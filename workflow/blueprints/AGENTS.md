@@ -68,3 +68,23 @@ Exception:
 
 - `../blueprint_history/` is not the active blueprint area.
 - Legacy files may be cited as rationale, but new tasks should not be opened there.
+
+## Templates (per Q4 §4.4)
+
+Authoritative starting points for new blueprints live in `workflow/templates/blueprints/`:
+
+- `task_blueprint.md` — standard task blueprint (8-state lifecycle)
+- `task_blueprint.audit.md` — sibling paired audit log
+- `legacy_reconstructed_archive.md` — reconstructed legacy archive
+- `legacy_reconstructed_archive.audit.md` — reconstructed legacy audit log
+
+Manual drafting (not from template) is discouraged; see `workflow/templates/README.md` §customization policy.
+
+## Paired vs standalone audit (per Q3 §4.2)
+
+The word "audit" in this repo refers to two distinct concepts:
+
+- **Paired blueprint audit log** (`<basename>.audit.md` sibling, governed by this file) — per-blueprint event log of state transitions + decision notes. Authority: `paired blueprint audit log`. Lives next to the blueprint it pairs with.
+- **Standalone audit record** (in `workflow/audit/`, governed by `workflow/audit/AGENTS.md`) — cross-cutting drift triage (`vs-shipped`), pre-implementation safety check (`preflight`), or post-Q re-bucketing (`synthesis`). Authority: `working triage document`.
+
+These are NOT interchangeable. See `workflow/audit/AGENTS.md` for the standalone-audit conventions.

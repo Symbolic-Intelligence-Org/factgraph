@@ -63,6 +63,16 @@
 - blueprint 与 audit 一起归档。
 - 归档后的文档只承担历史 rationale，不承担当前真相。
 
+### 6-8. Deviation states (per `AGENTS.md`)
+
+Three additional states exist for non-linear paths:
+
+- **`blocked`** — stalled on external dependency; record reason in audit log; resume to `implementing` when unblocked.
+- **`abandoned`** — explicitly cancelled before completion; record reason in audit log; move to `archive/`.
+- **`superseded`** — replaced by a newer blueprint; record successor link in audit log; move to `archive/`.
+
+See [`AGENTS.md`](./AGENTS.md) §State Rules + §Valid State Transitions for the full 8-state machine.
+
 ## Legacy Reconstructed Archive
 
 当 `docs/blueprint_history/` 中的旧蓝图需要进入新归档体系时，允许创建 reconstructed archive 条目，但这是一个窄范围桥接能力，不等价于标准归档流。
