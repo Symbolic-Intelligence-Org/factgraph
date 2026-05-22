@@ -240,7 +240,7 @@ Phases derived from synthesis §3. Phase 1 is already done (Step 0.1); Phase 1.5
 6. Author `workflow/templates/audit/synthesis.md` per Q3 §4.3 + §4.5 trigger conditions + §4.8 + Q4 §4.3 7-field header.
 7. Author `workflow/design/AGENTS.md` codifying Q2 §4.3-4.7 + Q4 §4.4 template pointer block.
 8. Author `workflow/audit/AGENTS.md` codifying Q3 §4.2-4.8 + Q4 §4.4 template pointer block + explicit paired-vs-standalone cross-reference to `workflow/blueprints/AGENTS.md`.
-9. Author `workflow/design/README.md` + `workflow/design/design-points/README.md` + `workflow/design/decisions/README.md` + `workflow/audit/README.md` + `workflow/foundations/README.md` + `workflow/heritage/README.md` (light; defer to AGENTS for state machines).
+9. Author `workflow/design/README.md` + `workflow/design/design-points/README.md` + `workflow/design/decisions/README.md` + `workflow/audit/README.md` + `workflow/foundations/README.md` + `workflow/heritage/README.md` + `workflow/working/README.md` (light; defer to AGENTS for state machines). Note: `workflow/working/README.md` is tracked via the `.gitignore` allowlist exception added in Step 0.1.
 
 Recommended commit batching: 1 commit for templates (steps 1-6) + 1 commit for AGENTS files (steps 7-8) + 1 commit for pillar READMEs (step 9). 3 commits.
 

@@ -22,6 +22,8 @@
 | 2026-05-22 | draft | Step 4.2 tightening applied | 4 P-findings folded into blueprint (commit `bfafabbd`): P1 design-points mv phase consolidation; P2 working/README.md author location fix; P3 Phase 5 per-pair mv pattern; P4 Acceptance addressed-or-deferred. |
 | 2026-05-22 | draft | Step 4.3 preflight landed on independent branch | Preflight at `c43ab22b` on `v0.2.0-workflow-governance-promotion-preflight-2026-05-22`. Findings: 2 Required + 2 Recommended + 14 Verified + 1 Scoped-detail + 0 Abandonment. |
 | 2026-05-22 | draft | Step 4.4 preflight amendment applied | 3 PF items folded into blueprint on blueprint branch (this commit): PF-R1 design-points count 6 → 12 essays + 1 readme; PF-Rec1 README mv vs author ambiguity (Phase 2 step 4 delete + step 6 absorb-not-mv); PF-Rec2 factgraph-namespace-test-proposals reconnaissance sub-step. **PF-R2 deferred** (out of authorized scope) — see Decision Notes. |
+| 2026-05-22 | draft | Step 4.5 self-check ran (doc-only, no commit) | Surfaced 2 minor narrative inconsistencies (SC-1 + SC-2), no blockers. SC-1: Phase 1.5 step 9 missed `workflow/working/README.md` author task despite §5 + §9 attributing it to Phase 1.5; tightened in next commit. SC-2: `f52f5894` commit subject says "4 PF-R/Rec applied" while body + audit log correctly say 3 applied + 1 deferred — git-log artifact, cannot rebase under cadence; accepted as permanent. |
+| 2026-05-22 | draft | Step 4.5 SC-1 tightening applied | Phase 1.5 step 9 extended to include `workflow/working/README.md` as a light README author task (was already attributed in §5 tree comment + §9 Docs To Update, but missing from §8 step list). 1-line edit. |
 
 ## Decision Notes
 
