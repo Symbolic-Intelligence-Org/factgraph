@@ -85,7 +85,7 @@ No additional template lives outside this tree. The previous `docs/blueprints/te
 
 ### 4.3 unified 7-field metadata header
 
-Every workflow document created from a template (i.e., every blueprint, decision, design-point, and standalone audit) must include the following 7-field block as the first content section after the H1 title:
+Every workflow document created from a template (i.e., every blueprint, **paired blueprint audit log**, decision, design-point, and standalone audit) must include the following 7-field block as the first content section after the H1 title:
 
 ```yaml
 - Status: <pillar-specific allowed value>
@@ -104,13 +104,21 @@ Every workflow document created from a template (i.e., every blueprint, decision
 
 | Field | Required | Description |
 |---|---|---|
-| `Status` | Yes | Pillar-specific lifecycle state. Blueprints: 8 states per `blueprints/AGENTS.md`. Decisions: 4 ADR states per Q2 §4.5. Design-points: not state-tracked (active/archive dir signals lifecycle; Status field may be omitted or hold a free-form drafting note). Audits: optional `skeleton / complete / superseded` per Q3 §4.6. |
+| `Status` | Yes | Pillar-specific lifecycle state. **The `Status` field is always present; the value varies by pillar.** Blueprints: one of 8 states per `blueprints/AGENTS.md`. Decisions: one of 4 ADR states per Q2 §4.5. Design-points: `n/a` (active/archive directory signals lifecycle), or a free-form drafting marker such as `working` / `mature`. Audits: `n/a`, or one of `skeleton` / `complete` / `superseded` per Q3 §4.6. Paired blueprint audit logs: mirror the sibling blueprint's `Status` value. |
 | `Created` | Yes | `YYYY-MM-DD` of first commit. Never updated. |
 | `Last Updated` | Yes | `YYYY-MM-DD` of most recent substantive content commit. Refreshed when the file's meaning changes; not for typo-fix commits. |
 | `Authority` | Yes | One-line statement of what role this document plays. Pillar-specific: blueprints "task constraint", decisions "design constraint", design-points "candidate design / non-authoritative reference", audits "working triage document". |
 | `Inputs` | Yes | Bullet list of upstream sources that triggered or informed this document. May include audit pointers, decision references, design-point essays, external standards, or user-conversation pointers. |
 | `Outputs / Downstream` | Yes | Bullet list of downstream documents that consume this. May be empty bullet list with explicit `- (none yet)` if the document has no downstream consumers at creation time. |
 | `Related` | Yes | Bullet list of cross-references not in the input/output chain (sibling slices, parallel decisions, etc.). May be empty `- (none)`. |
+
+**Paired blueprint audit log convention**: paired blueprint audit logs (`<basename>.audit.md` siblings to blueprints) carry the same 7-field header as their sibling blueprints, with pillar-specific values:
+
+- `Status:` mirrors the sibling blueprint's value (e.g., `draft`, `scoped`, `implementing`, `implemented`, `archived`).
+- `Authority: paired blueprint audit log` (denotes the document's role as event log for its sibling blueprint).
+- `Inputs:` points to the sibling blueprint (`- [<basename>.md](./<basename>.md)`).
+- `Outputs / Downstream:` typically `- (none)` (paired audit logs are passive event records, not consumed downstream).
+- `Related:` cross-references to related slices, prior audit logs, or relevant memory entries.
 
 **Pillar-specific extensions allowed**: each pillar may add fields **beyond** the 7-field minimum (not as substitutes). Examples:
 
@@ -219,10 +227,16 @@ The deletion happens at end of Phase 7 (references dissolution), simultaneously 
   - Write `workflow/templates/README.md` codifying the inventory + 7-field schema + customization policy + per-pillar pointer rule from §4.4.
   - Each of `workflow/blueprints/AGENTS.md`, `workflow/design/AGENTS.md`, `workflow/audit/AGENTS.md` includes a "Templates" pointer section per §4.4 example.
 - **Phase 3 (templates mv)**: `git mv docs/blueprints/templates/*` → `workflow/templates/blueprints/` (4 files; preserves git history per `feedback_refactor_execution_traps.md`).
-- **Phase 4 (validator)**:
-  - Verify every file in `workflow/blueprints/{active,archive}/`, `workflow/design/{decisions,design-points}/{active,archive}/`, `workflow/audit/{active,archive}/` includes the 7-field metadata header verbatim.
-  - Verify every pillar's `AGENTS.md` contains a "Templates" pointer section.
-  - Warning (not error) if a non-template file (e.g., README) is missing optional metadata fields.
+- **Phase 4 (validator)** — stratified by directory and provenance:
+  - **Error-level 7-field check** for files in active subdirectories: `workflow/blueprints/active/`, `workflow/design/decisions/active/`, `workflow/design/design-points/active/`, `workflow/audit/active/`. Missing fields = error.
+  - **Archive subdirectory treatment** is per-pillar to honor §7.4 retrofit boundary:
+    - `workflow/blueprints/archive/` — historical archived blueprints (including the 491 if Phase 5 mv'd) are **exempt or warning-only**, not error-level. Historical rationale documents do not retrofit.
+    - `workflow/design/decisions/archive/` — error-level (only superseded / withdrawn ADR-states arrive here, all authored under the 7-field schema from Q5 batch flip onward).
+    - `workflow/design/design-points/archive/` — error-level (Phase 6 mv retrofits the strengthened authority header per Q2 §4.4, which carries the 7-field block forward).
+    - `workflow/audit/archive/` — warning-level for audits migrated from Phase 2; error-level for audits authored post-schema-lock.
+  - **Existing DB/view decisions migrated in Phase 2** (the 8 Q1-Q8 files) — severity follows the Phase 2 retrofit choice (per §7.4): error-level if retrofit applied; warning-level if Phase 2 skipped optional retrofit (skip must be acknowledged in blueprint §10).
+  - **Per-pillar AGENTS.md "Templates" pointer**: error-level if missing.
+  - **Non-template files** (e.g., `README.md`, `AGENTS.md`) are exempt from the 7-field header check; warning-level for missing optional metadata if any.
 - **Phase 7 (references dissolution)**: delete `docs/references/templates/reference_note.md` + parent `docs/references/templates/` directory.
 
 ### 7.3 Q1-Q5 retrofit obligation
