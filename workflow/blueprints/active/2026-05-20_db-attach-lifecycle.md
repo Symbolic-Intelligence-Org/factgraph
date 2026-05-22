@@ -323,7 +323,7 @@ This section reflects the post-preflight implementation plan after `docs/audit/2
 
 - `src/factgraph/core/store/docs/README.md`
 - `src/factgraph/sdk/store.py` class docstring at `:712-720`
-- `docs/blueprints/archive/README.md` after implementation and archive
+- `workflow/blueprints/archive/INVENTORY.md` after implementation and archive
 
 ## 10. Outcome / Deviations
 
