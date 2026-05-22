@@ -1,6 +1,6 @@
 # T2.1 — `ne` adapter dispatch gap close
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Track: T2 Atom 语言闭合 + adapter gap(per [rule-expression-and-proof-track-plan.zh.md](../../design/design-points/active/rule-expression-and-proof-track-plan.zh.md))

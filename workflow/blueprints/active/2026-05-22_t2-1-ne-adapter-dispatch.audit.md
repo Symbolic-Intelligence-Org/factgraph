@@ -18,6 +18,7 @@
 | --- | --- | --- | --- |
 | 2026-05-22 | draft | Blueprint created | Drafted from shipped adapter reads requested by user: Souffle `eq`/comparison dispatch, ProbLog `eq` dispatch, and core `_CMP_OPS`/validator semantics. |
 | 2026-05-22 | review-tightening | Step 4.2 cross-flip review applied | P1 ProbLog `\=` term-inequality semantics documented; P2 Current Context file:line citations added; P3 Souffle variable example corrected to `V0`. |
+| 2026-05-23 | scoped | Scope anchored | Status changed `draft` → `scoped`; implementation must fork an independent impl branch from this commit. |
 
 ## Decision Notes
 
