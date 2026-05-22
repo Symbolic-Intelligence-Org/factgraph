@@ -140,7 +140,7 @@ Post-implementation tree (target state):
     │       └── synthesis.md
     ├── design/
     │   ├── README.md / AGENTS.md                 (Phase 1.5 author per Q2 + Q5 + Q4 pointer)
-    │   ├── design-points/{active,archive}/        (Phase 6 mv from docs/references/working/design-points/)
+    │   ├── design-points/{active,archive}/        (Phase 2 mv from docs/references/working/design-points/; existing essays land in active/)
     │   └── decisions/
     │       ├── active/                          (Phase 2 mv from docs/decisions/ + this slice's Q1-Q5 already here)
     │       └── archive/
@@ -159,8 +159,8 @@ Post-implementation tree (target state):
     │   ├── current.md
     │   ├── session_handoffs/
     │   └── *.md (project_*_implemented checkpoints)
-    ├── working/                                  (Step 0.1 done; gitignored; skill convention deferred per NG7)
-    │   └── README.md (tracked exception per .gitignore)
+    ├── working/                                  (Step 0.1 created `.gitkeep` only; gitignored contents; skill convention deferred per NG7)
+    │   └── README.md (Phase 1.5 light author; tracked via .gitignore allowlist exception added in Step 0.1)
     └── heritage/
         ├── README.md                             (Phase 6 author light)
         ├── blueprint_history/                    (Phase 6 mv from docs/blueprint_history/)
@@ -210,7 +210,8 @@ Post-impl verification will confirm zero diff on these targets.
 
 ## 7. Acceptance
 
-- [ ] All 22 blueprint-eligible audit items from synthesis §2.1 are addressed (verified by hand-check during closure).
+- [ ] All 22 blueprint-eligible audit items from synthesis §2.1 are **addressed or explicitly deferred with rationale** (verified by hand-check during closure). Items deferred (e.g., to a follow-up archive-mv slice or to a memory-content-cleanup slice) must each have a §10 deviation entry recording the deferral reason.
+- [ ] Phase 5 (491-archive mv) outcome explicitly recorded in §10 — one of: **defer** (default, with rationale tied to Phase 4 validator outcome) / **done in-slice** (with archive-mv commit hashes) / **split into a dedicated follow-up archive-mv slice**.
 - [ ] All 9 sub-acceptance criteria from Q1 §8, Q2 §8, Q3 §8, Q4 §8, Q5 §8 are individually satisfied (validator + reviewer practice).
 - [ ] `workflow/` 8-pillar tree fully populated per §5.
 - [ ] 3 per-pillar AGENTS files exist (blueprints + design + audit); no AGENTS in foundations / templates / memory / working / heritage per Q5 §4.3.
@@ -294,11 +295,15 @@ Recommended commit batching: 1 commit for validator script + 1 commit per materi
 
 **Default: DEFER.** Decision gate from Phase 4. If proceeding:
 
-1. `git mv docs/blueprints/active/ workflow/blueprints/active/` (40 active blueprints)
-2. `git mv docs/blueprints/archive/ workflow/blueprints/archive/` (491 archived blueprints)
-3. Bulk relative-link rewrites (estimated ~2500 link updates across 491 archived files) — script-driven; warning-only on stale historical refs per Q4 §7.4.
-4. Re-run Phase 4 validator on full corpus (must remain 0 errors on active; warnings on archive acceptable).
-5. Record archive-mv commit hashes in §10.
+⚠️ **Important**: `workflow/blueprints/active/` and `workflow/blueprints/archive/` **already exist** at Phase 5 entry (the current blueprint pair lives in `active/`, and `archive/` was scaffold-created in Step 0.1 with `.gitkeep`). Do **NOT** `git mv` the source directories whole — the target directories are not empty. Instead, mv contents/pairs into the existing target directories:
+
+1. For each blueprint pair `<basename>.md` + `<basename>.audit.md` in `docs/blueprints/active/` (40 pairs), execute paired `git mv` into `workflow/blueprints/active/`. Tool: shell loop or script-driven; preserves git history per `feedback_refactor_execution_traps.md`.
+2. For each file in `docs/blueprints/archive/` (491 files), `git mv` into `workflow/blueprints/archive/`. Same per-file/per-pair pattern.
+3. Remove the source `.gitkeep` from `workflow/blueprints/archive/` once real content lands (or remove the target `.gitkeep` early if cleaner; the .gitkeep was placeholder only).
+4. Bulk relative-link rewrites (estimated ~2500 link updates across 491 archived files) — script-driven; warning-only on stale historical refs per Q4 §7.4.
+5. Re-run Phase 4 validator on full corpus (must remain 0 errors on active; warnings on archive acceptable).
+6. Empty `docs/blueprints/active/` and `docs/blueprints/archive/` once all content has moved; remove the empty source directories.
+7. Record archive-mv commit hashes in §10.
 
 If deferred:
 - `docs/blueprints/active/` + `docs/blueprints/archive/` continue at current paths.
@@ -381,7 +386,7 @@ Repository docs to update:
 - `workflow/design/decisions/README.md` — Phase 1.5 (author per Q2 §4.5 ADR semantics) or absorb from Phase 2 mv of `docs/decisions/README.md`
 - `workflow/heritage/README.md` — Phase 6 (light author)
 - `workflow/templates/README.md` — Phase 1.5 (author per Q4)
-- `workflow/working/README.md` — already exists from Step 0.1
+- `workflow/working/README.md` — Phase 1.5 (light author; Step 0.1 created only `.gitkeep`; the README is permitted by the `.gitignore` allowlist exception already added in Step 0.1)
 - `workflow/memory/README.md` — Phase 3.5 (path-only update; content cleanup deferred)
 
 Auto-memory:
