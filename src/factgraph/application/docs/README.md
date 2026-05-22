@@ -24,6 +24,9 @@ compatibility.
 
 - `src/factgraph/application/docs/01_overview_en.md`
   - English overview of the application module.
+- `src/factgraph/application/docs/rule.md`
+  - Application-layer Rule DTO contract. Stores core rule AST atoms directly
+    and remains below SDK ergonomic authoring.
 - `src/factgraph/application/walker/docs/README.md`
   - Current implementation contract for the application-layer walker
     module.

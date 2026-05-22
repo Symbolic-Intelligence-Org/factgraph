@@ -71,6 +71,7 @@ from .rule_literal_replace import (
     RuleLiteralReplaceResult,
     RuleLiteralReplaceStatus,
 )
+from .rule import Rule, RuleValidationError
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -174,6 +175,7 @@ __all__ = [
     "RuleAddConditionRequest",
     "RuleAddConditionResult",
     "RuleAddConditionStatus",
+    "Rule",
     "RuleAddedAtom",
     "RuleAddedAtomKind",
     "RuleDisableAction",
@@ -187,6 +189,7 @@ __all__ = [
     "RuleLiteralReplaceResult",
     "RuleLiteralReplaceStatus",
     "RuleOverlayAction",
+    "RuleValidationError",
     "SchemaCapability",
     "WarningDTO",
     "WhereIR",
