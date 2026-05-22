@@ -71,7 +71,7 @@ T2.1 closes this adapter-only gap. It does not expand SDK authoring syntax, appl
 
 ### 4.1 Core AST already ships `ne`
 
-`src/factgraph/core/rules/where_ast.py` has:
+`src/factgraph/core/rules/where_ast.py:95` has:
 
 ```python
 _CMP_OPS = {"eq", "ne", "gt", "ge", "lt", "le"}
@@ -81,7 +81,7 @@ The parser path accepts `ne` as a native `CmpAtom`.
 
 ### 4.2 Core validator treats `ne` as a filter
 
-`src/factgraph/core/rules/where_ast_validate.py` currently handles:
+`src/factgraph/core/rules/where_ast_validate.py:33-34` defines the comparison operator sets, and `src/factgraph/core/rules/where_ast_validate.py:383-385` currently handles `ne` filter dataflow:
 
 ```python
 if atom.op in _CMP_FILTER_OPS or atom.op == "ne":
@@ -95,23 +95,24 @@ This is the semantic lock for this slice: `ne` behaves like `gt/ge/lt/le` for da
 
 `src/factgraph/adapters/souffle/where_compile.py` currently has separate branches for:
 
-- `kind == "eq"` in `_compile_atom(...)`
-- `kind in {"gt", "ge", "lt", "le"}` in `_compile_atom(...)`
-- `kind == "eq"` in `_validate_atom_subset(...)`
-- `kind in {"gt", "ge", "lt", "le"}` in `_validate_atom_subset(...)`
-- `kind == "eq"` in `_compile_not_body_atom(...)`
-- `kind in {"gt", "ge", "lt", "le"}` in `_compile_not_body_atom(...)`
-- `kind == "eq"` in `_vars_in_atom(...)`
-- `kind in {"gt", "ge", "lt", "le"}` in `_vars_in_atom(...)`
+- `kind == "eq"` in `_compile_atom(...)` at `where_compile.py:477`
+- `kind in {"gt", "ge", "lt", "le"}` in `_compile_atom(...)` at `where_compile.py:525`
+- `kind == "eq"` in `_validate_atom_subset(...)` at `where_compile.py:684`
+- `kind in {"gt", "ge", "lt", "le"}` in `_validate_atom_subset(...)` at `where_compile.py:704`
+- `kind == "eq"` in `_compile_not_body_atom(...)` at `where_compile.py:933`
+- `kind in {"gt", "ge", "lt", "le"}` in `_compile_not_body_atom(...)` at `where_compile.py:979`
+- `kind == "eq"` in `_vars_in_atom(...)` at `where_compile.py:1102`
+- `kind in {"gt", "ge", "lt", "le"}` in `_vars_in_atom(...)` at `where_compile.py:1112`
 
 None include `ne`.
 
 ### 4.4 ProbLog adapter gap
 
-`src/factgraph/adapters/problog/problog_export.py` currently compiles:
+`src/factgraph/adapters/problog/problog_export.py:208` dispatches all raw tuple atoms through `_compile_atom(...)`. It currently compiles:
 
-- `eq` as `lhs = rhs`
-- `gt/ge/lt/le` as `>`, `>=`, `<`, `=<`
+- `eq` as `lhs = rhs` at `problog_export.py:238-241`
+- `gt/ge/lt/le` as `>`, `>=`, `<`, `=<` at `problog_export.py:243-247`
+- `not` recursively through `_compile_atom(...)` at `problog_export.py:259-269`
 
 There is no `ne` branch.
 
@@ -160,6 +161,8 @@ if kind == "ne":
 
 The implementation should keep `eq` separate for readability because `=` and `\=` have different Prolog semantics and should not be collapsed into a generic operator table without tests.
 
+`\\=` is intentionally **term inequality / cannot-unify**, not arithmetic inequality (`=\\=`) or structural identity inequality (`\\==`). This matches the current raw where term model for ground filters: variables and literals are rendered as Prolog terms, not numeric expression trees. If future numeric type mixing needs value-level arithmetic disequality, that belongs in T2.2/T2.3 expression work rather than this adapter gap close.
+
 ## 6. Boundaries And Invariants
 
 - **Filter-only invariant**: `ne` never binds variables.
@@ -168,15 +171,17 @@ The implementation should keep `eq` separate for readability because `=` and `\=
 - **No external binary invariant**: tests validate emitted adapter code strings and local validation behavior, not external engine execution.
 - **Existing equality invariant**: `eq` must keep current binder behavior in Souffle and unification behavior in ProbLog.
 - **Existing ordering comparison invariant**: `gt/ge/lt/le` behavior must not change.
+- **ProbLog term-inequality invariant**: ProbLog `ne` uses `\=` term inequality. It is considered aligned with Souffle `!=` for ground term filters, while numeric type-mixing differences are explicit follow-up territory.
 
 ## 7. Acceptance
 
 - [ ] Souffle `_validate_atom_subset` accepts `("ne", "$x", "blocked")` and rejects malformed `ne` shapes.
-- [ ] Souffle main-body compile emits `C0 != "blocked"` or equivalent valid Souffle disequality for a bound `$x`.
+- [ ] Souffle main-body compile emits `V0 != "blocked"` or equivalent valid Souffle disequality for a bound `$x`.
 - [ ] Souffle compile rejects unbound `ne` variable operands with an error that identifies `ne`.
 - [ ] Souffle `not` body compile accepts `ne` and emits disequality inside the generated auxiliary relation.
 - [ ] Souffle variable extraction includes variables from top-level `ne` and `ne` inside `not` bodies when `include_not_body_vars=True`.
 - [ ] ProbLog export emits `\=` for raw tuple `ne`.
+- [ ] ProbLog nested `not` body export recursively emits `\+(V_X \= 'blocked')` or equivalent formatting for raw tuple `("not", [("ne", "$x", "blocked")])`.
 - [ ] Existing `eq` tests and ordering-comparison tests continue to pass.
 - [ ] Targeted tests pass:
   - `PYTHONPATH=src python -m unittest tests.test_souffle_witness_where_compile_v1 tests.test_problog_export`
