@@ -54,3 +54,8 @@ venv/
 .claude/skills/unfreeze
 esa_demo_output/
 dora_demo_output/
+
+# workflow/working/ is a temporary work area; ignore contents but keep the dir tracked.
+workflow/working/*
+!workflow/working/.gitkeep
+!workflow/working/README.md
