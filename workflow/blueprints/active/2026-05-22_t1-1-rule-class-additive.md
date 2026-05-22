@@ -1,6 +1,6 @@
 # T1.1 — Additive 新 Rule 类(application protocol DTO,storing core AST)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Track: T1 Rule body 重塑(per [rule-expression-and-proof-track-plan.zh.md](../../design/design-points/active/rule-expression-and-proof-track-plan.zh.md))
@@ -332,11 +332,27 @@ tests/application/protocol/
 
 ## 10. Outcome / Deviations
 
-待 implementation 完成后填写:
-
 - 最终落地结果:
+  - 新增 `factgraph.application.protocol.Rule` application DTO,存储 `core.rules.where_ast`
+    atoms,并通过 `factgraph.application.protocol.__init__` re-export。
+  - 新增 `RuleValidationError` domain exception。
+  - 新增 atom kind allowlist validation,`RuleRefAtom` reject,port reachability validation,
+    desc `%port_name` validation/rendering,`atom_ids`,`content_digest`,and shallow container
+    immutability。
+  - 新增 `src/factgraph/application/docs/rule.md` 并更新 application docs README。
+  - 新增 focused unit tests under `tests/application/protocol/test_rule.py`。
 - 与 blueprint 不同的地方:
+  - `PortType` helper dataclass is implemented and importable from
+    `factgraph.application.protocol.rule`;it is not re-exported at top-level `protocol`.
+  - Implementation is 289 LOC rather than the estimated 180-250 LOC because it includes
+    canonical serialization,recursive validation for `NotAtom` bodies,and port-type inference helpers.
 - 为什么会有这些调整:
+  - `PortType` keeps the T1.1 port hint explicit without exposing richer `PortInspect`.
+  - Extra helper code keeps application protocol independent from SDK DSL while preserving deterministic
+    digest behavior.
 - **Parent essay deviation** — essay §3.5 F6 写 "复用 `ExistsAtom` / `AttrRef` / `CompareExpr` / `LogicVar` primitives" 是 SDK DSL 角度;本 slice 用更深一层 core AST(`PredAtom` / `CmpAtom`)作为 `Rule.where` 存储类型。理由:依赖方向(`sdk → application → core`)+ slice 原子性(application 层不导入 SDK DSL)。Essay 高层意图(复用现有 primitive,不重写 IR)保留 — 只是复用方向变为 core 而非 SDK。Deviation 不引入新 commitment,Track plan 已同步更新(T1.2 absorb DSL ergonomic 扩展)。
 - **Recursive immutability deferred**(per Step 4.2 v2 P1 finding)— T1.1 Rule 仅 shallow immutable;`PredAtom.terms` / `InAtom.values` / `BuiltinAtom.args` 等 core AST 内部 list 保持 shipped 现状(mutable)。这是 `feedback_invariant_defense_in_depth` 已知 trade-off,user 选择以保 slice atomic 不修改 shipped core AST。后续 immutability hardening slice 触发条件:出现实际 mutation 漂移事件 / 跨 Rule 构造-evaluation 之间 atom internals 被改的 bug / 用户社区报告。
 - 归档说明:
+  - Implementation commit:`c155f3b1 feat(application): add Rule protocol DTO`.
+  - Verification:`PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.test_application_protocol`;
+    `python -m ruff check src/factgraph/application/protocol/rule.py tests/application/protocol/test_rule.py src/factgraph/application/protocol/__init__.py`.
