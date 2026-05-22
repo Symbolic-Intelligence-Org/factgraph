@@ -54,4 +54,4 @@ Rationale: templates encode hard-won cadence lessons. Free-form drafting loses t
 
 ## Per-pillar pointer rule (per Q4 §4.4)
 
-Each pillar's `AGENTS.md` includes a "Templates" section pointing to the templates that pillar consumes. Agents do not perform global search per use; they look up locally in their pillar AGENTS.
+Each pillar's `README.md` (which absorbs the former pillar-AGENTS content post SC-1 merge) includes a "Templates" section pointing to the templates that pillar consumes. Agents do not perform global search per use; they look up locally in the pillar README.

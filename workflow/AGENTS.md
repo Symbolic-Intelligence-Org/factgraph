@@ -10,11 +10,11 @@ For the canonical methodology see [CADENCE.md](./CADENCE.md). For the high-level
 |---|---|---|
 | `foundations/` | Stable architecture principles + module docs convention | (Stable, no state machine) |
 | `templates/` | Centralized document template inventory | (Static, replaced via blueprint) |
-| `design/design-points/` | Conceptual design essays (iterative, non-authoritative) | `design/AGENTS.md` (TBD Phase 1.5) |
-| `design/decisions/` | ADR-style decision records | `design/AGENTS.md` (TBD Phase 1.5) — ADR 4-state |
-| `audit/` | Drift / anti-drift records | `audit/AGENTS.md` (TBD Phase 1.5) — 3 sub-types |
-| `blueprints/` | Task-scoped implementation blueprints | `blueprints/AGENTS.md` (inherited on Phase 3 mv) — 8-state |
-| `memory/` | Operational memory + session handoff archive | `memory/README.md` (light) |
+| `design/design-points/` | Conceptual design essays (iterative, non-authoritative) | [`design/README.md`](./design/README.md) — 3-condition archive |
+| `design/decisions/` | ADR-style decision records | [`design/README.md`](./design/README.md) — ADR 4-state |
+| `audit/` | Drift / anti-drift records | [`audit/README.md`](./audit/README.md) — 3 sub-types |
+| `blueprints/` | Task-scoped implementation blueprints | [`blueprints/README.md`](./blueprints/README.md) — 8-state |
+| `memory/` | Operational memory + session handoff archive | [`memory/README.md`](./memory/README.md) (light) |
 | `working/` | Temporary work area | gitignored, no state machine |
 | `heritage/` | Closed / legacy archive | (Append-only, no state machine) |
 
@@ -22,16 +22,16 @@ For the canonical methodology see [CADENCE.md](./CADENCE.md). For the high-level
 
 > Primary work mode for large-scope workflow, architecture, migration, and audit-first implementation work is the Audit-to-Archive Cadence. See `workflow/CADENCE.md`. Tiny local fixes may use the lightweight exception path, but must not bypass blueprint requirements when the task changes workflow, architecture, protocol, or cross-module behavior.
 
-This is the project-canonical lock-in statement. The lightweight exception path lives in `blueprints/AGENTS.md` (after Phase 3 mv) and in the per-pillar AGENTS files where state machines define when a stage is required vs optional.
+This is the project-canonical lock-in statement. The lightweight exception path lives in [`blueprints/README.md`](./blueprints/README.md) §可以跳过蓝图的情况 + §State Rules, and in the per-pillar README files where state machines define when a stage is required vs optional.
 
 ## Conflict Priority
 
 When governance documents disagree:
 
-1. `workflow/CADENCE.md` is authoritative for stage transitions, branch naming, verification rituals, and commit discipline.
-2. Per-pillar `AGENTS.md` (when present) is authoritative for that pillar's state machine, naming convention, and structural rules.
-3. `README.md` at any level is descriptive, not prescriptive — if a README contradicts AGENTS or CADENCE, the README is the one to update.
-4. Repo-root `AGENTS.md` (legacy `docs/`-pointer rules) and `docs/blueprints/README.md` are being migrated; until migration completes, this `workflow/AGENTS.md` and `workflow/CADENCE.md` take precedence for any workflow concern.
+1. [`workflow/CADENCE.md`](./CADENCE.md) is authoritative for stage transitions, branch naming, verification rituals, and commit discipline.
+2. This `workflow/AGENTS.md` (umbrella) is authoritative for the pillar map, primary work mode lock-in, conflict priority itself, and cross-pillar concerns.
+3. Per-pillar `README.md` (one per pillar: blueprints / design / audit / memory / foundations / heritage / templates / working) is authoritative for that pillar's state machine, naming convention, and structural rules. (Phase 1.5 / SC-1 merge folded the pillar AGENTS.md content into these READMEs.)
+4. Repo-root `/AGENTS.md` (legacy) is being updated to point at this `workflow/AGENTS.md` as canonical workflow entry; until that update completes, `workflow/AGENTS.md` + `workflow/CADENCE.md` take precedence for any workflow concern.
 
 ## Companion Rules (Auto-memory, promotion pending)
 
@@ -46,14 +46,20 @@ CADENCE.md references six companion rules currently in Claude auto-memory:
 
 These remain authoritative for Claude session behavior. Their canonical promotion plan is captured in `design/decisions/active/2026-05-22_q5-cadence-as-primary-and-agents-hierarchy.md` (to be written in Step 0.2 of the workflow-governance-promotion slice).
 
-## Per-Pillar AGENTS Files
+## Per-Pillar Governance Files
 
-| File | Status |
+Per-pillar state machines and structural rules live in each pillar's `README.md`. There are no per-pillar `AGENTS.md` files — the original Phase 1.5 plan called for them, but the SC-1 merge folded their content into the pillar READMEs to reduce file proliferation (the umbrella `AGENTS.md` you are reading stays separate to host the project-canonical lock-in + conflict priority + cross-pillar concerns).
+
+| Pillar | Governance file |
 |---|---|
-| `blueprints/AGENTS.md` | Inherited from `docs/blueprints/AGENTS.md` on Phase 3 mv (existing 70-line 8-state machine) |
-| `design/AGENTS.md` | To be authored in Phase 1.5 (ADR semantics + design-point authority boundary) |
-| `audit/AGENTS.md` | To be authored in Phase 1.5 (3 sub-types + Rule 1/Rule 2 + preflight trigger conditions) |
-| `memory/AGENTS.md` | Deferred — content cleanup is its own future workstream |
+| `blueprints/` | [`blueprints/README.md`](./blueprints/README.md) — 8-state machine + paired audit log convention |
+| `design/` | [`design/README.md`](./design/README.md) — design-points 3-condition archive + decisions ADR 4-state |
+| `audit/` | [`audit/README.md`](./audit/README.md) — 3 sub-types + preflight/synthesis triggers + cross-branch visibility |
+| `foundations/` | [`foundations/README.md`](./foundations/README.md) — light (stable content) |
+| `templates/` | [`templates/README.md`](./templates/README.md) — 9-template inventory + 7-field schema + customization policy |
+| `memory/` | [`memory/README.md`](./memory/README.md) — light; content cleanup is its own future workstream |
+| `working/` | [`working/README.md`](./working/README.md) — gitignored temp area conventions |
+| `heritage/` | [`heritage/README.md`](./heritage/README.md) — append-only legacy archive |
 
 ## Branch Naming Convention
 
