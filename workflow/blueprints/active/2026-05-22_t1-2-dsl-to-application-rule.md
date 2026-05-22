@@ -1,6 +1,6 @@
 # T1.2 — DSL ergonomic 扩展 + DSL→application Rule 桥接 + legacy 形态拒绝(新 Rule path)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Track: T1 Rule body 重塑(per [rule-expression-and-proof-track-plan.zh.md](../../design/design-points/active/rule-expression-and-proof-track-plan.zh.md))
