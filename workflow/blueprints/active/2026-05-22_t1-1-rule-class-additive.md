@@ -1,6 +1,6 @@
 # T1.1 — Additive 新 Rule 类(application protocol DTO,storing core AST)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-22
 - Last Updated: 2026-05-22
 - Track: T1 Rule body 重塑(per [rule-expression-and-proof-track-plan.zh.md](../../design/design-points/active/rule-expression-and-proof-track-plan.zh.md))
