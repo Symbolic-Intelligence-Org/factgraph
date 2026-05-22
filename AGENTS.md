@@ -1,36 +1,41 @@
 # Repository Workflow
 
+Thin entry pointer. Canonical governance lives in dedicated files; this file routes you there.
+
+## Canonical Sources
+
+| Concern | Authoritative file |
+|---|---|
+| **Workflow governance** (cadence, pillar map, lock-in, conflict priority, branch naming, sacred branches) | [`workflow/AGENTS.md`](workflow/AGENTS.md) |
+| **Methodology** (9-stage Audit-to-Archive Cadence for large-scope audit-first work) | [`workflow/CADENCE.md`](workflow/CADENCE.md) |
+| **Module docs convention** (`src/factgraph/*/docs/README.md` minimum structure) | [`src/factgraph/AGENTS.md`](src/factgraph/AGENTS.md) + [`workflow/foundations/module_docs_convention.md`](workflow/foundations/module_docs_convention.md) |
+| **Architecture principles** (stable design philosophy, layer authority, release surface governance) | [`workflow/foundations/architecture_principles.md`](workflow/foundations/architecture_principles.md) |
+
 ## Document Roles
 
-- `docs/architecture_principles.md`
-  - Stable project philosophy, long-term boundaries, and durable design rules.
-- `docs/references/**/*`
-  - External comparisons, bridge notes, and working reference materials that can feed blueprint work but do not define current implementation truth.
-- `docs/blueprints/active/*.md` + `*.audit.md`
-  - Task-scoped blueprints and their audit trails.
-- `memory/`
-  - Operational memory, session continuity, and handoff archives; not current implementation truth.
-- `src/factpy_kernel/*/docs/`
-  - Current implementation truth for each module.
-- `docs/blueprints/archive/` and `docs/blueprint_history/`
-  - Archived blueprints and legacy historical material.
+- [`workflow/foundations/`](workflow/foundations/) — Stable architecture principles + module docs convention.
+- [`workflow/design/`](workflow/design/) — Design-points (conceptual essays) + decisions (ADR-style discrete records).
+- [`workflow/audit/`](workflow/audit/) — Drift / anti-drift records (`vs-shipped` / `preflight` / `synthesis` sub-types).
+- [`workflow/blueprints/active/`](workflow/blueprints/active/) — Live task blueprints and paired audit logs.
+- [`workflow/blueprints/archive/`](workflow/blueprints/archive/) — Archived blueprints + reconstructed legacy archive entries. See `INVENTORY.md` for the date-sorted index.
+- [`workflow/memory/`](workflow/memory/) — Operational memory, session continuity, and handoff archives; **not** current implementation truth.
+- [`workflow/heritage/blueprint_history/`](workflow/heritage/blueprint_history/) — Legacy historical material (pre-modern-workflow blueprints).
+- `src/factgraph/*/docs/` — **Current implementation truth** for each module.
+- [`docs/`](docs/) — Non-workflow content only: `SECURITY.md`, `api/openapi.yaml`, `official/kernel/` (public quickstart docs).
 
 ## Required Workflow
 
-- For any non-trivial feature, refactor, protocol change, cross-module change, or architecture-facing task, create or reuse a task blueprint before editing code.
-- Use `docs/blueprints/templates/task_blueprint.md` and `docs/blueprints/templates/task_blueprint.audit.md`.
-- Keep the blueprint in `draft` while exploring. Move it to `scoped` before multi-file implementation starts.
-- If implementation needs to expand or change scope, update the blueprint and audit first, then continue coding.
-- Keep external, bridge, and working reference notes under `docs/references/`, not at the repository root.
-- Keep session continuity and handoff material under `memory/`, not under `docs/` root.
-- If a reference document materially affects task scope, architecture decisions, or acceptance shape, cite it from the active blueprint and record the adopted conclusion in the audit log.
-- After implementation, update the affected module docs under `src/factpy_kernel/*/docs/`.
-- If a new module is introduced, create its `docs/README.md` in the same change.
-- When adding a new durable docs entry, update `docs/README.md`.
-- If reference material becomes current behavior or a durable system boundary, migrate that conclusion into module docs or `docs/architecture_principles.md`; do not leave current truth only in `docs/references/`.
-- When code and module docs are aligned, complete the blueprint's `Outcome / Deviations` section, mark it `implemented`, then archive it.
-- Historical files under `docs/blueprint_history/` may only be bridged into `docs/blueprints/archive/` as explicitly marked reconstructed archive entries.
-- Reconstructed archive entries must preserve provenance (`Historical Source`, `Git First Seen`) and must not imply they actually ran through the modern active blueprint workflow.
+For any non-trivial feature, refactor, protocol change, cross-module change, or architecture-facing task, **create or reuse a task blueprint before editing code**.
+
+- Use templates from [`workflow/templates/blueprints/`](workflow/templates/blueprints/).
+- Keep the blueprint in `draft` while exploring; move it to `scoped` before multi-file implementation starts.
+- If scope expands or changes, update the blueprint and its sibling audit first, then continue coding.
+- Cite reference material from the active blueprint and record adopted conclusions in the audit log.
+- After implementation, update affected module docs under `src/factgraph/*/docs/`.
+- When adding a new durable docs entry, update [`docs/README.md`](docs/README.md).
+- When code and module docs are aligned, complete the blueprint's `Outcome / Deviations`, mark it `implemented`, then archive it.
+
+For the full 8-state lifecycle, transition rules, and reconstructed archive conventions see [`workflow/blueprints/README.md`](workflow/blueprints/README.md). For the 9-stage cadence for large-scope work see [`workflow/CADENCE.md`](workflow/CADENCE.md).
 
 ## Exceptions
 
@@ -39,12 +44,13 @@
 
 ## Naming
 
-- Active blueprint: `docs/blueprints/active/YYYY-MM-DD_slug.md`
-- Audit log: `docs/blueprints/active/YYYY-MM-DD_slug.audit.md`
-- Archive keeps the same basename under `docs/blueprints/archive/`
+- Active blueprint: `workflow/blueprints/active/YYYY-MM-DD_slug.md`
+- Paired audit log: `workflow/blueprints/active/YYYY-MM-DD_slug.audit.md`
+- Archive keeps the same basename under `workflow/blueprints/archive/`.
 
 ## Legacy Material
 
-- `docs/blueprint_history/` is a legacy historical archive.
+- [`workflow/heritage/blueprint_history/`](workflow/heritage/blueprint_history/) is a legacy historical archive.
 - Do not rewrite legacy blueprints into "current truth" documents.
 - If a legacy blueprint is still useful, reference it as rationale and keep current behavior in module docs.
+- Reconstructed archive entries must preserve provenance (`Archive Mode: reconstructed`, `Historical Source`, `Git First Seen`, `Migration Date`) per [`workflow/blueprints/README.md`](workflow/blueprints/README.md) §Reconstructed 归档规则.
