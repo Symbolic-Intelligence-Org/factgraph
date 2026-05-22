@@ -153,8 +153,9 @@ Standalone audit files are **slice-scoped artifacts**, not globally-visible refe
 
 - An audit lives on the branch that creates it (typically the audit-only branch `v<version>-<topic>-audit-<date>` or the consuming blueprint branch `v<version>-blueprint-<topic>-<date>`).
 - Within the consuming slice's lifetime, audits are branch-local. Cross-slice reference requires explicit branch checkout.
-- At slice closure (blueprint archive), audit + decision + blueprint chain forward-merges to `master` via the normal push gate (with explicit user authorization per CADENCE Sacred-branch isolation rule).
-- The implementing blueprint's archive commit (Step 4.9) is the canonical "audit becomes globally visible" trigger.
+- At slice closure (blueprint archive — Step 4.9), the audit + decision + blueprint chain is **completed on the slice branch**. Archive itself does not integrate to `master` or any release branch.
+- Integration into `master` or any release line is a **separate, explicit, user-authorized push or merge** governed by CADENCE Sacred-branch isolation rule. It is not triggered automatically by archive.
+- "Globally visible" therefore means **authorized integration into a canonical branch** (typically `master` via PR or fast-forward push), not the archive commit itself.
 
 Existing branch-isolated audits (e.g., Slice 7C `2026-05-21_registry-final-removal-vs-shipped.md` only on `v0.2.0-registry-final-removal-audit-2026-05-21`) are honored as-is; no retroactive forward-merge is required. Future slices apply this convention from inception.
 
@@ -252,12 +253,12 @@ Post-implementing-blueprint, the audit pillar must satisfy:
 1. `workflow/audit/{active,archive}/` exist; no sub-type subdirectories.
 2. `workflow/audit/AGENTS.md` exists, codifies §4.2-4.7 verbatim or with semantic equivalence, and explicitly cross-references `workflow/blueprints/AGENTS.md` for paired-vs-standalone distinction.
 3. `workflow/audit/README.md` exists and introduces sub-types + lifecycle + trigger conditions without re-introducing state machine ambiguity (deference to `AGENTS.md`).
-4. The 2 existing migrated audits + the 4 new audits authored in this slice (1 vs-shipped + 1 synthesis + future preflight) all have correct filename suffix and header convention per §4.8.
+4. The 2 existing migrated audits + the 3 new standalone audit records authored/planned in this slice (vs-shipped + synthesis + preflight) all have correct filename suffix and header convention per §4.8. (Paired blueprint `*.audit.md` siblings are NOT counted here; they live under `workflow/blueprints/` and are governed by `workflow/blueprints/AGENTS.md`.)
 5. Validator (Phase 4) passes:
    - Filename suffix whitelist (`-vs-shipped` | `-preflight` | `-synthesis`).
    - Required-field presence per §4.8.
    - Active/archive placement aligned with consuming-slice state.
-6. No standalone preflight file exists for a slice that does not match a §4.4 trigger condition (validated by reviewer practice; not automatable).
+6. **Preflight requirement honored**: no slice is marked as *requiring* standalone preflight unless it matches a §4.4 required trigger condition. **Voluntary preflight permitted**: a slice may produce a standalone preflight even when not required by §4.4, provided the voluntary rationale is recorded in its blueprint §6 boundaries-and-invariants or §10 outcome. Validated by reviewer practice; not automatable.
 
 ## 9. Decision Record
 
