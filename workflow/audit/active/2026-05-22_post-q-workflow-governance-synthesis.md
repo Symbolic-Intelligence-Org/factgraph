@@ -175,7 +175,7 @@ Drawn from cadence + Q decisions, applicable to the implementing blueprint:
 
 ## 5. Audit trail of Stage 2 closure
 
-For traceability, the 14-commit lineage of Step 0.1 + Step 0.2 culminating in this synthesis:
+For traceability, the 17-commit lineage of Step 0.1 + Step 0.2 + Step 0.3 culminating in this synthesis (draft + 2 tightenings):
 
 | # | Commit | Stage | Topic |
 |---|---|---|---|
@@ -193,8 +193,11 @@ For traceability, the 14-commit lineage of Step 0.1 + Step 0.2 culminating in th
 | 12 | `15d60498` | 0.2 Q5 tightening | AGENTS hierarchy wording |
 | 13 | `ae375ce5` | 0.2 batch flip | adopt Q1-Q5 + retrofit Q1-Q4 to 7-field |
 | 14 | `4f705f6e` | 0.2 post-adoption tightening | status notes + footers to past tense |
+| 15 | `d83602e2` | 0.3 synthesis draft | Stage 3 post-Q bucketing (this file, initial draft) |
+| 16 | `efe3c198` | 0.3 synthesis tightening | filename rename to `post-q-` convention (per Q3 §4.3) + §3 phase-order self-reference fix |
+| 17 | `085d6988` | 0.3 synthesis tightening | self-reference path fix at §5 after the rename |
 
-Step 0.3 (this synthesis) adds commit 15. Step 0.4 (blueprint + sibling audit log) will add commit 16.
+Step 0.4 (blueprint + sibling audit log) will add commit 18; any Step 0.4 tightenings and downstream Stage 4 phases (preflight, amendment, scoped anchor, pre-impl grep, implementation, closure, archive) will continue the lineage from there.
 
 The implementing blueprint may cite this synthesis as `workflow/audit/active/2026-05-22_post-q-workflow-governance-synthesis.md` in its §4 lock table and §8 phase plan inputs.
 
@@ -205,6 +208,6 @@ This synthesis is **complete** when:
 - All audit §3.3 D-series + §6 cross-doc seams + §7 recommendations are classified into exactly one of the 5 buckets above (verified by hand-check).
 - Recommended phase order is consistent with Q1-Q5 decision dependencies (verified above in §3).
 - Cadence reminders capture all Q1-Q5 derived constraints (verified above in §4).
-- Audit trail is current as of the most recent commit (verified above in §5; this synthesis itself becomes commit 15 upon landing).
+- Audit trail is current as of the most recent commit (verified above in §5; this synthesis is commit 15 — `d83602e2` — with the two follow-up tightenings as commits 16 and 17).
 
 Per Q3 §4.6 audit lifecycle, this file remains in `workflow/audit/active/` while the implementing blueprint is `Status: draft → scoped → implementing → implemented`. It moves to `workflow/audit/archive/` in the same commit batch as the implementing blueprint's Step 4.9 archive.
