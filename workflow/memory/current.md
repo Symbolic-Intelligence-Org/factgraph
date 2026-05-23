@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + ProbLog hygiene fixtures archived locally; source `4e3176d2`, not pushed)
+最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + ProbLog hygiene fixtures archived locally; source `b217f309`, not pushed)
 
 ## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 S-CLASS BATCH ARCHIVED LOCALLY)
 
-**Current local branch:** `v0.2.0-impl-t2-3b-aggregate-sdk-bridge-2026-05-23 @ 4e3176d2`.
+**Current local branch:** `v0.2.0-impl-t2-3c-aggregate-souffle-wire-2026-05-23 @ b217f309`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -27,6 +27,7 @@
 | ProbLog `meta[confidence]` fixture cleanup | S | `1da49c41` | `e3c3d7bc test(problog): migrate meta-confidence fixtures` |
 | T2.3a AggregateExpr substrate | S | `477fcccb` | `b94576f5 feat(rules): add AggregateExpr substrate` |
 | T2.3b AggregateExpr SDK + bridge | S | `4e3176d2` | `94045e54 feat(sdk): add aggregate DSL helpers and bridge support` |
+| T2.3c AggregateExpr Souffle wire | S | `b217f309` | `3f64fe4d feat(adapters/souffle): add aggregate compile wire over T2.3a substrate` + `84564bf2 fix(adapters/souffle): T2.3c Step 4.7 P1+P2 + dead helper removal` |
 
 ### Current landed behavior
 
@@ -90,7 +91,23 @@
 - Commit lineage: scoped `26d11d81` → G7 precondition `99729ca5` (recorded BEFORE impl) → bridge validator amendment `13f79337` (scoped amendment BEFORE feat) → feat `94045e54` (impl + tests + 3-layer docs combined) → closure `f16a80db` (§10 Outcome filled, Nit deferral recorded) → archive `4e3176d2` (100% rename).
 - Verification at archive: 10 new aggregate tests pass; 98-test cross-slice scope pass (per §10.3); 153 wider-discover failures unrelated (frontier/diagnose/localizer paths, T2.3b touched none). Ruff clean on touched files. Sacred `master` + dirty set preserved throughout.
 - **Deferred Nit accepted as follow-up** (Step 4.7 single Nit observation, user chose deferral): `_lower_compare_with_aggregate` non-aggregate side currently calls `lower_term(..., in_where=True)` which raises for AttrRef and BinaryExpr. `Order(o).amount == agg_count(...)` and `(n + 1) == agg_count(...)` fail loudly with `SDKDSLError`; two-aggregate `agg_count(...) == agg_count(...)` works. T2.3.b1 / T2.3.e candidate; workaround = bind aggregate result to Var first.
-- Souffle / ProbLog aggregate adapter wires remain deferred to T2.3c / T2.3d. PyReason aggregate is out of scope.
+- Souffle adapter wire shipped in T2.3c (see below). ProbLog aggregate adapter remains deferred to T2.3.d. PyReason aggregate is out of scope.
+
+**T2.3c — AggregateExpr Souffle adapter wire**
+- Souffle adapter `src/factgraph/adapters/souffle/where_compile.py` now lowers SDK-produced aggregate IR (T2.3b output shape `("eq", lhs, ("kind", target_var, filter_atoms))`) to Souffle DL aggregate body syntax. Added `_AGGREGATE_KINDS` import + `_AGGREGATE_GUARD_KINDS = {"min", "max", "mean"}` + `_is_aggregate` strict helper + `_AGGREGATE_FILTER_ATOM_KINDS` C100 filter list.
+- **Empty-set guard algorithm** (blueprint §2.5 v2 lock per user direction A): `count` / `sum` use native Souffle empty=0 matching C101 legal values (no guard). `min` / `max` / `mean` emit `count : { same_body } > 0,` guard prefix → empty body → guard fails → branch does not fire → matches C101 "comparison violated / no env pollution". No Souffle sentinel object — `AggregateNoValue` represented by branch-not-firing.
+- **to_string/to_number wrapping** (blueprint §5.3.5 v3 lock table): eq binding to unbound var uses `v_X = to_string(<value>)` (symbol domain); eq filter with bound var uses `<value> = to_number(v_X)` (numeric); 8 cases total covering eq/ne/gt/ge/lt/le with var/literal/aggregate operands.
+- **Var extraction** (blueprint §5.5 v2 + §2.6 v3): `_vars_in_atom` cmp branches treat aggregate operand as ZERO outer-var contribution. Correlated outer vars come from their original outer-scope atom; aggregate-local vars (target_var + filter-introduced) stay private per C104.
+- **Type domain inference** (blueprint §2.6b v3 P2): `_infer_var_type_domains` recurses into aggregate filter atoms; marks aggregate `target_var` as int per C102; eq-binding to aggregate also marks bound var as int.
+- **Adapter validation** (blueprint §5.7.5 Layer 1 + §6 I5/I10/I11): `_validate_aggregate_atom_shape` mandatory regardless of `FACTPY_WHERE_AST_VALIDATE` gate state. Cmp operand tuples always routed to aggregate structural validation — unknown kinds rejected with "unsupported aggregate kind" (Step 4.7 P2 v7 fix). Layer 1 checks (kind/arity/target_var shape/filter list/nested aggregate/C100 filter atom kinds) mandatory; Layer 2 (C100 outside kind-list / C102 runtime / C104 binding-order / C103 snapshot) deferred upstream-only.
+- **`_compile_filter_atom_within_aggregate`** mirrors `_compile_atom` (no witness symbols, `local_bound_vars` scope, synthetic not-relation extraction via `agg:` namespace prefix). Multi-atom and OR-branch not bodies inside aggregate supported via same synthetic-relation pattern as outer-where.
+- **Three-layer docs flip** (mandatory per §9 + §6.1 P4 v2): `application/docs/rule.md` (Souffle row pending → ✓ + empty-set guard explanation) + `sdk/docs/03_rules_and_inferences.en.md` §3.2 (Souffle row Deferred → Supported).
+- 27-test acceptance file `tests/test_souffle_aggregate_compile.py` covers §7.1-§7.11 + extra shape coverage + 2 Step 4.7 P1 v7 tests (numeric bound var pass + entity-typed bound var reject).
+- Commit lineage: scoped `6083e305` → G7 precondition `6dd4272b` (BEFORE impl, doc-only) → feat main `3f64fe4d` (impl + 25 tests + 3-layer docs) → Step 4.7 fix `84564bf2` (P1 aggregate eq/ne bound-var `_assert_cmp_var_allowed` + P2 unknown kind structural rejection regardless of gate + dead `_compile_aggregate` wrapper removal) → closure `f7cc3a07` → archive `b217f309`.
+- Verification at archive: 27 T2.3c tests pass; 88 cross-slice tests pass (T2.3a + T2.3b + T2.1 + T2.2 + SDK DSL + application protocol — 0 regression). Ruff clean. Sacred `master` + dirty set preserved throughout.
+- **Cross-flip inversion experiment closed with documented cost-value verdict**: 6 Step 4.2 rounds + Step 4.7 v1 + Step 4.7 v2 = 8 review rounds, 25 findings (2 Blockers + 22 Required + 1 Worth-considering). Compared to user-drafts baseline (T2.2 / fixture cleanup / T2.3a — all 0-1 round Step 4.2). **Verdict: T2.3.d MUST revert to user-drafts pattern**. Hard recommendation locked across multiple retrospectives.
+- **Size deviation accepted as S-class** per Step 4.8 user closure guidance: actual ~1090 LOC (630 code + 460 tests) vs blueprint §5.7 estimate ~300 LOC. Qualitative S-class criteria all hold (adapter-only scope, no public API rename, no cross-engine semantic decision, no substrate/SDK change, no new baseline drift surfaced).
+- Deferred follow-ups per T2.3c §10.4: T2.3.d ProbLog wire (`findall/3` + list predicates) + T2.3.b1/T2.3.e Nit (T2.3b carried over) + schema "number" vs "int" cmp compatibility (general adapter hygiene, pre-existing) + Souffle native `mean` aggregator binary verification ((A-fallback) deviation path documented if incompatibility surfaces).
 
 ### Workflow governance state
 
@@ -114,6 +131,8 @@ Since T2.2, the cross-flip pattern stabilized as user-drafts / Claude-reviews fo
 
 T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed three tightening rounds (v1 1 Blocker + 3 Required → v2 1 Blocker → v3 1 Required acceptance discriminator gap). Step 4.7 came back with 0 P-findings and 1 Nit, and the Nit was explicitly deferred rather than expanded — preserving the clean-impl record. T2.3b also validated a 3-commit impl variant: G7 precondition commit + pre-impl scope amendment commit + single feat (combining impl + tests + 3-layer docs).
 
+**T2.3c extended cross-flip inversion to impl phase as well** (Claude drafts blueprint, Claude implements, user reviews everything) — and the experiment closed with a documented cost-value verdict. 6 Step 4.2 rounds + Step 4.7 v1 + Step 4.7 v2 = **8 review rounds, 25 findings** (2 Blockers + 22 Required + 1 Worth-considering). Compared to user-drafts baseline (T2.2 / fixture cleanup / T2.3a — all 0-1 round Step 4.2). **Verdict: T2.3.d MUST revert to user-drafts pattern**. Cost differential is bounded for blueprint drafting alone (manageable with anti-pattern audit discipline + section-level rewrite propagation) but compounds further when extended to impl phase. Future adapter-shaped slices: user-drafts is the default unless a specific reason to invert. T2.3c also validated the canonical 3-commit impl pattern (G7 precondition → feat main → Step 4.7 fix).
+
 ### Process lessons carried forward
 
 - **Branch isolation:** T1.1 did not use a separate implementation branch; T1.2 onward corrected this. Continue paired blueprint/impl branch discipline.
@@ -125,15 +144,21 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **Cross-flip inversion blindness:** T2.3b reverted to Claude-drafts / user-reviews and needed three Step 4.2 rounds. Drafter assumption blindness compounded across v1 and v2; v3 closed it only when the reviewer demanded a discriminator test that would actually fail if the corrected algorithm branch were dropped. When inverting cross-flip, the reviewer must explicitly verify each acceptance test discriminates the intended algorithm branch, not just exercises the nominal path.
 - **Reusable helper preference:** T2.3b implemented its self-ensure logic by reusing the existing `_ensure_attr_record_binding` helper instead of writing a new injection function. The helper's existing "early-return-on-hit" semantics gave "no duplicate `Type:exists`" behavior for free. When adding new lowering paths, scan for existing helpers with matching semantics first.
 - **Step 4.7 Nit discipline:** T2.3b had a single Nit observation (non-aggregate-side AttrRef/BinaryExpr asymmetry in `_lower_compare_with_aggregate`). User chose deferral over expansion. Preserve S-class minimal scope and the 0-P1-fix clean impl record; document the deferral in §10.4 and flag as a follow-up micro-slice rather than expanding after a clean reviewer pass.
+- **T2.3c cross-flip inversion cost ceiling reached:** extending cross-flip inversion to BOTH blueprint drafting + impl phase compounds the round count. T2.3c needed 8 review rounds vs user-drafts baseline 0-1. Hard recommendation: T2.3.d MUST revert. Future adapter slices: user-drafts is the default unless a specific reason to invert.
+- **T2.3c anti-pattern propagation discipline:** v5→v6 found 3 Required findings all rooted in the same "adapter trusts upstream" framing surviving in header / §2.4 / §3 Non-goals despite v4 §5.7.5 having corrected the core lock. Lesson: section-level rewrites must propagate through ALL referencing sections via anti-pattern grep. v6 mitigation added an explicit grep audit pass for stale phrasing. Pattern generalizes: when changing a contract clause, search the full blueprint for the OLD framing and update every instance.
+- **T2.3c rewrite-and-propagate discipline:** v3→v4 found 5 Required findings in sections referencing v3-corrected sections. Lesson: after editing any §N section, grep blueprint for cross-references to §N's content and update. Cross-section consistency check (§1 ↔ §5 ↔ §6 ↔ §7 ↔ §8 ↔ §9 ↔ audit log G1-G7) before each commit.
+- **T2.3c 3-commit impl pattern (canonical):** G7 precondition (doc-only, BEFORE impl) → feat main (impl + tests + docs) → Step 4.7 fix (P1/P2 + dead-code removal). Step 4.7 review can surface P1 findings post-feat; focused fix commit covers them without re-running pipeline.
+- **T2.3c size estimate calibration:** actual ~1090 LOC vs blueprint §5.7 estimate ~300 LOC. Future adapter-slice §5.7 estimates should account for "mirror-and-extend" patterns (filter-within-aggregate, scope-isolated copy of dispatch logic, per-case wiring across all cmp branches). T2.3.d ProbLog wire likely faces similar size pressure (~150 LOC mirror at minimum).
 
 ### Recommended next work
 
-- **T2.3c AggregateExpr Souffle adapter** — S-class adapter slice; closes Souffle path for aggregate-backed application Rules. T2.3a substrate + T2.3b SDK both ready.
-- **T2.3d AggregateExpr ProbLog adapter** — S-class adapter slice via `findall/3` + list predicates; symmetric to T2.3c.
-- **T2.3.b1 / T2.3.e (Nit follow-up)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` (via `_ensure_attr_record_binding`) and `BinaryExpr` (via `_lower_expr_term`), making it symmetric with standard `_lower_compare`.
+- **T2.3.d AggregateExpr ProbLog adapter** — S-class adapter slice via `findall/3` + list predicates (`length/2` / `sum_list/2` / `min_list/2` / `max_list/2` + custom mean derived from sum/count) + `AggregateNoValue` handling. Fundamentally different lowering algorithm from Souffle (ProbLog has no native aggregate operator). **MUST use user-drafts pattern** per closed cross-flip inversion experiment verdict (T2.3c retrospective). Likely ~150-300 LOC code per parent essay §1719.
+- **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` (via `_ensure_attr_record_binding`) and `BinaryExpr` (via `_lower_expr_term`), making it symmetric with standard `_lower_compare`.
+- **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains; production schemas using `"number"` pred type domains would fail filter-internal numeric cmp. Pre-existing limitation; could be addressed as general adapter hygiene slice. S-class.
 - **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing.
 - **T1.3 SDK top-level `Rule` naming** — M class; first M-class slice in the streak; needs decision doc for TPQ-2 / public API naming.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
+- **T3 RuleExpr** — L class; first full-cadence test of the size-class policy.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
