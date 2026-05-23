@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v5 tightening — §4.2 touch-point _vars_in_atom corrected + I5/I10 invariants distinguish structural vs semantic adapter responsibility)
+- Last Updated: 2026-05-23 (Step 4.2 v6 tightening — header Outputs corrected + §2.4 filter-kind structural enforcement + Non-goal nested-aggregate adapter-rejects updated)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + IR shape;§10.6.4 (C100) — filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 — per-engine aggregate lowering策略
@@ -15,8 +15,9 @@
   - `_compile_atom` dispatch extension recognizing aggregate-tuple in cmp atom LHS/RHS
   - `_compile_aggregate` helper lowering `(kind, target_var, filter_atoms)` to Souffle aggregate body DL syntax
   - `_compile_cmp_side` extension handling aggregate operand
-  - `_vars_in_atom` aggregate-aware extension(correlated outer vars only;aggregate-local vars stay private per C104)
-  - `_validate_atom_subset` aggregate shape validation extension
+  - `_vars_in_atom` aggregate operand contributes **ZERO** outer-var(query-variable set unaffected by aggregate filter atoms;correlated outer vars contributed by their original outer-scope atom;aggregate-local vars stay private per C104)
+  - `_infer_var_type_domains` aggregate-filter recursion(walks filter atoms for type-domain inference;marks aggregate `target_var` as int per C102)— separate concern from `_vars_in_atom`(different consumer / different algorithm,per §2.6b)
+  - `_validate_atom_subset` aggregate shape validation extension(structural,mandatory regardless of `FACTPY_WHERE_AST_VALIDATE` gate state)
   - Test coverage:per-kind compile + correlation pass-through + aggregate-local isolation + empty-set guard + validation rejection + gate-off validation
   - Adapter status docs:`application/docs/rule.md` adapter status table flip(Souffle pending → Souffle ✓)+ `sdk/docs/03_rules_and_inferences.en.md` §3.2 adapter status table row flip(mandatory per P4 v2)
 - Related:
@@ -103,7 +104,7 @@ Filter atoms compile via the same `_compile_atom` machinery but with a **scoped 
 
 - Outer `bound_vars` accessible as **correlated outer vars**(read-only)
 - Aggregate-local new vars(introduced inside filter)bind to a **local copy** of `bound_vars` that does NOT leak back to outer
-- Per C100,filter atom kinds restricted to pred / eq / ne / gt / ge / lt / le / in / **not**(no Rule reference / no RuleExpr / no nested aggregate / no ArithExpr — but T2.3a substrate validator upstream already rejects these,so Souffle adapter trusts the IR shape)
+- Per C100,filter atom kinds restricted to pred / eq / ne / gt / ge / lt / le / in / **not**。**Structural enforcement at adapter regardless of gate state**(v4/v5 lock):adapter rejects non-C100 filter atom kinds(`_ARITH_KINDS` / nested aggregate / future top-level kinds outside list)because compile path itself cannot proceed — `_ARITH_KINDS` would emit var-binding clauses Souffle aggregate body slots cannot accept;nested aggregate would recurse undefined。T2.3a substrate validator also enforces semantically when `FACTPY_WHERE_AST_VALIDATE=1`(defense-in-depth);adapter is **only safety net** when gate OFF。Deeper semantic checks(RuleRef object shape / RuleExpr AST nesting / C102 numeric runtime / C104 binding-order)remain upstream-only per §5.7.5 Layer 1 / Layer 2 split。
 
 ### 2.5 C101 — Empty set + `AggregateNoValue` Souffle representation(v2 lock — implement guard now)
 
@@ -279,7 +280,7 @@ Recorded BEFORE implementation per T2.2/T2.3a/T2.3b discipline。Detailed in §5
 - **T2.3a substrate changes** — IR / validator / Python eval / application Rule all consumed unchanged
 - **T2.3b SDK changes** — `_AggregateRef` / 5 helpers / lowering / bridge validator gate all consumed unchanged
 - **Aggregate-in-arith-atom** — deferred Nit from T2.3b(`_lower_compare_with_aggregate` non-aggregate side limitation);T2.3.b1/T2.3.e candidate
-- **Nested aggregate** — T2.3a validator rejects upstream;Souffle adapter trusts upstream
+- **Nested aggregate support** — out of scope for ANY future expansion in T2.3c。Adapter rejects nested aggregate(aggregate appearing inside another aggregate's filter)as **structural invalid input** at `_validate_atom_subset`(mandatory regardless of gate state per §5.7.5 Layer 1 / I10 v5)。T2.3a substrate validator also rejects upstream when gate ON(defense-in-depth)。Adapter is only safety net when gate OFF。
 - **New aggregate kinds beyond 5** — locked at parent essay C99
 - **New filter atom kinds beyond C100** — pred / eq / ne / gt / ge / lt / le / in / not list locked
 - **Witness layout for aggregate result** — aggregates produce derived numeric values;no rule occurrence witness
@@ -596,7 +597,7 @@ Similarly,top-level filter kinds outside C100 list(any future kinds added withou
 
 - C100 filter restriction *outside* the kind-list constraint(e.g.,RuleRef object semantics,RuleExpr nesting at AST layer)— substrate validator enforces;adapter doesn't see these as kind-list violations because RuleRef / RuleExpr are not raw-tuple-atom forms that reach Souffle adapter at all。If gate OFF and substrate produces malformed shape,adapter's structural shape checks catch it。
 - C102 numeric target type runtime check — substrate validator + Python eval;adapter cannot type-check generic var types。
-- C104 binding-order scoping(correlated var must be pre-bound before aggregate appearance)— substrate validator;adapter trusts upstream binding semantics。
+- C104 binding-order scoping(correlated var must be pre-bound before aggregate appearance)— substrate validator;deferred upstream-only(adapter does not re-implement binding-order analysis,which is a flow-state semantic check rather than structural compile gate)。
 - C103 snapshot semantics — substrate evaluator concern,not adapter compile。
 
 **Test §7.10 + §7.10b verify both layers**(see §7)。

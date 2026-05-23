@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v5 tightening — §4.2 touch-point _vars_in_atom corrected + I5/I10 invariants distinguish structural vs semantic adapter responsibility)
+- Last Updated: 2026-05-23 (Step 4.2 v6 tightening — header Outputs corrected + §2.4 filter-kind structural enforcement + Non-goal nested-aggregate adapter-rejects updated)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3c-aggregate-souffle-wire.md](./2026-05-23_t2-3c-aggregate-souffle-wire.md)
@@ -26,6 +26,7 @@
 | 2026-05-23 | draft | Step 4.2 v3 tightening | User v2 re-review surfaced 5 Required findings on contract-precision gaps that would surface at impl time: P1 §2.6 still had v1 stale algorithm (outer_var_universe approach) contradicting v2 §5.5; P2 `_infer_var_type_domains` (`where_compile.py:829-861`) not covered — needs aggregate-aware recursion or impl-time `_assert_cmp_var_allowed` would fail on aggregate-internal cmp like `gt($_agg1, 5)`; P3 to_string/to_number boundary not precisely locked — eq binding vs numeric cmp wrapping rules unclear; P4 §6.2 still listed `sdk/docs/` 0-diff invariant contradicting P4 v2 fix that mandates `sdk/docs/03_rules_and_inferences.en.md` flip; P5 audit log G5 + Anticipated reviewer P-findings retained v1 stale claims. v3 fixes applied: §2.6 rewritten to align with §5.5; new §2.6b + new I11 invariant + §7.11 acceptance for `_infer_var_type_domains`; new §5.3.5 lock table for to_string/to_number rules + §7.8 expanded to 4 tests + new test (d); §6.2 narrowed to per-file 0-diff (sdk/docs/03 row exempt); audit log G5 updated + Anticipated P-findings marked superseded. Acceptance grew 17+ → 19+ tests. Status stays `draft` pending v3 re-review. |
 | 2026-05-23 | draft | Step 4.2 v4 tightening | User v3 re-review surfaced 5 Required findings, no Blockers — convergence stage. P1 gate-off C100 contract self-contradiction in §5.7.5 (table said adapter enforces filter kind list "defense-in-depth" while narrative said C100 NOT in adapter) — split into Layer 1 structural validation (MANDATORY regardless of gate) and Layer 2 semantic checks (upstream-only); rationale that `_ARITH_KINDS` in aggregate filter is structurally undefined; new §7.10b 2-test discriminator. P2 §8 step 5 stale v1/v2 var-extraction text contradicting v3 §5.5 — split into step 5 (`_vars_in_atom` zero contribution) + step 5b (`_infer_var_type_domains` aggregate recursion); separation of concerns clarified. P3 §8 step 12 stale Outcome wording said "AggregateNoValue empty-set gap" which v2 lock A eliminated — reworded to "empty-set guard implementation status + Souffle deviations if discovered". P4 §2.5 line 146 prematurely claimed Souffle parse verification "Confirmed at Step 4.7" — flipped to future-tense "MUST be verified at Step 4.7" + impl requirement + (A-fallback) deviation path. P5 audit log Anticipated P-findings #1/#2/#3 still presented v1 framing — marked SUPERSEDED with v2/v3 cross-ref + cross-slice contract preservation `sdk/docs/` 0-diff narrowed per-file (04 stays 0-diff; 03 §3.2 row MUST flip; rest of 03 0-diff). Acceptance grew 19+ → 21+ tests. Status stays `draft` pending v4 re-review. |
 | 2026-05-23 | draft | Step 4.2 v5 tightening | User v4 re-review verdict: no Blockers, 2 Required text/contract residuals — final convergence. P1 §4.2 touch-point line 317 `_vars_in_atom(...)` description still said "T2.3c extends to walk aggregate filter atoms (correlated outer vars only)" — v1/v2 stale algorithm contradicting v3/v4 §5.5 + §8 step 5; corrected to "aggregate operand contributes ZERO outer vars" + added separate `_infer_var_type_domains` line at where_compile.py:829-861 documenting recursion as separate concern with different consumer/algorithm. P2 §6 invariants I5/I10 wording weakened adapter's gate-off responsibility ("substrate enforces upstream, Souffle adapter trusts" + "C100 semantic restrictions deferred to upstream") contradicting v4 §5.7.5 Layer 1 structural lock — rewrote I5 to explicitly state adapter enforces filter kind list regardless of gate state (rationale: `_ARITH_KINDS` in aggregate filter is structurally undefined, not just semantically violated); rewrote I10 to mirror §5.7.5's two-layer table (Layer 1 structural mandatory regardless of gate + Layer 2 semantic upstream-only with C100-outside-kind-list / C102 / C104 / C103 examples); I8 also updated to reflect §5.3.5 v3 lock table (to_string only for eq binding to unbound var, not blanket). Status stays `draft` pending v5 re-review. User indicated this should be the final round before scoped. |
+| 2026-05-23 | draft | Step 4.2 v6 tightening | User v5 re-review verdict: no Blockers, 3 Required current-text residuals all rooted in stale "adapter trusts upstream" wording surviving in three header / §2 sections. P1 header Outputs line 18 still said `_vars_in_atom` aggregate-aware with "correlated outer vars only" — v1/v2 stale; rewrote to explicit "aggregate operand contributes ZERO outer-var" + new `_infer_var_type_domains` line documenting aggregate-filter recursion as separate concern. P2 §2.4 filter-kind restriction bullet (line 106) said "T2.3a substrate validator upstream already rejects these, so Souffle adapter trusts the IR shape" — contradicts v4/v5 §5.7.5 Layer 1 lock; rewrote to explicit structural enforcement at adapter regardless of gate state (with rationale: `_ARITH_KINDS` would emit var-binding clauses Souffle aggregate body slots cannot accept; nested aggregate would recurse undefined) + cross-ref to §5.7.5 Layer 1/Layer 2 split. P3 Non-goal "Nested aggregate" bullet (line 282) said adapter trusts upstream — rewrote to "adapter rejects nested aggregate as structural invalid input at `_validate_atom_subset` regardless of gate state; substrate also rejects upstream when gate ON (defense-in-depth); adapter is only safety net when gate OFF". Status stays `draft` pending v6 re-review. |
 
 ## Decision Notes
 
@@ -378,3 +379,57 @@ v5 round surfaced **2 Required(no Blockers)** — exactly within v4 prediction t
 **Lesson for T2.3.d**:cross-flip inversion(Claude drafts,user reviews)on adapter-shaped slices accumulates 4-5 rounds of tightening to reach convergence。This is **significantly higher cost** than the user-drafts pattern's 0-1 round Step 4.2(T2.2 / fixture cleanup / T2.3a all had clean Step 4.2 drafts)。**T2.3.d should revert to user-drafts pattern**(per audit log retrospective lesson recorded across v2/v3/v4 rounds + final confirmation here)。
 
 **Convergence success criterion for v5**:if v5 review surfaces zero Required findings,scoped anchor proceeds and the cross-flip inversion experiment closes with a documented cost-value analysis。If v5 surfaces another Required,we should escalate to a meta-decision:abandon T2.3.c blueprint and re-draft via user-drafts pattern,or accept N=6 rounds as the new ceiling for cross-flip inversion overhead。
+
+### 2026-05-23 — Step 4.2 v5 review findings + v6 resolutions
+
+User Step 4.2 v5 re-review verdict:**no Blockers, 3 Required current-text residuals**。All 3 rooted in the same anti-pattern:"adapter trusts upstream"/"substrate validator upstream already rejects" wording surviving in header / §2 sections that describe current truth — contradicting v4/v5 §5.7.5 Layer 1 structural lock。
+
+**P1 Required — header Outputs line 18 stale `_vars_in_atom` semantics**
+
+Outputs line still wrote `_vars_in_atom` "aggregate-aware extension(correlated outer vars only;aggregate-local vars stay private per C104)" — v1/v2 stale framing contradicting v3 §5.5 + v5 §4.2 + v5 I6。
+
+**v6 fix**:
+- Outputs line rewritten:"`_vars_in_atom` aggregate operand contributes **ZERO** outer-var(query-variable set unaffected;correlated outer vars contributed by their original outer-scope atom independently;aggregate-local vars stay private per C104)"
+- Added new Outputs line for `_infer_var_type_domains` aggregate-filter recursion documenting it as separate concern from `_vars_in_atom`(different consumer / different algorithm,per §2.6b)
+- `_validate_atom_subset` Outputs line annotated "structural,mandatory regardless of `FACTPY_WHERE_AST_VALIDATE` gate state"
+
+**P2 Required — §2.4 filter-kind restriction said adapter trusts upstream**(blueprint §2.4 line 106)
+
+§2.4 bullet read:"Per C100,filter atom kinds restricted to pred / eq / ne / gt / ge / lt / le / in / **not**(no Rule reference / no RuleExpr / no nested aggregate / no ArithExpr — but T2.3a substrate validator upstream already rejects these,so Souffle adapter trusts the IR shape)" — directly contradicting v4/v5 §5.7.5 Layer 1 structural lock。
+
+**v6 fix**:§2.4 bullet rewritten to:
+- Explicit structural enforcement at adapter regardless of gate state(v4/v5 lock)
+- Rationale spelled out:`_ARITH_KINDS` would emit var-binding clauses Souffle aggregate body slots cannot accept;nested aggregate would recurse undefined
+- T2.3a substrate validator also enforces semantically when gate ON(defense-in-depth);adapter is only safety net when gate OFF
+- Deeper semantic checks(RuleRef object shape / RuleExpr AST nesting / C102 runtime / C104 binding-order)remain upstream-only per §5.7.5 Layer 1 / Layer 2 split
+
+**P3 Required — Non-goal "Nested aggregate" said adapter trusts upstream**(blueprint §3 line 282)
+
+§3 Non-goal bullet read:"Nested aggregate — T2.3a validator rejects upstream;Souffle adapter trusts upstream" — contradicts v4/v5 §5.7.5 Layer 1 lock(nested aggregate IS rejected at adapter structurally,not just upstream)。
+
+**v6 fix**:Non-goal bullet rewritten:
+- "Nested aggregate support — out of scope for ANY future expansion in T2.3c"(scope clarification preserved)
+- "Adapter rejects nested aggregate(aggregate appearing inside another aggregate's filter)as structural invalid input at `_validate_atom_subset`(mandatory regardless of gate state per §5.7.5 Layer 1 / I10 v5)"
+- "T2.3a substrate validator also rejects upstream when gate ON(defense-in-depth)。Adapter is only safety net when gate OFF"
+
+### 2026-05-23 — Cross-flip inversion v5→v6 retrospective (post-final-round)
+
+v6 round surfaced **3 Required(no Blockers)** — exceeded v5 prediction(predicted 0)。Updated final pattern:
+
+| Round | Blockers | Required | Total | Pattern |
+|---|---|---|---|---|
+| v1 | 2 | 4 | 6 | Big-picture |
+| v2 | 0 | 5 | 5 | Contract-precision |
+| v3 | 0 | 5 | 5 | Text consistency(impl plan / Outcome / future-tense / gate-off edge / audit anticipated) |
+| v4 | 0 | 2 | 2 | Touch-point cite + invariant weakening |
+| v5 | 0 | 3 | 3 | Header Outputs + §2.4 bullet + §3 Non-goal bullet — same "adapter trusts upstream" anti-pattern surviving across 3 sections |
+
+**5-round cumulative**:2 Blockers + 19 Required = 21 findings(updated from v5's "18")。
+
+**v5→v6 lesson**:**anti-pattern propagation outlives section-level rewrites**。The "adapter trusts upstream" framing was the v1/v2 simplification;v4 §5.7.5 corrected the core lock but the same anti-pattern survived in 3 other places(header Outputs / §2.4 / §3 Non-goal)— all describing current truth,all using stale framing。This is **deeper than rewrite-and-propagate**(v3→v4 lesson):it's **anti-pattern audit across all section types**(header / Goals / Non-goals / Current Context / Proposed Shape / Invariants / Acceptance / Impl Plan / Docs)。
+
+**v6 mitigation applied**:grep blueprint for residual "adapter trusts" / "substrate validator upstream already" / "Souffle adapter trusts" phrases — all 3 instances fixed。Anti-pattern audit pass added to v6 mitigation discipline。
+
+**Convergence success criterion for v6**:if v6 review surfaces zero Required findings,scoped anchor proceeds — but cost-value analysis already conclusive:**6 rounds for a single S-class adapter blueprint is significantly higher than the user-drafts pattern's 0-1 round baseline**。T2.3.d MUST revert to user-drafts pattern(no longer a "should consider";now a hard recommendation locked across 5+ retrospectives)。
+
+**If v6 still surfaces Required**:escalate to abandon-T2.3.c meta-decision。Cost ceiling has been reached at N=6 rounds。
