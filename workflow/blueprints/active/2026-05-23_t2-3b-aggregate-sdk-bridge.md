@@ -661,9 +661,22 @@ Per Track plan §1.2.4,T2.3b would upgrade S → M if any of these triggers fire
 - [ ] Bridge `_canonicalize_vars/expr/term` recursively canonicalizes within `AggregateAtom` Term
 - [ ] **End-to-end smoke**:user code `build_application_rule(where=[..., total == agg_sum(target, where=[...]), ...], ports={...})` produces valid application Rule with `AggregateAtom` Term-position;Python eval gives correct per-env aggregate result
 - [ ] **Target AttrRef lowering test**(per Step 4.2 v1 P1):`agg_sum(Order(o).amount, where=[Order(o).buyer == u])` lowers to expected IR tuple shape with temp var + injected field pred at end of filter;parent essay main example end-to-end works
-- [ ] **Target AttrRef self-ensure binding test**(per Step 4.2 v2 P1 — order independence):`agg_sum(Order(o).amount, where=[Order(o)])` — filter only has existence,target self-ensures field pred injection works(record_var `o` bound by filter,target only injects field pred,no duplicate existence)
-- [ ] **Target AttrRef solo binding test**(per Step 4.2 v2 P1):`agg_count(where=[Order(o).buyer == u])` with `agg_sum(Order(o).amount, ...)` — even when filter never explicitly binds via `Order(o)` ExistsAtom directly,unified syntax `Order(o).buyer == u` does bind `o` via `_lower_compare` existence injection,so target sees `o` bound;test verifies this case
-- [ ] **Target AttrRef no-duplicate-existence test**(per Step 4.2 v2 P1):IR output for `agg_sum(Order(o).amount, where=[Order(o).buyer == u])` should NOT contain duplicate `("pred", "Order:exists", ["$o"])`;exactly one existence pred for `$o`
+- [ ] **Filter-bound target AttrRef test**(per Step 4.2 v2 P1 — filter binds record_var via ExistsAtom):`agg_sum(Order(o).amount, where=[Order(o)])` — filter has `Order(o)` ExistsAtom binding `o`,target sees `o` bound,**only injects field pred**(no duplicate existence)
+- [ ] **Filter-bound via unified syntax test**(per Step 4.2 v2 P1):`agg_sum(Order(o).amount, where=[Order(o).buyer == u])` — `_lower_compare` for unified syntax injects existence pred for `o`,target sees `o` bound,**only injects field pred**(no duplicate existence)
+- [ ] **Target AttrRef no-duplicate-existence test**(per Step 4.2 v2 P1):IR output for `agg_sum(Order(o).amount, where=[Order(o).buyer == u])` MUST contain **exactly one** `("pred", "Order:exists", ["$o"])`;not zero,not two
+- [ ] **Target AttrRef TRUE self-ensure test**(per Step 4.2 v3 P1 — covers the actual self-ensure branch):`agg_sum(Order(o).amount, where=[User(u)])` — filter only binds `u`(correlated to outer),does NOT bind `o`。Target self-ensure must inject:
+  - `("pred", "Order:exists", ["$o"])` — injected by target self-ensure since `o` not in filter_bindings
+  - `("pred", "order:amount", ["$o", "$_agg1"])` — target field pred
+  - Expected lowered IR:
+    ```python
+    ("sum",
+     "$_agg1",
+     [("pred", "User:exists", ["$u"]),        # from filter
+      ("pred", "Order:exists", ["$o"]),       # self-ensured by target
+      ("pred", "order:amount", ["$o", "$_agg1"])])  # target field pred
+    ```
+  - **Critical check**:`o` MUST NOT leak to outer bindings(per Step 4.2 v1 P2 filter isolation)。If outer atom following aggregate references `o` without independent binding → fail
+  - This test covers the actual `if record_var not in filter_bindings:` branch in `_lower_aggregate_target`(if impl skipped this branch,filter-bound tests above still pass,but this test would fail with "unbound record var" or missing existence pred)
 - [ ] **Bare AttrRef target reject**(per Step 4.2 v1 P1):`agg_sum(o.amount, where=[...])` where `o.amount` uses legacy LogicVar.__getattr__ (entity_type=None) → reject construct-time
 - [ ] **Filter bindings isolation**(per Step 4.2 v1 P2):`Order(o)` introduced in aggregate filter does NOT make subsequent outer `Order(o).field == ...` legal;outer atom must independently bind `o`
 - [ ] **Legacy rejection in aggregate filter / target**(per Step 4.2 v1 P3):`agg_count(where=[Pred("user:exists", "$u")])` and `agg_sum(target_with_bare_attrref, where=[...])` and `agg_*(where=[RuleRefAtom(...)])` all reject via bridge `_reject_legacy_aggregate_ref` — T1.2 hard-cut policy preserved through SDK aggregate path

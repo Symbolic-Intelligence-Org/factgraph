@@ -195,3 +195,51 @@ if record_var not in filter_bindings:
 **P2/P3/P4 unchanged**:user confirmed v1 P2(filter bindings isolation)/ P3(legacy reject)/ P4(SDK docs)corrections accepted as-is。
 
 **Blueprint stays `Status: draft`** pending user re-approval of v2。Confidence:high — single ordering bug fixed surgically with self-ensure pattern that matches existing `_lower_compare` AttrRef path semantics from T1.2。Predict v3 review 0 findings,ready for Step 4.6 scoped。
+
+### 2026-05-23 — Step 4.2 v3 tightening applied (1 Required — acceptance test coverage gap)
+
+User Step 4.2 v2 re-review surfaced 1 Required — v2 acceptance tests didn't actually exercise the self-ensure branch。
+
+**P1 (Required) — Self-ensure acceptance tests didn't cover self-ensure branch**:
+v2 added 3 acceptance tests for target AttrRef lowering,but both example filters bind `o` themselves:
+
+- `agg_sum(Order(o).amount, where=[Order(o)])` — filter has `Order(o)` ExistsAtom → binds `o` → target skips self-ensure(only injects field pred)
+- `agg_sum(Order(o).amount, where=[Order(o).buyer == u])` — filter unified syntax → `_lower_compare` injects existence for `o` → target skips self-ensure(same)
+
+If implementation accidentally drops the `if record_var not in filter_bindings: inject existence` branch,**both v2 tests would still pass**。Target self-ensure goes uncovered。
+
+**User recommendation**:add a test where filter does NOT bind target record_var,e.g.:
+
+```python
+agg_sum(Order(o).amount, where=[User(u)])
+```
+
+Filter only binds `u`(correlated to outer);target MUST self-ensure `Order:exists($o)` injection。
+
+**Adopted**:
+- v2 acceptance tests renamed for clarity:
+  - "Target AttrRef self-ensure binding test" → "**Filter-bound target AttrRef test**"(filter binds via ExistsAtom)
+  - "Target AttrRef solo binding test" → "**Filter-bound via unified syntax test**"(filter binds via _lower_compare)
+- v2 "no-duplicate-existence test" kept(now explicit "exactly one")
+- **NEW acceptance**:"**Target AttrRef TRUE self-ensure test**":
+  - Example:`agg_sum(Order(o).amount, where=[User(u)])`
+  - Expected lowered IR:
+    ```python
+    ("sum",
+     "$_agg1",
+     [("pred", "User:exists", ["$u"]),        # from filter
+      ("pred", "Order:exists", ["$o"]),       # self-ensured by target
+      ("pred", "order:amount", ["$o", "$_agg1"])])  # target field pred
+    ```
+  - Critical check:`o` MUST NOT leak to outer bindings(per v1 P2)
+  - Test purpose explicit:"covers the actual `if record_var not in filter_bindings:` branch in `_lower_aggregate_target`"
+
+**Verification of test design**:if implementation drops self-ensure branch:
+- Filter-bound tests still pass(filter binds `o` for them)
+- **True self-ensure test fails** with "unbound record var" SDKDSLError or missing existence pred in IR output
+
+So this single new test is the **discriminator** for self-ensure branch coverage。
+
+**P2/P3/P4 v1 unchanged**:user re-confirmed accepted。
+
+**Blueprint stays `Status: draft`** pending user re-approval of v3。Confidence:high — single acceptance gap fixed with discriminating test。Predict v4 review 0 findings,ready for Step 4.6 scoped。
