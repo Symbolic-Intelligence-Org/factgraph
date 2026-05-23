@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2 + ProbLog hygiene fixtures archived locally; source `1da49c41`, not pushed)
+最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + ProbLog hygiene fixtures archived locally; source `477fcccb`, not pushed)
 
 ## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 S-CLASS BATCH ARCHIVED LOCALLY)
 
-**Current local branch:** `v0.2.0-impl-problog-meta-confidence-fixture-cleanup-2026-05-23 @ 1da49c41`.
+**Current local branch:** `v0.2.0-impl-t2-3-aggregate-substrate-2026-05-23 @ 477fcccb`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -25,6 +25,7 @@
 | ProbLog import-cycle hygiene | S | `cc8f9a96` | `d0fec968 fix(audit): break ProbLog import cycle at round_events` |
 | T2.2 ArithExpr substrate | S | `b17a62c1` | `04ac0cb9 feat(problog): export arithmetic builtins` |
 | ProbLog `meta[confidence]` fixture cleanup | S | `1da49c41` | `e3c3d7bc test(problog): migrate meta-confidence fixtures` |
+| T2.3a AggregateExpr substrate | S | `477fcccb` | `b94576f5 feat(rules): add AggregateExpr substrate` |
 
 ### Current landed behavior
 
@@ -67,6 +68,14 @@
   - combined export + engine gate — 24 tests OK.
 - The G7 precondition gate was amended before fixture edits: broad `tests.test_sdk_assertion_record_set` was removed as a precondition because it has unrelated `snap.field(...).active.where` baseline drift; the valid canonical gate is `tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane`.
 
+**T2.3a — AggregateExpr substrate**
+- Core `AggregateAtom` landed in `src/factgraph/core/rules/where_ast.py` as a term-position value form, not as a top-level truth atom.
+- Validation landed in `where_ast_validate.py`: aggregate filter restrictions, per-env variable scoping, target binding, numeric target checks, and aggregate-specific error classes.
+- Python evaluator landed in `where_eval.py`: per-env aggregate resolution, `AggregateNoValue`, aggregate-aware comparison/arithmetic raw resolvers, and helper coverage for planning/scoring/variable extraction.
+- Application Rule serialization landed in `application/protocol/rule.py`: `_serialize_term` and two-pass variable collection now understand aggregate terms while isolating aggregate-local filter variables.
+- SDK ergonomic helpers, DSL bridge aggregate support, public docs, and Souffle/ProbLog/PyReason adapter wires are deferred to follow-up slices T2.3b/T2.3c/T2.3d.
+- G7 precondition was recorded before implementation in `f3d217a3`, implementation landed in `b94576f5`, closure in `b554b0f1`, audit status sync in `c0a80f79`, and archive in `477fcccb`.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -85,7 +94,7 @@ G1-G7 now apply to every class:
 - G6 reviewer spot-check of shipped source.
 - G7 pre-implementation precondition checks for boundary-sensitive slices.
 
-Since T2.2, the cross-flip pattern stabilized as user-drafts / Claude-reviews for design artifacts, with clean Step 4.2 drafts. Implementation reviewer passes also found 0 P1 findings for T2.2 and the fixture cleanup.
+Since T2.2, the cross-flip pattern stabilized as user-drafts / Claude-reviews for design artifacts, with clean Step 4.2 drafts for T2.2 and fixture cleanup. T2.3a needed four tightening rounds because it was the largest S-class slice so far, but it still stayed S-class: no Stage 2 decision doc was required, G7 did not trigger escalation, and implementation reviewer pass found 0 P1 findings.
 
 ### Process lessons carried forward
 
@@ -94,10 +103,12 @@ Since T2.2, the cross-flip pattern stabilized as user-drafts / Claude-reviews fo
 - **G7 timing:** T2.2 ran preconditions before implementation but recorded them after. Fixture cleanup fixed the timing by committing the G7 record before fixture edits.
 - **G7 amendment discipline:** ProbLog hygiene and fixture cleanup both used scoped amendments when preconditions exposed an unsafe or noisy gate. This is the expected S-class (A-fallback) pattern.
 - **Baseline hygiene:** ProbLog import cycle and `meta[confidence]` fixture drift are now cleared. New known baseline: `tests.test_sdk_assertion_record_set` has unrelated `snap.field(...).active.where` drift.
+- **Large S-class boundary:** T2.3a validated that a larger S-class substrate slice can remain lightweight when G1-G7 are explicit, preconditions pass, public API is not changed, and SDK/adapters are kept out of scope.
 
 ### Recommended next work
 
-- **T2.3 AggregateExpr** — next T2 track slice; predicted S → possible M because C99-C105 are tightly coupled and mostly genuinely new.
+- **T2.3b AggregateExpr SDK ergonomic + bridge** — next T2 follow-up; public SDK helpers and bridge support make this a likely S/M boundary depending on exported names and caller impact.
+- **T2.3c/T2.3d AggregateExpr adapters** — Souffle aggregate body wire and ProbLog `findall/3`/list predicate lowering, likely separate S-class adapter slices if scoped narrowly.
 - **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing.
 - **T1.3 SDK top-level `Rule` naming** — M class; needs decision doc for TPQ-2 / public API naming.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.

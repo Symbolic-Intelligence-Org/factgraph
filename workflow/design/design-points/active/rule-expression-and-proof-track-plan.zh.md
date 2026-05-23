@@ -96,15 +96,20 @@ Sub-slice impl 期间任一发生 → **当前 slice 升级到下一 class**(per
 | T1.2 DSL→bridge | S | additive + 4 行 legacy reject,~300 LOC,no public API rename |
 | T2.1 ne adapter dispatch | S | adapter-only,~100 LOC,no API |
 | ProbLog import cycle hygiene | S | single-boundary fix,~50 LOC,no API |
+| T2.2 ArithExpr substrate | S | adapter-level ProbLog parity over shipped arithmetic builtin substrate,no new public API |
+| ProbLog `meta[confidence]` fixture cleanup | S | test-only hygiene,production source 0-touch |
+| T2.3a AggregateExpr substrate | S | larger substrate-only slice,public SDK/API 0-touch,SDK/adapters deferred to T2.3b/T2.3c/T2.3d |
 
-**4 slice 的 D1-D5 偏差全部在 S class 的 G1-G7 + Step 4.2 + Step 4.7 组合下 catch**,验证 S class lightweight 模式在 small additive slice 上**力度足够**。
+**7 slice 的 D1-D5 偏差全部在 S class 的 G1-G7 + Step 4.2 + Step 4.7 组合下 catch**,验证 S class lightweight 模式在 small additive slice 上**力度足够**。T2.3a 进一步验证 larger-but-contained substrate slice 也可保持 S class,前提是 public SDK/API 与 adapters 明确拆出后续 slice。
 
 #### 1.2.6 未来 slice class 预判 + cadence 升级 trigger
 
 | Slice | 预判 class | cadence 行动项 |
 |---|---|---|
-| **T2.2 ArithExpr** | S | lightweight + G1-G7;~150 LOC adapter + IR,~5 commitments,additive |
-| **T2.3 AggregateExpr** | S → 可能 M | C99-C105 7 commitments 紧耦合 + AggregateExpr 是 100% genuinely new;若 impl 期出现 cross-commitment 决策点(numeric target type / variable scoping / AggregateNoValue)→ 升 M |
+| **T2.2 ArithExpr** | S — shipped `b17a62c1` | lightweight + G1-G7;ProbLog adapter parity for shipped arithmetic builtins;no div / AttrRef arithmetic |
+| **T2.3a AggregateExpr substrate** | S — shipped `477fcccb` | C99-C105 substrate landed without public SDK/API or adapter wires;G7 did not trigger S→M escalation |
+| **T2.3b AggregateExpr SDK ergonomic + bridge** | S → 可能 M | Adds user-facing helpers / bridge support / public docs;upgrade to M if exported naming or caller-facing API choice becomes load-bearing |
+| **T2.3c/T2.3d AggregateExpr adapters** | S(each,if narrow) | Souffle aggregate body wire and ProbLog `findall/3`/list predicates;keep separate unless cross-engine semantic decision appears |
 | **T1.3 SDK 顶层 Rule 命名** | **M** | TPQ-2 三选一(A/B/C)+ public API rename ≥ 3 caller sites → 必须 Stage 2 decision doc |
 | **T1.4 alias / port contract** | S | scope 已收窄 |
 | **T3 RuleExpr 组合** | **L** | C23-C35 + C49-C51 = 17 commitments,shipped Branch + `fg.rules.inspect()` 替换;**Stage 1 mini-audit + 多 Stage 2 decisions 必跑** |
@@ -152,11 +157,13 @@ Sub-slice impl 期间任一发生 → **当前 slice 升级到下一 class**(per
 
 | ID | 范围 | 性质 | 备注 |
 |---|---|---|---|
-| **T2.1** | 9 IR atom kinds 名单 + ir_arity + tuple shape 文档化 + Souffle `ne` dispatch + ProbLog `ne` dispatch(~100 LOC 总)| Additive(adapter)| 与 T1.1 部分并行 OK — 若不引入新 Rule 类内部表示则无冲突 |
-| **T2.2** | ArithExpr(`+` / `-` / `*` / `/`)IR shape + comparison LHS/RHS 嵌套 + Souffle ArithExpr lower wire(~50 LOC,复用既有 5 sub-kinds 的 dispatch)+ ProbLog dispatch via `is/2`(~100 LOC)+ div-by-zero 锁定语义 | Additive | 触及 `where_eval` / `where_ast`,与 T1.2 hard-cut 可能竞争同源,**先 T1.2 后 T2.2** |
-| **T2.3** | AggregateExpr(count/sum/min/max/mean)IR shape + filter atoms + AggregateNoValue sentinel + variable scoping + numeric target type 校验 + Souffle native aggregate body wire(~150 LOC)+ ProbLog `findall/3` + list predicates(~150 LOC)| Additive | 同 T2.2,**T2.3 在 T2.2 后**(filter atoms 重用 ArithExpr 校验机制) |
+| **T2.1** | **Implemented + archived 2026-05-22**(`575d48d7` impl / `1ca39726` archive):9 IR atom kinds 名单 + ir_arity + tuple shape 文档化 + Souffle `ne` dispatch + ProbLog `ne` dispatch(term inequality `\=`)| Additive(adapter)| 完成 |
+| **T2.2** | **Implemented + archived 2026-05-23**(`04ac0cb9` impl / `b17a62c1` archive):ProbLog dispatch for existing arithmetic builtins `add` / `sub` / `neg` / `addc` / `mulc` via `is/2`;SDK bridge tests prove existing `BinaryExpr` lower path;**no div / AttrRef arithmetic / float literals** | Additive(adapter parity)| 完成 |
+| **T2.3a** | **Implemented + archived 2026-05-23**(`b94576f5` impl / `477fcccb` archive):Core `AggregateAtom` substrate + validation + Python eval + `AggregateNoValue` + application Rule serialization/var collection;**SDK ergonomic / bridge / public docs / adapters deferred** | Additive(substrate-only)| 完成;large S-class validated |
+| **T2.3b** | AggregateExpr SDK ergonomic helpers + DSL bridge aggregate passthrough + public docs/export policy | Additive(public SDK surface)| Next T2 follow-up;may upgrade to M if helper naming/export policy becomes load-bearing |
+| **T2.3c/T2.3d** | Souffle native aggregate body wire + ProbLog `findall/3` + list predicates | Additive(adapter)| Keep engine slices separate unless cross-engine semantic coupling appears |
 
-**依赖**:T2.1 与 T1.1 可并行;T2.2/T2.3 在 T1.2 hard-cut 落定后串行(避免 atom canonical 半状态导致 lowering 冲突)。
+**依赖**:T2.1 与 T1.1 可并行;T2.2/T2.3a 在 T1.2 hard-cut 落定后串行完成。T2.3b depends on T2.3a substrate + T1.2 bridge;T2.3c/T2.3d depend on T2.3a substrate and can run independently from T1.4.
 
 **Shipped 受影响 surface**:
 - `src/factgraph/adapters/souffle/where_compile.py`(1137 LOC)+ `package.py`(1181 LOC)
@@ -304,12 +311,14 @@ T1.1 (additive 新 Rule) [DONE 2026-05-22]
 2. T2.1 (ne adapter dispatch)     ── parallel-OK with later T1
 3. T1.2 (legacy hard-cut)         ── DONE / archived 2026-05-22;non-eq AttrRef deferred
 4. T1.4 (port + alias)
-5. T2.2 (ArithExpr)
-6. T2.3 (AggregateExpr)
-7. T3.1-T3.5 (RuleExpr,内部部分并行)
-8. T4.1-T4.5 (Head)
-9. T5.1-T5.10 (.eval namespace,strict sequential)
-10. T1.3 (Rule naming conflict)   ── 可在 T5 中段插入,因为 T5 完成时旧 API 已删,新 Rule 自然成为 canonical
+5. T2.2 (ArithExpr)               ── DONE / archived 2026-05-23
+6. T2.3a (Aggregate substrate)     ── DONE / archived 2026-05-23
+7. T2.3b/c/d (Aggregate SDK + adapters) ── follow-up;split per public API / engine scope
+8. T1.4 (port + alias)
+9. T3.1-T3.5 (RuleExpr,内部部分并行)
+10. T4.1-T4.5 (Head)
+11. T5.1-T5.10 (.eval namespace,strict sequential)
+12. T1.3 (Rule naming conflict)   ── 可在 T5 中段插入,因为 T5 完成时旧 API 已删,新 Rule 自然成为 canonical
 ```
 
 ## 4. Cross-Track 预告 Q(不开 decision 文档,本文记录)
