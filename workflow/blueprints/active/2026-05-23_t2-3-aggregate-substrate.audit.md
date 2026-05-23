@@ -90,3 +90,68 @@ Drafter anticipates these as likely review points:
 - **NoValue propagation tests**: §5.9 lists tests but should explicitly include "NoValue inside ArithExpr operand → result NoValue" cross-T2.2 interaction test. Drafter included this in mental list but may not be explicit enough in §5.9 test outline.
 - **C104 variable scoping algorithm specifics**: §5.3 shows skeleton but doesn't fully spec the algorithm. Reviewer may require tightening on "exactly when a Var is considered aggregate-local vs correlated".
 - **AggregateAtom inside CmpAtom serialization for content_digest**: §5.6 covers `_serialize_term` extension but does not specify ordering/canonicalization for filter atoms within serialized aggregate. Reviewer may P1 require explicit canonical ordering.
+
+### 2026-05-23 — Step 4.2 v1 tightening applied (P0+P1+P2+P3+P4+P5)
+
+User Step 4.2 review surfaced 5 substantive findings + 1 Minor — drafter anticipated 4 of these in initial draft Decision Notes above; user surfaced 2 more (P1 per-env semantics + P2 raw tuple evaluator path) that drafter missed.
+
+**P0 (Blocker) — Scope too thick;public API impact mis-stated**:
+Initial draft claimed "Public API impact None / internal substrate" while including `agg_count/agg_sum/agg_min/agg_max/agg_mean` SDK helpers (which ARE public API). Self-contradiction. **Adopted**: scope split into:
+
+- **T2.3a (this slice)**: core IR + validation + Python eval + raw aggregate term resolver (in cmp/arith paths) + application Rule serialization branches. NO SDK ergonomic. NO bridge ergonomic. NO public docs.
+- **T2.3b (future slice)**: SDK ergonomic helpers + bridge ergonomic + DSL `_AggregateRef` + public docs + export policy.
+
+Blueprint title renamed to "T2.3a — Core AggregateExpr substrate". §3 Non-goals explicitly enumerates SDK + bridge + DSL deferrals. §6 invariants gain SDK-deferral + bridge-deferral. §7 acceptance includes scope diff verifications (SDK files 0 lines + bridge files 0 lines).
+
+**P1 (Blocker) — Per-env aggregate semantics (C104 correlated)**:
+Initial draft §5.4 pseudocode: `_eval_aggregate_atom_value(aggregate, envs)` reduced over entire env-list globally. Per C104 (parent §10.6.8), aggregate MUST be computed per outer env so correlated vars provide seed for filter. Otherwise two users' order counts merge into one global count — semantic error.
+
+**Adopted**: §5.5 rewritten with `_resolve_aggregate_term_for_env(env, aggregate_term, view_facts, ast_gate_on)` operating on **one env at a time**. Filter is evaluated starting from `[env]` initial env-list. §7 acceptance adds explicit per-env correlated test: two outer envs (u-1 + 3 orders / u-2 + 5 orders) produce count=3 / count=5 separately, NOT merged count=8. §6 adds "Per-env aggregation invariant".
+
+**P2 (Required) — Raw tuple evaluator path vs AST execution**:
+Initial draft §5.4 used `_eval_cmp_atom(env, atom: CmpAtom, ...)` style — treating atoms as AST dataclass instances. But `where_eval.evaluate_where` (line 41-88) parses AST only for **validation gating** (line 52). Actual execution flows through `_normalize_where` → `_eval_body` using **raw tuples** (line 78-79).
+
+**Adopted**: §5.6 rewritten with raw tuple-aware design:
+
+- `_is_aggregate_term(term)` recognizes aggregate tuples by `term[0] in _AGGREGATE_KINDS`.
+- `_resolve_cmp_operand_for_env(env, operand, view_facts, ast_gate_on)` and `_resolve_arith_operand_for_env(...)` extend existing operand resolvers in raw evaluator path.
+- §1 Problem section + §4.3 add explicit clarification of raw tuple evaluator path.
+- §6 adds "Raw-tuple-evaluator invariant".
+- §5.8 G7 precondition #2 explicitly verifies raw evaluator path.
+
+**P3 (Required) — C104 scoping algorithm precise dataflow rule**:
+Initial draft §5.3 had placeholder pseudocode (`filter_vars = ...`, `outer atoms after aggregate should not reference local_vars`). Adopted user-proposed precise dataflow:
+
+- **`requires`**: `(target_vars ∪ filter_vars) ∩ outer_bound_vars` — correlated subset only.
+- **`binds`**: `∅` — aggregate term binds nothing.
+- **Result binding**: only via enclosing `CmpAtom("eq", outer_var, aggregate_term)`.
+
+§5.4 rewritten with concrete helpers `_aggregate_correlated_requires` / `_aggregate_local_vars` / `_validate_aggregate_scoping`. §5.7 application Rule `_collect_aggregate_term_vars` documents reliance on validator pre-check. §6 adds "Filter-local var isolation invariant".
+
+**P4 (Required) — C101 NoValue × ArithExpr resolved (Option a — implement)**:
+Initial draft had §2.6 require NoValue propagation in ArithExpr operands + §5.9 tests for it BUT §3 Non-goal said no AggregateExpr ArithExpr coupling. Self-contradiction.
+
+**Adopted Option (a)** — implement NoValue × ArithExpr via raw resolver. §3 Non-goal "No AggregateExpr ArithExpr coupling beyond what existing BuiltinAtom ArithExpr lowering handles naturally" REMOVED. §2.6 + §5.6 explicit: `_eval_arith_atom` operand resolver invokes `_resolve_arith_operand_for_env` which calls `_resolve_aggregate_term_for_env` if operand is aggregate tuple. NoValue causes the atom to be violated for that env (env excluded from output), no Python exception. §6 adds "NoValue × ArithExpr invariant". §7 adds explicit test (`agg_sum(empty_set) + 1 > 5` → atom violated, no exception).
+
+**P5 (Minor/Required) — Term type alias forward-ref**:
+Current `Term: TypeAlias = Var | Const` defined at `where_ast.py:31`, before `AggregateAtom` would exist. `AggregateAtom.filter: list[Atom]` also references `Atom` defined later.
+
+**Adopted Strategy A (restructure)** — move `Term` and `Atom` type alias definitions to AFTER all dataclass definitions. §5.2 added documenting this. Strategy B (string forward-ref) noted as fallback if Strategy A causes test breakage during impl. §5.8 G7 precondition #4 verifies no existing code relies on current `Term` definition position.
+
+**Summary of Step 4.2 v1 changes**:
+
+| Section | Change |
+|---|---|
+| Title | T2.3 → T2.3a — Core AggregateExpr substrate (IR + validation + Python eval + raw resolver) |
+| §1 Problem | Added explicit raw tuple evaluator path clarification |
+| §2 Goals | Removed §2.9 SDK ergonomic + §2.10 bridge passthrough + §2.11 allowlist (latter folded into §6). Added §2.6 NoValue × ArithExpr explicit. Added §2.8 per-env semantics |
+| §3 Non-goals | Explicit T2.3b deferrals (SDK helpers + DSL `_AggregateRef` + bridge ergonomic + public docs); removed "no AggregateExpr ArithExpr coupling" deferral (now in scope) |
+| §4 Current Context | Added §4.3 raw evaluator path explicit; §4.4 application Rule serialization filter-local isolation note |
+| §5 Proposed Shape | Rewrote: §5.2 Term restructure (Strategy A) / §5.3 precise filter validation / §5.4 precise scoping dataflow / §5.5 per-env evaluator / §5.6 raw resolver in cmp/arith / §5.7 application Rule branches with filter-local isolation / §5.8 G7 precondition extended |
+| §6 Boundaries | Added per-env / NoValue isolation / NoValue × ArithExpr / Filter-local var isolation / Raw-tuple-evaluator / SDK-deferral invariants |
+| §7 Acceptance | Per-env correlated test + NoValue × ArithExpr test + filter-local var isolation test + scope diff verifications for SDK 0-touch |
+| §8 Implementation Plan | Step order revised: G7 precondition recorded BEFORE impl; raw resolver explicit in step 4 |
+| §9 Docs | No SDK docs change (SDK 0-touch); application/docs internal note only; T2.3b carries public docs |
+| Size estimate | ~1280 LOC (slightly increased due to scoping helpers + raw resolver additions); still S-class with size override; Public API impact NOW genuinely None |
+
+**Blueprint stays `Status: draft`** pending user review of v1 tightening.
