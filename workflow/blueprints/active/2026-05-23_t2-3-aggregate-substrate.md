@@ -1,6 +1,6 @@
 # T2.3a — Core AggregateExpr substrate (IR + validation + Python eval + raw resolver)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: task blueprint
