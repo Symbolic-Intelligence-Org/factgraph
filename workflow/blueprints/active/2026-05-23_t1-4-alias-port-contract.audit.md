@@ -11,6 +11,7 @@ Blueprint: workflow/blueprints/active/2026-05-23_t1-4-alias-port-contract.md
 | 2026-05-23 | draft | Initial S-class blueprint drafted from parent §3.6 / shipped Rule port audit. |
 | 2026-05-23 | Step 4.2 v2 tightening | Applied P1 default alias fix and four low-cost acceptance/spec hardenings. |
 | 2026-05-23 | scoped | Step 4.2 v2 re-review passed with 0 Blocker / 0 Required; scoped anchor includes non-identifier rule.id edge-case acceptance. |
+| 2026-05-23 | G7 precondition | Recorded current absence of Rule alias DTOs before implementation. |
 
 ## G1-G7 Mapping
 
@@ -95,6 +96,39 @@ T1.4 is S-class because it is additive, contained to application protocol Rule a
 - T1.3 SDK top-level aliases remain unchanged.
 - T2.3 aggregate port validation remains unchanged.
 - T3 owns expression-level alias uniqueness and join reachability.
+
+### G7 Precondition Results
+
+Recorded on impl branch before implementation code changes:
+
+```text
+PYTHONPATH=src python - <<'PY'
+from factgraph.application.protocol import Rule
+import factgraph.application.protocol as protocol
+import factgraph.sdk as sdk
+from factgraph.sdk.dsl import build_application_rule
+print('has Rule.as_', hasattr(Rule, 'as_'))
+print('has RuleOccurrence', hasattr(protocol, 'RuleOccurrence'))
+print('has RulePortRef', hasattr(protocol, 'RulePortRef'))
+print('sdk.ApplicationRule is Rule', sdk.ApplicationRule is Rule)
+print('top build_application_rule available', sdk.build_application_rule is build_application_rule)
+PY
+```
+
+Observed:
+
+- `has Rule.as_`: `False`
+- `has RuleOccurrence`: `False`
+- `has RulePortRef`: `False`
+- `sdk.ApplicationRule is Rule`: `True`
+- `top build_application_rule available`: `True`
+
+Shipped source re-read:
+
+- `src/factgraph/application/protocol/rule.py:43-51` still defines the application `Rule` fields.
+- `src/factgraph/application/protocol/rule.py:76-87` still freezes `ports` and computes `_port_types`.
+- `src/factgraph/application/protocol/rule.py:361-388` still owns `PortType` inference.
+- `src/factgraph/application/protocol/__init__.py:74` currently exports `Rule` / `RuleValidationError` only from `.rule`.
 
 ## Review Surface
 
