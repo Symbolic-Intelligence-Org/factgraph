@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v4 tightening — §5.7.5 gate-off C100 structural lock + §8 step 5 v3-correct + §8 step 12 stale Outcome + §2.5 future-tense + audit log stale Anticipated + cross-slice sdk/docs narrowed)
+- Last Updated: 2026-05-23 (Step 4.2 v5 tightening — §4.2 touch-point _vars_in_atom corrected + I5/I10 invariants distinguish structural vs semantic adapter responsibility)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + IR shape;§10.6.4 (C100) — filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 — per-engine aggregate lowering策略
@@ -314,7 +314,8 @@ Verified 2026-05-23 on local branch `v0.2.0-blueprint-t2-3c-aggregate-souffle-wi
 - `src/factgraph/adapters/souffle/where_compile.py:679-731` `_validate_atom_subset(...)` — atom shape validation;T2.3c extends to recognize aggregate operand inside cmp
 - `src/factgraph/adapters/souffle/where_compile.py:905-908` `_compile_cmp_side(...)` — currently handles var(via `to_number(...)`)+ literal;T2.3c extends to handle aggregate-tuple
 - `src/factgraph/adapters/souffle/where_compile.py:1060-1103` `_compile_arith_atom(...)` — value-producing arith pattern;reference precedent for `to_string(...)` binding cast
-- `src/factgraph/adapters/souffle/where_compile.py:1139-1173` `_vars_in_atom(...)` — var extraction;T2.3c extends to walk aggregate filter atoms(correlated outer vars only)
+- `src/factgraph/adapters/souffle/where_compile.py:1139-1173` `_vars_in_atom(...)` — var extraction(outer-scope query var set);T2.3c extends cmp branches so **aggregate operand contributes ZERO outer vars**(per §5.5 v2 + §2.6 v3)。Correlated outer vars are bound by their original outer-scope atom independently;aggregate-local vars stay private per C104。
+- `src/factgraph/adapters/souffle/where_compile.py:829-861` `_infer_var_type_domains(...)` — type domain inference(value types for cmp safety);T2.3c extends to **recurse into aggregate filter atoms** AND mark aggregate `target_var` as int(per §2.6b v3 P2)。Separate concern from `_vars_in_atom`(outer-scope membership);different consumer / different algorithm。
 - `src/factgraph/adapters/souffle/where_compile.py:1176` `_symbol_for_var(...)` — symbol mapping helper(reused)
 
 ### 4.3 Souffle native aggregator syntax(Souffle 2.x language reference)
@@ -628,12 +629,12 @@ Similarly,top-level filter kinds outside C100 list(any future kinds added withou
 - I2 — `_AGGREGATE_KINDS = {"count", "sum", "min", "max", "mean"}` consistent with substrate
 - I3 — Aggregate-local var isolation(C104):vars introduced inside filter do NOT bind in outer scope
 - I4 — Correlated outer var pass-through(C104):outer-bound vars referenced in filter pass through transparently
-- I5 — Filter atom kinds restricted to C100 list(pred/eq/ne/gt/ge/lt/le/in/not);T2.3a substrate enforces upstream,Souffle adapter trusts
+- I5 — Filter atom kinds restricted to C100 list(pred/eq/ne/gt/ge/lt/le/in/not);**adapter enforces this structural kind-list inside aggregate filter regardless of `FACTPY_WHERE_AST_VALIDATE` gate state**(P1 v4 lock — `_ARITH_KINDS` and other non-C100 kinds compile to clauses Souffle aggregate body slots cannot accept,so adapter rejection is structural not semantic)。T2.3a substrate also enforces this upstream as a semantic check when gate ON;adapter is defense-in-depth + only safety net when gate OFF。
 - I6 — Aggregate target var is aggregate-local(not in `_vars_in_atom` outer result)
 - I7 — count aggregate has `target_var = None`(no target term in Souffle DL)
-- I8 — Aggregate result type:numeric;Souffle DL wraps with `to_string(...)` for symbol-typed outer var binding consistency with `_compile_arith_atom` precedent
+- I8 — Aggregate result type:numeric;Souffle DL wraps with `to_string(...)` only for **eq binding to unbound var**(symbol-domain target);numeric cmp / eq filter / aggregate-vs-aggregate paths leave aggregate raw numeric(per §5.3.5 v3 lock table)
 - I9 — Empty-set semantics for min/max/mean enforced via `count : { same_body } > 0` guard clause prefix(v2 P0 lock);count/sum native empty=0 matches C101 directly;`AggregateNoValue` represented by branch-not-firing(comparison violated / no env pollution)— no separate Souffle sentinel object
-- I10 — Adapter-side aggregate shape validation in `_validate_atom_subset` is mandatory regardless of `FACTPY_WHERE_AST_VALIDATE` gate state(P5 v2 lock);C100 semantic restrictions(no RuleRef/RuleExpr/ArithExpr in filter)deferred to upstream substrate validator(adapter does NOT re-implement)— see §5.7.5
+- I10 — Adapter-side aggregate validation in `_validate_atom_subset` is mandatory regardless of `FACTPY_WHERE_AST_VALIDATE` gate state(P5 v2 + P1 v4 lock)。**Layer 1**(structural,mandatory regardless of gate):aggregate kind ∈ `_AGGREGATE_KINDS` / tuple arity / target_var shape / filter_atoms list / recursive shape / no nested aggregate / **filter atom kind ∈ C100 list per I5**。**Layer 2**(deeper semantic checks deferred upstream-only):C100 semantics OUTSIDE the kind-list constraint(RuleRef object semantics,RuleExpr nesting at AST layer)/ C102 runtime numeric target type / C104 binding-order scoping / C103 snapshot semantics — adapter does NOT re-implement these because they're not structurally compile-blocking。See §5.7.5 for full Layer 1 / Layer 2 table。
 - I11 — Aggregate-local var naming convention:T2.3b SDK lowering uses `$_agg<N>` prefix for aggregate target vars;`_infer_var_type_domains` flat dict relies on this to avoid name collision with outer-scope vars(per §2.6b v3 P2)。Adapter does NOT defensively rename;if SDK ever changes naming,T2.3c must update。
 
 ## 7. Acceptance
