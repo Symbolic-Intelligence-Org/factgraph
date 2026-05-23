@@ -21,6 +21,7 @@
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | T2 Track 4th implementation sub-slice (after T2.1 ne / T2.2 ArithExpr / T2.3a Aggregate substrate). Closes SDK ergonomic + bridge surface gap left by T2.3a. T2.3a substrate frozen (5 layers UNTOUCHED). User-facing 5 `agg_*` helpers exposed via existing `Not`/`Pred` precedent. Estimated ~470 LOC. S-class lightweight per §5.7 trigger analysis. |
 | 2026-05-23 | scoped | Status: draft → scoped | Step 4.2 review converged after 3 tightening rounds (v1: 1 Blocker + 3 Required; v2: 1 Blocker target lowering order bug → Option 2 self-ensure adopted; v3: 1 Required acceptance gap → TRUE self-ensure test added at `c61095c1`). G1-G7 visible mapping in place. Sacred `master` untouched. Dirty set preserved. Ready for impl branch fork. |
+| 2026-05-23 | g7-precondition | G7 precondition recorded before implementation | Ran §5.6 checks on impl branch before code edits. All 6 checks passed. One smoke-check calibration: `evaluate_where` accepts raw where IR, not parsed AST object; raw IR parse → validate → eval passed. Sacred `master` untouched; dirty set preserved. |
 
 ## Decision Notes
 
@@ -269,3 +270,18 @@ Scope-freeze content(per v3-passed blueprint):
 Next step(per user authorization): fork impl branch `v0.2.0-impl-t2-3b-aggregate-sdk-bridge-2026-05-23` from this scoped commit。Cross-flip: user implements; reviewer(Claude)runs Step 4.7。
 
 Anchor commit will be small:blueprint `Status: draft → scoped`(line 3)+ audit log Event Log row + this Decision Note。
+
+### 2026-05-23 — G7 precondition results (recorded before implementation)
+
+Ran on branch `v0.2.0-impl-t2-3b-aggregate-sdk-bridge-2026-05-23` before code edits.
+
+| Check | Result | Evidence |
+|---|---|---|
+| 1. T2.3a substrate landed | PASS | `where_ast.py` contains `class AggregateAtom` line 75, `_AGGREGATE_KINDS` line 102, and `_parse_aggregate_term` line 241. |
+| 2. SDK aggregate ergonomic empty | PASS | `rg "^def agg_|^class _AggregateRef" src/factgraph/sdk/dsl/expr.py` returned no matches. |
+| 3. Bridge lacks aggregate-aware extension | PASS | `rg "AggregateAtom|_AGGREGATE_KINDS" src/factgraph/sdk/dsl/application_rule.py` returned no matches; `_collect_vars_from_term` and `_canonicalize_term` still handle only existing terms. |
+| 4. Adapter aggregate dispatch absent | PASS | `rg "AggregateAtom|_AGGREGATE_KINDS" src/factgraph/adapters/{souffle,problog,pyreason}/` returned no matches. T2.3.c/d adapter boundary still intact. |
+| 5. T2.3a round-trip smoke | PASS | Direct aggregate raw IR parsed via `parse_where_ir_to_ast`, validated via `validate_where_ast`, and evaluated via `evaluate_where` to `{"u1": 5, "u2": 5}`. Calibration note: `evaluate_where` shipped signature accepts raw where IR, not parsed AST object; first AST-object attempt failed as expected and was corrected before recording PASS. |
+| 6. Naming + export collision | PASS | `agg_*` names absent from SDK; `Not` / `Pred` are exported through `factgraph.sdk.dsl.__init__`, confirming helper export precedent. Top-level `factgraph.sdk` currently imports selected DSL helpers explicitly; T2.3b remains scoped to `factgraph.sdk.dsl` export only. |
+
+**Decision**:No G7 failure, no M-class escalation, and no blueprint amendment needed before implementation.
