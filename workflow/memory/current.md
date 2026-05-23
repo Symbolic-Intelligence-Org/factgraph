@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + T2.3d + T1.3 first M-class + ProbLog hygiene fixtures archived locally; source `df1dae2d`, not pushed)
+最后更新:2026-05-24(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + T2.3d + T1.3 first M-class + T1.4 alias/port substrate + ProbLog hygiene fixtures archived locally; source `a3411207`, not pushed)
 
-## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 BATCH ARCHIVED LOCALLY — T2.3 AGGREGATE TRACK CLOSED + T1.3 FIRST M-CLASS SHIPPED)
+## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 BATCH ARCHIVED LOCALLY — T2.3 AGGREGATE TRACK CLOSED + T1.3 + T1.4 SHIPPED — T1 TRACK CLOSURE; T3 RULEEXPR UNBLOCKED)
 
-**Current local branch:** `v0.2.0-impl-t1-3-sdk-rule-top-level-naming-2026-05-23 @ df1dae2d`.
+**Current local branch:** `v0.2.0-impl-t1-4-alias-port-contract-2026-05-23 @ a3411207`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -30,6 +30,7 @@
 | T2.3c AggregateExpr Souffle wire | S | `b217f309` | `3f64fe4d feat(adapters/souffle): add aggregate compile wire over T2.3a substrate` + `84564bf2 fix(adapters/souffle): T2.3c Step 4.7 P1+P2 + dead helper removal` |
 | T2.3d AggregateExpr ProbLog wire | S | `26fa7e54` | `a33b876e feat(adapters/problog): add aggregate export wire` + `d7e2a650 fix(adapters/problog): remove unused aggregate helper` |
 | **T1.3 SDK Top-Level Rule Naming (first M-class)** | **M** | `df1dae2d` | `c846af09 feat(sdk): add transitional Rule naming exports` (no Step 4.7 fix) |
+| **T1.4 Alias / Port Contract** | S | `a3411207` | `64135b85 feat(application): add Rule occurrence port refs` (no Step 4.7 fix) |
 
 ### Current landed behavior
 
@@ -163,6 +164,45 @@
   - `LegacyRule` retention decision at hard-cut (keep temporarily? remove?)
   - `DeprecationWarning` policy decision at hard-cut
 
+**T1.4 — Alias / Port Contract**
+- **Application protocol substrate for future T3 RuleExpr joins**. Adds `Rule.as_()`, `RuleOccurrence`, `RulePortRef` to `factgraph.application.protocol`. Closes parent §3.6 commitment 6 substrate requirement; T3 will consume these DTOs for `.join(...)` constraints and `fg.rules.inspect(...)` output.
+- **`Rule.as_(alias: str | None = None)` method** in `factgraph/application/protocol/rule.py`:
+  - Default `alias = rule.id` per parent §3.6 commitment 6
+  - Explicit alias validated via `_validate_occurrence_alias` using `re.fullmatch(_OCCURRENCE_ALIAS_RE)` pattern `[A-Za-z][A-Za-z0-9_]*`
+  - Rejects empty/digit-start/underscore-start/hyphen/punctuation
+  - Template-stable: no mutation; repeated calls produce value-equal occurrences (but NOT interned)
+  - Edge case: non-identifier `rule.id` (e.g., `"my-rule"`) causes `rule.as_()` default to raise; user must call `.as_("custom_alias")` explicitly
+- **`RuleOccurrence` frozen DTO**:
+  - `rule: Rule` + `alias: str` fields
+  - `__post_init__` defense-in-depth re-validates alias (catches direct `RuleOccurrence(...)` construction bypassing `Rule.as_()`)
+  - `port(name)` returns `RulePortRef`; missing port → `RuleValidationError`
+  - `__getattr__(name)` for `occ.user` style; `_`-prefix → `AttributeError`; missing port → `AttributeError` (via caught `RuleValidationError`); preserves Python `hasattr()` semantics
+  - Explicit `__hash__` for hashability
+- **`RulePortRef` frozen DTO** (5 fields): `occurrence_alias`, `rule_id`, `port_name`, `var: Var`, `port_type: PortType`. Reference descriptor for T3 joins, not a core AST term. Stores `rule_id` (lightweight) per G6 spot-check #3 choice.
+- **Validation pathway (defense-in-depth)**: `Rule.as_(alias)` → `_validate_occurrence_alias` → `RuleOccurrence(rule, alias)` → `__post_init__` validates again (idempotent + safe). Direct `RuleOccurrence(rule=..., alias=invalid)` still raises.
+- **Invariants** (per blueprint §6):
+  - `Rule.content_digest` alias-independent (occurrence wrappers are expression-level, not template-level)
+  - Port names (not internal `Var.name`) are the public cross-Rule interface (parent §C54)
+  - Same-name ports across Rules do NOT auto-join in T1.4 (T3 owns join semantics)
+  - `Rule.ports` remains frozen `MappingProxyType` (T1.1 contract preserved)
+- **Docs flip**: `application/docs/rule.md` gets new "Ports and Occurrence Aliases" section. `sdk/docs/03_rules_and_inferences.en.md` intentionally NOT updated (deferred to T3 when `.as_(...)` becomes user-visible via RuleExpr).
+- **Tests**: 10-test acceptance in `tests/application/protocol/test_rule.py` + 1 bridge compat test in `tests/sdk/dsl/test_application_rule.py`. Verifies default alias, explicit alias, value-equality-not-interning, 4 invalid alias patterns, non-identifier rule.id edge case, port reference 5 fields, missing port `RuleValidationError` vs `AttributeError` discrimination, frozen + hashable, content_digest alias-independent, parent §C54 different-Var-same-port-name, bridge compat.
+- **Canonical 4-commit impl pattern** (no Step 4.7 fix — second instance after T1.3):
+  - `8835812c` scoped anchor + edge case acceptance locked
+  - `f04907ea` G7 precondition (doc-only, BEFORE feat — recorded `has Rule.as_: False`, `has RuleOccurrence: False`, `has RulePortRef: False`, `sdk.ApplicationRule is Rule: True`, top `build_application_rule` available)
+  - `64135b85` feat main (61 LOC impl + 119 LOC tests + 20 LOC docs + 4 LOC exports)
+  - `2b4b2648` closure (Status: scoped → implemented + §10 Outcome)
+  - `a3411207` archive (2-file 100% rename — blueprint pair only, no decision doc since S-class)
+- Verification at archive: 39 T1.4 acceptance tests pass; 121 cross-slice tests pass (0 regression); ruff clean; **0-diff verified** under `src/factgraph/adapters/`, `src/factgraph/core/`, legacy `src/factgraph/sdk/dsl/rule.py`. Sacred `master` + dirty set preserved throughout.
+- **Convergence**: 2 Step 4.2 rounds + Step 4.7 v1 clean = **5 total findings at v1** (0B + 1R + 4WC, all closed at v2 + 1 minor WC at scoped). Pattern matches T2.3d S-class.
+- Deferred follow-ups (per T1.4 §10):
+  - T3 RuleExpr `.as_(rule)` occurrence alias + expression-level alias uniqueness check + multi-occurrence detection (depends on T1.4 substrate — now unblocked)
+  - T3 RuleExpr `&` / `|` / `.join(...)` / `.join_by_ports(...)` composition operators
+  - T3 `fg.rules.inspect(expr)` `unjoined_same_name_ports` discoverability hint
+  - SDK user-facing `.as_(...)` docs in `sdk/docs/03_rules_and_inferences.en.md` (defer to T3 when RuleExpr ships)
+
+**T1 Track CLOSED.** T1.1 (Rule DTO) + T1.2 (DSL bridge) + T1.3 (SDK naming) + T1.4 (alias/port substrate) all shipped. T3 RuleExpr (L-class) unblocked.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -191,6 +231,8 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 
 **T1.3 validated user-drafts pattern for M-class as well.** First M-class slice in batch. Codex drafted blueprint pair + decision doc + impl; Claude reviewed Step 4.2 + Step 4.7 + did memory consolidation. Total cost: 2 Step 4.2 rounds + Step 4.7 v1 clean (0 findings) = **7 total findings at v1** (0B + 4R + 3WC, all closed at v2). Pattern matches T2.3d S-class; M-class only adds ~2 decision-doc findings (lifecycle + framing relative to parent alternatives) but otherwise same cost-efficiency. T1.3 also validated:(1)**canonical 4-commit M-class impl pattern** (no Step 4.7 fix needed — variant of 5-commit pattern where Step 4.7 fix is OPTIONAL); (2)**decision doc lifecycle pattern** (`proposed` → `reviewed` → `accepted` → `superseded` with impl gating on `accepted`); (3)**A-staged framing for parent §X alternative deferrals** — when parent locks final commitment but pragmatic timing requires deferral, frame as "X-staged" (where X is parent-listed alternative) rather than introducing a new alternative.
 
+**T1.4 closed the T1 Track.** Second canonical 4-commit S-class impl pattern (no Step 4.7 fix). Codex drafted blueprint + impl; Claude reviewed Step 4.2 + Step 4.7 + did memory consolidation. Total cost: 2 Step 4.2 rounds + Step 4.7 v1 clean = **5 total findings at v1** (0B + 1R + 4WC, all closed at v2 + 1 minor WC at scoped). Pattern matches T2.3d S-class exactly. T1.4 also validated:(1) **defense-in-depth validation pattern** (`Rule.as_()` validates + `RuleOccurrence.__post_init__` re-validates idempotently — catches direct construction bypassing factory); (2) **`__getattr__` Python convention preservation** (re-raise `RuleValidationError` as `AttributeError` for `hasattr()` compat); (3) **minor WC in scoped anchor pattern** (non-identifier `rule.id` edge case addressed at Step 4.6 scoped commit, not v3 round — reduces cadence overhead); (4) **stricter downstream validation than upstream** (T1.4 `_OCCURRENCE_ALIAS_RE` stricter than T1.1 `Rule.id` validation; user fallback path documented in invariants + acceptance).
+
 ### Process lessons carried forward
 
 - **Branch isolation:** T1.1 did not use a separate implementation branch; T1.2 onward corrected this. Continue paired blueprint/impl branch discipline.
@@ -218,18 +260,23 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T1.3 A-staged framing pattern for parent §X alternative deferrals:** when a parent essay locks a final commitment (e.g., "Rule = atomic AND-only" at §325) but pragmatic timing requires deferral, frame the decision as "X-staged" (where X is the parent-listed alternative) rather than introducing a new alternative. This preserves parent framework alignment while explicitly recognizing timing refinement. Decision doc must:(a) cite parent §X alignment; (b) explicitly defer parent's hard promise during staged period; (c) lock the trigger for final flip (e.g., T5 hard-cut). T1.3 used this for parent §3.10 A vs §325 promise tension.
 - **T1.3 cross-slice docs guidance reversal pattern:** when a new slice intentionally reverses an earlier slice's docs guidance (T2.3b → T1.3 example: `build_application_rule` from DSL-only to top-level), the reversal must be: (a) acknowledged in blueprint §6 invariant; (b) explicitly handled in §9 docs scope; (c) documented in decision doc §Consequences; (d) reflected in audit log Cross-Slice Contract Preservation table. Otherwise reviewer surfaces the reversal as a P-finding.
 - **T1.3 caller-site cost quantification:** Decision doc Alternative cost-benefit analysis should cite **concrete grep counts** rather than abstract "breaks existing callers" language. T1.3 v2 added `15 caller-site` count to Alternative A cost (from `grep -rln "from factgraph.sdk import.*Rule"`). Concrete numbers strengthen alternative comparison.
+- **T1.4 second canonical 4-commit S-class pattern (no-Step-4.7-fix confirmed 2x):** T1.3 first validated the 4-commit pattern at M-class; T1.4 second-instance at S-class. **Lesson:** Step 4.7 fix commit is OPTIONAL — skipped when Step 4.7 review surfaces 0 findings. Cadence flexes:4-commit (G7 + feat + closure + archive) if clean Step 4.7;5-commit (G7 + feat + Step 4.7 fix + closure + archive) if findings.
+- **T1.4 `__getattr__` Python convention preservation:** For `RuleOccurrence`, `__getattr__(name)` re-raises `RuleValidationError` as `AttributeError` when name is not a declared port. **Lesson:** `__getattr__` MUST raise `AttributeError` (not other types) so Python `hasattr()` + attribute probing work. Explicit port lookup via `occ.port(name)` raises `RuleValidationError` for explicit caller errors. Dual-path pattern preserves both Python convention (attribute access) and explicit caller-error signaling.
+- **T1.4 defense-in-depth validation pattern:** `Rule.as_(alias)` validates alias before constructing `RuleOccurrence`; `RuleOccurrence.__post_init__` validates again (idempotent on already-validated values, but catches direct `RuleOccurrence(rule, alias=invalid)` construction bypassing `Rule.as_()`). **Lesson:** when a DTO can be constructed via multiple paths (factory method + direct constructor), validate in `__post_init__` for defense-in-depth even if all factory paths already validate.
+- **T1.4 v2 scoped anchor edge case lock:** v2 review surfaced 1 minor Worth-considering about non-identifier `rule.id` causing `rule.as_()` default to fail. Codex addressed in Step 4.6 scoped anchor commit (not in v3 round) by adding edge case acceptance test + §6 invariant note. **Lesson:** minor Worth-considerings can be addressed in scoped anchor commit alongside `Status: draft → scoped` transition, avoiding an extra v3 round. Reduces cadence overhead when fix is small + uncontroversial.
+- **T1.4 stricter downstream validation than upstream:** parent §3.6 commitment 6 says default alias = `rule.id` but T1.1 `Rule.id` accepts any non-empty string while T1.4 `_OCCURRENCE_ALIAS_RE` enforces `[A-Za-z][A-Za-z0-9_]*`. T1.4 lock: non-identifier `rule.id` → `rule.as_()` raises, user falls back to `.as_("custom_alias")`. **Lesson:** when a downstream slice's validation is stricter than its upstream input, document the fallback contract explicitly in invariants + acceptance tests. Don't silently swallow upstream values that would fail downstream validation.
 
 ### Recommended next work
 
-- **T2.3.d AggregateExpr ProbLog adapter** — shipped at `26fa7e54`. T2.3 AggregateExpr full track now CLOSED (substrate + SDK + Souffle + ProbLog).
-- **T1.3 SDK top-level Rule naming** — shipped at `df1dae2d` (see T1.3 landed-behavior section above). First M-class slice. TPQ-2 resolved via A-staged. Final `Rule` flip deferred to T5 legacy `.eval` hard-cut.
-- **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` (via `_ensure_attr_record_binding`) and `BinaryExpr` (via `_lower_expr_term`), making it symmetric with standard `_lower_compare`.
-- **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains; production schemas using `"number"` pred type domains would fail filter-internal numeric cmp. N/A for ProbLog adapter (untyped). Could be addressed as general Souffle adapter hygiene slice. S-class.
-- **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing. Natural next slice after T1.3 closure if continuing T1 Track.
+- **T2.3.d AggregateExpr ProbLog adapter** — shipped at `26fa7e54`. T2.3 AggregateExpr full track now CLOSED.
+- **T1.3 SDK top-level Rule naming** — shipped at `df1dae2d`. First M-class slice. TPQ-2 resolved via A-staged. Final `Rule` flip deferred to T5 legacy `.eval` hard-cut.
+- **T1.4 alias / port contract** — shipped at `a3411207`. Application protocol substrate (`Rule.as_()`, `RuleOccurrence`, `RulePortRef`) ready for T3 RuleExpr. **T1 Track CLOSED.**
+- **T3 RuleExpr** — L class; first full-cadence test of the size-class policy (Stage 1 audit + Stage 2 decisions + Stage 3 synthesis). **Now unblocked by T1.4. Natural next major slice.** Likely scope: `&` / `|` / `.join(...)` / `.join_by_ports(...)` composition operators + `.as_()` occurrence alias uniqueness + Every-Proof-Path Reach Rule validation + `fg.rules.inspect(expr)` output.
+- **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` + `BinaryExpr`. Currently raises `SDKDSLError`.
+- **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains. Pre-existing limitation; S-class adapter hygiene slice.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
-- **T3 RuleExpr** — L class; first full-cadence test of the size-class policy (Stage 1 audit + Stage 2 decisions + Stage 3 synthesis).
-- **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip (legacy `Rule` → `LegacyRule` removed, top-level `Rule` becomes application Rule alias). Coordinate with T1.3 A-staged commitment + `LegacyRule` retention + `DeprecationWarning` policy decisions.
-- **Push / publish gate** — 11 archived slices + 4 memory sync commits all local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries; user has not signaled publish intent.
+- **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip + `LegacyRule` retention + `DeprecationWarning` policy decisions. Coordinate with T1.3 A-staged commitment.
+- **Push / publish gate** — 12 archived slices + 5 memory sync commits all local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
