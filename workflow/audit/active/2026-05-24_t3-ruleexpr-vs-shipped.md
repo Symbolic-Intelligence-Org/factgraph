@@ -69,7 +69,9 @@ Parent section 4 expands RuleExpr as a user-facing expression layer. The commitm
 
 Parent section 5.9 adds C58, `.join_by_ports(*explicit_names)`, with an explicit-name contract and no silent same-name-port joins. Parent section 5.10 adds C59, `inspect.ports`, a likely T3/T4 seam for later head and visualization work. Lines 1298-1306 distinguish same-process `__hash__` from cross-process content digests, which matters for C34.
 
-Track plan section 1.2.6 marks T3 as L-class because it combines C23-C35 and C49-C51, 17 commitments, and requires Stage 1 audit plus multi-decision Stage 2 before per-slice blueprints.
+Track plan section 1.2.6 marks T3 as L-class because it combines C23-C35 and C49-C51 and requires Stage 1 audit plus multi-decision Stage 2 before per-slice blueprints.
+
+Commitment count note: this audit covers C23-C35 (13 commitments), C49-C51 (3 commitments), plus C58/C59 seams (2 commitments), for 18 audited commitments. The track plan currently contains count drift: line 115 says 17 commitments, while line 182 says 14. This is a track-plan synchronization issue, not an audit coverage gap, and should be resolved in Stage 3 synthesis.
 
 ## 3. Triage Table
 
@@ -155,10 +157,10 @@ Parent examples use `(a & b).join(a.user == b.person)`. T1.4 `RulePortRef` curre
 
 Candidate options:
 
-- Keep dataclass equality and use an explicit method, e.g. `a.user.eq(b.person)`.
-- Override equality to produce join constraints and add another equality API for DTO tests.
-- Introduce a wrapper from `RuleOccurrence` that is not the DTO itself.
-- Accept parent `==` syntax and migrate T1.4 equality tests accordingly.
+- Keep dataclass equality and use an explicit method, e.g. `a.user.eq(b.person)` (**substrate-preserving**).
+- Override equality to produce join constraints and add another equality API for DTO tests (**substrate-breaking**; it changes T1.4 `RulePortRef` value-equality expectations and set/dict behavior).
+- Introduce a wrapper from `RuleOccurrence` that is not the DTO itself (**substrate-preserving** if T1.4 DTO equality remains untouched).
+- Accept parent `==` syntax and migrate T1.4 equality tests accordingly (**substrate-breaking** unless implemented through a wrapper layer).
 
 This blocks C30 and likely determines the RuleExpr join IR.
 
@@ -171,6 +173,7 @@ Decision points:
 - Polymorphic same method or separate method.
 - Object DTO vs dict payload.
 - Whether legacy inspect output remains unchanged.
+- Three-way input split: legacy SDK `Rule` / `Inference`, single application `Rule` accepted via C35 coercion, and full `RuleExpr` should each have an explicit return-shape contract.
 - How branch inspect and RuleExpr inspect share atom descriptors.
 
 This blocks C32, C49-C51, and C59.
@@ -192,7 +195,7 @@ This blocks C25, C33, and C34.
 The track plan says T3 is L-class and should split into sub-slices. This audit suggests bool guards, join constraints, and inspect are separable risk clusters. Decide initial slice boundaries before coding:
 
 - T3.1 base RuleExpr IR and `&` / `|`.
-- T3.2 occurrence alias scope / repeated rule validation.
+- T3.2 occurrence alias scope / repeated rule validation. T1.4 already shipped `.as_`, `RuleOccurrence`, `RulePortRef`, and alias regex validation, so this slice is significantly narrower than the original track-plan row.
 - T3.3 join constraints and Every-Proof-Path reach.
 - T3.4 bool guards.
 - T3.5 inspect.
@@ -215,7 +218,7 @@ Parent T3 includes authoring and inspection semantics; execution/adapters for co
 - **Inspect shape friction**: existing inspect returns dicts; parent wants richer objects with render helpers.
 - **Bool guard friction**: adding `Rule.__bool__` changes behavior for any caller that currently relies on truthiness.
 - **Hash/canonical friction**: commutative equality is easy to state but needs precise canonicalization for joins, aliases, and single-rule coercion.
-- **Scope-size friction**: T3 has at least 17 commitments plus C58/C59 seams; direct implementation without decisions would reproduce T2.3c-style review churn.
+- **Scope-size friction**: T3 covers 18 audited commitments/seams (C23-C35, C49-C51, C58, C59); direct implementation without decisions would reproduce T2.3c-style review churn.
 
 ## 6. Cross-doc seams
 
@@ -252,12 +255,12 @@ Recommended Stage 3 synthesis outputs:
 Tentative slice order after decisions:
 
 1. T3.1 RuleExpr base IR, `&` / `|`, `RuleExpr.all/any`, flattening, immutability.
-2. T3.2 occurrence alias uniqueness and repeated-rule validation.
+2. T3.2 occurrence alias uniqueness and repeated-rule validation. T1.4 already shipped the occurrence DTO substrate, so Stage 3 should narrow this slice to expression-scope validation rather than re-shipping `.as_`.
 3. T3.3 join constraints and Every-Proof-Path reach.
 4. T3.4 bool guards if not included in T3.1.
 5. T3.5 inspect surface.
-6. T3.6 docs and examples.
-7. Later adapter/evaluation lowering slices if Stage 2 chooses executable RuleExpr.
+6. T3.6 docs and examples. This slice is an audit recommendation beyond the current track-plan T3.1-T3.5 list; Stage 3 synthesis should decide whether to sync it into the track plan.
+7. Later adapter/evaluation lowering slices if Stage 2 chooses executable RuleExpr. These slices are also beyond the current track-plan T3.1-T3.5 list and require Stage 3 confirmation before blueprinting.
 
 ## 8. Audit Method Notes
 
@@ -274,4 +277,3 @@ Tentative slice order after decisions:
 - [x] All frictions enumerated.
 - [x] Out-of-scope explicitly listed.
 - [x] Recommendations provided.
-
