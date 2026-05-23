@@ -184,7 +184,7 @@ Adapter status:
 |---|---|
 | Python application Rule evaluator | Supported |
 | SDK `build_application_rule(...)` bridge | Supported |
-| Souffle adapter | Deferred to T2.3.c |
+| Souffle adapter | Supported (empty `min`/`max`/`mean` follow C101 via `count > 0` guard, branch does not fire) |
 | ProbLog adapter | Deferred to T2.3.d |
 | PyReason adapter | Out of scope |
 

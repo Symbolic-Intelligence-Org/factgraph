@@ -9,7 +9,11 @@ from typing import Any
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.souffle_view_gen import witness_rel_name
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
-from factgraph.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
+from factgraph.core.rules.where_ast import (
+    _AGGREGATE_KINDS,
+    WhereASTError,
+    parse_where_ir_to_ast,
+)
 from factgraph.core.rules.where_ast_validate import (
     WhereASTValidationError,
     validate_where_ast,
@@ -18,6 +22,11 @@ from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store._support import make_pred_atom_key
 
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
+# T2.3c: min/max/mean require `count : {same_body} > 0` guard prefix per
+# blueprint §2.5 v2 lock to honor C101 AggregateNoValue via branch-not-firing.
+# count/sum empty=0 is a legal C101 value and needs no guard.
+_AGGREGATE_GUARD_KINDS = {"min", "max", "mean"}
+_AGGREGATE_FILTER_ATOM_KINDS = {"pred", "eq", "ne", "in", "gt", "ge", "lt", "le", "not"}
 
 
 @dataclass(frozen=True)
@@ -478,6 +487,68 @@ def _compile_atom(
         _, lhs, rhs = atom
         lhs_is_var = _is_var(lhs)
         rhs_is_var = _is_var(rhs)
+        lhs_is_agg = _is_aggregate(lhs)
+        rhs_is_agg = _is_aggregate(rhs)
+
+        # T2.3c eq dispatch with aggregate operand per blueprint §5.3.5 v3
+        # wrapper table. Guard for min/max/mean composed as peer body clause
+        # (NOT inside to_string wrap).
+        if lhs_is_agg or rhs_is_agg:
+            agg_ctx = {
+                "var_symbols": var_symbols,
+                "outer_bound_vars": bound_vars,
+                "pred_arities": pred_arities,
+                "pred_type_domains": pred_type_domains,
+                "var_type_domains": var_type_domains,
+                "in_rel_values": in_rel_values,
+                "not_rel_defs": not_rel_defs,
+                "not_rel_namespace": not_rel_namespace,
+                "ast_gate_on": ast_gate_on,
+            }
+            # Case 1: eq with two aggregates → numeric filter, both sides bare.
+            # Both guards (if min/max/mean) prepend as peer clauses.
+            if lhs_is_agg and rhs_is_agg:
+                lhs_guard, lhs_value = _compile_aggregate_parts(aggregate=lhs, **agg_ctx)
+                rhs_guard, rhs_value = _compile_aggregate_parts(aggregate=rhs, **agg_ctx)
+                parts: list[str] = []
+                if lhs_guard is not None:
+                    parts.append(lhs_guard)
+                if rhs_guard is not None:
+                    parts.append(rhs_guard)
+                parts.append(f"{lhs_value} = {rhs_value}")
+                return ", ".join(parts)
+            # Identify aggregate side and other side.
+            agg = lhs if lhs_is_agg else rhs
+            other = rhs if lhs_is_agg else lhs
+            other_is_var = rhs_is_var if lhs_is_agg else lhs_is_var
+            agg_guard, agg_value = _compile_aggregate_parts(aggregate=agg, **agg_ctx)
+            # Case 2: eq binding to unbound var → `<guard>?, v_X = to_string(<value>)`.
+            if other_is_var and other not in bound_vars:
+                bound_vars.add(other)
+                return _compose_aggregate_eq_binding(
+                    other_var_token=other,
+                    var_symbols=var_symbols,
+                    guard_clause=agg_guard,
+                    value_expr=agg_value,
+                )
+            # Case 3: eq filter with bound var → `<guard>?, <value> = to_number(v_X)`.
+            if other_is_var and other in bound_vars:
+                other_cmp_expr = f"to_number({var_symbols[other]})"
+                return _compose_aggregate_numeric_cmp(
+                    guard_clause=agg_guard,
+                    value_expr=agg_value,
+                    op="=",
+                    other_expr=other_cmp_expr,
+                    aggregate_on_left=True,
+                )
+            # Case 4: eq filter with literal → `<guard>?, <value> = <literal>`.
+            return _compose_aggregate_numeric_cmp(
+                guard_clause=agg_guard,
+                value_expr=agg_value,
+                op="=",
+                other_expr=_literal_to_cmp_int_text(other, "eq"),
+                aggregate_on_left=True,
+            )
 
         if lhs_is_var and rhs_is_var:
             lhs_bound = lhs in bound_vars
@@ -504,6 +575,55 @@ def _compile_atom(
         return f"{lhs_expr} = {rhs_expr}"
 
     if kind == "ne":
+        # T2.3c: aggregate-aware ne. Falls through to _compile_ne_filter for
+        # var/literal-only; otherwise dispatch via _compile_aggregate_parts
+        # to get guard + value separately.
+        _, lhs, rhs = atom
+        lhs_is_agg = _is_aggregate(lhs)
+        rhs_is_agg = _is_aggregate(rhs)
+        if lhs_is_agg or rhs_is_agg:
+            agg_ctx = {
+                "var_symbols": var_symbols,
+                "outer_bound_vars": bound_vars,
+                "pred_arities": pred_arities,
+                "pred_type_domains": pred_type_domains,
+                "var_type_domains": var_type_domains,
+                "in_rel_values": in_rel_values,
+                "not_rel_defs": not_rel_defs,
+                "not_rel_namespace": not_rel_namespace,
+                "ast_gate_on": ast_gate_on,
+            }
+            # Two-aggregate ne
+            if lhs_is_agg and rhs_is_agg:
+                lhs_guard, lhs_value = _compile_aggregate_parts(aggregate=lhs, **agg_ctx)
+                rhs_guard, rhs_value = _compile_aggregate_parts(aggregate=rhs, **agg_ctx)
+                parts: list[str] = []
+                if lhs_guard is not None:
+                    parts.append(lhs_guard)
+                if rhs_guard is not None:
+                    parts.append(rhs_guard)
+                parts.append(f"{lhs_value} != {rhs_value}")
+                return ", ".join(parts)
+            agg = lhs if lhs_is_agg else rhs
+            other = rhs if lhs_is_agg else lhs
+            agg_guard, agg_value = _compile_aggregate_parts(aggregate=agg, **agg_ctx)
+            if _is_var(other):
+                if other not in bound_vars:
+                    _raise_dataflow_or_runtime(
+                        ast_gate_on=ast_gate_on,
+                        message=f"ne variable must be bound before filter: {other}",
+                        op="ne",
+                    )
+                other_expr = f"to_number({var_symbols[other]})"
+            else:
+                other_expr = _literal_to_cmp_int_text(other, "ne")
+            return _compose_aggregate_numeric_cmp(
+                guard_clause=agg_guard,
+                value_expr=agg_value,
+                op="!=",
+                other_expr=other_expr,
+                aggregate_on_left=lhs_is_agg,
+            )
         return _compile_ne_filter(
             atom=atom,
             var_symbols=var_symbols,
@@ -534,7 +654,13 @@ def _compile_atom(
         _, lhs, rhs = atom
         lhs_is_var = _is_var(lhs)
         rhs_is_var = _is_var(rhs)
+        lhs_is_agg = _is_aggregate(lhs)
+        rhs_is_agg = _is_aggregate(rhs)
 
+        # T2.3c: aggregate operand bypasses bound check for the aggregate
+        # side (aggregate is always numeric per Souffle aggregator output;
+        # aggregate-local vars stay private). Var/literal side follows
+        # normal cmp side rules.
         if lhs_is_var and lhs not in bound_vars:
             _raise_dataflow_or_runtime(
                 ast_gate_on=ast_gate_on,
@@ -553,9 +679,45 @@ def _compile_atom(
         if rhs_is_var:
             _assert_cmp_var_allowed(rhs, var_type_domains, kind)
 
+        op = _cmp_operator(kind)
+
+        if lhs_is_agg or rhs_is_agg:
+            agg_ctx = {
+                "var_symbols": var_symbols,
+                "outer_bound_vars": bound_vars,
+                "pred_arities": pred_arities,
+                "pred_type_domains": pred_type_domains,
+                "var_type_domains": var_type_domains,
+                "in_rel_values": in_rel_values,
+                "not_rel_defs": not_rel_defs,
+                "not_rel_namespace": not_rel_namespace,
+                "ast_gate_on": ast_gate_on,
+            }
+            # Two-aggregate cmp
+            if lhs_is_agg and rhs_is_agg:
+                lhs_guard, lhs_value = _compile_aggregate_parts(aggregate=lhs, **agg_ctx)
+                rhs_guard, rhs_value = _compile_aggregate_parts(aggregate=rhs, **agg_ctx)
+                parts: list[str] = []
+                if lhs_guard is not None:
+                    parts.append(lhs_guard)
+                if rhs_guard is not None:
+                    parts.append(rhs_guard)
+                parts.append(f"{lhs_value} {op} {rhs_value}")
+                return ", ".join(parts)
+            agg = lhs if lhs_is_agg else rhs
+            other = rhs if lhs_is_agg else lhs
+            agg_guard, agg_value = _compile_aggregate_parts(aggregate=agg, **agg_ctx)
+            other_expr = _compile_cmp_side(other, var_symbols, kind)
+            return _compose_aggregate_numeric_cmp(
+                guard_clause=agg_guard,
+                value_expr=agg_value,
+                op=op,
+                other_expr=other_expr,
+                aggregate_on_left=lhs_is_agg,
+            )
+
         lhs_expr = _compile_cmp_side(lhs, var_symbols, kind)
         rhs_expr = _compile_cmp_side(rhs, var_symbols, kind)
-        op = _cmp_operator(kind)
         return f"{lhs_expr} {op} {rhs_expr}"
 
     if kind in _ARITH_KINDS:
@@ -695,8 +857,14 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         _, lhs, rhs = atom
         lhs_is_var = _is_var(lhs)
         rhs_is_var = _is_var(rhs)
-        if not lhs_is_var and not rhs_is_var:
-            raise WhereValidationError("eq must be var=literal or var=var")
+        lhs_is_agg = _is_aggregate(lhs)
+        rhs_is_agg = _is_aggregate(rhs)
+        if lhs_is_agg:
+            _validate_aggregate_atom_shape(lhs)
+        if rhs_is_agg:
+            _validate_aggregate_atom_shape(rhs)
+        if not lhs_is_var and not rhs_is_var and not lhs_is_agg and not rhs_is_agg:
+            raise WhereValidationError("eq must be var=literal or var=var or aggregate=...")
         return atom
 
     if kind == "in":
@@ -713,8 +881,14 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         if len(atom) != 3:
             raise WhereValidationError(f"{kind} atom must be ('{kind}', lhs, rhs)")
         _, lhs, rhs = atom
-        if not _is_var(lhs) and not _is_var(rhs):
-            raise WhereValidationError(f"{kind} requires at least one variable side")
+        lhs_is_agg = _is_aggregate(lhs)
+        rhs_is_agg = _is_aggregate(rhs)
+        if lhs_is_agg:
+            _validate_aggregate_atom_shape(lhs)
+        if rhs_is_agg:
+            _validate_aggregate_atom_shape(rhs)
+        if not _is_var(lhs) and not _is_var(rhs) and not lhs_is_agg and not rhs_is_agg:
+            raise WhereValidationError(f"{kind} requires at least one variable or aggregate side")
         return atom
 
     if kind in _ARITH_KINDS:
@@ -765,6 +939,47 @@ def _validate_arith_atom_subset(atom: tuple[Any, ...]) -> tuple[Any, ...]:
         _literal_to_cmp_int_text(c, kind)
         return atom
     raise WhereValidationError(f"unsupported arithmetic atom kind: {kind}")
+
+
+def _validate_aggregate_atom_shape(aggregate: tuple[Any, ...]) -> None:
+    """Layer 1 structural validation per blueprint §5.7.5.
+
+    Mandatory regardless of FACTPY_WHERE_AST_VALIDATE gate state because
+    the compile path itself cannot proceed on malformed aggregate shapes
+    or non-C100 filter atom kinds (e.g., _ARITH_KINDS in aggregate filter
+    would emit var-binding clauses Souffle aggregate body slots cannot
+    accept).
+    """
+    if not isinstance(aggregate, tuple) or len(aggregate) != 3:
+        raise WhereValidationError(
+            "aggregate atom must be (kind, target_var, [filter_atoms])"
+        )
+    kind, target_var, filter_atoms = aggregate
+    if kind not in _AGGREGATE_KINDS:
+        raise WhereValidationError(f"unsupported aggregate kind: {kind}")
+    if kind == "count":
+        if target_var is not None:
+            raise WhereValidationError("count aggregate target_var must be None")
+    else:
+        if not isinstance(target_var, str) or not target_var.startswith("$") or len(target_var) < 2:
+            raise WhereValidationError(
+                f"numeric aggregate target_var must be $-prefixed variable, got {target_var!r}"
+            )
+    if not isinstance(filter_atoms, list):
+        raise WhereValidationError("aggregate filter must be list")
+    for filter_atom in filter_atoms:
+        if _is_aggregate(filter_atom):
+            raise WhereValidationError("aggregate not allowed inside aggregate filter")
+        if not isinstance(filter_atom, tuple) or not filter_atom or not isinstance(filter_atom[0], str):
+            raise WhereValidationError("aggregate filter atom must be non-empty tuple with string kind")
+        atom_kind = filter_atom[0]
+        if atom_kind not in _AGGREGATE_FILTER_ATOM_KINDS:
+            raise WhereValidationError(
+                f"{atom_kind} not allowed inside aggregate filter (C100)"
+            )
+        # Recurse shape validation for sub-atoms via _validate_atom_subset
+        # (which handles pred / eq / ne / in / gt / ge / lt / le / not shapes).
+        _validate_atom_subset(filter_atom)
 
 
 def _canonicalize_in_values(values: list[Any]) -> tuple[str, ...]:
@@ -841,7 +1056,7 @@ def _infer_var_type_domains(
             if _is_var(term):
                 out.setdefault(term, set()).add(type_domain)
 
-    for atom in body:
+    def walk_atom(atom: tuple[Any, ...]) -> None:
         if atom[0] == "pred":
             add_from_pred_atom(atom)
         elif atom[0] in _ARITH_KINDS:
@@ -852,12 +1067,39 @@ def _infer_var_type_domains(
             _, not_body = atom
             for branch in _normalize_not_body_subset(not_body):
                 for not_atom in branch:
-                    if not_atom[0] == "pred":
-                        add_from_pred_atom(not_atom)
-                    elif not_atom[0] in _ARITH_KINDS:
-                        for term in not_atom[1:]:
-                            if _is_var(term):
-                                out.setdefault(term, set()).add("int")
+                    walk_atom(not_atom)
+        elif atom[0] in {"eq", "ne", "gt", "ge", "lt", "le"}:
+            # T2.3c §2.6b P2 v3: descend into aggregate operands so filter-
+            # internal numeric cmp (e.g., gt($_agg1, 5)) sees the type domain
+            # contributed by aggregate-filter pred atoms.
+            for side in (atom[1], atom[2]):
+                if _is_aggregate(side):
+                    walk_aggregate(side)
+            # When eq binds a var to an aggregate value (v_X = to_string(<agg>)),
+            # the var carries a numeric value as symbol; mark int type domain
+            # so subsequent gt/ge/lt/le on that var passes _assert_cmp_var_allowed.
+            if atom[0] == "eq":
+                lhs, rhs = atom[1], atom[2]
+                if _is_aggregate(lhs) and _is_var(rhs):
+                    out.setdefault(rhs, set()).add("int")
+                elif _is_aggregate(rhs) and _is_var(lhs):
+                    out.setdefault(lhs, set()).add("int")
+
+    def walk_aggregate(aggregate: tuple[Any, ...]) -> None:
+        _, target_var, filter_atoms = aggregate
+        # Aggregate target_var is numeric per C102 (sum/min/max/mean require
+        # numeric target; count has target_var=None).
+        if (
+            isinstance(target_var, str)
+            and target_var.startswith("$")
+            and len(target_var) >= 2
+        ):
+            out.setdefault(target_var, set()).add("int")
+        for filter_atom in filter_atoms:
+            walk_atom(filter_atom)
+
+    for atom in body:
+        walk_atom(atom)
     return out
 
 
@@ -903,6 +1145,13 @@ def _compile_ne_filter(
 
 
 def _compile_cmp_side(term: Any, var_symbols: dict[str, str], kind: str) -> str:
+    """Compile one side of numeric cmp (gt/ge/lt/le) for var/literal only.
+
+    Aggregate operand is NOT handled here — _compile_atom cmp branches
+    dispatch aggregate via _compile_aggregate_parts directly so they can
+    properly compose the guard clause for min/max/mean (which must appear
+    as a peer body clause, not inside any cast wrap).
+    """
     if _is_var(term):
         return f"to_number({_symbol_for_var(var_symbols, term)})"
     return _literal_to_cmp_int_text(term, kind)
@@ -1103,6 +1352,339 @@ def _compile_arith_atom(
     return f"{z_sym} = to_string({expr})"
 
 
+def _compile_aggregate_parts(
+    *,
+    aggregate: tuple[Any, ...],
+    var_symbols: dict[str, str],
+    outer_bound_vars: set[str],
+    pred_arities: dict[str, int],
+    pred_type_domains: dict[str, list[str]],
+    var_type_domains: dict[str, set[str]],
+    in_rel_values: dict[str, tuple[str, ...]],
+    not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
+    not_rel_namespace: str | None,
+    ast_gate_on: bool,
+) -> tuple[str | None, str]:
+    """Compile aggregate tuple to (guard_clause_or_None, value_expr).
+
+    Returns:
+        guard_clause: For min/max/mean, returns `count : {same_body} > 0`
+            so caller can prepend as peer body atom (NOT inside to_string
+            wrap). For count/sum returns None (empty=0 is legal C101 value).
+        value_expr: Bare numeric aggregate expression (e.g., `count : {body}`
+            or `sum to_number(v_X) : {body}`). Caller decides to_string /
+            to_number wrapping per blueprint §5.3.5 wrapper table.
+
+    The guard MUST be emitted as a peer body atom (separate from value),
+    NOT wrapped inside to_string with the value, because `to_string(...)`
+    is a per-expression conversion and the guard is a per-clause filter.
+    """
+    kind, target_var, filter_atoms = aggregate
+    # Aggregate scope per C104: local copy of bound_vars; filter-introduced
+    # vars stay private to the aggregate body and do NOT leak back to outer.
+    local_bound_vars = set(outer_bound_vars)
+    body_terms: list[str] = []
+    for filter_atom in filter_atoms:
+        body_terms.append(
+            _compile_filter_atom_within_aggregate(
+                atom=filter_atom,
+                var_symbols=var_symbols,
+                local_bound_vars=local_bound_vars,
+                pred_arities=pred_arities,
+                pred_type_domains=pred_type_domains,
+                var_type_domains=var_type_domains,
+                in_rel_values=in_rel_values,
+                not_rel_defs=not_rel_defs,
+                not_rel_namespace=not_rel_namespace,
+                ast_gate_on=ast_gate_on,
+            )
+        )
+    body = ", ".join(body_terms)
+
+    # Value clause per kind (bare numeric aggregate expression).
+    if kind == "count":
+        value_expr = f"count : {{ {body} }}"
+    else:
+        target_sym = _symbol_for_var(var_symbols, target_var)
+        target_expr = f"to_number({target_sym})"
+        value_expr = f"{kind} {target_expr} : {{ {body} }}"
+
+    # min/max/mean: emit `count : {same_body} > 0` guard as peer clause
+    # per blueprint §2.5 v2 lock. count/sum have no guard.
+    guard_clause: str | None = None
+    if kind in _AGGREGATE_GUARD_KINDS:
+        guard_clause = f"count : {{ {body} }} > 0"
+
+    return guard_clause, value_expr
+
+
+def _compose_aggregate_eq_binding(
+    *,
+    other_var_token: str,
+    var_symbols: dict[str, str],
+    guard_clause: str | None,
+    value_expr: str,
+) -> str:
+    """Compose eq-binding-to-unbound-var DL: `<guard>?, v_X = to_string(<value>)`.
+
+    Guard appears as peer body clause BEFORE the binding; the binding wraps
+    only the value expression in to_string for symbol-domain consistency.
+    """
+    binding = f"{var_symbols[other_var_token]} = to_string({value_expr})"
+    if guard_clause is None:
+        return binding
+    return f"{guard_clause}, {binding}"
+
+
+def _compose_aggregate_numeric_cmp(
+    *,
+    guard_clause: str | None,
+    value_expr: str,
+    op: str,
+    other_expr: str,
+    aggregate_on_left: bool,
+) -> str:
+    """Compose numeric cmp DL: `<guard>?, <value_or_other> <op> <value_or_other>`.
+
+    Guard appears as peer body clause; cmp expression uses bare numeric.
+    """
+    if aggregate_on_left:
+        cmp = f"{value_expr} {op} {other_expr}"
+    else:
+        cmp = f"{other_expr} {op} {value_expr}"
+    if guard_clause is None:
+        return cmp
+    return f"{guard_clause}, {cmp}"
+
+
+def _compile_aggregate(
+    *,
+    aggregate: tuple[Any, ...],
+    var_symbols: dict[str, str],
+    outer_bound_vars: set[str],
+    pred_arities: dict[str, int],
+    pred_type_domains: dict[str, list[str]],
+    var_type_domains: dict[str, set[str]],
+    in_rel_values: dict[str, tuple[str, ...]],
+    not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
+    not_rel_namespace: str | None,
+    ast_gate_on: bool,
+) -> str:
+    """Compile aggregate as a single Souffle expression for use in numeric
+    cmp side (via _compile_cmp_side) when guard is irrelevant (count/sum)
+    OR when caller doesn't need separate guard handling.
+
+    For min/max/mean used in numeric cmp side, the guard MUST be threaded
+    through _compose_aggregate_numeric_cmp at the caller's atom emit point.
+    This wrapper returns the bare value expression only and the guard is
+    discarded — use _compile_aggregate_parts directly for full control.
+    """
+    _, value_expr = _compile_aggregate_parts(
+        aggregate=aggregate,
+        var_symbols=var_symbols,
+        outer_bound_vars=outer_bound_vars,
+        pred_arities=pred_arities,
+        pred_type_domains=pred_type_domains,
+        var_type_domains=var_type_domains,
+        in_rel_values=in_rel_values,
+        not_rel_defs=not_rel_defs,
+        not_rel_namespace=not_rel_namespace,
+        ast_gate_on=ast_gate_on,
+    )
+    return value_expr
+
+
+def _compile_filter_atom_within_aggregate(
+    *,
+    atom: tuple[Any, ...],
+    var_symbols: dict[str, str],
+    local_bound_vars: set[str],
+    pred_arities: dict[str, int],
+    pred_type_domains: dict[str, list[str]],
+    var_type_domains: dict[str, set[str]],
+    in_rel_values: dict[str, tuple[str, ...]],
+    not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
+    not_rel_namespace: str | None,
+    ast_gate_on: bool,
+) -> str:
+    """Compile a single filter atom inside aggregate body.
+
+    Differences from _compile_atom:
+    - No witness symbols emitted (aggregate body has no rule-level witness)
+    - Operates on local_bound_vars (scope isolation per blueprint §2.4)
+    - C100 filter atom kinds enforced upstream by _validate_aggregate_atom_shape
+    - `not` body uses synthetic not-relation extraction pattern (same as outer)
+    """
+    kind = atom[0]
+    if kind == "pred":
+        _, pred_id, terms = atom
+        if pred_id not in pred_arities:
+            raise WhereValidationError(f"unknown predicate in where: {pred_id}")
+        if len(terms) != pred_arities[pred_id]:
+            raise WhereValidationError(
+                f"arity mismatch for predicate {pred_id}: expected {pred_arities[pred_id]}, got {len(terms)}"
+            )
+        args: list[str] = []
+        for term in terms:
+            if _is_var(term):
+                local_bound_vars.add(term)
+                args.append(_symbol_for_var(var_symbols, term))
+            else:
+                args.append(_literal_to_symbol(term))
+        rel_name = normalize_pred_id(pred_id)
+        return f'{rel_name}({", ".join(args)})'
+
+    if kind == "eq":
+        _, lhs, rhs = atom
+        lhs_is_var = _is_var(lhs)
+        rhs_is_var = _is_var(rhs)
+
+        if lhs_is_var and rhs_is_var:
+            lhs_bound = lhs in local_bound_vars
+            rhs_bound = rhs in local_bound_vars
+            if not lhs_bound and not rhs_bound:
+                _raise_dataflow_or_runtime(
+                    ast_gate_on=ast_gate_on,
+                    message="eq requires at least one bound/constant side",
+                    op="eq",
+                )
+            if lhs_bound and not rhs_bound:
+                local_bound_vars.add(rhs)
+            if rhs_bound and not lhs_bound:
+                local_bound_vars.add(lhs)
+        elif lhs_is_var and not rhs_is_var:
+            local_bound_vars.add(lhs)
+        elif rhs_is_var and not lhs_is_var:
+            local_bound_vars.add(rhs)
+        else:
+            raise WhereValidationError("eq requires at least one variable side")
+
+        lhs_expr = _symbol_for_var(var_symbols, lhs) if lhs_is_var else _literal_to_symbol(lhs)
+        rhs_expr = _symbol_for_var(var_symbols, rhs) if rhs_is_var else _literal_to_symbol(rhs)
+        return f"{lhs_expr} = {rhs_expr}"
+
+    if kind == "ne":
+        return _compile_ne_filter(
+            atom=atom,
+            var_symbols=var_symbols,
+            bound_vars=local_bound_vars,
+            ast_gate_on=ast_gate_on,
+        )
+
+    if kind == "in":
+        _, var, values = atom
+        if var not in local_bound_vars:
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"in variable must be bound before filter: {var}",
+                op="in",
+            )
+        canonical_values = _canonicalize_in_values(values)
+        rel_name = _in_rel_name(canonical_values)
+        existing = in_rel_values.get(rel_name)
+        if existing is None:
+            in_rel_values[rel_name] = canonical_values
+        elif existing != canonical_values:
+            raise WhereValidationError("in relation name collision detected")
+        return f"{rel_name}({_symbol_for_var(var_symbols, var)})"
+
+    if kind in {"gt", "ge", "lt", "le"}:
+        _, lhs, rhs = atom
+        lhs_is_var = _is_var(lhs)
+        rhs_is_var = _is_var(rhs)
+
+        if lhs_is_var and lhs not in local_bound_vars:
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"{kind} variable must be bound before filter: {lhs}",
+                op=kind,
+            )
+        if rhs_is_var and rhs not in local_bound_vars:
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message=f"{kind} variable must be bound before filter: {rhs}",
+                op=kind,
+            )
+        if lhs_is_var:
+            _assert_cmp_var_allowed(lhs, var_type_domains, kind)
+        if rhs_is_var:
+            _assert_cmp_var_allowed(rhs, var_type_domains, kind)
+        lhs_expr = _compile_cmp_side(lhs, var_symbols, kind)
+        rhs_expr = _compile_cmp_side(rhs, var_symbols, kind)
+        op = _cmp_operator(kind)
+        return f"{lhs_expr} {op} {rhs_expr}"
+
+    if kind == "not":
+        # Synthetic not-relation extraction pattern (mirror outer _compile_atom not branch).
+        # Aggregate-internal not body shares not_rel_defs with outer relation block,
+        # but uses a distinct namespace to avoid collision (aggregate body has its own
+        # scope, so even an identically-structured not body is semantically different).
+        _, not_body = atom
+        not_bodies = _normalize_not_body_subset(not_body)
+        vars_in_not_body: set[str] = set()
+        for branch in not_bodies:
+            for not_atom in branch:
+                if _is_aggregate(not_atom):
+                    raise WhereValidationError(
+                        "aggregate not allowed inside not body in aggregate filter"
+                    )
+                vars_in_not_body.update(_vars_in_atom(not_atom, include_not_body_vars=True))
+        if not any(var in local_bound_vars for var in vars_in_not_body):
+            _raise_dataflow_or_runtime(
+                ast_gate_on=ast_gate_on,
+                message="not body must reference at least one bound variable",
+                op="not",
+            )
+
+        # Key vars: aggregate-local vars referenced inside not body that are also
+        # bound in the aggregate's local scope at this point.
+        key_vars = tuple(sorted(var for var in vars_in_not_body if var in local_bound_vars))
+        key_args = tuple(var_symbols[var] for var in key_vars)
+        # Namespace: distinguish aggregate-internal not bodies from outer-where ones.
+        agg_namespace = f"agg:{not_rel_namespace or ''}"
+        rel_name = _not_rel_name(not_body, namespace=agg_namespace)
+        body_term_groups: list[tuple[str, ...]] = []
+        for branch in not_bodies:
+            branch_local_bound_vars = set(local_bound_vars)
+            branch_terms: list[str] = []
+            branch_vars: set[str] = set()
+            for not_atom in branch:
+                branch_vars.update(_vars_in_atom(not_atom, include_not_body_vars=True))
+                branch_terms.append(
+                    _compile_not_body_atom(
+                        atom=not_atom,
+                        pred_arities=pred_arities,
+                        pred_type_domains=pred_type_domains,
+                        var_symbols=var_symbols,
+                        local_bound_vars=branch_local_bound_vars,
+                        var_type_domains=var_type_domains,
+                        in_rel_values=in_rel_values,
+                        ast_gate_on=ast_gate_on,
+                    )
+                )
+            missing_key_vars = [var for var in key_vars if var not in branch_vars]
+            if missing_key_vars:
+                raise WhereValidationError(
+                    "not OR branch must reference all correlated variables; missing: "
+                    + ", ".join(missing_key_vars)
+                )
+            body_term_groups.append(tuple(branch_terms))
+        rel_def = (key_args, tuple(body_term_groups))
+
+        existing = not_rel_defs.get(rel_name)
+        if existing is None:
+            not_rel_defs[rel_name] = rel_def
+        elif existing != rel_def:
+            raise WhereValidationError("not relation name collision detected")
+
+        if key_vars:
+            rel_args = ", ".join(var_symbols[var] for var in key_vars)
+            return f"!{rel_name}({rel_args})"
+        return f"!{rel_name}()"
+
+    raise WhereValidationError(f"{kind} not allowed inside aggregate filter (C100)")
+
+
 def _literal_to_text(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -1136,6 +1718,20 @@ def _is_atom(value: Any) -> bool:
     return isinstance(value, tuple) and len(value) >= 1 and isinstance(value[0], str)
 
 
+def _is_aggregate(value: Any) -> bool:
+    """Identify aggregate-tuple operand inside cmp atoms.
+
+    Aggregate IR shape per T2.3a substrate + T2.3b SDK lowering:
+    `(kind, target_var, filter_atoms)` where kind ∈ _AGGREGATE_KINDS.
+    """
+    return (
+        isinstance(value, tuple)
+        and len(value) >= 1
+        and isinstance(value[0], str)
+        and value[0] in _AGGREGATE_KINDS
+    )
+
+
 def _vars_in_atom(atom: tuple[Any, ...], *, include_not_body_vars: bool) -> list[str]:
     kind = atom[0]
     found: set[str] = set()
@@ -1150,6 +1746,11 @@ def _vars_in_atom(atom: tuple[Any, ...], *, include_not_body_vars: bool) -> list
             found.add(lhs)
         if _is_var(rhs):
             found.add(rhs)
+        # T2.3c: aggregate operand contributes ZERO outer vars per blueprint
+        # §5.5 + §2.6. Correlated outer vars are bound by their original
+        # outer-scope atom independently; aggregate-local vars stay private
+        # per C104. _is_aggregate(side) intentionally produces no .add()
+        # below — explicit pass to surface the design choice.
     elif kind == "in":
         _, var, _ = atom
         if _is_var(var):
@@ -1160,6 +1761,8 @@ def _vars_in_atom(atom: tuple[Any, ...], *, include_not_body_vars: bool) -> list
             found.add(lhs)
         if _is_var(rhs):
             found.add(rhs)
+        # T2.3c: aggregate operand contributes ZERO outer vars (same rationale
+        # as eq branch above).
     elif kind in _ARITH_KINDS:
         for term in atom[1:]:
             if _is_var(term):
