@@ -15,6 +15,7 @@
 - Outputs / Downstream:
   - `src/factgraph/adapters/problog/problog_export.py` aggregate-aware `_compile_atom(...)` cmp dispatch for aggregate tuple operands.
   - New aggregate compile helpers using `findall/3`, `length/2`, `sum_list/2`, `min_list/2`, `max_list/2`, and derived mean via `sum_list` + `length` + `is/2`.
+  - Conditional generated-program directive `:- use_module(library(lists)).` when aggregate lowering is used.
   - Adapter-side aggregate shape validation for structural cases the exporter cannot compile.
   - Tests proving 5 aggregate kinds, empty-set behavior, aggregate-local isolation, `not` filter recursion, two-aggregate comparisons, and malformed aggregate rejection.
   - Docs status flip: `application/docs/rule.md` + `sdk/docs/03_rules_and_inferences.en.md` mark ProbLog aggregate adapter support as shipped.
@@ -95,6 +96,14 @@ The helper compiles `(kind, target_var, filter_atoms)` into deterministic fresh 
 | `mean` | `findall(Target, (<filter>), L), L = [_|_], sum_list(L, Sum), length(L, Count), Result is Sum / Count` |
 
 For min/max/mean, `L = [_|_]` is the C101 empty-set guard. Empty list makes the enclosing rule body fail, matching `AggregateNoValue` violated-comparison/no-env-pollution semantics.
+
+When any aggregate expression is compiled, the generated ProbLog program MUST include:
+
+```prolog
+:- use_module(library(lists)).
+```
+
+G7 precondition execution on 2026-05-23 confirmed the local ProbLog binary has `length/2` but does not expose `sum_list/2`, `min_list/2`, or `max_list/2` without `library(lists)`; the same smoke passes with the directive. Non-aggregate exports should avoid adding this directive so existing exact-output tests and non-aggregate programs remain stable.
 
 ### 2.3 C100 — Compile aggregate filter atoms recursively with local scope
 
@@ -255,6 +264,7 @@ Recommended shape:
 @dataclass
 class _CompileContext:
     next_id: int = 1
+    requires_lists: bool = False
 
     def fresh(self, prefix: str) -> str:
         ...
@@ -272,6 +282,8 @@ def _compile_body(body: list[Any]) -> str:
 
 Tests that call `_compile_atom(...)` directly should keep working by allowing `ctx: _CompileContext | None = None` and constructing a local context if absent.
 
+`export_problog(...)` should use one context for all compiled rule bodies, precompile those bodies before final line emission, and insert `:- use_module(library(lists)).` after the generated header when `ctx.requires_lists` becomes true. This keeps aggregate exports executable while preserving existing non-aggregate output.
+
 ### 5.3 Aggregate compile algorithm
 
 Pseudo-code:
@@ -280,6 +292,7 @@ Pseudo-code:
 def _compile_aggregate_parts(aggregate: tuple[Any, ...], *, ctx: _CompileContext) -> tuple[list[str], str]:
     kind, target_var, filter_atoms = aggregate
     _validate_aggregate_shape(aggregate)
+    ctx.requires_lists = True
 
     list_var = ctx.fresh("List")
     result_var = ctx.fresh("Result")
@@ -308,7 +321,7 @@ def _compile_aggregate_parts(aggregate: tuple[Any, ...], *, ctx: _CompileContext
     return goals, result_var
 ```
 
-`sum_list([], 0)` is locked as standard SWI-Prolog `library(lists)` behavior. If Step 4.7 integration against an actual ProbLog binary unexpectedly shows non-standard behavior, treat that as a deviation in §10 Outcome and amend before implementation continues; do not leave the empty-sum semantics open in the implementation plan.
+`sum_list([], 0)` is locked as standard SWI-Prolog `library(lists)` behavior. The implementation must emit `:- use_module(library(lists)).` for aggregate programs; if Step 4.7 integration against an actual ProbLog binary still shows non-standard behavior with the directive present, treat that as a deviation in §10 Outcome and amend before implementation continues. Do not leave the empty-sum semantics open in the implementation plan.
 
 ### 5.4 Cmp dispatch composition
 
@@ -387,7 +400,7 @@ Thus:
 | Size budget | Estimated 250-450 LOC code + tests after T2.3c calibration | Within S with size caution |
 | Substrate or SDK change | None | NO |
 
-If G7 or implementation discovers that ProbLog lacks required list predicates or cannot represent the locked semantics without a broader runtime helper, pause and amend; if that changes semantics, escalate to M. `sum_list([], 0)` itself is not an open design choice.
+G7 discovered that the local ProbLog binary requires `:- use_module(library(lists)).` before `sum_list/2`, `min_list/2`, and `max_list/2` are available. This is now locked as a narrow S-class amendment: aggregate exports conditionally include the directive. If implementation discovers that the directive is insufficient or cannot represent the locked semantics without a broader runtime helper, pause and amend; if that changes semantics, escalate to M. `sum_list([], 0)` itself is not an open design choice.
 
 ### 5.9 G7 pre-implementation checks
 
@@ -399,12 +412,13 @@ Must be run and recorded in the audit log **before code edits**:
 4. ProbLog aggregate dispatch currently absent: `rg "AggregateAtom|_AGGREGATE_KINDS|aggregate|findall|sum_list|min_list|max_list" src/factgraph/adapters/problog/problog_export.py` has no semantic aggregate dispatch hits.
 5. Current ProbLog exporter **silently mishandles** aggregate IR rather than rejecting it: aggregate tuple operands flow through `_to_problog_term:315-318` to `_to_problog_literal:343-355`, where unknown tuple values are JSON-encoded and quoted as Prolog atom literals such as `'["sum","$_agg1",[...]]'`. G7 smoke MUST reproduce this specific output shape to confirm the precondition gap and motivate cmp-branch aggregate routing.
 6. Local Python/ProbLog test environment supports import of `tests.test_problog_export` after prior hygiene/fixture cleanup.
-7. If a ProbLog binary is available cheaply, smoke `findall/3`, `sum_list/2`, `min_list/2`, `max_list/2`, `length/2`; if not available, record that this S-class slice verifies exported program text only.
+7. If a ProbLog binary is available cheaply, smoke `findall/3`, `sum_list/2`, `min_list/2`, `max_list/2`, `length/2`; if not available, record that this S-class slice verifies exported program text only. If list predicates require `library(lists)`, record that and keep the directive requirement in scope.
 
 ## 6. Boundaries And Invariants
 
 - I1 — Aggregate is term-position only; no top-level aggregate atom kind.
 - I2 — ProbLog aggregate lowering uses `findall/3` + list predicates; no custom runtime module.
+- I2a — Aggregate exports include `:- use_module(library(lists)).` exactly when aggregate lowering requires list predicates; non-aggregate exports stay unchanged.
 - I3 — min/max/mean empty set uses list non-empty guard `L = [_|_]` and fails the enclosing body.
 - I4 — count/sum empty set returns 0.
 - I5 — `not` in aggregate filter compiles through existing `\+(...)` recursion.
@@ -423,19 +437,20 @@ Minimum tests:
 3. `min` aggregate exports `L = [_|_]` guard + `min_list(L, R)`.
 4. `max` aggregate exports `L = [_|_]` guard + `max_list(L, R)`.
 5. `mean` aggregate exports `L = [_|_]`, `sum_list`, `length`, and `R is Sum / Count`.
-6. Empty-set guard is present for min/max/mean and absent for count/sum.
-7. Aggregate in eq binding compiles as goals + `V_TOTAL = R`.
-8. Aggregate in numeric comparison compiles as goals + `R > 3` or equivalent.
-9. Two-aggregate comparison compiles both aggregate goal sequences and compares result vars.
-10. Aggregate filter with `not` body exports nested `\+(...)`.
-11. Aggregate-local vars do not appear in `% query_vars=...` or rule head variables.
-12. Unknown aggregate kind rejects with `ProbLogExportError`.
-13. Malformed target shape rejects.
-14. Unsupported filter atom kind rejects.
-15. Existing `ne` and arithmetic ProbLog tests still pass.
-16. Full `tests.test_problog_export` passes.
-17. Relevant cross-slice tests pass: T2.3a/T2.3b/T2.3c/Souffle unaffected.
-18. Ruff clean on touched files.
+6. Aggregate export includes `:- use_module(library(lists)).`; non-aggregate export does not gain this directive.
+7. Empty-set guard is present for min/max/mean and absent for count/sum.
+8. Aggregate in eq binding compiles as goals + `V_TOTAL = R`.
+9. Aggregate in numeric comparison compiles as goals + `R > 3` or equivalent.
+10. Two-aggregate comparison compiles both aggregate goal sequences and compares result vars.
+11. Aggregate filter with `not` body exports nested `\+(...)`.
+12. Aggregate-local vars do not appear in `% query_vars=...` or rule head variables.
+13. Unknown aggregate kind rejects with `ProbLogExportError`.
+14. Malformed target shape rejects.
+15. Unsupported filter atom kind rejects.
+16. Existing `ne` and arithmetic ProbLog tests still pass.
+17. Full `tests.test_problog_export` passes.
+18. Relevant cross-slice tests pass: T2.3a/T2.3b/T2.3c/Souffle unaffected.
+19. Ruff clean on touched files.
 
 ## 8. Implementation Plan
 
@@ -444,6 +459,7 @@ Minimum tests:
 3. Add local aggregate constants + `_is_aggregate(...)` + `_validate_aggregate_shape(...)`.
 4. Add `_CompileContext` or equivalent fresh-var allocator.
 5. Update `_compile_body(...)` / `_compile_atom(...)` signatures to thread context while preserving direct `_compile_atom(...)` tests.
+5b. Update `export_problog(...)` to precompile rule bodies with a shared context and conditionally emit `:- use_module(library(lists)).` when aggregate lowering sets `ctx.requires_lists`.
 6. Add `_compile_aggregate_parts(...)` using `findall/3` + list predicates.
 7. Extend cmp branches for aggregate operands.
 8. Ensure `not` recursion shares the context.

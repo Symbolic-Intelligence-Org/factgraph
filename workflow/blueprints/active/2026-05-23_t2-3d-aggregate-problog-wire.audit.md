@@ -2,7 +2,7 @@
 
 - Status: scoped
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+- Last Updated: 2026-05-23 (G7 precondition + lists directive amendment)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3d-aggregate-problog-wire.md](./2026-05-23_t2-3d-aggregate-problog-wire.md)
@@ -23,6 +23,7 @@
 | 2026-05-23 | draft | Blueprint created | User-drafts / Claude-reviews pattern restored per T2.3c retrospective. T2.3d scope is ProbLog adapter-only aggregate wire over T2.3a substrate + T2.3b SDK + T2.3c query-variable extraction. No SDK/core/application/Souffle changes. |
 | 2026-05-23 | draft | Step 4.2 v2 tightening | Claude review surfaced 3 Required + 1 Worth-considering: two line-cite drifts, empty `sum_list([], 0)` ambiguity, inaccurate G7 #5 "rejects or mishandles" wording, and unlocked fresh-var naming. Applied all four: corrected cites, locked `sum_list([], 0)` as SWI-Prolog/ProbLog standard behavior, changed G7 #5 to silent JSON-quoted literal mishandle, and added `Agg{Prefix}{N}` fresh-var naming invariant. |
 | 2026-05-23 | scoped | Status: draft → scoped | Claude v2 re-review passed with 0 Blocker / 0 Required / 0 Worth-considering. Anti-pattern propagation grep clean. User-drafts pattern validated for T2.3d (2 rounds / 4 findings vs T2.3c 6 rounds / 21 findings). Ready to fork impl branch. |
+| 2026-05-23 | g7-precondition | G7 precondition recorded before implementation | All G7 checks completed before code edits. Local ProbLog binary smoke found list predicates require `:- use_module(library(lists)).`; blueprint amended in scoped state to conditionally emit the directive for aggregate exports. Sacred master and dirty set preserved. |
 
 ## Decision Notes
 
@@ -106,6 +107,24 @@ Claude v2 re-review passed cleanly:
 - Anti-pattern grep found no stale "to be verified by G7" / "fallback if unavailable" / "rejects or mishandles" / old `AGG_*` naming / old line-cite text.
 
 Status moved to `scoped`. No code changes have started. Implementation branch should fork from this scoped commit.
+
+### 2026-05-23 — G7 precondition results and scoped amendment
+
+G7 was executed on `v0.2.0-impl-t2-3d-aggregate-problog-wire-2026-05-23` before any code edits.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | T2.3a substrate exists | PASS — `where_ast.py:75` `AggregateAtom`, `where_ast.py:102` `_AGGREGATE_KINDS`, `where_ast_validate.py:68` `validate_where_ast`, `where_eval.py:769` `_resolve_aggregate_term_for_env`. |
+| 2 | T2.3b SDK bridge can produce aggregate IR | PASS — `sdk/dsl/expr.py:213` `_AggregateRef`, `:329` `agg_count`, `:334` `agg_sum`, `:459` `_lower_compare_with_aggregate`, `:482` `_lower_aggregate_ref`; bridge validator call at `sdk/dsl/application_rule.py:62`. |
+| 3 | T2.3c query-var extraction excludes aggregate-local vars | PASS — smoke returned `['$total', '$u']` for an aggregate filter containing `$o` and `$_agg1`; aggregate-local vars did not escape. |
+| 4 | ProbLog aggregate dispatch currently absent | PASS — `rg "AggregateAtom|_AGGREGATE_KINDS|aggregate|findall|sum_list|min_list|max_list" src/factgraph/adapters/problog/problog_export.py` returned no semantic aggregate hits. |
+| 5 | Current ProbLog exporter silently mishandles aggregate IR | PASS — `_compile_atom(("eq", "$total", ("sum", "$_agg1", ...)))` emitted `V_TOTAL = '["sum","$_agg1",...]'`, confirming JSON-quoted literal mishandle rather than rejection. |
+| 6 | ProbLog export test module is healthy | PASS — `PYTHONPATH=src python -m unittest tests.test_problog_export` ran 14 tests OK. |
+| 7 | Local ProbLog binary/list predicate smoke | PASS with amendment — `problog` binary exists. Smoke without imports failed with `UnknownClause: No clauses found for 'sum_list/2'`; same smoke with `:- use_module(library(lists)).` passed (`ok: 1`). |
+
+**Scoped amendment**: T2.3d remains S-class. The locked semantics do not change, but aggregate exports must conditionally emit `:- use_module(library(lists)).` when aggregate lowering uses list predicates. Non-aggregate exports should not gain the directive so existing exact-output tests remain stable.
+
+This amendment is recorded before implementation code edits, matching the G7 timing discipline established by fixture cleanup and T2.3a/T2.3c.
 
 ### 2026-05-23 — Branch state at draft commit time
 
