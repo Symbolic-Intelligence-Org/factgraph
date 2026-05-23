@@ -27,7 +27,7 @@ class ProbLogExportTests(unittest.TestCase):
             pred_id="user:name",
             e_ref=alice_ref,
             rest_terms=[("string", "Alice")],
-            meta={"source": "test", "confidence": 0.25},
+            meta={"source": "test"},
         )
         return sdk
 
@@ -220,7 +220,7 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
             pred_id="item:label",
             e_ref=ref,
             rest_terms=[("string", "val")],
-            meta={"confidence": 0.5},
+            meta={"source": "test"},
         )
         # Overwrite confidence with bool via raw annotation
         sdk.ledger.append_annotations([
