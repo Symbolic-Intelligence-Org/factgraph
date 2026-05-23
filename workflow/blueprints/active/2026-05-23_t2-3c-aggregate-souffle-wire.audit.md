@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v3 tightening — §2.6 stale algorithm fixed + _infer_var_type_domains coverage + to_string/to_number lock + §6.2 contradiction + audit log G5/anticipated marked superseded)
+- Last Updated: 2026-05-23 (Step 4.2 v4 tightening — gate-off C100 contract + §8 step 5 v3-correct + §8 step 12 stale Outcome + §2.5 future-tense + audit log stale Anticipated + cross-slice sdk/docs narrowed)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3c-aggregate-souffle-wire.md](./2026-05-23_t2-3c-aggregate-souffle-wire.md)
@@ -24,6 +24,7 @@
 | 2026-05-23 | draft | Blueprint created | T2 Track 5th implementation sub-slice (after T2.1 ne / T2.2 ArithExpr / T2.3a Aggregate substrate / T2.3b Aggregate SDK bridge). Closes Souffle adapter aggregate wire gap. T2.3a + T2.3b consumed unchanged. T2.3.d ProbLog wire remains separate. Estimated ~300 LOC (150 code + 150 tests). S-class lightweight per §5.7 trigger analysis. Cross-flip: Claude drafts, user reviews (continued from T2.3b inverted pattern). |
 | 2026-05-23 | draft | Step 4.2 v2 tightening | User v1 review surfaced 2 Blockers (P0 C101 empty-set semantics + P1 `_vars_in_atom` scope model false) + 4 Required (P2 §7.5 discriminator weak + P3 failure-path cite wrong + P4 SDK docs optional + P5 gate-off behavior unspec). User locked **A** for P0: implement empty-set guard now via `count : { same_body } > 0` prefix on min/max/mean; count/sum keep native empty=0. No Souffle sentinel object — `AggregateNoValue` represented by branch-not-firing (matches C101 "comparison violated / no env pollution"). P1-P5 v2 fixes applied in single amendment commit. Acceptance count grew from 11 to 17+ tests (new §7.8/§7.9/§7.10 + revised §7.5). Status stays `draft` pending v2 re-review. |
 | 2026-05-23 | draft | Step 4.2 v3 tightening | User v2 re-review surfaced 5 Required findings on contract-precision gaps that would surface at impl time: P1 §2.6 still had v1 stale algorithm (outer_var_universe approach) contradicting v2 §5.5; P2 `_infer_var_type_domains` (`where_compile.py:829-861`) not covered — needs aggregate-aware recursion or impl-time `_assert_cmp_var_allowed` would fail on aggregate-internal cmp like `gt($_agg1, 5)`; P3 to_string/to_number boundary not precisely locked — eq binding vs numeric cmp wrapping rules unclear; P4 §6.2 still listed `sdk/docs/` 0-diff invariant contradicting P4 v2 fix that mandates `sdk/docs/03_rules_and_inferences.en.md` flip; P5 audit log G5 + Anticipated reviewer P-findings retained v1 stale claims. v3 fixes applied: §2.6 rewritten to align with §5.5; new §2.6b + new I11 invariant + §7.11 acceptance for `_infer_var_type_domains`; new §5.3.5 lock table for to_string/to_number rules + §7.8 expanded to 4 tests + new test (d); §6.2 narrowed to per-file 0-diff (sdk/docs/03 row exempt); audit log G5 updated + Anticipated P-findings marked superseded. Acceptance grew 17+ → 19+ tests. Status stays `draft` pending v3 re-review. |
+| 2026-05-23 | draft | Step 4.2 v4 tightening | User v3 re-review surfaced 5 Required findings, no Blockers — convergence stage. P1 gate-off C100 contract self-contradiction in §5.7.5 (table said adapter enforces filter kind list "defense-in-depth" while narrative said C100 NOT in adapter) — split into Layer 1 structural validation (MANDATORY regardless of gate) and Layer 2 semantic checks (upstream-only); rationale that `_ARITH_KINDS` in aggregate filter is structurally undefined; new §7.10b 2-test discriminator. P2 §8 step 5 stale v1/v2 var-extraction text contradicting v3 §5.5 — split into step 5 (`_vars_in_atom` zero contribution) + step 5b (`_infer_var_type_domains` aggregate recursion); separation of concerns clarified. P3 §8 step 12 stale Outcome wording said "AggregateNoValue empty-set gap" which v2 lock A eliminated — reworded to "empty-set guard implementation status + Souffle deviations if discovered". P4 §2.5 line 146 prematurely claimed Souffle parse verification "Confirmed at Step 4.7" — flipped to future-tense "MUST be verified at Step 4.7" + impl requirement + (A-fallback) deviation path. P5 audit log Anticipated P-findings #1/#2/#3 still presented v1 framing — marked SUPERSEDED with v2/v3 cross-ref + cross-slice contract preservation `sdk/docs/` 0-diff narrowed per-file (04 stays 0-diff; 03 §3.2 row MUST flip; rest of 03 0-diff). Acceptance grew 19+ → 21+ tests. Status stays `draft` pending v4 re-review. |
 
 ## Decision Notes
 
@@ -86,12 +87,12 @@ Drafter anticipated user's Step 4.2 review would focus on:
 
 ### 2026-05-23 — Anticipated reviewer P-finding candidates
 
-Drafter anticipates these from Step 4.2 review:
+Drafter anticipated these at v1 draft;v3 status annotations below:
 
-- **Souffle DL aggregate result `to_string(...)` wrap** — §5.3 wraps aggregate output in `to_string(...)` for symbol-typed outer var binding consistency with `_compile_arith_atom`(line 1103 precedent)。Reviewer may verify Souffle 2.x aggregator return type:if native return is already string-coercible without explicit `to_string`,wrap may be redundant。Or:if aggregate return is numeric and outer var is bool-domain,`to_string` may produce wrong DL。Likely impl-time verification + (A-fallback) deviation if needed。
-- **Test 7.5 isolation discriminator strength** — test relies on `("pred", "user:exists", ["$o"])` in outer scope to fail because `$o` is aggregate-local。If Souffle adapter does not raise but silently emits invalid DL,the test should still catch via either:(a)`WhereValidationError` from dataflow gate,or(b)Souffle compile error at runtime。Drafter expects (a)but should add explicit pytest `assertRaises` rather than rely on downstream test infrastructure。
-- **`_vars_in_atom` simplification target_var exclusion** — §5.5 explicitly `found.discard(target_var)` to exclude aggregate-local result binding。But what if `target_var` happens to equal an outer-scope var name(`$total` could be aggregate target var OR outer-bound var depending on caller)? T2.3b SDK lowering uses `$_agg<N>` for target vars(per T2.3b acceptance tests);impl trusts this convention。Reviewer may push for explicit precondition test that target_var is always `$_agg<N>` prefixed。
-- **Filter `not` body recursion depth** — §5.3 recurses into filter atoms;`not` body itself contains pred atoms。Compile path may need to handle `_compile_not_body_atom`(line 939)precedent or compile not-body inside aggregate manually。Drafter may need to clarify or push to §8 step 6 impl detail。
+- ~~Souffle DL aggregate result `to_string(...)` wrap~~ — **SUPERSEDED by v3 P3 lock**:the `to_string(...)` wrap decision is now precisely locked in blueprint §5.3.5 v3 wrapper table covering 8 caller-context combinations。`_compile_aggregate` returns bare numeric;caller(eq branch / cmp branch)decides wrap based on §5.3.5 table。If Souffle aggregator return type still requires impl-time verification,§8 step 11 Souffle binary smoke covers it。
+- ~~Test 7.5 isolation discriminator strength~~ — **SUPERSEDED by v2 P2 fix**:v1 `("pred", "user:exists", ["$o"])` did not discriminate(pred always binds);v2 replaced with `("ne", "$o", "blocked")` per reviewer suggestion(`ne` requires lhs pre-bound per `where_compile.py:888-893`);v2 §7.5 uses explicit `assertRaises(WhereValidationError)`。Concern resolved。
+- ~~`_vars_in_atom` simplification target_var exclusion~~ — **SUPERSEDED by v2 P1 fix + v3 P1 fix**:v1/v2 stale "walk filter + exclude target_var" algorithm was based on false assumption about `extract_where_variables`(direct union,not filter)。v2 §5.5 rewritten to "aggregate side contributes ZERO outer vars";v3 §2.6 brought into alignment(v1 stale text removed)。Target_var collision concern no longer applies — `$_agg<N>` SDK convention locked in §6 invariant I11 v3。
+- **Filter `not` body recursion depth** — §5.3 recurses into filter atoms;`not` body itself contains pred atoms。Compile path may need to handle `_compile_not_body_atom`(line 939)precedent or compile not-body inside aggregate manually。Drafter may need to clarify or push to §8 step 6 impl detail。**[Status: not surfaced in v1/v2/v3 review;still impl-time decision]**
 
 ### 2026-05-23 — Cross-slice contract preservation summary
 
@@ -104,7 +105,7 @@ Drafter anticipates these from Step 4.2 review:
 | ProbLog hygiene | Import cycle fix unchanged | 0 diff in `audit/round_events.py` aggregate area |
 | Fixture cleanup | `meta[confidence]` cleanup unchanged | 0 diff in tests/test_problog_export.py / tests/test_problog_engine_eval.py |
 | T2.3a Aggregate substrate | IR + validator + Python eval + application Rule serialization unchanged | 0 diff in `core/rules/where_ast.py` / `where_ast_validate.py` / `where_eval.py` / `application/protocol/rule.py` aggregate-related lines |
-| T2.3b Aggregate SDK + bridge | 5 helpers + `_AggregateRef` + DSL→IR lowering + bridge validator gate unchanged | 0 diff in `sdk/dsl/expr.py` / `sdk/dsl/application_rule.py` / `sdk/dsl/__init__.py` / `sdk/docs/` |
+| T2.3b Aggregate SDK + bridge | 5 helpers + `_AggregateRef` + DSL→IR lowering + bridge validator gate unchanged | 0 diff in `sdk/dsl/expr.py` / `sdk/dsl/application_rule.py` / `sdk/dsl/__init__.py` / `sdk/docs/04_api_surface.en.md`;**`sdk/docs/03_rules_and_inferences.en.md` §3.2 adapter status row MUST flip per P4 v2 lock**(rest of file 0 diff)|
 
 Cross-slice non-regression test plan:run T2.3a + T2.3b + T2.1 + T2.2 relevant suites at Step 4.7 impl verification(scope at §8 step 11)。
 
@@ -267,3 +268,64 @@ v3 round surfaced **5 Required(no Blockers)** — improvement from v2 round(2 Bl
 - Drafter mitigations:explicit superseded-marking when rewriting sections;cross-section consistency check before each commit;helper coverage diff vs touched-file enumeration
 
 v3 mitigation applied:every v3 edit cross-verified against §5(impl) ↔ §2(goals) ↔ §6(invariants) ↔ §7(acceptance) ↔ audit log G1-G7 for consistency。If v3 review still surfaces Blocker-class,the cross-flip inversion pattern's overhead clearly exceeds value for adapter-shaped slices and T2.3.d should revert to user-drafts pattern。
+
+### 2026-05-23 — Step 4.2 v3 review findings + v4 resolutions
+
+User Step 4.2 v3 re-review verdict:**still requires v4 tightening, but converging — no Blockers**。5 Required findings spanning contract/text consistency and one gate-off semantic boundary。
+
+**P1 Required — gate-off C100 contract self-contradiction in §5.7.5**
+
+§5.7.5 had two contradictory statements:table listed "Filter atom kind ∈ C100 list — YES with gate ON — defense-in-depth" while narrative said "C100 filter restriction — substrate validator enforces (NOT in adapter)"。User locked:aggregate filter kind restriction is **structural** at adapter,not semantic — `_ARITH_KINDS` top-level atoms compile to var-binding clauses which Souffle aggregate body slots cannot accept;adapter MUST reject regardless of gate state。
+
+**v4 fix**:§5.7.5 reorganized into two explicit Layers:
+- Layer 1(structural,MANDATORY regardless of gate):aggregate kind in `_AGGREGATE_KINDS` / tuple arity / target_var shape / filter_atoms list / recursive shape / no nested aggregate / **filter atom kind ∈ C100 list**(promoted from "defense-in-depth" to "structurally required because compile path itself cannot proceed otherwise")
+- Layer 2(semantic,upstream-only):C100 *outside* kind-list constraint(RuleRef object semantics / RuleExpr nesting at AST layer)/ C102 numeric runtime type / C104 binding-order scoping / C103 snapshot semantics
+
+Added rationale paragraph explaining why `_ARITH_KINDS` in aggregate filter is structurally undefined(emits `<z> = to_string(<expr>)` var-binding clause,not Souffle aggregate body slot-compatible clause)。
+
+**Acceptance §7.10b added(2 tests)**:gate ON + ArithExpr in aggregate filter → raises;gate OFF + ArithExpr in aggregate filter → raises with SAME error message(adapter is only safety net)。Without v4 P1 lock,gate-off would let `add`/`sub` reach `_compile_filter_atom_within_aggregate` and either crash on dispatch or emit malformed DL。
+
+**P2 Required — §8 Implementation Plan step 5 stale**
+
+§8 step 5 still wrote "Extend `_vars_in_atom` cmp branches to walk aggregate filter atoms;explicitly exclude target_var" — v1/v2 stale algorithm contradicting v3 §5.5(aggregate side contributes ZERO outer vars)。Impl reading §8 would write wrong algorithm。
+
+**v4 fix**:§8 step 5 split into:
+- step 5:`_vars_in_atom` aggregate operand → ZERO outer var contribution(no walk;per §5.5 v2 + §2.6 v3)
+- step 5b:`_infer_var_type_domains` aggregate filter recursion(separate concern;per §2.6b v3 P2)
+
+Separation of concerns made explicit:`_vars_in_atom` tracks outer-scope membership(query variable set);`_infer_var_type_domains` tracks value types for cmp safety。Different algorithms,different consumers,different responsibilities。
+
+**P3 Required — §8 step 12 Outcome wording stale**
+
+§8 step 12 said closure should document "the `AggregateNoValue` empty-set gap" — v2 lock A eliminated the gap(guard implements branch-not-firing = C101 "violated comparison")。Stale language。
+
+**v4 fix**:§8 step 12 reworded — "empty-set guard implementation status + any Souffle syntax/runtime deviations discovered at impl-time(particularly `mean` aggregator support if version-pinned)"。
+
+**P4 Required — §2.5 premature confirmation claim**
+
+§2.5 line 146 said "Confirmed at Step 4.7 impl-time round-trip test against Souffle binary" — Step 4.7 has not happened;claim is forward-looking,not factual。
+
+**v4 fix**:flipped to future tense — "Verification requirement(P4 v4 wording — future tense,not yet confirmed)" + "MUST be verified at Step 4.7" + explicit (A-fallback) deviation path if Souffle parse rejects the conjunction pattern。Cross-ref to §8 step 11 Souffle binary smoke。
+
+**P5 Required — audit log Anticipated reviewer P-findings + cross-slice table stale**
+
+Audit log Anticipated reviewer P-findings #1 (`to_string` wrap concern), #2 (test 7.5 `pred` discriminator), #3 (`_vars_in_atom` target_var exclusion) still presented v1 framing without superseded markers despite v2/v3 fixes addressing each。Cross-slice contract preservation table still had broad "`sdk/docs/` 0 diff" claim contradicting §6.2 v3 narrowing。
+
+**v4 fix**:
+- Anticipated #1 / #2 / #3 marked **SUPERSEDED** with explicit v2/v3 fix cross-refs;#4(filter `not` body recursion)retained "not surfaced in v1/v2/v3 review;still impl-time decision" status
+- Cross-slice T2.3b row narrowed:`sdk/docs/04_api_surface.en.md` stays 0 diff;`sdk/docs/03_rules_and_inferences.en.md` §3.2 row MUST flip per P4 v2 lock(rest of file 0 diff)
+
+### 2026-05-23 — Cross-flip inversion v3→v4 retrospective
+
+v4 round surfaced **5 Required(no Blockers)** — exactly as v3 prediction lower bound suggested(predicted 0-2 Required;actual 5 Required is still in convergence trajectory but slightly above prediction)。Updated pattern:
+
+| Round | Blockers | Required | Total | Pattern |
+|---|---|---|---|---|
+| v1 | 2 | 4 | 6 | Big-picture(semantic / scope model / cite / docs) |
+| v2 | 0 | 5 | 5 | Contract-precision(stale specs / helper gaps / wrappers / invariant contradictions / gate mapping drift) |
+| v3 | 0 | 5 | 5 | Text consistency(impl plan stale / Outcome stale / future-tense confusion / gate-off semantics edge / audit log stale anticipated) |
+| (v4 prediction) | 0 | 0-1 | 0-1 | Should converge if v4 mitigations hold |
+
+v3-to-v4 lesson:**section-level rewrites need to propagate through ALL referencing sections**(§5 / §6 / §7 / §8 / audit log)— v3 fixed §2.6 + §5.5 but missed §8 step 5(P2 v4);v3 added §5.3.5 wrapper lock but missed audit log Anticipated #1 stale(P5 v4)。Rewrite-and-propagate discipline:after editing any §N section,grep blueprint for cross-references to §N's old content + update。
+
+v4 mitigation applied:every v4 edit cross-verified against §1 / §2 / §5 / §6 / §7 / §8 / §9 / audit log for stale references。Implementation Plan §8 + audit log Anticipated section explicitly cross-checked for stale v1/v2/v3 specs。If v4 review still surfaces Blocker-class,cross-flip inversion overhead clearly exceeds value;T2.3.d should revert to user-drafts。If v4 review surfaces zero Required,convergence reached and v4 ready for scoped anchor。

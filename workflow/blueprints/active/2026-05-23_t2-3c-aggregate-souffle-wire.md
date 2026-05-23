@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v3 tightening — §2.6 stale removed + _infer_var_type_domains coverage + to_string/to_number lock + §6.2 narrowed)
+- Last Updated: 2026-05-23 (Step 4.2 v4 tightening — §5.7.5 gate-off C100 structural lock + §8 step 5 v3-correct + §8 step 12 stale Outcome + §2.5 future-tense + audit log stale Anticipated + cross-slice sdk/docs narrowed)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + IR shape;§10.6.4 (C100) — filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 — per-engine aggregate lowering策略
@@ -143,7 +143,7 @@ count : { <same_body> } > 0, v_total = <kind> <target_expr> : { <body> }
 
 **Result return type**:`_compile_aggregate(...)` returns a string that may contain comma-joined Souffle clauses(1 clause for count/sum,2 clauses for min/max/mean)。Caller's atom-join with `", "` naturally accommodates this — a single "atom slot" contributing 1+ Souffle clauses to the body。
 
-**Verification**:Souffle treats commas as conjunction at body-atom level;`v_total = count : { body } > 0, mean ... : { body }` parses as two body atoms,not as nested expression syntax。Confirmed at Step 4.7 impl-time round-trip test against Souffle binary。
+**Verification requirement**(P4 v4 wording — future tense,not yet confirmed):Souffle is expected to treat commas as conjunction at body-atom level;`v_total = count : { body } > 0, mean ... : { body }` should parse as two body atoms,not as nested expression syntax。**MUST be verified at Step 4.7 impl-time round-trip test against Souffle binary**(per §8 step 11 Souffle binary smoke)。If verification fails(e.g.,Souffle requires explicit grouping or different conjunction syntax),implement (A-fallback)deviation per CADENCE and document in §10 Outcome at closure。
 
 **Two-aggregate cmp**(e.g., `("eq", agg_left, agg_right)`):each side independently determined。If either side is min/max/mean,its guard prefix prepends。Multiple guards comma-joined。Per-side body may differ;each guard uses its own body。
 
@@ -251,7 +251,7 @@ Note:T2.3a upstream validator `validate_where_ast` already enforces filter restr
 
 ### 2.8 Tests — acceptance suite with discriminator design
 
-Per T2.3b cross-flip inversion lesson(reviewer must verify each acceptance test discriminates the intended algorithm branch),acceptance includes 19+ tests targeting specific algorithm decisions:
+Per T2.3b cross-flip inversion lesson(reviewer must verify each acceptance test discriminates the intended algorithm branch),acceptance includes 21+ tests targeting specific algorithm decisions:
 
 1. Each of 5 aggregate kinds compiles to correct Souffle DL syntax(5 tests — §7.1 per-kind discriminators)
 2. Aggregate in eq RHS binds outer var(§7.2)
@@ -263,6 +263,7 @@ Per T2.3b cross-flip inversion lesson(reviewer must verify each acceptance test 
 8. **min/max/mean guard prefix emit shape + to_string/to_number wrapping**(§7.8 — 4 tests + 1 negative discriminator for count/sum;P0 v2 lock + P3 v3 wrapping lock)
 9. **min empty-set branch-not-firing runtime**(§7.9 — 1 optional Souffle-binary integration test)
 10. **Adapter validation regardless of gate state**(§7.10 — 2 tests,P5 v2 lock)
+10b. **Adapter rejects non-C100 filter atom kinds regardless of gate**(§7.10b — 2 tests,P1 v4 lock)
 11. **Type domain inference inside aggregate filter**(§7.11 — 2 tests,P2 v3 lock)
 
 Detailed in §7。
@@ -563,30 +564,41 @@ Per Track plan §1.2.4:
 
 **Conclusion**:S-class lightweight applies。No Stage 2 decision doc opened。
 
-### 5.7.5 Gate-off behavior(P5 v2 resolution)
+### 5.7.5 Gate-off behavior(P5 v2 resolution + P1 v4 clarification)
 
 `FACTPY_WHERE_AST_VALIDATE=0` disables the upstream T2.3a substrate validator(`_where_ast_gate_enabled` at `where_compile.py:136-138`)。When the gate is OFF,malformed aggregate IR can reach Souffle adapter without upstream semantic validation。Adapter-side `_validate_atom_subset` is the only safety net in that mode。
 
-**Adapter-side aggregate validation contract**(applies regardless of gate state):
+**Two layers of adapter aggregate validation**(P1 v4 lock):
 
-| Check | Required at adapter |
-|---|---|
-| Aggregate kind ∈ `_AGGREGATE_KINDS = {"count", "sum", "min", "max", "mean"}` | YES — `WhereValidationError("unsupported aggregate kind: ...")` |
-| Tuple arity == 3(`(kind, target_var, filter_atoms)`)| YES — `WhereValidationError("aggregate atom must be (kind, target_var, [filter_atoms])")` |
-| `target_var` shape:`None` for kind=="count",`$`-prefixed string otherwise | YES — `WhereValidationError("count target_var must be None")` / `WhereValidationError("numeric aggregate target_var must be $-prefixed variable")` |
-| `filter_atoms` is `list` | YES — `WhereValidationError("aggregate filter must be list")` |
-| Each `filter_atom` is well-formed via recursive `_validate_atom_subset` | YES — recurse;sub-atom errors propagate with path context |
-| Nested aggregate(filter_atom is itself aggregate) | YES — `WhereValidationError("aggregate not allowed inside aggregate filter")` |
-| Filter atom kind ∈ C100 list(pred / eq / ne / gt / ge / lt / le / in / not) | YES with gate ON — defense-in-depth;gate OFF still benefits from this check |
+1. **Structural/operational validation — MANDATORY regardless of gate state**:checks that the adapter literally cannot compile to valid Souffle DL without。These are NOT semantic restrictions;the adapter must reject these inputs because the compile path has no defined behavior。
+2. **Semantic validation — upstream-only,not adapter**:checks that are about meaning/design intent;upstream T2.3a substrate validator owns these。If gate OFF,user opts out。
 
-**Why adapter validates shape even with gate ON**:redundant guards are cheap;catching impossible inputs at the boundary improves debuggability。This matches T2.1 / T2.2 precedent(both validate atom shape at `_validate_atom_subset` regardless of upstream)。
+**Layer 1 — Adapter MUST validate regardless of gate state**:
 
-**Semantic-only checks deferred to upstream**(NOT in adapter):
-- C100 filter restriction(no RuleRef / RuleExpr / ArithExpr in filter)— substrate validator enforces
-- C102 numeric target type — substrate validator + runtime
-- C104 binding-order scoping(correlated var must be pre-bound)— substrate validator
+| Check | Required at adapter | Rationale |
+|---|---|---|
+| Aggregate kind ∈ `_AGGREGATE_KINDS = {"count", "sum", "min", "max", "mean"}` | YES — `WhereValidationError("unsupported aggregate kind: ...")` | No Souffle DL emit path for unknown kind |
+| Tuple arity == 3(`(kind, target_var, filter_atoms)`)| YES — `WhereValidationError("aggregate atom must be (kind, target_var, [filter_atoms])")` | Compile path destructures via 3-tuple unpacking |
+| `target_var` shape:`None` for kind=="count",`$`-prefixed string otherwise | YES — `WhereValidationError("count target_var must be None")` / `WhereValidationError("numeric aggregate target_var must be $-prefixed variable")` | `_symbol_for_var` requires `$`-prefixed token;count has no target term in Souffle DL |
+| `filter_atoms` is `list` | YES — `WhereValidationError("aggregate filter must be list")` | Compile path iterates filter atoms |
+| Each `filter_atom` is well-formed via recursive `_validate_atom_subset` | YES — recurse;sub-atom errors propagate with path context | Filter atoms compile via same atom dispatch;malformed sub-atoms break compile |
+| Nested aggregate(filter_atom is itself aggregate) | YES — `WhereValidationError("aggregate not allowed inside aggregate filter")` | Souffle aggregate body cannot nest aggregate |
+| **Filter atom kind ∈ {pred / eq / ne / gt / ge / lt / le / in / not}(C100 list)** | **YES regardless of gate** — `WhereValidationError("<kind> not allowed inside aggregate filter (C100)")` | **Structural**: `_ARITH_KINDS` top-level atoms compile via `_compile_arith_atom` which has no defined behavior inside aggregate body;Souffle DL aggregate body atom slots only accept relational/filter clauses。Same for any future top-level atom kinds outside C100。Validating at adapter regardless of gate is mandatory because the compile path itself cannot proceed otherwise。|
 
-Adapter trusts upstream for these(per defense-in-depth layering);if gate OFF,user is explicitly opting out of T2.3a semantic validation — adapter does NOT re-implement the substrate validator。
+**Why filter-kind validation is structural at adapter**(not just defense-in-depth):
+
+`_ARITH_KINDS` top-level atoms(`add` / `sub` / `neg` / `addc` / `mulc`)compile via `_compile_arith_atom`(line 1060-1103)which emits `<z> = to_string(<expr>)` — a **var-binding clause**,not a relational/filter clause。Souffle aggregate body slots accept only relational atoms(`relation(args)`)or filter atoms(`expr <op> expr` / `!relation(...)`)。Var-binding-via-arith inside aggregate body is undefined。If gate OFF and filter contains `("add", ...)`,`_compile_filter_atom_within_aggregate` would either crash on dispatch or emit malformed DL。Adapter MUST reject upfront。
+
+Similarly,top-level filter kinds outside C100 list(any future kinds added without adapter awareness)would have undefined behavior inside aggregate body — reject upfront。
+
+**Layer 2 — Adapter does NOT re-implement these semantic checks**(upstream-only):
+
+- C100 filter restriction *outside* the kind-list constraint(e.g.,RuleRef object semantics,RuleExpr nesting at AST layer)— substrate validator enforces;adapter doesn't see these as kind-list violations because RuleRef / RuleExpr are not raw-tuple-atom forms that reach Souffle adapter at all。If gate OFF and substrate produces malformed shape,adapter's structural shape checks catch it。
+- C102 numeric target type runtime check — substrate validator + Python eval;adapter cannot type-check generic var types。
+- C104 binding-order scoping(correlated var must be pre-bound before aggregate appearance)— substrate validator;adapter trusts upstream binding semantics。
+- C103 snapshot semantics — substrate evaluator concern,not adapter compile。
+
+**Test §7.10 + §7.10b verify both layers**(see §7)。
 
 ## 6. Boundaries And Invariants
 
@@ -849,6 +861,39 @@ where = [("eq", "$x", ("bogus_kind", "$y", []))]
 # Discriminator: assertRaises(WhereValidationError) — SAME error, adapter is safety net.
 ```
 
+### 7.10b Adapter rejects non-C100 filter atom kinds regardless of gate(2 tests — P1 v4 lock)
+
+Structural validation:`_ARITH_KINDS` top-level atoms compile to var-binding clauses,which Souffle aggregate body slots do not accept。Adapter MUST reject these inside aggregate filter regardless of gate state(per §5.7.5 Layer 1 structural validation)。
+
+```python
+# Test (a) — gate ON: arith atom in aggregate filter rejected
+os.environ["FACTPY_WHERE_AST_VALIDATE"] = "1"
+where = [("eq", "$result", ("sum", "$_agg1", [
+    ("pred", "Order:exists", ["$o"]),
+    ("pred", "order:amount", ["$o", "$_agg1"]),
+    ("add", "$x", "$y", "$z"),  # ArithExpr not allowed in C100 filter
+]))]
+# Discriminator: assertRaises(WhereValidationError) — "add not allowed inside aggregate filter (C100)"
+# T2.3a upstream validator catches this first;adapter is redundant guard
+
+# Test (b) — gate OFF: SAME rejection at adapter (only safety net)
+os.environ["FACTPY_WHERE_AST_VALIDATE"] = "0"
+where = [("eq", "$result", ("sum", "$_agg1", [
+    ("pred", "Order:exists", ["$o"]),
+    ("pred", "order:amount", ["$o", "$_agg1"]),
+    ("add", "$x", "$y", "$z"),
+]))]
+# Discriminator: assertRaises(WhereValidationError) — SAME error.
+# CRITICAL: if adapter does NOT enforce filter-kind restriction at validation,
+# compile path crashes or emits malformed DL when gate OFF.
+```
+
+**Why these tests matter**:without P1 v4 lock,gate-off would let `add`/`sub`/etc. reach `_compile_filter_atom_within_aggregate` which would either:
+- Dispatch to `_compile_arith_atom` emitting `v_z = to_string(...)` inside aggregate body(Souffle parse error);or
+- Hit fallback `WhereValidationError("unsupported atom kind")` but at the wrong point in the call stack(error message obscured)
+
+Either way,adapter behavior is undefined。v4 P1 mandates explicit validation upfront。
+
 ### 7.11 Type domain inference inside aggregate filter(2 tests — P2 v3 lock)
 
 Verifies `_infer_var_type_domains` walks aggregate filter atoms,so `_assert_cmp_var_allowed` works for aggregate-internal cmp。
@@ -886,11 +931,12 @@ assert "count : { ... } > 0" in compiled or "sum" in compiled  # min/max/mean �
 1. Record G7 precondition results on impl branch BEFORE code edits(per T2.2/T2.3a/T2.3b discipline)。Single audit log doc-only commit。
 2. Import `_AGGREGATE_KINDS` from `factgraph.core.rules.where_ast`(or define adapter-local mirror if lint flags;see §5.1)。
 3. Add `_is_aggregate(term)` helper at module level(below `_is_atom`)。
-4. Extend `_validate_atom_subset` cmp branch to accept aggregate operand;recurse into filter atoms。
-5. Extend `_vars_in_atom` cmp branches(eq / ne / gt / ge / lt / le)to walk aggregate filter atoms;explicitly exclude target_var。
-6. Add `_compile_aggregate(...)` helper per §5.3 algorithm。
-7. Extend `_compile_cmp_side` per §5.4(aggregate-aware via context kwarg)。
-8. Wire `_compile_atom` cmp branches(`eq` / `gt`/`ge`/`lt`/`le`)to recognize aggregate operand and route to `_compile_cmp_side` with aggregate context;`ne` route similarly extends `_compile_ne_filter`。
+4. Extend `_validate_atom_subset` cmp branch to accept aggregate operand;recurse into filter atoms;enforce C100 filter kind restriction per §5.7.5 Layer 1(P1 v4 — mandatory regardless of gate state)。
+5. Extend `_vars_in_atom` cmp branches(eq / ne / gt / ge / lt / le)to treat aggregate operand as **ZERO outer var contribution**(per §5.5 v2 + §2.6 v3)。Do NOT walk aggregate filter atoms here。Correlated outer vars are contributed by their original outer-scope atom independently;aggregate-local vars(target_var + filter-introduced)stay private per C104。
+5b. Extend `_infer_var_type_domains`(`where_compile.py:829-861`)to walk aggregate filter atoms recursively for type inference per §2.6b v3 P2。This is a separate concern from `_vars_in_atom`:type domains track value types for cmp safety,not outer-scope membership。Mark aggregate `target_var` as `int` type explicitly(per C102 numeric target)。
+6. Add `_compile_aggregate(...)` helper per §5.3 algorithm + §2.5 empty-set guard(min/max/mean prefix `count > 0`)。Return **bare numeric aggregate expression** per §5.3.5 v3 lock。
+7. Extend `_compile_cmp_side` per §5.4(aggregate-aware via context kwarg);wrapping decisions(to_string / to_number / raw)applied per §5.3.5 table at call site,not inside `_compile_aggregate`。
+8. Wire `_compile_atom` cmp branches(`eq` / `gt`/`ge`/`lt`/`le`)to recognize aggregate operand and route to `_compile_cmp_side` with aggregate context;`ne` route similarly extends `_compile_ne_filter`。Eq branch uses §5.3.5 v3 lock table to decide binding(`to_string` wrap)vs filter(`to_number` / raw)based on `bound_vars` state of non-aggregate side。
 9. Write tests `tests/adapters/souffle/test_aggregate_compile.py` per §7 (or extend existing test file)。
 10. Update docs(both mandatory per P4 v2 lock):
     - `application/docs/rule.md` adapter status table:Souffle row pending → ✓ + empty-set note。
@@ -899,7 +945,8 @@ assert "count : { ... } > 0" in compiled or "sum" in compiled  # min/max/mean �
     - `PYTHONPATH=src python -m unittest tests.adapters.souffle.test_aggregate_compile tests.adapters.souffle.test_where_compile`(or equivalent existing Souffle suite name)
     - Cross-slice non-regression sweep:T2.3a + T2.3b + T2.1 + T2.2 relevant suites
     - `python -m ruff check src/factgraph/adapters/souffle/ tests/adapters/souffle/`
-12. Fill §10 Outcome with exact LOC,test outcomes,deviations(particularly the `AggregateNoValue` empty-set gap),follow-up sketch(T2.3.d ProbLog,T2.3.b1/T2.3.e Nit)。
+    - **Souffle binary smoke**(if available):run a small end-to-end aggregate query against actual Souffle binary to verify(a)guard prefix syntax parses,(b)empty-set branch-not-firing behavior。If Souffle binary unavailable in dev env,defer to CI(per existing Souffle test gating convention)。
+12. Fill §10 Outcome with exact LOC,test outcomes,empty-set guard implementation status,any Souffle syntax/runtime deviations discovered at impl-time(particularly `mean` aggregator support if version-pinned),follow-up sketch(T2.3.d ProbLog,T2.3.b1/T2.3.e Nit)。
 
 ## 9. Docs To Update(v2 P4 lock — both mandatory)
 
