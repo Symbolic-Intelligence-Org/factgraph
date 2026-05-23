@@ -19,6 +19,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | S-class hygiene slice to remove stale ProbLog `meta[confidence]` fixture inputs repeatedly acknowledged in prior closures. |
+| 2026-05-23 | scoped | Scope anchored | Step 4.2 cross-flip review passed with 0 P-findings; hygiene-class G1-G7 are visible. |
 
 ## Decision Notes
 
