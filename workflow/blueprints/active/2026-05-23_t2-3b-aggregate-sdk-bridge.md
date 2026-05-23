@@ -453,38 +453,60 @@ def _lower_aggregate_target(
 ) -> tuple[Any, list[Any]]:
     """Lower aggregate target. Returns (target_lowered, extra_filter_atoms).
 
-    For AttrRef target (per Step 4.2 v1 P1): allocates temp var token and
-    emits field pred into filter. Other target shapes lower via lower_term.
+    For AttrRef target (per Step 4.2 v1 P1 + v2 P1 self-ensure):
+    - If record_var not yet bound (by filter or outer), **INJECT existence pred**
+      to ensure binding — target AttrRef's entity_type carries binding intent.
+    - Allocate temp Var token for field value.
+    - INJECT field pred binding record_var.field → temp_token.
+
+    **Order independence(per Step 4.2 v2 P1)**:this design makes target lowering
+    order-independent from filter lowering。Both ordering paths produce equivalent IR:
+    - target-first → injects existence + field pred → filter atom for same record_var
+      sees `o` bound,skips duplicate existence(per T1.2 v1 P2 fix in `_lower_compare`)
+    - filter-first → filter atom binds `o` → target sees `o` bound,skips own
+      existence injection,only injects field pred
+
+    Both produce equivalent IR shape。Other target shapes(Var / Const / None)
+    lower via `lower_term`(no extra atoms)。
 
     Returns:
         target_lowered: IR term (token str / literal value / None)
-        extra_filter_atoms: list of additional IR atoms (e.g., field pred for
-            AttrRef target) to be appended to filter IR
+        extra_filter_atoms: list of additional IR atoms (existence pred + field pred
+            for AttrRef target;empty for other target shapes)
     """
     if target is None:
         return (None, [])
+
     if isinstance(target, AttrRef):
         # AttrRef target: cannot go through lower_term (raises "AttrRef must appear
-        # in comparison" at expr.py:484). Allocate temp var + emit field pred.
+        # in comparison" at expr.py:484). Self-ensure binding + allocate temp var.
         if target.entity_type is None:
             raise SDKDSLError(
                 "aggregate target uses bare AttrRef; use Entity(var).field unified syntax"
             )
         record_var = target.record_var
+        extra_atoms = []
+
+        # Self-ensure existence binding(per Step 4.2 v2 P1 — order independence)
         if record_var not in filter_bindings:
-            raise SDKDSLError(
-                f"aggregate target AttrRef references unbound record var "
-                f"{record_var.token}; bind via Entity({record_var.token}) in filter or outer"
+            existence_pred = (
+                "pred",
+                f"{target.entity_type}:exists",
+                [record_var.token],
             )
+            extra_atoms.append(existence_pred)
+            filter_bindings[record_var] = target.entity_type
+
+        # Allocate temp Var for field value + inject field pred
         tmp_token = f"$_agg{next(temp_seq)}"
-        # Inject field pred into filter so per-env evaluator can resolve target value
-        # via the env binding produced by filter pred.
         field_pred = (
             "pred",
             f"{target.entity_type.lower()}:{target.field_name}",
             [record_var.token, tmp_token],
         )
-        return (tmp_token, [field_pred])
+        extra_atoms.append(field_pred)
+        return (tmp_token, extra_atoms)
+
     # Var / Const / etc: lower normally
     return (lower_term(target, in_where=True), [])
 
@@ -499,22 +521,29 @@ def _lower_aggregate_ref(
 
     Per Step 4.2 v1 P2 bindings isolation: filter atoms see correlated outer
     bindings (read), but filter-local bindings DO NOT leak back to outer.
+
+    Per Step 4.2 v2 P1 order independence: target lowering self-ensures
+    existence binding when record_var not yet bound. Two orderings produce
+    equivalent IR — chosen pattern: **filter-first then target**(matches
+    parent essay's "filter atoms describe matching context, target reads
+    bound field" reading order)。
     """
     # P2: copy outer bindings — filter mutations don't leak back
     filter_bindings = dict(outer_bindings)
 
-    # P1: lower target (may emit extra filter atoms for AttrRef target)
-    target_lowered, extra_filter_atoms = _lower_aggregate_target(
-        ref.target, filter_bindings, temp_seq=temp_seq
-    )
-
-    # Lower filter atoms with isolated bindings
+    # Lower user filter atoms first(filter atoms may bind record_var)
     filter_ir = []
     for atom in ref.filter:
         filter_ir.extend(_lower_where_atom(atom, filter_bindings, temp_seq=temp_seq))
 
-    # Append target-derived field pred AFTER user-written filter atoms
-    # (parent atom binds entity first; field pred binds target value second)
+    # P1+v2-P1: lower target AFTER filter. Target self-ensures binding if needed.
+    # If filter already bound record_var, target only injects field pred.
+    # If filter did NOT bind record_var, target injects existence + field pred.
+    target_lowered, extra_filter_atoms = _lower_aggregate_target(
+        ref.target, filter_bindings, temp_seq=temp_seq
+    )
+
+    # Append target-derived field pred (and possibly existence pred) at end
     filter_ir.extend(extra_filter_atoms)
 
     return (ref.kind, target_lowered, filter_ir)
@@ -632,6 +661,9 @@ Per Track plan §1.2.4,T2.3b would upgrade S → M if any of these triggers fire
 - [ ] Bridge `_canonicalize_vars/expr/term` recursively canonicalizes within `AggregateAtom` Term
 - [ ] **End-to-end smoke**:user code `build_application_rule(where=[..., total == agg_sum(target, where=[...]), ...], ports={...})` produces valid application Rule with `AggregateAtom` Term-position;Python eval gives correct per-env aggregate result
 - [ ] **Target AttrRef lowering test**(per Step 4.2 v1 P1):`agg_sum(Order(o).amount, where=[Order(o).buyer == u])` lowers to expected IR tuple shape with temp var + injected field pred at end of filter;parent essay main example end-to-end works
+- [ ] **Target AttrRef self-ensure binding test**(per Step 4.2 v2 P1 — order independence):`agg_sum(Order(o).amount, where=[Order(o)])` — filter only has existence,target self-ensures field pred injection works(record_var `o` bound by filter,target only injects field pred,no duplicate existence)
+- [ ] **Target AttrRef solo binding test**(per Step 4.2 v2 P1):`agg_count(where=[Order(o).buyer == u])` with `agg_sum(Order(o).amount, ...)` — even when filter never explicitly binds via `Order(o)` ExistsAtom directly,unified syntax `Order(o).buyer == u` does bind `o` via `_lower_compare` existence injection,so target sees `o` bound;test verifies this case
+- [ ] **Target AttrRef no-duplicate-existence test**(per Step 4.2 v2 P1):IR output for `agg_sum(Order(o).amount, where=[Order(o).buyer == u])` should NOT contain duplicate `("pred", "Order:exists", ["$o"])`;exactly one existence pred for `$o`
 - [ ] **Bare AttrRef target reject**(per Step 4.2 v1 P1):`agg_sum(o.amount, where=[...])` where `o.amount` uses legacy LogicVar.__getattr__ (entity_type=None) → reject construct-time
 - [ ] **Filter bindings isolation**(per Step 4.2 v1 P2):`Order(o)` introduced in aggregate filter does NOT make subsequent outer `Order(o).field == ...` legal;outer atom must independently bind `o`
 - [ ] **Legacy rejection in aggregate filter / target**(per Step 4.2 v1 P3):`agg_count(where=[Pred("user:exists", "$u")])` and `agg_sum(target_with_bare_attrref, where=[...])` and `agg_*(where=[RuleRefAtom(...)])` all reject via bridge `_reject_legacy_aggregate_ref` — T1.2 hard-cut policy preserved through SDK aggregate path

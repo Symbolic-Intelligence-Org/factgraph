@@ -144,3 +144,54 @@ Blueprint §2.5 / §5.5 / §9 only updated `application/docs/rule.md`。But T2.3
 **Size estimate revised**:~470 LOC → ~520 LOC(SDK docs additions ~50 LOC + legacy rejection helper ~20 LOC + target AttrRef lowering helper ~30 LOC,offset by simplification of `_lower_aggregate_ref` filter handling)。Still S-class within budget。
 
 **Blueprint stays `Status: draft`** pending user re-approval of v1 tightening。
+
+### 2026-05-23 — Step 4.2 v2 tightening applied (1 Blocker — target lowering order bug)
+
+User Step 4.2 v1 re-review surfaced 1 Blocker — ordering bug in `_lower_aggregate_ref` pseudocode that would make parent essay main example fail。
+
+**P1 (Blocker) — Target AttrRef lowering order bug**:
+v1 §5.3 pseudocode had:
+
+```python
+filter_bindings = dict(outer_bindings)
+target_lowered, extra_filter_atoms = _lower_aggregate_target(ref.target, filter_bindings, ...)
+filter_ir = []
+for atom in ref.filter:
+    filter_ir.extend(_lower_where_atom(atom, filter_bindings, ...))
+```
+
+`_lower_aggregate_target` required `record_var in filter_bindings` and raised "unbound record var" otherwise。But target lowered **BEFORE** filter — so `o → Order` binding from `Order(o).buyer == u` filter atom not yet present。Parent essay main example `agg_sum(Order(o).amount, where=[Order(o).buyer == u])` would fail at target lowering step。
+
+**User offered 2 fix options**:
+1. Reorder:lower user filter first,then target AttrRef
+2. Target AttrRef self-ensures binding via existence pred injection
+
+**User recommendation + adopted Option 2 — self-ensure**:
+- Target AttrRef's `entity_type` carries binding intent — should be self-sufficient like `_lower_compare` AttrRef path is for unified syntax
+- More robust:`agg_sum(Order(o).amount, where=[Order(o)])` or future simpler filters work
+- Order-independent:both `target-first` and `filter-first` ordering produce equivalent IR
+
+**Adopted**:§5.3 `_lower_aggregate_target` rewritten:
+
+```python
+if record_var not in filter_bindings:
+    existence_pred = ("pred", f"{entity_type}:exists", [record_var.token])
+    extra_atoms.append(existence_pred)
+    filter_bindings[record_var] = entity_type
+# allocate temp + inject field pred (always)
+```
+
+§5.3 `_lower_aggregate_ref` order also revised — **filter-first then target**(matches parent essay reading order "filter atoms describe matching context,target reads bound field"),but **order independence preserved** because target self-ensures。
+
+**Why no duplicate existence pred**:per T1.2 v1 P2 fix(`_lower_compare`),when AttrRef.entity_type known + record_var ALREADY bound,`_lower_compare` skips existence injection。So filter atom `Order(o).buyer == u` after target injection sees `o` bound → skips its own existence pred → exactly one existence pred total。Symmetric in either ordering。
+
+§7 acceptance gains 3 new tests:
+- Target AttrRef self-ensure binding test(`agg_sum(Order(o).amount, where=[Order(o)])`)
+- Target AttrRef solo binding test(unified syntax in filter binds via `_lower_compare`,target sees `o` bound)
+- Target AttrRef no-duplicate-existence test(IR must contain exactly one `Order:exists` pred for `$o`)
+
+**Acceptance language addition**(per user request):"target AttrRef lowering must work when the target AttrRef is the only place that introduces the aggregate record var, and must inject existence + field predicates without leaking that binding to the outer where" — covered by the 3 new acceptance items + existing filter-bindings-isolation test。
+
+**P2/P3/P4 unchanged**:user confirmed v1 P2(filter bindings isolation)/ P3(legacy reject)/ P4(SDK docs)corrections accepted as-is。
+
+**Blueprint stays `Status: draft`** pending user re-approval of v2。Confidence:high — single ordering bug fixed surgically with self-ensure pattern that matches existing `_lower_compare` AttrRef path semantics from T1.2。Predict v3 review 0 findings,ready for Step 4.6 scoped。
