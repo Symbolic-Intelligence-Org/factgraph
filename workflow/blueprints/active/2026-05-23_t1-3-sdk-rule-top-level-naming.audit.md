@@ -12,6 +12,7 @@ Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-leve
 | 2026-05-23 | draft | Initial M-class blueprint + decision doc drafted from source-grep audit. |
 | 2026-05-23 | Step 4.2 v2 tightening | Applied 4 Required + 3 Worth-considering findings from first M-class review. |
 | 2026-05-23 | scoped | Step 4.2 v2 re-review passed with 0 Blocker / 0 Required; decision doc accepted concurrent with scoped anchor. |
+| 2026-05-23 | G7 precondition | Recorded current SDK Rule identities and missing transitional top-level aliases before implementation. |
 
 ## G1-G7 Mapping
 
@@ -108,6 +109,35 @@ The draft decision selects staged replacement:
 - T1.2 `build_application_rule(...)` behavior remains untouched.
 - T2 aggregate/arithmetic/adapter slices remain untouched.
 - SDK docs may change to describe naming transition and to broaden T2.3b's `build_application_rule` import guidance; aggregate helper top-level export remains out of scope.
+
+### G7 Precondition Results
+
+Recorded on impl branch before implementation code changes:
+
+```text
+PYTHONPATH=src python - <<'PY'
+import factgraph.sdk as sdk
+import factgraph.sdk.dsl as dsl
+from factgraph.application.protocol import Rule as ApplicationRule
+print('sdk.Rule is dsl.Rule', sdk.Rule is dsl.Rule)
+print('has LegacyRule', hasattr(sdk, 'LegacyRule'))
+print('has ApplicationRule', hasattr(sdk, 'ApplicationRule'))
+print('has top build_application_rule', hasattr(sdk, 'build_application_rule'))
+print('has top DSLToApplicationRuleError', hasattr(sdk, 'DSLToApplicationRuleError'))
+print('application Rule name', ApplicationRule.__module__ + '.' + ApplicationRule.__name__)
+PY
+```
+
+Observed:
+
+- `sdk.Rule is dsl.Rule`: `True`
+- `has LegacyRule`: `False`
+- `has ApplicationRule`: `False`
+- `has top build_application_rule`: `False`
+- `has top DSLToApplicationRuleError`: `False`
+- application rule identity: `factgraph.application.protocol.rule.Rule`
+
+Decision doc status at this point: `accepted`, so implementation is unblocked.
 
 ## Review Surface
 
