@@ -334,15 +334,6 @@ def _is_tuple_operand(value: Any) -> bool:
     return isinstance(value, tuple)
 
 
-def _is_aggregate(value: Any) -> bool:
-    return (
-        isinstance(value, tuple)
-        and len(value) == 3
-        and isinstance(value[0], str)
-        and value[0] in _AGGREGATE_KINDS
-    )
-
-
 def _compile_cmp_with_aggregate(kind: str, lhs: Any, rhs: Any, *, ctx: _CompileContext) -> str:
     op = {"eq": "=", "ne": "\\=", "gt": ">", "ge": ">=", "lt": "<", "le": "=<"}[kind]
     lhs_goals, lhs_term = _compile_cmp_operand(lhs, kind=kind, ctx=ctx)
