@@ -59,24 +59,35 @@ If reviewer disagrees on size, blueprint §5.10 prepares two-way split:
 
 This split keeps each piece comfortably within S budget.
 
-### 2026-05-23 — G1-G7 visible gate mapping
+### 2026-05-23 — G1-G7 visible gate mapping (refined post Step 4.2 v2 — bridge passthrough reference removed per v3 P2)
 
 - **G1** — Blueprint §1 + §2 cite parent essay §10.6.3-§10.6.9 (C99-C105) + §8.8 explicitly. Every §2 sub-goal headers reference a C-number.
-- **G2** — Blueprint §4 documents complete G2 source-grep audit across 6 files (where_ast / where_ast_validate / where_eval / sdk dsl expr / sdk dsl application_rule / application protocol rule). Verified all empty.
-- **G3** — Blueprint §4 uses file:line citations (where_ast.py:31 / :77 / :95-96; where_ast_validate.py:33-34; where_eval.py:38; sdk/dsl/expr.py specific function locations; application/protocol/rule.py:_ALLOWED_ATOM_TYPES).
-- **G4** — Blueprint §2 sub-goals 2.1-2.10 each labeled with C-number or specific responsibility (2.10 is bridge passthrough; 2.11 is allowlist verification).
-- **G5** — Blueprint §3 Non-goals explicitly lists 10 deferred items with rationale and where each lands (T2.3.b / T2.3.c / parent essay extension candidate / parent §10.5 deferred).
-- **G6** — Reviewer should independently spot-check: (1) `_BUILTIN_TAGS` contents at where_ast.py:96, (2) absence of AggregateAtom in where_ast.py, (3) absence of aggregate eval in where_eval.py, (4) T1.1 archived `_ALLOWED_ATOM_TYPES` unchanged by T2.3 scope, (5) parent essay §10.6.3-§10.6.9 semantic completeness (no ambiguity demanding decision doc).
+- **G2** — Blueprint §4 documents complete G2 source-grep audit across 4 files (where_ast / where_ast_validate / where_eval / application protocol rule). SDK files removed from G2 scope per Step 4.2 v1 split (SDK 0-touch). Verified all aggregate substrate empty.
+- **G3** — Blueprint §4 uses file:line citations (where_ast.py:31 / :77 / :95-96; where_ast_validate.py:33-34; where_eval.py:38 + raw evaluator path lines; application/protocol/rule.py:_ALLOWED_ATOM_TYPES).
+- **G4** — Blueprint §2 sub-goals 2.1-2.9 each labeled with C-number or specific responsibility:
+  - 2.1 C99 IR type
+  - 2.2 C99 Term-position
+  - 2.3 C100 filter validation
+  - 2.4 C104 scoping
+  - 2.5 C102 numeric target
+  - 2.5b Target Var binding rule (per v2 P2)
+  - 2.6 C101 NoValue + raw resolver propagation (per v1 P4)
+  - 2.7 C103 snapshot
+  - 2.8 C105 result binding per-env (per v1 P1)
+  - 2.9 G7 precondition
+  - **No bridge passthrough sub-goal** (v0 §2.10 removed in v1 split;v3 P2 confirms G4 mapping reflects current §2 only).
+- **G5** — Blueprint §3 Non-goals explicitly lists deferred items with rationale + where each lands (T2.3b for SDK/bridge/public docs;T2.3c/d for adapter wires;parent §10.5 / §10.2 / §8.4 for further v1.x deferrals)。
+- **G6** — Reviewer should independently spot-check: (1) `_BUILTIN_TAGS` contents at where_ast.py:96, (2) absence of AggregateAtom in where_ast.py, (3) absence of aggregate eval in where_eval.py, (4) T1.1 archived `_ALLOWED_ATOM_TYPES` unchanged by T2.3a scope, (5) parent essay §10.6.3-§10.6.9 semantic completeness (no ambiguity demanding decision doc), (6) raw evaluator path (`where_eval.py:78-79` `_eval_body` walks raw tuples not AST).
 - **G7** — Blueprint §5.8 lists 5 pre-impl precondition checks. Check #5 specifically gates S → M escalation if C99-C105 semantic ambiguity surfaces.
 
-### 2026-05-23 — Cross-slice contract preservation
+### 2026-05-23 — Cross-slice contract preservation (refined post Step 4.2 v2 — bridge claim corrected per v3 P2)
 
-- T1.1 `_ALLOWED_ATOM_TYPES` MUST stay `(PredAtom, CmpAtom, InAtom, BuiltinAtom, NotAtom)` — AggregateAtom is Term-position, not top-level Atom. Verified by §2.11, §4.6, §5.7, §6 invariant, §7 acceptance.
-- T1.2 bridge passthrough chain (`lower_where → parse_where_ir_to_ast → application Rule construction`) handles new IR kinds automatically. T2.3 only extends `_serialize_term` + `_collect_term_vars` for AggregateAtom (content_digest correctness). No behavioral change to existing bridge logic.
-- T2.1 ne adapter dispatch unchanged (no adapter touched in T2.3).
-- T2.2 ArithExpr substrate unchanged (`_ARITH_KINDS` not modified, `_BUILTIN_TAGS` not extended).
+- T1.1 `_ALLOWED_ATOM_TYPES` MUST stay `(PredAtom, CmpAtom, InAtom, BuiltinAtom, NotAtom)` — AggregateAtom is Term-position, not top-level Atom. Verified by §4.5 / §5.7 / §6 invariant / §7 acceptance.
+- **T1.2 bridge passthrough is intentionally UNTOUCHED in T2.3a** (per v2 P4 + v3 P2 confirmation). `sdk/dsl/application_rule.py` `_collect_vars_from_term` (`:181`) and var canonicalization (`:250`) do NOT recognize `AggregateAtom`. `build_application_rule` does NOT support aggregate-containing IR in T2.3a. **Aggregate bridge support is deferred to T2.3b** — T2.3a only supports DIRECT application Rule construction (via `application/protocol/rule.py` with AggregateAtom Term-position arguments). The v0 / v1 claim that "T1.2 bridge passthrough handles new IR kinds automatically" was INCORRECT and removed in v2.
+- T2.1 ne adapter dispatch unchanged (no adapter touched in T2.3a).
+- T2.2 ArithExpr substrate unchanged (`_ARITH_KINDS` not modified, `_BUILTIN_TAGS` not extended). However, T2.2 ArithExpr operand resolver (`_eval_arith_atom`) IS extended in T2.3a to call aggregate-aware resolver when an operand is an aggregate term tuple (per v1 P4) — this is additive, not breaking ArithExpr behavior for non-aggregate operands.
 - ProbLog hygiene boundary unchanged (no `audit/round_events.py` touched).
-- meta-confidence fixture cleanup unchanged (no test fixtures touched in T2.3 production code path).
+- meta-confidence fixture cleanup unchanged (no test fixtures touched in T2.3a production code path).
 
 ### 2026-05-23 — Reviewer attention points
 
@@ -232,3 +243,59 @@ v1 audit log header + Initial scope lock + S/M table still described v0 scope(SD
 | Audit log | Title updated(P5);Initial scope lock + S/M table marked superseded with v1 corrections |
 
 **Blueprint stays `Status: draft`** pending user review of v2 tightening。Predict 0 P-findings if v2 holds — but if any new contract hole surfaces,further v3 tightening rather than skip to scoped。
+
+### 2026-05-23 — Step 4.2 v3 tightening applied (P1+P2)
+
+User Step 4.2 v2 re-review surfaced 2 Required — both v2 self-introduced or residual。Applied both。
+
+**P1 (Required) — Application Rule two-pass algorithm target-Var collection gap**:
+v2 §5.7 Pass 2 collected `(target_vars | filter_vars) & outer_seen_vars`. If aggregate target is an outer-bound Var that appears ONLY in aggregate target(not in any other top-level atom),Pass 1 doesn't capture it into `outer_seen_vars`,and Pass 2 intersects with empty → target Var not collected → ports can't reference it。
+
+User recommendation:distinguish **outer bound/order semantics**(validator job)from **Rule seen_vars/ports semantics**(application Rule job):
+- AST validator handles "is target Var bound by preceding atoms"(P2 §2.5b binding-order check)
+- application Rule `seen_vars` should collect:
+  - **Target Vars always**(target is the "input to aggregate from outside filter scope")
+  - `filter_vars ∩ outer_seen_vars`(correlated filter vars)
+- Filter-local non-target vars never collected
+
+**Adopted**:§5.7 `_collect_correlated_from_aggregate` algorithm revised:
+
+```python
+# v3 algorithm
+target_vars = _collect_vars_in_term_or_aggregate(agg.target) if agg.target else set()
+filter_vars = set()
+for f_atom in agg.filter:
+    _collect_non_aggregate_atom_vars(f_atom, ..., seen_vars=filter_vars)
+# Target vars: collect ALL (per v3 P1)
+seen_vars |= target_vars
+# Filter vars: collect only correlated subset
+correlated_filter = filter_vars & outer_seen_vars
+seen_vars |= correlated_filter
+# Aggregate-local-only vars (filter_vars - outer_seen_vars - target_vars) isolated.
+```
+
+Implication:if target Var is filter-bound only(`agg_sum($amount, filter=[..eq $amount..])`),target Var gets collected via target path。User has explicit choice on whether ports reference such a Var via direct Rule construction。Validator at AST layer additionally enforces P2 §2.5b binding-order requirement(must be in outer_bound_vars ∪ filter_bound_vars)。
+
+§7 acceptance adds explicit test:**target-only outer Var ports reference test** — target Var only in aggregate target,outer-bound per P2 §2.5b → ports valid。
+
+**P2 (Required) — Audit log G4 + cross-slice section still asserted v0 bridge passthrough**:
+- G4 sub-goal mapping listed §2.10 bridge passthrough + §2.11 allowlist verification — both removed from §2 in v1 split。
+- Cross-slice section said "T1.2 bridge passthrough chain handles new IR kinds automatically" — false post v2(bridge `_collect_vars_from_term` does NOT recognize AggregateAtom)。
+
+**Adopted**:
+- G4 mapping refreshed to enumerate current §2.1-§2.9 sub-goals:C99 IR / C99 Term-position / C100 filter / C104 scoping / C102 numeric target / **2.5b Target Var binding rule(per v2 P2)** / C101 NoValue + raw resolver / C103 snapshot / C105 result binding per-env / G7 precondition。Explicit "No bridge passthrough sub-goal — v0 §2.10 removed in v1 split"。
+- G2 file count corrected:6 files → 4 files(SDK files removed from G2 scope per v1 split — SDK 0-touch)。
+- G6 explicit raw evaluator path verification added(check #6)。
+- Cross-slice T1.2 bullet rewritten:bridge is intentionally UNTOUCHED in T2.3a;aggregate bridge support deferred to T2.3b;v0/v1 "passthrough handles automatically" claim was incorrect and removed in v2。
+- Cross-slice T2.2 bullet annotated:ArithExpr operand resolver extended to call aggregate-aware resolver(per v1 P4)— additive,not breaking。
+
+**Summary of v3 changes**:
+
+| Section | Change |
+|---|---|
+| §5.7 `_collect_correlated_from_aggregate` | Pass 2 algorithm revised:target_vars collected always;filter_vars only correlated subset(P1)|
+| §7 Acceptance | Added "target-only outer Var ports reference test"(P1);existing "filter-local isolation" wording refined to clarify "aggregate-local-only" |
+| Audit G1-G7 mapping | Refreshed to reflect current §2 only;removed bridge passthrough references;corrected G2 file count;added G6 raw evaluator check(P2)|
+| Audit Cross-slice contract | T1.2 bullet rewritten — bridge intentionally untouched + aggregate bridge deferred to T2.3b(P2);T2.2 bullet annotated for arith operand resolver extension |
+
+**Blueprint stays `Status: draft`** pending user re-approval of v3。Confidence:high — both findings were narrow textual / algorithmic gaps,addressed surgically without introducing new contradictions。Ready for Step 4.6 scoped anchor if v3 holds。

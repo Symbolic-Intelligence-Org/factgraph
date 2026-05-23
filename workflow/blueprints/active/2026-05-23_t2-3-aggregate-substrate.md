@@ -639,15 +639,31 @@ def _collect_aggregate_term_correlated_vars(atom, *, field_name, outer_seen_vars
 
 
 def _collect_correlated_from_aggregate(agg, *, field_name, outer_seen_vars, seen_vars):
-    """Collect only the correlated subset of vars from an AggregateAtom term."""
+    """Collect target vars always + correlated filter vars; filter-local non-target vars isolated.
+
+    Per Step 4.2 v3 P1 — distinguish outer bound/order semantics (validator job) from
+    Rule seen_vars/ports semantics (this function's job):
+
+    - **Target Vars are collected always** because target is the "input to aggregate from
+      outside the filter scope" — the user expression that produces values for reduction.
+      If target Var is correlated to outer, it's reachable from outer ports.
+      If target Var is filter-bound (e.g., `agg_sum($amount, where=[..eq $amount..])`),
+      collection through target reflects that target is the aggregation expression;
+      whether ports reference target Var directly is the user's choice.
+    - **Filter Vars are collected only if correlated** to outer (filter_vars ∩ outer_seen_vars).
+      Filter-local-only vars (introduced + bound inside filter, never seen in outer or in
+      target) are aggregate-local and never enter seen_vars.
+    """
     target_vars = _collect_vars_in_term_or_aggregate(agg.target) if agg.target else set()
     filter_vars: set[Var] = set()
     for f_atom in agg.filter:
         _collect_non_aggregate_atom_vars(f_atom, field_name=f"{field_name}.filter", seen_vars=filter_vars)
-    # Correlated subset only:
-    correlated = (target_vars | filter_vars) & outer_seen_vars
-    seen_vars |= correlated
-    # Filter-local vars (filter_vars - outer_seen_vars) are isolated, NOT added to seen_vars.
+    # Target vars: collect ALL (per v3 P1)
+    seen_vars |= target_vars
+    # Filter vars: collect only correlated subset
+    correlated_filter = filter_vars & outer_seen_vars
+    seen_vars |= correlated_filter
+    # Aggregate-local-only vars (filter_vars - outer_seen_vars - target_vars) are isolated.
 
 
 def _serialize_term(term):
@@ -776,7 +792,8 @@ Estimated test LOC ~700。
 - [ ] **Per-env correlated test**:two outer envs (e.g., user u-1 + 3 orders / user u-2 + 5 orders) produce count=3 / count=5 respectively;NOT a merged count=8。
 - [ ] **NoValue × ArithExpr test**:`agg_sum(empty_set) + 1 > 5` → atom violated for the env that hit empty;Python exception NOT raised。
 - [ ] **Filter-local var isolation test**:validator raises `AggregateVariableScopeError` when filter introduces var that subsequent outer atom references。
-- [ ] **Application Rule filter-local var isolation test**(per Step 4.2 v2 P1):construct Rule with `ports={"u": aggregate_local_var}` → reject;ports can only reference outer or aggregate-correlated vars,never aggregate-local。
+- [ ] **Application Rule filter-local var isolation test**(per Step 4.2 v2 P1):construct Rule with `ports={"u": aggregate_local_var}` → reject;ports can only reference outer or aggregate-correlated/target vars,never aggregate-local-only。
+- [ ] **Target-only outer Var ports reference test**(per Step 4.2 v3 P1):construct Rule where target Var `$amount` only appears in aggregate target(not in other outer atoms),AND $amount is outer-bound per P2 §2.5b → ports `{"amount": $amount}` is **valid**(target Vars are always collected into seen_vars per v3 P1 algorithm)。Validator additionally enforces binding-order requirement at AST layer。
 - [ ] **Target Var binding rule test**(per Step 4.2 v2 P2):`agg_sum(target=Var("$unbound_amount"), filter=[PredAtom("Order:exists", ...)])` where target Var is bound neither outer nor in filter → reject with `AggregateVariableScopeError`。
 - [ ] **All where_eval.py aggregate-aware helpers covered**(per Step 4.2 v2 P3):tests verify `_validate_atom` / `_term_known_for_plan` / `_atom_eval_score` / `_vars_in_atoms` produce correct behavior on aggregate-containing atoms。
 - [ ] Cross-slice non-regression:T1.1 + T1.2 + T2.1 + ProbLog hygiene + T2.2 + fixture cleanup tests all pass(70+ tests baseline)。
