@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v2 tightening — P0 empty-set guard locked + P1-P5 resolved)
+- Last Updated: 2026-05-23 (Step 4.2 v3 tightening — §2.6 stale removed + _infer_var_type_domains coverage + to_string/to_number lock + §6.2 narrowed)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + IR shape;§10.6.4 (C100) — filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 — per-engine aggregate lowering策略
@@ -149,30 +149,94 @@ count : { <same_body> } > 0, v_total = <kind> <target_expr> : { <body> }
 
 **C103 snapshot semantics preserved**:`count : { body }` operates on the same projected view as the value aggregate(Souffle clause is shared body),satisfying parent essay §10.6.7 matched_count parity。
 
-### 2.6 Var extraction — `_vars_in_atom` aggregate-aware
+### 2.6 Var extraction — `_vars_in_atom` aggregate-aware(v3 P1 fix — aligned with §5.5)
 
-Extend `_vars_in_atom` to walk aggregate tuples:
-- For `kind in _AGGREGATE_KINDS` directly(if aggregate ever surfaces as a standalone — not expected in valid IR but defensive)
-- For cmp atoms containing aggregate-tuple sides:`_vars_in_atom` of cmp recurses into the aggregate's filter atoms via `_vars_in_atom` to **collect correlated outer vars** referenced inside filter
+**v1/v2 wrong algorithm removed**(§2.6 v1 originally specified an outer_var_universe intersection;that algorithm was based on a false assumption about `extract_where_variables` filtering against outer scope — see P1 v2 in audit log)。
 
-Per C104:**only outer-correlated vars** flow to outer `vars_in_atom` result;**aggregate-local vars** stay local。Algorithm:
+**v3 correct algorithm**(matches §5.5 precise impl):
+
+Extend `_vars_in_atom` so that when a cmp atom contains an aggregate-tuple operand on lhs or rhs,the **aggregate side contributes ZERO outer vars** to the result。
+
+Rationale per C104:
+- **Correlated outer vars** referenced inside aggregate filter(e.g., `$u` referenced inside `order:buyer($o, $u)` while `$u` was bound by an outer `User($u)`)are contributed by their **original outer-scope binding atom**(`User($u)`)independently;the aggregate-filter reference does NOT re-introduce them。Ignoring the aggregate side at `_vars_in_atom` is correct because outer scope already accounts for those vars。
+- **Aggregate-local vars**(both `target_var` like `$_agg1` and filter-introduced vars like `$o`)are private per C104。They MUST NOT enter the outer query variable set or witness layout(per `where_compile.py:188-195` `extract_where_variables` direct union + `:217-237` `build_query_witness_layout`)。
+- **Result-binding var** of the enclosing cmp atom(e.g., `$total` from `("eq", "$total", aggregate)`)is captured by the existing non-aggregate-side branch of `_vars_in_atom`,not by the aggregate-side walk。
+
+Algorithm shape(implemented in §5.5):
 
 ```python
-def _aggregate_outer_vars(aggregate_tuple, outer_var_universe):
-    # outer_var_universe is the set of vars known at the enclosing scope
-    # aggregate-local vars are introduced inside filter and excluded
-    local_vars = set()
-    referenced_vars = set()
-    for filter_atom in aggregate_tuple[2]:
-        for var in _vars_in_atom(filter_atom, include_not_body_vars=True):
-            referenced_vars.add(var)
-        # find which vars this atom introduces (binds) — must subtract from outer
-        # simplification: rely on the universe set — anything in referenced_vars
-        # that is in outer_var_universe is a correlated outer var
-    return referenced_vars & outer_var_universe
+elif _is_aggregate(side):
+    pass  # zero contribution; aggregate's own scope is closed at this layer
 ```
 
-(Precise impl in §5.5;simplification:rely on caller's outer_var_universe knowledge instead of re-deriving binding order inside aggregate)
+Precise impl + correctness argument in §5.5 v2(P1 fix)。
+
+### 2.6b Type domain inference — `_infer_var_type_domains` aggregate-aware(v3 P2 fix)
+
+`where_compile.py:829-861` `_infer_var_type_domains` currently scans top-level atoms only(`pred` / `_ARITH_KINDS` / `not` body)。It does NOT recurse into cmp atom operands or aggregate filter atoms。
+
+**Gap**:if aggregate filter contains numeric compare(C100-allowed),e.g.
+
+```python
+("eq", "$result", ("sum", "$_agg1", [
+    ("pred", "Order:exists", ["$o"]),
+    ("pred", "order:amount", ["$o", "$_agg1"]),
+    ("gt", "$_agg1", 5),     # filter-internal numeric cmp; needs type domain for $_agg1
+]))
+```
+
+the type domain for `$_agg1` won't be inferred because `order:amount` pred is inside the aggregate filter,not at top level。Subsequent `_assert_cmp_var_allowed` call for the `gt` would see `$_agg1` with no/unknown type domain and raise unexpectedly。
+
+**v3 fix**:extend `_infer_var_type_domains` to recurse into aggregate filter atoms:
+
+```python
+def _infer_var_type_domains(body, pred_type_domains):
+    out: dict[str, set[str]] = {}
+
+    def add_from_pred_atom(atom):
+        # existing logic unchanged
+
+    def walk_atom(atom):
+        if atom[0] == "pred":
+            add_from_pred_atom(atom)
+        elif atom[0] in _ARITH_KINDS:
+            for term in atom[1:]:
+                if _is_var(term):
+                    out.setdefault(term, set()).add("int")
+        elif atom[0] == "not":
+            for branch in _normalize_not_body_subset(atom[1]):
+                for not_atom in branch:
+                    walk_atom(not_atom)
+        elif atom[0] in {"eq", "ne", "gt", "ge", "lt", "le"}:
+            # NEW v3: descend into aggregate operands
+            for side in (atom[1], atom[2]):
+                if _is_aggregate(side):
+                    walk_aggregate(side)
+            # numeric cmp also implies int type for var sides (defensive — outer
+            # binding atom likely already contributed, but explicit infer
+            # consistency).
+            if atom[0] in {"gt", "ge", "lt", "le"}:
+                for side in (atom[1], atom[2]):
+                    if _is_var(side):
+                        out.setdefault(side, set()).add("int")
+
+    def walk_aggregate(aggregate):
+        _, target_var, filter_atoms = aggregate
+        if target_var is not None and isinstance(target_var, str) and target_var.startswith("$"):
+            out.setdefault(target_var, set()).add("int")  # numeric aggregate target_var
+        for filter_atom in filter_atoms:
+            walk_atom(filter_atom)
+
+    for atom in body:
+        walk_atom(atom)
+    return out
+```
+
+**Two responsibilities added**:
+- Aggregate filter atoms walked recursively for type domain contributions(includes pred atoms that contribute correlated outer var types AND aggregate-local var types)
+- Aggregate `target_var` explicitly marked `int` type domain(numeric aggregate target per C102)
+
+**Note on scope**:type domains for aggregate-local vars(`$o`, `$_agg1`)enter the same `out` dict alongside outer vars,but downstream `_compile_aggregate` uses `local_bound_vars` for binding tracking。Type domain dict is **flat**(no scope marker);aggregate-local var symbols are unique(SDK uses `$_agg<N>` prefix),so no name collision with outer。Adapter relies on this naming convention(documented in §6 invariant I11)。
 
 ### 2.7 Validation — `_validate_atom_subset` aggregate shape
 
@@ -187,7 +251,7 @@ Note:T2.3a upstream validator `validate_where_ast` already enforces filter restr
 
 ### 2.8 Tests — acceptance suite with discriminator design
 
-Per T2.3b cross-flip inversion lesson(reviewer must verify each acceptance test discriminates the intended algorithm branch),acceptance includes 17+ tests targeting specific algorithm decisions:
+Per T2.3b cross-flip inversion lesson(reviewer must verify each acceptance test discriminates the intended algorithm branch),acceptance includes 19+ tests targeting specific algorithm decisions:
 
 1. Each of 5 aggregate kinds compiles to correct Souffle DL syntax(5 tests — §7.1 per-kind discriminators)
 2. Aggregate in eq RHS binds outer var(§7.2)
@@ -196,9 +260,10 @@ Per T2.3b cross-flip inversion lesson(reviewer must verify each acceptance test 
 5. Aggregate-local var isolation — TRUE C104 discriminator via `ne` bound-required atom(§7.5,P2 v2 fix)
 6. Filter with `not` body — compiles correctly nested inside aggregate body(§7.6)
 7. Validation rejects malformed aggregate shape(§7.7 — 2 tests)
-8. **min/max/mean guard prefix emit shape**(§7.8 — 3 tests + 1 negative discriminator for count/sum;P0 v2 lock)
+8. **min/max/mean guard prefix emit shape + to_string/to_number wrapping**(§7.8 — 4 tests + 1 negative discriminator for count/sum;P0 v2 lock + P3 v3 wrapping lock)
 9. **min empty-set branch-not-firing runtime**(§7.9 — 1 optional Souffle-binary integration test)
 10. **Adapter validation regardless of gate state**(§7.10 — 2 tests,P5 v2 lock)
+11. **Type domain inference inside aggregate filter**(§7.11 — 2 tests,P2 v3 lock)
 
 Detailed in §7。
 
@@ -350,7 +415,47 @@ def _compile_aggregate(
     return value_clause
 ```
 
-**Return shape**:string containing 1 Souffle clause(count/sum)or 2 comma-joined clauses(min/max/mean — guard + value)。Caller's atom-join with `", "` accommodates either case。The guard clause's body is **identical** to the value clause's body(same filter atoms repeated)— guarantees C103 snapshot parity since both aggregates operate on the same projected view。
+**Return shape**:`_compile_aggregate(...)` returns a **bare numeric aggregate expression**(without `to_string` wrap)。Caller(`_compile_atom` cmp branch / `_compile_cmp_side`)decides wrap based on context — see §5.3.5 for the precise rule。1 Souffle clause for count/sum or 2 comma-joined clauses for min/max/mean(guard + value)。The guard clause's body is **identical** to the value clause's body — guarantees C103 snapshot parity since both aggregates operate on the same projected view。
+
+### 5.3.5 to_string / to_number wrapping rules(v3 P3 lock)
+
+Aggregate expressions return **numeric**(per Souffle aggregator return type)。Souffle var symbols are **symbol-typed**(strings)by default(per `_compile_arith_atom:1103` precedent storing arith results via `to_string(...)`)。The boundary between these two domains MUST be locked precisely to avoid impl-time guessing:
+
+| Caller context | DL emit shape | Rationale |
+|---|---|---|
+| **eq binding to unbound var**:`("eq", "$X", aggregate)` with `$X` not in `bound_vars` | `v_X = to_string(<aggregate_expr>)` | Symbol-domain binding;`$X` joins `bound_vars` with symbol type;`to_string` matches `_compile_arith_atom:1103` precedent |
+| **eq filter with bound var**:`("eq", "$X", aggregate)` with `$X` in `bound_vars` | `<aggregate_expr> = to_number(v_X)` | Numeric eq filter;aggregate stays numeric,bound var gets `to_number` coercion per `_compile_cmp_side:907` precedent |
+| **eq filter with int literal**:`("eq", aggregate, 100)` | `<aggregate_expr> = 100` | Numeric eq;literal stays as integer literal;no coercion |
+| **eq filter with two aggregates**:`("eq", agg_left, agg_right)` | `<agg_left_expr> = <agg_right_expr>` | Numeric eq;both sides aggregate(both already numeric) |
+| **numeric cmp(`gt`/`ge`/`lt`/`le`)with var**:e.g.,`("gt", aggregate, "$X")` with `$X` bound | `<aggregate_expr> > to_number(v_X)` | Numeric cmp filter;var gets `to_number` per `_compile_cmp_side` |
+| **numeric cmp with int literal**:`("gt", aggregate, 5)` | `<aggregate_expr> > 5` | Numeric cmp;literal stays as integer per `_literal_to_cmp_int_text` |
+| **numeric `ne`**:e.g.,`("ne", aggregate, 5)` | `<aggregate_expr> != 5` | Same as gt/ge/lt/le family;numeric filter |
+| **`in` aggregate**:not valid IR | N/A | `in` operand must be a Var per `_validate_atom_subset:706`;aggregate not allowed |
+
+**Eq binding decision discriminator**:`bound_vars` set state determines whether eq emits binding(symbol domain via `to_string`)or filter(numeric domain raw)。Same dispatch as existing eq branch at `where_compile.py:477-504`:
+
+```python
+if kind == "eq":
+    _, lhs, rhs = atom
+    lhs_is_var = _is_var(lhs)
+    rhs_is_var = _is_var(rhs)
+    lhs_is_agg = _is_aggregate(lhs)
+    rhs_is_agg = _is_aggregate(rhs)
+
+    # Aggregate path — exactly one side is aggregate
+    if rhs_is_agg and lhs_is_var:
+        agg_expr = _compile_aggregate(aggregate=rhs, ...)
+        if lhs not in bound_vars:
+            bound_vars.add(lhs)
+            return f"{var_symbols[lhs]} = to_string({agg_expr})"  # symbol binding
+        return f"{agg_expr} = to_number({var_symbols[lhs]})"      # numeric filter
+    # symmetric for lhs_is_agg and rhs_is_var
+    # ... numeric literal cases per table above
+
+    # Existing non-aggregate eq path unchanged
+```
+
+**Why this matters**:without this lock,impl might inconsistently apply `to_string` everywhere(breaking numeric cmp)or never(breaking symbol binding)。`_compile_aggregate` returns bare numeric to keep the wrapper decision at the call site where context(binding vs filter)is known。
 
 **Filter atom compile within aggregate** uses a separate function `_compile_filter_atom_within_aggregate` that mirrors `_compile_atom` but:
 - Operates on `local_bound_vars`(scope isolation — see §2.4)
@@ -500,7 +605,8 @@ Adapter trusts upstream for these(per defense-in-depth layering);if gate OFF,use
 - `src/factgraph/sdk/dsl/expr.py` — T2.3b SDK ergonomic;0 diff
 - `src/factgraph/sdk/dsl/application_rule.py` — T2.3b bridge validator gate;0 diff
 - `src/factgraph/sdk/dsl/__init__.py` — T2.3b exports;0 diff
-- `src/factgraph/sdk/docs/` — T2.3b SDK docs;0 diff
+- `src/factgraph/sdk/docs/04_api_surface.en.md` — T2.3b API surface table;0 diff(adapter wire doesn't add new public symbols)
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` — **EXCEPT** §3.2 adapter status table row "Souffle adapter" which MUST flip per §6.1 P4 v2 lock。Rest of file:0 diff。
 - `src/factgraph/adapters/problog/` — T2.3.d boundary;0 diff
 - `src/factgraph/adapters/pyreason/` — PyReason out-of-scope;0 diff
 
@@ -516,6 +622,7 @@ Adapter trusts upstream for these(per defense-in-depth layering);if gate OFF,use
 - I8 — Aggregate result type:numeric;Souffle DL wraps with `to_string(...)` for symbol-typed outer var binding consistency with `_compile_arith_atom` precedent
 - I9 — Empty-set semantics for min/max/mean enforced via `count : { same_body } > 0` guard clause prefix(v2 P0 lock);count/sum native empty=0 matches C101 directly;`AggregateNoValue` represented by branch-not-firing(comparison violated / no env pollution)— no separate Souffle sentinel object
 - I10 — Adapter-side aggregate shape validation in `_validate_atom_subset` is mandatory regardless of `FACTPY_WHERE_AST_VALIDATE` gate state(P5 v2 lock);C100 semantic restrictions(no RuleRef/RuleExpr/ArithExpr in filter)deferred to upstream substrate validator(adapter does NOT re-implement)— see §5.7.5
+- I11 — Aggregate-local var naming convention:T2.3b SDK lowering uses `$_agg<N>` prefix for aggregate target vars;`_infer_var_type_domains` flat dict relies on this to avoid name collision with outer-scope vars(per §2.6b v3 P2)。Adapter does NOT defensively rename;if SDK ever changes naming,T2.3c must update。
 
 ## 7. Acceptance
 
@@ -650,12 +757,12 @@ where = [("eq", "$x", ("sum",))]
 # Discriminator: _validate_atom_subset raises on shape mismatch.
 ```
 
-### 7.8 Empty-set guard discriminator for min/max/mean(3 tests — P0 v2 lock)
+### 7.8 Empty-set guard discriminator for min/max/mean(4 tests — P0 v2 lock + P3 v3 wrapping)
 
-Per §2.5 v2 lock,min/max/mean compile MUST prefix `count : { same_body } > 0,` guard。Discriminator tests verify both **DL emit shape** and **runtime semantics**:
+Per §2.5 v2 lock + §5.3.5 v3 to_string/to_number rules,min/max/mean compile MUST prefix `count : { same_body } > 0,` guard。Discriminator tests verify **both** the guard prefix **and** the to_string/to_number wrapping per §5.3.5 table:
 
 ```python
-# Test (a) — DL emit shape for min binding (no execution needed)
+# Test (a) — eq binding to unbound var: to_string wrap (symbol binding)
 where = [
     ("eq", "$min_amount", ("min", "$_agg1", [
         ("pred", "Order:exists", ["$o"]),
@@ -663,34 +770,47 @@ where = [
     ]))
 ]
 compiled = compile_where_to_query_dl(where=where, schema_ir=..., ...)
-# Discriminator: compiled DL contains BOTH
-#   - "count : { ... } > 0"  (guard clause)
-#   - "min to_number(v__agg1) : { ... }"  (value clause)
-# joined by comma. If guard is dropped, this test fails.
+# Discriminator: compiled DL contains
+#   - "count : { ... } > 0"                                (guard clause)
+#   - "v_min_amount = to_string(min to_number(v__agg1) : { ... })"   (binding via to_string)
+# joined by comma. Verifies BOTH guard prefix AND symbol-binding to_string wrap.
 
-# Test (b) — DL emit shape for max comparison
+# Test (b) — numeric cmp (gt) with int literal: NO to_string, raw numeric aggregate
 where = [
     ("gt", ("max", "$_agg1", [
         ("pred", "Order:exists", ["$o"]),
         ("pred", "order:amount", ["$o", "$_agg1"]),
     ]), 5)
 ]
-# Discriminator: compiled contains "count : { ... } > 0, max ... > 5"
+# Discriminator: compiled contains
+#   - "count : { ... } > 0"                                (guard clause)
+#   - "max to_number(v__agg1) : { ... } > 5"               (raw numeric cmp, no to_string)
+# If impl wraps aggregate in to_string for numeric cmp, this fails.
 
-# Test (c) — DL emit shape for mean binding
+# Test (c) — eq binding for mean: to_string wrap + guard
 where = [
     ("eq", "$avg", ("mean", "$_agg1", [
         ("pred", "Order:exists", ["$o"]),
         ("pred", "order:amount", ["$o", "$_agg1"]),
     ]))
 ]
-# Discriminator: compiled contains "count : { ... } > 0, v_avg = mean ..."
+# Discriminator: "count : { ... } > 0, v_avg = to_string(mean to_number(v__agg1) : { ... })"
+
+# Test (d) — eq filter with bound var: aggregate numeric vs to_number(var)
+where = [
+    ("pred", "User:exists", ["$u"]),
+    ("eq", "$u", ("min", "$_agg1", [...])),  # $u already bound by outer pred
+]
+# Discriminator: compiled contains
+#   - "count : { ... } > 0"                                (guard clause)
+#   - "min to_number(v__agg1) : { ... } = to_number(v_u)"  (numeric filter, no to_string)
+# Verifies the bound-var branch of §5.3.5 eq decision tree.
 ```
 
-**Discriminator strength**:if implementation drops the `_AGGREGATE_GUARD_KINDS` branch in `_compile_aggregate`,all 3 tests fail because the guard clause is absent。Symmetric test for count/sum verifies NO guard is emitted:
+**Discriminator strength**:if implementation drops the `_AGGREGATE_GUARD_KINDS` branch,tests (a)-(d) all fail(guard missing)。If impl confuses to_string/to_number boundary,(a)/(c) catch wrong-symbol-binding and (b)/(d) catch wrong-numeric-cmp。Symmetric negative test for count/sum:
 
 ```python
-# Test (d) — count emits NO guard (empty-set = 0 is legal C101 value)
+# Test (e) — count emits NO guard (empty-set = 0 is legal C101 value)
 where = [("eq", "$cnt", ("count", None, [("pred", "Order:exists", ["$o"])]))]
 # Discriminator: compiled does NOT contain "count : { ... } > 0," prefix;
 # emits "v_cnt = to_string(count : { ... })" only.
@@ -727,6 +847,38 @@ where = [("eq", "$x", ("bogus_kind", "$y", []))]
 os.environ["FACTPY_WHERE_AST_VALIDATE"] = "0"
 where = [("eq", "$x", ("bogus_kind", "$y", []))]
 # Discriminator: assertRaises(WhereValidationError) — SAME error, adapter is safety net.
+```
+
+### 7.11 Type domain inference inside aggregate filter(2 tests — P2 v3 lock)
+
+Verifies `_infer_var_type_domains` walks aggregate filter atoms,so `_assert_cmp_var_allowed` works for aggregate-internal cmp。
+
+```python
+# Test (a) — aggregate target_var gets int type domain
+where = [
+    ("eq", "$result", ("sum", "$_agg1", [
+        ("pred", "Order:exists", ["$o"]),
+        ("pred", "order:amount", ["$o", "$_agg1"]),
+    ]))
+]
+# Discriminator: inferred type domains include $_agg1 with at least the
+# pred-derived type AND explicit "int" from aggregate target classification.
+domains = _infer_var_type_domains(where[0]_body, schema_pred_types)
+assert "$_agg1" in domains
+# Either pred-derived (e.g., "number") or "int" — at minimum non-empty.
+
+# Test (b) — filter-internal numeric cmp uses correctly inferred type
+where = [
+    ("eq", "$result", ("sum", "$_agg1", [
+        ("pred", "Order:exists", ["$o"]),
+        ("pred", "order:amount", ["$o", "$_agg1"]),
+        ("gt", "$_agg1", 5),  # filter-internal cmp; requires $_agg1 in type domain
+    ]))
+]
+# Discriminator: compile succeeds (no "unknown type" error from _assert_cmp_var_allowed).
+# If v3 P2 fix is missing, this test fails with WhereValidationError on $_agg1 type.
+compiled = compile_where_to_query_dl(where=where, ...)
+assert "count : { ... } > 0" in compiled or "sum" in compiled  # min/max/mean → guard
 ```
 
 ## 8. Implementation Plan

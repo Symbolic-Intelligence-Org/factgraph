@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v2 tightening — P0 empty-set guard locked + P1-P5 resolved)
+- Last Updated: 2026-05-23 (Step 4.2 v3 tightening — §2.6 stale algorithm fixed + _infer_var_type_domains coverage + to_string/to_number lock + §6.2 contradiction + audit log G5/anticipated marked superseded)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3c-aggregate-souffle-wire.md](./2026-05-23_t2-3c-aggregate-souffle-wire.md)
@@ -23,6 +23,7 @@
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | T2 Track 5th implementation sub-slice (after T2.1 ne / T2.2 ArithExpr / T2.3a Aggregate substrate / T2.3b Aggregate SDK bridge). Closes Souffle adapter aggregate wire gap. T2.3a + T2.3b consumed unchanged. T2.3.d ProbLog wire remains separate. Estimated ~300 LOC (150 code + 150 tests). S-class lightweight per §5.7 trigger analysis. Cross-flip: Claude drafts, user reviews (continued from T2.3b inverted pattern). |
 | 2026-05-23 | draft | Step 4.2 v2 tightening | User v1 review surfaced 2 Blockers (P0 C101 empty-set semantics + P1 `_vars_in_atom` scope model false) + 4 Required (P2 §7.5 discriminator weak + P3 failure-path cite wrong + P4 SDK docs optional + P5 gate-off behavior unspec). User locked **A** for P0: implement empty-set guard now via `count : { same_body } > 0` prefix on min/max/mean; count/sum keep native empty=0. No Souffle sentinel object — `AggregateNoValue` represented by branch-not-firing (matches C101 "comparison violated / no env pollution"). P1-P5 v2 fixes applied in single amendment commit. Acceptance count grew from 11 to 17+ tests (new §7.8/§7.9/§7.10 + revised §7.5). Status stays `draft` pending v2 re-review. |
+| 2026-05-23 | draft | Step 4.2 v3 tightening | User v2 re-review surfaced 5 Required findings on contract-precision gaps that would surface at impl time: P1 §2.6 still had v1 stale algorithm (outer_var_universe approach) contradicting v2 §5.5; P2 `_infer_var_type_domains` (`where_compile.py:829-861`) not covered — needs aggregate-aware recursion or impl-time `_assert_cmp_var_allowed` would fail on aggregate-internal cmp like `gt($_agg1, 5)`; P3 to_string/to_number boundary not precisely locked — eq binding vs numeric cmp wrapping rules unclear; P4 §6.2 still listed `sdk/docs/` 0-diff invariant contradicting P4 v2 fix that mandates `sdk/docs/03_rules_and_inferences.en.md` flip; P5 audit log G5 + Anticipated reviewer P-findings retained v1 stale claims. v3 fixes applied: §2.6 rewritten to align with §5.5; new §2.6b + new I11 invariant + §7.11 acceptance for `_infer_var_type_domains`; new §5.3.5 lock table for to_string/to_number rules + §7.8 expanded to 4 tests + new test (d); §6.2 narrowed to per-file 0-diff (sdk/docs/03 row exempt); audit log G5 updated + Anticipated P-findings marked superseded. Acceptance grew 17+ → 19+ tests. Status stays `draft` pending v3 re-review. |
 
 ## Decision Notes
 
@@ -53,10 +54,10 @@ Per Track plan §1.2.1 + §1.2.4 trigger analysis(mirror of T2.3b §5.7):
 ### 2026-05-23 — G1-G7 visible gate mapping
 
 - **G1** — Blueprint §1 + §2 cite parent essay §10.6.3 (C99) + §10.6.4 (C100) + §10.6.5 (C101) + §10.6.7 (C103) + §10.6.8 (C104) + §8.8 explicitly;§2 sub-goal headers reference C99/C100/C101/C104 or specific adapter-wire responsibilities。
-- **G2** — Blueprint §4.1 documents G2 source-grep audit on `src/factgraph/adapters/souffle/`(`rg "AggregateAtom\|_AGGREGATE_KINDS\|aggregate"` → 0 hits;dispatch fallthrough at line 731)。T2.3a substrate visibility verified at `where_ast.py:75` + `:102` + `where_ast_validate.py`。T2.3b SDK lowering output verified at `sdk/dsl/expr.py:209` + `:459` + bridge validator gate。
-- **G3** — Blueprint §4.2 uses file:line citations(where_compile.py:20/434-626/506-512/561-567/679-731/905-908/1060-1103/1139-1173/1176)。Citations to be re-verified at row-drafting / impl time per CADENCE Rule 1。
-- **G4** — Blueprint §2 sub-goals 2.1-2.9 each labeled with C-number(C99/C100/C101/C104)or specific responsibility(dispatch extension / helper / cmp side extension / filter atom recursion / var extraction / validation / acceptance / G7)。
-- **G5** — Blueprint §3 Non-goals lists 12 explicit deferrals or out-of-scope items with rationale(T2.3.d ProbLog / PyReason / T2.3a substrate change / T2.3b SDK change / Nit aggregate-in-arith / nested aggregate / new kinds / new filter atoms / witness layout / Souffle mean derived fallback / AggregateNoValue Souffle sentinel / M-class doc)。
+- **G2** — Blueprint §4.1 documents G2 source-grep audit on `src/factgraph/adapters/souffle/`(`rg "AggregateAtom\|_AGGREGATE_KINDS\|aggregate"` → 0 hits;P3 v2 corrected dispatch path note:aggregate-in-cmp reaches `_literal_to_text` via cmp side compile,not top-level atom dispatch)。T2.3a substrate visibility verified at `where_ast.py:75` + `:102` + `where_ast_validate.py`。T2.3b SDK lowering output verified at `sdk/dsl/expr.py:209` + `:459` + bridge validator gate。
+- **G3** — Blueprint §4.2 uses file:line citations(where_compile.py:20/434-626/506-512/561-567/679-731/829-861/905-908/1060-1103/1139-1173/1176);v3 P2 adds `:829-861` `_infer_var_type_domains` to touch points。Citations to be re-verified at row-drafting / impl time per CADENCE Rule 1。
+- **G4** — Blueprint §2 sub-goals 2.1-2.9 each labeled with C-number(C99/C100/C101/C104)or specific responsibility(dispatch extension / helper / cmp side extension / filter atom recursion / var extraction / type domain inference [v3 §2.6b] / validation / acceptance / G7)。
+- **G5** — Blueprint §3 Non-goals lists 11 explicit deferrals or out-of-scope items with rationale(T2.3.d ProbLog / PyReason / T2.3a substrate change / T2.3b SDK change / Nit aggregate-in-arith / nested aggregate / new kinds / new filter atoms / witness layout / Souffle mean derived fallback / M-class doc)。**v2 supersedes** v1 "AggregateNoValue Souffle DL sentinel" non-goal — replaced by §3 row "Souffle DL sentinel object for AggregateNoValue" with v2 lock(no separate sentinel;branch-not-firing represents NoValue per §2.5)。
 - **G6** — Reviewer should independently spot-check:
   1. T2.3a substrate present at cited where_ast.py / where_ast_validate.py lines
   2. T2.3b SDK lowering present at sdk/dsl/expr.py:209/459 + bridge validator gate
@@ -73,15 +74,15 @@ Per Track plan §1.2.1 + §1.2.4 trigger analysis(mirror of T2.3b §5.7):
   5. PyReason aggregate dispatch empty(out-of-scope boundary)
   6. **Souffle end-to-end smoke**(P3 v2-corrected wording) — `build_application_rule(...)` with `agg_sum(...)` example produces IR that current Souffle adapter rejects via `WhereValidationError("unsupported literal type")` at `_literal_to_text` line 1106-1113(aggregate tuple reaches via cmp side compile path,not via top-level atom kind dispatch);confirms precondition gap T2.3c fills
 
-### 2026-05-23 — User's Step 4.2 review focus areas (anticipated upfront)
+### 2026-05-23 — User's Step 4.2 review focus areas (anticipated upfront — v3 status annotations)
 
-Drafter anticipates user's Step 4.2 review will focus on:
+Drafter anticipated user's Step 4.2 review would focus on:
 
-1. **Souffle DL syntax correctness** — particularly `mean` native support claim. Parent essay line 1711 claims native;blueprint §4.3 backs with Souffle 2.x reference but no project-level Souffle version pin found in `pyproject.toml` / installation docs. If reviewer doubts `mean` support,decision options:(a)trust parent essay,verify at impl;(b)defer `mean` to a sub-slice;(c)derive `mean` as `sum/count` upfront。Drafter leans (a) with (A-fallback) deviation path documented in §10 Outcome at closure if impl reveals incompatibility。
-2. **Aggregate-local var isolation algorithm in `_vars_in_atom`** — §5.5 uses a simplification:return ALL referenced vars in filter,let upstream `extract_where_variables(where)` intersect with outer-scope known vars。Reviewer may push for stricter binding-order analysis inside the helper itself。Drafter rationale:upstream consumer already has outer-scope knowledge;duplicating binding logic inside `_vars_in_atom` adds complexity without correctness benefit。Test 7.5(TRUE isolation discriminator)verifies the simplification holds。
-3. **`AggregateNoValue` Souffle semantic gap** — §2.5 explicitly defers the `AggregateNoValue` sentinel handling at Souffle DL layer;Souffle's native empty-set behavior(min/max/mean → 0)deviates from C101。Reviewer may want this either(a)hard-blocked(force Souffle wire to detect empty sets explicitly via `count : {body} = 0` branch),or(b)accepted as scoped deferral with explicit docs warning。Drafter leans (b) per parent essay §8.9 "Aggregate Empty Set Behavior Convergence" deferral language;Python evaluator path remains source-of-truth for `AggregateNoValue` semantics。
-4. **Filter atom compile factoring** — §5.3 proposes a separate `_compile_filter_atom_within_aggregate` function;alternative is extending `_compile_atom` with a `within_aggregate=True` flag。Reviewer may prefer the flag-extension approach for less code duplication。Drafter neutral;impl can pick cleaner factoring。
-5. **`_AGGREGATE_KINDS` import vs adapter-local mirror** — §5.1 prefers import from substrate(single source of truth);some lint rules forbid underscore-prefix cross-module imports。If lint complains,fallback to adapter-local mirror with explicit invariant check。Reviewer may want lock-down on choice upfront。Drafter rationale:try import first;fallback only if lint forces it。
+1. **Souffle DL syntax correctness** — particularly `mean` native support claim. Parent essay line 1711 claims native;blueprint §4.3 backs with Souffle 2.x reference but no project-level Souffle version pin found in `pyproject.toml` / installation docs. If reviewer doubts `mean` support,decision options:(a)trust parent essay,verify at impl;(b)defer `mean` to a sub-slice;(c)derive `mean` as `sum/count` upfront。Drafter leans (a) with (A-fallback) deviation path documented in §10 Outcome at closure if impl reveals incompatibility。 **[Status: not surfaced in v1/v2 review;still applies at impl-time]**
+2. ~~Aggregate-local var isolation algorithm in `_vars_in_atom`~~ — **SUPERSEDED by v2 P1 Blocker**:v1 §5.5 "simplification"(return all filter vars,let upstream filter)was based on false assumption about `extract_where_variables`(which directly unions,does NOT filter)。User v1 review surfaced this as P1 Blocker;v2 corrected to aggregate-side-contributes-ZERO algorithm。v3 P1 fixed stale §2.6 v1 algorithm text。
+3. ~~`AggregateNoValue` Souffle semantic gap~~ — **SUPERSEDED by v1 P0 Blocker**:user locked direction A(implement empty-set guard now via `count > 0` prefix on min/max/mean)。v2 §2.5 fully rewritten with guard algorithm;no sentinel object;branch-not-firing represents NoValue per C101 semantics。
+4. **Filter atom compile factoring** — §5.3 proposes a separate `_compile_filter_atom_within_aggregate` function;alternative is extending `_compile_atom` with a `within_aggregate=True` flag。Reviewer may prefer the flag-extension approach for less code duplication。Drafter neutral;impl can pick cleaner factoring。 **[Status: not surfaced in v1/v2 review;still impl-time decision]**
+5. **`_AGGREGATE_KINDS` import vs adapter-local mirror** — §5.1 prefers import from substrate(single source of truth);some lint rules forbid underscore-prefix cross-module imports。If lint complains,fallback to adapter-local mirror with explicit invariant check。Reviewer may want lock-down on choice upfront。Drafter rationale:try import first;fallback only if lint forces it。 **[Status: not surfaced in v1/v2 review;still applies at impl-time]**
 
 ### 2026-05-23 — Anticipated reviewer P-finding candidates
 
@@ -203,3 +204,66 @@ v1 review surfaced 6 findings(2 Blockers + 4 Required)— consistent with T2.3b'
 v2 mitigation:explicit user-verified P3 reproduction;explicit cited-line citations for P1 fix(`where_compile.py:188-195` extraction;`:217-237` witness layout);explicit algorithm walkthrough for P0(no "deferred" wiggle-room)。
 
 If v2 review still surfaces Blocker-class findings,that signals cross-flip inversion pattern's overhead exceeds value for adapter-shaped slices — future T2 Track adapter slices(T2.3.d ProbLog)should consider reverting to user-drafts pattern。
+
+### 2026-05-23 — Step 4.2 v2 review findings + v3 resolutions
+
+User Step 4.2 v2 re-review verdict:**still not ready for scoped**。P0 direction correct;P1-P5 v2 main fixes landed;but 5 contract-precision gaps remain that would surface at impl time。
+
+**P1 Required — §2.6 retained v1 stale algorithm**(blueprint line 152-175)
+
+§2.6 v1 wrote `outer_var_universe` + `referenced_vars & outer_var_universe` intersection — based on the false assumption(P1 v1 Blocker)that `extract_where_variables` filters against outer scope。v2 §5.5 was rewritten correctly but §2.6 was not updated,leaving contradictory specifications。Impl reading §2.6 would write wrong algorithm。
+
+**v3 fix**:§2.6 rewritten to align with v2 §5.5 truth — aggregate side contributes ZERO outer vars;correlated outer vars are bound by their original outer-scope atom independently。Explicit "v1/v2 wrong algorithm removed" note in §2.6 header。
+
+**P2 Required — `_infer_var_type_domains` aggregate coverage gap**(blueprint §2.6b new + §6 I11 new + §7.11 new)
+
+`where_compile.py:829-861` `_infer_var_type_domains` only scans top-level `pred` / `_ARITH_KINDS` / `not`。It does NOT descend into cmp atom operands or aggregate filter atoms。Concrete gap:if aggregate filter contains numeric compare like `gt($_agg1, 5)` after `pred order:amount($o, $_agg1)`,the type domain for `$_agg1` is NOT inferred(pred is inside aggregate filter,not at top level)。Subsequent `_assert_cmp_var_allowed` call for the `gt` would see `$_agg1` with no/unknown type and raise unexpectedly。
+
+**v3 fix**:
+- New blueprint §2.6b documents the gap + algorithm extension(walk aggregate filter atoms recursively + explicit `target_var` int classification per C102)
+- New §6 invariant I11:aggregate-local var naming(`$_agg<N>` prefix per T2.3b SDK convention)to avoid name collision in flat type domain dict
+- New §7.11 acceptance(2 tests):type domain inference includes aggregate target_var + filter-internal numeric cmp compiles without "unknown type" error
+
+**P3 Required — to_string/to_number boundary not precisely locked**(blueprint §5.3 return shape note + new §5.3.5 + §7.8 expanded)
+
+§5.3 originally said `_compile_aggregate` returns aggregate expression but §7.8 expected `to_string(...)` wrap for binding。Inconsistent guidance on where to apply `to_string` vs `to_number` would cause impl to guess at the symbol/numeric domain boundary。
+
+**v3 fix**:
+- §5.3 return shape clarified — `_compile_aggregate` returns **bare numeric aggregate expression**(no wrap);wrapping decision moves to call site
+- New §5.3.5 lock table covers 8 combinations:eq binding vs eq filter vs numeric cmp,each paired with var(bound/unbound)/ literal / aggregate operand
+- Eq binding to unbound var:`v_X = to_string(<agg_expr>)` symbol binding(matches `_compile_arith_atom:1103` precedent)
+- Eq filter with bound var:`<agg_expr> = to_number(v_X)` numeric eq
+- Numeric cmp(gt/ge/lt/le/ne):raw numeric `<agg_expr> <op> <other>`
+- §7.8 expanded from 3 tests to 4 + negative test (e);test (b) and (d) discriminate the `to_string` vs `to_number` boundary
+
+**P4 Required — §6.2 self-contradiction**(blueprint §6.2 narrowed)
+
+§6.1 listed `sdk/docs/03_rules_and_inferences.en.md` as MUST change(P4 v2 lock)。§6.2 broad invariant "src/factgraph/sdk/docs/ — 0 diff" contradicted this。
+
+**v3 fix**:§6.2 narrowed — `sdk/docs/04_api_surface.en.md` stays 0 diff;`sdk/docs/03_rules_and_inferences.en.md` is 0 diff EXCEPT §3.2 adapter status row(which MUST flip)。Other sdk/docs files explicit case-by-case if added later。
+
+**P5 Required — audit log G1-G7 + Anticipated reviewer P-findings retained v1 stale**(audit log line 59 + 81)
+
+Audit log G5 description still listed "AggregateNoValue Souffle DL sentinel" as Non-goal — superseded by v2 §3 row "Souffle DL sentinel object for AggregateNoValue" reframe(no separate sentinel;branch-not-firing represents)。Anticipated reviewer P-findings section #2 + #3 still presented v1 framing without marking superseded by v2 review。Since these sections describe current G1-G7 mapping(not historical event log),they should reflect v3 truth。
+
+**v3 fix**:
+- G5 description rewritten:11 non-goals(was 12);"AggregateNoValue Souffle DL sentinel" removed and replaced with v2 reframe explicitly marked
+- Anticipated reviewer P-findings #2 + #3 marked **SUPERSEDED** with cross-ref to v1/v2 review outcome;remaining #1/#4/#5 retain "not surfaced in v1/v2;still impl-time decision" annotation
+
+### 2026-05-23 — Cross-flip inversion v2→v3 retrospective
+
+v3 round surfaced **5 Required(no Blockers)** — improvement from v2 round(2 Blockers + 4 Required = 6 total)。Trend suggests cross-flip inversion drafter blindness compounds across multiple rounds but converges:
+
+| Round | Blockers | Required | Total | Pattern |
+|---|---|---|---|---|
+| v1 | 2 | 4 | 6 | Semantic misjudgment + scope model false + cite wrong + scope optionalism |
+| v2 | 0 | 5 | 5 | Contract-precision gaps surface only after big-picture is correct |
+| (v3 prediction) | 0 | 0-2 | 0-2 | Should converge if v3 fixes are tight |
+
+**Lesson for future cross-flip-inverted drafts**:
+- Big-picture errors(P0 v1 type)dominate first round
+- Mid-precision errors(P1-P5 v1 type)dominate second round
+- Contract-precision gaps(v2 P1-P5 type — stale specs,helper coverage gaps,wrapper rules,invariant contradictions,gate mapping drift)dominate third round
+- Drafter mitigations:explicit superseded-marking when rewriting sections;cross-section consistency check before each commit;helper coverage diff vs touched-file enumeration
+
+v3 mitigation applied:every v3 edit cross-verified against §5(impl) ↔ §2(goals) ↔ §6(invariants) ↔ §7(acceptance) ↔ audit log G1-G7 for consistency。If v3 review still surfaces Blocker-class,the cross-flip inversion pattern's overhead clearly exceeds value for adapter-shaped slices and T2.3.d should revert to user-drafts pattern。
