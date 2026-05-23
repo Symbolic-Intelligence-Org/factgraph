@@ -1,8 +1,8 @@
 # Task Blueprint Audit: T2.3d — Aggregate ProbLog adapter wire
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (G7 precondition + lists directive amendment)
+- Last Updated: 2026-05-23 (Step 4.8 closure)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3d-aggregate-problog-wire.md](./2026-05-23_t2-3d-aggregate-problog-wire.md)
@@ -24,6 +24,7 @@
 | 2026-05-23 | draft | Step 4.2 v2 tightening | Claude review surfaced 3 Required + 1 Worth-considering: two line-cite drifts, empty `sum_list([], 0)` ambiguity, inaccurate G7 #5 "rejects or mishandles" wording, and unlocked fresh-var naming. Applied all four: corrected cites, locked `sum_list([], 0)` as SWI-Prolog/ProbLog standard behavior, changed G7 #5 to silent JSON-quoted literal mishandle, and added `Agg{Prefix}{N}` fresh-var naming invariant. |
 | 2026-05-23 | scoped | Status: draft → scoped | Claude v2 re-review passed with 0 Blocker / 0 Required / 0 Worth-considering. Anti-pattern propagation grep clean. User-drafts pattern validated for T2.3d (2 rounds / 4 findings vs T2.3c 6 rounds / 21 findings). Ready to fork impl branch. |
 | 2026-05-23 | g7-precondition | G7 precondition recorded before implementation | All G7 checks completed before code edits. Local ProbLog binary smoke found list predicates require `:- use_module(library(lists)).`; blueprint amended in scoped state to conditionally emit the directive for aggregate exports. Sacred master and dirty set preserved. |
+| 2026-05-23 | implemented | Step 4.8 closure | Implementation landed in `a33b876e`; Step 4.7 Worth-considering dead helper cleanup landed in `d7e2a650`; Claude review passed with 0 Blocker / 0 Required. Blueprint Status moved to implemented and §10 Outcome completed. |
 
 ## Decision Notes
 
@@ -125,6 +126,37 @@ G7 was executed on `v0.2.0-impl-t2-3d-aggregate-problog-wire-2026-05-23` before 
 **Scoped amendment**: T2.3d remains S-class. The locked semantics do not change, but aggregate exports must conditionally emit `:- use_module(library(lists)).` when aggregate lowering uses list predicates. Non-aggregate exports should not gain the directive so existing exact-output tests remain stable.
 
 This amendment is recorded before implementation code edits, matching the G7 timing discipline established by fixture cleanup and T2.3a/T2.3c.
+
+### 2026-05-23 — Step 4.8 closure notes
+
+Implementation lineage:
+
+| Commit | Purpose |
+|---|---|
+| `c3127703` | G7 precondition record + scoped amendment for conditional `library(lists)` directive |
+| `a33b876e` | Main ProbLog aggregate wire implementation, tests, and docs flip |
+| `d7e2a650` | Step 4.7 follow-up: remove unused `_is_aggregate` helper |
+
+Claude Step 4.7 review result:
+
+- PASS — 0 Blocker / 0 Required
+- 1 Worth-considering: unused `_is_aggregate(...)` helper
+- Resolution: adopted option (a), deleted the dead helper in `d7e2a650`
+
+Verification recorded for closure:
+
+- `tests.test_problog_export`: 26 tests OK
+- relevant cross-slice sweep: 114 tests OK locally before closure; Claude reviewer reported 124 relevant tests OK
+- ruff clean on touched ProbLog exporter + tests
+- local ProbLog binary smoke passed with generated aggregate program and `:- use_module(library(lists)).`
+
+Outcome:
+
+- ProbLog aggregate wire is implemented.
+- No SDK/core/application/Souffle code changed.
+- Docs status rows now mark ProbLog aggregate support as shipped.
+- No new unrelated baseline drift surfaced.
+- Ready for Step 4.9 archive.
 
 ### 2026-05-23 — Branch state at draft commit time
 

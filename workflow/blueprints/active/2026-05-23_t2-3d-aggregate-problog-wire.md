@@ -1,8 +1,8 @@
 # T2.3d — Aggregate ProbLog adapter wire over T2.3a substrate + T2.3b SDK
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+- Last Updated: 2026-05-23 (Step 4.8 closure)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — aggregate value expression shape;§10.6.4 (C100) — aggregate filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — projected-view snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 + §1719 — ProbLog lowering via `findall/3` + list predicates.
@@ -456,7 +456,7 @@ Minimum tests:
 
 1. Fork impl branch from scoped anchor.
 2. Run and record §5.9 G7 precondition checks in audit log before code edits.
-3. Add local aggregate constants + `_is_aggregate(...)` + `_validate_aggregate_shape(...)`.
+3. Add local aggregate constants + `_validate_aggregate_shape(...)`.
 4. Add `_CompileContext` or equivalent fresh-var allocator.
 5. Update `_compile_body(...)` / `_compile_atom(...)` signatures to thread context while preserving direct `_compile_atom(...)` tests.
 5b. Update `export_problog(...)` to precompile rule bodies with a shared context and conditionally emit `:- use_module(library(lists)).` when aggregate lowering sets `ctx.requires_lists`.
@@ -477,4 +477,81 @@ No new durable SDK API surface docs in `04_api_surface.en.md`.
 
 ## 10. Outcome
 
-Pending implementation.
+Implemented in:
+
+| Commit | Purpose |
+|---|---|
+| `c3127703` | G7 precondition record + scoped amendment for conditional `:- use_module(library(lists)).` |
+| `a33b876e` | Main ProbLog aggregate wire implementation, tests, and docs flip |
+| `d7e2a650` | Step 4.7 follow-up: remove unused `_is_aggregate` helper |
+
+### 10.1 Landed behavior
+
+- `src/factgraph/adapters/problog/problog_export.py` now recognizes aggregate tuple operands in `eq`, `ne`, `gt`, `ge`, `lt`, and `le` cmp atoms.
+- Aggregate lowering emits `findall/3` plus list predicates:
+  - `count`: `findall(1, (...), L)` + `length(L, R)`
+  - `sum`: `findall(Target, (...), L)` + `sum_list(L, R)`
+  - `min` / `max`: non-empty-list guard `L = [_|_]` + `min_list` / `max_list`
+  - `mean`: non-empty-list guard + `sum_list` + `length` + `R is Sum / Count`
+- Aggregate exports conditionally include `:- use_module(library(lists)).`; non-aggregate exports do not gain the directive.
+- Aggregate filter atoms compile through the same `_compile_atom(...)` path, including existing `not` recursion.
+- Adapter-side structural validation rejects unknown aggregate kinds, malformed targets, malformed filters, unsupported filter atom kinds, and nested aggregates before emission.
+- Query-variable extraction continues to come from T2.3c and excludes aggregate-local variables from exported heads.
+- `src/factgraph/application/docs/rule.md` and `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` now mark ProbLog aggregate support as shipped.
+
+### 10.2 Verification
+
+Verification performed before closure:
+
+```text
+PYTHONPATH=src python -m unittest tests.test_problog_export
+→ Ran 26 tests — OK
+
+Cross-slice sweep:
+PYTHONPATH=src python -m unittest \
+  tests.test_problog_export \
+  tests.test_problog_engine_eval \
+  tests.test_souffle_aggregate_compile \
+  tests.sdk.dsl.test_aggregate_ergonomic \
+  tests.sdk.dsl.test_application_rule \
+  tests.core.rules.test_aggregate_substrate \
+  tests.core.rules.test_aggregate_eval \
+  tests.application.protocol.test_rule \
+  tests.application.protocol.test_rule_aggregate
+→ Ran 114 tests — OK
+
+python -m ruff check src/factgraph/adapters/problog/problog_export.py tests/test_problog_export.py
+→ All checks passed
+```
+
+Local ProbLog binary smoke also passed after the G7 amendment:
+
+- generated aggregate program included `:- use_module(library(lists)).`
+- `problog <generated-file>` returned 0
+- output included `answer(1,'Alice',...)`
+
+Claude Step 4.7 review independently ran a broader relevant sweep:
+
+- 26 T2.3d tests pass
+- 124 cross-slice tests pass
+- ruff clean
+- 0 Blocker / 0 Required findings
+- 1 Worth-considering finding: unused `_is_aggregate` helper, resolved by `d7e2a650`
+
+### 10.3 Deviations and amendments
+
+- **G7 amendment**: local ProbLog exposed `length/2` but not `sum_list/2`, `min_list/2`, or `max_list/2` without `library(lists)`. The blueprint was amended in `c3127703` before code edits. This did not change semantics; it added the conditional generated-program directive required to execute the locked list-predicate strategy.
+- **Dead helper cleanup**: the first implementation included an unused `_is_aggregate(...)` helper. Step 4.7 review flagged it as Worth-considering; `d7e2a650` removed it rather than documenting it as future-use surface.
+- **No baseline drift surfaced**: unlike prior ProbLog hygiene and fixture slices, T2.3d did not uncover a new unrelated failing test baseline.
+- **No schema `number` vs `int` issue applies here**: ProbLog export is untyped at this layer and did not reuse the Souffle type-domain checks that exposed the earlier "number" / "int" note.
+
+### 10.4 Archive readiness
+
+The blueprint is ready for Step 4.9 archive:
+
+- Status is `implemented`
+- §10 Outcome is complete
+- Audit log has closure event and decision note
+- implementation and Step 4.7 follow-up are committed
+- sacred `master` remained unchanged
+- unrelated dirty set remained preserved
