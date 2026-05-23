@@ -1,84 +1,107 @@
 # Current Operational Memory
 
-最后更新:2026-05-22(rule-expression T1.1 + T1.2 implemented and archived locally; source `ca68103e`, not pushed)
+最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2 + ProbLog hygiene fixtures archived locally; source `1da49c41`, not pushed)
 
-## 当前阶段(2026-05-22 — RULE EXPRESSION T1.1 + T1.2 IMPLEMENTED LOCALLY)
+## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 S-CLASS BATCH ARCHIVED LOCALLY)
 
-**Current local branch:** `v0.2.0-impl-t1-2-dsl-to-application-rule-2026-05-22 @ ca68103e`.
+**Current local branch:** `v0.2.0-impl-problog-meta-confidence-fixture-cleanup-2026-05-23 @ 1da49c41`.
 
-**Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched during T1.1/T1.2.
+**Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
-**Known dirty worktree outside this slice:**
+**Known dirty worktree outside these slices:**
 - `docs/references/working/design-points/readme.md`
 - `examples/01_sdk_check_diagnose.ipynb`
 - `examples/02_overlay_why_not_frontier.ipynb`
 - `examples/archive/01_sdk_basics.ipynb`
 - untracked `rainbird-ai sdk code/`
 
-**Workflow mode:** lightweight manual mode per
-`workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md`.
-T1 sub-slices used small blueprints and skipped full audit/Q/synthesis/preflight cadence.
+### Archived S-class slices in this batch
 
-**T1.1 shipped state:**
-- Archived blueprint:
-  `workflow/blueprints/archive/2026-05-22_t1-1-rule-class-additive.md`.
-- Key implementation commit: `c155f3b1 feat(application): add Rule protocol DTO`.
-- Closure/archive commits: `237db48d`, `40c1c70e`.
-- Landed `factgraph.application.protocol.Rule` in
-  `src/factgraph/application/protocol/rule.py`.
-- Rule stores core AST atoms directly, exposes `atom_ids`, deterministic
-  `content_digest`, `render_desc(...)`, shallow/container immutability, and
-  rejects `RuleRefAtom`.
-- Recursive immutability hardening is explicitly deferred; core AST atom list
-  internals remain mutable.
+| Slice | Class | Archived at | Key implementation |
+|---|---|---:|---|
+| T1.1 Rule DTO | S | `40c1c70e` | `c155f3b1 feat(application): add Rule protocol DTO` |
+| T1.2 DSL→application bridge | S | `ca68103e` | `3aa229c6 feat(sdk): add DSL to application Rule bridge` |
+| T2.1 `ne` adapter dispatch | S | `1ca39726` | `575d48d7 feat(adapters): add raw tuple ne dispatch` |
+| ProbLog import-cycle hygiene | S | `cc8f9a96` | `d0fec968 fix(audit): break ProbLog import cycle at round_events` |
+| T2.2 ArithExpr substrate | S | `b17a62c1` | `04ac0cb9 feat(problog): export arithmetic builtins` |
+| ProbLog `meta[confidence]` fixture cleanup | S | `1da49c41` | `e3c3d7bc test(problog): migrate meta-confidence fixtures` |
 
-**T1.2 shipped state:**
-- Archived blueprint:
-  `workflow/blueprints/archive/2026-05-22_t1-2-dsl-to-application-rule.md`.
-- Key implementation commit: `3aa229c6 feat(sdk): add DSL to application Rule bridge`.
-- Closure/archive commits: `8df0446b`, `ca68103e`.
-- Landed `factgraph.sdk.dsl.build_application_rule(...)` and
-  `DSLToApplicationRuleError`.
-- Landed `ExistsAtom.__getattr__`, additive `AttrRef.entity_type`, positional
-  `User(...)` Ellipsis support, and unified AttrRef lowering that emits required
-  `EntityType:exists` predicates.
-- Cross-entity ref such as `LivesIn(li).user == User(u)` emits both existence
-  predicates and the field predicate.
-- Bridge rejects legacy bare AttrRef, two-line legacy form, raw `Pred(...)`,
-  raw RuleRef, OR-shaped where, and anonymous ports.
-- Bridge canonicalizes core `Var` objects by name after `parse_where_ir_to_ast`
-  so ports and predicates share object identity despite differing `Origin.path`.
-- Supported unified forms are 6 equality-only / bare-existence forms. Non-eq
-  AttrRef compare such as `User(u).score > 0.5` is deferred.
-- SDK top-level `factgraph.sdk.Rule` / `__all__` naming remains for T1.3.
+### Current landed behavior
 
-**Validation at T1.2 closure:**
-- Targeted and related regression command:
-  `PYTHONPATH=src python -m unittest tests.sdk.dsl.test_application_rule tests.sdk.dsl.test_existsatom_getattr tests.sdk.test_schema_ellipsis tests.application.protocol.test_rule tests.test_sdk_validation tests.test_relationship_schema tests.test_application_protocol`
-  — 87 tests OK.
-- Ruff command:
-  `python -m ruff check src/factgraph/sdk/dsl/expr.py src/factgraph/sdk/schema.py src/factgraph/sdk/dsl/application_rule.py src/factgraph/sdk/dsl/__init__.py tests/sdk/dsl/test_application_rule.py tests/sdk/dsl/test_existsatom_getattr.py tests/sdk/test_schema_ellipsis.py`
-  — clean.
-- Full `PYTHONPATH=src python -m unittest discover tests` still fails on
-  pre-existing baseline drift unrelated to T1.2(registry removal,
-  removed `meta[confidence]`, SDK `ReadPolicy` export expectations, etc.).
+**T1.1 — application `Rule` DTO**
+- `factgraph.application.protocol.Rule` exists in `src/factgraph/application/protocol/rule.py`.
+- `Rule.where` stores core AST atoms directly and rejects `RuleRefAtom`.
+- Supports `atom_ids`, deterministic `content_digest`, `render_desc(...)`, shallow/container immutability.
+- Recursive immutability hardening remains deferred because core AST internals use mutable lists.
 
-**Known workflow deviations recorded after closure:**
-- T1.1 implementation happened on the blueprint branch instead of a paired
-  implementation branch. T1.2 corrected this with
-  `v0.2.0-impl-t1-2-dsl-to-application-rule-2026-05-22`.
-- T1.1 and T1.2 each needed 3 Step 4.2 tightening rounds; sweep discipline
-  should be stricter for future sub-slices.
-- T1.2 skipped independent Step 4.6.5 pre-impl grep despite the original track
-  plan saying hard-cut slices should run it. Treat this as a lightweight-mode
-  deviation, not a new precedent for larger subtractive slices.
+**T1.2 — DSL to application Rule bridge**
+- `factgraph.sdk.dsl.build_application_rule(...)` and `DSLToApplicationRuleError` exist.
+- `ExistsAtom.__getattr__`, additive `AttrRef.entity_type`, and positional `User(...)` Ellipsis support landed.
+- Unified equality/bare-existence forms emit `EntityType:exists` predicates and field predicates; cross-entity ref emits both existence predicates.
+- Legacy bare AttrRef, two-line legacy form, raw `Pred(...)`, raw RuleRef, OR-shaped where, and anonymous ports are rejected.
+- Non-eq AttrRef compare, `AttrRef` arithmetic, float literals, and `/` remain deferred.
 
-**Recommended next sub-slices:**
-- T1.3: SDK `Rule` naming / top-level surface conflict, possibly deferred to
-  T5 midstream.
-- T1.4: remaining ports / alias contract for RuleExpr `.as_()`; do not repeat
-  T1.1 immutability / atom_id / desc basics or T1.2 anonymous Ellipsis work.
-- T2.1: atom kind `ne` adapter gap can proceed after T1.1/T1.2.
+**T2.1 — atom kind `ne` adapter dispatch**
+- Souffle raw tuple adapter validates and compiles `("ne", lhs, rhs)` in main body and `not` body.
+- Souffle variable extraction includes `ne`.
+- ProbLog exports raw tuple `ne` to `\=` term inequality.
+- T2.1 exposed a pre-existing ProbLog import cycle; fixed in the next hygiene slice.
+
+**ProbLog import-cycle hygiene**
+- `factgraph.adapters.problog.problog_export` can import directly.
+- `get_engine_evaluator("problog") is evaluate_problog` works.
+- Actual fix boundary moved deeper than the initial blueprint: `audit/round_events.py` stopped top-level importing application protocol common types.
+- A G7 precondition failure caused an amendment before implementation; this is the model for future boundary-sensitive hygiene slices.
+
+**T2.2 — ArithExpr substrate + ProbLog builtin parity**
+- ProbLog `_compile_atom(...)` exports existing arithmetic builtin atoms `add`, `sub`, `neg`, `addc`, `mulc` via `is/2`.
+- SDK bridge tests now prove existing `BinaryExpr` shapes lower through `build_application_rule(...)` to `BuiltinAtom("addc")` / `BuiltinAtom("mulc")` plus comparisons.
+- No production support added for `div`, `/`, `AttrRef` arithmetic, float literals, or div-by-zero evidence semantics.
+- G7 checks ran before implementation, but the audit-log record landed after the implementation commit; this timing miss was disclosed in `407cd71b`.
+
+**ProbLog `meta[confidence]` fixture cleanup**
+- Removed four stale `meta[confidence]` fixture sites in `tests/test_problog_export.py` and `tests/test_problog_engine_eval.py`.
+- Full ProbLog gates now pass:
+  - `tests.test_problog_export` — 14 tests OK.
+  - `tests.test_problog_engine_eval` — 10 tests OK.
+  - combined export + engine gate — 24 tests OK.
+- The G7 precondition gate was amended before fixture edits: broad `tests.test_sdk_assertion_record_set` was removed as a precondition because it has unrelated `snap.field(...).active.where` baseline drift; the valid canonical gate is `tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane`.
+
+### Workflow governance state
+
+`workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
+
+- S: lightweight blueprint path.
+- M: midweight with decision doc when public API / load-bearing choice appears.
+- L: full audit/Q/synthesis cadence for high-commitment clusters.
+
+G1-G7 now apply to every class:
+
+- G1 canonical source / parent essay citation.
+- G2 shipped source read before drafting.
+- G3 file:line citations.
+- G4 goal-to-driver mapping.
+- G5 documented deviations and class upgrade triggers.
+- G6 reviewer spot-check of shipped source.
+- G7 pre-implementation precondition checks for boundary-sensitive slices.
+
+Since T2.2, the cross-flip pattern stabilized as user-drafts / Claude-reviews for design artifacts, with clean Step 4.2 drafts. Implementation reviewer passes also found 0 P1 findings for T2.2 and the fixture cleanup.
+
+### Process lessons carried forward
+
+- **Branch isolation:** T1.1 did not use a separate implementation branch; T1.2 onward corrected this. Continue paired blueprint/impl branch discipline.
+- **Dirty preservation:** T2.1 had a temporary `git stash` incident; the stash was popped and the original 4 M + 1 untracked dirty set restored. Do not repeat.
+- **G7 timing:** T2.2 ran preconditions before implementation but recorded them after. Fixture cleanup fixed the timing by committing the G7 record before fixture edits.
+- **G7 amendment discipline:** ProbLog hygiene and fixture cleanup both used scoped amendments when preconditions exposed an unsafe or noisy gate. This is the expected S-class (A-fallback) pattern.
+- **Baseline hygiene:** ProbLog import cycle and `meta[confidence]` fixture drift are now cleared. New known baseline: `tests.test_sdk_assertion_record_set` has unrelated `snap.field(...).active.where` drift.
+
+### Recommended next work
+
+- **T2.3 AggregateExpr** — next T2 track slice; predicted S → possible M because C99-C105 are tightly coupled and mostly genuinely new.
+- **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing.
+- **T1.3 SDK top-level `Rule` naming** — M class; needs decision doc for TPQ-2 / public API naming.
+- **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
+- **Memory consolidation** — after this repo memory update, mirror summary into external Claude memory.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
