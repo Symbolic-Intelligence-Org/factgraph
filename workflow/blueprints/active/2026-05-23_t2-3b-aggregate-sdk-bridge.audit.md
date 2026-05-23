@@ -1,8 +1,8 @@
 # Task Blueprint Audit: T2.3b — Aggregate SDK ergonomic + bridge support
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+- Last Updated: 2026-05-23 (Step 4.8 implemented closure)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3b-aggregate-sdk-bridge.md](./2026-05-23_t2-3b-aggregate-sdk-bridge.md)
@@ -22,6 +22,7 @@
 | 2026-05-23 | draft | Blueprint created | T2 Track 4th implementation sub-slice (after T2.1 ne / T2.2 ArithExpr / T2.3a Aggregate substrate). Closes SDK ergonomic + bridge surface gap left by T2.3a. T2.3a substrate frozen (5 layers UNTOUCHED). User-facing 5 `agg_*` helpers exposed via existing `Not`/`Pred` precedent. Estimated ~470 LOC. S-class lightweight per §5.7 trigger analysis. |
 | 2026-05-23 | scoped | Status: draft → scoped | Step 4.2 review converged after 3 tightening rounds (v1: 1 Blocker + 3 Required; v2: 1 Blocker target lowering order bug → Option 2 self-ensure adopted; v3: 1 Required acceptance gap → TRUE self-ensure test added at `c61095c1`). G1-G7 visible mapping in place. Sacred `master` untouched. Dirty set preserved. Ready for impl branch fork. |
 | 2026-05-23 | g7-precondition | G7 precondition recorded before implementation | Ran §5.6 checks on impl branch before code edits. All 6 checks passed. One smoke-check calibration: `evaluate_where` accepts raw where IR, not parsed AST object; raw IR parse → validate → eval passed. Sacred `master` untouched; dirty set preserved. |
+| 2026-05-23 | implemented | Implementation landed and Step 4.7 reviewer pass clean | `94045e54` added SDK aggregate helpers + bridge support + docs + tests. Reviewer pass:0 P-findings,10 new tests pass,58 directly relevant tests pass,ruff clean,sacred master untouched,dirty set preserved. Step 4.7 nit on non-aggregate AttrRef/BinaryExpr comparison side accepted as explicit follow-up deferral. |
 
 ## Decision Notes
 
@@ -298,3 +299,34 @@ Without an explicit validator call in the bridge, `_AggregateRef` could bypass T
 - Keep this within T2.3b scope:it wires an already-shipped validator into the SDK bridge so `_AggregateRef` cannot bypass T2.3a validation;no new validation semantics are introduced.
 
 Blueprint updated before code implementation per scoped-amendment discipline。Status remains `scoped`。
+
+### 2026-05-23 — Step 4.8 implemented closure notes
+
+Implementation commit:
+- `94045e54 feat(sdk): add aggregate DSL helpers and bridge support`
+
+Files changed by implementation:
+- `src/factgraph/sdk/dsl/expr.py`
+- `src/factgraph/sdk/dsl/application_rule.py`
+- `src/factgraph/sdk/dsl/__init__.py`
+- `tests/sdk/dsl/test_aggregate_ergonomic.py`
+- `src/factgraph/application/docs/rule.md`
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
+- `src/factgraph/sdk/docs/04_api_surface.en.md`
+
+Reviewer Step 4.7 verdict:
+- PASS,0 P-findings。
+- 10 new aggregate tests passed。
+- 58 directly relevant tests passed。
+- Ruff clean on SDK DSL + tests。
+- Wider discovery failures were confirmed unrelated to T2.3b(`frontier` / `diagnose` / `localizer` areas untouched by this slice)。
+
+Explicit follow-up deferral from Step 4.7 nit:
+- `_lower_compare_with_aggregate` uses `lower_term(..., in_where=True)` for the non-aggregate side。
+- Therefore non-aggregate AttrRef/BinaryExpr operands such as `Order(o).amount == agg_count(...)` and `(n + 1) == agg_count(...)` fail loudly today。
+- Scoped acceptance covered `Var == aggregate` and aggregate-vs-aggregate shapes,not AttrRef/BinaryExpr non-aggregate operands。
+- Defer to a follow-up micro-slice(T2.3.b1/T2.3.e candidate)rather than expanding implementation after a clean review pass。
+
+Archive readiness:
+- Blueprint status now `implemented`。
+- Step 4.9 should move this blueprint pair from `workflow/blueprints/active/` to `workflow/blueprints/archive/` with no content changes。

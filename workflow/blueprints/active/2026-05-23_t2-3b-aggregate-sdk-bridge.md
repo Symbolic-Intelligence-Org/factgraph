@@ -1,8 +1,8 @@
 # T2.3b — Aggregate SDK ergonomic + bridge support over T2.3a substrate
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+- Last Updated: 2026-05-23 (Step 4.8 implemented closure)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + SDK ergonomic user-facing pattern (`agg_sum`, etc.)
@@ -743,4 +743,62 @@ Per Step 4.2 v1 P4 — SDK docs MUST update because public SDK surface is added:
 
 ## 10. Outcome / Deviations
 
-- Pending。
+Implemented on `v0.2.0-impl-t2-3b-aggregate-sdk-bridge-2026-05-23`.
+
+### 10.1 Landed Commits
+
+| Commit | Purpose |
+|---|---|
+| `99729ca5` | Recorded G7 precondition results before implementation;all 6 checks passed |
+| `13f79337` | Scoped amendment:wire bridge validation gate via `validate_where_ast(...)` |
+| `94045e54` | Implementation:SDK aggregate helpers + bridge support + docs + tests |
+
+### 10.2 Code And Docs Landed
+
+- Added internal `_AggregateRef` plus public `factgraph.sdk.dsl` helpers:
+  `agg_count`, `agg_sum`, `agg_min`, `agg_max`, `agg_mean`。
+- Added DSL lowering for aggregate operands in comparisons,including:
+  - target `AttrRef` lowering through temp vars
+  - target self-ensure for record vars not bound by the aggregate filter
+  - filter-local binding isolation via `filter_bindings = dict(outer_bindings)`
+  - no duplicate `EntityType:exists` predicates when filters already bind the target record var
+- Extended `build_application_rule(...)` to:
+  - reject legacy aggregate target/filter forms recursively
+  - collect and canonicalize `AggregateAtom` terms
+  - run `validate_where_ast(..., initial_bound_vars=<port tokens>)` before `ApplicationRule` construction
+- Re-exported the 5 helpers from `factgraph.sdk.dsl` only;top-level `factgraph.sdk` remains unchanged。
+- Updated:
+  - `src/factgraph/application/docs/rule.md`
+  - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
+  - `src/factgraph/sdk/docs/04_api_surface.en.md`
+- Added `tests/sdk/dsl/test_aggregate_ergonomic.py` with 10 focused tests。
+
+### 10.3 Verification
+
+- `PYTHONPATH=src python -m unittest tests.sdk.dsl.test_aggregate_ergonomic`
+  - 10 tests passed。
+- Cross-slice relevant suite:
+  - `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.sdk.dsl.test_application_rule tests.sdk.dsl.test_existsatom_getattr tests.sdk.dsl.test_aggregate_ergonomic tests.test_souffle_witness_where_compile_v1 tests.test_problog_export tests.test_problog_engine_eval tests.test_capability_helpers_round_events tests.core.rules.test_aggregate_substrate tests.core.rules.test_aggregate_eval tests.application.protocol.test_rule_aggregate`
+  - 98 tests passed。
+- Reviewer Step 4.7 pass reran targeted and relevant scopes:
+  - 10 new aggregate tests passed。
+  - 58 directly relevant tests passed。
+  - Ruff clean on `src/factgraph/sdk/dsl/` and `tests/sdk/dsl/`。
+- A wider discovery run exposed 153 failures in unrelated `frontier` / `diagnose` / `localizer` areas. Reviewer verified T2.3b did not touch those paths;not part of this slice。
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`。
+- Unrelated dirty set remained preserved:4 modified files + 1 untracked directory。
+
+### 10.4 Deviations / Follow-ups
+
+- **Scoped amendment**:`13f79337` added a bridge validation gate after implementation-time source review found the scoped blueprint assumed `build_application_rule(...)` already called `validate_where_ast(...)`。The amendment landed before the feature commit,with blueprint + audit updated first。
+- **Port vars as validator initial bound vars**:implementation passes SDK port LogicVar tokens to `validate_where_ast(..., initial_bound_vars=...)`。This preserves existing application-rule bridge arithmetic/input-port behavior while downstream `ApplicationRule.__post_init__` still rejects aggregate-local port leakage。
+- **Accepted Step 4.7 nit as deferral**:`_lower_compare_with_aggregate` currently supports Var/Const/non-DSL terms on the non-aggregate side,but does not support AttrRef or BinaryExpr on that side because it uses `lower_term(..., in_where=True)` there。Examples such as `Order(o).amount == agg_count(...)` and `(n + 1) == agg_count(...)` fail loudly with `SDKDSLError`。This was not in §7 acceptance and parent examples use `Var == aggregate` form,so it is deferred to a follow-up micro-slice(T2.3.b1/T2.3.e candidate)rather than expanded after clean Step 4.7 review。
+- **Adapter wires remain deferred**:
+  - Souffle aggregate projection: T2.3.c
+  - ProbLog aggregate projection: T2.3.d
+  - PyReason aggregate projection:out of scope
+
+### 10.5 Archive Readiness
+
+All scoped acceptance items are satisfied or explicitly deferred above. The
+blueprint pair is ready for Step 4.9 archive after this closure commit。
