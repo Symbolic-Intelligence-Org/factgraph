@@ -285,3 +285,16 @@ Ran on branch `v0.2.0-impl-t2-3b-aggregate-sdk-bridge-2026-05-23` before code ed
 | 6. Naming + export collision | PASS | `agg_*` names absent from SDK; `Not` / `Pred` are exported through `factgraph.sdk.dsl.__init__`, confirming helper export precedent. Top-level `factgraph.sdk` currently imports selected DSL helpers explicitly; T2.3b remains scoped to `factgraph.sdk.dsl` export only. |
 
 **Decision**:No G7 failure, no M-class escalation, and no blueprint amendment needed before implementation.
+
+### 2026-05-23 — Pre-implementation amendment:bridge validation gate
+
+Implementation-time source review found one scoped-blueprint assumption was false:the blueprint said SDK aggregate IR would flow through `validate_where_ast(...)` before `ApplicationRule`,but shipped `build_application_rule` currently does only `lower_where(...)` → `parse_where_ir_to_ast(...)` → `_canonicalize_vars(...)` → `ApplicationRule(...)`。
+
+Without an explicit validator call in the bridge, `_AggregateRef` could bypass T2.3a `where_ast_validate.py` checks for filter restrictions, scoping, target binding, and numeric target type。Application Rule defense-in-depth covers some shape / port checks, but not the full T2.3a validator contract。
+
+**Amendment**:
+- Add `validate_where_ast(where_expr, mode="python", capabilities={"allow_ruleref": False})` to `build_application_rule` after parse/canonicalization.
+- Catch `WhereASTValidationError` and wrap it as `DSLToApplicationRuleError` alongside existing `SDKDSLError` / `WhereASTError` handling.
+- Keep this within T2.3b scope:it wires an already-shipped validator into the SDK bridge so `_AggregateRef` cannot bypass T2.3a validation;no new validation semantics are introduced.
+
+Blueprint updated before code implementation per scoped-amendment discipline。Status remains `scoped`。

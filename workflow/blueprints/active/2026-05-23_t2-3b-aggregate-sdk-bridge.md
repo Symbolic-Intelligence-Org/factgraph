@@ -412,12 +412,12 @@ Per §2.1 — frozen dataclass with 5-op comparison dunders。Underscore prefix 
 **Does NOT bypass T2.3a validation**(per user Step 4.2 review focus area 2):
 
 - `_AggregateRef` only carries DSL atoms in `filter` and DSL Term in `target`。It does NOT run any validation。
-- All validation happens when IR reaches `parse_where_ir_to_ast` → `validate_where_ast` → application Rule `__post_init__`(all T2.3a layers)。
+- All validation happens when IR reaches `parse_where_ir_to_ast` → **`validate_where_ast` added to `build_application_rule` by T2.3b** → application Rule `__post_init__`(all T2.3a layers)。
 - Construct time:`agg_sum(target, where=[...])` returns `_AggregateRef` no questions asked。
 - Validation time:`build_application_rule(..., where=[..., agg_sum(target, where=[...]) compared, ...], ...)`triggers:
   - `lower_where` → IR tuples(T2.3b lowering)
   - `parse_where_ir_to_ast` → core AST(T2.3a)
-  - `validate_where_ast` → C100 filter restrictions / C104 scoping / P2 target binding / C102 numeric construct(T2.3a)
+  - `validate_where_ast`(wired into the bridge by T2.3b) → C100 filter restrictions / C104 scoping / P2 target binding / C102 numeric construct(T2.3a)
   - `application Rule.__post_init__` → two-pass var collection + serialization(T2.3a)
   - **All T2.3a invariants enforced through this path**
 
@@ -575,6 +575,19 @@ def _lower_compare_with_aggregate(expr, bindings, *, temp_seq) -> list:
 
 Per §2.4 — extend both functions for `AggregateAtom` Term-position。
 
+**Validation gate amendment(pre-implementation discovery)**:
+
+Shipped `build_application_rule` currently parses SDK-lowered IR via `parse_where_ir_to_ast(...)` but does **not** call `validate_where_ast(...)` before constructing `ApplicationRule`。The scoped blueprint assumed that validator was already in the bridge chain;implementation-time source review showed that assumption was false。
+
+T2.3b therefore also adds a bridge validation call:
+
+```python
+where_expr = _canonicalize_vars(parse_where_ir_to_ast(where_ir))
+validate_where_ast(where_expr, mode="python", capabilities={"allow_ruleref": False})
+```
+
+and catches `WhereASTValidationError` alongside `WhereASTError` / `SDKDSLError`,wrapping it as `DSLToApplicationRuleError`。This wires the already-shipped T2.3a validator into the SDK bridge so `_AggregateRef` cannot bypass T2.3a validation。
+
 **Var collection — ALL vars within aggregate Term collected here(target + filter)**。Rationale documented in §2.4:bridge is upstream;T2.3a application Rule's Pass 2 filters out aggregate-local-only vars before ports validation。Bridge over-collecting is safe and consistent with defense-in-depth。
 
 **Canonicalization — recursive into AggregateAtom**:target term + filter atoms。Preserves Var name unification across outer / aggregate scopes(per T1.2 baseline pattern)。
@@ -681,6 +694,7 @@ Per Track plan §1.2.4,T2.3b would upgrade S → M if any of these triggers fire
 - [ ] **Filter bindings isolation**(per Step 4.2 v1 P2):`Order(o)` introduced in aggregate filter does NOT make subsequent outer `Order(o).field == ...` legal;outer atom must independently bind `o`
 - [ ] **Legacy rejection in aggregate filter / target**(per Step 4.2 v1 P3):`agg_count(where=[Pred("user:exists", "$u")])` and `agg_sum(target_with_bare_attrref, where=[...])` and `agg_*(where=[RuleRefAtom(...)])` all reject via bridge `_reject_legacy_aggregate_ref` — T1.2 hard-cut policy preserved through SDK aggregate path
 - [ ] **T2.3a validation triggers via SDK path**:invalid aggregate via SDK helper raises `AggregateValidationError` / `AggregateVariableScopeError` from T2.3a validator(filter restrictions / scoping / target binding / numeric construct)
+- [ ] **Bridge validation gate wired**:`build_application_rule` calls `validate_where_ast(..., mode="python", capabilities={"allow_ruleref": False})` after parsing/canonicalization and wraps `WhereASTValidationError` as `DSLToApplicationRuleError`
 - [ ] **Application Rule two-pass isolation still works**:filter-local-only var in SDK-authored aggregate does NOT enter ports validation set via bridge over-collection
 - [ ] **`src/factgraph/sdk/docs/04_api_surface.en.md` extended**(per Step 4.2 v1 P4):5 `agg_*` helpers listed in public surface table alongside `Pred` / `Not`;adapter status note added
 - [ ] **`src/factgraph/sdk/docs/03_rules_and_inferences.en.md` extended**:aggregate usage section with end-to-end example + per-env semantics + filter restrictions + scoping + NoValue + adapter status
@@ -699,9 +713,10 @@ Per Track plan §1.2.4,T2.3b would upgrade S → M if any of these triggers fire
 2. **SDK ergonomic layer**:add `_AggregateRef` class + 5 `agg_*` helpers to `sdk/dsl/expr.py`(reuse `Not`/`Pred` pattern)。
 3. **DSL → IR lowering**:add `_lower_aggregate_ref` + extend `_lower_compare` to handle `_AggregateRef` operand。
 4. **Bridge layer**:extend `_collect_vars_from_term` + `_canonicalize_term` in `application_rule.py` for `AggregateAtom` Term-position。
-5. **SDK __init__ re-export**:add 5 helpers to `factgraph.sdk.dsl.__init__.py` `__all__`(following `Not`/`Pred` precedent)。
-6. **Docs**:extend `application/docs/rule.md` with SDK aggregate usage section + adapter status table。
-7. **Tests**:add new test file(or extend existing T2.3a tests):
+5. **Bridge validation gate**:call `validate_where_ast` in `build_application_rule` after parse/canonicalize and wrap `WhereASTValidationError` as `DSLToApplicationRuleError`。
+6. **SDK __init__ re-export**:add 5 helpers to `factgraph.sdk.dsl.__init__.py` `__all__`(following `Not`/`Pred` precedent)。
+7. **Docs**:extend `application/docs/rule.md` with SDK aggregate usage section + adapter status table。
+8. **Tests**:add new test file(or extend existing T2.3a tests):
    - `_AggregateRef` construction + dunders produce CompareExpr correctly
    - 5 helper functions return `_AggregateRef` with correct shape
    - DSL → IR lowering produces correct tuple shape
@@ -710,11 +725,11 @@ Per Track plan §1.2.4,T2.3b would upgrade S → M if any of these triggers fire
    - Invalid scoping triggers T2.3a `AggregateVariableScopeError`(filter-local leak)
    - Filter-local-only var in SDK-authored aggregate NOT in ports
    - End-to-end Python eval gives correct per-env aggregate result(use T2.3a per-env correlated test pattern adapted to SDK)
-8. **Run gates**:
+9. **Run gates**:
    - `PYTHONPATH=src python -m unittest tests.sdk.dsl.test_aggregate_ergonomic tests.sdk.dsl.test_application_rule tests.application.protocol.test_rule_aggregate tests.core.rules.test_aggregate_eval`
    - Cross-slice non-regression
    - `python -m ruff check src/factgraph/sdk/dsl/ tests/sdk/dsl/`
-9. **Fill §10 Outcome** with exact LOC,test outcomes,deviations,follow-up sketch(T2.3.c Souffle / T2.3.d ProbLog)。
+10. **Fill §10 Outcome** with exact LOC,test outcomes,deviations,follow-up sketch(T2.3.c Souffle / T2.3.d ProbLog)。
 
 ## 9. Docs To Update
 
