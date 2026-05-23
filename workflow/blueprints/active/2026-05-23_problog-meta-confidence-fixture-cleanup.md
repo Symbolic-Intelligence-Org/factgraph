@@ -92,7 +92,7 @@ Reference tests already prove the canonical accepted path:
 
 - `tests/test_write_protocol_annotations.py:189-218` verifies `meta={"raw_kind": "probabilistic", "bound": [0.2, 0.8]}` is projected to shared semantic annotations and meta rows.
 - `tests/test_write_protocol_annotations.py:220-232` verifies integer bounds normalize to floats.
-- `tests/test_sdk_assertion_record_set.py:189-216` verifies SDK metadata filtering over `raw_kind` and `bound`.
+- `tests/test_write_protocol_annotations.py:238-315` verifies paired-field requirements, raw-kind validation, and bound validation.
 
 ### 4.2 G2/G3 — Stale ProbLog export fixtures
 
@@ -135,7 +135,7 @@ Before implementation, verify:
 1. `tests/test_problog_export.py` has exactly two removed `meta[confidence]` fixture input sites.
 2. `tests/test_problog_engine_eval.py` has exactly two removed `meta[confidence]` fixture input sites.
 3. `write_protocol.py` still rejects removed `confidence` and accepts paired `raw_kind` / `bound`.
-4. Existing canonical `raw_kind` / `bound` tests still pass.
+4. Existing `tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane` canonical `raw_kind` / `bound` tests still pass.
 
 If any check fails, amend this blueprint before code changes.
 
@@ -154,7 +154,7 @@ If any check fails, amend this blueprint before code changes.
 - [ ] `PYTHONPATH=src python -m unittest tests.test_problog_export` passes fully.
 - [ ] `PYTHONPATH=src python -m unittest tests.test_problog_engine_eval` passes fully, or any new unrelated baseline is documented in §10 with evidence.
 - [ ] `PYTHONPATH=src python -m unittest tests.test_problog_export tests.test_problog_engine_eval` passes fully, or any new unrelated baseline is documented in §10 with evidence.
-- [ ] `PYTHONPATH=src python -m unittest tests.test_write_protocol_annotations tests.test_sdk_assertion_record_set` keeps passing the canonical metadata reference tests.
+- [ ] `PYTHONPATH=src python -m unittest tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane` keeps passing the canonical metadata reference tests.
 - [ ] `python -m ruff check tests/test_problog_export.py tests/test_problog_engine_eval.py` passes.
 - [ ] No production source files are changed.
 

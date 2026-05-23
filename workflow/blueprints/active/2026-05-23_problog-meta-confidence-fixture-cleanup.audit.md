@@ -39,3 +39,12 @@
 - G5: Expected deviation count is zero; new unrelated baselines must be documented in §10 rather than fixed opportunistically.
 - G6: Reviewer should independently verify removed fixture site completeness and `write_protocol.py` enforcement truth.
 - G7: Blueprint §5.4 defines pre-impl precondition checks that must run before fixture edits.
+
+### 2026-05-23 — G7 precondition result
+
+- Precondition checks ran before fixture edits.
+- `tests/test_problog_export.py` has exactly 2 removed `meta[confidence]` fixture input sites.
+- `tests/test_problog_engine_eval.py` has exactly 2 removed `meta[confidence]` fixture input sites.
+- Direct `_normalize_meta(...)` smoke confirms `confidence` / `confidence_source` are rejected and paired `raw_kind` / `bound` normalizes to floats.
+- `PYTHONPATH=src python -m unittest tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane` passes, 6 tests.
+- G7 calibration: the original blueprint precondition named the broader `tests.test_sdk_assertion_record_set` reference gate, but that module has an unrelated `snap.field(...).active.where` baseline and is not a valid precondition for this test-only ProbLog fixture cleanup. Blueprint §4 / §5.4 / §7 were tightened to use the write-protocol raw uncertainty lane directly.
