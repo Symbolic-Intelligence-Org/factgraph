@@ -25,10 +25,24 @@ from .error_codes import (
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
+from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry
-from .dsl import Branch, Inference, Not, Pred, Query, Rule, RuleRef, SDKDSLError, vars
+from .dsl import (
+    Branch,
+    DSLToApplicationRuleError,
+    Inference,
+    Not,
+    Pred,
+    Query,
+    Rule,
+    RuleRef,
+    SDKDSLError,
+    build_application_rule,
+    vars,
+)
+from .dsl import Rule as LegacyRule
 from .ingest import IngestResult, ValidationReport
 
 __all__ = [
@@ -62,12 +76,16 @@ __all__ = [
     "Database",
     "MetaEntry",
     "Rule",
+    "LegacyRule",
+    "ApplicationRule",
     "RuleRef",
     "Inference",
     "Query",
     "Pred",
     "Not",
     "vars",
+    "build_application_rule",
+    "DSLToApplicationRuleError",
     "FactGraph",
     "SDKStore",
     "build_authoring_schema_from_classes",

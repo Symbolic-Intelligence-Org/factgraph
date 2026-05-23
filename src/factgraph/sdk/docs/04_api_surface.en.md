@@ -88,7 +88,9 @@ class-first constructor name and does not accept workspace `path=`.
 | Symbol | Purpose |
 |---|---|
 | `Branch` | Rule `where` branch constructor (alternative conjunction) |
-| `Rule` | Declarative rule (head + body) |
+| `Rule` | Legacy-compatible declarative rule (head + body); final top-level `Rule` replacement is deferred to the later legacy hard-cut |
+| `LegacyRule` | Explicit alias for the current legacy `Rule` |
+| `ApplicationRule` | Transitional explicit alias for `factgraph.application.protocol.Rule` |
 | `RuleRef` | Where-clause reference to an exposed rule |
 | `Inference` | Multi-rule inference envelope |
 | `SchemaAddResult` | Result returned by additive `fg.schema.add(...)`; fields are `old_digest`, `new_digest`, `added_entities`, `added_fields` |
@@ -96,10 +98,13 @@ class-first constructor name and does not accept workspace `path=`.
 | `Pred` | Predicate literal (fact reference) |
 | `Not` | Negation operator for body literals |
 | `vars` | Logic-variable factory for rule construction |
+| `build_application_rule` | Build an `ApplicationRule` from SDK DSL conditions |
+| `DSLToApplicationRuleError` | Raised when SDK DSL conditions cannot lower to an `ApplicationRule` |
 | `SDKDSLError` | Raised on DSL construction errors |
 
 The application Rule bridge additionally exposes aggregate helpers from
-`factgraph.sdk.dsl` only:
+`factgraph.sdk.dsl` only. `build_application_rule` is available from both
+top-level `factgraph.sdk` and `factgraph.sdk.dsl`:
 
 | Symbol | Purpose |
 |---|---|
@@ -110,7 +115,8 @@ The application Rule bridge additionally exposes aggregate helpers from
 | `agg_mean(target, where=[...])` | Mean numeric target value over matching filter rows |
 
 These helpers are not re-exported from top-level `factgraph.sdk` in this slice.
-Use `from factgraph.sdk.dsl import agg_sum, build_application_rule`.
+Use `from factgraph.sdk import build_application_rule` and
+`from factgraph.sdk.dsl import agg_sum`.
 
 ### 1.3 Schema compile helpers
 

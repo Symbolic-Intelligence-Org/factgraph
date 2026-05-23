@@ -158,7 +158,8 @@ Aggregate helpers are available from `factgraph.sdk.dsl` for
 `build_application_rule(...)`:
 
 ```python
-from factgraph.sdk.dsl import agg_sum, build_application_rule, vars
+from factgraph.sdk import build_application_rule, vars
+from factgraph.sdk.dsl import agg_sum
 
 with vars("u", "o", "total") as (u, o, total):
     rule = build_application_rule(
