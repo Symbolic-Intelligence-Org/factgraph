@@ -97,3 +97,50 @@ SDK DSL `expr.py` extension is additive(new class + new helpers + new lowering b
 Adapter dispatch unchanged:Souffle / ProbLog aggregate aware path NOT introduced in T2.3b。Verified by §7 acceptance scope diff。
 
 **Blueprint stays `Status: draft`** pending user Step 4.2 review。
+
+### 2026-05-23 — Step 4.2 v1 tightening applied (P1+P2+P3+P4)
+
+User Step 4.2 review surfaced 4 findings:1 Blocker(P1)+ 3 Required(P2/P3/P4)。All applied。
+
+**P1 (Blocker) — `agg_sum(Order(o).amount, ...)` target AttrRef lowering**:
+Blueprint §2.3 / §5.3 said target goes through `lower_term`,but shipped `lower_term` raises "AttrRef must appear in a comparison" for AttrRef in where term position(`expr.py:484`)。Parent essay main example would fail。
+
+**Adopted**:add `_lower_aggregate_target` helper that handles AttrRef target by allocating aggregate-filter-local temp var + injecting field pred into filter IR。Other target types(Var / Const / None)lower normally。Example:
+
+```python
+# agg_sum(Order(o).amount, where=[Order(o).buyer == u])
+# becomes:
+("sum",
+ "$_agg1",          # temp var for Order.amount
+ [("pred", "Order:exists", ["$o"]),
+  ("pred", "order:buyer", ["$o", "$u"]),
+  ("pred", "order:amount", ["$o", "$_agg1"])])
+```
+
+§2.3 + §5.3 rewritten。§7 acceptance adds explicit "Target AttrRef lowering test" + "Bare AttrRef target reject" tests。
+
+**P2 (Required) — Aggregate filter lowering bindings isolation**:
+§5.3 pseudocode reused outer `bindings` for filter atom lowering。Filter-local entity bindings would leak to outer scope。
+
+**Adopted**:`filter_bindings = dict(outer_bindings)` — copy correlated outer bindings IN,but filter-local bindings DON'T write back。Matches T2.3a validator's C104 scoping semantics at lowering layer。§5.3 `_lower_aggregate_ref` explicit。§7 acceptance adds "Filter bindings isolation" test:`Order(o)` in filter does NOT make subsequent outer `Order(o).field == ...` legal。
+
+**P3 (Required) — `_AggregateRef.filter` bypasses T1.2 legacy rejection**:
+`build_application_rule._reject_legacy_where`(`application_rule.py:81-117`)recurses into top-level CompareExpr / NotExpr but NOT into future `_AggregateRef.filter` or `.target`。`agg_count(where=[Pred("user:exists", "$u")])` would bypass T1.2 hard-cut。
+
+**Adopted**:add §2.3b "Legacy rejection extension for `_AggregateRef`"。Extend `_reject_legacy_compare` to detect `_AggregateRef` operand;add `_reject_legacy_aggregate_ref` recursing into target + filter via existing `_reject_legacy_where`。T1.2 hard-cut policy preserved through SDK aggregate path。§7 acceptance adds "Legacy rejection in aggregate filter / target" test。
+
+**P4 (Required) — Public SDK surface docs不能只落 `application/docs/rule.md`**:
+Blueprint §2.5 / §5.5 / §9 only updated `application/docs/rule.md`。But T2.3b adds public SDK DSL helpers + re-export to `factgraph.sdk.dsl`。SDK docs(`sdk/docs/03_rules_and_inferences.en.md` + `04_api_surface.en.md`)current truth is at SDK layer for user-facing API。
+
+**Adopted**:§2.5 + §5.5 + §9 rewritten to update all 3 doc layers:
+- `sdk/docs/04_api_surface.en.md`:add 5 `agg_*` helpers to public surface table alongside existing `Pred` / `Not`(line 96-97)+ adapter status note in §7 "What's Not in the SDK" or new sub-section
+- `sdk/docs/03_rules_and_inferences.en.md`:add aggregate usage section with end-to-end example + per-env semantics + filter restrictions + scoping + NoValue + adapter status
+- `application/docs/rule.md`:brief internal bridge note + cross-reference to SDK docs
+
+§3 Non-goals refined:`docs/official/kernel/quickstart/` external public quickstart still deferred(until adapter wires ship — quickstart should not promise functionality only Python eval can execute)。But **SDK-internal docs ARE updated** since SDK helpers ship in T2.3b。§7 acceptance adds 3 separate doc-update items(one per layer)。
+
+**Cross-slice impact unchanged**:T2.3a substrate still 0-touch;adapter files still 0-touch;T1.x / T2.1 / T2.2 / hygiene / fixture cleanup untouched。
+
+**Size estimate revised**:~470 LOC → ~520 LOC(SDK docs additions ~50 LOC + legacy rejection helper ~20 LOC + target AttrRef lowering helper ~30 LOC,offset by simplification of `_lower_aggregate_ref` filter handling)。Still S-class within budget。
+
+**Blueprint stays `Status: draft`** pending user re-approval of v1 tightening。

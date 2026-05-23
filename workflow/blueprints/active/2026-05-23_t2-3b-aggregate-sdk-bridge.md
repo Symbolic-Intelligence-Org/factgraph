@@ -129,22 +129,81 @@ def agg_mean(target: Any, *, where: list[Any]) -> _AggregateRef:
 - **Not promoted to `factgraph.sdk.__init__.py` `__all__` top-level**(per `feedback_narrow_public_api` — top-level `factgraph.sdk` exports should stay minimal;DSL helpers naturally live in `factgraph.sdk.dsl` sub-namespace)
 - This is **purely additive** — no rename / replacement of any existing API。**Does NOT trigger M-class decision per §1.2.4 trigger conditions**(verified in §5.6)
 
-### 2.3 C99 — DSL → IR lowering for `_AggregateRef`
+### 2.3 C99 — DSL → IR lowering for `_AggregateRef`(per Step 4.2 v1 P1 — target AttrRef handling + per Step 4.2 v1 P2 — filter bindings isolation)
 
-Add lowering branch in `lower_where_atom` or `_lower_compare`:
+Add lowering branch in `_lower_compare` (or `lower_where_atom`):
 
-- When user writes `Var("total") == agg_sum(target, where=[...])`,this produces `CompareExpr("eq", Var("total"), _AggregateRef(kind="sum", target=..., filter=[...]))`
+- When user writes `Var("total") == agg_sum(Order(o).amount, where=[Order(o).buyer == u])`,this produces `CompareExpr("eq", Var("total"), _AggregateRef(kind="sum", target=AttrRef(o, "amount", entity_type="Order"), filter=[...]))`
 - Lowering recognizes `_AggregateRef` as Term-position value
-- Recursively lowers `target` + `filter` atoms via existing `lower_term` / `lower_where_atom` paths
-- Emits IR tuple shape `(kind_str, target_lowered, filter_ir_list)` as Term-position value within outer CmpAtom IR tuple
+- **Target AttrRef requires special lowering**(per Step 4.2 v1 P1):shipped `lower_term`(`expr.py:484`)raises "AttrRef must appear in a comparison" for AttrRef in where term position。Aggregate target is NOT a comparison context,so vanilla `lower_term` fails。Solution:**allocate aggregate-filter-local temp var + inject field predicate into filter**:
+  ```python
+  # For target = AttrRef(record_var=o, field_name="amount", entity_type="Order"):
+  # 1. Allocate temp Var token: $_agg<N> via temp_seq
+  # 2. Emit field pred ("pred", "order:amount", [record_token, tmp_var_token]) appended to filter IR
+  # 3. Aggregate target_lowered = tmp_var_token (the temp Var)
+  ```
+- **Target Var / Const / None lower normally**(no temp var injection)— Var via `.token`,Const via `lower_term`,None for `count`
+- **Filter atom lowering uses ISOLATED bindings**(per Step 4.2 v1 P2):`filter_bindings = dict(outer_bindings)` — correlated outer vars are visible(read),but filter-local entity bindings DON'T write back to outer scope。This matches T2.3a validator's C104 scoping semantics at lowering layer。
 
 **Result**:final IR tuple for the example is
 
 ```python
-("eq", "$total", ("sum", ("attr_ref", "$o", "amount"), [...filter IR...]))
+# agg_sum(Order(o).amount, where=[Order(o).buyer == u])
+# becomes:
+("eq",
+ "$total",
+ ("sum",
+  "$_agg1",          # temp var for Order.amount field
+  [("pred", "Order:exists", ["$o"]),
+   ("pred", "order:buyer", ["$o", "$u"]),
+   ("pred", "order:amount", ["$o", "$_agg1"]),   # injected for target AttrRef
+   ]))
 ```
 
-`parse_where_ir_to_ast` then parses the inner `("sum", ...)` tuple as `AggregateAtom` per T2.3a `_parse_aggregate_term`(`where_ast.py:241+`)。
+`parse_where_ir_to_ast` then parses the inner `("sum", ...)` tuple as `AggregateAtom` per T2.3a `_parse_aggregate_term`(`where_ast.py:241+`)。Target Var is the injected temp var;filter contains the field pred that binds it。**Per-env evaluator(T2.3a)** computes `$_agg1` for each matching `$o`,sums them up — correct behavior。
+
+### 2.3b Legacy rejection extension for `_AggregateRef`(per Step 4.2 v1 P3)
+
+`build_application_rule` currently calls `_reject_legacy_where`(`application_rule.py:81-117`)which rejects raw `Pred(...)` / `RuleRefAtom` / bare AttrRef compare in top-level CompareExpr / NotExpr。**It does NOT recurse into `_AggregateRef.filter` or `.target`** — so `agg_count(where=[Pred("user:exists", "$u")])` would bypass T1.2 hard-cut and let raw `Pred` reach core IR(where T2.3a validator accepts it as legal core atom)。
+
+**Adopted**:extend legacy rejection chain to handle `_AggregateRef`:
+
+```python
+# application_rule.py — extension to existing _reject_legacy_atom
+def _reject_legacy_atom(atom, *, path):
+    # ... existing branches (DSLPredAtom / DSLRuleRefAtom / AttrRef / CompareExpr / NotExpr) ...
+    if isinstance(atom, CompareExpr):
+        _reject_legacy_compare(atom, path=path)
+        return
+    # NEW: _AggregateRef Term-position via CompareExpr operand
+    # (entered via _reject_legacy_compare extension below)
+
+
+def _reject_legacy_compare(expr, *, path):
+    # ... existing legacy AttrRef check ...
+    # NEW: recurse into _AggregateRef operand
+    for side_name, value in (("left", expr.left), ("right", expr.right)):
+        if isinstance(value, _AggregateRef):
+            _reject_legacy_aggregate_ref(value, path=f"{path}.{side_name}")
+
+
+def _reject_legacy_aggregate_ref(ref, *, path):
+    """Recursively reject legacy SDK DSL forms within _AggregateRef target + filter."""
+    # Target: if AttrRef, must have entity_type (unified syntax);if bare AttrRef → reject per legacy
+    if isinstance(ref.target, AttrRef) and ref.target.entity_type is None:
+        raise DSLToApplicationRuleError(
+            f"{path}.target: legacy bare AttrRef is not allowed in aggregate target; "
+            "use Entity(var).field via unified syntax"
+        )
+    if isinstance(ref.target, (DSLPredAtom, DSLRuleRefAtom)):
+        raise DSLToApplicationRuleError(
+            f"{path}.target: raw {type(ref.target).__name__} is not allowed in aggregate target"
+        )
+    # Filter: recurse via existing _reject_legacy_where
+    _reject_legacy_where(ref.filter, path=f"{path}.filter")
+```
+
+**Result**:`agg_count(where=[Pred("user:exists", "$u")])` → bridge rejects construct-time with clear path `.where[N].right.filter[0]`(or similar)before reaching IR lowering or T2.3a validator。**T1.2 hard-cut policy preserved through SDK aggregate path**。
 
 ### 2.4 Bridge support — `_collect_vars_from_term` + `_canonicalize_vars` aggregate-aware
 
@@ -203,11 +262,42 @@ def _canonicalize_term(term, vars_by_name):
 - T2.3a application Rule two-pass independently isolates filter-local-only vars from ports
 - Bridge collecting ALL aggregate Vars is **safe** because application Rule's downstream Pass 2 filters them
 
-### 2.5 Public docs — SDK aggregate usage + adapter status
+### 2.5 Public docs — SDK aggregate usage + adapter status(per Step 4.2 v1 P4 — SDK docs added)
 
-Extend `src/factgraph/application/docs/rule.md`:
+T2.3b 添加 public SDK DSL helpers + re-export 到 `factgraph.sdk.dsl`;**public docs 必须落 SDK 层,不只 application 层**(per Step 4.2 v1 P4 boundary correction)。
 
-- **End-to-end aggregate usage example** showing user-facing pattern:
+Update set:
+
+**(a) `src/factgraph/sdk/docs/04_api_surface.en.md`** — primary SDK public surface table。Existing entries(line 96-97):
+
+```
+| `Pred` | Predicate literal (fact reference) |
+| `Not`  | Negation operator for body literals |
+```
+
+Add 5 new entries:
+
+```
+| `agg_count(*, where)`       | Aggregate count of rows matching filter, per outer env |
+| `agg_sum(target, *, where)` | Aggregate sum of target values per outer env |
+| `agg_min(target, *, where)` | Aggregate min per outer env |
+| `agg_max(target, *, where)` | Aggregate max per outer env |
+| `agg_mean(target, *, where)`| Aggregate mean per outer env |
+```
+
+Plus adapter status note in §7 "What's Not in the SDK"(line 559+)or new "Aggregate execution status" sub-section:
+
+```
+- Python evaluator supports aggregate execution per outer env (T2.3a).
+- Souffle aggregate body wire NOT YET LANDED (deferred to T2.3.c).
+- ProbLog findall/list predicates wire NOT YET LANDED (deferred to T2.3.d).
+- PyReason aggregate OUT OF SCOPE (parent essay §8.4 / C95).
+```
+
+**(b) `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`** — user-facing rule authoring docs。Add aggregate usage section showing:
+
+- 5 `agg_*` helpers with parameter shape
+- End-to-end example:
   ```python
   with vars("u", "o", "total") as (u, o, total):
       rule = build_application_rule(
@@ -220,12 +310,25 @@ Extend `src/factgraph/application/docs/rule.md`:
           ports={"user": u},
       )
   ```
-- **Adapter status explicit**(per user Step 4.2 review focus area 4):
-  - "Python evaluator supports aggregate execution per env(T2.3a)"
-  - "Souffle aggregate body wire **NOT YET LANDED**(deferred to T2.3.c)"
-  - "ProbLog `findall/3` + list predicates wire **NOT YET LANDED**(deferred to T2.3.d)"
-  - "PyReason aggregate **OUT OF SCOPE**(parent essay §8.4 / C95)"
-- Note that **`_AggregateRef` is internal type**;user code uses `agg_*` helpers,not direct construction
+- Per-env semantics(C104):aggregate computed per outer env binding
+- Filter atom kinds allowed(per C100 — pred / eq / ne / gt / ge / lt / le / in / not subset)
+- Filter-local var scoping(per C104)— filter introduces vars that don't leak to outer
+- `AggregateNoValue` propagation behavior(per C101)
+- Adapter execution status table — same as 04_api_surface or cross-reference it
+
+**(c) `src/factgraph/application/docs/rule.md`** — internal application bridge note。Add **brief** note that:
+
+- AggregateAtom Term-position is accepted by application Rule construction
+- `_AggregateRef` is internal SDK type;users go through `agg_*` helpers
+- Cross-reference to SDK docs(03 + 04)for user-facing usage
+
+**Layering rationale**(per Step 4.2 v1 P4):
+
+- `sdk/docs/04_api_surface.en.md` = public API surface contract(verbatim what's exported);MUST include `agg_*`
+- `sdk/docs/03_rules_and_inferences.en.md` = user-facing authoring tutorial;MUST include aggregate usage
+- `application/docs/rule.md` = internal contract for application Rule consumers(non-SDK callers);brief note + cross-ref to SDK docs
+
+**Adapter status table appears in ALL THREE**(per user focus area 4 — every doc layer that mentions aggregate must state adapter limitation)。
 
 ### 2.6 G7 pre-impl precondition checks
 
@@ -243,7 +346,7 @@ Per user Step 4.2 review focus area 5:**G7 must verify SDK aggregate IR can be p
 - **No PyReason aggregate support**(parent essay §8.4 / C95 explicit)
 - **No SDK top-level `__all__` promotion**(`agg_*` helpers go in `factgraph.sdk.dsl` namespace,not `factgraph.sdk` top-level — per narrow_public_api)
 - **No M-class decision doc**(no load-bearing decision triggered;naming follows parent essay verbatim,export policy follows existing `Not`/`Pred` precedent)
-- **No SDK Quickstart user-facing docs**(application/docs/rule.md is the appropriate landing layer per T1.1 / T2.3a precedent;wider user-facing quickstart deferred until adapter wires ship)
+- **No `docs/official/kernel/quickstart/` external public quickstart docs change**(per Step 4.2 v1 P4 boundary refinement):**SDK-internal docs(`sdk/docs/03_rules_and_inferences.en.md` + `sdk/docs/04_api_surface.en.md`)ARE updated** in T2.3b because public SDK helpers ship。 Wider external quickstart(`docs/official/kernel/quickstart/`)deferred until adapter wires ship — user-facing quickstart should not promise functionality that only Python eval can execute
 
 ## 4. Current Context
 
@@ -327,32 +430,93 @@ Per §2.2 — 5 `agg_*` helpers exposed at `factgraph.sdk.dsl.expr` + re-exporte
 - `Not(body)` precedent in same file — same pattern
 - NOT in `factgraph.sdk` top-level `__all__` — narrow_public_api keeps top-level minimal
 
-### 5.3 DSL → IR lowering
+### 5.3 DSL → IR lowering (Step 4.2 v1 P1 + P2 corrections)
 
-Per §2.3 — new branch in lowering chain。
-
-Existing `_lower_compare`(`expr.py:357+`)handles `CompareExpr` containing AttrRef / Var / Const operands。Extend to handle `_AggregateRef` operand:
+Per §2.3 — new branch in lowering chain with **target AttrRef handling** + **filter bindings isolation**:
 
 ```python
 def _lower_compare(expr: CompareExpr, bindings, *, temp_seq) -> list:
-    # ... existing AttrRef / Var / Const handling ...
+    # ... existing AttrRef-AttrRef / AttrRef-Other / arith branches ...
 
     # NEW: aggregate operand handling
     if isinstance(expr.left, _AggregateRef) or isinstance(expr.right, _AggregateRef):
-        # Lower aggregate Term to IR tuple recursively
-        # Then emit outer CmpAtom IR tuple with aggregate tuple as Term value
         return _lower_compare_with_aggregate(expr, bindings, temp_seq=temp_seq)
 
     # ... rest of existing logic ...
 
 
-def _lower_aggregate_ref(ref: _AggregateRef, bindings, *, temp_seq) -> tuple:
-    """Lower _AggregateRef to ('kind', target_lowered, filter_ir_list) tuple."""
-    target_lowered = _lower_term(ref.target, bindings) if ref.target else None
+def _lower_aggregate_target(
+    target: Any,
+    filter_bindings: dict[LogicVar, str],
+    *,
+    temp_seq: Any,
+) -> tuple[Any, list[Any]]:
+    """Lower aggregate target. Returns (target_lowered, extra_filter_atoms).
+
+    For AttrRef target (per Step 4.2 v1 P1): allocates temp var token and
+    emits field pred into filter. Other target shapes lower via lower_term.
+
+    Returns:
+        target_lowered: IR term (token str / literal value / None)
+        extra_filter_atoms: list of additional IR atoms (e.g., field pred for
+            AttrRef target) to be appended to filter IR
+    """
+    if target is None:
+        return (None, [])
+    if isinstance(target, AttrRef):
+        # AttrRef target: cannot go through lower_term (raises "AttrRef must appear
+        # in comparison" at expr.py:484). Allocate temp var + emit field pred.
+        if target.entity_type is None:
+            raise SDKDSLError(
+                "aggregate target uses bare AttrRef; use Entity(var).field unified syntax"
+            )
+        record_var = target.record_var
+        if record_var not in filter_bindings:
+            raise SDKDSLError(
+                f"aggregate target AttrRef references unbound record var "
+                f"{record_var.token}; bind via Entity({record_var.token}) in filter or outer"
+            )
+        tmp_token = f"$_agg{next(temp_seq)}"
+        # Inject field pred into filter so per-env evaluator can resolve target value
+        # via the env binding produced by filter pred.
+        field_pred = (
+            "pred",
+            f"{target.entity_type.lower()}:{target.field_name}",
+            [record_var.token, tmp_token],
+        )
+        return (tmp_token, [field_pred])
+    # Var / Const / etc: lower normally
+    return (lower_term(target, in_where=True), [])
+
+
+def _lower_aggregate_ref(
+    ref: _AggregateRef,
+    outer_bindings: dict[LogicVar, str],
+    *,
+    temp_seq: Any,
+) -> tuple:
+    """Lower _AggregateRef to ('kind', target_lowered, filter_ir_list).
+
+    Per Step 4.2 v1 P2 bindings isolation: filter atoms see correlated outer
+    bindings (read), but filter-local bindings DO NOT leak back to outer.
+    """
+    # P2: copy outer bindings — filter mutations don't leak back
+    filter_bindings = dict(outer_bindings)
+
+    # P1: lower target (may emit extra filter atoms for AttrRef target)
+    target_lowered, extra_filter_atoms = _lower_aggregate_target(
+        ref.target, filter_bindings, temp_seq=temp_seq
+    )
+
+    # Lower filter atoms with isolated bindings
     filter_ir = []
     for atom in ref.filter:
-        # Reuse existing atom lowering(handles ExistsAtom / CompareExpr / etc)
-        filter_ir.extend(_lower_atom(atom, bindings, temp_seq=temp_seq))
+        filter_ir.extend(_lower_where_atom(atom, filter_bindings, temp_seq=temp_seq))
+
+    # Append target-derived field pred AFTER user-written filter atoms
+    # (parent atom binds entity first; field pred binds target value second)
+    filter_ir.extend(extra_filter_atoms)
+
     return (ref.kind, target_lowered, filter_ir)
 
 
@@ -361,18 +525,22 @@ def _lower_compare_with_aggregate(expr, bindings, *, temp_seq) -> list:
     if isinstance(expr.left, _AggregateRef):
         left_term = _lower_aggregate_ref(expr.left, bindings, temp_seq=temp_seq)
     else:
-        left_term = _lower_term(expr.left, bindings)
+        left_term = lower_term(expr.left, in_where=True)
 
     if isinstance(expr.right, _AggregateRef):
         right_term = _lower_aggregate_ref(expr.right, bindings, temp_seq=temp_seq)
     else:
-        right_term = _lower_term(expr.right, bindings)
+        right_term = lower_term(expr.right, in_where=True)
 
     # Emit outer CmpAtom IR
     return [(expr.op, left_term, right_term)]
 ```
 
-**Filter atom lowering**:reuses existing `_lower_atom` for `ExistsAtom` / `CompareExpr` / etc。If filter atom contains `_AggregateRef`(nested aggregate)— **parent C100 prohibits nested aggregation**;T2.3a validator catches this construct-time。T2.3b lowering does NOT need explicit reject(layered defense)。
+**Filter atom lowering**:reuses existing `_lower_where_atom` for `ExistsAtom` / `CompareExpr` / etc — but with **filter_bindings = dict(outer_bindings)** so filter-local entity bindings don't leak。
+
+**Bindings isolation invariant**(per Step 4.2 v1 P2):if `filter` contains `Order(o)` and `o` is not in `outer_bindings`,then `o → Order` enters `filter_bindings` but NOT `outer_bindings`。Outer atoms following the aggregate that reference `o` without their own binding atom will fail T2.3a scoping validator(filter-local-leak rejection)。
+
+**Nested aggregate**:if filter atom contains `_AggregateRef`(nested aggregate)— parent C100 prohibits;T2.3a validator catches this construct-time。T2.3b lowering does NOT explicit reject(layered defense)。But Step 4.2 v1 P3 legacy rejection chain DOES recurse via `_reject_legacy_aggregate_ref` for raw `Pred(...)` / `RuleRefAtom` / bare AttrRef in filter — see §2.3b。
 
 ### 5.4 Bridge `_collect_vars_from_term` + `_canonicalize_vars` extension
 
@@ -463,9 +631,15 @@ Per Track plan §1.2.4,T2.3b would upgrade S → M if any of these triggers fire
 - [ ] Bridge `_collect_vars_from_term` recognizes `AggregateAtom` Term-position(recursive into target + filter)
 - [ ] Bridge `_canonicalize_vars/expr/term` recursively canonicalizes within `AggregateAtom` Term
 - [ ] **End-to-end smoke**:user code `build_application_rule(where=[..., total == agg_sum(target, where=[...]), ...], ports={...})` produces valid application Rule with `AggregateAtom` Term-position;Python eval gives correct per-env aggregate result
+- [ ] **Target AttrRef lowering test**(per Step 4.2 v1 P1):`agg_sum(Order(o).amount, where=[Order(o).buyer == u])` lowers to expected IR tuple shape with temp var + injected field pred at end of filter;parent essay main example end-to-end works
+- [ ] **Bare AttrRef target reject**(per Step 4.2 v1 P1):`agg_sum(o.amount, where=[...])` where `o.amount` uses legacy LogicVar.__getattr__ (entity_type=None) → reject construct-time
+- [ ] **Filter bindings isolation**(per Step 4.2 v1 P2):`Order(o)` introduced in aggregate filter does NOT make subsequent outer `Order(o).field == ...` legal;outer atom must independently bind `o`
+- [ ] **Legacy rejection in aggregate filter / target**(per Step 4.2 v1 P3):`agg_count(where=[Pred("user:exists", "$u")])` and `agg_sum(target_with_bare_attrref, where=[...])` and `agg_*(where=[RuleRefAtom(...)])` all reject via bridge `_reject_legacy_aggregate_ref` — T1.2 hard-cut policy preserved through SDK aggregate path
 - [ ] **T2.3a validation triggers via SDK path**:invalid aggregate via SDK helper raises `AggregateValidationError` / `AggregateVariableScopeError` from T2.3a validator(filter restrictions / scoping / target binding / numeric construct)
 - [ ] **Application Rule two-pass isolation still works**:filter-local-only var in SDK-authored aggregate does NOT enter ports validation set via bridge over-collection
-- [ ] `application/docs/rule.md` extended with SDK aggregate usage example + explicit adapter status(Souffle/ProbLog deferred,PyReason out-of-scope)
+- [ ] **`src/factgraph/sdk/docs/04_api_surface.en.md` extended**(per Step 4.2 v1 P4):5 `agg_*` helpers listed in public surface table alongside `Pred` / `Not`;adapter status note added
+- [ ] **`src/factgraph/sdk/docs/03_rules_and_inferences.en.md` extended**:aggregate usage section with end-to-end example + per-env semantics + filter restrictions + scoping + NoValue + adapter status
+- [ ] **`src/factgraph/application/docs/rule.md` extended**:brief AggregateAtom Term-position acceptance note + `_AggregateRef` internal status + cross-reference to SDK docs 03 + 04
 - [ ] **Scope diff verifies T2.3a substrate files 0-touch**:`where_ast.py` / `where_ast_validate.py` / `where_eval.py` / `application/protocol/rule.py` all 0 lines changed by T2.3b
 - [ ] **Scope diff verifies adapter files 0-touch**:`src/factgraph/adapters/{souffle,problog,pyreason}/` all 0 lines changed
 - [ ] Cross-slice non-regression:T1.1 + T1.2 + T2.1 + ProbLog hygiene + T2.2 + fixture cleanup + T2.3a tests all pass(85+ tests baseline from T2.3a)
@@ -499,9 +673,13 @@ Per Track plan §1.2.4,T2.3b would upgrade S → M if any of these triggers fire
 
 ## 9. Docs To Update
 
-- `src/factgraph/application/docs/rule.md` — extend with **SDK aggregate usage end-to-end example** + **adapter status table**(Python ✓ / Souffle deferred T2.3.c / ProbLog deferred T2.3.d / PyReason out-of-scope)+ note `_AggregateRef` internal status。
+Per Step 4.2 v1 P4 — SDK docs MUST update because public SDK surface is added:
+
+- **`src/factgraph/sdk/docs/04_api_surface.en.md`**(primary SDK API contract)— add 5 `agg_*` helpers to public surface table alongside `Pred` / `Not`;add adapter status note。
+- **`src/factgraph/sdk/docs/03_rules_and_inferences.en.md`**(user-facing rule authoring tutorial)— add aggregate usage section with end-to-end example + per-env semantics + filter restrictions + scoping + NoValue + adapter status cross-reference。
+- **`src/factgraph/application/docs/rule.md`**(internal application bridge note)— brief AggregateAtom Term-position acceptance note + `_AggregateRef` internal status + cross-reference to SDK docs。
 - Track plan §1.2.5 retroactive table — add T2.3b row after archive(via memory consolidation slice or batch labeling)。
-- No SDK Quickstart user-facing docs change(application/docs/rule.md is the appropriate landing layer per T1.1 / T2.3a precedent;wider quickstart deferred until adapter wires ship)。
+- **No `docs/official/kernel/quickstart/` external public quickstart change**:wider external quickstart deferred until adapter wires ship — user-facing quickstart should not promise functionality that only Python eval can execute。
 
 ## 10. Outcome / Deviations
 
