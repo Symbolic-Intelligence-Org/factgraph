@@ -1,7 +1,7 @@
 # T1.4 Alias / Port Contract
 
 Status: draft
-Last Updated: 2026-05-23
+Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
 Class: S
 
 ## 1. Problem
@@ -25,9 +25,12 @@ Make the shipped Rule surface document and enforce the port contract needed by l
 
 ### 2.2 Occurrence Alias Infrastructure
 
-Add a small immutable occurrence wrapper:
+Add a small immutable occurrence wrapper with default alias semantics:
 
 ```python
+default_occ = rule.as_()
+default_occ.alias == rule.id
+
 occ = rule.as_("a")
 occ.alias == "a"
 occ.rule is rule
@@ -55,6 +58,7 @@ Validate occurrence aliases at construction:
 - non-empty string
 - Python-identifier-like shape: `[A-Za-z_][A-Za-z0-9_]*`
 - reserved leading underscore rejected for public user aliases
+- omitted alias defaults to `rule.id` and is validated through the same path
 
 Alias uniqueness across a RuleExpr remains T3 scope because T1.4 sees only one occurrence at a time.
 
@@ -142,16 +146,17 @@ class RulePortRef:
 
 Export both from `src/factgraph/application/protocol/__init__.py`.
 
-### 5.2 `Rule.as_(alias)`
+### 5.2 `Rule.as_(alias=None)`
 
 Add:
 
 ```python
-def as_(self, alias: str) -> RuleOccurrence:
-    return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(alias))
+def as_(self, alias: str | None = None) -> RuleOccurrence:
+    effective_alias = self.id if alias is None else alias
+    return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(effective_alias))
 ```
 
-`Rule.as_(...)` is template-stable: it does not mutate the Rule and repeated calls with the same alias produce equal value objects.
+`Rule.as_()` with no argument uses `rule.id`, matching parent §3.6 commitment 6. `Rule.as_(...)` is template-stable: it does not mutate the Rule and repeated calls with the same alias produce equal value objects.
 
 ### 5.3 Port Access
 
@@ -172,7 +177,7 @@ Use a local regex:
 _OCCURRENCE_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 ```
 
-This rejects empty strings, leading digits, leading underscores, punctuation, and hyphenated aliases. The narrower shape keeps public occurrence aliases distinct from future internal synthetic aliases.
+Validation must use `re.fullmatch(_OCCURRENCE_ALIAS_RE, alias)`. This rejects empty strings, leading digits, leading underscores, punctuation, and hyphenated aliases. The narrower shape keeps public occurrence aliases distinct from future internal synthetic aliases.
 
 ### 5.5 Serialization / Digest
 
@@ -188,6 +193,7 @@ No `Rule.content_digest` change. Occurrence aliases are expression-level wrapper
 - Same-name ports across Rules do not auto-join in T1.4.
 - `RuleOccurrence` is an occurrence wrapper, not a Rule template replacement.
 - `RulePortRef` is a reference descriptor, not a core AST term.
+- `Rule.as_()` default alias is exactly `rule.id`.
 - `Rule.content_digest` remains alias-independent.
 - `Rule.ports` remains a frozen `MappingProxyType`.
 - Application Rule remains SDK-independent.
@@ -196,12 +202,14 @@ No `Rule.content_digest` change. Occurrence aliases are expression-level wrapper
 
 ## 7. Acceptance
 
+- `Rule.as_()` returns immutable `RuleOccurrence(rule=rule, alias=rule.id)`.
 - `Rule.as_("a")` returns immutable `RuleOccurrence(rule=rule, alias="a")`.
-- Repeated `rule.as_("a")` calls produce equal occurrence objects and do not mutate Rule.
+- Repeated `rule.as_("a")` calls satisfy `rule.as_("a") == rule.as_("a")`; they are not required to satisfy object identity (`is`) because T1.4 does not promise interning.
 - Invalid aliases (`""`, `"1a"`, `"_a"`, `"a-b"`) raise `RuleValidationError`.
 - `occ.port("user")` returns a `RulePortRef` with alias, rule id, port name, Var, and PortType.
 - `occ.user` returns the same object as `occ.port("user")`.
 - `occ.port("missing")` raises `RuleValidationError`; `occ.missing` raises `AttributeError` so normal Python attribute probing still behaves correctly.
+- Mutating `RuleOccurrence` or `RulePortRef` fields raises `FrozenInstanceError`; both DTOs are hashable.
 - `Rule.content_digest` is unchanged by occurrence alias creation.
 - Two Rules exposing `"user"` with different internal Var names produce port refs with the same port name and different Vars.
 - A Rule returned by `build_application_rule(...)` supports `.as_(...)`.
@@ -226,7 +234,7 @@ No `Rule.content_digest` change. Occurrence aliases are expression-level wrapper
 ## 9. Docs To Update
 
 - `src/factgraph/application/docs/rule.md`
-- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` if the application-rule section should mention `.as_(...)` as future RuleExpr infrastructure
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` is deferred to T3; user-facing `.as_(...)` docs should ship with RuleExpr `&` / `|` / `.join(...)` context rather than this substrate-only slice.
 
 ## 10. Outcome
 

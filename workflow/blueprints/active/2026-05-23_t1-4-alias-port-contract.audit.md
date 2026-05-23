@@ -1,7 +1,7 @@
 # T1.4 Alias / Port Contract Audit Log
 
 Status: draft
-Last Updated: 2026-05-23
+Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
 Blueprint: workflow/blueprints/active/2026-05-23_t1-4-alias-port-contract.md
 
 ## Event Log
@@ -9,6 +9,7 @@ Blueprint: workflow/blueprints/active/2026-05-23_t1-4-alias-port-contract.md
 | Date | Event | Notes |
 |---|---|---|
 | 2026-05-23 | draft | Initial S-class blueprint drafted from parent §3.6 / shipped Rule port audit. |
+| 2026-05-23 | Step 4.2 v2 tightening | Applied P1 default alias fix and four low-cost acceptance/spec hardenings. |
 
 ## G1-G7 Mapping
 
@@ -49,7 +50,7 @@ Blueprint §4 cites parent and shipped source lines. Reviewer should independent
 
 ### G5 Deviations
 
-No semantic deviation intended. This slice implements substrate only and explicitly defers RuleExpr expression-level validation to T3.
+No semantic deviation intended. This slice implements substrate only and explicitly defers RuleExpr expression-level validation to T3. Step 4.2 v2 tightened default alias behavior to match parent §3.6 commitment 6: `Rule.as_()` defaults to `rule.id`.
 
 ### G6 Reviewer Spot-Check
 
@@ -58,7 +59,17 @@ Reviewer should check:
 - Whether adding `RuleOccurrence.__getattr__` is too much for T1.4.
 - Whether alias regex should allow only ASCII letter starts, as drafted, or a broader identifier-like shape.
 - Whether `RulePortRef` should store `rule_id` or the full `Rule`.
-- Whether docs should mention `.as_(...)` now or defer until T3 user-visible docs.
+- Whether docs should mention `.as_(...)` now or defer until T3 user-visible docs. Current draft defers SDK user-facing docs to T3 and only updates application protocol docs.
+
+### Step 4.2 v2 Tightening
+
+| Finding | Resolution |
+|---|---|
+| P1 Required: default alias missing | `Rule.as_(alias=None)` now defaults to `rule.id`, with same validation path as explicit aliases. |
+| P2 Worth: regex unanchored | Blueprint now requires `re.fullmatch(...)` for `_OCCURRENCE_ALIAS_RE`. |
+| P3 Worth: docs timing | SDK user-facing `.as_(...)` docs are deferred to T3; only application protocol docs are required in T1.4. |
+| P4 Worth: immutability acceptance missing | Acceptance now requires `FrozenInstanceError` on DTO mutation and hashability. |
+| P5 Worth: equality vs identity ambiguous | Acceptance now explicitly promises value equality but no interning / identity guarantee. |
 
 ### G7 Pre-Impl Preconditions
 
