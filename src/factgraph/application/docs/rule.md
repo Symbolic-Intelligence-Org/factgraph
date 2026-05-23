@@ -81,16 +81,21 @@ syntax, including cross-entity references such as
 ## Internal Aggregate Terms
 
 The application DTO can store core `AggregateAtom` values in comparison or
-arithmetic term position. This is an internal substrate feature for direct
-application-rule construction: SDK ergonomic helpers and
-`build_application_rule(...)` aggregate lowering are intentionally deferred to a
-later slice.
+arithmetic term position. Direct application-rule construction may use the core
+AST shape. SDK authors should prefer the aggregate helpers exposed from
+`factgraph.sdk.dsl` (`agg_count`, `agg_sum`, `agg_min`, `agg_max`, `agg_mean`)
+through `build_application_rule(...)`.
 
 Aggregate terms do not extend the top-level atom allowlist. `AggregateAtom`
 stays value-producing and must be wrapped by an enclosing comparison or
 arithmetic atom. Port validation treats aggregate target variables as visible,
 keeps aggregate-filter-local variables private, and rejects ports that reference
 only aggregate-local filter variables.
+
+Adapter status: the Python evaluator supports aggregate terms. Souffle and
+ProbLog adapter projection remain deferred to later adapter-specific slices, so
+aggregate-backed application Rules should stay on the Python evaluator until
+those wires ship.
 
 ## Bridge Rejections
 

@@ -103,6 +103,8 @@ Supported:
 - OR branches: `where=[[...], [...]]`
 - `Branch` branches: `where=[Branch([...], id="seed_path"), Branch([...])]` (Rule/Inference)
 - linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
+- aggregate helpers for the application Rule bridge:
+  `agg_count`, `agg_sum`, `agg_min`, `agg_max`, and `agg_mean`
 
 `Branch` example:
 
@@ -149,6 +151,42 @@ Both `single` and `multi` fields support this field-to-value form. For `multi` f
 - migrations or debugging where spelling the predicate id directly matters
 
 Do not confuse field-to-value sugar with attr-vs-attr comparison. `u1.user_id == u2.user_id` follows cross-coordinate `attr_eq` lowering and currently only allows the same entity type, the same field, and a `primary_key` field.
+
+### 3.2 Aggregate Helpers for Application Rules
+
+Aggregate helpers are available from `factgraph.sdk.dsl` for
+`build_application_rule(...)`:
+
+```python
+from factgraph.sdk.dsl import agg_sum, build_application_rule, vars
+
+with vars("u", "o", "total") as (u, o, total):
+    rule = build_application_rule(
+        id="user_order_total",
+        where=[
+            User(u),
+            total == agg_sum(Order(o).amount, where=[Order(o).buyer == u]),
+            total > 100,
+        ],
+        ports={"user": u, "total": total},
+    )
+```
+
+`agg_count(where=[...])` has no target. `agg_sum`, `agg_min`, `agg_max`, and
+`agg_mean` require a target, usually a schema field reference such as
+`Order(o).amount`. Aggregate filters may correlate with variables bound outside
+the aggregate, but variables introduced only inside the filter remain local to
+the aggregate and cannot be exposed as application Rule ports.
+
+Adapter status:
+
+| Engine/layer | Aggregate status |
+|---|---|
+| Python application Rule evaluator | Supported |
+| SDK `build_application_rule(...)` bridge | Supported |
+| Souffle adapter | Deferred to T2.3.c |
+| ProbLog adapter | Deferred to T2.3.d |
+| PyReason adapter | Out of scope |
 
 ## 4. RuleRef and Dependency Registration
 

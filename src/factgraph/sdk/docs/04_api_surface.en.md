@@ -98,6 +98,20 @@ class-first constructor name and does not accept workspace `path=`.
 | `vars` | Logic-variable factory for rule construction |
 | `SDKDSLError` | Raised on DSL construction errors |
 
+The application Rule bridge additionally exposes aggregate helpers from
+`factgraph.sdk.dsl` only:
+
+| Symbol | Purpose |
+|---|---|
+| `agg_count(where=[...])` | Count matching aggregate-filter rows |
+| `agg_sum(target, where=[...])` | Sum a numeric target over matching filter rows |
+| `agg_min(target, where=[...])` | Minimum target value over matching filter rows |
+| `agg_max(target, where=[...])` | Maximum target value over matching filter rows |
+| `agg_mean(target, where=[...])` | Mean numeric target value over matching filter rows |
+
+These helpers are not re-exported from top-level `factgraph.sdk` in this slice.
+Use `from factgraph.sdk.dsl import agg_sum, build_application_rule`.
+
 ### 1.3 Schema compile helpers
 
 | Symbol | Purpose |
@@ -568,6 +582,7 @@ These are reachable via direct imports, not through `factgraph.sdk`:
 | Raw cross-boundary DTOs (`EvaluationOverlay`, `RuleLiteralPath`, `RuleAddedAtom`, `RoundEvent`) | `factgraph.application.protocol`, `factgraph.audit` |
 | Audit package loading | `factgraph.audit.load_audit_package` |
 | Engine adapter registration | `factgraph.adapters.{souffle,problog,pyreason}` |
+| Aggregate DSL helpers (`agg_count`, `agg_sum`, `agg_min`, `agg_max`, `agg_mean`) | `factgraph.sdk.dsl` |
 
 See [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) for
 when and why to drop down to these surfaces.

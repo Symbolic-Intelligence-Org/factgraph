@@ -17,6 +17,7 @@ def is_dsl_term(value: Any) -> bool:
         (
             LogicVar,
             AttrRef,
+            _AggregateRef,
             BinaryExpr,
             HeadCall,
             ExistsAtom,
@@ -209,6 +210,31 @@ class CompareExpr:
 
 
 @dataclass(frozen=True)
+class _AggregateRef:
+    kind: str
+    target: Any
+    filter: tuple[Any, ...]
+
+    def __eq__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+        return CompareExpr("eq", self, other)
+
+    def __ne__(self, other: Any) -> CompareExpr:  # type: ignore[override]
+        return CompareExpr("ne", self, other)
+
+    def __gt__(self, other: Any) -> CompareExpr:
+        return CompareExpr("gt", self, other)
+
+    def __ge__(self, other: Any) -> CompareExpr:
+        return CompareExpr("ge", self, other)
+
+    def __lt__(self, other: Any) -> CompareExpr:
+        return CompareExpr("lt", self, other)
+
+    def __le__(self, other: Any) -> CompareExpr:
+        return CompareExpr("le", self, other)
+
+
+@dataclass(frozen=True)
 class NotExpr:
     body: list[Any]
 
@@ -300,6 +326,36 @@ def Pred(pred_id: str, *terms: Any) -> PredAtom:
     return PredAtom(pred_id=pred_id, terms=tuple(terms))
 
 
+def agg_count(*, where: list[Any]) -> _AggregateRef:
+    _require_aggregate_filter(where)
+    return _AggregateRef(kind="count", target=None, filter=tuple(where))
+
+
+def agg_sum(target: Any, *, where: list[Any]) -> _AggregateRef:
+    _require_aggregate_filter(where)
+    return _AggregateRef(kind="sum", target=target, filter=tuple(where))
+
+
+def agg_min(target: Any, *, where: list[Any]) -> _AggregateRef:
+    _require_aggregate_filter(where)
+    return _AggregateRef(kind="min", target=target, filter=tuple(where))
+
+
+def agg_max(target: Any, *, where: list[Any]) -> _AggregateRef:
+    _require_aggregate_filter(where)
+    return _AggregateRef(kind="max", target=target, filter=tuple(where))
+
+
+def agg_mean(target: Any, *, where: list[Any]) -> _AggregateRef:
+    _require_aggregate_filter(where)
+    return _AggregateRef(kind="mean", target=target, filter=tuple(where))
+
+
+def _require_aggregate_filter(where: list[Any]) -> None:
+    if not isinstance(where, list) or not where:
+        raise SDKDSLError("aggregate where= must be non-empty list")
+
+
 def lower_where(
     where: list[Any],
     *,
@@ -356,6 +412,8 @@ def lower_where_atom(atom: Any, bindings: dict[LogicVar, str], *, temp_seq: Any)
 
 
 def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq: Any) -> list[Any]:
+    if isinstance(expr.left, _AggregateRef) or isinstance(expr.right, _AggregateRef):
+        return _lower_compare_with_aggregate(expr, bindings, temp_seq=temp_seq)
     if isinstance(expr.left, AttrRef) and isinstance(expr.right, AttrRef):
         if expr.op != "eq":
             raise SDKDSLError("entity attribute comparison sugar currently supports only '==' in SDK object DSL v1")
@@ -396,6 +454,68 @@ def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq
         out.append((expr.op, left, right))
         return out
     raise SDKDSLError(f"unsupported compare op: {expr.op}")
+
+
+def _lower_compare_with_aggregate(
+    expr: CompareExpr,
+    bindings: dict[LogicVar, str],
+    *,
+    temp_seq: Any,
+) -> list[Any]:
+    left = (
+        _lower_aggregate_ref(expr.left, bindings, temp_seq=temp_seq)
+        if isinstance(expr.left, _AggregateRef)
+        else lower_term(expr.left, in_where=True)
+    )
+    right = (
+        _lower_aggregate_ref(expr.right, bindings, temp_seq=temp_seq)
+        if isinstance(expr.right, _AggregateRef)
+        else lower_term(expr.right, in_where=True)
+    )
+    if expr.op == "ne":
+        return [("not", [("eq", left, right)])]
+    if expr.op in {"eq", "gt", "ge", "lt", "le"}:
+        return [(expr.op, left, right)]
+    raise SDKDSLError(f"unsupported compare op: {expr.op}")
+
+
+def _lower_aggregate_ref(
+    ref: _AggregateRef,
+    outer_bindings: dict[LogicVar, str],
+    *,
+    temp_seq: Any,
+) -> tuple[Any, Any, list[Any]]:
+    filter_bindings = dict(outer_bindings)
+    filter_ir: list[Any] = []
+    for atom in ref.filter:
+        filter_ir.extend(lower_where_atom(atom, filter_bindings, temp_seq=temp_seq))
+
+    target, extra_filter = _lower_aggregate_target(ref.target, filter_bindings, temp_seq=temp_seq)
+    filter_ir.extend(extra_filter)
+    return (ref.kind, target, filter_ir)
+
+
+def _lower_aggregate_target(
+    target: Any,
+    filter_bindings: dict[LogicVar, str],
+    *,
+    temp_seq: Any,
+) -> tuple[Any, list[Any]]:
+    if target is None:
+        return None, []
+    if isinstance(target, AttrRef):
+        extra: list[Any] = []
+        record_type = _ensure_attr_record_binding(target, filter_bindings, extra)
+        tmp = f"$_agg{next(temp_seq)}"
+        extra.append(
+            (
+                "pred",
+                f"{record_type.lower()}:{target.field_name}",
+                [target.record_var.token, tmp],
+            )
+        )
+        return tmp, extra
+    return lower_term(target, in_where=True), []
 
 
 def _ensure_attr_record_binding(

@@ -6,6 +6,7 @@ from typing import Any
 from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.core.rules.where_ast import (
     AndExpr,
+    AggregateAtom,
     Atom,
     BuiltinAtom,
     CmpAtom,
@@ -20,6 +21,10 @@ from factgraph.core.rules.where_ast import (
     WhereExpr,
     parse_where_ir_to_ast,
 )
+from factgraph.core.rules.where_ast_validate import (
+    WhereASTValidationError,
+    validate_where_ast,
+)
 
 from .branch import Branch
 from .errors import SDKDSLError
@@ -29,6 +34,7 @@ from .expr import (
     NotExpr,
     PredAtom as DSLPredAtom,
     RuleRefAtom as DSLRuleRefAtom,
+    _AggregateRef,
     lower_where,
 )
 
@@ -49,10 +55,17 @@ def build_application_rule(
 
     _reject_or_shape(where)
     _reject_legacy_where(where, path="where")
+    initial_bound_vars = _initial_bound_var_names_from_ports(ports)
     try:
         where_ir = lower_where(where)
         where_expr = _canonicalize_vars(parse_where_ir_to_ast(where_ir))
-    except (SDKDSLError, WhereASTError) as exc:
+        validate_where_ast(
+            where_expr,
+            mode="python",
+            capabilities={"allow_ruleref": False},
+            initial_bound_vars=initial_bound_vars,
+        )
+    except (SDKDSLError, WhereASTError, WhereASTValidationError) as exc:
         raise DSLToApplicationRuleError(str(exc)) from exc
 
     if not isinstance(where_expr, AndExpr):
@@ -115,6 +128,23 @@ def _reject_legacy_compare(expr: CompareExpr, *, path: str) -> None:
                 f"{path}.{side_name}: legacy AttrRef is not allowed in new Rule path; "
                 "use Entity(var).field == value"
             )
+        if isinstance(value, _AggregateRef):
+            _reject_legacy_aggregate_ref(value, path=f"{path}.{side_name}")
+
+
+def _reject_legacy_aggregate_ref(ref: _AggregateRef, *, path: str) -> None:
+    if isinstance(ref.target, AttrRef) and ref.target.entity_type is None:
+        raise DSLToApplicationRuleError(
+            f"{path}.target: legacy bare AttrRef is not allowed in aggregate target; "
+            "use Entity(var).field via unified syntax"
+        )
+    if isinstance(ref.target, (DSLPredAtom, DSLRuleRefAtom)):
+        raise DSLToApplicationRuleError(
+            f"{path}.target: raw {type(ref.target).__name__} is not allowed in aggregate target"
+        )
+    if isinstance(ref.target, _AggregateRef):
+        _reject_legacy_aggregate_ref(ref.target, path=f"{path}.target")
+    _reject_legacy_where(ref.filter, path=f"{path}.filter")
 
 
 def _convert_ports(ports: Mapping[str, Any], *, vars_by_name: Mapping[str, Var]) -> dict[str, Var]:
@@ -137,6 +167,18 @@ def _convert_ports(ports: Mapping[str, Any], *, vars_by_name: Mapping[str, Var])
         except KeyError as exc:
             raise DSLToApplicationRuleError(f"ports[{name!r}] LogicVar must appear in where") from exc
     return converted
+
+
+def _initial_bound_var_names_from_ports(ports: Mapping[str, Any]) -> set[str]:
+    if not isinstance(ports, Mapping):
+        return set()
+    out: set[str] = set()
+    for value in ports.values():
+        token = getattr(value, "token", None)
+        label = getattr(value, "label", None)
+        if isinstance(token, str) and token.startswith("$") and label is not None:
+            out.add(token)
+    return out
 
 
 def _collect_vars_by_name(expr: WhereExpr) -> dict[str, Var]:
@@ -183,6 +225,11 @@ def _collect_vars_from_term(term: Any, out: dict[str, Var]) -> None:
         out.setdefault(term.name, term)
     elif isinstance(term, Const):
         return
+    elif isinstance(term, AggregateAtom):
+        if term.target is not None:
+            _collect_vars_from_term(term.target, out)
+        for atom in term.filter:
+            _collect_vars_from_atom(atom, out)
 
 
 def _canonicalize_vars(expr: WhereExpr) -> WhereExpr:
@@ -251,4 +298,11 @@ def _canonicalize_term(term: Any, vars_by_name: dict[str, Var]) -> Any:
     if isinstance(term, Var):
         existing = vars_by_name.setdefault(term.name, term)
         return existing
+    if isinstance(term, AggregateAtom):
+        return AggregateAtom(
+            kind=term.kind,
+            target=None if term.target is None else _canonicalize_term(term.target, vars_by_name),
+            filter=[_canonicalize_atom(atom, vars_by_name) for atom in term.filter],
+            origin=term.origin,
+        )
     return term

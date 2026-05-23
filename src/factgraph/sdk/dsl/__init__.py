@@ -3,7 +3,7 @@ from __future__ import annotations
 from .branch import Branch
 from .errors import SDKDSLError
 from .application_rule import DSLToApplicationRuleError, build_application_rule
-from .expr import Not, Pred
+from .expr import Not, Pred, agg_count, agg_max, agg_mean, agg_min, agg_sum
 from .rule import Inference, Query, ReturnContractEntry, Rule, RuleRef
 from .vars import vars
 
@@ -20,4 +20,9 @@ __all__ = [
     "ReturnContractEntry",
     "Pred",
     "Not",
+    "agg_count",
+    "agg_sum",
+    "agg_min",
+    "agg_max",
+    "agg_mean",
 ]
