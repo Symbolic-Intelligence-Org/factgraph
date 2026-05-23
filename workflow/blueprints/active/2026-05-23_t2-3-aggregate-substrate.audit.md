@@ -23,6 +23,7 @@
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | T2 Track 3rd sub-slice (after T2.1 ne adapter dispatch + T2.2 ArithExpr substrate). 100% genuinely new substrate (verified via G2 source-grep). Class assessment: S with documented size override. |
 | 2026-05-23 | scoped | Status: draft → scoped | User Step 4.2 v4 review passed 0 P-findings. Tightening trend: v1(5)→ v2(5)→ v3(2)→ v4(3 blueprint-body sync). All algorithm + audit log + blueprint body coherent on T2.3a substrate-only scope + v3 target-vars-always algorithm + defense-in-depth filter-local isolation + T1.2 bridge intentionally untouched. Ready for Step 4.7 implementation pending user "可以推进 impl" + G7 precondition execution before code changes. |
+| 2026-05-23 | G7 precondition | Pre-implementation checks recorded before code changes | Ran blueprint §5.8 checks 1-5 on impl branch `v0.2.0-impl-t2-3-aggregate-substrate-2026-05-23` before implementation. Checks passed; no S→M escalation triggered. See Decision Notes below. |
 
 ## Decision Notes
 
@@ -59,6 +60,20 @@ If reviewer disagrees on size, blueprint §5.10 prepares two-way split:
 - T2.3.b: SDK ergonomic + bridge passthrough + tests (~250 LOC)
 
 This split keeps each piece comfortably within S budget.
+
+### 2026-05-23 — G7 precondition results (recorded before implementation)
+
+Ran on impl branch `v0.2.0-impl-t2-3-aggregate-substrate-2026-05-23` from scoped anchor `5cce63c5` before any code changes.
+
+| Check | Result | Evidence |
+|---|---|---|
+| 1. Substrate empty | PASS | `where_ast.py` has no `AggregateAtom` / `_AGGREGATE_KINDS`; `_BUILTIN_TAGS` remains only arith kinds; `where_ast_validate.py` and `where_eval.py` have no aggregate validator/evaluator. Adapter where compilers have no AggregateExpr dispatch; existing `count`/`max` hits are unrelated docs/view/provenance code, not rule-where aggregate substrate. |
+| 2. Raw evaluator path | PASS | `where_eval.evaluate_where` still calls `_eval_body(view_facts, body, ast_gate_on=ast_gate_on)` with raw tuple body at lines 78-79; AST parse is validation gate only. |
+| 3. `_eval_body` extensibility | PASS with required implementation extension | `_eval_body` currently accepts `view_facts`, `body`, and `ast_gate_on`; it does **not** accept `initial_envs`. Implementation must add the §5.5 extension for per-env aggregate filter evaluation. |
+| 4. Type alias restructure | PASS | `where_ast.py` uses `from __future__ import annotations`; external `Term` imports occur after module load. Strategy A can move `Term`/`Atom` aliases after dataclass declarations to include `AggregateAtom`. |
+| 5. C99-C105 unambiguity | PASS | Parent design §10.6.3-§10.6.9 and §8.8 provide enough semantic lock for T2.3a substrate-only implementation. No ambiguity surfaced; S-class remains valid and no Stage 2 decision doc is opened. |
+
+**Implementation permission**:code work may proceed under scoped blueprint constraints. If implementation contradicts any result above, stop and amend blueprint/audit before continuing.
 
 ### 2026-05-23 — G1-G7 visible gate mapping (refined post Step 4.2 v2 — bridge passthrough reference removed per v3 P2)
 
