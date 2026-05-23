@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23
+- Last Updated: 2026-05-23 (Step 4.2 v2 tightening — P0 empty-set guard locked + P1-P5 resolved)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3c-aggregate-souffle-wire.md](./2026-05-23_t2-3c-aggregate-souffle-wire.md)
@@ -22,6 +22,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | T2 Track 5th implementation sub-slice (after T2.1 ne / T2.2 ArithExpr / T2.3a Aggregate substrate / T2.3b Aggregate SDK bridge). Closes Souffle adapter aggregate wire gap. T2.3a + T2.3b consumed unchanged. T2.3.d ProbLog wire remains separate. Estimated ~300 LOC (150 code + 150 tests). S-class lightweight per §5.7 trigger analysis. Cross-flip: Claude drafts, user reviews (continued from T2.3b inverted pattern). |
+| 2026-05-23 | draft | Step 4.2 v2 tightening | User v1 review surfaced 2 Blockers (P0 C101 empty-set semantics + P1 `_vars_in_atom` scope model false) + 4 Required (P2 §7.5 discriminator weak + P3 failure-path cite wrong + P4 SDK docs optional + P5 gate-off behavior unspec). User locked **A** for P0: implement empty-set guard now via `count : { same_body } > 0` prefix on min/max/mean; count/sum keep native empty=0. No Souffle sentinel object — `AggregateNoValue` represented by branch-not-firing (matches C101 "comparison violated / no env pollution"). P1-P5 v2 fixes applied in single amendment commit. Acceptance count grew from 11 to 17+ tests (new §7.8/§7.9/§7.10 + revised §7.5). Status stays `draft` pending v2 re-review. |
 
 ## Decision Notes
 
@@ -70,7 +71,7 @@ Per Track plan §1.2.1 + §1.2.4 trigger analysis(mirror of T2.3b §5.7):
   3. Souffle aggregate dispatch empty(this slice's add point)
   4. ProbLog aggregate dispatch empty(T2.3.d boundary)
   5. PyReason aggregate dispatch empty(out-of-scope boundary)
-  6. **Souffle end-to-end smoke** — `build_application_rule(...)` with `agg_sum(...)` example produces IR that current Souffle adapter rejects via `WhereValidationError("unsupported atom kind: ...")` at line 731(confirms precondition gap)
+  6. **Souffle end-to-end smoke**(P3 v2-corrected wording) — `build_application_rule(...)` with `agg_sum(...)` example produces IR that current Souffle adapter rejects via `WhereValidationError("unsupported literal type")` at `_literal_to_text` line 1106-1113(aggregate tuple reaches via cmp side compile path,not via top-level atom kind dispatch);confirms precondition gap T2.3c fills
 
 ### 2026-05-23 — User's Step 4.2 review focus areas (anticipated upfront)
 
@@ -126,3 +127,79 @@ If Step 4.2 still requires multi-round tightening,that signals further mitigatio
 - Forked from:`1666ffd3 docs(memory): consolidate T2.3b aggregate SDK bridge progress`(T2.3b memory sync commit on impl branch)
 - Sacred `master`:`562c74195df43e933bed92a3ff25de94dd8ce666` — unchanged
 - Dirty set:4 M(docs design-points readme + 3 examples notebooks)+ 1 untracked(`rainbird-ai sdk code/`)— preserved
+
+### 2026-05-23 — Step 4.2 v1 review findings + v2 resolutions
+
+User Step 4.2 v1 re-review surfaced 2 Blockers + 4 Required across §1 / §2.5 / §5.5 / §5.6 / §7 / §9。Direction confirmed acceptable;tightening required before scoped。
+
+**P0 Blocker — C101 empty-set semantics conflict**(blueprint §2.5)
+
+User flagged that v1 §2.5 deferring `AggregateNoValue` semantic gap to follow-up violates parent essay C101 lock("comparison violated / no env pollution" is a closed-decision,not a deferral candidate)。Listed 3 resolution options:(a)implement empty guard now,(b)narrow scope to count/sum,(c)escalate to M-class decision。
+
+User locked **(a) Implement empty-set guard now** with reasoning:
+- C unnecessary — C101 already decided;not a pending decision
+- B creates half-finished semantics — T2.3a/T2.3b already exposed 5 kinds;partial Souffle support complicates state table and downstream docs/acceptance
+- A still S-class — adapter-internal lowering only;no public API / substrate / SDK touch
+
+**Locked algorithm shape**(blueprint §2.5 v2):
+- `count` / `sum`:empty=0 is legal C101 value → emit aggregate directly,no guard
+- `min` / `max` / `mean`:compile MUST prefix `count : { same_body } > 0,` guard clause → empty body → guard fails → branch does not fire → matches C101 "violated comparison / no env pollution"。No separate Souffle sentinel object。
+- `AggregateNoValue` represented by **rule branch not firing**(branch-not-fire = no query row emitted = no env to pollute)
+
+Acceptance §7.8 added 3 DL emit-shape discriminator tests(min binding / max cmp / mean binding)+ §7.9 1 optional runtime integration test(empty set → no query row)+ test 7.8(d)symmetric negative discriminator(count/sum must NOT have guard)。
+
+**P1 Blocker — `_vars_in_atom` scope model was false**(blueprint §5.5)
+
+User verified `where_compile.py:188-195` `extract_where_variables` directly unions `_vars_in_atom` results — does NOT filter against outer scope。v1 §5.5 "simplification" of returning all aggregate filter vars would leak `$o` / `$_agg1` into query variables AND witness layout(via `build_query_witness_layout` line 217-237)。
+
+**v2 fix**(blueprint §5.5):aggregate side of cmp atom contributes **ZERO** outer vars to `_vars_in_atom`。Correctness argument:
+1. Correlated outer vars are bound by their original outer atom(per C104),which contributes them independently — ignoring the aggregate-filter reference does not lose them
+2. Aggregate-local vars(target_var + filter-introduced)are private per C104 — MUST stay out of query vars / witness layout
+3. Result-binding var(`$total` from `("eq", "$total", aggregate)`)is captured by the existing non-aggregate-side branch
+
+Test §7.5 strengthened with explicit `extract_where_variables(...) == ["$total", "$u"]` assertion(aggregate-local `$o`/`$_agg1` MUST NOT appear)。
+
+**P2 Required — §7.5 discriminator did not discriminate**(blueprint §7.5)
+
+User flagged that `("pred", "user:exists", ["$o"])` would bind `$o` regardless of leak state(pred always binds new vars at `where_compile.py:466`),so the test would pass even if isolation was broken。
+
+**v2 fix**(blueprint §7.5):replaced with `("ne", "$o", "blocked")` per user suggestion。`ne` requires lhs var to be already-bound(`where_compile.py:888-893`)so test now discriminates:if `$o` leaked into outer `bound_vars`,compile succeeds(test FAILS);if isolated,compile raises `WhereValidationError`(test PASSES via `assertRaises`)。
+
+**P3 Required — current failure-path cite was wrong**(blueprint §1 + §5.6 G7 #6)
+
+User verified the actual error is `WhereValidationError("unsupported literal type")` at `_literal_to_text` line 1106-1113,not "unsupported atom kind" at line 731。Aggregate tuple inside cmp atom reaches `_literal_to_text` via cmp side compile path because the tuple is neither bool/int/str。
+
+**v2 fix**(blueprint §1 + §5.6 G7 #6 + audit log G7 #6 above):updated wording to reflect actual failure path。Note added in §1 explicitly correcting v1's incorrect "line 731 unsupported atom kind" claim。
+
+**P4 Required — SDK docs update was optional**(blueprint §9)
+
+User noted `sdk/docs/03_rules_and_inferences.en.md` §3.2 currently has row "Souffle adapter | Deferred to T2.3.c"(shipped in T2.3b archive `4e3176d2`)。If T2.3c does not flip this row,the docs become stale immediately upon ship。
+
+**v2 fix**(blueprint §6.1 + §8 step 10 + §9):both docs updates MANDATORY in T2.3c。Specific row content locked in §9。
+
+**P5 Required — adapter fallback validation needed gate-off behavior**(blueprint §2.7)
+
+User flagged `FACTPY_WHERE_AST_VALIDATE=0` gate-off path:upstream T2.3a substrate validator skipped → malformed aggregate IR can reach Souffle adapter without semantic guard。Existing T2.1/T2.2 adapters have gate-off fallback patterns。
+
+**v2 fix**(new blueprint §5.7.5 + new §6 invariant I10):adapter-side aggregate shape validation(`_validate_atom_subset`)is mandatory regardless of gate state。Locked checks:
+- Aggregate kind ∈ `_AGGREGATE_KINDS`
+- Tuple arity == 3
+- `target_var` shape per kind(None for count,$-prefixed otherwise)
+- `filter_atoms` is list;each recurses
+- Nested aggregate rejected
+
+Semantic-only checks(C100 filter restriction,C102 numeric target,C104 binding-order scoping)remain upstream-only — adapter does NOT re-implement(if gate OFF user is explicitly opting out of semantic validation)。
+
+Acceptance §7.10 added 2 tests verifying adapter rejects unknown kind both with gate ON and OFF。
+
+### 2026-05-23 — Cross-flip inversion v1→v2 retrospective
+
+v1 review surfaced 6 findings(2 Blockers + 4 Required)— consistent with T2.3b's v1 round count(1 Blocker + 3 Required = 4 findings)。Cross-flip inversion blindness(Claude drafts,user reviews)remains a real cost:
+
+- **P0** was a semantic misjudgment(deferring instead of solving)— drafter assumption ("Python eval path is source-of-truth so Souffle can deviate")did not survive parent essay re-read at reviewer time。**Pattern**:when drafter encounters semantic divergence,default to honoring the locked design,not deferring。
+- **P1** was a code-reading miss(drafter did not re-read `extract_where_variables` carefully enough to notice the direct union)— even though `extract_where_variables` was cited in §G3,the drafter relied on memory of "upstream filters" rather than re-reading the actual implementation。**Pattern**:cited code MUST be re-read at row-drafting time per CADENCE Rule 1。
+- **P3** was a copy-paste error(drafter assumed line 731 fallback fires without verifying the dispatch path that aggregate-in-cmp follows)— v1 G7 #6 was speculative not empirical。**Pattern**:G7 preconditions MUST be reproducible by reviewer in their own re-read,not just drafter's claim。
+
+v2 mitigation:explicit user-verified P3 reproduction;explicit cited-line citations for P1 fix(`where_compile.py:188-195` extraction;`:217-237` witness layout);explicit algorithm walkthrough for P0(no "deferred" wiggle-room)。
+
+If v2 review still surfaces Blocker-class findings,that signals cross-flip inversion pattern's overhead exceeds value for adapter-shaped slices — future T2 Track adapter slices(T2.3.d ProbLog)should consider reverting to user-drafts pattern。
