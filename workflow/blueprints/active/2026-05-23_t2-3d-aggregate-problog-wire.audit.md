@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (draft)
+- Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3d-aggregate-problog-wire.md](./2026-05-23_t2-3d-aggregate-problog-wire.md)
@@ -21,6 +21,7 @@
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-23 | draft | Blueprint created | User-drafts / Claude-reviews pattern restored per T2.3c retrospective. T2.3d scope is ProbLog adapter-only aggregate wire over T2.3a substrate + T2.3b SDK + T2.3c query-variable extraction. No SDK/core/application/Souffle changes. |
+| 2026-05-23 | draft | Step 4.2 v2 tightening | Claude review surfaced 3 Required + 1 Worth-considering: two line-cite drifts, empty `sum_list([], 0)` ambiguity, inaccurate G7 #5 "rejects or mishandles" wording, and unlocked fresh-var naming. Applied all four: corrected cites, locked `sum_list([], 0)` as SWI-Prolog/ProbLog standard behavior, changed G7 #5 to silent JSON-quoted literal mishandle, and added `Agg{Prefix}{N}` fresh-var naming invariant. |
 
 ## Decision Notes
 
@@ -44,17 +45,17 @@
 | Public API rename | None | No |
 | New commitment conflict | None known | No |
 
-Conclusion: S-class lightweight blueprint is appropriate. If G7 reveals missing ProbLog list predicates or incompatible empty-list semantics requiring a new design decision, pause and amend/escalate.
+Conclusion: S-class lightweight blueprint is appropriate. If G7 reveals missing ProbLog list predicates or incompatible runtime behavior requiring a new design decision, pause and amend/escalate. Empty `sum_list([], 0)` is now locked as standard SWI-Prolog/ProbLog behavior, not an open design choice.
 
 ### 2026-05-23 — G1-G7 visible mapping
 
 - **G1**: Blueprint §1 and §2 cite parent essay C99-C104 plus §8.8/§1719 lowering strategy. Hygiene/source-of-truth drivers are explicitly tied to prior archive rows.
 - **G2**: Draft-time source read covered `problog_export.py:1-359`, `tests/test_problog_export.py`, `tests/test_problog_engine_eval.py`, T2.3a/b/c archive docs, current SDK/application docs rows, and track plan/memory T2.3.d rows.
-- **G3**: Blueprint §4 uses concrete file:line cites for ProbLog dispatch, term conversion, tests, and docs rows.
+- **G3**: Blueprint §4 uses concrete file:line cites for ProbLog dispatch, term conversion, tests, and docs rows. Step 4.2 v2 corrected `_to_problog_var` to `problog_export.py:335-340` and `_to_problog_literal` to `:343-355`.
 - **G4**: Goals §2.1-§2.7 map to C99/C100/C101/C104 or docs/gate obligations.
 - **G5**: Non-goals explicitly exclude SDK/core/application/Souffle/PyReason/probability semantic changes and runtime binary execution requirement.
 - **G6**: Reviewer should independently verify `problog_export.py` dispatch lines, current absence of aggregate handling, list-predicate algorithm, query-var behavior from T2.3c, and docs rows.
-- **G7**: Blueprint §5.9 defines pre-impl checks, including T2.3a/b/c contract presence and current ProbLog aggregate gap.
+- **G7**: Blueprint §5.9 defines pre-impl checks, including T2.3a/b/c contract presence and current ProbLog aggregate gap. Step 4.2 v2 clarified that the current gap is silent mishandling: aggregate tuples are JSON-encoded/quoted as Prolog literals rather than rejected.
 
 ### 2026-05-23 — Cross-slice contract preservation table
 
@@ -73,12 +74,25 @@ Conclusion: S-class lightweight blueprint is appropriate. If G7 reveals missing 
 ### 2026-05-23 — Review focus areas for Claude Step 4.2
 
 1. **Mean derivation correctness**: verify `Mean is Sum / Count` after `L = [_|_]` is sufficient and uses valid ProbLog/Prolog syntax.
-2. **Empty sum assumption**: verify `sum_list([], 0)` assumption or require fallback.
+2. **Empty sum behavior**: verify implementation/tests preserve the locked standard behavior `sum_list([], 0)`; fallback is only a §10 deviation path if actual ProbLog binary behavior contradicts SWI-Prolog `library(lists)`.
 3. **Variable scoping inside `findall/3`**: confirm aggregate-local variables do not escape and correlated outer variables remain visible.
 4. **Two-aggregate comparison**: ensure blueprint acceptance covers both sides aggregate and fresh variable collision avoidance.
 5. **`not` in aggregate filter**: confirm existing `_compile_atom` recursion can be reused safely.
 6. **Validation boundary**: decide whether unknown aggregate-like tuple operands should be rejected specifically as aggregate shape errors or generic unsupported term errors.
 7. **Runtime smoke scope**: decide whether exported-text tests are enough or local ProbLog binary smoke should be required if available.
+
+### 2026-05-23 — Step 4.2 v2 tightening decisions
+
+Claude Step 4.2 review surfaced:
+
+| Finding | Resolution |
+|---|---|
+| P1 Required — line citation drift for `_to_problog_var` / `_to_problog_literal` | Blueprint §4.3 corrected to `problog_export.py:335-340` and `:343-355`. |
+| P2 Required — empty `sum_list([], 0)` was both provisional and definitive | Locked definitive behavior: `sum_list([], 0)` is standard SWI-Prolog `library(lists)` behavior inherited by ProbLog. Any contrary binary result becomes §10 deviation/amendment, not an implementation choice. |
+| P3 Required — G7 #5 said "rejects or mishandles" but shipped exporter silently mishandles | G7 #5 now requires reproducing JSON-quoted literal output through `_to_problog_term:315-318` → `_to_problog_literal:343-355`. |
+| P4 Worth-considering — fresh variable naming unlocked | Adopted. `_CompileContext.fresh(...)` must emit reserved `Agg{Prefix}{N}` names, never `V_...`, preventing collision with user variables converted by `_to_problog_var(...)`. |
+
+Status remains `draft`; no scoped transition authorized.
 
 ### 2026-05-23 — Branch state at draft commit time
 

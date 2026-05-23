@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (draft)
+- Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — aggregate value expression shape;§10.6.4 (C100) — aggregate filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — projected-view snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 + §1719 — ProbLog lowering via `findall/3` + list predicates.
@@ -129,7 +129,7 @@ min_list(L, Min),
 For empty aggregate result:
 
 - `count` emits 0 through `length([], 0)`
-- `sum` emits 0 through `sum_list([], 0)` (to be verified by G7; fallback if unavailable is a custom empty-list guard with `Result = 0`)
+- `sum` emits 0 through `sum_list([], 0)` per SWI-Prolog `library(lists)` standard behavior, inherited by ProbLog's Prolog runtime.
 - `min/max/mean` fail at `L = [_|_]`, so no answer row is produced
 
 This mirrors T2.3c's Souffle guard semantics while using idiomatic Prolog list predicates.
@@ -202,8 +202,8 @@ No `sdk/docs/04_api_surface.en.md` update is expected because T2.3d adds no new 
 - `problog_export.py:315-318` `_to_problog_term(...)` maps `$var` to Prolog var and non-vars to literal.
 - `problog_export.py:321-324` `_to_problog_arith_output(...)` requires `$` var output.
 - `problog_export.py:327-333` `_to_problog_arith_term(...)` allows `$` vars and integer literals only.
-- `problog_export.py:336-343` `_to_problog_var(...)` normalizes `$foo` to `V_FOO`.
-- `problog_export.py:346-359` `_to_problog_literal(...)` quotes strings, emits ints/floats, and JSON-encodes unknown values.
+- `problog_export.py:335-340` `_to_problog_var(...)` normalizes `$foo` to `V_FOO`.
+- `problog_export.py:343-355` `_to_problog_literal(...)` quotes strings, emits ints/floats, and JSON-encodes unknown values.
 
 Current aggregate tuple operands therefore fall through to literal encoding unless `_compile_atom(...)` intercepts them.
 
@@ -260,6 +260,8 @@ class _CompileContext:
         ...
 ```
 
+Fresh variables MUST use a reserved non-user prefix that cannot collide with `_to_problog_var("$...")` output. Lock the shape as `Agg{Prefix}{N}` after stripping non-alphanumeric prefix characters, for example `AggList1`, `AggResult2`, `AggSum3`, `AggCount4`. Do not emit `V_...` names for adapter-generated variables; `V_` is reserved for user IR variables converted by `_to_problog_var(...)`.
+
 Then:
 
 ```python
@@ -279,8 +281,8 @@ def _compile_aggregate_parts(aggregate: tuple[Any, ...], *, ctx: _CompileContext
     kind, target_var, filter_atoms = aggregate
     _validate_aggregate_shape(aggregate)
 
-    list_var = ctx.fresh("AGG_LIST")
-    result_var = ctx.fresh("AGG_RESULT")
+    list_var = ctx.fresh("List")
+    result_var = ctx.fresh("Result")
     filter_goal = _compile_aggregate_filter(filter_atoms, ctx=ctx)
 
     if kind == "count":
@@ -295,8 +297,8 @@ def _compile_aggregate_parts(aggregate: tuple[Any, ...], *, ctx: _CompileContext
     elif kind == "max":
         goals.extend([f"{list_var} = [_|_]", f"max_list({list_var}, {result_var})"])
     elif kind == "mean":
-        sum_var = ctx.fresh("AGG_SUM")
-        count_var = ctx.fresh("AGG_COUNT")
+        sum_var = ctx.fresh("Sum")
+        count_var = ctx.fresh("Count")
         goals.extend([
             f"{list_var} = [_|_]",
             f"sum_list({list_var}, {sum_var})",
@@ -306,7 +308,7 @@ def _compile_aggregate_parts(aggregate: tuple[Any, ...], *, ctx: _CompileContext
     return goals, result_var
 ```
 
-Note: if G7 shows `sum_list([], X)` is not available or not deterministic in the local ProbLog runtime, implementation should replace sum empty handling with an explicit list guard/disjunction helper and document a scoped amendment. The expected SWI/ProbLog behavior is `sum_list([], 0)`.
+`sum_list([], 0)` is locked as standard SWI-Prolog `library(lists)` behavior. If Step 4.7 integration against an actual ProbLog binary unexpectedly shows non-standard behavior, treat that as a deviation in §10 Outcome and amend before implementation continues; do not leave the empty-sum semantics open in the implementation plan.
 
 ### 5.4 Cmp dispatch composition
 
@@ -385,7 +387,7 @@ Thus:
 | Size budget | Estimated 250-450 LOC code + tests after T2.3c calibration | Within S with size caution |
 | Substrate or SDK change | None | NO |
 
-If G7 or implementation discovers that ProbLog lacks required list predicates or mean/empty semantics cannot be represented without a broader runtime helper, pause and amend; if that changes semantics, escalate to M.
+If G7 or implementation discovers that ProbLog lacks required list predicates or cannot represent the locked semantics without a broader runtime helper, pause and amend; if that changes semantics, escalate to M. `sum_list([], 0)` itself is not an open design choice.
 
 ### 5.9 G7 pre-implementation checks
 
@@ -395,7 +397,7 @@ Must be run and recorded in the audit log **before code edits**:
 2. T2.3b SDK bridge can produce aggregate IR.
 3. T2.3c `extract_where_variables(...)` excludes aggregate-local vars and remains importable from ProbLog.
 4. ProbLog aggregate dispatch currently absent: `rg "AggregateAtom|_AGGREGATE_KINDS|aggregate|findall|sum_list|min_list|max_list" src/factgraph/adapters/problog/problog_export.py` has no semantic aggregate dispatch hits.
-5. Current ProbLog exporter rejects or mishandles aggregate IR; smoke should show precondition gap before implementation.
+5. Current ProbLog exporter **silently mishandles** aggregate IR rather than rejecting it: aggregate tuple operands flow through `_to_problog_term:315-318` to `_to_problog_literal:343-355`, where unknown tuple values are JSON-encoded and quoted as Prolog atom literals such as `'["sum","$_agg1",[...]]'`. G7 smoke MUST reproduce this specific output shape to confirm the precondition gap and motivate cmp-branch aggregate routing.
 6. Local Python/ProbLog test environment supports import of `tests.test_problog_export` after prior hygiene/fixture cleanup.
 7. If a ProbLog binary is available cheaply, smoke `findall/3`, `sum_list/2`, `min_list/2`, `max_list/2`, `length/2`; if not available, record that this S-class slice verifies exported program text only.
 
@@ -410,6 +412,7 @@ Must be run and recorded in the audit log **before code edits**:
 - I7 — No SDK/core/application/Souffle changes.
 - I8 — Adapter validation rejects unsupported aggregate kinds and unsupported filter atom kinds before emission.
 - I9 — Docs row flips are mandatory because T2.3b/T2.3c docs currently point to T2.3.d for ProbLog support.
+- I10 — Adapter-generated fresh variables use `Agg{Prefix}{N}` names, never `_to_problog_var(...)` / `V_...` names, so user variables such as `$agg_list_1` cannot collide with aggregate helper variables.
 
 ## 7. Acceptance
 
