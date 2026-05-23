@@ -1,7 +1,7 @@
 # T1.4 Alias / Port Contract
 
-Status: scoped
-Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+Status: implemented
+Last Updated: 2026-05-24 (Step 4.8 closure)
 Class: S
 
 ## 1. Problem
@@ -240,4 +240,39 @@ No `Rule.content_digest` change. Occurrence aliases are expression-level wrapper
 
 ## 10. Outcome
 
-Pending implementation.
+Implemented in two commits on `v0.2.0-impl-t1-4-alias-port-contract-2026-05-23`:
+
+- `f04907ea` — recorded G7 precondition before implementation.
+- `64135b85` — added Rule occurrence / port reference substrate, exports, docs, and tests.
+
+Landed behavior:
+
+- `Rule.as_(alias=None)` returns a frozen `RuleOccurrence`.
+- `Rule.as_()` defaults the occurrence alias to `rule.id`.
+- `_validate_occurrence_alias(...)` uses `re.fullmatch(...)` and rejects non-identifier aliases.
+- `RuleOccurrence.port(name)` returns a frozen `RulePortRef`.
+- `RuleOccurrence.__getattr__(name)` resolves declared ports and raises `AttributeError` for missing/private names.
+- `RulePortRef` carries `occurrence_alias`, `rule_id`, `port_name`, `var`, and `port_type`.
+- `RuleOccurrence` and `RulePortRef` are hashable value objects.
+- `Rule.content_digest` remains alias-independent.
+
+Docs updated:
+
+- `src/factgraph/application/docs/rule.md` now documents ports as the public Rule boundary and describes occurrence aliases as future RuleExpr substrate.
+- SDK user-facing `.as_(...)` docs remain deferred to T3 RuleExpr, per scoped plan.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.sdk.dsl.test_application_rule` passed: 39 tests.
+- Targeted cross-slice sweep passed: 121 tests.
+- `python -m ruff check src/factgraph/application/protocol/rule.py src/factgraph/application/protocol/__init__.py tests/application/protocol/test_rule.py tests/sdk/dsl/test_application_rule.py` passed.
+- `git diff` showed no changes under `src/factgraph/adapters/`, `src/factgraph/core/`, or legacy `src/factgraph/sdk/dsl/rule.py`.
+
+Deviations:
+
+- None. The non-identifier `rule.id` default-alias edge case is covered by tests and matches the scoped contract.
+
+Archive readiness:
+
+- Blueprint and audit are implemented.
+- Ready for Step 4.9 archive.

@@ -1,7 +1,7 @@
 # T1.4 Alias / Port Contract Audit Log
 
-Status: scoped
-Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+Status: implemented
+Last Updated: 2026-05-24 (Step 4.8 closure)
 Blueprint: workflow/blueprints/active/2026-05-23_t1-4-alias-port-contract.md
 
 ## Event Log
@@ -12,6 +12,7 @@ Blueprint: workflow/blueprints/active/2026-05-23_t1-4-alias-port-contract.md
 | 2026-05-23 | Step 4.2 v2 tightening | Applied P1 default alias fix and four low-cost acceptance/spec hardenings. |
 | 2026-05-23 | scoped | Step 4.2 v2 re-review passed with 0 Blocker / 0 Required; scoped anchor includes non-identifier rule.id edge-case acceptance. |
 | 2026-05-23 | G7 precondition | Recorded current absence of Rule alias DTOs before implementation. |
+| 2026-05-24 | implemented | Step 4.7 review passed with 0 findings; blueprint Outcome filled. |
 
 ## G1-G7 Mapping
 
@@ -129,6 +130,29 @@ Shipped source re-read:
 - `src/factgraph/application/protocol/rule.py:76-87` still freezes `ports` and computes `_port_types`.
 - `src/factgraph/application/protocol/rule.py:361-388` still owns `PortType` inference.
 - `src/factgraph/application/protocol/__init__.py:74` currently exports `Rule` / `RuleValidationError` only from `.rule`.
+
+### Step 4.8 Closure
+
+Implementation commits:
+
+- `f04907ea` — G7 precondition record, before code changes.
+- `64135b85` — feature implementation.
+
+Step 4.7 review result:
+
+- 0 Blocker
+- 0 Required
+- 0 Worth-considering
+
+Verification reported by reviewer:
+
+- T1.4 acceptance suite: 39 tests pass.
+- Cross-slice sweep: 121 tests pass.
+- Ruff: clean.
+- No diff in adapters, core, or legacy SDK Rule.
+- Sacred master and dirty set preserved.
+
+No deviations were recorded.
 
 ## Review Surface
 
