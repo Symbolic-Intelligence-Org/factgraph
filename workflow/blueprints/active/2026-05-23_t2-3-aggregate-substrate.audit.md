@@ -2,7 +2,7 @@
 
 > **Title superseded note (post Step 4.2 v1)**:original title was "T2.3 — AggregateExpr substrate (IR + Python eval + SDK ergonomic)"。Step 4.2 v1 split scope to T2.3a substrate-only;SDK ergonomic deferred to T2.3b。Title updated above。
 
-- Status: draft
+- Status: implemented
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: paired blueprint audit log
