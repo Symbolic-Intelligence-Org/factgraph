@@ -28,9 +28,6 @@ class Const:
     origin: Origin | None = None
 
 
-Term: TypeAlias = Var | Const
-
-
 @dataclass(frozen=True)
 class PredAtom:
     pred_id: str
@@ -74,7 +71,12 @@ class NotAtom:
     origin: Origin | None = None
 
 
-Atom: TypeAlias = PredAtom | RuleRefAtom | CmpAtom | InAtom | BuiltinAtom | NotAtom
+@dataclass(frozen=True)
+class AggregateAtom:
+    kind: str
+    target: Term | None
+    filter: list[Atom]
+    origin: Origin | None = None
 
 
 @dataclass(frozen=True)
@@ -91,9 +93,13 @@ class OrExpr:
 
 WhereExpr: TypeAlias = AndExpr | OrExpr
 
+Term: TypeAlias = Var | Const | AggregateAtom
+Atom: TypeAlias = PredAtom | RuleRefAtom | CmpAtom | InAtom | BuiltinAtom | NotAtom
+
 
 _CMP_OPS = {"eq", "ne", "gt", "ge", "lt", "le"}
 _BUILTIN_TAGS = {"add", "sub", "neg", "addc", "mulc"}
+_AGGREGATE_KINDS = {"count", "sum", "min", "max", "mean"}
 
 
 def parse_where_ir_to_ast(where_ir: Any) -> WhereExpr:
@@ -227,7 +233,31 @@ def _parse_atom(raw: Any, *, path: str) -> Atom:
 def _parse_term(raw: Any, *, path: str) -> Term:
     if isinstance(raw, str) and raw.startswith("$") and len(raw) > 1:
         return Var(name=raw, origin=Origin(source="raw_ir", path=path))
+    if isinstance(raw, tuple) and raw and raw[0] in _AGGREGATE_KINDS:
+        return _parse_aggregate_term(raw, path=path)
     return Const(value=raw, origin=Origin(source="raw_ir", path=path))
+
+
+def _parse_aggregate_term(raw: tuple[Any, ...], *, path: str) -> AggregateAtom:
+    if len(raw) != 3:
+        raise WhereASTError(
+            "aggregate term must be (kind, target_or_None, [filter_atoms...])",
+            path=path,
+        )
+    kind, target_raw, filter_raw = raw
+    if kind not in _AGGREGATE_KINDS:
+        raise WhereASTError(f"unsupported aggregate kind: {kind}", path=path)
+    if not isinstance(filter_raw, list):
+        raise WhereASTError("aggregate filter must be list[atom]", path=f"{path}[2]")
+    return AggregateAtom(
+        kind=kind,
+        target=None if target_raw is None else _parse_term(target_raw, path=f"{path}[1]"),
+        filter=[
+            _parse_atom(filter_atom, path=f"{path}[2][{idx}]")
+            for idx, filter_atom in enumerate(filter_raw)
+        ],
+        origin=Origin(source="raw_ir", path=path),
+    )
 
 
 def _lower_atom(atom: Atom) -> tuple[Any, ...]:
@@ -251,4 +281,10 @@ def _lower_term(term: Term) -> Any:
         return term.name
     if isinstance(term, Const):
         return term.value
+    if isinstance(term, AggregateAtom):
+        return (
+            term.kind,
+            None if term.target is None else _lower_term(term.target),
+            [_lower_atom(atom) for atom in term.filter],
+        )
     raise WhereASTError(f"unsupported term node: {type(term).__name__}")

@@ -9,6 +9,7 @@ from typing import Any, Literal, Mapping
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (
     AndExpr,
+    AggregateAtom,
     Atom,
     BuiltinAtom,
     CmpAtom,
@@ -60,9 +61,17 @@ class Rule:
         if not isinstance(self.ports, Mapping) or not self.ports:
             raise RuleValidationError("ports must be non-empty Mapping[str, Var]")
 
-        seen_vars: set[Var] = set()
+        outer_seen_vars: set[Var] = set()
         for idx, atom in enumerate(self.where):
-            _validate_atom(atom, field_name=f"where[{idx}]", seen_vars=seen_vars)
+            _validate_atom(atom, field_name=f"where[{idx}]", seen_vars=outer_seen_vars)
+        seen_vars: set[Var] = set(outer_seen_vars)
+        for idx, atom in enumerate(self.where):
+            _collect_aggregate_term_vars_from_atom(
+                atom,
+                field_name=f"where[{idx}]",
+                outer_seen_vars=outer_seen_vars,
+                seen_vars=seen_vars,
+            )
 
         frozen_ports: dict[str, Var] = {}
         for key, value in self.ports.items():
@@ -173,7 +182,180 @@ def _collect_term_vars(term: Any, *, field_name: str, seen_vars: set[Var]) -> No
         return
     if isinstance(term, Const):
         return
+    if isinstance(term, AggregateAtom):
+        _validate_aggregate_term(term, field_name=field_name)
+        return
     raise RuleValidationError(f"{field_name} must be Var or Const")
+
+
+def _validate_aggregate_term(term: AggregateAtom, *, field_name: str) -> None:
+    if term.kind not in {"count", "sum", "min", "max", "mean"}:
+        raise RuleValidationError(f"{field_name}.kind must be one of count/sum/min/max/mean")
+    if term.kind == "count":
+        if term.target is not None:
+            raise RuleValidationError(f"{field_name}.target must be None for count")
+    elif term.target is None:
+        raise RuleValidationError(f"{field_name}.target must not be None for {term.kind}")
+    elif isinstance(term.target, AggregateAtom):
+        _validate_aggregate_term(term.target, field_name=f"{field_name}.target")
+    elif not isinstance(term.target, (Var, Const)):
+        raise RuleValidationError(f"{field_name}.target must be Var, Const, or AggregateAtom")
+    if not term.filter:
+        raise RuleValidationError(f"{field_name}.filter must be non-empty")
+    for idx, atom in enumerate(term.filter):
+        if isinstance(atom, BuiltinAtom):
+            raise RuleValidationError(f"{field_name}.filter[{idx}] must not be BuiltinAtom")
+        if isinstance(atom, RuleRefAtom):
+            raise RuleValidationError(f"{field_name}.filter[{idx}] must not be RuleRefAtom")
+        if _atom_has_aggregate_term(atom):
+            raise RuleValidationError(f"{field_name}.filter[{idx}] must not contain AggregateAtom")
+        _validate_atom(
+            atom,
+            field_name=f"{field_name}.filter[{idx}]",
+            seen_vars=set(),
+        )
+
+
+def _collect_aggregate_term_vars_from_atom(
+    atom: Atom,
+    *,
+    field_name: str,
+    outer_seen_vars: set[Var],
+    seen_vars: set[Var],
+) -> None:
+    if isinstance(atom, CmpAtom):
+        _collect_aggregate_term_vars(
+            atom.lhs,
+            field_name=f"{field_name}.lhs",
+            outer_seen_vars=outer_seen_vars,
+            seen_vars=seen_vars,
+        )
+        _collect_aggregate_term_vars(
+            atom.rhs,
+            field_name=f"{field_name}.rhs",
+            outer_seen_vars=outer_seen_vars,
+            seen_vars=seen_vars,
+        )
+        return
+    if isinstance(atom, BuiltinAtom):
+        for idx, term in enumerate(atom.args):
+            _collect_aggregate_term_vars(
+                term,
+                field_name=f"{field_name}.args[{idx}]",
+                outer_seen_vars=outer_seen_vars,
+                seen_vars=seen_vars,
+            )
+        return
+    if isinstance(atom, NotAtom):
+        _collect_aggregate_term_vars_from_expr(
+            atom.body,
+            field_name=f"{field_name}.body",
+            outer_seen_vars=outer_seen_vars,
+            seen_vars=seen_vars,
+        )
+
+
+def _collect_aggregate_term_vars_from_expr(
+    expr: WhereExpr,
+    *,
+    field_name: str,
+    outer_seen_vars: set[Var],
+    seen_vars: set[Var],
+) -> None:
+    if isinstance(expr, AndExpr):
+        for idx, atom in enumerate(expr.atoms):
+            _collect_aggregate_term_vars_from_atom(
+                atom,
+                field_name=f"{field_name}.atoms[{idx}]",
+                outer_seen_vars=outer_seen_vars,
+                seen_vars=seen_vars,
+            )
+        return
+    if isinstance(expr, OrExpr):
+        for branch_idx, branch in enumerate(expr.branches):
+            _collect_aggregate_term_vars_from_expr(
+                branch,
+                field_name=f"{field_name}.branches[{branch_idx}]",
+                outer_seen_vars=outer_seen_vars,
+                seen_vars=seen_vars,
+            )
+
+
+def _collect_aggregate_term_vars(
+    term: Any,
+    *,
+    field_name: str,
+    outer_seen_vars: set[Var],
+    seen_vars: set[Var],
+) -> None:
+    if not isinstance(term, AggregateAtom):
+        return
+    _validate_aggregate_term(term, field_name=field_name)
+    target_vars: set[Var] = set()
+    if term.target is not None:
+        _collect_all_vars_in_term(term.target, seen_vars=target_vars)
+    filter_vars: set[Var] = set()
+    for atom in term.filter:
+        _collect_all_vars_in_atom(atom, seen_vars=filter_vars)
+    seen_vars |= target_vars
+    seen_vars |= filter_vars & outer_seen_vars
+
+
+def _collect_all_vars_in_term(term: Any, *, seen_vars: set[Var]) -> None:
+    if isinstance(term, Var):
+        seen_vars.add(term)
+        return
+    if isinstance(term, Const):
+        return
+    if isinstance(term, AggregateAtom):
+        if term.target is not None:
+            _collect_all_vars_in_term(term.target, seen_vars=seen_vars)
+        for atom in term.filter:
+            _collect_all_vars_in_atom(atom, seen_vars=seen_vars)
+
+
+def _collect_all_vars_in_atom(atom: Atom, *, seen_vars: set[Var]) -> None:
+    if isinstance(atom, PredAtom):
+        for term in atom.terms:
+            _collect_all_vars_in_term(term, seen_vars=seen_vars)
+        return
+    if isinstance(atom, CmpAtom):
+        _collect_all_vars_in_term(atom.lhs, seen_vars=seen_vars)
+        _collect_all_vars_in_term(atom.rhs, seen_vars=seen_vars)
+        return
+    if isinstance(atom, InAtom):
+        _collect_all_vars_in_term(atom.var, seen_vars=seen_vars)
+        for value in atom.values:
+            _collect_all_vars_in_term(value, seen_vars=seen_vars)
+        return
+    if isinstance(atom, BuiltinAtom):
+        for term in atom.args:
+            _collect_all_vars_in_term(term, seen_vars=seen_vars)
+        return
+    if isinstance(atom, NotAtom):
+        branches = atom.body.branches if isinstance(atom.body, OrExpr) else [atom.body]
+        for branch in branches:
+            for body_atom in branch.atoms:
+                _collect_all_vars_in_atom(body_atom, seen_vars=seen_vars)
+
+
+def _term_has_aggregate(term: Any) -> bool:
+    return isinstance(term, AggregateAtom)
+
+
+def _atom_has_aggregate_term(atom: Atom) -> bool:
+    if isinstance(atom, PredAtom):
+        return any(_term_has_aggregate(term) for term in atom.terms)
+    if isinstance(atom, CmpAtom):
+        return _term_has_aggregate(atom.lhs) or _term_has_aggregate(atom.rhs)
+    if isinstance(atom, InAtom):
+        return _term_has_aggregate(atom.var) or any(_term_has_aggregate(value) for value in atom.values)
+    if isinstance(atom, BuiltinAtom):
+        return True
+    if isinstance(atom, NotAtom):
+        branches = atom.body.branches if isinstance(atom.body, OrExpr) else [atom.body]
+        return any(_atom_has_aggregate_term(body_atom) for branch in branches for body_atom in branch.atoms)
+    return False
 
 
 def _infer_port_types(ports: Mapping[str, Var], where: tuple[Atom, ...]) -> dict[str, PortType]:
@@ -247,6 +429,14 @@ def _serialize_term(term: Term) -> dict[str, Any]:
         return _serialize_var(term)
     if isinstance(term, Const):
         return _serialize_const(term)
+    if isinstance(term, AggregateAtom):
+        return {
+            "type": "AggregateAtom",
+            "kind": term.kind,
+            "target": None if term.target is None else _serialize_term(term.target),
+            "filter": [_serialize_atom(atom) for atom in term.filter],
+            "origin": _serialize_origin(term.origin),
+        }
     raise RuleValidationError(f"cannot serialize unsupported term type: {type(term).__name__}")
 
 

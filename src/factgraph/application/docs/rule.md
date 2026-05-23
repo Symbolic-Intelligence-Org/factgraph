@@ -78,6 +78,20 @@ The bridge emits the required `EntityType:exists` predicate for unified field
 syntax, including cross-entity references such as
 `LivesIn(li).user == User(u)`.
 
+## Internal Aggregate Terms
+
+The application DTO can store core `AggregateAtom` values in comparison or
+arithmetic term position. This is an internal substrate feature for direct
+application-rule construction: SDK ergonomic helpers and
+`build_application_rule(...)` aggregate lowering are intentionally deferred to a
+later slice.
+
+Aggregate terms do not extend the top-level atom allowlist. `AggregateAtom`
+stays value-producing and must be wrapped by an enclosing comparison or
+arithmetic atom. Port validation treats aggregate target variables as visible,
+keeps aggregate-filter-local variables private, and rejects ports that reference
+only aggregate-local filter variables.
+
 ## Bridge Rejections
 
 The new application Rule path rejects legacy SDK authoring forms that are still

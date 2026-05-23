@@ -5,7 +5,9 @@ from typing import Any, Iterable, Literal
 
 from factgraph.core.rules.backend_profile import BackendProfile
 from factgraph.core.rules.where_ast import (
+    _AGGREGATE_KINDS,
     AndExpr,
+    AggregateAtom,
     Atom,
     BuiltinAtom,
     CmpAtom,
@@ -30,9 +32,19 @@ class WhereASTValidationError(Exception):
         self.path = path
 
 
+class AggregateValidationError(WhereASTValidationError):
+    pass
+
+
+class AggregateVariableScopeError(WhereASTValidationError):
+    pass
+
+
 _CMP_OPS = {"eq", "ne", "gt", "ge", "lt", "le"}
 _CMP_FILTER_OPS = {"gt", "ge", "lt", "le"}
 _DEFAULT_BUILTINS = {"add", "sub", "neg", "addc", "mulc"}
+_AGGREGATE_FILTER_TOP_LEVEL_ALLOWED = {"pred", "eq", "ne", "gt", "ge", "lt", "le", "in", "not"}
+_AGGREGATE_FILTER_NOT_BODY_ALLOWED = _AGGREGATE_FILTER_TOP_LEVEL_ALLOWED - {"not"}
 _DEFAULT_MODES = {"python", "souffle"}
 _RULEREF_POLICIES = {"allow", "require_resolved", "forbid"}
 _NOT_BODY_POLICIES = {"allow", "require_correlated", "forbid_or", "forbid"}
@@ -165,7 +177,7 @@ def _validate_atom_shape(atom: Atom, caps: dict[str, Any], *, in_not_body: bool)
         if not atom.terms:
             raise _shape_error("PredAtom.terms must be non-empty", origin=atom.origin)
         for term in atom.terms:
-            _validate_term_shape(term, origin=atom.origin)
+            _validate_term_shape(term, origin=atom.origin, allow_aggregate=False)
         return
 
     if isinstance(atom, RuleRefAtom):
@@ -186,7 +198,7 @@ def _validate_atom_shape(atom: Atom, caps: dict[str, Any], *, in_not_body: bool)
         if not atom.terms:
             raise _shape_error("RuleRefAtom.terms must be non-empty", origin=atom.origin)
         for term in atom.terms:
-            _validate_term_shape(term, origin=atom.origin)
+            _validate_term_shape(term, origin=atom.origin, allow_aggregate=False)
         return
 
     if isinstance(atom, CmpAtom):
@@ -197,7 +209,7 @@ def _validate_atom_shape(atom: Atom, caps: dict[str, Any], *, in_not_body: bool)
         return
 
     if isinstance(atom, InAtom):
-        _validate_term_shape(atom.var, origin=atom.origin)
+        _validate_term_shape(atom.var, origin=atom.origin, allow_aggregate=False)
         if not isinstance(atom.var, Var):
             raise _shape_error("InAtom.var must be Var", origin=atom.origin)
         if not atom.values:
@@ -278,14 +290,98 @@ def _validate_builtin_shape(atom: BuiltinAtom) -> None:
     raise _shape_error(f"unsupported builtin op in validator: {op}", origin=atom.origin)
 
 
-def _validate_term_shape(term: Term, *, origin: Origin | None) -> None:
+def _validate_term_shape(
+    term: Term,
+    *,
+    origin: Origin | None,
+    allow_aggregate: bool = True,
+) -> None:
     if isinstance(term, Var):
         if not isinstance(term.name, str) or not term.name.startswith("$") or len(term.name) < 2:
             raise _shape_error("Var.name must be '$' + non-empty identifier token", origin=term.origin or origin)
         return
     if isinstance(term, Const):
         return
+    if isinstance(term, AggregateAtom):
+        if not allow_aggregate:
+            raise AggregateValidationError(
+                "AggregateAtom is only allowed in comparison/arithmetic term position",
+                path=(term.origin or origin).path if (term.origin or origin) else None,
+            )
+        _validate_aggregate_atom_shape(term)
+        return
     raise _shape_error(f"unsupported term node in PR-2 validator: {type(term).__name__}", origin=origin)
+
+
+def _validate_aggregate_atom_shape(atom: AggregateAtom) -> None:
+    if atom.kind not in _AGGREGATE_KINDS:
+        raise AggregateValidationError(
+            f"unsupported aggregate kind: {atom.kind}",
+            path=atom.origin.path if atom.origin else None,
+        )
+    if atom.kind == "count":
+        if atom.target is not None:
+            raise AggregateValidationError(
+                "count target must be None",
+                path=atom.origin.path if atom.origin else None,
+            )
+    elif atom.target is None:
+        raise AggregateValidationError(
+            f"{atom.kind} target must not be None",
+            path=atom.origin.path if atom.origin else None,
+        )
+    if atom.kind in {"sum", "mean"} and isinstance(atom.target, Const):
+        value = atom.target.value
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise AggregateValidationError(
+                f"{atom.kind} target Const must be int/float, got {type(value).__name__}",
+                path=atom.origin.path if atom.origin else None,
+            )
+    if not atom.filter:
+        raise AggregateValidationError(
+            "aggregate filter must be non-empty",
+            path=atom.origin.path if atom.origin else None,
+        )
+    for idx, filter_atom in enumerate(atom.filter):
+        kind = _atom_kind(filter_atom)
+        if kind not in _AGGREGATE_FILTER_TOP_LEVEL_ALLOWED:
+            raise AggregateValidationError(
+                f"aggregate filter[{idx}] kind not allowed: {kind}",
+                path=getattr(getattr(filter_atom, "origin", None), "path", None),
+            )
+        _validate_aggregate_filter_atom_shape(filter_atom)
+
+
+def _validate_aggregate_filter_atom_shape(atom: Atom) -> None:
+    if isinstance(atom, PredAtom):
+        for term in atom.terms:
+            _validate_term_shape(term, origin=atom.origin, allow_aggregate=False)
+        return
+    if isinstance(atom, CmpAtom):
+        _validate_term_shape(atom.lhs, origin=atom.origin, allow_aggregate=False)
+        _validate_term_shape(atom.rhs, origin=atom.origin, allow_aggregate=False)
+        return
+    if isinstance(atom, InAtom):
+        _validate_term_shape(atom.var, origin=atom.origin, allow_aggregate=False)
+        for value in atom.values:
+            _validate_term_shape(value, origin=atom.origin, allow_aggregate=False)
+        return
+    if isinstance(atom, NotAtom):
+        branches = atom.body.branches if isinstance(atom.body, OrExpr) else [atom.body]
+        for branch in branches:
+            for body_atom in branch.atoms:
+                kind = _atom_kind(body_atom)
+                if kind not in _AGGREGATE_FILTER_NOT_BODY_ALLOWED:
+                    raise AggregateValidationError(
+                        f"aggregate filter not body kind not allowed: {kind}",
+                        path=getattr(getattr(body_atom, "origin", None), "path", None),
+                    )
+                _validate_aggregate_filter_atom_shape(body_atom)
+        return
+    raise AggregateValidationError(
+        f"aggregate filter atom kind not allowed: {_atom_kind(atom)}",
+        path=getattr(getattr(atom, "origin", None), "path", None),
+    )
 
 
 def _validate_expr_dataflow(expr: WhereExpr, *, bound_outside: set[str], caps: dict[str, Any]) -> _FlowState:
@@ -312,10 +408,11 @@ def _validate_and_dataflow(and_expr: AndExpr, *, bound_outside: set[str], caps: 
     bound = set(bound_outside)
     local_bound: set[str] = set()
     free_used: set[str] = set()
-    for atom in and_expr.atoms:
+    for idx, atom in enumerate(and_expr.atoms):
         if isinstance(atom, NotAtom):
             _validate_not_dataflow(atom, bound_outside=bound, caps=caps)
             continue
+        _validate_aggregate_leaks(atom, bound=bound, subsequent_atoms=and_expr.atoms[idx + 1 :])
         effect = _step_effect(atom, bound=bound)
         missing = effect.requires - bound
         if missing:
@@ -367,28 +464,28 @@ def _step_effect(atom: Atom, *, bound: set[str]) -> _StepEffect:
         args = atom.args
         if op in {"add", "sub"}:
             z, x, y = args
-            req = _vars_in_terms([x, y])
+            req = _term_requires(x, bound=bound) | _term_requires(y, bound=bound)
             return _StepEffect(requires=req, binds={_var_name(z)}, references=set(req))
         if op == "neg":
             z, x = args
-            req = _vars_in_terms([x])
+            req = _term_requires(x, bound=bound)
             return _StepEffect(requires=req, binds={_var_name(z)}, references=set(req))
         if op in {"addc", "mulc"}:
             z, x, _c = args
-            req = _vars_in_terms([x])
+            req = _term_requires(x, bound=bound)
             return _StepEffect(requires=req, binds={_var_name(z)}, references=set(req))
         return _StepEffect(requires=set(), binds=set(), references=set())
 
     if isinstance(atom, CmpAtom):
         if atom.op in _CMP_FILTER_OPS or atom.op == "ne":
-            req = _term_requires(atom.lhs) | _term_requires(atom.rhs)
+            req = _term_requires(atom.lhs, bound=bound) | _term_requires(atom.rhs, bound=bound)
             return _StepEffect(requires=req, binds=set(), references=set(req))
         if atom.op != "eq":
             return _StepEffect(requires=set(), binds=set(), references=set())
         lhs_ready = _term_is_resolved(atom.lhs, bound)
         rhs_ready = _term_is_resolved(atom.rhs, bound)
-        lhs_vars = _term_requires(atom.lhs)
-        rhs_vars = _term_requires(atom.rhs)
+        lhs_vars = _term_requires(atom.lhs, bound=bound)
+        rhs_vars = _term_requires(atom.rhs, bound=bound)
         lhs_var = atom.lhs if isinstance(atom.lhs, Var) else None
         rhs_var = atom.rhs if isinstance(atom.rhs, Var) else None
 
@@ -407,9 +504,11 @@ def _step_effect(atom: Atom, *, bound: set[str]) -> _StepEffect:
     raise _flow_error(f"unsupported atom node in dataflow: {type(atom).__name__}", origin=getattr(atom, "origin", None))
 
 
-def _term_requires(term: Term) -> set[str]:
+def _term_requires(term: Term, *, bound: set[str]) -> set[str]:
     if isinstance(term, Var):
         return {term.name}
+    if isinstance(term, AggregateAtom):
+        return _aggregate_correlated_requires(term, outer_bound_vars=bound)
     return set()
 
 
@@ -418,11 +517,180 @@ def _term_is_resolved(term: Term, bound: set[str]) -> bool:
         return True
     if isinstance(term, Var):
         return term.name in bound
+    if isinstance(term, AggregateAtom):
+        return _aggregate_correlated_requires(term, outer_bound_vars=bound).issubset(bound)
     return False
 
 
 def _vars_in_terms(terms: Iterable[Term]) -> set[str]:
-    return {term.name for term in terms if isinstance(term, Var)}
+    out: set[str] = set()
+    for term in terms:
+        out |= _vars_in_term(term)
+    return out
+
+
+def _vars_in_term(term: Term) -> set[str]:
+    if isinstance(term, Var):
+        return {term.name}
+    if isinstance(term, AggregateAtom):
+        found = _vars_in_term(term.target) if term.target is not None else set()
+        for atom in term.filter:
+            found |= _vars_in_atom(atom)
+        return found
+    return set()
+
+
+def _vars_in_atom(atom: Atom) -> set[str]:
+    if isinstance(atom, (PredAtom, RuleRefAtom)):
+        return _vars_in_terms(atom.terms)
+    if isinstance(atom, CmpAtom):
+        return _vars_in_term(atom.lhs) | _vars_in_term(atom.rhs)
+    if isinstance(atom, InAtom):
+        return _vars_in_term(atom.var) | _vars_in_terms(atom.values)
+    if isinstance(atom, BuiltinAtom):
+        return _vars_in_terms(atom.args)
+    if isinstance(atom, NotAtom):
+        found: set[str] = set()
+        branches = atom.body.branches if isinstance(atom.body, OrExpr) else [atom.body]
+        for branch in branches:
+            for body_atom in branch.atoms:
+                found |= _vars_in_atom(body_atom)
+        return found
+    return set()
+
+
+def _aggregate_filter_bound_vars(agg: AggregateAtom, outer_bound_vars: set[str]) -> set[str]:
+    state = _validate_and_dataflow(
+        AndExpr(atoms=agg.filter, origin=agg.origin),
+        bound_outside=set(outer_bound_vars),
+        caps=_capabilities_for_mode("python", {"allow_ruleref": False}),
+    )
+    return set(state.bound)
+
+
+def _aggregate_correlated_requires(agg: AggregateAtom, *, outer_bound_vars: set[str]) -> set[str]:
+    target_vars = _vars_in_term(agg.target) if agg.target is not None else set()
+    filter_vars: set[str] = set()
+    for atom in agg.filter:
+        filter_vars |= _vars_in_atom(atom)
+    _validate_aggregate_target_binding(agg, target_vars=target_vars, outer_bound_vars=outer_bound_vars)
+    return (target_vars | filter_vars) & outer_bound_vars
+
+
+def _validate_aggregate_target_binding(
+    agg: AggregateAtom,
+    *,
+    target_vars: set[str],
+    outer_bound_vars: set[str],
+) -> None:
+    if not target_vars:
+        return
+    filter_bound_vars = _aggregate_filter_bound_vars(agg, outer_bound_vars)
+    missing = target_vars - (outer_bound_vars | filter_bound_vars)
+    if missing:
+        raise AggregateVariableScopeError(
+            "aggregate target variables must be bound by outer scope or aggregate filter: "
+            + ", ".join(sorted(missing)),
+            path=agg.origin.path if agg.origin else None,
+        )
+
+
+def _aggregate_local_only_vars(agg: AggregateAtom, *, outer_bound_vars: set[str]) -> set[str]:
+    target_vars = _vars_in_term(agg.target) if agg.target is not None else set()
+    filter_vars: set[str] = set()
+    for atom in agg.filter:
+        filter_vars |= _vars_in_atom(atom)
+    return filter_vars - outer_bound_vars - target_vars
+
+
+def _validate_aggregate_leaks(atom: Atom, *, bound: set[str], subsequent_atoms: list[Atom]) -> None:
+    local_only: set[str] = set()
+    for aggregate in _aggregates_in_atom(atom):
+        local_only |= _aggregate_local_only_vars(aggregate, outer_bound_vars=bound)
+    if not local_only:
+        return
+    subsequent_vars: set[str] = set()
+    for subsequent in subsequent_atoms:
+        subsequent_vars |= _outer_visible_vars_in_atom(subsequent, outer_bound_vars=bound)
+    leaked = local_only & subsequent_vars
+    if leaked:
+        raise AggregateVariableScopeError(
+            "aggregate-local vars leak into outer scope: " + ", ".join(sorted(leaked)),
+            path=getattr(atom.origin, "path", None),
+        )
+
+
+def _aggregates_in_term(term: Term) -> list[AggregateAtom]:
+    if isinstance(term, AggregateAtom):
+        out = [term]
+        if term.target is not None:
+            out.extend(_aggregates_in_term(term.target))
+        return out
+    return []
+
+
+def _aggregates_in_atom(atom: Atom) -> list[AggregateAtom]:
+    if isinstance(atom, CmpAtom):
+        return [*_aggregates_in_term(atom.lhs), *_aggregates_in_term(atom.rhs)]
+    if isinstance(atom, BuiltinAtom):
+        out: list[AggregateAtom] = []
+        for term in atom.args:
+            out.extend(_aggregates_in_term(term))
+        return out
+    return []
+
+
+def _outer_visible_vars_in_term(term: Term, *, outer_bound_vars: set[str]) -> set[str]:
+    if isinstance(term, Var):
+        return {term.name}
+    if isinstance(term, AggregateAtom):
+        target_vars = _vars_in_term(term.target) if term.target is not None else set()
+        filter_vars: set[str] = set()
+        for filter_atom in term.filter:
+            filter_vars |= _vars_in_atom(filter_atom)
+        return target_vars | (filter_vars & outer_bound_vars)
+    return set()
+
+
+def _outer_visible_vars_in_atom(atom: Atom, *, outer_bound_vars: set[str]) -> set[str]:
+    if isinstance(atom, (PredAtom, RuleRefAtom)):
+        return _vars_in_terms(atom.terms)
+    if isinstance(atom, CmpAtom):
+        return _outer_visible_vars_in_term(atom.lhs, outer_bound_vars=outer_bound_vars) | _outer_visible_vars_in_term(
+            atom.rhs,
+            outer_bound_vars=outer_bound_vars,
+        )
+    if isinstance(atom, InAtom):
+        return _outer_visible_vars_in_term(atom.var, outer_bound_vars=outer_bound_vars) | _vars_in_terms(atom.values)
+    if isinstance(atom, BuiltinAtom):
+        out: set[str] = set()
+        for term in atom.args:
+            out |= _outer_visible_vars_in_term(term, outer_bound_vars=outer_bound_vars)
+        return out
+    if isinstance(atom, NotAtom):
+        found: set[str] = set()
+        branches = atom.body.branches if isinstance(atom.body, OrExpr) else [atom.body]
+        for branch in branches:
+            for body_atom in branch.atoms:
+                found |= _outer_visible_vars_in_atom(body_atom, outer_bound_vars=outer_bound_vars)
+        return found
+    return set()
+
+
+def _atom_kind(atom: Atom) -> str:
+    if isinstance(atom, PredAtom):
+        return "pred"
+    if isinstance(atom, CmpAtom):
+        return atom.op
+    if isinstance(atom, InAtom):
+        return "in"
+    if isinstance(atom, BuiltinAtom):
+        return atom.op
+    if isinstance(atom, NotAtom):
+        return "not"
+    if isinstance(atom, RuleRefAtom):
+        return "ruleref"
+    return type(atom).__name__
 
 
 def _var_name(term: Term) -> str:

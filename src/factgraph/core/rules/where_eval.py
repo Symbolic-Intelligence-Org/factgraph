@@ -36,6 +36,15 @@ class WhereAddedCondition:
 
 _DEC_INT_RE = re.compile(r"^-?\d+$")
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
+_AGGREGATE_KINDS = {"count", "sum", "min", "max", "mean"}
+
+
+class _AggregateNoValueSentinel:
+    def __repr__(self) -> str:
+        return "AggregateNoValue"
+
+
+AggregateNoValue = _AggregateNoValueSentinel()
 
 
 def evaluate_where(
@@ -363,11 +372,16 @@ def _validate_atom(atom: Any) -> tuple[Any, ...]:
         _, pred_id, terms = atom
         if not isinstance(terms, list):
             raise WhereValidationError("pred terms must be list")
+        if any(_is_aggregate_term(term) for term in terms):
+            raise WhereValidationError("aggregate terms are not allowed in pred terms")
         return atom
 
     if kind == "eq":
         if len(atom) != 3:
             raise WhereValidationError("eq atom must be ('eq', lhs, rhs)")
+        _, lhs, rhs = atom
+        _validate_eval_term(lhs, allow_aggregate=True)
+        _validate_eval_term(rhs, allow_aggregate=True)
         return atom
 
     if kind == "in":
@@ -383,13 +397,18 @@ def _validate_atom(atom: Any) -> tuple[Any, ...]:
     if kind == "ne":
         if len(atom) != 3:
             raise WhereValidationError("ne atom must be ('ne', lhs, rhs)")
+        _, lhs, rhs = atom
+        _validate_eval_term(lhs, allow_aggregate=True)
+        _validate_eval_term(rhs, allow_aggregate=True)
         return atom
 
     if kind in {"gt", "ge", "lt", "le"}:
         if len(atom) != 3:
             raise WhereValidationError(f"{kind} atom must be ('{kind}', lhs, rhs)")
         _, lhs, rhs = atom
-        if not _is_var(lhs) and not _is_var(rhs):
+        _validate_eval_term(lhs, allow_aggregate=True)
+        _validate_eval_term(rhs, allow_aggregate=True)
+        if not _is_var(lhs) and not _is_var(rhs) and not _is_aggregate_term(lhs) and not _is_aggregate_term(rhs):
             raise WhereValidationError(f"{kind} requires at least one variable side")
         return atom
 
@@ -412,10 +431,19 @@ def _eval_body(
     body: list[tuple[Any, ...]],
     *,
     ast_gate_on: bool,
+    initial_envs: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    planned_body = _plan_body_atoms(body, ast_gate_on=ast_gate_on)
+    initial_bound_vars: set[str] = set()
+    if initial_envs is not None:
+        for env in initial_envs:
+            initial_bound_vars.update(env)
+    planned_body = _plan_body_atoms(
+        body,
+        ast_gate_on=ast_gate_on,
+        initial_bound_vars=initial_bound_vars,
+    )
     pred_lookup_cache: dict[str, dict[tuple[int, ...], dict[tuple[Any, ...], list[tuple[Any, ...]]]]] = {}
-    envs: list[dict[str, Any]] = [{}]
+    envs: list[dict[str, Any]] = [{}] if initial_envs is None else [dict(env) for env in initial_envs]
     for atom in planned_body:
         kind = atom[0]
         if kind == "pred":
@@ -426,15 +454,15 @@ def _eval_body(
                 pred_lookup_cache=pred_lookup_cache,
             )
         elif kind == "eq":
-            envs = _eval_eq_atom(envs, atom, ast_gate_on=ast_gate_on)
+            envs = _eval_eq_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "in":
             envs = _eval_in_atom(envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "ne":
-            envs = _eval_ne_atom(envs, atom, ast_gate_on=ast_gate_on)
+            envs = _eval_ne_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         elif kind in {"gt", "ge", "lt", "le"}:
-            envs = _eval_cmp_atom(envs, atom, ast_gate_on=ast_gate_on)
+            envs = _eval_cmp_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         elif kind in _ARITH_KINDS:
-            envs = _eval_arith_atom(envs, atom, ast_gate_on=ast_gate_on)
+            envs = _eval_arith_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "not":
             envs = _eval_not_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         else:
@@ -496,6 +524,7 @@ def _eval_pred_atom(
 
 
 def _eval_eq_atom(
+    view_facts: dict[str, list[tuple[Any, ...]]],
     envs: list[dict[str, Any]],
     atom: tuple[Any, ...],
     *,
@@ -505,8 +534,11 @@ def _eval_eq_atom(
     out: list[dict[str, Any]] = []
 
     for env in envs:
-        lhs_known, lhs_value = _resolve(env, lhs)
-        rhs_known, rhs_value = _resolve(env, rhs)
+        lhs_known, lhs_value = _resolve_eval_term(env, lhs, view_facts, ast_gate_on=ast_gate_on)
+        rhs_known, rhs_value = _resolve_eval_term(env, rhs, view_facts, ast_gate_on=ast_gate_on)
+
+        if lhs_value is AggregateNoValue or rhs_value is AggregateNoValue:
+            continue
 
         if lhs_known and rhs_known:
             if lhs_value == rhs_value:
@@ -552,6 +584,7 @@ def _eval_in_atom(
 
 
 def _eval_ne_atom(
+    view_facts: dict[str, list[tuple[Any, ...]]],
     envs: list[dict[str, Any]],
     atom: tuple[Any, ...],
     *,
@@ -561,8 +594,11 @@ def _eval_ne_atom(
     out: list[dict[str, Any]] = []
 
     for env in envs:
-        lhs_known, lhs_value = _resolve(env, lhs)
-        rhs_known, rhs_value = _resolve(env, rhs)
+        lhs_known, lhs_value = _resolve_eval_term(env, lhs, view_facts, ast_gate_on=ast_gate_on)
+        rhs_known, rhs_value = _resolve_eval_term(env, rhs, view_facts, ast_gate_on=ast_gate_on)
+
+        if lhs_value is AggregateNoValue or rhs_value is AggregateNoValue:
+            continue
 
         if not lhs_known and _is_var(lhs):
             if not ast_gate_on:
@@ -584,6 +620,7 @@ def _eval_ne_atom(
 
 
 def _eval_cmp_atom(
+    view_facts: dict[str, list[tuple[Any, ...]]],
     envs: list[dict[str, Any]],
     atom: tuple[Any, ...],
     *,
@@ -593,8 +630,11 @@ def _eval_cmp_atom(
     out: list[dict[str, Any]] = []
 
     for env in envs:
-        lhs_known, lhs_value_raw = _resolve(env, lhs)
-        rhs_known, rhs_value_raw = _resolve(env, rhs)
+        lhs_known, lhs_value_raw = _resolve_eval_term(env, lhs, view_facts, ast_gate_on=ast_gate_on)
+        rhs_known, rhs_value_raw = _resolve_eval_term(env, rhs, view_facts, ast_gate_on=ast_gate_on)
+
+        if lhs_value_raw is AggregateNoValue or rhs_value_raw is AggregateNoValue:
+            continue
 
         if not lhs_known and _is_var(lhs):
             if not ast_gate_on:
@@ -659,32 +699,7 @@ def _exists_not_body(
     ast_gate_on: bool,
 ) -> bool:
     for body in bodies:
-        planned_body = _plan_body_atoms(body, ast_gate_on=ast_gate_on)
-        pred_lookup_cache: dict[str, dict[tuple[int, ...], dict[tuple[Any, ...], list[tuple[Any, ...]]]]] = {}
-        envs: list[dict[str, Any]] = [dict(env)]
-        for atom in planned_body:
-            kind = atom[0]
-            if kind == "pred":
-                envs = _eval_pred_atom(
-                    view_facts,
-                    envs,
-                    atom,
-                    pred_lookup_cache=pred_lookup_cache,
-                )
-            elif kind == "eq":
-                envs = _eval_eq_atom(envs, atom, ast_gate_on=ast_gate_on)
-            elif kind == "in":
-                envs = _eval_in_atom(envs, atom, ast_gate_on=ast_gate_on)
-            elif kind == "ne":
-                envs = _eval_ne_atom(envs, atom, ast_gate_on=ast_gate_on)
-            elif kind in {"gt", "ge", "lt", "le"}:
-                envs = _eval_cmp_atom(envs, atom, ast_gate_on=ast_gate_on)
-            elif kind in _ARITH_KINDS:
-                envs = _eval_arith_atom(envs, atom, ast_gate_on=ast_gate_on)
-            else:
-                raise WhereValidationError(f"unsupported atom kind in not body: {kind}")
-            if not envs:
-                break
+        envs = _eval_body(view_facts, body, ast_gate_on=ast_gate_on, initial_envs=[env])
         if envs:
             return True
     return False
@@ -734,6 +749,72 @@ def _resolve(env: dict[str, Any], term: Any) -> tuple[bool, Any]:
     return True, term
 
 
+def _resolve_eval_term(
+    env: dict[str, Any],
+    term: Any,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    *,
+    ast_gate_on: bool,
+) -> tuple[bool, Any]:
+    if _is_aggregate_term(term):
+        return True, _resolve_aggregate_term_for_env(
+            env,
+            term,
+            view_facts,
+            ast_gate_on=ast_gate_on,
+        )
+    return _resolve(env, term)
+
+
+def _resolve_aggregate_term_for_env(
+    env: dict[str, Any],
+    aggregate_term: tuple[Any, ...],
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    *,
+    ast_gate_on: bool,
+) -> Any:
+    kind, target, filter_atoms = aggregate_term
+    matched_envs = _eval_body(
+        view_facts,
+        filter_atoms,
+        ast_gate_on=ast_gate_on,
+        initial_envs=[env],
+    )
+    if kind == "count":
+        return len(matched_envs)
+    if not matched_envs:
+        if kind == "sum":
+            return 0
+        return AggregateNoValue
+
+    target_values: list[Any] = []
+    for matched_env in matched_envs:
+        known, value = _resolve_eval_term(matched_env, target, view_facts, ast_gate_on=ast_gate_on)
+        if not known or value is AggregateNoValue:
+            return AggregateNoValue
+        target_values.append(value)
+
+    if kind in {"sum", "mean"}:
+        for value in target_values:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return AggregateNoValue
+    if kind == "sum":
+        return sum(target_values)
+    if kind == "mean":
+        return sum(target_values) / len(target_values)
+    if kind == "min":
+        try:
+            return min(target_values)
+        except TypeError:
+            return AggregateNoValue
+    if kind == "max":
+        try:
+            return max(target_values)
+        except TypeError:
+            return AggregateNoValue
+    raise WhereValidationError(f"unsupported aggregate kind: {kind}")
+
+
 def _validate_arith_atom(atom: tuple[Any, ...]) -> tuple[Any, ...]:
     kind = atom[0]
     if kind in {"add", "sub"}:
@@ -743,7 +824,8 @@ def _validate_arith_atom(atom: tuple[Any, ...]) -> tuple[Any, ...]:
         if not _is_var(z):
             raise WhereValidationError(f"{kind} output must be variable")
         for side in (x, y):
-            if not _is_var(side) and not _is_literal(side):
+            _validate_eval_term(side, allow_aggregate=True)
+            if not _is_var(side) and not _is_literal(side) and not _is_aggregate_term(side):
                 raise WhereValidationError(f"{kind} inputs must be variables or literals")
         return atom
     if kind == "neg":
@@ -752,7 +834,8 @@ def _validate_arith_atom(atom: tuple[Any, ...]) -> tuple[Any, ...]:
         _, z, x = atom
         if not _is_var(z):
             raise WhereValidationError("neg output must be variable")
-        if not _is_var(x) and not _is_literal(x):
+        _validate_eval_term(x, allow_aggregate=True)
+        if not _is_var(x) and not _is_literal(x) and not _is_aggregate_term(x):
             raise WhereValidationError("neg input must be variable or literal")
         return atom
     if kind in {"addc", "mulc"}:
@@ -761,7 +844,8 @@ def _validate_arith_atom(atom: tuple[Any, ...]) -> tuple[Any, ...]:
         _, z, x, c = atom
         if not _is_var(z):
             raise WhereValidationError(f"{kind} output must be variable")
-        if not _is_var(x) and not _is_literal(x):
+        _validate_eval_term(x, allow_aggregate=True)
+        if not _is_var(x) and not _is_literal(x) and not _is_aggregate_term(x):
             raise WhereValidationError(f"{kind} x input must be variable or literal")
         if _is_var(c) or not _is_literal(c):
             raise WhereValidationError(f"{kind} constant operand must be literal")
@@ -771,6 +855,7 @@ def _validate_arith_atom(atom: tuple[Any, ...]) -> tuple[Any, ...]:
 
 
 def _eval_arith_atom(
+    view_facts: dict[str, list[tuple[Any, ...]]],
     envs: list[dict[str, Any]],
     atom: tuple[Any, ...],
     *,
@@ -781,38 +866,38 @@ def _eval_arith_atom(
     for env in envs:
         if kind == "add":
             _, z, x, y = atom
-            xv = _require_resolved_arith(env, x, kind, ast_gate_on=ast_gate_on)
+            xv = _require_resolved_arith(env, x, kind, view_facts, ast_gate_on=ast_gate_on)
             if xv is None:
                 continue
-            yv = _require_resolved_arith(env, y, kind, ast_gate_on=ast_gate_on)
+            yv = _require_resolved_arith(env, y, kind, view_facts, ast_gate_on=ast_gate_on)
             if yv is None:
                 continue
             result = xv + yv
         elif kind == "sub":
             _, z, x, y = atom
-            xv = _require_resolved_arith(env, x, kind, ast_gate_on=ast_gate_on)
+            xv = _require_resolved_arith(env, x, kind, view_facts, ast_gate_on=ast_gate_on)
             if xv is None:
                 continue
-            yv = _require_resolved_arith(env, y, kind, ast_gate_on=ast_gate_on)
+            yv = _require_resolved_arith(env, y, kind, view_facts, ast_gate_on=ast_gate_on)
             if yv is None:
                 continue
             result = xv - yv
         elif kind == "neg":
             _, z, x = atom
-            xv = _require_resolved_arith(env, x, kind, ast_gate_on=ast_gate_on)
+            xv = _require_resolved_arith(env, x, kind, view_facts, ast_gate_on=ast_gate_on)
             if xv is None:
                 continue
             result = -xv
         elif kind == "addc":
             _, z, x, c = atom
-            xv = _require_resolved_arith(env, x, kind, ast_gate_on=ast_gate_on)
+            xv = _require_resolved_arith(env, x, kind, view_facts, ast_gate_on=ast_gate_on)
             if xv is None:
                 continue
             cv = _coerce_arith_int(c, kind)
             result = xv + cv
         elif kind == "mulc":
             _, z, x, c = atom
-            xv = _require_resolved_arith(env, x, kind, ast_gate_on=ast_gate_on)
+            xv = _require_resolved_arith(env, x, kind, view_facts, ast_gate_on=ast_gate_on)
             if xv is None:
                 continue
             cv = _coerce_arith_int(c, kind)
@@ -830,10 +915,13 @@ def _require_resolved_arith(
     env: dict[str, Any],
     term: Any,
     kind: str,
+    view_facts: dict[str, list[tuple[Any, ...]]],
     *,
     ast_gate_on: bool,
 ) -> int | None:
-    known, value = _resolve(env, term)
+    known, value = _resolve_eval_term(env, term, view_facts, ast_gate_on=ast_gate_on)
+    if value is AggregateNoValue:
+        return None
     if not known:
         if ast_gate_on:
             return None
@@ -858,6 +946,7 @@ def _plan_body_atoms(
     body: list[tuple[Any, ...]],
     *,
     ast_gate_on: bool,
+    initial_bound_vars: set[str] | None = None,
 ) -> list[tuple[Any, ...]]:
     if len(body) <= 1:
         return list(body)
@@ -868,7 +957,7 @@ def _plan_body_atoms(
         return list(body)
     remaining = list(body)
     planned: list[tuple[Any, ...]] = []
-    bound_vars: set[str] = set()
+    bound_vars: set[str] = set() if initial_bound_vars is None else set(initial_bound_vars)
 
     while remaining:
         selected_idx: int | None = None
@@ -989,6 +1078,8 @@ def _update_bound_vars_for_plan(bound_vars: set[str], atom: tuple[Any, ...]) -> 
 
 
 def _term_known_for_plan(term: Any, bound_vars: set[str]) -> bool:
+    if _is_aggregate_term(term):
+        return True
     if _is_var(term):
         return term in bound_vars
     return True
@@ -1060,12 +1151,74 @@ def _is_literal(value: Any) -> bool:
     return False
 
 
+def _is_aggregate_term(value: Any) -> bool:
+    return (
+        isinstance(value, tuple)
+        and len(value) == 3
+        and isinstance(value[0], str)
+        and value[0] in _AGGREGATE_KINDS
+    )
+
+
+def _validate_eval_term(term: Any, *, allow_aggregate: bool) -> None:
+    if _is_var(term) or _is_literal(term):
+        return
+    if _is_aggregate_term(term):
+        if not allow_aggregate:
+            raise WhereValidationError("aggregate terms are not allowed here")
+        kind, target, filter_atoms = term
+        if kind == "count":
+            if target is not None:
+                raise WhereValidationError("count aggregate target must be None")
+        elif target is None:
+            raise WhereValidationError(f"{kind} aggregate target must not be None")
+        elif kind in {"sum", "mean"} and isinstance(target, bool):
+            raise WhereValidationError(f"{kind} aggregate target must not be bool")
+        elif kind in {"sum", "mean"} and _is_literal(target) and not isinstance(target, (int, float)):
+            raise WhereValidationError(f"{kind} aggregate literal target must be numeric")
+        if not isinstance(filter_atoms, list) or not filter_atoms:
+            raise WhereValidationError("aggregate filter must be non-empty list")
+        for filter_atom in filter_atoms:
+            if _raw_atom_contains_aggregate(filter_atom):
+                raise WhereValidationError("aggregate filter must not contain aggregate terms")
+            validated = _validate_atom(filter_atom)
+            if validated[0] not in {"pred", "eq", "ne", "gt", "ge", "lt", "le", "in", "not"}:
+                raise WhereValidationError("aggregate filter supports scalar atoms only")
+        return
+    raise WhereValidationError("term must be variable, literal, or aggregate term")
+
+
 def _is_atom(value: Any) -> bool:
     return isinstance(value, tuple) and len(value) >= 1 and isinstance(value[0], str)
 
 
+def _raw_atom_contains_aggregate(atom: Any) -> bool:
+    if not _is_atom(atom):
+        return False
+    kind = atom[0]
+    if kind == "pred" and len(atom) == 3:
+        return any(_raw_term_contains_aggregate(term) for term in atom[2])
+    if kind in {"eq", "ne", "gt", "ge", "lt", "le"} and len(atom) == 3:
+        return _raw_term_contains_aggregate(atom[1]) or _raw_term_contains_aggregate(atom[2])
+    if kind == "in" and len(atom) == 3:
+        return _raw_term_contains_aggregate(atom[1]) or any(
+            _raw_term_contains_aggregate(value) for value in atom[2]
+        )
+    if kind in _ARITH_KINDS:
+        return True
+    if kind == "not" and len(atom) == 2:
+        bodies = _normalize_not_body(atom[1])
+        return any(_raw_atom_contains_aggregate(body_atom) for body in bodies for body_atom in body)
+    return False
+
+
+def _raw_term_contains_aggregate(term: Any) -> bool:
+    return _is_aggregate_term(term)
+
+
 def _vars_in_atoms(body: list[tuple[Any, ...]]) -> list[str]:
     found: set[str] = set()
+    bound_vars: set[str] = set()
     for atom in body:
         kind = atom[0]
         if kind == "pred":
@@ -1073,27 +1226,44 @@ def _vars_in_atoms(body: list[tuple[Any, ...]]) -> list[str]:
             for term in terms:
                 if _is_var(term):
                     found.add(term)
+                    bound_vars.add(term)
         elif kind == "eq":
             _, lhs, rhs = atom
-            if _is_var(lhs):
-                found.add(lhs)
-            if _is_var(rhs):
-                found.add(rhs)
+            for term in (lhs, rhs):
+                term_vars = _visible_vars_in_term(term, bound_vars)
+                found |= term_vars
+            lhs_known = _term_known_for_plan(lhs, bound_vars)
+            rhs_known = _term_known_for_plan(rhs, bound_vars)
+            if _is_var(lhs) and rhs_known:
+                bound_vars.add(lhs)
+            if _is_var(rhs) and lhs_known:
+                bound_vars.add(rhs)
         elif kind == "in":
             _, var, _ = atom
             if _is_var(var):
                 found.add(var)
         elif kind in {"gt", "ge", "lt", "le", "ne"}:
             _, lhs, rhs = atom
-            if _is_var(lhs):
-                found.add(lhs)
-            if _is_var(rhs):
-                found.add(rhs)
+            found |= _visible_vars_in_term(lhs, bound_vars)
+            found |= _visible_vars_in_term(rhs, bound_vars)
         elif kind in _ARITH_KINDS:
             for term in atom[1:]:
-                if _is_var(term):
-                    found.add(term)
+                found |= _visible_vars_in_term(term, bound_vars)
+            output = atom[1] if len(atom) > 1 else None
+            if _is_var(output):
+                bound_vars.add(output)
     return sorted(found)
+
+
+def _visible_vars_in_term(term: Any, bound_vars: set[str]) -> set[str]:
+    if _is_var(term):
+        return {term}
+    if _is_aggregate_term(term):
+        kind, target, filter_atoms = term
+        target_vars = _visible_vars_in_term(target, bound_vars) if target is not None else set()
+        filter_vars = set(_vars_in_atoms(filter_atoms))
+        return target_vars | (filter_vars & bound_vars)
+    return set()
 
 
 def _vars_in_not_bodies(bodies: list[list[tuple[Any, ...]]]) -> list[str]:
