@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + ProbLog hygiene fixtures archived locally; source `b217f309`, not pushed)
+最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + T2.3d + ProbLog hygiene fixtures archived locally; source `26fa7e54`, not pushed)
 
-## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 S-CLASS BATCH ARCHIVED LOCALLY)
+## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 S-CLASS BATCH ARCHIVED LOCALLY — T2.3 AGGREGATE FULL TRACK CLOSED)
 
-**Current local branch:** `v0.2.0-impl-t2-3c-aggregate-souffle-wire-2026-05-23 @ b217f309`.
+**Current local branch:** `v0.2.0-impl-t2-3d-aggregate-problog-wire-2026-05-23 @ 26fa7e54`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -28,6 +28,7 @@
 | T2.3a AggregateExpr substrate | S | `477fcccb` | `b94576f5 feat(rules): add AggregateExpr substrate` |
 | T2.3b AggregateExpr SDK + bridge | S | `4e3176d2` | `94045e54 feat(sdk): add aggregate DSL helpers and bridge support` |
 | T2.3c AggregateExpr Souffle wire | S | `b217f309` | `3f64fe4d feat(adapters/souffle): add aggregate compile wire over T2.3a substrate` + `84564bf2 fix(adapters/souffle): T2.3c Step 4.7 P1+P2 + dead helper removal` |
+| T2.3d AggregateExpr ProbLog wire | S | `26fa7e54` | `a33b876e feat(adapters/problog): add aggregate export wire` + `d7e2a650 fix(adapters/problog): remove unused aggregate helper` |
 
 ### Current landed behavior
 
@@ -91,7 +92,7 @@
 - Commit lineage: scoped `26d11d81` → G7 precondition `99729ca5` (recorded BEFORE impl) → bridge validator amendment `13f79337` (scoped amendment BEFORE feat) → feat `94045e54` (impl + tests + 3-layer docs combined) → closure `f16a80db` (§10 Outcome filled, Nit deferral recorded) → archive `4e3176d2` (100% rename).
 - Verification at archive: 10 new aggregate tests pass; 98-test cross-slice scope pass (per §10.3); 153 wider-discover failures unrelated (frontier/diagnose/localizer paths, T2.3b touched none). Ruff clean on touched files. Sacred `master` + dirty set preserved throughout.
 - **Deferred Nit accepted as follow-up** (Step 4.7 single Nit observation, user chose deferral): `_lower_compare_with_aggregate` non-aggregate side currently calls `lower_term(..., in_where=True)` which raises for AttrRef and BinaryExpr. `Order(o).amount == agg_count(...)` and `(n + 1) == agg_count(...)` fail loudly with `SDKDSLError`; two-aggregate `agg_count(...) == agg_count(...)` works. T2.3.b1 / T2.3.e candidate; workaround = bind aggregate result to Var first.
-- Souffle adapter wire shipped in T2.3c (see below). ProbLog aggregate adapter remains deferred to T2.3.d. PyReason aggregate is out of scope.
+- Souffle adapter wire shipped in T2.3c (see below). ProbLog adapter wire shipped in T2.3d (see below). T2.3 AggregateExpr full track now closed (substrate + SDK + Souffle + ProbLog). PyReason aggregate permanently out of scope.
 
 **T2.3c — AggregateExpr Souffle adapter wire**
 - Souffle adapter `src/factgraph/adapters/souffle/where_compile.py` now lowers SDK-produced aggregate IR (T2.3b output shape `("eq", lhs, ("kind", target_var, filter_atoms))`) to Souffle DL aggregate body syntax. Added `_AGGREGATE_KINDS` import + `_AGGREGATE_GUARD_KINDS = {"min", "max", "mean"}` + `_is_aggregate` strict helper + `_AGGREGATE_FILTER_ATOM_KINDS` C100 filter list.
@@ -107,7 +108,30 @@
 - Verification at archive: 27 T2.3c tests pass; 88 cross-slice tests pass (T2.3a + T2.3b + T2.1 + T2.2 + SDK DSL + application protocol — 0 regression). Ruff clean. Sacred `master` + dirty set preserved throughout.
 - **Cross-flip inversion experiment closed with documented cost-value verdict**: 6 Step 4.2 rounds + Step 4.7 v1 + Step 4.7 v2 = 8 review rounds, 25 findings (2 Blockers + 22 Required + 1 Worth-considering). Compared to user-drafts baseline (T2.2 / fixture cleanup / T2.3a — all 0-1 round Step 4.2). **Verdict: T2.3.d MUST revert to user-drafts pattern**. Hard recommendation locked across multiple retrospectives.
 - **Size deviation accepted as S-class** per Step 4.8 user closure guidance: actual ~1090 LOC (630 code + 460 tests) vs blueprint §5.7 estimate ~300 LOC. Qualitative S-class criteria all hold (adapter-only scope, no public API rename, no cross-engine semantic decision, no substrate/SDK change, no new baseline drift surfaced).
-- Deferred follow-ups per T2.3c §10.4: T2.3.d ProbLog wire (`findall/3` + list predicates) + T2.3.b1/T2.3.e Nit (T2.3b carried over) + schema "number" vs "int" cmp compatibility (general adapter hygiene, pre-existing) + Souffle native `mean` aggregator binary verification ((A-fallback) deviation path documented if incompatibility surfaces).
+- Deferred follow-ups per T2.3c §10.4: T2.3.d ProbLog wire **shipped at `26fa7e54` (see T2.3d below)** + T2.3.b1/T2.3.e Nit (T2.3b carried over) + schema "number" vs "int" cmp compatibility (general adapter hygiene, pre-existing Souffle-only concern) + Souffle native `mean` aggregator binary verification ((A-fallback) deviation path documented if incompatibility surfaces).
+
+**T2.3d — AggregateExpr ProbLog adapter wire**
+- ProbLog adapter `src/factgraph/adapters/problog/problog_export.py` now lowers SDK-produced aggregate IR via `findall/3` + `library(lists)` predicates (`length/2`, `sum_list/2`, `min_list/2`, `max_list/2`) + derived mean via `sum_list + length + is/2`. Closes T2.3 AggregateExpr full track (substrate + SDK + Souffle + ProbLog). PyReason aggregate permanently out of scope per parent essay §10.6.3.
+- Module-level additions: `_AGGREGATE_KINDS` + `_AGGREGATE_FILTER_ATOM_KINDS` constants + `_CompileContext` dataclass (`next_id` counter + `requires_lists` bool flag) + `_CompileContext.fresh(prefix)` producing `Agg{Prefix}{N}` names (AggList1, AggResult2, AggSum3, AggCount4) per blueprint I10 v2 lock, avoiding `V_<UPPER>` user-var namespace collision.
+- **Per-kind lowering** (blueprint §5.3): `count` via `findall(1,...) + length`; `sum` via `findall(target,...) + sum_list`; `min`/`max` via `L = [_|_]` guard + `min_list`/`max_list`; `mean` via `L = [_|_]` + `sum_list` + `length` + `Result is Sum / Count`. The `L = [_|_]` guard for min/max/mean makes empty body fail Prolog unification → enclosing rule body fails → matches C101 "comparison violated / no env pollution" semantics. No Souffle-like sentinel object; ProbLog's `findall/3` runtime + branch-not-firing model handles it naturally.
+- **Cmp dispatch composition** (blueprint §5.4): `_is_tuple_operand(value)` discriminator → `_compile_cmp_with_aggregate(kind, lhs, rhs, ctx)` emits `lhs_goals + rhs_goals + "lhs_term op rhs_term"`. Per P3 v2 lesson (T2.3c retrospective), any tuple cmp operand is aggregate-shaped (cmp operands cannot be raw atoms); unknown kinds rejected with "unsupported aggregate kind" via `_validate_aggregate_shape`. Two-aggregate cmp emits both goals + cmp on result vars.
+- **Aggregate-local var isolation** (blueprint I6): two layers. Layer 1 — Prolog `findall(Template, Goal, List)` runtime scope (vars not bound at call site are local to body). Layer 2 — `extract_where_variables(...)` from T2.3c (Souffle adapter) returns ZERO outer contribution for aggregate operands; ProbLog imports unchanged via `problog_export.py:12`. Aggregate-local vars never enter `query_vars` / `rule_body_N(...)` / `answer(...)` heads.
+- **Adapter validation** (blueprint §2.6 + §5.6 + I8): `_validate_aggregate_shape` mandatory regardless of `FACTPY_WHERE_AST_VALIDATE` gate state. Rejects unknown kind / wrong arity / target_var shape (None for count, `$`-prefixed otherwise) / non-list filter / non-C100 filter atom kinds / nested aggregate. Recursive validation into `not` body filter atoms.
+- **`library(lists)` conditional directive** (G7 (A-fallback) amendment, invariant I2a): G7 #7 smoke proactively discovered local ProbLog binary requires explicit `:- use_module(library(lists)).` for `sum_list/2`, `min_list/2`, `max_list/2`. Blueprint amended pre-impl per (A-fallback) discipline (in scoped state, before any code edits), 7-section propagation (Outputs + §2.2 + §5.2 + §5.3 + §5.8 + §5.9 G7 #7 + new I2a). Implementation: `ctx.requires_lists = True` set inside `_compile_aggregate_parts`; `export_problog` precompiles all bodies BEFORE line emission; conditional `:- use_module(library(lists)).` line emitted after `% query_vars=...` header IFF `ctx.requires_lists=True`. Non-aggregate exports keep existing exact-output behavior.
+- **`not` filter recursion**: existing `_compile_atom("not", ...)` at problog_export.py:318-326 reused inside aggregate filter via `ctx` threading. Emits `\+(...)` standard Prolog negation-as-failure. Multi-atom and OR-branch not bodies inside aggregate supported via `_normalize_not_bodies` pattern.
+- 12-test acceptance added to existing `tests/test_problog_export.py` (now 26 tests total, was 14 from T2.1/T2.2). Covers 5 per-kind compile + negative discriminator (count/sum no guard) + eq binding + numeric cmp + two-aggregate cmp + filter `not` body + library(lists) directive integration + 3 structural validation tests (unknown kind / malformed target / non-C100 filter atom kind).
+- **Two-layer docs flip** (mandatory per §9 + §6.1 P4 v2 + I9): `application/docs/rule.md` (ProbLog row pending → ✓ + `findall/3` + list predicates + `L = [_|_]` empty-set explanation) + `sdk/docs/03_rules_and_inferences.en.md` §3.2 (ProbLog row Deferred → Supported).
+- **6-commit canonical lineage**:
+  - `42104ec2` scoped anchor
+  - `c3127703` G7 precondition + scoped (A-fallback) amendment (BEFORE code edits)
+  - `a33b876e` feat main (impl + 12 tests + 2-layer docs)
+  - `d7e2a650` Step 4.7 fix (removed unused `_is_aggregate` dead helper)
+  - `d2c46bc7` closure (Status: implemented + §10 Outcome)
+  - `26fa7e54` archive (100% rename)
+- Verification at archive: 26 T2.3.d tests pass; 124 cross-slice tests pass (T2.3a + T2.3b + T2.3c + T2.1 + T2.2 + SDK DSL + application protocol + ProbLog export + engine eval — 0 regression). Ruff clean. Local `problog` binary smoke verified end-to-end with generated aggregate program. Sacred `master` + dirty set preserved throughout.
+- **Cross-flip retrospective verdict CONFIRMED**: 2 Step 4.2 rounds + Step 4.7 v1 = 5 findings total (0 Blockers + 3 Required + 2 Worth-considering). **5x cost reduction vs T2.3c** (25 findings / 8 rounds with cross-flip inversion). T2.3c retrospective lesson "T2.3.d MUST revert to user-drafts" validated. Future adapter-shaped slices should default to user-drafts pattern.
+- **Implementation size**: ~141 LOC code + ~140 LOC tests = ~281 LOC. Well within blueprint §5.8 estimate 250-450 LOC; much smaller than T2.3c ~1090 LOC because ProbLog's `findall/3` runtime scoping eliminates the Souffle "filter-within-aggregate mirror" pattern (~150 LOC saved).
+- Deferred follow-ups per T2.3d §10.4: T2.3.b1/T2.3.e Nit (T2.3b carried over) + schema "number" vs "int" cmp compatibility (Souffle-only, N/A for ProbLog untyped).
 
 ### Workflow governance state
 
@@ -133,6 +157,8 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 
 **T2.3c extended cross-flip inversion to impl phase as well** (Claude drafts blueprint, Claude implements, user reviews everything) — and the experiment closed with a documented cost-value verdict. 6 Step 4.2 rounds + Step 4.7 v1 + Step 4.7 v2 = **8 review rounds, 25 findings** (2 Blockers + 22 Required + 1 Worth-considering). Compared to user-drafts baseline (T2.2 / fixture cleanup / T2.3a — all 0-1 round Step 4.2). **Verdict: T2.3.d MUST revert to user-drafts pattern**. Cost differential is bounded for blueprint drafting alone (manageable with anti-pattern audit discipline + section-level rewrite propagation) but compounds further when extended to impl phase. Future adapter-shaped slices: user-drafts is the default unless a specific reason to invert. T2.3c also validated the canonical 3-commit impl pattern (G7 precondition → feat main → Step 4.7 fix).
 
+**T2.3d CONFIRMED the cross-flip retrospective verdict.** Codex drafted blueprint + impl, Claude reviewed Step 4.2 + Step 4.7 + did memory consolidation. Total cost: 2 Step 4.2 rounds + Step 4.7 v1 = **5 findings** (0B + 3R + 2WC). **5x cost reduction vs T2.3c** (25 findings / 8 rounds). User-drafts pattern is the default for adapter-shaped slices going forward; cross-flip inversion is reserved for special cases with explicit cost-benefit justification. T2.3d also validated the canonical **5-commit impl pattern with Worth-considering fix**: scoped → G7 → feat → Step 4.7 fix → closure (+ archive = 6 total). G7 (A-fallback) discovery at scoped state for `library(lists)` requirement was textbook — zero re-implementation cost despite a runtime-binary dependency surprise.
+
 ### Process lessons carried forward
 
 - **Branch isolation:** T1.1 did not use a separate implementation branch; T1.2 onward corrected this. Continue paired blueprint/impl branch discipline.
@@ -149,16 +175,22 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T2.3c rewrite-and-propagate discipline:** v3→v4 found 5 Required findings in sections referencing v3-corrected sections. Lesson: after editing any §N section, grep blueprint for cross-references to §N's content and update. Cross-section consistency check (§1 ↔ §5 ↔ §6 ↔ §7 ↔ §8 ↔ §9 ↔ audit log G1-G7) before each commit.
 - **T2.3c 3-commit impl pattern (canonical):** G7 precondition (doc-only, BEFORE impl) → feat main (impl + tests + docs) → Step 4.7 fix (P1/P2 + dead-code removal). Step 4.7 review can surface P1 findings post-feat; focused fix commit covers them without re-running pipeline.
 - **T2.3c size estimate calibration:** actual ~1090 LOC vs blueprint §5.7 estimate ~300 LOC. Future adapter-slice §5.7 estimates should account for "mirror-and-extend" patterns (filter-within-aggregate, scope-isolated copy of dispatch logic, per-case wiring across all cmp branches). T2.3.d ProbLog wire likely faces similar size pressure (~150 LOC mirror at minimum).
+- **T2.3d user-drafts pattern validated with 5x cost reduction:** 5 findings / 3 rounds total (vs T2.3c 25 / 8 rounds). User-drafts is now the locked default for adapter-shaped slices. Cross-flip inversion remains an option with explicit cost-benefit justification but is no longer the default.
+- **T2.3d G7 (A-fallback) discovery exemplary:** G7 #7 smoke proactively caught `library(lists)` import requirement on local ProbLog binary BEFORE any code edits. Blueprint amended at scoped state via 7-section propagation (Outputs + §2.2 + §5.2 + §5.3 + §5.8 + §5.9 + new I2a invariant). Implementation went straight against amended spec. Zero re-implementation cost. **Lesson:** G7 smoke should be substantive (runtime / binary verification, not just file presence checks) when adapter slices have runtime dependencies. The pre-impl smoke cost is paid back many times if it catches dependency issues.
+- **T2.3d size calibration validated:** ~281 LOC actual (141 code + 140 tests) vs blueprint estimate 250-450 LOC — delivered at the lower end. ProbLog's `findall/3` runtime scoping naturally eliminates the Souffle "filter-within-aggregate mirror" pattern (~150 LOC saved vs T2.3c). **Lesson:** size estimates for adapter slices should account for engine-native lowering style — Souffle requires explicit mirror-and-extend (large), ProbLog benefits from runtime scope semantics (compact).
+- **T2.3d cross-engine semantic mirror discipline:** T2.3c locked C101 empty-set semantics via Souffle `count : { same_body } > 0` guard; T2.3d mirrored the SAME semantics via ProbLog `L = [_|_]` guard. Different syntax, same C101 contract. **Lesson:** when the parent contract is well-locked at substrate (C101 at T2.3a), each adapter slice translates to engine-native idiom without renegotiating semantics. T2.3c P0 ("implement guard now, not deferred") was the right semantic discipline; T2.3d benefited directly.
+- **T2.3d canonical 5-commit impl pattern with Worth-considering fix:** scoped → G7 → feat → Step 4.7 fix → closure → archive (6 commits total). Step 4.7 Worth-considering (dead `_is_aggregate` helper) → fix commit `d7e2a650` between feat and closure, mirroring T2.3c v7 dead `_compile_aggregate` removal pattern. Canonical and reproducible across adapter slices.
 
 ### Recommended next work
 
-- **T2.3.d AggregateExpr ProbLog adapter** — S-class adapter slice via `findall/3` + list predicates (`length/2` / `sum_list/2` / `min_list/2` / `max_list/2` + custom mean derived from sum/count) + `AggregateNoValue` handling. Fundamentally different lowering algorithm from Souffle (ProbLog has no native aggregate operator). **MUST use user-drafts pattern** per closed cross-flip inversion experiment verdict (T2.3c retrospective). Likely ~150-300 LOC code per parent essay §1719.
+- **T2.3.d AggregateExpr ProbLog adapter** — shipped at `26fa7e54` (see T2.3d landed-behavior section above). T2.3 AggregateExpr full track now CLOSED.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` (via `_ensure_attr_record_binding`) and `BinaryExpr` (via `_lower_expr_term`), making it symmetric with standard `_lower_compare`.
-- **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains; production schemas using `"number"` pred type domains would fail filter-internal numeric cmp. Pre-existing limitation; could be addressed as general adapter hygiene slice. S-class.
+- **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains; production schemas using `"number"` pred type domains would fail filter-internal numeric cmp. N/A for ProbLog adapter (untyped). Could be addressed as general Souffle adapter hygiene slice. S-class.
 - **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing.
-- **T1.3 SDK top-level `Rule` naming** — M class; first M-class slice in the streak; needs decision doc for TPQ-2 / public API naming.
+- **T1.3 SDK top-level `Rule` naming** — M class; first M-class slice in the streak; needs decision doc for TPQ-2 / public API naming. Likely natural next slice after T2.3 track closure.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
 - **T3 RuleExpr** — L class; first full-cadence test of the size-class policy.
+- **Push / publish gate** — 10 archived slices + 3 memory sync commits all local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries; user has not signaled publish intent.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
