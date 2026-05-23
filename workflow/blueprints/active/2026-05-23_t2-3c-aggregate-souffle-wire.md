@@ -1,8 +1,8 @@
 # T2.3c — Aggregate Souffle adapter wire over T2.3a substrate + T2.3b SDK
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.6 scoped anchor — v6 review passed 0 findings)
+- Last Updated: 2026-05-23 (Step 4.8 implemented closure — Step 4.7 v2 re-review PASS)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + IR shape;§10.6.4 (C100) — filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 — per-engine aggregate lowering策略
@@ -957,4 +957,69 @@ assert "count : { ... } > 0" in compiled or "sum" in compiled  # min/max/mean �
 
 ## 10. Outcome / Deviations
 
-- Pending。
+Implemented on `v0.2.0-impl-t2-3c-aggregate-souffle-wire-2026-05-23`。
+
+### 10.1 Landed Commits
+
+| Commit | Purpose |
+|---|---|
+| `6dd4272b` | Recorded G7 precondition results before implementation;all 6 §5.6 checks PASS。Timing correct per T2.2/T2.3a/T2.3b discipline(doc-only commit BEFORE any code edits)。 |
+| `3f64fe4d` | Feat main:Souffle adapter aggregate compile wire impl + 25 acceptance tests + 3-layer docs flip(application/docs/rule.md + sdk/docs/03_rules_and_inferences.en.md §3.2)。 |
+| `84564bf2` | Step 4.7 fix:P1 aggregate `eq`/`ne` bound-var path adds `_assert_cmp_var_allowed`;P2 unknown aggregate tuple operands route to `_validate_aggregate_atom_shape` for "unsupported aggregate kind" rejection regardless of gate state;dead `_compile_aggregate(...)` helper removed per Worth-Considering note。2 new P1 v7 tests added(numeric bound var pass;entity-typed bound var reject)。 |
+
+3-commit impl pattern variant per CADENCE §3-commit pattern:Step 1(G7 precondition)+ Step 2(feat main)+ Step 3(Step 4.7 fix)。
+
+### 10.2 Code And Docs Landed
+
+- Module-level additions in `src/factgraph/adapters/souffle/where_compile.py`:
+  - `_AGGREGATE_KINDS` imported from `factgraph.core.rules.where_ast`(single source of truth)
+  - `_AGGREGATE_GUARD_KINDS = {"min", "max", "mean"}` constant
+  - `_AGGREGATE_FILTER_ATOM_KINDS` C100 filter atom kind list
+  - `_is_aggregate(term)` helper(strict — kind ∈ `_AGGREGATE_KINDS`)
+- Validation:`_validate_aggregate_atom_shape` Layer 1 structural validator + cmp branch dispatch routes any tuple operand through it。Rejects:unknown kind / wrong arity / target_var shape mismatch / non-list filter_atoms / nested aggregate / non-C100 filter atom kinds — all regardless of `FACTPY_WHERE_AST_VALIDATE` gate state。
+- Var extraction:`_vars_in_atom` cmp branches treat aggregate operand as ZERO outer-var contribution per §5.5 v2(correlated outer vars come from their original outer-scope atom;aggregate-local vars stay private per C104)。
+- Type domain inference:`_infer_var_type_domains` recurses into aggregate filter atoms;marks aggregate `target_var` as `int` per C102;eq-binding to aggregate marks bound var as `int`(so subsequent numeric cmp passes `_assert_cmp_var_allowed`)。
+- Compile helpers:
+  - `_compile_aggregate_parts(...)` returns `(guard_clause_or_None, value_expr)` — guard is peer body clause,NOT inside any wrap
+  - `_compose_aggregate_eq_binding(...)` emits `<guard>?, v_X = to_string(<value>)`
+  - `_compose_aggregate_numeric_cmp(...)` emits `<guard>?, <value_or_other> <op> <value_or_other>`
+  - `_compile_filter_atom_within_aggregate(...)` mirrors `_compile_atom` but:no witness symbols,local_bound_vars scope,synthetic not-relation extraction via `not_rel_defs` with `agg:` namespace prefix
+- Dispatch wiring(`_compile_atom`):4 eq cases per §5.3.5 wrapper table(binding to unbound / filter with bound /filter with literal / two aggregates);gt/ge/lt/le aggregate side bypasses bound-var check;ne aggregate-aware path with `_assert_cmp_var_allowed` for bound-var side per P1 v7 lock。
+- Tests:`tests/test_souffle_aggregate_compile.py`(27 tests across §7.1-§7.11 + 2 P1 v7 + 3 extra shape coverage)。
+- Docs(both mandatory per §9 + §6.1):
+  - `src/factgraph/application/docs/rule.md` — Souffle row pending → ✓ + empty-set guard explanation(count > 0 prefix;branch-not-firing = C101 violated comparison)
+  - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` §3.2 row — Deferred to T2.3.c → Supported(empty min/max/mean follow C101 via `count > 0` guard)
+
+### 10.3 Verification
+
+- New T2.3c acceptance suite:`PYTHONPATH=src python -m unittest tests.test_souffle_aggregate_compile`
+  - 27 tests passed(was 25 at feat;+2 P1 v7 tests added at Step 4.7 fix)。
+- Cross-slice non-regression sweep at Step 4.7 fix:
+  - `tests.test_souffle_aggregate_compile` + `tests.test_souffle_witness_where_compile_v1` + `tests.sdk.dsl.test_aggregate_ergonomic` + `tests.sdk.dsl.test_application_rule` + `tests.core.rules.test_aggregate_substrate` + `tests.core.rules.test_aggregate_eval` + `tests.application.protocol.test_rule` + `tests.application.protocol.test_rule_aggregate`
+  - 88 tests passed。0 regression on T2.3a / T2.3b / T2.1 / T2.2 / SDK DSL / application protocol。
+- Ruff check on touched files:`src/factgraph/adapters/souffle/where_compile.py` + `tests/test_souffle_aggregate_compile.py` — clean。
+- Reviewer Step 4.7 pass(v1):surfaced 2 Required + 1 Worth-considering;all addressed in `84564bf2`。Reviewer Step 4.7 re-review(v2):PASS,0 remaining P-findings(verified `84564bf2` only touches `where_compile.py` + test file;both P1 and P2 fixes verified per spec;dead `_compile_aggregate(...)` removed)。
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666` throughout entire impl flow。
+- Unrelated dirty set remained preserved:4 modified files + 1 untracked directory。
+
+### 10.4 Deviations / Follow-ups
+
+- **Size deviation accepted as S-class**(per user closure guidance):actual impl ~630 LOC code + ~460 LOC tests ≈ 1090 LOC,exceeding blueprint §5.7 estimate(~300 LOC = ~150 code + ~150 tests)。Reasons:
+  - `_compile_filter_atom_within_aggregate` mirrors most of `_compile_atom`(scope-isolated copy)— ~150 LOC
+  - 3 compose helpers(`_compile_aggregate_parts` / `_compose_aggregate_eq_binding` / `_compose_aggregate_numeric_cmp`)separate guard / wrapper concerns — ~120 LOC
+  - Full not-body synthetic relation extraction inside aggregate body — ~50 LOC
+  - All §5.3.5 v3 lock table 8 cases explicitly wired in eq + ne + gt/ge/lt/le branches — ~150 LOC
+
+  Qualitative S-class criteria all hold:no public API rename / no cross-engine semantic decision / no substrate change / no SDK change / no PyReason change / scope stayed adapter-only + docs + tests。No new baseline drift surfaced during verification。Accepted without M-class escalation per user guidance。
+- **Schema "number" vs "int" type domain limitation**:`_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains;production schemas may use `"number"` for numeric fields,which would fail filter-internal numeric cmp。T2.3c test schema uses `"int"` to sidestep this。Pre-existing limitation,NOT specific to T2.3c — follow-up item if production users hit it。
+- **Filter `not` body inside aggregate complexity**:T2.3c supports multi-atom and OR-branch not bodies inside aggregate via synthetic relation extraction(`_not_rel_name` with `agg:` namespace)。No scope limit applied;same expressiveness as outer-where `not` body。
+- **`_compile_aggregate` wrapper removed**(per Worth-Considering note):dead helper that "discarded min/max/mean guard"。All call sites use `_compile_aggregate_parts` directly。Reduced future misuse trap surface。
+- **T2.3.d ProbLog adapter wire** remains deferred:`findall/3` + list predicates pattern with fundamentally different lowering algorithm。Separate slice when prioritized。
+- **PyReason aggregate**:permanently out of scope per parent essay §10.6.3 line 1711(PyReason is Form 2 only,no aggregate support)。
+- **Souffle native `mean` aggregator**:assumes Souffle 2.x support;if Step 4.7 integration test against actual Souffle binary reveals unsupported,(A-fallback) deviation via `sum/count` derived path was the documented contingency。Not triggered in T2.3c verification(no Souffle binary smoke test in S-class scope)。
+
+### 10.5 Archive Readiness
+
+All scoped acceptance items satisfied or explicitly deferred above。Sacred `master` untouched throughout 6 Step 4.2 rounds + scoped anchor + G7 record + feat + Step 4.7 fix + closure(8 commits total on blueprint/impl branches local)。Dirty set 4 M + 1 untracked preserved throughout。
+
+The blueprint pair is ready for Step 4.9 archive after this closure commit。
