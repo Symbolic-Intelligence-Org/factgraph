@@ -1,8 +1,8 @@
 # T2.3d — Aggregate ProbLog adapter wire over T2.3a substrate + T2.3b SDK
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
+- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — aggregate value expression shape;§10.6.4 (C100) — aggregate filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — projected-view snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 + §1719 — ProbLog lowering via `findall/3` + list predicates.

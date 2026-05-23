@@ -1,8 +1,8 @@
 # Task Blueprint Audit: T2.3d — Aggregate ProbLog adapter wire
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
+- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3d-aggregate-problog-wire.md](./2026-05-23_t2-3d-aggregate-problog-wire.md)
@@ -22,6 +22,7 @@
 |---|---|---|---|
 | 2026-05-23 | draft | Blueprint created | User-drafts / Claude-reviews pattern restored per T2.3c retrospective. T2.3d scope is ProbLog adapter-only aggregate wire over T2.3a substrate + T2.3b SDK + T2.3c query-variable extraction. No SDK/core/application/Souffle changes. |
 | 2026-05-23 | draft | Step 4.2 v2 tightening | Claude review surfaced 3 Required + 1 Worth-considering: two line-cite drifts, empty `sum_list([], 0)` ambiguity, inaccurate G7 #5 "rejects or mishandles" wording, and unlocked fresh-var naming. Applied all four: corrected cites, locked `sum_list([], 0)` as SWI-Prolog/ProbLog standard behavior, changed G7 #5 to silent JSON-quoted literal mishandle, and added `Agg{Prefix}{N}` fresh-var naming invariant. |
+| 2026-05-23 | scoped | Status: draft → scoped | Claude v2 re-review passed with 0 Blocker / 0 Required / 0 Worth-considering. Anti-pattern propagation grep clean. User-drafts pattern validated for T2.3d (2 rounds / 4 findings vs T2.3c 6 rounds / 21 findings). Ready to fork impl branch. |
 
 ## Decision Notes
 
@@ -93,6 +94,18 @@ Claude Step 4.2 review surfaced:
 | P4 Worth-considering — fresh variable naming unlocked | Adopted. `_CompileContext.fresh(...)` must emit reserved `Agg{Prefix}{N}` names, never `V_...`, preventing collision with user variables converted by `_to_problog_var(...)`. |
 
 Status remains `draft`; no scoped transition authorized.
+
+### 2026-05-23 — Step 4.6 scoped anchor
+
+Claude v2 re-review passed cleanly:
+
+- P1 line cites verified.
+- P2 `sum_list([], 0)` language consistent across §2.4 / §5.3 / §5.7 / §5.8.
+- P3 G7 #5 now precisely describes silent JSON-quoted literal mishandling.
+- P4 fresh-var naming convention locked as `Agg{Prefix}{N}`.
+- Anti-pattern grep found no stale "to be verified by G7" / "fallback if unavailable" / "rejects or mishandles" / old `AGG_*` naming / old line-cite text.
+
+Status moved to `scoped`. No code changes have started. Implementation branch should fork from this scoped commit.
 
 ### 2026-05-23 — Branch state at draft commit time
 
