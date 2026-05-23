@@ -1,6 +1,6 @@
 # ProbLog meta-confidence fixture cleanup
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: task blueprint
@@ -174,4 +174,26 @@ If any check fails, amend this blueprint before code changes.
 
 ## 10. Outcome / Deviations
 
-- Pending.
+- Final landed behavior:
+  - Commit `e3c3d7bc` migrated four stale ProbLog fixture inputs away from removed `meta[confidence]`.
+  - `tests/test_problog_export.py` now creates generic fixture claims with allowed metadata and preserves probability semantics through explicit `problog/semantic/probability`, `shared/semantic/probability`, and raw shared `confidence` annotation rows where those are the test subject.
+  - `tests/test_problog_engine_eval.py` now seeds deterministic facts with allowed `meta={"source": "test"}` only.
+- Files changed:
+  - `tests/test_problog_export.py` — 2 fixture-site edits.
+  - `tests/test_problog_engine_eval.py` — 2 fixture-site edits.
+  - `workflow/blueprints/active/2026-05-23_problog-meta-confidence-fixture-cleanup.md` and sibling audit — G7 precondition gate calibration + closure.
+- Tests run:
+  - `PYTHONPATH=src python -m unittest tests.test_problog_export` — pass, 14 tests.
+  - `PYTHONPATH=src python -m unittest tests.test_problog_engine_eval` — pass, 10 tests.
+  - `PYTHONPATH=src python -m unittest tests.test_problog_export tests.test_problog_engine_eval` — pass, 24 tests.
+  - `PYTHONPATH=src python -m unittest tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane` — pass, 6 tests.
+  - `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.sdk.dsl.test_application_rule tests.test_souffle_witness_where_compile_v1 tests.test_problog_import_cycle_hygiene tests.test_problog_export tests.test_problog_engine_eval tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane` — pass, 70 tests.
+  - `python -m ruff check tests/test_problog_export.py tests/test_problog_engine_eval.py` — pass.
+  - `rg 'meta=\{[^\n]*confidence' tests/test_problog_export.py tests/test_problog_engine_eval.py` — 0 matches.
+- Deviations / calibration:
+  - Commit `ea26a2bb` tightened the G7 reference gate after precondition execution showed `tests.test_sdk_assertion_record_set` has an unrelated `snap.field(...).active.where` baseline. The valid precondition became the narrower `tests.test_write_protocol_annotations.TestRawUncertaintyWriteLane` gate plus direct `_normalize_meta(...)` smoke.
+  - This was an impl-time blueprint amendment while still `Status: scoped`; no fixture edits occurred before the corrected G7 record landed.
+- New follow-up:
+  - `tests.test_sdk_assertion_record_set` has an unrelated baseline drift around `snap.field(...).active.where` and should be handled in a separate hygiene slice if it blocks future gates.
+- Archive note:
+  - Ready for Step 4.9 archive after this closure commit lands.

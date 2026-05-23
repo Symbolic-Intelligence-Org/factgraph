@@ -1,6 +1,6 @@
 # Task Blueprint Audit: ProbLog meta-confidence fixture cleanup
 
-- Status: draft
+- Status: implemented
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: paired blueprint audit log
@@ -20,6 +20,7 @@
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | S-class hygiene slice to remove stale ProbLog `meta[confidence]` fixture inputs repeatedly acknowledged in prior closures. |
 | 2026-05-23 | scoped | Scope anchored | Step 4.2 cross-flip review passed with 0 P-findings; hygiene-class G1-G7 are visible. |
+| 2026-05-23 | implemented | Implementation closed | Commit `e3c3d7bc` migrated four fixture sites; 70-test verification passed; reviewer pass found 0 P1 findings. |
 
 ## Decision Notes
 
