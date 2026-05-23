@@ -71,7 +71,7 @@ from .rule_literal_replace import (
     RuleLiteralReplaceResult,
     RuleLiteralReplaceStatus,
 )
-from .rule import Rule, RuleValidationError
+from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -188,7 +188,9 @@ __all__ = [
     "RuleLiteralReplaceRequest",
     "RuleLiteralReplaceResult",
     "RuleLiteralReplaceStatus",
+    "RuleOccurrence",
     "RuleOverlayAction",
+    "RulePortRef",
     "RuleValidationError",
     "SchemaCapability",
     "WarningDTO",

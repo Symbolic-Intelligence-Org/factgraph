@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError
 from types import MappingProxyType
 import unittest
 
-from factgraph.application.protocol import Rule, RuleValidationError
+from factgraph.application.protocol import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 from factgraph.application.protocol.rule import PortType
 from factgraph.core.rules.where_ast import (
     AndExpr,
@@ -147,6 +147,111 @@ class ImmutabilityTests(unittest.TestCase):
             rule.ports["other"] = u  # type: ignore[index]
         with self.assertRaises(AttributeError):
             rule.where.append(PredAtom("User:exists", [u]))  # type: ignore[attr-defined]
+
+
+class RuleOccurrenceTests(unittest.TestCase):
+    def _rule(self, *, rule_id: str = "active_user", var_name: str = "u") -> Rule:
+        user = Var(var_name)
+        return Rule(
+            id=rule_id,
+            where=(PredAtom("User:exists", [user]),),
+            ports={"user": user},
+        )
+
+    def test_as_default_alias_uses_rule_id(self) -> None:
+        rule = self._rule()
+        occurrence = rule.as_()
+
+        self.assertEqual(occurrence, RuleOccurrence(rule=rule, alias="active_user"))
+        self.assertEqual(occurrence.alias, "active_user")
+        self.assertIs(occurrence.rule, rule)
+
+    def test_as_explicit_alias_returns_occurrence(self) -> None:
+        rule = self._rule()
+        occurrence = rule.as_("a")
+
+        self.assertEqual(occurrence.alias, "a")
+        self.assertIs(occurrence.rule, rule)
+
+    def test_repeated_alias_calls_use_value_equality_not_interning(self) -> None:
+        rule = self._rule()
+        first = rule.as_("a")
+        second = rule.as_("a")
+
+        self.assertEqual(first, second)
+        self.assertIsNot(first, second)
+
+    def test_invalid_aliases_raise(self) -> None:
+        rule = self._rule()
+        for alias in ("", "1a", "_a", "a-b"):
+            with self.subTest(alias=alias):
+                with self.assertRaises(RuleValidationError):
+                    rule.as_(alias)
+
+    def test_non_identifier_rule_id_default_alias_raises(self) -> None:
+        rule = self._rule(rule_id="bad-rule")
+
+        with self.assertRaises(RuleValidationError):
+            rule.as_()
+
+        self.assertEqual(rule.as_("good_alias").alias, "good_alias")
+
+    def test_port_reference_exposes_occurrence_port_details(self) -> None:
+        rule = self._rule()
+        occurrence = rule.as_("a")
+
+        ref = occurrence.port("user")
+        self.assertEqual(
+            ref,
+            RulePortRef(
+                occurrence_alias="a",
+                rule_id="active_user",
+                port_name="user",
+                var=rule.ports["user"],
+                port_type=PortType(kind="entity_ref", entity_type="User"),
+            ),
+        )
+        self.assertEqual(occurrence.user, ref)
+
+    def test_missing_port_errors_follow_explicit_vs_attribute_conventions(self) -> None:
+        occurrence = self._rule().as_("a")
+
+        with self.assertRaises(RuleValidationError):
+            occurrence.port("missing")
+        with self.assertRaises(AttributeError):
+            _ = occurrence.missing
+        with self.assertRaises(AttributeError):
+            _ = occurrence.__private
+
+    def test_occurrence_and_port_ref_are_frozen_and_hashable(self) -> None:
+        occurrence = self._rule().as_("a")
+        ref = occurrence.user
+
+        with self.assertRaises(FrozenInstanceError):
+            occurrence.alias = "b"  # type: ignore[misc]
+        with self.assertRaises(FrozenInstanceError):
+            ref.port_name = "other"  # type: ignore[misc]
+        self.assertIsInstance(hash(occurrence), int)
+        self.assertIsInstance(hash(ref), int)
+
+    def test_content_digest_is_alias_independent(self) -> None:
+        rule = self._rule()
+        before = rule.content_digest
+
+        _ = rule.as_("a")
+        _ = rule.as_("b")
+
+        self.assertEqual(rule.content_digest, before)
+
+    def test_same_port_name_with_different_internal_vars_preserves_port_contract(self) -> None:
+        left = self._rule(rule_id="left_rule", var_name="u")
+        right = self._rule(rule_id="right_rule", var_name="uid")
+
+        left_ref = left.as_("left").user
+        right_ref = right.as_("right").user
+
+        self.assertEqual(left_ref.port_name, right_ref.port_name)
+        self.assertNotEqual(left_ref.var, right_ref.var)
 
 
 if __name__ == "__main__":

@@ -172,6 +172,18 @@ class BuildApplicationRuleIdentityTests(unittest.TestCase):
         self.assertEqual(rule.render_desc(), "active user <user>")
         self.assertEqual(rule.render_desc({"user": "u-1"}), "active user u-1")
 
+    def test_application_rule_from_bridge_supports_occurrence_alias(self) -> None:
+        with vars("u") as (u,):
+            rule = build_application_rule(
+                id="active_user",
+                where=[User(u).status == "active"],
+                ports={"user": u},
+            )
+
+        occurrence = rule.as_("a")
+        self.assertEqual(occurrence.alias, "a")
+        self.assertEqual(occurrence.user.port_name, "user")
+
 
 class BuildApplicationRuleArithmeticTests(unittest.TestCase):
     def test_logic_var_add_constant_lowers_to_addc_builtin(self) -> None:

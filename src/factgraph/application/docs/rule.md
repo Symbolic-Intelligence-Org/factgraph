@@ -48,6 +48,26 @@ The DTO provides positional `atom_ids` using `<rule_id>:atom_<index>`, a
 deterministic `content_digest`, shallow container immutability, and
 `render_desc(...)` for template rendering.
 
+## Ports and Occurrence Aliases
+
+`ports` is the Rule's explicit public interface. Port keys are public names;
+the internal core `Var.name` values are implementation details and do not define
+cross-Rule alignment.
+
+T1.4 adds a small occurrence substrate for future RuleExpr joins:
+
+```python
+occ = rule.as_("a")
+user_port = occ.port("user")
+same_user_port = occ.user
+```
+
+`rule.as_()` defaults the occurrence alias to `rule.id`; the alias must match
+`[A-Za-z][A-Za-z0-9_]*`. If `rule.id` is not identifier-shaped, call
+`rule.as_("custom_alias")` explicitly. `RuleOccurrence` and `RulePortRef` are
+frozen value objects. They do not compose, join, or evaluate Rules by
+themselves; RuleExpr owns those expression-level semantics.
+
 ## Unified Syntax via SDK DSL Bridge
 
 Use `factgraph.sdk.dsl.build_application_rule(...)` when starting from SDK DSL

@@ -38,6 +38,7 @@ class PortType:
 _ALLOWED_ATOM_TYPES = (PredAtom, CmpAtom, InAtom, BuiltinAtom, NotAtom)
 _DESC_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
 _MALFORMED_PERCENT_RE = re.compile(r"%(?![A-Za-z_])")
+_OCCURRENCE_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,56 @@ class Rule:
 
         return _DESC_PORT_RE.sub(replace, self.desc)
 
+    def as_(self, alias: str | None = None) -> RuleOccurrence:
+        effective_alias = self.id if alias is None else alias
+        return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(effective_alias))
+
+
+@dataclass(frozen=True)
+class RulePortRef:
+    occurrence_alias: str
+    rule_id: str
+    port_name: str
+    var: Var
+    port_type: PortType
+
+    def __hash__(self) -> int:
+        return hash((self.occurrence_alias, self.rule_id, self.port_name, self.var, self.port_type))
+
+
+@dataclass(frozen=True)
+class RuleOccurrence:
+    rule: Rule
+    alias: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.rule, Rule):
+            raise RuleValidationError("RuleOccurrence.rule must be application protocol Rule")
+        object.__setattr__(self, "alias", _validate_occurrence_alias(self.alias))
+
+    def port(self, name: str) -> RulePortRef:
+        _require_non_empty_str(name, field_name="port name")
+        if name not in self.rule.ports:
+            raise RuleValidationError(f"port {name!r} is not declared on Rule {self.rule.id!r}")
+        return RulePortRef(
+            occurrence_alias=self.alias,
+            rule_id=self.rule.id,
+            port_name=name,
+            var=self.rule.ports[name],
+            port_type=self.rule.port_types[name],
+        )
+
+    def __getattr__(self, name: str) -> RulePortRef:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        try:
+            return self.port(name)
+        except RuleValidationError as exc:
+            raise AttributeError(name) from exc
+
+    def __hash__(self) -> int:
+        return hash((self.rule.id, self.alias))
+
 
 def _require_non_empty_str(value: Any, *, field_name: str) -> str:
     if not isinstance(value, str) or not value:
@@ -134,6 +185,14 @@ def _validate_desc(desc: str | None, *, port_names: frozenset[str]) -> None:
         name = match.group(1)
         if name not in port_names:
             raise RuleValidationError(f"desc references undeclared port: {name}")
+
+
+def _validate_occurrence_alias(alias: Any) -> str:
+    if not isinstance(alias, str) or not alias:
+        raise RuleValidationError("occurrence alias must be non-empty string")
+    if re.fullmatch(_OCCURRENCE_ALIAS_RE, alias) is None:
+        raise RuleValidationError("occurrence alias must match [A-Za-z][A-Za-z0-9_]*")
+    return alias
 
 
 def _validate_atom(atom: Any, *, field_name: str, seen_vars: set[Var]) -> None:
@@ -475,5 +534,7 @@ def _serialize_value(value: Any) -> Any:
 __all__ = [
     "PortType",
     "Rule",
+    "RuleOccurrence",
+    "RulePortRef",
     "RuleValidationError",
 ]
