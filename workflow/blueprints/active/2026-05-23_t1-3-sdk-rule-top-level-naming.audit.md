@@ -1,7 +1,7 @@
 # T1.3 SDK Top-Level Rule Naming Audit Log
 
-Status: draft
-Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
+Status: scoped
+Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 Blueprint: workflow/blueprints/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
@@ -11,6 +11,7 @@ Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-leve
 |---|---|---|
 | 2026-05-23 | draft | Initial M-class blueprint + decision doc drafted from source-grep audit. |
 | 2026-05-23 | Step 4.2 v2 tightening | Applied 4 Required + 3 Worth-considering findings from first M-class review. |
+| 2026-05-23 | scoped | Step 4.2 v2 re-review passed with 0 Blocker / 0 Required; decision doc accepted concurrent with scoped anchor. |
 
 ## G1-G7 Mapping
 

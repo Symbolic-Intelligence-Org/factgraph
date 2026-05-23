@@ -1,7 +1,7 @@
 # Decision: T1.3 SDK Top-Level Rule Naming
 
-Status: proposed
-Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
+Status: accepted
+Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 Related Blueprint: workflow/blueprints/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
 ## Context

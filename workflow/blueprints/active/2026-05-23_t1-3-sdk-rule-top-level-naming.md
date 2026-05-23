@@ -1,7 +1,7 @@
 # T1.3 SDK Top-Level Rule Naming
 
-Status: draft
-Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
+Status: scoped
+Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 Class: M
 Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
@@ -97,7 +97,7 @@ Implementation is blocked until the decision doc is `accepted`.
 ### 4.4 Existing Legacy Rule
 
 - `src/factgraph/sdk/dsl/rule.py:53-116` defines the current legacy SDK `Rule`.
-- `src/factgraph/sdk/dsl/rule.py:67-74` includes legacy fields such as `select`, `where`, `expose`, and `condition_weights`.
+- `src/factgraph/sdk/dsl/rule.py:67-78` includes legacy fields such as `select`, `where`, `expose`, and `condition_weights`.
 - `src/factgraph/sdk/dsl/rule.py:28-32` lets `RuleRef` accept a legacy `Rule` instance.
 
 ### 4.5 New Application Rule
