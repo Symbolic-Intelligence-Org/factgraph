@@ -185,7 +185,7 @@ Adapter status:
 | Python application Rule evaluator | Supported |
 | SDK `build_application_rule(...)` bridge | Supported |
 | Souffle adapter | Supported (empty `min`/`max`/`mean` follow C101 via `count > 0` guard, branch does not fire) |
-| ProbLog adapter | Deferred to T2.3.d |
+| ProbLog adapter | Supported (`findall/3` + `library(lists)` predicates; empty `min`/`max`/`mean` use `L = [_|_]` guard, branch does not fire) |
 | PyReason adapter | Out of scope |
 
 ## 4. RuleRef and Dependency Registration

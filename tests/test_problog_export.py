@@ -166,6 +166,146 @@ class ProbLogExportTests(unittest.TestCase):
         with self.assertRaisesRegex(ProbLogExportError, "arithmetic operands"):
             _compile_atom(("addc", "$z", "$x", "two"))
 
+    def test_compile_atom_supports_count_aggregate(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        compiled = _compile_atom(("eq", "$count", ("count", None, [("pred", "order:buyer", ["$o", "$u"])])))
+
+        self.assertIn("findall(1, (edb_fact(_, 'order:buyer', V_O, V_U)), AggList1)", compiled)
+        self.assertIn("length(AggList1, AggResult2)", compiled)
+        self.assertIn("V_COUNT = AggResult2", compiled)
+
+    def test_compile_atom_supports_sum_aggregate(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        compiled = _compile_atom(
+            ("eq", "$total", ("sum", "$_agg1", [("pred", "order:amount", ["$o", "$_agg1"])]))
+        )
+
+        self.assertIn("findall(V_AGG1, (edb_fact(_, 'order:amount', V_O, V_AGG1)), AggList1)", compiled)
+        self.assertIn("sum_list(AggList1, AggResult2)", compiled)
+        self.assertIn("V_TOTAL = AggResult2", compiled)
+
+    def test_compile_atom_supports_min_max_mean_empty_guards(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        filter_atoms = [("pred", "order:amount", ["$o", "$_agg1"])]
+        cases = [
+            ("min", "min_list(AggList1, AggResult2)"),
+            ("max", "max_list(AggList1, AggResult2)"),
+            ("mean", "AggResult2 is AggSum3 / AggCount4"),
+        ]
+        for kind, expected in cases:
+            with self.subTest(kind=kind):
+                compiled = _compile_atom(("eq", "$value", (kind, "$_agg1", filter_atoms)))
+                self.assertIn("AggList1 = [_|_]", compiled)
+                self.assertIn(expected, compiled)
+
+    def test_compile_atom_count_and_sum_do_not_emit_empty_guard(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        count_compiled = _compile_atom(("eq", "$count", ("count", None, [("pred", "order:exists", ["$o"])])))
+        sum_compiled = _compile_atom(
+            ("eq", "$total", ("sum", "$_agg1", [("pred", "order:amount", ["$o", "$_agg1"])]))
+        )
+
+        self.assertNotIn("[_|_]", count_compiled)
+        self.assertNotIn("[_|_]", sum_compiled)
+
+    def test_compile_atom_supports_aggregate_numeric_comparison(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        compiled = _compile_atom(("gt", ("count", None, [("pred", "order:exists", ["$o"])]), 3))
+
+        self.assertIn("findall(1, (edb_fact(_, 'order:exists', V_O, _)), AggList1)", compiled)
+        self.assertIn("AggResult2 > 3", compiled)
+
+    def test_compile_atom_supports_two_aggregate_comparison(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        compiled = _compile_atom(
+            (
+                "gt",
+                ("sum", "$_agg1", [("pred", "order:amount", ["$o", "$_agg1"])]),
+                ("count", None, [("pred", "order:exists", ["$o"])]),
+            )
+        )
+
+        self.assertEqual(compiled.count("findall("), 2)
+        self.assertIn("AggResult2 > AggResult4", compiled)
+
+    def test_compile_atom_supports_aggregate_filter_not_body(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        compiled = _compile_atom(
+            (
+                "eq",
+                "$count",
+                (
+                    "count",
+                    None,
+                    [
+                        ("pred", "order:status", ["$o", "$status"]),
+                        ("not", [("eq", "$status", "blocked")]),
+                    ],
+                ),
+            )
+        )
+
+        self.assertIn("\\+(V_STATUS = 'blocked')", compiled)
+
+    def test_export_aggregate_includes_lists_import_and_keeps_query_vars_outer_only(self) -> None:
+        sdk = self._make_sdk()
+
+        program = self._export_program(
+            sdk,
+            where=[
+                ("pred", "user:name", ["$u", "$name"]),
+                (
+                    "eq",
+                    "$total",
+                    (
+                        "sum",
+                        "$_agg1",
+                        [
+                            ("pred", "order:buyer", ["$o", "$u"]),
+                            ("pred", "order:amount", ["$o", "$_agg1"]),
+                        ],
+                    ),
+                ),
+            ],
+        )
+
+        self.assertIn(":- use_module(library(lists)).", program)
+        self.assertIn('% query_vars=["$name","$total","$u"]', program)
+        self.assertIn("rule_body_0(V_NAME, V_TOTAL, V_U)", program)
+        self.assertNotIn("V_O)", program.split(":-", 1)[0])
+
+    def test_export_non_aggregate_omits_lists_import(self) -> None:
+        sdk = self._make_sdk()
+
+        program = self._export_program(sdk)
+
+        self.assertNotIn(":- use_module(library(lists)).", program)
+
+    def test_compile_atom_rejects_unknown_aggregate_kind(self) -> None:
+        from factgraph.adapters.problog.problog_export import ProbLogExportError, _compile_atom
+
+        with self.assertRaisesRegex(ProbLogExportError, "unsupported aggregate kind: median"):
+            _compile_atom(("eq", "$x", ("median", "$_agg1", [("pred", "order:exists", ["$o"])])))
+
+    def test_compile_atom_rejects_malformed_aggregate_target(self) -> None:
+        from factgraph.adapters.problog.problog_export import ProbLogExportError, _compile_atom
+
+        with self.assertRaisesRegex(ProbLogExportError, "sum aggregate target must be a variable token"):
+            _compile_atom(("eq", "$x", ("sum", None, [("pred", "order:exists", ["$o"])])))
+
+    def test_compile_atom_rejects_unsupported_aggregate_filter_atom(self) -> None:
+        from factgraph.adapters.problog.problog_export import ProbLogExportError, _compile_atom
+
+        with self.assertRaisesRegex(ProbLogExportError, "unsupported aggregate filter atom kind: add"):
+            _compile_atom(("eq", "$x", ("count", None, [("add", "$z", "$x", "$y")])))
+
 
 class TestProbLogExportReadsSharedProbability(unittest.TestCase):
     """ProbLog export reads shared/semantic/probability annotations."""

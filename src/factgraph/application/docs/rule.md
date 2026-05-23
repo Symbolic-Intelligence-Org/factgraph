@@ -92,14 +92,13 @@ arithmetic atom. Port validation treats aggregate target variables as visible,
 keeps aggregate-filter-local variables private, and rejects ports that reference
 only aggregate-local filter variables.
 
-Adapter status: the Python evaluator and the Souffle adapter both support
-aggregate terms (Souffle aggregate body wire shipped in T2.3c). For Souffle,
-`count` and `sum` use native empty-set behavior (empty = 0, matching C101
-legal values); `min`/`max`/`mean` emit a `count : { same_body } > 0` guard
-clause so an empty body suppresses the rule branch (matching C101
-AggregateNoValue "comparison violated / no env pollution" semantics — no
-separate sentinel value). ProbLog adapter projection (`findall/3` + list
-predicates) remains deferred to T2.3.d. PyReason aggregates are out of
+Adapter status: the Python evaluator, Souffle adapter, and ProbLog adapter
+support aggregate terms. Souffle `min`/`max`/`mean` emit a
+`count : { same_body } > 0` guard so an empty body suppresses the rule branch.
+ProbLog lowers aggregates through `findall/3` plus `library(lists)` predicates;
+`min`/`max`/`mean` use `L = [_|_]` before list reduction. Both adapter paths
+match C101 AggregateNoValue "comparison violated / no env pollution" semantics
+without exposing a separate sentinel value. PyReason aggregates are out of
 scope per parent essay §10.6.3.
 
 ## Bridge Rejections
