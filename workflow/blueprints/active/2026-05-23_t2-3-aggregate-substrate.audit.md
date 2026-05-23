@@ -24,6 +24,7 @@
 | 2026-05-23 | draft | Blueprint created | T2 Track 3rd sub-slice (after T2.1 ne adapter dispatch + T2.2 ArithExpr substrate). 100% genuinely new substrate (verified via G2 source-grep). Class assessment: S with documented size override. |
 | 2026-05-23 | scoped | Status: draft → scoped | User Step 4.2 v4 review passed 0 P-findings. Tightening trend: v1(5)→ v2(5)→ v3(2)→ v4(3 blueprint-body sync). All algorithm + audit log + blueprint body coherent on T2.3a substrate-only scope + v3 target-vars-always algorithm + defense-in-depth filter-local isolation + T1.2 bridge intentionally untouched. Ready for Step 4.7 implementation pending user "可以推进 impl" + G7 precondition execution before code changes. |
 | 2026-05-23 | G7 precondition | Pre-implementation checks recorded before code changes | Ran blueprint §5.8 checks 1-5 on impl branch `v0.2.0-impl-t2-3-aggregate-substrate-2026-05-23` before implementation. Checks passed; no S→M escalation triggered. See Decision Notes below. |
+| 2026-05-23 | implemented | Status: scoped → implemented | Implementation landed in `b94576f5`. Step 4.7 reviewer pass reported 0 P1 findings; 85 tests passed, ruff clean, SDK/adapters 0-touch, no baseline drift surfaced. |
 
 ## Decision Notes
 

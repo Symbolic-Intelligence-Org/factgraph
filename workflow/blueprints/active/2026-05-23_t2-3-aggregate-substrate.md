@@ -1,6 +1,6 @@
 # T2.3a — Core AggregateExpr substrate (IR + validation + Python eval + raw resolver)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-23
 - Last Updated: 2026-05-23
 - Authority: task blueprint
@@ -832,4 +832,24 @@ Estimated test LOC ~700。
 
 ## 10. Outcome / Deviations
 
-- Pending。
+- **Implemented in** `b94576f5` (`feat(rules): add AggregateExpr substrate`) after G7 precondition record `f3d217a3`。
+- **Landed code**:
+  - `src/factgraph/core/rules/where_ast.py`: `AggregateAtom`, `_AGGREGATE_KINDS`, raw parse/lower, and `Term = Var | Const | AggregateAtom` restructure.
+  - `src/factgraph/core/rules/where_ast_validate.py`: aggregate validation, filter restrictions, scoping, target binding rule, numeric construct checks, `AggregateValidationError`, and `AggregateVariableScopeError`.
+  - `src/factgraph/core/rules/where_eval.py`: per-env aggregate evaluation, `AggregateNoValue`, raw aggregate resolver in comparison/arithmetic paths, and aggregate-aware helper coverage.
+  - `src/factgraph/application/protocol/rule.py`: direct-construction aggregate term serialization and two-pass port visibility (target vars always; correlated filter vars only; aggregate-local-only vars isolated).
+  - `src/factgraph/application/docs/rule.md`: internal substrate note; no SDK/public aggregate syntax docs.
+  - Tests: `tests/core/rules/test_aggregate_substrate.py`, `tests/core/rules/test_aggregate_eval.py`, `tests/application/protocol/test_rule_aggregate.py`.
+- **Verification**:
+  - G7 precondition checks 1-5 passed and were recorded before implementation in `f3d217a3`; no S→M escalation or decision doc was needed.
+  - T2.3a + cross-slice gate: `PYTHONPATH=src python -m unittest tests.core.rules.test_aggregate_substrate tests.core.rules.test_aggregate_eval tests.application.protocol.test_rule_aggregate tests.application.protocol.test_rule tests.sdk.dsl.test_application_rule tests.test_souffle_witness_where_compile_v1 tests.test_problog_export tests.test_problog_engine_eval tests.test_capability_helpers_round_events` → 85 tests passed.
+  - Ruff clean on touched source/test files.
+  - Scope diff verified SDK files and adapter files 0-touch.
+  - Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`; unrelated dirty set preserved.
+- **Deviations**:
+  - None from the scoped T2.3a blueprint. `_eval_body(initial_envs=...)` was an expected implementation extension from G7 check #3, not a scope change.
+  - No unrelated baseline drift surfaced.
+- **Follow-up**:
+  - T2.3b: SDK ergonomic helpers + aggregate bridge support + public docs/export policy.
+  - T2.3c/d: Souffle aggregate body wire and ProbLog `findall` / list-predicate adapter dispatch.
+  - Track plan / memory consolidation should add T2.3a after archive.
