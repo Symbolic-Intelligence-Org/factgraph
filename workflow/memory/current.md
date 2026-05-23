@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + ProbLog hygiene fixtures archived locally; source `477fcccb`, not pushed)
+最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + ProbLog hygiene fixtures archived locally; source `4e3176d2`, not pushed)
 
 ## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 S-CLASS BATCH ARCHIVED LOCALLY)
 
-**Current local branch:** `v0.2.0-impl-t2-3-aggregate-substrate-2026-05-23 @ 477fcccb`.
+**Current local branch:** `v0.2.0-impl-t2-3b-aggregate-sdk-bridge-2026-05-23 @ 4e3176d2`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -26,6 +26,7 @@
 | T2.2 ArithExpr substrate | S | `b17a62c1` | `04ac0cb9 feat(problog): export arithmetic builtins` |
 | ProbLog `meta[confidence]` fixture cleanup | S | `1da49c41` | `e3c3d7bc test(problog): migrate meta-confidence fixtures` |
 | T2.3a AggregateExpr substrate | S | `477fcccb` | `b94576f5 feat(rules): add AggregateExpr substrate` |
+| T2.3b AggregateExpr SDK + bridge | S | `4e3176d2` | `94045e54 feat(sdk): add aggregate DSL helpers and bridge support` |
 
 ### Current landed behavior
 
@@ -73,8 +74,23 @@
 - Validation landed in `where_ast_validate.py`: aggregate filter restrictions, per-env variable scoping, target binding, numeric target checks, and aggregate-specific error classes.
 - Python evaluator landed in `where_eval.py`: per-env aggregate resolution, `AggregateNoValue`, aggregate-aware comparison/arithmetic raw resolvers, and helper coverage for planning/scoring/variable extraction.
 - Application Rule serialization landed in `application/protocol/rule.py`: `_serialize_term` and two-pass variable collection now understand aggregate terms while isolating aggregate-local filter variables.
-- SDK ergonomic helpers, DSL bridge aggregate support, public docs, and Souffle/ProbLog/PyReason adapter wires are deferred to follow-up slices T2.3b/T2.3c/T2.3d.
+- SDK ergonomic helpers, DSL bridge aggregate support, and public docs all shipped in T2.3b (see below). Souffle/ProbLog/PyReason adapter wires are deferred to follow-up slices T2.3c/T2.3d (PyReason out of scope).
 - G7 precondition was recorded before implementation in `f3d217a3`, implementation landed in `b94576f5`, closure in `b554b0f1`, audit status sync in `c0a80f79`, and archive in `477fcccb`.
+
+**T2.3b — AggregateExpr SDK ergonomic + bridge**
+- 5 public helpers `agg_count` / `agg_sum` / `agg_min` / `agg_max` / `agg_mean` landed in `src/factgraph/sdk/dsl/expr.py` and are exported from `factgraph.sdk.dsl.__all__` only; top-level `factgraph.sdk` intentionally not promoted (narrow-public-api).
+- Internal `_AggregateRef` frozen dataclass added with 6 comparison dunders; pure syntactic sugar with no embedded validation. T2.3a substrate validates lowered IR.
+- DSL→IR lowering branch `_lower_compare_with_aggregate` / `_lower_aggregate_ref` / `_lower_aggregate_target` landed with filter-then-target order, `filter_bindings = dict(outer_bindings)` isolation copy, and **Option 2 self-ensure pattern**: target `AttrRef` record var auto-injects `EntityType:exists($var)` only when the aggregate filter did not already bind it, via the existing `_ensure_attr_record_binding` helper (early-return on hit prevents duplicate existence predicates). Order-independent by design.
+- Bridge extensions in `src/factgraph/sdk/dsl/application_rule.py`:
+  - `_reject_legacy_aggregate_ref` recurses through target + filter to preserve T1.2 P3 legacy hard-cut policy.
+  - `_collect_vars_from_term` + `_canonicalize_term` now understand `AggregateAtom` (over-collect target + filter atoms; T2.3a application Rule Pass 2 still independently isolates aggregate-local-only vars before ports — defense-in-depth).
+  - **Bridge validation gate wired** (scoped amendment `13f79337`): `validate_where_ast(where_expr, mode="python", capabilities={"allow_ruleref": False}, initial_bound_vars=<port LogicVar tokens>)` runs after parse/canonicalize; `WhereASTValidationError` wraps as `DSLToApplicationRuleError`. Port LogicVar tokens are passed as `initial_bound_vars` so existing arithmetic/input-port behavior remains valid; ApplicationRule still independently rejects aggregate-local port leakage downstream.
+- Three-layer docs updated: `application/docs/rule.md` (removed deferral language, added adapter status), `sdk/docs/03_rules_and_inferences.en.md` (new §3.2 with end-to-end example + per-env semantics + isolation + adapter status table), `sdk/docs/04_api_surface.en.md` (5 helpers in dsl namespace table + advanced-direct-import entry).
+- New 10-test acceptance file `tests/sdk/dsl/test_aggregate_ergonomic.py` includes the **3-test self-ensure discriminator trio** (filter-bound + filter-bound-via-unified-syntax + TRUE self-ensure `agg_sum(Order(o).amount, where=[User(u)])`) plus isolation-leak prevention, bridge legacy rejection, validator-gate, two-pass isolation, and end-to-end correlated Python eval tests.
+- Commit lineage: scoped `26d11d81` → G7 precondition `99729ca5` (recorded BEFORE impl) → bridge validator amendment `13f79337` (scoped amendment BEFORE feat) → feat `94045e54` (impl + tests + 3-layer docs combined) → closure `f16a80db` (§10 Outcome filled, Nit deferral recorded) → archive `4e3176d2` (100% rename).
+- Verification at archive: 10 new aggregate tests pass; 98-test cross-slice scope pass (per §10.3); 153 wider-discover failures unrelated (frontier/diagnose/localizer paths, T2.3b touched none). Ruff clean on touched files. Sacred `master` + dirty set preserved throughout.
+- **Deferred Nit accepted as follow-up** (Step 4.7 single Nit observation, user chose deferral): `_lower_compare_with_aggregate` non-aggregate side currently calls `lower_term(..., in_where=True)` which raises for AttrRef and BinaryExpr. `Order(o).amount == agg_count(...)` and `(n + 1) == agg_count(...)` fail loudly with `SDKDSLError`; two-aggregate `agg_count(...) == agg_count(...)` works. T2.3.b1 / T2.3.e candidate; workaround = bind aggregate result to Var first.
+- Souffle / ProbLog aggregate adapter wires remain deferred to T2.3c / T2.3d. PyReason aggregate is out of scope.
 
 ### Workflow governance state
 
@@ -96,6 +112,8 @@ G1-G7 now apply to every class:
 
 Since T2.2, the cross-flip pattern stabilized as user-drafts / Claude-reviews for design artifacts, with clean Step 4.2 drafts for T2.2 and fixture cleanup. T2.3a needed four tightening rounds because it was the largest S-class slice so far, but it still stayed S-class: no Stage 2 decision doc was required, G7 did not trigger escalation, and implementation reviewer pass found 0 P1 findings.
 
+T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed three tightening rounds (v1 1 Blocker + 3 Required → v2 1 Blocker → v3 1 Required acceptance discriminator gap). Step 4.7 came back with 0 P-findings and 1 Nit, and the Nit was explicitly deferred rather than expanded — preserving the clean-impl record. T2.3b also validated a 3-commit impl variant: G7 precondition commit + pre-impl scope amendment commit + single feat (combining impl + tests + 3-layer docs).
+
 ### Process lessons carried forward
 
 - **Branch isolation:** T1.1 did not use a separate implementation branch; T1.2 onward corrected this. Continue paired blueprint/impl branch discipline.
@@ -104,15 +122,18 @@ Since T2.2, the cross-flip pattern stabilized as user-drafts / Claude-reviews fo
 - **G7 amendment discipline:** ProbLog hygiene and fixture cleanup both used scoped amendments when preconditions exposed an unsafe or noisy gate. This is the expected S-class (A-fallback) pattern.
 - **Baseline hygiene:** ProbLog import cycle and `meta[confidence]` fixture drift are now cleared. New known baseline: `tests.test_sdk_assertion_record_set` has unrelated `snap.field(...).active.where` drift.
 - **Large S-class boundary:** T2.3a validated that a larger S-class substrate slice can remain lightweight when G1-G7 are explicit, preconditions pass, public API is not changed, and SDK/adapters are kept out of scope.
+- **Cross-flip inversion blindness:** T2.3b reverted to Claude-drafts / user-reviews and needed three Step 4.2 rounds. Drafter assumption blindness compounded across v1 and v2; v3 closed it only when the reviewer demanded a discriminator test that would actually fail if the corrected algorithm branch were dropped. When inverting cross-flip, the reviewer must explicitly verify each acceptance test discriminates the intended algorithm branch, not just exercises the nominal path.
+- **Reusable helper preference:** T2.3b implemented its self-ensure logic by reusing the existing `_ensure_attr_record_binding` helper instead of writing a new injection function. The helper's existing "early-return-on-hit" semantics gave "no duplicate `Type:exists`" behavior for free. When adding new lowering paths, scan for existing helpers with matching semantics first.
+- **Step 4.7 Nit discipline:** T2.3b had a single Nit observation (non-aggregate-side AttrRef/BinaryExpr asymmetry in `_lower_compare_with_aggregate`). User chose deferral over expansion. Preserve S-class minimal scope and the 0-P1-fix clean impl record; document the deferral in §10.4 and flag as a follow-up micro-slice rather than expanding after a clean reviewer pass.
 
 ### Recommended next work
 
-- **T2.3b AggregateExpr SDK ergonomic + bridge** — next T2 follow-up; public SDK helpers and bridge support make this a likely S/M boundary depending on exported names and caller impact.
-- **T2.3c/T2.3d AggregateExpr adapters** — Souffle aggregate body wire and ProbLog `findall/3`/list predicate lowering, likely separate S-class adapter slices if scoped narrowly.
+- **T2.3c AggregateExpr Souffle adapter** — S-class adapter slice; closes Souffle path for aggregate-backed application Rules. T2.3a substrate + T2.3b SDK both ready.
+- **T2.3d AggregateExpr ProbLog adapter** — S-class adapter slice via `findall/3` + list predicates; symmetric to T2.3c.
+- **T2.3.b1 / T2.3.e (Nit follow-up)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` (via `_ensure_attr_record_binding`) and `BinaryExpr` (via `_lower_expr_term`), making it symmetric with standard `_lower_compare`.
 - **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing.
-- **T1.3 SDK top-level `Rule` naming** — M class; needs decision doc for TPQ-2 / public API naming.
+- **T1.3 SDK top-level `Rule` naming** — M class; first M-class slice in the streak; needs decision doc for TPQ-2 / public API naming.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
-- **Memory consolidation** — after this repo memory update, mirror summary into external Claude memory.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
