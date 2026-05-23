@@ -299,3 +299,43 @@ Implication:if target Var is filter-bound only(`agg_sum($amount, filter=[..eq $a
 | Audit Cross-slice contract | T1.2 bullet rewritten — bridge intentionally untouched + aggregate bridge deferred to T2.3b(P2);T2.2 bullet annotated for arith operand resolver extension |
 
 **Blueprint stays `Status: draft`** pending user re-approval of v3。Confidence:high — both findings were narrow textual / algorithmic gaps,addressed surgically without introducing new contradictions。Ready for Step 4.6 scoped anchor if v3 holds。
+
+### 2026-05-23 — Step 4.2 v4 tightening applied (3 final blueprint-body residuals)
+
+User Step 4.2 v3 re-review surfaced 3 v2/v3 residuals — all in blueprint body that didn't sync with v3 algorithmic + audit log corrections。Applied all 3。
+
+**P1 (Required) — §5.7 Two-pass guarantee paragraph still described old v2 intersection algorithm**:
+Blueprint §5.7 line 686-689 still said "Pass 2 collects ONLY correlated subset (target ∪ filter) ∩ outer_seen_vars" — this is the v2 intersection algorithm that v3 P1 superseded. Reading at impl time would lead to implementing the wrong algorithm.
+
+**Adopted**:rewrite §5.7 Two-pass guarantee bullets to reflect v3:
+- Pass 2 collects target_vars ALWAYS + filter_vars ∩ outer_seen_vars(correlated subset)+ aggregate-local-only filter Vars(filter_vars - outer_seen_vars - target_vars)NEVER enter seen_vars。
+- ports validation can reference target Vars + outer + correlated filter Vars,but not aggregate-local-only Vars。
+
+**P2 (Required) — §6 invariant still said "relies on validator pre-check"**:
+Blueprint §6 Filter-local var isolation invariant(line 770)said "Application Rule `_collect_term_vars` relies on validator pre-check"。This contradicts §5.7's v2 P1 rewrite that established application Rule's two-pass algorithm as INDEPENDENTLY correct without validator pre-check。
+
+**Adopted**:rewrite §6 invariant to explicit defense-in-depth wording:
+- "Application Rule independently enforces this in its own two-pass collection algorithm"
+- "AST validator additionally rejects aggregate-local Vars referenced by subsequent outer atoms at construct-time"
+- "Application Rule's defense does NOT rely on validator pre-check — it is independently correct even when validator is bypassed"
+
+**P3 (Minor) — §6 Cross-slice contract invariant "T1.2 bridge passthrough unchanged" vague**:
+Blueprint §6 line 775 said "T1.2 bridge passthrough unchanged" — easily read as "bridge naturally handles aggregate"。Audit log v3 already corrected to "intentionally UNTOUCHED + aggregate bridge unsupported in T2.3a + deferred to T2.3b"。Blueprint §6 should match。
+
+**Adopted**:expand §6 Cross-slice contract invariant from single-line bullet to 4 sub-bullets:
+- T1.1 application Rule allowlist unchanged
+- T1.2 SDK bridge **intentionally UNTOUCHED**;aggregate-containing IR **unsupported via `build_application_rule` in T2.3a**(cite `_collect_vars_from_term:181` + var canonicalize `:250` not recognizing AggregateAtom);bridge support **deferred to T2.3b**;application Rule internal helpers gain AggregateAtom branch ONLY for **direct construction** path
+- T2.1 ne adapter dispatch unchanged
+- T2.2 ArithExpr `_BUILTIN_TAGS` unchanged;`_eval_arith_atom` operand resolver additive aggregate-aware extension(per v1 P4)
+
+**Summary of v4 changes**:
+
+| Section | Change |
+|---|---|
+| §5.7 Two-pass guarantee | Rewritten with v3 algorithm bullets:target ALWAYS + filter correlated subset + aggregate-local-only excluded(P1)|
+| §6 Filter-local isolation invariant | Rewritten as defense-in-depth:application Rule independently correct + validator additional defense(P2)|
+| §6 Cross-slice contract invariant | Expanded to 4 sub-bullets:T1.1 / T1.2 bridge UNTOUCHED + T2.3b deferred / T2.1 / T2.2 additive arith operand resolver(P3)|
+
+**Trend**:v1(5 findings)→ v2(5 findings)→ v3(2 findings)→ v4(3 findings,all blueprint-body sync with audit log)— **findings 都集中在 v2 → v3 算法变更后的文本同步,无新设计 issue**。Predict v5 review 0 findings,ready for Step 4.6 scoped。
+
+**Blueprint stays `Status: draft`** pending user re-approval of v4。

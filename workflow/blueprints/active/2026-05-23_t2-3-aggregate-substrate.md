@@ -683,12 +683,14 @@ def _serialize_aggregate_atom(atom: AggregateAtom) -> dict:
     }
 ```
 
-**Two-pass guarantee**(per Step 4.2 v2 P1):
+**Two-pass guarantee**(per Step 4.2 v2 P1 + v3 P1 refinement):
 
 - Pass 1 collects outer Var occurrences,treating AggregateAtom Term-position values as opaque(NOT recursed)。This gives clean `outer_seen_vars` set。
-- Pass 2 walks aggregate Term-position values with `outer_seen_vars` context;collects ONLY correlated subset(target ∪ filter) ∩ outer_seen_vars。
-- Filter-local vars(filter_vars - outer_seen_vars)NEVER enter `seen_vars`。
-- ports validation against `seen_vars` (after pass 2) cannot reference aggregate-local vars。
+- Pass 2 walks aggregate Term-position values with `outer_seen_vars` context and collects(per v3 P1):
+  - **Target Vars ALWAYS**:`target_vars` added to `seen_vars` unconditionally(target is "aggregate external input")
+  - **Filter correlated subset only**:`filter_vars ∩ outer_seen_vars` added to `seen_vars`
+  - **Aggregate-local-only filter Vars**(`filter_vars - outer_seen_vars - target_vars`)NEVER enter `seen_vars`
+- ports validation against `seen_vars`(after pass 2)can reference target Vars + outer + correlated filter Vars,but cannot reference aggregate-local-only Vars。
 
 **This is NOT "trust the constructor"** — application Rule itself enforces the isolation rule。`where_ast_validate._validate_aggregate_scoping` provides additional defense for AST-validation path,but application Rule's own pass-2 algorithm is independently correct。
 
@@ -767,12 +769,16 @@ Estimated test LOC ~700。
 - **Per-env aggregation invariant**:aggregate computation runs **per outer env**(correlated semantics per C104),NEVER as a global env-list reduce。
 - **NoValue isolation invariant**:`AggregateNoValue` propagation NEVER raises Python exception。NoValue causes atom violation(env excluded from output)or result binding rejection per parent §10.6.5 / C101 / C105。
 - **NoValue × ArithExpr invariant**:NoValue as ArithExpr operand causes the arithmetic atom to be violated for that env(not a process exception)。Implemented in raw resolver invocation from `_eval_arith_atom` operand resolution。
-- **Filter-local var isolation invariant**:vars introduced inside aggregate filter that are NOT in outer scope do NOT leak to outer Rule.where atoms。Validator rejects leak attempts construct-time。Application Rule `_collect_term_vars` relies on validator pre-check。
+- **Filter-local var isolation invariant**(defense-in-depth per v3):aggregate-local-only Vars(introduced + bound inside aggregate filter,not in outer scope,not in target)do NOT leak to outer Rule.where atoms or ports。**Application Rule independently enforces this in its own two-pass collection algorithm**(`Rule.__post_init__` Pass 1 treats AggregateAtom as opaque;Pass 2 collects target_vars + correlated_filter_vars only)。AST validator(`where_ast_validate._validate_aggregate_scoping`)additionally rejects aggregate-local Vars referenced by subsequent outer atoms at construct-time。**Application Rule's defense does NOT rely on validator pre-check** — it is independently correct even when validator is bypassed(e.g., direct AggregateAtom instantiation that skips `parse_where_ir_to_ast`)。
 - **Filter-only-9-kinds invariant**:filter clause top-level atoms restricted to 9 scalar kinds(pred / eq / ne / gt / ge / lt / le / in / not);`not` body further restricted to 8 kinds(去 nested not)。
 - **Raw-tuple-evaluator invariant**:T2.3a evaluator extensions operate on raw tuple shapes,not AST dataclass instances(per Step 4.2 v1 P2)。AST is parsed only for validation gating in `evaluate_where`。
 - **Adapter-deferral invariant**:adapter wires(Souffle / ProbLog)stay 0 LOC change in T2.3a — verified by scope diff。Deferred to T2.3.c / T2.3.d。
 - **SDK-deferral invariant**:no SDK helpers,no DSL `_AggregateRef`,no `sdk/dsl/expr.py` change — deferred to T2.3b。Verified by scope diff。
-- **Cross-slice contract invariant**:T1.1 application Rule allowlist unchanged;T1.2 bridge passthrough unchanged(only `_serialize_term` / `_collect_term_vars` in application Rule gain AggregateAtom branch — internal helpers);T2.1 ne dispatch unchanged;T2.2 ArithExpr `_BUILTIN_TAGS` unchanged。
+- **Cross-slice contract invariant**:
+  - T1.1 application Rule `_ALLOWED_ATOM_TYPES` unchanged(AggregateAtom is Term-position,not top-level Atom)。
+  - **T1.2 SDK bridge intentionally UNTOUCHED in T2.3a**(`sdk/dsl/expr.py` + `sdk/dsl/application_rule.py` 0-touch);aggregate-containing IR is **unsupported via `build_application_rule` in T2.3a**(`_collect_vars_from_term` `:181` + var canonicalize `:250` don't recognize AggregateAtom)。Aggregate bridge support is **deferred to T2.3b**。Application Rule internal helpers(`_serialize_term` / `_collect_term_vars` in `application/protocol/rule.py`)gain AggregateAtom branch ONLY for **direct application Rule construction** path(per §5.7)。
+  - T2.1 ne adapter dispatch unchanged。
+  - T2.2 ArithExpr `_BUILTIN_TAGS` unchanged;`_eval_arith_atom` operand resolver gains aggregate-aware branch(per v1 P4)— additive,not breaking。
 
 ## 7. Acceptance
 
