@@ -140,6 +140,32 @@ class ProbLogExportTests(unittest.TestCase):
 
         self.assertIn("\\+(V_NAME \\= 'blocked')", program)
 
+    def test_compile_atom_supports_arithmetic_builtins(self) -> None:
+        from factgraph.adapters.problog.problog_export import _compile_atom
+
+        cases = [
+            (("add", "$z", "$x", "$y"), "V_Z is V_X + V_Y"),
+            (("sub", "$z", "$x", "$y"), "V_Z is V_X - V_Y"),
+            (("neg", "$z", "$x"), "V_Z is -V_X"),
+            (("addc", "$z", "$x", 2), "V_Z is V_X + 2"),
+            (("mulc", "$z", "$x", 3), "V_Z is V_X * 3"),
+        ]
+        for atom, expected in cases:
+            with self.subTest(atom=atom):
+                self.assertEqual(_compile_atom(atom), expected)
+
+    def test_compile_atom_rejects_malformed_arithmetic_builtin(self) -> None:
+        from factgraph.adapters.problog.problog_export import ProbLogExportError, _compile_atom
+
+        with self.assertRaisesRegex(ProbLogExportError, "add atom must be"):
+            _compile_atom(("add", "$z", "$x"))
+
+    def test_compile_atom_rejects_non_numeric_arithmetic_literal(self) -> None:
+        from factgraph.adapters.problog.problog_export import ProbLogExportError, _compile_atom
+
+        with self.assertRaisesRegex(ProbLogExportError, "arithmetic operands"):
+            _compile_atom(("addc", "$z", "$x", "two"))
+
 
 class TestProbLogExportReadsSharedProbability(unittest.TestCase):
     """ProbLog export reads shared/semantic/probability annotations."""

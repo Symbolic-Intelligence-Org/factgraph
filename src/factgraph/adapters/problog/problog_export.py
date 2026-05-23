@@ -251,6 +251,31 @@ def _compile_atom(atom: Any) -> str:
         op = {"gt": ">", "ge": ">=", "lt": "<", "le": "=<"}[kind]
         return f"{_to_problog_term(atom[1])} {op} {_to_problog_term(atom[2])}"
 
+    if kind in {"add", "sub"}:
+        if len(atom) != 4:
+            raise ProbLogExportError(f"{kind} atom must be ({kind!r}, out, lhs, rhs)")
+        op = {"add": "+", "sub": "-"}[kind]
+        out = _to_problog_arith_output(atom[1], kind)
+        lhs = _to_problog_arith_term(atom[2])
+        rhs = _to_problog_arith_term(atom[3])
+        return f"{out} is {lhs} {op} {rhs}"
+
+    if kind == "neg":
+        if len(atom) != 3:
+            raise ProbLogExportError("neg atom must be ('neg', out, value)")
+        out = _to_problog_arith_output(atom[1], kind)
+        value = _to_problog_arith_term(atom[2])
+        return f"{out} is -{value}"
+
+    if kind in {"addc", "mulc"}:
+        if len(atom) != 4:
+            raise ProbLogExportError(f"{kind} atom must be ({kind!r}, out, var, const)")
+        op = {"addc": "+", "mulc": "*"}[kind]
+        out = _to_problog_arith_output(atom[1], kind)
+        var = _to_problog_arith_term(atom[2])
+        const = _to_problog_arith_term(atom[3])
+        return f"{out} is {var} {op} {const}"
+
     if kind == "in":
         if len(atom) != 3:
             raise ProbLogExportError("in atom must be ('in', var, values)")
@@ -291,6 +316,20 @@ def _to_problog_term(value: Any) -> str:
     if isinstance(value, str) and value.startswith("$"):
         return _to_problog_var(value)
     return _to_problog_literal(value)
+
+
+def _to_problog_arith_output(value: Any, kind: str) -> str:
+    if not (isinstance(value, str) and value.startswith("$")):
+        raise ProbLogExportError(f"{kind} output must be a variable token")
+    return _to_problog_var(value)
+
+
+def _to_problog_arith_term(value: Any) -> str:
+    if isinstance(value, str) and value.startswith("$"):
+        return _to_problog_var(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    raise ProbLogExportError("arithmetic operands must be variables or integer literals")
 
 
 def _to_problog_var(token: str) -> str:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from factgraph.application.protocol import Rule
-from factgraph.core.rules.where_ast import Const, PredAtom
+from factgraph.core.rules.where_ast import BuiltinAtom, CmpAtom, Const, PredAtom
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.dsl import DSLToApplicationRuleError, Pred, build_application_rule, vars
 from factgraph.sdk.dsl.expr import RuleRefAtom
@@ -171,6 +171,36 @@ class BuildApplicationRuleIdentityTests(unittest.TestCase):
         self.assertIsInstance(rule.content_digest, str)
         self.assertEqual(rule.render_desc(), "active user <user>")
         self.assertEqual(rule.render_desc({"user": "u-1"}), "active user u-1")
+
+
+class BuildApplicationRuleArithmeticTests(unittest.TestCase):
+    def test_logic_var_add_constant_lowers_to_addc_builtin(self) -> None:
+        with vars("u") as (u,):
+            rule = build_application_rule(
+                id="user_plus_one",
+                where=[(u + 1) == 3],
+                ports={"user": u},
+            )
+
+        self.assertEqual([type(atom) for atom in rule.where], [BuiltinAtom, CmpAtom])
+        builtin = rule.where[0]
+        compare = rule.where[1]
+        self.assertIsInstance(builtin, BuiltinAtom)
+        self.assertIsInstance(compare, CmpAtom)
+        self.assertEqual(builtin.op, "addc")
+        self.assertEqual(compare.op, "eq")
+
+    def test_logic_var_mul_constant_lowers_to_mulc_builtin(self) -> None:
+        with vars("u") as (u,):
+            rule = build_application_rule(
+                id="user_times_two",
+                where=[(u * 2) == 6],
+                ports={"user": u},
+            )
+
+        builtin = rule.where[0]
+        self.assertIsInstance(builtin, BuiltinAtom)
+        self.assertEqual(builtin.op, "mulc")
 
 
 if __name__ == "__main__":
