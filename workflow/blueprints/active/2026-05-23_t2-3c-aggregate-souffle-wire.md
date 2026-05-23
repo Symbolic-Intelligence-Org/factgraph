@@ -1,8 +1,8 @@
 # T2.3c — Aggregate Souffle adapter wire over T2.3a substrate + T2.3b SDK
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-23
-- Last Updated: 2026-05-23 (Step 4.2 v6 tightening — header Outputs corrected + §2.4 filter-kind structural enforcement + Non-goal nested-aggregate adapter-rejects updated)
+- Last Updated: 2026-05-23 (Step 4.6 scoped anchor — v6 review passed 0 findings)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + IR shape;§10.6.4 (C100) — filter restrictions;§10.6.5 (C101) — empty set + `AggregateNoValue`;§10.6.7 (C103) — snapshot semantics;§10.6.8 (C104) — variable scoping;§8.8 — per-engine aggregate lowering策略
