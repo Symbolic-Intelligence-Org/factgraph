@@ -240,15 +240,16 @@ class _MalformedAggregateTests(unittest.TestCase):
     """§7.7 — validation rejects malformed aggregate shape."""
 
     def test_validate_rejects_unknown_aggregate_kind(self) -> None:
-        """Unknown aggregate kind: `_is_aggregate` returns False (kind not in
-        _AGGREGATE_KINDS) so validator does not specifically reject as
-        aggregate, but compile path raises 'unsupported literal type' when
-        the unknown tuple reaches `_literal_to_*`. Test verifies SOME error
-        surfaces (compile-time safety net) — either validation or compile.
+        """Unknown aggregate kind: per blueprint §5.7.5 Layer 1 structural
+        contract + §858 explicit discriminator, adapter validation MUST reject
+        with "unsupported aggregate kind" message (P2 v7 fix). Cmp operand
+        tuples are always treated as aggregate-shaped — unknown kinds rejected
+        upfront, not falling through to `_literal_to_text` fallback.
         """
         where = [("eq", "$x", ("bogus_kind", "$y", []))]
-        with self.assertRaises(WhereValidationError):
+        with self.assertRaises(WhereValidationError) as ctx:
             compile_where_to_query_dl(where=where, schema_ir=_schema_ir(), query_rel="Q")
+        self.assertIn("unsupported aggregate kind", str(ctx.exception))
 
     def test_validate_rejects_aggregate_tuple_wrong_arity(self) -> None:
         atom = ("eq", "$x", ("sum",))
@@ -333,16 +334,18 @@ class _GateValidationTests(unittest.TestCase):
             compile_where_to_query_dl(where=where, schema_ir=_schema_ir(), query_rel="Q")
 
     def test_unknown_aggregate_kind_rejected_with_gate_off(self) -> None:
-        """Gate OFF + unknown aggregate kind: SOME WhereValidationError must
-        surface (adapter is only safety net; compile path cannot proceed on
-        unknown tuple shape). Per-message form: 'unsupported literal type'
-        (current fallback path via _literal_to_text) or future-proofed
-        'unsupported aggregate kind' if `_is_aggregate` widens.
+        """Gate OFF + unknown aggregate kind: adapter is only safety net.
+        Per blueprint §5.7.5 Layer 1 structural contract + §858 explicit
+        discriminator (P2 v7 fix), adapter validation MUST reject with
+        "unsupported aggregate kind" — same message as gate-ON path,
+        because cmp tuple operands are always routed to aggregate
+        structural validation regardless of gate state.
         """
         self._set_gate("0")
         where = [("eq", "$x", ("bogus_kind", "$y", []))]
-        with self.assertRaises(WhereValidationError):
+        with self.assertRaises(WhereValidationError) as ctx:
             compile_where_to_query_dl(where=where, schema_ir=_schema_ir(), query_rel="Q")
+        self.assertIn("unsupported aggregate kind", str(ctx.exception))
 
 
 class _ArithInFilterTests(unittest.TestCase):
@@ -428,6 +431,57 @@ class _TypeDomainInferenceTests(unittest.TestCase):
         # Should compile without "unknown type" error.
         dl = compile_where_to_query_dl(where=where, schema_ir=_schema_ir(), query_rel="Q")
         self.assertIn("sum to_number(", dl)
+
+
+class _AggregateEqBoundVarTypeTests(unittest.TestCase):
+    """P1 v7 — aggregate `eq` filter with bound var must validate cmp-allowed
+    type (int/time) on the bound-var side. Aggregate output is numeric; pairing
+    with a symbol-typed entity/string var via `to_number(...)` produces undefined
+    Souffle DL behavior.
+    """
+
+    def test_numeric_bound_var_eq_aggregate_compiles(self) -> None:
+        """Numeric bound var (here: another aggregate result, marked int by
+        `_infer_var_type_domains` after eq-binding) can be compared against
+        aggregate via eq filter.
+        """
+        # $first_total bound by sum (marked int via eq-aggregate binding).
+        # Then eq filter between $first_total and a second sum aggregate.
+        where = [
+            ("pred", "User:exists", ["$u"]),
+            ("eq", "$first_total", ("sum", "$_agg1", [
+                ("pred", "Order:exists", ["$o"]),
+                ("pred", "order:buyer", ["$o", "$u"]),
+                ("pred", "order:amount", ["$o", "$_agg1"]),
+            ])),
+            ("eq", "$first_total", ("sum", "$_agg2", [
+                ("pred", "Order:exists", ["$o2"]),
+                ("pred", "order:amount", ["$o2", "$_agg2"]),
+            ])),
+        ]
+        # Should compile without "supports only int/time variables" error.
+        dl = compile_where_to_query_dl(where=where, schema_ir=_schema_ir(), query_rel="Q")
+        # Verify the numeric-domain bound-var path emits `<value> = to_number(v_first_total)`.
+        self.assertIn("= to_number(", dl)
+
+    def test_entity_typed_bound_var_eq_aggregate_rejected(self) -> None:
+        """Entity-typed bound var ($u bound by User:exists, type domain
+        "User") must be rejected when used as eq filter side against an
+        aggregate, because `to_number(symbol-typed entity ref)` is
+        undefined Souffle DL.
+        """
+        where = [
+            ("pred", "User:exists", ["$u"]),
+            # $u is now bound, type domain "User" (NOT in {int, time}).
+            # Aggregate eq filter against $u must reject per P1 v7 lock.
+            ("eq", "$u", ("sum", "$_agg1", [
+                ("pred", "Order:exists", ["$o"]),
+                ("pred", "order:amount", ["$o", "$_agg1"]),
+            ])),
+        ]
+        with self.assertRaises(WhereValidationError) as ctx:
+            compile_where_to_query_dl(where=where, schema_ir=_schema_ir(), query_rel="Q")
+        self.assertIn("supports only int/time variables", str(ctx.exception))
 
 
 class _AggregateValidatorShapeTests(unittest.TestCase):

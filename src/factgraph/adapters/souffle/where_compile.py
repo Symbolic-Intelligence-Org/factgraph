@@ -532,7 +532,12 @@ def _compile_atom(
                     value_expr=agg_value,
                 )
             # Case 3: eq filter with bound var → `<guard>?, <value> = to_number(v_X)`.
+            # T2.3c P1 v7: aggregate is numeric; bound-var side MUST also be
+            # numeric (int/time domain). Reject entity/string bound vars
+            # because `to_number(symbol)` of non-numeric content yields
+            # undefined Souffle DL behavior. Mirrors gt/ge/lt/le precedent.
             if other_is_var and other in bound_vars:
+                _assert_cmp_var_allowed(other, var_type_domains, "eq")
                 other_cmp_expr = f"to_number({var_symbols[other]})"
                 return _compose_aggregate_numeric_cmp(
                     guard_clause=agg_guard,
@@ -614,6 +619,11 @@ def _compile_atom(
                         message=f"ne variable must be bound before filter: {other}",
                         op="ne",
                     )
+                # T2.3c P1 v7: aggregate is numeric; bound-var side MUST
+                # also be numeric (int/time domain) — mirrors gt/ge/lt/le
+                # precedent. Without this, `to_number(symbol)` of a
+                # non-numeric bound var produces undefined Souffle DL.
+                _assert_cmp_var_allowed(other, var_type_domains, "ne")
                 other_expr = f"to_number({var_symbols[other]})"
             else:
                 other_expr = _literal_to_cmp_int_text(other, "ne")
@@ -857,12 +867,17 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         _, lhs, rhs = atom
         lhs_is_var = _is_var(lhs)
         rhs_is_var = _is_var(rhs)
+        # T2.3c P2 v7: cmp operands cannot be raw atoms (atoms live at the
+        # where-level, not inside operands). Any tuple operand is therefore
+        # treated as aggregate-shaped for validation; unknown kinds get
+        # rejected with "unsupported aggregate kind" per blueprint §5.7.5
+        # Layer 1 structural contract.
+        if isinstance(lhs, tuple):
+            _validate_aggregate_atom_shape(lhs)
+        if isinstance(rhs, tuple):
+            _validate_aggregate_atom_shape(rhs)
         lhs_is_agg = _is_aggregate(lhs)
         rhs_is_agg = _is_aggregate(rhs)
-        if lhs_is_agg:
-            _validate_aggregate_atom_shape(lhs)
-        if rhs_is_agg:
-            _validate_aggregate_atom_shape(rhs)
         if not lhs_is_var and not rhs_is_var and not lhs_is_agg and not rhs_is_agg:
             raise WhereValidationError("eq must be var=literal or var=var or aggregate=...")
         return atom
@@ -881,12 +896,14 @@ def _validate_atom_subset(atom: Any) -> tuple[Any, ...]:
         if len(atom) != 3:
             raise WhereValidationError(f"{kind} atom must be ('{kind}', lhs, rhs)")
         _, lhs, rhs = atom
+        # T2.3c P2 v7: same rationale as eq branch — any tuple cmp operand
+        # is aggregate-shaped; unknown kind rejected here regardless of gate.
+        if isinstance(lhs, tuple):
+            _validate_aggregate_atom_shape(lhs)
+        if isinstance(rhs, tuple):
+            _validate_aggregate_atom_shape(rhs)
         lhs_is_agg = _is_aggregate(lhs)
         rhs_is_agg = _is_aggregate(rhs)
-        if lhs_is_agg:
-            _validate_aggregate_atom_shape(lhs)
-        if rhs_is_agg:
-            _validate_aggregate_atom_shape(rhs)
         if not _is_var(lhs) and not _is_var(rhs) and not lhs_is_agg and not rhs_is_agg:
             raise WhereValidationError(f"{kind} requires at least one variable or aggregate side")
         return atom
@@ -1455,43 +1472,6 @@ def _compose_aggregate_numeric_cmp(
     if guard_clause is None:
         return cmp
     return f"{guard_clause}, {cmp}"
-
-
-def _compile_aggregate(
-    *,
-    aggregate: tuple[Any, ...],
-    var_symbols: dict[str, str],
-    outer_bound_vars: set[str],
-    pred_arities: dict[str, int],
-    pred_type_domains: dict[str, list[str]],
-    var_type_domains: dict[str, set[str]],
-    in_rel_values: dict[str, tuple[str, ...]],
-    not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
-    not_rel_namespace: str | None,
-    ast_gate_on: bool,
-) -> str:
-    """Compile aggregate as a single Souffle expression for use in numeric
-    cmp side (via _compile_cmp_side) when guard is irrelevant (count/sum)
-    OR when caller doesn't need separate guard handling.
-
-    For min/max/mean used in numeric cmp side, the guard MUST be threaded
-    through _compose_aggregate_numeric_cmp at the caller's atom emit point.
-    This wrapper returns the bare value expression only and the guard is
-    discarded — use _compile_aggregate_parts directly for full control.
-    """
-    _, value_expr = _compile_aggregate_parts(
-        aggregate=aggregate,
-        var_symbols=var_symbols,
-        outer_bound_vars=outer_bound_vars,
-        pred_arities=pred_arities,
-        pred_type_domains=pred_type_domains,
-        var_type_domains=var_type_domains,
-        in_rel_values=in_rel_values,
-        not_rel_defs=not_rel_defs,
-        not_rel_namespace=not_rel_namespace,
-        ast_gate_on=ast_gate_on,
-    )
-    return value_expr
 
 
 def _compile_filter_atom_within_aggregate(
