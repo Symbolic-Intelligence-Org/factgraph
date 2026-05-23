@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + T2.3d + ProbLog hygiene fixtures archived locally; source `26fa7e54`, not pushed)
+最后更新:2026-05-23(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + T2.3d + T1.3 first M-class + ProbLog hygiene fixtures archived locally; source `df1dae2d`, not pushed)
 
-## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 S-CLASS BATCH ARCHIVED LOCALLY — T2.3 AGGREGATE FULL TRACK CLOSED)
+## 当前阶段(2026-05-23 — RULE EXPRESSION T1/T2 BATCH ARCHIVED LOCALLY — T2.3 AGGREGATE TRACK CLOSED + T1.3 FIRST M-CLASS SHIPPED)
 
-**Current local branch:** `v0.2.0-impl-t2-3d-aggregate-problog-wire-2026-05-23 @ 26fa7e54`.
+**Current local branch:** `v0.2.0-impl-t1-3-sdk-rule-top-level-naming-2026-05-23 @ df1dae2d`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -29,6 +29,7 @@
 | T2.3b AggregateExpr SDK + bridge | S | `4e3176d2` | `94045e54 feat(sdk): add aggregate DSL helpers and bridge support` |
 | T2.3c AggregateExpr Souffle wire | S | `b217f309` | `3f64fe4d feat(adapters/souffle): add aggregate compile wire over T2.3a substrate` + `84564bf2 fix(adapters/souffle): T2.3c Step 4.7 P1+P2 + dead helper removal` |
 | T2.3d AggregateExpr ProbLog wire | S | `26fa7e54` | `a33b876e feat(adapters/problog): add aggregate export wire` + `d7e2a650 fix(adapters/problog): remove unused aggregate helper` |
+| **T1.3 SDK Top-Level Rule Naming (first M-class)** | **M** | `df1dae2d` | `c846af09 feat(sdk): add transitional Rule naming exports` (no Step 4.7 fix) |
 
 ### Current landed behavior
 
@@ -133,6 +134,35 @@
 - **Implementation size**: ~141 LOC code + ~140 LOC tests = ~281 LOC. Well within blueprint §5.8 estimate 250-450 LOC; much smaller than T2.3c ~1090 LOC because ProbLog's `findall/3` runtime scoping eliminates the Souffle "filter-within-aggregate mirror" pattern (~150 LOC saved).
 - Deferred follow-ups per T2.3d §10.4: T2.3.b1/T2.3.e Nit (T2.3b carried over) + schema "number" vs "int" cmp compatibility (Souffle-only, N/A for ProbLog untyped).
 
+**T1.3 — SDK Top-Level Rule Naming (first M-class slice)**
+- **First M-class slice** in T1/T2 batch. Resolved TPQ-2 (parent essay §3.10 naming conflict — old `Rule` with `select`/`head` vs new application Rule atomic AND-only). Decision: **A-staged** — timing refinement of parent alternative A (full replacement), deferring final `Rule` flip to T5 legacy `.eval` / old rule hard-cut. Parent §325 promise ("new user sees `Rule` as atomic AND-only") explicitly deferred during staged period, not canceled.
+- **Decision doc** at `workflow/design/decisions/archive/2026-05-23_t1-3-sdk-rule-top-level-naming.md`:
+  - **Lifecycle**: `proposed` (draft) → `reviewed` (Step 4.2 v2 pass) → `accepted` (concurrent with Step 4.6 scoped anchor; impl gate unlocked) → `superseded` (if later decision overrides).
+  - **4 alternatives compared**: A immediate replacement / B `sdk.v2.Rule` namespace / C mode flag / **D A-staged (chosen)**. A's concrete cost: 15 caller-site migration (13 tests + 2 docs from `grep -rln "from factgraph.sdk import.*Rule"`).
+  - **No `DeprecationWarning`** in T1.3 on legacy `Rule` (deferred to final hard-cut to avoid noisy output across 15 callers).
+- **5 transitional top-level SDK exports** in `factgraph.sdk.__init__.py`:
+  - `LegacyRule` — explicit alias for legacy `factgraph.sdk.dsl.Rule`
+  - `ApplicationRule` — alias for `factgraph.application.protocol.Rule`
+  - `build_application_rule` — promoted to top-level (was DSL-only per T2.3b)
+  - `DSLToApplicationRuleError` — promoted to top-level
+  - `Rule` — kept as legacy-compatible (final flip deferred)
+- **T2.3b docs guidance broadening** explicit in `sdk/docs/04_api_surface.en.md`: `build_application_rule` now top-level AND DSL (T2.3b directed DSL-only); `agg_*` helpers remain DSL-only (narrow_public_api preserved). Old text "Use `from factgraph.sdk.dsl import agg_sum, build_application_rule`" updated to "Use `from factgraph.sdk import build_application_rule` and `from factgraph.sdk.dsl import agg_sum`".
+- **6 identity-based tests** in `tests/sdk/test_rule_naming.py` covering all alias `is` assertions + legacy construction + top-level bridge + `__all__` export.
+- **2-layer docs flip**: `sdk/docs/04_api_surface.en.md` updated `Rule` row + 4 new rows; `sdk/docs/03_rules_and_inferences.en.md` §3.2 example import updated. `06_what_if_and_proof.en.md` explicitly out-of-scope (legacy `Rule` still valid per A-staged).
+- **Canonical 4-commit M-class impl pattern** (no Step 4.7 fix — review passed clean):
+  - `f134dc8c` scoped anchor + decision doc `accepted` concurrent (per lifecycle)
+  - `dd323698` G7 precondition (doc-only, BEFORE feat — recorded `sdk.Rule is dsl.Rule: True`, `has LegacyRule: False`, `has ApplicationRule: False`, `has top build_application_rule: False`, `has top DSLToApplicationRuleError: False`, application rule identity)
+  - `c846af09` feat main (~91 LOC: impl + 6 tests + 2-layer docs)
+  - `0616f4ed` closure (Status: scoped → implemented + §10 Outcome)
+  - `df1dae2d` archive (3-file 100% rename: blueprint pair + decision doc)
+- Verification at archive: 6 T1.3 tests pass; 145 cross-slice tests pass (T1.1/T1.2/T2.1/T2.2/T2.3a-d targeted suites all 0-regression); ruff clean; 0-diff under `src/factgraph/adapters/` / `src/factgraph/core/` / `src/factgraph/application/protocol/rule.py` (per blueprint §7 acceptance #8). Sacred `master` + dirty set preserved throughout.
+- **Convergence**: 2 Step 4.2 rounds + Step 4.7 v1 clean = **7 total findings at v1** (0B + 4R + 3WC, all closed at v2). Pattern matches T2.3d S-class (5 findings / 3 rounds). M-class adds ~2 decision-doc findings (lifecycle + framing) but otherwise same cost.
+- **User-drafts pattern validated for M-class**: same rotation as T2.3d S-class. No Step 4.7 fix commit needed (variant of canonical 5-commit pattern: Step 4.7 fix is OPTIONAL).
+- Deferred follow-ups (per T1.3 §10):
+  - Final `Rule` flip at T5 legacy `.eval` / old rule hard-cut (parent §3.10 alternative A finalization)
+  - `LegacyRule` retention decision at hard-cut (keep temporarily? remove?)
+  - `DeprecationWarning` policy decision at hard-cut
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -159,6 +189,8 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 
 **T2.3d CONFIRMED the cross-flip retrospective verdict.** Codex drafted blueprint + impl, Claude reviewed Step 4.2 + Step 4.7 + did memory consolidation. Total cost: 2 Step 4.2 rounds + Step 4.7 v1 = **5 findings** (0B + 3R + 2WC). **5x cost reduction vs T2.3c** (25 findings / 8 rounds). User-drafts pattern is the default for adapter-shaped slices going forward; cross-flip inversion is reserved for special cases with explicit cost-benefit justification. T2.3d also validated the canonical **5-commit impl pattern with Worth-considering fix**: scoped → G7 → feat → Step 4.7 fix → closure (+ archive = 6 total). G7 (A-fallback) discovery at scoped state for `library(lists)` requirement was textbook — zero re-implementation cost despite a runtime-binary dependency surprise.
 
+**T1.3 validated user-drafts pattern for M-class as well.** First M-class slice in batch. Codex drafted blueprint pair + decision doc + impl; Claude reviewed Step 4.2 + Step 4.7 + did memory consolidation. Total cost: 2 Step 4.2 rounds + Step 4.7 v1 clean (0 findings) = **7 total findings at v1** (0B + 4R + 3WC, all closed at v2). Pattern matches T2.3d S-class; M-class only adds ~2 decision-doc findings (lifecycle + framing relative to parent alternatives) but otherwise same cost-efficiency. T1.3 also validated:(1)**canonical 4-commit M-class impl pattern** (no Step 4.7 fix needed — variant of 5-commit pattern where Step 4.7 fix is OPTIONAL); (2)**decision doc lifecycle pattern** (`proposed` → `reviewed` → `accepted` → `superseded` with impl gating on `accepted`); (3)**A-staged framing for parent §X alternative deferrals** — when parent locks final commitment but pragmatic timing requires deferral, frame as "X-staged" (where X is parent-listed alternative) rather than introducing a new alternative.
+
 ### Process lessons carried forward
 
 - **Branch isolation:** T1.1 did not use a separate implementation branch; T1.2 onward corrected this. Continue paired blueprint/impl branch discipline.
@@ -180,17 +212,24 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T2.3d size calibration validated:** ~281 LOC actual (141 code + 140 tests) vs blueprint estimate 250-450 LOC — delivered at the lower end. ProbLog's `findall/3` runtime scoping naturally eliminates the Souffle "filter-within-aggregate mirror" pattern (~150 LOC saved vs T2.3c). **Lesson:** size estimates for adapter slices should account for engine-native lowering style — Souffle requires explicit mirror-and-extend (large), ProbLog benefits from runtime scope semantics (compact).
 - **T2.3d cross-engine semantic mirror discipline:** T2.3c locked C101 empty-set semantics via Souffle `count : { same_body } > 0` guard; T2.3d mirrored the SAME semantics via ProbLog `L = [_|_]` guard. Different syntax, same C101 contract. **Lesson:** when the parent contract is well-locked at substrate (C101 at T2.3a), each adapter slice translates to engine-native idiom without renegotiating semantics. T2.3c P0 ("implement guard now, not deferred") was the right semantic discipline; T2.3d benefited directly.
 - **T2.3d canonical 5-commit impl pattern with Worth-considering fix:** scoped → G7 → feat → Step 4.7 fix → closure → archive (6 commits total). Step 4.7 Worth-considering (dead `_is_aggregate` helper) → fix commit `d7e2a650` between feat and closure, mirroring T2.3c v7 dead `_compile_aggregate` removal pattern. Canonical and reproducible across adapter slices.
+- **T1.3 first M-class slice cadence validated:** M-class adds decision doc (proposed → reviewed → accepted lifecycle) + Stage 2 process compared to S-class. Cost overhead at v1: ~2 extra findings vs S-class (decision-doc lifecycle + framing relative to parent alternatives). Convergence pattern matches T2.3d: 2 Step 4.2 rounds + Step 4.7 v1 clean. **User-drafts pattern works for M-class** — same cost-efficiency as S-class.
+- **T1.3 canonical 4-commit M-class impl pattern (no Step 4.7 fix):** G7 → feat → closure → archive (4 commits when Step 4.7 review passes clean at v1). Variant of T2.3d's canonical 5-commit pattern — Step 4.7 fix is OPTIONAL. When Step 4.7 surfaces findings (e.g., dead helper at T2.3d), impl branch is 5 commits; when clean (T1.3), 4 commits.
+- **T1.3 decision doc lifecycle pattern:** `proposed` (at draft) → `reviewed` (Step 4.2 v? pass) → `accepted` (concurrent with Step 4.6 scoped anchor; impl gate unlocked) → `superseded` (if later decision overrides; historical record kept). Lifecycle is in the decision doc itself + invariants in blueprint §6. Implementation strictly blocked until `accepted`. **Lesson:** M-class decision doc Status field is the impl gate — must be designed with explicit lifecycle states, not just a single Status.
+- **T1.3 A-staged framing pattern for parent §X alternative deferrals:** when a parent essay locks a final commitment (e.g., "Rule = atomic AND-only" at §325) but pragmatic timing requires deferral, frame the decision as "X-staged" (where X is the parent-listed alternative) rather than introducing a new alternative. This preserves parent framework alignment while explicitly recognizing timing refinement. Decision doc must:(a) cite parent §X alignment; (b) explicitly defer parent's hard promise during staged period; (c) lock the trigger for final flip (e.g., T5 hard-cut). T1.3 used this for parent §3.10 A vs §325 promise tension.
+- **T1.3 cross-slice docs guidance reversal pattern:** when a new slice intentionally reverses an earlier slice's docs guidance (T2.3b → T1.3 example: `build_application_rule` from DSL-only to top-level), the reversal must be: (a) acknowledged in blueprint §6 invariant; (b) explicitly handled in §9 docs scope; (c) documented in decision doc §Consequences; (d) reflected in audit log Cross-Slice Contract Preservation table. Otherwise reviewer surfaces the reversal as a P-finding.
+- **T1.3 caller-site cost quantification:** Decision doc Alternative cost-benefit analysis should cite **concrete grep counts** rather than abstract "breaks existing callers" language. T1.3 v2 added `15 caller-site` count to Alternative A cost (from `grep -rln "from factgraph.sdk import.*Rule"`). Concrete numbers strengthen alternative comparison.
 
 ### Recommended next work
 
-- **T2.3.d AggregateExpr ProbLog adapter** — shipped at `26fa7e54` (see T2.3d landed-behavior section above). T2.3 AggregateExpr full track now CLOSED.
+- **T2.3.d AggregateExpr ProbLog adapter** — shipped at `26fa7e54`. T2.3 AggregateExpr full track now CLOSED (substrate + SDK + Souffle + ProbLog).
+- **T1.3 SDK top-level Rule naming** — shipped at `df1dae2d` (see T1.3 landed-behavior section above). First M-class slice. TPQ-2 resolved via A-staged. Final `Rule` flip deferred to T5 legacy `.eval` hard-cut.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` (via `_ensure_attr_record_binding`) and `BinaryExpr` (via `_lower_expr_term`), making it symmetric with standard `_lower_compare`.
 - **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains; production schemas using `"number"` pred type domains would fail filter-internal numeric cmp. N/A for ProbLog adapter (untyped). Could be addressed as general Souffle adapter hygiene slice. S-class.
-- **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing.
-- **T1.3 SDK top-level `Rule` naming** — M class; first M-class slice in the streak; needs decision doc for TPQ-2 / public API naming. Likely natural next slice after T2.3 track closure.
+- **T1.4 alias / port contract** — S class; supports later T3 RuleExpr aliasing. Natural next slice after T1.3 closure if continuing T1 Track.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
-- **T3 RuleExpr** — L class; first full-cadence test of the size-class policy.
-- **Push / publish gate** — 10 archived slices + 3 memory sync commits all local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries; user has not signaled publish intent.
+- **T3 RuleExpr** — L class; first full-cadence test of the size-class policy (Stage 1 audit + Stage 2 decisions + Stage 3 synthesis).
+- **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip (legacy `Rule` → `LegacyRule` removed, top-level `Rule` becomes application Rule alias). Coordinate with T1.3 A-staged commitment + `LegacyRule` retention + `DeprecationWarning` policy decisions.
+- **Push / publish gate** — 11 archived slices + 4 memory sync commits all local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries; user has not signaled publish intent.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
