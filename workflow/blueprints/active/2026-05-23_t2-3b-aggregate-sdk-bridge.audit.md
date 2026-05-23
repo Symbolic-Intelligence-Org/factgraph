@@ -1,8 +1,8 @@
 # Task Blueprint Audit: T2.3b — Aggregate SDK ergonomic + bridge support
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-23
-- Last Updated: 2026-05-23
+- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 - Authority: paired blueprint audit log
 - Inputs:
   - [2026-05-23_t2-3b-aggregate-sdk-bridge.md](./2026-05-23_t2-3b-aggregate-sdk-bridge.md)
@@ -20,6 +20,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-23 | draft | Blueprint created | T2 Track 4th implementation sub-slice (after T2.1 ne / T2.2 ArithExpr / T2.3a Aggregate substrate). Closes SDK ergonomic + bridge surface gap left by T2.3a. T2.3a substrate frozen (5 layers UNTOUCHED). User-facing 5 `agg_*` helpers exposed via existing `Not`/`Pred` precedent. Estimated ~470 LOC. S-class lightweight per §5.7 trigger analysis. |
+| 2026-05-23 | scoped | Status: draft → scoped | Step 4.2 review converged after 3 tightening rounds (v1: 1 Blocker + 3 Required; v2: 1 Blocker target lowering order bug → Option 2 self-ensure adopted; v3: 1 Required acceptance gap → TRUE self-ensure test added at `c61095c1`). G1-G7 visible mapping in place. Sacred `master` untouched. Dirty set preserved. Ready for impl branch fork. |
 
 ## Decision Notes
 
@@ -243,3 +244,28 @@ So this single new test is the **discriminator** for self-ensure branch coverage
 **P2/P3/P4 v1 unchanged**:user re-confirmed accepted。
 
 **Blueprint stays `Status: draft`** pending user re-approval of v3。Confidence:high — single acceptance gap fixed with discriminating test。Predict v4 review 0 findings,ready for Step 4.6 scoped。
+
+### 2026-05-23 — Step 4.6 scoped anchor
+
+User v3 review verdict: **passed**。Quote:
+> "v3 复核通过。新增的 TRUE self-ensure test 确实覆盖了 `record_var not in filter_bindings` 分支... 它和 filter-bound / unified-syntax 两个非 self-ensure cases 形成了完整覆盖。... 可以推进 Step 4.6 scoped anchor。"
+
+State at anchor moment:
+- HEAD: `c61095c1` (v3 commit)
+- Sacred `master`: `562c74195df43e933bed92a3ff25de94dd8ce666` 未动
+- Dirty set: 4 M + 1 untracked 保留
+- Step 4.2 review converged through 3 tightening rounds(v1 / v2 / v3),all P-findings adopted
+
+Scope-freeze content(per v3-passed blueprint):
+- §2 sub-goals 2.1-2.6 frozen
+- §4 source-grep audit citations frozen
+- §5 implementation algorithm frozen — particularly:
+  - §5.3 `_lower_aggregate_target` with Option 2 self-ensure pattern(target injects `Type:exists($record_var)` when filter does not bind record_var)
+  - §5.3 `_lower_aggregate_ref` filter-then-target order with `filter_bindings = dict(outer_bindings)` isolation
+  - §2.3b `_reject_legacy_aggregate_ref` recursion through target + filter(T1.2 P3 legacy hard-cut)
+- §6 invariants frozen
+- §7 acceptance tests frozen — particularly the 3 target lowering tests(filter-bound / unified-syntax / TRUE self-ensure)forming the self-ensure branch discriminator
+
+Next step(per user authorization): fork impl branch `v0.2.0-impl-t2-3b-aggregate-sdk-bridge-2026-05-23` from this scoped commit。Cross-flip: user implements; reviewer(Claude)runs Step 4.7。
+
+Anchor commit will be small:blueprint `Status: draft → scoped`(line 3)+ audit log Event Log row + this Decision Note。

@@ -1,8 +1,8 @@
 # T2.3b — Aggregate SDK ergonomic + bridge support over T2.3a substrate
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-23
-- Last Updated: 2026-05-23
+- Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 - Authority: task blueprint
 - Inputs:
   - Parent essay [rule-expression-and-proof-attempt.zh.md](../../design/design-points/active/rule-expression-and-proof-attempt.zh.md) §10.6.3 (C99) — 5 aggregate kinds + SDK ergonomic user-facing pattern (`agg_sum`, etc.)
