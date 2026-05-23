@@ -27,24 +27,93 @@ parent essay 体量过大(2066 行 / ~100 commitments / §3-§10 跨越 Rule bod
 - 单一 blueprint 落 100 commitments → 违反 `feedback_smaller_batch_design_blueprints`(rule-touching blueprint 必须 1-at-a-time)
 - 整体走 CADENCE 9-stage(audit + Q + synthesis + per-slice 8-state)× 5 Tracks → governance overhead 远超 implementation overhead
 
-### 1.2 本轮选定的轻量模式
+### 1.2 Size-class-based cadence policy(post-reflection 2026-05-23)
 
-| Cadence 元素 | 全量模式 | 本轮采用模式 |
+**Evolution rationale**:T1.1 + T1.2 + T2.1 + ProbLog hygiene 4 slice 完成后的反思暴露:
+
+- **Lightweight 在 additive small slice 上 catch 力度足够** — 5/5 design-vs-shipped 偏差(D1-D5)全部 catch,no slip-through。
+- **但 Stage 1 audit 跳过导致 slice 范围外的 commitments 未 triage** — T3 RuleExpr / T5 .eval 启动时 shipped surface 跨度太大,lightweight 不够。
+- **结论**:不是 "lightweight 失败,改用 full",而是 **"按 slice size class 分配 cadence overhead"** — additive small 保持 lightweight,redesign-scale 升级到 full。
+
+#### 1.2.1 Slice size class 定义
+
+| Class | Sub-slice scope | Public API impact | Cross-commitment 复杂度 | 代表 |
+|---|---|---|---|---|
+| **S — additive 或 subtractive 小 slice** | ≤ ~300 LOC impl + tests | None / 仅 internal namespace | 单点变更,不触发 cross-commitment 决策 | T1.1 / T1.2 / T2.1 / ProbLog hygiene |
+| **M — 单 load-bearing 决策 slice** | ~300-800 LOC | 单 facade entry 改名 / 命名冲突 / 单 PENDING resolve | 1-3 个 commitments 相互绑定需要 lock | T1.3 命名冲突 / T5.10 `why_not` PENDING |
+| **L — redesign-scale slice** | ≥ ~800 LOC,or 跨多 sub-slice 集合 | Public API 多面改 / DTO 全套替换 | 多 commitments 同时演进,有相互冲突或依赖 | T3 RuleExpr 整体 / T4 Head / T5.1-T5.5 EvaluateResult DTO 群 / T5.9 旧 API hard-cut |
+
+#### 1.2.2 Per-class cadence overhead
+
+| Cadence 元素 | S(lightweight)| M(midweight)| L(full cadence)|
+|---|---|---|---|
+| Stage 1 audit doc(`audit/active/...vs-shipped.md`)| ✗ skip | ✗ skip | ✓ **required**(scope = 该 slice cluster commitments)|
+| Stage 2 decision doc(per Q)| ✗ skip(inline in blueprint Non-goals / audit log Decision Notes)| ✓ **required**(load-bearing Q lock,即便单 Q)| ✓ required(per Q) |
+| Stage 3 synthesis doc | ✗ skip | ✗ skip(blueprint §10 inline 足够)| ✓ required(post-Q reclassify + slice ordering) |
+| Per-sub-slice 8-state blueprint | ✓ required | ✓ required | ✓ required |
+| Per-commit verification ritual | ✓ required | ✓ required | ✓ required |
+| 可以推进 mutual authorization | ✓ required | ✓ required | ✓ required |
+| Sacred branch + dirty set isolation | ✓ required | ✓ required | ✓ required |
+| Independent impl branch from scoped anchor | ✓ required(post T1.1 lesson)| ✓ required | ✓ required |
+| Pre-impl precondition check(P2 from hygiene)| ✓ **required for boundary-sensitive slices** | ✓ required | ✓ required |
+| Step 4.6.5 pre-impl grep(per Slice 6 lesson)| ✓ required for subtractive slices | ✓ required | ✓ required |
+
+#### 1.2.3 设计严格遵照 gates(G1-G7,所有 class 不可豁免)
+
+无论 S / M / L,以下 gates **是 design 遵照的 baseline**,lightweight 不豁免任何一项 — 这是 lightweight 模式能 catch D1-D5 全部偏差的真实机制:
+
+- **G1 — Parent essay §-cite required**:每个 blueprint §1 Problem + §2 Goals 必须显式 cite parent essay `§<section>` + `C<N>` commitment;missing cite → Step 4.2 reviewer block scoped anchor。
+- **G2 — Per Rule 1 source-grep audit before drafting**:drafter 在写 blueprint 前 read shipped 相关文件**完整**(non-snippet),per `feedback_preflight_code_audit_required` Rule 1。**Lightweight 不 skip 这一步** — 只是 audit 结果不写成单独 audit doc,而是落在 blueprint §4 Current Context + audit log Decision Notes。
+- **G3 — File:line precision in §4 Current Context**:所有 cite shipped 的 file 必须带 `:line` 或 `:line-range` 精度;粗 cite → Step 4.2 reviewer P-finding。
+- **G4 — Commitment ↔ slice mapping**:blueprint §2 Goals 中每条 commitment 必须可追溯到 parent essay 的 `C<N>`;无 trace 的 Goal → reviewer 提问 "这个 Goal 对应哪条 commitment?可能 scope creep"。
+- **G5 — Deviation 必须 documented**:任何 shipped vs design 偏离必须 record:
+  - In-blueprint refinement(scope 缩减 / form deferral)→ §3 Non-goals + §10 Outcome
+  - Impl-time 偏离(precondition fail / (A-fallback))→ amendment commit + §10
+  - Load-bearing 偏离 → **自动升级 S → M**,开 Stage 2 decision doc
+- **G6 — Step 4.2 reviewer pass 必须 spot-check shipped source**:reviewer 在 surface P-findings 前,至少独立 verify blueprint 中**关键 commitment cite** 与实际源码 align;cite drift → P-finding,block scoped anchor。
+- **G7 — Pre-impl precondition check for boundary-sensitive slices**(per ProbLog hygiene §8 step 1.5 lesson):若 blueprint §5 选定 fix boundary 依赖某个 shipped 模块的特定 import / call 行为,impl 前必须独立 verify 该行为;失败 → amend blueprint(不进 impl)。
+
+**Lightweight 路径的可靠性 = G1-G7 + per-slice blueprint(8-state)+ Step 4.2 review + Step 4.7 reviewer pass + Step 4.6.5(if subtractive)+ G7 precondition check(if boundary-sensitive)。** Full cadence 上叠加 Stage 1 audit doc 集中 triage 是 risk-coverage 升级,但 G1-G7 是底线,任何 class 都不能豁免。
+
+#### 1.2.4 升级 trigger conditions(refined)
+
+Sub-slice impl 期间任一发生 → **当前 slice 升级到下一 class**(per G5 / `feedback_smaller_batch_design_blueprints`):
+
+| Trigger | 升级方向 | 触发 artifact |
 |---|---|---|
-| Per-Track Stage 1 audit | 单独 audit doc(`audit/active/...vs-shipped.md`)| **跳过** — parent essay 内 commitments 已锁(`C<N>` 序号),直接进 blueprint |
-| Per-Track Stage 2 Q-resolution | 单独 decision doc per Q + 单独分支 | **跳过 by default** — parent essay 内 PENDING 项(`fg.eval.why_not` / §6 task split / §9 joins 等)进 blueprint Non-goals;真正出现 load-bearing 歧义时才回退到 decision doc |
-| Per-Track Stage 3 synthesis | 单独 synthesis doc | **跳过** — 本 track plan 自身充当 sub-slice ordering source |
-| Per-sub-slice Stage 4 blueprint | 完整 8-state + 配对 audit log + preflight + scoped anchor + impl + closure + archive | **轻量保留** — blueprint 是实施粒度的真单元;每 sub-slice 一份;独立 preflight 仅在用户或风险触发时启用 |
-| Per-commit verification ritual | 全量保留 | **保留** — sacred branch + dirty 集 + branch check |
-| 可以推进 mutual authorization | 全量保留 | **保留** — 每 sub-slice 之间用户授权 |
-| Pre-impl grep amendment (Step 4.6.5) | 大型 subtractive slice 触发 | **未来大型 subtractive slice 保留** — T1.2 已按轻量模式完成且 skipped independent pre-impl grep(closure deviation 已记录);T5.9 等大 hard-cut slice 仍应执行 |
-| Sacred branch isolation | 全量保留 | **保留** |
+| 发现 commitment ↔ shipped 跨 ≥ 2 file 集合的 mismatch,需跨 file 协调 | S → M | open Stage 2 decision doc |
+| Parent essay PENDING 项必须先决再实施(`why_not` / §6 / §9 / TPQ-2 等)| 触发 PENDING 升 M | decision doc for that PENDING |
+| Sub-slice 数超 Track plan §2 预估 2 倍以上 | S/M → L | open Stage 3 mini-synthesis |
+| Public API 重命名 / 替换涉及 ≥ 3 caller sites | S → M | decision doc lock 替换策略 |
+| 设计 vs shipped 同时 ≥ 3 commitments 冲突 | S/M → L | Stage 1 mini-audit triage |
+| Reviewer Step 4.2 spot-check 发现 cite drift > 30% | 当前 slice 暂停 | drafter re-do G2 source-grep |
 
-**触发回退到 heavy cadence 的条件**(任一发生则当前 Track 升级):
+#### 1.2.5 已 ship slice 的 retroactive class 归属
 
-- sub-slice impl 期间发现 cross-Track 矛盾,需要跨 Track 协调 → 启动 Stage 1 mini-audit
-- 出现两个 commitment 显式冲突 / parent essay PENDING 项必须先决再实施 → 启动 Stage 2 decision doc
-- sub-slice 数超出本文预估的 2 倍以上 → 启动 Stage 3 synthesis 重排
+| Slice | Class | 归属理由 |
+|---|---|---|
+| T1.1 additive Rule DTO | S | additive only,internal namespace,~250 LOC,no public API |
+| T1.2 DSL→bridge | S | additive + 4 行 legacy reject,~300 LOC,no public API rename |
+| T2.1 ne adapter dispatch | S | adapter-only,~100 LOC,no API |
+| ProbLog import cycle hygiene | S | single-boundary fix,~50 LOC,no API |
+
+**4 slice 的 D1-D5 偏差全部在 S class 的 G1-G7 + Step 4.2 + Step 4.7 组合下 catch**,验证 S class lightweight 模式在 small additive slice 上**力度足够**。
+
+#### 1.2.6 未来 slice class 预判 + cadence 升级 trigger
+
+| Slice | 预判 class | cadence 行动项 |
+|---|---|---|
+| **T2.2 ArithExpr** | S | lightweight + G1-G7;~150 LOC adapter + IR,~5 commitments,additive |
+| **T2.3 AggregateExpr** | S → 可能 M | C99-C105 7 commitments 紧耦合 + AggregateExpr 是 100% genuinely new;若 impl 期出现 cross-commitment 决策点(numeric target type / variable scoping / AggregateNoValue)→ 升 M |
+| **T1.3 SDK 顶层 Rule 命名** | **M** | TPQ-2 三选一(A/B/C)+ public API rename ≥ 3 caller sites → 必须 Stage 2 decision doc |
+| **T1.4 alias / port contract** | S | scope 已收窄 |
+| **T3 RuleExpr 组合** | **L** | C23-C35 + C49-C51 = 17 commitments,shipped Branch + `fg.rules.inspect()` 替换;**Stage 1 mini-audit + 多 Stage 2 decisions 必跑** |
+| **T4 Head + closed-head** | **L**(可能与 T3 合并 L cluster)| C52-C60 = 9 commitments,与 T3 紧耦合 |
+| **T5.1-T5.5 EvaluateResult DTO 群** | **L** | C61-C67 = 7 commitments 同步 ship;最大 redesign 区,**先跑 Stage 1 audit triage shipped `SDKStore.evaluate/check/diagnose/why_not/run` vs Wave 1 row-centric model** |
+| **T5.6-T5.7 Semantics wrappers** | M(each)| per-engine wrapper 单点 lock,decision doc per wrapper |
+| **T5.8 T6 ProbLog raw_kind/bound 投影** | S | adapter-level |
+| **T5.9 旧 API hard-cut** | **L** | subtractive 大 scope,Stage 1 audit triage caller blast radius |
+| **T5.10 `fg.eval.why_not` PENDING resolve** | **M** | TPQ-5 lock,decision doc |
 
 ## 2. 5-Track 分解
 
