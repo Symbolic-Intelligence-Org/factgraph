@@ -112,6 +112,21 @@ Runtime(`where_eval.py`):
   - `sum` / `mean`:target must be `int` / `float`(not `bool`,not `str`,etc)。Non-numeric → aggregate result is `AggregateNoValue`(per parent §10.6.6 "atom violated 不污染 env,不中断其他 env")。
   - `min` / `max`:target must support `<` comparison;violations → `AggregateNoValue`。
 
+### 2.5b — Target Var binding rule (construct-time, per Step 4.2 v2 P2)
+
+For `kind in {"sum", "min", "max", "mean"}` with `target` as `Var`:
+
+- Target Var **MUST be in** `outer_bound_vars ∪ filter_bound_vars`,where:
+  - `outer_bound_vars` = vars bound by Rule.where atoms preceding the aggregate(correlated scope)
+  - `filter_bound_vars` = vars bound BY filter atoms(`pred` binding new Var / `eq` with Var on unbound side / `in` declaring Var)
+- If target Var is **NOT** in either set → it has no value source at runtime → `AggregateVariableScopeError` raised construct-time。
+
+Examples:
+
+- `agg_sum(Var("$amount"), filter=[PredAtom("Order:exists", [Var("$o")]), CmpAtom("eq", AttrRef-equivalent(Var("$o"), "amount"), Var("$amount"))])` → target `$amount` bound by filter's eq → OK。
+- `agg_sum(Var("$amount"), filter=[PredAtom("Order:exists", [Var("$o")])])` → target `$amount` not bound anywhere → **reject construct-time**。
+- `agg_sum(Var("$u_balance"), filter=[PredAtom("Order:exists", [Var("$o")])])` where `$u_balance` is outer correlated → OK if `$u_balance` ∈ outer_bound_vars。
+
 ### 2.6 C101 — Empty set + `AggregateNoValue` sentinel + propagation via raw resolver
 
 Add to `where_eval.py`:
@@ -153,7 +168,7 @@ Per §5.8 — verify substrate empty + C99-C105 semantic clarity + raw evaluator
 
 - **No SDK ergonomic helpers**(`agg_count` / `agg_sum` / `agg_min` / `agg_max` / `agg_mean`)— **deferred to T2.3b**。User-facing usability lands when T2.3b ships SDK helpers + bridge ergonomic。
 - **No `_AggregateRef` DSL type**(deferred to T2.3b)。
-- **No bridge ergonomic via DSL lowering**(deferred to T2.3b)。Raw IR tuples can still flow through `build_application_rule` if user constructs them directly,but ergonomic path is T2.3b。
+- **No bridge support for aggregate IR**(deferred to T2.3b,per Step 4.2 v2 P4 correction):**`build_application_rule` does NOT support aggregate-containing IR in T2.3a**。`sdk/dsl/application_rule.py` `_collect_vars_from_term`(`:181`)and var canonicalization(`:250`)don't recognize `AggregateAtom`。**T2.3a supports DIRECT application Rule construction**(via `application/protocol/rule.py` with `AggregateAtom` Term-position arguments),NOT the SDK→application bridge ergonomic path。End-to-end DSL syntax for aggregate requires T2.3b。
 - **No SDK / application public docs update**(deferred to T2.3b)— user-facing aggregate usage docs land when SDK ergonomic is shipped。
 - **No Souffle aggregate body wire**(deferred to T2.3.c sub-slice)。
 - **No ProbLog `findall/3` + list predicates wire**(deferred to T2.3.d sub-slice)。
@@ -538,11 +553,103 @@ def _eval_arith_atom(view_facts, atom, envs, *, ast_gate_on):
 
 **Key invariant**:NoValue never leaks as a Python exception。It causes atom violation(env excluded from output)per parent §10.6.5 / C101。
 
-### 5.7 Application Rule serialization branches(filter-local var isolation per Step 4.2 v1 P3)
+### 5.6b — Full where_eval.py helper coverage (Step 4.2 v2 P3)
 
-`application/protocol/rule.py` additions:
+Aggregate-term-aware extension MUST cover all raw-tuple helpers that touch term values, not just cmp/arith resolvers:
+
+| Helper | Location | Aggregate-term-aware required because |
+|---|---|---|
+| `_eval_cmp_atom` operand resolver | `where_eval.py` cmp path | Operand may be aggregate tuple → resolve per env(§5.5)|
+| `_eval_arith_atom` operand resolver | `where_eval.py` arith path | Operand may be aggregate tuple → resolve + NoValue propagation(§5.6)|
+| `_validate_atom` | `where_eval.py:355` | Validates atom shape during evaluation prep;must recognize aggregate as Term-position(not unsupported kind)|
+| `_validate_arith_atom` | `where_eval.py` arith validator | When ArithExpr operand is aggregate tuple, validate the aggregate tuple shape recursively or accept it as deferred-eval-time |
+| `_term_known_for_plan` | `where_eval.py:891` | Planner asks "is this term known at this point?" Aggregate tuple is known **per env at evaluation time**;planner must NOT treat aggregate as never-known or always-known |
+| `_atom_eval_score` | `where_eval.py:991` | Planner orders atoms by cost;aggregate atom is expensive(scans filter)— must score appropriately,not 0-cost |
+| `_vars_in_atoms` | `where_eval.py:1067` | Used for not-body correlation + query var extraction;aggregate tuple's correlated vars(target ∪ filter ∩ outer)must be returned;filter-local vars must NOT |
+
+Implementation contract:each helper gains an `_is_aggregate_term(term)` check + delegate to aggregate-aware branch。Without these,planner may misorder, not-body correlation may drop aggregate-internal vars, validation may reject aggregate tuples as unknown kind。
+
+### 5.7 Application Rule serialization branches(two-pass filter-local var isolation per Step 4.2 v1 P3 + v2 P1)
+
+`application/protocol/rule.py` Rule `__post_init__` revised to **two-pass algorithm**(per Step 4.2 v2 P1 — explicit outer_vars context,no "trust constructor" punt):
 
 ```python
+def __post_init__(self):
+    # ... existing 5-field validation ...
+
+    # Pass 1: collect outer_seen_vars from non-aggregate top-level atoms.
+    # Iterate self.where (top-level CmpAtom / PredAtom / InAtom / BuiltinAtom / NotAtom).
+    # For each top-level atom, collect Var occurrences EXCLUDING any AggregateAtom Term-position values
+    # (we don't peek inside aggregates at this pass).
+    outer_seen_vars: set[Var] = set()
+    for idx, atom in enumerate(self.where):
+        _collect_non_aggregate_atom_vars(
+            atom, field_name=f"where[{idx}]", seen_vars=outer_seen_vars
+        )
+
+    # Pass 2: process AggregateAtom Term-position values inside CmpAtom atoms.
+    # Only correlated vars (target/filter ∩ outer_seen_vars) flow into the final seen_vars set;
+    # filter-local vars stay isolated within the aggregate.
+    seen_vars: set[Var] = set(outer_seen_vars)
+    for idx, atom in enumerate(self.where):
+        _collect_aggregate_term_correlated_vars(
+            atom,
+            field_name=f"where[{idx}]",
+            outer_seen_vars=outer_seen_vars,
+            seen_vars=seen_vars,
+        )
+
+    # ports validation now uses seen_vars (outer + aggregate-correlated)
+    # Filter-local vars are not in seen_vars → ports cannot reference them.
+    # ... ports validation against seen_vars ...
+
+
+def _collect_non_aggregate_atom_vars(atom, *, field_name, seen_vars):
+    """Collect Var occurrences from an atom, EXCLUDING AggregateAtom Term-position values.
+
+    Treats AggregateAtom-typed terms as opaque (not recursed into) during pass 1.
+    """
+    if isinstance(atom, PredAtom):
+        for term in atom.terms:
+            if isinstance(term, Var):
+                seen_vars.add(term)
+            # Const ignored
+            # AggregateAtom in pred terms is forbidden by validator (aggregate is CmpAtom-only)
+    elif isinstance(atom, CmpAtom):
+        for term in [atom.lhs, atom.rhs]:
+            if isinstance(term, Var):
+                seen_vars.add(term)
+            # AggregateAtom in CmpAtom Term-position: SKIPPED in pass 1
+            # (handled in pass 2 via _collect_aggregate_term_correlated_vars)
+    # ... similar for InAtom / BuiltinAtom / NotAtom ...
+
+
+def _collect_aggregate_term_correlated_vars(atom, *, field_name, outer_seen_vars, seen_vars):
+    """Pass 2: walk atom for AggregateAtom Term-position values; collect ONLY correlated vars."""
+    if isinstance(atom, CmpAtom):
+        for term in [atom.lhs, atom.rhs]:
+            if isinstance(term, AggregateAtom):
+                _collect_correlated_from_aggregate(
+                    term,
+                    field_name=field_name,
+                    outer_seen_vars=outer_seen_vars,
+                    seen_vars=seen_vars,
+                )
+    # NotAtom body / other atoms with potential nested CmpAtom: recurse similarly
+
+
+def _collect_correlated_from_aggregate(agg, *, field_name, outer_seen_vars, seen_vars):
+    """Collect only the correlated subset of vars from an AggregateAtom term."""
+    target_vars = _collect_vars_in_term_or_aggregate(agg.target) if agg.target else set()
+    filter_vars: set[Var] = set()
+    for f_atom in agg.filter:
+        _collect_non_aggregate_atom_vars(f_atom, field_name=f"{field_name}.filter", seen_vars=filter_vars)
+    # Correlated subset only:
+    correlated = (target_vars | filter_vars) & outer_seen_vars
+    seen_vars |= correlated
+    # Filter-local vars (filter_vars - outer_seen_vars) are isolated, NOT added to seen_vars.
+
+
 def _serialize_term(term):
     if isinstance(term, Var): return _serialize_var(term)
     if isinstance(term, Const): return _serialize_const(term)
@@ -556,47 +663,20 @@ def _serialize_aggregate_atom(atom: AggregateAtom) -> dict:
         "type": "AggregateAtom",
         "kind": atom.kind,
         "target": _serialize_term(atom.target) if atom.target else None,
-        "filter": [_serialize_atom(a) for a in atom.filter],  # preserves user-written order
+        "filter": [_serialize_atom(a) for a in atom.filter],  # preserves user-written order for canonical digest
     }
-
-
-def _collect_term_vars(term, *, field_name, seen_vars):
-    if isinstance(term, Var):
-        seen_vars.add(term)
-        return
-    if isinstance(term, Const):
-        return
-    if isinstance(term, AggregateAtom):  # NEW
-        _collect_aggregate_term_vars(term, field_name=field_name, seen_vars=seen_vars)
-        return
-    raise RuleValidationError(...)
-
-
-def _collect_aggregate_term_vars(agg, *, field_name, seen_vars):
-    """Collect correlated vars only; filter-local vars stay isolated.
-
-    NOTE: This relies on `where_ast_validate._validate_aggregate_scoping` having
-    already rejected aggregate-local var leaks. Application Rule construction
-    therefore can assume filter-local vars are safely scoped.
-
-    Implementation: collect target vars and filter atom vars; the validator
-    ensures any var collected here is either (a) already in outer scope (will
-    appear in other atoms too, harmless dedup) or (b) filter-local but never
-    referenced outside (also harmless since the var still uniquely identifies
-    a binding scope within filter).
-    """
-    if agg.target is not None:
-        _collect_term_vars(agg.target, field_name=f"{field_name}.target", seen_vars=seen_vars)
-    for idx, f_atom in enumerate(agg.filter):
-        _validate_atom(f_atom, field_name=f"{field_name}.filter[{idx}]", seen_vars=seen_vars)
 ```
 
-**Note**:since application Rule construction does not have explicit `outer_bound_vars` at this point,the implementation relies on where_ast_validate having pre-validated。If application Rule is constructed without going through where_ast validation(direct AggregateAtom instantiation),it MAY contain leaked vars。Acceptable because:
+**Two-pass guarantee**(per Step 4.2 v2 P1):
 
-- The application Rule allowlist(via lower_ast_to_where_ir + parse_where_ir_to_ast)flows through where_ast_validate when AST gate is enabled。
-- Direct manual construction is a "trust the constructor" path — out of scope for validation at application layer per layered design。
+- Pass 1 collects outer Var occurrences,treating AggregateAtom Term-position values as opaque(NOT recursed)。This gives clean `outer_seen_vars` set。
+- Pass 2 walks aggregate Term-position values with `outer_seen_vars` context;collects ONLY correlated subset(target ∪ filter) ∩ outer_seen_vars。
+- Filter-local vars(filter_vars - outer_seen_vars)NEVER enter `seen_vars`。
+- ports validation against `seen_vars` (after pass 2) cannot reference aggregate-local vars。
 
-Document this in `application/docs/rule.md` and §10 outcome。
+**This is NOT "trust the constructor"** — application Rule itself enforces the isolation rule。`where_ast_validate._validate_aggregate_scoping` provides additional defense for AST-validation path,but application Rule's own pass-2 algorithm is independently correct。
+
+If `where_ast_validate` is bypassed(e.g., direct application Rule construction without going through `lower_ast_to_where_ir → parse_where_ir_to_ast → validate_where_ast`),application Rule still correctly isolates filter-local vars。Validator(at AST layer)additionally rejects aggregate-local vars referenced by subsequent outer atoms construct-time — that's an extra check at AST layer,not the only line of defense。
 
 ### 5.8 G7 pre-impl precondition
 
@@ -696,10 +776,14 @@ Estimated test LOC ~700。
 - [ ] **Per-env correlated test**:two outer envs (e.g., user u-1 + 3 orders / user u-2 + 5 orders) produce count=3 / count=5 respectively;NOT a merged count=8。
 - [ ] **NoValue × ArithExpr test**:`agg_sum(empty_set) + 1 > 5` → atom violated for the env that hit empty;Python exception NOT raised。
 - [ ] **Filter-local var isolation test**:validator raises `AggregateVariableScopeError` when filter introduces var that subsequent outer atom references。
+- [ ] **Application Rule filter-local var isolation test**(per Step 4.2 v2 P1):construct Rule with `ports={"u": aggregate_local_var}` → reject;ports can only reference outer or aggregate-correlated vars,never aggregate-local。
+- [ ] **Target Var binding rule test**(per Step 4.2 v2 P2):`agg_sum(target=Var("$unbound_amount"), filter=[PredAtom("Order:exists", ...)])` where target Var is bound neither outer nor in filter → reject with `AggregateVariableScopeError`。
+- [ ] **All where_eval.py aggregate-aware helpers covered**(per Step 4.2 v2 P3):tests verify `_validate_atom` / `_term_known_for_plan` / `_atom_eval_score` / `_vars_in_atoms` produce correct behavior on aggregate-containing atoms。
 - [ ] Cross-slice non-regression:T1.1 + T1.2 + T2.1 + ProbLog hygiene + T2.2 + fixture cleanup tests all pass(70+ tests baseline)。
 - [ ] Ruff clean on all touched source + test files。
 - [ ] No Souffle / ProbLog / PyReason adapter files changed(scope diff)。
 - [ ] No SDK files changed(scope diff:`sdk/dsl/expr.py` / `sdk/dsl/application_rule.py` / `sdk/__init__.py` 0 lines)。
+- [ ] `build_application_rule(...)` aggregate path **NOT tested as supported**(per Step 4.2 v2 P4)— T2.3a only tests **direct application Rule construction** with aggregate Term-position;bridge ergonomic path defers to T2.3b。
 - [ ] Sacred `master 562c7419` unchanged。
 - [ ] Dirty 4 M + 1 untracked preserved。
 

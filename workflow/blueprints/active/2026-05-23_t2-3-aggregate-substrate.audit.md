@@ -1,4 +1,6 @@
-# Task Blueprint Audit: T2.3 — AggregateExpr substrate (IR + Python eval + SDK ergonomic)
+# Task Blueprint Audit: T2.3a — Core AggregateExpr substrate (IR + validation + Python eval + raw resolver)
+
+> **Title superseded note (post Step 4.2 v1)**:original title was "T2.3 — AggregateExpr substrate (IR + Python eval + SDK ergonomic)"。Step 4.2 v1 split scope to T2.3a substrate-only;SDK ergonomic deferred to T2.3b。Title updated above。
 
 - Status: draft
 - Created: 2026-05-23
@@ -23,31 +25,33 @@
 
 ## Decision Notes
 
-### 2026-05-23 — Initial scope lock
+### 2026-05-23 — Initial scope lock (superseded by Step 4.2 v1 tightening — see below)
+
+> **Superseded note**:original scope included SDK ergonomic helpers + bridge passthrough。Step 4.2 v1 surfaced P0(Public API impact contradiction)→ scope split。**Current scope is T2.3a substrate-only**(per Step 4.2 v1 + v2 tightening sections below)。Original Initial scope lock preserved here for historical context。
 
 - T2.3 is the T2 Track closing slice (Atom 语言闭合 final piece) — adds AggregateExpr substrate net-new.
 - G2 audit confirms shipped Aggregate substrate empty: `where_ast.py` no AggregateAtom, no `_AGGREGATE_KINDS`; `where_ast_validate.py` no aggregate validation; `where_eval.py` no aggregate eval; adapters no aggregate dispatch.
 - Parent essay §10.6.3-§10.6.9 + §8.8 fully lock C99-C105 semantics — no load-bearing decision pending.
-- Scope narrowed to **substrate + Python eval + SDK ergonomic + bridge passthrough**. Adapter wires (Souffle aggregate body / ProbLog findall) deferred to T2.3.b and T2.3.c follow-up sub-slices.
+- Scope narrowed to **substrate + Python eval + SDK ergonomic + bridge passthrough**. Adapter wires (Souffle aggregate body / ProbLog findall) deferred to T2.3.b and T2.3.c follow-up sub-slices. — **SUPERSEDED by Step 4.2 v1**;current scope is substrate-only(no SDK ergonomic / no bridge passthrough);SDK + bridge → T2.3b。
 
-### 2026-05-23 — S vs M class assessment
+### 2026-05-23 — S vs M class assessment (post Step 4.2 v1 corrections;v0 row "Public API impact None" was incorrect — see Step 4.2 v1 section below)
 
 User explicitly flagged this slice as S → 可能 M during T2.2 review:
 > "T2.3 AggregateExpr | S → 可能 M | C99-C105 7 commitments 紧耦合 + AggregateExpr 是 100% genuinely new;若 impl 期出现 cross-commitment 决策点 → 升 M"
 
-Drafter assessment for S-class with size override:
+Drafter v0 assessment for S-class with size override(**Public API impact row was WRONG at v0**;corrected in Step 4.2 v1 by removing SDK helpers from scope):
 
-| Factor | T2.3 reality | Trigger fire? |
-|---|---|---|
-| Public API rename / replacement | None | No |
-| Cross-commitment Q load-bearing | None — parent essay fully locks C99-C105 | No |
-| Design vs shipped ≥ 3 commitments conflict | No conflict — 100% genuinely new additive | No |
-| Sub-slice count vs Track plan §2 prediction | Track plan §2 listed T2.3 as one row | Within prediction |
-| Public API impact | None / internal substrate | No |
-| Cross-commitment 复杂度 | High (C99-C105 interrelated) — but no load-bearing decision needed | Triggers vs no decision needed = no fire |
-| Size budget | ~1160 LOC est — 4x above ~300 LOC S guideline | Size flags concern, not a hard trigger |
+| Factor | T2.3 reality (v0) | Trigger fire? (v0) | Corrected (v1+) |
+|---|---|---|---|
+| Public API rename / replacement | None | No | None(unchanged)|
+| Cross-commitment Q load-bearing | None — parent essay fully locks C99-C105 | No | None(unchanged)|
+| Design vs shipped ≥ 3 commitments conflict | No conflict — 100% genuinely new additive | No | No(unchanged)|
+| Sub-slice count vs Track plan §2 prediction | Track plan §2 listed T2.3 as one row | Within prediction | Within prediction(but slice split to T2.3a + T2.3b after v1)|
+| **Public API impact** | **None / internal substrate (WRONG: agg_* helpers ARE public SDK API)** | No | **Now genuinely None** — SDK helpers removed from T2.3a scope |
+| Cross-commitment 复杂度 | High (C99-C105 interrelated) — but no load-bearing decision needed | Triggers vs no decision needed = no fire | Unchanged |
+| Size budget | ~1160 LOC est — 4x above ~300 LOC S guideline | Size flags concern, not a hard trigger | ~1280 LOC est in v1 (slightly increased due to scoping + raw resolver helpers); still S-class |
 
-**Conclusion**: §1.2.4 trigger conditions do not fire. Size is the only S-class concern. Drafter recommends S-class with size override + escalation contingency.
+**Conclusion (v1+)**: §1.2.4 trigger conditions do not fire. Size is the only S-class concern. Drafter recommends S-class with size override + escalation contingency。**Public API impact row corrected — now genuinely None post-split**。
 
 If reviewer disagrees on size, blueprint §5.10 prepares two-way split:
 - T2.3.a: IR + validation + Python eval + tests (~400 LOC)
@@ -155,3 +159,76 @@ Current `Term: TypeAlias = Var | Const` defined at `where_ast.py:31`, before `Ag
 | Size estimate | ~1280 LOC (slightly increased due to scoping helpers + raw resolver additions); still S-class with size override; Public API impact NOW genuinely None |
 
 **Blueprint stays `Status: draft`** pending user review of v1 tightening.
+
+### 2026-05-23 — Step 4.2 v2 tightening applied (P1+P2+P3+P4+P5)
+
+User Step 4.2 v1 re-review surfaced 4 Required + 1 Minor — all genuine implementation-contract holes that v1 did not close。Drafter applied all 5。
+
+**P1 (Required) — Application Rule filter-local var two-pass algorithm**:
+v1 §5.7 had `_collect_aggregate_term_vars(agg, ...)` iterate filter atoms calling `_validate_atom(...)` which **adds ALL filter vars to seen_vars**(including aggregate-local)。Self-contradicted with §4.4 "collect only correlated"。Punt to "trust constructor" was unacceptable。
+
+**Adopted**:explicit **two-pass** algorithm in `Rule.__post_init__`:
+- Pass 1:walk top-level atoms,treating AggregateAtom Term-position values as **opaque**(not recursed)。Builds `outer_seen_vars`。
+- Pass 2:walk AggregateAtom Term-position values with `outer_seen_vars` context;collect ONLY correlated subset = `(target_vars ∪ filter_vars) ∩ outer_seen_vars`。Filter-local vars(`filter_vars - outer_seen_vars`)NEVER enter `seen_vars`。
+- ports validation against `seen_vars` after pass 2 → ports cannot reference aggregate-local vars by construction。
+
+§5.7 fully rewritten with `_collect_non_aggregate_atom_vars` + `_collect_aggregate_term_correlated_vars` + `_collect_correlated_from_aggregate` helpers。Application Rule's own algorithm is independently correct;does NOT rely on AST validator's pre-check。Validator at AST layer is additional defense,not only line。
+
+§7 acceptance adds explicit application Rule filter-local isolation test。
+
+**P2 (Required) — Target Var binding rule**:
+v1 had no construct-time check that aggregate target Var has a binding source。`agg_sum("$unbound_amount", filter=[PredAtom("Order:exists", ["$o"])])` would surface only at runtime as unresolved。
+
+**Adopted**:new §2.5b "Target Var binding rule"。For `kind in {"sum", "min", "max", "mean"}` with target Var:
+- target Var MUST be in `outer_bound_vars ∪ filter_bound_vars`
+- `filter_bound_vars` = vars bound BY filter atoms(`pred` new Var / `eq` Var-on-unbound / `in` declaration)
+- Otherwise `AggregateVariableScopeError` raised construct-time
+- §7 adds explicit test:`agg_sum(Var("$unbound"), filter=[PredAtom("Order:exists", [Var("$o")])])` → reject
+
+Confirmed no conflict with parent C99-C105:parent essay examples implicitly assume target is filter-scoped or correlated;P2 is new construct-time validator for what was implicitly assumed,no semantic change。
+
+**P3 (Required) — Full where_eval.py helper coverage**:
+v1 §5.6 only mentioned `_eval_cmp_atom` + `_eval_arith_atom` operand resolvers。User cited 4 additional helpers:
+- `_validate_atom` (`where_eval.py:355`)
+- `_term_known_for_plan` (`where_eval.py:891`)
+- `_atom_eval_score` (`where_eval.py:991`)
+- `_vars_in_atoms` (`where_eval.py:1067`)
+
+If aggregate term tuples pass through these without aggregate-awareness:
+- `_validate_atom` may reject aggregate as unknown kind
+- `_term_known_for_plan` may treat aggregate as never-known(plans don't fire)or always-known(plans fire prematurely)
+- `_atom_eval_score` may score aggregate as 0-cost(planner orders catastrophically)
+- `_vars_in_atoms` may drop aggregate-internal correlated vars(not-body correlation breaks)
+
+**Adopted**:new §5.6b table enumerating ALL helpers requiring aggregate-term-aware extension。Each helper gains `_is_aggregate_term(term)` check + dedicated aggregate-handling branch。§7 acceptance adds explicit test:"All where_eval.py aggregate-aware helpers covered"。
+
+**P4 (Required) — Bridge passthrough claim vs SDK 0-touch contradiction**:
+v1 §3 Non-goal said "Raw IR tuples can still flow through `build_application_rule` if user constructs them directly"。But §7 required `sdk/dsl/application_rule.py` 0-touch。Bridge's `_collect_vars_from_term` (`:181`) and var canonicalization (`:250`) don't recognize `AggregateAtom`,so claim was false。
+
+**Adopted**:**delete passthrough claim**。§3 rewritten explicit:
+- T2.3a supports **direct application Rule construction** via `application/protocol/rule.py` with `AggregateAtom` Term-position arguments(YES)
+- T2.3a does NOT support `build_application_rule` with aggregate IR(NO — `sdk/dsl/application_rule.py` 0-touch verified)
+- End-to-end DSL ergonomic path → T2.3b
+
+§7 acceptance adds explicit "bridge aggregate path NOT tested as supported"。
+
+**P5 (Minor) — Audit log current-truth drift**:
+v1 audit log header + Initial scope lock + S/M table still described v0 scope(SDK ergonomic + bridge passthrough + "Public API impact None")。User flagged historical entries OK to preserve but **current title / current scope** must explicitly say "superseded by Step 4.2 v1"。
+
+**Adopted**:
+- Audit log title updated to "T2.3a — Core AggregateExpr substrate (IR + validation + Python eval + raw resolver)" with "Title superseded note" pointing to v1
+- "Initial scope lock" section gains "(superseded by Step 4.2 v1 tightening — see below)" marker + superseded line for the SDK/bridge scope assertion
+- S/M assessment table:annotated "Public API impact" row both v0(WRONG)and v1+(corrected);table title gains "(post Step 4.2 v1 corrections)" prefix
+
+**Summary of Step 4.2 v2 changes**:
+
+| Section | Change |
+|---|---|
+| §3 Non-goals | Bridge passthrough claim deleted(P4);explicit "T2.3a supports direct construction NOT bridge ergonomic" |
+| §2.5b NEW | Target Var binding rule(P2) |
+| §5.6b NEW | Full where_eval.py helper coverage table(P3) — `_validate_atom` / `_term_known_for_plan` / `_atom_eval_score` / `_vars_in_atoms` |
+| §5.7 | Rewritten with two-pass algorithm(P1) — outer_seen_vars + correlated-subset isolation;no "trust constructor" punt |
+| §7 Acceptance | Added:application Rule filter-local isolation test(P1)/ target Var binding rule test(P2)/ all helpers covered test(P3)/ bridge aggregate path NOT tested(P4) |
+| Audit log | Title updated(P5);Initial scope lock + S/M table marked superseded with v1 corrections |
+
+**Blueprint stays `Status: draft`** pending user review of v2 tightening。Predict 0 P-findings if v2 holds — but if any new contract hole surfaces,further v3 tightening rather than skip to scoped。
