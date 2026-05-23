@@ -1,7 +1,7 @@
 # Decision: T1.3 SDK Top-Level Rule Naming
 
 Status: proposed
-Last Updated: 2026-05-23
+Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
 Related Blueprint: workflow/blueprints/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
 ## Context
@@ -20,6 +20,8 @@ T1.1 shipped the new application protocol `Rule` at `factgraph.application.proto
 
 ## Alternatives
 
+Parent §3.10 lists replacement, namespace isolation, and mode-transition alternatives. The selected option below is framed as **A-staged**: a timing refinement of replacement, not a fourth permanent semantic model.
+
 ### A. Immediate Replacement
 
 Make `factgraph.sdk.Rule` point to `factgraph.application.protocol.Rule` in T1.3 and rename the current SDK DSL class to `LegacyRule`.
@@ -32,6 +34,7 @@ Benefits:
 Costs:
 
 - Breaks existing tests, examples, and domain integrations that construct legacy `Rule`.
+- Requires updating 15 current `from factgraph.sdk import Rule` caller sites identified during Step 4.2 review: 13 tests plus 2 docs.
 - Requires broader migration work before the legacy `.eval` / old rule workflow is ready to be cut.
 - Turns a narrow naming slice into a larger compatibility migration.
 
@@ -65,7 +68,7 @@ Costs:
 - Preserves the exact confusion the parent essay identifies: `Rule` with `select` / `head` versus atomic AND-only rule.
 - Makes validation and docs harder.
 
-### D. Staged Replacement With Explicit Aliases
+### D. A-Staged Replacement With Explicit Aliases
 
 Keep `factgraph.sdk.Rule` as the legacy SDK DSL rule for T1.3. Add:
 
@@ -74,7 +77,7 @@ Keep `factgraph.sdk.Rule` as the legacy SDK DSL rule for T1.3. Add:
 - `factgraph.sdk.build_application_rule`
 - `factgraph.sdk.DSLToApplicationRuleError`
 
-Document that final direction remains flipping top-level `Rule` to the application rule at the later hard-cut.
+Document that final direction remains flipping top-level `Rule` to the application rule at the T5 legacy `.eval` / old rule hard-cut. This is parent alternative A delayed to the hard-cut point, not a separate long-lived model.
 
 Benefits:
 
@@ -87,12 +90,13 @@ Benefits:
 Costs:
 
 - `factgraph.sdk.Rule` remains legacy for now, so the parent essay's final naming state is not fully achieved in T1.3.
+- Parent §3.10 line 325's "new user sees `Rule` as atomic AND-only" promise is explicitly deferred during the staged period.
 - Docs must be precise to avoid implying the final flip already happened.
 - A later hard-cut still needs to update `Rule`.
 
 ## Decision
 
-Choose **D. Staged Replacement With Explicit Aliases**.
+Choose **D. A-Staged Replacement With Explicit Aliases**.
 
 T1.3 implements a transitional top-level SDK surface:
 
@@ -102,13 +106,22 @@ T1.3 implements a transitional top-level SDK surface:
 - `build_application_rule` is promoted to the SDK top-level as an alias.
 - `DSLToApplicationRuleError` is promoted to the SDK top-level as an alias.
 
-The final target remains replacing top-level `Rule` with the new application rule during a later legacy hard-cut.
+The final target remains replacing top-level `Rule` with the new application rule during the T5 legacy `.eval` / old rule hard-cut. Until then, the final parent §3.10 user-facing `Rule` promise is deferred as a timing matter.
+
+## Lifecycle
+
+- `proposed`: initial draft commit
+- `reviewed`: after Step 4.2 review passes
+- `accepted`: concurrent with the blueprint Step 4.6 scoped anchor; implementation may begin only after this transition
+- `superseded`: if a later decision doc replaces this one; this document remains historical record
 
 ## Consequences
 
 - Existing callers keep working.
 - New code can import `ApplicationRule` and `build_application_rule` from `factgraph.sdk`.
 - Docs must clearly state the transition status.
+- T2.3b's SDK docs guidance evolves: `build_application_rule` becomes available from `factgraph.sdk` as well as `factgraph.sdk.dsl`, while `agg_*` helpers remain DSL-only.
+- T1.3 does not emit `DeprecationWarning` from legacy `Rule`; warnings are deferred to the final hard-cut to avoid noisy output across the current caller set.
 - A future decision or hard-cut slice must flip `Rule` and decide whether `LegacyRule` remains temporarily or is removed.
 - Tests must assert alias identity to prevent wrappers or accidental semantic drift.
 

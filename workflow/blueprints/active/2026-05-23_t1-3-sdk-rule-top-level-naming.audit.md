@@ -1,7 +1,7 @@
 # T1.3 SDK Top-Level Rule Naming Audit Log
 
 Status: draft
-Last Updated: 2026-05-23
+Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
 Blueprint: workflow/blueprints/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
@@ -10,6 +10,7 @@ Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-leve
 | Date | Event | Notes |
 |---|---|---|
 | 2026-05-23 | draft | Initial M-class blueprint + decision doc drafted from source-grep audit. |
+| 2026-05-23 | Step 4.2 v2 tightening | Applied 4 Required + 3 Worth-considering findings from first M-class review. |
 
 ## G1-G7 Mapping
 
@@ -52,7 +53,7 @@ Blueprint §4 cites current source with line precision. Step 4.2 reviewer should
 
 ### G5 Deviations
 
-The parent essay inclination is full replacement. This draft chooses staged replacement for T1.3 while preserving the final full-replacement direction. The deviation is documented in the decision doc as a timing refinement, not a change to final semantics.
+The parent essay inclination is full replacement. This draft chooses A-staged replacement for T1.3 while preserving the final full-replacement direction. The decision doc now explicitly frames this as a timing refinement of parent alternative A and defers parent §3.10 line 325's final `Rule` semantics until the T5 hard-cut.
 
 ### G6 Reviewer Spot-Check
 
@@ -88,12 +89,24 @@ The draft decision selects staged replacement:
 - Adds `ApplicationRule` to make the new path explicit.
 - Keeps final replacement of `Rule` available for a later hard-cut.
 
+### Step 4.2 v2 Tightening
+
+| Finding | Resolution |
+|---|---|
+| P1 Required: Alternative D outside parent A/B/C + missing final trigger | Renamed the choice to A-staged, stated it is a timing refinement of parent alternative A, reconciled parent §3.10 line 325 as deferred, and locked the final flip trigger to the T5 legacy `.eval` / old rule hard-cut. |
+| P2 Required: `when` field cite inaccurate | Replaced `when` with shipped legacy fields `expose` and `condition_weights`, and tightened the field cite to `sdk/dsl/rule.py:67-74`. |
+| P3 Required: T2.3b docs guidance reversal unhandled | Blueprint and decision doc now explicitly state that `build_application_rule` becomes available from top-level SDK while `agg_*` helpers remain DSL-only. |
+| P4 Required: Decision status lifecycle unspecified | Added proposed/reviewed/accepted/superseded lifecycle and made accepted status a Step 4.6 implementation gate. |
+| P5 Worth-considering: deprecation signal | Chose no `DeprecationWarning` in T1.3; warning policy deferred to final hard-cut. |
+| P6 Worth-considering: concrete caller count | Added the 15-site caller count to Alternative A cost. |
+| P7 Worth-considering: docs scope completeness | Added `06_what_if_and_proof.en.md` as explicit out-of-scope unless it claims final application-rule semantics. |
+
 ### Cross-Slice Contract Preservation
 
 - T1.1 application `Rule` implementation remains untouched.
 - T1.2 `build_application_rule(...)` behavior remains untouched.
 - T2 aggregate/arithmetic/adapter slices remain untouched.
-- SDK docs may change to describe naming transition.
+- SDK docs may change to describe naming transition and to broaden T2.3b's `build_application_rule` import guidance; aggregate helper top-level export remains out of scope.
 
 ## Review Surface
 

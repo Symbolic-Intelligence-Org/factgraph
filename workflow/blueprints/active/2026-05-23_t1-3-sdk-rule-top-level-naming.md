@@ -1,7 +1,7 @@
 # T1.3 SDK Top-Level Rule Naming
 
 Status: draft
-Last Updated: 2026-05-23
+Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
 Class: M
 Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
@@ -17,12 +17,12 @@ This slice resolves TPQ-2 at the M-class design level and implements the transit
 
 ### 2.1 TPQ-2 Decision Lock
 
-Adopt a documented public API naming decision for SDK top-level `Rule` exposure. The decision must compare at least:
+Adopt a documented public API naming decision for SDK top-level `Rule` exposure. The decision must compare parent §3.10's three alternatives plus the selected staged refinement:
 
 - immediate replacement of `factgraph.sdk.Rule`
 - namespace isolation such as a future `sdk.v2.Rule`
 - mode/flag transition on the legacy `Rule`
-- a staged replacement path with explicit transitional aliases
+- **A-staged** replacement with explicit transitional aliases
 
 ### 2.2 Transitional Top-Level SDK Exports
 
@@ -40,11 +40,22 @@ Existing imports such as `from factgraph.sdk import Rule` and `from factgraph.sd
 
 ### 2.4 Document Final Direction
 
-SDK docs must state that `ApplicationRule` is the transitional explicit name for the new application protocol rule and that the final target remains making top-level `Rule` mean the new atomic AND-only rule after the later hard-cut.
+SDK docs must state that `ApplicationRule` is the transitional explicit name for the new application protocol rule and that the final target remains making top-level `Rule` mean the new atomic AND-only rule at the later T5 legacy `.eval` / old rule hard-cut. During the staged period, parent §3.10 line 325's "new user sees `Rule` as atomic AND-only" promise is deferred, not canceled.
 
 ### 2.5 M-Class Governance
 
 Because this slice changes public SDK naming and locks TPQ-2, it must carry the M-class decision doc through review before implementation starts.
+
+### 2.6 Decision Lifecycle
+
+The decision doc lifecycle is part of this slice's state machine:
+
+- `proposed`: initial draft commit
+- `reviewed`: after Step 4.2 review passes
+- `accepted`: concurrent with Step 4.6 scoped anchor
+- `superseded`: only if a later decision doc replaces it
+
+Implementation is blocked until the decision doc is `accepted`.
 
 ## 3. Non-Goals
 
@@ -57,6 +68,7 @@ Because this slice changes public SDK naming and locks TPQ-2, it must carry the 
 - Do not change application protocol `Rule`.
 - Do not touch T2 aggregate, arithmetic, or adapter implementations.
 - Do not update examples wholesale beyond docs that explain the naming transition.
+- Do not emit a `DeprecationWarning` from legacy `Rule` in this slice; warning policy is deferred to the final hard-cut because current callers are numerous and warning noise would be high.
 - Do not push or merge branches.
 
 ## 4. Current Context
@@ -85,7 +97,7 @@ Because this slice changes public SDK naming and locks TPQ-2, it must carry the 
 ### 4.4 Existing Legacy Rule
 
 - `src/factgraph/sdk/dsl/rule.py:53-116` defines the current legacy SDK `Rule`.
-- `src/factgraph/sdk/dsl/rule.py:61-74` includes legacy fields such as `select`, `where`, and `when`.
+- `src/factgraph/sdk/dsl/rule.py:67-74` includes legacy fields such as `select`, `where`, `expose`, and `condition_weights`.
 - `src/factgraph/sdk/dsl/rule.py:28-32` lets `RuleRef` accept a legacy `Rule` instance.
 
 ### 4.5 New Application Rule
@@ -99,8 +111,9 @@ Because this slice changes public SDK naming and locks TPQ-2, it must carry the 
 ### 4.6 Current Docs
 
 - `src/factgraph/sdk/docs/04_api_surface.en.md:88-99` currently lists `Rule` as the declarative rule surface with legacy head/body behavior.
-- `src/factgraph/sdk/docs/04_api_surface.en.md:101-113` lists aggregate helpers and `build_application_rule` under `factgraph.sdk.dsl`.
+- `src/factgraph/sdk/docs/04_api_surface.en.md:101-113` lists aggregate helpers and `build_application_rule` under `factgraph.sdk.dsl`, and line 112-113 explicitly says to use `from factgraph.sdk.dsl import agg_sum, build_application_rule`.
 - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md:155-180` documents aggregate-backed application rule authoring via `factgraph.sdk.dsl`.
+- `src/factgraph/sdk/docs/06_what_if_and_proof.en.md` currently uses legacy `Rule`; this remains valid because T1.3 keeps top-level `Rule` legacy-compatible.
 
 ## 5. Proposed Shape
 
@@ -109,6 +122,8 @@ Because this slice changes public SDK naming and locks TPQ-2, it must carry the 
 Adopt the decision documented in `workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md`:
 
 > Staged replacement. Keep top-level `Rule` legacy-compatible in T1.3, add explicit `LegacyRule` and `ApplicationRule` aliases, and reserve the eventual `Rule` flip for the later legacy hard-cut.
+
+The decision doc frames this as **A-staged**, a timing refinement of parent §3.10's replacement alternative rather than a fourth long-lived semantic option.
 
 ### 5.2 SDK Top-Level Export Patch
 
@@ -139,6 +154,7 @@ Update SDK docs to explain:
 - `LegacyRule` is an explicit name for the current legacy SDK rule.
 - `ApplicationRule` is the explicit transitional name for the new application protocol rule.
 - `build_application_rule(...)` is available from both `factgraph.sdk.dsl` and `factgraph.sdk`.
+- `src/factgraph/sdk/docs/04_api_surface.en.md:112-113` is intentionally updated: `agg_*` helpers remain DSL-only, while `build_application_rule` becomes available from both top-level `factgraph.sdk` and `factgraph.sdk.dsl`.
 - Final target is a later hard-cut where `Rule` can become the new application rule.
 
 ### 5.4 Tests
@@ -173,11 +189,13 @@ Add focused SDK export tests:
 - Top-level `build_application_rule` is an alias, not a wrapper.
 - No adapter, core, application protocol, or aggregate implementation changes occur.
 - The decision doc is the canonical record for TPQ-2 until a later decision supersedes it.
-- Implementation cannot start until the decision doc is reviewed and accepted.
+- The decision doc transitions `proposed` to `reviewed` after Step 4.2 passes and `reviewed` to `accepted` concurrent with the Step 4.6 scoped anchor.
+- Implementation cannot start until the decision doc is `accepted`.
+- T2.3b's docs instruction to import `build_application_rule` from `factgraph.sdk.dsl` is intentionally broadened: `build_application_rule` becomes top-level as well; `agg_*` helpers remain `factgraph.sdk.dsl` only.
 
 ## 7. Acceptance
 
-- Decision doc exists and reaches accepted status before implementation.
+- Decision doc exists, reaches `reviewed` after Step 4.2 review, and reaches `accepted` concurrent with Step 4.6 scoped anchor before implementation.
 - SDK top-level export tests pass.
 - Existing legacy SDK rule tests continue to pass.
 - T1.1 / T1.2 application rule tests continue to pass.
@@ -208,6 +226,7 @@ Add focused SDK export tests:
 - `src/factgraph/sdk/docs/04_api_surface.en.md`
 - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
 - potentially `src/factgraph/sdk/docs/00_user_guide.en.md` if it currently implies top-level `Rule` final semantics
+- `src/factgraph/sdk/docs/06_what_if_and_proof.en.md` remains out of scope unless implementation discovers wording that claims `Rule` already has application-rule semantics; legacy `Rule` examples remain valid in T1.3.
 
 ## 10. Outcome
 
