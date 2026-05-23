@@ -1,7 +1,7 @@
 # T1.3 SDK Top-Level Rule Naming
 
-Status: scoped
-Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+Status: implemented
+Last Updated: 2026-05-23 (Step 4.8 closure)
 Class: M
 Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
@@ -230,4 +230,37 @@ Add focused SDK export tests:
 
 ## 10. Outcome
 
-Pending implementation.
+Implemented in two commits on `v0.2.0-impl-t1-3-sdk-rule-top-level-naming-2026-05-23`:
+
+- `dd323698` — recorded G7 precondition before implementation.
+- `c846af09` — added transitional SDK top-level Rule naming exports, docs, and tests.
+
+Landed behavior:
+
+- `factgraph.sdk.Rule` remains the legacy SDK DSL `Rule`.
+- `factgraph.sdk.LegacyRule` aliases the same legacy SDK DSL `Rule`.
+- `factgraph.sdk.ApplicationRule` aliases `factgraph.application.protocol.Rule`.
+- `factgraph.sdk.build_application_rule` aliases `factgraph.sdk.dsl.build_application_rule`.
+- `factgraph.sdk.DSLToApplicationRuleError` aliases `factgraph.sdk.dsl.DSLToApplicationRuleError`.
+
+Docs updated:
+
+- `src/factgraph/sdk/docs/04_api_surface.en.md` now documents `Rule`, `LegacyRule`, `ApplicationRule`, top-level `build_application_rule`, and the staged final flip.
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` now imports `build_application_rule` from top-level `factgraph.sdk` while keeping aggregate helpers under `factgraph.sdk.dsl`.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.sdk.test_rule_naming` passed: 6 tests.
+- Targeted cross-slice sweep passed: 145 tests.
+- `python -m ruff check src/factgraph/sdk/__init__.py tests/sdk/test_rule_naming.py` passed.
+- `git diff` showed no changes under `src/factgraph/adapters/`, `src/factgraph/core/`, or `src/factgraph/application/protocol/rule.py`.
+
+Deviations:
+
+- None. No `DeprecationWarning` was added by design, per the accepted decision doc.
+
+Archive readiness:
+
+- Blueprint and audit are implemented.
+- Decision doc remains `accepted`.
+- Ready for Step 4.9 archive of blueprint pair and decision doc.

@@ -1,7 +1,7 @@
 # T1.3 SDK Top-Level Rule Naming Audit Log
 
-Status: scoped
-Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
+Status: implemented
+Last Updated: 2026-05-23 (Step 4.8 closure)
 Blueprint: workflow/blueprints/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-level-naming.md
 
@@ -13,6 +13,7 @@ Decision Doc: workflow/design/decisions/active/2026-05-23_t1-3-sdk-rule-top-leve
 | 2026-05-23 | Step 4.2 v2 tightening | Applied 4 Required + 3 Worth-considering findings from first M-class review. |
 | 2026-05-23 | scoped | Step 4.2 v2 re-review passed with 0 Blocker / 0 Required; decision doc accepted concurrent with scoped anchor. |
 | 2026-05-23 | G7 precondition | Recorded current SDK Rule identities and missing transitional top-level aliases before implementation. |
+| 2026-05-23 | implemented | Step 4.7 review passed with 0 findings; blueprint Outcome filled. |
 
 ## G1-G7 Mapping
 
@@ -138,6 +139,29 @@ Observed:
 - application rule identity: `factgraph.application.protocol.rule.Rule`
 
 Decision doc status at this point: `accepted`, so implementation is unblocked.
+
+### Step 4.8 Closure
+
+Implementation commits:
+
+- `dd323698` — G7 precondition record, before code changes.
+- `c846af09` — feature implementation.
+
+Step 4.7 review result:
+
+- 0 Blocker
+- 0 Required
+- 0 Worth-considering
+
+Verification reported by reviewer:
+
+- T1.3 tests: 6 pass.
+- Cross-slice sweep: 145 pass.
+- Ruff: clean.
+- No diff in adapters, core, or application protocol Rule.
+- Sacred master and dirty set preserved.
+
+Decision doc remains `accepted`; no superseding decision was created.
 
 ## Review Surface
 
