@@ -1,7 +1,7 @@
 # T1.4 Alias / Port Contract Audit Log
 
-Status: draft
-Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
+Status: scoped
+Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 Blueprint: workflow/blueprints/active/2026-05-23_t1-4-alias-port-contract.md
 
 ## Event Log
@@ -10,6 +10,7 @@ Blueprint: workflow/blueprints/active/2026-05-23_t1-4-alias-port-contract.md
 |---|---|---|
 | 2026-05-23 | draft | Initial S-class blueprint drafted from parent §3.6 / shipped Rule port audit. |
 | 2026-05-23 | Step 4.2 v2 tightening | Applied P1 default alias fix and four low-cost acceptance/spec hardenings. |
+| 2026-05-23 | scoped | Step 4.2 v2 re-review passed with 0 Blocker / 0 Required; scoped anchor includes non-identifier rule.id edge-case acceptance. |
 
 ## G1-G7 Mapping
 

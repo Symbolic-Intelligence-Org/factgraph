@@ -1,7 +1,7 @@
 # T1.4 Alias / Port Contract
 
-Status: draft
-Last Updated: 2026-05-23 (Step 4.2 v2 tightening)
+Status: scoped
+Last Updated: 2026-05-23 (Step 4.6 scoped anchor)
 Class: S
 
 ## 1. Problem
@@ -194,6 +194,7 @@ No `Rule.content_digest` change. Occurrence aliases are expression-level wrapper
 - `RuleOccurrence` is an occurrence wrapper, not a Rule template replacement.
 - `RulePortRef` is a reference descriptor, not a core AST term.
 - `Rule.as_()` default alias is exactly `rule.id`.
+- If `rule.id` is not identifier-shaped, `Rule.as_()` raises `RuleValidationError`; users must call `.as_(custom_alias)`.
 - `Rule.content_digest` remains alias-independent.
 - `Rule.ports` remains a frozen `MappingProxyType`.
 - Application Rule remains SDK-independent.
@@ -203,6 +204,7 @@ No `Rule.content_digest` change. Occurrence aliases are expression-level wrapper
 ## 7. Acceptance
 
 - `Rule.as_()` returns immutable `RuleOccurrence(rule=rule, alias=rule.id)`.
+- `Rule(id="bad-rule", ...).as_()` raises `RuleValidationError` because the default alias must pass occurrence-alias validation; `.as_("good_alias")` remains valid.
 - `Rule.as_("a")` returns immutable `RuleOccurrence(rule=rule, alias="a")`.
 - Repeated `rule.as_("a")` calls satisfy `rule.as_("a") == rule.as_("a")`; they are not required to satisfy object identity (`is`) because T1.4 does not promise interning.
 - Invalid aliases (`""`, `"1a"`, `"_a"`, `"a-b"`) raise `RuleValidationError`.
