@@ -116,6 +116,8 @@ Must include:
 - application Rule and RuleExpr operand acceptance.
 - legacy SDK Rule rejection.
 - `RuleExpr.__bool__` and application `Rule.__bool__` raising `ExplicitBoolError`.
+- MUST NOT change legacy SDK `Rule.__bool__` behavior; D5 leaves legacy SDK Rule truthiness to the T5 hard-cut.
+- MUST NOT introduce direct `application_rule == rule_expr` cross-type equality or change T1.4 application Rule `__eq__` / `__hash__` semantics; D4 keeps coercion at RuleExpr API boundaries.
 
 ### T3.2: Expression-Scope Occurrence Validation
 
@@ -184,6 +186,10 @@ Must preserve legacy SDK Rule / Inference dict inspect behavior.
 Dependencies:
 
 - T3.1-T3.5 stable public behavior.
+- D1 staged import path.
+- D2 `.eq(...)` join syntax.
+- D3 inspect coexistence.
+- D5 docs obligations, including C24 precedence/parentheses.
 
 Must include:
 
@@ -237,4 +243,3 @@ Dependencies:
 - [x] Audit trail current as of `81bcec29`.
 
 Lifecycle: this synthesis stays in `workflow/audit/active/` until the final consuming T3 blueprint archives, or until a later synthesis supersedes it.
-
