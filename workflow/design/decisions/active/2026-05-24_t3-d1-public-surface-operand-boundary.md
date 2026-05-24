@@ -1,6 +1,6 @@
 # Q1 Decision: T3 Public Surface And Operand Boundary
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Authority: design constraint; locks T3 RuleExpr public imports and operand acceptance during the T1.3 staged naming period.
@@ -173,3 +173,4 @@ This decision is compatible with the future T5 hard-cut. At T5, a superseding de
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit Q1 required explicit public surface and operand boundary during the T1.3 staged naming period. |
+| 2026-05-24 | adopted | P2 amendment cleared, cross-decision dependencies sealed | D1 P2 framing sharpening landed in 4c845615; reviewer pass confirmed adoption prerequisites. |

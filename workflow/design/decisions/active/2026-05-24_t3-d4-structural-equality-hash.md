@@ -1,6 +1,6 @@
 # Q4 Decision: T3 Structural Equality And Hash
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Authority: design constraint; locks RuleExpr structural equality and same-process hashing before T3 RuleExpr value implementation.
@@ -187,3 +187,4 @@ Inspect rendering may choose a stable presentation order that differs from autho
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit Q4 and D2 amendment required structural equality/hash to absorb join symmetry and set-vs-list semantics. |
+| 2026-05-24 | adopted | P2 amendment cleared, cross-decision dependencies sealed | D4 P2 framing sharpening landed in 4c845615; reviewer pass confirmed adoption prerequisites. |
