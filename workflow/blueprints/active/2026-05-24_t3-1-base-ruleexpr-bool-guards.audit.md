@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.1 Base RuleExpr And Bool Guards
 
 - Blueprint: [2026-05-24_t3-1-base-ruleexpr-bool-guards.md](./2026-05-24_t3-1-base-ruleexpr-bool-guards.md)
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -15,6 +15,7 @@
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | Pre-implementation grep found no shipped RuleExpr code surface, no application/legacy Rule operator or bool conflicts, no T1.4 bool-context test dependency, no `factgraph.sdk.all` / `factgraph.sdk.any` export, and existing SDK API docs/error rows for T3.1 docs alignment. No scope amendment required. |
 | 2026-05-24 | baseline | G7 baseline recorded | Before implementation, direct `pytest tests/application/protocol/test_rule.py -v` and `python -m pytest ...` both exited with no output; subprocess capture showed pytest returncode `-11` (SIGSEGV). Fallback `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule -v` ran 23 tests OK. No code edits made. |
 | 2026-05-24 | implementing | Import-cycle fallback | During implementation smoke tests, direct application `rule_expr.py` import from `factgraph.sdk.dsl.errors` triggered an application/SDK package cycle. Blueprint §5.2 now allows neutral internal SDK error base re-export support while preserving `issubclass(RuleExprError, factgraph.sdk.dsl.errors.SDKDSLError)`. |
+| 2026-05-24 | implemented | Step 4.7 clean; blueprint closed | Feat `e049c93e` passed Step 4.7 with 0 P0/P1/P2 and 3 P3 type-precision follow-ups deferred. Closure records 88 cross-slice tests OK, ruff clean, A-fallback accepted, and archive readiness. |
 
 ## Decision Notes
 

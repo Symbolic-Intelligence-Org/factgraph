@@ -1,6 +1,6 @@
 # Task Blueprint: T3.1 Base RuleExpr And Bool Guards
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: M
@@ -362,10 +362,42 @@ No `sdk/docs/03_rules_and_inferences.en.md` tutorial update in T3.1 unless revie
 
 ## 10. Outcome / Deviations
 
-To fill after implementation:
+### Final Landed Code
 
-- Final landed code:
-- Test gates:
-- Deviations from blueprint:
-- Stage 1-3 traceability:
-- Archive readiness:
+T3.1 landed in `e049c93e` after the G7 baseline commit `febe7028` and the import-cycle fallback scope amendment `8de03372`.
+
+Landed files:
+
+- `src/factgraph/application/protocol/rule_expr.py` — public `RuleExpr`, `RuleExprError`, `ExplicitBoolError`; internal frozen `_RuleExpr`, `_RuleOperand`, `_AndGroup`, `_OrGroup`; operand coercion; flattening; equality/hash; bool guard.
+- `src/factgraph/application/protocol/rule.py` — additive `Rule.__and__`, `Rule.__or__`, and `Rule.__bool__` methods.
+- `src/factgraph/application/protocol/__init__.py` — public RuleExpr exports.
+- `src/factgraph/sdk/__init__.py` — SDK top-level RuleExpr re-exports; no module-level `all` / `any`.
+- `src/factgraph/_sdk_errors.py`, `src/factgraph/sdk/errors.py`, `src/factgraph/sdk/dsl/errors.py` — neutral SDK error base re-export support preserving `SDKDSLError` class identity while avoiding application/SDK import cycles.
+- `tests/application/protocol/test_rule_expr.py` — T3.1 acceptance tests.
+- `src/factgraph/application/docs/rule.md` and `src/factgraph/sdk/docs/04_api_surface.en.md` — minimal API/docs updates.
+
+### Test Gates
+
+- G7 fallback baseline before code: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule -v` → 23 tests OK.
+- Core post-implementation gate: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` → 38 tests OK.
+- Cross-slice gate: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_rule_naming tests.test_sdk_error_hierarchy tests.sdk.dsl.test_application_rule tests.sdk.dsl.test_aggregate_ergonomic tests.core.rules.test_aggregate_substrate tests.core.rules.test_aggregate_eval tests.application.protocol.test_rule_aggregate -v` → 88 tests OK.
+- Ruff: `python -m ruff check` on touched Python files → all checks passed.
+
+### Deviations / Follow-Ups
+
+- (A-fallback) Directly importing `factgraph.sdk.dsl.errors.SDKDSLError` from `application.protocol.rule_expr` triggered an application/SDK package cycle. T3.1 introduced `factgraph._sdk_errors` as a neutral internal source of SDK error classes, with `factgraph.sdk.errors` and `factgraph.sdk.dsl.errors` re-exporting the same class objects. This preserves `issubclass(RuleExprError, factgraph.sdk.dsl.errors.SDKDSLError)` and the D1 error-bucket requirement.
+- Pytest remains an environment/tooling issue in this workspace: pytest exits with returncode `-11` and no output. T3.1 uses the recorded unittest fallback baseline; the pytest SIGSEGV investigation is out of T3.1 scope.
+- Step 4.7 review found 0 P0/P1/P2 and 3 minor P3 type-precision follow-ups: add `-> _RuleExpr` return annotations on `Rule.__and__` / `Rule.__or__`, narrow `_RuleOperand.rule` from `object` to `Rule`, and optionally replace the duck-typed legacy SDK Rule detector if a cycle-safe nominal check becomes available. These do not block closure and are deferred to T3.2 or a cleanup slice.
+
+### Stage 1-3 Traceability
+
+T3.1 consumes the completed T3 audit-to-synthesis chain:
+
+- Stage 1 audit: `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`
+- Adopted D1 / D4 / D5 decision docs in `workflow/design/decisions/active/`
+- Stage 3 synthesis: `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md`
+- Track plan sync: `9c857d0c`
+
+### Archive Readiness
+
+Ready. Blueprint and audit log are `implemented`; active pair can be moved to `workflow/blueprints/archive/` with no content edits.
