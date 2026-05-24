@@ -14,6 +14,7 @@
 | 2026-05-24 | scoped | Scope locked + P3 precision | T3.5-F4 AtomDescriptor derivation pseudocode added for PredAtom entity-existence/field-predicate dispatch and CmpAtom best-effort `cmp` classification. |
 | 2026-05-24 | pre-impl | Step 4.6 grep found F5 alignment risk | Grep confirmed new DTO/module names are clean and legacy inspect paths are isolated, but T1.4 `:exists` inference accepts any matching term while §5.6 pseudocode currently requires `len(atom.terms) == 1`; needs a pre-feat A-fallback precision amendment before G7/implementation. |
 | 2026-05-24 | scoped-amend | Step 4.6 (A-fallback) precision alignment | T3.5 §5.6 PredAtom entity_existence dispatch relaxed from `len(atom.terms) == 1` to `atom.terms` non-empty, aligning with shipped T1.4 `_find_entity_ref_type_in_atom` any-term semantics; `subject=atom.terms[0]` retained as inspect convention. |
+| 2026-05-24 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 63 tests OK after Step 4.6.5 F5 A-fallback alignment. |
 
 ## Decision Notes
 
@@ -127,6 +128,16 @@ T3.5 applies the T3.3/T3.4 zero-deviation pattern:
 | T1.1 atom id schema | `rg 'atom_ids' src/factgraph/ tests/` | Clean with expected split: application `Rule.atom_ids` uses `<rule_id>:atom_<index>`; legacy SDK branch inspect keeps `b0.a0` dict shape. T3.5 F1 application inspect should reuse `Rule.atom_ids[index]`. |
 | Legacy branch inspect helper | `rg '_inspect_where_branches' src/factgraph/ tests/` | Clean: internal legacy helper only, called from `_inspect_rule_or_inference(...)`. |
 | `:exists` inference alignment | `rg ':exists' src/factgraph/application/protocol/` + `rg '_find_entity_ref_type' src/factgraph/application/protocol/` | Risk: T1.4 `_find_entity_ref_type_in_atom(...)` accepts `PredAtom` whose `pred_id` ends with `:exists` and any term equals the target `Var`; §5.6 pseudocode currently says `len(atom.terms) == 1`. Amend §5.6 before implementation. |
+
+### G7 Baseline Record
+
+| Check | Result |
+|---|---|
+| Branch and sacred state | T3.5 branch `v0.2.0-t3-5-ruleexpr-inspect-2026-05-24`; sacred `master` remains `562c7419`; dirty 4M+1U preserved. |
+| T3.4 join_by_ports substrate | Step 4.6 grep already confirmed T3.4 substrate boundaries; F5 risk was inspect atom-derivation precision, not T3.4 substrate. |
+| New DTO names and module placement | Step 4.6 grep confirmed `RuleExprInspect` / `OccurrenceInspect` / `AtomDescriptor` / `PortInspect` and `rule_expr_inspect` have 0 shipped code/test hits. |
+| Requested pytest baseline | Deferred per T3.1-T3.4 environment lock: pytest has known SIGSEGV in this environment; unittest fallback is the G7 runner. |
+| Fallback unittest baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` -> 63 tests OK. |
 
 ### Step 4.2 Draft Review Checklist
 
