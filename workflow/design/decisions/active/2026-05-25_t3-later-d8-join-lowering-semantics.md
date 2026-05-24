@@ -337,3 +337,4 @@ D10 must decide:
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D8 chooses explicit equality atom materialization for `RuleJoinConstraint(op="eq")`, rejects variable unification and plan-level-only joins, and preserves join provenance internally for D10. |
 | 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified D8 endpoint invariant chain, `materialized_atom_index` semantics, PortType future evolution, Rule/port validation dependency, and D4 canonical-ordering citation. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1-WC4 and N1 addressed; endpoint invariants, materialized atom index semantics, and D4 canonical ordering reviewed clean; D9 unblocked. |

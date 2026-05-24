@@ -330,3 +330,4 @@ Stage 3 may choose a different split, but it must preserve this D9 matrix.
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D9 chooses branch-list materialization, native/Souffle/ProbLog support within shipped grammar, PyReason pred-only subset with preflight rejection for non-pred atoms, and `SDKStoreError` for public adapter matrix rejection. |
 | 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified eventual materialization vs first slice, PyReason `SDKStoreError` cross-reference, aggregate scope layering, and §4.9 message-contract acceptance. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1/WC2/WC4/WC5 and N1 addressed; aggregate scope layering and adapter rejection message contract reviewed clean; D10 unblocked. |

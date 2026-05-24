@@ -392,3 +392,4 @@ D10 must decide:
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D7 chooses a private `RuleExprLoweringPlan` as canonical internal lowering target, with deterministic branch sets for AND/OR lowering and existing `CompiledDerivationPlan` reserved as downstream runtime materialization. |
 | 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Defined minimum `RuleExprPortBinding` / `RuleExprHeadBinding` categories; documented `canonical_key`; added D7 plan-construction error bucket; clarified alias-local variable representation and head-binding downstream consequences. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1/WC2/WC4 plus N1-N3 addressed; D7 lowering plan categories and Q9 plan-construction error bucket reviewed clean; D8 unblocked. |

@@ -340,3 +340,4 @@ Still deferred:
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D10 keeps public RuleExpr evaluation success results as `list[CandidateSet]`, rejects public result wrappers / `CandidateSet` extensions, and requires private trace preservation for future T5 evidence mapping. |
 | 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Added ADR lifecycle blockquote, typed trace sidecar fields against D7/D8 minimum categories, and locked minimum sidecar storage/lifetime invariants. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1-WC3 and N2 addressed; public `list[CandidateSet]` boundary, private trace sidecar typing, and T5 evidence deferral reviewed clean; Stage 3 synthesis unblocked. |

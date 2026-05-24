@@ -249,3 +249,4 @@ Stage 3 synthesis must not create a blueprint that ships full T4 closed-head beh
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | Stage 1 audit v2 mapped Q1/Q2 to D6. D6 chooses public `fg.eval.evaluate(rule_expr, head=...)` as the target while limiting head ownership to the minimal execution subset. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | Inline/external head terminology, projection deferral to D7, C35 dispatch location, D6-owned precondition wording, F10 cluster citation, and Q2 T4-first workflow consequence were clarified; D7 unblocked. |
