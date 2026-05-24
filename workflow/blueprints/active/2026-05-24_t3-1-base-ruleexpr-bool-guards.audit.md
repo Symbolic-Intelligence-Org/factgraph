@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.1 M-class scope recorded from Stage 1 audit, adopted D1/D4/D5 decisions, Stage 3 synthesis, and synced track plan. |
+| 2026-05-24 | draft | P2 tightening | Step 4.2 review found the error hierarchy violated adopted D1 and the acceptance gates omitted RuleExpr immutability. Blueprint now locks `RuleExprError(SDKDSLError)` and adds an immutable RuleExpr acceptance check. |
 
 ## Decision Notes
 
@@ -41,9 +42,15 @@ T3.1 is M-class because it adds public SDK exports and changes application proto
 
 ### Reviewer Focus Areas
 
-- Whether `RuleExprError` / `ExplicitBoolError` base-class choice should be locked now instead of left as blueprint implementation shape.
+- Whether `RuleExprError(SDKDSLError)` is implemented without weakening the D1 requirement that callers can catch RuleExpr failures through existing SDK exception buckets.
 - Whether public `RuleExpr` should be a facade or nominal base class; blueprint acceptance intentionally avoids over-locking internal inheritance.
 - Whether duplicate operands should preserve multiplicity. Blueprint currently says yes because D4 says commutative, not idempotent.
 - Whether `Rule.__bool__` should be added in application protocol `rule.py` or via mixin/helper. Blueprint chooses direct method for clarity.
 - Whether docs updates are too small for T3.1 or should be deferred entirely to T3.6.
 
+### Step 4.2 P2 Tightening
+
+| Finding | Resolution |
+|---|---|
+| G-2: §5.2 chose `ValueError`, bypassing the existing SDK error hierarchy and violating adopted D1 section 4.1. | §5.2 now locks `RuleExprError(SDKDSLError)` and `ExplicitBoolError(RuleExprError)`, aligned with the shipped `DSLToApplicationRuleError(SDKDSLError)` precedent. |
+| G-1: §7 acceptance mentioned immutability in prose but did not include an explicit RuleExpr immutability check. | §7 now requires `_RuleExpr` / `_AndGroup` / `_OrGroup` to be frozen dataclasses or equivalent immutable structures, with field assignment raising. |

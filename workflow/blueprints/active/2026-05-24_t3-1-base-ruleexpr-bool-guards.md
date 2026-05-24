@@ -148,16 +148,15 @@ Update exports:
 
 Implementation lock:
 
-- `RuleExprError` subclasses `ValueError`.
+- `RuleExprError` subclasses `SDKDSLError`.
 - `ExplicitBoolError` subclasses `RuleExprError`.
 
 Rationale:
 
-- Existing application protocol validation errors use `ValueError` subclasses.
-- RuleExpr is application-protocol authoring surface with SDK exports.
+- D1 section 4.1 requires RuleExpr failures to remain catchable through the existing SDK exception buckets.
+- `DSLToApplicationRuleError(SDKDSLError)` is the nearest shipped precedent for SDK-facing DSL/application bridge failures.
 - More specific SDK-store exceptions are not appropriate because T3.1 is not store/evaluation behavior.
-
-If reviewer decides this should instead subclass an existing SDK DSL error, amend this blueprint before code.
+- The implementation may keep the classes in `rule_expr.py`, but the inheritance must stay in the SDK DSL error hierarchy.
 
 ### 5.3 Operand coercion
 
@@ -294,6 +293,7 @@ S→M trigger is public API impact and cross-module surface (`application.protoc
 - [ ] AND/OR child order is commutative for equality/hash.
 - [ ] AND and OR expressions remain unequal.
 - [ ] Duplicate operands are preserved for equality/hash multiplicity.
+- [ ] RuleExpr values are immutable: `_RuleExpr` / `_AndGroup` / `_OrGroup` are frozen dataclasses or equivalent immutable structures, and field assignment raises.
 - [ ] `bool(rule_expr)` raises `ExplicitBoolError`.
 - [ ] `bool(application_rule)` raises `ExplicitBoolError`.
 - [ ] `bool(legacy_sdk_rule)` behavior is unchanged from pre-T3.1.
@@ -361,4 +361,3 @@ To fill after implementation:
 - Deviations from blueprint:
 - Stage 1-3 traceability:
 - Archive readiness:
-
