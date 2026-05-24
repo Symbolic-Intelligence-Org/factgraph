@@ -112,7 +112,7 @@ Sub-slice impl 期间任一发生 → **当前 slice 升级到下一 class**(per
 | **T2.3c/T2.3d AggregateExpr adapters** | S(each,if narrow) | Souffle aggregate body wire and ProbLog `findall/3`/list predicates;keep separate unless cross-engine semantic decision appears |
 | **T1.3 SDK 顶层 Rule 命名** | **M** | TPQ-2 三选一(A/B/C)+ public API rename ≥ 3 caller sites → 必须 Stage 2 decision doc |
 | **T1.4 alias / port contract** | S | scope 已收窄 |
-| **T3 RuleExpr 组合** | **L** | C23-C35 + C49-C51 = 17 commitments,shipped Branch + `fg.rules.inspect()` 替换;**Stage 1 mini-audit + 多 Stage 2 decisions 必跑** |
+| **T3 RuleExpr 组合** | **L** | C23-C35 + C49-C51 + C58 + C59 = **18 commitments/seams**;Stage 1 audit + 5 Stage 2 decisions complete;Stage 3 synthesis splits T3.1-T3.6 + later execution tranche |
 | **T4 Head + closed-head** | **L**(可能与 T3 合并 L cluster)| C52-C60 = 9 commitments,与 T3 紧耦合 |
 | **T5.1-T5.5 EvaluateResult DTO 群** | **L** | C61-C67 = 7 commitments 同步 ship;最大 redesign 区,**先跑 Stage 1 audit triage shipped `SDKStore.evaluate/check/diagnose/why_not/run` vs Wave 1 row-centric model** |
 | **T5.6-T5.7 Semantics wrappers** | M(each)| per-engine wrapper 单点 lock,decision doc per wrapper |
@@ -179,7 +179,7 @@ Sub-slice impl 期间任一发生 → **当前 slice 升级到下一 class**(per
 
 ### T3: RuleExpr 组合表达(§4)
 
-**Scope**:parent essay §4.1-§4.11;C23-C35 + C49-C51(共 14 commitments)
+**Scope**:parent essay §4.1-§4.11 + §5.9-§5.10 seams;C23-C35 + C49-C51 + C58 + C59(共 18 commitments/seams)
 
 **核心交付**:`RuleExpr` 作为 `&` / `|` / `.join()` / `.as_()` 组合体 + `fg.rules.inspect()` rich 表面。
 
@@ -187,11 +187,13 @@ Sub-slice impl 期间任一发生 → **当前 slice 升级到下一 class**(per
 
 | ID | 范围 | 性质 | 备注 |
 |---|---|---|---|
-| **T3.1** | `_AndGroup` / `_OrGroup` 内部 frozen 类型 + `&` / `|` 运算符 + `RuleExpr.all/any` 工厂 + 关联性平展 | Additive | RuleExpr 内部类型不暴露(C26) |
-| **T3.2** | `.as_(rule)` occurrence alias + 同表达式 alias 唯一性构造期校验 + 多次出现强制 alias 检测 | Additive | 依赖 T1.4 的 Rule 端 alias 基础设施 |
-| **T3.3** | `.join(*constraints)` AND-spine reachable 构造期验证 + 10 join 规则(§3.6 锁定 / §4.6 实施)+ `.join_by_ports(*names)` 公开方法 | Additive | every-proof-path reach rule 是 §3.6 / C10 锁定;违反 raise `RuleExprError` |
-| **T3.4** | `Rule.__bool__` / `RuleExpr.__bool__` raise `ExplicitBoolError`(防误用)| Additive(small)| 可与 T3.1 合并,但作为独立 sub-slice 便于在 raise message + docs 上更细致 |
-| **T3.5** | `fg.rules.inspect(expr)` 返回 rich `RuleExprInspect`(`ast` / `occurrences` / `joins` / `unjoined_same_name_ports` / `render()` / `render_compact()`)+ `OccurrenceInspect` + `AtomDescriptor`(structured fields + summary)+ `PortInspect` + convenience properties | Additive | **大 surface**:可能内部再分 T3.5a (top-level inspect API) / T3.5b (descriptors detail) |
+| **T3.1** | Base RuleExpr value + bool guards:`RuleExpr` / `RuleExprError` / `ExplicitBoolError` SDK exports;internal `_RuleExpr` / `_AndGroup` / `_OrGroup`;`&` / `|`;`RuleExpr.all/any`;AND/OR flattening;immutability;join-free equality/hash;application Rule + RuleExpr operands;legacy SDK Rule rejection;`RuleExpr.__bool__` + application `Rule.__bool__` raise;**must not** change legacy SDK `Rule.__bool__`;**must not** introduce direct `application_rule == rule_expr` cross-type equality | Additive(public SDK surface + application Rule method) | D1/D4/D5 governed;RuleExpr internals not public(C26);T3.1 blueprint must cite synthesis negative-action gates |
+| **T3.2** | Expression-scope occurrence validation only:alias uniqueness within RuleExpr;repeated same Rule requires explicit aliases;default alias behavior when Rule appears once;diagnostics for duplicate aliases/repeated unaliased Rules | Additive | Scope narrowed: T1.4 already shipped `.as_`, `RuleOccurrence`, `RulePortRef`, and alias regex validation |
+| **T3.3** | `.join(...)` over AND groups + `RulePortRef.eq(...) -> RuleJoinConstraint` + Every-Proof-Path Reach Rule + self-join semantics + join constraint symmetry / duplicate normalization | Additive | D2 locks `.eq(...)` as initial syntax;D4 locks structural equality/hash;`.join_by_ports` excluded unless synthesis re-scopes |
+| **T3.4** | `.join_by_ports(*names)` explicit-name expansion + missing/fewer-than-two/ambiguous diagnostics | Additive | C58;separate slice per D2/D5,uses T3.3 join mechanics |
+| **T3.5** | `fg.rules.inspect(application_rule|rule_expr)` rich `RuleExprInspect`;legacy SDK Rule / Inference dict inspect preserved;minimum fields + render helpers;may split into T3.5a core inspect and T3.5b C49/C50/C51/C59 rich descriptors / ports if preflight shows scope risk | Additive | D3 governed;must preserve current legacy inspect dict behavior |
+| **T3.6** | Docs + examples for staged import path,`.eq(...)` joins,`&` / `|` precedence and parentheses,bool guards,same-name ports no auto-join,inspect return-shape differences | Additive(docs) | Added by Stage 3 synthesis;track plan formerly stopped at T3.5 |
+| **T3 later tranche** | RuleExpr execution lowering / adapter integration for composite expressions | L or M(TBD) | Deferred by D5/synthesis;requires later decision or synthesis update after authoring/inspect stabilizes |
 
 **依赖**:T1.1(新 Rule 类必须先存在)+ T1.4(alias 基础设施);**T2 不 block T3**(RuleExpr 不直接消费 atom kinds)。
 
