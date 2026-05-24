@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-24(rule-expression T1.1/T1.2 + T2.1/T2.2/T2.3a + T2.3b + T2.3c + T2.3d + T1.3 first M-class + T1.4 alias/port substrate + ProbLog hygiene fixtures archived locally; source `a3411207`, not pushed)
+最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1 base RuleExpr archived locally; source `a0718e85`, not pushed)
 
-## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 BATCH ARCHIVED LOCALLY — T2.3 AGGREGATE TRACK CLOSED + T1.3 + T1.4 SHIPPED — T1 TRACK CLOSURE; T3 RULEEXPR UNBLOCKED)
+## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 RULEEXPR BASE ARCHIVED; T3.2 NEXT)
 
-**Current local branch:** `v0.2.0-impl-t1-4-alias-port-contract-2026-05-23 @ a3411207`.
+**Current local branch:** `v0.2.0-t3-1-base-ruleexpr-bool-guards-2026-05-24 @ a0718e85`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -31,6 +31,7 @@
 | T2.3d AggregateExpr ProbLog wire | S | `26fa7e54` | `a33b876e feat(adapters/problog): add aggregate export wire` + `d7e2a650 fix(adapters/problog): remove unused aggregate helper` |
 | **T1.3 SDK Top-Level Rule Naming (first M-class)** | **M** | `df1dae2d` | `c846af09 feat(sdk): add transitional Rule naming exports` (no Step 4.7 fix) |
 | **T1.4 Alias / Port Contract** | S | `a3411207` | `64135b85 feat(application): add Rule occurrence port refs` (no Step 4.7 fix) |
+| **T3.1 Base RuleExpr + Bool Guards** | M | `a0718e85` | `e049c93e feat(application): add T3.1 RuleExpr base and bool guards` (A-fallback `8de03372`, no Step 4.7 fix) |
 
 ### Current landed behavior
 
@@ -203,6 +204,21 @@
 
 **T1 Track CLOSED.** T1.1 (Rule DTO) + T1.2 (DSL bridge) + T1.3 (SDK naming) + T1.4 (alias/port substrate) all shipped. T3 RuleExpr (L-class) unblocked.
 
+**T3 Stage 1-3 + T3.1 — Base RuleExpr + Bool Guards**
+- **Stage 1 audit + Stage 2 decisions + Stage 3 synthesis complete**:
+  - Stage 1 audit `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md` established shipped-vs-design baseline for C23-C35 + C49-C51 + C58 + C59.
+  - Stage 2 adopted five decision docs D1-D5 covering public surface / operand boundary, join constraint construction, inspect coexistence, structural equality/hash, and slice split + bool guard timing.
+  - Stage 3 synthesis `workflow/audit/active/2026-05-24_t3-ruleexpr-synthesis.md` mapped T3.1-T3.6 + later execution tranche; track plan sync landed at `9c857d0c`.
+- **T3.1 archived at `a0718e85`**:
+  - Blueprint lineage: `81551dd4` draft → `3d92a48a` P2 amend → `e184f3c5` scoped+P3 → `0abe8386` Step 4.6 grep clean → `febe7028` G7 baseline → `8de03372` A-fallback → `e049c93e` feat → `2190edce` closure → `a0718e85` archive.
+  - Landed base `RuleExpr` surface: `RuleExpr`, `RuleExprError`, `ExplicitBoolError`; frozen `_RuleExpr` / `_AndGroup` / `_OrGroup`; `RuleExpr.all` / `RuleExpr.any`; application `Rule.__and__` / `__or__` / `__bool__`; SDK top-level exports.
+  - A-fallback `8de03372` introduced neutral `factgraph._sdk_errors` to avoid application→SDK import cycle while preserving `factgraph.sdk.dsl.errors.SDKDSLError` class identity for `RuleExprError(SDKDSLError)`.
+  - Verification: G7 baseline 23 tests OK; post-impl core gate 38 tests OK; cross-slice 88 tests OK; ruff clean. `pytest` SIGSEGV remains a separate tooling issue and does not block T3.1.
+  - Negative-action gates preserved: legacy SDK `Rule.__bool__` unchanged; no direct `application_rule == rule_expr` cross-type equality; T1.4 `Rule.as_` / `RuleOccurrence` / `RulePortRef` untouched; T2.3 aggregate substrate untouched; T1.3 staged top-level `Rule` remains legacy.
+- **Deferred T3.1 follow-ups**:
+  - Inline in T3.2 if touching the same files: add `-> _RuleExpr` annotations to `Rule.__and__` / `Rule.__or__`, tighten `_RuleOperand.rule` typing from `object` to `Rule`, and optionally replace the duck-typed legacy SDK Rule detector if a cycle-safe nominal check is available.
+  - T3.2 owns expression-scope occurrence validation: alias uniqueness, repeated same Rule requires explicit aliases, default alias behavior for single occurrence, and duplicate diagnostics.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -232,6 +248,8 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 **T1.3 validated user-drafts pattern for M-class as well.** First M-class slice in batch. Codex drafted blueprint pair + decision doc + impl; Claude reviewed Step 4.2 + Step 4.7 + did memory consolidation. Total cost: 2 Step 4.2 rounds + Step 4.7 v1 clean (0 findings) = **7 total findings at v1** (0B + 4R + 3WC, all closed at v2). Pattern matches T2.3d S-class; M-class only adds ~2 decision-doc findings (lifecycle + framing relative to parent alternatives) but otherwise same cost-efficiency. T1.3 also validated:(1)**canonical 4-commit M-class impl pattern** (no Step 4.7 fix needed — variant of 5-commit pattern where Step 4.7 fix is OPTIONAL); (2)**decision doc lifecycle pattern** (`proposed` → `reviewed` → `accepted` → `superseded` with impl gating on `accepted`); (3)**A-staged framing for parent §X alternative deferrals** — when parent locks final commitment but pragmatic timing requires deferral, frame as "X-staged" (where X is parent-listed alternative) rather than introducing a new alternative.
 
 **T1.4 closed the T1 Track.** Second canonical 4-commit S-class impl pattern (no Step 4.7 fix). Codex drafted blueprint + impl; Claude reviewed Step 4.2 + Step 4.7 + did memory consolidation. Total cost: 2 Step 4.2 rounds + Step 4.7 v1 clean = **5 total findings at v1** (0B + 1R + 4WC, all closed at v2 + 1 minor WC at scoped). Pattern matches T2.3d S-class exactly. T1.4 also validated:(1) **defense-in-depth validation pattern** (`Rule.as_()` validates + `RuleOccurrence.__post_init__` re-validates idempotently — catches direct construction bypassing factory); (2) **`__getattr__` Python convention preservation** (re-raise `RuleValidationError` as `AttributeError` for `hasattr()` compat); (3) **minor WC in scoped anchor pattern** (non-identifier `rule.id` edge case addressed at Step 4.6 scoped commit, not v3 round — reduces cadence overhead); (4) **stricter downstream validation than upstream** (T1.4 `_OCCURRENCE_ALIAS_RE` stricter than T1.1 `Rule.id` validation; user fallback path documented in invariants + acceptance).
+
+**T3 Stage 1-3 validated the L-class front-loaded cadence.** Codex drafted Stage 1 audit, five Stage 2 decision docs, Stage 3 synthesis, track-plan sync, and the T3.1 blueprint/impl; Claude reviewed each gate. T3.1 used the first RuleExpr per-slice M-class path after L-class synthesis: draft → P2 amend → scoped/P3 → Step 4.6 grep → G7 → A-fallback → feat → clean Step 4.7 → closure → archive. The A-fallback (`8de03372`) confirmed that mid-impl scope correction is valid when it records a discovered import-cycle boundary before the feat commit and preserves the adopted decision's error hierarchy intent.
 
 ### Process lessons carried forward
 
@@ -265,18 +283,23 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T1.4 defense-in-depth validation pattern:** `Rule.as_(alias)` validates alias before constructing `RuleOccurrence`; `RuleOccurrence.__post_init__` validates again (idempotent on already-validated values, but catches direct `RuleOccurrence(rule, alias=invalid)` construction bypassing `Rule.as_()`). **Lesson:** when a DTO can be constructed via multiple paths (factory method + direct constructor), validate in `__post_init__` for defense-in-depth even if all factory paths already validate.
 - **T1.4 v2 scoped anchor edge case lock:** v2 review surfaced 1 minor Worth-considering about non-identifier `rule.id` causing `rule.as_()` default to fail. Codex addressed in Step 4.6 scoped anchor commit (not in v3 round) by adding edge case acceptance test + §6 invariant note. **Lesson:** minor Worth-considerings can be addressed in scoped anchor commit alongside `Status: draft → scoped` transition, avoiding an extra v3 round. Reduces cadence overhead when fix is small + uncontroversial.
 - **T1.4 stricter downstream validation than upstream:** parent §3.6 commitment 6 says default alias = `rule.id` but T1.1 `Rule.id` accepts any non-empty string while T1.4 `_OCCURRENCE_ALIAS_RE` enforces `[A-Za-z][A-Za-z0-9_]*`. T1.4 lock: non-identifier `rule.id` → `rule.as_()` raises, user falls back to `.as_("custom_alias")`. **Lesson:** when a downstream slice's validation is stricter than its upstream input, document the fallback contract explicitly in invariants + acceptance tests. Don't silently swallow upstream values that would fail downstream validation.
+- **T3 L-class audit-to-synthesis cadence validated:** T3 ran full Stage 1 audit → Stage 2 D1-D5 decisions → Stage 3 synthesis → track-plan sync before per-slice blueprinting. This is now the reference pattern for high-commitment clusters: do not start a T3.x blueprint until the synthesis ladder and cross-doc sync are explicit.
+- **T3.1 neutral SDK error module A-fallback:** `RuleExprError(SDKDSLError)` was required by adopted D1, but direct application protocol imports from SDK would create a cycle. The neutral `factgraph._sdk_errors` module plus SDK re-export preserved class identity and unblocked implementation. Reuse this pattern when application-layer code must satisfy SDK-facing exception hierarchy contracts without importing SDK modules.
+- **T3.1 pre-impl grep discipline:** Step 4.6 grep proved no existing truthiness/operator/export/catch-site conflict before adding `Rule.__bool__`, `Rule.__and__`, and `Rule.__or__`. For slices adding Python dunder behavior, pre-impl grep is mandatory even after Stage 1 audit.
+- **T3.1 pytest SIGSEGV handling:** pytest segfaulted in the local environment, while unittest gates passed and matched G7 baseline. The correct cadence was to lock unittest as the runner for this slice, record the pytest issue as out-of-scope tooling drift, and investigate separately rather than blocking feature closure.
+- **T3.1 P3 follow-up discipline:** Step 4.7 surfaced only minor type-precision items. When review has 0 P0/P1/P2 and the fixes naturally touch the next adjacent slice's files, defer them explicitly to that slice instead of polluting closure/archive with code churn.
 
 ### Recommended next work
 
-- **T2.3.d AggregateExpr ProbLog adapter** — shipped at `26fa7e54`. T2.3 AggregateExpr full track now CLOSED.
-- **T1.3 SDK top-level Rule naming** — shipped at `df1dae2d`. First M-class slice. TPQ-2 resolved via A-staged. Final `Rule` flip deferred to T5 legacy `.eval` hard-cut.
-- **T1.4 alias / port contract** — shipped at `a3411207`. Application protocol substrate (`Rule.as_()`, `RuleOccurrence`, `RulePortRef`) ready for T3 RuleExpr. **T1 Track CLOSED.**
-- **T3 RuleExpr** — L class; first full-cadence test of the size-class policy (Stage 1 audit + Stage 2 decisions + Stage 3 synthesis). **Now unblocked by T1.4. Natural next major slice.** Likely scope: `&` / `|` / `.join(...)` / `.join_by_ports(...)` composition operators + `.as_()` occurrence alias uniqueness + Every-Proof-Path Reach Rule validation + `fg.rules.inspect(expr)` output.
+- **T3.2 expression-scope occurrence validation** — recommended next slice. Scope: alias uniqueness within RuleExpr, repeated same Rule requires explicit aliases, default alias behavior for single occurrence, diagnostics for duplicate aliases / repeated unaliased Rules, and inline T3.1 P3 type-precision follow-ups.
+- **T3.3 join constraints** — follows T3.2; consumes D2 + D4, `RulePortRef.eq(...)`, `.join(...)`, Every-Proof-Path Reach Rule, self-join semantics, and join symmetry/duplicate handling.
+- **T3.4 `.join_by_ports(...)`**, **T3.5 inspect**, **T3.6 docs/examples**, and **later execution lowering tranche** — follow the Stage 3 synthesis ladder.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` + `BinaryExpr`. Currently raises `SDKDSLError`.
 - **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains. Pre-existing limitation; S-class adapter hygiene slice.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
+- **Pytest SIGSEGV tooling investigation** — independent task; T3.1 locked unittest fallback and did not block on pytest runner segfault.
 - **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip + `LegacyRule` retention + `DeprecationWarning` policy decisions. Coordinate with T1.3 A-staged commitment.
-- **Push / publish gate** — 12 archived slices + 5 memory sync commits all local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
+- **Push / publish gate** — T1/T2 + T3.1 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
