@@ -1,6 +1,6 @@
 # Task Blueprint: T3.5 RuleExpr Inspect
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: M
@@ -503,4 +503,62 @@ T3.6 owns tutorial docs, examples, and user-facing explanation of legacy dict in
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation.
+### Final Landed Code
+
+- `src/factgraph/application/protocol/rule_expr_inspect.py` — new sibling inspect module with `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, and `PortInspect` frozen DTOs; RuleExpr traversal helpers; C32 `ast` / `occurrences` / `joins` / `unjoined_same_name_ports`; C49-C51/C59 descriptor projection; `render()` / `render_compact()`; T1.1 `Rule.atom_ids[index]` reuse; F5-aligned `:exists` non-empty term dispatch; and unjoined same-name port hints using stable `port_name` / `occurrences` dict keys.
+- `src/factgraph/application/protocol/__init__.py` — exports the four new inspect DTOs.
+- `src/factgraph/sdk/__init__.py` — re-exports the four new inspect DTOs from top-level SDK.
+- `src/factgraph/sdk/store.py` — extends `SDKStore.inspect_rule(...)` dispatch with lazy imports for application `Rule` and RuleExpr values while preserving the legacy SDK Rule / Inference `_inspect_rule_or_inference(...)` dict path.
+- `src/factgraph/sdk/docs/04_api_surface.en.md` — adds four inspect DTO rows and corrects the runtime SDK `__all__` count to 53. The previous 41 count was stale relative to runtime exports before T3.5.
+- `tests/sdk/test_ruleexpr_inspect.py` — 13 new tests covering three-way dispatch, DTO immutability and shape validation, F1-F5 precision decisions, render behavior, port descriptors, unjoined same-name port hints, legacy dict preservation, and public exports.
+
+Strict scope result: T3.5 landed in 6 files, better than the estimated 8-file scope. The sibling module design kept `src/factgraph/application/protocol/rule_expr.py` and `tests/application/protocol/test_rule_expr.py` untouched.
+
+### Test Gates
+
+- G7 baseline `325798ca`: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` → 63 OK.
+- Post-impl core + T3.5 inspect gate: `tests.application.protocol.test_rule`, `tests.application.protocol.test_rule_expr`, and `tests.sdk.test_ruleexpr_inspect` → 76 OK.
+- Focused cross-slice gate: add `tests.sdk.test_rule_naming`, `tests.application.protocol.test_rule_aggregate`, and `tests.test_branch_identity_rule_inspect` → 99 OK.
+- Ruff on touched Python files → clean.
+
+The broader `tests.test_public_inference_factgraph_create` gate still has 4 failures + 1 error at the G7 baseline before T3.5. The failures are unrelated to RuleExpr inspect: `meta[confidence]` write-protocol removal and missing `sdk.inferences` persistence methods.
+
+### Deviations / Follow-Ups
+
+T3.5 closed with **zero deviations** from blueprint scope. This is the **third consecutive T3 feat commit** to land without a scope deviation after T3.3 and T3.4, and the largest M-class T3 slice to preserve that cadence.
+
+T3.5 cadence discipline milestones:
+
+- **Third consecutive zero-deviation feat**: T3.3, T3.4, and T3.5 all followed the preemptive scope-locking pattern.
+- **First proactive Step 4.6 (A-fallback) catch**: Step 4.6 identified F5 before implementation — T1.4 `_find_entity_ref_type_in_atom(...)` permissive `:exists` semantics versus the original T3.5 §5.6 strict `len == 1` pseudocode. Scope amend `d5d185bf` aligned §5.6 to T1.4 before feat.
+- **Strict 6-file scope**: §5.2 sibling module placement preserved `rule_expr.py` and `test_rule_expr.py` 0-touch.
+
+Clean result attributed to the same pattern proven by T3.3/T3.4:
+
+- §5.2 sibling module placement.
+- §5.3 lazy imports for SDK dispatch.
+- §5.4 four DTO shapes with `__post_init__` validation.
+- §5.6 atom derivation dispatch pseudocode after F4 + F5 amendments.
+- §5.9 ten explicit "do not" locks plus lazy-import "do" guidance.
+- §5.10 three-layer validation (DTO / traversal / dispatch).
+
+Non-blocking follow-up:
+
+- **T3.5-F6**: `_inspect_ports(...)` uses `value_type="unknown"` for value ports because T1.4 `PortType` does not carry a concrete value type. T3.6 docs should clarify this sentinel, or a future substrate slice can add real value-type metadata.
+
+No T3.5 follow-up blocks T3.6.
+
+### Stage 1-3 Traceability
+
+- Stage 1 audit: `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`
+- Adopted D3: `workflow/design/decisions/active/2026-05-24_t3-d3-inspect-coexistence.md` §4.1-§4.6.
+- Adopted D4: `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md` §4.3 and §7.3.
+- Adopted D5: `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.6.
+- Stage 3 synthesis: `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md` §3 T3.5.
+- Track plan sync: `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` synced at `9c857d0c`.
+- Parent design: `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.7 / §4.10 C32-C35+C49-C51 / §5.10 C59.
+- Substrate archives: T1.4 plus T3.1, T3.2, T3.3, and T3.4 archive pairs.
+
+### Archive Readiness
+
+Yes.

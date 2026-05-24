@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.5 RuleExpr Inspect
 
 - Blueprint: [2026-05-24_t3-5-ruleexpr-inspect.md](./2026-05-24_t3-5-ruleexpr-inspect.md)
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -15,6 +15,7 @@
 | 2026-05-24 | pre-impl | Step 4.6 grep found F5 alignment risk | Grep confirmed new DTO/module names are clean and legacy inspect paths are isolated, but T1.4 `:exists` inference accepts any matching term while §5.6 pseudocode currently requires `len(atom.terms) == 1`; needs a pre-feat A-fallback precision amendment before G7/implementation. |
 | 2026-05-24 | scoped-amend | Step 4.6 (A-fallback) precision alignment | T3.5 §5.6 PredAtom entity_existence dispatch relaxed from `len(atom.terms) == 1` to `atom.terms` non-empty, aligning with shipped T1.4 `_find_entity_ref_type_in_atom` any-term semantics; `subject=atom.terms[0]` retained as inspect convention. |
 | 2026-05-24 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 63 tests OK after Step 4.6.5 F5 A-fallback alignment. |
+| 2026-05-24 | implemented | Step 4.7 clean; 0 deviation (third consecutive) | Feat `55d9e67b` passed Step 4.7 with 0 P0/P1/P2 and one non-blocking P3 (`value_type="unknown"` docs follow-up). 76 core+inspect tests OK, 99 focused cross-slice tests OK, ruff clean. Third consecutive T3 feat with zero scope deviation and first proactive Step 4.6 (A-fallback) catch: F5 was found and amended before feat. `tests.test_public_inference_factgraph_create` still fails at G7 baseline for unrelated public-inference issues. |
 
 ## Decision Notes
 
