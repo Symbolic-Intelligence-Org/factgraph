@@ -8,6 +8,7 @@
   - Stage 1 audit `workflow/audit/active/2026-05-25_t3-later-execution-vs-shipped.md` Q3, Q4, F3, F6, F7, F8, F10, and §10 D7 mapping.
   - D6 `workflow/design/decisions/active/2026-05-25_t3-later-d6-public-entrypoint-head-dependency.md`.
   - D4 `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md`.
+  - D5 `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.8 execution-lowering deferral.
   - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.1 and §5.1-§5.4.
   - Shipped `src/factgraph/application/protocol/rule_expr.py:73-236` and `src/factgraph/application/protocol/rule_expr.py:295-330`.
   - Shipped `src/factgraph/application/protocol/derivation.py:21-43` and `src/factgraph/application/derivation_runtime.py:69-139`.
@@ -121,6 +122,31 @@ class RuleExprOccurrenceBinding:
     port_bindings: tuple[RuleExprPortBinding, ...]
 ```
 
+Minimum port-binding information:
+
+```python
+@dataclass(frozen=True)
+class RuleExprPortBinding:
+    occurrence_alias: str
+    port_name: str
+    port_type: object
+    source_var: object
+    alias_local_execution_var: object
+```
+
+Minimum head-binding information:
+
+```python
+@dataclass(frozen=True)
+class RuleExprHeadBinding:
+    kind: Literal["external", "inline"]
+    head_rule_id: str
+    head_content_digest: str
+    projection_occurrence_alias: str | None
+```
+
+`canonical_key` provides stable internal plan identity for cache keying, equality checks in tests, and debug labels. It is derived from the D4 canonical RuleExpr structure plus D6 head-binding category and head identity, not from incidental construction order.
+
 This is a conceptual contract, not a public DTO commitment. Stage 3 blueprints may choose internal helper names, but they must preserve these data categories.
 
 ### 4.3 `CompiledDerivationPlan` remains the downstream runtime materialization target
@@ -164,6 +190,8 @@ occurrence alias "b", Var("u") -> alias-local execution variable for ("b", "u")
 The plan must keep a port-binding map from each declared `RulePortRef` to its alias-local execution variable. D8 consumes that map when deciding whether explicit joins lower to equality atoms, variable unification, or another internal construct.
 
 This lock is the execution counterpart of T3.3/T3.4's "same-name ports do not auto-join" discipline.
+
+The concrete alias-local variable representation is an implementation detail for Stage 3. It may be a renamed `Var`, wrapper object, or another runtime-local identity as long as equality between distinct occurrence variables cannot happen by private source variable name alone.
 
 ### 4.6 AND lowers by cartesian product over child branch sets
 
@@ -255,11 +283,25 @@ D7 locks the representation boundary only. It does not decide:
 
 Those remain Stage 3/D8/D10/T4 responsibilities unless a later decision supersedes D7.
 
+Although D7 does not choose final head execution semantics, the `head_binding` category constrains downstream planning: external heads require Stage 3 or a later decision to decide whether and how to concatenate head body atoms, while inline projection targets give downstream lowering an occurrence alias that is already represented in the RuleExpr body.
+
 ### 4.11 RuleExprInspect is explicitly not execution IR
 
 Implementation may use inspect-like helper logic for diagnostics, but `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, and `PortInspect` are not lowering-plan fields and are not runtime IR.
 
 If diagnostics need render strings, they should derive them from the private lowering plan or call inspect at the edge. Execution must not depend on user-facing inspect DTO shape.
+
+### 4.12 Plan-construction error bucket
+
+D7 does not introduce a new error subclass.
+
+Plan-construction errors use `RuleExprError` when they are about RuleExpr lowering invariants, including:
+
+- empty branch sets under §4.9;
+- occurrence alias collisions or alias-local variable binding failures under §4.5;
+- missing or malformed plan categories from §4.2.
+
+This extends D6 §4.6's Q9 disposition for the D7 scope. Adapter-time rejections, engine grammar failures, and per-engine error policy remain D9 scope.
 
 ## 5. Rejected Alternatives
 
@@ -295,6 +337,7 @@ If diagnostics need render strings, they should derive them from the private low
 - Shipped `CompiledDerivationPlan` requires non-empty `heads` and has `body_ir` but no RuleExpr provenance fields.
 - Shipped `evaluate_derivation_plans(...)` flattens `CandidateSet` results from one or more compiled plans without an application-side wrapper.
 - Shipped `evaluate_store(...)` consumes `where`, `head_vars`, `target_pred_id`, and optional `head`; it has no RuleExpr object boundary.
+- D5 §4.8 intentionally deferred execution lowering until after T3.1-T3.6 authoring and inspect were stable; D7 is the first Stage 2 decision consuming that deferral.
 
 ## 7. Consequences
 
@@ -348,3 +391,4 @@ D10 must decide:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D7 chooses a private `RuleExprLoweringPlan` as canonical internal lowering target, with deterministic branch sets for AND/OR lowering and existing `CompiledDerivationPlan` reserved as downstream runtime materialization. |
+| 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Defined minimum `RuleExprPortBinding` / `RuleExprHeadBinding` categories; documented `canonical_key`; added D7 plan-construction error bucket; clarified alias-local variable representation and head-binding downstream consequences. |
