@@ -13,6 +13,7 @@
 | 2026-05-24 | draft | P2 tightening | Step 4.2 review found the error hierarchy violated adopted D1 and the acceptance gates omitted RuleExpr immutability. Blueprint now locks `RuleExprError(SDKDSLError)` and adds an immutable RuleExpr acceptance check. |
 | 2026-05-24 | scoped | Scope locked | Status advanced to scoped with P3 acceptance/implementation precision added: frozen DTO method-addition rationale, factory export acceptance, concrete G7 baseline command, required SDK API docs update, and operand coercion acceptance. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | Pre-implementation grep found no shipped RuleExpr code surface, no application/legacy Rule operator or bool conflicts, no T1.4 bool-context test dependency, no `factgraph.sdk.all` / `factgraph.sdk.any` export, and existing SDK API docs/error rows for T3.1 docs alignment. No scope amendment required. |
+| 2026-05-24 | baseline | G7 baseline recorded | Before implementation, direct `pytest tests/application/protocol/test_rule.py -v` and `python -m pytest ...` both exited with no output; subprocess capture showed pytest returncode `-11` (SIGSEGV). Fallback `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule -v` ran 23 tests OK. No code edits made. |
 
 ## Decision Notes
 
@@ -67,3 +68,13 @@ T3.1 is M-class because it adds public SDK exports and changes application proto
 | SDK error catch/docs scan | Existing SDK docs list `DSLToApplicationRuleError`, `SDKDSLError`, and store/schema errors; T3.1 docs can follow that shape. Existing catches are store/shell specific and do not block `RuleExprError(SDKDSLError)`. |
 | SDK `all` / `any` scan | `rg '\ball\b|\bany\b' src/factgraph/sdk/__init__.py` found no top-level `all` / `any` exports. |
 | T1.4 bool baseline | `rg 'bool\(.*rule|if.*rule' tests/application/protocol/test_rule.py` found only the non-identifier rule-id test name, not a bool-context dependency. |
+
+### G7 Baseline Record
+
+| Check | Result |
+|---|---|
+| Branch and sacred state | Current branch `v0.2.0-t3-1-base-ruleexpr-bool-guards-2026-05-24`; `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`; dirty set remains the pre-existing 4 modified notebooks/docs plus 1 untracked directory. |
+| RuleExpr surface | Step 4.6 grep already confirmed no shipped RuleExpr code/test surface before implementation. |
+| Operator/bool baseline | Step 4.6 grep already confirmed no shipped application or legacy SDK Rule `__and__` / `__or__` / `__bool__` definitions and no T1.4 bool-context dependency. |
+| Requested pytest baseline | `pytest tests/application/protocol/test_rule.py -v`, `PYTHONPATH=src pytest tests/application/protocol/test_rule.py -v`, and `PYTHONPATH=src python -m pytest tests/application/protocol/test_rule.py -v` exited with no stdout/stderr in this environment; escalated retry behaved the same. Subprocess capture returned `-11`, indicating pytest SIGSEGV rather than test failure. |
+| Fallback baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule -v` ran 23 tests in 0.003s, OK. This is the pre-implementation T1.4 application Rule baseline for post-implementation comparison. |
