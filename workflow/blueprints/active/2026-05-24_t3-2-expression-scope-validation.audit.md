@@ -12,6 +12,7 @@
 | 2026-05-24 | draft | Blueprint created | Initial T3.2 S-class scope recorded from D5 §4.3, Stage 3 synthesis §3 T3.2, synced track plan T3.2 row, T1.4 substrate, and archived T3.1 implementation. |
 | 2026-05-24 | scoped | Scope locked + P3 amendments | T-2 Goal #1 prerequisite rationale recorded; T-3 D4 §4.3 alias identity operationalization acknowledged in §5.6. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | `_RuleOperand`, `_combine`, `RuleOccurrence`, T3.1 duplicate-multiplicity test, `_rule_identity`, and direct internal group construction scans matched expected shipped scope. No blueprint scope amendment required. |
+| 2026-05-24 | baseline | G7 baseline recorded | Branch/sacred/dirty state verified; Step 4.6 grep remains clean; `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 38 tests OK. |
 
 ## Decision Notes
 
@@ -88,3 +89,13 @@ S-to-M triggers:
 | Rule identity logic | `rg 'content_digest.*rule\.id\|rule\.id.*content_digest\|_rule_identity' src/factgraph/` found only T3.1 `rule_expr.py:_rule_identity`; no duplicated identity logic elsewhere. |
 | `_RuleOperand(...)` direct construction | `rg '_RuleOperand\(' src/factgraph/ tests/` found only `rule_expr.py` class definition and `_coerce_rule_expr_operand` internal construction. |
 | `_AndGroup(...)` / `_OrGroup(...)` direct construction | `rg '_AndGroup\(|_OrGroup\(' src/factgraph/ tests/` found only `rule_expr.py` class definitions and `_combine` internal construction. |
+
+### G7 Baseline Record
+
+| Check | Result |
+|---|---|
+| Branch and sacred state | Branch `v0.2.0-t3-2-expression-scope-validation-2026-05-24` at `c8e4fce8`; sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`; dirty set remains 4 modified files + 1 untracked directory. |
+| RuleExpr / T1.4 substrate | Step 4.6 grep already confirmed `_RuleOperand`, `_combine`, `RuleOccurrence`, `_rule_identity`, and direct group construction are limited to expected shipped scope. |
+| Operator/bool baseline | Step 4.6 grep confirmed no hidden T3.2 caller bypass or existing external construction path requiring a scope amendment before implementation. |
+| Requested pytest baseline | Pytest remains out of the T3.2 baseline path because T3.1 recorded the current environment SIGSEGV issue; the spawned tooling investigation is out of scope for T3.2. |
+| Fallback unittest baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 38 tests in 0.004s and passed OK. |
