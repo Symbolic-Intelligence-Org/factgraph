@@ -1,6 +1,6 @@
 # Q5 Decision: T3 Slice Split And Bool Guard Timing
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Authority: design constraint; locks the T3 RuleExpr slice ladder and bool-guard timing before Stage 3 synthesis and implementing blueprints.
@@ -232,3 +232,4 @@ No T3.1 blueprint should begin until this D5 is adopted and the Stage 3 synthesi
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | D1-D4 were adopted; D5 converts their constraints plus audit Q5-Q7 into a concrete T3 slice ladder. |
+| 2026-05-24 | adopted | P2 amendment cleared, Stage 2 closure-ready | D5 P2 framing sharpening landed in 1d2e4c8f; reviewer pass confirmed adoption prerequisites; all 5 T3 Stage 2 decisions (D1-D5) now adopted. |
