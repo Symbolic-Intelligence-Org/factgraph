@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 import unittest
+from typing import get_type_hints
 
 import factgraph.sdk as sdk
 from factgraph.application.protocol import ExplicitBoolError, Rule, RuleExpr, RuleExprError
-from factgraph.application.protocol.rule_expr import _AndGroup, _OrGroup, _RuleExpr, _coerce_rule_expr_operand
+from factgraph.application.protocol.rule_expr import (
+    _AndGroup,
+    _OrGroup,
+    _RuleExpr,
+    _RuleOperand,
+    _coerce_rule_expr_operand,
+)
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.sdk.dsl.errors import SDKDSLError
 
@@ -71,8 +78,83 @@ class RuleExprOperatorTests(unittest.TestCase):
         a = _rule("a")
         b = _rule("b", var_name="b")
 
-        self.assertEqual(a & a & b, b & a & a)
-        self.assertNotEqual(a & b, a & a & b)
+        a1 = a.as_("a1")
+        a2 = a.as_("a2")
+
+        self.assertEqual(a1 & a2 & b, b & a1 & a2)
+        self.assertNotEqual(a1 & b, a1 & a2 & b)
+
+    def test_rule_occurrence_operands_are_accepted(self) -> None:
+        a = _rule("a")
+        b = _rule("b", var_name="b")
+
+        expr = a.as_("left") & b.as_("right")
+
+        self.assertIsInstance(expr, _RuleExpr)
+        self.assertEqual(expr, RuleExpr.all(a.as_("left"), b.as_("right")))
+        self.assertNotEqual(expr, a.as_("other") & b.as_("right"))
+
+    def test_repeated_same_rule_requires_all_explicit_aliases(self) -> None:
+        a = _rule("a")
+
+        with self.assertRaisesRegex(RuleExprError, "multiple times without explicit aliases"):
+            _ = a & a
+        with self.assertRaisesRegex(RuleExprError, "multiple times without explicit aliases"):
+            _ = a & a.as_("other")
+
+        self.assertIsInstance(a.as_("one") & a.as_("two"), _RuleExpr)
+
+    def test_duplicate_aliases_are_rejected(self) -> None:
+        a = _rule("a")
+        b = _rule("b", var_name="b")
+
+        with self.assertRaisesRegex(RuleExprError, "duplicate alias 'same'"):
+            _ = a.as_("same") & b.as_("same")
+
+    def test_expression_scope_diagnostics_are_aggregated_and_stable(self) -> None:
+        a = _rule("a")
+        b = _rule("b", var_name="b")
+
+        with self.assertRaises(RuleExprError) as ctx:
+            RuleExpr.all(a, a.as_("a2"), b.as_("a"))
+
+        message = str(ctx.exception)
+        self.assertIn("duplicate alias 'a'", message)
+        self.assertIn("rule 'a' appears multiple times without explicit aliases", message)
+        self.assertLess(message.index("duplicate alias 'a'"), message.index("rule 'a'"))
+
+    def test_bare_rule_default_alias_must_be_identifier_shaped(self) -> None:
+        rule = _rule("bad-rule")
+
+        with self.assertRaisesRegex(RuleExprError, r"use \.as_\(\.\.\.\)"):
+            _ = rule & _rule("other", var_name="o")
+
+    def test_factories_apply_expression_scope_validation(self) -> None:
+        a = _rule("a")
+        b = _rule("b", var_name="b")
+
+        self.assertEqual(RuleExpr.all(a.as_("a1"), a.as_("a2"), b), a.as_("a1") & a.as_("a2") & b)
+        with self.assertRaisesRegex(RuleExprError, "duplicate alias 'same'"):
+            RuleExpr.any(a.as_("same"), b.as_("same"))
+
+    def test_rule_operand_type_precision_and_alias_metadata(self) -> None:
+        rule = _rule("a")
+        bare = _coerce_rule_expr_operand(rule)
+        explicit = _coerce_rule_expr_operand(rule.as_("explicit"))
+
+        self.assertIsInstance(bare, _RuleOperand)
+        self.assertIsInstance(explicit, _RuleOperand)
+        self.assertIs(bare.rule, rule)
+        self.assertEqual(bare.alias, "a")
+        self.assertFalse(bare.explicit_alias)
+        self.assertEqual(explicit.alias, "explicit")
+        self.assertTrue(explicit.explicit_alias)
+
+        from factgraph.application.protocol.rule import Rule as ApplicationRule
+
+        self.assertIs(get_type_hints(_RuleOperand)["rule"], ApplicationRule)
+        self.assertEqual(ApplicationRule.__and__.__annotations__["return"], "_RuleExpr")
+        self.assertEqual(ApplicationRule.__or__.__annotations__["return"], "_RuleExpr")
 
     def test_ruleexpr_values_are_immutable(self) -> None:
         a = _rule("a")
@@ -83,6 +165,8 @@ class RuleExprOperatorTests(unittest.TestCase):
 
         with self.assertRaises(FrozenInstanceError):
             atom.rule = b  # type: ignore[misc]
+        with self.assertRaises(FrozenInstanceError):
+            atom.alias = "other"  # type: ignore[misc]
         with self.assertRaises(FrozenInstanceError):
             and_group.children = (atom,)  # type: ignore[misc]
         with self.assertRaises(FrozenInstanceError):

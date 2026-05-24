@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
+from .rule import Rule, RuleOccurrence, RuleValidationError
 
 
 class RuleExprError(SDKDSLError):
@@ -60,10 +62,12 @@ class _RuleExpr(RuleExpr):
 
 @dataclass(frozen=True, eq=False)
 class _RuleOperand(_RuleExpr):
-    rule: object
+    rule: Rule
+    alias: str
+    explicit_alias: bool
 
     def _canonical(self) -> CanonicalExpr:
-        return ("rule", _rule_identity(self.rule))
+        return ("rule", _rule_identity(self.rule), self.alias)
 
 
 @dataclass(frozen=True, eq=False)
@@ -83,12 +87,18 @@ class _OrGroup(_RuleExpr):
 
 
 def _coerce_rule_expr_operand(value: object) -> _RuleExpr:
-    from .rule import Rule
-
     if isinstance(value, _RuleExpr):
         return value
+    if isinstance(value, RuleOccurrence):
+        return _RuleOperand(rule=value.rule, alias=value.alias, explicit_alias=True)
     if isinstance(value, Rule):
-        return _RuleOperand(value)
+        try:
+            occurrence = value.as_()
+        except RuleValidationError as exc:
+            raise RuleExprError(
+                "bare Rule id cannot be used as a RuleExpr alias; use .as_(...) with an identifier alias"
+            ) from exc
+        return _RuleOperand(rule=occurrence.rule, alias=occurrence.alias, explicit_alias=False)
     if _is_legacy_sdk_rule(value):
         raise RuleExprError(
             "legacy SDK Rule cannot be used in RuleExpr; use build_application_rule(...) "
@@ -112,8 +122,42 @@ def _combine(kind: Literal["and", "or"], operands: tuple[object, ...]) -> _RuleE
             children.append(expr)
 
     if kind == "and":
-        return _AndGroup(tuple(children))
-    return _OrGroup(tuple(children))
+        expr: _RuleExpr = _AndGroup(tuple(children))
+    else:
+        expr = _OrGroup(tuple(children))
+    _validate_expression_scope(expr)
+    return expr
+
+
+def _validate_expression_scope(expr: _RuleExpr) -> None:
+    operands = tuple(_iter_rule_operands(expr))
+    aliases: dict[str, int] = defaultdict(int)
+    by_identity: dict[tuple[str, str], list[_RuleOperand]] = defaultdict(list)
+
+    for operand in operands:
+        aliases[operand.alias] += 1
+        by_identity[_rule_identity(operand.rule)].append(operand)
+
+    issues: list[str] = [
+        f"duplicate alias {alias!r}" for alias, count in sorted(aliases.items()) if count > 1
+    ]
+    for (rule_id, _content_digest), matches in sorted(by_identity.items(), key=lambda item: item[0]):
+        if len(matches) > 1 and any(not match.explicit_alias for match in matches):
+            issues.append(f"rule {rule_id!r} appears multiple times without explicit aliases")
+
+    if issues:
+        raise RuleExprError("RuleExpr occurrence validation failed: " + "; ".join(issues))
+
+
+def _iter_rule_operands(expr: _RuleExpr) -> tuple[_RuleOperand, ...]:
+    if isinstance(expr, _RuleOperand):
+        return (expr,)
+    if isinstance(expr, (_AndGroup, _OrGroup)):
+        operands: list[_RuleOperand] = []
+        for child in expr.children:
+            operands.extend(_iter_rule_operands(child))
+        return tuple(operands)
+    return ()
 
 
 def _canonical_children(children: tuple[_RuleExpr, ...]) -> tuple[CanonicalExpr, ...]:

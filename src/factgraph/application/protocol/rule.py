@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 import re
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, NoReturn
+from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn
 
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (
@@ -23,6 +23,9 @@ from factgraph.core.rules.where_ast import (
     Var,
     WhereExpr,
 )
+
+if TYPE_CHECKING:
+    from .rule_expr import _RuleExpr
 
 
 class RuleValidationError(ValueError):
@@ -123,12 +126,12 @@ class Rule:
         effective_alias = self.id if alias is None else alias
         return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(effective_alias))
 
-    def __and__(self, other: object):
+    def __and__(self, other: object) -> _RuleExpr:
         from .rule_expr import _combine
 
         return _combine("and", (self, other))
 
-    def __or__(self, other: object):
+    def __or__(self, other: object) -> _RuleExpr:
         from .rule_expr import _combine
 
         return _combine("or", (self, other))
@@ -172,6 +175,16 @@ class RuleOccurrence:
             var=self.rule.ports[name],
             port_type=self.rule.port_types[name],
         )
+
+    def __and__(self, other: object) -> _RuleExpr:
+        from .rule_expr import _combine
+
+        return _combine("and", (self, other))
+
+    def __or__(self, other: object) -> _RuleExpr:
+        from .rule_expr import _combine
+
+        return _combine("or", (self, other))
 
     def __getattr__(self, name: str) -> RulePortRef:
         if name.startswith("_"):
