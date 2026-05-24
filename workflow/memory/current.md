@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1 base RuleExpr archived locally; source `a0718e85`, not pushed)
+最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2 archived locally; source `21fa0914`, not pushed)
 
-## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 RULEEXPR BASE ARCHIVED; T3.2 NEXT)
+## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 ARCHIVED; T3.3 NEXT)
 
-**Current local branch:** `v0.2.0-t3-1-base-ruleexpr-bool-guards-2026-05-24 @ a0718e85`.
+**Current local branch:** `v0.2.0-t3-2-expression-scope-validation-2026-05-24 @ 21fa0914`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -32,6 +32,7 @@
 | **T1.3 SDK Top-Level Rule Naming (first M-class)** | **M** | `df1dae2d` | `c846af09 feat(sdk): add transitional Rule naming exports` (no Step 4.7 fix) |
 | **T1.4 Alias / Port Contract** | S | `a3411207` | `64135b85 feat(application): add Rule occurrence port refs` (no Step 4.7 fix) |
 | **T3.1 Base RuleExpr + Bool Guards** | M | `a0718e85` | `e049c93e feat(application): add T3.1 RuleExpr base and bool guards` (A-fallback `8de03372`, no Step 4.7 fix) |
+| **T3.2 Expression-Scope Occurrence Validation** | S | `21fa0914` | `2a16dd98 feat(application): add T3.2 expression-scope occurrence validation` (T-1 deviation recorded in closure) |
 
 ### Current landed behavior
 
@@ -219,6 +220,15 @@
   - Inline in T3.2 if touching the same files: add `-> _RuleExpr` annotations to `Rule.__and__` / `Rule.__or__`, tighten `_RuleOperand.rule` typing from `object` to `Rule`, and optionally replace the duck-typed legacy SDK Rule detector if a cycle-safe nominal check is available.
   - T3.2 owns expression-scope occurrence validation: alias uniqueness, repeated same Rule requires explicit aliases, default alias behavior for single occurrence, and duplicate diagnostics.
 
+**T3.2 — Expression-Scope Occurrence Validation**
+- **T3.2 archived at `21fa0914`**:
+  - Lineage: `e7dbf693` draft → `24ca01cd` P2 amendment (T3.1 duplicate-multiplicity supersedence) → `b0963c17` scoped + P3 → `c8e4fce8` Step 4.6 grep clean → `62c04100` G7 baseline → `2a16dd98` feat → `90598e95` closure → `21fa0914` archive.
+  - Landed expression-scope validation in `rule_expr.py`: `_RuleOperand(rule: Rule, alias: str, explicit_alias: bool)`, `RuleOccurrence` operand coercion, default-alias validation via T1.4 `Rule.as_()`, `_validate_expression_scope(...)`, deterministic aggregate diagnostics, and alias-inclusive canonical equality/hash.
+  - T3.1 P3 follow-ups landed inline: `Rule.__and__` / `Rule.__or__` now have `-> _RuleExpr` annotations, and `_RuleOperand.rule` tightened from `object` to application `Rule`. `_is_legacy_sdk_rule` remains duck-typed by explicit deferral.
+  - Verification: G7 baseline 38 tests OK; post-impl core gate 45 tests OK; cross-slice gate 54 tests OK; ruff clean. T1.4 23-test baseline preserved.
+  - Seven negative-action gates preserved: legacy SDK `Rule.__bool__` unchanged; no direct `application_rule == rule_expr`; T1.4 `Rule.as_` / alias regex / port APIs preserved; T1.3 staged naming unchanged; T2.3 aggregate substrate untouched; T3.1 acceptance preserved after explicit-alias test supersedence; duck-typed legacy detector retained.
+  - **T-1 deviation recorded in §10**: implementation discovered explicit-alias infix expressions require `RuleOccurrence.__and__` / `__or__`. The additive method change was bundled into feat rather than a pre-feat (A-fallback) scope amendment. Closure records this as process-discipline drift and future slices must pause for a pre-feat scope amendment when discovered operator/dunder additions expand scope.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -288,18 +298,23 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T3.1 pre-impl grep discipline:** Step 4.6 grep proved no existing truthiness/operator/export/catch-site conflict before adding `Rule.__bool__`, `Rule.__and__`, and `Rule.__or__`. For slices adding Python dunder behavior, pre-impl grep is mandatory even after Stage 1 audit.
 - **T3.1 pytest SIGSEGV handling:** pytest segfaulted in the local environment, while unittest gates passed and matched G7 baseline. The correct cadence was to lock unittest as the runner for this slice, record the pytest issue as out-of-scope tooling drift, and investigate separately rather than blocking feature closure.
 - **T3.1 P3 follow-up discipline:** Step 4.7 surfaced only minor type-precision items. When review has 0 P0/P1/P2 and the fixes naturally touch the next adjacent slice's files, defer them explicitly to that slice instead of polluting closure/archive with code churn.
+- **T3.2 cross-slice supersedence trace:** When a later slice deliberately invalidates an earlier acceptance test, record it in §6 invariants, §7 acceptance, §8 implementation plan, and audit-log reviewer focus before implementation. T3.2 did this for T3.1 `test_duplicate_operands_preserve_multiplicity`, preserving multiplicity semantics through explicit aliases while rejecting bare repeated Rule operands.
+- **T3.2 (A-fallback) discipline drift lesson:** `RuleOccurrence.__and__` / `__or__` was a necessary discovered additive method change for explicit-alias infix expressions, but it was bundled into feat instead of a pre-feat blueprint amendment. Closure §10 records this as process-discipline drift. Future T3.x slices discovering operator/dunder scope expansion must pause for a doc-only (A-fallback) scope amendment before feat.
+- **T3.2 validation diagnostics pattern:** Aggregate expression-scope diagnostics with stable ordering when multiple authoring issues can coexist; fail immediately only for operand construction failures that prevent representing the operand (non-identifier default alias). This avoids fix-one-error-per-run churn without hiding invalid default-alias guidance.
 
 ### Recommended next work
 
-- **T3.2 expression-scope occurrence validation** — recommended next slice. Scope: alias uniqueness within RuleExpr, repeated same Rule requires explicit aliases, default alias behavior for single occurrence, diagnostics for duplicate aliases / repeated unaliased Rules, and inline T3.1 P3 type-precision follow-ups.
-- **T3.3 join constraints** — follows T3.2; consumes D2 + D4, `RulePortRef.eq(...)`, `.join(...)`, Every-Proof-Path Reach Rule, self-join semantics, and join symmetry/duplicate handling.
-- **T3.4 `.join_by_ports(...)`**, **T3.5 inspect**, **T3.6 docs/examples**, and **later execution lowering tranche** — follow the Stage 3 synthesis ladder.
+- **T3.3 joins + Every-Proof-Path Reach Rule** — recommended next slice. Predicted M-class because it introduces public `RuleJoinConstraint`, consumes D2/D4/D5, adds `RulePortRef.eq(...)`, `.join(...)`, self-join semantics, join symmetry / duplicate normalization, and the Every-Proof-Path Reach Rule validator.
+- **T3.4 `.join_by_ports(...)`** — S-class candidate after T3.3; should reduce to pure expansion over T3.3 `.join(...)` mechanics if no new diagnostics appear.
+- **T3.5 RuleExpr inspect** — likely M/L depending on whether T3.5a/T3.5b split is used; must preserve legacy SDK Rule / Inference dict inspect while adding RuleExprInspect.
+- **T3.6 docs + examples** — docs-only slice after T3.1-T3.5 behavior stabilizes; owns precedence/parentheses guidance, `.eq(...)`, bool guards, same-name-port diagnostics, and inspect examples.
+- **T3 later execution tranche** — RuleExpr execution lowering / adapter integration deferred per D5 §4.8; class TBD (M or L) and requires a fresh decision before blueprinting.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` + `BinaryExpr`. Currently raises `SDKDSLError`.
 - **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains. Pre-existing limitation; S-class adapter hygiene slice.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3.1 locked unittest fallback and did not block on pytest runner segfault.
 - **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip + `LegacyRule` retention + `DeprecationWarning` policy decisions. Coordinate with T1.3 A-staged commitment.
-- **Push / publish gate** — T1/T2 + T3.1 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
+- **Push / publish gate** — T1/T2 + T3.1 + T3.2 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
