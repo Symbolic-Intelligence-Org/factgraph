@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2/T3.3 archived locally; source `1100ea78`, not pushed)
+最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2/T3.3/T3.4 archived locally; source `02fcaec6`, not pushed)
 
-## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 + T3.3 ARCHIVED; T3.4 NEXT)
+## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 + T3.3 + T3.4 ARCHIVED; T3.5 NEXT)
 
-**Current local branch:** `v0.2.0-t3-3-joins-and-reach-rule-2026-05-24 @ 1100ea78`.
+**Current local branch:** `v0.2.0-t3-4-join-by-ports-2026-05-24 @ 02fcaec6`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -34,6 +34,7 @@
 | **T3.1 Base RuleExpr + Bool Guards** | M | `a0718e85` | `e049c93e feat(application): add T3.1 RuleExpr base and bool guards` (A-fallback `8de03372`, no Step 4.7 fix) |
 | **T3.2 Expression-Scope Occurrence Validation** | S | `21fa0914` | `2a16dd98 feat(application): add T3.2 expression-scope occurrence validation` (T-1 deviation recorded in closure) |
 | **T3.3 Joins + Every-Proof-Path Reach Rule** | M | `1100ea78` | `0b80fe9b feat(application): add T3.3 joins and reach rule` (0 deviation — first T3 feat with zero Step 4.7 findings) |
+| **T3.4 Join By Ports** | S | `02fcaec6` | `8f248212 feat(application): add T3.4 join by ports` (0 deviation — second consecutive T3 feat with zero Step 4.7 findings) |
 
 ### Current landed behavior
 
@@ -238,6 +239,14 @@
   - Nine negative-action gates preserved: legacy SDK `Rule.__bool__` unchanged; no direct `application_rule == rule_expr`; T1.4 substrate preserved except pre-scoped additive `RulePortRef.eq`; `RulePortRef.__eq__` remains value equality; T1.3 staged naming unchanged; T2.3 aggregate substrate untouched; T3.1/T3.2 acceptance + negative-action gates preserved; `_is_legacy_sdk_rule` duck-typed detector retained; no new error subclass.
   - **0-deviation milestone**: first T3 feat with 0 P0/P1/P2/P3 at Step 4.7. Clean result attributed to §5.2 preemptive `RulePortRef.eq()` scope lock, §5.3 validation-location layering, §5.6 Reach Rule pseudocode/complexity, and §5.7 canonical symmetric equality lock.
 
+**T3.4 — Join By Ports**
+- **T3.4 archived at `02fcaec6`**:
+  - Lineage: `6242c7a1` draft → `5fb525eb` scoped + P3 → `4035d360` Step 4.6 grep clean → `81285e98` G7 baseline → `8f248212` feat → `67f9fed2` closure → `02fcaec6` archive.
+  - Landed strict two-file scope: `rule_expr.py` adds `itertools.combinations`, `_AndGroup.join_by_ports(...)`, `_OrGroup.join_by_ports(...)` diagnostic, `_validate_join_by_port_names`, `_expand_join_by_ports`, and `_port_refs_for_name`; `test_rule_expr.py` adds 8 T3.4 tests including `test_join_by_ports_preserves_export_scope`.
+  - Verification: G7 baseline 55 tests OK; post-impl core gate 63 tests OK; cross-slice gate 72 tests OK; ruff clean.
+  - Nine T3.3 negative-action gates plus six T3.4 explicit "no" locks preserved: no legacy SDK change, no cross-type equality, no T1.4 DTO change, no `Rule.join_by_ports`, no `RuleOccurrence.join_by_ports`, no helper module, no new error subclass, and no new SDK export.
+  - **Second consecutive 0-deviation milestone**: T3.4 repeated T3.3's clean result with 0 P0/P1/P2/P3 at Step 4.7. Closure attributes this to §5.5 preemptive scope locking, §5.3 algorithm pseudocode with `itertools.combinations`, §5.7 validation ordering, and §5.4 stable diagnostics.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -313,19 +322,21 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T3.3 preemptive scope locking pattern:** T3.2 T-1 drift lesson was applied in T3.3 §5.2 by explicitly locking `RulePortRef.eq()` as an additive method on the T1.4 frozen DTO before implementation. Result: 0 deviation. Future slices should pre-lock any method/dunder additions implied by prior drift.
 - **T3.3 0-deviation milestone:** first T3 feat with 0 P0/P1/P2/P3 at Step 4.7. The winning pattern was preemptive scope + explicit validation-layer placement + algorithm pseudocode + canonical equality spec in the blueprint.
 - **T3.3 cadence cycle most efficient:** 7 commits total versus T3.1 9 and T3.2 8; no P2 amendment, no A-fallback, no Step 4.7 fix. Strong evidence that lessons from prior slices now land in draft/scoped stages.
+- **T3.4 repeatable preemptive scope locking:** T3.4 reused T3.3's pattern with six explicit "no" locks and one explicit "yes" lock in §5.5, strict two-file scope, and no new public export. Result: second consecutive 0-deviation feat.
+- **T3.4 second consecutive 0-deviation milestone:** 0 P0/P1/P2/P3 at Step 4.7 with 72 cross-slice tests and ruff clean. The pattern is now repeatable, not slice-specific: preemptive scope lock + algorithm spec + validation ordering + stable diagnostics.
+- **T3.4 scope-boundary test discipline:** `test_join_by_ports_preserves_export_scope` actively asserts no new SDK export. Future slices should test important negative scope locks directly when cheap, not only test positive behavior.
 
 ### Recommended next work
 
-- **T3.4 `.join_by_ports(...)`** — recommended next slice; predicted S-class. Should reduce to explicit-name expansion over T3.3 `.join(...)` and `RuleJoinConstraint` if diagnostics remain missing/fewer-than-two/ambiguous only.
-- **T3.5 RuleExpr inspect** — likely M/L depending on whether T3.5a/T3.5b split is used; must preserve legacy SDK Rule / Inference dict inspect while adding RuleExprInspect.
-- **T3.6 docs + examples** — docs-only slice after T3.1-T3.5 behavior stabilizes; owns precedence/parentheses guidance, `.eq(...)`, bool guards, same-name-port diagnostics, and inspect examples.
+- **T3.5 RuleExpr inspect** — recommended next slice; likely M/L depending on whether T3.5a/T3.5b split is used. Must preserve legacy SDK Rule / Inference dict inspect while adding RuleExprInspect, occurrence/atom/port descriptors, render contracts, and D3 §4.4 deferred inspect details.
+- **T3.6 docs + examples** — docs-only slice after T3.1-T3.5 behavior stabilizes; owns precedence/parentheses guidance, `.eq(...)`, `.join(...)`, `.join_by_ports(...)`, bool guards, same-name-port diagnostics, and inspect examples.
 - **T3 later execution tranche** — RuleExpr execution lowering / adapter integration deferred per D5 §4.8; class TBD (M or L) and requires a fresh decision before blueprinting.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` + `BinaryExpr`. Currently raises `SDKDSLError`.
 - **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains. Pre-existing limitation; S-class adapter hygiene slice.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3.1 locked unittest fallback and did not block on pytest runner segfault.
 - **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip + `LegacyRule` retention + `DeprecationWarning` policy decisions. Coordinate with T1.3 A-staged commitment.
-- **Push / publish gate** — T1/T2 + T3.1 + T3.2 + T3.3 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
+- **Push / publish gate** — T1/T2 + T3.1 + T3.2 + T3.3 + T3.4 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
