@@ -1,6 +1,6 @@
 # Task Blueprint: T3.5 RuleExpr Inspect
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: M
@@ -290,6 +290,29 @@ Minimum mapping:
 - `InAtom`: kind `in`.
 - `BuiltinAtom`: kind `builtin`.
 - `NotAtom`: kind `not`.
+
+Derivation dispatch:
+
+```python
+def _derive_atom_descriptor(atom: Atom, atom_id: str) -> AtomDescriptor:
+    if isinstance(atom, PredAtom):
+        if atom.pred_id.endswith(":exists") and len(atom.terms) == 1:
+            entity_type = atom.pred_id.removesuffix(":exists")
+            return _atom_descriptor(atom_id, "entity_existence", entity_type=entity_type, subject=atom.terms[0])
+        if ":" in atom.pred_id and atom.terms:
+            entity_type, _, field = atom.pred_id.partition(":")
+            return _atom_descriptor(atom_id, "field_predicate", entity_type=entity_type, field=field, subject=atom.terms[0])
+        return _atom_descriptor(atom_id, "pred")
+    if isinstance(atom, CmpAtom):
+        # T3.5 records op/value reliably; field_eq/field_compare are used only when field structure is directly discoverable.
+        return _atom_descriptor(atom_id, "cmp", op=atom.op, value=atom.rhs)
+    if isinstance(atom, InAtom):
+        return _atom_descriptor(atom_id, "in")
+    if isinstance(atom, BuiltinAtom):
+        return _atom_descriptor(atom_id, "builtin")
+    if isinstance(atom, NotAtom):
+        return _atom_descriptor(atom_id, "not")
+```
 
 Descriptors are best-effort structural authoring projections. They are not adapter execution IR and not evidence proof nodes. `AtomDescriptor.atom_id` reuses the source application `Rule.atom_ids[index]` string (`<rule_id>:atom_<index>`) from T1.1 so inspect and the future evidence interpreter share the parent C50 atom-id schema. Occurrence-local identity remains on `OccurrenceInspect.alias`; aliases do not prefix `atom_id`.
 
