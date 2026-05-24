@@ -12,6 +12,7 @@
 | 2026-05-24 | draft | Blueprint created | Initial T3.3 M-class scope recorded from D2 §4.2-§4.5, D4 §4.5, D5 §4.4, Stage 3 synthesis §3 T3.3, synced track plan T3.3 row, and archived T1.4/T3.1/T3.2 substrates. |
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.3-F1 flatten-merge acceptance added; T3.3-F2 RuleJoinConstraint validation location explicit; T3.3-F3 zero-arg `.join()` rejection rationale added. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | `RulePortRef.eq`, `_AndGroup` / `_OrGroup`, `_combine`, `RuleJoinConstraint`, `.join(...)`, SDK export names, and T3.2 validation helper scans matched expected shipped scope. No blueprint scope amendment required. |
+| 2026-05-24 | baseline | G7 baseline recorded | Branch/sacred/dirty state verified; Step 4.6 grep remains clean; `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 45 tests OK. |
 
 ## Decision Notes
 
@@ -108,3 +109,13 @@ S-to-M triggers are already active; additional L trigger would be introducing ex
 | `.join(...)` RuleExpr naming conflict | `rg '\.join\(' src/factgraph/application/ src/factgraph/sdk/dsl/ src/factgraph/sdk/__init__.py` found only string/list join usage in current application code; no RuleExpr `.join(...)` surface exists. |
 | SDK / application export name conflict | `rg '"RuleJoinConstraint"' src/factgraph/sdk/__init__.py src/factgraph/application/protocol/__init__.py` returned no hits; the export name is new. |
 | T3.2 validation helper callers | `rg '_validate_expression_scope\|_iter_rule_operands' src/factgraph/ tests/` found only internal T3.2 `rule_expr.py` definition/call sites. |
+
+### G7 Baseline Record
+
+| Check | Result |
+|---|---|
+| Branch and sacred state | Branch `v0.2.0-t3-3-joins-and-reach-rule-2026-05-24` at `52eec99e`; sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`; dirty set remains 4 modified files + 1 untracked directory. |
+| RuleExpr / T1.4 substrate | Step 4.6 grep already confirmed `RulePortRef.eq`, `_AndGroup` / `_OrGroup`, `_combine`, `RuleJoinConstraint`, `.join(...)`, and export-name scope are clean. |
+| Operator / `.eq` / `RuleJoinConstraint` baseline | Step 4.6 grep confirmed `.eq(...)` and `RuleJoinConstraint` are new T3.3 surfaces with no shipped implementation conflict. |
+| Requested pytest baseline | Pytest remains out of the T3.3 baseline path because T3.1 recorded the current environment SIGSEGV issue; the spawned tooling investigation remains out of scope for T3.3. |
+| Fallback unittest baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 45 tests in 0.008s and passed OK. |
