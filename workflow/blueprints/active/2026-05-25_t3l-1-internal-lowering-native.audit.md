@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-25 | draft | Blueprint created | Initial T3L.1 M-class scope drafted from reviewed Stage 1 audit, reviewed D6-D10, Stage 3 synthesis, track-plan sync, and archived T3.1-T3.6 substrate. Scope is private RuleExpr lowering core plus native execution only; public SDK dispatch and adapter parity remain later slices. |
+| 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | T3L.1-WC1 native materialization now returns per-branch trace tuple; T3L.1-WC2 external head body concatenation explicitly deferred to T3L.3; WC3 concrete typing refinement, WC4 abstract alias-local example, and N1 track-plan cite added. |
 
 ## Decision Notes
 
@@ -159,4 +160,3 @@ Do not use `tests.test_public_inference_factgraph_create` as a T3L.1 blocking ga
 - [ ] Preemptive scope locks preserve legacy SDK, public dispatch, adapters, exports, T4/T5, and error hierarchy.
 - [ ] Acceptance gates are testable and include preservation tests.
 - [ ] Step 4.6 grep plan is specific enough to catch scope creep before code.
-

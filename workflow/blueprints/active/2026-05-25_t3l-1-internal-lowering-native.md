@@ -46,6 +46,7 @@ Canonical drivers:
 - D8 section 4.1-4.8 locks explicit equality atom materialization and join provenance.
 - D9 section 4.1 and native matrix row lock eventual branch-list materialization for the native engine.
 - D10 section 4.5 locks a private trace sidecar floor and correlation/lifetime invariants.
+- Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` T3L.1 row defines this slice's scope envelope.
 
 This slice is M-class because it introduces a new private lowering module, multiple internal frozen DTO categories, native runtime materialization, trace sidecar plumbing, and focused tests across RuleExpr, WhereIR, derivation runtime, and native evaluation. It is not L-class because Stage 1 audit, D6-D10 decisions, Stage 3 synthesis, and track-plan sync are already complete; this blueprint consumes those reviewed decisions and implements only the first internal/native slice.
 
@@ -273,16 +274,20 @@ RuleExprEvaluationTrace(
 
 Trace `support_digest` / `support_kind` may be `None` before a candidate/support link exists. T3L.1 must preserve the rest of the trace data even if native execution produces no candidates.
 
+Concrete types such as `PortType`, `Var`, and `Rule` refine D7 section 4.2 and D10 section 4.5 conceptual `object` categories for implementation. D7/D10 still allow concrete helper names to differ as long as these data categories are preserved.
+
 ### 5.3 Private entry helpers
 
 Add private helpers only. Candidate names:
 
 - `_lower_application_rule(rule: Rule, *, head: Rule) -> RuleExprLoweringPlan`
 - `_lower_rule_expr(expr: _RuleExpr, *, head: Rule) -> RuleExprLoweringPlan`
-- `_materialize_native_derivation_plan(plan: RuleExprLoweringPlan) -> tuple[CompiledDerivationPlan, RuleExprEvaluationTrace]`
+- `_materialize_native_derivation_plan(plan: RuleExprLoweringPlan) -> tuple[CompiledDerivationPlan, tuple[RuleExprEvaluationTrace, ...]]`
 - `_evaluate_rule_expr_native_for_tests(...) -> list[CandidateSet]`
 
 The final helper names can change, but the slice must keep this path private. T3L.3 owns public SDK dispatch.
+
+`RuleExprEvaluationTrace` is per branch. Native materialization returns a trace tuple keyed by branch id/runtime branch index so multi-branch RuleExpr values can later correlate candidates and support artifacts to the selected branch.
 
 ### 5.4 D6 head binding in T3L.1
 
@@ -294,18 +299,18 @@ T3L.1 supports D6 minimal head subset internally:
 - same id + same content digest as an inline occurrence is represented with `projection_occurrence_alias`.
 - external head is represented with `projection_occurrence_alias=None`.
 
-The execution semantics for external heads may concatenate the head rule body as required by Stage 3 implementation, but this blueprint must keep behavior constrained to D6's minimal application Rule head boundary.
+T3L.1 records external head binding but does not implement external head body concatenation. T3L.1 focused execution tests should use inline/projected heads or head shapes that do not require additional body concatenation. T3L.3 owns the eventual public external-head body semantics when SDK dispatch is exposed.
 
 ### 5.5 Alias-local variable namespacing
 
 Before concatenating AND branches, lower each occurrence body into alias-local variables:
 
 ```text
-("a", Var("u")) -> Var("__fg_a__u") or equivalent runtime-local identity
-("b", Var("u")) -> Var("__fg_b__u") or equivalent runtime-local identity
+("a", Var("u")) -> alias-local-var(occurrence="a", source="u")
+("b", Var("u")) -> alias-local-var(occurrence="b", source="u")
 ```
 
-The concrete representation is an implementation detail. Required invariant:
+The concrete representation is an implementation detail per D7 section 4.5. It may be a renamed `Var`, wrapper object, or another runtime-local identity. Required invariant:
 
 - variables from distinct occurrences must not compare equal only because their private source variable names match.
 
@@ -550,4 +555,3 @@ T3L.3 owns user-facing RuleExpr execution docs.
 ## 10. Outcome / Deviations
 
 Pending implementation.
-
