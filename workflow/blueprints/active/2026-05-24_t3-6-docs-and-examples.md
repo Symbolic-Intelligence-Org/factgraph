@@ -1,6 +1,6 @@
 # Task Blueprint: T3.6 Docs And Examples
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: S
@@ -507,4 +507,91 @@ Out of default scope:
 
 ## 10. Outcome / Deviations
 
-To be filled at closure.
+### Final Landed Code
+
+- `src/factgraph/application/docs/rule.md` — replaced stale T3.1-era deferral
+  language with current T3.1-T3.5 truth: composition, bool guards, explicit
+  `.eq(...)` joins, `.join(...)`, `.join_by_ports(...)`, same-name port
+  discoverability, and RuleExpr inspect return shape.
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` — added the main
+  user-facing "RuleExpr Authoring Surface" section covering staged imports,
+  `ApplicationRule` / `build_application_rule(...)`, occurrence aliases,
+  `&` / `|` precedence and parentheses, `ExplicitBoolError` bool guards,
+  `.eq(...)` joins, `.join_by_ports(...)`, `unjoined_same_name_ports`, inspect
+  return-shape differences, `value_type="unknown"`, and render helpers as
+  authoring narrative.
+- `src/factgraph/sdk/docs/01_concepts.en.md` — added a concise RuleExpr mental
+  model under the SDK/application split and added RuleExpr DTOs to the frozen
+  DTO boundary table.
+- `src/factgraph/sdk/docs/00_user_guide.en.md` — added navigation pointers from
+  the eval section and "Where to go next" list to the RuleExpr authoring docs.
+
+Strict scope result: T3.6 landed in four docs files. `04_api_surface.en.md`,
+`06_what_if_and_proof.en.md`, all Python source files, and all tests remained
+untouched.
+
+### Test Gates
+
+- G7 baseline `24e55668`: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect -v` -> 76 OK.
+- Post-impl preservation gate: `tests.application.protocol.test_rule`, `tests.application.protocol.test_rule_expr`, `tests.sdk.test_ruleexpr_inspect`, `tests.sdk.test_rule_naming`, `tests.application.protocol.test_rule_aggregate`, and `tests.test_branch_identity_rule_inspect` -> 99 OK.
+- Markdown grep gates passed: stale "deferred to later T3" language removed; required RuleExpr teaching terms present; no new final-state `from factgraph.sdk import Rule` application-Rule teaching added.
+- Ruff not run because T3.6 touched no Python files.
+
+### Deviations / Follow-Ups
+
+T3.6 closed with **zero deviations** from blueprint scope. This is the
+**fourth consecutive T3 feat commit** to land with 0 P0/P1/P2/P3 findings at
+Step 4.7 review, and the final feat slice of the initial T3 authoring/inspect
+cycle.
+
+T3 cycle six-slice summary:
+
+| Slice | Class | Feat | Deviation |
+|---|---|---|---|
+| T3.1 | M | `e049c93e` | A-fallback `8de03372` mid-impl reactive. |
+| T3.2 | S | `2a16dd98` | T-1 `RuleOccurrence.__and__/__or__` deviation bundled into feat. |
+| T3.3 | M | `0b80fe9b` | **0 deviation** — first preemptive scope-locking success. |
+| T3.4 | S | `8f248212` | **0 deviation** — second consecutive zero-deviation feat. |
+| T3.5 | M | `55d9e67b` | **0 deviation** — third consecutive feat plus first proactive Step 4.6 A-fallback catch. |
+| T3.6 | S | `f8abaad1` | **0 deviation** — fourth consecutive feat and final initial T3 slice. |
+
+Cadence discipline pattern validated across T3:
+
+- preemptive scope locks with explicit "do not" lists.
+- algorithm / validation / diagnostics specifications before implementation.
+- sibling-module isolation for public-surface-heavy work.
+- Step 4.6 proactive catch and pre-feat A-fallback amendment in T3.5.
+- docs-only scope discipline in T3.6: strict four-file docs scope, no Python,
+  no tests, no API-surface count churn.
+
+The pattern spans M/S/M/S/M/S slices, including the largest T3 M-class slice
+(T3.5) and the final docs-only S-class slice (T3.6). The zero-deviation tail is
+repeatable rather than slice-specific.
+
+Out-of-scope notes preserved:
+
+- `tests.test_public_inference_factgraph_create` still has pre-existing
+  failures unrelated to RuleExpr work at the T3.5 G7 baseline.
+- pytest remains deferred due the known environment SIGSEGV; unittest fallback
+  was used throughout the T3 cycle.
+- T3.5-F6 `value_type="unknown"` for value ports is now documented in T3.6.
+  A future substrate slice may add concrete value-type metadata if needed.
+
+No T3.6 follow-up blocks the later RuleExpr execution-lowering tranche.
+
+### Stage 1-3 Traceability
+
+- Stage 1 audit: `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`
+- Adopted D1: `workflow/design/decisions/active/2026-05-24_t3-d1-public-surface-operand-boundary.md` §4.5.
+- Adopted D2: `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md` §4.1-§4.5 and §7.3.
+- Adopted D3: `workflow/design/decisions/active/2026-05-24_t3-d3-inspect-coexistence.md` §4.1-§4.6 and §7.3.
+- Adopted D4: `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md` §4.1-§4.7 and §7.3.
+- Adopted D5: `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.7.
+- Stage 3 synthesis: `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md` §3 T3.6.
+- Track plan sync: `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` synced at `9c857d0c`.
+- Parent design: `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §3.6 / §3.7.1 C5-C6 / §4 C23-C35+C49-C51 / §5.9 C58 / §5.10 C59.
+- Substrate archives: T1.4 plus T3.1, T3.2, T3.3, T3.4, and T3.5 archive pairs.
+
+### Archive Readiness
+
+Yes.

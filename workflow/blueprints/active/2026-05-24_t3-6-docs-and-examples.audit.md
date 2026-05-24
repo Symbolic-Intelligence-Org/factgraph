@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.6 Docs And Examples
 
 - Blueprint: [2026-05-24_t3-6-docs-and-examples.md](./2026-05-24_t3-6-docs-and-examples.md)
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -13,6 +13,7 @@
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.6-F1 anti-example wording clarified to `ExplicitBoolError` short-circuit behavior; T3.6-F2 markdown grep acceptance cross-referenced §8 step 8 specifics; T3.6-F3 optional `06_what_if_and_proof.en.md` touch locked to no-touch unless scoped amendment says otherwise. |
 | 2026-05-24 | pre-impl | Step 4.6 docs grep clean; targets identified | Grep found one expected stale application-rule deferral sentence, legacy-context `Rule` imports only, no invalid join `==` examples, missing user-facing `join_by_ports` / `ExplicitBoolError` / `unjoined_same_name_ports` teaching outside API surface, and confirmed `04_api_surface.en.md` already contains the T3.5 RuleExpr rows/count baseline. |
 | 2026-05-24 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect -v` ran 76 tests OK after Step 4.6 docs grep. |
+| 2026-05-24 | implemented | Step 4.7 clean; 0 deviation (fourth consecutive + T3 cycle final) | Docs feat `f8abaad1` passed Step 4.7 with 0 P0/P1/P2/P3. Four docs files updated, `04_api_surface.en.md` and `06_what_if_and_proof.en.md` untouched, no Python/tests touched, 99 preservation tests OK. Fourth consecutive zero-deviation T3 feat and final initial T3 authoring/inspect slice. |
 
 ## Decision Notes
 
