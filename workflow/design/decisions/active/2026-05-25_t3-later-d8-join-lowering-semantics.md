@@ -9,6 +9,7 @@
   - D6 `workflow/design/decisions/active/2026-05-25_t3-later-d6-public-entrypoint-head-dependency.md`.
   - D7 `workflow/design/decisions/active/2026-05-25_t3-later-d7-lowering-plan-shape.md`.
   - D2 `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md`.
+  - D4 `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md`.
   - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.7 and §5.1-§5.4.
   - Shipped `src/factgraph/application/protocol/rule.py:35-39`, `src/factgraph/application/protocol/rule.py:145-185`, and `src/factgraph/application/protocol/rule.py:80-99`.
   - Shipped `src/factgraph/application/protocol/rule_expr.py:20-40`, `src/factgraph/application/protocol/rule_expr.py:105-115`, and `src/factgraph/application/protocol/rule_expr.py:217-236`.
@@ -140,6 +141,8 @@ The implementation must not resolve joins by raw variable name alone. It must us
 
 If no binding exists, multiple bindings exist, or a binding does not match the endpoint's source var / port type, lowering raises `RuleExprError`.
 
+T3.3 `_validate_endpoint_matches_operand(...)`, T1.4 `Rule.ports` uniqueness, and T3.2 alias uniqueness enforce these invariants at authoring time for normal inputs. D8 keeps this defensive check so malformed D7 plan construction fails before adapter selection.
+
 ### 4.5 Port type compatibility is checked at lowering
 
 D8 adds a semantic compatibility check between the two join endpoints:
@@ -156,6 +159,8 @@ Consequences:
 - value-to-value joins are allowed because T1.4 `PortType` does not carry a value subtype.
 
 This keeps authoring `.eq(...)` permissive enough to remain a lightweight constraint constructor, while making execution lowering reject semantically incompatible joins before adapter selection.
+
+If a future T1.4 substrate extension adds a value subtype field to `PortType`, this equality check naturally extends to value-subtype compatibility. Any different value-port matching rule must explicitly supersede this D8 decision.
 
 ### 4.6 Join equality atoms are appended after branch body atoms
 
@@ -175,6 +180,8 @@ Rationale:
 - appending join equality atoms keeps ordering deterministic and avoids making join atoms responsible for binding port variables before their source bodies appear.
 
 This ordering does not make same-name ports auto-join. Only `pending_joins` produce appended equality atoms.
+
+The first bullet refers to shipped T1.4 Rule/port validation: declared port variables must appear in the source rule body before D7 can create a `RuleExprPortBinding`.
 
 ### 4.7 Join materialization order follows canonical join order
 
@@ -209,6 +216,8 @@ class RuleExprJoinMaterialization:
     right_port_name: str
     materialized_atom_index: int
 ```
+
+`materialized_atom_index` records the 0-based position of this equality atom within the branch's `materialized_body` after §4.6 appending. It is not the pending-join input index.
 
 This metadata remains internal unless D10 decides to expose it. It is not part of the public result surface in D8.
 
@@ -277,6 +286,7 @@ This extends D6/D7's Q9 disposition for the D8 scope.
 - Shipped `RulePortRef.eq(...)` constructs `RuleJoinConstraint` without changing `RulePortRef.__eq__` value equality.
 - Shipped `_AndGroup.join(...)` normalizes joins and validates direct AND reach before D8.
 - Shipped `_canonical_join_constraint(...)` sorts endpoints and normalizes duplicate joins deterministically.
+- D4 and shipped `_canonical_join_constraint(...)` provide the canonical ordering basis for §4.7.
 - Shipped `Rule.port_types` stores `PortType(kind="entity_ref" | "value", entity_type=...)`.
 - Shipped `where_ast.CmpAtom` and raw WhereIR support equality comparison atoms.
 - Shipped SDK DSL equality lowering emits raw WhereIR `("eq", left, right)`.
@@ -326,3 +336,4 @@ D10 must decide:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D8 chooses explicit equality atom materialization for `RuleJoinConstraint(op="eq")`, rejects variable unification and plan-level-only joins, and preserves join provenance internally for D10. |
+| 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified D8 endpoint invariant chain, `materialized_atom_index` semantics, PortType future evolution, Rule/port validation dependency, and D4 canonical-ordering citation. |
