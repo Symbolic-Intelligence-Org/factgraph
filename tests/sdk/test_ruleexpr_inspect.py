@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+from dataclasses import FrozenInstanceError
+import unittest
+
+import factgraph.sdk as sdk
+from factgraph.application.protocol import (
+    AtomDescriptor,
+    OccurrenceInspect,
+    PortInspect,
+    Rule as ApplicationRule,
+    RuleExprInspect,
+)
+from factgraph.application.protocol.rule_expr import RuleExprError
+from factgraph.core.rules.where_ast import AndExpr, BuiltinAtom, CmpAtom, Const, InAtom, NotAtom, PredAtom, Var
+from factgraph.sdk.schema import Entity, Field, Identity
+from factgraph.sdk.store import SDKStoreError
+
+
+class User(Entity):
+    user_id: str = Identity(primary_key=True)
+    status: str = Field(cardinality="single")
+    region: str = Field(cardinality="single")
+
+
+def _application_rule(rule_id: str = "active_user", *, var_name: str = "u") -> ApplicationRule:
+    user = Var(var_name)
+    status = Var(f"{var_name}_status")
+    return ApplicationRule(
+        id=rule_id,
+        where=(
+            PredAtom("User:exists", [user]),
+            PredAtom("User:status", [user, status]),
+            CmpAtom("eq", status, Const("active")),
+        ),
+        ports={"user": user, "status": status},
+        desc="User %user has status %status",
+    )
+
+
+def _other_rule() -> ApplicationRule:
+    user = Var("v")
+    return ApplicationRule(
+        id="trusted_user",
+        where=(PredAtom("User:exists", [user]),),
+        ports={"user": user},
+        desc="Trusted %user",
+    )
+
+
+class RuleExprInspectExportTests(unittest.TestCase):
+    def test_sdk_exports_ruleexpr_inspect_public_names(self) -> None:
+        self.assertIs(sdk.RuleExprInspect, RuleExprInspect)
+        self.assertIs(sdk.OccurrenceInspect, OccurrenceInspect)
+        self.assertIs(sdk.AtomDescriptor, AtomDescriptor)
+        self.assertIs(sdk.PortInspect, PortInspect)
+        self.assertEqual(len(sdk.__all__), len(set(sdk.__all__)))
+        for name in ("RuleExprInspect", "OccurrenceInspect", "AtomDescriptor", "PortInspect"):
+            self.assertIn(name, sdk.__all__)
+
+
+class RuleExprInspectDispatchTests(unittest.TestCase):
+    def test_legacy_sdk_rule_inspect_dict_shape_is_preserved(self) -> None:
+        with sdk.vars("u") as (u,):
+            legacy = sdk.Rule(id="legacy", version="v1", select=[u], where=[sdk.Pred("User:exists", u)])
+
+        inspected = sdk.SDKStore([User]).rules.inspect(legacy)
+
+        self.assertIsInstance(inspected, dict)
+        self.assertEqual(inspected["kind"], "Rule")
+        self.assertEqual(inspected["branches"][0]["atom_ids"], ["b0.a0"])
+
+    def test_legacy_sdk_inference_inspect_dict_shape_is_preserved(self) -> None:
+        with sdk.vars("u") as (u,):
+            inference = sdk.Inference(
+                id="legacy_inference",
+                version="v1",
+                where=[sdk.Pred("User:exists", u)],
+                target="User:status",
+                head_vars=[u],
+            )
+
+        inspected = sdk.SDKStore([User]).rules.inspect(inference)
+
+        self.assertIsInstance(inspected, dict)
+        self.assertEqual(inspected["kind"], "Inference")
+        self.assertIn("heads", inspected)
+
+    def test_application_rule_inspect_returns_ruleexprinspect(self) -> None:
+        rule = _application_rule()
+
+        inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+        self.assertIsInstance(inspected, RuleExprInspect)
+        self.assertEqual(inspected.ast, ("rule", "active_user", "active_user"))
+        self.assertEqual(inspected.templates, ("active_user",))
+        self.assertEqual(inspected.port_visibility["active_user"], ("status", "user"))
+
+    def test_ruleexpr_inspect_returns_ruleexprinspect(self) -> None:
+        left = _application_rule().as_("left")
+        right = _other_rule().as_("right")
+        expr = (left & right).join(left.user.eq(right.user))
+
+        inspected = sdk.SDKStore([User]).rules.inspect(expr)
+
+        self.assertIsInstance(inspected, RuleExprInspect)
+        self.assertEqual(len(inspected.occurrences), 2)
+        self.assertEqual(len(inspected.joins), 1)
+        self.assertEqual(inspected.unjoined_same_name_ports, ())
+
+    def test_unsupported_input_still_uses_sdk_store_error(self) -> None:
+        with self.assertRaises(SDKStoreError):
+            sdk.SDKStore([User]).rules.inspect(object())
+
+
+class RuleExprInspectDTOTests(unittest.TestCase):
+    def test_dtos_are_frozen_and_shape_validated(self) -> None:
+        atom = AtomDescriptor(atom_id="rule:atom_0", kind="pred", summary="pred")
+        occurrence = OccurrenceInspect(
+            template_id="rule",
+            alias="alias",
+            desc_template=None,
+            ports=("user",),
+            atoms=(atom,),
+        )
+        inspect = RuleExprInspect(
+            ast=("rule", "alias", "rule"),
+            occurrences=(occurrence,),
+            joins=(),
+            unjoined_same_name_ports=({"port_name": "user", "occurrences": ("alias",)},),
+        )
+
+        with self.assertRaises(FrozenInstanceError):
+            atom.kind = "other"  # type: ignore[misc]
+        with self.assertRaises(FrozenInstanceError):
+            occurrence.alias = "other"  # type: ignore[misc]
+        with self.assertRaises(FrozenInstanceError):
+            inspect.ast = ()  # type: ignore[misc]
+
+        with self.assertRaisesRegex(RuleExprError, "port_name and occurrences"):
+            RuleExprInspect(ast=(), occurrences=(), joins=(), unjoined_same_name_ports=({"name": "user"},))
+
+    def test_occurrence_atoms_use_rule_atom_ids_and_parent_c50_kinds(self) -> None:
+        inspected = sdk.SDKStore([User]).rules.inspect(_application_rule())
+        occurrence = inspected.occurrences[0]
+
+        self.assertEqual(occurrence.alias, "active_user")
+        self.assertEqual(occurrence.ports, ("status", "user"))
+        self.assertEqual([atom.atom_id for atom in occurrence.atoms], [f"active_user:atom_{idx}" for idx in range(3)])
+        self.assertEqual(occurrence.atoms[0].kind, "entity_existence")
+        self.assertEqual(occurrence.atoms[0].entity_type, "User")
+        self.assertEqual(occurrence.atoms[1].kind, "field_predicate")
+        self.assertEqual(occurrence.atoms[1].field, "status")
+        self.assertEqual(occurrence.atoms[2].kind, "cmp")
+        self.assertEqual(occurrence.atoms[2].op, "eq")
+
+    def test_entity_existence_accepts_non_empty_multi_term_predicates(self) -> None:
+        marker = Const("marker")
+        user = Var("u")
+        rule = ApplicationRule(
+            id="multi_exists",
+            where=(PredAtom("User:exists", [marker, user]),),
+            ports={"user": user},
+        )
+
+        inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+        atom = inspected.occurrences[0].atoms[0]
+        self.assertEqual(atom.kind, "entity_existence")
+        self.assertEqual(atom.entity_type, "User")
+        self.assertEqual(atom.subject, "'marker'")
+
+    def test_ports_property_returns_c59_portinspect_descriptors(self) -> None:
+        inspected = sdk.SDKStore([User]).rules.inspect(_application_rule())
+
+        self.assertEqual(
+            inspected.ports,
+            (
+                PortInspect(name="status", kind="value", value_type="unknown"),
+                PortInspect(name="user", kind="entity_ref", entity_type="User"),
+            ),
+        )
+        self.assertNotEqual(inspected.occurrences[0].ports, inspected.ports)
+
+    def test_unjoined_same_name_ports_use_stable_key_shape(self) -> None:
+        left = _application_rule().as_("left")
+        right = _other_rule().as_("right")
+
+        inspected = sdk.SDKStore([User]).rules.inspect(left & right)
+
+        self.assertEqual(inspected.unjoined_same_name_ports, ({"port_name": "user", "occurrences": ("left", "right")},))
+
+    def test_render_and_render_compact_are_deterministic_authoring_narratives(self) -> None:
+        left = _application_rule().as_("left")
+        right = _other_rule().as_("right")
+        inspected = sdk.SDKStore([User]).rules.inspect((left & right).join(left.user.eq(right.user)))
+
+        rendered = inspected.render({"left.user": "Alice", "left.status": "active", "right.user": "Bob"})
+
+        self.assertIn("RuleExprInspect", rendered)
+        self.assertIn("left:active_user User Alice has status active", rendered)
+        self.assertIn("right:trusted_user Trusted Bob", rendered)
+        self.assertIn("joins left.user = right.user", rendered)
+        self.assertEqual(inspected.render_compact(), "(left:active_user & right:trusted_user).join(1)")
+
+    def test_remaining_atom_kinds_are_described_without_execution_semantics(self) -> None:
+        status = Var("status")
+        user = Var("u")
+        rule = ApplicationRule(
+            id="atom_kinds",
+            where=(
+                InAtom(status, [Const("active"), Const("pending")]),
+                BuiltinAtom("add", [Const(1), Const(2)]),
+                NotAtom(body=AndExpr([PredAtom("User:exists", [user])])),
+            ),
+            ports={"status": status},
+        )
+
+        inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+        self.assertEqual([atom.kind for atom in inspected.occurrences[0].atoms], ["in", "builtin", "not"])
+
+
+if __name__ == "__main__":
+    unittest.main()

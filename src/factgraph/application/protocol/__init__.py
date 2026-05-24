@@ -73,6 +73,7 @@ from .rule_literal_replace import (
 )
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
+from .rule_expr_inspect import AtomDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -113,6 +114,7 @@ from .schema_runtime import EntityRef, EntitySelector, FieldPath, IdentityValue,
 __all__ = [
     "AppliedOpResultDTO",
     "AssertionRecordDTO",
+    "AtomDescriptor",
     "CheckRequest",
     "CheckResult",
     "CheckStatus",
@@ -161,7 +163,9 @@ __all__ = [
     "OverlayCheckPhase",
     "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
+    "OccurrenceInspect",
     "PlannedOpDTO",
+    "PortInspect",
     "ProofFrameAtomVerdict",
     "ProofFrameRecheckRequest",
     "ProofFrameRecheckResult",
@@ -194,6 +198,7 @@ __all__ = [
     "RulePortRef",
     "RuleExpr",
     "RuleExprError",
+    "RuleExprInspect",
     "RuleJoinConstraint",
     "RuleValidationError",
     "ExplicitBoolError",

@@ -62,7 +62,7 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from factgraph.sdk import <name>`.
-The export list currently has 41 names.
+The export list currently has 53 names.
 
 ### 1.1 Schema and store
 
@@ -104,6 +104,10 @@ class-first constructor name and does not accept workspace `path=`.
 | `RuleExpr` | Base RuleExpr authoring surface; use `RuleExpr.all(...)` / `RuleExpr.any(...)` or application `Rule` `&` / `|` composition |
 | `RuleExprError` (← `SDKDSLError`) | Raised when RuleExpr authoring input violates the expression contract |
 | `RuleJoinConstraint` | Immutable RuleExpr join constraint produced by `occurrence.port.eq(other_port)` / `occurrence.port_name.eq(other.port_name)`; initial joins use explicit `.eq(...)`, not Python `==` |
+| `RuleExprInspect` | Immutable object returned by `fg.rules.inspect(application_rule_or_rule_expr)`; exposes `ast`, `occurrences`, `joins`, `unjoined_same_name_ports`, `render()`, and `render_compact()` |
+| `OccurrenceInspect` | Immutable occurrence descriptor used by `RuleExprInspect.occurrences`; exposes alias, template id, port names, and atom descriptors |
+| `AtomDescriptor` | Immutable authoring-time atom descriptor used by `OccurrenceInspect.atoms`; exposes structured fields plus a display `summary` |
+| `PortInspect` | Immutable rich port descriptor used by `RuleExprInspect.ports`; exposes port name, kind, entity type, field, and value type |
 | `ExplicitBoolError` (← `RuleExprError`) | Raised when application `Rule` or RuleExpr values are used in Python boolean contexts; use `&` / `|`, not `and` / `or` |
 
 The application Rule bridge additionally exposes aggregate helpers from

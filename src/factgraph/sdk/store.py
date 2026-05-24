@@ -2085,7 +2085,15 @@ class SDKStore:
             return inspected
         raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile or SDK public semantics")
 
-    def inspect_rule(self, obj: Any) -> dict[str, Any]:
+    def inspect_rule(self, obj: Any) -> Any:
+        from factgraph.application.protocol import Rule as ApplicationRule
+        from factgraph.application.protocol.rule_expr import _RuleExpr
+        from factgraph.application.protocol.rule_expr_inspect import _inspect_application_rule, _inspect_rule_expr
+
+        if isinstance(obj, ApplicationRule):
+            return _inspect_application_rule(obj)
+        if isinstance(obj, _RuleExpr):
+            return _inspect_rule_expr(obj)
         return _inspect_rule_or_inference(obj)
 
     def save(self, path: str | Path | None = None) -> dict[str, Any]:

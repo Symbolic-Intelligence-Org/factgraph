@@ -25,7 +25,16 @@ from .error_codes import (
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
-from factgraph.application.protocol import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
+from factgraph.application.protocol import (
+    AtomDescriptor,
+    ExplicitBoolError,
+    OccurrenceInspect,
+    PortInspect,
+    RuleExpr,
+    RuleExprError,
+    RuleExprInspect,
+    RuleJoinConstraint,
+)
 from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
@@ -87,6 +96,10 @@ __all__ = [
     "vars",
     "build_application_rule",
     "DSLToApplicationRuleError",
+    "RuleExprInspect",
+    "OccurrenceInspect",
+    "AtomDescriptor",
+    "PortInspect",
     "RuleExpr",
     "RuleExprError",
     "RuleJoinConstraint",
