@@ -25,6 +25,7 @@ from .error_codes import (
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
+from factgraph.application.protocol import ExplicitBoolError, RuleExpr, RuleExprError
 from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
@@ -86,6 +87,9 @@ __all__ = [
     "vars",
     "build_application_rule",
     "DSLToApplicationRuleError",
+    "RuleExpr",
+    "RuleExprError",
+    "ExplicitBoolError",
     "FactGraph",
     "SDKStore",
     "build_authoring_schema_from_classes",

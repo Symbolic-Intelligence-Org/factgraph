@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 import re
 from types import MappingProxyType
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, NoReturn
 
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import (
@@ -122,6 +122,21 @@ class Rule:
     def as_(self, alias: str | None = None) -> RuleOccurrence:
         effective_alias = self.id if alias is None else alias
         return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(effective_alias))
+
+    def __and__(self, other: object):
+        from .rule_expr import _combine
+
+        return _combine("and", (self, other))
+
+    def __or__(self, other: object):
+        from .rule_expr import _combine
+
+        return _combine("or", (self, other))
+
+    def __bool__(self) -> NoReturn:
+        from .rule_expr import ExplicitBoolError
+
+        raise ExplicitBoolError("Rule values do not support Python truthiness; use & or | instead of and/or")
 
 
 @dataclass(frozen=True)

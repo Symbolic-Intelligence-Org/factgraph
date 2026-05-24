@@ -68,6 +68,13 @@ same_user_port = occ.user
 frozen value objects. They do not compose, join, or evaluate Rules by
 themselves; RuleExpr owns those expression-level semantics.
 
+T3.1 adds the base RuleExpr authoring surface: application `Rule` objects can
+compose with `&` and `|`, and `RuleExpr.all(...)` / `RuleExpr.any(...)` provide
+factory equivalents. Python boolean contexts are intentionally rejected for
+application `Rule` and RuleExpr values; use explicit `&` / `|` composition
+instead of `and` / `or`. Joins, inspect output, and full user-facing examples
+remain deferred to later T3 slices.
+
 ## Unified Syntax via SDK DSL Bridge
 
 Use `factgraph.sdk.dsl.build_application_rule(...)` when starting from SDK DSL

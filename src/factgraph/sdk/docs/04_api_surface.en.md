@@ -101,6 +101,9 @@ class-first constructor name and does not accept workspace `path=`.
 | `build_application_rule` | Build an `ApplicationRule` from SDK DSL conditions |
 | `DSLToApplicationRuleError` | Raised when SDK DSL conditions cannot lower to an `ApplicationRule` |
 | `SDKDSLError` | Raised on DSL construction errors |
+| `RuleExpr` | Base RuleExpr authoring surface; use `RuleExpr.all(...)` / `RuleExpr.any(...)` or application `Rule` `&` / `|` composition |
+| `RuleExprError` (← `SDKDSLError`) | Raised when RuleExpr authoring input violates the expression contract |
+| `ExplicitBoolError` (← `RuleExprError`) | Raised when application `Rule` or RuleExpr values are used in Python boolean contexts; use `&` / `|`, not `and` / `or` |
 
 The application Rule bridge additionally exposes aggregate helpers from
 `factgraph.sdk.dsl` only. `build_application_rule` is available from both

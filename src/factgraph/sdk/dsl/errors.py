@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from ..errors import SDKError
+from factgraph._sdk_errors import SDKDSLError
 
-
-class SDKDSLError(SDKError):
-    pass
+__all__ = ["SDKDSLError"]
