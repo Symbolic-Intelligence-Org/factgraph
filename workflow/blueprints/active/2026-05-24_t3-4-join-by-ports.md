@@ -1,6 +1,6 @@
 # Task Blueprint: T3.4 Join By Ports
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: S
@@ -286,4 +286,44 @@ If API-surface docs already list RuleExpr methods at implementation time, add a 
 
 ## 10. Outcome / Deviations
 
-To be completed after implementation.
+### Final Landed Code
+
+- `src/factgraph/application/protocol/rule_expr.py`: added `from itertools import combinations`, `_AndGroup.join_by_ports(*explicit_names) -> _AndGroup` as a thin delegate, `_OrGroup.join_by_ports(...)` as an AND-only diagnostic raise method, and private `_validate_join_by_port_names`, `_expand_join_by_ports`, and `_port_refs_for_name` helpers. The implementation follows the §5.7 five-step ordering: validate name shapes and duplicates, gather reachable operands, build stable diagnostics, expand pairwise constraints, then delegate to T3.3 `.join(...)`.
+- `tests/application/protocol/test_rule_expr.py`: added 8 T3.4 tests in `RuleExprJoinByPortsTests`, covering explicit `.join(...)` equivalence, pairwise expansion for more than two occurrences, missing and fewer-than-two diagnostics, duplicate requested names, zero/empty/non-string names, AND-only enforcement, OR-branch reach exclusion, and the bonus `test_join_by_ports_preserves_export_scope` scope-boundary check.
+
+### Test Gates
+
+- G7 baseline `81285e98`: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 55 tests OK.
+- Post-implementation core gate: the same command ran 63 tests OK (55 baseline + 8 T3.4 tests).
+- Cross-slice gate: adding `tests.sdk.test_rule_naming` and `tests.application.protocol.test_rule_aggregate` ran 72 tests OK.
+- Ruff: `python -m ruff check src/factgraph/application/protocol/rule_expr.py tests/application/protocol/test_rule_expr.py` passed clean.
+
+### Deviations / Follow-Ups
+
+T3.4 closed with **zero deviations** from blueprint scope. This is the **second consecutive T3 feat commit** to achieve 0 P0/P1/P2/P3 findings at Step 4.7 review.
+
+The clean result is attributed to the same preemptive blueprint design pattern that worked for T3.3:
+
+- **Preemptive scope locking in §5.5**: 6 explicit "no" locks and 1 explicit "yes" lock were listed before implementation: no `Rule.join_by_ports`, no `RuleOccurrence.join_by_ports`, no T1.4 DTO changes, no new helper module, no new error subclass, no new SDK export, and explicit addition of `_OrGroup.join_by_ports` as a raise diagnostic.
+- **Algorithm specification in §5.3**: pseudocode with `itertools.combinations(refs, 2)` for pairwise expansion, plus complexity analysis. Implementation followed this shape directly.
+- **Validation ordering in §5.7**: the five-step sequence (name shape + dedup, reachable operands, diagnostics, expand, delegate to T3.3 `.join()`) was implemented as scoped.
+- **Diagnostics aggregation in §5.4**: the stable-order aggregation pattern from T3.2/T3.3 was preserved for missing and fewer-than-two port-name diagnostics.
+
+**Bonus discipline**: `test_join_by_ports_preserves_export_scope` actively verifies preemptive lock #6 (no new SDK export). This asserts a scope boundary directly, rather than only testing functional behavior.
+
+**Lesson for future T3 slices**: T3.3 and T3.4 both achieving 0 deviation through the same blueprint pattern demonstrates that preemptive scope locking, algorithm specification, validation-layer ordering, and diagnostics precision are repeatable, not slice-specific. T3.5 inspect and T3.6 docs blueprints should continue this approach.
+
+No T3.4 follow-ups are deferred to T3.5 or later slices.
+
+### Stage 1-3 Traceability
+
+- Stage 1 audit: `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`.
+- Adopted D2 §4.5: `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md`.
+- Adopted D5 §4.5: `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md`.
+- Stage 3 synthesis §3 T3.4: `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md`.
+- Track plan sync: `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` at `9c857d0c`.
+- Substrate archives: T1.4 `workflow/blueprints/archive/2026-05-23_t1-4-alias-port-contract.md`, T3.1 `workflow/blueprints/archive/2026-05-24_t3-1-base-ruleexpr-bool-guards.md`, T3.2 `workflow/blueprints/archive/2026-05-24_t3-2-expression-scope-validation.md`, and T3.3 `workflow/blueprints/archive/2026-05-24_t3-3-joins-and-reach-rule.md`.
+
+### Archive Readiness
+
+Yes. T3.4 implementation, tests, ruff, deviation review, and traceability records are complete. The blueprint pair is ready to move from `workflow/blueprints/active/` to `workflow/blueprints/archive/`.

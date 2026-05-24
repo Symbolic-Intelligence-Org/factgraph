@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.4 Join By Ports
 
 - Blueprint: [2026-05-24_t3-4-join-by-ports.md](./2026-05-24_t3-4-join-by-ports.md)
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -13,6 +13,7 @@
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.4-F1 "requested names" typo fixed; T3.4-F2 §5.7 step 1 wording clarified; T3.4-F3 §5.3 pseudocode standardized with `itertools.combinations`. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | `join_by_ports`, `itertools.combinations`, `_reachable_operands`, T3.3 join substrate usage, `_OrGroup` direct access, and SDK `__all__` scans matched expected shipped scope. No blueprint scope amendment required. |
 | 2026-05-24 | baseline | G7 baseline recorded | Branch/sacred/dirty state verified; Step 4.6 grep remains clean; `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 55 tests OK. |
+| 2026-05-24 | implemented | Step 4.7 clean; 0 deviation (second consecutive) | Feat `8f248212` passed Step 4.7 with 0 P0/P1/P2/P3. 72 cross-slice tests OK, ruff clean. Second consecutive T3 feat with 0 deviation. Preemptive scope locking pattern (6 explicit "no" + 1 explicit "yes" in §5.5), diagnostics aggregation stable-order pattern (§5.4), and 5-step validation ordering (§5.7) carried T3.3 discipline forward to T3.4. Bonus test `test_join_by_ports_preserves_export_scope` actively verifies SDK export scope preemptive lock. |
 
 ## Decision Notes
 
