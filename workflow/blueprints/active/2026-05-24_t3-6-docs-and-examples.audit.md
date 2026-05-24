@@ -12,6 +12,7 @@
 | 2026-05-24 | draft | Blueprint created | Initial T3.6 S-class docs-only scope recorded from D5 section 4.7, Stage 3 synthesis section 3 T3.6, track plan T3.6 row, adopted D1-D5, parent C24/C27/C32/C35/C49-C51/C58/C59, and archived T3.1-T3.5 substrate. |
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.6-F1 anti-example wording clarified to `ExplicitBoolError` short-circuit behavior; T3.6-F2 markdown grep acceptance cross-referenced §8 step 8 specifics; T3.6-F3 optional `06_what_if_and_proof.en.md` touch locked to no-touch unless scoped amendment says otherwise. |
 | 2026-05-24 | pre-impl | Step 4.6 docs grep clean; targets identified | Grep found one expected stale application-rule deferral sentence, legacy-context `Rule` imports only, no invalid join `==` examples, missing user-facing `join_by_ports` / `ExplicitBoolError` / `unjoined_same_name_ports` teaching outside API surface, and confirmed `04_api_surface.en.md` already contains the T3.5 RuleExpr rows/count baseline. |
+| 2026-05-24 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect -v` ran 76 tests OK after Step 4.6 docs grep. |
 
 ## Decision Notes
 
@@ -115,6 +116,16 @@ T3.6 applies the T3.3/T3.4/T3.5 zero-deviation pattern for the fourth cycle:
 | Join examples using `==` instead of `.eq(...)` | `rg '\.user.*==.*\.|\.eq\(' src/factgraph/sdk/docs/ src/factgraph/application/docs/` | Clean for invalid join examples: `.eq(...)` is present in `04_api_surface.en.md`; `==` hits are SDK where-syntax / attr-equality examples or application bridge examples, not RuleExpr join examples. |
 | Missing RuleExpr docs terms | `rg 'join_by_ports\|ExplicitBoolError\|unjoined_same_name_ports' src/factgraph/sdk/docs/ src/factgraph/application/docs/` | Expected docs gap confirmed: terms currently appear only in `04_api_surface.en.md` rows. T3.6 must add user-facing teaching in scoped docs files. |
 | API surface no-touch baseline | `wc -l src/factgraph/sdk/docs/04_api_surface.en.md` + `grep -c 'RuleExpr\|RuleJoinConstraint\|RuleExprInspect' src/factgraph/sdk/docs/04_api_surface.en.md` | Clean: `04_api_surface.en.md` is 607 lines and has 7 RuleExpr-related hits, including `RuleExpr`, `RuleJoinConstraint`, `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, `PortInspect`, and `ExplicitBoolError`. No T3.6 edit needed. |
+
+### G7 Baseline Record
+
+| Check | Result |
+|---|---|
+| Branch and sacred state | T3.6 branch `v0.2.0-t3-6-docs-and-examples-2026-05-24`; sacred `master` remains `562c7419`; dirty 4M+1U preserved. |
+| T3.5 RuleExpr inspect substrate | Step 4.6 grep already confirmed T3.5 API surface rows/count baseline and no T3.6 API-surface edits needed. |
+| Docs grep targets identified | Step 4.6 grep already confirmed stale application-rule deferral target, missing RuleExpr user-facing teaching outside API surface, legacy `Rule` imports in legacy/proof contexts only, and no invalid join `==` examples. |
+| Requested pytest baseline | Deferred per T3.1-T3.5 environment lock: pytest has known SIGSEGV in this environment; unittest fallback is the G7 runner. |
+| Fallback unittest baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect -v` -> 76 tests OK. |
 
 ### Step 4.2 Draft Review Checklist
 
