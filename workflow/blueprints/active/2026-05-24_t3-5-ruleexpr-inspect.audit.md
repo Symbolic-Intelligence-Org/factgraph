@@ -12,6 +12,7 @@
 | 2026-05-24 | draft | Blueprint created | Initial T3.5 M-class scope recorded from D3 inspect coexistence, D4 alias identity, D5 §4.6 split allowance, Stage 3 synthesis §3 T3.5, track plan T3.5 row, parent C32/C49/C50/C51/C59, and archived T3.1-T3.4 substrate. |
 | 2026-05-24 | draft-amend | Step 4.2 P2 precision amendments | T3.5-F1 atom_id schema locked to T1.1 `Rule.atom_ids[index]`; T3.5-F2 `unjoined_same_name_ports` key shape specified without adding a fifth DTO; T3.5-F3 `OccurrenceInspect.ports` string names vs `RuleExprInspect.ports` `PortInspect` descriptors clarified. |
 | 2026-05-24 | scoped | Scope locked + P3 precision | T3.5-F4 AtomDescriptor derivation pseudocode added for PredAtom entity-existence/field-predicate dispatch and CmpAtom best-effort `cmp` classification. |
+| 2026-05-24 | pre-impl | Step 4.6 grep found F5 alignment risk | Grep confirmed new DTO/module names are clean and legacy inspect paths are isolated, but T1.4 `:exists` inference accepts any matching term while §5.6 pseudocode currently requires `len(atom.terms) == 1`; needs a pre-feat A-fallback precision amendment before G7/implementation. |
 
 ## Decision Notes
 
@@ -112,6 +113,19 @@ T3.5 applies the T3.3/T3.4 zero-deviation pattern:
 | T3.2 expression-scope validation | Alias uniqueness, explicit aliases, and alias-aware canonical operands preserved. |
 | T3.3 joins + reach rule | `RuleJoinConstraint`, joins, reach validation, symmetry/dedupe, and negative-action gates preserved. |
 | T3.4 join_by_ports | `.join_by_ports(...)` behavior, strict no-export lock, and two-file implementation remain unchanged. |
+
+### Step 4.6 Pre-Implementation Grep
+
+| Check | Command | Result |
+|---|---|---|
+| New public DTO names | `rg 'RuleExprInspect|OccurrenceInspect|AtomDescriptor|PortInspect' src/factgraph/ tests/` | Clean: 0 shipped code/test hits. |
+| New module name | `rg 'rule_expr_inspect|RuleExprInspect' src/factgraph/ tests/` | Clean: 0 shipped code/test hits. |
+| `SDKStore.inspect_rule` callers | `rg 'inspect_rule\(|\.inspect_rule\b' src/factgraph/ tests/` | Clean: only `_SDKRulesManager.inspect(...)` delegates to `SDKStore.inspect_rule(...)`; method definition remains the single store entry point. |
+| Legacy inspect helper callers | `rg '_inspect_rule_or_inference' src/factgraph/ tests/` | Clean: only `SDKStore.inspect_rule(...)` calls `_inspect_rule_or_inference(...)`; no external helper dependency. |
+| Public rules inspect callers | `rg '_SDKRulesManager|rules\.inspect\(' src/factgraph/ tests/` | Clean: existing docs/tests call `fg.rules.inspect(...)`; no alternate public entry point discovered. |
+| T1.1 atom id schema | `rg 'atom_ids' src/factgraph/ tests/` | Clean with expected split: application `Rule.atom_ids` uses `<rule_id>:atom_<index>`; legacy SDK branch inspect keeps `b0.a0` dict shape. T3.5 F1 application inspect should reuse `Rule.atom_ids[index]`. |
+| Legacy branch inspect helper | `rg '_inspect_where_branches' src/factgraph/ tests/` | Clean: internal legacy helper only, called from `_inspect_rule_or_inference(...)`. |
+| `:exists` inference alignment | `rg ':exists' src/factgraph/application/protocol/` + `rg '_find_entity_ref_type' src/factgraph/application/protocol/` | Risk: T1.4 `_find_entity_ref_type_in_atom(...)` accepts `PredAtom` whose `pred_id` ends with `:exists` and any term equals the target `Var`; §5.6 pseudocode currently says `len(atom.terms) == 1`. Amend §5.6 before implementation. |
 
 ### Step 4.2 Draft Review Checklist
 
