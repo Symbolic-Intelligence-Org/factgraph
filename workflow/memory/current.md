@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2 archived locally; source `21fa0914`, not pushed)
+最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2/T3.3 archived locally; source `1100ea78`, not pushed)
 
-## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 ARCHIVED; T3.3 NEXT)
+## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 + T3.3 ARCHIVED; T3.4 NEXT)
 
-**Current local branch:** `v0.2.0-t3-2-expression-scope-validation-2026-05-24 @ 21fa0914`.
+**Current local branch:** `v0.2.0-t3-3-joins-and-reach-rule-2026-05-24 @ 1100ea78`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -33,6 +33,7 @@
 | **T1.4 Alias / Port Contract** | S | `a3411207` | `64135b85 feat(application): add Rule occurrence port refs` (no Step 4.7 fix) |
 | **T3.1 Base RuleExpr + Bool Guards** | M | `a0718e85` | `e049c93e feat(application): add T3.1 RuleExpr base and bool guards` (A-fallback `8de03372`, no Step 4.7 fix) |
 | **T3.2 Expression-Scope Occurrence Validation** | S | `21fa0914` | `2a16dd98 feat(application): add T3.2 expression-scope occurrence validation` (T-1 deviation recorded in closure) |
+| **T3.3 Joins + Every-Proof-Path Reach Rule** | M | `1100ea78` | `0b80fe9b feat(application): add T3.3 joins and reach rule` (0 deviation — first T3 feat with zero Step 4.7 findings) |
 
 ### Current landed behavior
 
@@ -229,6 +230,14 @@
   - Seven negative-action gates preserved: legacy SDK `Rule.__bool__` unchanged; no direct `application_rule == rule_expr`; T1.4 `Rule.as_` / alias regex / port APIs preserved; T1.3 staged naming unchanged; T2.3 aggregate substrate untouched; T3.1 acceptance preserved after explicit-alias test supersedence; duck-typed legacy detector retained.
   - **T-1 deviation recorded in §10**: implementation discovered explicit-alias infix expressions require `RuleOccurrence.__and__` / `__or__`. The additive method change was bundled into feat rather than a pre-feat (A-fallback) scope amendment. Closure records this as process-discipline drift and future slices must pause for a pre-feat scope amendment when discovered operator/dunder additions expand scope.
 
+**T3.3 — Joins + Every-Proof-Path Reach Rule**
+- **T3.3 archived at `1100ea78`**:
+  - Lineage: `5496d076` draft → `a3a78702` scoped + P3 → `52eec99e` Step 4.6 grep clean → `83489a07` G7 baseline → `0b80fe9b` feat → `c43c3613` closure → `1100ea78` archive.
+  - Landed join surface: `RuleJoinConstraint` frozen DTO; `RulePortRef.eq(...)`; `_AndGroup.joins` + `.join(...)`; `_OrGroup.join(...)` diagnostic; symmetric/dedup canonical join helpers; direct-AND-spine `_validate_join_reach(...)`; endpoint-vs-operand validation; `_combine("and", ...)` merge/revalidation; `_AndGroup._canonical()` includes normalized joins.
+  - Verification: G7 45 tests OK; post-impl core 55 tests OK; cross-slice 64 tests OK; ruff clean.
+  - Nine negative-action gates preserved: legacy SDK `Rule.__bool__` unchanged; no direct `application_rule == rule_expr`; T1.4 substrate preserved except pre-scoped additive `RulePortRef.eq`; `RulePortRef.__eq__` remains value equality; T1.3 staged naming unchanged; T2.3 aggregate substrate untouched; T3.1/T3.2 acceptance + negative-action gates preserved; `_is_legacy_sdk_rule` duck-typed detector retained; no new error subclass.
+  - **0-deviation milestone**: first T3 feat with 0 P0/P1/P2/P3 at Step 4.7. Clean result attributed to §5.2 preemptive `RulePortRef.eq()` scope lock, §5.3 validation-location layering, §5.6 Reach Rule pseudocode/complexity, and §5.7 canonical symmetric equality lock.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -301,11 +310,13 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T3.2 cross-slice supersedence trace:** When a later slice deliberately invalidates an earlier acceptance test, record it in §6 invariants, §7 acceptance, §8 implementation plan, and audit-log reviewer focus before implementation. T3.2 did this for T3.1 `test_duplicate_operands_preserve_multiplicity`, preserving multiplicity semantics through explicit aliases while rejecting bare repeated Rule operands.
 - **T3.2 (A-fallback) discipline drift lesson:** `RuleOccurrence.__and__` / `__or__` was a necessary discovered additive method change for explicit-alias infix expressions, but it was bundled into feat instead of a pre-feat blueprint amendment. Closure §10 records this as process-discipline drift. Future T3.x slices discovering operator/dunder scope expansion must pause for a doc-only (A-fallback) scope amendment before feat.
 - **T3.2 validation diagnostics pattern:** Aggregate expression-scope diagnostics with stable ordering when multiple authoring issues can coexist; fail immediately only for operand construction failures that prevent representing the operand (non-identifier default alias). This avoids fix-one-error-per-run churn without hiding invalid default-alias guidance.
+- **T3.3 preemptive scope locking pattern:** T3.2 T-1 drift lesson was applied in T3.3 §5.2 by explicitly locking `RulePortRef.eq()` as an additive method on the T1.4 frozen DTO before implementation. Result: 0 deviation. Future slices should pre-lock any method/dunder additions implied by prior drift.
+- **T3.3 0-deviation milestone:** first T3 feat with 0 P0/P1/P2/P3 at Step 4.7. The winning pattern was preemptive scope + explicit validation-layer placement + algorithm pseudocode + canonical equality spec in the blueprint.
+- **T3.3 cadence cycle most efficient:** 7 commits total versus T3.1 9 and T3.2 8; no P2 amendment, no A-fallback, no Step 4.7 fix. Strong evidence that lessons from prior slices now land in draft/scoped stages.
 
 ### Recommended next work
 
-- **T3.3 joins + Every-Proof-Path Reach Rule** — recommended next slice. Predicted M-class because it introduces public `RuleJoinConstraint`, consumes D2/D4/D5, adds `RulePortRef.eq(...)`, `.join(...)`, self-join semantics, join symmetry / duplicate normalization, and the Every-Proof-Path Reach Rule validator.
-- **T3.4 `.join_by_ports(...)`** — S-class candidate after T3.3; should reduce to pure expansion over T3.3 `.join(...)` mechanics if no new diagnostics appear.
+- **T3.4 `.join_by_ports(...)`** — recommended next slice; predicted S-class. Should reduce to explicit-name expansion over T3.3 `.join(...)` and `RuleJoinConstraint` if diagnostics remain missing/fewer-than-two/ambiguous only.
 - **T3.5 RuleExpr inspect** — likely M/L depending on whether T3.5a/T3.5b split is used; must preserve legacy SDK Rule / Inference dict inspect while adding RuleExprInspect.
 - **T3.6 docs + examples** — docs-only slice after T3.1-T3.5 behavior stabilizes; owns precedence/parentheses guidance, `.eq(...)`, bool guards, same-name-port diagnostics, and inspect examples.
 - **T3 later execution tranche** — RuleExpr execution lowering / adapter integration deferred per D5 §4.8; class TBD (M or L) and requires a fresh decision before blueprinting.
@@ -314,7 +325,7 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3.1 locked unittest fallback and did not block on pytest runner segfault.
 - **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip + `LegacyRule` retention + `DeprecationWarning` policy decisions. Coordinate with T1.3 A-staged commitment.
-- **Push / publish gate** — T1/T2 + T3.1 + T3.2 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
+- **Push / publish gate** — T1/T2 + T3.1 + T3.2 + T3.3 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
