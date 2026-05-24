@@ -42,6 +42,8 @@ Depends on:
 - D8 reviewed join lowering semantics.
 - D9 reviewed adapter matrix and rejection policy.
 
+> ADR 4-state lifecycle: `proposed` -> `adopted` (current binding constraint, stays in `active/`) -> `superseded` or `withdrawn` (moves to `archive/`). Transitions are explicit; no `adopted` -> `proposed` re-opening.
+
 Lifecycle:
 
 - `proposed`: this draft records the intended decision.
@@ -164,14 +166,20 @@ class RuleExprEvaluationTrace:
     branch_id: str
     runtime_branch_index: int
     occurrence_aliases: tuple[str, ...]
-    occurrence_map: object
-    join_materializations: tuple[object, ...]
-    head_binding: object
+    occurrence_map: tuple[RuleExprOccurrenceBinding, ...]
+    join_materializations: tuple[RuleExprJoinMaterialization, ...]
+    head_binding: RuleExprHeadBinding
     support_digest: str
     support_kind: str
 ```
 
-Exact class names, field names, storage location, and lookup key are implementation details for Stage 3.
+Concrete helper names may differ, but the referenced minimum categories come from D7 §4.2 (`RuleExprOccurrenceBinding`, `RuleExprHeadBinding`) and D8 §4.8 (`RuleExprJoinMaterialization`). Exact storage location and lookup key are implementation details for Stage 3.
+
+Minimum storage/lifetime invariants:
+
+- the trace sidecar must be correlateable with the selected `CandidateSet`, the evaluation invocation, and the runtime branch index;
+- the trace sidecar must live at least until the originating `fg.eval.evaluate(...)` invocation finishes;
+- persistence beyond the invocation is not required by D10.
 
 Required semantics:
 
@@ -186,7 +194,7 @@ The sidecar is private and not exported from `factgraph.sdk`.
 
 ### 4.6 D8 join materialization metadata remains internal but durable
 
-D8 `RuleExprJoinMaterialization` metadata must survive through evaluation planning at least until a candidate/support link can be associated with a selected branch.
+D8 §4.8 `RuleExprJoinMaterialization` metadata must survive through evaluation planning at least until a candidate/support link can be associated with a selected branch.
 
 Future T5 must be able to identify:
 
@@ -331,3 +339,4 @@ Still deferred:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D10 keeps public RuleExpr evaluation success results as `list[CandidateSet]`, rejects public result wrappers / `CandidateSet` extensions, and requires private trace preservation for future T5 evidence mapping. |
+| 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Added ADR lifecycle blockquote, typed trace sidecar fields against D7/D8 minimum categories, and locked minimum sidecar storage/lifetime invariants. |
