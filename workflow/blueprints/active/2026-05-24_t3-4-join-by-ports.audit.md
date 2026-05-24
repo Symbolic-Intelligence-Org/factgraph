@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.4 Join By Ports
 
 - Blueprint: [2026-05-24_t3-4-join-by-ports.md](./2026-05-24_t3-4-join-by-ports.md)
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.4 S-class scope recorded from D2 §4.5, D5 §4.5, Stage 3 synthesis §3 T3.4, synced track plan T3.4 row, and archived T3.3 join substrate. |
+| 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.4-F1 "requested names" typo fixed; T3.4-F2 §5.7 step 1 wording clarified; T3.4-F3 §5.3 pseudocode standardized with `itertools.combinations`. |
 
 ## Decision Notes
 

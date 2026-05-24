@@ -1,6 +1,6 @@
 # Task Blueprint: T3.4 Join By Ports
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: S
@@ -129,6 +129,8 @@ T3.4 expands explicit port names into T3.3 constraints.
 Pseudocode:
 
 ```python
+from itertools import combinations
+
 def _expand_join_by_ports(group: _AndGroup, names: tuple[str, ...]) -> tuple[RuleJoinConstraint, ...]:
     direct = tuple(_reachable_operands(group).values())
     issues = []
@@ -143,7 +145,7 @@ def _expand_join_by_ports(group: _AndGroup, names: tuple[str, ...]) -> tuple[Rul
         elif len(refs) == 1:
             issues.append(f"port {name!r} is present on fewer than two direct AND occurrences")
         else:
-            constraints.extend(left.eq(right) for each pair in refs)
+            constraints.extend(left.eq(right) for left, right in combinations(refs, 2))
     if issues:
         raise RuleExprError("RuleExpr.join_by_ports validation failed: " + "; ".join(sorted(issues)))
     return tuple(constraints)
@@ -167,7 +169,7 @@ Rules:
 - Missing port: zero direct reachable occurrences expose the requested name.
 - Fewer-than-two: exactly one direct reachable occurrence exposes the requested name.
 - More-than-two: not an error; deterministic pairwise expansion creates all pair constraints.
-- Duplicate requested names should be rejected as duplicate request names rather than silently duplicating work.
+- Duplicate requested names should be rejected as duplicate requested names rather than silently duplicating work.
 
 If multiple requested names fail, raise one `RuleExprError` with `; `-joined issues sorted by requested name.
 
@@ -196,7 +198,7 @@ Single application `Rule` and `RuleOccurrence` intentionally have no `.join_by_p
 
 `_AndGroup.join_by_ports(...)` should:
 
-1. validate requested names and duplicate requested names.
+1. validate explicit name shapes (non-empty strings) and detect duplicate requested names.
 2. gather direct reachable operands via T3.3 `_reachable_operands(...)`.
 3. build diagnostics for missing/fewer-than-two names.
 4. expand valid names pairwise into `RuleJoinConstraint` values via T3.3 `.eq(...)`.
