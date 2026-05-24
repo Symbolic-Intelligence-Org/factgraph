@@ -1,6 +1,6 @@
 # Task Blueprint: T3.2 Expression-Scope Occurrence Validation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: S
@@ -29,6 +29,8 @@ T3.2 must add the expression-scope rules that Stage 3 synthesis assigned to this
 - diagnostics for duplicate aliases and repeated unaliased Rules.
 
 This must consume T1.4's shipped `Rule.as_(...)`, `RuleOccurrence`, `RulePortRef`, and alias regex rather than re-shipping those substrates.
+
+Accepting `RuleOccurrence` as a RuleExpr operand is a prerequisite for the "repeated same Rule requires explicit aliases" must-include, not a scope expansion — it operationalizes the T1.4 substrate that D5 §4.3 explicitly cites.
 
 Canonical drivers:
 
@@ -206,6 +208,8 @@ Rationale:
 ```python
 return ("rule", _rule_identity(self.rule), self.alias)
 ```
+
+T3.2 §5.6 implements D4 §4.3 "alias 参与 identity" for `_RuleOperand`. T3.1 had no alias concept so D4 §4.3 was vacuously true; T3.2 makes alias identity operational at the canonical tuple level.
 
 Consequences:
 

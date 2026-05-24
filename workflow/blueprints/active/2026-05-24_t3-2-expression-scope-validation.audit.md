@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.2 Expression-Scope Occurrence Validation
 
 - Blueprint: [2026-05-24_t3-2-expression-scope-validation.md](./2026-05-24_t3-2-expression-scope-validation.md)
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.2 S-class scope recorded from D5 §4.3, Stage 3 synthesis §3 T3.2, synced track plan T3.2 row, T1.4 substrate, and archived T3.1 implementation. |
+| 2026-05-24 | scoped | Scope locked + P3 amendments | T-2 Goal #1 prerequisite rationale recorded; T-3 D4 §4.3 alias identity operationalization acknowledged in §5.6. |
 
 ## Decision Notes
 
