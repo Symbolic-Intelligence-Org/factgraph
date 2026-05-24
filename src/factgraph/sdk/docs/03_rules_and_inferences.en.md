@@ -189,6 +189,158 @@ Adapter status:
 | ProbLog adapter | Supported (`findall/3` + `library(lists)` predicates; empty `min`/`max`/`mean` use `L = [_|_]` guard, branch does not fire) |
 | PyReason adapter | Out of scope |
 
+## 3.3 RuleExpr Authoring Surface
+
+RuleExpr is the application-rule composition surface. During the staged T1.3/T3
+period, top-level `factgraph.sdk.Rule` remains the legacy SDK Rule. Use
+`ApplicationRule` for direct application DTO imports, or use
+`build_application_rule(...)` when starting from SDK DSL syntax:
+
+```python
+from factgraph.sdk import ApplicationRule, RuleExpr, build_application_rule, vars
+```
+
+`factgraph.sdk.ApplicationRule` and `factgraph.application.protocol.Rule` are
+the same runtime type. The final top-level `Rule` name flip is deferred to T5.
+
+### Building operands
+
+Prefer the bridge for user-facing examples:
+
+```python
+from factgraph.sdk import build_application_rule, vars
+
+with vars("u") as (u,):
+    active_user = build_application_rule(
+        id="active_user",
+        where=[User(u), User(u).status == "active"],
+        ports={"user": u},
+        desc="active user %user",
+    )
+
+with vars("u") as (u,):
+    assigned_owner = build_application_rule(
+        id="assigned_owner",
+        where=[User(u), User(u).role == "owner"],
+        ports={"user": u},
+        desc="assigned owner %user",
+    )
+```
+
+Occurrence aliases identify each use of a rule inside an expression:
+
+```python
+a = active_user.as_("a")
+b = assigned_owner.as_("b")
+```
+
+If a rule appears more than once in one RuleExpr, use explicit aliases for each
+occurrence.
+
+### Composition, precedence, and bool guards
+
+Use `&` and `|` for RuleExpr construction:
+
+```python
+expr = (a & b) | c      # explicit OR of an AND group and c
+expr = a & (b | c)      # explicit AND with an OR branch
+```
+
+Python `&` binds tighter than `|`, so `a & b | c` is parsed as `(a & b) | c`.
+Use parentheses for every mixed AND/OR expression.
+
+Do not use Python boolean operators:
+
+```python
+expr = a and b          # raises ExplicitBoolError because Python evaluates bool(a) for short-circuit
+if expr:                # raises ExplicitBoolError
+    ...
+```
+
+Use explicit optional checks when needed:
+
+```python
+if expr is None:
+    ...
+```
+
+### Explicit joins
+
+RuleExpr joins bind occurrence ports. Initial T3 syntax is explicit `.eq(...)`,
+not Python `==`, so T1.4 `RulePortRef` value equality remains intact:
+
+```python
+expr = (a & b).join(a.user.eq(b.user))
+```
+
+`.join(...)` is AND-only. It is not available on a single `Rule` /
+`RuleOccurrence`, and OR groups reject it with guidance to attach joins inside
+AND branches. Same-occurrence joins such as `a.user.eq(a.user)` are rejected.
+
+### Explicit-name joins
+
+Same-name ports do not auto-join. If both `a` and `b` expose a `user` port,
+`a & b` is still unjoined until you say how they relate.
+
+Use either direct constraints:
+
+```python
+expr = (a & b).join(a.user.eq(b.user))
+```
+
+or explicit-name expansion:
+
+```python
+expr = (a & b).join_by_ports("user")
+```
+
+`.join_by_ports("user")` expands the requested port name pairwise across
+reachable AND operands. The method reports missing names, names present on
+fewer than two occurrences, duplicate requested names, and invalid name shapes.
+It is still explicit authoring, not silent same-name-port joining.
+
+Inspect unjoined same-name hints:
+
+```python
+hints = fg.rules.inspect(a & b).unjoined_same_name_ports
+# [{"port_name": "user", "occurrences": ("a", "b")}]
+```
+
+### Inspect return shapes
+
+`fg.rules.inspect(...)` is intentionally polymorphic:
+
+```python
+legacy_payload = fg.rules.inspect(legacy_rule)       # dict
+legacy_inf     = fg.rules.inspect(legacy_inference)  # dict
+rule_view      = fg.rules.inspect(active_user)       # RuleExprInspect
+expr_view      = fg.rules.inspect(expr)              # RuleExprInspect
+```
+
+Legacy SDK `Rule` / `Inference` inputs keep the existing dict payload. Application
+`Rule` and RuleExpr inputs return `RuleExprInspect`.
+
+`RuleExprInspect` exposes:
+
+- `ast`
+- `occurrences`
+- `joins`
+- `unjoined_same_name_ports`
+- `templates`
+- `port_visibility`
+- `ports`
+- `render(bindings=None)`
+- `render_compact()`
+
+`OccurrenceInspect.ports` is a tuple of local port name strings. In contrast,
+`RuleExprInspect.ports` is a tuple of `PortInspect` descriptors aggregated
+across inspected occurrences. For value ports, `value_type="unknown"` means the
+current application `PortType` substrate does not carry concrete value type
+metadata.
+
+`render()` and `render_compact()` are deterministic authoring narratives. They
+do not read the ledger and are not proof explanations.
+
 ## 4. RuleRef and Dependency Registration
 
 Construction:

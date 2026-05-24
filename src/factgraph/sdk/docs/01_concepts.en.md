@@ -178,6 +178,13 @@ For most users this split is invisible — `fg.write.add(...)` Just
 Works. The split matters when you're building tooling on top of
 factgraph.
 
+RuleExpr uses this split deliberately. User-facing examples should start from
+SDK ergonomics (`build_application_rule(...)`) or the staged
+`ApplicationRule` export, while the expression values themselves are application
+protocol objects. `fg.rules.inspect(...)` also reflects the split: legacy SDK
+`Rule` / `Inference` inputs return the preserved dict shape, while application
+`Rule` and RuleExpr inputs return `RuleExprInspect`.
+
 ---
 
 ## 4. Frozen DTO boundary
@@ -195,6 +202,7 @@ types**. Other internal types stay inside their layer.
 | `ProofFrameRecheckResult` | Returned by `recheck_proof_frame` |
 | `RoundEvent`, `WarningDTO` | `audit.diff_proof_frames` |
 | `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference` | Returned by `audit.diff_proof_frames` |
+| `RuleExpr`, `RuleJoinConstraint`, `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, `PortInspect` | RuleExpr authoring and inspect |
 
 These mostly live in `factgraph.application.protocol` and `factgraph.audit`.
 They are frozen dataclasses with `__post_init__` validation —

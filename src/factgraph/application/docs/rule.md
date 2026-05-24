@@ -68,12 +68,18 @@ same_user_port = occ.user
 frozen value objects. They do not compose, join, or evaluate Rules by
 themselves; RuleExpr owns those expression-level semantics.
 
-T3.1 adds the base RuleExpr authoring surface: application `Rule` objects can
-compose with `&` and `|`, and `RuleExpr.all(...)` / `RuleExpr.any(...)` provide
-factory equivalents. Python boolean contexts are intentionally rejected for
-application `Rule` and RuleExpr values; use explicit `&` / `|` composition
-instead of `and` / `or`. Joins, inspect output, and full user-facing examples
-remain deferred to later T3 slices.
+T3 adds the initial RuleExpr authoring and inspect surface. Application `Rule`
+objects can compose with `&` and `|`, and `RuleExpr.all(...)` /
+`RuleExpr.any(...)` provide factory equivalents. Python boolean contexts are
+intentionally rejected for application `Rule` and RuleExpr values; use explicit
+`&` / `|` composition instead of `and` / `or`. Joins are explicit:
+`a.user.eq(b.user)` constructs a `RuleJoinConstraint`, `(a & b).join(...)`
+attaches it to an AND group, and `(a & b).join_by_ports("user")` expands an
+explicit port name into pairwise joins. Same-name ports are not auto-joined;
+`fg.rules.inspect(expr).unjoined_same_name_ports` exposes discoverability hints.
+`fg.rules.inspect(application_rule)` and `fg.rules.inspect(rule_expr)` return a
+`RuleExprInspect` authoring projection, while legacy SDK `Rule` / `Inference`
+inputs keep their existing dict inspect shape.
 
 ## Unified Syntax via SDK DSL Bridge
 

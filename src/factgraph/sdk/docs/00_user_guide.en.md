@@ -414,6 +414,10 @@ Three primitives:
 All three are constructed inside a `with vars(...) as (...):` block.
 For the deeper DSL spec see
 [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md).
+That spec also covers the staged RuleExpr authoring surface:
+`ApplicationRule` / `build_application_rule(...)`, `&` / `|` composition,
+explicit `.eq(...)` joins, `.join_by_ports(...)`, bool guards, and
+`fg.rules.inspect(...)` return-shape differences.
 
 ### Query
 
@@ -1010,7 +1014,8 @@ for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 - **[`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md)** —
   canonical Rule / Query / Inference DSL spec (compile-time
   constraints, `where` syntax, engine runtime options,
-  `accept` parameter boundaries)
+  `accept` parameter boundaries, RuleExpr authoring, joins, bool guards,
+  and inspect return-shape differences)
 - **[`04_api_surface.en.md`](04_api_surface.en.md)** — full API
   reference with every method signature
 - **[`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md)** —
