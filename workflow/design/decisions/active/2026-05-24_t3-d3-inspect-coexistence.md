@@ -6,6 +6,7 @@
 - Authority: design constraint; locks `fg.rules.inspect(...)` coexistence and return-shape policy before T3 inspect implementation.
 - Inputs:
   - `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md` Q3, D2, D6, A10, and R2 amendment.
+  - `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md` for the `RuleExprInspect.joins` input DTO shape.
   - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` C32, C49-C51, C59.
   - Current SDK store inspect implementation in `src/factgraph/sdk/store.py:2088-2089`, `:2907-2964`.
 - Outputs / Downstream:
@@ -62,6 +63,8 @@ This decision does not lock:
 - Execution lowering.
 - Final T5 top-level `Rule` flip.
 - Join constraint syntax.
+- Whether single-Rule coercion produces a real transient RuleExpr value or a synthesized inspect-only view; the T3.5 inspect blueprint must choose one while preserving the return-shape contract locked here.
+- The migration path for legacy SDK `Inference`; this decision preserves current legacy `Inference` dict inspect behavior but does not decide whether or how `Inference` changes during the future T5 hard-cut.
 
 ## 4. Decision
 
@@ -145,6 +148,8 @@ This decision unblocks:
 - C35 inspect behavior for single application Rules.
 - Stage 3 docs plan for legacy-vs-new inspect behavior.
 
+`RuleExprInspect.joins` must consume the `RuleJoinConstraint` shape locked by T3-D2 or a later adopted successor decision. D3 does not redefine join constraints.
+
 ### 7.2 Required follow-up actions
 
 The T3 inspect blueprint must:
@@ -178,4 +183,3 @@ This distinction remains until a future T5 hard-cut or a later decision supersed
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit review requested the three-way inspect input split be made load-bearing before T3 inspect blueprinting. |
-

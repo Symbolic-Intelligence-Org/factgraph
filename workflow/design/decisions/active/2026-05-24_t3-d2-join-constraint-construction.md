@@ -53,6 +53,8 @@ This decision does not lock:
 - The full RuleExpr tree class layout.
 - AND/OR flattening.
 - Every-Proof-Path Reach Rule algorithm details beyond the constraint input shape.
+- Self-join semantics for constraints such as `a.user.eq(a.user)`; the T3.3 Every-Proof-Path Reach Rule blueprint must decide whether these are rejected as vacuous, allowed, or normalized.
+- `RuleJoinConstraint` structural equality/hash semantics, including left/right symmetry for `a.user.eq(b.person)` versus `b.person.eq(a.user)`; this belongs to T3-D4 structural equality and hash.
 - RuleExpr inspect output.
 - Adapter execution lowering.
 - Final top-level `Rule` naming after T5.
@@ -182,4 +184,3 @@ This decision intentionally prefers preserving shipped T1.4 substrate over exact
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit review requested substrate-preserving vs substrate-breaking axis be made load-bearing before T3 join blueprinting. |
-
