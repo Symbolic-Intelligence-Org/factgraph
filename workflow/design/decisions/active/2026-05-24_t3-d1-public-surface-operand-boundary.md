@@ -61,6 +61,8 @@ T3 should expose public authoring names from `factgraph.sdk`:
 - `RuleExprError`
 - `ExplicitBoolError`
 
+`RuleExprError` and `ExplicitBoolError` must follow the existing SDK error hierarchy conventions so callers can catch RuleExpr failures with the same broad SDK exception buckets used by neighboring SDK DSL/store APIs. The exact base class selection is a T3.1 blueprint concern.
+
 If factories are implemented in T3.1, `RuleExpr.all(...)` and `RuleExpr.any(...)` are class/static methods on `RuleExpr`, not separate top-level functions.
 
 Internal implementation classes remain non-public:
@@ -78,6 +80,8 @@ RuleExpr operators and factories accept:
 - `factgraph.application.protocol.Rule`
 - `factgraph.sdk.ApplicationRule` (same object)
 - Existing RuleExpr values
+
+`factgraph.sdk.ApplicationRule is factgraph.application.protocol.Rule`; these are two import paths for one runtime type. Operand validation should not model them as separate semantic classes.
 
 Single application Rules are coerced into a single-rule RuleExpr where APIs accept RuleExpr, satisfying C35.
 
@@ -169,4 +173,3 @@ This decision is compatible with the future T5 hard-cut. At T5, a superseding de
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit Q1 required explicit public surface and operand boundary during the T1.3 staged naming period. |
-

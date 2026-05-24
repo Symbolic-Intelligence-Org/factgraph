@@ -59,6 +59,8 @@ T3 RuleExpr values must be immutable. Equality compares normalized structural co
 
 `expr1 == expr2` returns true when the expressions have the same normalized tree, occurrence aliases, Rule template identities, and join constraints.
 
+Equality with unsupported non-RuleExpr types follows Python convention by returning `NotImplemented`. Coercion from application Rule to RuleExpr happens at API boundaries where RuleExpr is expected, not inside `RuleExpr.__eq__`.
+
 ### 4.2 AND and OR groups are commutative and flattened for equality/hash
 
 AND and OR groups normalize nested groups of the same kind before equality/hash.
@@ -101,6 +103,8 @@ Duplicate equivalent join constraints normalize to one constraint for equality/h
 An application Rule coerced to RuleExpr equals the explicit one-occurrence RuleExpr for that Rule with the default alias.
 
 This supports C35 while keeping equality predictable.
+
+This equality applies between two RuleExpr values after coercion. It does not introduce direct cross-type equality such as `application_rule == rule_expr`, and it does not change T1.4 application Rule `__eq__` or `__hash__` semantics.
 
 ### 4.7 `__hash__` follows equality in-process only
 
@@ -183,4 +187,3 @@ Inspect rendering may choose a stable presentation order that differs from autho
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit Q4 and D2 amendment required structural equality/hash to absorb join symmetry and set-vs-list semantics. |
-
