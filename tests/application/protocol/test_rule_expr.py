@@ -5,7 +5,7 @@ import unittest
 from typing import get_type_hints
 
 import factgraph.sdk as sdk
-from factgraph.application.protocol import ExplicitBoolError, Rule, RuleExpr, RuleExprError
+from factgraph.application.protocol import ExplicitBoolError, Rule, RuleExpr, RuleExprError, RuleJoinConstraint
 from factgraph.application.protocol.rule_expr import (
     _AndGroup,
     _OrGroup,
@@ -13,6 +13,7 @@ from factgraph.application.protocol.rule_expr import (
     _RuleOperand,
     _coerce_rule_expr_operand,
 )
+from factgraph.application.protocol.rule import PortType, RulePortRef
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.sdk.dsl.errors import SDKDSLError
 
@@ -22,14 +23,26 @@ def _rule(rule_id: str, *, var_name: str = "u") -> Rule:
     return Rule(id=rule_id, where=(PredAtom("User:exists", [var]),), ports={"user": var})
 
 
+def _rule_with_two_ports(rule_id: str) -> Rule:
+    user = Var("u")
+    region = Var("r")
+    return Rule(
+        id=rule_id,
+        where=(PredAtom("User:exists", [user]), PredAtom("Region:exists", [region])),
+        ports={"user": user, "region": region},
+    )
+
+
 class RuleExprExportTests(unittest.TestCase):
     def test_sdk_exports_public_ruleexpr_names(self) -> None:
         self.assertIs(sdk.RuleExpr, RuleExpr)
         self.assertIs(sdk.RuleExprError, RuleExprError)
         self.assertIs(sdk.ExplicitBoolError, ExplicitBoolError)
+        self.assertIs(sdk.RuleJoinConstraint, RuleJoinConstraint)
         self.assertIn("RuleExpr", sdk.__all__)
         self.assertIn("RuleExprError", sdk.__all__)
         self.assertIn("ExplicitBoolError", sdk.__all__)
+        self.assertIn("RuleJoinConstraint", sdk.__all__)
 
     def test_sdk_does_not_export_internal_or_module_level_factory_names(self) -> None:
         self.assertNotIn("_RuleExpr", sdk.__all__)
@@ -228,6 +241,127 @@ class RuleExprBoolAndCoercionTests(unittest.TestCase):
             RuleExpr.all()
         with self.assertRaises(RuleExprError):
             RuleExpr.any()
+
+
+class RuleExprJoinTests(unittest.TestCase):
+    def test_rule_port_ref_eq_returns_frozen_join_constraint(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        constraint = a.user.eq(b.user)
+
+        self.assertEqual(constraint, RuleJoinConstraint(left=a.user, right=b.user))
+        self.assertEqual(constraint.op, "eq")
+        self.assertEqual(hash(constraint), hash(b.user.eq(a.user)))
+        with self.assertRaises(FrozenInstanceError):
+            constraint.left = b.user  # type: ignore[misc]
+
+    def test_rule_port_ref_value_equality_is_preserved(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        self.assertIs(a.user == b.user, False)
+        self.assertEqual(a.user, RulePortRef("a", "a", "user", Var("u"), PortType("entity_ref", "User")))
+
+    def test_join_constraint_shape_validation_is_defensive(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaisesRegex(RuleExprError, "left must be RulePortRef"):
+            RuleJoinConstraint(left=object(), right=b.user)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(RuleExprError, "right must be RulePortRef"):
+            RuleJoinConstraint(left=a.user, right=object())  # type: ignore[arg-type]
+        with self.assertRaisesRegex(RuleExprError, "op must be 'eq'"):
+            RuleJoinConstraint(left=a.user, right=b.user, op="ne")  # type: ignore[arg-type]
+
+    def test_same_occurrence_join_constraints_are_rejected(self) -> None:
+        a = _rule_with_two_ports("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaisesRegex(RuleExprError, "distinct Rule occurrences"):
+            a.user.eq(a.user)
+        with self.assertRaisesRegex(RuleExprError, "distinct Rule occurrences"):
+            a.user.eq(a.region)
+        with self.assertRaisesRegex(RuleExprError, "distinct Rule occurrences"):
+            (a & b).join(RuleJoinConstraint(left=a.user, right=a.region))
+
+    def test_and_group_join_returns_new_immutable_group(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+        expr = a & b
+        constraint = a.user.eq(b.user)
+
+        joined = expr.join(constraint)
+
+        self.assertIsInstance(expr, _AndGroup)
+        self.assertIsInstance(joined, _AndGroup)
+        self.assertNotEqual(expr, joined)
+        self.assertEqual(expr.joins, ())
+        self.assertEqual(joined.joins, (constraint,))
+        with self.assertRaises(FrozenInstanceError):
+            joined.joins = ()  # type: ignore[misc]
+
+    def test_join_symmetry_and_duplicate_normalization(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        left = (a & b).join(a.user.eq(b.user), a.user.eq(b.user))
+        right = (b & a).join(b.user.eq(a.user))
+
+        self.assertEqual(left, right)
+        self.assertEqual(hash(left), hash(right))
+        self.assertEqual(len(left.joins), 1)
+
+    def test_flatten_merge_preserves_and_revalidates_joins(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+        c = _rule("c", var_name="c").as_("c")
+
+        left = (a & b).join(a.user.eq(b.user)) & c
+        right = (c & b & a).join(b.user.eq(a.user))
+
+        self.assertEqual(left, right)
+        self.assertIsInstance(left, _AndGroup)
+        self.assertEqual(len(left.children), 3)
+        self.assertEqual(len(left.joins), 1)
+
+    def test_join_reach_rejects_or_branch_endpoints(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+        c = _rule("c", var_name="c").as_("c")
+
+        with self.assertRaisesRegex(RuleExprError, "not reachable"):
+            (a & (b | c)).join(a.user.eq(b.user))
+
+        self.assertIsInstance((a & b).join(a.user.eq(b.user)) | c, _OrGroup)
+
+    def test_join_is_and_only(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaisesRegex(RuleExprError, "at least one"):
+            (a & b).join()
+        with self.assertRaisesRegex(RuleExprError, "AND groups"):
+            (a | b).join(a.user.eq(b.user))
+        self.assertFalse(hasattr(_rule("r"), "join"))
+        self.assertFalse(hasattr(a, "join"))
+
+    def test_join_rejects_non_constraints_and_mismatched_endpoint_fields(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaisesRegex(RuleExprError, "RuleJoinConstraint"):
+            (a & b).join(object())  # type: ignore[arg-type]
+
+        mismatched = RulePortRef(
+            occurrence_alias="a",
+            rule_id="a",
+            port_name="user",
+            var=Var("not_the_rule_port"),
+            port_type=a.user.port_type,
+        )
+        with self.assertRaisesRegex(RuleExprError, "Var does not match"):
+            (a & b).join(RuleJoinConstraint(left=mismatched, right=b.user))
 
 
 if __name__ == "__main__":

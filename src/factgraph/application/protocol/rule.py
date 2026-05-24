@@ -25,7 +25,7 @@ from factgraph.core.rules.where_ast import (
 )
 
 if TYPE_CHECKING:
-    from .rule_expr import _RuleExpr
+    from .rule_expr import RuleJoinConstraint, _RuleExpr
 
 
 class RuleValidationError(ValueError):
@@ -152,6 +152,14 @@ class RulePortRef:
 
     def __hash__(self) -> int:
         return hash((self.occurrence_alias, self.rule_id, self.port_name, self.var, self.port_type))
+
+    def eq(self, other: RulePortRef) -> RuleJoinConstraint:
+        from .rule_expr import RuleExprError, RuleJoinConstraint, _validate_not_same_occurrence
+
+        if not isinstance(other, RulePortRef):
+            raise RuleExprError("RulePortRef.eq(...) requires another RulePortRef")
+        _validate_not_same_occurrence(self, other)
+        return RuleJoinConstraint(left=self, right=other)
 
 
 @dataclass(frozen=True)

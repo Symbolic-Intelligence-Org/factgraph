@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Literal, NoReturn
+from typing import Iterable, Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
-from .rule import Rule, RuleOccurrence, RuleValidationError
+from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 
 
 class RuleExprError(SDKDSLError):
@@ -14,6 +14,29 @@ class RuleExprError(SDKDSLError):
 
 class ExplicitBoolError(RuleExprError):
     """Raised when Rule or RuleExpr values are used in Python boolean contexts."""
+
+
+@dataclass(frozen=True, eq=False)
+class RuleJoinConstraint:
+    left: RulePortRef
+    right: RulePortRef
+    op: Literal["eq"] = "eq"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.left, RulePortRef):
+            raise RuleExprError("RuleJoinConstraint.left must be RulePortRef")
+        if not isinstance(self.right, RulePortRef):
+            raise RuleExprError("RuleJoinConstraint.right must be RulePortRef")
+        if self.op != "eq":
+            raise RuleExprError("RuleJoinConstraint.op must be 'eq'")
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, RuleJoinConstraint):
+            return NotImplemented
+        return _canonical_join_constraint(self) == _canonical_join_constraint(other)
+
+    def __hash__(self) -> int:
+        return hash(_canonical_join_constraint(self))
 
 
 class RuleExpr:
@@ -73,9 +96,18 @@ class _RuleOperand(_RuleExpr):
 @dataclass(frozen=True, eq=False)
 class _AndGroup(_RuleExpr):
     children: tuple[_RuleExpr, ...]
+    joins: tuple[RuleJoinConstraint, ...] = ()
 
     def _canonical(self) -> CanonicalExpr:
-        return ("and", _canonical_children(self.children))
+        return ("and", _canonical_children(self.children), _canonical_joins(self.joins))
+
+    def join(self, *constraints: RuleJoinConstraint) -> _AndGroup:
+        if not constraints:
+            raise RuleExprError("RuleExpr.join requires at least one join constraint")
+        _validate_join_constraint_shapes(constraints)
+        merged = _normalize_join_constraints((*self.joins, *constraints))
+        _validate_join_reach(self, merged)
+        return _AndGroup(self.children, merged)
 
 
 @dataclass(frozen=True, eq=False)
@@ -84,6 +116,9 @@ class _OrGroup(_RuleExpr):
 
     def _canonical(self) -> CanonicalExpr:
         return ("or", _canonical_children(self.children))
+
+    def join(self, *constraints: RuleJoinConstraint) -> NoReturn:
+        raise RuleExprError("RuleExpr joins must be attached to AND groups; distribute joins into OR branches")
 
 
 def _coerce_rule_expr_operand(value: object) -> _RuleExpr:
@@ -112,20 +147,25 @@ def _combine(kind: Literal["and", "or"], operands: tuple[object, ...]) -> _RuleE
         raise RuleExprError("RuleExpr.all/any require at least one operand")
 
     children: list[_RuleExpr] = []
+    joins: list[RuleJoinConstraint] = []
     for operand in operands:
         expr = _coerce_rule_expr_operand(operand)
         if kind == "and" and isinstance(expr, _AndGroup):
             children.extend(expr.children)
+            joins.extend(expr.joins)
         elif kind == "or" and isinstance(expr, _OrGroup):
             children.extend(expr.children)
         else:
             children.append(expr)
 
     if kind == "and":
-        expr: _RuleExpr = _AndGroup(tuple(children))
+        merged_joins = _normalize_join_constraints(joins)
+        expr: _RuleExpr = _AndGroup(tuple(children), merged_joins)
     else:
         expr = _OrGroup(tuple(children))
     _validate_expression_scope(expr)
+    if isinstance(expr, _AndGroup) and expr.joins:
+        _validate_join_reach(expr, expr.joins)
     return expr
 
 
@@ -164,6 +204,78 @@ def _canonical_children(children: tuple[_RuleExpr, ...]) -> tuple[CanonicalExpr,
     return tuple(sorted((child._canonical() for child in children), key=repr))
 
 
+def _canonical_join_constraint(constraint: RuleJoinConstraint) -> tuple[object, ...]:
+    left = _canonical_join_endpoint(constraint.left)
+    right = _canonical_join_endpoint(constraint.right)
+    endpoint_a, endpoint_b = sorted((left, right), key=repr)
+    return (constraint.op, endpoint_a, endpoint_b)
+
+
+def _canonical_join_endpoint(ref: RulePortRef) -> tuple[object, ...]:
+    return (ref.occurrence_alias, ref.rule_id, ref.port_name, ref.var, ref.port_type)
+
+
+def _canonical_joins(joins: tuple[RuleJoinConstraint, ...]) -> tuple[tuple[object, ...], ...]:
+    return tuple(sorted((_canonical_join_constraint(join) for join in joins), key=repr))
+
+
+def _normalize_join_constraints(constraints: Iterable[RuleJoinConstraint]) -> tuple[RuleJoinConstraint, ...]:
+    unique: dict[tuple[object, ...], RuleJoinConstraint] = {}
+    for constraint in constraints:
+        unique.setdefault(_canonical_join_constraint(constraint), constraint)
+    return tuple(unique[key] for key in sorted(unique, key=repr))
+
+
+def _validate_join_constraint_shapes(constraints: tuple[RuleJoinConstraint, ...]) -> None:
+    for constraint in constraints:
+        if not isinstance(constraint, RuleJoinConstraint):
+            raise RuleExprError("RuleExpr.join accepts only RuleJoinConstraint values")
+        _validate_not_same_occurrence(constraint.left, constraint.right)
+
+
+def _validate_not_same_occurrence(left: RulePortRef, right: RulePortRef) -> None:
+    if left.occurrence_alias == right.occurrence_alias and left.rule_id == right.rule_id:
+        raise RuleExprError("join constraints must connect distinct Rule occurrences; put self constraints in Rule.where")
+
+
+def _validate_join_reach(group: _AndGroup, constraints: tuple[RuleJoinConstraint, ...]) -> None:
+    reachable = _reachable_operands(group)
+    for constraint in constraints:
+        _validate_not_same_occurrence(constraint.left, constraint.right)
+        for endpoint in (constraint.left, constraint.right):
+            key = (endpoint.occurrence_alias, endpoint.rule_id)
+            operand = reachable.get(key)
+            if operand is None:
+                raise RuleExprError(
+                    f"join endpoint {endpoint.occurrence_alias!r}.{endpoint.port_name} is not reachable "
+                    "from the direct AND spine"
+                )
+            _validate_endpoint_matches_operand(endpoint, operand)
+
+
+def _reachable_operands(group: _AndGroup) -> dict[tuple[str, str], _RuleOperand]:
+    reachable: dict[tuple[str, str], _RuleOperand] = {}
+    for child in group.children:
+        if isinstance(child, _RuleOperand):
+            reachable[(child.alias, child.rule.id)] = child
+    return reachable
+
+
+def _validate_endpoint_matches_operand(endpoint: RulePortRef, operand: _RuleOperand) -> None:
+    if endpoint.port_name not in operand.rule.ports:
+        raise RuleExprError(
+            f"join endpoint {endpoint.occurrence_alias!r}.{endpoint.port_name} is not a declared port"
+        )
+    if endpoint.var != operand.rule.ports[endpoint.port_name]:
+        raise RuleExprError(
+            f"join endpoint {endpoint.occurrence_alias!r}.{endpoint.port_name} Var does not match the Rule port"
+        )
+    if endpoint.port_type != operand.rule.port_types[endpoint.port_name]:
+        raise RuleExprError(
+            f"join endpoint {endpoint.occurrence_alias!r}.{endpoint.port_name} port type does not match the Rule port"
+        )
+
+
 def _rule_identity(rule: object) -> tuple[str, str]:
     return (str(getattr(rule, "id")), str(getattr(rule, "content_digest")))
 
@@ -175,6 +287,7 @@ def _is_legacy_sdk_rule(value: object) -> bool:
 
 __all__ = [
     "ExplicitBoolError",
+    "RuleJoinConstraint",
     "RuleExpr",
     "RuleExprError",
 ]

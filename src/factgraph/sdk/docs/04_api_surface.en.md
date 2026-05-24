@@ -62,7 +62,7 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from factgraph.sdk import <name>`.
-The export list currently has 40 names.
+The export list currently has 41 names.
 
 ### 1.1 Schema and store
 
@@ -103,6 +103,7 @@ class-first constructor name and does not accept workspace `path=`.
 | `SDKDSLError` | Raised on DSL construction errors |
 | `RuleExpr` | Base RuleExpr authoring surface; use `RuleExpr.all(...)` / `RuleExpr.any(...)` or application `Rule` `&` / `|` composition |
 | `RuleExprError` (← `SDKDSLError`) | Raised when RuleExpr authoring input violates the expression contract |
+| `RuleJoinConstraint` | Immutable RuleExpr join constraint produced by `occurrence.port.eq(other_port)` / `occurrence.port_name.eq(other.port_name)`; initial joins use explicit `.eq(...)`, not Python `==` |
 | `ExplicitBoolError` (← `RuleExprError`) | Raised when application `Rule` or RuleExpr values are used in Python boolean contexts; use `&` / `|`, not `and` / `or` |
 
 The application Rule bridge additionally exposes aggregate helpers from

@@ -72,7 +72,7 @@ from .rule_literal_replace import (
     RuleLiteralReplaceStatus,
 )
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
-from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError
+from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -194,6 +194,7 @@ __all__ = [
     "RulePortRef",
     "RuleExpr",
     "RuleExprError",
+    "RuleJoinConstraint",
     "RuleValidationError",
     "ExplicitBoolError",
     "SchemaCapability",
