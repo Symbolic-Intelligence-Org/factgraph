@@ -5,7 +5,7 @@
 - Last Updated: 2026-05-25
 - Authority: proposed design constraint; locks the public execution entrypoint and minimal head dependency boundary for the T3 later RuleExpr execution-lowering tranche.
 - Inputs:
-  - Stage 1 audit `workflow/audit/active/2026-05-25_t3-later-execution-vs-shipped.md` Q1, Q2, F2, F4, F9, and §10 D6 mapping.
+  - Stage 1 audit `workflow/audit/active/2026-05-25_t3-later-execution-vs-shipped.md` Q1, Q2, F2, F4, F9, F10, and §10 D6 mapping.
   - D5 `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.8 execution-lowering deferral.
   - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.1, §4.9, and §5.1-§5.4.
   - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:180-196`.
@@ -89,6 +89,8 @@ candidates = fg.eval.evaluate(expr, head=head_rule, engine="native")
 
 Single application `Rule` inputs are coerced through the same C35 boundary as inspect and authoring: a single `Rule` is accepted wherever RuleExpr is accepted.
 
+This C35 coercion happens at the `fg.eval.evaluate(...)` dispatch entry, before any D7-owned lowering.
+
 ### 4.2 `head=` is required for RuleExpr execution in this tranche
 
 RuleExpr has no head/projection/claim by design. Therefore T3 later evaluation requires an explicit `head=` when the first positional input is an application `Rule` or RuleExpr value.
@@ -127,6 +129,8 @@ Minimal T3 later head behavior:
 - require inline / external head port names to be drawn from the expression's public port namespace;
 - pass the lowered head information to whatever plan shape D7 adopts.
 
+Here, "inline head" means the head `Rule` is already present as an occurrence in the expression body; "external head" means the head `Rule` is supplied only through the `head=` keyword. D7 decides the lowering mechanism for same-id/same-digest projection onto an inline occurrence, including any alias or plan representation needed to execute that projection.
+
 Deferred to T4:
 
 - closed-head semantics and utilities;
@@ -156,7 +160,7 @@ T3 later should not introduce a new public error subclass in D6.
 Error bucket guidance:
 
 - Public call-shape mistakes at `fg.eval.evaluate(...)` use `SDKStoreError` when they are about the SDK entrypoint contract.
-- RuleExpr/head semantic validation errors use `RuleExprError` when they are about expression structure, stale head identity, port namespace alignment, or RuleExpr lowering preconditions.
+- RuleExpr/head semantic validation errors use `RuleExprError` when they are about expression structure, stale head identity, port namespace alignment, or D6-owned head/expression validation preconditions from §4.4.
 - Adapter rejection and per-engine error policy are finalized in D9.
 
 This keeps D6 compatible with the Stage 1 audit's Q9 disposition: Q9 is cross-cutting across D6-D9, with D9 owning adapter rejection error policy.
@@ -165,7 +169,7 @@ This keeps D6 compatible with the Stage 1 audit's Q9 disposition: Q9 is cross-cu
 
 ### Option A: Require T4 before any T3 later execution work
 
-- **Why rejected**: T3 later can define a narrow head subset sufficient for execution lowering without claiming closed-head semantics. Blocking on all T4 work would pause the selected next track and force a track-order decision before learning anything from lowering design.
+- **Why rejected**: T3 later can define a narrow head subset sufficient for execution lowering without claiming closed-head semantics. Blocking on all T4 work would pause the selected next track and force a track-order decision before learning anything from lowering design, requiring Human re-engagement on next-track ordering per the Stage 1 audit Q2 candidate analysis.
 
 ### Option B: Ship only internal lowering and no public entrypoint
 
