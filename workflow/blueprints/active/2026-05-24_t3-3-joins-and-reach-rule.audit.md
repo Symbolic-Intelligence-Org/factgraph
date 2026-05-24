@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.3 Joins And Reach Rule
 
 - Blueprint: [2026-05-24_t3-3-joins-and-reach-rule.md](./2026-05-24_t3-3-joins-and-reach-rule.md)
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -13,6 +13,7 @@
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.3-F1 flatten-merge acceptance added; T3.3-F2 RuleJoinConstraint validation location explicit; T3.3-F3 zero-arg `.join()` rejection rationale added. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | `RulePortRef.eq`, `_AndGroup` / `_OrGroup`, `_combine`, `RuleJoinConstraint`, `.join(...)`, SDK export names, and T3.2 validation helper scans matched expected shipped scope. No blueprint scope amendment required. |
 | 2026-05-24 | baseline | G7 baseline recorded | Branch/sacred/dirty state verified; Step 4.6 grep remains clean; `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 45 tests OK. |
+| 2026-05-24 | implemented | Step 4.7 clean; 0 deviation | Feat `0b80fe9b` passed Step 4.7 with 0 P0/P1/P2/P3. 64 cross-slice tests OK, ruff clean. First T3 feat with 0 deviation thanks to preemptive `RulePortRef.eq()` lock (§5.2), 3-layer validation (§5.3), and Reach Rule specification (§5.6). Lesson: future T3 slices should preempt prior-slice mid-impl drifts in scoped blueprints. |
 
 ## Decision Notes
 

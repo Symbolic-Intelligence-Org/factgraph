@@ -1,6 +1,6 @@
 # Task Blueprint: T3.3 Joins And Reach Rule
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: M
@@ -393,4 +393,57 @@ Diagnostics do not need to aggregate every join issue in T3.3. Reach validation 
 
 ## 10. Outcome / Deviations
 
-To be filled during closure.
+### Final Landed Code
+
+- `src/factgraph/application/protocol/rule_expr.py`
+  - Added `RuleJoinConstraint`, a frozen public DTO with `__post_init__` shape validation and symmetric equality/hash via `_canonical_join_constraint(...)`.
+  - Added `_AndGroup.joins`, `_AndGroup.join(...)`, and `_OrGroup.join(...)` diagnostics.
+  - Added `_canonical_join_constraint`, `_canonical_join_endpoint`, `_canonical_joins`, `_normalize_join_constraints`, `_reachable_operands`, `_validate_join_reach`, `_validate_endpoint_matches_operand`, `_validate_not_same_occurrence`, and `_validate_join_constraint_shapes`.
+  - Updated `_combine("and", ...)` to merge nested `_AndGroup.joins` and re-run reach validation on the flattened group.
+  - Updated `_AndGroup._canonical()` to include normalized joins.
+- `src/factgraph/application/protocol/rule.py`
+  - Added `RulePortRef.eq(other: RulePortRef) -> RuleJoinConstraint` with lazy imports and same-occurrence validation through the shared helper.
+- `src/factgraph/application/protocol/__init__.py`
+  - Exported `RuleJoinConstraint`.
+- `src/factgraph/sdk/__init__.py`
+  - Re-exported `RuleJoinConstraint`.
+- `src/factgraph/sdk/docs/04_api_surface.en.md`
+  - Updated export count from 40 to 41 and added the `RuleJoinConstraint` row with `.eq(...)` syntax.
+- `tests/application/protocol/test_rule_expr.py`
+  - Added 10 T3.3 join tests covering all 21 acceptance gates, including F1 flatten-merge, F2 validation layering, F3 zero-arg `.join()` rejection, reach-rule corner cases, symmetry/deduplication, and cross-slice preservation.
+
+### Test Gates
+
+- G7 baseline `83489a07`: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` -> 45 tests OK.
+- Post-implementation core gate: same command -> 55 tests OK.
+- Cross-slice gate: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate -v` -> 64 tests OK.
+- Ruff: `python -m ruff check src/factgraph/application/protocol/rule.py src/factgraph/application/protocol/rule_expr.py src/factgraph/application/protocol/__init__.py src/factgraph/sdk/__init__.py tests/application/protocol/test_rule_expr.py` -> clean.
+
+### Deviations / Follow-Ups
+
+T3.3 closed with **zero deviations** from blueprint scope. This is the first T3 feat commit to achieve 0 P0/P1/P2/P3 findings at Step 4.7 review.
+
+The clean result is attributed to preemptive blueprint design:
+
+- `RulePortRef.eq()` additive method was explicitly scoped in §5.2 with reference to the T3.2 T-1 drift lesson. The implementation followed §5.2 exactly with no mid-implementation operator or method discovery.
+- Three-layer validation was explicitly locked in §5.3: `RuleJoinConstraint.__post_init__` shape validation; `.eq(...)` plus `_AndGroup.join(...)` same-occurrence validation; and `_AndGroup.join(...)` endpoint-vs-operand reach validation. Implementation followed those layers through `_validate_join_constraint_shapes`, `_validate_not_same_occurrence`, and `_validate_endpoint_matches_operand`.
+- The Reach Rule algorithm was specified with pseudocode and complexity in §5.6. Implementation followed it through `_reachable_operands(...)` and `_validate_join_reach(...)`.
+- Canonical symmetric equality with sorted endpoints in §5.7 matched D4 §4.5 set-like and symmetric semantics. Implementation used `_canonical_join_constraint(...)` and `_normalize_join_constraints(...)`.
+
+Lesson for future T3 slices: when scope expansion discovered in a prior slice, such as T3.2 T-1, is preemptively locked in the next blueprint, mid-implementation deviations are avoided. T3.4, T3.5, and T3.6 blueprints should continue this pattern of preemptive scope locking plus algorithm and validation-layer specification.
+
+No T3.3 follow-ups are deferred to T3.4 or later slices.
+
+### Stage 1-3 Traceability
+
+- Stage 1 audit: `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`.
+- Adopted D2: `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md` §4.2-§4.5.
+- Adopted D4: `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md` §4.5.
+- Adopted D5: `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.4.
+- Stage 3 synthesis: `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md` §3 T3.3.
+- Track plan sync: `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` at `9c857d0c`.
+- Substrate archives: T1.4 alias/port contract, T3.1 base RuleExpr/bool guards, and T3.2 expression-scope occurrence validation.
+
+### Archive Readiness
+
+Yes. Blueprint and audit log are implemented and ready to move from `workflow/blueprints/active/` to `workflow/blueprints/archive/`.
