@@ -14,6 +14,7 @@
 | 2026-05-24 | scoped | Scope locked | Status advanced to scoped with P3 acceptance/implementation precision added: frozen DTO method-addition rationale, factory export acceptance, concrete G7 baseline command, required SDK API docs update, and operand coercion acceptance. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | Pre-implementation grep found no shipped RuleExpr code surface, no application/legacy Rule operator or bool conflicts, no T1.4 bool-context test dependency, no `factgraph.sdk.all` / `factgraph.sdk.any` export, and existing SDK API docs/error rows for T3.1 docs alignment. No scope amendment required. |
 | 2026-05-24 | baseline | G7 baseline recorded | Before implementation, direct `pytest tests/application/protocol/test_rule.py -v` and `python -m pytest ...` both exited with no output; subprocess capture showed pytest returncode `-11` (SIGSEGV). Fallback `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule -v` ran 23 tests OK. No code edits made. |
+| 2026-05-24 | implementing | Import-cycle fallback | During implementation smoke tests, direct application `rule_expr.py` import from `factgraph.sdk.dsl.errors` triggered an application/SDK package cycle. Blueprint §5.2 now allows neutral internal SDK error base re-export support while preserving `issubclass(RuleExprError, factgraph.sdk.dsl.errors.SDKDSLError)`. |
 
 ## Decision Notes
 

@@ -7,7 +7,10 @@
 - Related Modules:
   - `src/factgraph/application/protocol/rule.py`
   - `src/factgraph/application/protocol/__init__.py`
+  - `src/factgraph/_sdk_errors.py`
   - `src/factgraph/sdk/__init__.py`
+  - `src/factgraph/sdk/errors.py`
+  - `src/factgraph/sdk/dsl/errors.py`
   - `src/factgraph/sdk/dsl/rule.py`
   - `tests/application/protocol/`
   - `tests/sdk/`
@@ -157,6 +160,7 @@ Rationale:
 - `DSLToApplicationRuleError(SDKDSLError)` is the nearest shipped precedent for SDK-facing DSL/application bridge failures.
 - More specific SDK-store exceptions are not appropriate because T3.1 is not store/evaluation behavior.
 - The implementation may keep the classes in `rule_expr.py`, but the inheritance must stay in the SDK DSL error hierarchy.
+- Impl-time import-cycle fallback: direct `rule_expr.py -> factgraph.sdk.dsl.errors` imports execute `factgraph.sdk.__init__` and can cycle back through `factgraph.application`. To preserve class identity without the cycle, T3.1 may introduce a neutral internal `factgraph._sdk_errors` module and have `factgraph.sdk.errors` / `factgraph.sdk.dsl.errors` re-export those same classes. `RuleExprError` may import `SDKDSLError` from the neutral module as long as `issubclass(RuleExprError, factgraph.sdk.dsl.errors.SDKDSLError)` remains true.
 
 ### 5.3 Operand coercion
 
@@ -318,7 +322,7 @@ S→M trigger is public API impact and cross-module surface (`application.protoc
    - verify legacy SDK Rule currently has no custom `__bool__`.
    - run `pytest tests/application/protocol/test_rule.py -v` before changes and record the baseline pass count for post-implementation comparison.
 
-2. Add `src/factgraph/application/protocol/rule_expr.py` with errors, public `RuleExpr`, internal value types, operand coercion, flattening, equality/hash, and bool guard.
+2. Add `src/factgraph/application/protocol/rule_expr.py` with errors, public `RuleExpr`, internal value types, operand coercion, flattening, equality/hash, and bool guard. If needed to avoid application/SDK import cycles, add neutral SDK error re-export support as described in §5.2.
 
 3. Add application `Rule` operator methods and `__bool__` in `src/factgraph/application/protocol/rule.py`.
 
