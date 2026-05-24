@@ -12,6 +12,7 @@
 | 2026-05-24 | draft | Blueprint created | Initial T3.1 M-class scope recorded from Stage 1 audit, adopted D1/D4/D5 decisions, Stage 3 synthesis, and synced track plan. |
 | 2026-05-24 | draft | P2 tightening | Step 4.2 review found the error hierarchy violated adopted D1 and the acceptance gates omitted RuleExpr immutability. Blueprint now locks `RuleExprError(SDKDSLError)` and adds an immutable RuleExpr acceptance check. |
 | 2026-05-24 | scoped | Scope locked | Status advanced to scoped with P3 acceptance/implementation precision added: frozen DTO method-addition rationale, factory export acceptance, concrete G7 baseline command, required SDK API docs update, and operand coercion acceptance. |
+| 2026-05-24 | pre-impl | Step 4.6 grep clean | Pre-implementation grep found no shipped RuleExpr code surface, no application/legacy Rule operator or bool conflicts, no T1.4 bool-context test dependency, no `factgraph.sdk.all` / `factgraph.sdk.any` export, and existing SDK API docs/error rows for T3.1 docs alignment. No scope amendment required. |
 
 ## Decision Notes
 
@@ -55,3 +56,14 @@ T3.1 is M-class because it adds public SDK exports and changes application proto
 |---|---|
 | G-2: §5.2 chose `ValueError`, bypassing the existing SDK error hierarchy and violating adopted D1 section 4.1. | §5.2 now locks `RuleExprError(SDKDSLError)` and `ExplicitBoolError(RuleExprError)`, aligned with the shipped `DSLToApplicationRuleError(SDKDSLError)` precedent. |
 | G-1: §7 acceptance mentioned immutability in prose but did not include an explicit RuleExpr immutability check. | §7 now requires `_RuleExpr` / `_AndGroup` / `_OrGroup` to be frozen dataclasses or equivalent immutable structures, with field assignment raising. |
+
+### Step 4.6 Pre-Implementation Grep
+
+| Check | Result |
+|---|---|
+| RuleExpr surface scan | `rg 'RuleExpr|RuleExprError|ExplicitBoolError|_AndGroup|_OrGroup|_RuleExpr' src/factgraph tests` only found forward-looking application docs mentions; no shipped code/test surface exists. |
+| Rule truthiness scan | `rg 'if.*[Rr]ule\b|if.*rule:|if.*application_rule|bool\(.*[Rr]ule' src/factgraph tests` found no application Rule truthiness dependency; hits were docs, strings, or type checks. |
+| Operator conflict scan | `rg '__and__|__or__|Rule\s*&\s*|Rule\s*\|\s*' src/factgraph/application src/factgraph/sdk/dsl/rule.py` found no shipped application or legacy SDK Rule operator conflicts. |
+| SDK error catch/docs scan | Existing SDK docs list `DSLToApplicationRuleError`, `SDKDSLError`, and store/schema errors; T3.1 docs can follow that shape. Existing catches are store/shell specific and do not block `RuleExprError(SDKDSLError)`. |
+| SDK `all` / `any` scan | `rg '\ball\b|\bany\b' src/factgraph/sdk/__init__.py` found no top-level `all` / `any` exports. |
+| T1.4 bool baseline | `rg 'bool\(.*rule|if.*rule' tests/application/protocol/test_rule.py` found only the non-identifier rule-id test name, not a bool-context dependency. |
