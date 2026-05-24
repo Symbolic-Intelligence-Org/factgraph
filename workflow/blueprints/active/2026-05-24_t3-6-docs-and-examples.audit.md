@@ -11,6 +11,7 @@
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.6 S-class docs-only scope recorded from D5 section 4.7, Stage 3 synthesis section 3 T3.6, track plan T3.6 row, adopted D1-D5, parent C24/C27/C32/C35/C49-C51/C58/C59, and archived T3.1-T3.5 substrate. |
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.6-F1 anti-example wording clarified to `ExplicitBoolError` short-circuit behavior; T3.6-F2 markdown grep acceptance cross-referenced §8 step 8 specifics; T3.6-F3 optional `06_what_if_and_proof.en.md` touch locked to no-touch unless scoped amendment says otherwise. |
+| 2026-05-24 | pre-impl | Step 4.6 docs grep clean; targets identified | Grep found one expected stale application-rule deferral sentence, legacy-context `Rule` imports only, no invalid join `==` examples, missing user-facing `join_by_ports` / `ExplicitBoolError` / `unjoined_same_name_ports` teaching outside API surface, and confirmed `04_api_surface.en.md` already contains the T3.5 RuleExpr rows/count baseline. |
 
 ## Decision Notes
 
@@ -104,6 +105,16 @@ T3.6 applies the T3.3/T3.4/T3.5 zero-deviation pattern for the fourth cycle:
 | T3.3 joins + reach rule | `.eq(...)`, `.join(...)`, reach validation, self-join rejection, symmetry/dedupe preserved and documented. |
 | T3.4 join_by_ports | `.join_by_ports(...)` explicit-name expansion and diagnostics preserved and documented. |
 | T3.5 RuleExpr inspect | `RuleExprInspect` DTOs, polymorphic inspect dispatch, legacy dict preservation, and `value_type="unknown"` sentinel preserved and documented. |
+
+### Step 4.6 Pre-Implementation Grep
+
+| Check | Command | Result |
+|---|---|---|
+| Stale deferral language | `rg 'joins.*deferred\|inspect.*deferred\|deferred.*to later T3' src/factgraph/application/docs/ src/factgraph/sdk/docs/` | Expected target found: `src/factgraph/application/docs/rule.md` still says joins / inspect output / full examples remain deferred to later T3 slices. T3.6 should update this current-truth sentence. |
+| Final-state SDK `Rule` imports | `rg 'from factgraph.sdk import Rule\b' src/factgraph/sdk/docs/ src/factgraph/application/docs/` | Clean for T3.6 risk: hits are existing legacy SDK Rule / proof docs contexts in `00_user_guide.en.md` and `06_what_if_and_proof.en.md`, not application Rule / RuleExpr teaching. |
+| Join examples using `==` instead of `.eq(...)` | `rg '\.user.*==.*\.|\.eq\(' src/factgraph/sdk/docs/ src/factgraph/application/docs/` | Clean for invalid join examples: `.eq(...)` is present in `04_api_surface.en.md`; `==` hits are SDK where-syntax / attr-equality examples or application bridge examples, not RuleExpr join examples. |
+| Missing RuleExpr docs terms | `rg 'join_by_ports\|ExplicitBoolError\|unjoined_same_name_ports' src/factgraph/sdk/docs/ src/factgraph/application/docs/` | Expected docs gap confirmed: terms currently appear only in `04_api_surface.en.md` rows. T3.6 must add user-facing teaching in scoped docs files. |
+| API surface no-touch baseline | `wc -l src/factgraph/sdk/docs/04_api_surface.en.md` + `grep -c 'RuleExpr\|RuleJoinConstraint\|RuleExprInspect' src/factgraph/sdk/docs/04_api_surface.en.md` | Clean: `04_api_surface.en.md` is 607 lines and has 7 RuleExpr-related hits, including `RuleExpr`, `RuleJoinConstraint`, `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, `PortInspect`, and `ExplicitBoolError`. No T3.6 edit needed. |
 
 ### Step 4.2 Draft Review Checklist
 
