@@ -62,6 +62,7 @@ S-to-M triggers:
 - Whether bare Rule with non-identifier id should fail as `RuleExprError` with `.as_(...)` guidance. Blueprint chooses yes, matching T1.4 edge-case contract.
 - Whether preserving duplicate operand multiplicity conflicts with validation. Blueprint keeps multiplicity internally but rejects invalid returned expressions.
 - Whether deferring the duck-typed legacy SDK Rule detector is acceptable. Blueprint treats it as a deliberate cycle-avoidance choice.
+- Whether the T3.1 `test_duplicate_operands_preserve_multiplicity` update is correctly treated as a deliberate cross-slice contract supersedence (not a regression) — blueprint §6 invariant + §7 acceptance #15 + §8 step 4 sub-step explicitly track this.
 
 ### Cross-Slice Contract Preservation
 
@@ -73,4 +74,3 @@ S-to-M triggers:
 | T1.4 alias/port substrate | `Rule.as_`, `RuleOccurrence`, `RulePortRef`, alias regex, and port APIs unchanged; T3.2 only consumes them. |
 | T2.3 aggregate track | Aggregate AST/eval/adapter paths untouched. |
 | T3.1 base RuleExpr | 23 acceptance gates and 5 negative-action gates preserved; T3.2 adds validation over the same tree. |
-

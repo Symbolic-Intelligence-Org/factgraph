@@ -234,6 +234,7 @@ Defer:
   - no direct `application_rule == rule_expr` cross-type equality.
   - T1.4 application Rule `__eq__` / `__hash__` unchanged.
 - Duplicate operands are still physically representable internally, but invalid expression-scope combinations are rejected before returning to callers.
+- T3.1 `test_duplicate_operands_preserve_multiplicity` will be updated to use explicit occurrence aliases. T3.2 enforces the uniqueness contract at the `_combine` API boundary, not at the canonical tuple level — internal `_RuleOperand` multiplicity preservation remains intact at the data-structure level.
 - No T3.3 join semantics are introduced.
 - No T3.5 inspect semantics are introduced.
 - No T2.3 aggregate code changes.
@@ -254,7 +255,7 @@ Defer:
 - [ ] `RuleExpr.all(...)` and `RuleExpr.any(...)` apply the same expression-scope validation as `&` / `|`.
 - [ ] Legacy SDK `Rule` remains rejected as a RuleExpr operand.
 - [ ] `application_rule == rule_expr` remains false / non-cross-type; application Rule `__eq__` / `__hash__` unchanged.
-- [ ] T3.1 core tests and T1.4 application protocol tests pass.
+- [ ] T3.1 core tests pass after `test_duplicate_operands_preserve_multiplicity` is updated to use explicit occurrence aliases (a deliberate cross-slice contract supersedence required by T3.2 Goal #4); T1.4 application protocol tests pass unchanged.
 - [ ] T1.3 SDK naming tests pass.
 - [ ] At least one T2.3 aggregate cross-slice suite passes, proving no aggregate regression.
 - [ ] Ruff clean on touched Python files.
@@ -288,6 +289,7 @@ Defer:
    - non-identifier default alias guidance.
    - factory parity.
    - type-precision assertions.
+   - update T3.1 `test_duplicate_operands_preserve_multiplicity` to use `rule.as_("a1")` / `rule.as_("a2")` for explicit-alias repeated occurrences; the multiplicity preservation assertion semantics are preserved but expressed through valid T3.2 expressions.
 
 5. Run targeted tests:
    - `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v`
@@ -307,4 +309,3 @@ Optional minimal module docs are not required because T3.2 changes validation be
 ## 10. Outcome / Deviations
 
 To be filled during closure.
-
