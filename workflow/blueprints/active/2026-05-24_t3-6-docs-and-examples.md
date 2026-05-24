@@ -1,6 +1,6 @@
 # Task Blueprint: T3.6 Docs And Examples
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: S
@@ -8,7 +8,6 @@
   - `src/factgraph/sdk/docs/00_user_guide.en.md`
   - `src/factgraph/sdk/docs/01_concepts.en.md`
   - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
-  - `src/factgraph/sdk/docs/06_what_if_and_proof.en.md`
   - `src/factgraph/application/docs/rule.md`
 - Related Docs:
   - `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`
@@ -200,15 +199,13 @@ Default touched files:
 - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
 - `src/factgraph/application/docs/rule.md`
 
-Optional touched file:
-
-- `src/factgraph/sdk/docs/06_what_if_and_proof.en.md`, only if a short inspect
-  cross-reference belongs near proof-adjacent explanation.
-
 Explicitly untouched:
 
 - `src/factgraph/sdk/docs/04_api_surface.en.md`; T3.5 already updated API rows
   and runtime export count.
+- `src/factgraph/sdk/docs/06_what_if_and_proof.en.md`; T3.6 keeps inspect
+  render docs in rules/application docs, not proof-adjacent docs. Any later
+  proof-facing cross-reference requires a scoped amendment.
 - all Python source files.
 - all tests, unless a later review explicitly asks for docs-grep fixtures. The
   default T3.6 implementation is docs-only.
@@ -290,7 +287,7 @@ expr = a & (b | c)      # explicit AND with an OR branch
 Anti-example:
 
 ```python
-expr = a and b          # raises / wrong operator family
+expr = a and b          # raises ExplicitBoolError because Python evaluates bool(a) for short-circuit
 if expr:                # raises ExplicitBoolError
     ...
 ```
@@ -412,7 +409,9 @@ Docs must be current-truth and user-facing:
 - [ ] Baseline RuleExpr tests still pass.
 - [ ] Focused cross-slice tests still pass, excluding known pre-existing
   `tests.test_public_inference_factgraph_create` failures.
-- [ ] Markdown grep checks find required terms and no stale forbidden teaching.
+- [ ] Markdown grep checks per §8 step 8 pass: required terms are present,
+  forbidden final-state `Rule` imports are absent from new RuleExpr examples,
+  and stale "deferred" language in application Rule docs is updated.
 
 ## 8. Implementation Plan
 
@@ -450,8 +449,9 @@ Docs must be current-truth and user-facing:
 6. Update `sdk/docs/00_user_guide.en.md` with navigation/cross-link only if
    the RuleExpr docs become a durable user-guide destination.
 
-7. Optionally update `sdk/docs/06_what_if_and_proof.en.md` only with a small
-   pointer that inspect render is authoring narrative, not proof explanation.
+7. Keep `sdk/docs/06_what_if_and_proof.en.md` untouched. T3.6 documents inspect
+   render as authoring narrative in rules/application docs; a proof-facing
+   cross-reference requires a scoped amendment.
 
 8. Run docs grep gates:
    - required terms are present.
@@ -494,8 +494,9 @@ Expected docs changes:
 - `src/factgraph/sdk/docs/01_concepts.en.md`: mental model / return-shape
   distinction if needed.
 - `src/factgraph/sdk/docs/00_user_guide.en.md`: navigation pointer if needed.
-- `src/factgraph/sdk/docs/06_what_if_and_proof.en.md`: optional authoring-vs-
-  proof inspect note if needed.
+- `src/factgraph/sdk/docs/06_what_if_and_proof.en.md`: explicitly untouched;
+  proof-facing inspect cross-references are deferred unless a scoped amendment
+  says otherwise.
 
 Out of default scope:
 

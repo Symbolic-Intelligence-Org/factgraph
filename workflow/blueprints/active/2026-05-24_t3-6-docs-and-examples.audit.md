@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.6 Docs And Examples
 
 - Blueprint: [2026-05-24_t3-6-docs-and-examples.md](./2026-05-24_t3-6-docs-and-examples.md)
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.6 S-class docs-only scope recorded from D5 section 4.7, Stage 3 synthesis section 3 T3.6, track plan T3.6 row, adopted D1-D5, parent C24/C27/C32/C35/C49-C51/C58/C59, and archived T3.1-T3.5 substrate. |
+| 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.6-F1 anti-example wording clarified to `ExplicitBoolError` short-circuit behavior; T3.6-F2 markdown grep acceptance cross-referenced §8 step 8 specifics; T3.6-F3 optional `06_what_if_and_proof.en.md` touch locked to no-touch unless scoped amendment says otherwise. |
 
 ## Decision Notes
 
