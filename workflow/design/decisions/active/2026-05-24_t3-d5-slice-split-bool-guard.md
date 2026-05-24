@@ -135,6 +135,8 @@ T3.5 owns D3 inspect behavior:
 
 T3.5 must consume D2 join constraints and D4 canonicalization semantics.
 
+T3.5 may internally split into T3.5a (core `RuleExprInspect` minimum from D3) and T3.5b (rich descriptors: C49 `OccurrenceInspect`, C50 `AtomDescriptor`, C51 render contract, C59 `PortInspect`, plus D3-deferred `templates`, `port_visibility`, and `ports`) if blueprint preflight shows scope risk. This decision locks the ownership of that work in the inspect tranche but does not force it into one blueprint.
+
 ### 4.7 T3.6: Docs and examples
 
 T3.6 owns user-facing docs and examples after the authoring and inspect slices are stable.
@@ -143,6 +145,7 @@ Docs must:
 
 - use D1's staged import style with `ApplicationRule`, `RuleExpr`, and `build_application_rule`.
 - show `.eq(...)` join syntax from D2.
+- explain `&` / `|` Python precedence and required parentheses for mixed AND/OR expressions (C24).
 - explain bool guards.
 - explain same-name ports do not auto-join.
 - explain inspect return-shape differences between legacy and RuleExpr inputs from D3.
@@ -229,4 +232,3 @@ No T3.1 blueprint should begin until this D5 is adopted and the Stage 3 synthesi
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | D1-D4 were adopted; D5 converts their constraints plus audit Q5-Q7 into a concrete T3 slice ladder. |
-
