@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.2 Expression-Scope Occurrence Validation
 
 - Blueprint: [2026-05-24_t3-2-expression-scope-validation.md](./2026-05-24_t3-2-expression-scope-validation.md)
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -13,6 +13,7 @@
 | 2026-05-24 | scoped | Scope locked + P3 amendments | T-2 Goal #1 prerequisite rationale recorded; T-3 D4 §4.3 alias identity operationalization acknowledged in §5.6. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | `_RuleOperand`, `_combine`, `RuleOccurrence`, T3.1 duplicate-multiplicity test, `_rule_identity`, and direct internal group construction scans matched expected shipped scope. No blueprint scope amendment required. |
 | 2026-05-24 | baseline | G7 baseline recorded | Branch/sacred/dirty state verified; Step 4.6 grep remains clean; `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 38 tests OK. |
+| 2026-05-24 | implemented | Step 4.7 clean; T-1 deviation recorded in §10 | Feat `2a16dd98` passed Step 4.7 with 0 P0/P1 and 1 P2 (`RuleOccurrence.__and__` / `__or__` scope expansion bundled into feat, recorded in §10 Deviations with (A-fallback) discipline pattern correction for future slices). 54 cross-slice tests OK, ruff clean. |
 
 ## Decision Notes
 

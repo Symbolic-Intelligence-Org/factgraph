@@ -1,6 +1,6 @@
 # Task Blueprint: T3.2 Expression-Scope Occurrence Validation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: S
@@ -312,4 +312,36 @@ Optional minimal module docs are not required because T3.2 changes validation be
 
 ## 10. Outcome / Deviations
 
-To be filled during closure.
+### Final Landed Code
+
+- `src/factgraph/application/protocol/rule_expr.py`: `_RuleOperand` now carries `alias` and `explicit_alias`; `_coerce_rule_expr_operand(...)` accepts `RuleOccurrence`, derives validated default aliases for bare application `Rule`, wraps invalid default aliases in `RuleExprError` with `.as_(...)` guidance, runs `_validate_expression_scope(...)`, aggregates deterministic duplicate-alias / repeated-bare-rule diagnostics, and includes alias in `_RuleOperand._canonical()`.
+- `src/factgraph/application/protocol/rule.py`: `Rule.__and__` and `Rule.__or__` now carry `-> _RuleExpr` return annotations via `TYPE_CHECKING` + forward reference. `RuleOccurrence.__and__` and `RuleOccurrence.__or__` were added as a necessary discovered additive method change for explicit-alias infix expressions; see Deviations.
+- `tests/application/protocol/test_rule_expr.py`: `test_duplicate_operands_preserve_multiplicity` now uses explicit occurrence aliases, and T3.2 coverage verifies `RuleOccurrence` operands, repeated-rule alias requirements, duplicate aliases, aggregate diagnostics, non-identifier default-alias guidance, factory parity, alias metadata, frozen fields, and type precision.
+
+### Test Gates
+
+- G7 baseline `62c04100`: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 38 tests OK.
+- Post-implementation core gate: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 45 tests OK.
+- Cross-slice gate: `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate -v` ran 54 tests OK.
+- Ruff: `python -m ruff check src/factgraph/application/protocol/rule_expr.py src/factgraph/application/protocol/rule.py tests/application/protocol/test_rule_expr.py` passed clean.
+
+### Deviations / Follow-Ups
+
+- **`RuleOccurrence.__and__` / `__or__` scope expansion**: T3.2 blueprint §5.5 listed `_RuleOperand` field additions and §3 non-goals stated no changes to T1.4 `RuleOccurrence` / port APIs. Implementation discovered that `rule.as_("a") & other_rule.as_("b")` requires `RuleOccurrence.__and__` because Python operator resolution cannot delegate to application `Rule.__and__` for a left-hand `RuleOccurrence`. Two methods (`__and__`, `__or__`) were added to `RuleOccurrence` in feat `2a16dd98` as a necessary additive change. This is method-only, preserves frozen dataclass field semantics, preserves all T1.4 alias regex / port API / `Rule.as_` / `RulePortRef` behavior, and is operationally required for explicit-alias infix expressions.
+
+  **Pattern correction for future slices**: this scope expansion should have followed the (A-fallback) discipline established by T3.1 `8de03372` — a pre-feat doc-only blueprint scope amendment commit, then feat. It was bundled into feat for expedience, which is a process discipline drift. Future T3.x slices discovering necessary operator or dunder additions should pause for a pre-feat scope amendment commit before bundling the change into feat.
+
+- **T3.1 P3 follow-ups landed inline as planned**: `Rule.__and__` / `Rule.__or__` gained `-> _RuleExpr` return annotations via `TYPE_CHECKING` + forward reference; `_RuleOperand.rule` typing tightened from `object` to application `Rule`. The duck-typed `_is_legacy_sdk_rule` detector remains in place per §5.7 and §3 non-goals because no cycle-safe nominal check appeared.
+- **T3.1 `test_duplicate_operands_preserve_multiplicity` updated**: the test now uses `rule.as_("a1") & rule.as_("a2") & b` per §6 invariant and §7 acceptance #15 supersedence. Multiplicity preservation semantics remain covered through explicit aliases while invalid bare repeated-rule expressions are rejected at the `_combine` API boundary.
+
+### Stage 1-3 Traceability
+
+- Stage 1 audit: `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`.
+- Stage 2 governing decision: D5 §4.3 in `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md`.
+- Stage 3 synthesis: `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md` §3 T3.2.
+- Track plan sync: `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` synced at `9c857d0c`.
+- Shipped substrate references: T1.4 archive `workflow/blueprints/archive/2026-05-23_t1-4-alias-port-contract.md` and T3.1 archive `workflow/blueprints/archive/2026-05-24_t3-1-base-ruleexpr-bool-guards.md`.
+
+### Archive Readiness
+
+Yes. The blueprint and audit log are implemented, Step 4.7 review found no functional blockers or required code fixes, and the only P2 was recorded above as a process-discipline deviation.
