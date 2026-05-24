@@ -11,6 +11,7 @@
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.4 S-class scope recorded from D2 §4.5, D5 §4.5, Stage 3 synthesis §3 T3.4, synced track plan T3.4 row, and archived T3.3 join substrate. |
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.4-F1 "requested names" typo fixed; T3.4-F2 §5.7 step 1 wording clarified; T3.4-F3 §5.3 pseudocode standardized with `itertools.combinations`. |
+| 2026-05-24 | pre-impl | Step 4.6 grep clean | `join_by_ports`, `itertools.combinations`, `_reachable_operands`, T3.3 join substrate usage, `_OrGroup` direct access, and SDK `__all__` scans matched expected shipped scope. No blueprint scope amendment required. |
 
 ## Decision Notes
 
@@ -103,3 +104,14 @@ T3.4 applies the T3.3 0-deviation lesson before implementation:
 - [ ] `_OrGroup.join_by_ports(...)` diagnostic method is intentionally scoped.
 - [ ] Acceptance gates map one-to-one to goals and cross-slice preservation.
 - [ ] T3.3 helpers are reused rather than duplicated.
+
+### Step 4.6 Pre-Implementation Grep
+
+| Check | Result |
+|---|---|
+| `join_by_ports` naming conflict | `rg 'join_by_ports' src/factgraph/ tests/ workflow/` found workflow/design, memory, and blueprint mentions only. `rg 'join_by_ports' src/factgraph/ tests/` returned no shipped code/test hits; the method name is new. |
+| `itertools.combinations` import pattern | `rg 'from itertools import\|itertools\.combinations' src/factgraph/` found only existing `from itertools import count` in `src/factgraph/sdk/dsl/expr.py`; adding `combinations` in `rule_expr.py` is local and non-conflicting. |
+| T3.3 `_reachable_operands` callers | `rg '_reachable_operands' src/factgraph/ tests/` found only the T3.3 internal call and definition in `src/factgraph/application/protocol/rule_expr.py`; T3.4 will be the first additional internal caller. |
+| T3.3 join substrate usage | `rg 'RuleJoinConstraint\(|RulePortRef\.eq|_AndGroup\.join' src/factgraph/ tests/` found current T3.3 implementation and tests only. No external caller bypasses the intended join path. |
+| `_OrGroup` direct access | `rg '_OrGroup\.' src/factgraph/ tests/` returned no hits; adding `_OrGroup.join_by_ports(...)` as a diagnostic method has no existing direct-access collision. |
+| SDK `__all__` export scope | `grep -A 80 '__all__' src/factgraph/sdk/__init__.py \| head -90` shows existing T3.3 `RuleJoinConstraint`, `RuleExpr`, `RuleExprError`, and `ExplicitBoolError` exports; T3.4 adds no new SDK export. |
