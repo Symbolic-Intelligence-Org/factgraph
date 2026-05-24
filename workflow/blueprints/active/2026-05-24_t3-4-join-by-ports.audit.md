@@ -12,6 +12,7 @@
 | 2026-05-24 | draft | Blueprint created | Initial T3.4 S-class scope recorded from D2 §4.5, D5 §4.5, Stage 3 synthesis §3 T3.4, synced track plan T3.4 row, and archived T3.3 join substrate. |
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.4-F1 "requested names" typo fixed; T3.4-F2 §5.7 step 1 wording clarified; T3.4-F3 §5.3 pseudocode standardized with `itertools.combinations`. |
 | 2026-05-24 | pre-impl | Step 4.6 grep clean | `join_by_ports`, `itertools.combinations`, `_reachable_operands`, T3.3 join substrate usage, `_OrGroup` direct access, and SDK `__all__` scans matched expected shipped scope. No blueprint scope amendment required. |
+| 2026-05-24 | baseline | G7 baseline recorded | Branch/sacred/dirty state verified; Step 4.6 grep remains clean; `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 55 tests OK. |
 
 ## Decision Notes
 
@@ -115,3 +116,13 @@ T3.4 applies the T3.3 0-deviation lesson before implementation:
 | T3.3 join substrate usage | `rg 'RuleJoinConstraint\(|RulePortRef\.eq|_AndGroup\.join' src/factgraph/ tests/` found current T3.3 implementation and tests only. No external caller bypasses the intended join path. |
 | `_OrGroup` direct access | `rg '_OrGroup\.' src/factgraph/ tests/` returned no hits; adding `_OrGroup.join_by_ports(...)` as a diagnostic method has no existing direct-access collision. |
 | SDK `__all__` export scope | `grep -A 80 '__all__' src/factgraph/sdk/__init__.py \| head -90` shows existing T3.3 `RuleJoinConstraint`, `RuleExpr`, `RuleExprError`, and `ExplicitBoolError` exports; T3.4 adds no new SDK export. |
+
+### G7 Baseline Record
+
+| Check | Result |
+|---|---|
+| Branch and sacred state | Branch `v0.2.0-t3-4-join-by-ports-2026-05-24` at `4035d360`; sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`; dirty set remains 4 modified files + 1 untracked directory. |
+| T3.3 join substrate | Step 4.6 grep already confirmed T3.3 `RuleJoinConstraint`, `RulePortRef.eq(...)`, `_AndGroup.join(...)`, `_reachable_operands(...)`, and `_OrGroup` direct-access scope are clean. |
+| `join_by_ports` baseline | Step 4.6 grep confirmed `join_by_ports` is absent from shipped `src/factgraph/` and `tests/`; T3.4 adds the first implementation. |
+| Requested pytest baseline | Pytest remains out of the T3.4 baseline path because T3.1 recorded the current environment SIGSEGV issue; the spawned tooling investigation remains out of scope for T3.4. |
+| Fallback unittest baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v` ran 55 tests in 0.009s and passed OK. |
