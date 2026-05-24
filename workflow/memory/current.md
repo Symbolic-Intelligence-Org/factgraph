@@ -1,8 +1,8 @@
 # Current Operational Memory
 
-最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; **push gate executed — 4 origin refs created**; next-track decision pending)
+最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; push gate executed — 4 origin refs created; **next-track selected: T3 later tranche; Codex 起 Stage 1 audit per cross-flip default**)
 
-## 当前阶段(2026-05-25 — T3 CYCLE COMPLETE + PUSH GATE EXECUTED — NEXT-TRACK DECISION PENDING)
+## 当前阶段(2026-05-25 — T3 CYCLE COMPLETE + PUSH GATE EXECUTED — NEXT-TRACK SELECTED: T3 LATER TRANCHE)
 
 **Current local branch:** `v0.2.0-t3-6-docs-and-examples-2026-05-24 @ 96baa609`.
 
@@ -303,6 +303,42 @@ Push semantics verified:
 - Session push count: 0 → 1.
 
 Push approach selected by Human: "Cycle milestones" — 3 milestone refs at T1/T2/T3-cycle archive commits + current HEAD branch. Aligns with prior Track 3 milestone pattern; provides per-cycle immutable references + cumulative HEAD for navigation.
+
+### Next-track selected: T3 later tranche (2026-05-25)
+
+**Human-direct authorization** 2026-05-25: next-track = **T3 later tranche** — RuleExpr execution lowering / adapter integration. Predicted L-class per Stage 3 synthesis + D5 §4.8 deferral.
+
+**Cross-flip default**: per T2.1+ / T1.3 / T1.4 / T2.3d / T3.1-T3.6 cycle baseline = **Codex drafts, Claude reviews**.
+
+- Codex first action: Stage 1 audit draft (L-class entry point per `workflow/CADENCE.md`).
+- Claude second action: Step 4.2 review of Stage 1 audit draft.
+- Cross-flip inversion (Claude drafts) reserved for special cases — T2.3b/T2.3c experiments closed with "revert to user-drafts" verdict (5x cost reduction T2.3d 验证).
+
+**Source references for Codex Stage 1 audit**:
+
+- Parent essay: `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` — later tranche commitments (execution lowering scope post-D5 §4.8).
+- T3 Stage 3 synthesis: `workflow/audit/active/2026-05-24_t3-ruleexpr-synthesis.md` — mapped T3.1-T3.6 + later tranche slice candidates.
+- Track plan: `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` — T3 later rows per `9c857d0c` sync.
+- D5 decision doc: `workflow/design/decisions/archive/2026-05-24_t3-d5-slice-split-bool-guard-timing.md` (or active if not archived) — explicit deferral rationale for §4.8.
+- Shipped T3 surface (read-before-draft per preflight code audit): `src/factgraph/application/protocol/rule_expr.py`, `rule_expr_inspect.py`, `src/factgraph/application/protocol/rule.py`, `src/factgraph/sdk/__init__.py`.
+
+**Branch naming**: TBD by Codex at Stage 1 start; convention `v0.2.0-<topic>-<date>` per established v0.2.0 chain.
+
+**Workflow expectations**:
+
+- Stage 1 audit doc in `workflow/audit/active/<date>_<slug>.md` (read-only doc-only mode).
+- Codex requests Claude "可以推进" after Stage 1 audit complete.
+- Stage 2 Q-resolution → adopted decision docs in `workflow/design/decisions/active/` (proposed → reviewed → adopted lifecycle).
+- Stage 3 synthesis → track plan sync.
+- Per-slice loop (Step 4.1-4.7 + archive + memory) for each slice in Stage 3 split.
+
+**Hold gates remaining** (Human-direct):
+
+- Memory consolidation commit `45e7ab19` push to origin (deferred).
+- Factgraph push (deferred).
+- Future push gates per `feedback_push_master_gate.md` (each new scoped-unit completion needs single-shot auth).
+- Sacred branch operations.
+- Dirty set strategy.
 
 ### Workflow governance state
 
