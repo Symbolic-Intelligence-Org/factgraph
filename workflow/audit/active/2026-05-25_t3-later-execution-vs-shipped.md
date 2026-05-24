@@ -4,7 +4,7 @@ Status: draft
 Date: 2026-05-25
 Branch: `v0.2.0-t3-later-execution-audit-2026-05-25`
 Base: `e4e4417f` (`docs(memory): record next-track selection T3 later tranche`)
-Class prediction: L
+Class prediction: L cluster (Stage 2 decisions + Stage 3 synthesis + per-slice M/S blueprints)
 Owner split: Codex drafts; Claude reviews
 
 ## 1. Purpose
@@ -52,6 +52,8 @@ Out of scope for this Stage 1 audit:
 | `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 1835-1867, 1873-1959 | Parent §10 atom grammar and ArithExpr/AggregateExpr restrictions. |
 | `workflow/blueprints/archive/2026-05-24_t3-1-*` through `t3-6-*` | archive pairs | T3.1-T3.6 closure trail and negative-action gates. |
 
+Line ranges are pinned to the Stage 1 audit branch state; the initial audit commit was `4ac498f0`.
+
 ## 4. Shipped Code Read
 
 | File | Relevant lines | Shipped truth |
@@ -90,9 +92,11 @@ Shipped `RuleExpr` has factories, operators, equality/hash, bool guards, joins, 
 
 There is no branch for application `Rule`, `_RuleExpr`, or `RuleExprInspect`. Core `evaluate_store(...)` consumes `derivation_id`, `target_pred_id`, `head_vars`, and `where`, so RuleExpr lowering needs an explicit bridge rather than an adapter-only patch.
 
-### F3. The runtime shape already has a likely lowering target.
+### F3. The runtime shape already has possible lowering targets.
 
-`CompiledDerivationPlan` stores `body_ir`, `heads`, optional `head_spec`, engine extension/options, and semantics profile. `evaluate_derivation_plans(...)` then calls `evaluate_store(...)` per head. This is the most natural existing shape to target, but it is not yet a decided contract for RuleExpr lowering.
+`CompiledDerivationPlan` stores `body_ir`, `heads`, optional `head_spec`, engine extension/options, and semantics profile. `evaluate_derivation_plans(...)` then calls `evaluate_store(...)` per head. This is one existing runtime shape that could be targeted, but it is not yet a decided contract for RuleExpr lowering.
+
+This is a Stage 2 entry hypothesis, not a Stage 1 conclusion; D7 must compare it against transient derivation dicts, a new internal lowering plan, and adapter-specific lowering.
 
 ### F4. Parent head commitments are load-bearing and may require T4 or a T3-later sub-slice.
 
@@ -101,6 +105,8 @@ Parent §5 examples use `fg.eval.evaluate(expr, head=...)`. The parent commits t
 ### F5. Adapter semantics are not uniform enough for a single "just lower it" implementation.
 
 Native, Souffle, and ProbLog all consume WhereIR-style bodies; PyReason is explicitly pred-only and rejects equality, negation, and other atom kinds. Parent §8 also records Form 1 portability constraints and PyReason Form 2 separation. T3 later must lock an engine support matrix and explicit rejection behavior before implementation.
+
+T2.3 aggregate support is part of this matrix. RuleExpr lowering must preserve both RuleExpr alias/occurrence scoping and T2.3 aggregate-local variable isolation, empty-set guard semantics, and PyReason exclusion behavior.
 
 ### F6. Joins are structurally validated but not executable.
 
@@ -122,6 +128,10 @@ D5 says execution lowering must decide how composite RuleExprs map to proof/eval
 ### F9. Public surface expansion is likely, so L-class is justified.
 
 Possible public surfaces include `fg.eval.evaluate(rule_expr, head=...)`, error messages, docs, and maybe lower/inspect helpers. Even if implementation targets internal lowering first, this tranche crosses SDK dispatch, application protocol, core runtime, adapter support, and proof/evidence boundaries.
+
+### F10. L-class means cluster, not one monolithic blueprint.
+
+The current scope crosses public SDK dispatch, application protocol lowering, runtime plans, adapter behavior, and evidence/result boundaries. It should follow L-class cluster cadence: Stage 2 decisions, Stage 3 synthesis, then smaller scoped implementation blueprints.
 
 ## 6. Commitment Triage
 
@@ -157,7 +167,7 @@ If public evaluation ships now, what subset of parent §5 head semantics is in t
 
 Candidate directions:
 
-- require T4 first;
+- require T4 first, which would pause this T3 later tranche pending T4 cycle completion and require Human re-engagement on next-track ordering;
 - ship minimal head-as-application-Rule checks in T3 later;
 - allow only existing expression occurrence heads initially;
 - keep public path unsupported until T4.
@@ -173,7 +183,7 @@ Candidate directions:
 - a new non-public `RuleExprLoweringPlan`;
 - adapter-specific lowering without a shared plan.
 
-Audit leaning: a shared plan is safer because existing application runtime already consumes `CompiledDerivationPlan`, but the exact shape should be decided before coding.
+Stage 2 entry hypothesis: a shared plan may be attractive because existing application runtime already consumes `CompiledDerivationPlan`. This is not binding; D7 must decide the canonical lowering target before coding.
 
 ### Q4. AND / OR tree lowering
 
@@ -218,6 +228,19 @@ Required locks:
 Should T3 later require the full currently shipped T2.3 atom grammar through each adapter, or only lower RuleExpr structure over whatever each adapter already supports?
 
 This matters because parent §8 records Form 1 portability goals, while shipped adapters have different support levels, especially PyReason.
+
+Q7 is a sub-question of Q6. D9 must answer both jointly so the engine matrix and per-engine grammar floor do not diverge.
+
+### Q7a. Aggregate-in-RuleExpr preservation
+
+How should RuleExpr lowering preserve `AggregateAtom` / aggregate expression behavior already shipped by T2.3?
+
+Required locks:
+
+- aggregate-local variable isolation remains independent from RuleExpr alias-local variable privacy;
+- empty-set guard semantics remain unchanged;
+- adapter support follows the D9 engine matrix;
+- PyReason aggregate behavior remains explicitly unsupported unless a later Form 2 decision changes it.
 
 ### Q8. Evidence / support / explanation boundary
 
@@ -275,6 +298,8 @@ Possible split:
 
 Proceed to Stage 2 Q-resolution before any blueprint implementation.
 
+Each decision doc should follow the T3 D1-D5 lifecycle: proposed, reviewed, adopted.
+
 Recommended decision docs:
 
 1. **D6: T3 later public entrypoint and head dependency** — decide whether public `fg.eval.evaluate(rule_expr, head=...)` is in this tranche and whether T4 blocks it.
@@ -283,7 +308,25 @@ Recommended decision docs:
 4. **D9: Adapter support matrix** — decide native/Souffle/ProbLog/PyReason support and rejection behavior.
 5. **D10: Evaluation result / evidence boundary** — decide what this tranche returns now and what remains T5.
 
+Q-to-D disposition:
+
+| Question | Disposition |
+|---|---|
+| Q1 public entrypoint | D6 |
+| Q2 head dependency boundary | D6 |
+| Q3 lowering IR strategy | D7 |
+| Q4 AND / OR tree lowering | D7 |
+| Q5 join lowering semantics | D8 |
+| Q6 engine support matrix | D9 |
+| Q7 adapter grammar floor | D9 |
+| Q7a aggregate-in-RuleExpr preservation | D9 |
+| Q8 evidence / support boundary | D10 |
+| Q9 error hierarchy and diagnostics | Cross-cutting acceptance in D6-D9; D9 owns adapter rejection error policy. Create a standalone D11 only if review finds the cross-cut too diffuse. |
+| Q10 slice split | Stage 3 synthesis, not a decision doc. |
+
 After those decisions, run Stage 3 synthesis to split implementation slices and update the track plan before any scoped blueprint enters implementation.
+
+Per-slice implementation should carry forward the validated T3 cadence discipline: preemptive scope locking, executable-quality §5/§6 specs, sibling module isolation where it reduces touch surface, Step 4.6 proactive grep with pre-feat A-fallback amendments when needed, and Step 4.7 review before closure/archive.
 
 ## 11. Audit Status
 
@@ -291,7 +334,7 @@ Draft complete for Step 4.2 review.
 
 Open review asks:
 
-- Confirm L-class classification.
+- Confirm L-class cluster classification.
 - Confirm Stage 2 decision count and names.
 - Confirm whether T4 head dependency should be treated as blocker or partial in-tranche scope.
 - Confirm whether native-only first slice is acceptable if adapters require a broader decision.
