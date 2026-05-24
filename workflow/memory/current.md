@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2/T3.3/T3.4 archived locally; source `02fcaec6`, not pushed)
+最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2/T3.3/T3.4/T3.5 archived locally; source `12bd9221`, not pushed)
 
-## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 + T3.3 + T3.4 ARCHIVED; T3.5 NEXT)
+## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 + T3.3 + T3.4 + T3.5 ARCHIVED; T3.6 NEXT)
 
-**Current local branch:** `v0.2.0-t3-4-join-by-ports-2026-05-24 @ 02fcaec6`.
+**Current local branch:** `v0.2.0-t3-5-ruleexpr-inspect-2026-05-24 @ 12bd9221`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -35,6 +35,7 @@
 | **T3.2 Expression-Scope Occurrence Validation** | S | `21fa0914` | `2a16dd98 feat(application): add T3.2 expression-scope occurrence validation` (T-1 deviation recorded in closure) |
 | **T3.3 Joins + Every-Proof-Path Reach Rule** | M | `1100ea78` | `0b80fe9b feat(application): add T3.3 joins and reach rule` (0 deviation — first T3 feat with zero Step 4.7 findings) |
 | **T3.4 Join By Ports** | S | `02fcaec6` | `8f248212 feat(application): add T3.4 join by ports` (0 deviation — second consecutive T3 feat with zero Step 4.7 findings) |
+| **T3.5 RuleExpr Inspect** | M | `12bd9221` | `55d9e67b feat(application): add T3.5 ruleexpr inspect` (0 deviation — third consecutive T3 feat, first proactive Step 4.6 A-fallback catch) |
 
 ### Current landed behavior
 
@@ -247,6 +248,14 @@
   - Nine T3.3 negative-action gates plus six T3.4 explicit "no" locks preserved: no legacy SDK change, no cross-type equality, no T1.4 DTO change, no `Rule.join_by_ports`, no `RuleOccurrence.join_by_ports`, no helper module, no new error subclass, and no new SDK export.
   - **Second consecutive 0-deviation milestone**: T3.4 repeated T3.3's clean result with 0 P0/P1/P2/P3 at Step 4.7. Closure attributes this to §5.5 preemptive scope locking, §5.3 algorithm pseudocode with `itertools.combinations`, §5.7 validation ordering, and §5.4 stable diagnostics.
 
+**T3.5 — RuleExpr Inspect**
+- **T3.5 archived at `12bd9221`**:
+  - Lineage: `a56012bd` draft → `7a0db88c` P2 amendment (F1-F3) → `59518e3f` scoped + P3 (F4) → `d5d185bf` Step 4.6 (A-fallback) scope amend (F5) → `325798ca` G7 baseline → `55d9e67b` feat → `71d4d504` closure → `12bd9221` archive.
+  - Landed strict six-file scope: new `rule_expr_inspect.py` sibling module with `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, and `PortInspect`; application protocol + SDK exports; SDK inspect dispatch extension with lazy imports; API surface docs rows + runtime `__all__` count correction; and 13 focused tests in `tests/sdk/test_ruleexpr_inspect.py`.
+  - Verification: G7 baseline 63 tests OK; post-impl core+inspect gate 76 tests OK; focused cross-slice gate 99 tests OK; ruff clean. `tests.test_public_inference_factgraph_create` has unrelated pre-existing failures at G7 baseline (`meta[confidence]` removal + missing `sdk.inferences` persistence methods).
+  - Twenty-five negative-action gates preserved: T3.3 nine + T3.4 six + T3.5 ten, including legacy SDK Rule / Inference dict inspect preservation, no T1.4 DTO changes, no RuleExpr authoring substrate changes, no new error subclass, and lazy SDK dispatch imports.
+  - **Third consecutive 0-deviation milestone**: T3.5 is the largest M-class T3 slice so far and still landed with zero scope deviation. Step 4.6 proactively caught F5 (`:exists` strict pseudocode vs T1.4 permissive entity inference) and amended scope before feat — the first proactive Step 4.6 (A-fallback) catch in the T3 cycle.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -325,18 +334,20 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T3.4 repeatable preemptive scope locking:** T3.4 reused T3.3's pattern with six explicit "no" locks and one explicit "yes" lock in §5.5, strict two-file scope, and no new public export. Result: second consecutive 0-deviation feat.
 - **T3.4 second consecutive 0-deviation milestone:** 0 P0/P1/P2/P3 at Step 4.7 with 72 cross-slice tests and ruff clean. The pattern is now repeatable, not slice-specific: preemptive scope lock + algorithm spec + validation ordering + stable diagnostics.
 - **T3.4 scope-boundary test discipline:** `test_join_by_ports_preserves_export_scope` actively asserts no new SDK export. Future slices should test important negative scope locks directly when cheap, not only test positive behavior.
+- **T3.5 third consecutive 0-deviation milestone:** largest M-class T3 slice landed with 0 scope deviation after 31 acceptance gates, 25 negative-action gates, 99 focused cross-slice tests, and ruff clean. The preemptive pattern holds across small, medium, and large T3 scope.
+- **T3.5 proactive Step 4.6 (A-fallback) catch:** Step 4.6 grep found F5 before feat — T1.4 `_find_entity_ref_type_in_atom(...)` accepts any `:exists` term while T3.5 §5.6 initially required exactly one term. Scope amend `d5d185bf` aligned inspect pseudocode before implementation, avoiding mid-impl drift.
+- **T3.5 sibling-module scope economy:** estimated 8-file scope landed in 6 files because `rule_expr_inspect.py` isolated inspect traversal and kept `rule_expr.py` / `test_rule_expr.py` untouched. Prefer sibling modules when a public projection layer is large but can consume existing authoring substrate read-only.
 
 ### Recommended next work
 
-- **T3.5 RuleExpr inspect** — recommended next slice; likely M/L depending on whether T3.5a/T3.5b split is used. Must preserve legacy SDK Rule / Inference dict inspect while adding RuleExprInspect, occurrence/atom/port descriptors, render contracts, and D3 §4.4 deferred inspect details.
-- **T3.6 docs + examples** — docs-only slice after T3.1-T3.5 behavior stabilizes; owns precedence/parentheses guidance, `.eq(...)`, `.join(...)`, `.join_by_ports(...)`, bool guards, same-name-port diagnostics, and inspect examples.
+- **T3.6 docs + examples** — next slice and final T3 authoring slice; docs-only S/M candidate covering precedence/parentheses, `.eq(...)`, `.join(...)`, `.join_by_ports(...)`, bool guards, same-name-port diagnostics, legacy inspect dict vs `RuleExprInspect`, and inspect examples.
 - **T3 later execution tranche** — RuleExpr execution lowering / adapter integration deferred per D5 §4.8; class TBD (M or L) and requires a fresh decision before blueprinting.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` + `BinaryExpr`. Currently raises `SDKDSLError`.
 - **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains. Pre-existing limitation; S-class adapter hygiene slice.
 - **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3.1 locked unittest fallback and did not block on pytest runner segfault.
 - **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip + `LegacyRule` retention + `DeprecationWarning` policy decisions. Coordinate with T1.3 A-staged commitment.
-- **Push / publish gate** — T1/T2 + T3.1 + T3.2 + T3.3 + T3.4 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
+- **Push / publish gate** — T1/T2 + T3.1 + T3.2 + T3.3 + T3.4 + T3.5 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
