@@ -1,0 +1,310 @@
+# Task Blueprint: T3.2 Expression-Scope Occurrence Validation
+
+- Status: draft
+- Created: 2026-05-24
+- Last Updated: 2026-05-24
+- Class: S
+- Related Modules:
+  - `src/factgraph/application/protocol/rule_expr.py`
+  - `src/factgraph/application/protocol/rule.py`
+  - `tests/application/protocol/test_rule_expr.py`
+- Related Docs:
+  - `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md`
+  - `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md`
+  - `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md`
+  - `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md`
+  - `workflow/blueprints/archive/2026-05-24_t3-1-base-ruleexpr-bool-guards.md`
+- Audit Log:
+  - [2026-05-24_t3-2-expression-scope-validation.audit.md](./2026-05-24_t3-2-expression-scope-validation.audit.md)
+
+## 1. Problem
+
+T3.1 shipped the base RuleExpr tree, `&` / `|` composition, bool guards, and join-free equality/hash. It intentionally preserved duplicate operands and did not validate expression-scope occurrence aliases.
+
+T3.2 must add the expression-scope rules that Stage 3 synthesis assigned to this slice:
+
+- alias uniqueness within one RuleExpr.
+- repeated same Rule requires explicit aliases.
+- default alias behavior when a Rule appears once.
+- diagnostics for duplicate aliases and repeated unaliased Rules.
+
+This must consume T1.4's shipped `Rule.as_(...)`, `RuleOccurrence`, `RulePortRef`, and alias regex rather than re-shipping those substrates.
+
+Canonical drivers:
+
+- D5 section 4.3: T3.2 owns expression-scope validation only; T1.4 already owns `.as_`, `RuleOccurrence`, `RulePortRef`, and alias regex validation.
+- Synthesis section 3 T3.2: dependencies are T3.1 base RuleExpr tree and T1.4 occurrence substrate; four must-include validation items.
+- Track plan T3.2 row at `9c857d0c`: expression-scope occurrence validation only, scope narrowed by T1.4 substrate.
+- T3.1 closure §10: 3 minor type-precision follow-ups deferred to the next adjacent slice.
+
+## 2. Goals
+
+1. Accept `RuleOccurrence` as a RuleExpr operand.
+
+2. Represent every Rule operand internally with an occurrence alias:
+   - bare application `Rule` uses default alias `rule.id`.
+   - `RuleOccurrence` uses its explicit `alias`.
+
+3. Enforce alias uniqueness within the composed RuleExpr.
+
+4. Enforce repeated same Rule requires explicit aliases:
+   - a Rule appearing once may be bare.
+   - a Rule appearing multiple times must appear through explicit `rule.as_(...)` occurrences for every occurrence.
+   - `rule.as_("a") & rule.as_("b")` is valid.
+   - `rule & rule` and `rule & rule.as_("b")` are invalid.
+
+5. Emit stable diagnostics for duplicate aliases, repeated unaliased Rules, and invalid default aliases.
+
+6. Inline T3.1 low-risk type-precision follow-ups:
+   - add `-> _RuleExpr` return annotations to application `Rule.__and__` / `Rule.__or__`.
+   - tighten `_RuleOperand.rule` from `object` to application `Rule`.
+
+## 3. Non-goals
+
+- No `.join(...)` or `RuleJoinConstraint`; T3.3 owns joins.
+- No `.join_by_ports(...)`; T3.4 owns it.
+- No `fg.rules.inspect(rule_expr)` or `RuleExprInspect`; T3.5 owns inspect.
+- No user-facing T3 docs/examples; T3.6 owns docs and examples.
+- No RuleExpr execution lowering or adapter integration.
+- No changes to T1.4 `Rule.as_`, `RuleOccurrence`, `RulePortRef`, alias regex validation, or port APIs.
+- No changes to T1.3 staged SDK naming; `factgraph.sdk.Rule` remains legacy.
+- No changes to T2.3 aggregate substrate or adapters.
+- No direct `application_rule == rule_expr` cross-type equality.
+- No replacement of the T3.1 duck-typed `_is_legacy_sdk_rule` check unless G7 or implementation proves a cycle-safe nominal check is available. The current duck-typed check is deliberately retained to avoid an application/SDK import cycle.
+
+## 4. Current Context
+
+### 4.1 T1.4 substrate already shipped
+
+- Application `Rule.as_(alias: str | None = None)` exists at `src/factgraph/application/protocol/rule.py:122-124`.
+- `RuleOccurrence` exists at `src/factgraph/application/protocol/rule.py:154-181`.
+- `RulePortRef` exists at `src/factgraph/application/protocol/rule.py:142-151`.
+- Alias validation uses `_validate_occurrence_alias(...)` at `src/factgraph/application/protocol/rule.py:186-191`.
+
+T3.2 must call or reuse this substrate. It must not duplicate alias regex logic in `rule_expr.py`.
+
+### 4.2 T3.1 base RuleExpr tree already shipped
+
+- Public `RuleExpr`, `RuleExprError`, `ExplicitBoolError` exist at `src/factgraph/application/protocol/rule_expr.py:9-41`.
+- Internal frozen `_RuleExpr`, `_RuleOperand`, `_AndGroup`, `_OrGroup` exist at `src/factgraph/application/protocol/rule_expr.py:47-82`.
+- `_coerce_rule_expr_operand(...)` accepts application `Rule` and `_RuleExpr` at `src/factgraph/application/protocol/rule_expr.py:85-97`.
+- `_combine(...)` flattens same-kind groups and preserves duplicate operands at `src/factgraph/application/protocol/rule_expr.py:100-116`.
+- T3.1 tests verify duplicate multiplicity is preserved and `application_rule == rule_expr` cross-type equality is not introduced.
+
+### 4.3 Current failure mode
+
+Current T3.1 behavior allows expression shapes that T3.2 must reject:
+
+- `rule & rule` currently builds an `_AndGroup` with two bare `_RuleOperand` children.
+- `rule & rule.as_("b")` is not accepted yet because `RuleOccurrence` is not a RuleExpr operand; after T3.2 it should be accepted syntactically but rejected semantically because the repeated Rule includes a bare occurrence.
+- `rule.as_("a") & other_rule.as_("a")` is not accepted yet; after T3.2 it should be rejected for duplicate alias.
+
+## 5. Proposed Shape
+
+### 5.1 Module placement
+
+Extend the existing T3.1 module:
+
+- `src/factgraph/application/protocol/rule_expr.py`
+
+No new public SDK exports are required. T3.2 reuses `RuleExprError` for diagnostics.
+
+Rationale:
+
+- D5 defines T3.2 as validation over the existing RuleExpr tree.
+- Introducing a public `RuleExprAliasError` would fire an M-class public-surface trigger without current need.
+- `RuleExprError(SDKDSLError)` is already the correct public bucket from T3.1 / D1.
+
+### 5.2 Internal operand shape
+
+Change `_RuleOperand` from:
+
+```python
+@dataclass(frozen=True, eq=False)
+class _RuleOperand(_RuleExpr):
+    rule: object
+```
+
+to:
+
+```python
+@dataclass(frozen=True, eq=False)
+class _RuleOperand(_RuleExpr):
+    rule: Rule
+    alias: str
+    explicit_alias: bool
+```
+
+Rules:
+
+- bare application `Rule` -> `_RuleOperand(rule=rule, alias=rule.id, explicit_alias=False)`.
+- `RuleOccurrence` -> `_RuleOperand(rule=occ.rule, alias=occ.alias, explicit_alias=True)`.
+- `_RuleExpr` input remains accepted unchanged.
+
+### 5.3 Default alias validation
+
+Bare Rule operands inherit `alias = rule.id`. The inherited alias must pass T1.4 alias validation.
+
+Implementation should call `rule.as_()` or `_validate_occurrence_alias(...)` rather than duplicating the regex. Preferred implementation:
+
+```python
+occ = rule.as_()
+return _RuleOperand(rule=occ.rule, alias=occ.alias, explicit_alias=False)
+```
+
+If `rule.id` is not identifier-shaped, `_coerce_rule_expr_operand(rule)` should raise `RuleExprError` with guidance to call `rule.as_("custom_alias")`. This mirrors the T1.4 edge-case contract rather than silently accepting invalid aliases.
+
+### 5.4 Expression-scope validation pass
+
+Add a private validation helper:
+
+```python
+def _validate_expression_scope(expr: _RuleExpr) -> None: ...
+```
+
+`_combine(...)` should build and flatten the expression first, then validate the resulting expression before returning it.
+
+The helper traverses all `_RuleOperand` leaves and checks:
+
+1. Alias uniqueness across all operands in the expression.
+2. Repeated same Rule identity requires every occurrence of that Rule to have `explicit_alias=True`.
+
+Rule identity for repeated-rule detection follows T3.1/D4:
+
+```python
+(rule.id, rule.content_digest)
+```
+
+This preserves D4's identity contract and does not add cross-type equality.
+
+### 5.5 Diagnostic policy
+
+Diagnostics should be deterministic and aggregated into one `RuleExprError` where practical.
+
+Preferred message shape:
+
+```text
+RuleExpr occurrence validation failed: duplicate alias 'u'; rule 'orders_total' appears multiple times without explicit aliases
+```
+
+Policy:
+
+- collect duplicate aliases in stable sorted order.
+- collect repeated Rule identities with any bare occurrence in stable `(rule.id, content_digest)` order.
+- raise one `RuleExprError` with all collected issues joined by `; `.
+- if alias validation fails while deriving a bare Rule default alias, wrap the underlying `RuleValidationError` in `RuleExprError` and include "use .as_(...)" guidance. This may fail before aggregate collection because the operand cannot be represented.
+
+Rationale:
+
+- T3.2's purpose is diagnostics. Aggregating duplicate alias and repeated-unaliased issues avoids fix-one-error-per-run churn.
+- Default-alias invalidity is an operand construction error and can fail immediately.
+
+### 5.6 Canonical equality/hash update
+
+`_RuleOperand._canonical()` must include alias:
+
+```python
+return ("rule", _rule_identity(self.rule), self.alias)
+```
+
+Consequences:
+
+- `rule & other` uses default aliases.
+- `rule.as_("a") & other` is not equal to `rule.as_("b") & other`.
+- repeated explicit aliases are still rejected before equality/hash is observed.
+- no direct `application_rule == rule_expr` equality is introduced.
+
+### 5.7 T3.1 P3 follow-up handling
+
+Inline:
+
+- add `-> _RuleExpr` return annotations to `Rule.__and__` and `Rule.__or__` in `src/factgraph/application/protocol/rule.py`.
+- tighten `_RuleOperand.rule` typing to `Rule` as part of §5.2.
+
+Defer:
+
+- `_is_legacy_sdk_rule` stays duck-typed unless a cycle-safe nominal check appears during G7 or implementation. This is an explicit preservation choice, not an omitted cleanup.
+
+## 6. Invariants
+
+- T1.4 `Rule.as_`, `RuleOccurrence`, `RulePortRef`, alias regex, and port APIs remain unchanged.
+- T3.1 public exports and bool guards remain unchanged.
+- T3.1 negative-action gates remain intact:
+  - legacy SDK `Rule.__bool__` unchanged.
+  - no direct `application_rule == rule_expr` cross-type equality.
+  - T1.4 application Rule `__eq__` / `__hash__` unchanged.
+- Duplicate operands are still physically representable internally, but invalid expression-scope combinations are rejected before returning to callers.
+- No T3.3 join semantics are introduced.
+- No T3.5 inspect semantics are introduced.
+- No T2.3 aggregate code changes.
+
+## 7. Acceptance
+
+- [ ] `rule & other_rule` succeeds when both Rules appear once and uses default aliases equal to each Rule id.
+- [ ] `rule.as_("a") & other_rule.as_("b")` succeeds.
+- [ ] `rule & rule` raises `RuleExprError` explaining repeated same Rule requires explicit aliases.
+- [ ] `rule & rule.as_("b")` raises `RuleExprError` because the repeated Rule includes a bare occurrence.
+- [ ] `rule.as_("a") & rule.as_("b")` succeeds and compares unequal to `rule.as_("c") & rule.as_("d")`.
+- [ ] `rule.as_("same") & other_rule.as_("same")` raises `RuleExprError` explaining duplicate alias.
+- [ ] A combined expression with both duplicate alias and repeated bare Rule emits one aggregated deterministic `RuleExprError` message containing both issues.
+- [ ] Bare Rule with non-identifier `rule.id` raises `RuleExprError` with `.as_(...)` guidance when used as a RuleExpr operand.
+- [ ] `RuleOccurrence` remains frozen/hashable and T1.4 tests continue to pass unchanged.
+- [ ] `_RuleOperand.rule` is typed as application `Rule`; `Rule.__and__` and `Rule.__or__` have `-> _RuleExpr` annotations.
+- [ ] `_is_legacy_sdk_rule` behavior remains covered by T3.1 legacy SDK Rule rejection tests.
+- [ ] `RuleExpr.all(...)` and `RuleExpr.any(...)` apply the same expression-scope validation as `&` / `|`.
+- [ ] Legacy SDK `Rule` remains rejected as a RuleExpr operand.
+- [ ] `application_rule == rule_expr` remains false / non-cross-type; application Rule `__eq__` / `__hash__` unchanged.
+- [ ] T3.1 core tests and T1.4 application protocol tests pass.
+- [ ] T1.3 SDK naming tests pass.
+- [ ] At least one T2.3 aggregate cross-slice suite passes, proving no aggregate regression.
+- [ ] Ruff clean on touched Python files.
+
+## 8. Implementation Plan
+
+1. G7 precondition record before code edits:
+   - verify branch / sacred / dirty set.
+   - run `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v`.
+   - grep shipped `_RuleOperand`, `_coerce_rule_expr_operand`, `_combine`, and T1.4 `RuleOccurrence` line ranges.
+   - record in audit log before edits.
+
+2. Extend `src/factgraph/application/protocol/rule_expr.py`:
+   - import application `Rule` and `RuleOccurrence` in a cycle-safe way.
+   - update `_RuleOperand` fields.
+   - update `_coerce_rule_expr_operand(...)` to accept `RuleOccurrence`.
+   - add default alias validation and error wrapping.
+   - add `_validate_expression_scope(...)`.
+   - update `_RuleOperand._canonical()`.
+
+3. Add T3.1 type-precision follow-up in `src/factgraph/application/protocol/rule.py`:
+   - annotate `Rule.__and__` and `Rule.__or__` as returning `_RuleExpr`.
+   - use local import / `TYPE_CHECKING` as needed to avoid cycles.
+
+4. Add focused tests to `tests/application/protocol/test_rule_expr.py`:
+   - success cases.
+   - duplicate alias.
+   - repeated unaliased Rule.
+   - mixed bare + explicit repeated Rule.
+   - aggregated diagnostics.
+   - non-identifier default alias guidance.
+   - factory parity.
+   - type-precision assertions.
+
+5. Run targeted tests:
+   - `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr -v`
+   - `PYTHONPATH=src python -m unittest tests.sdk.test_rule_naming -v`
+   - one T2.3 aggregate suite, e.g. `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule_aggregate -v`
+
+6. Run ruff on touched Python files.
+
+7. Fill §10 Outcome after implementation and archive only after review pass.
+
+## 9. Docs
+
+No user-facing T3 docs/examples in this slice; T3.6 owns complete docs.
+
+Optional minimal module docs are not required because T3.2 changes validation behavior in an existing T3.1 module and remains covered by tests. If implementation updates `application/docs/rule.md`, keep it to one sentence clarifying that expression-scope alias uniqueness is enforced by RuleExpr, not by `RuleOccurrence` itself.
+
+## 10. Outcome / Deviations
+
+To be filled during closure.
+
