@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import combinations
 from typing import Iterable, Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
@@ -109,6 +110,10 @@ class _AndGroup(_RuleExpr):
         _validate_join_reach(self, merged)
         return _AndGroup(self.children, merged)
 
+    def join_by_ports(self, *explicit_names: str) -> _AndGroup:
+        constraints = _expand_join_by_ports(self, explicit_names)
+        return self.join(*constraints)
+
 
 @dataclass(frozen=True, eq=False)
 class _OrGroup(_RuleExpr):
@@ -119,6 +124,11 @@ class _OrGroup(_RuleExpr):
 
     def join(self, *constraints: RuleJoinConstraint) -> NoReturn:
         raise RuleExprError("RuleExpr joins must be attached to AND groups; distribute joins into OR branches")
+
+    def join_by_ports(self, *explicit_names: str) -> NoReturn:
+        raise RuleExprError(
+            "RuleExpr join_by_ports must be attached to AND groups; distribute joins into OR branches"
+        )
 
 
 def _coerce_rule_expr_operand(value: object) -> _RuleExpr:
@@ -224,6 +234,50 @@ def _normalize_join_constraints(constraints: Iterable[RuleJoinConstraint]) -> tu
     for constraint in constraints:
         unique.setdefault(_canonical_join_constraint(constraint), constraint)
     return tuple(unique[key] for key in sorted(unique, key=repr))
+
+
+def _validate_join_by_port_names(explicit_names: tuple[str, ...]) -> None:
+    if not explicit_names:
+        raise RuleExprError("RuleExpr.join_by_ports requires at least one explicit port name")
+
+    counts: dict[str, int] = defaultdict(int)
+    issues: list[str] = []
+    for name in explicit_names:
+        if not isinstance(name, str) or not name:
+            raise RuleExprError("RuleExpr.join_by_ports port names must be non-empty strings")
+        counts[name] += 1
+
+    issues.extend(f"duplicate requested port name {name!r}" for name, count in sorted(counts.items()) if count > 1)
+    if issues:
+        raise RuleExprError("RuleExpr.join_by_ports validation failed: " + "; ".join(issues))
+
+
+def _expand_join_by_ports(group: _AndGroup, explicit_names: tuple[str, ...]) -> tuple[RuleJoinConstraint, ...]:
+    _validate_join_by_port_names(explicit_names)
+    reachable = tuple(_reachable_operands(group).values())
+    issues: list[str] = []
+    constraints: list[RuleJoinConstraint] = []
+
+    for name in explicit_names:
+        refs = tuple(_port_refs_for_name(reachable, name))
+        if not refs:
+            issues.append(f"port {name!r} is not present on any direct AND occurrence")
+        elif len(refs) == 1:
+            issues.append(f"port {name!r} is present on fewer than two direct AND occurrences")
+        else:
+            constraints.extend(left.eq(right) for left, right in combinations(refs, 2))
+
+    if issues:
+        raise RuleExprError("RuleExpr.join_by_ports validation failed: " + "; ".join(sorted(issues)))
+    return tuple(constraints)
+
+
+def _port_refs_for_name(operands: tuple[_RuleOperand, ...], name: str) -> tuple[RulePortRef, ...]:
+    refs: list[RulePortRef] = []
+    for operand in operands:
+        if name in operand.rule.ports:
+            refs.append(operand.rule.as_(operand.alias).port(name))
+    return tuple(refs)
 
 
 def _validate_join_constraint_shapes(constraints: tuple[RuleJoinConstraint, ...]) -> None:

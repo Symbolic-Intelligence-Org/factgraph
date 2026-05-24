@@ -364,5 +364,76 @@ class RuleExprJoinTests(unittest.TestCase):
             (a & b).join(RuleJoinConstraint(left=mismatched, right=b.user))
 
 
+class RuleExprJoinByPortsTests(unittest.TestCase):
+    def test_join_by_ports_matches_explicit_join(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        self.assertEqual((a & b).join_by_ports("user"), (a & b).join(a.user.eq(b.user)))
+
+    def test_join_by_ports_pairwise_expands_more_than_two_occurrences(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+        c = _rule("c", var_name="c").as_("c")
+
+        joined = (a & b & c).join_by_ports("user")
+        explicit = (c & b & a).join(c.user.eq(b.user), c.user.eq(a.user), b.user.eq(a.user))
+
+        self.assertEqual(joined, explicit)
+        self.assertEqual(hash(joined), hash(explicit))
+        self.assertEqual(len(joined.joins), 3)
+
+    def test_join_by_ports_reports_missing_and_fewer_than_two_names_in_stable_order(self) -> None:
+        a = _rule_with_two_ports("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaises(RuleExprError) as ctx:
+            (a & b).join_by_ports("region", "active")
+
+        message = str(ctx.exception)
+        self.assertIn("port 'active' is not present", message)
+        self.assertIn("port 'region' is present on fewer than two", message)
+        self.assertLess(message.index("port 'active'"), message.index("port 'region'"))
+
+    def test_join_by_ports_rejects_duplicate_requested_names(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaisesRegex(RuleExprError, "duplicate requested port name 'user'"):
+            (a & b).join_by_ports("user", "user")
+
+    def test_join_by_ports_rejects_zero_empty_and_non_string_names(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaisesRegex(RuleExprError, "at least one"):
+            (a & b).join_by_ports()
+        with self.assertRaisesRegex(RuleExprError, "non-empty strings"):
+            (a & b).join_by_ports("")
+        with self.assertRaisesRegex(RuleExprError, "non-empty strings"):
+            (a & b).join_by_ports(123)  # type: ignore[arg-type]
+
+    def test_join_by_ports_is_and_only(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+
+        with self.assertRaisesRegex(RuleExprError, "AND groups"):
+            (a | b).join_by_ports("user")
+        self.assertFalse(hasattr(_rule("r"), "join_by_ports"))
+        self.assertFalse(hasattr(a, "join_by_ports"))
+
+    def test_join_by_ports_does_not_reach_into_or_branches(self) -> None:
+        a = _rule("a").as_("a")
+        b = _rule("b", var_name="b").as_("b")
+        c = _rule("c", var_name="c").as_("c")
+
+        with self.assertRaisesRegex(RuleExprError, "fewer than two"):
+            (a & (b | c)).join_by_ports("user")
+
+    def test_join_by_ports_preserves_export_scope(self) -> None:
+        self.assertNotIn("join_by_ports", sdk.__all__)
+        self.assertFalse(hasattr(sdk, "join_by_ports"))
+
+
 if __name__ == "__main__":
     unittest.main()
