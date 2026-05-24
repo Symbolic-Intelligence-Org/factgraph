@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1/T3.2/T3.3/T3.4/T3.5 archived locally; source `12bd9221`, not pushed)
+最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived locally; T3 INITIAL CYCLE COMPLETE; source `96baa609`, not pushed)
 
-## 当前阶段(2026-05-24 — RULE EXPRESSION T1/T2 CLOSED — T3 STAGE 1-3 COMPLETE — T3.1 + T3.2 + T3.3 + T3.4 + T3.5 ARCHIVED; T3.6 NEXT)
+## 当前阶段(2026-05-24 — T3 CYCLE COMPLETE — T3.1-T3.6 ALL ARCHIVED; NEXT-TRACK DECISION PENDING)
 
-**Current local branch:** `v0.2.0-t3-5-ruleexpr-inspect-2026-05-24 @ 12bd9221`.
+**Current local branch:** `v0.2.0-t3-6-docs-and-examples-2026-05-24 @ 96baa609`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -36,6 +36,7 @@
 | **T3.3 Joins + Every-Proof-Path Reach Rule** | M | `1100ea78` | `0b80fe9b feat(application): add T3.3 joins and reach rule` (0 deviation — first T3 feat with zero Step 4.7 findings) |
 | **T3.4 Join By Ports** | S | `02fcaec6` | `8f248212 feat(application): add T3.4 join by ports` (0 deviation — second consecutive T3 feat with zero Step 4.7 findings) |
 | **T3.5 RuleExpr Inspect** | M | `12bd9221` | `55d9e67b feat(application): add T3.5 ruleexpr inspect` (0 deviation — third consecutive T3 feat, first proactive Step 4.6 A-fallback catch) |
+| **T3.6 Docs and Examples** | S (docs-only) | `96baa609` | `f8abaad1 docs(sdk): add T3 RuleExpr user-facing docs and examples` (0 deviation — fourth consecutive T3 feat + T3 cycle final) |
 
 ### Current landed behavior
 
@@ -256,6 +257,30 @@
   - Twenty-five negative-action gates preserved: T3.3 nine + T3.4 six + T3.5 ten, including legacy SDK Rule / Inference dict inspect preservation, no T1.4 DTO changes, no RuleExpr authoring substrate changes, no new error subclass, and lazy SDK dispatch imports.
   - **Third consecutive 0-deviation milestone**: T3.5 is the largest M-class T3 slice so far and still landed with zero scope deviation. Step 4.6 proactively caught F5 (`:exists` strict pseudocode vs T1.4 permissive entity inference) and amended scope before feat — the first proactive Step 4.6 (A-fallback) catch in the T3 cycle.
 
+**T3.6 — Docs and Examples**
+- **T3.6 archived at `96baa609`**:
+  - Lineage: `314827bb` draft → `a66fdfce` scoped + P3 (F1-F3) → `ab77ce6b` Step 4.6 docs grep clean → `24e55668` G7 baseline → `f8abaad1` docs feat → `2c0ae623` closure → `96baa609` archive.
+  - Landed strict docs-only scope: `application/docs/rule.md`, `sdk/docs/00_user_guide.en.md`, `sdk/docs/01_concepts.en.md`, and `sdk/docs/03_rules_and_inferences.en.md`. Python source, tests, `sdk/docs/04_api_surface.en.md`, and `sdk/docs/06_what_if_and_proof.en.md` were untouched.
+  - User-facing docs now cover staged imports, `.eq(...)` join syntax, `&` / `|` precedence and parentheses, bool guards, same-name ports no auto-join plus `unjoined_same_name_ports`, and legacy dict inspect vs `RuleExprInspect` return shapes.
+  - Verification: G7 baseline 76 tests OK; focused preservation gate 99 tests OK; markdown grep gates clean; ruff not applicable because no Python files changed.
+  - **Fourth consecutive 0-deviation milestone**: final initial T3 slice landed with 0 P0/P1/P2/P3 and closes the T3 initial authoring + inspect + docs cycle.
+
+### T3 cycle complete milestone
+
+| Slice | Class | Feat | Deviation |
+|---|---|---|---|
+| T3.1 | M | `e049c93e` | A-fallback `8de03372` mid-impl reactive |
+| T3.2 | S | `2a16dd98` | T-1 bundled into feat (reactive) |
+| T3.3 | M | `0b80fe9b` | **0 deviation** (first preemptive) |
+| T3.4 | S | `8f248212` | **0 deviation** (second consecutive) |
+| T3.5 | M | `55d9e67b` | **0 deviation** (third consecutive + first proactive Step 4.6 catch) |
+| T3.6 | S (docs-only) | `f8abaad1` | **0 deviation** (fourth consecutive + T3 cycle final) |
+
+- T3 initial cycle is complete: Stage 1-3 + T3.1-T3.6 all archived locally; later execution lowering remains deferred per D5 §4.8.
+- Cadence pattern validated across M/S/M/S/M/S slices: preemptive scope locking, algorithm/validation layer specification, sibling-module isolation, proactive Step 4.6 (A-fallback) catch, docs-only scope discipline, and preservation-test gates.
+- Total local T3 cycle span from track plan sync `9c857d0c` through T3.6 archive `96baa609`: 52 commits, 0 pushed.
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`; unrelated dirty set stayed preserved throughout.
+
 ### Workflow governance state
 
 `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` §1.2 was upgraded in `a5bc010a` to a size-class policy:
@@ -337,17 +362,22 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T3.5 third consecutive 0-deviation milestone:** largest M-class T3 slice landed with 0 scope deviation after 31 acceptance gates, 25 negative-action gates, 99 focused cross-slice tests, and ruff clean. The preemptive pattern holds across small, medium, and large T3 scope.
 - **T3.5 proactive Step 4.6 (A-fallback) catch:** Step 4.6 grep found F5 before feat — T1.4 `_find_entity_ref_type_in_atom(...)` accepts any `:exists` term while T3.5 §5.6 initially required exactly one term. Scope amend `d5d185bf` aligned inspect pseudocode before implementation, avoiding mid-impl drift.
 - **T3.5 sibling-module scope economy:** estimated 8-file scope landed in 6 files because `rule_expr_inspect.py` isolated inspect traversal and kept `rule_expr.py` / `test_rule_expr.py` untouched. Prefer sibling modules when a public projection layer is large but can consume existing authoring substrate read-only.
+- **T3.6 fourth consecutive 0-deviation milestone:** docs-only final slice landed with 0 P0/P1/P2/P3 and completed the initial T3 authoring + inspect + docs cycle.
+- **T3.6 strict docs-only scope discipline:** 4 docs files changed, 0 Python files, 0 tests, and explicit no-touch locks for `04_api_surface.en.md` + `06_what_if_and_proof.en.md` held through Step 4.7.
+- **T3.6 preservation-test discipline for docs-only slices:** even with no Python edits, the slice ran 76-test G7 baseline and 99-test preservation gate to prove user-facing docs did not mask regressions.
+- **T3 aggregate cadence lesson:** preemptive scope locking + algorithm specification + sibling module isolation + proactive Step 4.6 catch + docs-only discipline spans M/S/M/S/M/S and is repeatable, not slice-specific.
 
 ### Recommended next work
 
-- **T3.6 docs + examples** — next slice and final T3 authoring slice; docs-only S/M candidate covering precedence/parentheses, `.eq(...)`, `.join(...)`, `.join_by_ports(...)`, bool guards, same-name-port diagnostics, legacy inspect dict vs `RuleExprInspect`, and inspect examples.
+- **T3 INITIAL CYCLE COMPLETE** — T3.1-T3.6 are all archived. Later execution lowering remains a separate tranche deferred by D5 §4.8 and needs a fresh decision before blueprinting.
+- **Step A2 cadence lesson sediment** — update `feedback_audit_to_archive_cadence.md` with the T3 cycle pattern: 4 consecutive 0-deviation feats, proactive Step 4.6 catch, sibling-module isolation, and docs-only scope discipline.
+- **Step A3 next-track decision review** — choose among T3 later tranche, T4 Head + closed-head, T5 EvaluateResult/Semantics/hard-cut/WhyNot redesign, push gate evaluation, tooling tasks, or a hybrid.
 - **T3 later execution tranche** — RuleExpr execution lowering / adapter integration deferred per D5 §4.8; class TBD (M or L) and requires a fresh decision before blueprinting.
-- **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice; extend `_lower_compare_with_aggregate` non-aggregate side to handle `AttrRef` + `BinaryExpr`. Currently raises `SDKDSLError`.
-- **Schema "number" vs "int" cmp compatibility** (deferred from T2.3c, Souffle-only) — `_assert_cmp_var_allowed` accepts only `{"int", "time"}` domains. Pre-existing limitation; S-class adapter hygiene slice.
-- **`tests.test_sdk_assertion_record_set` hygiene** — S class if it blocks verification gates.
-- **Pytest SIGSEGV tooling investigation** — independent task; T3.1 locked unittest fallback and did not block on pytest runner segfault.
-- **T5 legacy `.eval` / old rule hard-cut** — M or L class; trigger for T1.3 final `Rule` flip + `LegacyRule` retention + `DeprecationWarning` policy decisions. Coordinate with T1.3 A-staged commitment.
-- **Push / publish gate** — T1/T2 + T3.1 + T3.2 + T3.3 + T3.4 + T3.5 archived slices and memory sync commits remain local, 0 pushed. Sacred `master` untouched throughout. v0.2.0 release machinery still gated. Cross-doc / push / cross-doc S1-S6 + I10-A10 formal unblock all deferred per prior memory entries.
+- **T4 Head + closed-head** — 0% started; likely next independent capability track after T3 initial cycle.
+- **T5 EvaluateResult + Semantics + legacy hard-cut + WhyNot** — 0% started; largest redesign zone and trigger for T1.3 final `Rule` flip.
+- **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice for `_lower_compare_with_aggregate` non-aggregate side AttrRef/BinaryExpr handling.
+- **Pytest SIGSEGV tooling investigation** — independent task; T3 locked unittest fallback and did not block on pytest runner instability.
+- **Push / publish gate** — T1/T2 + T3.1-T3.6 archived slices and memory sync commits remain local: 52 commits across the T3 cycle, 0 pushed. Sacred `master` untouched throughout the entire T3 cycle. Push gate evaluation pending Step A3 decision review.
 
 <!-- Historical 2026-05-13 official docs state follows. -->
 
