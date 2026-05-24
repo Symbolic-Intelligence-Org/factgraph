@@ -11,6 +11,7 @@
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.3 M-class scope recorded from D2 §4.2-§4.5, D4 §4.5, D5 §4.4, Stage 3 synthesis §3 T3.3, synced track plan T3.3 row, and archived T1.4/T3.1/T3.2 substrates. |
 | 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.3-F1 flatten-merge acceptance added; T3.3-F2 RuleJoinConstraint validation location explicit; T3.3-F3 zero-arg `.join()` rejection rationale added. |
+| 2026-05-24 | pre-impl | Step 4.6 grep clean | `RulePortRef.eq`, `_AndGroup` / `_OrGroup`, `_combine`, `RuleJoinConstraint`, `.join(...)`, SDK export names, and T3.2 validation helper scans matched expected shipped scope. No blueprint scope amendment required. |
 
 ## Decision Notes
 
@@ -95,3 +96,15 @@ S-to-M triggers are already active; additional L trigger would be introducing ex
 - [ ] Join normalization covers endpoint symmetry and duplicate dedupe.
 - [ ] `.join(...)` AND-only enforcement includes `_OrGroup.join(...)` diagnostics and no single Rule `.join(...)`.
 - [ ] Cross-slice preservation table includes T1.4, T3.1, and T3.2 negative-action gates.
+
+### Step 4.6 Pre-Implementation Grep
+
+| Check | Result |
+|---|---|
+| `RulePortRef.eq` naming conflict | `rg '\.eq\b' src/factgraph/application/ tests/application/` and `rg 'RulePortRef\.eq' src/factgraph/ tests/` returned no shipped hits; `.eq(...)` is a new T3.3 method and does not collide with T1.4. |
+| `_AndGroup` / `_OrGroup` construction and access | `rg '_AndGroup\(|_OrGroup\(' src/factgraph/ tests/` found only class definitions and `_combine` construction in `rule_expr.py`; `rg '_AndGroup\.|_OrGroup\.' src/factgraph/ tests/` returned no hits. |
+| `_combine(...)` callers | `rg '_combine\(' src/factgraph/ tests/` found only Rule / RuleOccurrence operators and RuleExpr operators/factories plus the `_combine` definition. |
+| `RuleJoinConstraint` naming conflict | `rg 'RuleJoinConstraint' src/factgraph/ tests/ workflow/` found workflow/design and blueprint mentions only; no shipped code or tests define the symbol. |
+| `.join(...)` RuleExpr naming conflict | `rg '\.join\(' src/factgraph/application/ src/factgraph/sdk/dsl/ src/factgraph/sdk/__init__.py` found only string/list join usage in current application code; no RuleExpr `.join(...)` surface exists. |
+| SDK / application export name conflict | `rg '"RuleJoinConstraint"' src/factgraph/sdk/__init__.py src/factgraph/application/protocol/__init__.py` returned no hits; the export name is new. |
+| T3.2 validation helper callers | `rg '_validate_expression_scope\|_iter_rule_operands' src/factgraph/ tests/` found only internal T3.2 `rule_expr.py` definition/call sites. |
