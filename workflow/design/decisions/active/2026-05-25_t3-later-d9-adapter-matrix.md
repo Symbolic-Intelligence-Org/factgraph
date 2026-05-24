@@ -76,7 +76,8 @@ For supported engines, D9 chooses one compiled runtime body for the D7 branch se
 - two or more D7 branches materialize as a two-level OR-of-AND branch-list `where` body;
 - D7 branch order is preserved as runtime branch index order.
 
-T3 later does not materialize one `CompiledDerivationPlan` per D7 branch as the default.
+The semantic target is one branch-list body per supported engine; multi-plan materialization is not used (per Option D rejected).
+Per D7 §4.3, the first implementation slice may still stop at the internal `RuleExprLoweringPlan`; D9 §4.1 locks the eventual materialization shape, not the slice that must first perform materialization.
 
 Rationale:
 
@@ -162,6 +163,7 @@ PyReason rejects before adapter invocation when the lowered RuleExpr contains an
 - ruleref atoms if any future path tries to introduce them.
 
 This means joined RuleExprs are not supported under PyReason in this tranche because D8 joins lower to `eq` atoms and shipped PyReason explicitly rejects `eq`.
+These public preflight rejections use `SDKStoreError` per §4.9.
 
 PyReason branch-list shape remains usable for pred-only OR branches because the shipped compiler extracts branches and emits one rule per branch.
 
@@ -172,7 +174,8 @@ D9 preserves aggregate semantics by not rewriting aggregate terms differently fo
 Rules:
 
 - aggregate-local variable isolation remains independent from D7 occurrence alias-local variable isolation;
-- D7 alias-scoping applies to outer Rule variables and to aggregate filter variables without promoting aggregate-filter-local variables into port bindings;
+- D7 alias-scoping applies to outer Rule body variables per D7 §4.5 alias-local namespacing;
+- aggregate-filter-local variables remain in T2.3's per-aggregate scope and are not promoted to D7 `RuleExprPortBinding`;
 - D8 joins may only reference declared ports, never aggregate-filter-local variables;
 - native, Souffle, and ProbLog preserve existing aggregate behavior;
 - PyReason rejects aggregate-containing lowered branches.
@@ -317,6 +320,7 @@ Stage 3 may choose a different split, but it must preserve this D9 matrix.
 - [ ] Future implementation blueprints preflight-reject PyReason for any non-pred lowered atom, including D8 equality joins.
 - [ ] Future implementation blueprints preserve aggregate-local variable isolation and empty-set guard semantics for native/Souffle/ProbLog.
 - [ ] Future implementation blueprints reject unsupported engine/grammar matrix cells with `SDKStoreError`.
+- [ ] Future implementation blueprints' `SDKStoreError` matrix rejection messages identify the §4.9 required fields: selected engine, unsupported lowered atom kind or feature, rejection source, and at least one supported alternative engine when known.
 - [ ] Future implementation blueprints do not silently drop joins, OR branches, aggregate filters, or atom kinds to fit an engine.
 - [ ] No new public error subclass is introduced by D9.
 
@@ -325,3 +329,4 @@ Stage 3 may choose a different split, but it must preserve this D9 matrix.
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | D9 chooses branch-list materialization, native/Souffle/ProbLog support within shipped grammar, PyReason pred-only subset with preflight rejection for non-pred atoms, and `SDKStoreError` for public adapter matrix rejection. |
+| 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified eventual materialization vs first slice, PyReason `SDKStoreError` cross-reference, aggregate scope layering, and §4.9 message-contract acceptance. |
