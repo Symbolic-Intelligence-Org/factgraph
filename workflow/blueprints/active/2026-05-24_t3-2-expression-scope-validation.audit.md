@@ -11,6 +11,7 @@
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.2 S-class scope recorded from D5 §4.3, Stage 3 synthesis §3 T3.2, synced track plan T3.2 row, T1.4 substrate, and archived T3.1 implementation. |
 | 2026-05-24 | scoped | Scope locked + P3 amendments | T-2 Goal #1 prerequisite rationale recorded; T-3 D4 §4.3 alias identity operationalization acknowledged in §5.6. |
+| 2026-05-24 | pre-impl | Step 4.6 grep clean | `_RuleOperand`, `_combine`, `RuleOccurrence`, T3.1 duplicate-multiplicity test, `_rule_identity`, and direct internal group construction scans matched expected shipped scope. No blueprint scope amendment required. |
 
 ## Decision Notes
 
@@ -75,3 +76,15 @@ S-to-M triggers:
 | T1.4 alias/port substrate | `Rule.as_`, `RuleOccurrence`, `RulePortRef`, alias regex, and port APIs unchanged; T3.2 only consumes them. |
 | T2.3 aggregate track | Aggregate AST/eval/adapter paths untouched. |
 | T3.1 base RuleExpr | 23 acceptance gates and 5 negative-action gates preserved; T3.2 adds validation over the same tree. |
+
+### Step 4.6 Pre-Implementation Grep
+
+| Check | Result |
+|---|---|
+| `_RuleOperand` / `_canonical` shipped usage | `rg '_RuleOperand\|_canonical\b' src/factgraph/ tests/` found only T3.1 `rule_expr.py` definitions/callers; no external direct `_RuleOperand` construction. |
+| `_combine(...)` callers | `rg '_combine\(' src/factgraph/ tests/` found only application `Rule.__and__/__or__`, `RuleExpr` operators/factories, and the `_combine` definition. |
+| `RuleOccurrence` shipped usage | `rg 'RuleOccurrence' src/factgraph/ tests/` found T1.4 definition/export/docs/tests and `Rule.as_()` construction; no current application/SDK production caller outside the substrate. |
+| T3.1 duplicate-multiplicity test body | `rg -A 8 'test_duplicate_operands_preserve_multiplicity' tests/` confirmed the current test uses bare `a & a & b`, matching the planned supersedence update to explicit aliases. |
+| Rule identity logic | `rg 'content_digest.*rule\.id\|rule\.id.*content_digest\|_rule_identity' src/factgraph/` found only T3.1 `rule_expr.py:_rule_identity`; no duplicated identity logic elsewhere. |
+| `_RuleOperand(...)` direct construction | `rg '_RuleOperand\(' src/factgraph/ tests/` found only `rule_expr.py` class definition and `_coerce_rule_expr_operand` internal construction. |
+| `_AndGroup(...)` / `_OrGroup(...)` direct construction | `rg '_AndGroup\(|_OrGroup\(' src/factgraph/ tests/` found only `rule_expr.py` class definitions and `_combine` internal construction. |
