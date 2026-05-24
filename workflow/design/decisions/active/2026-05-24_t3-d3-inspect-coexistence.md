@@ -1,6 +1,6 @@
 # Q3 Decision: T3 RuleExpr Inspect Coexistence
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Authority: design constraint; locks `fg.rules.inspect(...)` coexistence and return-shape policy before T3 inspect implementation.
@@ -183,3 +183,4 @@ This distinction remains until a future T5 hard-cut or a later decision supersed
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit review requested the three-way inspect input split be made load-bearing before T3 inspect blueprinting. |
+| 2026-05-24 | adopted | P2 amendment cleared, cross-decision dependencies sealed | D3 P2 framing sharpening landed in 158a7156; reviewer pass confirmed adoption prerequisites. |

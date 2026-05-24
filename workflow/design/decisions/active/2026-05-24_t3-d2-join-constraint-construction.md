@@ -1,6 +1,6 @@
 # Q2 Decision: T3 Join Constraint Construction
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Authority: design constraint; locks RuleExpr join-constraint syntax and substrate preservation before T3 join implementation.
@@ -184,3 +184,4 @@ This decision intentionally prefers preserving shipped T1.4 substrate over exact
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-24 | proposed | Decision drafted | Stage 1 audit review requested substrate-preserving vs substrate-breaking axis be made load-bearing before T3 join blueprinting. |
+| 2026-05-24 | adopted | P2 amendment cleared, cross-decision dependencies sealed | D2 P2 framing sharpening landed in 158a7156; reviewer pass confirmed adoption prerequisites. |
