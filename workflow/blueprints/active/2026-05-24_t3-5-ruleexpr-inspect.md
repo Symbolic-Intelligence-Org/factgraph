@@ -218,6 +218,11 @@ RuleExprInspect(
 )
 ```
 
+`unjoined_same_name_ports` keeps the parent C32 discoverability hint shape without adding a fifth public DTO. Each dict has exactly two stable keys:
+
+- `port_name: str`
+- `occurrences: tuple[str, ...]` containing occurrence aliases that expose that unjoined same-name port
+
 `RuleExprInspect` also provides:
 
 - `templates` property: tuple of unique `template_id` values in stable occurrence order.
@@ -261,6 +266,8 @@ PortInspect(
 
 DTO `__post_init__` validation is defense-in-depth only: type/shape validation, tuple normalization for collections, and no graph traversal. Semantic source-consistency validation lives in traversal helpers.
 
+Note: `OccurrenceInspect.ports` is a tuple of port name strings local to the occurrence's `Rule`, while `RuleExprInspect.ports` is the C59 tuple of `PortInspect` rich descriptors aggregated across inspected occurrences. The names intentionally follow parent C49 and C59, but the shapes differ and must be tested separately.
+
 ### 5.5 Traversal and AST projection
 
 `_inspect_rule_expr(expr)` walks the RuleExpr tree and produces:
@@ -284,7 +291,7 @@ Minimum mapping:
 - `BuiltinAtom`: kind `builtin`.
 - `NotAtom`: kind `not`.
 
-Descriptors are best-effort structural authoring projections. They are not adapter execution IR and not evidence proof nodes. `atom_id` uses a stable inspect-local form such as `<alias>:atom_<index>`; this aligns with parent C50's shared authoring schema intent without claiming execution proof identity.
+Descriptors are best-effort structural authoring projections. They are not adapter execution IR and not evidence proof nodes. `AtomDescriptor.atom_id` reuses the source application `Rule.atom_ids[index]` string (`<rule_id>:atom_<index>`) from T1.1 so inspect and the future evidence interpreter share the parent C50 atom-id schema. Occurrence-local identity remains on `OccurrenceInspect.alias`; aliases do not prefix `atom_id`.
 
 ### 5.7 Render contract
 
@@ -383,7 +390,8 @@ RuleExpr inspect helper errors use `RuleExprError(SDKDSLError)` from T3.1. SDK d
 - [ ] `RuleExprInspect.ast` represents rule, AND, OR, and join structure deterministically.
 - [ ] `RuleExprInspect.occurrences` includes aliases, template ids, desc templates, ports, and atoms.
 - [ ] `RuleExprInspect.joins` includes T3.3 join constraints and preserves symmetric/dedup normalized behavior.
-- [ ] `RuleExprInspect.unjoined_same_name_ports` reports same-name direct-AND ports that are not joined.
+- [ ] `RuleExprInspect.unjoined_same_name_ports` reports same-name direct-AND ports that are not joined, using dicts with stable `port_name` and `occurrences` keys.
+- [ ] `OccurrenceInspect.ports` string-name shape and `RuleExprInspect.ports` `PortInspect` descriptor shape are distinct and tested separately.
 - [ ] `templates` derives from occurrences and is stable.
 - [ ] `port_visibility` derives from occurrences and is stable.
 - [ ] `ports` returns `PortInspect` values with C59 fields.

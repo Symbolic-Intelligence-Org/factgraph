@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.5 M-class scope recorded from D3 inspect coexistence, D4 alias identity, D5 §4.6 split allowance, Stage 3 synthesis §3 T3.5, track plan T3.5 row, parent C32/C49/C50/C51/C59, and archived T3.1-T3.4 substrate. |
+| 2026-05-24 | draft-amend | Step 4.2 P2 precision amendments | T3.5-F1 atom_id schema locked to T1.1 `Rule.atom_ids[index]`; T3.5-F2 `unjoined_same_name_ports` key shape specified without adding a fifth DTO; T3.5-F3 `OccurrenceInspect.ports` string names vs `RuleExprInspect.ports` `PortInspect` descriptors clarified. |
 
 ## Decision Notes
 
