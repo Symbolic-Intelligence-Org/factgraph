@@ -1,6 +1,6 @@
 # Task Blueprint: T3.3 Joins And Reach Rule
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: M
@@ -161,6 +161,12 @@ Validation:
   - same `occurrence_alias` and same `rule_id` is invalid even if port names differ.
 - endpoint symmetry is handled in a private canonical helper; `RulePortRef.__eq__` remains value equality.
 
+Validation location:
+
+- Basic shape validation (`left` / `right` types, `op == "eq"`) lives in `RuleJoinConstraint.__post_init__` for defense-in-depth against direct `RuleJoinConstraint(...)` construction, matching the T1.4 substrate pattern.
+- Same-occurrence rejection lives in `.eq(...)` factory and `_AndGroup.join(...)` reach validator because same-occurrence rejection is a join authoring concern, not a DTO shape concern.
+- Endpoint-vs-operand match validation (alias / rule_id / port_name / var / port_type) lives in `_AndGroup.join(...)` reach validator because it requires the AND group's current operand context.
+
 Export:
 
 - `factgraph.application.protocol.RuleJoinConstraint`
@@ -193,6 +199,8 @@ class _AndGroup(_RuleExpr):
 `_AndGroup.join(*constraints)` returns a new `_AndGroup` with existing and new constraints normalized/deduped.
 
 When `_combine("and", ...)` flattens nested `_AndGroup` values, it must preserve and merge their `joins` into the new group. This keeps `(a & b).join(c) & d` immutable while preserving the previously attached join constraint.
+
+Zero-constraint `.join()` is rejected by `_AndGroup.join(*constraints)` to avoid accidental no-op calls that could mask missing constraints. Users wanting to compose without joins should use `&` / `|` directly without `.join()`.
 
 ### 5.5 AND-only enforcement
 
@@ -334,6 +342,7 @@ Diagnostics do not need to aggregate every join issue in T3.3. Reach validation 
 - [ ] `(a & b).join(a.user.eq(b.user))` returns a new `_AndGroup`; the original expression remains unchanged.
 - [ ] `(a & b).join(a.user.eq(b.user)) == (b & a).join(b.user.eq(a.user))` and hashes match.
 - [ ] Duplicate equivalent joins do not change equality/hash.
+- [ ] `(a & b).join(a.user.eq(b.user)) & c` flattens children to `(a, b, c)`, preserves the join constraint, and re-validates reach against the new direct children. The result equals `(c & b & a).join(b.user.eq(a.user))` for canonical equality/hash.
 - [ ] `_AndGroup.join(...)` rejects zero constraints.
 - [ ] `_AndGroup.join(...)` rejects constraints whose endpoints are not direct AND-spine operands.
 - [ ] `(a & (b | c)).join(a.user.eq(b.user))` raises `RuleExprError` because `b` is inside an OR child.

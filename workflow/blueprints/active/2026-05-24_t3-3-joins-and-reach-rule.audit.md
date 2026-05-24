@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.3 Joins And Reach Rule
 
 - Blueprint: [2026-05-24_t3-3-joins-and-reach-rule.md](./2026-05-24_t3-3-joins-and-reach-rule.md)
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.3 M-class scope recorded from D2 §4.2-§4.5, D4 §4.5, D5 §4.4, Stage 3 synthesis §3 T3.3, synced track plan T3.3 row, and archived T1.4/T3.1/T3.2 substrates. |
+| 2026-05-24 | scoped | Scope locked + P3 precision amendments | T3.3-F1 flatten-merge acceptance added; T3.3-F2 RuleJoinConstraint validation location explicit; T3.3-F3 zero-arg `.join()` rejection rationale added. |
 
 ## Decision Notes
 
