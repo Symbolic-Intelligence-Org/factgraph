@@ -1,8 +1,8 @@
 # Current Operational Memory
 
-最后更新:2026-05-24(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived locally; T3 INITIAL CYCLE COMPLETE; source `96baa609`, not pushed)
+最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; **push gate executed — 4 origin refs created**; next-track decision pending)
 
-## 当前阶段(2026-05-24 — T3 CYCLE COMPLETE — T3.1-T3.6 ALL ARCHIVED; NEXT-TRACK DECISION PENDING)
+## 当前阶段(2026-05-25 — T3 CYCLE COMPLETE + PUSH GATE EXECUTED — NEXT-TRACK DECISION PENDING)
 
 **Current local branch:** `v0.2.0-t3-6-docs-and-examples-2026-05-24 @ 96baa609`.
 
@@ -278,8 +278,31 @@
 
 - T3 initial cycle is complete: Stage 1-3 + T3.1-T3.6 all archived locally; later execution lowering remains deferred per D5 §4.8.
 - Cadence pattern validated across M/S/M/S/M/S slices: preemptive scope locking, algorithm/validation layer specification, sibling-module isolation, proactive Step 4.6 (A-fallback) catch, docs-only scope discipline, and preservation-test gates.
-- Total local T3 cycle span from track plan sync `9c857d0c` through T3.6 archive `96baa609`: 52 commits, 0 pushed.
+- Total local T3 cycle span from track plan sync `9c857d0c` through T3.6 archive `96baa609`: 52 commits, 0 pushed **at cycle close** (subsequently mirrored to origin via the post-cycle push gate; see next subsection).
 - Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`; unrelated dirty set stayed preserved throughout.
+
+### Push gate executed (2026-05-25)
+
+Single batched push session to `origin` (not `factgraph`), 4 new origin refs:
+
+| Origin ref | Anchor commit | Role |
+|---|---|---|
+| `origin/milestone/t1-complete-2026-05-23` | `a3411207` (T1.4 archive) | T1 track close immutable ref |
+| `origin/milestone/t2-complete-2026-05-23` | `26fa7e54` (T2.3d archive) | T2 track close immutable ref |
+| `origin/milestone/t3-cycle-complete-2026-05-24` | `96baa609` (T3.6 archive) | T3 initial cycle close immutable ref |
+| `origin/v0.2.0-t3-6-docs-and-examples-2026-05-24` | `0d5b9c22` (handoff doc) | Current cumulative HEAD branch |
+
+Push semantics verified:
+
+- Destination: `origin` only — `factgraph` skipped per Human direction.
+- No force push, no ref override; all 4 are NEW refs.
+- ~258 net new commits uploaded (275 total ahead of `origin/master` minus ~17 already on origin via Slice 7C chain).
+- Sacred `master` / `origin/master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty set (4 M + 1 untracked) stayed unstaged and out of push history.
+- Hook bypass not used.
+- Session push count: 0 → 1.
+
+Push approach selected by Human: "Cycle milestones" — 3 milestone refs at T1/T2/T3-cycle archive commits + current HEAD branch. Aligns with prior Track 3 milestone pattern; provides per-cycle immutable references + cumulative HEAD for navigation.
 
 ### Workflow governance state
 
