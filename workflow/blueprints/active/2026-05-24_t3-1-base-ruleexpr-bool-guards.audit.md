@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3.1 Base RuleExpr And Bool Guards
 
 - Blueprint: [2026-05-24_t3-1-base-ruleexpr-bool-guards.md](./2026-05-24_t3-1-base-ruleexpr-bool-guards.md)
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 
@@ -11,6 +11,7 @@
 | --- | --- | --- | --- |
 | 2026-05-24 | draft | Blueprint created | Initial T3.1 M-class scope recorded from Stage 1 audit, adopted D1/D4/D5 decisions, Stage 3 synthesis, and synced track plan. |
 | 2026-05-24 | draft | P2 tightening | Step 4.2 review found the error hierarchy violated adopted D1 and the acceptance gates omitted RuleExpr immutability. Blueprint now locks `RuleExprError(SDKDSLError)` and adds an immutable RuleExpr acceptance check. |
+| 2026-05-24 | scoped | Scope locked | Status advanced to scoped with P3 acceptance/implementation precision added: frozen DTO method-addition rationale, factory export acceptance, concrete G7 baseline command, required SDK API docs update, and operand coercion acceptance. |
 
 ## Decision Notes
 

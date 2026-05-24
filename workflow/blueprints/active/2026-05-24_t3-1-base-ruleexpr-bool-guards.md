@@ -1,6 +1,6 @@
 # Task Blueprint: T3.1 Base RuleExpr And Bool Guards
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-24
 - Last Updated: 2026-05-24
 - Class: M
@@ -201,6 +201,8 @@ Add operator methods to application protocol `Rule`:
 - `Rule.__or__(self, other)`
 - `Rule.__bool__(self)`
 
+Adding these methods to the T1.4 frozen application Rule DTO is an additive method change only: `frozen=True` constrains field assignment, not class method definitions.
+
 Add reflected/mixed operators to RuleExpr values:
 
 - `RuleExpr & Rule`
@@ -289,6 +291,7 @@ S→M trigger is public API impact and cross-module surface (`application.protoc
 - [ ] Application protocol `Rule & Rule` and `Rule | Rule` produce RuleExpr values.
 - [ ] `RuleExpr.all(rule_a, rule_b)` equals `rule_a & rule_b`.
 - [ ] `RuleExpr.any(rule_a, rule_b)` equals `rule_a | rule_b`.
+- [ ] `RuleExpr.all` and `RuleExpr.any` are classmethods or staticmethods on `RuleExpr`; no module-level `factgraph.sdk.all` or `factgraph.sdk.any` exists.
 - [ ] Nested same-kind AND and OR groups flatten for equality/hash.
 - [ ] AND/OR child order is commutative for equality/hash.
 - [ ] AND and OR expressions remain unequal.
@@ -297,6 +300,7 @@ S→M trigger is public API impact and cross-module surface (`application.protoc
 - [ ] `bool(rule_expr)` raises `ExplicitBoolError`.
 - [ ] `bool(application_rule)` raises `ExplicitBoolError`.
 - [ ] `bool(legacy_sdk_rule)` behavior is unchanged from pre-T3.1.
+- [ ] `_coerce_rule_expr_operand` accepts application Rule and `_RuleExpr` values, and rejects legacy SDK Rule and arbitrary objects with `RuleExprError`.
 - [ ] Legacy SDK `Rule` operands are rejected with `RuleExprError` and a message that points to `build_application_rule(...)` / `ApplicationRule`.
 - [ ] `application_rule == rule_expr` does not return True and does not alter application Rule equality/hash.
 - [ ] Direct equality with arbitrary objects follows Python convention and does not raise.
@@ -312,7 +316,7 @@ S→M trigger is public API impact and cross-module surface (`application.protoc
    - verify `factgraph.sdk.Rule` is legacy and `ApplicationRule` is application Rule.
    - verify application Rule currently has no custom `__bool__`.
    - verify legacy SDK Rule currently has no custom `__bool__`.
-   - verify T1.4 substrate tests pass before changes.
+   - run `pytest tests/application/protocol/test_rule.py -v` before changes and record the baseline pass count for post-implementation comparison.
 
 2. Add `src/factgraph/application/protocol/rule_expr.py` with errors, public `RuleExpr`, internal value types, operand coercion, flattening, equality/hash, and bool guard.
 
@@ -347,7 +351,7 @@ S→M trigger is public API impact and cross-module surface (`application.protoc
   - Do not document joins, inspect, or full examples; T3.6 owns user-facing docs/examples.
 
 - `src/factgraph/sdk/docs/04_api_surface.en.md`:
-  - Add minimal API surface entries for `RuleExpr`, `RuleExprError`, `ExplicitBoolError` if this doc lists exported SDK names.
+  - Add minimal API surface entries for `RuleExpr`, `RuleExprError`, `ExplicitBoolError`, including the §5.2 lock that `RuleExprError` subclasses `SDKDSLError`.
   - Do not add tutorial examples; T3.6 owns them.
 
 No `sdk/docs/03_rules_and_inferences.en.md` tutorial update in T3.1 unless reviewer requires a minimal warning for bool guards. Full tutorial docs are T3.6.
