@@ -13,6 +13,7 @@
 | 2026-05-24 | draft-amend | Step 4.2 P2 precision amendments | T3.5-F1 atom_id schema locked to T1.1 `Rule.atom_ids[index]`; T3.5-F2 `unjoined_same_name_ports` key shape specified without adding a fifth DTO; T3.5-F3 `OccurrenceInspect.ports` string names vs `RuleExprInspect.ports` `PortInspect` descriptors clarified. |
 | 2026-05-24 | scoped | Scope locked + P3 precision | T3.5-F4 AtomDescriptor derivation pseudocode added for PredAtom entity-existence/field-predicate dispatch and CmpAtom best-effort `cmp` classification. |
 | 2026-05-24 | pre-impl | Step 4.6 grep found F5 alignment risk | Grep confirmed new DTO/module names are clean and legacy inspect paths are isolated, but T1.4 `:exists` inference accepts any matching term while §5.6 pseudocode currently requires `len(atom.terms) == 1`; needs a pre-feat A-fallback precision amendment before G7/implementation. |
+| 2026-05-24 | scoped-amend | Step 4.6 (A-fallback) precision alignment | T3.5 §5.6 PredAtom entity_existence dispatch relaxed from `len(atom.terms) == 1` to `atom.terms` non-empty, aligning with shipped T1.4 `_find_entity_ref_type_in_atom` any-term semantics; `subject=atom.terms[0]` retained as inspect convention. |
 
 ## Decision Notes
 

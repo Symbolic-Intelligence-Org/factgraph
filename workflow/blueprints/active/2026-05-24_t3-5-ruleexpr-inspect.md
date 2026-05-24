@@ -296,7 +296,9 @@ Derivation dispatch:
 ```python
 def _derive_atom_descriptor(atom: Atom, atom_id: str) -> AtomDescriptor:
     if isinstance(atom, PredAtom):
-        if atom.pred_id.endswith(":exists") and len(atom.terms) == 1:
+        # Align with T1.4 _find_entity_ref_type_in_atom permissive semantics;
+        # subject is the first term per inspect convention.
+        if atom.pred_id.endswith(":exists") and atom.terms:
             entity_type = atom.pred_id.removesuffix(":exists")
             return _atom_descriptor(atom_id, "entity_existence", entity_type=entity_type, subject=atom.terms[0])
         if ":" in atom.pred_id and atom.terms:
