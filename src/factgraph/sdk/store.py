@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import re
 import warnings
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -33,7 +34,6 @@ from factgraph.application.protocol import (
 from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
-    RuleExprError,
     _classify_pyreason_rule_expr_support,
     _lower_application_rule,
     _lower_rule_expr,
@@ -117,6 +117,9 @@ _ATTACHED_WRITE_ERROR = (
     "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
     "{method_name} is not available on attached runtimes"
 )
+_RULE_EXPR_DEFAULT_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+
+
 class _SDKViewsManager:
     """Read-only namespace for named frozen assertion-id selections.
 
@@ -2349,11 +2352,9 @@ class SDKStore:
         )
         source = args[0]
         if isinstance(source, ApplicationRule):
-            try:
+            if _RULE_EXPR_DEFAULT_ALIAS_RE.fullmatch(source.id):
                 plan = _lower_application_rule(source, head=head)
-            except RuleExprError as exc:
-                if "bare Rule id cannot be used as a RuleExpr alias" not in str(exc):
-                    raise
+            else:
                 plan = _lower_rule_expr(_coerce_rule_expr_operand(source.as_("head")), head=head)
         elif isinstance(source, _RuleExpr):
             plan = _lower_rule_expr(source, head=head)

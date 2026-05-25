@@ -358,6 +358,9 @@ input is treated like a one-rule RuleExpr:
 candidates = fg.eval.evaluate(active_user, head=active_user)
 ```
 
+For execution, application `Rule` ids that are not valid default occurrence
+aliases are internally evaluated with a stable `head` occurrence alias.
+
 The supplied `head=` must already be an inline/projected rule occurrence in the
 expression. External head body concatenation is not public in this tranche; add
 the head rule as an expression occurrence and pass that same application `Rule`
