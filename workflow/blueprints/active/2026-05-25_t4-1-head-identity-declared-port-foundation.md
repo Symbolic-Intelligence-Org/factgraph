@@ -1,6 +1,6 @@
 # Task Blueprint: T4.1 Head Identity + Declared-Port Foundation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -441,4 +441,68 @@ Review should pay special attention to:
 
 ## 10. Outcome
 
-Pending.
+Completed in commits:
+
+1. `ea125920` — feature implementation.
+2. `49cd8074` — Step 4.7 fix tests.
+
+### Final landed code
+
+- Extended `src/factgraph/application/protocol/rule_expr_lowering.py` with the private D11/D12 foundation:
+  - `RuleExprOccurrenceBinding.rule_version: str | None` metadata for warning-only version comparison;
+  - private declared-port DTOs `RuleExprDeclaredPortBranchSource` and `RuleExprDeclaredPort`;
+  - private `RuleExprHeadValidation` DTO;
+  - `_validate_rule_expr_head_foundation(...)`;
+  - `_declared_ports_for_rule_expr_plan(...)` and supporting branch-total declared-port helpers.
+- Wired `_validate_rule_expr_head_foundation(...)` into `SDKStore._evaluate_rule_expr_input(...)` after RuleExpr lowering and before the existing T3L.3 external-head rejection.
+- Added `tests/application/protocol/test_rule_expr_head_validation.py` with 11 focused helper tests.
+- Extended `tests/sdk/test_rule_expr_evaluate.py` with public warning/error coverage and adapted downstream PyReason rejection setup to pass the new T4.1 declared-port validation first.
+- Preserved all preemptive scope locks: no external-head body concatenation, no `Rule.projection(...)`, no closed-head inspect fields, no public `expr.declared_ports`, no public DTO/export/result shape changes, no adapter edits, no T5 surfaces.
+
+### Delivered behavior
+
+- D11 identity validation:
+  - inline same id + same digest remains valid;
+  - same id + same digest + different version emits one `UserWarning` per validation invocation and proceeds;
+  - same id + different digest raises `RuleExprError`;
+  - duplicate same-id same-digest inline matches raise `RuleExprError`.
+- D12 declared-port validation:
+  - declared ports are private and branch-total;
+  - head ports must be declared by every branch;
+  - truly undeclared and branch-partial head ports raise distinct `RuleExprError` paths;
+  - exact `PortType` equality is required.
+- Same-name port ambiguity:
+  - same-name sources do not auto-join;
+  - explicit `.eq(...)` and `.join_by_ports(...)` joins prove equivalence;
+  - equivalence is implemented as graph connectivity over D8 join records, so transitive chains such as A-B and B-C are accepted without requiring all pairwise joins.
+- T3L.3 public boundary remains intact:
+  - public success still returns `list[CandidateSet]`;
+  - valid external heads still fall through to the existing T3L.3 `SDKStoreError` until T4.2;
+  - legacy SDK `Inference` / derivation dict paths remain green.
+
+### Test gates
+
+- G7 baseline before feature: 131 tests OK.
+- Feature commit `ea125920`: 143 preservation tests OK, focused RuleExpr suites 44 OK, touched-file ruff clean.
+- Step 4.7 fix `49cd8074`: 145 preservation tests OK, focused RuleExpr suites 46 OK, touched-file ruff clean.
+- Full `ruff check src tests` remains blocked by pre-existing unrelated repo issues; T4.1 used the established touched-file ruff gate.
+
+### Deviations and follow-ups
+
+- 0 P0/P1 findings.
+- Step 4.7 found 2 minor WC items:
+  - WC1: transitive same-name equivalence was implemented but not executable as a test; fixed by `test_transitive_same_name_join_chain_permits_declared_port`.
+  - WC2: truly undeclared head-port error path lacked explicit coverage; fixed by `test_truly_undeclared_head_port_rejects`.
+- No T4.1-specific deferrals remain.
+- T4.2 owns external-head body concatenation and `Rule.projection(...)`.
+- T4.3 owns closed-head inspect utilities and docs.
+- T5 result/evidence surfaces remain out of T4.1.
+
+### Lessons
+
+- Running D11 semantic validation before the existing T3L.3 external-head rejection is the right ordering: stale identity and ambiguous inline-head cases now surface as `RuleExprError` instead of being masked as public SDK call-shape limitations.
+- Version metadata can be carried privately on occurrence bindings without entering identity, digest, canonical key, join, hash, or branch ordering semantics.
+- Branch-total declared-port validation is stricter than T3.5 inspect union semantics; downstream adapter/classifier tests must now construct RuleExpr inputs that pass the T4.1 foundation before testing later layers.
+- Graph connectivity is a compact implementation contract for same-name join equivalence and should be preserved by T4.2 when external/projection heads consume the same helper.
+
+Ready for archive commit.

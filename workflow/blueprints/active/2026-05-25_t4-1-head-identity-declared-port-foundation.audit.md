@@ -1,6 +1,6 @@
 # Audit Log: T4.1 Head Identity + Declared-Port Foundation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t4-1-head-identity-declared-port-foundation.md](./2026-05-25_t4-1-head-identity-declared-port-foundation.md)
@@ -13,6 +13,7 @@
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Added an explicit upper-bound scope lock for private occurrence-version metadata, specified T4.1 validation ordering before the existing T3L.3 external-head rejection, and cross-referenced D11/D12 multi-occurrence ambiguity for identity state 5. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1-T3L.3 lowering/dispatch substrate, D8 join materialization support, existing SDK error surfaces, and known T4.2/T4.3/T5 references. No A-fallback amendment needed; T4.1 remains limited to D11/D12 foundation. |
 | 2026-05-25 | baseline | G7 preservation baseline | Ran the scoped baseline command covering T3.1-T3.6 plus T3L.1-T3L.3 preservation suites; result matched expectation: 131 tests OK. Pytest remains deferred per SIGSEGV environment lock; unrelated `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | implemented | Step 4.7 fix + closure | Feature commit `ea125920` added D11/D12 private head-validation and declared-port foundation plus SDK wiring and 12 focused tests; Step 4.7 fix `49cd8074` covered transitive same-name equivalence and truly undeclared head-port rejection. Final gates: 46 focused RuleExpr tests OK, 145 preservation tests OK, touched-file ruff clean. |
 
 ## Decision Notes
 
@@ -212,4 +213,50 @@ Reviewer should verify:
 
 ## Closure Notes
 
-Pending.
+### Final code scope
+
+- `src/factgraph/application/protocol/rule_expr_lowering.py`
+  - Added private declared-port/head-validation DTOs and helpers.
+  - Added private `RuleExprOccurrenceBinding.rule_version` metadata for warning-only D11 comparison.
+  - Implemented D11 identity validation and D12 branch-total declared-port validation.
+  - Implemented same-name equivalence via graph connectivity over explicit D8 join records.
+- `src/factgraph/sdk/store.py`
+  - Calls `_validate_rule_expr_head_foundation(...)` after lowering and before the existing T3L.3 external-head rejection.
+- Tests:
+  - New `tests/application/protocol/test_rule_expr_head_validation.py` with 11 helper tests after Step 4.7 fix.
+  - Extended `tests/sdk/test_rule_expr_evaluate.py` with public warning/error behavior and adjusted downstream PyReason setup to pass T4.1 validation.
+
+### Verification
+
+- G7 baseline before feature: 131 tests OK at `72934e46`.
+- Feature commit `ea125920`: 143 preservation tests OK, focused RuleExpr suites 44 OK, touched-file ruff clean.
+- Step 4.7 fix `49cd8074`: 145 preservation tests OK, focused RuleExpr suites 46 OK, touched-file ruff clean.
+- Full `ruff check src tests` remains blocked by pre-existing unrelated repository issues; T4.1 uses the established touched-file ruff gate.
+- Pytest remains deferred per existing SIGSEGV environment lock.
+- `tests.test_public_inference_factgraph_create` remains excluded due to pre-existing unrelated failures.
+
+### Scope preservation
+
+- No external-head body concatenation.
+- No `Rule.projection(...)`.
+- No closed-head inspect fields.
+- No public `expr.declared_ports`.
+- No public DTO/export/result shape change.
+- No adapter production file edits.
+- No T5 `EvaluateResult`, Explanation, WhyNot, `row.close()`, or public trace/evidence surface.
+- Legacy SDK `Inference` and derivation dict evaluation paths remain green.
+
+### Step 4.7 disposition
+
+- 0 P0/P1 findings.
+- WC1: transitive same-name equivalence is now executable via `test_transitive_same_name_join_chain_permits_declared_port`.
+- WC2: truly undeclared head-port rejection is now covered via `test_truly_undeclared_head_port_rejects`.
+- No T4.1-specific deferrals remain.
+
+### Deferred
+
+- T4.2 owns external-head body concatenation and `Rule.projection(...)`.
+- T4.3 owns closed-head inspect utilities and docs.
+- T5 owns result/evidence redesign surfaces.
+
+Ready for archive commit.
