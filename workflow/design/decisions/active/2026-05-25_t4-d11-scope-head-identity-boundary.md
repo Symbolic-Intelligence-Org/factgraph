@@ -143,6 +143,8 @@ Minimum behavior:
 - Emission frequency: at most once per validation invocation per matched head/occurrence pair.
 - Message content: include head id, supplied version, matched occurrence version, and state that id + content digest matched.
 
+`UserWarning` is the default because this is user-facing context about metadata drift, not a runtime anomaly. `RuntimeWarning` remains reserved for actual runtime/environment anomalies.
+
 This directly addresses the Stage 1 audit Q3 warning-mechanism gap: D11 rejects SDK warning DTOs, docs-only warnings, and persistent audit records for T4. T5 may later introduce structured warning surfaces as part of result/evidence redesign.
 
 ### 4.5 Identity validation errors use `RuleExprError`
@@ -156,7 +158,7 @@ T4 keeps D6's error-bucket boundary:
 Therefore:
 
 - same id + different digest raises `RuleExprError`;
-- duplicate same id matches with incompatible digests raise `RuleExprError`;
+- duplicate same-id matching across multiple expression occurrences is D12/D13 territory, but it inherits the same `RuleExprError` bucket for incompatible digest or ambiguous identity cases;
 - head port namespace mismatch raises `RuleExprError`;
 - closed-head semantic validation failures raise `RuleExprError` unless D15 adopts a more specific existing bucket;
 - missing or invalid `head=` type continues to use `SDKStoreError`.
@@ -268,4 +270,4 @@ Stage 3 synthesis must not create a blueprint that implements projection, extern
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit v1 mapped Q1/Q3 to D11. D11 locks T4 post-T3L.3 scope, existing-head id/digest identity, version mismatch warning mechanics, and error buckets; D12-D15 remain responsible for declared ports, external heads, projection, and closed-head utilities. |
-
+| 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified that duplicate same-id multi-occurrence matching belongs to D12/D13 while inheriting D11's `RuleExprError` bucket, and added the `UserWarning` rationale for version mismatch warnings. |
