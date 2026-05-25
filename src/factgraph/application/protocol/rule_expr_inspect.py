@@ -18,7 +18,7 @@ from factgraph.core.rules.where_ast import (
     Var,
 )
 
-from .rule import Rule, RulePortRef
+from .rule import Rule, RulePortRef, _is_projection_rule
 from .rule_expr import (
     RuleExprError,
     RuleJoinConstraint,
@@ -93,6 +93,8 @@ class RuleExprInspect:
     joins: tuple[RuleJoinConstraint, ...]
     unjoined_same_name_ports: tuple[dict[str, object], ...]
     _ports: tuple[PortInspect, ...] = field(default=(), repr=False)
+    is_closed: bool = False
+    unbound_ports: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.ast, tuple):
@@ -115,6 +117,12 @@ class RuleExprInspect:
                 raise RuleExprError("unjoined_same_name_ports.occurrences must be tuple[str, ...]")
         if not isinstance(self._ports, tuple) or any(not isinstance(port, PortInspect) for port in self._ports):
             raise RuleExprError("RuleExprInspect.ports must be tuple[PortInspect, ...]")
+        if not isinstance(self.is_closed, bool):
+            raise RuleExprError("RuleExprInspect.is_closed must be bool")
+        if not isinstance(self.unbound_ports, tuple) or any(
+            not isinstance(port, str) or not port for port in self.unbound_ports
+        ):
+            raise RuleExprError("RuleExprInspect.unbound_ports must be tuple of non-empty strings")
 
     @property
     def templates(self) -> tuple[str, ...]:
@@ -152,10 +160,99 @@ class RuleExprInspect:
         return _render_ast_compact(self.ast)
 
 
-def _inspect_application_rule(rule: Rule) -> RuleExprInspect:
+@dataclass(frozen=True)
+class _ClosedHeadInspect:
+    is_closed: bool
+    unbound_ports: tuple[str, ...]
+
+
+def _inspect_application_rule(rule: Rule, *, schema_index: object | None = None) -> RuleExprInspect:
     if not isinstance(rule, Rule):
         raise RuleExprError("inspect(application_rule) requires application protocol Rule")
-    return _inspect_rule_expr(_coerce_rule_expr_operand(rule))
+    source = _coerce_rule_expr_operand(rule.as_("head")) if _is_projection_rule(rule) else _coerce_rule_expr_operand(rule)
+    inspected = _inspect_rule_expr(source)
+    closed = _inspect_closed_head(rule, schema_index=schema_index)
+    return RuleExprInspect(
+        ast=inspected.ast,
+        occurrences=inspected.occurrences,
+        joins=inspected.joins,
+        unjoined_same_name_ports=inspected.unjoined_same_name_ports,
+        _ports=inspected.ports,
+        is_closed=closed.is_closed,
+        unbound_ports=closed.unbound_ports,
+    )
+
+
+def _inspect_closed_head(rule: Rule, *, schema_index: object | None) -> _ClosedHeadInspect:
+    if _is_projection_rule(rule):
+        return _ClosedHeadInspect(is_closed=True, unbound_ports=())
+
+    unbound: list[str] = []
+    for name, var in rule.ports.items():
+        port_type = rule.port_types[name]
+        if port_type.kind == "value":
+            if not _value_port_is_closed(var, rule.where):
+                unbound.append(name)
+            continue
+        if not _entity_ref_port_is_closed(var, port_type.entity_type, rule.where, schema_index):
+            unbound.append(name)
+    return _ClosedHeadInspect(is_closed=not unbound, unbound_ports=tuple(unbound))
+
+
+def _value_port_is_closed(var: Var, atoms: tuple[Atom, ...]) -> bool:
+    for atom in atoms:
+        if not isinstance(atom, CmpAtom) or atom.op != "eq":
+            continue
+        if atom.lhs == var and isinstance(atom.rhs, Const):
+            return True
+        if atom.rhs == var and isinstance(atom.lhs, Const):
+            return True
+    return False
+
+
+def _entity_ref_port_is_closed(
+    var: Var,
+    entity_type: str | None,
+    atoms: tuple[Atom, ...],
+    schema_index: object | None,
+) -> bool:
+    if not entity_type or schema_index is None:
+        return False
+    entities = getattr(schema_index, "entities", None)
+    if not isinstance(entities, Mapping):
+        return False
+    entity = entities.get(entity_type)
+    if entity is None:
+        return False
+    identity_fields = getattr(entity, "identity_fields", None)
+    identity_predicates = getattr(entity, "identity_predicates", None)
+    if not isinstance(identity_fields, tuple) or not isinstance(identity_predicates, Mapping):
+        return False
+
+    primary_fields = tuple(field for field in identity_fields if getattr(field, "primary_key", False))
+    if not primary_fields:
+        return False
+    for field_info in primary_fields:
+        field_name = getattr(field_info, "name", None)
+        if not isinstance(field_name, str) or not field_name:
+            return False
+        predicate = identity_predicates.get(field_name)
+        pred_id = getattr(predicate, "pred_id", None)
+        if not isinstance(pred_id, str) or not pred_id:
+            return False
+        if not _has_entity_identity_literal(var, pred_id, atoms):
+            return False
+    return True
+
+
+def _has_entity_identity_literal(var: Var, pred_id: str, atoms: tuple[Atom, ...]) -> bool:
+    for atom in atoms:
+        if not isinstance(atom, PredAtom) or atom.pred_id != pred_id:
+            continue
+        terms = tuple(atom.terms)
+        if len(terms) == 2 and terms[0] == var and isinstance(terms[1], Const):
+            return True
+    return False
 
 
 def _inspect_rule_expr(expr: _RuleExpr) -> RuleExprInspect:

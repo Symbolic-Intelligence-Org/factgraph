@@ -83,9 +83,12 @@ inputs keep their existing dict inspect shape.
 
 Public execution is exposed through the SDK layer, not this protocol module:
 `fg.eval.evaluate(rule_expr, head=application_rule, engine=...)` returns the
-existing `list[CandidateSet]` success shape. The head must be an inline
-application `Rule` occurrence in the expression for this tranche; full external
-head body concatenation remains outside the application protocol surface.
+existing `list[CandidateSet]` success shape. The head may be an inline
+application `Rule`, an external application `Rule`, or
+`Rule.projection("port", ...)`; the protocol layer supplies the frozen Rule and
+RuleExpr values while SDK evaluation owns execution. `fg.rules.inspect(rule)`
+returns a `RuleExprInspect` value with closed-head fields for application Rule
+inputs; structural RuleExpr inspect does not define closed-head semantics.
 
 ## Unified Syntax via SDK DSL Bridge
 

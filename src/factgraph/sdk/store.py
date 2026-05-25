@@ -2105,7 +2105,7 @@ class SDKStore:
         from factgraph.application.protocol.rule_expr_inspect import _inspect_application_rule, _inspect_rule_expr
 
         if isinstance(obj, ApplicationRule):
-            return _inspect_application_rule(obj)
+            return _inspect_application_rule(obj, schema_index=self._application_schema_index)
         if isinstance(obj, _RuleExpr):
             return _inspect_rule_expr(obj)
         return _inspect_rule_or_inference(obj)

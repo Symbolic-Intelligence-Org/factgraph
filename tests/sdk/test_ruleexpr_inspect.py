@@ -23,6 +23,12 @@ class User(Entity):
     region: str = Field(cardinality="single")
 
 
+class Account(Entity):
+    account_id: str = Identity(primary_key=True)
+    tenant_id: str = Identity(primary_key=True)
+    region: str = Field(cardinality="single")
+
+
 def _application_rule(rule_id: str = "active_user", *, var_name: str = "u") -> ApplicationRule:
     user = Var(var_name)
     status = Var(f"{var_name}_status")
@@ -95,6 +101,8 @@ class RuleExprInspectDispatchTests(unittest.TestCase):
         self.assertEqual(inspected.ast, ("rule", "active_user", "active_user"))
         self.assertEqual(inspected.templates, ("active_user",))
         self.assertEqual(inspected.port_visibility["active_user"], ("status", "user"))
+        self.assertFalse(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ("user",))
 
     def test_ruleexpr_inspect_returns_ruleexprinspect(self) -> None:
         left = _application_rule().as_("left")
@@ -107,6 +115,8 @@ class RuleExprInspectDispatchTests(unittest.TestCase):
         self.assertEqual(len(inspected.occurrences), 2)
         self.assertEqual(len(inspected.joins), 1)
         self.assertEqual(inspected.unjoined_same_name_ports, ())
+        self.assertFalse(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ())
 
     def test_unsupported_input_still_uses_sdk_store_error(self) -> None:
         with self.assertRaises(SDKStoreError):
@@ -139,6 +149,10 @@ class RuleExprInspectDTOTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuleExprError, "port_name and occurrences"):
             RuleExprInspect(ast=(), occurrences=(), joins=(), unjoined_same_name_ports=({"name": "user"},))
+        with self.assertRaisesRegex(RuleExprError, "is_closed must be bool"):
+            RuleExprInspect(ast=(), occurrences=(), joins=(), unjoined_same_name_ports=(), is_closed=None)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(RuleExprError, "unbound_ports must be tuple"):
+            RuleExprInspect(ast=(), occurrences=(), joins=(), unjoined_same_name_ports=(), unbound_ports=("ok", ""))  # type: ignore[arg-type]
 
     def test_occurrence_atoms_use_rule_atom_ids_and_parent_c50_kinds(self) -> None:
         inspected = sdk.SDKStore([User]).rules.inspect(_application_rule())
@@ -219,6 +233,143 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         inspected = sdk.SDKStore([User]).rules.inspect(rule)
 
         self.assertEqual([atom.kind for atom in inspected.occurrences[0].atoms], ["in", "builtin", "not"])
+
+    def test_value_port_direct_var_const_equality_closes(self) -> None:
+        inspected = sdk.SDKStore([User]).rules.inspect(_application_rule())
+
+        self.assertFalse(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ("user",))
+
+        status = Var("status")
+        rule = ApplicationRule(
+            id="closed_status",
+            where=(CmpAtom("eq", status, Const("active")),),
+            ports={"status": status},
+        )
+
+        inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+        self.assertTrue(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ())
+
+    def test_value_port_direct_const_var_equality_closes(self) -> None:
+        status = Var("status")
+        rule = ApplicationRule(
+            id="closed_status_reverse",
+            where=(CmpAtom("eq", Const("active"), status),),
+            ports={"status": status},
+        )
+
+        inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+        self.assertTrue(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ())
+
+    def test_value_port_non_literal_forms_remain_open(self) -> None:
+        cases = (
+            (PredAtom("User:status", [Var("u"), Var("status")]),),
+            (BuiltinAtom("lower", [Var("status")]),),
+            (InAtom(Var("status"), [Const("active")]),),
+            (NotAtom(body=AndExpr([PredAtom("User:status", [Var("u"), Var("status")])])),),
+            (CmpAtom("eq", Var("status"), Var("other")),),
+            (CmpAtom("ne", Var("status"), Const("active")),),
+        )
+
+        for index, where in enumerate(cases):
+            with self.subTest(index=index):
+                rule = ApplicationRule(id=f"open_value_{index}", where=where, ports={"status": Var("status")})
+
+                inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+                self.assertFalse(inspected.is_closed)
+                self.assertEqual(inspected.unbound_ports, ("status",))
+
+    def test_entity_ref_single_primary_identity_literal_closes(self) -> None:
+        user = Var("u")
+        rule = ApplicationRule(
+            id="closed_user",
+            where=(
+                PredAtom("User:exists", [user]),
+                PredAtom("user:user_id", [user, Const("user-1")]),
+            ),
+            ports={"user": user},
+        )
+
+        inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+        self.assertTrue(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ())
+
+    def test_entity_ref_primary_identity_requires_entity_first_order(self) -> None:
+        user = Var("u")
+        rule = ApplicationRule(
+            id="wrong_identity_order",
+            where=(
+                PredAtom("User:exists", [user]),
+                PredAtom("user:user_id", [Const("user-1"), user]),
+            ),
+            ports={"user": user},
+        )
+
+        inspected = sdk.SDKStore([User]).rules.inspect(rule)
+
+        self.assertFalse(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ("user",))
+
+    def test_entity_ref_compound_primary_identity_requires_all_fields(self) -> None:
+        account = Var("a")
+        closed = ApplicationRule(
+            id="closed_account",
+            where=(
+                PredAtom("Account:exists", [account]),
+                PredAtom("account:account_id", [account, Const("acct-1")]),
+                PredAtom("account:tenant_id", [account, Const("tenant-1")]),
+            ),
+            ports={"account": account},
+        )
+        open_rule = ApplicationRule(
+            id="open_account",
+            where=(
+                PredAtom("Account:exists", [account]),
+                PredAtom("account:account_id", [account, Const("acct-1")]),
+            ),
+            ports={"account": account},
+        )
+
+        sdk_store = sdk.SDKStore([Account])
+
+        self.assertTrue(sdk_store.rules.inspect(closed).is_closed)
+        inspected_open = sdk_store.rules.inspect(open_rule)
+        self.assertFalse(inspected_open.is_closed)
+        self.assertEqual(inspected_open.unbound_ports, ("account",))
+
+    def test_missing_schema_keeps_entity_ref_unbound_without_raising(self) -> None:
+        user = Var("u")
+        rule = ApplicationRule(
+            id="schema_missing",
+            where=(
+                PredAtom("User:exists", [user]),
+                PredAtom("user:user_id", [user, Const("user-1")]),
+            ),
+            ports={"user": user},
+        )
+
+        # Direct protocol helper path has no SDK schema index and is conservative.
+        from factgraph.application.protocol.rule_expr_inspect import _inspect_application_rule
+
+        inspected = _inspect_application_rule(rule)
+
+        self.assertFalse(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ("user",))
+
+    def test_projection_rule_inspect_reports_closed_by_construction(self) -> None:
+        projection = ApplicationRule.projection("region", "user")
+
+        inspected = sdk.SDKStore([User]).rules.inspect(projection)
+
+        self.assertTrue(inspected.is_closed)
+        self.assertEqual(inspected.unbound_ports, ())
+        self.assertEqual(tuple(port.name for port in inspected.ports), ("region", "user"))
 
 
 if __name__ == "__main__":

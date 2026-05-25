@@ -188,6 +188,10 @@ Execution follows the same boundary. `fg.eval.evaluate(expr, head=application_ru
 accepts application `Rule` / RuleExpr inputs and still returns the existing
 `list[CandidateSet]`; private lowering, trace, and adapter-support DTOs are not
 SDK exports.
+For application `Rule` inspect values, `RuleExprInspect.is_closed` and
+`RuleExprInspect.unbound_ports` report the strict closed-head inspect subset.
+Structural RuleExpr inspect carries default fields for shape consistency but
+does not define closed-head semantics.
 
 ---
 

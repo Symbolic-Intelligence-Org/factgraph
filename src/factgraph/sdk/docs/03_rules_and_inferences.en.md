@@ -329,6 +329,8 @@ Legacy SDK `Rule` / `Inference` inputs keep the existing dict payload. Applicati
 - `templates`
 - `port_visibility`
 - `ports`
+- `is_closed`
+- `unbound_ports`
 - `render(bindings=None)`
 - `render_compact()`
 
@@ -340,6 +342,16 @@ metadata.
 
 `render()` and `render_compact()` are deterministic authoring narratives. They
 do not read the ledger and are not proof explanations.
+
+For application `Rule` inputs, `RuleExprInspect.is_closed` reports whether every
+declared head port is bound by the strict closed-head inspect subset, and
+`unbound_ports` lists the remaining port names. Value ports close only through a
+direct equality to a literal `Const`. Entity-ref ports close only when every
+primary identity predicate binds that entity variable to a literal in the
+user-authored `head.where`. If schema identity metadata is unavailable, entity
+ports are reported unbound. `Rule.projection(...)` heads inspect as closed by
+construction. Structural RuleExpr inspect exposes the fields for shape
+consistency but does not define closed-head semantics.
 
 ### RuleExpr execution
 
@@ -361,10 +373,10 @@ candidates = fg.eval.evaluate(active_user, head=active_user)
 For execution, application `Rule` ids that are not valid default occurrence
 aliases are internally evaluated with a stable `head` occurrence alias.
 
-The supplied `head=` must already be an inline/projected rule occurrence in the
-expression. External head body concatenation is not public in this tranche; add
-the head rule as an expression occurrence and pass that same application `Rule`
-as `head=`.
+The supplied `head=` may be an inline rule occurrence, an external application
+head with an ordinary body, or `Rule.projection("port", ...)` for projected
+ports. External head bodies are conjoined with each RuleExpr branch. Projection
+placeholder atoms are validation-only and are not materialized as filters.
 
 Supported engines are `native`, `souffle`, `problog`, and the current PyReason
 pred-only subset. PyReason rejects RuleExpr joins, source non-pred atoms, and
