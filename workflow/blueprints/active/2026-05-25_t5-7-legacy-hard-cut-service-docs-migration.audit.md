@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.7 Legacy Hard-Cut + Service/Docs Migration draft created after T5.6 archive `7aa1c6a3`. Scope is predicted L-class: complete D23 hard-cut, migrate service/OpenAPI/docs, decide legacy DSL Rule and why-not final disposition, and preserve private CandidateSet runtime as needed. |
 | 2026-05-25 | scoped | pending | Step 4.6 inventory recorded | Grep found 99 files with service, agent, OpenAPI, docs, examples, tests, CandidateSet, accept, what-if, why-not, `ApplicationRule`, or legacy DSL Rule references. T5.7 remains one L-class blueprint but will implement through T5.7a/T5.7b/T5.7c local M-class sub-slices; no sub-slice is push-ready until the full public story is coherent. |
+| 2026-05-25 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `272a57f4`: 171 tests in 0.100s, OK. Pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded from G7. |
 
 ## 2. Source Chain
 
@@ -160,16 +161,14 @@ PYTHONPATH=src python -m unittest \
 
 Expected result: 171 tests OK, inherited from T5.6 archive.
 
-Baseline record fields to fill later:
-
 | Field | Value |
 |---|---|
 | Branch | `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` |
 | Sacred state | `master = 562c74195df43e933bed92a3ff25de94dd8ce666` |
 | Dirty baseline | 6 modified + 1 untracked preserved |
-| Scoped anchor | pending |
-| Command | pending |
-| Result | pending |
+| Scoped anchor | `272a57f4` |
+| Command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
+| Result | 171 tests in 0.100s, OK |
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
