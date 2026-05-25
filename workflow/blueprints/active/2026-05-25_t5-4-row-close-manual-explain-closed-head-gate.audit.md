@@ -1,11 +1,11 @@
 # Audit: T5.4 Row Close + Manual Explain Closed-Head Gate
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-4-row-close-manual-explain-closed-head-gate.md`
-- Stage: T5.4 implementation blueprint scoped
+- Stage: T5.4 implementation complete
 - Class: M (predicted; split if Step 4.6 shows broader runtime/service scope)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -15,8 +15,10 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-25 | draft | `f755749b` | Blueprint pair drafted | T5.4 Row Close + Manual Explain Closed-Head Gate draft created after T5.3 archive `ba5e5c26`. Scope is M-class predicted, but Step 4.6 must decide whether row-close and manual explain stay one slice or split. |
-| 2026-05-25 | scoped | pending | Step 4.6 grep clean | Ten grep buckets matched expected shipped/design hits. No A-fallback triggered; T5.4 remains a single SDK/protocol-scoped M-class slice. Service/docs, why-not, SDK Rule flip, and adapter semantics remain future-slice territory. |
-| 2026-05-25 | baseline | pending | G7 baseline recorded | Scoped anchor `b7e3e121`; G7 command ran 166 tests in 0.088s, OK. Pytest remains deferred per existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | scoped | `b7e3e121` | Step 4.6 grep clean | Ten grep buckets matched expected shipped/design hits. No A-fallback triggered; T5.4 remains a single SDK/protocol-scoped M-class slice. Service/docs, why-not, SDK Rule flip, and adapter semantics remain future-slice territory. |
+| 2026-05-25 | baseline | `5e810cff` | G7 baseline recorded | Scoped anchor `b7e3e121`; G7 command ran 166 tests in 0.088s, OK. Pytest remains deferred per existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | feat | `c820f102` | Row close + manual explain implemented | Four files changed (+522/-8). Added live `EvaluateRow.close()`, closed-head construction/validation, SDK `fg.eval.explain(...)`, schema-backed identity recovery, and focused tests. Verification: `41 OK` focused, `170 OK` G7, touched-file ruff clean, `git diff --check` clean. |
+| 2026-05-25 | implemented | pending | Closure recorded | Blueprint and audit status moved to implemented. Step 4.7 review clean (`0 P0 / 0 P1`); no fix commit needed. T5.5-T5.8 deferred boundaries reaffirmed. |
 
 ## 2. Source Chain
 
@@ -186,6 +188,85 @@ Baseline record:
 | D25 row-anchored mismatch complexity may leak in | Confirm row-anchored manual replay is not in scope unless amended. |
 | Service/docs migration may leak early | Confirm T5.7 remains owner. |
 
-## 11. Outcome
+## 11. Closure Notes
 
-Pending.
+### Final Code Scope
+
+T5.4 implementation scope stayed within the SDK/protocol boundary:
+
+- `src/factgraph/application/protocol/evaluate_result.py`
+  - `EvaluateRow.close()`;
+  - private closed-head construction;
+  - D15 closed-head validation reuse;
+  - projection placeholder stripping;
+  - manual passed Explanation row-backref relaxation.
+- `src/factgraph/sdk/store.py`
+  - `_SDKEvalManager.explain(...)`;
+  - `SDKStore.explain(...)`;
+  - manual closed-head preflight;
+  - schema-backed entity identity recovery from active ledger claims;
+  - live-result close builder injection.
+- `tests/application/protocol/test_evaluate_result_dtos.py`
+  - detached close, projection stripping, manual Explanation row-backref coverage.
+- `tests/sdk/test_rule_expr_evaluate.py`
+  - value/entity close atoms, detached close, open-head rejection, manual standalone checked scope coverage.
+
+No service, OpenAPI, agent, adapter, renderer, docs migration, or SDK Rule namespace files were changed.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| Baseline before feat | `166 OK` at `5e810cff` |
+| Focused T5.1-T5.4 | `41 OK` |
+| G7 after feat | `170 OK` |
+| Touched-file ruff | clean |
+| `git diff --check` | clean |
+| Step 4.7 review | clean, `0 P0 / 0 P1` |
+
+Pytest remains deferred under the existing SIGSEGV environment lock, and `tests.test_public_inference_factgraph_create` remains outside the G7 command.
+
+### Scope Preservation
+
+T5.4 preserved the following no-* locks:
+
+- no public `.eval.why_not(...)`;
+- no Why-Not fold implementation;
+- no SDK final `Rule` flip;
+- no `LegacyRule` / `ApplicationRule` namespace changes;
+- no `accept` / `accept_many` / Check / Diagnose / What-If hard-cut;
+- no service route changes;
+- no OpenAPI changes;
+- no agent-tool changes;
+- no broad docs/examples migration;
+- no adapter production edits;
+- no C73-C78 semantics implementation;
+- no general closure inference beyond D15 strict v1;
+- no D13 runtime head-port link atoms as closure proof;
+- no public closed-head DTO, `ClosedHeadStatus`, or public inspect helper;
+- no renderer product API or `Explanation.render()`.
+
+### Step 4.7 Disposition
+
+Reviewer verified `c820f102` clean:
+
+- `EvaluateRow.close() -> Rule` implemented live-only with `DetachedRowError` for detached rows;
+- value and entity-ref closure atoms match D21/D15 strict shapes;
+- projection placeholders are stripped;
+- manual `fg.eval.explain(...)` dispatches through SDK eval namespace;
+- closed-head gate raises before Explanation construction;
+- standalone manual checked scope records `semantics_source="manual_standalone"`;
+- T5.1/T5.2/T5.3 substrates remain preserved.
+
+No P0/P1 findings and no follow-up fix commit.
+
+### Deferred
+
+- T5.5: fold why-not into failed Explanation and quarantine legacy evidence shells.
+- T5.6: final SDK `Rule` flip.
+- T5.7: legacy hard-cut plus service/OpenAPI/agent/docs migration; this remains the largest deferred T5 implementation slice.
+- T5.8 / post-T5: Semantics Lite and adapter-touching C73-C78 work.
+
+### Next Slice
+
+T5.4 is ready for archive. After archive, the next implementation slice is T5.5 Why-Not Fold + Legacy Evidence Shell Quarantine.

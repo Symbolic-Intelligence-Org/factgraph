@@ -1,6 +1,6 @@
 # Task Blueprint: T5.4 Row Close + Manual Explain Closed-Head Gate
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted; split if manual explain needs broad runtime/service work)
@@ -419,4 +419,79 @@ Deferred:
 
 ## 10. Outcome
 
-Pending implementation.
+### Commit References
+
+- Draft: `f755749b`
+- Scoped / Step 4.6 grep clean: `b7e3e121`
+- G7 baseline: `5e810cff` (`166 OK`)
+- Feature: `c820f102` (`170 OK` G7, `41 OK` focused, touched-file ruff clean, `0 P0 / 0 P1`)
+- Step 4.7 disposition: reviewed clean; no fix commit required.
+
+### Final Landed Code
+
+T5.4 landed in four files:
+
+- `src/factgraph/application/protocol/evaluate_result.py`
+  - added live-only `EvaluateRow.close() -> Rule`;
+  - added private closed-head construction from `EvaluateResult.head`, public row bindings, and schema identity metadata;
+  - added value-port closure through `CmpAtom("eq", port_var, Const(value))`;
+  - added entity-ref closure through D15-form identity predicate atoms;
+  - stripped D14 projection placeholder atoms before durable manual replay;
+  - reused T4.3 `_inspect_closed_head(...)` validation;
+  - allowed passed manual `Explanation` values to omit row back-reference fields.
+- `src/factgraph/sdk/store.py`
+  - added `_SDKEvalManager.explain(...)`;
+  - added `SDKStore.explain(...)` for standalone `fg.eval.explain(expr, head=closed_head, ...)`;
+  - added a closed-head preflight gate that raises `RuleExprError` before building an `Explanation`;
+  - added schema-backed entity identity recovery from SDK ledger claims for encoded entity-ref bindings;
+  - injected schema-aware row-close builder hooks into live `EvaluateResult` rows.
+- `tests/application/protocol/test_evaluate_result_dtos.py`
+  - updated detached row live-only assertions for `close()`;
+  - added projection placeholder stripping and manual passed Explanation row-backref tests.
+- `tests/sdk/test_rule_expr_evaluate.py`
+  - added row-close value/entity identity literal coverage;
+  - added detached close coverage;
+  - added manual closed-head explain gate and standalone checked-scope coverage.
+
+No service routes, OpenAPI, agent files, adapter production files, SDK final `Rule` namespace files, renderer APIs, or docs migration files were touched.
+
+### Delivered Behavior
+
+| Locked behavior | Delivered in `c820f102` |
+|---|---|
+| D21 §4.1 live `row.close() -> Rule` | `EvaluateRow.close()` returns an application protocol `Rule`; detached rows raise `DetachedRowError`. |
+| D21 §4.3 construction sources | Closed heads are constructed from `EvaluateResult.head`, row bindings, and schema identity metadata. |
+| D21 §4.4 value closure | Value ports append direct `CmpAtom("eq", port_var, Const(value))` atoms. |
+| D21 §4.5 entity-ref closure | Entity-ref ports append identity predicate atoms in D15 term order `[entity_ref_var, Const(identity_value)]`; missing metadata raises `RuleExprError`. |
+| D21 §4.6 projection handling | Projection placeholder atoms are stripped; row-close emits durable literal closure atoms. |
+| D21 §4.7 manual closed-head gate | `fg.eval.explain(...)` validates closed heads before D20 pipeline work; open heads raise `RuleExprError`. |
+| D21 §4.8 digest boundary | Manual checked scope uses `closed_head_digest_for(closed_head)` without redefining D19 formula. |
+| D20 manual output | Standalone manual explain returns `Explanation`; closed-head false maps to failed Explanation after precondition success. |
+| D25 standalone semantics | Manual explain checked scope records `semantics_source="manual_standalone"`, `evaluate_semantics_digest=None`, and `semantics_match=None`. |
+| T4.3 D15 reuse | T5.4 consumes the private closed-head inspect substrate without reopening inspect semantics or exposing new public closed-head DTOs. |
+
+### Test Gates
+
+| Gate | Result |
+|---|---|
+| T5.4 G7 baseline | `166 OK` at `5e810cff` |
+| Focused T5.1-T5.4 suite | `41 OK` |
+| G7 preservation after feat | `170 OK` |
+| Touched-file ruff | clean |
+| `git diff --check` | clean |
+| Pytest | deferred per existing SIGSEGV environment lock |
+| Excluded test | `tests.test_public_inference_factgraph_create` remains outside G7 command |
+
+### Deviations / Follow-Ups
+
+- `0 P0 / 0 P1` in Step 4.7 review.
+- No Step 4.7 fix commit was needed.
+- Optional implementation notes left for future review:
+  - manual explain currently stays standalone; row-anchored manual replay remains deferred unless a later slice explicitly introduces row anchors;
+  - schema-backed identity recovery reads active identity claims from the SDK ledger and intentionally stays private to the SDK close builder;
+  - manual replay for application Rule inputs evaluates the original expression and matches returned rows against the supplied closed head.
+- Deferred to later slices:
+  - T5.5: Why-Not Fold + Legacy Evidence Shell Quarantine;
+  - T5.6: Final SDK Rule Flip;
+  - T5.7: Legacy Hard-Cut + Service/OpenAPI/Agent/Docs Migration;
+  - T5.8 or post-T5: Semantics Lite / adapter-touching semantics work.
