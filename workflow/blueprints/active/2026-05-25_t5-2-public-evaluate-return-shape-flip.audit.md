@@ -1,6 +1,6 @@
 # Audit: T5.2 Public Evaluate Return-Shape Flip
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
@@ -17,6 +17,8 @@
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.2 public evaluate return-shape flip draft created after T5.1 archive `53781419`. Scope is L-class default and requires D18/D23 blast-radius inventory before scoped. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Ten grep buckets completed. Scope stays one SDK-focused L-class slice; service/OpenAPI/agent/docs CandidateSet/accept migration is classified as T5.7 deferred hard-cut territory. |
 | 2026-05-25 | baseline | pending | G7 preservation baseline | Scoped anchor `591c4ba5`; G7 baseline command ran 163 tests in 0.078s, OK. |
+| 2026-05-25 | feat | `7dfadd4e` | SDK evaluate return-shape hard-cut implemented | Flipped scoped SDK public evaluate paths to `EvaluateResult`, rejected public `engine_options=` / `registry=`, added deterministic in-memory view snapshot digest source, preserved internal CandidateSet runtime, and left service/OpenAPI/agent/docs migration deferred to T5.7. Gates: 18 focused evaluate tests OK, 13 T5.1 substrate tests OK, G7 preservation 166 tests OK, touched-file ruff clean. |
+| 2026-05-25 | implemented | pending | Closure recorded after Step 4.7 review | Step 4.7 review found 0 P0/P1 and 3 optional nits; no fix commit required. T5.2 ready for archive after this closure. |
 
 ## 2. Source Chain
 
@@ -190,4 +192,66 @@ Expected result: 163 tests OK, inherited from T5.1 archive.
 
 ## 12. Outcome
 
-Pending.
+### Final Code Scope
+
+Production:
+
+1. `src/factgraph/sdk/store.py` changed the SDK public `evaluate(...)` success return shape to `EvaluateResult`.
+2. RuleExpr/application `Rule`, legacy SDK `Inference`, and structured derivation dict inputs now wrap internal `CandidateSet` output into the T5.1 result envelope.
+3. Direct SDK store-style fallback now raises `SDKStoreError` instead of leaking raw store `CandidateSet` output.
+4. Public `engine_options=` and `registry=` now raise `SDKStoreError`.
+5. T5.1 digest helpers populate result, row, claim, evidence-ref, context, view snapshot, semantics, and result digests.
+6. The in-memory SDK-store `view_snapshot_digest` follow-up from T5.1 was closed with deterministic visible-view input to `view_snapshot_digest_for_parts(...)`.
+
+Tests:
+
+1. `tests/sdk/test_rule_expr_evaluate.py` was updated to assert the `EvaluateResult` envelope across scoped public paths.
+2. New coverage verifies structured derivation dict result wrapping, direct fallback rejection, and public `engine_options=` / `registry=` rejection.
+3. Existing projection, external-head, PyReason preflight, and version-warning behavior remains covered under the new result envelope.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `ca18f856`: 163 tests OK. |
+| Feature preservation | `7dfadd4e`: 166 tests OK. |
+| Focused T5.2 tests | `tests.sdk.test_rule_expr_evaluate`: 18 tests OK. |
+| T5.1 substrate focused tests | DTO/digest/export focused suite: 13 tests OK. |
+| Ruff | Touched production and test files clean. |
+| Diff hygiene | `git diff --check` clean. |
+| Pytest | Deferred per existing SIGSEGV environment lock. |
+| Excluded test | `tests.test_public_inference_factgraph_create` remains outside G7 command. |
+
+### Scope Preservation
+
+1. Service runtime `src/service/runtime_v1.py` was not touched.
+2. `docs/api/openapi.yaml` was not touched.
+3. `src/agent/*` was not touched.
+4. Broad SDK docs, official docs, examples, and notebooks were not migrated.
+5. `accept`, `accept_many`, `check`, `diagnose`, `why_not`, and `what_if.*` shells were not removed.
+6. T5.1 DTO field contracts were not changed.
+7. `Rule.content_digest` format and formula were not changed.
+8. SDK top-level `Rule` / `LegacyRule` / `ApplicationRule` namespace was not changed.
+9. No public `row.explain()`, `row.close()`, `Explanation`, `.eval.why_not`, or evidence renderer surface was added.
+10. No adapter production files were edited.
+11. No C73-C78 semantics implementation was added.
+12. No public CandidateSet compatibility surface (`evaluate_v2`, `result_shape=`, `return_candidates=`, `as_candidates=`, or `evaluate_candidates`) was added.
+13. Internal `CandidateSet` runtime paths remain available for Check/Diagnose/WhyNot and future T5.7 migration work.
+14. Dirty baseline remained 6 modified + 1 untracked and was not included.
+
+### Step 4.7 Disposition
+
+- 0 P0 / 0 P1.
+- No Step 4.7 fix commit required.
+- Optional Nit N1: `_head_rule_for_compiled_plans(...)` synthetic head for legacy/dict paths is an internal bridge and user-invisible.
+- Optional Nit N2: deterministic in-memory `db_id` / `base_tx_id` derivation may match across identical schema/data stores, which is acceptable because it represents the same visible view.
+- Optional Nit N3: digest repeatability test cost is minor and acceptable.
+
+### Deferred
+
+1. T5.3: `Explanation` envelope and live row resolver behavior.
+2. T5.4: `row.close()` and manual closed-head explain gate.
+3. T5.5: why-not fold/quarantine.
+4. T5.6: final SDK `Rule` flip.
+5. T5.7: service route, OpenAPI, agent workflows, SDK docs/examples, CandidateSet/accept migration, and remaining legacy shell hard-cut.
+6. T5.8 or post-T5: semantics lite and adapter-touching semantics work.

@@ -1,6 +1,6 @@
 # Task Blueprint: T5.2 Public Evaluate Return-Shape Flip
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: L (predicted; may split into adjacent M-class local slices after Step 4.6)
@@ -426,4 +426,58 @@ Deferred to T5.6:
 
 ## 10. Outcome
 
-Pending implementation.
+### Commit References
+
+- Feature implementation: `7dfadd4e` (`feat(sdk): flip evaluate to T5 result envelope`).
+- Step 4.7 review: clean, 0 P0 / 0 P1.
+- No Step 4.7 fix commit was required.
+
+### Final Landed Code
+
+Production:
+
+1. `src/factgraph/sdk/store.py` flipped the SDK public `evaluate(...)` return shape to `EvaluateResult`.
+2. The RuleExpr / application `Rule` path, legacy SDK `Inference` path, and structured derivation dict path now evaluate through existing internal `CandidateSet` runtime and wrap success into the T5.1 result envelope.
+3. Direct store-style SDK evaluate fallback is rejected with `SDKStoreError` instead of returning raw store `CandidateSet` values.
+4. Public `engine_options=` and `registry=` are rejected at the SDK evaluate boundary with `SDKStoreError`.
+5. `_candidate_sets_to_evaluate_result(...)` populates T5.1 DTOs and D19 digest fields by reusing the T5.1 helper path.
+6. `_view_snapshot_digest(...)` closes the T5.1 follow-up with a deterministic in-memory SDK-store view snapshot source and still delegates final formatting through `view_snapshot_digest_for_parts(...)`.
+
+Tests:
+
+1. `tests/sdk/test_rule_expr_evaluate.py` was updated for the public result envelope.
+2. The focused tests now cover RuleExpr/application `Rule`, legacy `Inference`, structured derivation dict, public `engine_options=` / `registry=` rejection, direct fallback rejection, digest population, projection-head lowering preservation, and absence of early `row.explain()` / `row.close()` methods.
+
+### Delivered Behavior
+
+1. `fg.eval.evaluate(...)` now returns `EvaluateResult` for all scoped SDK public success paths.
+2. Public rows expose `EvaluateRow` data (`bindings`, `Claim`, `EvidenceRef`, `raw_kind`, `bound`) rather than `CandidateSet` identifiers or support internals.
+3. CandidateSet remains the internal runtime artifact; `_evaluate_compiled_derivation_plans(...)` and application runtime helpers continue to return internal `list[CandidateSet]` where needed by Check/Diagnose/WhyNot and future T5.7 work.
+4. Public `engine_options=` and `registry=` are hard rejected instead of forwarded, matching D18 section 4.4.
+5. The direct SDK fallback no longer exposes underlying store-style candidate output; callers must use application `Rule` / `RuleExpr` with `head=`, legacy `Inference`, or a structured derivation dict.
+6. Every returned result receives `run_id`, `result_id`, row ids, `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `semantics_digest`, `result_digest`, row `Claim.digest`, row `EvidenceRef.ref_id`, and row `EvidenceRef.closed_head_digest`.
+7. Service route, OpenAPI, agent workflows, examples, and broad docs remain intentionally deferred to T5.7 per the scoped Step 4.6 decision.
+
+### Test Gates
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `ca18f856`: 163 tests OK. |
+| Feature preservation | `7dfadd4e`: 166 tests OK. |
+| Focused T5.2 tests | `tests.sdk.test_rule_expr_evaluate`: 18 tests OK. |
+| T5.1 substrate focused tests | DTO/digest/export focused suite: 13 tests OK. |
+| Ruff | Touched `src/factgraph/sdk/store.py` and `tests/sdk/test_rule_expr_evaluate.py` clean. |
+| Diff hygiene | `git diff --check` clean. |
+| Pytest | Deferred per existing SIGSEGV environment lock. |
+| Excluded test | `tests.test_public_inference_factgraph_create` remains outside the G7 command. |
+
+### Deviations And Follow-Ups
+
+- 0 P0 / 0 P1 in Step 4.7 review.
+- Optional Nit N1: `_head_rule_for_compiled_plans(...)` builds a synthetic application head `Rule` for legacy `Inference` / structured dict paths. It is an internal bridge and user-invisible.
+- Optional Nit N2: in-memory `db_id` / `base_tx_id` derivation can collide across stores with identical schema and data. That is acceptable because it represents the same visible view.
+- Optional Nit N3: one test compares two evaluate calls for digest repeatability; the minor extra runtime is acceptable.
+- T5.7 must explicitly handle the deferred public surfaces: `src/service/runtime_v1.py`, `docs/api/openapi.yaml`, `src/agent/*`, SDK docs/examples, `accept` / `accept_many`, `check`, `diagnose`, `why_not`, and `what_if.*`.
+- T5.3 and T5.4 remain responsible for `row.explain()`, `Explanation`, `row.close()`, and manual closed-head replay.
+- T5.6 remains responsible for the final SDK `Rule` namespace flip.
+- T5.8 or a post-T5 cycle remains responsible for C73-C78 semantics implementation and adapter-touching work.
