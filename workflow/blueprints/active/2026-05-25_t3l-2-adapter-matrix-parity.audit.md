@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | draft | T3L.2 blueprint pair created | Scope consumes Stage 3 synthesis T3L.2 row, D8-D10, T3L.1 archived substrate, and shipped Souffle / ProbLog / PyReason adapter evidence. |
+| 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Clarified private trace engine widening, Souffle/ProbLog adapter-time rejection ownership, PyReason classifier vs materialization engine split, and `unsupported_feature` label convention. |
 
 ## Decision Notes
 

@@ -196,6 +196,8 @@ def _materialize_adapter_derivation_plan(
 
 Implementation may keep `_materialize_native_derivation_plan(...)` as a wrapper around the shared helper. The shared helper must preserve T3L.1 native behavior and only generalize the private trace engine category from `"native"` to supported materialization engines.
 
+Extending `RuleExprEvaluationTrace.engine` from `Literal["native"]` to `RuleExprAdapterEngine` (or an equivalent private union over materialization engines) is in T3L.2 scope. The T3L.1 `__post_init__` engine guard must be widened only to the supported materialization engines: `"native"`, `"souffle"`, and `"problog"`.
+
 Minimum requirements:
 
 - D7 branch order remains the runtime branch order.
@@ -215,6 +217,8 @@ Souffle materialization uses the same D9 branch-list body shape as native:
 
 T3L.2 tests should compile or validate the materialized body through shipped Souffle grammar rather than adding a new Souffle grammar path.
 
+Souffle adapter-time rejections, such as `WhereValidationError` for unsupported atom kinds, remain shipped adapter validation responsibility. T3L.3 owns conversion of those failures into public `SDKStoreError` messages per D9 section 4.9.
+
 Expected test coverage:
 
 - branch-list RuleExpr materializes to a Souffle-compatible OR-of-AND body;
@@ -232,6 +236,8 @@ ProbLog materialization uses the same D9 branch-list body shape as native:
 
 T3L.2 tests should export or compile the materialized body through shipped ProbLog grammar rather than adding a new ProbLog grammar path.
 
+ProbLog adapter-time rejections, such as `ProbLogExportError` for pred arity greater than 2, remain shipped adapter validation responsibility. T3L.3 owns conversion of those failures into public `SDKStoreError` messages per D9 section 4.9.
+
 Expected test coverage:
 
 - branch-list RuleExpr creates multiple ProbLog rule bodies through shipped export behavior;
@@ -240,6 +246,8 @@ Expected test coverage:
 - pred arity > 2 remains rejected by shipped ProbLog validation and is not papered over by RuleExpr lowering.
 
 ### 5.5 PyReason classifier
+
+PyReason is intentionally excluded from `RuleExprAdapterEngine` in section 5.2 because D9 section 4.6 classifies it as a preflight rejection target, not a materialization engine. The classifier produces private support data for T3L.3 public dispatch.
 
 Add a private classifier or equivalent:
 
@@ -253,7 +261,7 @@ RuleExprAdapterSupport(
 )
 ```
 
-Exact helper names may differ. The classifier must:
+Exact helper names may differ. `unsupported_feature` may be an atom kind such as `"eq"` / `"not"` / `"aggregate"` or a broader feature label such as `"non-pred-source-rule"` / `"branch-shape"`. The classifier must:
 
 - classify pred-only lowered branches as supported;
 - classify D8 materialized `eq` joins as unsupported with rejection source `ruleexpr-join`;
@@ -300,7 +308,8 @@ T3L.2 must not:
 9. change RuleExpr authoring semantics or inspect behavior;
 10. add public docs or user-facing examples;
 11. implement external-head body concatenation;
-12. touch unrelated T1/T2/T3 archive docs.
+12. widen `RuleExprEvaluationTrace.engine` beyond `"native"`, `"souffle"`, and `"problog"` during this slice;
+13. touch unrelated T1/T2/T3 archive docs.
 
 ### 5.9 Validation layers
 
