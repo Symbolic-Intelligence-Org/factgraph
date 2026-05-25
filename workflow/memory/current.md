@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; first push gate executed — 4 origin refs created; T3 later selected; T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE; **T3 later push gate executed — 2 origin refs created; T4 Stage 1-3 complete; T4.1 + T4.2 archived; T4.3 next**)
+最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; first push gate executed — 4 origin refs created; T3 later selected; T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE; **T3 later push gate executed — 2 origin refs created; T4 cycle complete (Stage 1-3 + T4.1 + T4.2 + T4.3 archived); next-stage decision pending**)
 
-## 当前阶段(2026-05-25 — T4.2 EXTERNAL + PROJECTION HEAD EXECUTION ARCHIVED — T4.3 NEXT)
+## 当前阶段(2026-05-25 — T4 CYCLE COMPLETE — NEXT-STAGE DECISION PENDING)
 
-**Current local branch:** `v0.2.0-t4-2-external-projection-head-execution-2026-05-25` (latest archived anchor `bd0b14bf`; `19d2d375` closure, `7e0ff9b7` feat, `f6d376e8` G7 baseline, `43bd2f4e` scoped, `b9f30be0` draft-amend, and `5d7755b4` draft are the T4.2 anchors).
+**Current local branch:** `v0.2.0-t4-3-closed-head-inspect-docs-2026-05-25` (latest archived anchor `73f6fff5`; `ba2e7ef6` closure, `e44f7920` feat, `d3304933` G7 baseline, `7005e7d5` scoped, `1af6c2b5` draft-amend, and `9ad2980b` draft are the T4.3 anchors).
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -42,6 +42,7 @@
 | **T3L.3 Public SDK Dispatch + Diagnostics + Docs** | M | `48f925a8` | `25b71e64 feat(sdk): expose RuleExpr evaluation dispatch` + `762731fa fix(sdk): harden RuleExpr rule alias fallback` (131 preservation tests OK; final T3 later implementation slice archived; public RuleExpr execution shipped) |
 | **T4.1 Head Identity + Declared-Port Foundation** | M | `f3e9cb9a` | `ea125920 feat(ruleexpr): add T4.1 head validation foundation` + `49cd8074 test(ruleexpr): cover T4.1 head validation gaps` (145 preservation tests OK; 46 focused RuleExpr tests; touched-file ruff clean; first T4 implementation slice archived) |
 | **T4.2 External + Projection Head Execution** | M | `bd0b14bf` | `7e0ff9b7 feat(ruleexpr): add T4.2 external projection head execution` (155 preservation tests OK; 56 focused RuleExpr tests; touched-file ruff clean; second T4 implementation slice archived) |
+| **T4.3 Closed-Head Inspect Utilities + Docs** | M | `73f6fff5` | `e44f7920 feat(ruleexpr): add T4.3 closed-head inspect docs` (163 preservation tests OK; 77 focused RuleExpr/inspect tests; touched-file ruff clean; final T4 implementation slice archived) |
 
 ### Current landed behavior
 
@@ -323,6 +324,19 @@
   - Verification: G7 baseline 145 tests OK; feature gate 155 preservation tests OK; 56 focused RuleExpr tests OK; touched-file ruff clean. Step 4.7 had 0 P0/P1; 3 optional internal cleanup nits deferred.
   - T4.3 is the next scoped target: D15 closed-head inspect utilities + docs.
 
+**T4.3 — Closed-Head Inspect Utilities + Docs**
+- **T4.3 archived at `73f6fff5`**:
+  - Lineage: `9ad2980b` draft → `1af6c2b5` draft-amend → `7005e7d5` scoped (Step 4.6 grep clean) → `d3304933` G7 baseline (155 OK) → `e44f7920` feat → `ba2e7ef6` closure → `73f6fff5` archive.
+  - Landed D15 closed-head inspect reporting on the existing public `RuleExprInspect` DTO by appending `is_closed: bool = False` and `unbound_ports: tuple[str, ...] = ()`; the existing structural fields keep their positional indexes.
+  - Closed-head v1 is intentionally strict: value ports close only through direct `Var == Const` / `Const == Var` equality, and entity-ref ports close only when every primary identity field has a user-authored `PredAtom(identity_predicate_id, [entity_ref_var, Const(value)])`.
+  - Entity identity lookup uses SDK schema context (`SDKStore._application_schema_index`) through `SchemaIndex.entities[entity_type].identity_predicates[field_name].pred_id`; missing schema conservatively leaves entity-ref ports unbound without raising.
+  - Projection inspect reports closed by construction at inspect time and stays decoupled from D12 evaluation-time declared-port validation.
+  - RuleExpr structural inspect exposes the same fields for shape consistency, but their defaults mean "not applicable"; structural RuleExpr inspect does not define closed-head semantics.
+  - Updated 4 docs files to explain `is_closed`, `unbound_ports`, value/entity-ref closure, missing-schema behavior, projection closure, and the structural-inspect not-applicable rule without introducing T5 result/evidence surfaces.
+  - Verification: G7 baseline 155 tests OK; feature gate 163 preservation tests OK; 77 focused RuleExpr/inspect tests OK; touched-file ruff clean. Step 4.7 had 0 P0/P1; 3 optional internal cleanup nits deferred.
+  - Scope locks held: no public DTO export, no `CandidateSet` / evidence / result shape change, no adapter production edits, no `Rule.where` / `Rule.ports` invariant relaxation, no T5 `EvaluateResult` / `Explanation` / `WhyNot` / `row.close()`, no T1.3 final `Rule` flip, and no leakage of placeholder atoms or D13 head-link metadata into public evidence.
+  - T4 implementation slices are complete after this archive; T4 cycle is closed once this memory consolidation lands.
+
 ### T4 cycle progress
 
 | Phase | Status |
@@ -331,8 +345,22 @@
 | T4 Stage 2 D11-D15 | 5/5 reviewed clean |
 | T4 Stage 3 synthesis | clean v1 |
 | T4.1 Head Identity + Declared-Port Foundation | archived at `f3e9cb9a`; memory consolidated at `8ddbe121` |
-| T4.2 External + Projection Head Execution | archived at `bd0b14bf`; memory consolidation in this commit |
-| T4.3 Closed-Head Inspect Utilities + Docs | next scoped target |
+| T4.2 External + Projection Head Execution | archived at `bd0b14bf`; memory consolidated at `94e8baec` |
+| T4.3 Closed-Head Inspect Utilities + Docs | archived at `73f6fff5`; memory consolidation in this commit |
+| **T4 cycle** | **CLOSED locally; next-stage decision pending** |
+
+### T4 cycle complete milestone
+
+| Slice | Class | Feat | Verification |
+|---|---|---|---|
+| T4.1 Head Identity + Declared-Port Foundation | M | `ea125920` + `49cd8074` | 145 preservation tests OK; 46 focused RuleExpr tests; touched-file ruff clean |
+| T4.2 External + Projection Head Execution | M | `7e0ff9b7` | 155 preservation tests OK; 56 focused RuleExpr tests; touched-file ruff clean |
+| T4.3 Closed-Head Inspect Utilities + Docs | M | `e44f7920` | 163 preservation tests OK; 77 focused RuleExpr/inspect tests; touched-file ruff clean |
+
+- T4 is complete locally: Stage 1 audit, D11-D15, Stage 3 synthesis, and all 3 implementation slices are reviewed, archived, and memory-consolidated.
+- T4 Head + closed-head shipped end to end: D11/D12 identity and declared-port foundation, D13/D14 external/projection head execution, and D15 closed-head inspect/docs.
+- T4 preserved the narrow-public-api line: public evaluation success remains `list[CandidateSet]`; no public trace/evidence/result DTO, adapter grammar expansion, or legacy SDK path rewrite landed.
+- T5 is now unblocked as the next L-class redesign zone, but the next action is Human-directed: push gate, T5 next-track, or hybrid push + T5.
 
 ### T3 later cycle complete milestone
 
@@ -543,8 +571,11 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 - **T3 later cycle complete + push gate executed** — T3L.1 + T3L.2 + T3L.3 archived + 2 new origin refs pushed; RuleExpr public execution shipped + asymmetric local-only risk eliminated for T3 later work.
 - **T4.1 Head Identity + Declared-Port Foundation archived locally** — first T4 implementation slice complete; D11 identity validation + D12 branch-total declared-port foundation shipped; final gates 145 preservation tests OK, 46 focused RuleExpr tests OK, touched-file ruff clean.
 - **T4.2 External + Projection Head Execution archived locally** — second T4 implementation slice complete; D13 external-head body materialization + D14 `Rule.projection(...)` sugar shipped; final gates 155 preservation tests OK, 56 focused RuleExpr tests OK, touched-file ruff clean.
-- **T4.3 Closed-Head Inspect Utilities + Docs — next scoped target** — consumes D15 plus T4.1/T4.2 head validation/materialization substrate. M-class predicted; expected to finish T4 cycle by adding strict closed-head inspect fields and user-facing docs without T5 result/evidence surfaces.
-- **T5 EvaluateResult + Semantics + legacy hard-cut + WhyNot** — 0% started; largest redesign zone and trigger for T1.3 final `Rule` flip.
+- **T4.3 Closed-Head Inspect Utilities + Docs archived locally** — final T4 implementation slice complete; D15 strict closed-head inspect fields + 4 docs shipped; final gates 163 preservation tests OK, 77 focused RuleExpr/inspect tests OK, touched-file ruff clean.
+- **T4 cycle complete — next-stage Human decision pending** — choose one of: T4 push gate, T5 next-track, or hybrid push + T5.
+- **T4 push gate option** — push T4.1 + T4.2 + T4.3 milestone refs and cumulative branch refs to origin, following the T3 later push-gate template; do not push without explicit Human authorization.
+- **T5 EvaluateResult + Semantics + legacy hard-cut + WhyNot option** — 0% started; largest redesign zone and trigger for T1.3 final `Rule` flip.
+- **Hybrid push + T5 option** — push T4 cycle milestones first, then start the T5 L-class Stage 1 audit / decision cadence.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice for `_lower_compare_with_aggregate` non-aggregate side AttrRef/BinaryExpr handling.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3/T3L.1 locked unittest fallback and did not block on pytest runner instability.
 
