@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | 2026-05-25 | draft | `4f4fc8d4` | Blueprint pair drafted | T5.6 Final SDK Rule Flip draft created after T5.5 archive `ec45f12f`. Scope is predicted M-class: flip SDK top-level `Rule` to application protocol `Rule`, keep `ApplicationRule` as transition alias, remove top-level `LegacyRule`, and defer broad D23 hard-cut/docs migration to T5.7. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Grep found expected SDK namespace/test blast radius, `.dsl.Rule` preservation paths, and broad docs/examples deferred to T5.7. T5.6 remains one SDK-focused M-class namespace flip with no split before scoped. |
+| 2026-05-25 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `c91c1d38`: 170 tests in 0.092s, OK. Pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded from G7. |
 
 ## 2. Source Chain
 
@@ -138,9 +139,9 @@ Baseline record:
 | Branch | `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` |
 | Sacred state | `master = 562c74195df43e933bed92a3ff25de94dd8ce666` |
 | Dirty baseline | 6 modified + 1 untracked preserved |
-| Scoped anchor | pending |
-| Command | pending |
-| Result | pending |
+| Scoped anchor | `c91c1d38` |
+| Command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
+| Result | 170 tests in 0.092s, OK |
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
