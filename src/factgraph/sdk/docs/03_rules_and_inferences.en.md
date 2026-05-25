@@ -68,7 +68,7 @@ with vars("li", "u", "c") as (li, u, c):
         expose=True,
     )
 
-rows = sdk.run(rule, row_format="dict")
+result = sdk.eval.evaluate(rule)
 ```
 
 Stable contract:
@@ -81,10 +81,9 @@ Stable contract:
   adapter parameter and does not enter `where` execution semantics.
   Future runtime configuration for this lane belongs in
   `SemanticsProfile.certainty_projection`.
-- The `row_format` precedence chain (`call-site > SDKStore(default_row_format=...) > FACTPY_ROW_FORMAT > "dict"`) and the `"tuple"` `DeprecationWarning` apply to the **Rule path**. `Query` has its own narrower contract (`"dict"|"instance"`, `"tuple"` rejected) — see §5.
-- Resolving to `"tuple"` emits `DeprecationWarning` (prefer `"dict"`).
-- `policy=` and `return_display_meta=True` are removed from `run(...)`;
-  read-time confidence/display aggregation is not a public SDK surface.
+- Public rule evaluation returns `EvaluateResult`; row-format dispatch was
+  removed from the T5 SDK surface.
+- `policy=` and display-meta aggregation are not public SDK evaluation inputs.
 
 ## 3. `where` Syntax and Limits
 
@@ -391,7 +390,8 @@ RuleRef(existing_rule_obj)
 Rules:
 - RuleRef target must be `expose=True`, otherwise runtime `RuleCompileError`.
 - `RuleRef` is forbidden inside `Not(...)` body (compile-time error).
-- `sdk.run(..., registry=None)` auto-registers `RuleRef(RuleObj)` dependencies.
+- `fg.eval.evaluate(...)` auto-registers `RuleRef(RuleObj)` dependencies for
+  in-memory rule values.
 - If `registry` is explicitly provided, SDK does not auto-fill dependencies.
 - `RuleRef` is a where-clause carrier. It is not a persistence handle;
   SavedRule/SavedInference persistence was removed by Q8 Phase 2.
@@ -406,11 +406,11 @@ Rules:
 ```python
 fg = FactGraph.create(schema_classes=[User], path="./workspace")
 
-my_rule = Rule(rule_id="rule_alice", version="1.0.0", select_vars=["x"], where=[...])
-rows = fg.eval.run(my_rule)
+my_rule = Rule(id="rule_alice", where=[...], ports={"x": x})
+rule_result = fg.eval.evaluate(my_rule)
 
 my_inference = Inference(id="drv.copy_name", version="1.0.0", where=[...], head=...)
-candidates = fg.eval.evaluate(my_inference)
+result = fg.eval.evaluate(my_inference)
 ```
 
 `fg.rules.inspect(rule_or_inference)` is the only remaining structural inspection
@@ -432,17 +432,15 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         on_type_mismatch="error",
     )
 
-rows = sdk.run(q)  # list[dict]
+snapshot_rows = sdk.read.find(User)
 ```
 
 Stable contract:
-- Query head only supports `Entity(var)` and `Entity.field(...)`.
-- Query supports `row_format="dict"|"instance"`; default is `"dict"`.
-- `row_format="instance"` is allowed only for a single `Entity(var)` head and returns instance rows (`list[EntitySnapshot|None]`).
-- Field projection must resolve to schema `single` fields.
-- Unbound variables in `where` fail at construction with `SDKDSLError(code="QUERY_UNBOUND_VAR")`.
-- `on_missing` / `on_type_mismatch` only allow `error|skip|null`.
-- Invalid Query `row_format`, or incompatible head shape for `instance` mode, raises `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`.
+- Query remains importable as a legacy DSL value object for internal tests and
+  future read-projection work.
+- T5 public runtime does not expose `sdk.run(...)`; use `sdk.read.find(...)`
+  for snapshot reads or `sdk.eval.evaluate(Rule(...))` for replay-anchored
+  rule evaluation.
 
 ## 6. Inference DSL
 
@@ -455,8 +453,10 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         head=User.name(locale=loc, name=nm),
     )
 
-cands = sdk.evaluate(inf, engine="native")
-res = sdk.accept(cands[0], approved_by="alice")
+result = sdk.eval.evaluate(inf, engine="native")
+row = result.first()
+if row is not None:
+    explanation = row.explain()
 ```
 
 Fields:
@@ -467,8 +467,7 @@ Stable contract:
 - `head` shape infers candidate kind (fact/entity).
 - Public SDK `Inference` is single-head. Multi-head (`head=[H1, H2, ...]`) is rejected in Track 1; define one inference per head.
 - `Rule/Inference.where` both support `Branch(...)`; it unwraps to normalized OR-branch structure.
-- `sdk.run(inference)` is not supported; use `sdk.evaluate(...)`.
-- `sdk.run(inference)` fails with code `QUERY_INVALID_ROW_FORMAT` (error message directs callers to `evaluate()`).
+- `sdk.run(inference)` was removed; use `sdk.eval.evaluate(...)`.
 
 ## 7. Compile-Time Hard Constraints (v2)
 

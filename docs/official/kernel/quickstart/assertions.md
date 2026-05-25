@@ -546,7 +546,7 @@ implement them:
   silently.
 - `fg.views.patch(...)` and `fg.views.diff(...)` -- frozen view updates are
   full replacements.
-- `fg.read.find(view=...)` and `fg.eval.run(rule, view=...)` -- `view=` is
+- `fg.read.find(view=...)` and `fg.eval.evaluate(rule, view=...)` -- `view=` is
   not a parameter. Frozen views do not scope reads, rules, or inference
   evaluation; they are id-set containers only.
 - `fg.eval.evaluate(inference, view=...)` -- inference evaluation always

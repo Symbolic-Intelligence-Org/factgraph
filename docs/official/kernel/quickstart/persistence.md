@@ -12,7 +12,7 @@ There is one supported persistence path in the public SDK:
 | Migrate a pre-v0.2 workspace with `registry/` | `python -m factgraph migrate-workspace <path>` |
 
 Rules and inferences are ordinary Python value objects. Keep them in code,
-construct them when needed, and pass them directly to `fg.eval.run(...)` /
+construct them when needed, and pass them directly to
 `fg.eval.evaluate(...)`. The old saved-rule and saved-inference registry
 handles were removed in the Slice 7C registry-final-removal work.
 
@@ -70,9 +70,10 @@ with vars("u", "tag") as (u, tag):
         where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
     )
 
-rows = fg.eval.run(seeded_tags)
+rule_result = fg.eval.evaluate(seeded_tags)
 
-assert rows == [{"u": alice, "tag": "engineer"}]
+assert rule_result.count() == 1
+assert rule_result.first().bindings["tag"] == "engineer"
 ```
 
 Inferences work the same way:
@@ -146,9 +147,9 @@ assert tuple(loaded_snap.tag) == ("engineer",)
 Recreate rule/inference values from code when you need to run them again:
 
 ```python
-rows_after_load = loaded.eval.run(seeded_tags)
+result_after_load = loaded.eval.evaluate(seeded_tags)
 
-assert rows_after_load == [{"u": alice, "tag": "engineer"}]
+assert result_after_load.count() == 1
 ```
 
 ## Migrate legacy workspaces
@@ -249,7 +250,8 @@ with TemporaryDirectory() as tmp_dir:
     rule = make_rule()
     inference = make_inference()
 
-    assert fg.eval.run(rule) == [{"u": alice, "tag": "engineer"}]
+    rule_result = fg.eval.evaluate(rule)
+    assert rule_result.count() == 1
 
     result = fg.eval.evaluate(inference)
     row = result.first()
@@ -261,10 +263,10 @@ with TemporaryDirectory() as tmp_dir:
     fg.save()
 
     restored = FactGraph.load(workspace, schema_classes=[User])
-    restored_rows = restored.eval.run(make_rule())
+    restored_result = restored.eval.evaluate(make_rule())
 
     assert tuple(restored.read.get(User, user_id="u-1").tag) == ("engineer",)
-    assert restored_rows == [{"u": alice, "tag": "engineer"}]
+    assert restored_result.count() == 1
 ```
 
 ## Syntax checklist
@@ -272,7 +274,7 @@ with TemporaryDirectory() as tmp_dir:
 - Use `FactGraph.create(schema_classes=[...], path=workspace)` for a
   path-backed graph.
 - Use `Rule(...)` and `Inference(...)` as in-memory Python values.
-- Use `fg.eval.run(rule)` and `fg.eval.evaluate(inference)` directly.
+- Use `fg.eval.evaluate(rule_or_inference)` directly.
 - Use `fg.save()` for the Level-4 workspace: manifest, ledger, and Database
   schema object.
 - Use `FactGraph.load(path, schema_classes=[...])` to restore a workspace.

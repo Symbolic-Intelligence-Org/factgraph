@@ -57,9 +57,9 @@ Stable contract:
 - `ledger` and `ledger_path` are mutually exclusive.
 - `ledger_path` records `schema_digest` when the ledger is opened/created, and validates it on reopen.
 - `artifact_store_root` is an optional `str`; when provided it enables sidecar-backed explain artifact readback, while omitting it keeps the default in-process explain registry behavior.
-- `default_row_format` affects only `sdk.run(rule, ...)`; allowed values are `"tuple"` / `"dict"` (default `"dict"`).
-- `FACTPY_ROW_FORMAT` is read and cached at `SDKStore` initialization time (not re-read on every `run()` call).
-- Resolving to `"tuple"` emits `DeprecationWarning`; prefer `"dict"`.
+- `default_row_format` and `FACTPY_ROW_FORMAT` are legacy row-dispatch
+  settings. T5 public evaluation uses `fg.eval.evaluate(...)` and returns
+  `EvaluateResult`.
 
 ## 3. Low-Level Writes (`ref/set/add/retract`)
 

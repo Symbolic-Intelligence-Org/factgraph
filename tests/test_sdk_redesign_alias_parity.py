@@ -1,4 +1,4 @@
-"""Phase 1 alias-parity tests for the post-L SDK ergonomics redesign.
+"""Alias-parity tests for the post-T5 SDK taxonomy.
 
 Per blueprint `2026-05-09_post-l-sdk-ergonomics-redesign.md` §5.9 lock:
 each `FactGraph.<namespace>.<method>(...)` call must delegate to the
@@ -103,84 +103,13 @@ class WriteNamespaceParityTests(_AliasParityBase):
 class EvalNamespaceParityTests(_AliasParityBase):
     namespace_attr = "eval"
     flat_to_nested = (
-        ("run", "run"),
         ("evaluate", "evaluate"),
-        ("accept", "accept"),
-        ("accept_many", "accept_many"),
+        ("explain", "explain"),
+        ("inspect_semantics", "inspect_semantics"),
     )
 
     def test_eval_methods_delegate(self) -> None:
         self._run_all()
-
-
-class WhatIfDirectMethodParityTests(_AliasParityBase):
-    """G1 + G4 direct methods on `what_if` (not in sub-namespaces)."""
-
-    namespace_attr = "what_if"
-    flat_to_nested = (
-        ("check", "check"),
-        ("diagnose", "diagnose"),
-        ("why_not", "why_not"),
-    )
-
-    def test_what_if_direct_methods_delegate(self) -> None:
-        self._run_all()
-
-
-class WhatIfFactOverlayParityTests(unittest.TestCase):
-    """G2 sub-namespace `what_if.fact_overlay`.
-
-    Note: `check_fact_overlay` flat method maps to `fact_overlay.check`
-    nested name (prefix dropped at sub-namespace level per §5.2 split).
-    """
-
-    def test_check_delegates_to_check_fact_overlay(self) -> None:
-        fg = _new_fg()
-        with patch.object(fg, "check_fact_overlay") as mock:
-            mock.return_value = "fo-result"
-            result = fg.what_if.fact_overlay.check("arg1", kw="kw1")
-        mock.assert_called_once_with("arg1", kw="kw1")
-        self.assertEqual(result, "fo-result")
-
-    def test_recheck_proof_frame_delegates(self) -> None:
-        fg = _new_fg()
-        with patch.object(fg, "recheck_proof_frame") as mock:
-            mock.return_value = "rpf-result"
-            result = fg.what_if.fact_overlay.recheck_proof_frame("arg1", kw="kw1")
-        mock.assert_called_once_with("arg1", kw="kw1")
-        self.assertEqual(result, "rpf-result")
-
-
-class WhatIfRuleParityTests(unittest.TestCase):
-    """G3 sub-namespace `what_if.rule`.
-
-    Note: `check_rule_*` flat methods map to `rule.<verb>` nested names
-    (prefix dropped at sub-namespace level per §5.2 split).
-    """
-
-    def test_disable_delegates_to_check_rule_disable(self) -> None:
-        fg = _new_fg()
-        with patch.object(fg, "check_rule_disable") as mock:
-            mock.return_value = "rd-result"
-            result = fg.what_if.rule.disable("arg1", kw="kw1")
-        mock.assert_called_once_with("arg1", kw="kw1")
-        self.assertEqual(result, "rd-result")
-
-    def test_literal_replace_delegates(self) -> None:
-        fg = _new_fg()
-        with patch.object(fg, "check_rule_literal_replace") as mock:
-            mock.return_value = "rlr-result"
-            result = fg.what_if.rule.literal_replace("arg1", kw="kw1")
-        mock.assert_called_once_with("arg1", kw="kw1")
-        self.assertEqual(result, "rlr-result")
-
-    def test_add_condition_delegates(self) -> None:
-        fg = _new_fg()
-        with patch.object(fg, "check_rule_add_condition") as mock:
-            mock.return_value = "rac-result"
-            result = fg.what_if.rule.add_condition("arg1", kw="kw1")
-        mock.assert_called_once_with("arg1", kw="kw1")
-        self.assertEqual(result, "rac-result")
 
 
 class AuditNamespaceParityTests(_AliasParityBase):

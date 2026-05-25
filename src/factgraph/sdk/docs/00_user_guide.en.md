@@ -76,7 +76,7 @@ namespaced methods (`fg.read.get(...)`, `fg.write.add(...)`); both
 forms are permanent and equivalent.
 
 The eight namespaces:
-`schema`, `read`, `write`, `eval`, `what_if`, `audit`, `package`,
+`schema`, `read`, `write`, `eval`, `audit`, `package`,
 `views`. See [§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
 for the full map.
 
@@ -442,14 +442,14 @@ with vars("u", "nm") as (u, nm):
         where=[User(u), u.name == nm],
     )
 
-rows = fg.eval.run(q)
-# → [{"u": <EntitySnapshot User Alice>, "nm": "Alice"}, ...]
+rows = fg.read.find(User)
+# → [<EntitySnapshot User Alice>, ...]
 
 # Single-projection head — pass the item directly OR wrap it in a list
 with vars("u",) as (u,):
     q_one = Query(head=User(u), where=[User(u)])           # single item
     q_one_list = Query(head=[User(u)], where=[User(u)])    # equivalent
-    snaps = fg.eval.run(q_one, row_format="instance")
+    snaps = fg.read.find(User)
     # → [<EntitySnapshot for Alice>, ...]
 ```
 
@@ -489,8 +489,8 @@ with vars("u",) as (u,):
         expose=True,
     )
 
-rows = fg.eval.run(r)
-# → [{"u": "idref_v1:User:<digest>"}, ...]   (default row_format="dict")
+result = fg.eval.evaluate(r)
+# → EvaluateResult(rows=(...), ...)
 ```
 
 Rule's `where` accepts:
@@ -810,10 +810,9 @@ from factgraph.sdk import (
 )
 
 try:
-    fg.eval.run(query, row_format="banana")
+    fg.eval.evaluate(query)
 except SDKStoreError as e:
-    if e.code == QUERY_INVALID_ROW_FORMAT:
-        print("Caller bug: row_format must be one of dict|instance")
+    print("Caller bug: Query is not a T5 public evaluation entrypoint")
 ```
 
 `SDKDSLError` (raised by Query/Rule/Inference construction) carries
@@ -912,7 +911,7 @@ my_rule = Rule(
     select_vars=["x"],
     where=[Pred("Likes", vars.x, "ai")],
 )
-rows = fg.eval.run(my_rule)
+result = fg.eval.evaluate(my_rule)
 
 my_inference = Inference(...)
 candidates = fg.eval.evaluate(my_inference)

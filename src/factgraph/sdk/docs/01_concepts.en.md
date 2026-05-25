@@ -125,7 +125,7 @@ There is no built-in `default` view. The name `"default"` is not
 reserved: if users create `fg.views.create("default", asrt_ids=[...])`,
 it is just another frozen assertion-id selection and has no special read
 behavior. Frozen views are read back through `fg.assertions.by_ids(...)`;
-they are not accepted as `fg.read.find(...)`, `fg.eval.run(...)`, or
+they are not accepted as `fg.read.find(...)` or
 `fg.eval.evaluate(...)` inputs.
 
 ---
@@ -140,7 +140,7 @@ they are not accepted as `fg.read.find(...)`, `fg.eval.run(...)`, or
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  factgraph.sdk (FactGraph / SDKStore)                   │  │
 │  │  • Schema authoring (Entity, Field, Identity)        │  │
-│  │  • Ergonomic facade (read.get, write.add, eval.run)  │  │
+│  │  • Ergonomic facade (read.get, write.add, eval)      │  │
 │  │  • DSL lowering (Rule → RuleSpec)                    │  │
 │  │  • Outward shapes (EntitySnapshot, IngestResult)     │  │
 │  │  • Compatibility errors                              │  │
@@ -296,7 +296,7 @@ prefers to add wrappers after seeing real usage patterns.
 | Assertion view surface | `.chosen` is removed; field assertion collections expose `active`, `history`, `at`, `version`; `AssertionRecordSet` also supports `where`, `at`, `version`, `by_id`, `one`, `first`, `all` |
 | Frozen assertion views | `fg.views` supports named frozen assertion-id selections only; no built-in `default` view and no read-policy registry |
 | Snapshot history | `active` returns currently non-revoked assertions; `history` returns the append-only field assertion history |
-| `sdk.run(...)` dispatch | Rule and Query supported; Inference is rejected with guidance to use `evaluate()` |
+| `sdk.run(...)` dispatch | Removed by the T5 hard-cut; use `fg.eval.evaluate(...)` for Rule/Inference evidence paths |
 | `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |
 | Rule `row_format` detail | `"tuple"` still works but emits `DeprecationWarning`; prefer `"dict"` |
 | `SDKBatchTx` context | `__exit__` does not auto-commit or auto-rollback; call explicitly |

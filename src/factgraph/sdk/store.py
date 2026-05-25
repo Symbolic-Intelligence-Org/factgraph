@@ -139,6 +139,11 @@ _ATTACHED_WRITE_ERROR = (
     "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
     "{method_name} is not available on attached runtimes"
 )
+_T5_LEGACY_SHELL_REMOVED = (
+    "{method_name} was removed by the T5 EvaluateResult hard-cut; use "
+    "fg.eval.evaluate(...), row.explain(), row.close(), or "
+    "fg.eval.explain(expr, head=closed_head)"
+)
 _RULE_EXPR_DEFAULT_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
 
@@ -439,11 +444,7 @@ class _SDKInferencesManager:
 
 
 class _SDKEvalManager:
-    """Read-only namespace manager for the `eval` taxonomy group.
-
-    Per §5.2 §5.2.5 placement #4, ``accept*`` stays in `eval` because
-    the mental workflow is evaluation lifecycle (evaluate → accept).
-    """
+    """Read-only namespace manager for T5 evaluation and explanation."""
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
@@ -451,21 +452,8 @@ class _SDKEvalManager:
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("FactGraph.eval namespace is read-only")
 
-    def run(self, *args: Any, **kwargs: Any) -> Any:
-        """Run a `Rule` or `Query` against the current graph projection.
-
-        `run` returns matching rows and does not write assertions. Use it for
-        reads over existing facts; use `evaluate` for inference candidates.
-        """
-        return self._sdk.run(*args, **kwargs)
-
     def evaluate(self, *args: Any, **kwargs: Any) -> Any:
-        """Evaluate an `Inference` and return candidate fact sets.
-
-        Evaluation is read-only: candidates are proposed but not committed to
-        the ledger. Pass the returned `CandidateSet` to `accept` when a
-        candidate should become an assertion.
-        """
+        """Evaluate an `Inference`, application `Rule`, or RuleExpr."""
         return self._sdk.evaluate(*args, **kwargs)
 
     def explain(self, *args: Any, **kwargs: Any) -> Any:
@@ -480,24 +468,6 @@ class _SDKEvalManager:
         their lowered canonical profile preview.
         """
         return self._sdk.inspect_semantics(*args, **kwargs)
-
-    def accept(self, *args: Any, **kwargs: Any) -> Any:
-        """Accept candidate facts into the ledger.
-
-        The common path is `fg.eval.accept(candidate_set)` after
-        `fg.eval.evaluate(inference)`. This is the step that appends accepted
-        candidate assertions to the graph.
-        """
-        return self._sdk.accept(*args, **kwargs)
-
-    def accept_many(self, *args: Any, **kwargs: Any) -> Any:
-        """Accept multiple candidate sets or accept requests.
-
-        `mode="atomic"` is the default. This is the bulk form of
-        `fg.eval.accept(...)` for callers that already have several candidate
-        sets or request dictionaries.
-        """
-        return self._sdk.accept_many(*args, **kwargs)
 
 
 class _SDKWhatIfFactOverlayManager:
@@ -763,7 +733,6 @@ class SDKStore:
         self._rules_manager = _SDKRulesManager(self)
         self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
-        self._what_if_manager = _SDKWhatIfManager(self)
         self._audit_manager = _SDKAuditManager(self)
         self._package_manager = _SDKPackageManager(self)
         self._default_row_format = default_row_format
@@ -1040,13 +1009,8 @@ class SDKStore:
 
     @property
     def eval(self) -> _SDKEvalManager:
-        """`eval` taxonomy namespace exposing the evaluate→accept lifecycle."""
+        """`eval` taxonomy namespace exposing T5 evaluate/explain APIs."""
         return self._eval_manager
-
-    @property
-    def what_if(self) -> _SDKWhatIfManager:
-        """`what_if` taxonomy namespace (G1+G4 direct; G2 / G3 sub-namespaced)."""
-        return self._what_if_manager
 
     @property
     def audit(self) -> _SDKAuditManager:
@@ -1223,10 +1187,8 @@ class SDKStore:
                 validation errors. Helper errors are preserved as
                 ``__cause__``.
         """
-        from .shells.check import sdk_check
-
-        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
-        return sdk_check(self, inference, binding, engine=engine, registry=registry)
+        del inference, binding, engine, registry, semantics, semantics_profile
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check"))
 
     def diagnose(
         self,
@@ -1260,10 +1222,8 @@ class SDKStore:
                 validation errors. Helper errors are preserved as
                 ``__cause__``.
         """
-        from .shells.diagnose import sdk_diagnose
-
-        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
-        return sdk_diagnose(self, inference, binding, engine=engine, registry=registry)
+        del inference, binding, engine, registry, semantics, semantics_profile
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.diagnose"))
 
     def why_not(
         self,
@@ -1310,10 +1270,8 @@ class SDKStore:
                 failures. Original exceptions are preserved as
                 ``__cause__``.
         """
-        from .shells.why_not import sdk_why_not
-
-        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
-        return sdk_why_not(self, inference, candidates, engine=engine, registry=registry)
+        del inference, candidates, engine, registry, semantics, semantics_profile
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.why_not"))
 
     def check_fact_overlay(
         self,
@@ -1369,12 +1327,8 @@ class SDKStore:
                 passed through unchanged). Original exceptions are
                 preserved as ``__cause__``.
         """
-        from .shells.fact_overlay import sdk_fact_overlay_check
-
-        self._reject_shell_semantics(semantics=semantics, semantics_profile=semantics_profile)
-        return sdk_fact_overlay_check(
-            self, inference, binding, overlay, engine=engine, registry=registry
-        )
+        del inference, binding, overlay, engine, registry, semantics, semantics_profile
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_fact_overlay"))
 
     def recheck_proof_frame(
         self,
@@ -1410,9 +1364,8 @@ class SDKStore:
                 runtime exceptions. Original exceptions are preserved as
                 ``__cause__``.
         """
-        from .shells.proof_frame import sdk_proof_frame_recheck
-
-        return sdk_proof_frame_recheck(self, support_artifact, overlay)
+        del support_artifact, overlay
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.recheck_proof_frame"))
 
     def check_rule_disable(
         self,
@@ -1471,17 +1424,8 @@ class SDKStore:
                 unexpected runtime exceptions. Original exceptions are
                 preserved as ``__cause__``.
         """
-        from .shells.rule_disable import sdk_rule_disable
-
-        return sdk_rule_disable(
-            self,
-            rule,
-            support,
-            branch_index=branch_index,
-            atom_index=atom_index,
-            overlay=overlay,
-            note=note,
-        )
+        del rule, support, branch_index, atom_index, overlay, note
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_rule_disable"))
 
     def check_rule_literal_replace(
         self,
@@ -1550,20 +1494,8 @@ class SDKStore:
                 for unexpected runtime exceptions. Original exceptions
                 are preserved as ``__cause__``.
         """
-        from .shells.rule_literal_replace import sdk_rule_literal_replace
-
-        return sdk_rule_literal_replace(
-            self,
-            rule,
-            support,
-            branch_index=branch_index,
-            atom_index=atom_index,
-            literal_path=literal_path,
-            old_literal=old_literal,
-            new_literal=new_literal,
-            overlay=overlay,
-            note=note,
-        )
+        del rule, support, branch_index, atom_index, literal_path, old_literal, new_literal, overlay, note
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_rule_literal_replace"))
 
     def check_rule_add_condition(
         self,
@@ -1626,17 +1558,8 @@ class SDKStore:
                 unexpected runtime exceptions. Original exceptions are
                 preserved as ``__cause__``.
         """
-        from .shells.rule_add_condition import sdk_rule_add_condition
-
-        return sdk_rule_add_condition(
-            self,
-            rule,
-            support,
-            branch_index=branch_index,
-            added_atom=added_atom,
-            overlay=overlay,
-            note=note,
-        )
+        del rule, support, branch_index, added_atom, overlay, note
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_rule_add_condition"))
 
     def diff_proof_frames(
         self,
@@ -1988,24 +1911,8 @@ class SDKStore:
         return_display_meta: bool = False,
         registry: RuleRegistry | None = None,
     ) -> list[Any]:
-        if not isinstance(return_display_meta, bool):
-            raise SDKStoreError("return_display_meta must be bool", path="$.run.return_display_meta")
-        if view is not _VIEW_TOMBSTONE:
-            raise SDKStoreError("view= is not supported by fg.run()", path="$.run.view")
-        self._reject_removed_read_policy(policy, api_path="fg.run")
-        if return_display_meta:
-            raise SDKStoreError(_READPOLICY_REMOVED_MESSAGE, path="$.run.return_display_meta")
-        dispatch_key = self._run_dispatch_key(obj)
-        dispatch_map = {
-            "query": self._run_dispatch_query,
-            "derivation": self._run_dispatch_derivation,
-            "rule": self._run_dispatch_rule,
-        }
-        return dispatch_map[dispatch_key](
-            obj,
-            row_format=row_format,
-            registry=registry,
-        )
+        del obj, row_format, policy, view, return_display_meta, registry
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.run"))
 
     def _run_dispatch_key(self, obj: Any) -> str:
         detectors = (
@@ -2711,22 +2618,8 @@ class SDKStore:
         return f"derive:{uuid4().hex[:8]}"
 
     def accept(self, *args: Any, **kwargs: Any) -> AcceptResult:
-        self._reject_attached_write("fg.accept")
-        if args and isinstance(args[0], CandidateSet):
-            if len(args) != 1:
-                raise SDKStoreError("accept(candidate_set, ...) accepts exactly one positional argument")
-            candidate_set = args[0]
-            options = self._accept_options_from_user_kwargs(kwargs)
-            if kwargs:
-                unknown = ", ".join(sorted(kwargs.keys()))
-                raise SDKStoreError(f"unknown accept keyword(s): {unknown}")
-            return self._store.accept(
-                derivation_id=candidate_set.derivation_id,
-                version=candidate_set.derivation_version,
-                candidate_set=candidate_set,
-                options=options,
-            )
-        return self._store.accept(*args, **kwargs)
+        del args, kwargs
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.accept"))
 
     def accept_many(
         self,
@@ -2735,12 +2628,8 @@ class SDKStore:
         mode: str = "atomic",
         idempotent_duplicate_ok: bool = True,
     ) -> list[dict[str, Any]]:
-        self._reject_attached_write("fg.accept_many")
-        return self._store.accept_many(
-            requests,
-            mode=mode,
-            idempotent_duplicate_ok=idempotent_duplicate_ok,
-        )
+        del requests, mode, idempotent_duplicate_ok
+        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.accept_many"))
 
     def explain_fact(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return self._store.explain_fact(*args, **kwargs)

@@ -301,7 +301,7 @@ removed by Q8 Phase 2.
 
 > Q8 Phase 2 (Slice 6) removed `fg.rules.save / load / list / get`. The
 > namespace now exposes only `inspect(...)`. Construct `Rule(...)` values in
-> memory and pass them to `fg.eval.run(...)`.
+> memory and pass them to `fg.eval.evaluate(...)`.
 
 ### 2.8 Inferences namespace (`fg.inferences.*`)
 
@@ -353,12 +353,12 @@ via `factgraph.audit.load_audit_package` or hold them from a recorder.
 `fg.views` has no built-in `default` entry; `"default"` is just another
 user-defined frozen assertion view name when created explicitly. Frozen
 assertion views are not accepted as snapshot input to `fg.read.find(...)`
-or display-meta input to `fg.run(...)`; use
+or evaluation input to `fg.eval.evaluate(...)`; use
 `fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
 readback.
 
 Read-time confidence/display aggregation is not a public SDK surface.
-`fg.read.find(...)`, `fg.eval.run(...)`, and `fg.eval.evaluate(...)` do
+`fg.read.find(...)` and `fg.eval.evaluate(...)` do
 not accept frozen views or read policies as input.
 
 ### 2.15 Result-type non-export
@@ -474,14 +474,12 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 
 ### 6.1 Query
 
-- `fg.run(Query(...))` — defaults to `list[dict]`
-- `row_format="instance"` returns `list[EntitySnapshot|None]` (only for
-  single `Entity(var)` head)
+- Public `fg.run(Query(...))` was removed by the T5 hard-cut.
+- Use `fg.read.find(...)` for snapshot reads.
 - `on_missing` and `on_type_mismatch` accept `error | skip | null`
 - Query head supports only schema `single` fields
-- Invalid `row_format` or incompatible head raises
-  `SDKStoreError(code="QUERY_INVALID_ROW_FORMAT")`
-- Calling `run(...)` with an `Inference` raises the same error
+- Legacy Query construction remains available for internal/future-track code,
+  but it is not a public runtime entrypoint.
 
 ### 6.2 Inference
 

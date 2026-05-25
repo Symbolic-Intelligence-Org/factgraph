@@ -28,6 +28,8 @@ class SDKRuleNamingTests(unittest.TestCase):
         self.assertIs(sdk.DSLToApplicationRuleError, dsl.DSLToApplicationRuleError)
 
     def test_legacy_rule_construction_is_explicit_dsl_path(self) -> None:
+        self.assertNotIn("Rule", dsl.__all__)
+
         with sdk.vars("u") as (u,):
             rule = dsl.Rule(
                 id="legacy_rule",

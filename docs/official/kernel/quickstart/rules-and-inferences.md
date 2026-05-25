@@ -14,7 +14,7 @@ The short version is:
 
 | Need | Use |
 | --- | --- |
-| Read matching facts | `Rule` + `fg.eval.run(...)` |
+| Read matching facts | `Rule` + `fg.eval.evaluate(...)` |
 | Propose new facts | `Inference` + `fg.eval.evaluate(...)` |
 | Explain evaluated rows | `row.explain()` / `fg.eval.explain(...)` |
 | Inspect rule shape | `fg.rules.inspect(...)` |
@@ -80,14 +80,10 @@ The `where` clause describes what must be found. The `select` list describes
 what the rule returns. Running the rule is read-only.
 
 ```python
-rows = fg.eval.run(seeded_tags)
+rule_result = fg.eval.evaluate(seeded_tags)
 
-assert rows == [
-    {
-        "u": alice,
-        "tag": "engineer",
-    }
-]
+assert rule_result.count() == 1
+assert rule_result.first().bindings["tag"] == "engineer"
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 ```
 
@@ -96,9 +92,10 @@ not write a `tag` fact.
 
 ## Use Query for one-off projections
 
-Use `Query` when you want an ad-hoc result shape without saving a reusable
-rule. It uses the same body language, but the head describes the projected
-columns directly.
+`Query` remains a DSL value object for internal and future read-projection
+work, but the T5 public runtime path no longer exposes `fg.eval.run(...)`.
+Use `fg.read.find(...)` for snapshot reads or an application `Rule` with
+`fg.eval.evaluate(...)` when you need replay anchors and evidence.
 
 ```python
 with vars("u", "tag") as (u, tag):
@@ -108,11 +105,9 @@ with vars("u", "tag") as (u, tag):
     )
 
 
-query_rows = fg.eval.run(seeded_tag_query)
-
-assert len(query_rows) == 1
-assert query_rows[0]["u"].ref == alice
-assert query_rows[0]["tag"] == "engineer"
+snapshot = fg.read.get(User, user_id="u-1")
+assert snapshot is not None
+assert snapshot.tag_seed == "engineer"
 ```
 
 Queries are read-time projections. They are useful for one-off shapes. Rules
@@ -249,9 +244,9 @@ with vars("u", "tag") as (u, tag):
         where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
     )
 
-rows = fg.eval.run(seeded_tags)
+rule_result = fg.eval.evaluate(seeded_tags)
 
-assert rows == [{"u": alice, "tag": "engineer"}]
+assert rule_result.count() == 1
 
 with vars("u", "tag") as (u, tag):
     seeded_tag_query = Query(
@@ -259,9 +254,9 @@ with vars("u", "tag") as (u, tag):
         where=[User(u), u.tag_seed == tag],
     )
 
-query_rows = fg.eval.run(seeded_tag_query)
-
-assert query_rows[0]["tag"] == "engineer"
+snapshot = fg.read.get(User, user_id="u-1")
+assert snapshot is not None
+assert snapshot.tag_seed == "engineer"
 
 with vars("u", "tag") as (u, tag):
     tags_from_seed = Inference(
@@ -293,8 +288,8 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
 - Use `Pred("entity:field", ...)` for explicit predicate literals.
 - Use `Branch([...], id="...")` when branch identity matters.
 - Use `Rule(id=..., select=[...], where=[...])` for reusable read patterns.
-- Run rules with `fg.eval.run(rule)`; running a rule does not write.
-- Use `Query(head=..., where=[...])` for ad-hoc read projections.
+- Evaluate rules with `fg.eval.evaluate(rule)`; evaluation does not write.
+- Use read APIs for ad-hoc projections; public `fg.eval.run(...)` was removed.
 - Use `Inference(id=..., where=[...], target=..., head_vars=[...])` for
   proposed facts.
 - Evaluate inferences with `fg.eval.evaluate(inference)`; evaluation does not
@@ -305,5 +300,5 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
 - `RuleRef` is a body-composition tool, not a persistence handle.
 - Rule and inference persistence handles were removed; runtime methods consume
   in-memory value objects directly.
-- Semantic engines are evaluation configuration; the evaluate/accept lifecycle
+- Semantic engines are evaluation configuration; the evaluate/explain lifecycle
   stays the same.
