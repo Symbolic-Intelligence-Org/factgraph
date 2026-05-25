@@ -1,6 +1,6 @@
 # Task Blueprint: T3L.2 Adapter Matrix Parity And Aggregate Preservation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -414,4 +414,67 @@ Review should pay special attention to:
 
 ## 10. Outcome
 
-Pending.
+Implemented by `a417fe73` with Step 4.7 docstring hardening in `f1726ef3`.
+
+### Final Landed Code
+
+- Extended private sibling module `src/factgraph/application/protocol/rule_expr_lowering.py` from the T3L.1 substrate:
+  - added private `RuleExprAdapterEngine = Literal["native", "souffle", "problog"]`;
+  - widened `RuleExprEvaluationTrace.engine` from native-only to the supported materialization engines, with the post-init guard widened to the same bounded set;
+  - retained `_materialize_native_derivation_plan(...)` as a compatibility wrapper over the shared adapter materialization helper;
+  - added private `_materialize_adapter_derivation_plan(plan, *, engine)` for native / Souffle / ProbLog materialization shape;
+  - added private `RuleExprAdapterSupport` for D9-style classifier data;
+  - added private PyReason support classification helpers without changing the PyReason compiler.
+- Added `tests/application/protocol/test_rule_expr_lowering_adapter.py` with focused adapter matrix tests.
+- Preserved all negative-action gates:
+  - no public SDK dispatch changes;
+  - no SDK or protocol exports;
+  - no Souffle / ProbLog / PyReason production adapter edits;
+  - no public docs;
+  - no public DTO / result shape changes;
+  - no PyReason Form 2 grammar expansion.
+
+### Delivered Behavior
+
+- Souffle consumes the T3L.1 branch-list materialization shape through shipped adapter grammar:
+  - one branch remains an AND body;
+  - multiple branches remain OR-of-AND bodies;
+  - D8 equality joins compile through shipped Souffle `eq` support.
+- ProbLog consumes the same branch-list / equality materialization shape through shipped export support:
+  - branch-list bodies export as multiple rule bodies;
+  - D8 equality joins export through shipped equality handling;
+  - shipped ProbLog adapter validation still owns adapter-time grammar rejection such as pred arity greater than 2.
+- Aggregate-in-RuleExpr preservation is verified for Souffle and ProbLog without promoting aggregate-filter-local variables into D7 `RuleExprPortBinding`.
+- PyReason is classifier-only in this slice:
+  - pred-only lowered branches classify as supported;
+  - D8 eq joins, source-rule non-pred atoms, and aggregate-containing branches classify as unsupported;
+  - the classifier uses private support data for T3L.3 and does not call or expand PyReason compiler grammar.
+- `_classify_pyreason_rule_expr_support(...)` is explicitly documented as inline-head only; external-head plans still raise `RuleExprError` through materialization because external head body concatenation remains deferred to T3L.3.
+
+### Test Gates
+
+- G7 baseline `a9ddf924`: 111 preservation tests OK before implementation.
+- Feature commit `a417fe73`: 121 preservation tests OK, including 10 new adapter tests.
+- Step 4.7 fix `f1726ef3`: focused adapter tests remained 10 OK; `ruff` remained clean.
+- Final focused lowering coverage: 22 tests OK (12 T3L.1 lowering + 10 T3L.2 adapter).
+
+### Deviations / Follow-Ups
+
+- Step 4.7 found 0 P0/P1 issues.
+- One WC was addressed by `f1726ef3`: the PyReason classifier inline-head dependency is now documented in the function docstring.
+- No T3L.2-specific follow-up remains open.
+- Deferred to T3L.3:
+  - public `fg.eval.evaluate(rule_expr, head=...)` dispatch;
+  - public `SDKStoreError` conversion and message formatting from private adapter support data;
+  - public docs;
+  - external-head body concatenation semantics.
+- Deferred beyond T3 later unless separately decided: PyReason Form 2 grammar expansion.
+
+### Lessons
+
+- The T3L.1 wrapper pattern worked: keeping `_materialize_native_derivation_plan(...)` as a wrapper let T3L.2 add shared adapter materialization without reopening native behavior.
+- Shared materialization plus per-engine classification reduced duplication while preserving the D9 matrix boundaries.
+- PyReason classification can inspect the lowered WhereIR via native materialization without treating PyReason as a materialization engine.
+- Strong private DTO invariants on `RuleExprAdapterSupport` catch malformed support classifications before T3L.3 exposes public error conversion.
+
+Ready to archive after this closure commit.

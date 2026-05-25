@@ -1,6 +1,6 @@
 # Audit Log: T3L.2 Adapter Matrix Parity And Aggregate Preservation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t3l-2-adapter-matrix-parity.md](./2026-05-25_t3l-2-adapter-matrix-parity.md)
@@ -13,6 +13,7 @@
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Clarified private trace engine widening, Souffle/ProbLog adapter-time rejection ownership, PyReason classifier vs materialization engine split, and `unsupported_feature` label convention. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1 lowering substrate, adapter branch/equality/aggregate/PyReason surfaces, and public dispatch references only in existing SDK/tests. No adapter production write scope or public SDK dispatch amendment needed. |
 | 2026-05-25 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering -v` passed: 111 tests OK. |
+| 2026-05-25 | implemented | Step 4.7 fix + closure | Feature commit `a417fe73` added adapter matrix materialization and PyReason classifier support; Step 4.7 fix `f1726ef3` addressed 1 WC docstring clarification for PyReason classifier inline-head scope. Final gates: 22 focused tests OK, 121 preservation tests OK, ruff clean. |
 
 ## Decision Notes
 
@@ -197,4 +198,24 @@ Reviewer should verify:
 
 ## Closure Notes
 
-Pending.
+T3L.2 landed as a private adapter parity slice over the T3L.1 lowering substrate.
+
+- Final code scope:
+  - `src/factgraph/application/protocol/rule_expr_lowering.py` extended with private adapter-aware materialization and PyReason support classification.
+  - `tests/application/protocol/test_rule_expr_lowering_adapter.py` added focused Souffle / ProbLog / PyReason tests.
+- Verification:
+  - G7 baseline: 111 tests OK before implementation.
+  - Feature gate: 121 preservation tests OK, 22 focused lowering tests OK, ruff clean.
+  - Step 4.7 fix: docstring-only clarification in `f1726ef3`; focused adapter tests stayed 10 OK.
+- Scope preservation:
+  - public SDK dispatch remains deferred to T3L.3;
+  - adapter production files remain unchanged;
+  - public DTO / result / evidence shapes remain unchanged;
+  - PyReason remains classifier-only with no Form 2 grammar expansion.
+- Deferred to T3L.3:
+  - public `fg.eval.evaluate(rule_expr, head=...)` dispatch;
+  - public `SDKStoreError` conversion from private adapter support data;
+  - public docs;
+  - external-head body concatenation semantics.
+
+Ready for archive commit.
