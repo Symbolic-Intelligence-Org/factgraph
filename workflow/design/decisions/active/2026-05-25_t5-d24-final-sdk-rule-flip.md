@@ -1,10 +1,32 @@
-# D24: T5 Final SDK Rule Flip
+# D24 Decision: T5 Final SDK Rule Flip
 
-Status: proposed
-Date: 2026-05-25
-Track: T5 result / evidence / explain
-Depends on: D16, D17, D18, D23, T5 Stage 1 audit
-Review lifecycle: proposed -> proposed-amend -> accepted -> archived
+- Status: proposed
+- Created: 2026-05-25
+- Last Updated: 2026-05-25
+- Authority: proposed design constraint; locks T5 final SDK `Rule` naming, transition alias survival policy, and T1.3 public namespace closure.
+- Inputs:
+  - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` F8 and Q11.
+  - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.5 and 4.7.
+  - D17 `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` section 4.9.
+  - D18 `workflow/design/decisions/active/2026-05-25_t5-d18-return-shape-transition.md` sections 4.1-4.3.
+  - D23 `workflow/design/decisions/active/2026-05-25_t5-d23-legacy-sdk-hard-cut-plan.md` sections 4.1, 4.3, 4.7, and 4.8.
+  - Shipped `src/factgraph/sdk/__init__.py:28-56`, `src/factgraph/sdk/__init__.py:88-108`, and `src/factgraph/sdk/dsl/rule.py:53-170`.
+  - Shipped application protocol `src/factgraph/application/protocol/rule.py:52-113`.
+  - Shipped docs `src/factgraph/sdk/docs/04_api_surface.en.md:86-104`.
+- Outputs / Downstream:
+  - D25 evaluate/explain semantics consistency.
+  - D26 semantics commitments scope and adapter implementation policy.
+  - Stage 3 T5 synthesis and final public naming implementation blueprint(s).
+  - D23 final docs migration and hard-cut implementation slices.
+- Related:
+  - `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md`
+  - `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md`
+  - `workflow/design/decisions/active/2026-05-25_t5-d23-legacy-sdk-hard-cut-plan.md`
+  - `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md`
+- Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
+- Depends on: D16-D23 reviewed clean.
+
+> ADR 4-state lifecycle: `proposed` -> `adopted` (current binding constraint, stays in `active/`) -> `superseded` or `withdrawn` (moves to `archive/`). Transitions are explicit; no `adopted` -> `proposed` re-opening.
 
 ## 1. Inputs
 
@@ -254,3 +276,4 @@ Rejected. D23 requires docs migration to consume the D24 decision, not decide it
 | Date | Stage | Summary | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Flip SDK top-level `Rule` to the application protocol Rule. | Drafted after D23 reviewed clean v1. D24 resolves T1.3 by making `Rule` the application head Rule in the SDK, keeping `ApplicationRule` only as a transition alias, classifying top-level `LegacyRule` as a D23 hard-cut target, and preserving `Inference` naming pending D23 hard-cut mechanics. |
+| 2026-05-25 | proposed-amend | Step 4.2 v1 header normalization. | Rewrote the header to match D16-D23 ADR conventions, including authority, input/output lists, related documents, branch, dependency line, and ADR lifecycle wording. |
