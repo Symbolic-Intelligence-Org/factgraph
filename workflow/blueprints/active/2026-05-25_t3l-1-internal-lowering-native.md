@@ -1,6 +1,6 @@
 # Task Blueprint: T3L.1 Internal RuleExpr Lowering And Native Execution
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -554,4 +554,126 @@ T3L.3 owns user-facing RuleExpr execution docs.
 
 ## 10. Outcome / Deviations
 
-Pending implementation.
+Implemented in `ec8ae668` with follow-up test hardening in `ebec1136`.
+
+### Final Landed Code
+
+- Added private sibling module `src/factgraph/application/protocol/rule_expr_lowering.py` (613 lines).
+- Added focused test module `tests/application/protocol/test_rule_expr_lowering.py` (262 lines after Step 4.7 hardening).
+- Kept the implementation private:
+  - no `factgraph.sdk` export;
+  - no `factgraph.application.protocol` export;
+  - no public `SDKStore.evaluate(...)` / `_SDKEvalManager.evaluate(...)` dispatch;
+  - no adapter changes;
+  - no docs changes;
+  - no `CandidateSet`, `SupportArtifact`, `EvidenceEnvelope`, or `CompiledDerivationPlan` shape changes.
+
+### Delivered Behavior
+
+- Added 7 private frozen DTOs aligned with D7/D8/D10:
+  - `RuleExprLoweringPlan`
+  - `RuleExprLoweringBranch`
+  - `RuleExprOccurrenceBinding`
+  - `RuleExprPortBinding`
+  - `RuleExprHeadBinding`
+  - `RuleExprJoinMaterialization`
+  - `RuleExprEvaluationTrace`
+- Added private helpers:
+  - `_lower_application_rule(...)`
+  - `_lower_rule_expr(...)`
+  - `_materialize_native_derivation_plan(...)`
+  - `_evaluate_rule_expr_native_for_tests(...)`
+- Implemented D6 C35 single-rule coercion for private lowering.
+- Implemented D7 branch model:
+  - alias-local variable namespacing;
+  - AND cartesian product;
+  - OR branch alternatives;
+  - deterministic `b{index}` branch ids.
+- Implemented D8 native join lowering:
+  - explicit `CmpAtom(op="eq", ...)` materialization;
+  - endpoint resolution through `RuleExprPortBinding`;
+  - PortType compatibility checks;
+  - duplicate join dedup via canonical join key;
+  - `RuleExprJoinMaterialization` provenance metadata.
+- Implemented D9 native-only materialization:
+  - single branch lowers to one native body;
+  - multi-branch RuleExpr lowers to branch-list body shape;
+  - aggregate atoms remain in shipped native grammar.
+- Implemented D10 private trace sidecar floor:
+  - per-branch `RuleExprEvaluationTrace` tuple;
+  - runtime branch index and branch id correlation;
+  - head binding and join materialization metadata preserved.
+- Explicitly deferred external head body concatenation to T3L.3.
+
+### Test Gates
+
+- G7 baseline before implementation: 99 tests OK.
+- Focused T3L.1 tests after feature commit: 9 tests OK.
+- Preservation gate after feature commit: 108 tests OK.
+- Step 4.7 hardening added 3 test methods covering:
+  - incompatible PortType joins;
+  - duplicate join dedup;
+  - critical DTO shape invariants.
+- Final focused T3L.1 tests: 12 tests OK.
+- Final preservation gate:
+
+  ```bash
+  PYTHONPATH=src python -m unittest \
+    tests.application.protocol.test_rule \
+    tests.application.protocol.test_rule_expr \
+    tests.sdk.test_ruleexpr_inspect \
+    tests.sdk.test_rule_naming \
+    tests.application.protocol.test_rule_aggregate \
+    tests.test_branch_identity_rule_inspect \
+    tests.application.protocol.test_rule_expr_lowering \
+    -v
+  ```
+
+  Result: 111 tests OK.
+
+- Ruff:
+
+  ```bash
+  PYTHONPATH=src python -m ruff check \
+    src/factgraph/application/protocol/rule_expr_lowering.py \
+    tests/application/protocol/test_rule_expr_lowering.py
+  ```
+
+  Result: all checks passed.
+
+### Deviations / Follow-Ups
+
+No P0/P1 deviations.
+
+Step 4.7 review found 3 worth-considering test coverage gaps and 2 minor style nits:
+
+| Finding | Disposition |
+|---|---|
+| WC1 PortType incompatibility negative test | Addressed in `ebec1136`. |
+| WC2 duplicate join dedup test | Addressed in `ebec1136`. |
+| WC3 DTO invariant negative tests | Addressed in `ebec1136`. |
+| N1 `_resolve_endpoint` uses defensive `getattr(...)` | Skipped as style-only; no behavior risk. |
+| N2 temporary empty `branch_id` placeholder before assignment | Skipped as style-only; existing invariant remains explicit in `_assign_branch_ids(...)`. |
+
+No T3L.1-specific follow-up blocks T3L.2.
+
+Deferred by scope:
+
+- public `fg.eval.evaluate(rule_expr, head=...)` dispatch remains T3L.3;
+- Souffle / ProbLog / PyReason parity remains T3L.2;
+- public docs remain T3L.3;
+- external head body concatenation public semantics remain T3L.3;
+- T4 Head and T5 EvaluateResult / WhyNot remain out of scope.
+
+### Lessons
+
+- T3.5 sibling-module isolation pattern carried forward cleanly: `rule_expr_lowering.py` absorbed the new private projection layer without touching shipped `rule_expr.py` authoring behavior.
+- The first T3 later implementation slice benefited from a Step 4.7 fix commit: the feature substrate was sound at 108 OK, and the extra 61 lines of tests raised the gate to 111 OK while keeping implementation untouched.
+- D6-D10 reviewed decisions were sufficient as implementation contracts: no substrate amendment was needed during feat implementation.
+- The v2 blueprint clarifications landed accurately:
+  - native materialization returns a per-branch trace tuple;
+  - external head body concatenation is explicitly deferred to T3L.3.
+
+### Archive Readiness
+
+Ready to archive after this closure commit.

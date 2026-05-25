@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3L.1 Internal RuleExpr Lowering And Native Execution
 
 - Blueprint: [2026-05-25_t3l-1-internal-lowering-native.md](./2026-05-25_t3l-1-internal-lowering-native.md)
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 
@@ -13,6 +13,7 @@
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | T3L.1-WC1 native materialization now returns per-branch trace tuple; T3L.1-WC2 external head body concatenation explicitly deferred to T3L.3; WC3 concrete typing refinement, WC4 abstract alias-local example, and N1 track-plan cite added. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found no `RuleExprLoweringPlan` / `RuleExprEvaluationTrace` / `rule_expr_lowering` collisions, confirmed existing runtime/native/aggregate/adapter substrates, and found no need to touch public SDK dispatch in T3L.1. Blueprint status moved from draft to scoped. |
 | 2026-05-25 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect -v` ran 99 tests OK after Step 4.6 grep clean. |
+| 2026-05-25 | implemented | Step 4.7 fix + closure | Feature commit `ec8ae668` added the private native lowering module and focused tests; Step 4.7 fix `ebec1136` addressed 3 WC test gaps (PortType incompatibility, duplicate join dedup, DTO invariants). Final gates: 12 focused tests OK, 111 preservation tests OK, ruff clean. |
 
 ## Decision Notes
 
