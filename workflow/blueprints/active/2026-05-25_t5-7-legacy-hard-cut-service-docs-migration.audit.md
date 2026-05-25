@@ -1,11 +1,11 @@
 # Audit: T5.7 Legacy Hard-Cut + Service/Docs Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-7-legacy-hard-cut-service-docs-migration.md`
-- Stage: T5.7 scoped
+- Stage: T5.7 implemented
 - Class: L (scoped; implement as three adjacent M-class local sub-slices)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -17,6 +17,10 @@
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.7 Legacy Hard-Cut + Service/Docs Migration draft created after T5.6 archive `7aa1c6a3`. Scope is predicted L-class: complete D23 hard-cut, migrate service/OpenAPI/docs, decide legacy DSL Rule and why-not final disposition, and preserve private CandidateSet runtime as needed. |
 | 2026-05-25 | scoped | pending | Step 4.6 inventory recorded | Grep found 99 files with service, agent, OpenAPI, docs, examples, tests, CandidateSet, accept, what-if, why-not, `ApplicationRule`, or legacy DSL Rule references. T5.7 remains one L-class blueprint but will implement through T5.7a/T5.7b/T5.7c local M-class sub-slices; no sub-slice is push-ready until the full public story is coherent. |
 | 2026-05-25 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `272a57f4`: 171 tests in 0.100s, OK. Pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded from G7. |
+| 2026-05-25 | feat-a | `41f7e60f` | Service / agent / OpenAPI migrated | Runtime evaluate returns an `EvaluateResult` envelope, accept is rejected as removed, OpenAPI no longer exposes CandidateSet round-trips, and agent evaluation consumes rows without candidate cache state. |
+| 2026-05-25 | feat-b | `63718d09` | Final active docs migration | Active SDK, service, and official docs were moved to final T5 Rule / EvaluateResult / explanation language. Historical/reference docs and dirty notebooks were preserved. |
+| 2026-05-25 | feat-c | `62279515` | Legacy SDK shells hard-cut | `fg.eval` legacy methods and `fg.what_if` were removed from public namespace; direct legacy shells reject with T5 guidance; DSL Rule is internal-only; hard-cut tests were added. |
+| 2026-05-25 | implemented | pending | T5.7 closure recorded | G7, focused SDK, service/agent, ruff, and diff-check gates passed. Blueprint and audit moved to implemented. |
 
 ## 2. Source Chain
 
@@ -198,4 +202,45 @@ Expected result: 171 tests OK, inherited from T5.6 archive.
 
 ## 12. Outcome
 
-Pending implementation.
+### Commit References
+
+- `41f7e60f` — service, agent runtime, and OpenAPI migration.
+- `63718d09` — final active docs / examples migration.
+- `62279515` — legacy SDK shell hard-cut and hard-cut tests.
+
+### Closure Notes
+
+- Service evaluate now returns a T5 `EvaluateResult` representation and the
+  accept route rejects the removed CandidateSet echo workflow.
+- Active docs no longer teach CandidateSet, accept, check, diagnose, why-not,
+  what-if, or `fg.eval.run(...)` as public T5 evidence paths except as explicit
+  removed/internal notes.
+- SDK hard-cut behavior is explicit: public legacy shells reject with
+  `SDKStoreError` guidance to `fg.eval.evaluate(...)`, `row.explain()`,
+  `row.close()`, or manual `fg.eval.explain(...)`.
+- Why-not protocol/runtime/shell code remains internal/quarantined; no public
+  why-not replacement or lossy conversion path was added.
+- Legacy DSL Rule is preserved as an internal import path but removed from
+  public `factgraph.sdk.dsl.__all__`.
+
+### Verification
+
+- G7 preservation: `PYTHONPATH=src python -m unittest ... -v` ran 171 tests in
+  0.113s, OK.
+- Focused SDK hard-cut / namespace / quarantine suite:
+  `tests.test_sdk_redesign_namespace_shape`, `tests.test_sdk_redesign_alias_parity`,
+  `tests.sdk.test_t5_legacy_hard_cut`, and
+  `tests.sdk.test_t5_why_not_quarantine` ran 37 tests in 0.071s, OK.
+- Focused service/agent suite:
+  `src.service.tests.test_problog_candidate_evidence_tree` and
+  `src.agent.tests.test_agent_layer2_runtime_api` ran 8 tests in 0.011s, OK.
+- Touched-file ruff passed.
+- `git diff --check` passed.
+
+### Residual / Deferred
+
+- C73-C78 Semantics Lite remains optional T5.8 / post-T5 work.
+- Historical/reference docs and pre-existing dirty notebooks retain legacy
+  mentions outside the active T5 public-docs scope.
+- Private legacy helper code can be physically deleted in a future cleanup if
+  all non-G7 tests are migrated; T5.7 only hard-cuts the public surface.

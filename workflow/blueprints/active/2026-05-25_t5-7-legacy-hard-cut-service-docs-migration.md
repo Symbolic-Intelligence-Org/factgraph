@@ -1,6 +1,6 @@
 # Task Blueprint: T5.7 Legacy Hard-Cut + Service/Docs Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: L (scoped; implement as three adjacent M-class local sub-slices)
@@ -383,4 +383,66 @@ Review should focus on:
 
 ## 10. Outcome
 
-Pending implementation.
+### Commit References
+
+- T5.7a service / agent / OpenAPI: `41f7e60f`
+- T5.7b final docs / examples migration: `63718d09`
+- T5.7c legacy SDK shell hard-cut: `62279515`
+- Step 4.7 disposition: ready for review; no known P0/P1 at closure time.
+
+### Final Landed Code
+
+- Service runtime `/runtime/inferences/evaluate` now returns a T5
+  `EvaluateResult` representation and no longer serializes public
+  CandidateSet payloads.
+- Service `/runtime/inferences/accept` is rejected as removed, so clients no
+  longer echo CandidateSet payloads for writes.
+- Agent runtime evaluation consumes `EvaluateResult.rows` directly and no
+  longer maintains candidate caches for accept.
+- OpenAPI and active SDK/service/official docs were migrated to the final T5
+  evidence path: `fg.eval.evaluate(...)`, `row.explain()`, `row.close()`, and
+  `fg.eval.explain(...)`.
+- Legacy SDK evidence shells now hard-cut with `SDKStoreError` guidance:
+  `run`, `accept`, `accept_many`, direct `check` / `diagnose` / `why_not`,
+  fact-overlay checks, proof-frame rechecks, and rule-overlay checks.
+- `fg.eval` exposes only T5 evaluation/explanation methods; `fg.what_if` is
+  removed from the public SDK namespace.
+- `factgraph.sdk.dsl.Rule` remains importable for internal legacy tests but is
+  no longer advertised in `factgraph.sdk.dsl.__all__`.
+- Why-not DTO/runtime code remains internal/quarantined; no public why-not
+  replacement or lossy WhyNot-to-Explanation conversion path was introduced.
+
+### Delivered Behavior
+
+- Public SDK, service runtime, OpenAPI, and active docs now agree that
+  CandidateSet is internal runtime substrate rather than a public evaluation
+  return shape.
+- Final SDK docs use `Rule` as the application-protocol Rule name and keep
+  `ApplicationRule` only as transition-alias material.
+- Legacy direct evidence shells are removed or rejected without introducing
+  compatibility flags such as `result_shape=`, `return_candidates=`, or
+  `.eval.why_not(...)`.
+- T5.1-T5.6 contracts were preserved: `EvaluateResult`, `EvaluateRow`,
+  `Explanation`, `row.explain()`, `row.close()`, manual explain, and final
+  SDK Rule identity are unchanged.
+
+### Test Gates
+
+- G7 preservation after T5.7c: 171 tests in 0.113s, OK.
+- Focused SDK hard-cut and namespace tests: 37 tests in 0.071s, OK.
+- Focused service/agent route tests: 8 tests in 0.011s, OK.
+- Touched-file ruff: clean.
+- `git diff --check`: clean.
+
+### Deviations / Follow-Ups
+
+- Historical/reference docs and pre-existing dirty notebooks still contain
+  legacy examples; they are outside the active T5 public docs migration and
+  remain part of the preserved dirty baseline or archive/reference material.
+- Private legacy query/Rule dispatch helpers remain in `SDKStore` because the
+  public hard-cut rejects before reaching them; deeper deletion can be handled
+  in a future cleanup if full-suite migration requires it.
+- `factgraph.sdk.dsl.Rule` is internal-only rather than deleted outright to
+  preserve private legacy helper tests and bridge coverage.
+- C73-C78 Semantics Lite remains outside T5.7 and is available as optional
+  T5.8 work.
