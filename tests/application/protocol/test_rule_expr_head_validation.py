@@ -101,6 +101,19 @@ class RuleExprHeadValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuleExprError, "only declared in some RuleExpr branches"):
             _validate_rule_expr_head_foundation(plan)
 
+    def test_truly_undeclared_head_port_rejects(self) -> None:
+        body = _person_exists_rule("body")
+        unknown = Var("$unknown")
+        head = Rule(
+            id="head",
+            where=(PredAtom("Unknown:exists", [unknown]),),
+            ports={"unknown": unknown},
+        )
+        plan = _lower_application_rule(body, head=head)
+
+        with self.assertRaisesRegex(RuleExprError, "is not declared by the RuleExpr"):
+            _validate_rule_expr_head_foundation(plan)
+
     def test_same_name_ambiguity_rejects_without_explicit_join(self) -> None:
         left = _person_exists_rule("left")
         right = _person_exists_rule("right")
@@ -130,6 +143,21 @@ class RuleExprHeadValidationTests(unittest.TestCase):
 
         self.assertEqual(validation.identity_state, "inline")
         self.assertEqual(tuple(port.name for port in validation.declared_ports), ("person",))
+
+    def test_transitive_same_name_join_chain_permits_declared_port(self) -> None:
+        left = _person_exists_rule("left")
+        middle = _person_exists_rule("middle")
+        right = _person_exists_rule("right")
+        expr = (left.as_("left") & middle.as_("middle") & right.as_("right")).join(
+            left.as_("left").person.eq(middle.as_("middle").person),
+            middle.as_("middle").person.eq(right.as_("right").person),
+        )
+        plan = _lower_rule_expr(expr, head=left)
+
+        declared = _declared_ports_for_rule_expr_plan(plan)
+
+        self.assertEqual(tuple(port.name for port in declared), ("person",))
+        self.assertEqual(declared[0].branch_sources[0].occurrence_alias, "left")
 
     def test_same_name_port_type_mismatch_rejects(self) -> None:
         left = _person_exists_rule("left")
