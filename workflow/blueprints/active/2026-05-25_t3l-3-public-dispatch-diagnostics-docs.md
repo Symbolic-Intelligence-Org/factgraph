@@ -1,6 +1,6 @@
 # Task Blueprint: T3L.3 Public SDK Dispatch, Diagnostics, And Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)

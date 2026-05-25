@@ -1,6 +1,6 @@
 # Audit Log: T3L.3 Public SDK Dispatch, Diagnostics, And Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md](./2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md)
@@ -11,6 +11,7 @@
 |---|---|---|---|
 | 2026-05-25 | draft | T3L.3 blueprint pair created | Scope consumes Stage 3 synthesis T3L.3 row, D6/D9/D10, T3L.1/T3L.2 archived substrate, and shipped SDK dispatch/docs evidence. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked the external-head public behavior to conservative inline/projected-head support with SDKStoreError rejection for external heads, clarified missing/invalid `head=` as SDK call-shape errors per D6, and specified RuleExpr `engine_options` forwarding through existing evaluation machinery. |
+| 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1/T3L.2 lowering substrate, SDK evaluate dispatch surface, head/application Rule call sites, SDKStoreError diagnostics, result/evidence surfaces, and docs update targets. No A-fallback amendment needed; external-head conservative rejection and public result boundary remain locked. |
 
 ## Decision Notes
 
@@ -124,6 +125,19 @@ Run before feature implementation:
 | 6. Docs update surface | `rg 'RuleExpr|evaluate\\(|head=|pyreason|CandidateSet|same-name|bool guards' src/factgraph/sdk/docs src/factgraph/application/docs` | Lock docs files and avoid stale/contradictory execution guidance. |
 
 If any grep result contradicts the blueprint scope, pause for an A-fallback amendment.
+
+## Step 4.6 Pre-Implementation Grep Results
+
+| Check | Result | T3L.3 impact |
+|---|---|---|
+| 1. Existing RuleExpr public dispatch | Expected hits in T3L.1/T3L.2 lowering substrate, focused tests, docs, and `SDKStore.inspect_rule(...)`. The only `src/factgraph/sdk/store.py` `_RuleExpr` hit is the existing inspect helper, not `evaluate(...)`. | Public evaluate dispatch can be added in T3L.3 without colliding with an existing RuleExpr evaluate branch. |
+| 2. SDK evaluate dispatch paths | Expected hits in `_SDKEvalManager.evaluate(...)`, `SDKStore.evaluate(...)`, `_resolve_public_engine_and_semantics(...)`, `to_authoring_payload(...)`, and `_evaluate_compiled_derivation_plans(...)`. | Insertion point and legacy path are clear; no amendment needed. |
+| 3. Head and ApplicationRule usage | Expected hits across application `Rule`/`ApplicationRule`, `head=` docs/tests, `RuleExprInspect`, legacy SDK `Inference`, and archived T3L.1/T3L.2 blueprint decisions. | Accepted/rejected head shapes remain consistent with D6 and the v2 external-head rejection lock. |
+| 4. SDKStoreError diagnostics | Existing `SDKStoreError` usage, PyReason semantics paths, and T3L.2 classifier fields are present; no conflicting public diagnostic owner exists. | T3L.3 can convert RuleExpr call-shape and adapter preflight failures to `SDKStoreError` under D9 section 4.9. |
+| 5. Public result/evidence boundaries | `CandidateSet`, `EvidenceEnvelope`, `branch_atom_projection`, and payload surfaces are existing protocol/test surfaces. No public `RuleExprEvaluateResult` owner exists. | D10 public result boundary stays locked: success returns `list[CandidateSet]`; trace/evidence DTOs remain private. |
+| 6. Docs update surface | Expected RuleExpr authoring docs, existing `evaluate(...)` sections, `CandidateSet` docs, PyReason notes, same-name-port/no-auto-join guidance, and bool guard docs are present. | Docs update surface is known and bounded; T3L.3 should extend, not rewrite, T3.6 guidance. |
+
+Step 4.6 conclusion: **clean**. No A-fallback scope amendment required. Proceed to G7 baseline from this scoped anchor.
 
 ## G7 Baseline Plan
 
