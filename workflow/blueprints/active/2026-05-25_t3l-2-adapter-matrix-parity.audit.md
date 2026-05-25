@@ -12,6 +12,7 @@
 | 2026-05-25 | draft | T3L.2 blueprint pair created | Scope consumes Stage 3 synthesis T3L.2 row, D8-D10, T3L.1 archived substrate, and shipped Souffle / ProbLog / PyReason adapter evidence. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Clarified private trace engine widening, Souffle/ProbLog adapter-time rejection ownership, PyReason classifier vs materialization engine split, and `unsupported_feature` label convention. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1 lowering substrate, adapter branch/equality/aggregate/PyReason surfaces, and public dispatch references only in existing SDK/tests. No adapter production write scope or public SDK dispatch amendment needed. |
+| 2026-05-25 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering -v` passed: 111 tests OK. |
 
 ## Decision Notes
 
@@ -186,7 +187,13 @@ Reviewer should verify:
 
 ## G7 Baseline Record
 
-Pending.
+| Check | Result |
+|---|---|
+| Branch and sacred state | T3L.2 branch `v0.2.0-t3l-2-adapter-matrix-parity-2026-05-25`; sacred master `562c74195df43e933bed92a3ff25de94dd8ce666`; dirty 4M + 1U preserved. |
+| Step 4.6 precondition | Clean; no adapter production write-scope or public dispatch amendment needed. |
+| Requested pytest baseline | Deferred per existing pytest SIGSEGV environment lock from T3 cycle. |
+| Excluded unrelated test | `tests.test_public_inference_factgraph_create` remains excluded because failures are pre-existing and unrelated to RuleExpr lowering. |
+| Fallback unittest baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering -v` -> 111 tests OK. |
 
 ## Closure Notes
 
