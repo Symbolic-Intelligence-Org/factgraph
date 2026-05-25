@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, replace
 from itertools import product
 from typing import Literal
@@ -64,12 +65,14 @@ class RuleExprOccurrenceBinding:
     rule_id: str
     content_digest: str
     port_bindings: tuple[RuleExprPortBinding, ...]
+    rule_version: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.alias, field_name="alias")
         _require_non_empty_str(self.rule_id, field_name="rule_id")
         _require_non_empty_str(self.content_digest, field_name="content_digest")
         _require_tuple(self.port_bindings, field_name="port_bindings", item_type=RuleExprPortBinding)
+        _require_optional_str(self.rule_version, field_name="rule_version")
 
 
 @dataclass(frozen=True)
@@ -216,6 +219,65 @@ class RuleExprAdapterSupport:
             raise RuleExprError("unsupported adapter classification requires rejection details")
 
 
+@dataclass(frozen=True)
+class RuleExprDeclaredPortBranchSource:
+    branch_id: str
+    occurrence_alias: str
+    port_name: str
+    port_type: PortType
+    alias_local_execution_var: Var
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.branch_id, field_name="branch_id")
+        _require_non_empty_str(self.occurrence_alias, field_name="occurrence_alias")
+        _require_non_empty_str(self.port_name, field_name="port_name")
+        if not isinstance(self.port_type, PortType):
+            raise RuleExprError("RuleExprDeclaredPortBranchSource.port_type must be PortType")
+        if not isinstance(self.alias_local_execution_var, Var):
+            raise RuleExprError("RuleExprDeclaredPortBranchSource.alias_local_execution_var must be Var")
+
+
+@dataclass(frozen=True)
+class RuleExprDeclaredPort:
+    name: str
+    port_type: PortType
+    branch_sources: tuple[RuleExprDeclaredPortBranchSource, ...]
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.name, field_name="name")
+        if not isinstance(self.port_type, PortType):
+            raise RuleExprError("RuleExprDeclaredPort.port_type must be PortType")
+        _require_tuple(self.branch_sources, field_name="branch_sources", item_type=RuleExprDeclaredPortBranchSource)
+        if not self.branch_sources:
+            raise RuleExprError("RuleExprDeclaredPort.branch_sources must not be empty")
+
+
+@dataclass(frozen=True)
+class RuleExprHeadValidation:
+    identity_state: Literal["external", "inline", "version-warning"]
+    head_binding: RuleExprHeadBinding
+    declared_ports: tuple[RuleExprDeclaredPort, ...]
+    matched_occurrence_alias: str | None = None
+    version_warning_emitted: bool = False
+
+    def __post_init__(self) -> None:
+        if self.identity_state not in {"external", "inline", "version-warning"}:
+            raise RuleExprError("RuleExprHeadValidation.identity_state is unsupported")
+        if not isinstance(self.head_binding, RuleExprHeadBinding):
+            raise RuleExprError("RuleExprHeadValidation.head_binding must be RuleExprHeadBinding")
+        _require_tuple(self.declared_ports, field_name="declared_ports", item_type=RuleExprDeclaredPort)
+        if self.matched_occurrence_alias is not None:
+            _require_non_empty_str(self.matched_occurrence_alias, field_name="matched_occurrence_alias")
+        if not isinstance(self.version_warning_emitted, bool):
+            raise RuleExprError("RuleExprHeadValidation.version_warning_emitted must be bool")
+        if self.identity_state == "external" and self.matched_occurrence_alias is not None:
+            raise RuleExprError("external head validation must not set matched_occurrence_alias")
+        if self.identity_state != "external" and self.matched_occurrence_alias is None:
+            raise RuleExprError("inline head validation requires matched_occurrence_alias")
+        if self.identity_state != "version-warning" and self.version_warning_emitted:
+            raise RuleExprError("version_warning_emitted requires version-warning identity_state")
+
+
 def _lower_application_rule(rule: Rule, *, head: Rule) -> RuleExprLoweringPlan:
     if not isinstance(rule, Rule):
         raise RuleExprError("rule must be application protocol Rule")
@@ -306,6 +368,195 @@ def _classify_pyreason_rule_expr_support(plan: RuleExprLoweringPlan) -> RuleExpr
     return RuleExprAdapterSupport(engine="pyreason", supported=True)
 
 
+def _validate_rule_expr_head_foundation(plan: RuleExprLoweringPlan) -> RuleExprHeadValidation:
+    if not isinstance(plan, RuleExprLoweringPlan):
+        raise RuleExprError("plan must be RuleExprLoweringPlan")
+
+    exact_matches = [
+        occurrence
+        for occurrence in plan.occurrence_map
+        if occurrence.rule_id == plan.head.id and occurrence.content_digest == plan.head.content_digest
+    ]
+    stale_matches = [
+        occurrence
+        for occurrence in plan.occurrence_map
+        if occurrence.rule_id == plan.head.id and occurrence.content_digest != plan.head.content_digest
+    ]
+    if stale_matches:
+        raise RuleExprError(
+            f"head rule {plan.head.id!r} matches an expression occurrence with a different content digest"
+        )
+    if len(exact_matches) > 1:
+        raise RuleExprError(
+            f"head rule {plan.head.id!r} matches multiple expression occurrences with the same content digest"
+        )
+
+    declared_ports, partial_ports = _declared_port_state_for_rule_expr_plan(plan)
+    _validate_head_declared_ports(plan.head, declared_ports, partial_ports=partial_ports)
+
+    if not exact_matches:
+        return RuleExprHeadValidation(
+            identity_state="external",
+            head_binding=plan.head_binding,
+            declared_ports=declared_ports,
+        )
+
+    occurrence = exact_matches[0]
+    if occurrence.rule_version != plan.head.version:
+        warnings.warn(
+            f"head rule {plan.head.id!r} matches expression occurrence {occurrence.alias!r} "
+            "by id and content digest but has a different version",
+            UserWarning,
+            stacklevel=2,
+        )
+        return RuleExprHeadValidation(
+            identity_state="version-warning",
+            head_binding=plan.head_binding,
+            declared_ports=declared_ports,
+            matched_occurrence_alias=occurrence.alias,
+            version_warning_emitted=True,
+        )
+
+    return RuleExprHeadValidation(
+        identity_state="inline",
+        head_binding=plan.head_binding,
+        declared_ports=declared_ports,
+        matched_occurrence_alias=occurrence.alias,
+    )
+
+
+def _declared_ports_for_rule_expr_plan(plan: RuleExprLoweringPlan) -> tuple[RuleExprDeclaredPort, ...]:
+    declared_ports, _partial_ports = _declared_port_state_for_rule_expr_plan(plan)
+    return declared_ports
+
+
+def _declared_port_state_for_rule_expr_plan(
+    plan: RuleExprLoweringPlan,
+) -> tuple[tuple[RuleExprDeclaredPort, ...], frozenset[str]]:
+    if not isinstance(plan, RuleExprLoweringPlan):
+        raise RuleExprError("plan must be RuleExprLoweringPlan")
+    by_branch: list[dict[str, RuleExprDeclaredPortBranchSource]] = []
+    seen_names: set[str] = set()
+    for branch in plan.branches:
+        branch_ports = _branch_declared_port_sources(branch, plan.occurrence_map)
+        by_branch.append(branch_ports)
+        seen_names.update(branch_ports)
+
+    declared: list[RuleExprDeclaredPort] = []
+    partial: set[str] = set()
+    for name in sorted(seen_names):
+        sources = [branch_ports.get(name) for branch_ports in by_branch]
+        if any(source is None for source in sources):
+            partial.add(name)
+            continue
+        resolved_sources = tuple(source for source in sources if source is not None)
+        port_type = resolved_sources[0].port_type
+        if any(source.port_type != port_type for source in resolved_sources):
+            raise RuleExprError(f"declared port {name!r} has incompatible port types across branches")
+        declared.append(RuleExprDeclaredPort(name=name, port_type=port_type, branch_sources=resolved_sources))
+    return tuple(declared), frozenset(partial)
+
+
+def _branch_declared_port_sources(
+    branch: RuleExprLoweringBranch,
+    occurrence_map: tuple[RuleExprOccurrenceBinding, ...],
+) -> dict[str, RuleExprDeclaredPortBranchSource]:
+    bindings_by_name: dict[str, list[RuleExprPortBinding]] = {}
+    for alias in branch.occurrence_aliases:
+        occurrence = _occurrence_binding(occurrence_map, alias)
+        for binding in occurrence.port_bindings:
+            bindings_by_name.setdefault(binding.port_name, []).append(binding)
+
+    declared: dict[str, RuleExprDeclaredPortBranchSource] = {}
+    for name, bindings in bindings_by_name.items():
+        if len(bindings) == 1:
+            declared[name] = _branch_source(branch.branch_id, bindings[0])
+            continue
+        if any(binding.port_type != bindings[0].port_type for binding in bindings):
+            raise RuleExprError(f"declared port {name!r} has incompatible same-name port types")
+        if not _same_name_bindings_are_joined(name, bindings, branch.pending_joins, occurrence_map):
+            aliases = ", ".join(sorted(binding.occurrence_alias for binding in bindings))
+            raise RuleExprError(f"declared port {name!r} is ambiguous across occurrences: {aliases}")
+        declared[name] = _branch_source(branch.branch_id, sorted(bindings, key=_binding_sort_key)[0])
+    return declared
+
+
+def _same_name_bindings_are_joined(
+    port_name: str,
+    bindings: list[RuleExprPortBinding],
+    joins: tuple[RuleJoinConstraint, ...],
+    occurrence_map: tuple[RuleExprOccurrenceBinding, ...],
+) -> bool:
+    aliases = {binding.occurrence_alias for binding in bindings}
+    if len(aliases) != len(bindings):
+        return False
+    graph: dict[str, set[str]] = {alias: set() for alias in aliases}
+    unique_joins: dict[tuple[object, ...], RuleJoinConstraint] = {}
+    for join in joins:
+        unique_joins.setdefault(_canonical_join_constraint(join), join)
+    for join_key in sorted(unique_joins, key=repr):
+        join = unique_joins[join_key]
+        left = _resolve_endpoint(join.left, occurrence_map)
+        right = _resolve_endpoint(join.right, occurrence_map)
+        if left.port_name != port_name or right.port_name != port_name:
+            continue
+        if left.occurrence_alias not in aliases or right.occurrence_alias not in aliases:
+            continue
+        if left.port_type != right.port_type:
+            raise RuleExprError(f"declared port {port_name!r} has incompatible same-name port types")
+        graph[left.occurrence_alias].add(right.occurrence_alias)
+        graph[right.occurrence_alias].add(left.occurrence_alias)
+
+    remaining = set(aliases)
+    stack = [next(iter(remaining))]
+    while stack:
+        alias = stack.pop()
+        if alias not in remaining:
+            continue
+        remaining.remove(alias)
+        stack.extend(graph[alias])
+    return not remaining
+
+
+def _validate_head_declared_ports(
+    head: Rule,
+    declared_ports: tuple[RuleExprDeclaredPort, ...],
+    *,
+    partial_ports: frozenset[str],
+) -> None:
+    declared_by_name = {port.name: port for port in declared_ports}
+    issues: list[str] = []
+    for name, head_var in head.ports.items():
+        declared = declared_by_name.get(name)
+        if declared is None:
+            if name in partial_ports:
+                issues.append(f"head port {name!r} is only declared in some RuleExpr branches")
+            else:
+                issues.append(f"head port {name!r} is not declared by the RuleExpr")
+            continue
+        head_type = head.port_types[name]
+        if declared.port_type != head_type:
+            issues.append(f"head port {name!r} type {head_type!r} does not match RuleExpr port type {declared.port_type!r}")
+        if not isinstance(head_var, Var):
+            issues.append(f"head port {name!r} is not backed by a Var")
+    if issues:
+        raise RuleExprError("RuleExpr head validation failed: " + "; ".join(issues))
+
+
+def _branch_source(branch_id: str, binding: RuleExprPortBinding) -> RuleExprDeclaredPortBranchSource:
+    return RuleExprDeclaredPortBranchSource(
+        branch_id=branch_id,
+        occurrence_alias=binding.occurrence_alias,
+        port_name=binding.port_name,
+        port_type=binding.port_type,
+        alias_local_execution_var=binding.alias_local_execution_var,
+    )
+
+
+def _binding_sort_key(binding: RuleExprPortBinding) -> tuple[str, str]:
+    return (binding.occurrence_alias, binding.port_name)
+
+
 def _evaluate_rule_expr_native_for_tests(
     expr: _RuleExpr,
     *,
@@ -372,6 +623,7 @@ def _lower_operand(
         rule_id=operand.rule.id,
         content_digest=operand.rule.content_digest,
         port_bindings=port_bindings,
+        rule_version=operand.rule.version,
     )
     existing = occurrence_map_by_alias.get(operand.alias)
     if existing is not None and existing != binding:

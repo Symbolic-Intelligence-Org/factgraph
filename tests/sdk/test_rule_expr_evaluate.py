@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import unittest
+import warnings
 from unittest.mock import patch
 
 import factgraph.sdk as sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
-from factgraph.application.protocol import EntitySelector, Rule, RuleExprInspect
+from factgraph.application.protocol import EntitySelector, Rule, RuleExprError, RuleExprInspect
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, PredAtom, Var
@@ -62,7 +63,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         encoded = _seed_person(graph, "alice")
         rule = _person_exists_rule()
         region = _person_region_rule()
-        expr = rule.as_("exists") & region.as_("region")
+        expr = (rule.as_("exists") & region.as_("region")).join_by_ports("person")
 
         candidates = graph.eval.evaluate(expr, head=rule, engine="native")
 
@@ -116,6 +117,43 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "include the head rule as an expression occurrence"):
             graph.eval.evaluate(body, head=external_head)
 
+    def test_same_id_version_mismatch_warns_and_evaluates(self) -> None:
+        graph = _store()
+        _seed_person(graph, "dana")
+        person = Var("$person")
+        rule = Rule(
+            id="Person:exists",
+            version="v1",
+            where=(PredAtom("Person:exists", [person]),),
+            ports={"person": person},
+        )
+        head = Rule(id=rule.id, version="v2", where=rule.where, ports=rule.ports)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            candidates = graph.eval.evaluate(rule, head=head, engine="native")
+
+        self.assertTrue(candidates)
+        self.assertEqual(len(caught), 1)
+        self.assertIn("different version", str(caught[0].message))
+
+    def test_same_id_different_digest_uses_ruleexpr_error(self) -> None:
+        graph = _store()
+        body = _person_exists_rule("same_id")
+        head = _person_region_rule("same_id")
+
+        with self.assertRaisesRegex(RuleExprError, "different content digest"):
+            graph.eval.evaluate(body, head=head, engine="native")
+
+    def test_same_name_ambiguity_uses_ruleexpr_error_before_evaluation(self) -> None:
+        graph = _store()
+        left = _person_exists_rule("left")
+        right = _person_exists_rule("right")
+        expr = left.as_("left") & right.as_("right")
+
+        with self.assertRaisesRegex(RuleExprError, "ambiguous across occurrences"):
+            graph.eval.evaluate(expr, head=left, engine="native")
+
     def test_souffle_and_problog_paths_use_existing_request_shape(self) -> None:
         graph = _store()
         rule = _person_exists_rule()
@@ -145,7 +183,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         graph = _store()
         left = _person_region_rule("left_region")
         right = _person_region_rule("right_region")
-        expr = (left.as_("left") & right.as_("right")).join(left.as_("left").region.eq(right.as_("right").region))
+        expr = (left.as_("left") & right.as_("right")).join_by_ports("person", "region")
 
         with self.assertRaises(SDKStoreError) as ctx:
             graph.eval.evaluate(expr, head=left, engine="pyreason")

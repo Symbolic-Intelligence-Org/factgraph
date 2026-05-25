@@ -38,6 +38,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _lower_application_rule,
     _lower_rule_expr,
     _materialize_adapter_derivation_plan,
+    _validate_rule_expr_head_foundation,
 )
 from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
@@ -2361,6 +2362,7 @@ class SDKStore:
         else:  # pragma: no cover - guarded by caller classification
             raise SDKStoreError("evaluate(rule_expr, ...) expects application Rule or RuleExpr input")
 
+        _validate_rule_expr_head_foundation(plan)
         if plan.head_binding.kind == "external":
             raise SDKStoreError(
                 "evaluate(rule_expr, ...) does not support external head= body concatenation in T3L.3; "
