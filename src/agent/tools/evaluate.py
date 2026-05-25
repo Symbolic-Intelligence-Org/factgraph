@@ -30,11 +30,13 @@ class EvaluateResult:
     inference_id: str
     version: str
     target_pred_id: str
+    result_id: str
+    run_id: str
     mode: str
-    candidate_count: int
+    row_count: int
     returned_count: int
     truncated: bool
-    candidates: list[dict[str, Any]]
+    rows: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -122,12 +124,7 @@ class EvaluateTools:
         )
         meta = _require_dict(response.get("meta"), "meta")
         evaluation = _require_dict(response.get("evaluation"), "evaluation")
-        candidates = _require_list_of_dicts(evaluation.get("candidates"), "evaluation.candidates")
-        self._candidate_cache.store(
-            self._agent_session_id,
-            self._runtime_session_id,
-            candidates,
-        )
+        rows = _require_list_of_dicts(evaluation.get("rows"), "evaluation.rows")
         return EvaluateResult(
             inference_id=_require_non_empty_str(evaluation.get("inference_id"), "evaluation.inference_id"),
             version=_require_non_empty_str(evaluation.get("version"), "evaluation.version"),
@@ -135,11 +132,13 @@ class EvaluateTools:
                 evaluation.get("target_pred_id"),
                 "evaluation.target_pred_id",
             ),
+            result_id=_require_non_empty_str(evaluation.get("result_id"), "evaluation.result_id"),
+            run_id=_require_non_empty_str(evaluation.get("run_id"), "evaluation.run_id"),
             mode=_require_non_empty_str(meta.get("mode"), "meta.mode"),
-            candidate_count=_require_int(meta.get("candidate_count"), "meta.candidate_count"),
+            row_count=_require_int(meta.get("row_count"), "meta.row_count"),
             returned_count=_require_int(meta.get("returned_count"), "meta.returned_count"),
             truncated=_require_bool(meta.get("truncated"), "meta.truncated"),
-            candidates=[dict(candidate) for candidate in candidates],
+            rows=[dict(row) for row in rows],
         )
 
     def review_candidate(

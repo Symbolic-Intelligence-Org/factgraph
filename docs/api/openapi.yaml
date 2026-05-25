@@ -603,11 +603,13 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [runtime-exec]
-      summary: Evaluate an inference and return a CandidateSet.
+      summary: Evaluate an inference and return an EvaluateResult envelope.
       description: |
-        Returns `CandidateSet` v2 structure (candidates with `candidate_id`,
-        `candidate_key`, `candidate_kind`). See `02_runtime_sessions.md` §5.2
-        for request/response shape and `inferences/accept` handshake.
+        Returns the T5 `EvaluateResult` representation: result metadata,
+        digest anchors, a head Rule summary, and `rows[]` with bindings,
+        Claim metadata, raw uncertainty carrier fields, and EvidenceRef
+        metadata. CandidateSet payloads are internal runtime artifacts and
+        are not exposed by this route.
       requestBody:
         required: true
         content:
@@ -623,18 +625,17 @@ paths:
       - $ref: "#/components/parameters/SessionId"
     post:
       tags: [runtime-exec]
-      summary: Accept an inference candidate returned by evaluate.
+      summary: Removed inference CandidateSet accept endpoint.
       description: |
-        Client must echo the full candidate payload (do not trim `terms` / identity fields).
+        Removed by the T5 EvaluateResult hard-cut. Evaluation returns rows and
+        evidence anchors, not public CandidateSet payloads. This route returns
+        an error envelope for legacy clients until the route is deleted.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [candidate]
-              properties:
-                candidate: { type: object }
       responses:
         "200": { $ref: "#/components/responses/Envelope200" }
         "401": { $ref: "#/components/responses/UnauthorizedError" }

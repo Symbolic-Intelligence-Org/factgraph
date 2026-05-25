@@ -26,10 +26,6 @@ from service.runtime_v1 import (
     accept_runtime_derivation,
     close_runtime_session,
     evaluate_runtime_derivation,
-    explain_runtime_narrative,
-    explain_runtime_nl,
-    explain_runtime_summary,
-    explain_runtime_tree,
     open_runtime_session,
     reset_runtime_sessions_for_tests,
     write_runtime_fact,
@@ -153,7 +149,7 @@ class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
         self.assertEqual(failed_child["check_kind"], "missing")
 
     @patch("factgraph.adapters.problog.engine_eval.run_problog")
-    def test_runtime_explain_tree_summary_narrative_and_nl_work_after_accept(self, mock_run) -> None:
+    def test_runtime_evaluate_returns_result_envelope_and_accept_is_removed(self, mock_run) -> None:
         session_id, sdk = self._open_session()
         alice_ref = sdk.ref(User, user_id="Alice")
         mock_run.return_value = "\n".join(
@@ -197,53 +193,24 @@ class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
                 },
             )
             self.assertTrue(eval_resp["ok"])
-            candidate = dict(eval_resp["evaluation"]["candidates"][0])
-            self.assertEqual(candidate["support_kind"], PROBLOG_PROVENANCE_KIND)
+            evaluation = eval_resp["evaluation"]
+            self.assertRegex(evaluation["result_id"], r"^evalr_v1:[0-9a-f]{64}$")
+            self.assertRegex(evaluation["result_digest"], r"^sha256:[0-9a-f]{64}$")
+            self.assertEqual(evaluation["engine"], "problog")
+            self.assertNotIn("candidates", evaluation)
+            row = dict(evaluation["rows"][0])
+            self.assertEqual(row["raw_kind"], "probabilistic")
+            self.assertEqual(row["bound"], [0.42, 0.42])
+            self.assertRegex(row["evidence_ref"]["ref_id"], r"^evref_v1:[0-9a-f]{64}$")
 
             accept_resp = accept_runtime_derivation(
                 session_id,
                 {
-                    "candidate": candidate,
-                    "options": {"approved_by": "alice"},
+                    "candidate": {"candidate_id": "cand_v2:legacy"},
                 },
             )
-            self.assertTrue(accept_resp["ok"])
-
-            tree_resp = explain_runtime_tree(session_id, {"kind": "candidate", "id": candidate["candidate_id"]})
-            summary_resp = explain_runtime_summary(session_id, {"kind": "candidate", "id": candidate["candidate_id"]})
-            narrative_resp = explain_runtime_narrative(
-                session_id,
-                {"kind": "candidate", "id": candidate["candidate_id"]},
-            )
-            nl_resp = explain_runtime_nl(session_id, {"kind": "candidate", "id": candidate["candidate_id"]})
-
-            self.assertTrue(tree_resp["ok"])
-            self.assertTrue(summary_resp["ok"])
-            self.assertTrue(narrative_resp["ok"])
-            self.assertTrue(nl_resp["ok"])
-
-            tree = tree_resp["tree"]
-            self.assertEqual(tree["support_kind"], PROBLOG_PROVENANCE_KIND)
-            self.assertEqual(tree["root"]["engine_meta"]["probability"], 0.42)
-            support_children = tree["root"]["children"][0]["children"]
-            self.assertEqual(len(support_children), 1)
-            self.assertEqual(support_children[0]["node_kind"], "proof_leaf")
-            self.assertNotIn("asrt_id", support_children[0])
-
-            summary = summary_resp["summary"]
-            self.assertEqual(summary["problog_probability"], 0.42)
-            self.assertEqual(summary["proof_goal_count"], 0)
-            self.assertEqual(summary["proof_leaf_count"], 1)
-
-            narrative = narrative_resp["narrative"]
-            self.assertEqual(narrative["probability_lines"], ["ProbLog probability: 0.42."])
-            self.assertEqual(
-                narrative["drilldown_lines"][1],
-                "Proof leaf nodes are logical terminals and do not link to ledger assertions.",
-            )
-
-            explain_nl = nl_resp["explain_nl"]
-            self.assertIn("Probability assessment: ProbLog probability: 0.42.", explain_nl["paragraphs"])
+            self.assertFalse(accept_resp["ok"])
+            self.assertEqual(accept_resp["errors"][0]["kind"], "removed")
         finally:
             close_runtime_session(session_id)
 

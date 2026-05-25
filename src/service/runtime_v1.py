@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from threading import RLock
 from time import time_ns
-from typing import Any
+from typing import Any, Mapping
 from uuid import uuid4
 
 from factgraph.adapters.problog.rule_ext import resolve_problog_engine_ext
@@ -18,10 +18,26 @@ from factgraph.authoring.derivation_compile import (
     compile_authoring_derivation_v1,
 )
 from factgraph.authoring.rules import compile_authoring_rule_v1
+from factgraph.application.protocol import EvaluateResult, EvaluateRow
+from factgraph.application.protocol.evaluate_result import (
+    _candidate_set_to_evaluate_row,
+    _row_digest_for,
+    canonical_bytes_for_evaluate,
+    closed_head_digest_for,
+    expr_digest_for_payload,
+    new_run_id,
+    result_digest_for,
+    result_id_for,
+    rule_set_digest_for_entries,
+    semantics_digest_for,
+    view_snapshot_digest_for_parts,
+)
+from factgraph.application.protocol.rule import Rule as ApplicationRule
 from factgraph.core.derivation.accept import AcceptOptions, AcceptResult
 from factgraph.core.derivation.candidates import CONFIDENCE_KINDS, CandidateSet
 from factgraph.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
 from factgraph.core.mapping.canon import MappingConflictError, MappingResolution
+from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules._trace_nl import render_rule_run_nl_explain
 from factgraph.core.rules._trace_narrative import render_rule_run_narrative
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec, run_rule, run_rule_with_trace
@@ -58,6 +74,13 @@ from factgraph.core.view.projector import (
 )
 from factgraph.audit import build_rule_trace_detail_payload
 from factgraph.audit.evidence_graph import evidence_graph_to_dict
+from factgraph.sdk.store import (
+    _application_plans_from_compiled_dicts,
+    _compiled_plan_digest_payload,
+    _head_rule_for_compiled_plans,
+    _rule_set_entries_for_result,
+    _view_snapshot_asrt_id_for_claim,
+)
 from service.static_ui import render_candidate_evidence_html, render_rule_trace_detail_html
 
 from ._common import error_response, exception_to_error, facade_error, ok_response
@@ -981,24 +1004,26 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
             engine_ext=runtime_engine_ext,
             semantics_profile=semantics_profile,
         )
-        _cache_derivation_recipe(
+        result = _evaluate_result_from_candidates(
             session,
             candidates=candidates,
             compiled=compiled,
+            mode=mode,
+            semantics_profile=semantics_profile,
         )
-        returned_candidates = candidates if limit is None else candidates[:limit]
+        returned_rows = result.rows if limit is None else result.rows[:limit]
         return ok_response(
             meta={
                 "mode": mode,
-                "candidate_count": len(candidates),
-                "returned_count": len(returned_candidates),
-                "truncated": len(returned_candidates) != len(candidates),
+                "result_id": result.result_id,
+                "row_count": len(result.rows),
+                "returned_count": len(returned_rows),
+                "truncated": len(returned_rows) != len(result.rows),
             },
-            evaluation={
+            evaluation=_evaluate_result_to_dict(result, rows=returned_rows) | {
                 "inference_id": compiled["derivation_id"],
                 "version": compiled["version"],
                 "target_pred_id": compiled["target_pred_id"],
-                "candidates": [_candidate_to_dict(item) for item in returned_candidates],
             },
         )
     except Exception as exc:
@@ -1019,26 +1044,13 @@ def _resolve_runtime_derivation_engine_ext(compiled: dict[str, Any], *, mode: st
 
 def accept_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[str, Any]:
     try:
-        session = _require_session(session_id)
         if not isinstance(dto, dict):
             raise facade_error("dto must be object", kind="shape", path="$")
-        raw_candidate = dto.get("candidate")
-        if not isinstance(raw_candidate, dict):
-            raise facade_error("candidate must be object", kind="shape", path="$.candidate")
-        candidate = _candidate_from_dict(raw_candidate, path="$.candidate")
-        options = _accept_options_from_dto(dto.get("options"), path="$.options")
-        result = session.store.accept(
-            derivation_id=candidate.derivation_id,
-            version=candidate.derivation_version,
-            candidate_set=candidate,
-            options=options,
-        )
-        return ok_response(
-            meta={
-                "dry_run": options.dry_run,
-                "terminal": _accept_result_terminal(result),
-            },
-            accept=_accept_result_to_dict(result),
+        raise facade_error(
+            "runtime inference accept was removed by the T5 EvaluateResult hard-cut; "
+            "evaluate returns rows and evidence anchors, not public CandidateSet payloads",
+            kind="removed",
+            path="$",
         )
     except Exception as exc:
         err = _runtime_exception_to_error(exc, default_kind="derivation_accept")
@@ -2307,6 +2319,176 @@ def _jsonable_row(row: tuple[Any, ...]) -> list[Any]:
     return [item for item in row]
 
 
+def _evaluate_result_from_candidates(
+    session: RuntimeSession,
+    *,
+    candidates: list[CandidateSet],
+    compiled: dict[str, Any],
+    mode: str,
+    semantics_profile: SemanticsProfile | None,
+) -> EvaluateResult:
+    app_plans = _application_plans_from_compiled_dicts((compiled,), mode=mode)
+    head = _head_rule_for_compiled_plans(app_plans)
+    run_id = new_run_id()
+    expr_digest = expr_digest_for_payload(
+        "compiled_derivation_plans",
+        {"plans": [_compiled_plan_digest_payload(plan) for plan in app_plans]},
+    )
+    rule_set_digest = rule_set_digest_for_entries(_rule_set_entries_for_result(app_plans, head=head))
+    view_snapshot_digest = _runtime_view_snapshot_digest(session)
+    semantics_digest = semantics_digest_for(semantics_profile)
+    result_id = result_id_for(
+        run_id=run_id,
+        expr_digest=expr_digest,
+        rule_set_digest=rule_set_digest,
+        view_snapshot_digest=view_snapshot_digest,
+        semantics_digest=semantics_digest,
+        engine=mode,
+        head_id=head.id,
+        head_content_digest=head.content_digest,
+    )
+    closed_head_digest = closed_head_digest_for(head)
+    rows = tuple(
+        _candidate_set_to_evaluate_row(
+            candidate,
+            result_id=result_id,
+            run_id=run_id,
+            closed_head_digest=closed_head_digest,
+        )
+        for candidate in candidates
+    )
+    result_digest = result_digest_for(
+        result_id=result_id,
+        run_id=run_id,
+        row_digests=tuple(_row_digest_for(row) for row in rows),
+        head_id=head.id,
+        head_content_digest=head.content_digest,
+        engine=mode,
+        engine_version=None,
+        adapter_version=None,
+        expr_digest=expr_digest,
+        rule_set_digest=rule_set_digest,
+        view_snapshot_digest=view_snapshot_digest,
+        semantics_digest=semantics_digest,
+    )
+    return EvaluateResult(
+        result_id=result_id,
+        run_id=run_id,
+        rows=rows,
+        head=head,
+        engine=mode,
+        engine_version=None,
+        adapter_version=None,
+        expr_digest=expr_digest,
+        rule_set_digest=rule_set_digest,
+        view_snapshot_digest=view_snapshot_digest,
+        semantics_digest=semantics_digest,
+        evaluated_at=time_ns(),
+        result_digest=result_digest,
+    )
+
+
+def _runtime_view_snapshot_digest(session: RuntimeSession) -> str:
+    ledger = session.store.ledger
+    db_id = ledger.get_ledger_meta("db_id")
+    if db_id is None:
+        db_id = "mem:" + sha256_hex(canonical_bytes_for_evaluate("runtime_evaluate_mem_db_v1", session.schema_digest))
+    base_tx_id = ledger.get_ledger_meta("head_tx_id")
+    if base_tx_id is None:
+        base_tx_id = "tx:" + sha256_hex(
+            canonical_bytes_for_evaluate(
+                "runtime_evaluate_mem_tx_v1",
+                {
+                    "claims": [
+                        {
+                            "asrt_id": claim.asrt_id,
+                            "e_ref": claim.e_ref,
+                            "pred_id": claim.pred_id,
+                            "rest_terms": claim.rest_terms,
+                        }
+                        for claim in sorted(ledger.find_claims(), key=lambda item: item.asrt_id)
+                    ],
+                    "revokes": [
+                        {
+                            "revoked_asrt_id": revoke.revoked_asrt_id,
+                            "revoker_asrt_id": revoke.revoker_asrt_id,
+                        }
+                        for revoke in sorted(
+                            ledger.revokes,
+                            key=lambda item: (item.revoked_asrt_id, item.revoker_asrt_id),
+                        )
+                    ],
+                    "schema_digest": session.schema_digest,
+                },
+            )
+        )
+    active_asrt_ids = tuple(
+        _view_snapshot_asrt_id_for_claim(claim)
+        for claim in sorted(ledger.find_claims(), key=lambda item: item.asrt_id)
+        if not ledger.has_active_revocation(claim.asrt_id)
+    )
+    return view_snapshot_digest_for_parts(
+        db_id=db_id,
+        base_tx_id=base_tx_id,
+        schema_digest=session.schema_digest,
+        asrt_ids=active_asrt_ids,
+    )
+
+
+def _evaluate_result_to_dict(result: EvaluateResult, *, rows: tuple[EvaluateRow, ...] | None = None) -> dict[str, Any]:
+    selected_rows = result.rows if rows is None else rows
+    return {
+        "result_id": result.result_id,
+        "run_id": result.run_id,
+        "rows": [_evaluate_row_to_dict(row) for row in selected_rows],
+        "head": _application_rule_to_dict(result.head),
+        "engine": result.engine,
+        "engine_version": result.engine_version,
+        "adapter_version": result.adapter_version,
+        "expr_digest": result.expr_digest,
+        "rule_set_digest": result.rule_set_digest,
+        "view_snapshot_digest": result.view_snapshot_digest,
+        "semantics_digest": result.semantics_digest,
+        "evaluated_at": _to_jsonable(result.evaluated_at),
+        "result_digest": result.result_digest,
+        "row_count": len(result.rows),
+    }
+
+
+def _evaluate_row_to_dict(row: EvaluateRow) -> dict[str, Any]:
+    return {
+        "row_id": row.row_id,
+        "bindings": _to_jsonable(row.bindings),
+        "claim": {
+            "kind": row.claim.kind,
+            "name": row.claim.name,
+            "arguments": _to_jsonable(row.claim.arguments),
+            "repr": row.claim.repr,
+            "digest": row.claim.digest,
+        },
+        "raw_kind": row.raw_kind,
+        "bound": list(row.bound) if row.bound is not None else None,
+        "evidence_ref": {
+            "ref_id": row.evidence_ref.ref_id,
+            "result_id": row.evidence_ref.result_id,
+            "row_id": row.evidence_ref.row_id,
+            "fact_digest": row.evidence_ref.fact_digest,
+            "closed_head_digest": row.evidence_ref.closed_head_digest,
+        },
+    }
+
+
+def _application_rule_to_dict(rule: ApplicationRule) -> dict[str, Any]:
+    return {
+        "id": rule.id,
+        "version": rule.version,
+        "desc": rule.desc,
+        "content_digest": rule.content_digest,
+        "ports": {name: var.name for name, var in rule.ports.items()},
+        "where": [repr(atom) for atom in rule.where],
+    }
+
+
 def _candidate_to_dict(candidate: CandidateSet) -> dict[str, Any]:
     return {
         "candidate_id": candidate.candidate_id,
@@ -2605,7 +2787,7 @@ def _optional_str_or_none(value: Any, *, path: str) -> str | None:
 
 
 def _to_jsonable(value: Any) -> Any:
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {key: _to_jsonable(item) for key, item in value.items()}
     if isinstance(value, tuple):
         return [_to_jsonable(item) for item in value]
