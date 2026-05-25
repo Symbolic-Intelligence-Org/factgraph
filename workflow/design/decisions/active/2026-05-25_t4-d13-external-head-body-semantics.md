@@ -182,13 +182,15 @@ D13 does not add evaluate-specific head grammar restrictions:
 - aggregate atoms remain subject to the shipped T2.3 aggregate rules;
 - adapter support remains engine-specific per D9/T3L.2 behavior.
 
+External head bodies containing aggregate atoms make every branch aggregate-containing per §4.2, so the existing D9/T3L.2 PyReason classifier rejects the whole query under the adapter matrix policy.
+
 If an engine cannot support a valid head body atom, the adapter rejection path remains D9/T3L.2/T3L.3 style. D13 does not expand adapter grammar.
 
 ### 4.8 External head body constraints are filters, not output schema declarations
 
 Head output shape is still determined by `head.ports.keys`.
 
-External head body atoms can filter which rows qualify, but they do not create output columns unless their variables are exposed through `head.ports`.
+External head body atoms function as filters or constraints. They do not declare output columns: only `head.ports.keys` declares output column names. Head body atoms may reference variables present in `head.ports`, adding constraints on those columns, but cannot extend the output schema.
 
 This preserves parent §5.5: ports define output shape; where provides constraints.
 
@@ -301,4 +303,4 @@ Stage 3 synthesis must ensure any external-head implementation blueprint tests:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit Q4/F6 and D11/D12 deferred scope mapped to D13. D13 lifts T3L.3 external-head rejection and defines branch-wise alias-scoped head body concatenation plus explicit head-port link atoms. |
-
+| 2026-05-25 | proposed-amend | Claude Step 4.2 v1 follow-up | WC1 aggregate-in-head-body PyReason rejection interaction and WC2 head.ports output-schema wording clarified. |
