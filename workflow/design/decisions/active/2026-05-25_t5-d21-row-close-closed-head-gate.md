@@ -324,19 +324,20 @@ D26 may add adapter-specific evidence support, but it must not change D21's publ
 
 ## 8. Acceptance Criteria
 
-- [x] `row.close()` is live-row only and raises `DetachedRowError` for detached rows.
-- [x] `row.close()` returns an application protocol Rule, described generically until D24 final naming.
-- [x] Closed-head construction preserves non-projection head body atoms and appends deterministic D15 closure atoms.
-- [x] Projection closed-head construction drops D14 placeholder atoms and emits real literal closure atoms.
-- [x] Value ports close with `CmpAtom("eq", port_var, Const(value))`.
-- [x] Entity-ref ports close with primary identity `PredAtom(identity_predicate_id, [entity_ref_var, Const(value)])` atoms.
-- [x] Missing schema metadata for entity-ref closure raises `RuleExprError` in row-close / manual-explain gates.
-- [x] Manual `fg.eval.explain(..., head=closed_head)` validates closed-head status before D20 replay.
-- [x] D21 does not add new public error subclasses, public closed-head DTOs, or new explain entrypoints.
-- [x] D21 does not reopen D15 strict closure forms, D20 Explanation fields, D24 naming, or D26 semantics policy.
+- [ ] `row.close()` is live-row only and raises `DetachedRowError` for detached rows.
+- [ ] `row.close()` returns an application protocol Rule, described generically until D24 final naming.
+- [ ] Closed-head construction preserves non-projection head body atoms and appends deterministic D15 closure atoms.
+- [ ] Projection closed-head construction drops D14 placeholder atoms and emits real literal closure atoms.
+- [ ] Value ports close with `CmpAtom("eq", port_var, Const(value))`.
+- [ ] Entity-ref ports close with primary identity `PredAtom(identity_predicate_id, [entity_ref_var, Const(value)])` atoms.
+- [ ] Missing schema metadata for entity-ref closure raises `RuleExprError` in row-close / manual-explain gates.
+- [ ] Manual `fg.eval.explain(..., head=closed_head)` validates closed-head status before D20 replay.
+- [ ] D21 does not add new public error subclasses, public closed-head DTOs, or new explain entrypoints.
+- [ ] D21 does not reopen D15 strict closure forms, D20 Explanation fields, D24 naming, or D26 semantics policy.
 
 ## 9. Decision Record
 
 | Date | Stage | Decision | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Adopt live-row `row.close() -> Rule`, D15 strict closed-head construction, projection placeholder stripping, and manual explain closed-head gate. | Drafted after D20 reviewed clean v1; D22 why-not disposition unblocked after review. |
+| 2026-05-25 | proposed-amend | Normalize D21 acceptance criteria checkboxes to unchecked draft-state convention. | Addresses Step 4.2 v1 WC1; aligns D21 with D16-D20 and T4 D-doc implementation-time acceptance semantics. |
