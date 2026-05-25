@@ -1,6 +1,6 @@
 # Task Blueprint: T5.6 Final SDK Rule Flip
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted; escalate to L if service/agent/docs imports require broad migration)
@@ -327,4 +327,48 @@ Deferred:
 
 ## 11. Outcome
 
-Pending implementation.
+### Commit References
+
+- Scoped: `c91c1d38` — Step 4.6 grep clean, SDK-focused M-class scope retained.
+- Baseline: `58dddb50` — G7 baseline recorded, 170 tests in 0.092s, OK.
+- Feature: `ad810f4d` — SDK top-level `Rule` flipped to application protocol `Rule`.
+- Step 4.7 review: clean; 0 P0 / 0 P1; no fix commit required.
+
+### Final Landed Code
+
+T5.6 landed the final D24 SDK Rule namespace contract:
+
+- `factgraph.sdk.Rule` now refers to `factgraph.application.protocol.Rule`;
+- `factgraph.sdk.ApplicationRule` remains a transition alias and is identical to `factgraph.sdk.Rule`;
+- top-level `factgraph.sdk.LegacyRule` is removed from module attributes and `__all__`;
+- `factgraph.sdk.dsl.Rule` remains the explicit legacy DSL class path until T5.7;
+- `factgraph.sdk.Inference`, `build_application_rule(...)`, and `DSLToApplicationRuleError` remain exported;
+- focused runtime-facing messages now use final `Rule` naming instead of public `ApplicationRule` naming.
+
+The feature touched only SDK/protocol namespace behavior and focused tests. It did not touch service routes, OpenAPI, agent code, adapters, final docs migration, legacy shell deletion, or T5.1-T5.5 DTO/evaluate/explain/why-not contracts.
+
+### Delivered Behavior
+
+- `from factgraph.sdk import Rule` now imports the application protocol `Rule`.
+- `from factgraph.sdk import ApplicationRule` remains valid as a migration alias.
+- `from factgraph.sdk import LegacyRule` no longer works; callers that intentionally need the legacy DSL class must import `factgraph.sdk.dsl.Rule`.
+- Top-level legacy Rule construction through `sdk.Rule(...)` no longer constructs a DSL Rule.
+- Legacy DSL construction, inspect, check/diagnose/why-not helper paths, and capability helper tests use the explicit `.sdk.dsl.Rule` path.
+- T5.1-T5.5 public result/evidence/explain/why-not behavior is preserved.
+
+### Test Gates
+
+- Focused T5.6/T5 evaluate suite: 91 tests OK.
+- G7 preservation: 171 tests OK.
+- T5.1-T5.5 focused preservation: 52 tests OK.
+- Legacy helper subset using explicit `.sdk.dsl.Rule`: 151 tests OK.
+- Touched-file ruff: clean.
+- `git diff --check`: clean.
+
+### Deviations / Follow-Ups
+
+- 0 P0 / 0 P1.
+- G7 increased from 170 to 171 after the Rule naming test split/update.
+- Broad SDK docs/examples, OpenAPI, service routes, agent paths, and final legacy deletion remain T5.7.
+- `tests.test_public_inference_factgraph_create` remains outside G7 by existing policy; the extra local sweep still shows unrelated pre-existing failures tied to removed registry/confidence surfaces, not to T5.6.
+- Optional Semantics Lite remains T5.8 / post-T5 depending on T5.7 outcome.

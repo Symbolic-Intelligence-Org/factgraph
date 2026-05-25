@@ -1,11 +1,11 @@
 # Audit: T5.6 Final SDK Rule Flip
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-6-final-sdk-rule-flip.md`
-- Stage: T5.6 implementation scoped
+- Stage: T5.6 implemented
 - Class: M (predicted; escalate to L if service/agent/docs imports require broad migration)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -17,6 +17,8 @@
 | 2026-05-25 | draft | `4f4fc8d4` | Blueprint pair drafted | T5.6 Final SDK Rule Flip draft created after T5.5 archive `ec45f12f`. Scope is predicted M-class: flip SDK top-level `Rule` to application protocol `Rule`, keep `ApplicationRule` as transition alias, remove top-level `LegacyRule`, and defer broad D23 hard-cut/docs migration to T5.7. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Grep found expected SDK namespace/test blast radius, `.dsl.Rule` preservation paths, and broad docs/examples deferred to T5.7. T5.6 remains one SDK-focused M-class namespace flip with no split before scoped. |
 | 2026-05-25 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `c91c1d38`: 170 tests in 0.092s, OK. Pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded from G7. |
+| 2026-05-25 | feat | `ad810f4d` | SDK Rule namespace flipped | Landed D24 final SDK namespace: top-level `Rule` is application protocol `Rule`, `ApplicationRule` is a transition alias, top-level `LegacyRule` is removed, and `.sdk.dsl.Rule` remains the explicit legacy path. |
+| 2026-05-25 | implemented | pending | Closure recorded | Step 4.7 review clean with 0 P0 / 0 P1. Gates: 91 focused, 171 G7, 52 T5.1-T5.5 preservation, 151 legacy helper subset, ruff clean, diff check clean. |
 
 ## 2. Source Chain
 
@@ -173,4 +175,53 @@ Baseline record:
 
 ## 12. Outcome
 
-Pending.
+### Commit References
+
+| Stage | Commit | Notes |
+|---|---|---|
+| Draft | `4f4fc8d4` | T5.6 blueprint pair drafted. |
+| Scoped | `c91c1d38` | Step 4.6 grep clean; M-class SDK-focused scope retained. |
+| Baseline | `58dddb50` | G7 baseline: 170 tests in 0.092s, OK. |
+| Feature | `ad810f4d` | SDK top-level `Rule` flipped to application protocol `Rule`. |
+
+### Landed Code
+
+T5.6 landed:
+
+- SDK top-level `Rule` now imports `factgraph.application.protocol.Rule`.
+- `ApplicationRule = Rule` remains as a transition alias.
+- `LegacyRule` is removed from top-level `factgraph.sdk` and `factgraph.sdk.__all__`.
+- `factgraph.sdk.dsl.Rule` remains available for explicit legacy DSL construction until T5.7.
+- `Inference`, `build_application_rule(...)`, and `DSLToApplicationRuleError` remain exported.
+- Narrow runtime messages in RuleExpr/evaluate/explain paths use final `Rule` naming.
+- Focused tests migrated legacy DSL construction expectations to `factgraph.sdk.dsl.Rule`.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| Focused T5.6/T5 evaluate suite | 91 tests OK |
+| G7 preservation | 171 tests OK |
+| T5.1-T5.5 focused preservation | 52 tests OK |
+| Legacy helper subset | 151 tests OK |
+| Touched-file ruff | clean |
+| `git diff --check` | clean |
+
+### Step 4.7 Disposition
+
+Reviewer reported T5.6 feat clean:
+
+- 0 P0;
+- 0 P1;
+- no Step 4.7 fix required.
+
+### Deferred Work
+
+- T5.7 owns broad legacy hard-cut, service routes, OpenAPI, final SDK docs/examples migration, and any remaining legacy shell deletion.
+- T5.7 also owns final public docs rewrite after D23 hard-cut consumes D24 final naming.
+- Optional Semantics Lite remains T5.8 / post-T5.
+- `tests.test_public_inference_factgraph_create` remains excluded from G7; extra local sweep failures are unrelated to T5.6 and tied to already-removed registry/confidence surfaces.
+
+### Closure Notes
+
+T5.6 is implemented and ready for archive. The final SDK namespace now has a single public `Rule` meaning: application protocol `Rule`. Legacy DSL construction remains possible only through explicit `factgraph.sdk.dsl.Rule`, giving T5.7 a clear hard-cut boundary for docs, services, and remaining legacy shells.
