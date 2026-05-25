@@ -138,6 +138,8 @@ PredAtom(identity_predicate_id, [entity_ref_var, Const(value)])
 
 where `identity_predicate_id` comes from `SchemaIndex.entities[entity_type].identity_predicates[field_name].pred_id` for each `IdentityFieldInfo(primary_key=True)`.
 
+Closure checks operate on the user-authored `head.where` atoms, not on D13 runtime-augmented head-port link atoms, which link variables rather than literals.
+
 For compound primary identity, all primary-key fields must be present. If one primary-key identity field is missing, the entity-ref port is unbound.
 
 Non-primary identity fields are not required for closedness.
@@ -151,6 +153,8 @@ If schema metadata is missing or incomplete:
 - inspect marks the affected entity-ref port unbound;
 - a future "must be closed" validation gate using the same helper raises `RuleExprError` with a schema-metadata message;
 - value-port closure can still be computed without schema metadata.
+
+That future gate belongs to T5 caller paths such as manual explain or `row.close()` if adopted; D15 owns only the reusable validator and inspect reporting.
 
 This avoids false `is_closed=True` while keeping read-only inspect useful.
 
@@ -179,7 +183,7 @@ The fields live on the public inspect DTO returned by `fg.rules.inspect(...)` fo
 
 Implementation may extend the existing `RuleExprInspect` DTO because shipped SDK inspection already returns `RuleExprInspect` for application `Rule` values. It must preserve existing structural fields (`ast`, `occurrences`, `joins`, `unjoined_same_name_ports`, and `ports`).
 
-For RuleExpr structural inspection, D15 does not define a closed-head guarantee. The T5 invariant applies to inspect values for application head Rules.
+For RuleExpr structural inspection, D15 does not define a closed-head guarantee. The closed-head invariant applies to inspect values for application head Rules.
 
 ### 4.8 Closed-head validation is private and reusable
 
@@ -323,3 +327,4 @@ Stage 3 synthesis must ensure closed-head implementation blueprints test:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit Q6/Q7/Q8/Q9 and parent C72 mapped to D15. D15 locks a strict v1 closed-head algorithm, inspect-only public fields, private reusable validator, and T4/T5 boundary. |
+| 2026-05-25 | proposed-amend | Claude Step 4.2 v1 follow-up | WC1 closed-head invariant wording fixed; WC2 user-authored head body closure scope and WC3 future T5 gate relationship clarified. |
