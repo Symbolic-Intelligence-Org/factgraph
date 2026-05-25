@@ -13,6 +13,8 @@ T4 is closed: Stage 1-3 plus T4.1, T4.2, and T4.3 are archived, memory-consolida
 
 This audit compares the T5 parent design commitments against shipped runtime and SDK surfaces before any T5 decision or implementation work. The audit focuses on `.eval` result shape, row-centric explanation, why-not disposition, legacy hard-cut blast radius, evidence publicization, semantics wrappers, and the T1.3 final `Rule` naming flip.
 
+Given the initial 14-question surface after this audit, Stage 2 likely needs roughly 7-10 decision docs before Stage 3 synthesis chooses a final implementation ladder.
+
 ## 2. Audit Scope
 
 In scope:
@@ -32,6 +34,7 @@ Out of scope for this Stage 1 audit:
 - No push.
 - No final decision on whether T5 includes all semantics commitments C73-C78 or splits part of them into a later cycle.
 - No §6 task split (`match` / `evaluate` / `prove`) or §9 RuleExpr x evidence joins; both are explicitly outside the T5 track plan (`workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:263-266`).
+  Parent §6 proposes a future three-way decomposition of evaluation behavior; parent §9 proposes a join surface between RuleExpr and evidence. This audit treats both as deferred context, not T5 implementation scope.
 
 ## 3. Canonical Sources Read
 
@@ -74,6 +77,8 @@ This is the central T5 gap: T4 intentionally preserved `list[CandidateSet]` to a
 
 T5 must decide whether `CandidateSet` remains an internal adapter/runtime artifact, a compatibility view, or a deleted public surface.
 
+The full proposed `EvaluateRow` field set is `row_id`, `bindings`, `claim`, `raw_kind`, `bound`, `evidence_ref`, and non-data `_result_resolver`; `CandidateSet` has no exact counterpart for several of those fields.
+
 ### F3 — `.eval` namespace is partly present but conflicts with parent delete/deprecate plan
 
 Shipped `_SDKEvalManager` still exposes `run`, `evaluate`, `inspect_semantics`, `accept`, and `accept_many` (`src/factgraph/sdk/store.py:420-475`). Parent §5.8 deletes `fg.eval.accept` / `accept_many`, deletes `engine_options=` and `registry=` from public evaluate, and freezes `fg.eval.run` for later deletion (`workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:940-957`).
@@ -109,6 +114,8 @@ T5 can reuse the closed-head helper, but T4.3 intentionally did not add `row.clo
 SDK exports both legacy `Rule` and `LegacyRule`, while application `Rule` is exported as `ApplicationRule` (`src/factgraph/sdk/__init__.py:38-56`, `src/factgraph/sdk/__init__.py:88-92`). Legacy SDK `Rule` remains a query object with `fg.eval.run(rule)` docs in its docstring (`src/factgraph/sdk/dsl/rule.py:53-118`). SDK `Inference` remains the derivation authoring object (`src/factgraph/sdk/dsl/rule.py:119-170`).
 
 T5's new evaluate surface uses application `Rule` as the head. The final SDK naming flip should be audited and decided inside the T5 hard-cut plan, not as an unrelated cleanup.
+
+Current namespace shape is four-way: `Rule` is the legacy SDK query class, `LegacyRule` is an alias to that same DSL class, `ApplicationRule` points at `factgraph.application.protocol.Rule`, and `Inference` remains a separate derivation authoring class. T1.3 final flip must decide which names survive and which names become transition aliases.
 
 ### F9 — Semantics wrappers are partially shipped; C73-C78 are larger than result DTOs
 
@@ -172,6 +179,7 @@ The Stage 2 decision layer should be at least as explicit as T4 D11-D15 before i
 | Q11 | How does the T1.3 final SDK `Rule` flip happen without confusing legacy `Rule`, `LegacyRule`, `Inference`, and application `Rule` imports? | F8. |
 | Q12 | Which semantics wrapper commitments belong in T5 Stage 2, and which become a later track? | F9, C73-C78. |
 | Q13 | Which application / service routes depend on old Check/Diagnose/WhyNot shapes and must be included in blast-radius tests? | Track plan affected surface, F12. |
+| Q14 | How do `.eval.evaluate(..., semantics=...)` and `.eval.explain(..., semantics=...)` enforce semantics consistency between row-time evaluate and replay-time explain? If callers use different `semantics=` for the same row or manual replay, should the system warn, raise, or remain silent? | C69, F9. |
 
 ## 8. Reviewer Focus
 
