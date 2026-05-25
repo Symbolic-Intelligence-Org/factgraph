@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | 2026-05-25 | draft | `62c8eb1a` | Blueprint pair drafted | T5.5 Why-Not Fold + Legacy Evidence Quarantine draft created after T5.4 archive `7464c3e3`. Scope is M-class predicted and intentionally minimal: failed Explanation is v1 why-not envelope; legacy why-not hard-cut remains T5.7. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Eight grep buckets completed. Existing WhyNot protocol/runtime/shells, round-event payloads, docs/examples, and T5.3/T5.4 explanation paths are expected substrate or future T5.7 territory. No public `.eval.why_not`, no result/explanation why-not method, and no lossy WhyNot/Diagnose-to-Explanation conversion path found. Scope remains M-class minimal. |
+| 2026-05-25 | baseline | pending | G7 preservation baseline recorded | Ran inherited G7 command at scoped anchor `a27feb0f`: 170 tests OK in 0.098s. Pytest remains deferred per existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains excluded. |
 
 ## 2. Source Chain
 
@@ -135,9 +136,9 @@ Baseline record:
 | Branch | `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` |
 | Sacred state | `master = 562c74195df43e933bed92a3ff25de94dd8ce666` |
 | Dirty baseline | 6 modified + 1 untracked preserved |
-| Scoped anchor | pending |
-| Command | pending |
-| Result | pending |
+| Scoped anchor | `a27feb0f` |
+| Command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
+| Result | `Ran 170 tests in 0.098s, OK` |
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
