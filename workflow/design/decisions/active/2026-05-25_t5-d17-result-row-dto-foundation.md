@@ -143,9 +143,11 @@ class EvaluateRow:
 Field rules:
 
 - `bindings` keys are output column names from the application head Rule, not internal variable names.
+- `bindings` values are application-level Python values for output columns. D17 does not narrow the value-type union beyond `object`, but concrete values follow the head Rule port type system: primitives, datetimes, entity refs, and registered application values. Internal lowering vars, support artifacts, resolver callables, and adapter-native evidence objects must not appear as `bindings` values.
 - `raw_kind` and `bound` are nullable quantitative fields. D17 only locks the carrier; D25/D26 own semantics consistency and projection behavior.
 - `_result_resolver` is non-data plumbing. It must not participate in equality, hash, repr, serialization, row digest, or public JSON.
 - `EvaluateRow` has no `status` field. Success rows live in `EvaluateResult`; failure / unsupported / invalid states live in `Explanation`, decided by D20.
+- Row lineage, such as aggregate rows referencing source rows or rule-head rows referencing fact-triple parents, is not a direct `EvaluateRow` field. Lineage is expressed through `evidence_ref` and the downstream `EvidenceGraph` in D20. This keeps `EvaluateRow` flat and leaves lineage details to evidence resolution.
 
 ### 4.4 `Claim` is a new public eval claim DTO, distinct from ledger `Claim`
 
@@ -197,6 +199,8 @@ row.evidence_ref.row_id == row.row_id
 row.evidence_ref.fact_digest == row.claim.digest
 ```
 
+`closed_head_digest` captures the canonical digest of the closed-head form used to produce this row, allowing D20 manual `fg.eval.explain(expr, head=closed_head)` and D21 `row.close()` to align replay with original evaluation. D15 closed-head inspect provides the substrate; D19 owns the digest formula and D21 owns construction semantics.
+
 ### 4.6 `EvaluateResult` is the session envelope and shared audit context
 
 D17 adopts the parent Wave 1 result field surface:
@@ -207,7 +211,7 @@ class EvaluateResult:
     result_id: str
     run_id: str
     rows: tuple[EvaluateRow, ...]
-    head: object  # application head Rule; D24 owns SDK public naming.
+    head: Rule  # application protocol head Rule; D24 owns SDK public naming.
     engine: str
     engine_version: str | None
     adapter_version: str | None
@@ -215,7 +219,7 @@ class EvaluateResult:
     rule_set_digest: str
     view_snapshot_digest: str
     semantics_digest: str | None
-    evaluated_at: object
+    evaluated_at: object  # frozen evaluation timestamp; representation locked by implementation.
     result_digest: str
 ```
 
@@ -362,3 +366,4 @@ Stage 3 synthesis must not create a return-shape flip blueprint before D18 and D
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T5 Stage 1 audit Q2/Q4 mapped to D17. D17 locks application-protocol-owned result DTOs with SDK re-exports, final `EvaluateResult` / `EvaluateRow` / `Claim` / `EvidenceRef` / `DetachedRowError` field surfaces, `CandidateSet` as internal artifact, ledger-Claim name separation, and live/detached row behavior while deferring return-shape migration, digest formulas, Explanation, row.close, hard-cut, Rule naming, and semantics decisions. |
+| 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified `EvaluateRow.bindings` values are application-level output values only, row lineage is carried through `EvidenceRef` / D20 `EvidenceGraph` rather than direct row fields, `EvidenceRef.closed_head_digest` aligns replay with original closed-head construction, and tightened illustrative `EvaluateResult.head` / `evaluated_at` annotations without locking D19/D24 details. |
