@@ -1,0 +1,173 @@
+# Audit: T5.7 Legacy Hard-Cut + Service/Docs Migration
+
+- Status: draft
+- Created: 2026-05-25
+- Last Updated: 2026-05-25
+- Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
+- Blueprint: `workflow/blueprints/active/2026-05-25_t5-7-legacy-hard-cut-service-docs-migration.md`
+- Stage: T5.7 draft
+- Class: L (predicted; may split into M-class local slices after Step 4.6)
+- Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
+- Dirty baseline: 6 modified + 1 untracked preserved
+
+## 1. Event Log
+
+| Date | Stage | Commit | Event | Notes |
+|---|---|---|---|---|
+| 2026-05-25 | draft | pending | Blueprint pair drafted | T5.7 Legacy Hard-Cut + Service/Docs Migration draft created after T5.6 archive `7aa1c6a3`. Scope is predicted L-class: complete D23 hard-cut, migrate service/OpenAPI/docs, decide legacy DSL Rule and why-not final disposition, and preserve private CandidateSet runtime as needed. |
+
+## 2. Source Chain
+
+T5.7 consumes:
+
+- Stage 1 audit: `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md`
+- Stage 3 synthesis: `workflow/audit/active/2026-05-25_post-q-t5-result-evidence-explain-synthesis.md`
+- D18 return-shape transition: `workflow/design/decisions/active/2026-05-25_t5-d18-return-shape-transition-strategy.md`
+- D20 explanation envelope: `workflow/design/decisions/active/2026-05-25_t5-d20-explanation-envelope-evidencegraph-integration.md`
+- D22 why-not disposition: `workflow/design/decisions/active/2026-05-25_t5-d22-why-not-disposition.md`
+- D23 legacy SDK hard-cut plan: `workflow/design/decisions/active/2026-05-25_t5-d23-legacy-sdk-hard-cut-plan.md`
+- D24 final SDK Rule flip: `workflow/design/decisions/active/2026-05-25_t5-d24-final-sdk-rule-flip.md`
+- T5.1 archive: `workflow/blueprints/archive/2026-05-25_t5-1-dto-foundation-digest-harness.md`
+- T5.2 archive: `workflow/blueprints/archive/2026-05-25_t5-2-public-evaluate-return-shape-flip.md`
+- T5.3 archive: `workflow/blueprints/archive/2026-05-25_t5-3-explanation-envelope-live-row-resolver.md`
+- T5.4 archive: `workflow/blueprints/archive/2026-05-25_t5-4-row-close-manual-explain-closed-head-gate.md`
+- T5.5 archive: `workflow/blueprints/archive/2026-05-25_t5-5-why-not-fold-legacy-evidence-quarantine.md`
+- T5.6 archive: `workflow/blueprints/archive/2026-05-25_t5-6-final-sdk-rule-flip.md`
+
+## 3. Pre-Draft Shipped Source Reads
+
+| Source | Lines / area | Reason |
+|---|---|---|
+| `workflow/audit/active/2026-05-25_post-q-t5-result-evidence-explain-synthesis.md` | T5.7 slice | Confirms L-class default and acceptance anchors. |
+| `workflow/design/decisions/active/2026-05-25_t5-d23-legacy-sdk-hard-cut-plan.md` | sections 4.1-4.8 | Defines hard-cut targets, service inventory, and docs timing. |
+| `workflow/blueprints/archive/2026-05-25_t5-2-public-evaluate-return-shape-flip.md` | scope + outcome | Confirms service/OpenAPI/docs deferred from SDK-only evaluate flip. |
+| `workflow/blueprints/archive/2026-05-25_t5-6-final-sdk-rule-flip.md` | scope + outcome | Confirms final SDK `Rule` naming is available for docs migration. |
+| `src/service/runtime_v1.py` | evaluate / accept runtime derivation routes | Confirms CandidateSet serialization and accept cache remain service-facing. |
+| `src/service/app_v1.py` | route registration | Confirms evaluate and accept routes are still registered. |
+| `docs/api/openapi.yaml` | `/runtime/inferences/evaluate` and `/runtime/inferences/accept` | Confirms public OpenAPI still documents CandidateSet and accept handshake. |
+| `src/factgraph/sdk/store.py` | eval, accept, direct check/diagnose/why_not, what_if managers | Confirms legacy shell targets remain after T5.6. |
+| `src/factgraph/sdk/docs/*.en.md`, `docs/official`, `examples`, `tests` | broad grep snapshot | Confirms docs/tests still contain CandidateSet, accept, what-if, and legacy naming references. |
+
+## 4. Pre-Draft Grep Snapshot
+
+| Area | Snapshot |
+|---|---|
+| Service evaluate | `src/service/runtime_v1.py` calls `session.store.evaluate(...)`, caches CandidateSets, and serializes `candidates`. |
+| Service accept | `src/service/runtime_v1.py` accepts a serialized candidate and calls `session.store.accept(...)`. |
+| OpenAPI | `docs/api/openapi.yaml` describes CandidateSet v2 output and an accept handshake. |
+| SDK hard-cut | `src/factgraph/sdk/store.py` still contains accept/accept_many, direct check/diagnose/why_not, and what-if managers. |
+| Why-not | T5.5 quarantine markers exist, but shipped why-not DTO/runtime/shell code still exists. |
+| DSL Rule | T5.6 removed top-level `LegacyRule`, but `.sdk.dsl.Rule` remains. |
+| Docs/examples | CandidateSet, accept, check, diagnose, why-not, what-if, `ApplicationRule`, and legacy DSL examples remain broad. |
+| Adapter guard | No T5.7 owner for `src/factgraph/adapters/` or C73-C78. |
+
+## 5. Scope Mapping
+
+| Stage 3 / D-doc item | T5.7 draft treatment |
+|---|---|
+| D23 hard-cut target inventory | In scope; Step 4.6 must classify before scoped. |
+| D23 service route migration | In scope; evaluate route and accept route must align with T5 EvaluateResult model. |
+| D23 OpenAPI/docs migration | In scope after T5.6 final Rule naming. |
+| D18 no public CandidateSet compatibility | In scope as a negative gate. |
+| D22 no public why-not API | In scope as a negative gate; final disposition of legacy why-not code decided here. |
+| D24 final SDK `Rule` naming | In scope for docs/examples and legacy DSL cleanup. |
+| T5.1-T5.6 contracts | Preserved; T5.7 must not alter DTO/evaluate/explain/close/Rule contracts. |
+| D26 adapter/Semantics Lite | Out of scope. |
+
+## 6. G1-G7 Mapping
+
+| Gate | Description | Draft status |
+|---|---|---|
+| G1 | Uses reviewed-clean T5 design inputs | Satisfied. |
+| G2 | Has explicit T5.7 scope and split rules | Satisfied; L-class default. |
+| G3 | Has negative-action gates | Satisfied in blueprint section 0. |
+| G4 | Includes shipped-source preflight | Satisfied in audit sections 3-4. |
+| G5 | Defines tests and preservation gates | Satisfied in blueprint sections 4 and 6. |
+| G6 | Preserves sacred branch and dirty baseline | Satisfied; draft docs only. |
+| G7 | Establishes baseline before feat | Pending after scoped; expected 171 tests OK. |
+
+## 7. Step 4.6 Pre-Implementation Grep Plan
+
+Run before scoped and record actual results.
+
+| # | Check | Command shape | Expected / classification |
+|---|---|---|---|
+| 1 | Service routes | `rg "inferences/evaluate|inferences/accept|CandidateSet|candidate|accept_runtime_derivation|evaluate_runtime_derivation" src/service` | Expected broad hits; classify T5.7 service update or route removal/redesign. |
+| 2 | OpenAPI and service docs | `rg "CandidateSet|accept|inferences/evaluate|inferences/accept|EvaluateResult" docs/api src/service docs` | Expected broad hits; T5.7 OpenAPI/docs update. |
+| 3 | SDK legacy shells | `rg "def accept|accept_many|def check|def diagnose|def why_not|what_if|_SDKWhatIf|eval\\.run|eval\\.accept" src/factgraph/sdk tests` | Expected hits; classify removal/rejection/internal preservation. |
+| 4 | Public CandidateSet exposure | `rg "CandidateSet|candidate_id|support_digest|return_candidates|result_shape|evaluate_v2|evaluate_candidates" src tests docs examples` | CandidateSet internal hits expected; public teaching/route hits T5.7 update. |
+| 5 | Docs/examples/notebooks | `rg "CandidateSet|accept_many|accept\\(|check\\(|diagnose\\(|why_not|what_if|ApplicationRule|LegacyRule" src/factgraph/sdk/docs docs/official examples tests` | Broad hits expected; classify rewrite/archive/historical exception. |
+| 6 | Why-not final disposition | `rg "WhyNotUniverse|WhyNotRedRow|WhyNotRowDiagnostic|WhyNotAtomLocator|WhyNotStatus|check_why_not_universe|sdk_why_not|why_not" src tests` | Expected legacy quarantine hits; decide internal preserve/delete. |
+| 7 | Legacy DSL Rule final disposition | `rg "factgraph\\.sdk\\.dsl|from factgraph\\.sdk\\.dsl import Rule|dsl\\.Rule|LegacyRule|ApplicationRule|Inference" src tests docs examples` | Expected legacy tests/docs; decide final public cleanup. |
+| 8 | T5.1-T5.6 contract guard | `rg "EvaluateResult|EvaluateRow|Explanation|row\\.explain|row\\.close|fg\\.eval\\.explain|Rule.content_digest|semantics_digest" src/factgraph tests` | Existing substrate expected; no contract changes. |
+| 9 | Adapter / Semantics Lite guard | `rg "src/factgraph/adapters|SemanticsProfile|C73|C74|C75|C76|C77|C78|iteration_count|temporal" src tests workflow` | Existing references only; no adapter edits. |
+| 10 | Compatibility surface guard | `rg "evaluate_v2|why_not_v2|result_shape|return_candidates|as_candidates|EvaluateResult\\.why_not|Explanation\\.why_not|counterfactual" src tests docs examples` | Should be absent except design references; no new compat surface. |
+
+Step 4.6 must also decide:
+
+- one L-class implementation or T5.7a/T5.7b/T5.7c split;
+- service accept removal versus redesign;
+- why-not DTO delete versus internal preserve;
+- legacy DSL Rule delete versus internal preserve;
+- any future-track deferral for `what_if.fact_overlay.*` or `what_if.rule.*`.
+
+## 8. G7 Baseline Plan
+
+Command:
+
+```bash
+PYTHONPATH=src python -m unittest \
+  tests.application.protocol.test_rule \
+  tests.application.protocol.test_rule_expr \
+  tests.sdk.test_ruleexpr_inspect \
+  tests.sdk.test_rule_naming \
+  tests.application.protocol.test_rule_aggregate \
+  tests.test_branch_identity_rule_inspect \
+  tests.application.protocol.test_rule_expr_lowering \
+  tests.application.protocol.test_rule_expr_lowering_adapter \
+  tests.sdk.test_rule_expr_evaluate \
+  tests.application.protocol.test_rule_expr_head_validation \
+  -v
+```
+
+Expected result: 171 tests OK, inherited from T5.6 archive.
+
+Baseline record fields to fill later:
+
+| Field | Value |
+|---|---|
+| Branch | `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` |
+| Sacred state | `master = 562c74195df43e933bed92a3ff25de94dd8ce666` |
+| Dirty baseline | 6 modified + 1 untracked preserved |
+| Scoped anchor | pending |
+| Command | pending |
+| Result | pending |
+| Pytest policy | deferred per existing SIGSEGV environment lock |
+| Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
+
+## 9. Draft Review Checklist
+
+| Item | Status |
+|---|---|
+| D23 hard-cut targets represented | Yes |
+| Service/OpenAPI migration represented | Yes |
+| Final docs migration represented | Yes |
+| D18 CandidateSet compat ban represented | Yes |
+| D22 why-not replacement ban represented | Yes |
+| D24 final Rule naming represented | Yes |
+| T5.1-T5.6 contracts protected | Yes |
+| C73-C78 / adapter work excluded | Yes |
+| Step 4.6 split decision required | Yes |
+
+## 10. Reviewer Focus
+
+- Is T5.7 scope broad enough to close D23 without accidentally adding new public compatibility?
+- Are split rules strict enough to prevent incoherent public milestones?
+- Is service/OpenAPI/docs migration tied to the same public target shape?
+- Are legacy DTO deletion/internal-preserve decisions deferred only to Step 4.6, not implementation guesswork?
+- Are dirty notebooks and existing dirty files protected from unrelated overwrite?
+
+## 11. Outcome
+
+Pending implementation.
+
