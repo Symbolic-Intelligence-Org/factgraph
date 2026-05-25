@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; push gate executed — 4 origin refs created; T3 later selected; **T3L.1 + T3L.2 archived; T3 later 2/3 implementation slices complete**)
+最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; push gate executed — 4 origin refs created; T3 later selected; **T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE**)
 
-## 当前阶段(2026-05-25 — T3L.2 ARCHIVED; T3 LATER TRANCHE IN PROGRESS)
+## 当前阶段(2026-05-25 — T3 LATER CYCLE COMPLETE)
 
-**Current local branch:** `v0.2.0-t3l-2-adapter-matrix-parity-2026-05-25 @ 9ab312b9`.
+**Current local branch:** `v0.2.0-t3l-3-public-dispatch-diagnostics-docs-2026-05-25 @ 48f925a8`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -39,6 +39,7 @@
 | **T3.6 Docs and Examples** | S (docs-only) | `96baa609` | `f8abaad1 docs(sdk): add T3 RuleExpr user-facing docs and examples` (0 deviation — fourth consecutive T3 feat + T3 cycle final) |
 | **T3L.1 Internal Lowering + Native Execution** | M | `797c93f1` | `ec8ae668 feat(ruleexpr): add internal native lowering plan` + `ebec1136 test(ruleexpr): cover native lowering negative cases` (111 preservation tests OK; first T3 later implementation slice archived) |
 | **T3L.2 Adapter Matrix Parity** | M | `9ab312b9` | `a417fe73 feat(ruleexpr): add adapter matrix materialization checks` + `f1726ef3 docs(ruleexpr): clarify PyReason classifier head scope` (121 preservation tests OK; second T3 later implementation slice archived) |
+| **T3L.3 Public SDK Dispatch + Diagnostics + Docs** | M | `48f925a8` | `25b71e64 feat(sdk): expose RuleExpr evaluation dispatch` + `762731fa fix(sdk): harden RuleExpr rule alias fallback` (131 preservation tests OK; final T3 later implementation slice archived; public RuleExpr execution shipped) |
 
 ### Current landed behavior
 
@@ -285,6 +286,31 @@
   - Verification: G7 baseline 111 tests OK; post-feat preservation 121 tests OK; focused lowering coverage 22 tests OK; ruff clean.
   - T3L.2 explicitly defers public `fg.eval.evaluate(rule_expr, head=...)`, public SDKStoreError conversion, public docs, and external-head body concatenation semantics to T3L.3.
 
+**T3L.3 — Public SDK Dispatch + Diagnostics + Docs**
+- **T3L.3 archived at `48f925a8`**:
+  - Lineage: `ecb83f2b` draft → `71024ee7` draft-amend → `5f607628` scoped (Step 4.6 grep clean) → `7f9df8cb` G7 baseline (121 OK) → `25b71e64` feat → `762731fa` Step 4.7 regex/docs fix → `5580e3c4` closure → `48f925a8` archive.
+  - Extended `src/factgraph/sdk/store.py` with public RuleExpr / application Rule dispatch through `fg.eval.evaluate(rule_expr_or_application_rule, *, head=head_rule)`, required `head=` validation, conservative external-head rejection, PyReason classifier conversion to `SDKStoreError`, and `engine_options` forwarding through the existing `DerivationEvaluateRequest` / `evaluate_derivation_plans(...)` path.
+  - Consumed T3L.1/T3L.2 private substrate without exporting it: `_lower_application_rule(...)`, `_lower_rule_expr(...)`, `_materialize_adapter_derivation_plan(...)`, and `_classify_pyreason_rule_expr_support(...)`.
+  - Added `_RULE_EXPR_DEFAULT_ALIAS_RE` fallback for application Rule ids that are not valid default occurrence aliases; such Rules are internally evaluated through a stable `head` occurrence alias and the behavior is documented.
+  - Added `tests/sdk/test_rule_expr_evaluate.py` with 10 focused SDK tests covering public native success, C35 single Rule coercion, missing/invalid `head=`, external-head rejection, Souffle/ProbLog request shape, PyReason support/rejection diagnostics, and legacy `Inference` preservation.
+  - Updated 4 user-facing docs files: `sdk/docs/03_rules_and_inferences.en.md`, `sdk/docs/00_user_guide.en.md`, `sdk/docs/01_concepts.en.md`, and `application/docs/rule.md`.
+  - Verification: G7 baseline 121 tests OK; post-feat preservation 131 tests OK; Step 4.7 fix kept 131 tests OK; 10 focused SDK tests OK; ruff clean.
+  - Scope locks held: no adapter production edits, no public lowering/trace/adapter-support DTO exports, no public result wrapper, no `CandidateSet` / `SupportArtifact` / `EvidenceEnvelope` / `CompiledDerivationPlan` shape changes, no T4 Head / closed-head behavior, no PyReason Form 2 grammar expansion, and no legacy SDK `Inference` / derivation dict behavior change.
+
+### T3 later cycle complete milestone
+
+| Slice | Class | Feat | Verification |
+|---|---|---|---|
+| T3L.1 Internal Lowering + Native | M | `ec8ae668` + `ebec1136` | 111 preservation tests OK; 12 focused lowering tests; ruff clean |
+| T3L.2 Adapter Matrix Parity | M | `a417fe73` + `f1726ef3` | 121 preservation tests OK; 22 focused lowering/adapter tests; ruff clean |
+| T3L.3 Public SDK Dispatch + Diagnostics + Docs | M | `25b71e64` + `762731fa` | 131 preservation tests OK; 10 focused SDK tests; ruff clean |
+
+- T3 later is complete locally: Stage 1 audit, D6-D10, Stage 3 synthesis, and all 3 implementation slices are reviewed, archived, and memory-consolidated by this commit.
+- Public RuleExpr execution is now shipped through `fg.eval.evaluate(rule_expr_or_application_rule, head=...)`.
+- Private lowering / trace / adapter-support substrate remains private; public success result remains `list[CandidateSet]`.
+- T3 later preserved narrow-public-api discipline across all slices and did not reopen T4 Head or T5 result/evidence surfaces.
+- Remaining unpushed local work includes T3L.1/T3L.2/T3L.3 cycle commits and memory consolidations; push remains Human-directed.
+
 ### T3 cycle complete milestone
 
 | Slice | Class | Feat | Deviation |
@@ -448,10 +474,9 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 
 ### Recommended next work
 
-- **T3 later tranche in progress** — Stage 1 audit, D6-D10, Stage 3 synthesis, T3L.1, and T3L.2 are complete. Final slice is **T3L.3 Public SDK Dispatch + Diagnostics + Docs**.
-- **T3L.3 Public SDK Dispatch + Diagnostics + Docs** — expose public `fg.eval.evaluate(rule_expr, head=...)`, diagnostics, public `SDKStoreError` conversion from private adapter support data, docs, and external-head public semantics per D6/D10 and Stage 3 synthesis.
-- **Post-T3L.2 memory / push gates** — T3L.1 + T3L.2 archive/memory commits remain local unless Human authorizes another push gate. Prior push gate already created T1/T2/T3-initial origin refs; no automatic push.
-- **T4 Head + closed-head** — still 0% started; remains after or alongside T3 later tranche depending on Human direction.
+- **T3 later cycle complete** — T3L.1 + T3L.2 + T3L.3 are archived; RuleExpr public execution is shipped. No T3 later implementation slice remains.
+- **Push gate consideration** — T3L.1/T3L.2/T3L.3 archive and memory commits remain local unless Human authorizes a T3 later cycle-complete push gate. Prior push gate already created T1/T2/T3-initial origin refs; no automatic push.
+- **T4 Head + closed-head** — still 0% started; remains an independent next-track option.
 - **T5 EvaluateResult + Semantics + legacy hard-cut + WhyNot** — 0% started; largest redesign zone and trigger for T1.3 final `Rule` flip.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice for `_lower_compare_with_aggregate` non-aggregate side AttrRef/BinaryExpr handling.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3/T3L.1 locked unittest fallback and did not block on pytest runner instability.
