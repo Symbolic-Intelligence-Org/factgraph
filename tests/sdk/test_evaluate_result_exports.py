@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 import factgraph.sdk as sdk
-from factgraph.application.protocol import Claim, DetachedRowError, EvaluateResult, EvaluateRow, EvidenceRef
+from factgraph.application.protocol import Claim, DetachedRowError, EvaluateResult, EvaluateRow, EvidenceRef, Explanation
 
 
 class EvaluateResultSDKExportTests(unittest.TestCase):
@@ -12,6 +12,7 @@ class EvaluateResultSDKExportTests(unittest.TestCase):
         self.assertIs(sdk.EvidenceRef, EvidenceRef)
         self.assertIs(sdk.EvaluateRow, EvaluateRow)
         self.assertIs(sdk.EvaluateResult, EvaluateResult)
+        self.assertIs(sdk.Explanation, Explanation)
         self.assertIs(sdk.DetachedRowError, DetachedRowError)
         self.assertIsNot(sdk.Rule, sdk.ApplicationRule)
         self.assertIs(sdk.LegacyRule, sdk.Rule)

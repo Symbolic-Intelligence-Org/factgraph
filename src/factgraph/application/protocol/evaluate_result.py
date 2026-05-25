@@ -9,8 +9,9 @@ from types import MappingProxyType
 from typing import Any, Literal
 import uuid
 
-from factgraph.application.protocol.common import ProtocolShapeError
+from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.rule import Rule
+from factgraph.audit.evidence_graph import EvidenceGraph, EvidenceNode, NODE_CONCLUSION
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.semantics.profile import SemanticsProfile
@@ -23,8 +24,20 @@ class DetachedRowError(RuntimeError):
 
 ClaimKind = Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
 RawKind = Literal["probabilistic", "possibilistic"]
+ExplanationStatus = Literal["passed", "failed", "unsupported", "invalid_request"]
+ExplanationFailureClass = Literal[
+    "no_matching_row",
+    "closed_head_false",
+    "stale_row",
+    "row_not_in_result",
+    "insufficient_closed_bindings",
+]
 _CLAIM_KINDS = frozenset({"fact_triple", "rule_head", "aggregate_result", "projection"})
 _RAW_KINDS = frozenset({"probabilistic", "possibilistic"})
+_EXPLANATION_STATUSES = frozenset({"passed", "failed", "unsupported", "invalid_request"})
+_EXPLANATION_FAILURE_CLASSES = frozenset(
+    {"no_matching_row", "closed_head_false", "stale_row", "row_not_in_result", "insufficient_closed_bindings"}
+)
 _SHA256_TOKEN_PREFIX = "sha256:"
 _SHA256_HEX_LEN = 64
 _RESULT_ID_PREFIX = "evalr_v1:"
@@ -101,6 +114,9 @@ class EvaluateRow:
             raise DetachedRowError("EvaluateRow is detached from its EvaluateResult")
         return self._result_resolver()
 
+    def explain(self) -> Explanation:
+        return _explain_live_row(self, self._require_live_result())
+
 
 @dataclass(frozen=True)
 class EvaluateResult:
@@ -165,6 +181,81 @@ class EvaluateResult:
 
     def count(self) -> int:
         return len(self.rows)
+
+
+@dataclass(frozen=True)
+class Explanation:
+    status: ExplanationStatus
+    evidence: EvidenceGraph | None
+    claim: Claim | None
+    result_id: str | None
+    row_id: str | None
+    evidence_ref_id: str | None
+    raw_kind: RawKind | None = None
+    bound: tuple[float, float] | None = None
+    failure_class: ExplanationFailureClass | None = None
+    checked_scope: Mapping[str, Any] | None = None
+    suggested_next_steps: tuple[str, ...] = ()
+    errors: tuple[ErrorDTO, ...] = ()
+    warnings: tuple[WarningDTO, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.status not in _EXPLANATION_STATUSES:
+            raise ProtocolShapeError("Explanation.status must be one of passed, failed, unsupported, invalid_request")
+        if (self.status == "passed") != (self.evidence is not None):
+            raise ProtocolShapeError("Explanation.status='passed' iff Explanation.evidence is not None")
+        if self.evidence is not None and not isinstance(self.evidence, EvidenceGraph):
+            raise ProtocolShapeError("Explanation.evidence must be EvidenceGraph or None")
+        if self.claim is not None and not isinstance(self.claim, Claim):
+            raise ProtocolShapeError("Explanation.claim must be Claim or None")
+
+        _require_optional_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="Explanation.result_id")
+        _require_optional_non_empty_str(self.row_id, field_name="Explanation.row_id")
+        _require_optional_token_prefix(
+            self.evidence_ref_id,
+            prefix=_EVIDENCE_REF_ID_PREFIX,
+            field_name="Explanation.evidence_ref_id",
+        )
+
+        if self.status == "passed":
+            if self.claim is None:
+                raise ProtocolShapeError("Explanation.claim is required when status is passed")
+            _require_non_empty_str(self.result_id, field_name="Explanation.result_id")
+            _require_non_empty_str(self.row_id, field_name="Explanation.row_id")
+            _require_non_empty_str(self.evidence_ref_id, field_name="Explanation.evidence_ref_id")
+        if self.status == "failed":
+            if self.failure_class not in _EXPLANATION_FAILURE_CLASSES:
+                raise ProtocolShapeError("Explanation.failure_class is required when status is failed")
+        elif self.failure_class is not None:
+            raise ProtocolShapeError("Explanation.failure_class must be None unless status is failed")
+        if self.status in {"unsupported", "invalid_request"} and not self.errors:
+            raise ProtocolShapeError("Explanation.errors must be non-empty when status is unsupported or invalid_request")
+
+        if self.raw_kind is None:
+            if self.bound is not None:
+                raise ProtocolShapeError("Explanation.bound must be None when raw_kind is None")
+        else:
+            if self.raw_kind not in _RAW_KINDS:
+                raise ProtocolShapeError("Explanation.raw_kind must be probabilistic, possibilistic, or None")
+            object.__setattr__(self, "bound", _validate_bound(self.bound))
+
+        if self.checked_scope is not None:
+            object.__setattr__(
+                self,
+                "checked_scope",
+                _freeze_mapping(self.checked_scope, field_name="Explanation.checked_scope"),
+            )
+        object.__setattr__(
+            self,
+            "suggested_next_steps",
+            _validate_tuple_of_type(self.suggested_next_steps, str, field_name="Explanation.suggested_next_steps"),
+        )
+        object.__setattr__(self, "errors", _validate_tuple_of_type(self.errors, ErrorDTO, field_name="Explanation.errors"))
+        object.__setattr__(
+            self,
+            "warnings",
+            _validate_tuple_of_type(self.warnings, WarningDTO, field_name="Explanation.warnings"),
+        )
 
 
 def canonical_bytes_for_evaluate(*items: Any) -> bytes:
@@ -445,6 +536,170 @@ def _candidate_set_to_evaluate_row(
     )
 
 
+def _explain_live_row(
+    row: EvaluateRow,
+    result: EvaluateResult,
+    *,
+    graph_builder: Callable[[EvaluateRow, EvaluateResult, Mapping[str, Any]], EvidenceGraph] | None = None,
+) -> Explanation:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+
+    checked_scope = _checked_scope_for_row_result(result, row)
+    matched = next((candidate for candidate in result.rows if candidate.row_id == row.row_id), None)
+    if matched is None:
+        return Explanation(
+            status="failed",
+            evidence=None,
+            claim=row.claim,
+            result_id=result.result_id,
+            row_id=row.row_id,
+            evidence_ref_id=row.evidence_ref.ref_id,
+            raw_kind=row.raw_kind,
+            bound=row.bound,
+            failure_class="row_not_in_result",
+            checked_scope=checked_scope,
+            suggested_next_steps=("Re-evaluate the expression and explain a row from the returned result.",),
+        )
+
+    if not _row_anchor_matches(matched, row, result):
+        return Explanation(
+            status="failed",
+            evidence=None,
+            claim=row.claim,
+            result_id=result.result_id,
+            row_id=row.row_id,
+            evidence_ref_id=row.evidence_ref.ref_id,
+            raw_kind=row.raw_kind,
+            bound=row.bound,
+            failure_class="stale_row",
+            checked_scope=checked_scope,
+            suggested_next_steps=("Use a row from the current EvaluateResult before calling explain().",),
+        )
+
+    metadata = _evidence_metadata_for_row_result(row, result)
+    builder = _build_passed_row_evidence_graph if graph_builder is None else graph_builder
+    try:
+        evidence = builder(row, result, metadata)
+    except ValueError as exc:
+        return Explanation(
+            status="unsupported",
+            evidence=None,
+            claim=row.claim,
+            result_id=result.result_id,
+            row_id=row.row_id,
+            evidence_ref_id=row.evidence_ref.ref_id,
+            raw_kind=row.raw_kind,
+            bound=row.bound,
+            checked_scope=checked_scope,
+            errors=(
+                ErrorDTO(
+                    code="GRAPH_VALIDATION_FAILED",
+                    message=str(exc) or "EvidenceGraph validation failed",
+                    details={"row_id": row.row_id},
+                ),
+            ),
+        )
+
+    return Explanation(
+        status="passed",
+        evidence=evidence,
+        claim=row.claim,
+        result_id=result.result_id,
+        row_id=row.row_id,
+        evidence_ref_id=row.evidence_ref.ref_id,
+        raw_kind=row.raw_kind,
+        bound=row.bound,
+        checked_scope=checked_scope,
+    )
+
+
+def _row_anchor_matches(left: EvaluateRow, right: EvaluateRow, result: EvaluateResult) -> bool:
+    return (
+        left.row_id == right.row_id
+        and left.claim.digest == right.claim.digest
+        and left.evidence_ref.ref_id == right.evidence_ref.ref_id
+        and left.evidence_ref.result_id == result.result_id
+        and left.evidence_ref.row_id == left.row_id
+        and left.evidence_ref.fact_digest == left.claim.digest
+        and left.evidence_ref.closed_head_digest == right.evidence_ref.closed_head_digest
+    )
+
+
+def _build_passed_row_evidence_graph(
+    row: EvaluateRow,
+    result: EvaluateResult,
+    metadata: Mapping[str, Any],
+) -> EvidenceGraph:
+    node = EvidenceNode(
+        node_id=row.row_id,
+        node_kind=NODE_CONCLUSION,
+        component="evaluate.row",
+        label=row.claim.name,
+        value_summary=row.claim.repr,
+    )
+    return EvidenceGraph(
+        graph_id=f"{result.result_id}:{row.row_id}",
+        engine=result.engine,
+        root_node_id=row.row_id,
+        nodes=(node,),
+        edges=(),
+        support_kind="evaluate_row",
+        metadata=metadata,
+    )
+
+
+def _evidence_metadata_for_row_result(row: EvaluateRow, result: EvaluateResult) -> Mapping[str, Any]:
+    return _freeze_mapping(
+        {
+            "result_id": result.result_id,
+            "row_id": row.row_id,
+            "evidence_ref_id": row.evidence_ref.ref_id,
+            "claim_digest": row.claim.digest,
+            "closed_head_digest": row.evidence_ref.closed_head_digest,
+            "expr_digest": result.expr_digest,
+            "rule_set_digest": result.rule_set_digest,
+            "view_snapshot_digest": result.view_snapshot_digest,
+            "semantics_digest": result.semantics_digest,
+            "result_digest": result.result_digest,
+            "engine": result.engine,
+            "engine_version": result.engine_version,
+            "adapter_version": result.adapter_version,
+            "evaluated_at": _metadata_value(result.evaluated_at),
+        },
+        field_name="EvidenceGraph.metadata",
+    )
+
+
+def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:
+    return _freeze_mapping(
+        {
+            "semantics_digest": result.semantics_digest,
+            "semantics_source": "row_result",
+            "evaluate_semantics_digest": result.semantics_digest,
+            "explain_semantics_digest": result.semantics_digest,
+            "semantics_match": True,
+            "result_id": result.result_id,
+            "row_id": row.row_id,
+            "expr_digest": result.expr_digest,
+            "rule_set_digest": result.rule_set_digest,
+            "view_snapshot_digest": result.view_snapshot_digest,
+            "closed_head_digest": row.evidence_ref.closed_head_digest,
+        },
+        field_name="Explanation.checked_scope",
+    )
+
+
+def _metadata_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return str(value)
+
+
 def _bindings_from_candidate(candidate: CandidateSet) -> Mapping[str, Any]:
     payload = candidate.payload
     maybe_bindings = payload.get("bindings") if isinstance(payload, Mapping) else None
@@ -534,6 +789,12 @@ def _require_optional_non_empty_str(value: object | None, *, field_name: str) ->
     return _require_non_empty_str(value, field_name=field_name)
 
 
+def _require_optional_token_prefix(value: object | None, *, prefix: str, field_name: str) -> str | None:
+    if value is None:
+        return None
+    return _require_token_prefix(value, prefix=prefix, field_name=field_name)
+
+
 def _require_token_prefix(value: object, *, prefix: str, field_name: str) -> str:
     text = _require_non_empty_str(value, field_name=field_name)
     if not text.startswith(prefix):
@@ -559,9 +820,19 @@ def _require_sha256_hex(value: object, *, field_name: str) -> str:
     return text
 
 
+def _validate_tuple_of_type(value: object, item_type: type[Any], *, field_name: str) -> tuple[Any, ...]:
+    if not isinstance(value, tuple):
+        raise ProtocolShapeError(f"{field_name} must be tuple[{item_type.__name__}, ...]")
+    for idx, item in enumerate(value):
+        if not isinstance(item, item_type):
+            raise ProtocolShapeError(f"{field_name}[{idx}] must be {item_type.__name__}")
+    return value
+
+
 __all__ = [
     "Claim",
     "DetachedRowError",
+    "Explanation",
     "EvaluateResult",
     "EvaluateRow",
     "EvidenceRef",

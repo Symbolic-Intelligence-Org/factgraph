@@ -16,7 +16,7 @@ from .derivation_diagnose import (
     DiagnoseResult,
     DiagnoseStatus,
 )
-from .evaluate_result import Claim, DetachedRowError, EvaluateResult, EvaluateRow, EvidenceRef
+from .evaluate_result import Claim, DetachedRowError, EvaluateResult, EvaluateRow, EvidenceRef, Explanation
 from .derivation_fact_overlay import (
     EvaluationOverlay,
     FactOverlayAction,
@@ -143,6 +143,7 @@ __all__ = [
     "EvaluateResult",
     "EvaluateRow",
     "EvidenceRef",
+    "Explanation",
     "EvaluationOverlay",
     "EvidenceEnvelope",
     "FactOverlayAction",

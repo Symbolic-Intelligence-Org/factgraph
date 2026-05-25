@@ -5,14 +5,17 @@ import unittest
 from factgraph.application.protocol import (
     Claim,
     DetachedRowError,
+    ErrorDTO,
     EvaluateResult,
     EvaluateRow,
     EvidenceRef,
+    Explanation,
     Rule,
 )
 from factgraph.application.protocol.common import ProtocolShapeError
 from factgraph.application.protocol.evaluate_result import (
     _candidate_set_to_evaluate_row,
+    _explain_live_row,
     _row_digest_for,
     claim_digest_for,
     closed_head_digest_for,
@@ -21,6 +24,7 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
 )
+from factgraph.audit.evidence_graph import EvidenceGraph
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.rules.where_ast import PredAtom, Var
@@ -181,8 +185,239 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         with self.assertRaises(DetachedRowError):
             row._require_live_result()
-        self.assertFalse(hasattr(row, "explain"))
+        with self.assertRaises(DetachedRowError):
+            row.explain()
         self.assertFalse(hasattr(row, "close"))
+
+    def test_live_row_explain_returns_passed_explanation(self) -> None:
+        (
+            run_id,
+            result_id,
+            expr_digest,
+            rule_set_digest,
+            view_snapshot_digest,
+            semantics_digest,
+            closed_head_digest,
+            head_content_digest,
+            engine,
+            head,
+        ) = _result_parts()
+        row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
+        result_digest = result_digest_for(
+            result_id=result_id,
+            run_id=run_id,
+            row_digests=(_row_digest_for(row),),
+            head_id=head.id,
+            head_content_digest=head_content_digest,
+            engine=engine,
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+        )
+        result = EvaluateResult(
+            result_id=result_id,
+            run_id=run_id,
+            rows=(row,),
+            head=head,
+            engine=engine,
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+            evaluated_at="2026-05-25T00:00:00Z",
+            result_digest=result_digest,
+        )
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        self.assertIsInstance(explanation.evidence, EvidenceGraph)
+        self.assertIs(explanation.claim, result[0].claim)
+        self.assertEqual(explanation.result_id, result.result_id)
+        self.assertEqual(explanation.row_id, result[0].row_id)
+        self.assertEqual(explanation.evidence_ref_id, result[0].evidence_ref.ref_id)
+        self.assertEqual(explanation.raw_kind, result[0].raw_kind)
+        self.assertEqual(explanation.bound, result[0].bound)
+        self.assertEqual(explanation.failure_class, None)
+        self.assertEqual(explanation.checked_scope["semantics_digest"], semantics_digest)
+        self.assertEqual(explanation.checked_scope["semantics_source"], "row_result")
+        self.assertEqual(explanation.checked_scope["evaluate_semantics_digest"], semantics_digest)
+        self.assertEqual(explanation.checked_scope["explain_semantics_digest"], semantics_digest)
+        self.assertEqual(explanation.checked_scope["semantics_match"], True)
+        self.assertEqual(explanation.evidence.root_node_id, result[0].row_id)
+        self.assertEqual(explanation.evidence.metadata["result_id"], result.result_id)
+        self.assertEqual(explanation.evidence.metadata["evidence_ref_id"], result[0].evidence_ref.ref_id)
+        self.assertEqual(explanation.evidence.metadata["view_snapshot_digest"], view_snapshot_digest)
+
+    def test_explanation_status_matrix_is_enforced(self) -> None:
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
+
+        with self.assertRaisesRegex(ProtocolShapeError, "iff"):
+            Explanation(
+                status="passed",
+                evidence=None,
+                claim=row.claim,
+                result_id=result_id,
+                row_id=row.row_id,
+                evidence_ref_id=row.evidence_ref.ref_id,
+            )
+        with self.assertRaisesRegex(ProtocolShapeError, "failure_class"):
+            Explanation(
+                status="failed",
+                evidence=None,
+                claim=row.claim,
+                result_id=result_id,
+                row_id=row.row_id,
+                evidence_ref_id=row.evidence_ref.ref_id,
+            )
+        with self.assertRaisesRegex(ProtocolShapeError, "errors"):
+            Explanation(
+                status="unsupported",
+                evidence=None,
+                claim=row.claim,
+                result_id=result_id,
+                row_id=row.row_id,
+                evidence_ref_id=row.evidence_ref.ref_id,
+            )
+
+        failed = Explanation(
+            status="failed",
+            evidence=None,
+            claim=row.claim,
+            result_id=result_id,
+            row_id=row.row_id,
+            evidence_ref_id=row.evidence_ref.ref_id,
+            failure_class="no_matching_row",
+            suggested_next_steps=("Retry with a closed head.",),
+        )
+        self.assertEqual(failed.failure_class, "no_matching_row")
+
+        invalid = Explanation(
+            status="invalid_request",
+            evidence=None,
+            claim=None,
+            result_id=None,
+            row_id=None,
+            evidence_ref_id=None,
+            errors=(ErrorDTO(code="INVALID_REQUEST", message="bad request"),),
+        )
+        self.assertEqual(invalid.errors[0].code, "INVALID_REQUEST")
+
+    def test_live_row_explain_reports_row_not_in_result(self) -> None:
+        (
+            run_id,
+            result_id,
+            expr_digest,
+            rule_set_digest,
+            view_snapshot_digest,
+            semantics_digest,
+            closed_head_digest,
+            head_content_digest,
+            engine,
+            head,
+        ) = _result_parts()
+        row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
+        outside_row = _row(result_id, run_id, closed_head_digest, {"person": "p2"})
+        result_digest = result_digest_for(
+            result_id=result_id,
+            run_id=run_id,
+            row_digests=(_row_digest_for(row),),
+            head_id=head.id,
+            head_content_digest=head_content_digest,
+            engine=engine,
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+        )
+        result = EvaluateResult(
+            result_id=result_id,
+            run_id=run_id,
+            rows=(row,),
+            head=head,
+            engine=engine,
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+            evaluated_at="2026-05-25T00:00:00Z",
+            result_digest=result_digest,
+        )
+        live_outside_row = EvaluateRow(
+            row_id=outside_row.row_id,
+            bindings=outside_row.bindings,
+            claim=outside_row.claim,
+            raw_kind=outside_row.raw_kind,
+            bound=outside_row.bound,
+            evidence_ref=outside_row.evidence_ref,
+            _result_resolver=lambda: result,
+        )
+
+        explanation = live_outside_row.explain()
+
+        self.assertEqual(explanation.status, "failed")
+        self.assertEqual(explanation.failure_class, "row_not_in_result")
+        self.assertIsNone(explanation.evidence)
+
+    def test_graph_validation_failure_returns_unsupported(self) -> None:
+        (
+            run_id,
+            result_id,
+            expr_digest,
+            rule_set_digest,
+            view_snapshot_digest,
+            semantics_digest,
+            closed_head_digest,
+            head_content_digest,
+            engine,
+            head,
+        ) = _result_parts()
+        row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
+        result_digest = result_digest_for(
+            result_id=result_id,
+            run_id=run_id,
+            row_digests=(_row_digest_for(row),),
+            head_id=head.id,
+            head_content_digest=head_content_digest,
+            engine=engine,
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+        )
+        result = EvaluateResult(
+            result_id=result_id,
+            run_id=run_id,
+            rows=(row,),
+            head=head,
+            engine=engine,
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+            evaluated_at="2026-05-25T00:00:00Z",
+            result_digest=result_digest,
+        )
+
+        explanation = _explain_live_row(result[0], result, graph_builder=lambda _row, _result, _metadata: (_ for _ in ()).throw(ValueError("bad graph")))
+
+        self.assertEqual(explanation.status, "unsupported")
+        self.assertEqual(explanation.errors[0].code, "GRAPH_VALIDATION_FAILED")
+        self.assertIsNone(explanation.evidence)
 
     def test_evaluate_result_rejects_duplicate_row_id(self) -> None:
         (

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import factgraph.sdk as sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
-from factgraph.application.protocol import EntitySelector, EvaluateResult, Rule, RuleExprError, RuleExprInspect
+from factgraph.application.protocol import EntitySelector, EvaluateResult, Explanation, Rule, RuleExprError, RuleExprInspect
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
@@ -78,7 +78,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIsNone(result.semantics_digest)
         self.assertFalse(hasattr(result[0], "candidate_id"))
         self.assertFalse(hasattr(result[0], "support_digest"))
-        self.assertFalse(hasattr(result[0], "explain"))
+        self.assertIsInstance(result[0].explain(), Explanation)
         self.assertFalse(hasattr(result[0], "close"))
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:
