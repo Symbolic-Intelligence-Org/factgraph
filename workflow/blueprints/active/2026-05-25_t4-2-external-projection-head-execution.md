@@ -146,7 +146,7 @@ or equivalent private state. If the exact field is widened, the upper bound for 
 
 Classification order:
 
-1. Projection recognizer runs first. Exact projection-head values become `projection` and bypass D11 identity matching.
+1. Projection recognizer runs first during `RuleExprHeadBinding` construction, before D11 inline id + digest matching. Exact projection-head values become `projection` and bypass D11 identity matching.
 2. Same id + same digest + one occurrence remains `inline`.
 3. Different id, same id + different digest before T4.1 validation, or no exact match remains `external`.
 4. T4.1 validation still owns stale digest and ambiguous same-id same-digest rejection before materialization.
@@ -180,7 +180,17 @@ The implementation should split or extend the existing materialization helper so
 1. expression branch body atoms;
 2. alias-scoped external head body atoms;
 3. D8 explicit RuleExpr join equality atoms;
-4. D13 head-port link equality atoms in deterministic head port order.
+4. D13 head-port link equality atoms in sorted head port-name order.
+
+The four-step order applies by head kind as follows:
+
+| Head kind | Step 1 expression body | Step 2 head body | Step 3 D8 joins | Step 4 D13 head links |
+|---|---|---|---|---|
+| inline | yes | no | yes | no |
+| external | yes | yes, alias-scoped | yes | yes, sorted by port name |
+| projection | yes | no | yes | yes, sorted by port name |
+
+Projection does not enter step 2 because D14 section 4.3 makes placeholder atoms validation-only and not materialized as filters.
 
 Because existing `_materialize_branch(...)` currently returns expression body + D8 joins together, implementation may either:
 
@@ -266,6 +276,12 @@ Output order:
 
 - `Rule.projection("user", "state")` preserves argument order in `head.ports`;
 - `CompiledHeadCall.head_var_names` must preserve that requested order for output payload ordering.
+- `_head_var_names(...)` must return head-side variables for external and projection heads:
+  - inline heads keep returning inline occurrence alias-local port vars as in T3L.3;
+  - external heads return private head-alias-local port vars, which D13 head-link atoms equate to the branch source vars;
+  - projection heads return generated projection port vars, which D13 head-link atoms equate to the branch source vars.
+
+This separates D13 materialization ordering from D14 output payload ordering: head-link atoms are sorted by port name for stable `materialized_atom_index`, while output columns preserve `head.ports` / projection argument order.
 
 ### 2.6 SDK dispatch wiring
 
@@ -399,6 +415,7 @@ Pytest remains deferred per existing SIGSEGV environment lock. `tests.test_publi
 - **Materialization ordering drift**: existing `_materialize_branch(...)` appends D8 joins. T4.2 must preserve D13 ordering by splitting or carefully extending helper internals.
 - **Projection spoofing**: user-authored Rules could attempt to mimic projection metadata. Recognizer must combine Origin, id pattern, generated Var pattern, atom shape, atom count, and ports/where consistency.
 - **PyReason compatibility**: D13 head-link equality atoms and non-pred external head body atoms may cause existing PyReason classifier rejection. This is expected under D9/T3L.2 policy; do not expand PyReason grammar in T4.2.
+- **Aggregate x external head interaction**: external head bodies containing aggregate atoms make every branch aggregate-containing, so the existing D9/T3L.2 PyReason classifier rejects the whole query through adapter policy. T4.2 must not relax aggregate-side rejection or modify the PyReason classifier.
 - **T4.1 graph-connectivity contract**: T4.2 must consume declared-port branch sources as already validated. It must not reimplement same-name ambiguity with a different equivalence rule.
 - **Placeholder atom escape**: projection placeholder atoms must never enter final materialized body IR, traces as runtime atoms, or adapter request bodies.
 - **Result shape drift**: adding head-link metadata must stay private; public success remains `list[CandidateSet]`.

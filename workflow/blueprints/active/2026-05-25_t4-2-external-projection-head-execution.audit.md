@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | draft | T4.2 blueprint pair created | Scope consumes T4 Stage 3 synthesis T4.2 row, D13/D14 reviewed decisions, T4.1 archived foundation, and shipped RuleExpr lowering / SDK dispatch evidence. Pre-draft grep found no A-fallback trigger. |
+| 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked D13 head-link materialization to sorted head port-name order, clarified head-side output vars for external/projection heads, documented inline/external/projection materialization subsets, surfaced aggregate x PyReason interaction, and specified projection recognition timing during head binding construction. |
 
 ## Decision Notes
 
