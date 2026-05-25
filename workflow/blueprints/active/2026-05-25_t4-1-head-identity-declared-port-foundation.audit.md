@@ -12,6 +12,7 @@
 | 2026-05-25 | draft | T4.1 blueprint pair created | Scope consumes T4 Stage 3 synthesis T4.1 row, D11/D12 reviewed decisions, T3L.1-T3L.3 archived substrate, and shipped RuleExpr lowering / SDK dispatch evidence. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Added an explicit upper-bound scope lock for private occurrence-version metadata, specified T4.1 validation ordering before the existing T3L.3 external-head rejection, and cross-referenced D11/D12 multi-occurrence ambiguity for identity state 5. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1-T3L.3 lowering/dispatch substrate, D8 join materialization support, existing SDK error surfaces, and known T4.2/T4.3/T5 references. No A-fallback amendment needed; T4.1 remains limited to D11/D12 foundation. |
+| 2026-05-25 | baseline | G7 preservation baseline | Ran the scoped baseline command covering T3.1-T3.6 plus T3L.1-T3L.3 preservation suites; result matched expectation: 131 tests OK. Pytest remains deferred per SIGSEGV environment lock; unrelated `tests.test_public_inference_factgraph_create` remains excluded. |
 
 ## Decision Notes
 
@@ -199,7 +200,15 @@ Reviewer should verify:
 
 ## G7 Baseline Record
 
-Pending.
+| Item | Result |
+|---|---|
+| Branch | `v0.2.0-t4-1-head-identity-declared-port-foundation-2026-05-25` |
+| Sacred / dirty state | Sacred `master` untouched; existing 4M + 1U dirty set preserved. |
+| Step 4.6 precondition | Clean at scoped commit `784f3212`; no A-fallback amendment required. |
+| Baseline command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate -v` |
+| Result | 131 tests OK. |
+| Pytest status | Deferred per existing SIGSEGV environment lock. |
+| Excluded unrelated suite | `tests.test_public_inference_factgraph_create` remains excluded due to pre-existing failures outside T4.1 scope. |
 
 ## Closure Notes
 
