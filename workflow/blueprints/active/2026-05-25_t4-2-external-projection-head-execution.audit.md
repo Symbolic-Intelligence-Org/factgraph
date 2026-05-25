@@ -12,6 +12,7 @@
 | 2026-05-25 | draft | T4.2 blueprint pair created | Scope consumes T4 Stage 3 synthesis T4.2 row, D13/D14 reviewed decisions, T4.1 archived foundation, and shipped RuleExpr lowering / SDK dispatch evidence. Pre-draft grep found no A-fallback trigger. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked D13 head-link materialization to sorted head port-name order, clarified head-side output vars for external/projection heads, documented inline/external/projection materialization subsets, surfaced aggregate x PyReason interaction, and specified projection recognition timing during head binding construction. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Seven pre-implementation grep checks found expected T4.1 validation consumers, existing external-head blockers, D13/D14 docs-only projection/head-link references, broad T4.3/T5/result-surface references, and existing adapter surfaces. No production collision or A-fallback amendment needed; T4.2 remains limited to D13 + D14. |
+| 2026-05-25 | baseline | G7 preservation baseline | Ran the scoped baseline command covering T3.1-T3.6, T3L.1-T3L.3, and T4.1 preservation suites; result matched expectation: 145 tests OK. Pytest remains deferred per SIGSEGV environment lock; unrelated `tests.test_public_inference_factgraph_create` remains excluded. |
 
 ## Decision Notes
 
@@ -221,4 +222,12 @@ Reviewer should verify:
 
 ## G7 Baseline Record
 
-Pending.
+| Item | Result |
+|---|---|
+| Branch | `v0.2.0-t4-2-external-projection-head-execution-2026-05-25` |
+| Sacred / dirty state | Sacred `master` untouched; existing 4M + 1U dirty set preserved. |
+| Step 4.6 precondition | Clean at scoped commit `43bd2f4e`; no A-fallback amendment required. |
+| Baseline command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
+| Result | 145 tests OK. |
+| Pytest policy | Deferred per SIGSEGV environment lock. |
+| Exclusions | `tests.test_public_inference_factgraph_create` remains excluded as a pre-existing unrelated failure surface. |
