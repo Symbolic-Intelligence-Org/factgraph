@@ -5,6 +5,7 @@ import warnings
 from unittest.mock import patch
 
 import factgraph.sdk as sdk
+import factgraph.sdk.dsl as dsl
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
 from factgraph.application.protocol import (
     DetachedRowError,
@@ -114,7 +115,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         graph = _store()
         rule = _person_exists_rule()
         with sdk.vars("p") as (p,):
-            legacy_rule = sdk.Rule(id="legacy", version="v1", select=[p], where=[sdk.Pred("Person:exists", p)])
+            legacy_rule = dsl.Rule(id="legacy", version="v1", select=[p], where=[sdk.Pred("Person:exists", p)])
             inference = sdk.Inference(
                 id="legacy_inference",
                 version="v1",
@@ -126,7 +127,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
 
         for invalid in (legacy_rule, inference, {"head": "dict"}, "Person:exists", inspected):
             with self.subTest(invalid=type(invalid).__name__):
-                with self.assertRaisesRegex(SDKStoreError, "head= must be application Rule"):
+                with self.assertRaisesRegex(SDKStoreError, "head= must be Rule"):
                     graph.eval.evaluate(rule, head=invalid)
 
     def test_external_head_filters_rows_and_evaluates(self) -> None:

@@ -36,12 +36,12 @@ from factgraph.application.protocol import (
     ExplicitBoolError,
     OccurrenceInspect,
     PortInspect,
+    Rule,
     RuleExpr,
     RuleExprError,
     RuleExprInspect,
     RuleJoinConstraint,
 )
-from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry
@@ -52,14 +52,14 @@ from .dsl import (
     Not,
     Pred,
     Query,
-    Rule,
     RuleRef,
     SDKDSLError,
     build_application_rule,
     vars,
 )
-from .dsl import Rule as LegacyRule
 from .ingest import IngestResult, ValidationReport
+
+ApplicationRule = Rule
 
 __all__ = [
     "SDKSchemaError",
@@ -98,7 +98,6 @@ __all__ = [
     "Database",
     "MetaEntry",
     "Rule",
-    "LegacyRule",
     "ApplicationRule",
     "RuleRef",
     "Inference",

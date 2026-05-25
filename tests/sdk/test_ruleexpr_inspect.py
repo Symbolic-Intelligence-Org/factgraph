@@ -4,6 +4,7 @@ from dataclasses import FrozenInstanceError
 import unittest
 
 import factgraph.sdk as sdk
+import factgraph.sdk.dsl as dsl
 from factgraph.application.protocol import (
     AtomDescriptor,
     OccurrenceInspect,
@@ -68,7 +69,7 @@ class RuleExprInspectExportTests(unittest.TestCase):
 class RuleExprInspectDispatchTests(unittest.TestCase):
     def test_legacy_sdk_rule_inspect_dict_shape_is_preserved(self) -> None:
         with sdk.vars("u") as (u,):
-            legacy = sdk.Rule(id="legacy", version="v1", select=[u], where=[sdk.Pred("User:exists", u)])
+            legacy = dsl.Rule(id="legacy", version="v1", select=[u], where=[sdk.Pred("User:exists", u)])
 
         inspected = sdk.SDKStore([User]).rules.inspect(legacy)
 

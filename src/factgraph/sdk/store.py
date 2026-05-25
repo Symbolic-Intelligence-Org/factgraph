@@ -2325,9 +2325,9 @@ class SDKStore:
 
     def explain(self, *args: Any, **kwargs: Any) -> Explanation:
         if len(args) != 1:
-            raise SDKStoreError("eval.explain(expr, ...) accepts exactly one RuleExpr or application Rule input")
+            raise SDKStoreError("eval.explain(expr, ...) accepts exactly one RuleExpr or Rule input")
         if "head" not in kwargs:
-            raise SDKStoreError("eval.explain(expr, ...) requires head= closed application Rule")
+            raise SDKStoreError("eval.explain(expr, ...) requires head= closed Rule")
         head = kwargs.pop("head")
         raw_engine = kwargs.pop("engine", None)
         raw_semantics = kwargs.pop("semantics", None)
@@ -2335,7 +2335,7 @@ class SDKStore:
             unknown = ", ".join(sorted(kwargs))
             raise SDKStoreError(f"unknown eval.explain(...) keyword(s): {unknown}")
         if not isinstance(head, ApplicationRule):
-            raise SDKStoreError("eval.explain(...) head= must be application Rule")
+            raise SDKStoreError("eval.explain(...) head= must be Rule")
         self._require_manual_explain_closed_head(head)
 
         evaluate_kwargs: dict[str, Any] = {"head": head}
@@ -2466,14 +2466,14 @@ class SDKStore:
         if len(args) != 1:
             raise SDKStoreError("evaluate(rule_expr, ...) accepts exactly one RuleExpr or application Rule input")
         if "head" not in kwargs:
-            raise SDKStoreError("evaluate(rule_expr, ...) requires head= application Rule")
+            raise SDKStoreError("evaluate(rule_expr, ...) requires head= Rule")
         head = kwargs.pop("head")
         if kwargs:
             unknown = ", ".join(sorted(kwargs))
             raise SDKStoreError(f"unknown evaluate(rule_expr, ...) keyword(s): {unknown}")
         if not isinstance(head, ApplicationRule):
             raise SDKStoreError(
-                "evaluate(rule_expr, ...) head= must be application Rule; "
+                "evaluate(rule_expr, ...) head= must be Rule; "
                 "legacy SDK Rule, Inference, dict, string, and inspect objects are not accepted"
             )
 

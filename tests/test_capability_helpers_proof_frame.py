@@ -15,7 +15,8 @@ from factgraph.application.protocol import (
     ProofFrameRecheckRequest,
 )
 from factgraph.core.store._support import PredWitness, SupportArtifact
-from factgraph.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.sdk import Pred, vars as sdk_vars
+from factgraph.sdk.dsl import Rule
 
 
 def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> SupportArtifact:

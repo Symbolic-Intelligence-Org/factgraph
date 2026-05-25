@@ -27,7 +27,8 @@ from factgraph.application.protocol import (
 )
 from factgraph.core.rules.rule_ir import RuleSpec
 from factgraph.core.store._support import PredWitness, SupportArtifact, normalize_binding_items
-from factgraph.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.sdk import Pred, vars as sdk_vars
+from factgraph.sdk.dsl import Rule
 
 
 HELPER_EXPORTS = (

@@ -16,7 +16,8 @@ from factgraph.application.protocol import (
     ProtocolShapeError,
 )
 from factgraph.core.store._support import normalize_binding_items
-from factgraph.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.sdk import Pred, vars as sdk_vars
+from factgraph.sdk.dsl import Rule
 
 
 def _plan(*, heads: tuple[CompiledHeadCall, ...] | None = None) -> CompiledDerivationPlan:

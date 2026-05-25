@@ -25,7 +25,8 @@ from factgraph.application.protocol import (
 )
 from factgraph.core.rules.rule_ir import RuleSpec
 from factgraph.core.store._support import PredWitness, SupportArtifact
-from factgraph.sdk import Pred, Rule, vars as sdk_vars
+from factgraph.sdk import Pred, vars as sdk_vars
+from factgraph.sdk.dsl import Rule
 
 
 def _rule_spec(*, where: list[object] | None = None) -> RuleSpec:

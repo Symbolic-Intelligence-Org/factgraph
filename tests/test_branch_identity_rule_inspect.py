@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
 
 from factgraph.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
-from factgraph.sdk import Branch, Inference, Pred, Rule, SDKStore, vars as sdk_vars
+from factgraph.sdk import Branch, Inference, Pred, SDKStore, vars as sdk_vars
+from factgraph.sdk.dsl import Rule
 from factgraph.sdk.dsl.errors import SDKDSLError
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError

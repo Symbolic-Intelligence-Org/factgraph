@@ -147,9 +147,9 @@ def _coerce_rule_expr_operand(value: object) -> _RuleExpr:
     if _is_legacy_sdk_rule(value):
         raise RuleExprError(
             "legacy SDK Rule cannot be used in RuleExpr; use build_application_rule(...) "
-            "or import ApplicationRule"
+            "or import Rule"
         )
-    raise RuleExprError("RuleExpr operands must be application protocol Rule or RuleExpr values")
+    raise RuleExprError("RuleExpr operands must be Rule or RuleExpr values")
 
 
 def _combine(kind: Literal["and", "or"], operands: tuple[object, ...]) -> _RuleExpr:

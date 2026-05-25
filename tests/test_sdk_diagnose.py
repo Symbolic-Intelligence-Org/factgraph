@@ -9,7 +9,8 @@ from unittest.mock import patch
 from factgraph.application.capability_helpers import CapabilityHelperError, OriginPackageError
 from factgraph.application.protocol import DiagnoseResult
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
-from factgraph.sdk import Inference, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
+from factgraph.sdk import Inference, Entity, Field, Identity, Pred, SDKDSLError, SDKStore, SDKStoreError, vars
+from factgraph.sdk.dsl import Rule
 from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
 

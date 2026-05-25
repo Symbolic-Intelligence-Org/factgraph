@@ -15,6 +15,7 @@ from factgraph.application.protocol.rule_expr import (
 )
 from factgraph.application.protocol.rule import PortType, RulePortRef
 from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.sdk.dsl import Rule as LegacyRule
 from factgraph.sdk.dsl.errors import SDKDSLError
 
 
@@ -199,9 +200,9 @@ class RuleExprBoolAndCoercionTests(unittest.TestCase):
             bool(rule & _rule("b", var_name="b"))
 
     def test_legacy_sdk_rule_truthiness_is_unchanged(self) -> None:
-        legacy = sdk.Rule(id="legacy", version="v1", select=["$u"], where=[("pred", "User:exists", ["$u"])])
+        legacy = LegacyRule(id="legacy", version="v1", select=["$u"], where=[("pred", "User:exists", ["$u"])])
 
-        self.assertNotIn("__bool__", sdk.Rule.__dict__)
+        self.assertNotIn("__bool__", LegacyRule.__dict__)
         self.assertTrue(bool(legacy))
 
     def test_coerce_accepts_application_rule_and_ruleexpr_values(self) -> None:
@@ -212,15 +213,15 @@ class RuleExprBoolAndCoercionTests(unittest.TestCase):
         self.assertIs(_coerce_rule_expr_operand(expr), expr)
 
     def test_coerce_rejects_legacy_sdk_rule_and_arbitrary_objects(self) -> None:
-        legacy = sdk.Rule(id="legacy", version="v1", select=["$u"], where=[("pred", "User:exists", ["$u"])])
+        legacy = LegacyRule(id="legacy", version="v1", select=["$u"], where=[("pred", "User:exists", ["$u"])])
 
         with self.assertRaisesRegex(RuleExprError, "legacy SDK Rule"):
             _coerce_rule_expr_operand(legacy)
-        with self.assertRaisesRegex(RuleExprError, "application protocol Rule or RuleExpr"):
+        with self.assertRaisesRegex(RuleExprError, "Rule or RuleExpr"):
             _coerce_rule_expr_operand(object())
 
     def test_legacy_sdk_rule_operands_are_rejected_with_guidance(self) -> None:
-        legacy = sdk.Rule(id="legacy", version="v1", select=["$u"], where=[("pred", "User:exists", ["$u"])])
+        legacy = LegacyRule(id="legacy", version="v1", select=["$u"], where=[("pred", "User:exists", ["$u"])])
 
         with self.assertRaisesRegex(RuleExprError, "build_application_rule"):
             _ = _rule("a") & legacy

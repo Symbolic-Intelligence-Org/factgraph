@@ -10,7 +10,8 @@ from factgraph.application.capability_helpers import CapabilityHelperError
 from factgraph.application.protocol import ProtocolShapeError, WhyNotUniverseResult
 from factgraph.application.why_not_runtime import WhyNotRuntimeError
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
-from factgraph.sdk import Inference, Entity, Field, Identity, Pred, Rule, SDKDSLError, SDKStore, SDKStoreError, vars
+from factgraph.sdk import Inference, Entity, Field, Identity, Pred, SDKDSLError, SDKStore, SDKStoreError, vars
+from factgraph.sdk.dsl import Rule
 from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
 
