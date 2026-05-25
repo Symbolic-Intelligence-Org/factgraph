@@ -12,6 +12,7 @@
 | 2026-05-25 | draft | T3L.3 blueprint pair created | Scope consumes Stage 3 synthesis T3L.3 row, D6/D9/D10, T3L.1/T3L.2 archived substrate, and shipped SDK dispatch/docs evidence. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked the external-head public behavior to conservative inline/projected-head support with SDKStoreError rejection for external heads, clarified missing/invalid `head=` as SDK call-shape errors per D6, and specified RuleExpr `engine_options` forwarding through existing evaluation machinery. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1/T3L.2 lowering substrate, SDK evaluate dispatch surface, head/application Rule call sites, SDKStoreError diagnostics, result/evidence surfaces, and docs update targets. No A-fallback amendment needed; external-head conservative rejection and public result boundary remain locked. |
+| 2026-05-25 | baseline | G7 preservation baseline | Ran the scoped baseline command covering T3.1-T3.6, T3L.1, and T3L.2 preservation suites; result matched expectation: 121 tests OK. Pytest remains deferred per SIGSEGV environment lock; unrelated `tests.test_public_inference_factgraph_create` remains excluded. |
 
 ## Decision Notes
 
@@ -180,7 +181,15 @@ Reviewer should verify:
 
 ## G7 Baseline Record
 
-Pending.
+| Item | Result |
+|---|---|
+| Branch | `v0.2.0-t3l-3-public-dispatch-diagnostics-docs-2026-05-25` |
+| Sacred / dirty state | Sacred `master` untouched; existing 4M + 1U dirty set preserved. |
+| Step 4.6 precondition | Clean at scoped commit `5f607628`; no A-fallback amendment required. |
+| Baseline command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter -v` |
+| Result | 121 tests OK. |
+| Pytest status | Deferred per existing SIGSEGV environment lock. |
+| Excluded unrelated suite | `tests.test_public_inference_factgraph_create` remains excluded due to pre-existing failures outside T3L.3 scope. |
 
 ## Closure Notes
 
