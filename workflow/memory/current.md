@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; push gate executed — 4 origin refs created; T3 later selected; **T3L.1 internal lowering + native archived at 797c93f1**)
+最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; push gate executed — 4 origin refs created; T3 later selected; **T3L.1 + T3L.2 archived; T3 later 2/3 implementation slices complete**)
 
-## 当前阶段(2026-05-25 — T3L.1 ARCHIVED; T3 LATER TRANCHE IN PROGRESS)
+## 当前阶段(2026-05-25 — T3L.2 ARCHIVED; T3 LATER TRANCHE IN PROGRESS)
 
-**Current local branch:** `v0.2.0-t3l-1-internal-lowering-native-2026-05-25 @ 797c93f1`.
+**Current local branch:** `v0.2.0-t3l-2-adapter-matrix-parity-2026-05-25 @ 9ab312b9`.
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -38,6 +38,7 @@
 | **T3.5 RuleExpr Inspect** | M | `12bd9221` | `55d9e67b feat(application): add T3.5 ruleexpr inspect` (0 deviation — third consecutive T3 feat, first proactive Step 4.6 A-fallback catch) |
 | **T3.6 Docs and Examples** | S (docs-only) | `96baa609` | `f8abaad1 docs(sdk): add T3 RuleExpr user-facing docs and examples` (0 deviation — fourth consecutive T3 feat + T3 cycle final) |
 | **T3L.1 Internal Lowering + Native Execution** | M | `797c93f1` | `ec8ae668 feat(ruleexpr): add internal native lowering plan` + `ebec1136 test(ruleexpr): cover native lowering negative cases` (111 preservation tests OK; first T3 later implementation slice archived) |
+| **T3L.2 Adapter Matrix Parity** | M | `9ab312b9` | `a417fe73 feat(ruleexpr): add adapter matrix materialization checks` + `f1726ef3 docs(ruleexpr): clarify PyReason classifier head scope` (121 preservation tests OK; second T3 later implementation slice archived) |
 
 ### Current landed behavior
 
@@ -275,6 +276,15 @@
   - Verification: G7 baseline 99 tests OK; post-feat preservation 108 tests OK; Step 4.7 hardening raised final preservation gate to 111 tests OK; ruff clean.
   - T3L.1 explicitly defers public `fg.eval.evaluate(rule_expr, head=...)`, non-native adapter parity, public docs, and external-head body concatenation semantics to T3L.2/T3L.3 per Stage 3 synthesis.
 
+**T3L.2 — Adapter Matrix Parity + Aggregate Preservation**
+- **T3L.2 archived at `9ab312b9`**:
+  - Lineage: `0106f2bf` draft → `5f411be5` draft-amend → `6bdcca8a` scoped (Step 4.6 grep clean) → `a9ddf924` G7 baseline (111 OK) → `a417fe73` feat → `f1726ef3` Step 4.7 docstring fix → `b104b50e` closure → `9ab312b9` archive.
+  - Extended private `src/factgraph/application/protocol/rule_expr_lowering.py` with `RuleExprAdapterEngine`, widened trace engine support for native / Souffle / ProbLog, shared adapter materialization, `RuleExprAdapterSupport`, and PyReason classifier helpers.
+  - Added `tests/application/protocol/test_rule_expr_lowering_adapter.py` with 10 focused tests for Souffle branch/equality/aggregate preservation, ProbLog branch/equality/aggregate preservation, and PyReason pred-only / eq / non-pred / aggregate classification.
+  - Preserved narrow public API and adapter boundaries: no SDK dispatch, no SDK/protocol exports, no adapter production file edits, no public docs, no public result/evidence DTO changes, and no PyReason Form 2 grammar expansion.
+  - Verification: G7 baseline 111 tests OK; post-feat preservation 121 tests OK; focused lowering coverage 22 tests OK; ruff clean.
+  - T3L.2 explicitly defers public `fg.eval.evaluate(rule_expr, head=...)`, public SDKStoreError conversion, public docs, and external-head body concatenation semantics to T3L.3.
+
 ### T3 cycle complete milestone
 
 | Slice | Class | Feat | Deviation |
@@ -438,10 +448,9 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 
 ### Recommended next work
 
-- **T3 later tranche in progress** — Stage 1 audit, D6-D10, Stage 3 synthesis, and T3L.1 are complete. Next slice is **T3L.2 Adapter Matrix Parity**.
-- **T3L.2 Adapter Matrix Parity** — implement Souffle + ProbLog parity over the private T3L.1 lowering substrate; add PyReason preflight rejection/classifier behavior per D9; preserve adapter grammar boundaries and aggregate handling. Requires fresh T3L.2 blueprint pair before code.
-- **T3L.3 Public SDK Dispatch + Diagnostics + Docs** — after T3L.2, expose public `fg.eval.evaluate(rule_expr, head=...)`, diagnostics/docs, and external-head public semantics per D6/D10 and Stage 3 synthesis.
-- **Post-T3L.1 memory / push gates** — T3L.1 archive and this memory consolidation remain local unless Human authorizes another push gate. Prior push gate already created T1/T2/T3-initial origin refs; no automatic push.
+- **T3 later tranche in progress** — Stage 1 audit, D6-D10, Stage 3 synthesis, T3L.1, and T3L.2 are complete. Final slice is **T3L.3 Public SDK Dispatch + Diagnostics + Docs**.
+- **T3L.3 Public SDK Dispatch + Diagnostics + Docs** — expose public `fg.eval.evaluate(rule_expr, head=...)`, diagnostics, public `SDKStoreError` conversion from private adapter support data, docs, and external-head public semantics per D6/D10 and Stage 3 synthesis.
+- **Post-T3L.2 memory / push gates** — T3L.1 + T3L.2 archive/memory commits remain local unless Human authorizes another push gate. Prior push gate already created T1/T2/T3-initial origin refs; no automatic push.
 - **T4 Head + closed-head** — still 0% started; remains after or alongside T3 later tranche depending on Human direction.
 - **T5 EvaluateResult + Semantics + legacy hard-cut + WhyNot** — 0% started; largest redesign zone and trigger for T1.3 final `Rule` flip.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice for `_lower_compare_with_aggregate` non-aggregate side AttrRef/BinaryExpr handling.
