@@ -1295,6 +1295,9 @@ class SDKStore:
             shell does not wrap or re-export the result; advanced callers
             can import ``WhyNotUniverseResult`` from
             ``factgraph.application.protocol`` if a typed reference is needed.
+            T5 quarantine: this method is a legacy surface and D23/T5.7
+            hard-cut target; row/manual evidence should use ``fg.eval`` explain
+            APIs instead.
 
         Raises:
             SDKStoreError: For non-SDK exceptions crossing the SDK boundary.

@@ -17,6 +17,7 @@
 | 2026-05-25 | draft | `62c8eb1a` | Blueprint pair drafted | T5.5 Why-Not Fold + Legacy Evidence Quarantine draft created after T5.4 archive `7464c3e3`. Scope is M-class predicted and intentionally minimal: failed Explanation is v1 why-not envelope; legacy why-not hard-cut remains T5.7. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Eight grep buckets completed. Existing WhyNot protocol/runtime/shells, round-event payloads, docs/examples, and T5.3/T5.4 explanation paths are expected substrate or future T5.7 territory. No public `.eval.why_not`, no result/explanation why-not method, and no lossy WhyNot/Diagnose-to-Explanation conversion path found. Scope remains M-class minimal. |
 | 2026-05-25 | baseline | pending | G7 preservation baseline recorded | Ran inherited G7 command at scoped anchor `a27feb0f`: 170 tests OK in 0.098s. Pytest remains deferred per existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | feat | pending | Why-not quarantine implemented | Added T5 quarantine markers to legacy WhyNot protocol/runtime/SDK shell surfaces and focused tests proving failed Explanation is the v1 why-not envelope, no T5 public why-not surface exists, legacy why-not remains quarantined, and no lossy conversion path exists. Verification: 4 T5.5 tests OK; 37 focused T5.1-T5.5 preservation tests OK; 170 G7 tests OK; touched-file ruff clean. |
 
 ## 2. Source Chain
 

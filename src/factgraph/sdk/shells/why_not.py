@@ -26,6 +26,9 @@ Public surface contract per blueprint §5 locks:
                application-layer ``check_why_not_universe(...)`` handles
                per-row diagnose internally without re-entering the SDK
                shell layer.
+
+T5 quarantine: this shell is a legacy SDK capability and D23/T5.7 hard-cut
+target. It is not part of the T5 ``fg.eval`` evidence path.
 """
 
 from __future__ import annotations

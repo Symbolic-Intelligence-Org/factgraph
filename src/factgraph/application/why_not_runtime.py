@@ -3,6 +3,9 @@
 Why-not evaluates one explicit finite candidate universe into a green/red board.
 Red rows are diagnosed through Sibling-with-Diagnose runtime composition, then
 mapped back into Why-not-owned row DTOs.
+
+T5 quarantine: this runtime remains a legacy/internal candidate-universe
+capability until the D23/T5.7 hard-cut. It is not the T5 eval evidence path.
 """
 from __future__ import annotations
 

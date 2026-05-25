@@ -3,6 +3,10 @@
 Why-not is a Sibling-with-Diagnose application capability: its runtime may call
 Diagnose to fill red-row diagnostics, but this protocol owns its public row DTOs
 and does not expose nested Diagnose result types.
+
+T5 quarantine: these DTOs are legacy/internal relative to the T5 eval evidence
+path and remain D23/T5.7 hard-cut targets. Failed row/manual explanations use
+the T5 ``Explanation`` envelope instead of adopting atom-locator DTOs here.
 """
 
 from __future__ import annotations
