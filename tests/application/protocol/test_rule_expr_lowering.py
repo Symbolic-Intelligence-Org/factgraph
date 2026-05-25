@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+import unittest
+from dataclasses import FrozenInstanceError
+
+from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
+from factgraph.application.protocol import EntitySelector, Rule, RuleExprError
+from factgraph.application.protocol.rule_expr_lowering import (
+    RuleExprEvaluationTrace,
+    RuleExprLoweringPlan,
+    _evaluate_rule_expr_native_for_tests,
+    _lower_application_rule,
+    _lower_rule_expr,
+    _materialize_native_derivation_plan,
+)
+from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, PredAtom, Var
+from factgraph.core.store import Store
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
+
+
+class Person(Entity):
+    name: str = Identity(primary_key=True)
+    region: str = Field(cardinality="single")
+
+
+def _build_store() -> tuple[Store, object]:
+    schema_ir = compile_schema_from_classes([Person])
+    return Store(schema_ir), build_schema_index(schema_ir)
+
+
+def _seed_person(store: Store, index: object, name: str, region: str = "us") -> str:
+    ref = resolve_selector(EntitySelector(entity_type="Person", identity={"name": name}), index=index)
+    info = entity_info(index, "Person")
+    encoded = ref.encoded_ref or ""
+    set_field(store.ledger, info.exists_predicate_id, encoded, [])
+    set_field(store.ledger, info.identity_predicates["name"].pred_id, encoded, [("string", name)])
+    set_field(store.ledger, field_predicate(index, "Person", "region").pred_id, encoded, [("string", region)])
+    return encoded
+
+
+def _person_exists_rule() -> Rule:
+    person = Var("$p")
+    return Rule(
+        id="Person:exists",
+        where=(PredAtom("Person:exists", [person]),),
+        ports={"person": person},
+    )
+
+
+def _person_region_rule() -> Rule:
+    person = Var("$p")
+    region = Var("$region")
+    return Rule(
+        id="person_region",
+        where=(
+            PredAtom("Person:exists", [person]),
+            PredAtom("Person:region", [person, region]),
+        ),
+        ports={"person": person, "region": region},
+    )
+
+
+class RuleExprLoweringPlanTests(unittest.TestCase):
+    def test_application_rule_lowers_to_private_plan(self) -> None:
+        rule = Rule(id="user_rule", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+
+        plan = _lower_application_rule(rule, head=rule)
+
+        self.assertIsInstance(plan, RuleExprLoweringPlan)
+        self.assertEqual(plan.source_kind, "rule")
+        self.assertEqual(plan.head_binding.kind, "inline")
+        self.assertEqual(plan.head_binding.projection_occurrence_alias, "user_rule")
+        self.assertEqual(len(plan.branches), 1)
+        self.assertEqual(plan.branches[0].branch_id, "b0")
+        self.assertEqual(plan.branches[0].occurrence_aliases, ("user_rule",))
+
+    def test_dtos_are_frozen_and_not_public_exports(self) -> None:
+        rule = Rule(id="user_rule", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        plan = _lower_application_rule(rule, head=rule)
+
+        with self.assertRaises(FrozenInstanceError):
+            plan.source_kind = "other"  # type: ignore[misc]
+
+        import factgraph.application.protocol as protocol
+        import factgraph.sdk as sdk
+
+        self.assertFalse(hasattr(protocol, "RuleExprLoweringPlan"))
+        self.assertFalse(hasattr(sdk, "RuleExprLoweringPlan"))
+
+    def test_alias_local_variables_prevent_private_name_collisions(self) -> None:
+        left = Rule(id="left", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        right = Rule(id="right", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+
+        plan = _lower_rule_expr(left.as_("a") & right.as_("b"), head=left)
+
+        bindings = {
+            (occ.alias, binding.port_name): binding.alias_local_execution_var.name
+            for occ in plan.occurrence_map
+            for binding in occ.port_bindings
+        }
+        self.assertEqual(bindings[("a", "user")], "$a__u")
+        self.assertEqual(bindings[("b", "user")], "$b__u")
+        self.assertNotEqual(bindings[("a", "user")], bindings[("b", "user")])
+
+    def test_and_or_lowers_to_deterministic_branch_alternatives(self) -> None:
+        a = Rule(id="a", where=(PredAtom("A", [Var("$a")]),), ports={"a": Var("$a")})
+        b = Rule(id="b", where=(PredAtom("B", [Var("$b")]),), ports={"b": Var("$b")})
+        c = Rule(id="c", where=(PredAtom("C", [Var("$c")]),), ports={"c": Var("$c")})
+
+        plan = _lower_rule_expr((a.as_("a") & b.as_("b")) | c.as_("c"), head=a)
+
+        self.assertEqual(tuple(branch.branch_id for branch in plan.branches), ("b0", "b1"))
+        self.assertEqual(tuple(branch.occurrence_aliases for branch in plan.branches), (("a", "b"), ("c",)))
+
+
+class RuleExprJoinMaterializationTests(unittest.TestCase):
+    def test_join_materializes_to_eq_atom_after_body_atoms(self) -> None:
+        left = _person_region_rule()
+        right = Rule(
+            id="right_region",
+            where=(PredAtom("Person:region", [Var("$q"), Var("$region")]),),
+            ports={"person": Var("$q"), "region": Var("$region")},
+        )
+        expr = (left.as_("left") & right.as_("right")).join(left.as_("left").region.eq(right.as_("right").region))
+        plan = _lower_rule_expr(expr, head=left)
+
+        compiled, traces = _materialize_native_derivation_plan(plan)
+
+        self.assertEqual(compiled.body_ir[-1][0], "eq")
+        self.assertEqual(compiled.body_ir[-1][1:], ("$left__region", "$right__region"))
+        self.assertEqual(traces[0].join_materializations[0].materialized_atom_index, len(compiled.body_ir) - 1)
+        self.assertEqual(traces[0].join_materializations[0].left_occurrence_alias, "left")
+
+    def test_external_head_materialization_is_deferred(self) -> None:
+        body = _person_region_rule()
+        head = _person_exists_rule()
+        plan = _lower_rule_expr(body & Rule(id="other", where=(PredAtom("Other", [Var("$o")]),), ports={"other": Var("$o")}), head=head)
+
+        self.assertEqual(plan.head_binding.kind, "external")
+        with self.assertRaisesRegex(RuleExprError, "external head body concatenation is deferred"):
+            _materialize_native_derivation_plan(plan)
+
+    def test_aggregate_atom_survives_native_materialization(self) -> None:
+        amount = Var("$amount")
+        order = Var("$order")
+        aggregate = AggregateAtom("sum", amount, [PredAtom("OrderAmount", [order, amount])])
+        rule = Rule(
+            id="amount_sum",
+            where=(CmpAtom("eq", Var("$total"), aggregate),),
+            ports={"total": Var("$total")},
+        )
+
+        compiled, _traces = _materialize_native_derivation_plan(_lower_application_rule(rule, head=rule))
+
+        self.assertEqual(
+            compiled.body_ir,
+            [
+                (
+                    "eq",
+                    "$amount_sum__total",
+                    ("sum", "$amount_sum__amount", [("pred", "OrderAmount", ["$amount_sum__order", "$amount_sum__amount"])]),
+                )
+            ],
+        )
+
+
+class RuleExprNativeExecutionTests(unittest.TestCase):
+    def test_private_native_execution_returns_candidate_sets(self) -> None:
+        store, index = _build_store()
+        encoded = _seed_person(store, index, "alice")
+        rule = _person_exists_rule()
+        copy = Rule(id="person_exists_copy", where=(PredAtom("Person:exists", [Var("$q")]),), ports={"person": Var("$q")})
+
+        candidates = _evaluate_rule_expr_native_for_tests(
+            rule.as_("exists") & copy.as_("copy"),
+            head=rule,
+            store=store,
+        )
+
+        self.assertTrue(candidates)
+        self.assertTrue(all(isinstance(candidate, CandidateSet) for candidate in candidates))
+        self.assertIn(encoded, str(candidates[0].payload))
+
+    def test_trace_tuple_is_per_branch(self) -> None:
+        rule = _person_exists_rule()
+        other = Rule(id="Other:exists", where=(PredAtom("Other:exists", [Var("$o")]),), ports={"other": Var("$o")})
+        plan = _lower_rule_expr(rule.as_("a") | other.as_("b"), head=rule)
+
+        compiled, traces = _materialize_native_derivation_plan(plan)
+
+        self.assertEqual(len(traces), 2)
+        self.assertEqual(tuple(trace.runtime_branch_index for trace in traces), (0, 1))
+        self.assertEqual(tuple(trace.branch_id for trace in traces), ("b0", "b1"))
+        self.assertEqual(compiled.body_ir[0][0][0], "pred")
+        self.assertIsInstance(traces[0], RuleExprEvaluationTrace)
+
+
+if __name__ == "__main__":
+    unittest.main()
