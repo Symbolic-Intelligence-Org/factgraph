@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; first push gate executed — 4 origin refs created; T3 later selected; T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE; **T3 later push gate executed — 2 origin refs created; T4 cycle complete (Stage 1-3 + T4.1 + T4.2 + T4.3 archived); next-stage decision pending**)
+最后更新:2026-05-26(rule-expression T1/T2 closed + T3 initial/later complete + T4 complete; **T5 cycle complete (Stage 1-3 + T5.1-T5.7 archived); T5.8 + push gate Human-decision pending**)
 
-## 当前阶段(2026-05-25 — T4 CYCLE COMPLETE — NEXT-STAGE DECISION PENDING)
+## 当前阶段(2026-05-26 — T5 CYCLE COMPLETE — NEXT-STAGE DECISION PENDING)
 
-**Current local branch:** `v0.2.0-t4-3-closed-head-inspect-docs-2026-05-25` (latest archived anchor `73f6fff5`; `ba2e7ef6` closure, `e44f7920` feat, `d3304933` G7 baseline, `7005e7d5` scoped, `1af6c2b5` draft-amend, and `9ad2980b` draft are the T4.3 anchors).
+**Current local branch:** `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` (T5 Core complete locally; T5.1-T5.7 archived: `53781419`, `4e590e8a`, `ba5e5c26`, `7464c3e3`, `ec45f12f`, `7aa1c6a3`, `8173c715`).
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -13,7 +13,64 @@
 - `examples/01_sdk_check_diagnose.ipynb`
 - `examples/02_overlay_why_not_frontier.ipynb`
 - `examples/archive/01_sdk_basics.ipynb`
+- `src/factgraph/sdk/facade.py`
+- `tests/test_sdk_assertion_record_set_view_filters.py`
 - untracked `rainbird-ai sdk code/`
+
+### T5 cycle complete milestone
+
+T5 is complete locally: Stage 1 audit, Stage 2 decisions D16-D26, Stage 3 synthesis, and all Core implementation slices T5.1-T5.7 are archived on `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`. Nothing has been pushed from this T5 cycle yet. Sacred `master` remains untouched, and the known dirty baseline above remains outside the T5 commits.
+
+All D-doc invariants remain in force: public `evaluate(...)` returns `EvaluateResult`, `CandidateSet` is internal, D19 digest sources are populated without placeholder fallbacks, `EvidenceRef.fact_digest == EvaluateRow.claim.digest`, row-sourced semantics use D25 digest comparison rules, failed `Explanation` is the T5 why-not envelope, SDK `Rule` is the application protocol Rule, and public legacy shells were hard-cut in T5.7.
+
+The narrow-public-API hard-cut is coherent across SDK, service, OpenAPI, and docs: public CandidateSet round-trips are removed; `engine_options=` / `registry=` are rejected at the SDK boundary; `row.explain()`, `row.close()`, and manual `fg.eval.explain(...)` are the evidence/explain path; top-level `LegacyRule` is gone; and final docs teach `from factgraph.sdk import Rule`.
+
+| T5 slice | Status | Feat anchor | Archive anchor | Delivered milestone |
+|---|---|---:|---:|---|
+| T5.1 DTO Foundation + Digest Harness | archived | `a3e96eb6` | `53781419` | `EvaluateResult` / `EvaluateRow` / `Claim` / `EvidenceRef` / `DetachedRowError` plus D19 digest harness. |
+| T5.2 Public Evaluate Return-Shape Flip | archived | `7dfadd4e` | `4e590e8a` | `fg.eval.evaluate(...) -> EvaluateResult` for all SDK input paths, with real `view_snapshot_digest`. |
+| T5.3 Explanation Envelope + Live Row Resolver | archived | `53551cb6` | `ba5e5c26` | `Explanation` DTO, live `row.explain()`, `EvidenceGraph` reuse, D25 checked scope. |
+| T5.4 Row Close + Manual Explain | archived | `c820f102` | `7464c3e3` | live `row.close() -> Rule`, strict closed-head construction, manual `fg.eval.explain(...)`. |
+| T5.5 Why-Not Fold + Quarantine | archived | `5113e13d` | `ec45f12f` | failed `Explanation` as v1 why-not envelope; legacy why-not surfaces quarantined. |
+| T5.6 Final SDK Rule Flip | archived | `ad810f4d` | `7aa1c6a3` | SDK top-level `Rule` is application protocol Rule; `ApplicationRule` transition alias; `LegacyRule` top-level removed. |
+| T5.7 Legacy Hard-Cut + Service/Docs Migration | archived | `41f7e60f` / `63718d09` / `62279515` | `8173c715` | service/OpenAPI/docs migration plus legacy shell hard-cut and final public coherence. |
+
+### T5 cycle progress
+
+| Stage | Status | Notes |
+|---|---|---|
+| Stage 1 audit | complete | T5 result/evidence/explain vs shipped audit reviewed clean v2. |
+| Stage 2 D-docs D16-D26 | complete | 11/11 reviewed clean; D16-D26 lock T5 tranche, DTOs, hard-cut, digests, explanation, row.close, why-not, legacy hard-cut, SDK Rule flip, semantics consistency, and semantics scope. |
+| Stage 3 synthesis | complete | `efc2a997` maps Q1-Q14 and C61-C78 to implementation slices. |
+| T5.1-T5.7 implementation | complete | All seven Core slices archived; final T5.7 gates: 171 G7 tests OK, 37 focused hard-cut/namespace/quarantine tests OK, 8 service/agent route tests OK, touched-file ruff clean, diff check clean. |
+| T5.8 Semantics Lite | optional / pending | D26 Lite-eligible wrapper work can be done in T5 or deferred to a post-T5 semantics cycle. |
+| Memory consolidation | this commit | Repo memory + external memory index/progress updated for T5 complete. |
+| Push gate | Human-decision pending | Ask before any push; no T5 refs have been pushed yet. |
+
+### T5.1-T5.7 — Result + Evidence + Explain Cycle Implementation
+
+**T5.1 DTO Foundation + Digest Harness** landed the public result DTO substrate and D19 digest harness. `EvaluateResult`, `EvaluateRow`, `Claim`, `EvidenceRef`, and `DetachedRowError` are application protocol DTOs and SDK exports; the private CandidateSet-to-row conversion harness keeps CandidateSet internal while preserving `fact_digest == claim.digest`.
+
+**T5.2 Public Evaluate Return-Shape Flip** changed the SDK boundary so public evaluate calls return `EvaluateResult` atomically across application Rule/RuleExpr, legacy Inference, structured derivation dict, and direct SDK aliases. `engine_options=` and `registry=` are rejected, and in-memory view snapshot digest generation was implemented without placeholder fallback.
+
+**T5.3 Explanation Envelope + Live Row Resolver** added `Explanation` and no-arg live `EvaluateRow.explain()`. Row-sourced explanations reuse the owning result, copy D19 anchors into `checked_scope` / graph metadata, enforce `passed iff evidence is not None`, and keep detached rows as `DetachedRowError`.
+
+**T5.4 Row Close + Manual Explain** added live-only `EvaluateRow.close() -> Rule` and manual `fg.eval.explain(expr, head=closed_head, ...)`. Closed-head construction reuses T4.3 D15 strict forms, strips projection placeholders, gates non-closed heads with `RuleExprError`, and uses D19 `closed_head_digest_for`.
+
+**T5.5 Why-Not Fold + Legacy Evidence Quarantine** locked failed `Explanation` as the T5 v1 why-not envelope. Legacy why-not DTOs/runtime/shells are quarantine-marked and not promoted to public T5 evidence APIs; there is no public `.eval.why_not` or lossy WhyNot-to-Explanation conversion.
+
+**T5.6 Final SDK Rule Flip** completed D24: `factgraph.sdk.Rule` is the application protocol Rule, `ApplicationRule` remains as a transition alias, top-level `LegacyRule` is removed, and legacy DSL tests/imports moved to explicit `factgraph.sdk.dsl` paths until the final hard-cut.
+
+**T5.7 Legacy Hard-Cut + Service/Docs Migration** completed the broad public coherence pass. Service and OpenAPI now use EvaluateResult representation, final SDK/service/docs/examples stop teaching CandidateSet/accept/check/diagnose/why-not/what-if workflows, and legacy public shells were removed while preserving internal runtime substrate where needed.
+
+### Recommended next work
+
+Human-directed next-stage choices:
+
+1. **T5.8 Optional Semantics Lite** — implement D26 Lite-eligible C73/C75 and non-adapter parts of C74/C76 without adapter production edits.
+2. **Push gate** — create/push T5 milestone refs and branch refs after explicit authorization; sacred `master` remains untouched unless separately requested.
+3. **T6 evidence-tree cycle** — start the independent evidence-tree Phase B / internal schema / audit-channel cycle, using T5 public DTOs as the stable boundary.
+4. **Pause / external review** — leave T5 complete locally and defer push or semantics decisions.
 
 ### Archived S-class slices in this batch
 
