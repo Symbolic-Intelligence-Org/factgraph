@@ -227,7 +227,7 @@ States:
 2. Exactly one occurrence has same id + same content digest + same version: inline existing head.
 3. Exactly one occurrence has same id + same content digest + different version: inline existing head, emit `warnings.warn(..., UserWarning)` once per validation invocation.
 4. One or more occurrences have same id + different content digest: raise `RuleExprError`.
-5. More than one occurrence matches same id + same content digest: raise `RuleExprError` for ambiguous inline head.
+5. More than one occurrence matches same id + same content digest: raise `RuleExprError` for ambiguous inline head, per D11 section 4.7 and D12 section 4.7 multi-occurrence ambiguity handling.
 
 Version is warning-only metadata. It must not enter content digest, equality, hashing, canonical key, or join behavior.
 
@@ -291,6 +291,14 @@ This validation should be available before T4.2 so external/projection heads can
 
 `SDKStore.evaluate(...)` should stay structurally unchanged except for calling the private T4.1 validation helper inside `_evaluate_rule_expr_input(...)` after lowering and before the existing external-head rejection.
 
+Validation ordering:
+
+1. Identity state 4 (same id + different digest) and state 5 (ambiguous same-id same-digest matches) raise `RuleExprError` before the external-head check.
+2. Identity state 3 (same id + same digest + different version) emits `UserWarning` and proceeds.
+3. Identity state 1 (external head) runs declared-port validation per §5.5; invalid declared-port alignment raises `RuleExprError`, and valid alignment falls through to the existing T3L.3 external-head `SDKStoreError`.
+4. Identity state 2 (inline existing head) runs declared-port validation per §5.5 and proceeds when valid.
+5. The T3L.3 external-head `SDKStoreError` remains the final rejection for external-head body concatenation until T4.2.
+
 Public behavior:
 
 - missing/invalid `head=` remains `SDKStoreError`;
@@ -337,7 +345,8 @@ Do not:
 10. expand PyReason Form 2 grammar;
 11. change legacy SDK `Inference` / derivation dict evaluation behavior;
 12. change RuleExpr authoring / inspect semantics;
-13. introduce T5 `EvaluateResult`, Explanation, WhyNot, `row.close()`, or public trace/evidence surfaces.
+13. introduce T5 `EvaluateResult`, Explanation, WhyNot, `row.close()`, or public trace/evidence surfaces;
+14. widen `RuleExprOccurrenceBinding` beyond a private `rule_version: str | None` field, or equivalent private occurrence-version lookup data; version metadata must not enter canonical key, content digest, identity, hash, join, or branch ordering semantics in this slice or future slices.
 
 ### 5.9 Validation layers
 

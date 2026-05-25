@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | draft | T4.1 blueprint pair created | Scope consumes T4 Stage 3 synthesis T4.1 row, D11/D12 reviewed decisions, T3L.1-T3L.3 archived substrate, and shipped RuleExpr lowering / SDK dispatch evidence. |
+| 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Added an explicit upper-bound scope lock for private occurrence-version metadata, specified T4.1 validation ordering before the existing T3L.3 external-head rejection, and cross-referenced D11/D12 multi-occurrence ambiguity for identity state 5. |
 
 ## Decision Notes
 
