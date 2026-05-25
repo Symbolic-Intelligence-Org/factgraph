@@ -1,6 +1,6 @@
 # Audit: T5.3 Explanation Envelope + Live Row Resolver
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
@@ -15,6 +15,7 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.3 Explanation Envelope + Live Row Resolver draft created after T5.2 archive `4e590e8a`. Scope is M-class predicted and excludes row.close/manual explain, public why-not, renderer, service/docs migration, adapter work, and final SDK Rule flip. |
+| 2026-05-25 | scoped | pending | Step 4.6 grep clean | Ten grep buckets completed. No shipped public `Explanation` or `row.explain()` production owner found; `EvidenceGraph`, Check/Diagnose, WhyNot, renderer, service, docs, and adapter hits are existing substrates or future-slice territory. Scope remains M-class. |
 
 ## 2. Source Chain
 
@@ -104,7 +105,24 @@ Run before implementation and record actual results in a scoped commit.
 
 If Step 4.6 shows `EvidenceGraph` construction requires internal evidence schema redesign or adapter work, amend or split before scoped.
 
-## 8. G7 Baseline Plan
+## 8. Step 4.6 Pre-Implementation Grep Results
+
+| # | Check | Result | Scope decision |
+|---|---|---|---|
+| 1 | Explanation namespace | Hits are T5 design docs, synthesis, T5.3 blueprint pair, and historical references. No `src/factgraph` production T5 public `Explanation` DTO exists. | Clean. T5.3 owns the first public application-protocol `Explanation` implementation. |
+| 2 | Row explain/close methods | No production `EvaluateRow.explain()` or `row.explain()` owner exists. `row.close` and manual explain hits are design docs, T5.3/T5.4 planning, or test data around closed-head digest helpers. | Clean. T5.3 owns only no-arg `EvaluateRow.explain()`; `row.close()` and manual explain remain T5.4. |
+| 3 | EvidenceGraph consumers | `EvidenceGraph` is implemented in `src/factgraph/audit/evidence_graph.py`; existing consumers include service/static UI, audit readers, adapter provenance converters, and audit tests. | Expected substrate. T5.3 reuses graph type and must not promote renderer or engine_meta key contracts. |
+| 4 | ErrorDTO / WarningDTO patterns | `ErrorDTO` / `WarningDTO` are defined in `application/protocol/common.py` and used broadly by Check/Diagnose/WhyNot/query/entity/rule action DTOs. | Expected. T5.3 should follow existing tuple validation/export patterns. |
+| 5 | Check/Diagnose/WhyNot substrate | Existing Check/Diagnose/WhyNot protocol, runtime, shell, and test surfaces are broad. Why-not DTOs and atom locators remain independently tested. | Expected legacy/private substrate. T5.3 must not embed Diagnose/WhyNot DTOs in public Explanation or remove old shells. |
+| 6 | T5.4 / manual explain guard | `fg.eval.explain`, manual explain, `closed_head`, and `row.close` hits are design docs, T5.4 planning, T5.1/T5.2 closed-head digest helpers, and T4.3 closed-head inspect code. No production manual explain entrypoint exists. | Clean guard. T5.3 must not implement manual explain or `row.close()`. |
+| 7 | SDK exports and Rule gate | SDK namespace still has pre-D24 `Rule`, `LegacyRule`, and `ApplicationRule`; tests assert that behavior. No SDK `Explanation` export exists yet. | Add `Explanation` only; do not perform D24 final Rule flip. |
+| 8 | Service/docs/renderer guard | Service docs/OpenAPI/runtime evaluate, static UI rendering, audit render helpers, and why-not tests have existing hits. | T5.7 / renderer-future territory. T5.3 does not migrate service/docs or add `Explanation.render()`. |
+| 9 | Adapter / semantics guard | ProbLog/PyReason/Souffle provenance, semantics profiles, and raw_kind/bound carrier tests/docs have broad existing hits. | Existing substrate only. T5.3 copies row carriers and result semantics digest; no adapter production edits. |
+| 10 | T5.2 evaluate preservation | `EvaluateResult` and `_candidate_sets_to_evaluate_result` are present from T5.1/T5.2. Agent-layer `EvaluateResult` is unrelated. SDK docs still contain deferred CandidateSet teaching from T5.7 scope. | T5.2 public evaluate hard-cut is baseline. T5.3 must preserve it and avoid broad docs/service migration. |
+
+Step 4.6 scope decision: T5.3 remains one M-class slice. No A-fallback amendment is required. Existing EvidenceGraph adapter/service/rendering hits are substrate or future-slice scope, not implementation collisions.
+
+## 9. G7 Baseline Plan
 
 Command:
 
@@ -138,7 +156,7 @@ Baseline fields to fill after scoped:
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
-## 9. Draft Review Checklist
+## 10. Draft Review Checklist
 
 | Item | Status |
 |---|---|
@@ -154,8 +172,9 @@ Baseline fields to fill after scoped:
 | D24 SDK Rule flip excluded | Yes |
 | Step 4.6 grep plan present | Yes |
 | G7 baseline plan present | Yes |
+| Step 4.6 grep results clean | Yes |
 
-## 10. Risks For Reviewer
+## 11. Risks For Reviewer
 
 | Risk | Reviewer focus |
 |---|---|
@@ -167,6 +186,6 @@ Baseline fields to fill after scoped:
 | Check/Diagnose may leak public DTOs into Explanation | Confirm they remain private substrate only. |
 | Adapter semantics may leak through raw_kind/bound | Confirm carriers are copied from rows and no adapter edits occur. |
 
-## 11. Outcome
+## 12. Outcome
 
 Pending.

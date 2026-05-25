@@ -1,6 +1,6 @@
 # Task Blueprint: T5.3 Explanation Envelope + Live Row Resolver
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
