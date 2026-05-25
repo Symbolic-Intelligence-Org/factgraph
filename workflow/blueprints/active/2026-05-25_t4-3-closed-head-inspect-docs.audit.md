@@ -11,6 +11,7 @@ Blueprint: `workflow/blueprints/active/2026-05-25_t4-3-closed-head-inspect-docs.
 | 2026-05-25 | draft | Codex | Drafted T4.3 blueprint after pre-draft grep against the post-T4.2 baseline. Scope covers D15 closed-head inspect fields plus bounded docs updates; T5/result/evidence/adapter changes remain locked out. |
 | 2026-05-25 | draft-amend | Codex | Addressed Step 4.2 v1 WCs: append-only `RuleExprInspect` field lock, RuleExpr structural inspect "not applicable" defaults, D15 section 4.4 entity-ref atom/schema path, and projection inspect-time vs D12 evaluation-time validation boundary. |
 | 2026-05-25 | scoped | Codex | Step 4.6 grep clean; no A-fallback amendment required. Blueprint and audit moved to scoped with closed-head inspect/docs scope locked. |
+| 2026-05-25 | baseline | Codex | G7 preservation baseline recorded after scoped anchor `7005e7d5`: 155 tests OK with the T4.2 final preservation suite; pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded. |
 
 ## Source Chain
 
@@ -156,6 +157,18 @@ PYTHONPATH=src python -m unittest \
 Expected result: 155 tests OK, matching the T4.2 final preservation gate.
 
 Pytest remains deferred because of the existing SIGSEGV environment lock. `tests.test_public_inference_factgraph_create` remains excluded due to pre-existing failure.
+
+## G7 Baseline Record
+
+| Item | Result |
+|---|---|
+| Branch | `v0.2.0-t4-3-closed-head-inspect-docs-2026-05-25` |
+| Sacred / dirty state | Sacred `master` untouched; existing 4 modified files + 1 untracked path preserved. |
+| Step 4.6 precondition | Scoped anchor `7005e7d5` recorded Step 4.6 grep clean with no A-fallback amendment. |
+| Command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
+| Result | 155 tests OK (`Ran 155 tests in 0.066s`, `OK`). |
+| Pytest | Deferred per existing SIGSEGV environment lock; unittest preservation gate remains canonical for this slice. |
+| Excluded pre-existing failure | `tests.test_public_inference_factgraph_create` remains excluded and unchanged. |
 
 ## Step 4.2 Draft Review Checklist
 
