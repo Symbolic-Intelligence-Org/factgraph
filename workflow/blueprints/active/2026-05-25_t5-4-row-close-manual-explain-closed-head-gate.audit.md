@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | 2026-05-25 | draft | `f755749b` | Blueprint pair drafted | T5.4 Row Close + Manual Explain Closed-Head Gate draft created after T5.3 archive `ba5e5c26`. Scope is M-class predicted, but Step 4.6 must decide whether row-close and manual explain stay one slice or split. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Ten grep buckets matched expected shipped/design hits. No A-fallback triggered; T5.4 remains a single SDK/protocol-scoped M-class slice. Service/docs, why-not, SDK Rule flip, and adapter semantics remain future-slice territory. |
+| 2026-05-25 | baseline | pending | G7 baseline recorded | Scoped anchor `b7e3e121`; G7 command ran 166 tests in 0.088s, OK. Pytest remains deferred per existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains excluded. |
 
 ## 2. Source Chain
 
@@ -141,16 +142,16 @@ PYTHONPATH=src python -m unittest \
 
 Expected result: 166 tests OK, inherited from T5.3 archive.
 
-Baseline fields to fill after scoped:
+Baseline record:
 
 | Field | Value |
 |---|---|
-| Branch | pending |
-| Sacred state | pending |
-| Dirty baseline | pending |
-| Scoped anchor | pending |
-| Command | pending |
-| Result | pending |
+| Branch | `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` |
+| Sacred state | `master = 562c74195df43e933bed92a3ff25de94dd8ce666` |
+| Dirty baseline | 6 modified + 1 untracked preserved |
+| Scoped anchor | `b7e3e121` |
+| Command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
+| Result | `Ran 166 tests in 0.088s, OK` |
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
