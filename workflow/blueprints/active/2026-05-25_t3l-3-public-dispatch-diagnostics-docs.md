@@ -109,6 +109,7 @@ If any trigger appears during Step 4.6 or implementation, pause for a blueprint 
 - No SDK top-level export changes unless implementation proves an import is already missing for existing T3 public authoring docs.
 - No changes to RuleExpr authoring semantics, inspect behavior, equality/hash, joins, or `join_by_ports`.
 - No legacy SDK `Rule` / `Inference` `head=` acceptance.
+- No public external-head body concatenation semantics in T3L.3; callers include the head rule as an expression occurrence for this tranche.
 - No new public error subclass.
 - No public debug/lower API.
 
@@ -211,7 +212,7 @@ The RuleExpr public path should reuse the existing SDK engine / semantics resolu
 
 - `engine=` selects native / Souffle / ProbLog / PyReason behavior just as existing `evaluate(...)` does for legacy derivations.
 - `semantics=` wrappers may still derive engine when existing `_resolve_public_engine_and_semantics(...)` allows it.
-- `engine_options=` is passed through only where existing evaluation machinery accepts it.
+- `engine_options=` is forwarded through the same `DerivationEvaluateRequest` / `evaluate_derivation_plans(...)` path used by existing `_evaluate_compiled_derivation_plans(...)`, and only where existing evaluation machinery accepts it.
 - legacy mode aliases and removed kwargs remain rejected by existing code before RuleExpr dispatch.
 
 No new engine names are added.
@@ -238,12 +239,11 @@ Unexpected adapter/runtime errors after supported preflight may still surface ex
 
 D6 requires `head=` to be an application protocol `Rule`.
 
-T3L.1/T3L.2 currently defer external-head body concatenation. T3L.3 must choose one of these bounded public behaviors before feat:
+T3L.3 chooses the conservative public behavior: support inline/projected heads and reject external-head body concatenation.
 
-- **Preferred narrow behavior**: support inline/projected heads publicly first; reject external-head body concatenation with `SDKStoreError` guidance that the head rule must be included as an occurrence in the expression for this tranche.
-- **If implementation proves simple and bounded**: concatenate external head body atoms through the private lowering/materialization path without adding full T4 Head / closed-head behavior.
+Public RuleExpr execution therefore requires the `head` rule to already appear as an inline expression occurrence with the same id and content digest. If the supplied application `head=` is external to the expression body, T3L.3 raises `SDKStoreError` with guidance to include the head rule as an occurrence in the expression.
 
-Either behavior must be documented in §10 Outcome and user docs. Full T4 Head / closed-head semantics remain non-goal.
+This keeps T3L.3 out of full T4 Head territory and preserves the T3L.1/T3L.2 external-head defer boundary. Full external-head body concatenation and closed-head behavior remain non-goals.
 
 ### 5.6 Public diagnostics
 
@@ -252,8 +252,11 @@ Known public call-shape errors use `SDKStoreError`, including:
 - missing `head=`;
 - invalid `head=` type;
 - unsupported `head=` legacy SDK objects;
+- external `head=` values that would require body concatenation;
 - unsupported engine/grammar matrix cell;
 - PyReason non-pred / eq / aggregate rejection from `RuleExprAdapterSupport`.
+
+Missing or invalid `head=` is treated as an SDK entrypoint call-shape contract, not as post-lowering RuleExpr semantic validation: the caller supplied an invalid keyword boundary before any RuleExpr lowering begins. This aligns with D6 section 4.6's `SDKStoreError` bucket for public `fg.eval.evaluate(...)` contract mistakes.
 
 RuleExpr semantic/lowering errors from expression structure may continue to use `RuleExprError` when they are not SDK call-shape or adapter matrix problems.
 
@@ -347,23 +350,25 @@ Layer 4: shipped runtime / adapter validation after preflight passes.
 
 5. Invalid `head=` types and legacy SDK `Rule` / `Inference` as `head=` raise `SDKStoreError`.
 
-6. Legacy SDK `Inference` / derivation dict evaluation tests remain green.
+6. External application `head=` values that are not inline/projected expression occurrences raise `SDKStoreError` with guidance to include the head rule as an occurrence.
 
-7. Souffle and ProbLog RuleExpr public paths pass through the T3L.2 materialization shape without adapter production edits.
+7. Legacy SDK `Inference` / derivation dict evaluation tests remain green.
 
-8. PyReason public path:
+8. Souffle and ProbLog RuleExpr public paths pass through the T3L.2 materialization shape without adapter production edits.
+
+9. PyReason public path:
    - accepts pred-only lowered RuleExprs when supported by shipped runtime;
    - rejects D8 eq joins / source non-pred atoms / aggregates with `SDKStoreError`.
 
-9. D9 rejection messages include engine, unsupported feature, rejection source, and supported alternatives when known.
+10. D9 rejection messages include engine, unsupported feature, rejection source, and supported alternatives when known.
 
-10. Public result tests assert no `CandidateSet` shape change and no provenance stuffing into payload.
+11. Public result tests assert no `CandidateSet` shape change and no provenance stuffing into payload.
 
-11. Docs update the expected files and do not introduce T5 result/evidence claims.
+12. Docs update the expected files and do not introduce T5 result/evidence claims.
 
-12. Final gate includes T3.1-T3.6 + T3L.1 + T3L.2 preservation tests plus new T3L.3 focused tests and reports final OK count.
+13. Final gate includes T3.1-T3.6 + T3L.1 + T3L.2 preservation tests plus new T3L.3 focused tests and reports final OK count.
 
-13. `ruff` passes if Python files are changed.
+14. `ruff` passes if Python files are changed.
 
 ## 8. Implementation Plan
 
@@ -379,7 +384,7 @@ Layer 4: shipped runtime / adapter validation after preflight passes.
 
 6. Add public `SDKStoreError` conversion for known adapter matrix rejection, especially PyReason classifier output.
 
-7. Decide and implement the bounded external-head behavior chosen in §5.5.
+7. Implement the conservative external-head rejection locked in §5.5.
 
 8. Add focused SDK tests, expected in `tests/sdk/test_rule_expr_evaluate.py`.
 

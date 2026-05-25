@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | draft | T3L.3 blueprint pair created | Scope consumes Stage 3 synthesis T3L.3 row, D6/D9/D10, T3L.1/T3L.2 archived substrate, and shipped SDK dispatch/docs evidence. |
+| 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked the external-head public behavior to conservative inline/projected-head support with SDKStoreError rejection for external heads, clarified missing/invalid `head=` as SDK call-shape errors per D6, and specified RuleExpr `engine_options` forwarding through existing evaluation machinery. |
 
 ## Decision Notes
 
@@ -51,14 +52,15 @@ Rationale:
 - D10 rejects a public result wrapper in this tranche, so the public path can remain `list[CandidateSet]`.
 - T3.6 docs already teach RuleExpr authoring; T3L.3 only needs to add execution-specific behavior.
 
-### External-Head Risk
+### External-Head Boundary
 
-T3L.1 and T3L.2 explicitly deferred external-head body concatenation. T3L.3 must not accidentally smuggle in full T4 Head behavior. The draft records two bounded options:
+T3L.1 and T3L.2 explicitly deferred external-head body concatenation. T3L.3 locks the conservative public behavior:
 
-1. reject external-head body concatenation publicly with `SDKStoreError` guidance to include the head as an expression occurrence; or
-2. implement narrowly bounded concatenation if Step 4.6 and implementation prove it is local and does not require T4 semantics.
+- inline/projected heads are supported;
+- external `head=` values requiring body concatenation raise `SDKStoreError`;
+- the message guides callers to include the head rule as an expression occurrence for this tranche.
 
-Reviewer should verify this boundary before scoped status.
+This avoids smuggling full T4 Head behavior into the final T3 later slice.
 
 ## G1-G7 Visible Mapping
 
