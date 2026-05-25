@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import factgraph.sdk as sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
-from factgraph.application.protocol import EntitySelector, Rule, RuleExprError, RuleExprInspect
+from factgraph.application.protocol import EntitySelector, EvaluateResult, Rule, RuleExprError, RuleExprInspect
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
@@ -58,30 +58,40 @@ def _aggregate_rule() -> Rule:
 
 
 class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
-    def test_ruleexpr_native_evaluate_returns_candidate_sets(self) -> None:
+    def test_ruleexpr_native_evaluate_returns_evaluate_result(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "alice")
         rule = _person_exists_rule()
         region = _person_region_rule()
         expr = (rule.as_("exists") & region.as_("region")).join_by_ports("person")
 
-        candidates = graph.eval.evaluate(expr, head=rule, engine="native")
+        result = graph.eval.evaluate(expr, head=rule, engine="native")
 
-        self.assertTrue(candidates)
-        self.assertTrue(all(isinstance(candidate, CandidateSet) for candidate in candidates))
-        self.assertIn(encoded, str(candidates[0].payload))
-        self.assertNotIn("occurrence_map", candidates[0].payload)
-        self.assertNotIn("join_materializations", candidates[0].payload)
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertTrue(result)
+        self.assertIn(encoded, str(result[0].bindings))
+        self.assertNotIn("occurrence_map", result[0].bindings)
+        self.assertNotIn("join_materializations", result[0].bindings)
+        self.assertRegex(result.result_id, r"^evalr_v1:[0-9a-f]{64}$")
+        self.assertRegex(result.view_snapshot_digest, r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(result.result_digest, r"^sha256:[0-9a-f]{64}$")
+        self.assertIsNone(result.semantics_digest)
+        self.assertFalse(hasattr(result[0], "candidate_id"))
+        self.assertFalse(hasattr(result[0], "support_digest"))
+        self.assertFalse(hasattr(result[0], "explain"))
+        self.assertFalse(hasattr(result[0], "close"))
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "bob")
         rule = _person_exists_rule()
 
-        candidates = graph.eval.evaluate(rule, head=rule, engine="native")
+        result = graph.eval.evaluate(rule, head=rule, engine="native")
 
-        self.assertTrue(candidates)
-        self.assertIn(encoded, str(candidates[0].payload))
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertTrue(result)
+        self.assertIn(encoded, str(result[0].bindings))
+        self.assertEqual(result.view_snapshot_digest, graph.eval.evaluate(rule, head=rule, engine="native").view_snapshot_digest)
 
     def test_missing_head_uses_sdk_store_error(self) -> None:
         graph = _store()
@@ -126,11 +136,12 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             ports={"person": person, "region": region},
         )
 
-        candidates = graph.eval.evaluate(body, head=external_head, engine="native")
+        result = graph.eval.evaluate(body, head=external_head, engine="native")
 
-        self.assertTrue(candidates)
-        self.assertIn(alice, str(candidates[0].payload))
-        self.assertNotIn("bob", str(candidates[0].payload))
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertTrue(result)
+        self.assertIn(alice, str(result[0].bindings))
+        self.assertNotIn("bob", str(result[0].bindings))
 
     def test_projection_head_evaluates_and_preserves_argument_order(self) -> None:
         graph = _store()
@@ -138,9 +149,10 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         rule = _person_region_rule()
 
         with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
-            candidates = graph.eval.evaluate(rule, head=Rule.projection("region", "person"), engine="native")
+            result = graph.eval.evaluate(rule, head=Rule.projection("region", "person"), engine="native")
 
-        self.assertEqual(candidates, [])
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertEqual(result.count(), 0)
         request = evaluate.call_args.args[0]
         self.assertEqual(request.plans[0].heads[0].head_var_names, ("$__projection_0", "$__projection_1"))
         self.assertIn("$__projection_0", repr(request.plans[0].body_ir))
@@ -169,9 +181,9 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            candidates = graph.eval.evaluate(rule, head=head, engine="native")
+            result = graph.eval.evaluate(rule, head=head, engine="native")
 
-        self.assertTrue(candidates)
+        self.assertTrue(result)
         self.assertEqual(len(caught), 1)
         self.assertIn("different version", str(caught[0].message))
 
@@ -199,21 +211,32 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         for engine in ("souffle", "problog"):
             with self.subTest(engine=engine):
                 with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
-                    candidates = graph.eval.evaluate(rule, head=rule, engine=engine, engine_options={"timeout": 1})
+                    result = graph.eval.evaluate(rule, head=rule, engine=engine)
 
-                self.assertEqual(candidates, [])
+                self.assertIsInstance(result, EvaluateResult)
+                self.assertEqual(result.count(), 0)
                 request = evaluate.call_args.args[0]
                 self.assertEqual(request.engine, engine)
-                self.assertEqual(request.plans[0].engine_options, {"timeout": 1})
+                self.assertEqual(request.plans[0].engine_options, {})
+
+    def test_evaluate_rejects_public_engine_options_and_registry(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+
+        with self.assertRaisesRegex(SDKStoreError, "engine_options"):
+            graph.eval.evaluate(rule, head=rule, engine="native", engine_options={"timeout": 1})
+        with self.assertRaisesRegex(SDKStoreError, "registry"):
+            graph.eval.evaluate(rule, head=rule, engine="native", registry=object())
 
     def test_pyreason_pred_only_path_preflights_and_evaluates_when_supported(self) -> None:
         graph = _store()
         rule = _person_exists_rule()
 
         with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
-            candidates = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+            result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
 
-        self.assertEqual(candidates, [])
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertEqual(result.count(), 0)
         request = evaluate.call_args.args[0]
         self.assertEqual(request.engine, "pyreason")
 
@@ -239,7 +262,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "unsupported feature 'aggregate'"):
             graph.eval.evaluate(rule, head=rule, engine="pyreason")
 
-    def test_legacy_inference_evaluation_still_uses_existing_path(self) -> None:
+    def test_legacy_inference_evaluation_returns_evaluate_result(self) -> None:
         graph = _store()
         _seed_person(graph, "carol")
         with sdk.vars("p") as (p,):
@@ -251,10 +274,41 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 head_vars=[p],
             )
 
-        candidates = graph.eval.evaluate(inference, engine="native")
+        result = graph.eval.evaluate(inference, engine="native")
 
-        self.assertTrue(candidates)
-        self.assertTrue(all(isinstance(candidate, CandidateSet) for candidate in candidates))
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertTrue(result)
+        self.assertTrue(all(not isinstance(row, CandidateSet) for row in result))
+
+    def test_structured_derivation_dict_returns_evaluate_result(self) -> None:
+        graph = _store()
+        _seed_person(graph, "frank")
+        with sdk.vars("p") as (p,):
+            derivation = sdk.Inference(
+                id="dict_inference",
+                version="v1",
+                where=[sdk.Pred("Person:exists", p)],
+                target="Person:exists",
+                head_vars=[p],
+            ).to_authoring_payload()
+
+        result = graph.eval.evaluate(derivation, engine="native")
+
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertTrue(result)
+        self.assertEqual(result.head.id, "Person:exists")
+
+    def test_direct_store_style_evaluate_fallback_is_rejected(self) -> None:
+        graph = _store()
+
+        with self.assertRaisesRegex(SDKStoreError, "direct Store.evaluate-style calls"):
+            graph.eval.evaluate(
+                derivation_id="legacy",
+                version="v1",
+                target_pred_id="Person:exists",
+                head_vars=["$person"],
+                where=[],
+            )
 
 
 if __name__ == "__main__":

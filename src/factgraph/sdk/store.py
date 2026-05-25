@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -31,6 +31,20 @@ from factgraph.application.protocol import (
     FieldPath,
     Rule as ApplicationRule,
 )
+from factgraph.application.protocol.evaluate_result import (
+    EvaluateResult,
+    _candidate_set_to_evaluate_row,
+    _row_digest_for,
+    canonical_bytes_for_evaluate,
+    closed_head_digest_for,
+    expr_digest_for_payload,
+    new_run_id,
+    result_digest_for,
+    result_id_for,
+    rule_set_digest_for_entries,
+    semantics_digest_for,
+    view_snapshot_digest_for_parts,
+)
 from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
@@ -46,6 +60,8 @@ from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt
+from factgraph.core.protocol.digests import sha256_hex
+from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.semantics import SemanticsProfile, inspect_semantics_profile
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.adapters.souffle.package import ExportOptions, export_package
@@ -2208,7 +2224,7 @@ class SDKStore:
             raise SDKStoreError("SDK public semantics require SDK Rule or Inference object input")
         return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
 
-    def evaluate(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+    def evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
         if "view" in kwargs or "policy" in kwargs:
             raise SDKStoreError(
                 "evaluate() does not accept view=; policy= was removed for read APIs and is not accepted for inference evaluation"
@@ -2224,6 +2240,10 @@ class SDKStore:
             raise SDKStoreError("temporal_view is removed from evaluate(); use active/history views on read APIs")
         registry = kwargs.pop("registry", None)
         engine_options = kwargs.pop("engine_options", None)
+        if registry is not None:
+            raise SDKStoreError("evaluate() does not accept registry= in T5; register dependencies on the inference object")
+        if engine_options is not None:
+            raise SDKStoreError("evaluate() does not accept engine_options= in T5; use semantics= or engine-specific configuration")
         raw_engine = kwargs.pop("engine", None)
         raw_semantics = kwargs.pop("semantics", None)
         if args and isinstance(args[0], str):
@@ -2236,8 +2256,6 @@ class SDKStore:
                 kwargs,
                 raw_engine=raw_engine,
                 raw_semantics=raw_semantics,
-                registry=registry,
-                engine_options=engine_options,
             )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
@@ -2247,13 +2265,21 @@ class SDKStore:
                 derivation=derivation,
                 api_path="evaluate()",
             )
-            runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=registry)
+            runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=None)
             compiled_plans = self._compile_derivation_input(derivation)
-            return self._evaluate_compiled_derivation_plans(
+            candidates = self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=engine,
                 registry=runtime_registry,
-                engine_options=engine_options,
+                semantics_profile=semantics_profile,
+            )
+            app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
+            head = _head_rule_for_compiled_plans(app_plans)
+            return self._candidate_sets_to_evaluate_result(
+                candidates,
+                compiled_plans=app_plans,
+                head=head,
+                engine=engine,
                 semantics_profile=semantics_profile,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
@@ -2264,27 +2290,26 @@ class SDKStore:
                 api_path="evaluate()",
             )
             compiled_plans = self._compile_derivation_input(args[0])
-            return self._evaluate_compiled_derivation_plans(
+            candidates = self._evaluate_compiled_derivation_plans(
                 compiled_plans,
                 mode=engine,
-                registry=registry,
-                engine_options=engine_options,
+                registry=None,
                 semantics_profile=semantics_profile,
             )
-        engine, semantics_profile = self._resolve_public_engine_and_semantics(
-            raw_engine,
-            raw_semantics,
-            derivation=None,
-            api_path="evaluate()",
+            app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
+            head = _head_rule_for_compiled_plans(app_plans)
+            return self._candidate_sets_to_evaluate_result(
+                candidates,
+                compiled_plans=app_plans,
+                head=head,
+                engine=engine,
+                semantics_profile=semantics_profile,
+            )
+        raise SDKStoreError(
+            "direct Store.evaluate-style calls are not supported by SDK evaluate() after the T5 result-envelope "
+            "hard-cut; use an application Rule/RuleExpr with head=, an Inference object, or a structured "
+            "derivation dict"
         )
-        if registry is not None:
-            kwargs["registry"] = registry
-        if engine_options is not None:
-            kwargs["engine_options"] = engine_options
-        kwargs["mode"] = engine
-        if semantics_profile is not None:
-            kwargs["semantics_profile"] = semantics_profile
-        return self._store.evaluate(*args, **kwargs)
 
     def _evaluate_compiled_derivation_plans(
         self,
@@ -2328,9 +2353,7 @@ class SDKStore:
         *,
         raw_engine: Any,
         raw_semantics: Any,
-        registry: RuleRegistry | None,
-        engine_options: dict[str, Any] | None,
-    ) -> list[CandidateSet]:
+    ) -> EvaluateResult:
         if len(args) != 1:
             raise SDKStoreError("evaluate(rule_expr, ...) accepts exactly one RuleExpr or application Rule input")
         if "head" not in kwargs:
@@ -2372,15 +2395,141 @@ class SDKStore:
         else:
             compiled, _traces = _materialize_adapter_derivation_plan(plan, engine=engine)
 
-        compiled = replace(compiled, engine_options=dict(engine_options or {}))
-        return evaluate_derivation_plans(
+        candidates = evaluate_derivation_plans(
             DerivationEvaluateRequest(
                 plans=(compiled,),
                 engine=engine,
                 semantics_profile=semantics_profile,
             ),
             store=self._store,
-            registry=registry,
+            registry=None,
+        )
+        return self._candidate_sets_to_evaluate_result(
+            candidates,
+            compiled_plans=[compiled],
+            head=head,
+            engine=engine,
+            semantics_profile=semantics_profile,
+        )
+
+    def _candidate_sets_to_evaluate_result(
+        self,
+        candidates: list[CandidateSet],
+        *,
+        compiled_plans: Sequence[CompiledDerivationPlan],
+        head: ApplicationRule,
+        engine: str,
+        semantics_profile: SemanticsProfile | None,
+    ) -> EvaluateResult:
+        run_id = new_run_id()
+        expr_digest = expr_digest_for_payload(
+            "compiled_derivation_plans",
+            {"plans": [_compiled_plan_digest_payload(plan) for plan in compiled_plans]},
+        )
+        rule_set_digest = rule_set_digest_for_entries(_rule_set_entries_for_result(compiled_plans, head=head))
+        view_snapshot_digest = self._view_snapshot_digest()
+        semantics_digest = semantics_digest_for(semantics_profile)
+        result_id = result_id_for(
+            run_id=run_id,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+            engine=engine,
+            head_id=head.id,
+            head_content_digest=head.content_digest,
+        )
+        closed_head_digest = closed_head_digest_for(head)
+        try:
+            rows = tuple(
+                _candidate_set_to_evaluate_row(
+                    candidate,
+                    result_id=result_id,
+                    run_id=run_id,
+                    closed_head_digest=closed_head_digest,
+                )
+                for candidate in candidates
+            )
+            row_digests = tuple(_row_digest_for(row) for row in rows)
+            result_digest = result_digest_for(
+                result_id=result_id,
+                run_id=run_id,
+                row_digests=row_digests,
+                head_id=head.id,
+                head_content_digest=head.content_digest,
+                engine=engine,
+                engine_version=None,
+                adapter_version=None,
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                semantics_digest=semantics_digest,
+            )
+            return EvaluateResult(
+                result_id=result_id,
+                run_id=run_id,
+                rows=rows,
+                head=head,
+                engine=engine,
+                engine_version=None,
+                adapter_version=None,
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                semantics_digest=semantics_digest,
+                evaluated_at=datetime.now(timezone.utc),
+                result_digest=result_digest,
+            )
+        except Exception as exc:
+            if isinstance(exc, SDKStoreError):
+                raise
+            raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _view_snapshot_digest(self) -> str:
+        schema_token = self._schema_digest
+        ledger = self.ledger
+        db_id = ledger.get_ledger_meta("db_id")
+        if db_id is None:
+            db_id = "mem:" + sha256_hex(canonical_bytes_for_evaluate("sdk_evaluate_mem_db_v1", schema_token))
+        base_tx_id = ledger.get_ledger_meta("head_tx_id")
+        if base_tx_id is None:
+            base_tx_id = "tx:" + sha256_hex(
+                canonical_bytes_for_evaluate(
+                    "sdk_evaluate_mem_tx_v1",
+                    {
+                        "claims": [
+                            {
+                                "asrt_id": claim.asrt_id,
+                                "e_ref": claim.e_ref,
+                                "pred_id": claim.pred_id,
+                                "rest_terms": claim.rest_terms,
+                            }
+                            for claim in sorted(ledger.find_claims(), key=lambda claim: claim.asrt_id)
+                        ],
+                        "revokes": [
+                            {
+                                "revoked_asrt_id": revoke.revoked_asrt_id,
+                                "revoker_asrt_id": revoke.revoker_asrt_id,
+                            }
+                            for revoke in sorted(
+                                ledger.revokes,
+                                key=lambda revoke: (revoke.revoked_asrt_id, revoke.revoker_asrt_id),
+                            )
+                        ],
+                        "schema_digest": schema_token,
+                    },
+                )
+            )
+        active_asrt_ids = tuple(
+            _view_snapshot_asrt_id_for_claim(claim)
+            for claim in sorted(ledger.find_claims(), key=lambda claim: claim.asrt_id)
+            if not ledger.has_active_revocation(claim.asrt_id)
+        )
+        return view_snapshot_digest_for_parts(
+            db_id=db_id,
+            base_tx_id=base_tx_id,
+            schema_digest=schema_token,
+            asrt_ids=active_asrt_ids,
         )
 
     @staticmethod
@@ -3245,6 +3394,110 @@ def _compiled_derivation_plan_to_application(
         head_spec=compiled.get("head"),
         engine_ext=resolved_engine_ext,
         engine_options=dict(engine_options or {}),
+    )
+
+
+def _application_plans_from_compiled_dicts(
+    compiled_plans: Sequence[dict[str, Any]],
+    *,
+    mode: str,
+) -> tuple[CompiledDerivationPlan, ...]:
+    return tuple(
+        _compiled_derivation_plan_to_application(
+            compiled,
+            mode=mode,
+            engine_options=None,
+        )
+        for compiled in compiled_plans
+    )
+
+
+def _head_rule_for_compiled_plans(plans: Sequence[CompiledDerivationPlan]) -> ApplicationRule:
+    if not plans:
+        raise SDKStoreError("cannot build EvaluateResult head from empty compiled plans")
+    first = plans[0]
+    if not first.heads:
+        raise SDKStoreError("cannot build EvaluateResult head from compiled plan without heads")
+    head = first.heads[0]
+    if not head.head_var_names:
+        raise SDKStoreError("cannot build EvaluateResult head from compiled plan without head variables")
+    vars_by_port = tuple(Var(name) for name in head.head_var_names)
+    ports: dict[str, Var] = {}
+    for idx, var in enumerate(vars_by_port):
+        base = var.name.removeprefix("$") or f"arg{idx}"
+        port_name = base if base not in ports else f"{base}_{idx}"
+        ports[port_name] = var
+    return ApplicationRule(
+        id=head.target_pred_id,
+        where=(PredAtom(head.target_pred_id, list(vars_by_port)),),
+        ports=ports,
+    )
+
+
+def _compiled_plan_digest_payload(plan: CompiledDerivationPlan) -> dict[str, Any]:
+    return {
+        "body_ir": [repr(atom) for atom in plan.body_ir],
+        "derivation_id": plan.derivation_id,
+        "engine_ext": repr(plan.engine_ext) if plan.engine_ext is not None else None,
+        "engine_options": _evaluate_digest_safe(plan.engine_options),
+        "head_spec": _evaluate_digest_safe(plan.head_spec),
+        "heads": [
+            {
+                "head_var_names": tuple(head.head_var_names),
+                "target_pred_id": head.target_pred_id,
+            }
+            for head in plan.heads
+        ],
+        "version": plan.version,
+    }
+
+
+def _rule_set_entries_for_result(
+    plans: Sequence[CompiledDerivationPlan],
+    *,
+    head: ApplicationRule,
+) -> tuple[tuple[str, str], ...]:
+    entries: list[tuple[str, str]] = [(f"head:{head.id}", head.content_digest)]
+    for plan in plans:
+        content_digest = sha256_hex(
+            canonical_bytes_for_evaluate(
+                "evaluate_compiled_plan_rule_set_entry_v1",
+                _compiled_plan_digest_payload(plan),
+            )
+        )
+        entries.append((f"plan:{plan.derivation_id}:{plan.version}", content_digest))
+    return tuple(entries)
+
+
+def _evaluate_digest_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    if isinstance(value, tuple):
+        return tuple(_evaluate_digest_safe(item) for item in value)
+    if isinstance(value, list):
+        return [_evaluate_digest_safe(item) for item in value]
+    if isinstance(value, Mapping):
+        return {
+            str(key): _evaluate_digest_safe(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    return repr(value)
+
+
+def _view_snapshot_asrt_id_for_claim(claim: Any) -> str:
+    asrt_id = getattr(claim, "asrt_id", None)
+    if isinstance(asrt_id, str) and re.fullmatch(r"asrt:[0-9a-f]{64}", asrt_id):
+        return asrt_id
+    return "asrt:" + sha256_hex(
+        canonical_bytes_for_evaluate(
+            "sdk_evaluate_view_claim_asrt_v1",
+            {
+                "asrt_id": asrt_id,
+                "e_ref": getattr(claim, "e_ref", None),
+                "pred_id": getattr(claim, "pred_id", None),
+                "rest_terms": getattr(claim, "rest_terms", None),
+            },
+        )
     )
 
 
