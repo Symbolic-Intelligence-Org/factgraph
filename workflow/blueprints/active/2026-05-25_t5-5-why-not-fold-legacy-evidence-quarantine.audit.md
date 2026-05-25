@@ -1,11 +1,11 @@
 # Audit: T5.5 Why-Not Fold + Legacy Evidence Quarantine
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-5-why-not-fold-legacy-evidence-quarantine.md`
-- Stage: T5.5 implementation blueprint scoped
+- Stage: T5.5 implementation blueprint implemented
 - Class: M (predicted; split if hard-cut deletion or service/docs migration leaks in)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -18,6 +18,7 @@
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Eight grep buckets completed. Existing WhyNot protocol/runtime/shells, round-event payloads, docs/examples, and T5.3/T5.4 explanation paths are expected substrate or future T5.7 territory. No public `.eval.why_not`, no result/explanation why-not method, and no lossy WhyNot/Diagnose-to-Explanation conversion path found. Scope remains M-class minimal. |
 | 2026-05-25 | baseline | pending | G7 preservation baseline recorded | Ran inherited G7 command at scoped anchor `a27feb0f`: 170 tests OK in 0.098s. Pytest remains deferred per existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains excluded. |
 | 2026-05-25 | feat | pending | Why-not quarantine implemented | Added T5 quarantine markers to legacy WhyNot protocol/runtime/SDK shell surfaces and focused tests proving failed Explanation is the v1 why-not envelope, no T5 public why-not surface exists, legacy why-not remains quarantined, and no lossy conversion path exists. Verification: 4 T5.5 tests OK; 37 focused T5.1-T5.5 preservation tests OK; 170 G7 tests OK; touched-file ruff clean. |
+| 2026-05-25 | implemented | pending | T5.5 closure recorded | Marked blueprint/audit implemented. Step 4.7 review was clean with 0 P0/P1. T5.6, T5.7, and optional T5.8 deferred boundaries remain explicit. |
 
 ## 2. Source Chain
 
@@ -171,6 +172,35 @@ Baseline record:
 | Failed Explanation may not yet cover enough failure paths | Confirm closed-head false/manual failed path is sufficient for T5.5. |
 | Docs migration pressure may leak in | Confirm broad docs/OpenAPI/examples remain T5.7. |
 
-## 12. Outcome
+## 12. Closure Notes
 
-Pending.
+### Commit References
+
+- `62c8eb1a` — draft blueprint pair.
+- `a27feb0f` — scoped Step 4.6 grep results.
+- `879b0d56` — G7 baseline, 170 OK.
+- `5113e13d` — feat implementation.
+- Closure commit: pending.
+
+### Final State
+
+T5.5 is implemented as a minimal M-class quarantine/fold slice. The T5 public evidence path stays `row.explain()` and `fg.eval.explain(...)`; no public `.eval.why_not(...)` or result/explanation why-not method was added.
+
+### Verification Summary
+
+- 4 T5.5 quarantine tests OK.
+- 37 focused T5.1-T5.5 preservation tests OK.
+- 170 G7 preservation tests OK.
+- Touched-file ruff clean.
+- `git diff --check` clean.
+
+### Deferred Work
+
+- T5.6: final SDK `Rule` flip.
+- T5.7: broad legacy hard-cut, service/OpenAPI/docs migration, and final WhyNot shell/DTO disposition.
+- T5.8 optional: Semantics Lite.
+- Post-T5: any new why-not product/API requires a new D-doc, non-lossy algorithm, and evidence-tree support.
+
+### Dirty / Sacred State
+
+Sacred `master` remains untouched. Dirty baseline remains 6 modified + 1 untracked and was not folded into T5.5.

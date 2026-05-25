@@ -1,6 +1,6 @@
 # Task Blueprint: T5.5 Why-Not Fold + Legacy Evidence Quarantine
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted; split if hard-cut deletion or service/docs migration leaks in)
@@ -345,4 +345,39 @@ Deferred:
 
 ## 10. Outcome
 
-Pending implementation.
+### Commit References
+
+- `5113e13d` — `feat(sdk): quarantine legacy why-not evidence path`.
+- Step 4.7 review disposition: clean, 0 P0 / 0 P1, no fix commit required.
+
+### Final Landed Code
+
+- Added narrow T5 quarantine markers to:
+  - `src/factgraph/application/protocol/derivation_why_not.py`;
+  - `src/factgraph/application/why_not_runtime.py`;
+  - `src/factgraph/sdk/shells/why_not.py`;
+  - `src/factgraph/sdk/store.py` (`SDKStore.why_not(...)` docstring).
+- Added `tests/sdk/test_t5_why_not_quarantine.py` with four focused tests.
+
+### Delivered Behavior
+
+- Failed `Explanation(status="failed")` is verified as the T5 v1 why-not envelope for row/manual explain failure.
+- No T5 public `.eval.why_not(...)`, `why_not_v2`, `EvaluateResult.why_not(...)`, `Explanation.why_not(...)`, or `counterfactuals` surface exists.
+- Legacy WhyNot protocol/runtime/shells remain present and behaviorally unchanged, but are explicitly quarantined as D23/T5.7 hard-cut targets.
+- No shipped lossy conversion path maps `WhyNotUniverseResult.red[0].diagnostic`, `WhyNotAtomLocator`, or `DiagnoseResult` into `Explanation.failure_class`.
+
+### Test Gates
+
+- `PYTHONPATH=src python -m unittest tests.sdk.test_t5_why_not_quarantine -v` — 4 OK.
+- `PYTHONPATH=src python -m unittest tests.sdk.test_t5_why_not_quarantine tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_evaluate_result_dtos -v` — 37 OK.
+- G7 preservation command — 170 OK.
+- `python -m ruff check src/factgraph/application/protocol/derivation_why_not.py src/factgraph/application/why_not_runtime.py src/factgraph/sdk/shells/why_not.py src/factgraph/sdk/store.py tests/sdk/test_t5_why_not_quarantine.py` — clean.
+- `git diff --check` — clean.
+
+### Deviations / Follow-Ups
+
+- No P0/P1 findings.
+- T5.5 intentionally did not delete any legacy why-not code or migrate service/docs/OpenAPI/examples.
+- T5.6 owns final SDK `Rule` flip.
+- T5.7 owns broad legacy hard-cut, service/OpenAPI/docs migration, and final WhyNot shell disposition.
+- Optional T5.8 owns Semantics Lite if the cycle elects to include it.
