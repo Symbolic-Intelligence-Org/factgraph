@@ -7,6 +7,8 @@ from factgraph.application import build_schema_index, entity_info, field_predica
 from factgraph.application.protocol import EntitySelector, Rule, RuleExprError
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
+    RuleExprHeadBinding,
+    RuleExprLoweringBranch,
     RuleExprLoweringPlan,
     _evaluate_rule_expr_native_for_tests,
     _lower_application_rule,
@@ -89,6 +91,36 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         self.assertFalse(hasattr(protocol, "RuleExprLoweringPlan"))
         self.assertFalse(hasattr(sdk, "RuleExprLoweringPlan"))
 
+    def test_dto_invariants_reject_invalid_shapes(self) -> None:
+        rule = Rule(id="user_rule", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        head_binding = RuleExprHeadBinding(
+            kind="inline",
+            head_rule_id=rule.id,
+            head_content_digest=rule.content_digest,
+            projection_occurrence_alias=rule.id,
+        )
+
+        with self.assertRaisesRegex(RuleExprError, "external head binding"):
+            RuleExprHeadBinding(
+                kind="external",
+                head_rule_id=rule.id,
+                head_content_digest=rule.content_digest,
+                projection_occurrence_alias=rule.id,
+            )
+        with self.assertRaisesRegex(RuleExprError, "inline head binding"):
+            RuleExprHeadBinding(kind="inline", head_rule_id=rule.id, head_content_digest=rule.content_digest)
+        with self.assertRaisesRegex(RuleExprError, "body_atoms"):
+            RuleExprLoweringBranch(branch_id="b0", path=(), occurrence_aliases=(rule.id,), body_atoms=())
+        with self.assertRaisesRegex(RuleExprError, "branches"):
+            RuleExprLoweringPlan(
+                source_kind="rule",
+                head=rule,
+                head_binding=head_binding,
+                branches=(),
+                occurrence_map=(),
+                canonical_key=("rule", rule.content_digest),
+            )
+
     def test_alias_local_variables_prevent_private_name_collisions(self) -> None:
         left = Rule(id="left", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
         right = Rule(id="right", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
@@ -132,6 +164,35 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         self.assertEqual(compiled.body_ir[-1][1:], ("$left__region", "$right__region"))
         self.assertEqual(traces[0].join_materializations[0].materialized_atom_index, len(compiled.body_ir) - 1)
         self.assertEqual(traces[0].join_materializations[0].left_occurrence_alias, "left")
+
+    def test_join_rejects_incompatible_port_types(self) -> None:
+        left = _person_region_rule()
+        right = Rule(
+            id="right_value",
+            where=(PredAtom("Person:region", [Var("$person"), Var("$region")]),),
+            ports={"region": Var("$region")},
+        )
+        expr = (left.as_("left") & right.as_("right")).join(left.as_("left").person.eq(right.as_("right").region))
+        plan = _lower_rule_expr(expr, head=left)
+
+        with self.assertRaisesRegex(RuleExprError, "port types are incompatible"):
+            _materialize_native_derivation_plan(plan)
+
+    def test_duplicate_joins_materialize_once(self) -> None:
+        left = _person_region_rule()
+        right = Rule(
+            id="right_region",
+            where=(PredAtom("Person:region", [Var("$q"), Var("$region")]),),
+            ports={"person": Var("$q"), "region": Var("$region")},
+        )
+        join = left.as_("left").region.eq(right.as_("right").region)
+        expr = (left.as_("left") & right.as_("right")).join(join, join)
+        plan = _lower_rule_expr(expr, head=left)
+
+        compiled, traces = _materialize_native_derivation_plan(plan)
+
+        self.assertEqual(sum(1 for atom in compiled.body_ir if atom[0] == "eq"), 1)
+        self.assertEqual(len(traces[0].join_materializations), 1)
 
     def test_external_head_materialization_is_deferred(self) -> None:
         body = _person_region_rule()
