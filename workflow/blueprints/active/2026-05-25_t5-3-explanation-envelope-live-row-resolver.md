@@ -1,6 +1,6 @@
 # Task Blueprint: T5.3 Explanation Envelope + Live Row Resolver
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -425,4 +425,62 @@ Deferred:
 
 ## 10. Outcome
 
-Pending implementation.
+### 10.1 Commit References
+
+- Feature commit: `53551cb6` (`feat(eval): add T5.3 live row explanations`).
+- Step 4.7 review: 0 P0 / 0 P1; no fix commit required.
+- Baseline anchor: `946d1e4d`, with G7 preserving `166 OK`.
+- Scoped anchor: `c5e5c28b`, with Step 4.6 grep clean across ten buckets.
+
+### 10.2 Final Landed Code
+
+T5.3 landed in six files:
+
+- `src/factgraph/application/protocol/evaluate_result.py`
+  - added public `Explanation` DTO;
+  - added `EvaluateRow.explain()` as a live-only no-argument method;
+  - added private row explanation helper, row/result anchor checks, checked-scope copy helper, metadata copy helper, and minimal row-sourced `EvidenceGraph` builder;
+  - reused existing `ErrorDTO`, `WarningDTO`, `DetachedRowError`, and shipped `factgraph.audit.evidence_graph.EvidenceGraph`.
+- `src/factgraph/application/protocol/__init__.py`
+  - re-exported `Explanation`.
+- `src/factgraph/sdk/__init__.py`
+  - re-exported `Explanation` without touching `Rule`, `LegacyRule`, or `ApplicationRule`.
+- `tests/application/protocol/test_evaluate_result_dtos.py`
+  - added focused tests for `Explanation`, live row explain, detached row explain, row-not-in-result, graph validation failure, checked scope, metadata, and carrier copying.
+- `tests/sdk/test_evaluate_result_exports.py`
+  - added SDK re-export coverage for `Explanation`.
+- `tests/sdk/test_rule_expr_evaluate.py`
+  - updated T5.2 evaluate hard-cut coverage to assert live rows now expose `explain()` while `close()` remains absent.
+
+### 10.3 Delivered Behavior
+
+| Contract | Delivered behavior |
+|---|---|
+| D20 Explanation fields | `Explanation` exposes `status`, `evidence`, `claim`, result/row/evidence refs, raw carrier fields, `failure_class`, `checked_scope`, next steps, errors, and warnings. |
+| D20 status/evidence matrix | `status="passed"` iff `evidence is not None`; failed / unsupported / invalid_request states carry no graph. |
+| D20 graph reuse | Passed row explanations return shipped `EvidenceGraph`, not a new SDK graph DTO. |
+| D20 graph validation | Graph construction failures return `Explanation(status="unsupported", errors=(GRAPH_VALIDATION_FAILED,))` and no partial graph. |
+| D17 live/detached boundary | Detached rows still raise `DetachedRowError`; no detached `invalid_request` Explanation is returned. |
+| D25 row-sourced semantics | `row.explain()` accepts no alternate semantics and copies the original result `semantics_digest` into the five-key checked-scope subset. |
+| T5.2 evaluate hard-cut | Public `evaluate(...) -> EvaluateResult` remains unchanged. |
+| Future-slice guards | No `row.close()`, no manual `fg.eval.explain(...)`, no public `.eval.why_not(...)`, no renderer API, no service/OpenAPI/docs migration, no adapter edits, and no SDK Rule flip. |
+
+### 10.4 Test Gates
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `166 OK` at `946d1e4d`. |
+| G7 preservation after feat | `166 OK` after `53551cb6`. |
+| Focused T5.3/T5.2 suite | `35 OK` (`tests.sdk.test_rule_expr_evaluate`, `tests.application.protocol.test_evaluate_result_dtos`, `tests.application.protocol.test_evaluate_result_digests`, `tests.sdk.test_evaluate_result_exports`). |
+| Touched-file ruff | Clean for production and touched tests. |
+| Diff hygiene | `git diff --check` clean. |
+
+### 10.5 Deviations And Follow-Ups
+
+- 0 P0 / 0 P1.
+- T5.3 uses a minimal single-node passed `EvidenceGraph`. Richer support topology remains a future evidence-tree / post-T5 concern.
+- T5.4 owns `row.close()` and manual `fg.eval.explain(expr, head=closed_head, ...)`.
+- T5.5 owns why-not fold and legacy evidence shell quarantine.
+- T5.6 owns the final SDK `Rule` flip.
+- T5.7 owns service/OpenAPI/docs migration and legacy shell hard-cut.
+- T5.8 or post-T5 owns semantics-lite / adapter-touching C73-C78 work.

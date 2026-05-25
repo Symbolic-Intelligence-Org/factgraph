@@ -1,6 +1,6 @@
 # Audit: T5.3 Explanation Envelope + Live Row Resolver
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
@@ -17,6 +17,8 @@
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.3 Explanation Envelope + Live Row Resolver draft created after T5.2 archive `4e590e8a`. Scope is M-class predicted and excludes row.close/manual explain, public why-not, renderer, service/docs migration, adapter work, and final SDK Rule flip. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean | Ten grep buckets completed. No shipped public `Explanation` or `row.explain()` production owner found; `EvidenceGraph`, Check/Diagnose, WhyNot, renderer, service, docs, and adapter hits are existing substrates or future-slice territory. Scope remains M-class. |
 | 2026-05-25 | baseline | pending | G7 baseline recorded | Scoped anchor `c5e5c28b`; G7 command ran 166 tests in 0.085s, OK. Pytest remains deferred per existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains outside the G7 command. |
+| 2026-05-25 | feat | `53551cb6` | T5.3 live row explanations implemented | Added `Explanation`, live `EvaluateRow.explain()`, minimal row-sourced `EvidenceGraph`, checked-scope/metadata copying, and SDK/protocol re-exports. Gates: 35 focused OK, G7 166 OK, ruff clean, diff check clean. |
+| 2026-05-25 | implemented | pending | Closure recorded | Blueprint and audit moved to implemented after Step 4.7 review reported 0 P0 / 0 P1 and no fix commit required. Future-slice boundaries for T5.4-T5.8 remain deferred. |
 
 ## 2. Source Chain
 
@@ -189,4 +191,71 @@ Baseline record:
 
 ## 12. Outcome
 
-Pending.
+### Final Code Scope
+
+T5.3 touched only the scoped protocol / SDK export / focused test files:
+
+- `src/factgraph/application/protocol/evaluate_result.py`
+  - public `Explanation` DTO;
+  - `EvaluateRow.explain()`;
+  - private row explanation helper;
+  - checked-scope and graph metadata copy helpers;
+  - minimal row-sourced `EvidenceGraph` builder.
+- `src/factgraph/application/protocol/__init__.py`
+  - application protocol `Explanation` export.
+- `src/factgraph/sdk/__init__.py`
+  - SDK `Explanation` re-export.
+- `tests/application/protocol/test_evaluate_result_dtos.py`
+  - DTO, live row explain, detached row, failure, unsupported graph, checked-scope, metadata, and carrier tests.
+- `tests/sdk/test_evaluate_result_exports.py`
+  - SDK export coverage.
+- `tests/sdk/test_rule_expr_evaluate.py`
+  - public evaluate hard-cut test updated to expect live row `explain()`.
+
+No service, OpenAPI, docs migration, adapter, renderer, public why-not, manual explain, row.close, or final SDK Rule files were touched.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `Ran 166 tests in 0.085s`, OK at scoped baseline `946d1e4d`. |
+| G7 preservation after feat | `Ran 166 tests in 0.082s`, OK after `53551cb6`. |
+| Focused T5.3/T5.2 suite | `35 OK`. |
+| Touched-file ruff | Clean. |
+| Diff check | `git diff --check` clean. |
+| Pytest policy | Deferred per existing SIGSEGV environment lock. |
+| Excluded public inference test | `tests.test_public_inference_factgraph_create` remains outside G7 command. |
+
+### Scope Preservation
+
+- `row.close()` remains absent; T5.4 owns it.
+- Manual `fg.eval.explain(expr, head=closed_head, ...)` remains absent; T5.4 owns it.
+- Public `.eval.why_not(...)` remains absent; D22/T5.5 owns why-not fold decisions.
+- No renderer API or `Explanation.render()` was added.
+- No new SDK-specific graph DTO was introduced; T5.3 reuses shipped `EvidenceGraph`.
+- Engine-specific `engine_meta` key contracts remain audit-facing and non-public.
+- T5.2 public `evaluate(...) -> EvaluateResult` behavior remains unchanged.
+- SDK `Rule`, `LegacyRule`, and `ApplicationRule` namespace remains pre-D24; T5.6 owns final flip.
+- Service routes, OpenAPI, agents, docs, and legacy shell hard-cut remain T5.7.
+- Adapter production files and semantics-lite commitments remain T5.8 / post-T5.
+
+### Step 4.7 Disposition
+
+Claude review found 0 P0 / 0 P1 and no Step 4.7 fix commit was required.
+
+Reviewed implementation highlights:
+
+- D20 fields and status/evidence matrix implemented.
+- Live row explanation path added without kwargs or alternate semantics.
+- Detached row behavior remains `DetachedRowError`.
+- D25 checked-scope five-key subset copied for row-sourced explanations.
+- Minimal valid `EvidenceGraph` returned for passed explanations.
+- Graph validation failure maps to `unsupported` with `GRAPH_VALIDATION_FAILED`.
+
+### Deferred
+
+- T5.4: `row.close()` and manual `fg.eval.explain(expr, head=closed_head, ...)`.
+- T5.5: why-not fold and legacy evidence shell quarantine.
+- T5.6: final SDK `Rule` flip.
+- T5.7: legacy hard-cut, service/OpenAPI/docs migration, and old shell removal.
+- T5.8 / post-T5: semantics-lite and adapter-touching C73-C78 work.
