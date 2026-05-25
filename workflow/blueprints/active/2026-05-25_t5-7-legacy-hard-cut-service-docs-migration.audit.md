@@ -1,12 +1,12 @@
 # Audit: T5.7 Legacy Hard-Cut + Service/Docs Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-7-legacy-hard-cut-service-docs-migration.md`
-- Stage: T5.7 draft
-- Class: L (predicted; may split into M-class local slices after Step 4.6)
+- Stage: T5.7 scoped
+- Class: L (scoped; implement as three adjacent M-class local sub-slices)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
 
@@ -15,6 +15,7 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.7 Legacy Hard-Cut + Service/Docs Migration draft created after T5.6 archive `7aa1c6a3`. Scope is predicted L-class: complete D23 hard-cut, migrate service/OpenAPI/docs, decide legacy DSL Rule and why-not final disposition, and preserve private CandidateSet runtime as needed. |
+| 2026-05-25 | scoped | pending | Step 4.6 inventory recorded | Grep found 99 files with service, agent, OpenAPI, docs, examples, tests, CandidateSet, accept, what-if, why-not, `ApplicationRule`, or legacy DSL Rule references. T5.7 remains one L-class blueprint but will implement through T5.7a/T5.7b/T5.7c local M-class sub-slices; no sub-slice is push-ready until the full public story is coherent. |
 
 ## 2. Source Chain
 
@@ -111,7 +112,34 @@ Step 4.6 must also decide:
 - legacy DSL Rule delete versus internal preserve;
 - any future-track deferral for `what_if.fact_overlay.*` or `what_if.rule.*`.
 
-## 8. G7 Baseline Plan
+## 8. Step 4.6 Pre-Implementation Grep Results
+
+| # | Check | Result | Classification |
+|---|---|---|---|
+| 1 | Service routes | `src/service/runtime_v1.py` still imports `CandidateSet`, serializes `candidates`, caches CandidateSet payloads, implements `_candidate_to_dict` / `_candidate_from_dict`, and supports evaluate plus accept routes. `src/service/app_v1.py` still registers both inference routes. | T5.7a service/OpenAPI update. |
+| 2 | OpenAPI and service docs | `docs/api/openapi.yaml` still describes `/inferences/evaluate` as CandidateSet output and `/inferences/accept` as the accept handshake. Service docs still mention runtime evaluate/accept policy. | T5.7a update, with T5.7b docs follow-through. |
+| 3 | SDK legacy shells | `src/factgraph/sdk/store.py` still owns `_SDKEvalManager.accept`, `_SDKEvalManager.accept_many`, direct `check`, `diagnose`, `why_not`, `_SDKWhatIfManager`, `_SDKWhatIfFactOverlayManager`, and `_SDKWhatIfRuleManager`. Tests still assert these managers exist. | T5.7c hard-cut/delete/reject decision. |
+| 4 | Public CandidateSet exposure | CandidateSet public assumptions remain across service, OpenAPI, agent tools, docs, examples, and tests; internal runtime tests also legitimately use CandidateSet. | Public hits T5.7a/T5.7b; private runtime hits preserved. |
+| 5 | Docs/examples/notebooks | SDK docs, official quickstarts, examples, and notebooks still teach CandidateSet, accept, run, check/diagnose/why-not, what-if, `ApplicationRule`, or legacy DSL Rule. | T5.7b migration; dirty notebook baseline must be preserved and edited carefully. |
+| 6 | Why-not final disposition | WhyNot protocol/runtime/shells and tests remain broad. T5.5 quarantine is present; SDK does not re-export WhyNot DTOs, but tests still validate the old runtime and shell. | T5.7c decide internal preserve vs deletion. |
+| 7 | Legacy DSL Rule final disposition | `factgraph.sdk.dsl.Rule` is still used by legacy helper tests and DSL bridge tests. Docs still contain `ApplicationRule` and `LegacyRule` references. | T5.7c final disposition; T5.7b docs cleanup. |
+| 8 | T5.1-T5.6 contract guard | `EvaluateResult`, `EvaluateRow`, `Explanation`, `row.explain`, `row.close`, manual explain, digests, and final SDK `Rule` substrate are present and not owned by T5.7. | Preserve; no contract changes. |
+| 9 | Adapter / Semantics Lite guard | Adapter and semantics references are unrelated substrate or design references. No T5.7 implementation owner. | Clean guard; no adapter edits. |
+| 10 | Compatibility surface guard | No production `evaluate_v2`, `result_shape`, `return_candidates`, `EvaluateResult.why_not`, or `Explanation.why_not` owner found. Remaining `counterfactual` references are docs/legacy what-if language. | No new compatibility surface; docs cleanup in T5.7b. |
+
+Split decision:
+
+- T5.7 remains one L-class blueprint and one archive unit.
+- Implement as three adjacent M-class local sub-slices:
+  - T5.7a: service routes, agent/runtime candidate workflow alignment, and OpenAPI.
+  - T5.7b: final SDK/service/official docs, examples, and notebook migration.
+  - T5.7c: legacy SDK shell deletion/rejection, legacy DSL Rule final disposition, and why-not final disposition.
+- No sub-slice is push-ready by default; the full T5.7 closure must record SDK/service/OpenAPI/docs agreement.
+- Service accept final path is removal or rejection unless T5.7a review explicitly accepts a redesign that does not expose CandidateSet.
+- Why-not DTOs and legacy DSL Rule default to internal preserve if deletion breaks private tests; final public exposure remains forbidden.
+- `what_if.fact_overlay.*` and `what_if.rule.*` stay T5.7c hard-cut targets unless T5.7c records an explicit future-track deferral.
+
+## 9. G7 Baseline Plan
 
 Command:
 
@@ -145,7 +173,7 @@ Baseline record fields to fill later:
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
-## 9. Draft Review Checklist
+## 10. Draft Review Checklist
 
 | Item | Status |
 |---|---|
@@ -158,8 +186,10 @@ Baseline record fields to fill later:
 | T5.1-T5.6 contracts protected | Yes |
 | C73-C78 / adapter work excluded | Yes |
 | Step 4.6 split decision required | Yes |
+| Step 4.6 grep results clean | Yes |
+| Split policy recorded | Yes |
 
-## 10. Reviewer Focus
+## 11. Reviewer Focus
 
 - Is T5.7 scope broad enough to close D23 without accidentally adding new public compatibility?
 - Are split rules strict enough to prevent incoherent public milestones?
@@ -167,7 +197,6 @@ Baseline record fields to fill later:
 - Are legacy DTO deletion/internal-preserve decisions deferred only to Step 4.6, not implementation guesswork?
 - Are dirty notebooks and existing dirty files protected from unrelated overwrite?
 
-## 11. Outcome
+## 12. Outcome
 
 Pending implementation.
-

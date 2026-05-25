@@ -1,9 +1,9 @@
 # Task Blueprint: T5.7 Legacy Hard-Cut + Service/Docs Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Class: L (predicted; may split into M-class local slices after Step 4.6)
+- Class: L (scoped; implement as three adjacent M-class local sub-slices)
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Owner: Codex
 - Reviewer: Claude
@@ -83,6 +83,16 @@ Allowed split candidates:
 
 Any split must be recorded before scoped status. Intermediate mixed states are local-only and must not be pushed as a public milestone when SDK, service, OpenAPI, and docs disagree about return shape or public surfaces.
 
+Step 4.6 decision:
+
+- T5.7 remains one L-class blueprint and one archive unit.
+- Implementation is split into three adjacent M-class local sub-slices:
+  - T5.7a: service routes, agent/runtime candidate workflow alignment, and OpenAPI.
+  - T5.7b: final SDK/service/official docs, examples, and notebook migration.
+  - T5.7c: legacy SDK shell deletion/rejection, legacy DSL Rule final disposition, and why-not final disposition.
+- No T5.7 sub-slice may be treated as push-ready until the full T5.7 public story is coherent.
+- The blueprint stays active until T5.7a, T5.7b, and T5.7c are complete, verified, and closed.
+
 ### M-to-L / stop-and-amend triggers
 
 Pause and amend if implementation requires:
@@ -147,14 +157,17 @@ Classify each hit as:
 - explicit future-track deferral;
 - unrelated or historical reference.
 
-### 2.2 Choose one L slice or split policy
+### 2.2 Implement through three local M-class sub-slices
 
-After inventory, choose:
+Step 4.6 found 99 files across service, agent, OpenAPI, docs, examples, and tests that still reference CandidateSet, candidate ids, accept workflows, what-if, why-not, `ApplicationRule`, or legacy DSL Rule. A single feat commit would be too broad and would make review less precise.
 
-- one L-class T5.7 implementation if the service/docs/legacy blast radius is coherent and testable; or
-- T5.7a/T5.7b/T5.7c M-class local slices if route, docs, and legacy deletion need separate commits.
+T5.7 therefore uses one active L-class blueprint with three local sub-slices:
 
-No split may leave a pushed milestone where SDK docs teach removed APIs, OpenAPI exposes CandidateSet as public T5 output, or service accept routes depend on public CandidateSet after SDK hard-cut.
+- T5.7a service routes, agent/runtime candidate workflow alignment, and OpenAPI.
+- T5.7b final SDK/service/official docs, examples, and notebook migration.
+- T5.7c legacy SDK shell deletion/rejection, legacy DSL Rule final disposition, and why-not final disposition.
+
+No sub-slice is independently push-ready unless the reviewer explicitly marks it coherent. The default is to keep all T5.7 intermediate states local-only until the closure commit records SDK/service/OpenAPI/docs agreement.
 
 ### 2.3 Migrate service evaluate and accept routes
 
@@ -371,4 +384,3 @@ Review should focus on:
 ## 10. Outcome
 
 Pending implementation.
-
