@@ -1,6 +1,6 @@
 # Audit Log: T4.1 Head Identity + Declared-Port Foundation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t4-1-head-identity-declared-port-foundation.md](./2026-05-25_t4-1-head-identity-declared-port-foundation.md)
@@ -11,6 +11,7 @@
 |---|---|---|---|
 | 2026-05-25 | draft | T4.1 blueprint pair created | Scope consumes T4 Stage 3 synthesis T4.1 row, D11/D12 reviewed decisions, T3L.1-T3L.3 archived substrate, and shipped RuleExpr lowering / SDK dispatch evidence. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Added an explicit upper-bound scope lock for private occurrence-version metadata, specified T4.1 validation ordering before the existing T3L.3 external-head rejection, and cross-referenced D11/D12 multi-occurrence ambiguity for identity state 5. |
+| 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1-T3L.3 lowering/dispatch substrate, D8 join materialization support, existing SDK error surfaces, and known T4.2/T4.3/T5 references. No A-fallback amendment needed; T4.1 remains limited to D11/D12 foundation. |
 
 ## Decision Notes
 
@@ -142,6 +143,19 @@ Run before feature implementation:
 | 6. Public result / adapter gates | `rg 'CandidateSet|EvidenceEnvelope|SupportArtifact|CompiledDerivationPlan|DerivationEvaluateRequest|pyreason|souffle|problog' src/factgraph tests` | Confirm no result-shape or adapter grammar work is needed. |
 
 If any grep result contradicts the blueprint scope, pause for an A-fallback amendment.
+
+## Step 4.6 Pre-Implementation Grep Results
+
+| Check | Result | T4.1 impact |
+|---|---|---|
+| 1. Existing head / declared-port helper names | Existing hits are `RuleExprHeadBinding` in T3L lowering/tests plus ordinary desc placeholder tests for unbound ports. No `DeclaredPort`, `HeadValidation`, `is_closed`, or `unbound_ports` implementation owner exists. | Clean namespace for private T4.1 declared-port/head-validation helpers; T4.3 closed-head inspect scope remains untouched. |
+| 2. Lowering head identity substrate | Broad expected hits for `version` across SDK/application, plus existing T3L head binding, `_head_var_names`, content digest, and public dispatch references. | Confirms insertion points and need for private occurrence-version metadata; no conflicting identity validator exists. |
+| 3. Branch / join substrate | Expected hits in T3/T3L tests and `rule_expr_lowering.py`: `pending_joins`, `RuleExprJoinMaterialization`, `join_materializations`, `.join_by_ports(...)`, and `unjoined_same_name_ports`. | D8 equivalence proof substrate exists; no new public join API needed. |
+| 4. Public dispatch and error buckets | Expected broad SDKStoreError / RuleExprError hits, existing T3L.3 RuleExpr evaluate tests, public docs, and current `_evaluate_rule_expr_input(...)` path. | SDK call-shape vs semantic error boundary is visible; T4.1 can add RuleExprError semantic validation without changing dispatch architecture. |
+| 5. Projection / closed-head / T5 gates | Hits are existing why_not/Explanation surfaces, active T4 audit/synthesis/blueprint docs, and historical archives. No shipped `Rule.projection(...)`, `is_closed`, `unbound_ports`, `EvaluateResult`, or `row.close()` implementation owner for RuleExpr Head exists in current production T4 path. | No T4.2/T4.3/T5 implementation collision; scope locks remain intact. |
+| 6. Public result / adapter gates | Expected broad hits for `CandidateSet`, support/evidence DTOs, `CompiledDerivationPlan`, `DerivationEvaluateRequest`, and adapter engines across shipped runtime/tests/docs. | Confirms these are existing public/runtime surfaces to preserve, not T4.1 edit targets. No adapter grammar or result-shape amendment needed. |
+
+Step 4.6 conclusion: **clean**. No A-fallback scope amendment required. Proceed to G7 baseline from this scoped anchor.
 
 ## G7 Baseline Plan
 
