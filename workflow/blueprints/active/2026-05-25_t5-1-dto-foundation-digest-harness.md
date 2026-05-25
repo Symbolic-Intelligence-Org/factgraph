@@ -1,6 +1,6 @@
 # Task Blueprint: T5.1 DTO Foundation + Digest Harness
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -395,4 +395,87 @@ Deferred docs:
 
 ## 10. Outcome
 
-Pending implementation.
+### Commit References
+
+- Feature commit: `a3e96eb6` (`feat(protocol): add T5.1 evaluate result DTO foundation`).
+- Step 4.7 review: 0 P0 / 0 P1; no fix commit required.
+
+### Final Landed Code
+
+Production:
+
+1. `src/factgraph/application/protocol/evaluate_result.py` added the T5.1 DTO foundation:
+   - `Claim`;
+   - `EvidenceRef`;
+   - `EvaluateRow`;
+   - `EvaluateResult`;
+   - `DetachedRowError`.
+2. The same module added the D19 digest harness:
+   - deterministic canonical bytes;
+   - `run_id`, `result_id`, and `row_id` helpers;
+   - claim, closed-head, evidence-ref, private row, and result digest helpers;
+   - `semantics_digest_for(...)`;
+   - `view_snapshot_digest_for_parts(...)`;
+   - expression and rule-set digest helpers.
+3. The same module added private CandidateSet conversion plumbing:
+   - `_candidate_set_to_evaluate_row(...)`;
+   - `_row_digest_for(...)`.
+4. `src/factgraph/application/protocol/__init__.py` re-exports the five DTOs.
+5. `src/factgraph/sdk/__init__.py` re-exports the five DTOs without changing `Rule`, `LegacyRule`, or `ApplicationRule`.
+
+Tests:
+
+1. `tests/application/protocol/test_evaluate_result_dtos.py` covers DTO validation, live/detached row plumbing, duplicate row-id rejection, and private CandidateSet conversion.
+2. `tests/application/protocol/test_evaluate_result_digests.py` covers digest determinism, token/id formats, result-digest acyclicity, semantics digest normalization, and view snapshot digest substrate use.
+3. `tests/sdk/test_evaluate_result_exports.py` covers SDK DTO exports and verifies the pre-D24 SDK `Rule` namespace remains unchanged.
+
+All §0 scope locks held:
+
+- no public `evaluate(...)->EvaluateResult` flip;
+- no public `row.explain()` or `row.close()`;
+- no SDK `Rule` naming flip;
+- no legacy hard-cut, service route, OpenAPI, or final docs migration;
+- no adapter production edits;
+- no `Rule.content_digest` formula or format change;
+- no public CandidateSet compatibility surface.
+
+### Delivered Behavior
+
+| Area | Delivered behavior |
+|---|---|
+| DTO ownership | T5.1 result DTOs live in application protocol and are re-exported from SDK. |
+| `Claim` | Result-fact-shaped DTO distinct from storage-layer `ledger.Claim`; validates kind, name, arguments, repr, and `sha256:` digest. |
+| `EvidenceRef` | Validates `evref_v1:` / `evalr_v1:` ids and digest anchors. |
+| `EvaluateRow` | Enforces `evidence_ref.row_id == row_id`, `evidence_ref.fact_digest == claim.digest`, `raw_kind=None iff bound=None`, finite bounds, and non-data resolver plumbing. |
+| `EvaluateResult` | Binds live row resolvers, rejects duplicate row ids, validates context digests, and exposes container helpers. |
+| Digest format | New public `*_digest` values use `sha256:<64 hex>`; public object ids use namespaced `evalr_v1:` / `evref_v1:` / `run_v1:` ids. |
+| `Rule.content_digest` | Consumed as named bare-hex source data; not reformatted or changed. |
+| CandidateSet conversion | Private harness maps payload/bindings and confidence carriers into row fields while keeping CandidateSet ids/support/state internal. |
+| Semantics | `semantics_digest_for(None) is None`; normalized `SemanticsProfile` content is the digest source, not wrapper identity. |
+| View snapshot | Helper wraps shipped `view_digest_for(...)`; no placeholder digest path was added. |
+
+### Test Gates
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `6c4b2cba`: 163 tests OK. |
+| Feature preservation | `a3e96eb6`: 163 tests OK. |
+| Focused DTO/digest/export tests | 13 tests OK. |
+| Ruff | Touched production and test files clean. |
+| Pytest | Deferred per existing SIGSEGV environment lock. |
+| Excluded test | `tests.test_public_inference_factgraph_create` remains excluded. |
+
+### Deviations And Follow-Ups
+
+- 0 P0 / 0 P1.
+- Optional Nit N1: canonical bytes use deterministic JSON object normalization with `sort_keys=True`, rather than a visibly positional byte builder. This is accepted as implementation detail and covered by determinism tests.
+- Optional Nit N2: `view_snapshot_digest_for_parts(...)` currently wraps the database `view_digest_for(...)` substrate. T5.2 must decide any in-memory SDK-store view snapshot source when public evaluation is wired.
+- Optional Nit N3: `_candidate_set_to_evaluate_row(...)` defaults `claim_kind="fact_triple"`; T5.2 callers may override for rule-head, aggregate, or projection rows.
+- T5.2 owns public `evaluate(...) -> EvaluateResult` wiring and any runtime-specific view snapshot integration.
+
+### Lessons
+
+1. Keeping `_row_digest_for(...)` and `_candidate_set_to_evaluate_row(...)` private preserved D17/D18's narrow public boundary while still giving T5.2 a ready harness.
+2. Binding row resolvers inside `EvaluateResult.__post_init__` lets T5.1 test live/detached plumbing without prematurely adding `row.explain()` or `row.close()`.
+3. Explicit `ledger.Claim` separation remains important because the storage-layer name collision is real and would be easy to expose accidentally.
+4. Using named payload fields for `Rule.content_digest` avoids reformatting shipped bare hex while still fitting D19's tokenized T5 digest layer.

@@ -1,6 +1,6 @@
 # Audit: T5.1 DTO Foundation + Digest Harness
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
@@ -17,7 +17,8 @@
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.1 DTO Foundation + Digest Harness draft created from reviewed-clean T5 Stage 1-3 design layer. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean; scope locked | Grep found expected docs/history/agent/service/runtime hits, no shipped T5 `EvaluateResult` / `EvaluateRow` production owner, no public evaluate flip, no D20-D24 implementation collision, and no adapter edit target. |
 | 2026-05-25 | baseline | pending | G7 preservation baseline recorded | Baseline command ran 163 tests in 0.077s, OK; scoped anchor `457b55d0`; pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded. |
-| 2026-05-25 | feat | pending | DTO foundation + digest harness implemented | Added application-protocol result DTOs, digest helpers, private CandidateSet conversion harness, and SDK DTO re-exports. Gates: 13 focused DTO/digest/export tests OK, G7 preservation 163 tests OK, touched-file ruff clean. |
+| 2026-05-25 | feat | `a3e96eb6` | DTO foundation + digest harness implemented | Added application-protocol result DTOs, digest helpers, private CandidateSet conversion harness, and SDK DTO re-exports. Gates: 13 focused DTO/digest/export tests OK, G7 preservation 163 tests OK, touched-file ruff clean. |
+| 2026-05-25 | implemented | pending | Closure recorded after Step 4.7 review | Step 4.7 review found 0 P0/P1 and 3 optional nits; no fix commit required. T5.1 ready for archive after this closure. |
 
 ## 2. Source Chain
 
@@ -175,4 +176,60 @@ Baseline record:
 
 ## 11. Outcome
 
-Pending.
+### Final Code Scope
+
+Production:
+
+1. `src/factgraph/application/protocol/evaluate_result.py` added the five T5.1 DTOs, D19 digest helpers, private row digest helper, private CandidateSet conversion helper, and `view_snapshot_digest_for_parts(...)`.
+2. `src/factgraph/application/protocol/__init__.py` added application-protocol DTO exports.
+3. `src/factgraph/sdk/__init__.py` added SDK DTO exports while preserving current `Rule` / `LegacyRule` / `ApplicationRule` behavior.
+
+Tests:
+
+1. `tests/application/protocol/test_evaluate_result_dtos.py` covers DTO invariants, live/detached plumbing, duplicate row-id rejection, and CandidateSet conversion boundary.
+2. `tests/application/protocol/test_evaluate_result_digests.py` covers deterministic digest helpers, namespace formats, result digest acyclicity, semantics digest behavior, and view snapshot substrate.
+3. `tests/sdk/test_evaluate_result_exports.py` covers SDK re-exports and verifies no SDK Rule flip.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `6c4b2cba`: 163 tests OK. |
+| Feature preservation | `a3e96eb6`: 163 tests OK. |
+| Focused T5.1 tests | 13 DTO/digest/export tests OK. |
+| Ruff | Touched production and test files clean. |
+| Pytest | Deferred per existing SIGSEGV environment lock. |
+| Excluded test | `tests.test_public_inference_factgraph_create` remains excluded. |
+
+### Scope Preservation
+
+1. No public `evaluate(...)->EvaluateResult` return-shape flip.
+2. No public `row.explain()` or `row.close()`.
+3. No `Explanation`, public evidence graph, why-not, or renderer surface.
+4. No SDK top-level `Rule` naming flip.
+5. No legacy hard-cut.
+6. No service route, OpenAPI, or final docs migration.
+7. No adapter production file edit.
+8. No C73-C78 semantics implementation.
+9. No `Rule.content_digest` format or formula change.
+10. No public CandidateSet compatibility surface.
+11. No storage-layer `ledger.Claim` re-export as T5 `Claim`.
+12. Dirty baseline remained 6 modified + 1 untracked and was not included.
+
+### Step 4.7 Disposition
+
+- 0 P0 / 0 P1.
+- No Step 4.7 fix commit required.
+- Optional Nit N1: canonical bytes use deterministic JSON object normalization; accepted and covered by tests.
+- Optional Nit N2: in-memory SDK-store view snapshot integration remains a T5.2 follow-up when public evaluation wiring exists.
+- Optional Nit N3: CandidateSet conversion default `claim_kind="fact_triple"` is acceptable; future T5.2 callers can override.
+
+### Deferred
+
+1. T5.2: public `evaluate(...) -> EvaluateResult` wiring, runtime view snapshot source, and return-shape hard cut.
+2. T5.3: `Explanation` and live row resolver behavior.
+3. T5.4: `row.close()` and manual closed-head explain gate.
+4. T5.5: why-not fold/quarantine.
+5. T5.6: final SDK `Rule` flip.
+6. T5.7: legacy hard-cut, service route/OpenAPI/docs migration.
+7. T5.8 or post-T5: semantics lite / adapter-touching semantics work.
