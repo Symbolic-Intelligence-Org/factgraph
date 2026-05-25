@@ -10,6 +10,7 @@
   - D17 `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` sections 4.3-4.8.
   - D18 `workflow/design/decisions/active/2026-05-25_t5-d18-return-shape-transition.md` sections 4.1-4.8.
   - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` sections 5.8.2, 5.8.5, C64-C68, and C69.
+  - Sibling future-design note `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md:1-14`, `:272-325`, and `:771-792` as non-authoritative evidence runtime context.
   - Shipped `src/factgraph/core/protocol/digests.py:7-12`, `src/factgraph/application/protocol/rule.py:107-113`, `src/factgraph/core/derivation/candidates.py:13-115`, `src/factgraph/core/semantics/profile.py:25-95`, `src/factgraph/sdk/store.py:2289-2390`, `src/factgraph/application/derivation_runtime.py:64-148`, and `src/factgraph/core/store/database.py:193-199`, `:407-410`.
 - Outputs / Downstream:
   - D20 explanation envelope and evidence graph replay.
@@ -40,6 +41,8 @@ Shipped code already has several digest-like sources:
 - `support_digest`, `key_tuple_digest`, and tuple digests in the core derivation runtime;
 - `SemanticsProfile`, a normalized core profile shape consumed by ProbLog and PyReason;
 - database-layer `view_digest_for(...)`, but no shipped SDK-level `EvaluateResult.view_snapshot_digest` source.
+
+Evidence-tree v1 is a sibling future-design input, not current implementation truth: its header marks it as a draft skeleton and non-authoritative reference note. D19 cites it only for local evidence-runtime context: `EvidenceNode` / `EvidenceEdge` extension data lives in `engine_meta`, `raw_kind` / `bound` are the canonical quantitative carriers, and evidence runtime consumes `EvaluateRow.bindings` rather than re-evaluating bindings. D19 does not adopt the internal evidence graph schema; D20, D22, D25, and D26 will cite evidence-tree v1 on demand, while full evidence-tree schema implementation remains a separate future cycle.
 
 D19 decides how T5 uses those sources without exposing internal candidate identifiers or inventing duplicate formulas in downstream D-docs.
 
@@ -175,6 +178,8 @@ Legacy derivation dict / `Inference` inputs that do not have application Rule oc
 `view_snapshot_digest` is mandatory for every public `EvaluateResult`. Its authoritative source is a private store/view snapshot helper over the exact facts visible to the evaluation. Attached database views should use the database view digest substrate when available. In-memory SDK stores without database view identity must compute a deterministic digest over the projected view facts plus schema digest. T5 must not return a placeholder, wall-clock-derived value, schema-only digest, or empty string for `view_snapshot_digest`.
 
 `semantics_digest` is `None` when no semantics profile participates. When semantics is present, wrappers are lowered first, and the digest is computed from the normalized core `SemanticsProfile` fields (`name`, `engine`, `version`, `engine_options`, `uncertainty_projection`, `temporal_projection`, `rule_projection`, `certainty_projection`, `output_readback`, and `fallback`). D25 may decide mismatch behavior between evaluate and explain, but it must consume the D19 digest source.
+
+Evidence-tree v1 `engine_meta` keys, including `raw_kind` / `bound`, are not authoritative digest sources in D19. They are downstream evidence rendering carriers. D19 keeps quantitative identity on the D17 row fields and leaves internal graph-node metadata to D20 / a future evidence-tree cycle.
 
 ### 4.5 `engine_version`, `adapter_version`, and `evaluated_at` are metadata, not hidden digest sources
 
@@ -322,3 +327,4 @@ Stage 3 must sequence implementation so that D17 DTOs and D19 digest helpers lan
 | Date | State | Reviewer / Commit | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Codex draft | Initial D19 source-of-truth decision for T5 result, row, claim, evidence, and audit digests. |
+| 2026-05-25 | proposed-amend | Codex follow-up | Added non-authoritative evidence-tree v1 sibling input and locked on-demand citation policy without reopening D16-D18 or adopting internal evidence graph schema. |
