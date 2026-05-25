@@ -74,7 +74,7 @@ that live directly on `FactGraph`, not on a namespace.
 | `fg.schema_ir` | Compiled schema IR snapshot (advanced). |
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
@@ -157,7 +157,7 @@ persistence.
 
 ## Public imports panorama
 
-Everything in `kernel.sdk.__all__`, grouped by purpose. The intent of this
+Everything in `factgraph.sdk.__all__`, grouped by purpose. The intent of this
 table is to answer "what should I import for this task?" without scanning the
 whole module.
 
@@ -188,13 +188,13 @@ same project; some are out of scope for `factpy-kernel` entirely.
 - Substrate `derivation_*` names in protocol, registry, and proof internals;
   public SDK uses `Inference`.
 - Round capture (`start_round`, `record_round_event`, `finalize_round` in
-  `kernel.audit.round_events`) and audit package loading
-  (`kernel.audit.load_audit_package`); the SDK ships the query-side
+  `factgraph.audit.round_events`) and audit package loading
+  (`factgraph.audit.load_audit_package`); the SDK ships the query-side
   `fg.audit.diff_proof_frames(...)` but not the recorder lifecycle.
 - Walker views over evidence results (`ProofFrameView`,
-  `SupportArtifactView`, `ProofFrameDiffView` in `kernel.application.walker`);
+  `SupportArtifactView`, `ProofFrameDiffView` in `factgraph.application.walker`);
   the SDK methods return raw frozen DTOs.
-- Frontier introspection (`kernel.core.rules.frontier`); Why-not requires an
+- Frontier introspection (`factgraph.core.rules.frontier`); Why-not requires an
   explicit candidate universe.
 - Long-form proof / evidence rendering pipelines beyond the structured DTOs
   returned by `fg.eval.*` and `fg.audit.*`.

@@ -33,7 +33,7 @@ Use explicit `Branch(id=...)` values when you plan to configure branch-level
 semantics.
 
 ```python
-from kernel.sdk import (
+from factgraph.sdk import (
     Branch,
     Entity,
     FactGraph,
@@ -239,7 +239,7 @@ them writes ledger assertions.
 ## Complete example
 
 ```python
-from kernel.sdk import (
+from factgraph.sdk import (
     Branch,
     Entity,
     FactGraph,

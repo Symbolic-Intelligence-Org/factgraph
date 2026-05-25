@@ -19,7 +19,7 @@ Writes need an entity reference. Build it from the entity identity with
 `fg.read.ref(...)`.
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
@@ -151,7 +151,7 @@ return value.
 ## Complete example
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):

@@ -24,7 +24,7 @@ Every entity class subclasses `Entity`. Each entity must declare at least one
 `Identity(primary_key=True)`.
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class Team(Entity):
@@ -242,7 +242,7 @@ digests.
 ## Complete example
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class Team(Entity):

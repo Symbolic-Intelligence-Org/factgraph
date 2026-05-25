@@ -25,7 +25,7 @@ its workspace should live.
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from kernel.sdk import (
+from factgraph.sdk import (
     Branch,
     Entity,
     FactGraph,
@@ -210,7 +210,7 @@ validates the workspace schema digest against your Python schema declarations.
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from kernel.sdk import Branch, Entity, FactGraph, Field, Identity, Inference, Pred, Rule, vars
+from factgraph.sdk import Branch, Entity, FactGraph, Field, Identity, Inference, Pred, Rule, vars
 
 
 class User(Entity):

@@ -26,7 +26,7 @@ the schema small: `tag_seed` is a direct fact, and `tag` will be inferred from
 it.
 
 ```python
-from kernel.sdk import (
+from factgraph.sdk import (
     Branch,
     Entity,
     FactGraph,
@@ -211,7 +211,7 @@ Learn the lifecycle first. Engine-specific semantics are an advanced topic.
 ## Complete example
 
 ```python
-from kernel.sdk import (
+from factgraph.sdk import (
     Branch,
     Entity,
     FactGraph,

@@ -33,7 +33,7 @@ assertion they just appended. Keeping that id is the simplest way to inspect
 or retract that exact write later.
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
@@ -468,7 +468,7 @@ stay valid members. Empty views are allowed.
 
 `FrozenAssertionView` is the returned object type. It carries only `name`
 and `asrt_ids` (a `frozenset[str]`). It is intentionally not in
-`kernel.sdk.__all__`; you reach it through `fg.views.get(...)` and
+`factgraph.sdk.__all__`; you reach it through `fg.views.get(...)` and
 `fg.views.list()`. `fg.views` stores assertion-id sets, not read policies.
 
 `fg.views` is intentionally outside workspace persistence. `fg.save(...)`
@@ -561,7 +561,7 @@ need a dedicated blueprint.
 ## Complete example
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):

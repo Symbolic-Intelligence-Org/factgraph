@@ -20,7 +20,7 @@ A FactGraph starts from Python classes. Each class represents an entity type.
 that entity.
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
@@ -82,7 +82,7 @@ in the graph ledger are.
 ## Complete example
 
 ```python
-from kernel.sdk import Entity, FactGraph, Field, Identity
+from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
