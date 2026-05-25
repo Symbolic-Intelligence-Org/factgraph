@@ -1,6 +1,6 @@
 # Task Blueprint: T3L.3 Public SDK Dispatch, Diagnostics, And Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -411,4 +411,48 @@ Review should pay special attention to:
 
 ## 10. Outcome
 
-Pending.
+Implemented in commits `25b71e64` and `762731fa`.
+
+### Final landed code
+
+- Extended `src/factgraph/sdk/store.py` with the public RuleExpr dispatch branch, `_evaluate_rule_expr_input(...)`, `_rule_expr_adapter_support_error(...)`, and the explicit `_RULE_EXPR_DEFAULT_ALIAS_RE` fallback for application `Rule` ids that are not valid default occurrence aliases.
+- Added `tests/sdk/test_rule_expr_evaluate.py` with 10 focused public SDK tests covering native success, application Rule C35 coercion, `head=` validation, external-head rejection, Souffle / ProbLog request shape, PyReason support / rejection paths, and legacy `Inference` preservation.
+- Updated user-facing docs in `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`, `src/factgraph/sdk/docs/00_user_guide.en.md`, `src/factgraph/sdk/docs/01_concepts.en.md`, and `src/factgraph/application/docs/rule.md`.
+- Preserved the negative-action gates: no adapter production edits, no public lowering / trace DTO exports, no SDK result wrapper, no `CandidateSet` / `SupportArtifact` / `EvidenceEnvelope` / `CompiledDerivationPlan` shape changes, no T4 Head / closed-head behavior, no PyReason Form 2 grammar expansion, and no legacy SDK `Inference` / derivation dict behavior change.
+
+### Delivered behavior
+
+- Public `fg.eval.evaluate(rule_expr_or_application_rule, *, head=head_rule)` now evaluates through the T3L.1/T3L.2 private lowering and materialization substrate and returns the existing `list[CandidateSet]`.
+- Application `Rule` input follows D6 C35 one-rule coercion. If the rule id is not a valid default occurrence alias, the public path internally evaluates it through a stable `head` occurrence alias rather than depending on a lowering error string.
+- Missing or invalid `head=` values raise `SDKStoreError` as SDK call-shape contract errors.
+- External `head=` values that would require body concatenation raise `SDKStoreError` with guidance to include the head rule as an expression occurrence.
+- PyReason RuleExpr evaluation uses the T3L.2 classifier and converts unsupported cases to `SDKStoreError` messages containing engine, unsupported feature, rejection source, and known alternatives.
+- `engine_options=` is forwarded through the existing `DerivationEvaluateRequest` / `evaluate_derivation_plans(...)` path.
+- Private traces remain private and are not surfaced through `CandidateSet.payload` or new public DTOs.
+
+### Test gates
+
+- G7 baseline: 121 preservation tests OK at `7f9df8cb`.
+- Feature gate: 131 preservation tests OK after `25b71e64`.
+- Step 4.7 fix gate: 10 focused SDK tests OK, 131 preservation tests OK, and `ruff` clean after `762731fa`.
+
+### Deviations and follow-ups
+
+- Step 4.7 review found 0 P0/P1 issues.
+- WC1 was addressed in `762731fa` by replacing fragile exception-message matching with `_RULE_EXPR_DEFAULT_ALIAS_RE`.
+- WC2 was addressed in `762731fa` by documenting the non-identifier rule-id fallback in the main RuleExpr execution docs.
+- No T3L.3-specific follow-up remains open.
+
+### Lessons
+
+- Explicit identifier validation is a better public-dispatch boundary than relying on private exception text.
+- User-friendly behavior for non-identifier application Rule ids should be surfaced in docs when it becomes observable at the SDK layer.
+- The T3L.1/T3L.2 private substrate could be consumed from SDK dispatch with a narrow import surface and without reopening lowering or adapter decisions.
+- Public RuleExpr execution was added without touching adapter production files or public result/evidence DTO shapes.
+
+### Deferred beyond T3 later
+
+- PyReason Form 2 grammar expansion remains a future decision.
+- Full T4 Head / closed-head behavior remains on the T4 track.
+- T5 `EvaluateResult`, WhyNot, public trace DTOs, and public evidence expansion remain on the T5 track.
+- After archive and memory consolidation, the T3 later tranche is complete.

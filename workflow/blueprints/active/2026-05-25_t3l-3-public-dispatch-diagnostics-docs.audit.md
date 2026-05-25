@@ -1,6 +1,6 @@
 # Audit Log: T3L.3 Public SDK Dispatch, Diagnostics, And Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md](./2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md)
@@ -13,6 +13,7 @@
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked the external-head public behavior to conservative inline/projected-head support with SDKStoreError rejection for external heads, clarified missing/invalid `head=` as SDK call-shape errors per D6, and specified RuleExpr `engine_options` forwarding through existing evaluation machinery. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1/T3L.2 lowering substrate, SDK evaluate dispatch surface, head/application Rule call sites, SDKStoreError diagnostics, result/evidence surfaces, and docs update targets. No A-fallback amendment needed; external-head conservative rejection and public result boundary remain locked. |
 | 2026-05-25 | baseline | G7 preservation baseline | Ran the scoped baseline command covering T3.1-T3.6, T3L.1, and T3L.2 preservation suites; result matched expectation: 121 tests OK. Pytest remains deferred per SIGSEGV environment lock; unrelated `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | implemented | Step 4.7 fix + closure | Feature commit `25b71e64` added public SDK RuleExpr dispatch, 10 focused SDK tests, and 4 docs file updates; Step 4.7 fix `762731fa` replaced fragile string matching with explicit `_RULE_EXPR_DEFAULT_ALIAS_RE` validation and surfaced fallback behavior in user docs. Final gates: 10 focused SDK tests OK, 131 preservation tests OK, ruff clean. |
 
 ## Decision Notes
 
@@ -193,4 +194,37 @@ Reviewer should verify:
 
 ## Closure Notes
 
-Pending.
+### Final code scope
+
+- `src/factgraph/sdk/store.py` now contains the public RuleExpr / application Rule dispatch branch, SDK call-shape validation, conservative external-head rejection, private adapter-support-to-`SDKStoreError` conversion, and explicit non-identifier rule-id fallback.
+- `tests/sdk/test_rule_expr_evaluate.py` adds 10 focused SDK tests for public success, C35 coercion, missing / invalid `head=`, external-head rejection, Souffle / ProbLog request shape, PyReason classifier conversion, and legacy `Inference` preservation.
+- Four docs files were updated: `03_rules_and_inferences.en.md`, `00_user_guide.en.md`, `01_concepts.en.md`, and `application/docs/rule.md`.
+
+### Verification
+
+- G7 baseline before implementation: 121 tests OK.
+- Feature commit `25b71e64`: 131 preservation tests OK.
+- Step 4.7 fix `762731fa`: 10 focused SDK tests OK, 131 preservation tests OK, and `ruff` clean.
+- Pytest remains deferred under the existing SIGSEGV environment lock; `tests.test_public_inference_factgraph_create` remains excluded as unrelated pre-existing failure coverage.
+
+### Scope preservation
+
+- No adapter production files were edited.
+- No `CandidateSet`, `SupportArtifact`, `EvidenceEnvelope`, `CompiledDerivationPlan`, or `DerivationEvaluateRequest` public shape changed.
+- No public RuleExpr lowering, trace, or adapter-support DTO was exported.
+- No T4 Head / closed-head behavior, T5 `EvaluateResult` / WhyNot surface, or PyReason Form 2 grammar expansion was introduced.
+- Legacy SDK `Inference` and derivation dict evaluation paths remain preserved.
+
+### Step 4.7 disposition
+
+- WC1: addressed by replacing private exception-message matching with `_RULE_EXPR_DEFAULT_ALIAS_RE`.
+- WC2: addressed by documenting the stable `head` occurrence fallback for application Rule ids that are not valid default aliases.
+- No P0/P1 issues remained at closure.
+
+### Deferred
+
+- PyReason Form 2 grammar expansion remains beyond T3 later.
+- T4 Head / closed-head behavior remains an independent track.
+- T5 `EvaluateResult`, WhyNot, public trace DTOs, and public evidence expansion remain independent T5 work.
+
+Ready for archive commit.
