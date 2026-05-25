@@ -1,6 +1,6 @@
 # Audit Log: T3L.2 Adapter Matrix Parity And Aggregate Preservation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t3l-2-adapter-matrix-parity.md](./2026-05-25_t3l-2-adapter-matrix-parity.md)
@@ -11,6 +11,7 @@
 |---|---|---|---|
 | 2026-05-25 | draft | T3L.2 blueprint pair created | Scope consumes Stage 3 synthesis T3L.2 row, D8-D10, T3L.1 archived substrate, and shipped Souffle / ProbLog / PyReason adapter evidence. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Clarified private trace engine widening, Souffle/ProbLog adapter-time rejection ownership, PyReason classifier vs materialization engine split, and `unsupported_feature` label convention. |
+| 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found expected T3L.1 lowering substrate, adapter branch/equality/aggregate/PyReason surfaces, and public dispatch references only in existing SDK/tests. No adapter production write scope or public SDK dispatch amendment needed. |
 
 ## Decision Notes
 
@@ -131,6 +132,19 @@ Run before feature implementation:
 | 6. Public dispatch untouched | `rg 'def evaluate\\(|SDKStore.evaluate|_SDKEvalManager|RuleExprLoweringPlan' src/factgraph/sdk tests` | Confirm T3L.3 public dispatch remains untouched. |
 
 If any grep result contradicts the blueprint scope, pause for an A-fallback amendment.
+
+## Step 4.6 Pre-Implementation Grep Results
+
+| Check | Result | T3L.2 impact |
+|---|---|---|
+| 1. Existing adapter helper names | Existing hits only for T3L.1 `_materialize_native_derivation_plan(...)` and its focused tests; no `RuleExprAdapter` / `AdapterSupport` names exist. | Clean namespace for private adapter materialization helper and classifier DTO names. |
+| 2. Branch-list runtime assumptions | Broad expected hits in adapter branch projection, application walker/capability helpers, PyReason branch bounds, Souffle branch indexes, and T3L.1 lowering branch fields. | Confirms branch-list / branch-index substrate is already present; no amendment needed. |
+| 3. Equality atom adapter support | Broad expected hits across Souffle / ProbLog equality handling and PyReason equality rejection; no RuleExpr-specific adapter owner exists. | D8 eq atoms can be tested against shipped adapter grammar; PyReason remains classifier-only. |
+| 4. Aggregate adapter support | Expected hits in T2.3 Souffle aggregate tests, ProbLog aggregate export tests, core aggregate substrate, SDK aggregate ergonomic tests, and T3L.1 aggregate preservation test. | Reuse shipped aggregate substrate/tests; no adapter grammar amendment needed. |
+| 5. PyReason pred-only boundary | Expected hits in `compile_where_ir_to_pyreason`, `_validate_pred_atom`, branch-head-bound support, and existing PyReason tests. | Classifier expectations match shipped pred-only behavior; no Form 2 scope. |
+| 6. Public dispatch untouched | Hits limited to existing `_SDKEvalManager` / `SDKStore.evaluate` definitions and existing tests plus T3L.1 private `RuleExprLoweringPlan` tests. | T3L.2 keeps public SDK dispatch untouched; T3L.3 owns public entrypoint. |
+
+Step 4.6 conclusion: **clean**. No A-fallback scope amendment required. Proceed to G7 baseline from the scoped anchor.
 
 ## G7 Baseline Plan
 

@@ -1,6 +1,6 @@
 # Task Blueprint: T3L.2 Adapter Matrix Parity And Aggregate Preservation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
