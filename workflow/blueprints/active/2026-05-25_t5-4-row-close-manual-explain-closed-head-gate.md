@@ -1,6 +1,6 @@
 # Task Blueprint: T5.4 Row Close + Manual Explain Closed-Head Gate
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted; split if manual explain needs broad runtime/service work)

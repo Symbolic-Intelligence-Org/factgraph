@@ -1,11 +1,11 @@
 # Audit: T5.4 Row Close + Manual Explain Closed-Head Gate
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-4-row-close-manual-explain-closed-head-gate.md`
-- Stage: T5.4 implementation blueprint draft
+- Stage: T5.4 implementation blueprint scoped
 - Class: M (predicted; split if Step 4.6 shows broader runtime/service scope)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -14,7 +14,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-25 | draft | pending | Blueprint pair drafted | T5.4 Row Close + Manual Explain Closed-Head Gate draft created after T5.3 archive `ba5e5c26`. Scope is M-class predicted, but Step 4.6 must decide whether row-close and manual explain stay one slice or split. |
+| 2026-05-25 | draft | `f755749b` | Blueprint pair drafted | T5.4 Row Close + Manual Explain Closed-Head Gate draft created after T5.3 archive `ba5e5c26`. Scope is M-class predicted, but Step 4.6 must decide whether row-close and manual explain stay one slice or split. |
+| 2026-05-25 | scoped | pending | Step 4.6 grep clean | Ten grep buckets matched expected shipped/design hits. No A-fallback triggered; T5.4 remains a single SDK/protocol-scoped M-class slice. Service/docs, why-not, SDK Rule flip, and adapter semantics remain future-slice territory. |
 
 ## 2. Source Chain
 
@@ -82,12 +83,12 @@ T5.4 consumes:
 | G3 | Has negative-action gates | Satisfied in blueprint section 0. |
 | G4 | Includes shipped-source preflight | Satisfied in audit sections 3-4. |
 | G5 | Defines tests and preservation gates | Satisfied in blueprint sections 4 and 6. |
-| G6 | Preserves sacred branch and dirty baseline | Satisfied; draft only. |
+| G6 | Preserves sacred branch and dirty baseline | Satisfied; scoped docs only. |
 | G7 | Establishes baseline before feat | Pending after scoped; expected 166 tests OK. |
 
-## 7. Step 4.6 Pre-Implementation Grep Plan
+## 7. Step 4.6 Pre-Implementation Grep Results
 
-Run before implementation and record actual results in a scoped commit.
+Ran before implementation and recorded actual results in this scoped commit.
 
 | # | Check | Command shape | Expected / classification |
 |---|---|---|
@@ -102,7 +103,22 @@ Run before implementation and record actual results in a scoped commit.
 | 9 | SDK Rule namespace guard | `rg "LegacyRule|ApplicationRule|from factgraph\\.sdk import Rule|Rule =" src/factgraph/sdk tests/sdk` | Pre-D24 namespace must remain unchanged. |
 | 10 | Adapter / semantics guard | `rg "problog|pyreason|souffle|SemanticsProfile|raw_kind|bound|adapter" src/factgraph tests` | Existing substrate only; no adapter edits. |
 
-If Step 4.6 shows manual explain requires broad runtime/service work, amend or split into row-close first and manual explain later before scoped.
+Actual classification:
+
+| # | Result |
+|---|---|
+| 1 | Clean. No production `EvaluateRow.close`; hits are design docs, active T5.4 draft, and unrelated `close()` methods in service/agent/ledger classes. |
+| 2 | Clean. Production has only T5.3 `EvaluateRow.explain()` in `evaluate_result.py`; SDK eval manual `explain(...)` is absent. |
+| 3 | Expected. T4.3 private helpers and inspect tests exist; no public closed-head DTO/export exists. |
+| 4 | Expected. D14/T4.2 projection constants, recognizer, lowering/inspect tests, and docs exist; T5.4 owns stripping placeholders from row-close output. |
+| 5 | Expected. SchemaIndex, EntityRef, identity field/predicate metadata, and SDK normalization helpers are present; no schema API redesign needed. |
+| 6 | Expected. Core atom classes/tests and D15/D21 docs exist; T5.4 must keep strict v1 closure and not broaden inference. |
+| 7 | Expected. T5.1 digest helpers, T5.2 consumers, T5.3 tests, and D21/docs exist; T5.4 can reuse `closed_head_digest_for(...)`. |
+| 8 | Clean guard. Hits are service/OpenAPI routes, legacy why-not/docs/tests, T5.4 draft text, and static UI render helpers. Service/docs/agent migration stays T5.7; why-not stays T5.5; renderer remains out of scope. |
+| 9 | Expected. Pre-D24 SDK namespace remains in `sdk/__init__.py`, docs, and tests. T5.4 must not alter `Rule` / `LegacyRule` / `ApplicationRule`. |
+| 10 | Expected broad substrate hits in adapter/runtime/semantics/tests. No T5.4 adapter production edit target found. |
+
+Scope decision: keep T5.4 as one SDK/protocol-scoped M-class slice. Manual explain does not require service/OpenAPI work before implementation; service/docs remain T5.7 deferred.
 
 ## 8. G7 Baseline Plan
 
@@ -154,6 +170,7 @@ Baseline fields to fill after scoped:
 | D24 SDK Rule flip excluded | Yes |
 | D26 adapter semantics excluded | Yes |
 | Step 4.6 grep plan present | Yes |
+| Step 4.6 grep results clean | Yes |
 | G7 baseline plan present | Yes |
 
 ## 10. Risks For Reviewer
