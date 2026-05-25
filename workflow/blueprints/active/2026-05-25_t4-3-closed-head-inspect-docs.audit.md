@@ -1,6 +1,6 @@
 # Audit - T4.3 Closed-Head Inspect Utilities + Docs
 
-Status: draft
+Status: scoped
 Branch: `v0.2.0-t4-3-closed-head-inspect-docs-2026-05-25`
 Blueprint: `workflow/blueprints/active/2026-05-25_t4-3-closed-head-inspect-docs.md`
 
@@ -10,6 +10,7 @@ Blueprint: `workflow/blueprints/active/2026-05-25_t4-3-closed-head-inspect-docs.
 |---|---|---|---|
 | 2026-05-25 | draft | Codex | Drafted T4.3 blueprint after pre-draft grep against the post-T4.2 baseline. Scope covers D15 closed-head inspect fields plus bounded docs updates; T5/result/evidence/adapter changes remain locked out. |
 | 2026-05-25 | draft-amend | Codex | Addressed Step 4.2 v1 WCs: append-only `RuleExprInspect` field lock, RuleExpr structural inspect "not applicable" defaults, D15 section 4.4 entity-ref atom/schema path, and projection inspect-time vs D12 evaluation-time validation boundary. |
+| 2026-05-25 | scoped | Codex | Step 4.6 grep clean; no A-fallback amendment required. Blueprint and audit moved to scoped with closed-head inspect/docs scope locked. |
 
 ## Source Chain
 
@@ -118,6 +119,20 @@ Run after draft review, before scoped anchor:
 | 7 | Adapter guards | `rg -n "pyreason|souffle|problog|compile_where|export_problog" src tests workflow` |
 
 Expected: no production owner conflicts and no A-fallback scope amendment.
+
+## Step 4.6 Pre-Implementation Grep Results
+
+| # | Check | Result | Disposition |
+|---|---|---|---|
+| 1 | T4.1 validator callers | Hits are T4.1 helper tests, the private helper definition, active/archive docs, and one production `SDKStore._evaluate_rule_expr_input(...)` call. | Expected. T4.3 does not add a new validation consumer or alter validation ordering. |
+| 2 | Materialization consumers | Hits are adapter helper tests, `_materialize_adapter_derivation_plan(...)`, `_materialize_branch(...)`, SDK evaluation calls, memory/docs, and archives. | Expected. D15 inspect must not use runtime-augmented materialization as closure proof. |
+| 3 | Declared-port consumers | Hits are T4.1 helper definition/tests plus active/archive docs; no new production downstream reader of `RuleExprHeadValidation.declared_ports`. | Expected. No public declared-port surface exists. |
+| 4 | Closed-head namespace | Narrow `src/factgraph tests` grep shows only an unrelated `test_render_desc_uses_placeholders_for_unbound_ports` test method; broad workflow hits are D15/T4 planning docs and archives. | Clean namespace for T4.3 `is_closed` / `unbound_ports` inspect fields. |
+| 5 | Inspect DTO surface | Hits are `RuleExprInspect`, `_inspect_application_rule(...)`, `_inspect_rule_expr(...)`, SDK inspect dispatch, and existing inspect tests. | Expected insertion point; no competing inspect DTO owner. |
+| 6 | T5/public result guards | Narrow source/test grep hits existing `CandidateSet`, `SupportArtifact`, `EvidenceEnvelope`, and why-not surfaces from earlier tracks; no T4.3 production owner or active implementation target. | Scope lock holds: no T5/result/evidence shape work in T4.3. |
+| 7 | Adapter guards | Hits are existing adapter modules, adapter tests, core/service docs, and T4.2 adapter preservation tests. | Scope lock holds: no adapter production edit target for T4.3. |
+
+Conclusion: Step 4.6 is clean. T4.3 remains M-class; no A-fallback scope amendment or split is required.
 
 ## G7 Baseline Plan
 

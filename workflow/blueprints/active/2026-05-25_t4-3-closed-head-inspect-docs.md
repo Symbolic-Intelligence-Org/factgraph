@@ -1,6 +1,6 @@
 # T4.3 Closed-Head Inspect Utilities + Docs
 
-Status: draft
+Status: scoped
 Class: M
 Branch: `v0.2.0-t4-3-closed-head-inspect-docs-2026-05-25`
 
