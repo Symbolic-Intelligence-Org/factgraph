@@ -1,7 +1,7 @@
 # Task Blueprint Audit: T3L.1 Internal RuleExpr Lowering And Native Execution
 
 - Blueprint: [2026-05-25_t3l-1-internal-lowering-native.md](./2026-05-25_t3l-1-internal-lowering-native.md)
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 
@@ -11,6 +11,7 @@
 | --- | --- | --- | --- |
 | 2026-05-25 | draft | Blueprint created | Initial T3L.1 M-class scope drafted from reviewed Stage 1 audit, reviewed D6-D10, Stage 3 synthesis, track-plan sync, and archived T3.1-T3.6 substrate. Scope is private RuleExpr lowering core plus native execution only; public SDK dispatch and adapter parity remain later slices. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | T3L.1-WC1 native materialization now returns per-branch trace tuple; T3L.1-WC2 external head body concatenation explicitly deferred to T3L.3; WC3 concrete typing refinement, WC4 abstract alias-local example, and N1 track-plan cite added. |
+| 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found no `RuleExprLoweringPlan` / `RuleExprEvaluationTrace` / `rule_expr_lowering` collisions, confirmed existing runtime/native/aggregate/adapter substrates, and found no need to touch public SDK dispatch in T3L.1. Blueprint status moved from draft to scoped. |
 
 ## Decision Notes
 
@@ -124,6 +125,17 @@ T3L.1 carries forward the T3.3-T3.6 zero-deviation discipline:
 | Adapter boundaries | `rg 'pyreason|souffle|problog|where_compile|problog_export' src/factgraph/adapters tests` | Confirm adapter work is deferred to T3L.2. |
 
 If grep finds a needed Python touch outside scoped modules or a public dispatch dependency, pause for a scope amendment before implementation.
+
+### Step 4.6 Pre-Implementation Grep Results
+
+| Check | Result | Implementation impact |
+|---|---|---|
+| Existing lowering names | `rg 'RuleExprLoweringPlan\|RuleExprEvaluationTrace\|rule_expr_lowering' src/factgraph tests` returned no matches. | Clean namespace for new private `rule_expr_lowering.py` module and internal DTO names. |
+| Runtime plan construction | `rg 'CompiledDerivationPlan\|DerivationEvaluateRequest' src/factgraph tests` found existing construction in application runtime, SDK store, capability helpers, docs, and established tests. | Use existing runtime plan patterns; no unexpected RuleExpr lowering owner exists. |
+| Native branch/support substrate | `rg 'OrExpr\|branches\|branch_index\|support_key\|b\{branch' src/factgraph/core src/factgraph/application tests` found expected branch-list, support-key, walker, rule-disable, diagnose/check, and native evaluator substrates. | Confirms D9/D10 branch-index assumptions are backed by shipped substrate; no scope amendment needed. |
+| Aggregate preservation tests | `rg 'AggregateAtom\|aggregate\|empty-set\|empty set\|count\|sum' tests/application tests/test_application* tests/test_core_rules* src/factgraph/application/protocol src/factgraph/core/rules src/factgraph/application/docs/rule.md` found T2.3 aggregate substrate and tests including `tests/application/protocol/test_rule_aggregate.py`. | T3L.1 should reuse existing aggregate tests and add focused native RuleExpr aggregate preservation tests. |
+| Public evaluate dispatch | `rg 'def evaluate\(\|SDKStore.evaluate\|_SDKEvalManager' src/factgraph/sdk src/factgraph/application tests` found only `src/factgraph/sdk/store.py` plus SDK namespace/invariant tests. | Confirms T3L.1 can keep public SDK dispatch untouched; T3L.3 owns public dispatch changes. |
+| Adapter boundaries | `rg 'pyreason\|souffle\|problog\|where_compile\|problog_export' src/factgraph/adapters tests` found expected adapter implementations and tests. | Confirms non-native adapter work is present but deferred to T3L.2; no T3L.1 adapter touch needed. |
 
 ### G7 Baseline Plan
 
