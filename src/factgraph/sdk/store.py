@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -28,6 +28,16 @@ from factgraph.application.protocol import (
     ErrorDTO,
     FieldMutation,
     FieldPath,
+    Rule as ApplicationRule,
+)
+from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
+from factgraph.application.protocol.rule_expr_lowering import (
+    RuleExprAdapterSupport,
+    RuleExprError,
+    _classify_pyreason_rule_expr_support,
+    _lower_application_rule,
+    _lower_rule_expr,
+    _materialize_adapter_derivation_plan,
 )
 from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
@@ -2216,6 +2226,15 @@ class SDKStore:
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
+        if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
+            return self._evaluate_rule_expr_input(
+                args,
+                kwargs,
+                raw_engine=raw_engine,
+                raw_semantics=raw_semantics,
+                registry=registry,
+                engine_options=engine_options,
+            )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
             engine, semantics_profile = self._resolve_public_engine_and_semantics(
@@ -2294,6 +2313,74 @@ class SDKStore:
         )
         return evaluate_derivation_plans(
             request,
+            store=self._store,
+            registry=registry,
+        )
+
+    def _evaluate_rule_expr_input(
+        self,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+        *,
+        raw_engine: Any,
+        raw_semantics: Any,
+        registry: RuleRegistry | None,
+        engine_options: dict[str, Any] | None,
+    ) -> list[CandidateSet]:
+        if len(args) != 1:
+            raise SDKStoreError("evaluate(rule_expr, ...) accepts exactly one RuleExpr or application Rule input")
+        if "head" not in kwargs:
+            raise SDKStoreError("evaluate(rule_expr, ...) requires head= application Rule")
+        head = kwargs.pop("head")
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise SDKStoreError(f"unknown evaluate(rule_expr, ...) keyword(s): {unknown}")
+        if not isinstance(head, ApplicationRule):
+            raise SDKStoreError(
+                "evaluate(rule_expr, ...) head= must be application Rule; "
+                "legacy SDK Rule, Inference, dict, string, and inspect objects are not accepted"
+            )
+
+        engine, semantics_profile = self._resolve_public_engine_and_semantics(
+            raw_engine,
+            raw_semantics,
+            derivation=None,
+            api_path="evaluate(rule_expr)",
+        )
+        source = args[0]
+        if isinstance(source, ApplicationRule):
+            try:
+                plan = _lower_application_rule(source, head=head)
+            except RuleExprError as exc:
+                if "bare Rule id cannot be used as a RuleExpr alias" not in str(exc):
+                    raise
+                plan = _lower_rule_expr(_coerce_rule_expr_operand(source.as_("head")), head=head)
+        elif isinstance(source, _RuleExpr):
+            plan = _lower_rule_expr(source, head=head)
+        else:  # pragma: no cover - guarded by caller classification
+            raise SDKStoreError("evaluate(rule_expr, ...) expects application Rule or RuleExpr input")
+
+        if plan.head_binding.kind == "external":
+            raise SDKStoreError(
+                "evaluate(rule_expr, ...) does not support external head= body concatenation in T3L.3; "
+                "include the head rule as an expression occurrence and pass that same application Rule as head="
+            )
+
+        if engine == "pyreason":
+            support = _classify_pyreason_rule_expr_support(plan)
+            if not support.supported:
+                raise _rule_expr_adapter_support_error(support)
+            compiled, _traces = _materialize_adapter_derivation_plan(plan, engine="native")
+        else:
+            compiled, _traces = _materialize_adapter_derivation_plan(plan, engine=engine)
+
+        compiled = replace(compiled, engine_options=dict(engine_options or {}))
+        return evaluate_derivation_plans(
+            DerivationEvaluateRequest(
+                plans=(compiled,),
+                engine=engine,
+                semantics_profile=semantics_profile,
+            ),
             store=self._store,
             registry=registry,
         )
@@ -3118,6 +3205,17 @@ def _resolve_compiled_derivation_mode(
             path="$.mode",
         )
     return next(iter(modes))
+
+
+def _rule_expr_adapter_support_error(support: RuleExprAdapterSupport) -> SDKStoreError:
+    feature = support.unsupported_feature or "unknown"
+    source = support.rejection_source or "unknown"
+    alternatives = ", ".join(support.alternative_engines) if support.alternative_engines else "none known"
+    return SDKStoreError(
+        "evaluate(rule_expr, ...) unsupported for "
+        f"engine='{support.engine}': unsupported feature '{feature}' from {source}; "
+        f"supported alternative engines: {alternatives}"
+    )
 
 
 def _compiled_derivation_plan_to_application(

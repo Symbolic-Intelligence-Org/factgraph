@@ -81,6 +81,12 @@ explicit port name into pairwise joins. Same-name ports are not auto-joined;
 `RuleExprInspect` authoring projection, while legacy SDK `Rule` / `Inference`
 inputs keep their existing dict inspect shape.
 
+Public execution is exposed through the SDK layer, not this protocol module:
+`fg.eval.evaluate(rule_expr, head=application_rule, engine=...)` returns the
+existing `list[CandidateSet]` success shape. The head must be an inline
+application `Rule` occurrence in the expression for this tranche; full external
+head body concatenation remains outside the application protocol surface.
+
 ## Unified Syntax via SDK DSL Bridge
 
 Use `factgraph.sdk.dsl.build_application_rule(...)` when starting from SDK DSL

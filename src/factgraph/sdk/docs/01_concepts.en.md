@@ -184,6 +184,10 @@ SDK ergonomics (`build_application_rule(...)`) or the staged
 protocol objects. `fg.rules.inspect(...)` also reflects the split: legacy SDK
 `Rule` / `Inference` inputs return the preserved dict shape, while application
 `Rule` and RuleExpr inputs return `RuleExprInspect`.
+Execution follows the same boundary. `fg.eval.evaluate(expr, head=application_rule, engine=...)`
+accepts application `Rule` / RuleExpr inputs and still returns the existing
+`list[CandidateSet]`; private lowering, trace, and adapter-support DTOs are not
+SDK exports.
 
 ---
 
@@ -202,7 +206,7 @@ types**. Other internal types stay inside their layer.
 | `ProofFrameRecheckResult` | Returned by `recheck_proof_frame` |
 | `RoundEvent`, `WarningDTO` | `audit.diff_proof_frames` |
 | `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference` | Returned by `audit.diff_proof_frames` |
-| `RuleExpr`, `RuleJoinConstraint`, `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, `PortInspect` | RuleExpr authoring and inspect |
+| `RuleExpr`, `RuleJoinConstraint`, `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, `PortInspect` | RuleExpr authoring and inspect; execution reuses `fg.eval.evaluate(..., head=...)` without new public result DTOs |
 
 These mostly live in `factgraph.application.protocol` and `factgraph.audit`.
 They are frozen dataclasses with `__post_init__` validation —

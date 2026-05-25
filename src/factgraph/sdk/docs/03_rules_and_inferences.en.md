@@ -341,6 +341,34 @@ metadata.
 `render()` and `render_compact()` are deterministic authoring narratives. They
 do not read the ledger and are not proof explanations.
 
+### RuleExpr execution
+
+`fg.eval.evaluate(...)` also accepts application `Rule` and RuleExpr values
+when you provide an application `Rule` as `head=`:
+
+```python
+candidates = fg.eval.evaluate(expr, head=active_user, engine="native")
+```
+
+The public success shape is the existing `list[CandidateSet]`; no RuleExpr
+result wrapper or public trace DTO is returned. A single application `Rule`
+input is treated like a one-rule RuleExpr:
+
+```python
+candidates = fg.eval.evaluate(active_user, head=active_user)
+```
+
+The supplied `head=` must already be an inline/projected rule occurrence in the
+expression. External head body concatenation is not public in this tranche; add
+the head rule as an expression occurrence and pass that same application `Rule`
+as `head=`.
+
+Supported engines are `native`, `souffle`, `problog`, and the current PyReason
+pred-only subset. PyReason rejects RuleExpr joins, source non-pred atoms, and
+aggregate-containing branches before adapter invocation with `SDKStoreError`
+guidance that names the engine, unsupported feature, rejection source, and
+known alternative engines.
+
 ## 4. RuleRef and Dependency Registration
 
 Construction:
@@ -476,6 +504,10 @@ cands = sdk.evaluate(inf, engine="native")
   not supported; inference always uses the full active assertion set.
 - `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(inf, engine="pyreason", engine_options={"timesteps": 5})`.
 - `engine_options` does not enter `Inference` or `to_authoring_payload()`; `mode="native"` rejects non-empty `engine_options`.
+- RuleExpr execution uses the same public entrypoint as inference evaluation:
+  `sdk.evaluate(expr, head=application_rule, engine=...)` returns
+  `list[CandidateSet]`. `head=` is required and must be an application `Rule`;
+  legacy SDK `Rule` / `Inference` objects are rejected as heads.
 
 ### 8.2 `CandidateSet` key fields
 

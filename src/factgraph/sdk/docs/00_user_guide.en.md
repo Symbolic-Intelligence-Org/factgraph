@@ -410,6 +410,7 @@ Three primitives:
 | `Rule` | Single-rule inference (`select` + `where`); produces rows | `fg.eval.run(rule)` → `list[dict]` (default) |
 | `Query` | Read-side projection over the current store; produces rows | `fg.eval.run(query)` → `list[dict]` (default) |
 | `Inference` | A single inference (one head); produces accept-ready candidates | `fg.eval.evaluate(inf, engine=...)` → `list[CandidateSet]` |
+| `ApplicationRule` / `RuleExpr` | Application-rule composition; produces accept-ready candidates when evaluated with an inline application `head=` | `fg.eval.evaluate(expr, head=app_rule, engine=...)` → `list[CandidateSet]` |
 
 All three are constructed inside a `with vars(...) as (...):` block.
 For the deeper DSL spec see
@@ -418,6 +419,9 @@ That spec also covers the staged RuleExpr authoring surface:
 `ApplicationRule` / `build_application_rule(...)`, `&` / `|` composition,
 explicit `.eq(...)` joins, `.join_by_ports(...)`, bool guards, and
 `fg.rules.inspect(...)` return-shape differences.
+RuleExpr execution uses that same staged surface: pass an application `Rule` or
+RuleExpr to `fg.eval.evaluate(..., head=...)`, keep joins explicit, and include
+the head rule as an expression occurrence in this tranche.
 
 ### Query
 
