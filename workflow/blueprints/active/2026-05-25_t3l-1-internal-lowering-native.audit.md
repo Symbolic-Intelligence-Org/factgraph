@@ -12,6 +12,7 @@
 | 2026-05-25 | draft | Blueprint created | Initial T3L.1 M-class scope drafted from reviewed Stage 1 audit, reviewed D6-D10, Stage 3 synthesis, track-plan sync, and archived T3.1-T3.6 substrate. Scope is private RuleExpr lowering core plus native execution only; public SDK dispatch and adapter parity remain later slices. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | T3L.1-WC1 native materialization now returns per-branch trace tuple; T3L.1-WC2 external head body concatenation explicitly deferred to T3L.3; WC3 concrete typing refinement, WC4 abstract alias-local example, and N1 track-plan cite added. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Six pre-implementation grep checks found no `RuleExprLoweringPlan` / `RuleExprEvaluationTrace` / `rule_expr_lowering` collisions, confirmed existing runtime/native/aggregate/adapter substrates, and found no need to touch public SDK dispatch in T3L.1. Blueprint status moved from draft to scoped. |
+| 2026-05-25 | baseline | G7 baseline recorded | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect -v` ran 99 tests OK after Step 4.6 grep clean. |
 
 ## Decision Notes
 
@@ -155,6 +156,16 @@ PYTHONPATH=src python -m unittest \
 Expected starting point: 99 OK from the T3.6 preservation gate.
 
 Do not use `tests.test_public_inference_factgraph_create` as a T3L.1 blocking gate; it has documented pre-existing failures unrelated to RuleExpr execution lowering.
+
+### G7 Baseline Record
+
+| Check | Result |
+|---|---|
+| Branch and sacred state | T3L.1 branch `v0.2.0-t3l-1-internal-lowering-native-2026-05-25`; sacred `master` remains `562c7419`; dirty 4M+1U preserved. |
+| Step 4.6 precondition | Grep clean: no lowering-name collisions, existing runtime/native/aggregate/adapter substrates confirmed, public SDK dispatch remains out of T3L.1 scope. |
+| Requested pytest baseline | Deferred per T3 cycle environment lock: pytest has known SIGSEGV in this environment; unittest remains the cadence runner. |
+| Fallback unittest baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect -v` -> 99 tests OK. |
+| Known excluded gate | `tests.test_public_inference_factgraph_create` remains excluded because failures were verified pre-existing and unrelated to RuleExpr execution lowering. |
 
 ### Step 4.2 Draft Review Checklist
 
