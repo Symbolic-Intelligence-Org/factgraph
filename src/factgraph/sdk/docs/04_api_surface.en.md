@@ -1,8 +1,7 @@
 # SDK API Surface Reference
 
 The exact public surface of `factgraph.sdk`. For tutorials see
-[`00_user_guide.en.md`](00_user_guide.en.md). For what-if and proof
-workflows see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+[`00_user_guide.en.md`](00_user_guide.en.md).
 
 ---
 
@@ -12,10 +11,8 @@ workflows see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
 `SDKStore` — both names refer to the same class object and accept the
 same calls.
 
-`FactGraph` exposes operations through 8 top-level namespaces and 2
-sub-namespaces under `what_if`. The same operations are also available
-as flat methods on the same instance; both shapes are permanently
-supported.
+`FactGraph` exposes operations through focused namespaces. T5 keeps the public
+evaluation/evidence path under `fg.eval`.
 
 ```python
 from factgraph.sdk import FactGraph
@@ -25,17 +22,14 @@ fg = FactGraph.create(schema_classes=[User])
 # Namespaced (preferred for new code)
 fg.read.get(User, user_id="u-1")
 fg.write.add(User.tag, alice, "engineer")
-fg.what_if.check(inference, binding)
-fg.what_if.fact_overlay.check(inference, binding, overlay)
-fg.what_if.rule.disable(rule, support, branch_index=0, atom_index=0)
+result = fg.eval.evaluate(inference)
+row = result.first()
+explanation = row.explain() if row is not None else None
 fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 
-# Flat (foundational; permanent)
+# Flat read/write aliases remain available where documented
 fg.get(User, user_id="u-1")
 fg.add(User.tag, alice, "engineer")
-fg.check(inference, binding)
-fg.check_fact_overlay(inference, binding, overlay)
-fg.check_rule_disable(rule, support, branch_index=0, atom_index=0)
 fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 ```
 
@@ -44,16 +38,13 @@ fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 | `schema` | `ingest`, `validate_provenance` |
 | `read` | `get`, `find`, `ref` |
 | `write` | `set`, `add`, `retract`, `edit` |
-| `eval` | `run`, `evaluate`, `accept`, `accept_many`, `inspect_semantics` |
-| `what_if` | `check`, `diagnose`, `why_not` |
-| `what_if.fact_overlay` | `check`, `recheck_proof_frame` |
-| `what_if.rule` | `disable`, `literal_replace`, `add_condition` |
+| `eval` | `evaluate`, `explain`, `inspect_semantics` |
 | `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` |
 | `package` | `export_package`, `run_package` |
 | `views` | `create`, `update`, `delete`, `get`, `list` |
 
 Namespace accessors return private manager objects. The managers are
-read-only — assigning attributes (`fg.what_if.foo = ...`) raises
+read-only — assigning attributes to namespace managers raises
 `FrozenSnapshotError`. They are not part of `factgraph.sdk.__all__` and
 should not be imported directly.
 
@@ -88,9 +79,8 @@ class-first constructor name and does not accept workspace `path=`.
 | Symbol | Purpose |
 |---|---|
 | `Branch` | Rule `where` branch constructor (alternative conjunction) |
-| `Rule` | Legacy-compatible declarative rule (head + body); final top-level `Rule` replacement is deferred to the later legacy hard-cut |
-| `LegacyRule` | Explicit alias for the current legacy `Rule` |
-| `ApplicationRule` | Transitional explicit alias for `factgraph.application.protocol.Rule` |
+| `Rule` | Application protocol Rule |
+| `ApplicationRule` | Transitional alias for `Rule` |
 | `RuleRef` | Where-clause reference to an exposed rule |
 | `Inference` | Multi-rule inference envelope |
 | `SchemaAddResult` | Result returned by additive `fg.schema.add(...)`; fields are `old_digest`, `new_digest`, `added_entities`, `added_fields` |
@@ -98,8 +88,8 @@ class-first constructor name and does not accept workspace `path=`.
 | `Pred` | Predicate literal (fact reference) |
 | `Not` | Negation operator for body literals |
 | `vars` | Logic-variable factory for rule construction |
-| `build_application_rule` | Build an `ApplicationRule` from SDK DSL conditions |
-| `DSLToApplicationRuleError` | Raised when SDK DSL conditions cannot lower to an `ApplicationRule` |
+| `build_application_rule` | Build an application `Rule` from SDK DSL conditions |
+| `DSLToApplicationRuleError` | Raised when SDK DSL conditions cannot lower to a `Rule` |
 | `SDKDSLError` | Raised on DSL construction errors |
 | `RuleExpr` | Base RuleExpr authoring surface; use `RuleExpr.all(...)` / `RuleExpr.any(...)` or application `Rule` `&` / `|` composition |
 | `RuleExprError` (← `SDKDSLError`) | Raised when RuleExpr authoring input violates the expression contract |
@@ -292,14 +282,12 @@ This namespace is read-only and by-id only. It does not ship graph-wide
 
 | Method | One-liner |
 |---|---|
-| `run(rule_or_query, *, row_format=None)` | Evaluate a `Rule` or `Query`; `RuleRef` remains a where-clause carrier, not a direct runtime selector |
-| `evaluate(inference, *, engine='native', engine_options=None, semantics=None)` | Evaluate an `Inference`; returns list of `CandidateSet`. If `semantics` is `ProbLogSemantics`, `PyReasonSemantics`, or `SemanticsProfile`, `engine` may be omitted and is derived from the semantics object. |
-| `accept(candidate, *, approved_by=None, note=None, dry_run=False, identity_override=None)` | Accept exactly one candidate; performs writes |
-| `accept_many(candidates, *, ...)` | Accept multiple candidates idempotently |
+| `evaluate(inference_or_expr, *, head=None, engine='native', semantics=None)` | Evaluate an `Inference`, `Rule`, or `RuleExpr`; returns `EvaluateResult`. |
+| `explain(expr, *, head=closed_head, engine='native', semantics=None)` | Replay a closed-head explanation; returns `Explanation`. |
+| `inspect_semantics(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 
-`engine='native'` rejects non-empty `engine_options`. Adapter-owned engines
-(`souffle`, `problog`, `pyreason`) consume `engine_options` at call time
-and never propagate to `Inference` or ledger.
+Public `evaluate(...)` rejects `engine_options=`, `registry=`, `mode=`, and
+candidate compatibility flags.
 
 Pass `Rule` / `Inference` value objects directly to `run(...)` or
 `evaluate(...)`. Registry-backed SavedRule/SavedInference persistence was
@@ -322,40 +310,12 @@ removed by Q8 Phase 2.
 > frozen via `FrozenSnapshotError` on attribute set. Construct `Inference(...)`
 > values in memory and pass them to `fg.eval.evaluate(...)`.
 
-### 2.9 What-if namespace (`fg.what_if.*`)
+### 2.9 Removed legacy evidence shells
 
-For tutorial usage see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
-
-| Method | One-liner |
-|---|---|
-| `check(inference, binding, *, engine='native', registry=None)` | Counterfactual evaluation; returns `CheckResult` |
-| `diagnose(inference, binding, *, engine='native', registry=None)` | Trace why a fact was derived; returns `DiagnoseResult` |
-| `why_not(inference, candidates, *, engine='native', registry=None)` | Explain why facts in an explicit candidate universe did not derive; returns `WhyNotUniverseResult` |
-
-### 2.10 What-if fact overlay (`fg.what_if.fact_overlay.*`)
-
-| Method | One-liner |
-|---|---|
-| `check(inference, binding, overlay, *, engine='native', registry=None)` | Re-check inference with fact-value overrides; returns `FactOverlayCheckResult` |
-| `recheck_proof_frame(support_artifact, overlay)` | Re-evaluate a held `SupportArtifact` under a new overlay; returns `ProofFrameRecheckResult` |
-
-`overlay` is a `factgraph.application.protocol.EvaluationOverlay`. The
-`tuple[FactValueOverride, ...]` form is rejected at the SDK boundary.
-
-### 2.11 What-if rule (`fg.what_if.rule.*`)
-
-All three accept an SDK `Rule` (lowered internally; raw `RuleSpec` IR
-is rejected) and a `SupportArtifact`. `overlay` may be `None` or empty;
-the rule-action overlay is constructed internally.
-
-| Method | One-liner |
-|---|---|
-| `disable(rule, support, *, branch_index, atom_index, overlay=None, note=None)` | Re-check with a literal disabled; returns `RuleDisableResult` |
-| `literal_replace(rule, support, *, branch_index, atom_index, literal_path, old_literal, new_literal, overlay=None, note=None)` | Re-check with a literal replaced; returns `RuleLiteralReplaceResult` |
-| `add_condition(rule, support, *, branch_index, added_atom, overlay=None, note=None)` | Re-check with a condition appended (no `atom_index`); returns `RuleAddConditionResult` |
-
-`literal_path` is a `factgraph.application.protocol.RuleLiteralPath`;
-`added_atom` is a `factgraph.application.protocol.RuleAddedAtom`.
+Direct `check`, `diagnose`, `why_not`, `what_if.*`, `accept`, and
+`accept_many` candidate workflows are not part of the T5 public SDK evidence
+path. Use `fg.eval.evaluate(...)`, `row.explain()`, `row.close()`, and
+`fg.eval.explain(...)`.
 
 ### 2.12 Audit namespace (`fg.audit.*`)
 
@@ -403,13 +363,9 @@ not accept frozen views or read policies as input.
 
 ### 2.15 Result-type non-export
 
-`CheckResult`, `DiagnoseResult`, `WhyNotUniverseResult`,
-`FactOverlayCheckResult`, `ProofFrameRecheckResult`, `RuleDisableResult`,
-`RuleLiteralReplaceResult`, `RuleAddConditionResult`, and
-`ProofFrameDiff` are returned by `fg.what_if.*` and `fg.audit.*` but
-**are not in `factgraph.sdk.__all__`**. They are passthrough application
-DTOs. Import them directly from `factgraph.application.protocol` or
-`factgraph.audit` if your code needs to type-annotate them.
+`EvaluateResult`, `EvaluateRow`, `Claim`, `EvidenceRef`, and `Explanation`
+are exported from `factgraph.sdk`. Legacy check/diagnose/why-not DTOs are not
+SDK public result types.
 
 ---
 
@@ -530,16 +486,12 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 ### 6.2 Inference
 
 - `fg.evaluate(Inference(...), engine="native"|"souffle"|"problog"|"pyreason")`
-  returns `list[CandidateSet]`
+  returns `EvaluateResult`
 - Public SDK `evaluate(...)` does not accept `mode=`; use `engine=`.
 - `head=[...]` is rejected in public SDK `Inference`; use one inference per head
-- `CandidateSet.confidence` semantics depend on engine:
-  - `native` / `souffle` → `None`
-  - `problog` → probability `float`
-  - `pyreason` → lower-bound `float`
-- `engine_options`: call-time runtime config (e.g.
-  `fg.evaluate(..., engine_options={"timesteps": 5})`); never enters
-  `Inference` or ledger
+- `EvaluateRow.raw_kind` and `EvaluateRow.bound` carry public quantitative
+  results when an adapter produces them.
+- `engine_options=` is rejected; use public `semantics=` wrappers.
 - Public `Rule` / `Inference` objects do not carry adapter-specific
   `engine_ext` parameters. `SemanticsProfile.rule_projection` owns
   engine-specific rule projection.
@@ -559,9 +511,9 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
   certainty/explain projection input. It is not an engine adapter
   parameter, and future runtime configuration for this lane belongs in
   `SemanticsProfile.certainty_projection`.
-- Semantic annotations: PyReason produces `pyreason/semantic/*`,
-  ProbLog produces `problog/semantic/probability`. Persist post-accept
-  via `persist_pyreason_annotations()` or `persist_problog_annotations()`
+- Semantic annotations: PyReason and ProbLog may produce adapter-native
+  evidence; T5 public SDK code consumes it through `EvaluateRow` and
+  `Explanation`.
 - User-authored raw uncertainty uses paired
   `meta={"raw_kind": "probabilistic"|"possibilistic", "bound": [lower, upper]}`.
   `probability`, `bound_lower`, and `bound_upper` are not accepted as write
@@ -576,11 +528,11 @@ environment variable > `"dict"` default.
 `FACTPY_ROW_FORMAT` is read once at `SDKStore` initialization and
 cached. `row_format="tuple"` still works but emits `DeprecationWarning`.
 
-### 6.4 Accept
+### 6.4 Candidate accept removal
 
-`accept(CandidateSet, ...)` accepts exactly one positional candidate.
-Sugar keyword arguments: `approved_by`, `note`, `dry_run`,
-`identity_override` (also via `meta_overrides`).
+`accept(CandidateSet, ...)` and `accept_many(...)` are removed from the public
+SDK path. Evaluation is read-only; explicit writes go through `fg.write.*` or
+`fg.batch(...)`.
 
 ---
 

@@ -6,9 +6,9 @@ patterns over those facts.
 A `Rule` asks the graph what is already true. It is a reusable read query over
 the current snapshot.
 
-An `Inference` proposes new facts from existing facts. It does not write by
-itself. Evaluation produces candidates, and accepting a candidate appends the
-new assertion to the ledger.
+An `Inference` evaluates possible derived rows from existing facts. It does not
+write by itself. Evaluation returns an `EvaluateResult`; explicit writes still
+go through `fg.write.*` or `fg.batch(...)`.
 
 The short version is:
 
@@ -16,7 +16,7 @@ The short version is:
 | --- | --- |
 | Read matching facts | `Rule` + `fg.eval.run(...)` |
 | Propose new facts | `Inference` + `fg.eval.evaluate(...)` |
-| Commit proposed facts | `fg.eval.accept(...)` |
+| Explain evaluated rows | `row.explain()` / `fg.eval.explain(...)` |
 | Inspect rule shape | `fg.rules.inspect(...)` |
 
 ## Start with facts
@@ -139,45 +139,33 @@ with vars("u", "tag") as (u, tag):
     )
 ```
 
-`fg.eval.evaluate(...)` returns candidate fact sets. It is still read-only.
+`fg.eval.evaluate(...)` returns an `EvaluateResult`. It is read-only.
 
 ```python
-candidates = fg.eval.evaluate(tags_from_seed)
+result = fg.eval.evaluate(tags_from_seed)
 
-assert len(candidates) == 1
-assert candidates[0].target == "user:tag"
-assert candidates[0].derivation_id == "inf.tags_from_seed"
+assert result.count() == 1
+row = result.first()
+assert row is not None
+assert row.claim.name == "user:tag"
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 ```
 
-The candidate says "this inference can write `user:tag` for this user with this
-value." It has not changed the graph yet.
+The row says "this inference can derive `user:tag` for this user with this
+value." It has not changed the graph.
 
-## Accept a candidate
-
-Accepting is the commit step. It appends assertion records for the candidate
-facts.
+## Explain a row
 
 ```python
-accepted = fg.eval.accept(candidates[0])
+explanation = row.explain()
+closed_head = row.close()
+manual = fg.eval.explain(tags_from_seed, head=closed_head)
 
-assert accepted.accepted_count == 1
-assert accepted.written_assertions[0]["pred_id"] == "user:tag"
-
-after = fg.read.get(User, user_id="u-1")
-
-assert after is not None
-assert tuple(after.tag) == ("engineer",)
+assert explanation.status == "passed"
+assert manual.status == "passed"
 ```
 
-This two-step workflow is intentional:
-
-1. `evaluate` explains what could be written.
-2. `accept` decides what actually enters the ledger.
-
-That separation is useful when you want to inspect candidates, apply a review
-step, compare engines, or keep inferred facts out of the graph until a user
-approves them.
+Use explicit write APIs when you want to persist new facts.
 
 ## Inspect rule shape
 
@@ -208,8 +196,8 @@ In the quickstart, keep the model simple:
 
 - `Rule` reads.
 - `Inference` proposes.
-- `CandidateSet` waits for review.
-- `accept` writes.
+- `EvaluateResult` rows wait for review.
+- explicit writes persist changes.
 - Keep reusable rule/inference definitions in Python code and pass the value
   objects directly to runtime methods.
 
@@ -220,7 +208,7 @@ semantics options for engines such as ProbLog and PyReason. Those options
 change how an inference is evaluated; they do not change the basic lifecycle:
 
 ```text
-Inference -> evaluate -> CandidateSet -> accept -> ledger assertion
+Inference -> evaluate -> EvaluateResult rows -> explain/close -> explicit writes if needed
 ```
 
 Learn the lifecycle first. Engine-specific semantics are an advanced topic.
@@ -284,15 +272,12 @@ with vars("u", "tag") as (u, tag):
         head_vars=[u, tag],
     )
 
-candidates = fg.eval.evaluate(tags_from_seed)
+result = fg.eval.evaluate(tags_from_seed)
 
-assert len(candidates) == 1
+assert result.count() == 1
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 
-accepted = fg.eval.accept(candidates[0])
-
-assert accepted.accepted_count == 1
-assert accepted.written_assertions[0]["pred_id"] == "user:tag"
+fg.write.add(User.tag, alice, "engineer")
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
 
 inspected = fg.rules.inspect(tags_from_seed)
@@ -314,8 +299,8 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
   proposed facts.
 - Evaluate inferences with `fg.eval.evaluate(inference)`; evaluation does not
   write.
-- Accept candidates with `fg.eval.accept(candidate)` or
-  `fg.eval.accept_many(candidates)`.
+- Explain rows with `row.explain()` or replay with
+  `fg.eval.explain(expr, head=row.close())`.
 - Inspect rule or inference structure with `fg.rules.inspect(...)`.
 - `RuleRef` is a body-composition tool, not a persistence handle.
 - Rule and inference persistence handles were removed; runtime methods consume

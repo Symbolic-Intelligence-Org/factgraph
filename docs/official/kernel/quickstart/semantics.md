@@ -7,7 +7,7 @@ Semantics are call-time configuration. They do not live inside the inference
 template, and they do not change the ledger lifecycle:
 
 ```text
-Inference -> evaluate -> CandidateSet -> accept -> ledger assertion
+Inference -> evaluate -> EvaluateResult rows -> explain/close -> explicit writes if needed
 ```
 
 Use this page to learn the shape of the public API. It does not teach the
@@ -197,19 +197,21 @@ Public wrappers return wrapper metadata plus a lowered-profile preview.
 `SemanticsProfile` is already canonical, so inspection returns the canonical
 inspection directly.
 
-## Semantics do not change acceptance
+## Semantics do not write facts
 
-Semantics choose how candidates are produced. Acceptance is still explicit.
+Semantics choose how rows are evaluated. Evaluation is still read-only.
 
 ```python
 before = fg.read.get(User, user_id="u-1")
 assert tuple(before.tag) == ()
 
-candidate = candidates[0]
-fg.eval.accept(candidate)
+result = fg.eval.evaluate(inference, semantics=ProbLogSemantics(...))
+row = result.first()
+assert row is not None
+assert row.raw_kind == "probabilistic"
 
 after = fg.read.get(User, user_id="u-1")
-assert tuple(after.tag) == ("engineer",)
+assert tuple(after.tag) == ()
 ```
 
 Keep this separation in mind:
@@ -218,8 +220,8 @@ Keep this separation in mind:
 | --- | --- |
 | `Inference` | What could be derived? |
 | `semantics=...` | How should an engine evaluate it? |
-| `CandidateSet` | What did evaluation propose? |
-| `accept(...)` | Which candidate facts enter the ledger? |
+| `EvaluateResult` / `EvaluateRow` | What did evaluation derive? |
+| explicit writes | Which facts enter the ledger? |
 
 ## What not to do
 
@@ -289,11 +291,13 @@ except SDKStoreError as exc:
 else:
     raise AssertionError("mismatched engine should be rejected")
 
-candidates = fg.eval.evaluate(inference)
+result = fg.eval.evaluate(inference)
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 
-fg.eval.accept(candidates[0])
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
+row = result.first()
+assert row is not None
+assert row.explain().status == "passed"
+assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 ```
 
 ## Syntax checklist

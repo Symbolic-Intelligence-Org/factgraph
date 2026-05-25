@@ -46,17 +46,18 @@ advanced users.
 | [`02_readwrite_and_ingest.en.md`](02_readwrite_and_ingest.en.md) | In-depth reference for `read`, `write`, `schema.ingest`, `schema.validate_provenance`. |
 | [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md) | In-depth reference for the DSL (`Rule`, `Query`, `Inference`) and the `eval` namespace. |
 | [`04_api_surface.en.md`](04_api_surface.en.md) | Full public API index with every method signature, every export, every error class. |
-| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | Tutorial for the nine `what_if.*` and `audit.*` methods. |
+| [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md) | T5 evidence and closed-head replay overview. |
 | [`07_walker_and_advanced.en.md`](07_walker_and_advanced.en.md) | When and why to use direct imports (walker views, recorder, raw DTOs, engine adapters). |
 
 ## Stability and Versioning
 
 - `factgraph.sdk.__all__` is the product surface. Removing or renaming an
   exported name requires a major version bump.
-- The `FactGraph` namespaced form (`fg.read.get`, `fg.what_if.check`,
-  etc.) is the recommended shape for new code.
-- The flat form (`fg.get`, `fg.check`, etc.) is **permanently
-  supported** foundational API. Never deprecated, never removed.
+- The `FactGraph` namespaced form (`fg.read.get`, `fg.write.set`,
+  `fg.eval.evaluate`, etc.) is the recommended shape for new code.
+- Flat read/write aliases such as `fg.get` remain foundational. Legacy evidence
+  shells such as direct `fg.check` / `fg.why_not` are not part of the T5 public
+  evidence path.
 - Behaviors in the docs are labeled **stable contract** (safe to assert
   against), **current behavior** (subject to evolution), or **current
   boundary** (a deliberate non-feature). See

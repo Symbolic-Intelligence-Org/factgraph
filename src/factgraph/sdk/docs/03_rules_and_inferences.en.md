@@ -1,32 +1,29 @@
 # SDK Rule / Query / Inference DSL
 
-Scope: `src/factgraph/sdk/dsl` + the `eval` and `what_if` namespaces of
+Scope: `src/factgraph/sdk/dsl` + the `eval` namespace of
 `FactGraph` / `SDKStore`. For the introductory walkthrough see
 [`00_user_guide.en.md`](00_user_guide.en.md); for the API index see
-[`04_api_surface.en.md`](04_api_surface.en.md); for what-if examples
-see [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
+[`04_api_surface.en.md`](04_api_surface.en.md).
 
 In the snippets below, `fg = FactGraph.create(schema_classes=[...])`.
 All flat methods are also reachable through namespaces:
 
-| Flat | Namespaced | Namespace |
-|---|---|---|
-| `fg.run / evaluate / accept / accept_many` | `fg.eval.<verb>` | `eval` |
-| `fg.check / diagnose / why_not` | `fg.what_if.<verb>` | `what_if` |
-| `fg.check_fact_overlay / recheck_proof_frame` | `fg.what_if.fact_overlay.{check, recheck_proof_frame}` | `what_if.fact_overlay` |
-| `fg.check_rule_disable / check_rule_literal_replace / check_rule_add_condition` | `fg.what_if.rule.{disable, literal_replace, add_condition}` | `what_if.rule` |
+| Public entrypoint | Namespace |
+|---|---|
+| `fg.eval.evaluate(...)` | Evaluate an `Inference`, `Rule`, or `RuleExpr` and return `EvaluateResult` |
+| `fg.eval.explain(expr, head=closed_head, ...)` | Replay a closed-head explanation and return `Explanation` |
+| `fg.eval.inspect_semantics(...)` | Inspect semantics configuration without running an engine |
 
-Both forms have identical semantics. The flat form is permanently
-supported.
+Legacy `run`, `accept`, `accept_many`, direct `check` / `diagnose` /
+`why_not`, and `what_if.*` shells are not part of the T5 public evidence
+path.
 
 ### Engine runtime options
 
 - Public `Rule` and `Inference` objects are engine-independent business
   templates. They do not carry adapter-specific `engine_ext` parameters.
-- `engine_options` is **call-time** runtime configuration passed at
-  `evaluate(...)` (e.g. `fg.eval.evaluate(inf, engine_options={"timesteps": 5})`).
-  It never enters the `Inference` or the ledger. `engine="native"`
-  rejects non-empty `engine_options`.
+- Public `evaluate(...)` rejects `engine_options=` and `registry=`.
+  Runtime-specific semantics are expressed through `semantics=`.
 - Track 2 makes `ProbLogSemantics` and `PyReasonSemantics` the
   preferred public SDK wrappers for engine-specific semantics.
   `SemanticsProfile` remains the advanced/canonical profile shape.
@@ -191,17 +188,16 @@ Adapter status:
 
 ## 3.3 RuleExpr Authoring Surface
 
-RuleExpr is the application-rule composition surface. During the staged T1.3/T3
-period, top-level `factgraph.sdk.Rule` remains the legacy SDK Rule. Use
-`ApplicationRule` for direct application DTO imports, or use
-`build_application_rule(...)` when starting from SDK DSL syntax:
+RuleExpr is the application-rule composition surface. Top-level
+`factgraph.sdk.Rule` is the application protocol Rule. `ApplicationRule`
+remains a transition alias, but new code should import `Rule`:
 
 ```python
-from factgraph.sdk import ApplicationRule, RuleExpr, build_application_rule, vars
+from factgraph.sdk import Rule, RuleExpr, build_application_rule, vars
 ```
 
-`factgraph.sdk.ApplicationRule` and `factgraph.application.protocol.Rule` are
-the same runtime type. The final top-level `Rule` name flip is deferred to T5.
+`factgraph.sdk.Rule` and `factgraph.application.protocol.Rule` are the same
+runtime type.
 
 ### Building operands
 
@@ -359,15 +355,14 @@ consistency but does not define closed-head semantics.
 when you provide an application `Rule` as `head=`:
 
 ```python
-candidates = fg.eval.evaluate(expr, head=active_user, engine="native")
+result = fg.eval.evaluate(expr, head=active_user, engine="native")
 ```
 
-The public success shape is the existing `list[CandidateSet]`; no RuleExpr
-result wrapper or public trace DTO is returned. A single application `Rule`
+The public success shape is `EvaluateResult`. A single application `Rule`
 input is treated like a one-rule RuleExpr:
 
 ```python
-candidates = fg.eval.evaluate(active_user, head=active_user)
+result = fg.eval.evaluate(active_user, head=active_user)
 ```
 
 For execution, application `Rule` ids that are not valid default occurrence
@@ -503,66 +498,40 @@ Valid cross-coordinate primary-key comparison is lowered to shared system vars (
 
 System-prefixed temporary names are reserved.
 
-## 8. `evaluate/accept` Runtime Semantics
+## 8. `evaluate` Runtime Semantics
 
 ### 8.1 `sdk.evaluate(...)`
 
 ```python
-cands = sdk.evaluate(inf, engine="native")
+result = sdk.evaluate(inf, engine="native")
 ```
 
 - `engine`: `native` (default) / `souffle` / `problog` / `pyreason`.
-- SDK lowers `Inference` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK remains responsible for mode alias rejection, registry sugar, and outward compatibility.
+- SDK lowers `Inference` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK returns the T5 `EvaluateResult` envelope.
 - Legacy `mode='python'` / `mode='engine'` **values** fail with explicit rename hints (use `mode='native'` / `mode='souffle'` respectively); enforced at `factgraph/core/store/_evaluate.py:50,52`.
 - `souffle` / `problog` / `pyreason` require registered adapters (for example `import factgraph.adapters.souffle`, `import factgraph.adapters.problog`, `import factgraph.adapters.pyreason`).
 - `sdk.evaluate(..., view=...)` and `sdk.evaluate(..., policy=...)` are
   not supported; inference always uses the full active assertion set.
-- `engine_options` is call-time engine run-time configuration, for example `sdk.evaluate(inf, engine="pyreason", engine_options={"timesteps": 5})`.
-- `engine_options` does not enter `Inference` or `to_authoring_payload()`; `mode="native"` rejects non-empty `engine_options`.
+- `engine_options=` and `registry=` are rejected at the public boundary.
 - RuleExpr execution uses the same public entrypoint as inference evaluation:
   `sdk.evaluate(expr, head=application_rule, engine=...)` returns
-  `list[CandidateSet]`. `head=` is required and must be an application `Rule`;
+  `EvaluateResult`. `head=` is required and must be an application `Rule`;
   legacy SDK `Rule` / `Inference` objects are rejected as heads.
 
-### 8.2 `CandidateSet` key fields
+### 8.2 `EvaluateResult` key fields
 
-- `candidate_id`: per-run handle
-- `candidate_key`: cross-run stable key
-- `candidate_kind`: `fact` / `entity`
-- `confidence` / `confidence_kind`: internal/session output carriers only.
-  ProbLog and PyReason may set them on `CandidateSet`, but service DTOs do not
-  expose them by default and `accept(...)` does not persist them as assertion
-  meta.
-- Candidate `confidence` is not the canonical raw uncertainty carrier.
-  User-authored raw uncertainty belongs on facts as
-  `meta={"raw_kind": ..., "bound": [...]}` and is persisted to
-  `shared/semantic/raw_kind` plus `shared/semantic/bound`.
-- `payload`:
-  - fact: `{"pred_id": ..., "terms": [...]}`
-  - entity: `{"entity_type": ..., "resolved_identity": ..., ...}`
+- `result_id`, `run_id`, and `result_digest` identify the evaluation envelope.
+- `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, and
+  `semantics_digest` are replay anchors.
+- `rows` is a tuple-like sequence of `EvaluateRow` values.
+- Each row exposes `bindings`, `claim`, `raw_kind`, `bound`, and an
+  `EvidenceRef`.
+- `row.explain()` returns an `Explanation`.
+- `row.close()` returns a closed application `Rule` that can be passed to
+  `fg.eval.explain(expr, head=closed_head, ...)`.
 
-### 8.3 `sdk.accept(...)`
-
-```python
-sdk.accept(candidate, approved_by="alice", note="ok", dry_run=False)
-```
-
-Accept sugar keys:
-- `approved_by`
-- `note`
-- `dry_run`
-- `identity_override` (for incomplete entity identity)
-- `meta_overrides` (can carry the same sugar keys)
-
-Parameter boundaries:
-- `accept(CandidateSet, ...)` accepts exactly one positional argument; extra positional arguments raise `SDKStoreError`.
-- `meta_overrides` only supports `approved_by` / `note` / `dry_run` / `identity_override`; unknown keys fail.
-- If the same sugar key is provided in both `meta_overrides` and top-level keyword args, SDK raises duplicate-option error.
-- Repeated accept on the same candidate is idempotent no-op (`duplicate`).
-- Same claim with different business-semantic meta such as `source` is
-  allowed to coexist.
-- Legacy candidate confidence differences alone do not affect duplicate
-  detection.
+`CandidateSet` remains an internal runtime artifact. Public code should use
+`EvaluateResult`, `EvaluateRow`, `row.explain()`, and `row.close()`.
 
 ## 9. Temporal Boundary (Current Status)
 
@@ -599,8 +568,10 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         head=User.name(locale=loc, name=nm),
     )
 
-fact = next(c for c in sdk.evaluate(inf) if c.candidate_kind == "fact")
-sdk.accept(fact, approved_by="alice")
+result = sdk.evaluate(inf)
+row = result.first()
+assert row is not None
+explanation = row.explain()
 ```
 
 ### 10.2 Entity candidate + dependent facts
@@ -614,5 +585,8 @@ with vars("u", "lang") as (u, lang):
         head=Speaks(user=u, language=lang),
     )
 
-rows = sdk.accept_many(sdk.evaluate(inf), mode="atomic")
+result = sdk.evaluate(inf)
+for row in result:
+    closed = row.close()
+    replay = sdk.eval.explain(inf, head=closed)
 ```

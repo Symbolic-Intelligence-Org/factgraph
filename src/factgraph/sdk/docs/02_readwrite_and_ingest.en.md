@@ -274,8 +274,7 @@ report = sdk.validate_provenance(obj, standard="derivation_v1")
 ```
 
 Inputs:
-- `CandidateSet`
-- `dict` (currently flat-key contract)
+- provenance/meta `dict` payloads
 
 Required keys for `derivation_v1`:
 - `derived_rule_id`

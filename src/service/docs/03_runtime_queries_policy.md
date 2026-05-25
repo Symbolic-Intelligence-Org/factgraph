@@ -1024,36 +1024,43 @@
   "errors": [],
   "meta": {
     "mode": "native",
-    "candidate_count": 1,
+    "result_id": "evalr_v1:...",
+    "row_count": 1,
     "returned_count": 1,
     "truncated": false
   },
   "evaluation": {
+    "result_id": "evalr_v1:...",
+    "run_id": "run_v1:...",
     "inference_id": "drv.country_copy",
     "version": "1.0.0",
     "target_pred_id": "person:country_copy",
-    "candidates": [
+    "engine": "native",
+    "expr_digest": "sha256:...",
+    "rule_set_digest": "sha256:...",
+    "view_snapshot_digest": "sha256:...",
+    "semantics_digest": null,
+    "result_digest": "sha256:...",
+    "rows": [
       {
-        "candidate_id": "cand_v2:...",
-        "candidate_key": "candk_v2:...",
-        "candidate_kind": "fact",
-        "derivation_id": "drv.country_copy",
-        "derivation_version": "1.0.0",
-        "run_id": "run_123",
-        "target": "person:country_copy",
-        "key_tuple_digest": "sha256:abc",
-        "tup_digest": "sha256:def",
-        "payload": {
-          "pred_id": "person:country_copy",
-          "terms": [
-            {"kind": "entity_ref", "value": "idref_v1:Person:source_id=u1"},
-            {"kind": "literal", "tag": "string", "value": "de"}
-          ]
+        "row_id": "run_v1:...:0123456789abcdef",
+        "bindings": {"$E": "idref_v1:Person:source_id=u1", "$C": "de"},
+        "claim": {
+          "kind": "fact_triple",
+          "name": "person:country_copy",
+          "arguments": {"$E": "idref_v1:Person:source_id=u1", "$C": "de"},
+          "repr": "person:country_copy(...)",
+          "digest": "sha256:..."
         },
-        "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
-        "support_kind": "native_binding_v1",
-        "generated_at": 1730000000000000000,
-        "state": "generated"
+        "raw_kind": null,
+        "bound": null,
+        "evidence_ref": {
+          "ref_id": "evref_v1:...",
+          "result_id": "evalr_v1:...",
+          "row_id": "run_v1:...:0123456789abcdef",
+          "fact_digest": "sha256:...",
+          "closed_head_digest": "sha256:..."
+        }
       }
     ]
   }
@@ -1064,11 +1071,10 @@
 
 - 请求顶层使用 public `inference` vocabulary；嵌套的 `derivation_id`
   是 compiler-facing authoring payload 的 substrate key。
-- `evaluate` 返回完整 candidate 对象，供后续 `accept` 原样 round-trip。
-- candidate DTO 中的 `derivation_id` / `derivation_version` 也是
-  candidate/internal substrate 字段，不是 public `Derivation` value object。
-- candidate DTO 不再默认暴露 legacy `confidence` / `confidence_kind`
-  字段；这些值只保留为 store 内部/session carrier。
+- `evaluate` 返回 T5 `EvaluateResult` 表示，不返回 public CandidateSet。
+- `result_id` / `run_id` / digest 字段是 explain/replay anchors。
+- `rows[]` 是 public evaluation rows；每行包含 bindings、Claim、raw quantitative carrier 和 EvidenceRef。
+- CandidateSet payloads 只保留为 runtime/internal substrate，不再要求客户端 echo。
 - Souffle deterministic 路径内部仍可保留 `confidence_kind="none"`；
   ProbLog / PyReason 路径可在 `CandidateSet` 上保留 adapter summary。
 - runtime native inference 当前会在 create-time 注入 certainty resolver：
@@ -1141,7 +1147,7 @@
   - candidate static page 会在 degraded tree 之外追加统一 `EvidenceGraph` section
   - 这仍不等于 runtime live tree/summary/narrative/NL 支持
 - legacy `support_kind="none"` 只作为兼容读回值保留；新 writer 不再产生它。
-- `limit` 只影响返回条数，不改变底层总候选数；总量体现在 `meta.candidate_count`。
+- `limit` 只影响返回条数，不改变底层总 row 数；总量体现在 `meta.row_count`。
 - `temporal_view` 已移除；传入会返回 `$.temporal_view` 的 `shape` error。
 
 错误 kinds：
@@ -1154,88 +1160,43 @@
 
 ## 9. `POST /v1/runtime/sessions/{session_id}/inferences/accept`
 
-请求：
+该 CandidateSet accept endpoint 已移除。旧客户端调用会收到 error envelope；
+不会再解析或写入 echoed CandidateSet payload。
+
+请求可以是任意 object；内容会被拒绝：
 
 ```json
 {
-  "candidate": {
-    "candidate_id": "cand_v2:...",
-    "candidate_key": "candk_v2:...",
-    "candidate_kind": "fact",
-    "derivation_id": "drv.country_copy",
-    "derivation_version": "1.0.0",
-    "run_id": "run_123",
-    "target": "person:country_copy",
-    "key_tuple_digest": "sha256:abc",
-    "tup_digest": "sha256:def",
-    "payload": {
-      "pred_id": "person:country_copy",
-      "terms": [
-        {"kind": "entity_ref", "value": "idref_v1:Person:source_id=u1"},
-        {"kind": "literal", "tag": "string", "value": "de"}
-      ]
-    },
-    "support_digest": "sha256:6f3e4f9c2d1b8a7e6c5d4b3a291817161514131211100f0e0d0c0b0a09080706",
-    "support_kind": "native_binding_v1",
-    "generated_at": 1730000000000000000,
-    "state": "generated"
-  },
-  "options": {
-    "approved_by": "alice",
-    "note": "ok",
-    "dry_run": false
-  }
+  "candidate": {"candidate_id": "cand_v2:..."}
 }
 ```
 
-成功响应：
+响应：
 
 ```json
 {
-  "ok": true,
-  "errors": [],
-  "meta": {
-    "dry_run": false,
-    "terminal": false
-  },
-  "accept": {
-    "candidate_id": "cand_v2:...",
-    "candidate_key": "candk_v2:...",
-    "run_id": "run_123",
-    "accepted_count": 1,
-    "skipped_count": 0,
-    "written_assertions": [
-      {
-        "asrt_id": "A1",
-        "pred_id": "person:country_copy"
-      }
-    ],
-    "skipped_reason_counts": {},
-    "diagnostics_contract_version": 1,
-    "diagnostics": [],
-    "entity_ref": null
-  }
+  "ok": false,
+  "errors": [
+    {
+      "kind": "removed",
+      "message": "runtime inference accept was removed by the T5 EvaluateResult hard-cut",
+      "path": "$"
+    }
+  ]
 }
 ```
 
 说明：
 
-- 客户端应原样回传 `evaluate` 返回的 candidate 对象，不要裁剪字段。
-- candidate DTO 的 `derivation_id` / `derivation_version` 是
-  accept/proof/audit round-trip substrate 字段。
-- 为兼容旧客户端，accept 仍会解析 echoed `candidate.confidence` /
-  `candidate.confidence_kind` 字段；这些字段只 hydrate 内部 carrier，
-  不会写入 assertion meta 或 adapter semantic lanes。
-- fact candidate 必须保留完整 `payload.terms`。
-- entity candidate 必须保留 identity 相关字段（如 `entity_type / identity_fields / resolved_identity / missing_identity_fields / proposed_entity_ref`）。
-- `options.identity_override` 可选，用于 entity candidate 的 identity 覆盖。
-- `meta.terminal=true` 表示已进入终止态；当前至少覆盖 `skipped_reason_counts.aborted > 0`，客户端不应自动重试。
+- Evaluation is read-only.
+- Persist facts with explicit write APIs rather than CandidateSet accept.
+- CandidateSet remains available only to internal runtime code.
 
 错误 kinds：
 
 - `shape`
+- `removed`
 - `runtime_session_not_found`
-- `derivation_accept`
 
 ## 10. `POST /v1/runtime/sessions/{session_id}/queries/explain-fact`
 

@@ -87,16 +87,18 @@ with vars("u", "tag") as (u, tag):
         head_vars=[u, tag],
     )
 
-candidates = fg.eval.evaluate(tags_from_seed)
+result = fg.eval.evaluate(tags_from_seed)
 
-assert len(candidates) == 1
-assert candidates[0].target == "user:tag"
+assert result.count() == 1
+row = result.first()
+assert row is not None
+assert row.claim.name == "user:tag"
 ```
 
-Accepting a candidate writes ledger assertions:
+Evaluation is read-only. Persist facts with explicit writes:
 
 ```python
-fg.eval.accept(candidates[0])
+fg.write.add(User.tag, alice, "engineer")
 
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
 ```
@@ -249,8 +251,10 @@ with TemporaryDirectory() as tmp_dir:
 
     assert fg.eval.run(rule) == [{"u": alice, "tag": "engineer"}]
 
-    candidate = fg.eval.evaluate(inference)[0]
-    fg.eval.accept(candidate)
+    result = fg.eval.evaluate(inference)
+    row = result.first()
+    assert row is not None
+    fg.write.add(User.tag, alice, row.bindings["$tag"])
 
     assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
 

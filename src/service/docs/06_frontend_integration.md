@@ -144,11 +144,9 @@ r = await post(`/v1/runtime/sessions/${sessionId}/inferences/evaluate`, {
   },
 });
 
-// 4. accept 选中的 candidate —— 必须回传完整 payload
-for (const candidate of r.result.candidates) {
-  await post(`/v1/runtime/sessions/${sessionId}/inferences/accept`, {
-    candidate,                    // 完整 echo,不要裁 terms / identity
-  });
+// 4. consume EvaluateResult rows
+for (const row of r.evaluation.rows) {
+  console.log(row.row_id, row.bindings, row.evidence_ref);
 }
 ```
 
@@ -234,9 +232,11 @@ async function call<T extends Envelope>(
 
 (extraction 路由的状态码语义略有不同,见 agent.service.docs。)
 
-### 3.3 `inferences/accept` 要完整 echo candidate
+### 3.3 `inferences/accept` 已移除
 
-`POST /v1/runtime/sessions/{session_id}/inferences/accept` 的 request body **必须包含 evaluate 返回的完整 candidate payload**(含 `terms` / identity)。裁剪会触发 `shape` 错误。
+T5 后 evaluate 返回 `EvaluateResult.rows`，不返回 public `CandidateSet`
+payload。旧 `inferences/accept` CandidateSet echo workflow 已移除；前端应通过
+显式写入接口表达要持久化的事实。
 
 ### 3.5 `rest_terms` 是类型化二元组
 

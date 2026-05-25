@@ -35,11 +35,11 @@ principles run through the whole map:
    authoring assets. Registry mechanics back them, but the user-facing verb is
    the asset domain, not the storage layer.
 
-4. **Counterfactual vs. persisted review are different namespaces.**
-   `fg.what_if` is live counterfactual exploration that does not write to the
-   ledger. `fg.audit` is persisted-record explanation and cross-round review.
-   Mixing them would obscure the difference between "what could happen" and
-   "what already happened."
+4. **Evaluation evidence and persisted review are different surfaces.**
+   `fg.eval.evaluate(...)` returns rows that can explain or close themselves.
+   `fg.audit` is persisted-record explanation and cross-round review. Mixing
+   them would obscure the difference between "this evaluation row" and "what is
+   already stored."
 
 5. **Semantics are evaluate-time configuration.**
    `ProbLogSemantics` and `PyReasonSemantics` are call-time arguments to
@@ -125,21 +125,20 @@ described and executed.
 | --- | --- | --- |
 | `fg.rules` | `inspect(rule_or_inference_or_query)` | `inspect(...)` shows structure for in-memory `Rule`, `Inference`, or `Query` values. |
 | `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. |
-| `fg.eval` | `run(rule_or_query)`, `evaluate(inference, *, engine=None, semantics=None)`, `accept(candidate)`, `accept_many(candidates)`, `inspect_semantics(semantics_or_profile)` | `run(...)` is read-only and returns rows. `evaluate(...)` is read-only and returns `CandidateSet[]`. `accept(...)` writes ledger assertions and returns `AcceptResult`. `inspect_semantics(...)` previews wrapper or profile shape without running an engine. |
+| `fg.eval` | `evaluate(inference_or_expr, *, head=None, engine=None, semantics=None)`, `explain(expr, *, head=closed_head)`, `inspect_semantics(semantics_or_profile)` | `evaluate(...)` is read-only and returns `EvaluateResult`. `explain(...)` replays a closed-head explanation. `inspect_semantics(...)` previews wrapper or profile shape without running an engine. |
 
 Public DSL value objects are `Rule`, `Inference`, `Query`, `Branch`, `Pred`,
 `Not`, `RuleRef`, and `vars`. Saved rule/inference handles were removed; pass
 the value objects directly to `fg.eval.*`.
 
-## What-if and audit
+## Evidence and audit
 
 Different review surfaces with different boundaries.
 
 | Surface | Methods | Notes |
 | --- | --- | --- |
-| `fg.what_if` | `check(...)`, `diagnose(...)`, `why_not(...)` | Live counterfactual checks. No ledger writes. |
-| `fg.what_if.fact_overlay` | `check(...)`, `recheck_proof_frame(...)` | Counterfactuals layered on top of imagined facts without a registry write. |
-| `fg.what_if.rule` | `disable(...)`, `literal_replace(...)`, `add_condition(...)` | Counterfactuals over imagined rule edits. |
+| `EvaluateRow` | `explain()`, `close()` | Row-level evidence and closed-head replay anchors. |
+| `fg.eval` | `explain(expr, head=closed_head)` | Manual closed-head replay. |
 | `fg.audit` | `explain_fact(pred_id, e_ref, *value_atoms)`, `conflicts(pred_id, e_ref)`, `diff_proof_frames(...)` | Persisted-fact explanation and cross-round proof-frame diff. |
 
 `fg.audit.explain_fact(...)` is the user-facing bridge into evidence in the
@@ -198,7 +197,7 @@ same project; some are out of scope for `factpy-kernel` entirely.
 - Frontier introspection (`kernel.core.rules.frontier`); Why-not requires an
   explicit candidate universe.
 - Long-form proof / evidence rendering pipelines beyond the structured DTOs
-  returned by `fg.what_if.*` and `fg.audit.*`.
+  returned by `fg.eval.*` and `fg.audit.*`.
 
 ## Syntax checklist
 
@@ -224,11 +223,10 @@ same project; some are out of scope for `factpy-kernel` entirely.
   queries.
 - Rules and inferences are in-memory value objects; keep reusable definitions in
   Python code or application configuration.
-- `fg.eval.run(rule_or_query)` reads; `fg.eval.evaluate(inference, engine=...,
-  semantics=...)` proposes; `fg.eval.accept(candidate)` writes.
+- `fg.eval.evaluate(inference, engine=..., semantics=...)` returns
+  `EvaluateResult`; rows can be explained or closed for manual replay.
 - `fg.eval.inspect_semantics(...)` previews semantics shape; it does not run an
   engine.
-- `fg.what_if.*` is live counterfactual exploration without ledger writes.
 - `fg.audit.explain_fact(...)`, `fg.audit.conflicts(...)`, and
   `fg.audit.diff_proof_frames(...)` inspect persisted records.
 - `fg.package.export_package(...)` / `fg.package.run_package(...)` is for

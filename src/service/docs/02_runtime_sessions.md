@@ -568,7 +568,7 @@ Query 参数：
 - `shape`
 - `runtime_session_not_found`
 
-## 10B. `GET /v1/runtime/sessions/{session_id}/candidates`
+## 10B. Legacy/internal `GET /v1/runtime/sessions/{session_id}/candidates`
 
 Query 参数：
 
@@ -596,7 +596,9 @@ Query 参数：
 
 说明：
 
-- 返回的是当前 session store 中已登记的 candidate handles，适合长循环 / 中断恢复后的 candidate rediscovery。
+- 返回的是当前 session store 中已登记的 legacy/internal candidate handles。
+  T5 public evaluation uses `/inferences/evaluate` `EvaluateResult.rows`;
+  this endpoint is not the public evaluate/accept workflow.
 - 每条只返回 v1 可稳定读取的 store-level metadata：
   - `candidate_id`
   - `pred_id`

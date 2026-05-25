@@ -221,10 +221,10 @@ from factgraph.audit.round_events import RoundEvent
 
 ## 4. Compiled-plan boundary
 
-`fg.eval.evaluate_compiled(...)` and `fg.eval.accept_compiled(...)` are
-not part of the public SDK surface. The SDK accepts an `Inference` and
-performs lowering through `fg.eval.evaluate(inf, engine=...)`; compiled
-plan DTOs remain application/substrate objects.
+Compiled-plan evaluate/accept helpers are not part of the public SDK surface.
+The SDK accepts an `Inference` and performs lowering through
+`fg.eval.evaluate(inf, engine=...)`; compiled plan DTOs remain
+application/substrate objects.
 
 If you genuinely need to reuse a lowered plan across calls, construct a
 `factgraph.application.protocol.CompiledDerivationPlan` directly and feed it
@@ -276,9 +276,8 @@ for row in result.rows:                         # → tuple[NativeWhereFrontierR
 
 Use case: building a custom audit tool that needs to see the
 evaluator's working set during a `where`-clause evaluation. Most
-users do not need this — the frontier trace is what powers Why-not
-internally, and `fg.what_if.why_not(...)` is almost always the
-right entry point. Read the module source for argument shape; the
+users do not need this; T5 public evidence is exposed through
+`EvaluateResult`, `EvaluateRow`, and `Explanation`. Read the module source for argument shape; the
 public surface is small but precise.
 
 ---

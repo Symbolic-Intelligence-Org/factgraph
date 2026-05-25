@@ -35,26 +35,25 @@ with vars("u",) as (u,):              # rule declaration
     )
 ```
 
-### Candidate
+### Evaluation Row
 
-A *candidate* is an `Eval` output that has not been written yet. When
-`fg.eval.evaluate(...)` runs a derivation, it returns a list of
-`CandidateSet`s — proposed facts plus their evidence. Nothing is in
-the ledger until you `accept(...)` them.
+An *evaluation row* is an `EvaluateResult` row produced by
+`fg.eval.evaluate(...)`. Evaluation is read-only; rows carry bindings, a Claim,
+raw quantitative carriers, and an EvidenceRef.
 
 ```python
-candidates = fg.eval.evaluate(deriv)
-candidates[0].candidate_kind          # "fact" or "entity"
-candidates[0].payload                 # the proposed fact / entity body
-candidates[0].confidence              # float | None (engine-dependent)
-candidates[0].confidence_kind         # "none" | "probability" | "certainty"
-candidates[0].support_digest          # sha256 token of the supporting evidence
+result = fg.eval.evaluate(deriv)
+row = result.first()
+assert row is not None
+row.bindings
+row.claim.digest
+row.raw_kind
+row.bound
+row.evidence_ref.ref_id
 ```
 
-The supporting evidence itself (a `SupportArtifact`) is reachable
-*only* via `fg.what_if.check(...)` — see the proof-trace block below.
-`CandidateSet` deliberately keeps just the digest so the run/accept
-path stays narrow.
+The supporting evidence is reachable through `row.explain()`. A row can also
+produce a closed replay head with `row.close()`.
 
 ### Assertion
 
@@ -96,12 +95,13 @@ support artifacts — concretely `ProofFrameRecheckResult`
 named `ProofFrame`.
 
 ```python
-result = fg.what_if.check(my_deriv, binding)
-result.evidence_envelope.engine_payload  # SupportArtifact
+result = fg.eval.evaluate(my_deriv)
+row = result.first()
+assert row is not None
+row.explain()
 ```
 
-The same proof structure powers `diagnose`, `recheck_proof_frame`,
-`why_not`, and `diff_proof_frames`.
+Persisted proof-frame comparison remains under `fg.audit.*`.
 
 ---
 
@@ -179,15 +179,14 @@ Works. The split matters when you're building tooling on top of
 factgraph.
 
 RuleExpr uses this split deliberately. User-facing examples should start from
-SDK ergonomics (`build_application_rule(...)`) or the staged
-`ApplicationRule` export, while the expression values themselves are application
-protocol objects. `fg.rules.inspect(...)` also reflects the split: legacy SDK
-`Rule` / `Inference` inputs return the preserved dict shape, while application
-`Rule` and RuleExpr inputs return `RuleExprInspect`.
-Execution follows the same boundary. `fg.eval.evaluate(expr, head=application_rule, engine=...)`
-accepts application `Rule` / RuleExpr inputs and still returns the existing
-`list[CandidateSet]`; private lowering, trace, and adapter-support DTOs are not
-SDK exports.
+SDK ergonomics (`build_application_rule(...)`) or the top-level `Rule` export,
+while the expression values themselves are application protocol objects.
+`fg.rules.inspect(...)` also reflects the split: legacy SDK `Inference` inputs
+return the preserved dict shape, while application `Rule` and RuleExpr inputs
+return `RuleExprInspect`.
+Execution follows the same boundary. `fg.eval.evaluate(expr, head=rule, engine=...)`
+accepts application `Rule` / RuleExpr inputs and returns `EvaluateResult`;
+private lowering, trace, and adapter-support DTOs are not SDK exports.
 For application `Rule` inspect values, `RuleExprInspect.is_closed` and
 `RuleExprInspect.unbound_ports` report the strict closed-head inspect subset.
 Structural RuleExpr inspect carries default fields for shape consistency but

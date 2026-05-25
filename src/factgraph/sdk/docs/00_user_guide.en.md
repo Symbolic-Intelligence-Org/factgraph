@@ -146,14 +146,13 @@ relationship schema IR directly.
 ### Provenance validation
 
 ```python
-report = fg.schema.validate_provenance(candidate)  # also: fg.validate_provenance
+report = fg.schema.validate_provenance(provenance_payload)  # also: fg.validate_provenance
 report.ok                # True if everything passes
 report.warnings          # list[dict] — non-fatal advisories
 report.errors            # list[dict], each: {code, severity, path, message, data}
 ```
 
-This inspects a `CandidateSet` (or a provenance/meta dict) **without**
-writing. Returns a
+This inspects provenance/meta payloads **without** writing. Returns a
 `ValidationReport(ok, warnings, errors, diagnostics_contract_version)`.
 
 ---
@@ -397,7 +396,7 @@ fg.write.set(User.name, ref, "Alice", meta={"confidence_source": "ml"})   # ❌ 
 | Update multiple fields atomically on one entity | `fg.write.edit(...)` context manager |
 | Group writes across multiple entities | `fg.batch(...)` context manager |
 | Bulk-insert from external data | `fg.ingest(...)` |
-| Persist derived facts | `fg.eval.accept(...)` (handles meta automatically) |
+| Explain derived rows | `row.explain()` or `fg.eval.explain(expr, head=row.close())` |
 
 ---
 
@@ -407,16 +406,16 @@ Three primitives:
 
 | | Purpose | Returned by |
 |---|---|---|
-| `Rule` | Single-rule inference (`select` + `where`); produces rows | `fg.eval.run(rule)` → `list[dict]` (default) |
-| `Query` | Read-side projection over the current store; produces rows | `fg.eval.run(query)` → `list[dict]` (default) |
-| `Inference` | A single inference (one head); produces accept-ready candidates | `fg.eval.evaluate(inf, engine=...)` → `list[CandidateSet]` |
-| `ApplicationRule` / `RuleExpr` | Application-rule composition; produces accept-ready candidates when evaluated with an inline, external, or projection application `head=` | `fg.eval.evaluate(expr, head=app_rule, engine=...)` → `list[CandidateSet]` |
+| `Rule` | Application protocol Rule used as an evaluation head or closed replay head | `from factgraph.sdk import Rule` |
+| `Query` | Read-side projection over the current store | `fg.read.*` and query helpers |
+| `Inference` | A single inference (one head); produces evaluation rows | `fg.eval.evaluate(inf, engine=...)` → `EvaluateResult` |
+| `RuleExpr` | Application-rule composition; evaluates with an inline, external, or projection `head=` | `fg.eval.evaluate(expr, head=rule, engine=...)` → `EvaluateResult` |
 
 All three are constructed inside a `with vars(...) as (...):` block.
 For the deeper DSL spec see
 [`03_rules_and_inferences.en.md`](03_rules_and_inferences.en.md).
-That spec also covers the staged RuleExpr authoring surface:
-`ApplicationRule` / `build_application_rule(...)`, `&` / `|` composition,
+That spec also covers the RuleExpr authoring surface:
+`Rule` / `build_application_rule(...)`, `&` / `|` composition,
 explicit `.eq(...)` joins, `.join_by_ports(...)`, bool guards, and
 `fg.rules.inspect(...)` return-shape differences.
 RuleExpr execution uses that same staged surface: pass an application `Rule` or
@@ -539,75 +538,52 @@ with vars("d", "kw") as (d, kw):
         head=Document.keywords(value=kw),  # fact-candidate head
     )
 
-candidates = fg.eval.evaluate(inf, engine="native")           # → list[CandidateSet]
-candidates = fg.eval.evaluate(inf, engine="problog")          # probabilistic
-candidates = fg.eval.evaluate(inf, engine="pyreason",
-                              engine_options={"timesteps": 5})  # temporal
+result = fg.eval.evaluate(inf, engine="native")               # → EvaluateResult
+result = fg.eval.evaluate(inf, engine="problog")              # probabilistic rows
+result = fg.eval.evaluate(inf, semantics=PyReasonSemantics(...))
 ```
 
 `engine` is **call-time**, not stored on the `Inference`. Allowed values:
 `"native"` (default), `"souffle"`, `"problog"`, `"pyreason"`.
-`engine="native"` rejects non-empty `engine_options`. The public SDK
-`mode=` keyword is removed in Track 3 / E; use `engine=`.
+The public SDK rejects `engine_options=`, `registry=`, and the removed
+`mode=` keyword. Use `engine=` and `semantics=`.
 
 For multiple output facts, define separate inferences. This keeps the
 public runtime call-site aligned with `SemanticsProfile` and with the
 what-if shells, all of which are single-head surfaces.
 
-`CandidateSet` keeps internal/session `confidence` and `confidence_kind`
-carriers for engine summaries, but service candidate DTOs do not expose those
-legacy fields by default. Public code should treat candidates as identity,
-payload, support, and evidence handles:
+`EvaluateRow.raw_kind` and `EvaluateRow.bound` are the public quantitative
+carriers. Public code should treat `EvaluateResult` rows as bindings, claims,
+and evidence anchors:
 
-| Engine | `confidence` | `confidence_kind` |
+| Engine | `raw_kind` | `bound` |
 |---|---|---|
-| `native` / `souffle` | `None` | `"none"` |
-| `problog` | probability `float` ∈ `(0, 1]` | `"probability"` |
-| `pyreason` | lower-bound `float` ∈ `(0, 1]` | `"certainty"` |
+| `native` / `souffle` | `None` | `None` |
+| `problog` | `"probabilistic"` | probability point interval |
+| `pyreason` | `"possibilistic"` | certainty interval |
 
-### Accept
-
-```python
-result = fg.eval.accept(
-    candidates[0],
-    approved_by="u-admin",
-    note="weekly batch",
-)
-```
-
-`accept` writes the candidate's facts into the ledger. Sugar keys:
-`approved_by`, `note`, `dry_run`, `identity_override` — each can also
-be passed via `meta_overrides={...}` (but not in both at once).
-
-Batch:
+### Explain
 
 ```python
-results = fg.eval.accept_many(
-    candidates,
-    mode="atomic",                # or "best_effort"
-    idempotent_duplicate_ok=True, # default — skip already-accepted
-)
+row = result.first()
+assert row is not None
+explanation = row.explain()
+closed_head = row.close()
+manual = fg.eval.explain(inf, head=closed_head)
 ```
 
-- Re-accepting the same candidate is idempotent (returns
-  `result.kind="duplicate"`) when `idempotent_duplicate_ok=True`.
-- Same claim with different business metadata such as `source` can create a
-  separate assertion. Legacy candidate confidence differences alone do not
-  change duplicate detection.
-- `mode="atomic"` rolls the whole batch back on any failure;
-  `"best_effort"` accepts what it can.
+Evaluation is read-only. Candidate accept shells are not part of the T5 public
+SDK; persist new facts with explicit `fg.write.*` or `fg.batch(...)` writes.
 
 ### Engine runtime options
 
 ```python
-fg.eval.evaluate(inf, engine="pyreason", engine_options={"timesteps": 10})
+fg.eval.evaluate(inf, semantics=PyReasonSemantics(temporal_projection={"timesteps": 10}))
 ```
 
-`engine_options` is **call-time** runtime config. It never enters
-`Rule`, `Inference`, authoring payloads, or the ledger. Engine-specific
-rule projection is intentionally not carried by public SDK rule objects.
-Track 2 adds lightweight public semantics wrappers as the preferred SDK
-authoring shape:
+Engine-specific rule projection is intentionally not carried by public SDK
+rule objects. Track 2 adds lightweight public semantics wrappers as the
+preferred SDK authoring shape:
 
 ```python
 from factgraph.sdk import Branch, ProbLogSemantics, PyReasonSemantics
@@ -655,57 +631,29 @@ more stable when an inference's branch order changes.
 
 ### Semantic annotations
 
-PyReason runs produce `pyreason/semantic/*` annotations; ProbLog runs
-produce `problog/semantic/probability`. These are persisted by adapter
-helpers (not flat methods on `fg`):
+PyReason and ProbLog adapters may produce engine-native evidence and
+quantitative carrier data during evaluation. T5 public SDK code reads those
+through `EvaluateRow.raw_kind`, `EvaluateRow.bound`, and `row.explain()`;
+adapter-native annotation persistence is not a public SDK accept workflow.
 
-```python
-from factgraph.adapters.pyreason.accept import persist_pyreason_annotations
-from factgraph.adapters.problog.accept  import persist_problog_annotations
-
-accept_result = fg.eval.accept(candidates[0])
-
-persist_pyreason_annotations(fg.ledger, run_id="run-1", store=fg, accept_result=accept_result)
-persist_problog_annotations(fg.ledger,  run_id="run-1", store=fg, accept_result=accept_result)
-```
-
-Each helper walks the accept result, maps every accepted candidate to
-its persisted `asrt_id`, and writes the engine-specific annotation
-records into the ledger's annotation store.
-
-These engine-native annotations are not the SDK's user-authored raw
-uncertainty contract. For new writes, use `meta={"raw_kind": ..., "bound": ...}`.
+For new user-authored writes, use
+`meta={"raw_kind": ..., "bound": ...}`.
 
 ---
 
-## 6. What-if
+## 6. Evidence And Why-Not
 
-Counterfactual analysis without writing to the ledger. The full tour
-is in [`06_what_if_and_proof.en.md`](06_what_if_and_proof.en.md).
-
-Quick reference:
+The public evidence path is `EvaluateResult` plus `Explanation`:
 
 | Method | Question |
 |---|---|
-| `fg.what_if.check(deriv, binding)` | Does this fact derive? |
-| `fg.what_if.diagnose(deriv, binding)` | Why does it derive (or why not)? |
-| `fg.what_if.fact_overlay.check(deriv, binding, overlay)` | What if facts were different? |
-| `fg.what_if.fact_overlay.recheck_proof_frame(support, overlay)` | Re-check a held proof under overlay |
-| `fg.what_if.rule.disable(rule, support, ...)` | What if this body literal were disabled? |
-| `fg.what_if.rule.literal_replace(rule, support, ...)` | What if this literal were replaced? |
-| `fg.what_if.rule.add_condition(rule, support, ...)` | What if we added this condition? |
-| `fg.what_if.why_not(deriv, candidates)` | Across this candidate universe, what doesn't derive and why? |
+| `row.explain()` | Why did this evaluated row pass? |
+| `row.close()` | Produce a closed Rule replay head for this row |
+| `fg.eval.explain(expr, head=closed_head)` | Replay a closed-head explanation |
 
-All eight methods above are **also available as flat methods** on `fg` (e.g.
-`fg.check(deriv, binding)`, `fg.check_fact_overlay(deriv, binding, overlay)`,
-`fg.check_rule_disable(rule, support, ...)`, `fg.why_not(deriv, candidates)`).
-The namespaced and flat forms are equivalent.
-
-All return frozen application DTOs (e.g. `CheckResult`,
-`DiagnoseResult`, `FactOverlayCheckResult`, `WhyNotUniverseResult`).
-These DTOs are **not** in `factgraph.sdk.__all__` — they live in
-`factgraph.application.protocol` and are imported only when the user
-needs to typecheck a return value. See 06 for the result shapes.
+Failed explanations use `Explanation(status="failed")` with
+`failure_class`. There is no public `.eval.why_not(...)` or `fg.what_if.*`
+candidate-universe shell in T5.
 
 ---
 

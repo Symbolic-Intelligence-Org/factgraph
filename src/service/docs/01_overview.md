@@ -131,11 +131,12 @@ read surface。
 3. 返回 `session_id`
 4. 后续前端通过 `session_id` 调写入、查询、运行 rule/inference、导出 package
 
-### 5.2 inference evaluate/accept（v2）
+### 5.2 inference evaluate（T5）
 
-- `inferences/evaluate` 返回 `CandidateSet` v2 结构（含 `candidate_id/candidate_key/candidate_kind`）。
-- fact candidate 主 payload 形态为 `terms`；entity candidate 主 payload 形态为 identity 解析字段。
-- `inferences/accept` 要求客户端回传完整 candidate payload；不要裁剪 `terms`/identity 字段。
+- `inferences/evaluate` 返回 `EvaluateResult` 表示：result/run id、digest anchors、head Rule 摘要、以及 `rows[]`。
+- 每个 row 暴露 `row_id`、`bindings`、`claim`、`raw_kind` / `bound` 和 `evidence_ref`。
+- `CandidateSet` 是 runtime 内部 artifact，不再作为 service evaluate 响应或 accept round-trip payload 暴露。
+- `inferences/accept` CandidateSet echo workflow 已移除；旧客户端会得到 `kind="removed"` error envelope。
 
 最小请求示例（evaluate）：
 
@@ -214,6 +215,6 @@ ephemeral rules / inferences、以及 workspace APIs 工作。
 
 ## 7. 当前限制
 
-- 当前仅暴露单条 inference `accept`，尚未暴露 `accept_many` HTTP 接口
+- Candidate accept HTTP workflow 已移除；持久化事实应通过写入接口表达。
 - 错误 envelope 当前统一走 `{ok, errors, meta}`；未捕获异常由 `app_v1` 全局 exception handler 统一包装
 - `HttpRuntimeAPI` 这类 HTTP 调用方若访问启用认证的 kernel，需要自行提供 API key header；`LocalRuntimeAPI` 不经过 HTTP 认证层
