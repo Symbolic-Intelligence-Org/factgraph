@@ -1,6 +1,6 @@
 # Audit Log: T4.2 External + Projection Head Execution
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t4-2-external-projection-head-execution.md](./2026-05-25_t4-2-external-projection-head-execution.md)
@@ -11,6 +11,7 @@
 |---|---|---|---|
 | 2026-05-25 | draft | T4.2 blueprint pair created | Scope consumes T4 Stage 3 synthesis T4.2 row, D13/D14 reviewed decisions, T4.1 archived foundation, and shipped RuleExpr lowering / SDK dispatch evidence. Pre-draft grep found no A-fallback trigger. |
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked D13 head-link materialization to sorted head port-name order, clarified head-side output vars for external/projection heads, documented inline/external/projection materialization subsets, surfaced aggregate x PyReason interaction, and specified projection recognition timing during head binding construction. |
+| 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Seven pre-implementation grep checks found expected T4.1 validation consumers, existing external-head blockers, D13/D14 docs-only projection/head-link references, broad T4.3/T5/result-surface references, and existing adapter surfaces. No production collision or A-fallback amendment needed; T4.2 remains limited to D13 + D14. |
 
 ## Decision Notes
 
@@ -162,6 +163,20 @@ Run again after blueprint review and before scoping:
 | 7. Adapter edit gates | `rg 'pyreason|souffle|problog|compile_where|export_problog' src/factgraph tests workflow/blueprints/active` | Confirm adapter grammar remains unchanged and unsupported cases use existing policy. |
 
 If any grep result contradicts scope, pause for A-fallback amendment.
+
+## Step 4.6 Pre-Implementation Grep Results
+
+| Check | Result | T4.2 impact |
+|---|---|---|
+| 1. T4.1 validator callers | Hits are the T4.1 helper definition, helper tests, one production `SDKStore._evaluate_rule_expr_input(...)` call, active T4.2 blueprint text, and T4.1 archive docs. | No hidden production consumer appeared; T4.2 can extend behavior after the single SDK validation call. |
+| 2. External-head blockers | Production hits remain `_materialize_adapter_derivation_plan(...)` external guard, `_head_var_names(...)` external guard, and SDK external-head `SDKStoreError`; focused tests and docs record the current deferred behavior. | Exact blockers to replace are visible; no parallel external-head path exists. |
+| 3. Projection substrate | No production `Rule.projection(...)`, projection-head, or `ProjectionHead` implementation exists. Hits are T4 audit/synthesis/decisions/blueprint text, parent design examples, memory, and unrelated generic projection helpers/docs. | D14 implementation namespace is clean; no public projection DTO collision. |
+| 4. Head-port link metadata | No production `HeadPortLink` / `RuleExprHeadPortLink` implementation exists. Hits are T4 synthesis, D13/D14/D15 decisions, T4.2 blueprint/audit, and track-plan text. | D13 private metadata can be added without collision. |
+| 5. Declared-port helper consumers | Hits are T4.1 helper definitions/tests, active T4.2 blueprint/audit, and T4.1 archive docs. No production downstream reader of `RuleExprHeadValidation.declared_ports` exists. | T4.2 will be the first production consumer for D13 links/projection; it should reuse T4.1 helper results. |
+| 6. T4.3/T5/public result gates | Broad expected hits across T4 synthesis/decisions/audits, old active blueprints, existing `CandidateSet` / `SupportArtifact` tests and docs, and legacy `why_not` surfaces. No T4.2 production implementation owner exists. | Closed-head/T5/result-shape terms remain pre-existing surfaces or docs; no scope amendment needed. |
+| 7. Adapter edit gates | Broad expected hits across shipped adapter tests, adapter modules, old active blueprints, and T4.2 docs. No T4.2-specific adapter production edit target appeared. | Adapter grammar remains out of scope; unsupported plans continue through existing adapter policy. |
+
+Step 4.6 conclusion: **clean**. No A-fallback scope amendment required. Proceed to G7 baseline from this scoped anchor.
 
 ## G7 Baseline Plan
 

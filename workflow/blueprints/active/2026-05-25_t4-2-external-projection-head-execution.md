@@ -1,6 +1,6 @@
 # Task Blueprint: T4.2 External + Projection Head Execution
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
