@@ -281,6 +281,11 @@ def _materialize_adapter_derivation_plan(
 
 
 def _classify_pyreason_rule_expr_support(plan: RuleExprLoweringPlan) -> RuleExprAdapterSupport:
+    """Classify PyReason support for inline-head plans.
+
+    External-head plans still raise ``RuleExprError`` through materialization because
+    external head body concatenation remains deferred to T3L.3.
+    """
     compiled, traces = _materialize_adapter_derivation_plan(plan, engine="native")
     branch_join_indexes = {
         trace.runtime_branch_index: {join.materialized_atom_index for join in trace.join_materializations}
