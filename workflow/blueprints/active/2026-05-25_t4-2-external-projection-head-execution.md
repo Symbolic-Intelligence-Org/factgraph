@@ -1,6 +1,6 @@
 # Task Blueprint: T4.2 External + Projection Head Execution
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -481,4 +481,87 @@ Claude should verify:
 
 ## 10. Outcome / Deviations
 
-Pending implementation.
+### Commit References
+
+- Feature commit: `7e0ff9b7` (`feat(ruleexpr): add T4.2 external projection head execution`).
+- Step 4.7 review: 0 P0 / 0 P1; no fix commit required.
+
+### Final Landed Code
+
+- `src/factgraph/application/protocol/rule.py`
+  - Added public `Rule.projection(*port_names)` sugar.
+  - Added private projection constants, deterministic projection id derivation, placeholder atoms, and `_is_projection_rule(...)` recognizer.
+  - Kept shipped `Rule.where` and `Rule.ports` non-empty invariants intact.
+- `src/factgraph/application/protocol/rule_expr_lowering.py`
+  - Extended private `RuleExprHeadBinding.kind` to `external | inline | projection`.
+  - Added private `RuleExprHeadPortLinkMaterialization` sidecar metadata.
+  - Extended `RuleExprHeadValidation.identity_state` with `projection`.
+  - Replaced external-head materialization rejection with D13 branch-wise materialization.
+  - Implemented the locked four-step order: expression atoms, external head body atoms, D8 joins, then D13 head-link atoms sorted by head port name.
+  - Updated `_head_var_names(...)` to return head-side vars for external and projection heads.
+- `src/factgraph/sdk/store.py`
+  - Removed the T3L.3 external-head `SDKStoreError` rejection after T4.1 validation.
+  - Preserved SDK call-shape errors, legacy `Inference` / derivation dict paths, and public success shape.
+- Tests updated in:
+  - `tests/application/protocol/test_rule_expr_lowering.py`
+  - `tests/application/protocol/test_rule_expr_head_validation.py`
+  - `tests/application/protocol/test_rule_expr_lowering_adapter.py`
+  - `tests/sdk/test_rule_expr_evaluate.py`
+- All 16 preemptive scope locks held:
+  - no public result wrapper;
+  - no public projection/head-link/trace DTO export;
+  - no T5 `EvaluateResult`, Explanation, WhyNot, `row.close()`, or evidence API;
+  - no D15 closed-head inspect fields;
+  - no public `expr.declared_ports`;
+  - no adapter production edits or grammar expansion;
+  - no projection rename syntax;
+  - no `Rule.where` / `Rule.ports` invariant relaxation;
+  - no `CandidateSet`, `SupportArtifact`, `EvidenceEnvelope`, `CompiledDerivationPlan`, or `DerivationEvaluateRequest` shape change.
+
+### Delivered Behavior
+
+- External heads now evaluate publicly through `fg.eval.evaluate(rule_expr_or_application_rule, head=external_rule, ...)` when T4.1 validation passes.
+- External head body atoms are materialized into every executable branch under private `__head` alias-local variables.
+- D13 head-port link equality atoms bind head-side vars to D12 declared branch sources by public port name.
+- Head-link atom materialization order is sorted by head port name for stable `materialized_atom_index`.
+- Output column order remains `head.ports` order; projection output preserves `Rule.projection(...)` argument order.
+- Projection heads bypass D11 id/digest identity matching only when the exact D14 private recognizable shape matches.
+- Projection placeholder atoms satisfy `Rule` construction invariants but never materialize into final body IR or adapter requests.
+- PyReason support remains adapter-policy based: head-link equality atoms, non-pred external head atoms, and aggregate-containing external head bodies reject through existing D9/T3L.2 classifier behavior.
+- Public success remains `list[CandidateSet]`.
+
+### Test Gates
+
+- G7 baseline before feature: 145 tests OK at `f6d376e8`.
+- Post-feat preservation: 155 tests OK.
+- Focused RuleExpr suites: 56 tests OK.
+- Touched-file ruff:
+  - `src/factgraph/application/protocol/rule.py`
+  - `src/factgraph/application/protocol/rule_expr_lowering.py`
+  - `src/factgraph/sdk/store.py`
+  - `tests/application/protocol/test_rule_expr_head_validation.py`
+  - `tests/application/protocol/test_rule_expr_lowering.py`
+  - `tests/application/protocol/test_rule_expr_lowering_adapter.py`
+  - `tests/sdk/test_rule_expr_evaluate.py`
+  - result: clean.
+- Pytest remains deferred per SIGSEGV environment lock; unrelated `tests.test_public_inference_factgraph_create` remains excluded.
+
+### Deviations / Follow-Ups
+
+- Step 4.7 found 0 P0 / 0 P1.
+- Optional non-blocking nits recorded by review:
+  - `_head_alias_var_map(plan.head)` is computed twice for external materialization and could be cached later.
+  - `_materialize_branch(...)` defensively recomputes declared ports already validated by T4.1; a later internal optimization may thread validation results through.
+  - `_head_alias_var_map(...)` could gain a short docstring explaining private `__head` namespace isolation.
+- No T4.2-specific blocking deferrals remain.
+- Deferred beyond T4.2:
+  - T4.3 owns D15 closed-head inspect utilities and docs.
+  - T5 owns `EvaluateResult`, Explanation, WhyNot, `row.close()`, and public evidence/result surfaces.
+  - Adapter grammar expansion and PyReason Form 2 remain out of scope.
+
+### Lessons
+
+- A single private `RuleExprHeadBinding.kind` field kept inline, external, and projection head dispatch clear without adding public DTOs.
+- D13 materialization order and D14 output order are separate contracts: sorted port-name order for head-link atom indexes, argument/head-port order for output variables.
+- The private `__head` alias namespace and generated projection var names keep head-side variables distinct from user occurrence aliases.
+- Projection recognition needs multiple signals together: deterministic id, origin, placeholder pred id, generated var pattern, atom count, atom shape, and ports/where consistency.

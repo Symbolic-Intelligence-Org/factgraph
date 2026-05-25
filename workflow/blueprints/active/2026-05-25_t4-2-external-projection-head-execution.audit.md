@@ -1,6 +1,6 @@
 # Audit Log: T4.2 External + Projection Head Execution
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Blueprint: [2026-05-25_t4-2-external-projection-head-execution.md](./2026-05-25_t4-2-external-projection-head-execution.md)
@@ -13,6 +13,7 @@
 | 2026-05-25 | draft-amend | Step 4.2 v1 precision amendments | Locked D13 head-link materialization to sorted head port-name order, clarified head-side output vars for external/projection heads, documented inline/external/projection materialization subsets, surfaced aggregate x PyReason interaction, and specified projection recognition timing during head binding construction. |
 | 2026-05-25 | scoped | Step 4.6 grep clean; scope locked | Seven pre-implementation grep checks found expected T4.1 validation consumers, existing external-head blockers, D13/D14 docs-only projection/head-link references, broad T4.3/T5/result-surface references, and existing adapter surfaces. No production collision or A-fallback amendment needed; T4.2 remains limited to D13 + D14. |
 | 2026-05-25 | baseline | G7 preservation baseline | Ran the scoped baseline command covering T3.1-T3.6, T3L.1-T3L.3, and T4.1 preservation suites; result matched expectation: 145 tests OK. Pytest remains deferred per SIGSEGV environment lock; unrelated `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | implemented | Feature + closure | Feature commit `7e0ff9b7` added D13 external-head materialization, D14 `Rule.projection(...)`, three-way head dispatch, and 10 focused T4.2 tests. Step 4.7 review found 0 P0/P1 and only 3 optional nits. Final gates: 56 focused RuleExpr tests OK, 155 preservation tests OK, touched-file ruff clean. |
 
 ## Decision Notes
 
@@ -231,3 +232,72 @@ Reviewer should verify:
 | Result | 145 tests OK. |
 | Pytest policy | Deferred per SIGSEGV environment lock. |
 | Exclusions | `tests.test_public_inference_factgraph_create` remains excluded as a pre-existing unrelated failure surface. |
+
+## Closure Notes
+
+### Final Code Scope
+
+Production edits landed in three files:
+
+- `src/factgraph/application/protocol/rule.py`
+  - public `Rule.projection(*port_names)`;
+  - private projection constants;
+  - deterministic projection id helper;
+  - exact `_is_projection_rule(...)` recognizer.
+- `src/factgraph/application/protocol/rule_expr_lowering.py`
+  - three-way `RuleExprHeadBinding.kind`;
+  - private `RuleExprHeadPortLinkMaterialization`;
+  - projection-aware `RuleExprHeadValidation`;
+  - D13 branch materialization for external heads;
+  - projection head-link materialization without placeholder body atoms;
+  - head-side `_head_var_names(...)` behavior for external/projection heads.
+- `src/factgraph/sdk/store.py`
+  - removed the T3L.3 external-head rejection after T4.1 validation;
+  - retained call-shape validation and legacy evaluation paths.
+
+Test edits landed in four files:
+
+- `tests/application/protocol/test_rule_expr_lowering.py`
+- `tests/application/protocol/test_rule_expr_head_validation.py`
+- `tests/application/protocol/test_rule_expr_lowering_adapter.py`
+- `tests/sdk/test_rule_expr_evaluate.py`
+
+### Verification
+
+- G7 baseline at `f6d376e8`: 145 tests OK.
+- Feature commit `7e0ff9b7`: 155 preservation tests OK.
+- Focused RuleExpr suites: 56 tests OK.
+- Touched-file ruff passed for production and test files changed by T4.2.
+- Pytest remains deferred per SIGSEGV environment lock.
+- `tests.test_public_inference_factgraph_create` remains excluded as a pre-existing unrelated surface.
+
+### Scope Preservation
+
+- Public success remains `list[CandidateSet]`.
+- No public projection/head-link/trace DTO was exported.
+- No `CandidateSet`, `SupportArtifact`, `EvidenceEnvelope`, `CompiledDerivationPlan`, or `DerivationEvaluateRequest` shape changed.
+- No Souffle / ProbLog / PyReason production adapter file was edited.
+- No PyReason grammar expansion was added.
+- No D15 closed-head inspect fields were added.
+- No T5 `EvaluateResult`, Explanation, WhyNot, `row.close()`, or evidence API was added.
+- No T1.3 final SDK `Rule` naming flip was performed.
+- Legacy SDK `Inference`, derivation dict, and fallback evaluate paths remain unchanged.
+
+### Step 4.7 Disposition
+
+- Findings: 0 P0 / 0 P1.
+- No Step 4.7 fix commit required.
+- Optional nits only:
+  - cache external `_head_alias_var_map(...)` within `_materialize_branch(...)`;
+  - avoid recomputing declared ports in materialization after T4.1 validation if a future optimization threads validation results through;
+  - add a docstring for private `__head` alias isolation.
+- These nits are not correctness issues and are left as future internal cleanup.
+
+### Deferred
+
+- T4.3 owns D15 closed-head inspect utilities, `inspect.is_closed`, `inspect.unbound_ports`, and the broad docs pass.
+- T5 owns public result/evidence surfaces: `EvaluateResult`, Explanation, WhyNot, `row.close()`, and trace/evidence exports.
+- Adapter grammar expansion remains future work.
+- Projection rename syntax remains out of scope.
+
+Ready for archive commit.
