@@ -1,6 +1,6 @@
 # T4.3 Closed-Head Inspect Utilities + Docs
 
-Status: scoped
+Status: implemented
 Class: M
 Branch: `v0.2.0-t4-3-closed-head-inspect-docs-2026-05-25`
 
@@ -267,4 +267,81 @@ Rollback:
 
 ## 10. Outcome
 
-Pending.
+### Commit References
+
+Feature commit: `e44f7920 feat(ruleexpr): add closed-head inspect reporting`.
+
+Step 4.7 review found 0 P0/P1 issues. No fix commit was required.
+
+### Final Landed Code
+
+T4.3 landed in seven files:
+
+1. `src/factgraph/application/protocol/rule_expr_inspect.py`
+   - Added append-only `RuleExprInspect.is_closed: bool = False`.
+   - Added append-only `RuleExprInspect.unbound_ports: tuple[str, ...] = ()`.
+   - Added private `_ClosedHeadInspect` and strict D15 closed-head helper logic.
+   - Updated `_inspect_application_rule(...)` to compute closed-head metadata while preserving structural inspect fields.
+2. `src/factgraph/sdk/store.py`
+   - Passed `SDKStore._application_schema_index` into application-rule inspection.
+3. `tests/sdk/test_ruleexpr_inspect.py`
+   - Added focused D15 coverage for value closure, entity-ref closure, missing schema, projection inspect, structural RuleExpr defaults, DTO validation, and entity-ref atom argument order.
+4. `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
+5. `src/factgraph/sdk/docs/00_user_guide.en.md`
+6. `src/factgraph/sdk/docs/01_concepts.en.md`
+7. `src/factgraph/application/docs/rule.md`
+   - Updated user-facing docs for T4 head execution and closed-head inspect reporting without T5 result/evidence claims.
+
+All section 0 scope locks held: no new public DTO export, no public result wrapper, no `CandidateSet` / `SupportArtifact` / `EvidenceEnvelope` / `CompiledDerivationPlan` shape change, no adapter production edit, no T1.3 final SDK `Rule` flip, no `Rule.where` / `Rule.ports` invariant relaxation, no T5 `EvaluateResult` / Explanation / WhyNot / `row.close()`, and no legacy SDK path change.
+
+### Delivered Behavior
+
+| D15 anchor | Delivered behavior |
+|---|---|
+| D15 §4.1 | Closed-head inspect uses the strict v1 subset only. |
+| D15 §4.2 | Literal closure requires direct `Const` and strict `op == "eq"`. |
+| D15 §4.3 | Value ports close on `Var == Const` or `Const == Var`; predicates, `InAtom`, `BuiltinAtom`, `NotAtom`, `Var == Var`, and non-`eq` comparisons remain open. |
+| D15 §4.4 | Entity-ref ports close only when every primary identity predicate binds `[entity_ref_var, Const(value)]` in user-authored `head.where`. |
+| D15 §4.5 | Missing schema metadata conservatively reports entity-ref ports as unbound without raising. |
+| D15 §4.6 | Exact `Rule.projection(...)` rules inspect as closed by construction without invoking D12 evaluation-time validation. |
+| D15 §4.7 | `is_closed` / `unbound_ports` live on existing `RuleExprInspect`; structural RuleExpr inspect keeps "not applicable" defaults. |
+| D15 §4.8 | Closed-head status is private helper data; no helper is exported. |
+| D15 §4.9 | T5 result/evidence/explain/row-close surfaces remain deferred. |
+| D15 §4.10 | Inspect is read-only and does not raise for open heads. |
+
+### Test Gates
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `d3304933` recorded 155 tests OK before feature work. |
+| Feature preservation | 163 tests OK after `e44f7920`. |
+| Focused RuleExpr/inspect | 77 tests OK. |
+| Ruff | `python -m ruff check src/factgraph/application/protocol/rule_expr_inspect.py src/factgraph/sdk/store.py tests/sdk/test_ruleexpr_inspect.py` clean. |
+| Docs guard | T4.3-added docs contain no new `EvaluateResult`, Explanation, WhyNot, or `row.close()` claims. |
+
+Pytest remains deferred per the existing SIGSEGV environment lock. `tests.test_public_inference_factgraph_create` remains excluded.
+
+### Deviations And Follow-Ups
+
+No P0/P1 issues were found in Step 4.7. No Step 4.7 fix commit was required.
+
+Optional future cleanup only:
+
+1. Projection inspect uses display alias `"head"` internally for the structural inspect projection path. This is harmless for closed-head metadata but could be made more visibly private in a future cleanup.
+2. `_entity_ref_port_is_closed(...)` uses duck-typed schema access. This intentionally fails closed per D15 §4.5, but a future schema-interface version check could make drift easier to diagnose.
+3. The unrelated `test_render_desc_uses_placeholders_for_unbound_ports` remains isolated from D15 `unbound_ports` semantics.
+
+Deferred beyond T4.3:
+
+1. T5 owns `EvaluateResult`, Explanation, WhyNot, `row.close()`, and public evidence surfaces.
+2. T1.3 final SDK `Rule` flip remains independent.
+3. Adapter grammar expansion remains independent.
+4. Rename syntax or broader RuleExpr authoring changes remain independent.
+
+### Lessons
+
+1. Closed-head inspect needs explicit "not applicable" semantics for structural RuleExpr values; default fields alone are ambiguous without docs.
+2. The entity-ref positional-order test is the simplest executable guard for D15 §4.4.
+3. Projection inspect should short-circuit before evaluation-time D12 validation; otherwise read-only inspect can accidentally become a validating caller.
+4. Duck-typed schema access keeps the inspect helper decoupled from schema-runtime imports and preserves D15's conservative missing-schema behavior.
+5. T4.3 completed the T4 Head + closed-head tranche without reopening evaluation result, evidence, adapter, or legacy SDK paths.

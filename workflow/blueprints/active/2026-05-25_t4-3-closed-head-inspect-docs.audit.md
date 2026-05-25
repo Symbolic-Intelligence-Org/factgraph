@@ -1,6 +1,6 @@
 # Audit - T4.3 Closed-Head Inspect Utilities + Docs
 
-Status: scoped
+Status: implemented
 Branch: `v0.2.0-t4-3-closed-head-inspect-docs-2026-05-25`
 Blueprint: `workflow/blueprints/active/2026-05-25_t4-3-closed-head-inspect-docs.md`
 
@@ -12,6 +12,7 @@ Blueprint: `workflow/blueprints/active/2026-05-25_t4-3-closed-head-inspect-docs.
 | 2026-05-25 | draft-amend | Codex | Addressed Step 4.2 v1 WCs: append-only `RuleExprInspect` field lock, RuleExpr structural inspect "not applicable" defaults, D15 section 4.4 entity-ref atom/schema path, and projection inspect-time vs D12 evaluation-time validation boundary. |
 | 2026-05-25 | scoped | Codex | Step 4.6 grep clean; no A-fallback amendment required. Blueprint and audit moved to scoped with closed-head inspect/docs scope locked. |
 | 2026-05-25 | baseline | Codex | G7 preservation baseline recorded after scoped anchor `7005e7d5`: 155 tests OK with the T4.2 final preservation suite; pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | implemented | Codex | Feature commit `e44f7920` added closed-head inspect reporting, SDK schema-index wiring, 8 focused inspect tests, and 4 docs updates. Final gates: 163 preservation tests OK, 77 focused RuleExpr/inspect tests OK, touched-file ruff clean. Step 4.7 found 0 P0/P1; 3 optional nits deferred. |
 
 ## Source Chain
 
@@ -186,4 +187,58 @@ Pytest remains deferred because of the existing SIGSEGV environment lock. `tests
 
 ## Closure Notes
 
-Pending.
+### Final Code Scope
+
+Production:
+
+1. `rule_expr_inspect.py` added append-only `RuleExprInspect.is_closed` / `unbound_ports`, private `_ClosedHeadInspect`, and D15 strict closed-head helper logic.
+2. `store.py` passes `_application_schema_index` into `_inspect_application_rule(...)`.
+3. Four docs files describe shipped T4 head behavior and closed-head inspect reporting without T5 surfaces.
+
+Tests:
+
+1. `tests/sdk/test_ruleexpr_inspect.py` added 8 new focused tests.
+2. Coverage includes value literal closure, entity-ref identity closure, compound primary-key closure, missing schema, projection closed-by-construction, structural RuleExpr defaults, DTO validation, and positional identity atom order.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| G7 baseline | `d3304933`: 155 tests OK. |
+| Feature preservation | `e44f7920`: 163 tests OK. |
+| Focused RuleExpr/inspect | 77 tests OK. |
+| Ruff | Touched Python files clean. |
+| Pytest | Deferred per existing SIGSEGV environment lock. |
+| Excluded test | `tests.test_public_inference_factgraph_create` remains excluded. |
+
+### Scope Preservation
+
+1. No new public DTO export.
+2. No `CandidateSet`, `SupportArtifact`, `EvidenceEnvelope`, or `CompiledDerivationPlan` shape change.
+3. No adapter production file edit.
+4. No T5 `EvaluateResult`, Explanation, WhyNot, `row.close()`, public trace, or public evidence surface.
+5. No T1.3 final SDK `Rule` flip.
+6. No public `expr.declared_ports`.
+7. Public evaluation success remains `list[CandidateSet]`.
+8. Legacy SDK `Inference` and derivation-dict evaluation paths remain unchanged.
+9. `Rule.where` / `Rule.ports` non-empty invariants remain unchanged.
+10. Projection placeholder atoms and D13 head-link metadata remain private and are not used as D15 closure proof.
+
+### Step 4.7 Disposition
+
+Step 4.7 found 0 P0/P1 issues and required no fix commit.
+
+Optional nits deferred:
+
+1. Projection inspect internally uses display alias `"head"` for the structural projection path.
+2. Entity-ref closure uses duck-typed schema access and fails closed on schema interface drift.
+3. The unrelated desc-rendering `unbound_ports` test name remains isolated from D15 inspect semantics.
+
+### Deferred
+
+1. T5 owns `EvaluateResult`, Explanation, WhyNot, `row.close()`, and public evidence surfaces.
+2. T1.3 final SDK `Rule` flip remains independent.
+3. Adapter grammar expansion remains independent.
+4. Rename syntax and broader authoring changes remain independent.
+
+Ready for archive commit. T4 implementation slices are complete after this closure; archive + memory consolidation will close the T4 cycle.
