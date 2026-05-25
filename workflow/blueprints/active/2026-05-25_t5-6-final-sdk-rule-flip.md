@@ -1,6 +1,6 @@
 # Task Blueprint: T5.6 Final SDK Rule Flip
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted; escalate to L if service/agent/docs imports require broad migration)
@@ -277,7 +277,27 @@ Run:
 
 Pytest remains deferred per existing SIGSEGV environment lock unless environment constraints change.
 
-## 7. Rollback
+## 7. Step 4.6 Scope Decision
+
+Step 4.6 grep results keep T5.6 as an SDK-focused M-class namespace flip.
+
+Findings:
+
+- `src/factgraph/sdk/__init__.py` and SDK namespace tests still encode the pre-D24 state: top-level `Rule` is `.dsl.Rule`, `LegacyRule` is a top-level alias, and `ApplicationRule` is the application protocol alias.
+- Production service and agent code do not require a T5.6 rename migration; broad docs/examples/service docs still mention legacy names and remain T5.7 migration territory.
+- Several SDK and protocol tests intentionally import top-level legacy `Rule`; T5.6 feat updates focused tests to D24 final expectations or moves legacy construction expectations to `factgraph.sdk.dsl.Rule`.
+- `factgraph.sdk.dsl.Rule`, `Inference`, `build_application_rule(...)`, and `DSLToApplicationRuleError` remain live preservation paths and must not be deleted in T5.6.
+- Runtime code already checks application protocol `Rule` type identity in evaluate/explain paths, though a few local aliases and messages still use `ApplicationRule`; T5.6 may update narrow naming without changing behavior.
+- No `HeadRule`, `EvalRule`, `DerivationRule`, or `LegacyInference` production owner exists.
+
+Scope decision:
+
+- T5.6 proceeds as one M-class SDK namespace flip.
+- No split is needed before scoped.
+- Service routes, OpenAPI, broad docs/examples, and final legacy deletion remain T5.7.
+- T5.1-T5.5 DTO/evaluate/explain/why-not behavior remains out of scope except preservation tests.
+
+## 8. Rollback
 
 Rollback must preserve T5.1-T5.5 behavior:
 
@@ -287,7 +307,7 @@ Rollback must preserve T5.1-T5.5 behavior:
 - Do not revert T5 evaluate/explain/why-not commits.
 - Do not revert unrelated dirty baseline files.
 
-## 8. Documentation Handoff
+## 9. Documentation Handoff
 
 T5.6 may update narrow import-facing comments or test docstrings.
 
@@ -297,7 +317,7 @@ Deferred:
 - final legacy shell deletion remains T5.7;
 - optional Semantics Lite remains T5.8.
 
-## 9. Reviewer Focus
+## 10. Reviewer Focus
 
 - Does `Rule` now clearly mean application protocol Rule?
 - Does `ApplicationRule` survive only as a transition alias?
@@ -305,6 +325,6 @@ Deferred:
 - Is `Inference` untouched?
 - Are service/docs/adapter boundaries preserved?
 
-## 10. Outcome
+## 11. Outcome
 
 Pending implementation.

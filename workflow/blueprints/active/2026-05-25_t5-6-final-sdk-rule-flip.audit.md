@@ -1,11 +1,11 @@
 # Audit: T5.6 Final SDK Rule Flip
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-6-final-sdk-rule-flip.md`
-- Stage: T5.6 implementation blueprint draft
+- Stage: T5.6 implementation scoped
 - Class: M (predicted; escalate to L if service/agent/docs imports require broad migration)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -14,7 +14,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-25 | draft | pending | Blueprint pair drafted | T5.6 Final SDK Rule Flip draft created after T5.5 archive `ec45f12f`. Scope is predicted M-class: flip SDK top-level `Rule` to application protocol `Rule`, keep `ApplicationRule` as transition alias, remove top-level `LegacyRule`, and defer broad D23 hard-cut/docs migration to T5.7. |
+| 2026-05-25 | draft | `4f4fc8d4` | Blueprint pair drafted | T5.6 Final SDK Rule Flip draft created after T5.5 archive `ec45f12f`. Scope is predicted M-class: flip SDK top-level `Rule` to application protocol `Rule`, keep `ApplicationRule` as transition alias, remove top-level `LegacyRule`, and defer broad D23 hard-cut/docs migration to T5.7. |
+| 2026-05-25 | scoped | pending | Step 4.6 grep clean | Grep found expected SDK namespace/test blast radius, `.dsl.Rule` preservation paths, and broad docs/examples deferred to T5.7. T5.6 remains one SDK-focused M-class namespace flip with no split before scoped. |
 
 ## 2. Source Chain
 
@@ -89,7 +90,27 @@ Run before scoped and record actual results.
 | 7 | Adapter / semantics guard | `rg "SemanticsProfile|raw_kind|bound|src/factgraph/adapters" src tests workflow` | Existing substrate only; no T5.6 owner. |
 | 8 | New-name alternatives guard | `rg "HeadRule|EvalRule|DerivationRule|LegacyInference" src tests workflow` | Should be absent except historical/design references. |
 
-## 8. G7 Baseline Plan
+## 8. Step 4.6 Pre-Implementation Grep Results
+
+| # | Check | Result | Classification |
+|---|---|---|---|
+| 1 | SDK namespace exports | `src/factgraph/sdk/__init__.py` still binds top-level `Rule` to `.dsl.Rule`, exposes `LegacyRule`, and exposes `ApplicationRule`; `tests/sdk/test_rule_naming.py` and `tests/sdk/test_evaluate_result_exports.py` assert that pre-D24 state. | T5.6 hard-cut update. |
+| 2 | Top-level legacy consumers | SDK/protocol tests use `from factgraph.sdk import Rule` for legacy construction and need focused updates. Docs/examples contain broad historical/teaching uses. No production service route requires a T5.6 rename. | Focused tests in T5.6; broad docs/examples deferred to T5.7. |
+| 3 | DSL module preservation | `factgraph.sdk.dsl.Rule`, `Inference`, `build_application_rule(...)`, and `DSLToApplicationRuleError` have active tests and runtime support. | Internal/transition preservation; no deletion in T5.6. |
+| 4 | Runtime type checks and messages | `src/factgraph/sdk/store.py` already imports application protocol `Rule` for evaluate/explain checks under a local `ApplicationRule` alias. Local wording may still say `ApplicationRule`. | Narrow naming cleanup allowed; runtime behavior unchanged. |
+| 5 | T5.1-T5.5 guard | `EvaluateResult`, `EvaluateRow`, `Explanation`, `row.explain`, `row.close`, and why-not quarantine surfaces are already implemented and have no T5.6 behavior owner. | Preservation tests only. |
+| 6 | Service/docs/OpenAPI guard | Broad docs and SDK docs mention `ApplicationRule`, `LegacyRule`, `CandidateSet`, or legacy surfaces. `src/service` and OpenAPI hard-cut remain D23/T5.7 territory. | T5.7 deferred. |
+| 7 | Adapter / semantics guard | SemanticsProfile/raw_kind/bound/adapters are existing substrate and do not need edits for SDK Rule naming. | No T5.6 owner. |
+| 8 | New-name alternatives guard | `HeadRule`, `EvalRule`, `DerivationRule`, and `LegacyInference` appear only in design/blueprint references, not production owners. | Clean; no alternative public class introduced. |
+
+Scope decision:
+
+- T5.6 remains M-class.
+- No T5.6a/T5.6b split is needed before scoped.
+- Feature work is limited to SDK top-level namespace flip, focused import/naming tests, and narrow runtime naming cleanup if required.
+- T5.7 owns broad service/docs/OpenAPI/examples migration and legacy hard-cut deletion.
+
+## 9. G7 Baseline Plan
 
 Command:
 
@@ -123,7 +144,7 @@ Baseline record:
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
-## 9. Draft Review Checklist
+## 10. Draft Review Checklist
 
 | Item | Status |
 |---|---|
@@ -136,9 +157,10 @@ Baseline record:
 | T5.1-T5.5 behavior changes excluded | Yes |
 | Adapter semantics excluded | Yes |
 | Step 4.6 grep plan present | Yes |
+| Step 4.6 grep results clean | Yes |
 | G7 baseline plan present | Yes |
 
-## 10. Risks For Reviewer
+## 11. Risks For Reviewer
 
 | Risk | Reviewer focus |
 |---|---|
@@ -148,6 +170,6 @@ Baseline record:
 | Service/docs migration pressure leaks in | Confirm broad migration remains T5.7. |
 | Import identity change breaks hidden tests | Confirm Step 4.6 finds broad consumers before feat. |
 
-## 11. Outcome
+## 12. Outcome
 
 Pending.
