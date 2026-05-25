@@ -6,7 +6,17 @@ from unittest.mock import patch
 
 import factgraph.sdk as sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
-from factgraph.application.protocol import EntitySelector, EvaluateResult, Explanation, Rule, RuleExprError, RuleExprInspect
+from factgraph.application.protocol import (
+    DetachedRowError,
+    EntitySelector,
+    EvaluateResult,
+    Explanation,
+    Rule,
+    RuleExprError,
+    RuleExprInspect,
+)
+from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
+from factgraph.application.protocol.evaluate_result import closed_head_digest_for
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
@@ -79,7 +89,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertFalse(hasattr(result[0], "candidate_id"))
         self.assertFalse(hasattr(result[0], "support_digest"))
         self.assertIsInstance(result[0].explain(), Explanation)
-        self.assertFalse(hasattr(result[0], "close"))
+        self.assertIsInstance(result[0].close(), Rule)
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:
         graph = _store()
@@ -159,6 +169,82 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertNotIn("__factgraph_projection_placeholder", repr(request.plans[0].body_ir))
 
         self.assertTrue(encoded)
+
+    def test_row_close_adds_value_and_entity_identity_literals(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "alice", region="eu")
+        rule = _person_region_rule("body_region")
+        person = Var("$person")
+        region = Var("$region")
+        head = Rule(
+            id="person:region",
+            where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
+            ports={"person": person, "region": region},
+        )
+
+        result = graph.eval.evaluate(rule, head=head, engine="native")
+        closed = result[0].close()
+
+        self.assertIsInstance(closed, Rule)
+        self.assertIn("_closed_", closed.id)
+        self.assertNotIn("__factgraph_projection_placeholder", repr(closed.where))
+        self.assertIn(encoded, str(result[0].bindings))
+        self.assertTrue(any(isinstance(atom, CmpAtom) and atom.rhs == Const("eu") for atom in closed.where))
+        index = build_schema_index(graph.schema_ir)
+        identity_pred_id = entity_info(index, "Person").identity_predicates["name"].pred_id
+        self.assertTrue(
+            any(
+                isinstance(atom, PredAtom)
+                and atom.pred_id == identity_pred_id
+                and tuple(atom.terms)[1] == Const("alice")
+                for atom in closed.where
+            )
+        )
+        self.assertTrue(_inspect_closed_head(closed, schema_index=build_schema_index(graph.schema_ir)).is_closed)
+
+    def test_row_close_detached_row_raises_detached_error(self) -> None:
+        graph = _store()
+        _seed_person(graph, "detached")
+        rule = _person_exists_rule()
+        row = graph.eval.evaluate(rule, head=rule, engine="native")[0]
+
+        detached = row.__class__(
+            row_id=row.row_id,
+            bindings=row.bindings,
+            claim=row.claim,
+            raw_kind=row.raw_kind,
+            bound=row.bound,
+            evidence_ref=row.evidence_ref,
+        )
+
+        with self.assertRaisesRegex(DetachedRowError, "detached"):
+            detached.close()
+
+    def test_manual_explain_rejects_non_closed_head(self) -> None:
+        graph = _store()
+        _seed_person(graph, "open")
+        rule = _person_exists_rule()
+
+        with self.assertRaisesRegex(RuleExprError, "must be closed"):
+            graph.eval.explain(rule, head=rule, engine="native")
+
+    def test_manual_explain_uses_closed_head_and_manual_checked_scope(self) -> None:
+        graph = _store()
+        _seed_person(graph, "manual")
+        rule = _person_exists_rule()
+        result = graph.eval.evaluate(rule, head=rule, engine="native")
+        closed = result[0].close()
+
+        explanation = graph.eval.explain(rule, head=closed, engine="native")
+
+        self.assertIsInstance(explanation, Explanation)
+        self.assertEqual(explanation.status, "passed")
+        self.assertEqual(explanation.checked_scope["semantics_source"], "manual_standalone")
+        self.assertIsNone(explanation.checked_scope["evaluate_semantics_digest"])
+        self.assertIsNone(explanation.checked_scope["semantics_match"])
+        self.assertIsNone(explanation.row_id)
+        self.assertIsNone(explanation.evidence_ref_id)
+        self.assertEqual(explanation.checked_scope["closed_head_digest"], closed_head_digest_for(closed))
 
     def test_projection_undeclared_port_uses_ruleexpr_error(self) -> None:
         graph = _store()

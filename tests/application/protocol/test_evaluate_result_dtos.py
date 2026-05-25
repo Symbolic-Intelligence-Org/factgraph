@@ -24,10 +24,10 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
 )
-from factgraph.audit.evidence_graph import EvidenceGraph
+from factgraph.audit.evidence_graph import EvidenceGraph, EvidenceNode, NODE_CONCLUSION
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
 
 
 def _head_rule() -> Rule:
@@ -187,7 +187,64 @@ class EvaluateResultDTOTests(unittest.TestCase):
             row._require_live_result()
         with self.assertRaises(DetachedRowError):
             row.explain()
-        self.assertFalse(hasattr(row, "close"))
+        with self.assertRaises(DetachedRowError):
+            row.close()
+
+    def test_live_value_row_close_strips_projection_placeholders(self) -> None:
+        head = Rule.projection("region")
+        run_id = "run_v1:" + "1" * 64
+        expr_digest = _token("expr")
+        rule_set_digest = _token("rules")
+        view_snapshot_digest = _token("view")
+        semantics_digest = _token("semantics")
+        result_id = result_id_for(
+            run_id=run_id,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+            engine="native",
+            head_id=head.id,
+            head_content_digest=head.content_digest,
+        )
+        closed_head_digest = closed_head_digest_for(head)
+        row = _row(result_id, run_id, closed_head_digest, {"region": "eu"})
+        result_digest = result_digest_for(
+            result_id=result_id,
+            run_id=run_id,
+            row_digests=(_row_digest_for(row),),
+            head_id=head.id,
+            head_content_digest=head.content_digest,
+            engine="native",
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+        )
+        result = EvaluateResult(
+            result_id=result_id,
+            run_id=run_id,
+            rows=(row,),
+            head=head,
+            engine="native",
+            engine_version=None,
+            adapter_version=None,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            semantics_digest=semantics_digest,
+            evaluated_at="2026-05-25T00:00:00Z",
+            result_digest=result_digest,
+        )
+
+        closed = result[0].close()
+
+        self.assertIsInstance(closed, Rule)
+        self.assertIn("_closed_", closed.id)
+        self.assertNotIn("__factgraph_projection_placeholder", repr(closed.where))
+        self.assertTrue(any(isinstance(atom, CmpAtom) and atom.rhs == Const("eu") for atom in closed.where))
 
     def test_live_row_explain_returns_passed_explanation(self) -> None:
         (
@@ -285,6 +342,39 @@ class EvaluateResultDTOTests(unittest.TestCase):
                 row_id=row.row_id,
                 evidence_ref_id=row.evidence_ref.ref_id,
             )
+
+    def test_manual_passed_explanation_allows_no_row_back_reference(self) -> None:
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
+
+        explanation = Explanation(
+            status="passed",
+            evidence=EvidenceGraph(
+                graph_id="manual",
+                engine="native",
+                root_node_id="root",
+                nodes=(
+                    EvidenceNode(
+                        node_id="root",
+                        node_kind=NODE_CONCLUSION,
+                        component="evaluate.row",
+                        label="manual",
+                        value_summary="manual",
+                    ),
+                ),
+                edges=(),
+                support_kind="evaluate_row",
+                metadata={},
+            ),
+            claim=row.claim,
+            result_id=result_id,
+            row_id=None,
+            evidence_ref_id=None,
+        )
+
+        self.assertEqual(explanation.status, "passed")
+        self.assertIsNone(explanation.row_id)
+        self.assertIsNone(explanation.evidence_ref_id)
 
         failed = Explanation(
             status="failed",

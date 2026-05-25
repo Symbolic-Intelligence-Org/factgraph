@@ -23,16 +23,20 @@ from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DerivationEvaluateRequest,
+    DetachedRowError,
     EntityRef as AppEntityRef,
     EntitySelector as AppEntitySelector,
     EntityWriteCommand,
     ErrorDTO,
+    Explanation,
     FieldMutation,
     FieldPath,
     Rule as ApplicationRule,
+    RuleExprError,
 )
 from factgraph.application.protocol.evaluate_result import (
     EvaluateResult,
+    _build_closed_head_from_row,
     _candidate_set_to_evaluate_row,
     _row_digest_for,
     canonical_bytes_for_evaluate,
@@ -46,6 +50,7 @@ from factgraph.application.protocol.evaluate_result import (
     view_snapshot_digest_for_parts,
 )
 from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
+from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
     _classify_pyreason_rule_expr_support,
@@ -462,6 +467,10 @@ class _SDKEvalManager:
         candidate should become an assertion.
         """
         return self._sdk.evaluate(*args, **kwargs)
+
+    def explain(self, *args: Any, **kwargs: Any) -> Any:
+        """Explain a closed-head evaluation replay."""
+        return self._sdk.explain(*args, **kwargs)
 
     def inspect_semantics(self, *args: Any, **kwargs: Any) -> Any:
         """Inspect semantics configuration without evaluating an inference.
@@ -2311,6 +2320,103 @@ class SDKStore:
             "derivation dict"
         )
 
+    def explain(self, *args: Any, **kwargs: Any) -> Explanation:
+        if len(args) != 1:
+            raise SDKStoreError("eval.explain(expr, ...) accepts exactly one RuleExpr or application Rule input")
+        if "head" not in kwargs:
+            raise SDKStoreError("eval.explain(expr, ...) requires head= closed application Rule")
+        head = kwargs.pop("head")
+        raw_engine = kwargs.pop("engine", None)
+        raw_semantics = kwargs.pop("semantics", None)
+        if kwargs:
+            unknown = ", ".join(sorted(kwargs))
+            raise SDKStoreError(f"unknown eval.explain(...) keyword(s): {unknown}")
+        if not isinstance(head, ApplicationRule):
+            raise SDKStoreError("eval.explain(...) head= must be application Rule")
+        self._require_manual_explain_closed_head(head)
+
+        evaluate_kwargs: dict[str, Any] = {"head": head}
+        if raw_engine is not None:
+            evaluate_kwargs["engine"] = raw_engine
+        if raw_semantics is not None:
+            evaluate_kwargs["semantics"] = raw_semantics
+        evaluate_kwargs["head"] = self._manual_explain_replay_head(args[0], head)
+        result = self.evaluate(args[0], **evaluate_kwargs)
+        checked_scope = self._manual_explain_checked_scope(result, closed_head=head)
+        first = self._manual_explain_matching_row(result, closed_head=head)
+        if first is None:
+            return Explanation(
+                status="failed",
+                evidence=None,
+                claim=None,
+                result_id=result.result_id,
+                row_id=None,
+                evidence_ref_id=None,
+                failure_class="closed_head_false",
+                checked_scope=checked_scope,
+                suggested_next_steps=("Re-evaluate with a closed head that matches at least one result row.",),
+            )
+
+        row_explanation = first.explain()
+        return Explanation(
+            status=row_explanation.status,
+            evidence=row_explanation.evidence,
+            claim=row_explanation.claim,
+            result_id=result.result_id,
+            row_id=None,
+            evidence_ref_id=None,
+            raw_kind=row_explanation.raw_kind,
+            bound=row_explanation.bound,
+            failure_class=row_explanation.failure_class,
+            checked_scope=checked_scope,
+            suggested_next_steps=row_explanation.suggested_next_steps,
+            errors=row_explanation.errors,
+            warnings=row_explanation.warnings,
+        )
+
+    def _require_manual_explain_closed_head(self, head: ApplicationRule) -> None:
+        inspected = _inspect_closed_head(head, schema_index=self._application_schema_index)
+        if not inspected.is_closed:
+            missing = ", ".join(inspected.unbound_ports)
+            raise RuleExprError(f"manual explain head must be closed; unbound ports: {missing}")
+
+    def _manual_explain_checked_scope(self, result: EvaluateResult, *, closed_head: ApplicationRule) -> Mapping[str, Any]:
+        return {
+            "semantics_digest": result.semantics_digest,
+            "semantics_source": "manual_standalone",
+            "evaluate_semantics_digest": None,
+            "explain_semantics_digest": result.semantics_digest,
+            "semantics_match": None,
+            "result_id": result.result_id,
+            "expr_digest": result.expr_digest,
+            "rule_set_digest": result.rule_set_digest,
+            "view_snapshot_digest": result.view_snapshot_digest,
+            "closed_head_digest": closed_head_digest_for(closed_head),
+        }
+
+    @staticmethod
+    def _manual_explain_replay_head(source: Any, closed_head: ApplicationRule) -> ApplicationRule:
+        if isinstance(source, ApplicationRule) and source.id != closed_head.id:
+            return source
+        if isinstance(source, ApplicationRule) and source.content_digest != closed_head.content_digest:
+            return source
+        return closed_head
+
+    def _manual_explain_matching_row(
+        self,
+        result: EvaluateResult,
+        *,
+        closed_head: ApplicationRule,
+    ) -> Any | None:
+        expected_digest = closed_head.content_digest
+        for row in result:
+            try:
+                if self._close_evaluate_row(row, result).content_digest == expected_digest:
+                    return row
+            except (DetachedRowError, RuleExprError, SDKStoreError):
+                continue
+        return None
+
     def _evaluate_compiled_derivation_plans(
         self,
         compiled_plans: list[dict[str, Any]],
@@ -2479,11 +2585,74 @@ class SDKStore:
                 semantics_digest=semantics_digest,
                 evaluated_at=datetime.now(timezone.utc),
                 result_digest=result_digest,
+                _schema_index=self._application_schema_index,
+                _row_close_builder=self._close_evaluate_row,
             )
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _close_evaluate_row(self, row: Any, result: Any) -> ApplicationRule:
+        return _build_closed_head_from_row(
+            row,
+            result,
+            schema_index=self._application_schema_index,
+            entity_identity_resolver=self._identity_for_entity_ref_binding,
+        )
+
+    def _identity_for_entity_ref_binding(
+        self,
+        entity_type: str,
+        value: object,
+        _schema_index: object | None,
+    ) -> Mapping[str, Any]:
+        if isinstance(value, AppEntityRef):
+            if value.entity_type != entity_type:
+                raise RuleExprError(
+                    f"cannot close entity-ref port for {entity_type}: row binding has entity_type {value.entity_type!r}"
+                )
+            return value.identity
+        if isinstance(value, Mapping):
+            identity = value.get("identity")
+            if isinstance(identity, Mapping):
+                return identity
+            return value
+        if not isinstance(value, str):
+            raise RuleExprError(f"cannot close entity-ref port for {entity_type}: unsupported row binding")
+        ref_entity_type = entity_type_from_ref(value)
+        if ref_entity_type != entity_type:
+            raise RuleExprError(f"cannot close entity-ref port for {entity_type}: row binding is not an {entity_type} ref")
+
+        entity = self._application_schema_index.entities.get(entity_type)
+        if entity is None:
+            raise RuleExprError(f"cannot close entity-ref port for {entity_type}: unknown entity type")
+        identity: dict[str, Any] = {}
+        primary_fields = tuple(field for field in entity.identity_fields if getattr(field, "primary_key", False))
+        for field_info in primary_fields:
+            field_name = field_info.name
+            predicate = entity.identity_predicates.get(field_name)
+            pred_id = getattr(predicate, "pred_id", None)
+            if not isinstance(pred_id, str) or not pred_id:
+                raise RuleExprError(
+                    f"cannot close entity-ref port for {entity_type}: missing identity predicate for {field_name!r}"
+                )
+            active_claims = [
+                claim
+                for claim in self.ledger.find_claims(pred_id=pred_id, e_ref=value)
+                if not self.ledger.has_active_revocation(claim.asrt_id)
+            ]
+            if not active_claims:
+                raise RuleExprError(
+                    f"cannot close entity-ref port for {entity_type}: missing identity field {field_name!r}"
+                )
+            rest_terms = active_claims[-1].rest_terms
+            if not rest_terms:
+                raise RuleExprError(
+                    f"cannot close entity-ref port for {entity_type}: empty identity value for {field_name!r}"
+                )
+            identity[field_name] = rest_terms[0][1]
+        return identity
 
     def _view_snapshot_digest(self) -> str:
         schema_token = self._schema_digest

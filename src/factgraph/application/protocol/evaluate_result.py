@@ -10,10 +10,14 @@ from typing import Any, Literal
 import uuid
 
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
-from factgraph.application.protocol.rule import Rule
+from factgraph.application.protocol.rule import Rule, _is_projection_rule
+from factgraph.application.protocol.rule_expr import RuleExprError
+from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
+from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.audit.evidence_graph import EvidenceGraph, EvidenceNode, NODE_CONCLUSION
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
+from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
 from factgraph.core.store.database import view_digest_for
 
@@ -117,6 +121,9 @@ class EvaluateRow:
     def explain(self) -> Explanation:
         return _explain_live_row(self, self._require_live_result())
 
+    def close(self) -> Rule:
+        return _close_live_row(self, self._require_live_result())
+
 
 @dataclass(frozen=True)
 class EvaluateResult:
@@ -133,6 +140,13 @@ class EvaluateResult:
     semantics_digest: str | None
     evaluated_at: object
     result_digest: str
+    _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
+    _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
 
     def __post_init__(self) -> None:
         _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
@@ -148,6 +162,8 @@ class EvaluateResult:
         if self.semantics_digest is not None:
             _require_sha256_token(self.semantics_digest, field_name="EvaluateResult.semantics_digest")
         _require_sha256_token(self.result_digest, field_name="EvaluateResult.result_digest")
+        if self._row_close_builder is not None and not callable(self._row_close_builder):
+            raise ProtocolShapeError("EvaluateResult._row_close_builder must be callable or None")
 
         if not isinstance(self.rows, tuple):
             raise ProtocolShapeError("EvaluateResult.rows must be tuple[EvaluateRow, ...]")
@@ -221,8 +237,6 @@ class Explanation:
             if self.claim is None:
                 raise ProtocolShapeError("Explanation.claim is required when status is passed")
             _require_non_empty_str(self.result_id, field_name="Explanation.result_id")
-            _require_non_empty_str(self.row_id, field_name="Explanation.row_id")
-            _require_non_empty_str(self.evidence_ref_id, field_name="Explanation.evidence_ref_id")
         if self.status == "failed":
             if self.failure_class not in _EXPLANATION_FAILURE_CLASSES:
                 raise ProtocolShapeError("Explanation.failure_class is required when status is failed")
@@ -614,6 +628,161 @@ def _explain_live_row(
         bound=row.bound,
         checked_scope=checked_scope,
     )
+
+
+def _close_live_row(row: EvaluateRow, result: EvaluateResult) -> Rule:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+    if result._row_close_builder is not None:
+        return result._row_close_builder(row, result)
+    return _build_closed_head_from_row(row, result, schema_index=result._schema_index)
+
+
+def _build_closed_head_from_row(
+    row: EvaluateRow,
+    result: EvaluateResult,
+    *,
+    schema_index: object | None = None,
+    entity_identity_resolver: Callable[[str, object, object | None], Mapping[str, Any]] | None = None,
+) -> Rule:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+
+    matched = next((candidate for candidate in result.rows if candidate.row_id == row.row_id), None)
+    if matched is None or not _row_anchor_matches(matched, row, result):
+        raise DetachedRowError("EvaluateRow is stale or does not belong to its EvaluateResult")
+
+    head = result.head
+    closure_atoms: list[object] = []
+    for port_name, port_var in head.ports.items():
+        value = _binding_value_for_head_port(row, head, port_name)
+        port_type = head.port_types[port_name]
+        if port_type.kind == "value":
+            closure_atoms.append(CmpAtom("eq", port_var, Const(value)))
+            continue
+        closure_atoms.extend(
+            _entity_identity_closure_atoms(
+                port_var,
+                port_type.entity_type,
+                value,
+                schema_index=schema_index,
+                entity_identity_resolver=entity_identity_resolver,
+            )
+        )
+
+    base_where = () if _is_projection_rule(head) else tuple(head.where)
+    closed = Rule(
+        id=f"{head.id}_closed_{row.row_id}",
+        where=tuple(base_where) + tuple(closure_atoms),
+        ports=dict(head.ports),
+        version=head.version,
+        desc=head.desc,
+    )
+    inspected = _inspect_closed_head(closed, schema_index=schema_index)
+    if not inspected.is_closed:
+        missing = ", ".join(inspected.unbound_ports)
+        raise RuleExprError(f"closed head construction left unbound ports: {missing}")
+    return closed
+
+
+def _binding_value_for_head_port(row: EvaluateRow, head: Rule, port_name: str) -> object:
+    if port_name in row.bindings:
+        return row.bindings[port_name]
+    terms = row.bindings.get("terms")
+    if isinstance(terms, Sequence):
+        port_names = tuple(head.ports)
+        try:
+            idx = port_names.index(port_name)
+        except ValueError:  # pragma: no cover - guarded by head.ports iteration
+            idx = -1
+        if 0 <= idx < len(terms):
+            return _public_term_value(terms[idx])
+    raise RuleExprError(f"cannot close head port {port_name!r}: row binding is missing")
+
+
+def _public_term_value(value: object) -> object:
+    if isinstance(value, Mapping) and "value" in value:
+        return value["value"]
+    return value
+
+
+def _entity_identity_closure_atoms(
+    port_var: object,
+    entity_type: str | None,
+    value: object,
+    *,
+    schema_index: object | None,
+    entity_identity_resolver: Callable[[str, object, object | None], Mapping[str, Any]] | None,
+) -> tuple[PredAtom, ...]:
+    if not entity_type:
+        raise RuleExprError("cannot close entity-ref port without entity_type metadata")
+    identity = _identity_mapping_for_entity_value(
+        entity_type,
+        value,
+        schema_index=schema_index,
+        entity_identity_resolver=entity_identity_resolver,
+    )
+    entity = _entity_info_for_close(schema_index, entity_type)
+    identity_fields = getattr(entity, "identity_fields", None)
+    identity_predicates = getattr(entity, "identity_predicates", None)
+    if not isinstance(identity_fields, tuple) or not isinstance(identity_predicates, Mapping):
+        raise RuleExprError(f"cannot close entity-ref port for {entity_type}: incomplete schema identity metadata")
+
+    atoms: list[PredAtom] = []
+    primary_fields = tuple(field for field in identity_fields if getattr(field, "primary_key", False))
+    if not primary_fields:
+        raise RuleExprError(f"cannot close entity-ref port for {entity_type}: no primary identity fields")
+    for field_info in primary_fields:
+        field_name = getattr(field_info, "name", None)
+        if not isinstance(field_name, str) or not field_name:
+            raise RuleExprError(f"cannot close entity-ref port for {entity_type}: invalid identity field metadata")
+        if field_name not in identity:
+            raise RuleExprError(f"cannot close entity-ref port for {entity_type}: missing identity field {field_name!r}")
+        predicate = identity_predicates.get(field_name)
+        pred_id = getattr(predicate, "pred_id", None)
+        if not isinstance(pred_id, str) or not pred_id:
+            raise RuleExprError(
+                f"cannot close entity-ref port for {entity_type}: missing identity predicate for {field_name!r}"
+            )
+        atoms.append(PredAtom(pred_id, [port_var, Const(identity[field_name])]))
+    return tuple(atoms)
+
+
+def _identity_mapping_for_entity_value(
+    entity_type: str,
+    value: object,
+    *,
+    schema_index: object | None,
+    entity_identity_resolver: Callable[[str, object, object | None], Mapping[str, Any]] | None,
+) -> Mapping[str, Any]:
+    if isinstance(value, EntityRef):
+        if value.entity_type != entity_type:
+            raise RuleExprError(
+                f"cannot close entity-ref port for {entity_type}: row binding has entity_type {value.entity_type!r}"
+            )
+        return value.identity
+    if isinstance(value, Mapping):
+        identity = value.get("identity")
+        if isinstance(identity, Mapping):
+            return identity
+        return value
+    if entity_identity_resolver is not None:
+        return entity_identity_resolver(entity_type, value, schema_index)
+    raise RuleExprError(f"cannot close entity-ref port for {entity_type}: schema-backed identity metadata is required")
+
+
+def _entity_info_for_close(schema_index: object | None, entity_type: str) -> object:
+    entities = getattr(schema_index, "entities", None)
+    if not isinstance(entities, Mapping):
+        raise RuleExprError(f"cannot close entity-ref port for {entity_type}: missing schema index")
+    entity = entities.get(entity_type)
+    if entity is None:
+        raise RuleExprError(f"cannot close entity-ref port for {entity_type}: unknown entity type")
+    return entity
 
 
 def _row_anchor_matches(left: EvaluateRow, right: EvaluateRow, result: EvaluateResult) -> bool:
