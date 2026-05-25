@@ -1,0 +1,581 @@
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import date, datetime
+import json
+import math
+from types import MappingProxyType
+from typing import Any, Literal
+import uuid
+
+from factgraph.application.protocol.common import ProtocolShapeError
+from factgraph.application.protocol.rule import Rule
+from factgraph.core.derivation.candidates import CandidateSet
+from factgraph.core.protocol.digests import sha256_hex, sha256_token
+from factgraph.core.semantics.profile import SemanticsProfile
+from factgraph.core.store.database import view_digest_for
+
+
+class DetachedRowError(RuntimeError):
+    """Raised when a live-only row operation is requested from a detached row."""
+
+
+ClaimKind = Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
+RawKind = Literal["probabilistic", "possibilistic"]
+_CLAIM_KINDS = frozenset({"fact_triple", "rule_head", "aggregate_result", "projection"})
+_RAW_KINDS = frozenset({"probabilistic", "possibilistic"})
+_SHA256_TOKEN_PREFIX = "sha256:"
+_SHA256_HEX_LEN = 64
+_RESULT_ID_PREFIX = "evalr_v1:"
+_EVIDENCE_REF_ID_PREFIX = "evref_v1:"
+_RUN_ID_PREFIX = "run_v1:"
+
+
+@dataclass(frozen=True)
+class Claim:
+    kind: ClaimKind
+    name: str
+    arguments: Mapping[str, Any]
+    repr: str
+    digest: str
+
+    def __post_init__(self) -> None:
+        if self.kind not in _CLAIM_KINDS:
+            raise ProtocolShapeError("Claim.kind must be one of fact_triple, rule_head, aggregate_result, projection")
+        _require_non_empty_str(self.name, field_name="Claim.name")
+        _require_non_empty_str(self.repr, field_name="Claim.repr")
+        _require_sha256_token(self.digest, field_name="Claim.digest")
+        object.__setattr__(self, "arguments", _freeze_mapping(self.arguments, field_name="Claim.arguments"))
+
+
+@dataclass(frozen=True)
+class EvidenceRef:
+    ref_id: str
+    result_id: str
+    row_id: str
+    fact_digest: str
+    closed_head_digest: str
+
+    def __post_init__(self) -> None:
+        _require_token_prefix(self.ref_id, prefix=_EVIDENCE_REF_ID_PREFIX, field_name="EvidenceRef.ref_id")
+        _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvidenceRef.result_id")
+        _require_non_empty_str(self.row_id, field_name="EvidenceRef.row_id")
+        _require_sha256_token(self.fact_digest, field_name="EvidenceRef.fact_digest")
+        _require_sha256_token(self.closed_head_digest, field_name="EvidenceRef.closed_head_digest")
+
+
+@dataclass(frozen=True)
+class EvaluateRow:
+    row_id: str
+    bindings: Mapping[str, Any]
+    claim: Claim
+    raw_kind: RawKind | None
+    bound: tuple[float, float] | None
+    evidence_ref: EvidenceRef
+    _result_resolver: Callable[[], EvaluateResult] | None = field(default=None, repr=False, compare=False, hash=False)
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.row_id, field_name="EvaluateRow.row_id")
+        object.__setattr__(self, "bindings", _freeze_mapping(self.bindings, field_name="EvaluateRow.bindings"))
+        if not isinstance(self.claim, Claim):
+            raise ProtocolShapeError("EvaluateRow.claim must be Claim")
+        if not isinstance(self.evidence_ref, EvidenceRef):
+            raise ProtocolShapeError("EvaluateRow.evidence_ref must be EvidenceRef")
+        if self.evidence_ref.row_id != self.row_id:
+            raise ProtocolShapeError("EvaluateRow.evidence_ref.row_id must equal EvaluateRow.row_id")
+        if self.evidence_ref.fact_digest != self.claim.digest:
+            raise ProtocolShapeError("EvaluateRow.evidence_ref.fact_digest must equal EvaluateRow.claim.digest")
+        if self.raw_kind is None:
+            if self.bound is not None:
+                raise ProtocolShapeError("EvaluateRow.bound must be None when raw_kind is None")
+        else:
+            if self.raw_kind not in _RAW_KINDS:
+                raise ProtocolShapeError("EvaluateRow.raw_kind must be probabilistic, possibilistic, or None")
+            object.__setattr__(self, "bound", _validate_bound(self.bound))
+        if self._result_resolver is not None and not callable(self._result_resolver):
+            raise ProtocolShapeError("EvaluateRow._result_resolver must be callable or None")
+
+    def _require_live_result(self) -> EvaluateResult:
+        if self._result_resolver is None:
+            raise DetachedRowError("EvaluateRow is detached from its EvaluateResult")
+        return self._result_resolver()
+
+
+@dataclass(frozen=True)
+class EvaluateResult:
+    result_id: str
+    run_id: str
+    rows: tuple[EvaluateRow, ...]
+    head: Rule
+    engine: str
+    engine_version: str | None
+    adapter_version: str | None
+    expr_digest: str
+    rule_set_digest: str
+    view_snapshot_digest: str
+    semantics_digest: str | None
+    evaluated_at: object
+    result_digest: str
+
+    def __post_init__(self) -> None:
+        _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
+        _require_token_prefix(self.run_id, prefix=_RUN_ID_PREFIX, field_name="EvaluateResult.run_id")
+        if not isinstance(self.head, Rule):
+            raise ProtocolShapeError("EvaluateResult.head must be application protocol Rule")
+        _require_non_empty_str(self.engine, field_name="EvaluateResult.engine")
+        _require_optional_non_empty_str(self.engine_version, field_name="EvaluateResult.engine_version")
+        _require_optional_non_empty_str(self.adapter_version, field_name="EvaluateResult.adapter_version")
+        _require_sha256_token(self.expr_digest, field_name="EvaluateResult.expr_digest")
+        _require_sha256_token(self.rule_set_digest, field_name="EvaluateResult.rule_set_digest")
+        _require_sha256_token(self.view_snapshot_digest, field_name="EvaluateResult.view_snapshot_digest")
+        if self.semantics_digest is not None:
+            _require_sha256_token(self.semantics_digest, field_name="EvaluateResult.semantics_digest")
+        _require_sha256_token(self.result_digest, field_name="EvaluateResult.result_digest")
+
+        if not isinstance(self.rows, tuple):
+            raise ProtocolShapeError("EvaluateResult.rows must be tuple[EvaluateRow, ...]")
+        seen: set[str] = set()
+        bound_rows: list[EvaluateRow] = []
+        for idx, row in enumerate(self.rows):
+            if not isinstance(row, EvaluateRow):
+                raise ProtocolShapeError(f"EvaluateResult.rows[{idx}] must be EvaluateRow")
+            if row.row_id in seen:
+                raise ProtocolShapeError(f"EvaluateResult.rows contains duplicate row_id: {row.row_id!r}")
+            seen.add(row.row_id)
+            if row.evidence_ref.result_id != self.result_id:
+                raise ProtocolShapeError("EvaluateRow.evidence_ref.result_id must equal EvaluateResult.result_id")
+            bound_rows.append(replace(row, _result_resolver=lambda self_ref=self: self_ref))
+        object.__setattr__(self, "rows", tuple(bound_rows))
+
+    def __iter__(self) -> Iterator[EvaluateRow]:
+        return iter(self.rows)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, index: int) -> EvaluateRow:
+        return self.rows[index]
+
+    def first(self) -> EvaluateRow | None:
+        return self.rows[0] if self.rows else None
+
+    def exists(self) -> bool:
+        return bool(self.rows)
+
+    def count(self) -> int:
+        return len(self.rows)
+
+
+def canonical_bytes_for_evaluate(*items: Any) -> bytes:
+    return json.dumps(
+        _normalize_for_canonical(items),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def new_run_id() -> str:
+    return f"{_RUN_ID_PREFIX}{uuid.uuid4().hex}{uuid.uuid4().hex}"
+
+
+def result_id_for(
+    *,
+    run_id: str,
+    expr_digest: str,
+    rule_set_digest: str,
+    view_snapshot_digest: str,
+    semantics_digest: str | None,
+    engine: str,
+    head_id: str,
+    head_content_digest: str,
+) -> str:
+    _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
+    _require_sha256_token(expr_digest, field_name="expr_digest")
+    _require_sha256_token(rule_set_digest, field_name="rule_set_digest")
+    _require_sha256_token(view_snapshot_digest, field_name="view_snapshot_digest")
+    if semantics_digest is not None:
+        _require_sha256_token(semantics_digest, field_name="semantics_digest")
+    _require_non_empty_str(engine, field_name="engine")
+    _require_non_empty_str(head_id, field_name="head_id")
+    _require_sha256_hex(head_content_digest, field_name="head_content_digest")
+    digest = sha256_hex(
+        canonical_bytes_for_evaluate(
+            "evaluate_result_id_v1",
+            {
+                "engine": engine,
+                "expr_digest": expr_digest,
+                "head_content_digest": head_content_digest,
+                "head_id": head_id,
+                "rule_set_digest": rule_set_digest,
+                "run_id": run_id,
+                "semantics_digest": semantics_digest,
+                "view_snapshot_digest": view_snapshot_digest,
+            },
+        )
+    )
+    return f"{_RESULT_ID_PREFIX}{digest}"
+
+
+def row_id_for(run_id: str, bindings: Mapping[str, Any]) -> str:
+    _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
+    frozen = _freeze_mapping(bindings, field_name="bindings")
+    digest = sha256_hex(canonical_bytes_for_evaluate("evaluate_row_id_v1", frozen))[:16]
+    return f"{run_id}:{digest}"
+
+
+def claim_digest_for(kind: ClaimKind, name: str, arguments: Mapping[str, Any]) -> str:
+    if kind not in _CLAIM_KINDS:
+        raise ProtocolShapeError("kind must be one of fact_triple, rule_head, aggregate_result, projection")
+    _require_non_empty_str(name, field_name="name")
+    frozen = _freeze_mapping(arguments, field_name="arguments")
+    return sha256_token(canonical_bytes_for_evaluate("evaluate_claim_v1", kind, name, frozen))
+
+
+def closed_head_digest_for_parts(closed_head_id: str, closed_head_content_digest: str) -> str:
+    _require_non_empty_str(closed_head_id, field_name="closed_head_id")
+    _require_sha256_hex(closed_head_content_digest, field_name="closed_head_content_digest")
+    return sha256_token(
+        canonical_bytes_for_evaluate(
+            "evaluate_closed_head_v1",
+            {"id": closed_head_id, "content_digest": closed_head_content_digest},
+        )
+    )
+
+
+def closed_head_digest_for(closed_head: Rule) -> str:
+    if not isinstance(closed_head, Rule):
+        raise ProtocolShapeError("closed_head must be application protocol Rule")
+    return closed_head_digest_for_parts(closed_head.id, closed_head.content_digest)
+
+
+def evidence_ref_id_for(result_id: str, row_id: str, fact_digest: str, closed_head_digest: str) -> str:
+    _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
+    _require_non_empty_str(row_id, field_name="row_id")
+    _require_sha256_token(fact_digest, field_name="fact_digest")
+    _require_sha256_token(closed_head_digest, field_name="closed_head_digest")
+    digest = sha256_hex(
+        canonical_bytes_for_evaluate(
+            "evaluate_evidence_ref_v1",
+            {
+                "closed_head_digest": closed_head_digest,
+                "fact_digest": fact_digest,
+                "result_id": result_id,
+                "row_id": row_id,
+            },
+        )
+    )
+    return f"{_EVIDENCE_REF_ID_PREFIX}{digest}"
+
+
+def _row_digest_for(row: EvaluateRow) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    return sha256_token(
+        canonical_bytes_for_evaluate(
+            "evaluate_row_digest_v1",
+            {
+                "bindings": row.bindings,
+                "bound": row.bound,
+                "claim": {
+                    "arguments": row.claim.arguments,
+                    "digest": row.claim.digest,
+                    "kind": row.claim.kind,
+                    "name": row.claim.name,
+                    "repr": row.claim.repr,
+                },
+                "evidence_ref": {
+                    "closed_head_digest": row.evidence_ref.closed_head_digest,
+                    "fact_digest": row.evidence_ref.fact_digest,
+                    "result_id": row.evidence_ref.result_id,
+                    "row_id": row.evidence_ref.row_id,
+                },
+                "raw_kind": row.raw_kind,
+                "row_id": row.row_id,
+            },
+        )
+    )
+
+
+def result_digest_for(
+    *,
+    result_id: str,
+    run_id: str,
+    row_digests: Sequence[str],
+    head_id: str,
+    head_content_digest: str,
+    engine: str,
+    engine_version: str | None,
+    adapter_version: str | None,
+    expr_digest: str,
+    rule_set_digest: str,
+    view_snapshot_digest: str,
+    semantics_digest: str | None,
+) -> str:
+    _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
+    _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
+    for idx, digest in enumerate(row_digests):
+        _require_sha256_token(digest, field_name=f"row_digests[{idx}]")
+    _require_non_empty_str(head_id, field_name="head_id")
+    _require_sha256_hex(head_content_digest, field_name="head_content_digest")
+    _require_non_empty_str(engine, field_name="engine")
+    _require_optional_non_empty_str(engine_version, field_name="engine_version")
+    _require_optional_non_empty_str(adapter_version, field_name="adapter_version")
+    _require_sha256_token(expr_digest, field_name="expr_digest")
+    _require_sha256_token(rule_set_digest, field_name="rule_set_digest")
+    _require_sha256_token(view_snapshot_digest, field_name="view_snapshot_digest")
+    if semantics_digest is not None:
+        _require_sha256_token(semantics_digest, field_name="semantics_digest")
+    return sha256_token(
+        canonical_bytes_for_evaluate(
+            "evaluate_result_digest_v1",
+            {
+                "adapter_version": adapter_version,
+                "engine": engine,
+                "engine_version": engine_version,
+                "expr_digest": expr_digest,
+                "head_content_digest": head_content_digest,
+                "head_id": head_id,
+                "result_id": result_id,
+                "row_digests": tuple(row_digests),
+                "rule_set_digest": rule_set_digest,
+                "run_id": run_id,
+                "semantics_digest": semantics_digest,
+                "view_snapshot_digest": view_snapshot_digest,
+            },
+        )
+    )
+
+
+def semantics_digest_for(profile: SemanticsProfile | None) -> str | None:
+    if profile is None:
+        return None
+    if not isinstance(profile, SemanticsProfile):
+        raise ProtocolShapeError("profile must be SemanticsProfile or None")
+    payload = {
+        "certainty_projection": profile.certainty_projection,
+        "engine": profile.engine,
+        "engine_options": profile.engine_options,
+        "fallback": profile.fallback,
+        "name": profile.name,
+        "output_readback": profile.output_readback,
+        "rule_projection": profile.rule_projection,
+        "temporal_projection": profile.temporal_projection,
+        "uncertainty_projection": profile.uncertainty_projection,
+        "version": profile.version,
+    }
+    return sha256_token(canonical_bytes_for_evaluate("evaluate_semantics_profile_v1", payload))
+
+
+def view_snapshot_digest_for_parts(
+    *,
+    db_id: str,
+    base_tx_id: str,
+    schema_digest: str,
+    asrt_ids: Iterable[str],
+) -> str:
+    _require_non_empty_str(db_id, field_name="db_id")
+    _require_non_empty_str(base_tx_id, field_name="base_tx_id")
+    _require_sha256_token(schema_digest, field_name="schema_digest")
+    normalized_asrt_ids = tuple(asrt_ids)
+    return view_digest_for(db_id=db_id, base_tx_id=base_tx_id, schema_digest=schema_digest, asrt_ids=normalized_asrt_ids)
+
+
+def expr_digest_for_payload(kind: str, payload: Mapping[str, Any]) -> str:
+    _require_non_empty_str(kind, field_name="kind")
+    frozen = _freeze_mapping(payload, field_name="payload")
+    return sha256_token(canonical_bytes_for_evaluate("evaluate_expr_digest_v1", kind, frozen))
+
+
+def rule_set_digest_for_entries(entries: Iterable[tuple[str, str]]) -> str:
+    normalized: list[tuple[str, str]] = []
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise ProtocolShapeError(f"entries[{idx}] must be tuple[str, str]")
+        rule_id, content_digest = entry
+        _require_non_empty_str(rule_id, field_name=f"entries[{idx}].rule_id")
+        _require_sha256_hex(content_digest, field_name=f"entries[{idx}].content_digest")
+        normalized.append((rule_id, content_digest))
+    if not normalized:
+        raise ProtocolShapeError("entries must be non-empty")
+    return sha256_token(canonical_bytes_for_evaluate("evaluate_rule_set_digest_v1", tuple(sorted(normalized))))
+
+
+def _candidate_set_to_evaluate_row(
+    candidate: CandidateSet,
+    *,
+    result_id: str,
+    run_id: str,
+    closed_head_digest: str,
+    claim_kind: ClaimKind = "fact_triple",
+    claim_name: str | None = None,
+) -> EvaluateRow:
+    if not isinstance(candidate, CandidateSet):
+        raise ProtocolShapeError("candidate must be CandidateSet")
+    _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
+    _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
+    _require_sha256_token(closed_head_digest, field_name="closed_head_digest")
+    bindings = _bindings_from_candidate(candidate)
+    effective_claim_name = candidate.target if claim_name is None else claim_name
+    digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
+    claim = Claim(
+        kind=claim_kind,
+        name=effective_claim_name,
+        arguments=bindings,
+        repr=f"{effective_claim_name}{dict(bindings)!r}",
+        digest=digest,
+    )
+    row_id = row_id_for(run_id, bindings)
+    evidence_ref = EvidenceRef(
+        ref_id=evidence_ref_id_for(result_id, row_id, digest, closed_head_digest),
+        result_id=result_id,
+        row_id=row_id,
+        fact_digest=digest,
+        closed_head_digest=closed_head_digest,
+    )
+    raw_kind, bound = _raw_kind_and_bound_from_candidate(candidate)
+    return EvaluateRow(
+        row_id=row_id,
+        bindings=bindings,
+        claim=claim,
+        raw_kind=raw_kind,
+        bound=bound,
+        evidence_ref=evidence_ref,
+    )
+
+
+def _bindings_from_candidate(candidate: CandidateSet) -> Mapping[str, Any]:
+    payload = candidate.payload
+    maybe_bindings = payload.get("bindings") if isinstance(payload, Mapping) else None
+    if isinstance(maybe_bindings, Mapping):
+        return _freeze_mapping(maybe_bindings, field_name="candidate.payload.bindings")
+    return _freeze_mapping(payload, field_name="candidate.payload")
+
+
+def _raw_kind_and_bound_from_candidate(candidate: CandidateSet) -> tuple[RawKind | None, tuple[float, float] | None]:
+    if candidate.confidence is None or candidate.confidence_kind is None:
+        return None, None
+    value = _require_finite_number(candidate.confidence, field_name="CandidateSet.confidence")
+    if candidate.confidence_kind == "probability":
+        return "probabilistic", (value, value)
+    if candidate.confidence_kind == "certainty":
+        return "possibilistic", (value, value)
+    return None, None
+
+
+def _freeze_mapping(value: Mapping[str, Any], *, field_name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ProtocolShapeError(f"{field_name} must be Mapping[str, Any]")
+    frozen: dict[str, Any] = {}
+    for key, item in value.items():
+        _require_non_empty_str(key, field_name=f"{field_name}.<key>")
+        frozen[key] = item
+    return MappingProxyType(dict(frozen))
+
+
+def _validate_bound(value: tuple[float, float] | None) -> tuple[float, float]:
+    if not isinstance(value, tuple) or len(value) != 2:
+        raise ProtocolShapeError("EvaluateRow.bound must be tuple[float, float] when raw_kind is set")
+    lower = _require_finite_number(value[0], field_name="EvaluateRow.bound[0]")
+    upper = _require_finite_number(value[1], field_name="EvaluateRow.bound[1]")
+    if lower > upper:
+        raise ProtocolShapeError("EvaluateRow.bound lower value must be <= upper value")
+    return (lower, upper)
+
+
+def _normalize_for_canonical(value: Any) -> Any:
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ProtocolShapeError("canonical float values must be finite")
+        return value
+    if isinstance(value, datetime):
+        return {"__datetime__": value.isoformat()}
+    if isinstance(value, date):
+        return {"__date__": value.isoformat()}
+    if isinstance(value, tuple):
+        return {"__tuple__": [_normalize_for_canonical(item) for item in value]}
+    if isinstance(value, list):
+        return [_normalize_for_canonical(item) for item in value]
+    if isinstance(value, Mapping):
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str) or not key:
+                raise ProtocolShapeError("canonical mapping keys must be non-empty strings")
+            normalized[key] = _normalize_for_canonical(item)
+        return normalized
+    raise ProtocolShapeError(f"unsupported canonical value type: {type(value).__name__}")
+
+
+def _require_finite_number(value: object, *, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ProtocolShapeError(f"{field_name} must be finite number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ProtocolShapeError(f"{field_name} must be finite number")
+    return number
+
+
+def _require_non_empty_str(value: object, *, field_name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ProtocolShapeError(f"{field_name} must be non-empty string")
+    return value
+
+
+def _require_optional_non_empty_str(value: object | None, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    return _require_non_empty_str(value, field_name=field_name)
+
+
+def _require_token_prefix(value: object, *, prefix: str, field_name: str) -> str:
+    text = _require_non_empty_str(value, field_name=field_name)
+    if not text.startswith(prefix):
+        raise ProtocolShapeError(f"{field_name} must start with {prefix!r}")
+    suffix = text[len(prefix) :]
+    if len(suffix) != _SHA256_HEX_LEN or any(ch not in "0123456789abcdef" for ch in suffix):
+        raise ProtocolShapeError(f"{field_name} must end with 64 lowercase hex characters")
+    return text
+
+
+def _require_sha256_token(value: object, *, field_name: str) -> str:
+    text = _require_non_empty_str(value, field_name=field_name)
+    if not text.startswith(_SHA256_TOKEN_PREFIX):
+        raise ProtocolShapeError(f"{field_name} must start with 'sha256:'")
+    _require_sha256_hex(text[len(_SHA256_TOKEN_PREFIX) :], field_name=field_name)
+    return text
+
+
+def _require_sha256_hex(value: object, *, field_name: str) -> str:
+    text = _require_non_empty_str(value, field_name=field_name)
+    if len(text) != _SHA256_HEX_LEN or any(ch not in "0123456789abcdef" for ch in text):
+        raise ProtocolShapeError(f"{field_name} must be 64 lowercase hex characters")
+    return text
+
+
+__all__ = [
+    "Claim",
+    "DetachedRowError",
+    "EvaluateResult",
+    "EvaluateRow",
+    "EvidenceRef",
+    "canonical_bytes_for_evaluate",
+    "claim_digest_for",
+    "closed_head_digest_for",
+    "closed_head_digest_for_parts",
+    "evidence_ref_id_for",
+    "expr_digest_for_payload",
+    "new_run_id",
+    "result_digest_for",
+    "result_id_for",
+    "row_id_for",
+    "rule_set_digest_for_entries",
+    "semantics_digest_for",
+    "view_snapshot_digest_for_parts",
+]

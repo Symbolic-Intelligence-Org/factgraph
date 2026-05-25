@@ -27,6 +27,11 @@ from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
 from factgraph.application.protocol import (
     AtomDescriptor,
+    Claim,
+    DetachedRowError,
+    EvaluateResult,
+    EvaluateRow,
+    EvidenceRef,
     ExplicitBoolError,
     OccurrenceInspect,
     PortInspect,
@@ -78,6 +83,11 @@ __all__ = [
     "Identity",
     "Relationship",
     "SemanticsProfile",
+    "Claim",
+    "DetachedRowError",
+    "EvaluateResult",
+    "EvaluateRow",
+    "EvidenceRef",
     "ProbLogSemantics",
     "PyReasonSemantics",
     "SchemaAddResult",

@@ -17,6 +17,7 @@
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.1 DTO Foundation + Digest Harness draft created from reviewed-clean T5 Stage 1-3 design layer. |
 | 2026-05-25 | scoped | pending | Step 4.6 grep clean; scope locked | Grep found expected docs/history/agent/service/runtime hits, no shipped T5 `EvaluateResult` / `EvaluateRow` production owner, no public evaluate flip, no D20-D24 implementation collision, and no adapter edit target. |
 | 2026-05-25 | baseline | pending | G7 preservation baseline recorded | Baseline command ran 163 tests in 0.077s, OK; scoped anchor `457b55d0`; pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded. |
+| 2026-05-25 | feat | pending | DTO foundation + digest harness implemented | Added application-protocol result DTOs, digest helpers, private CandidateSet conversion harness, and SDK DTO re-exports. Gates: 13 focused DTO/digest/export tests OK, G7 preservation 163 tests OK, touched-file ruff clean. |
 
 ## 2. Source Chain
 
