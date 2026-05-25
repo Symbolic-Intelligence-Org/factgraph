@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; first push gate executed — 4 origin refs created; T3 later selected; T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE; **T3 later push gate executed — 2 origin refs created; T4 Stage 1-3 complete; T4.1 archived; T4.2 next**)
+最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; first push gate executed — 4 origin refs created; T3 later selected; T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE; **T3 later push gate executed — 2 origin refs created; T4 Stage 1-3 complete; T4.1 + T4.2 archived; T4.3 next**)
 
-## 当前阶段(2026-05-25 — T4.1 HEAD FOUNDATION ARCHIVED — T4.2 NEXT)
+## 当前阶段(2026-05-25 — T4.2 EXTERNAL + PROJECTION HEAD EXECUTION ARCHIVED — T4.3 NEXT)
 
-**Current local branch:** `v0.2.0-t4-1-head-identity-declared-port-foundation-2026-05-25` (latest archived anchor `f3e9cb9a`; `94ef43df` closure, `49cd8074` Step 4.7 fix, and `ea125920` feat are the T4.1 implementation anchors).
+**Current local branch:** `v0.2.0-t4-2-external-projection-head-execution-2026-05-25` (latest archived anchor `bd0b14bf`; `19d2d375` closure, `7e0ff9b7` feat, `f6d376e8` G7 baseline, `43bd2f4e` scoped, `b9f30be0` draft-amend, and `5d7755b4` draft are the T4.2 anchors).
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -41,6 +41,7 @@
 | **T3L.2 Adapter Matrix Parity** | M | `9ab312b9` | `a417fe73 feat(ruleexpr): add adapter matrix materialization checks` + `f1726ef3 docs(ruleexpr): clarify PyReason classifier head scope` (121 preservation tests OK; second T3 later implementation slice archived) |
 | **T3L.3 Public SDK Dispatch + Diagnostics + Docs** | M | `48f925a8` | `25b71e64 feat(sdk): expose RuleExpr evaluation dispatch` + `762731fa fix(sdk): harden RuleExpr rule alias fallback` (131 preservation tests OK; final T3 later implementation slice archived; public RuleExpr execution shipped) |
 | **T4.1 Head Identity + Declared-Port Foundation** | M | `f3e9cb9a` | `ea125920 feat(ruleexpr): add T4.1 head validation foundation` + `49cd8074 test(ruleexpr): cover T4.1 head validation gaps` (145 preservation tests OK; 46 focused RuleExpr tests; touched-file ruff clean; first T4 implementation slice archived) |
+| **T4.2 External + Projection Head Execution** | M | `bd0b14bf` | `7e0ff9b7 feat(ruleexpr): add T4.2 external projection head execution` (155 preservation tests OK; 56 focused RuleExpr tests; touched-file ruff clean; second T4 implementation slice archived) |
 
 ### Current landed behavior
 
@@ -310,6 +311,18 @@
   - Scope locks held: no external-head body concatenation, no `Rule.projection(...)`, no closed-head inspect fields, no public `expr.declared_ports`, no public DTO / result shape changes, no adapter edits, and no T5 surfaces.
   - T4.2 is the next scoped target: External + Projection Head Execution per D13 + D14, starting with fresh Step 4.6 grep against the post-T4.1 baseline.
 
+**T4.2 — External + Projection Head Execution**
+- **T4.2 archived at `bd0b14bf`**:
+  - Lineage: `5d7755b4` draft → `b9f30be0` draft-amend → `43bd2f4e` scoped (Step 4.6 grep clean) → `f6d376e8` G7 baseline (145 OK) → `7e0ff9b7` feat → `19d2d375` closure → `bd0b14bf` archive.
+  - Landed D13 external-head body materialization: expression body → external head body under private `__head` alias → D8 joins → D13 head-port link equality atoms sorted by head port name.
+  - Landed D14 `Rule.projection(*port_names)`: deterministic private projection id, validation-only placeholder atoms, argument-order output preservation, and a 6-signal anti-spoofing recognizer.
+  - Three-way head dispatch is now explicit through `RuleExprHeadBinding.kind`: `inline`, `external`, and `projection`; `_head_var_names(...)` returns head-side vars for all three categories.
+  - SDK T3L.3 external-head rejection was removed after T4.1 validation; legacy SDK `Inference` / derivation dict behavior remains unchanged.
+  - PyReason remains adapter-policy only: head-link equality, non-pred features, and aggregate external-head bodies reject through the existing classifier; no adapter grammar expansion landed.
+  - Scope locks held: no public DTO / result shape changes, no projection/head-link DTO exports, no D15 closed-head inspect fields, no T5 evidence / WhyNot / `row.close()` surfaces, no adapter production edits, no T1.3 final `Rule` flip, and no projection rename syntax.
+  - Verification: G7 baseline 145 tests OK; feature gate 155 preservation tests OK; 56 focused RuleExpr tests OK; touched-file ruff clean. Step 4.7 had 0 P0/P1; 3 optional internal cleanup nits deferred.
+  - T4.3 is the next scoped target: D15 closed-head inspect utilities + docs.
+
 ### T4 cycle progress
 
 | Phase | Status |
@@ -317,9 +330,9 @@
 | T4 Stage 1 audit | reviewed clean v1 |
 | T4 Stage 2 D11-D15 | 5/5 reviewed clean |
 | T4 Stage 3 synthesis | clean v1 |
-| T4.1 Head Identity + Declared-Port Foundation | archived at `f3e9cb9a`; memory consolidation in this commit |
-| T4.2 External + Projection Head Execution | next scoped target |
-| T4.3 Closed-Head Inspect Utilities + Docs | pending |
+| T4.1 Head Identity + Declared-Port Foundation | archived at `f3e9cb9a`; memory consolidated at `8ddbe121` |
+| T4.2 External + Projection Head Execution | archived at `bd0b14bf`; memory consolidation in this commit |
+| T4.3 Closed-Head Inspect Utilities + Docs | next scoped target |
 
 ### T3 later cycle complete milestone
 
@@ -529,7 +542,8 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 
 - **T3 later cycle complete + push gate executed** — T3L.1 + T3L.2 + T3L.3 archived + 2 new origin refs pushed; RuleExpr public execution shipped + asymmetric local-only risk eliminated for T3 later work.
 - **T4.1 Head Identity + Declared-Port Foundation archived locally** — first T4 implementation slice complete; D11 identity validation + D12 branch-total declared-port foundation shipped; final gates 145 preservation tests OK, 46 focused RuleExpr tests OK, touched-file ruff clean.
-- **T4.2 External + Projection Head Execution — next scoped target** — consumes D13 + D14 plus T4.1 helpers; start with fresh Step 4.6 grep against the post-T4.1 baseline. Acceptance anchors: D13 external-head body semantics, D14 `Rule.projection(...)` private recognizable shape, D12 declared-port helper, and T3L.1/T3L.2 lowering/materialization substrate.
+- **T4.2 External + Projection Head Execution archived locally** — second T4 implementation slice complete; D13 external-head body materialization + D14 `Rule.projection(...)` sugar shipped; final gates 155 preservation tests OK, 56 focused RuleExpr tests OK, touched-file ruff clean.
+- **T4.3 Closed-Head Inspect Utilities + Docs — next scoped target** — consumes D15 plus T4.1/T4.2 head validation/materialization substrate. M-class predicted; expected to finish T4 cycle by adding strict closed-head inspect fields and user-facing docs without T5 result/evidence surfaces.
 - **T5 EvaluateResult + Semantics + legacy hard-cut + WhyNot** — 0% started; largest redesign zone and trigger for T1.3 final `Rule` flip.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice for `_lower_compare_with_aggregate` non-aggregate side AttrRef/BinaryExpr handling.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3/T3L.1 locked unittest fallback and did not block on pytest runner instability.
