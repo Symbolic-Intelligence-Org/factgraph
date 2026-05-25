@@ -8,6 +8,7 @@ from factgraph.application.protocol import EntitySelector, Rule, RuleExprError
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
     RuleExprHeadBinding,
+    RuleExprHeadPortLinkMaterialization,
     RuleExprLoweringBranch,
     RuleExprLoweringPlan,
     _evaluate_rule_expr_native_for_tests,
@@ -100,9 +101,16 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
             projection_occurrence_alias=rule.id,
         )
 
-        with self.assertRaisesRegex(RuleExprError, "external head binding"):
+        with self.assertRaisesRegex(RuleExprError, "external/projection head binding"):
             RuleExprHeadBinding(
                 kind="external",
+                head_rule_id=rule.id,
+                head_content_digest=rule.content_digest,
+                projection_occurrence_alias=rule.id,
+            )
+        with self.assertRaisesRegex(RuleExprError, "external/projection head binding"):
+            RuleExprHeadBinding(
+                kind="projection",
                 head_rule_id=rule.id,
                 head_content_digest=rule.content_digest,
                 projection_occurrence_alias=rule.id,
@@ -194,14 +202,67 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         self.assertEqual(sum(1 for atom in compiled.body_ir if atom[0] == "eq"), 1)
         self.assertEqual(len(traces[0].join_materializations), 1)
 
-    def test_external_head_materialization_is_deferred(self) -> None:
+    def test_external_head_body_and_links_materialize_after_expression_and_joins(self) -> None:
         body = _person_region_rule()
         head = _person_exists_rule()
         plan = _lower_rule_expr(body & Rule(id="other", where=(PredAtom("Other", [Var("$o")]),), ports={"other": Var("$o")}), head=head)
 
         self.assertEqual(plan.head_binding.kind, "external")
-        with self.assertRaisesRegex(RuleExprError, "external head body concatenation is deferred"):
-            _materialize_native_derivation_plan(plan)
+        compiled, traces = _materialize_native_derivation_plan(plan)
+
+        self.assertEqual(compiled.body_ir[0][0], "pred")
+        self.assertEqual(compiled.body_ir[-1], ("eq", "$__head__p", "$person_region__p"))
+        self.assertEqual(compiled.heads[0].head_var_names, ("$__head__p",))
+        self.assertEqual(len(traces[0].head_port_link_materializations), 1)
+        self.assertIsInstance(traces[0].head_port_link_materializations[0], RuleExprHeadPortLinkMaterialization)
+        self.assertEqual(traces[0].head_port_link_materializations[0].head_port_name, "person")
+
+    def test_external_head_body_applies_to_every_or_branch_without_var_collision(self) -> None:
+        left = Rule(id="left", where=(PredAtom("Person:exists", [Var("$person")]),), ports={"person": Var("$person")})
+        right = Rule(id="right", where=(PredAtom("Person:exists", [Var("$person")]),), ports={"person": Var("$person")})
+        head = Rule(
+            id="head",
+            where=(PredAtom("Person:exists", [Var("$person")]), PredAtom("Allowed", [Var("$person")])),
+            ports={"person": Var("$person")},
+        )
+        plan = _lower_rule_expr(left.as_("left") | right.as_("right"), head=head)
+
+        compiled, traces = _materialize_native_derivation_plan(plan)
+
+        self.assertEqual(len(compiled.body_ir), 2)
+        for branch in compiled.body_ir:
+            self.assertIn(("pred", "Allowed", ["$__head__person"]), branch)
+            self.assertEqual(branch[-1][0], "eq")
+        self.assertEqual(compiled.body_ir[0][-1], ("eq", "$__head__person", "$left__person"))
+        self.assertEqual(compiled.body_ir[1][-1], ("eq", "$__head__person", "$right__person"))
+        self.assertEqual(tuple(len(trace.head_port_link_materializations) for trace in traces), (1, 1))
+
+    def test_external_head_links_by_public_port_name_not_internal_var_name(self) -> None:
+        source = Rule(id="source", where=(PredAtom("Person:exists", [Var("$p")]),), ports={"person": Var("$p")})
+        head = Rule(id="head", where=(PredAtom("Person:exists", [Var("$different")]),), ports={"person": Var("$different")})
+        plan = _lower_application_rule(source, head=head)
+
+        compiled, traces = _materialize_native_derivation_plan(plan)
+
+        self.assertEqual(compiled.body_ir[-1], ("eq", "$__head__different", "$source__p"))
+        self.assertEqual(traces[0].head_port_link_materializations[0].source_port_name, "person")
+
+    def test_projection_head_links_without_materializing_placeholder_atoms(self) -> None:
+        body = _person_region_rule()
+        head = Rule.projection("region", "person")
+        plan = _lower_application_rule(body, head=head)
+
+        compiled, traces = _materialize_native_derivation_plan(plan)
+
+        self.assertEqual(plan.head_binding.kind, "projection")
+        self.assertEqual(compiled.heads[0].head_var_names, ("$__projection_0", "$__projection_1"))
+        self.assertNotIn("__factgraph_projection_placeholder", repr(compiled.body_ir))
+        self.assertEqual(compiled.body_ir[-2], ("eq", "$__projection_1", "$person_region__p"))
+        self.assertEqual(compiled.body_ir[-1], ("eq", "$__projection_0", "$person_region__region"))
+        self.assertEqual(
+            tuple(link.head_port_name for link in traces[0].head_port_link_materializations),
+            ("person", "region"),
+        )
 
     def test_aggregate_atom_survives_native_materialization(self) -> None:
         amount = Var("$amount")

@@ -16,6 +16,7 @@ from factgraph.core.rules.where_ast import (
     Const,
     InAtom,
     NotAtom,
+    Origin,
     OrExpr,
     PredAtom,
     RuleRefAtom,
@@ -42,6 +43,10 @@ _ALLOWED_ATOM_TYPES = (PredAtom, CmpAtom, InAtom, BuiltinAtom, NotAtom)
 _DESC_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
 _MALFORMED_PERCENT_RE = re.compile(r"%(?![A-Za-z_])")
 _OCCURRENCE_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+_PROJECTION_ID_PREFIX = "__factgraph_projection__"
+_PROJECTION_ORIGIN = Origin(source="authoring", path="Rule.projection")
+_PROJECTION_PLACEHOLDER_PRED_ID = "__factgraph_projection_placeholder"
+_PROJECTION_VAR_PREFIX = "$__projection_"
 
 
 @dataclass(frozen=True)
@@ -125,6 +130,25 @@ class Rule:
     def as_(self, alias: str | None = None) -> RuleOccurrence:
         effective_alias = self.id if alias is None else alias
         return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(effective_alias))
+
+    @classmethod
+    def projection(cls, *port_names: str) -> Rule:
+        if not port_names:
+            raise RuleValidationError("Rule.projection(...) requires at least one port name")
+        seen: set[str] = set()
+        for idx, name in enumerate(port_names):
+            if not isinstance(name, str) or not name:
+                raise RuleValidationError(f"Rule.projection(...) port_names[{idx}] must be non-empty string")
+            if name in seen:
+                raise RuleValidationError(f"Rule.projection(...) duplicate port name: {name!r}")
+            seen.add(name)
+
+        variables = tuple(Var(f"{_PROJECTION_VAR_PREFIX}{idx}", _PROJECTION_ORIGIN) for idx, _name in enumerate(port_names))
+        return cls(
+            id=_projection_rule_id(port_names),
+            where=tuple(PredAtom(_PROJECTION_PLACEHOLDER_PRED_ID, [var], _PROJECTION_ORIGIN) for var in variables),
+            ports={name: var for name, var in zip(port_names, variables, strict=True)},
+        )
 
     def __and__(self, other: object) -> _RuleExpr:
         from .rule_expr import _combine
@@ -229,6 +253,34 @@ def _validate_occurrence_alias(alias: Any) -> str:
     if re.fullmatch(_OCCURRENCE_ALIAS_RE, alias) is None:
         raise RuleValidationError("occurrence alias must match [A-Za-z][A-Za-z0-9_]*")
     return alias
+
+
+def _projection_rule_id(port_names: tuple[str, ...]) -> str:
+    payload = json.dumps(list(port_names), separators=(",", ":")).encode("utf-8")
+    return f"{_PROJECTION_ID_PREFIX}{sha256_hex(payload)[:16]}"
+
+
+def _is_projection_rule(rule: Rule) -> bool:
+    if not isinstance(rule, Rule):
+        return False
+    port_names = tuple(rule.ports)
+    if not port_names or rule.id != _projection_rule_id(port_names):
+        return False
+    if len(rule.where) != len(port_names):
+        return False
+    expected_vars = tuple(Var(f"{_PROJECTION_VAR_PREFIX}{idx}", _PROJECTION_ORIGIN) for idx, _name in enumerate(port_names))
+    if tuple(rule.ports.values()) != expected_vars:
+        return False
+    for atom, expected_var in zip(rule.where, expected_vars, strict=True):
+        if not isinstance(atom, PredAtom):
+            return False
+        if atom.pred_id != _PROJECTION_PLACEHOLDER_PRED_ID:
+            return False
+        if atom.origin != _PROJECTION_ORIGIN:
+            return False
+        if tuple(atom.terms) != (expected_var,):
+            return False
+    return True
 
 
 def _validate_atom(atom: Any, *, field_name: str, seen_vars: set[Var]) -> None:

@@ -24,7 +24,7 @@ from factgraph.core.rules.where_ast import (
 from factgraph.core.store import Store
 
 from .derivation import CompiledDerivationPlan, CompiledHeadCall, DerivationEvaluateRequest
-from .rule import PortType, Rule
+from .rule import PortType, Rule, _is_projection_rule
 from .rule_expr import (
     RuleExprError,
     RuleJoinConstraint,
@@ -77,20 +77,20 @@ class RuleExprOccurrenceBinding:
 
 @dataclass(frozen=True)
 class RuleExprHeadBinding:
-    kind: Literal["external", "inline"]
+    kind: Literal["external", "inline", "projection"]
     head_rule_id: str
     head_content_digest: str
     projection_occurrence_alias: str | None = None
 
     def __post_init__(self) -> None:
-        if self.kind not in {"external", "inline"}:
-            raise RuleExprError("RuleExprHeadBinding.kind must be 'external' or 'inline'")
+        if self.kind not in {"external", "inline", "projection"}:
+            raise RuleExprError("RuleExprHeadBinding.kind must be external, inline, or projection")
         _require_non_empty_str(self.head_rule_id, field_name="head_rule_id")
         _require_non_empty_str(self.head_content_digest, field_name="head_content_digest")
         if self.projection_occurrence_alias is not None:
             _require_non_empty_str(self.projection_occurrence_alias, field_name="projection_occurrence_alias")
-        if self.kind == "external" and self.projection_occurrence_alias is not None:
-            raise RuleExprError("external head binding must not set projection_occurrence_alias")
+        if self.kind in {"external", "projection"} and self.projection_occurrence_alias is not None:
+            raise RuleExprError("external/projection head binding must not set projection_occurrence_alias")
         if self.kind == "inline" and self.projection_occurrence_alias is None:
             raise RuleExprError("inline head binding requires projection_occurrence_alias")
 
@@ -159,6 +159,22 @@ class RuleExprJoinMaterialization:
 
 
 @dataclass(frozen=True)
+class RuleExprHeadPortLinkMaterialization:
+    branch_id: str
+    head_port_name: str
+    source_occurrence_alias: str
+    source_port_name: str
+    materialized_atom_index: int
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.branch_id, field_name="branch_id")
+        _require_non_empty_str(self.head_port_name, field_name="head_port_name")
+        _require_non_empty_str(self.source_occurrence_alias, field_name="source_occurrence_alias")
+        _require_non_empty_str(self.source_port_name, field_name="source_port_name")
+        _require_non_negative_int(self.materialized_atom_index, field_name="materialized_atom_index")
+
+
+@dataclass(frozen=True)
 class RuleExprEvaluationTrace:
     canonical_key: tuple[object, ...]
     engine: RuleExprAdapterEngine
@@ -168,6 +184,7 @@ class RuleExprEvaluationTrace:
     occurrence_map: tuple[RuleExprOccurrenceBinding, ...]
     join_materializations: tuple[RuleExprJoinMaterialization, ...]
     head_binding: RuleExprHeadBinding
+    head_port_link_materializations: tuple[RuleExprHeadPortLinkMaterialization, ...] = ()
     support_digest: str | None = None
     support_kind: str | None = None
 
@@ -184,6 +201,11 @@ class RuleExprEvaluationTrace:
             self.join_materializations,
             field_name="join_materializations",
             item_type=RuleExprJoinMaterialization,
+        )
+        _require_tuple(
+            self.head_port_link_materializations,
+            field_name="head_port_link_materializations",
+            item_type=RuleExprHeadPortLinkMaterialization,
         )
         if not isinstance(self.head_binding, RuleExprHeadBinding):
             raise RuleExprError("RuleExprEvaluationTrace.head_binding must be RuleExprHeadBinding")
@@ -254,14 +276,14 @@ class RuleExprDeclaredPort:
 
 @dataclass(frozen=True)
 class RuleExprHeadValidation:
-    identity_state: Literal["external", "inline", "version-warning"]
+    identity_state: Literal["external", "inline", "projection", "version-warning"]
     head_binding: RuleExprHeadBinding
     declared_ports: tuple[RuleExprDeclaredPort, ...]
     matched_occurrence_alias: str | None = None
     version_warning_emitted: bool = False
 
     def __post_init__(self) -> None:
-        if self.identity_state not in {"external", "inline", "version-warning"}:
+        if self.identity_state not in {"external", "inline", "projection", "version-warning"}:
             raise RuleExprError("RuleExprHeadValidation.identity_state is unsupported")
         if not isinstance(self.head_binding, RuleExprHeadBinding):
             raise RuleExprError("RuleExprHeadValidation.head_binding must be RuleExprHeadBinding")
@@ -270,9 +292,9 @@ class RuleExprHeadValidation:
             _require_non_empty_str(self.matched_occurrence_alias, field_name="matched_occurrence_alias")
         if not isinstance(self.version_warning_emitted, bool):
             raise RuleExprError("RuleExprHeadValidation.version_warning_emitted must be bool")
-        if self.identity_state == "external" and self.matched_occurrence_alias is not None:
-            raise RuleExprError("external head validation must not set matched_occurrence_alias")
-        if self.identity_state != "external" and self.matched_occurrence_alias is None:
+        if self.identity_state in {"external", "projection"} and self.matched_occurrence_alias is not None:
+            raise RuleExprError("external/projection head validation must not set matched_occurrence_alias")
+        if self.identity_state in {"inline", "version-warning"} and self.matched_occurrence_alias is None:
             raise RuleExprError("inline head validation requires matched_occurrence_alias")
         if self.identity_state != "version-warning" and self.version_warning_emitted:
             raise RuleExprError("version_warning_emitted requires version-warning identity_state")
@@ -305,14 +327,12 @@ def _materialize_adapter_derivation_plan(
         raise RuleExprError("plan must be RuleExprLoweringPlan")
     if engine not in {"native", "souffle", "problog"}:
         raise RuleExprError("engine must be native, souffle, or problog")
-    if plan.head_binding.kind == "external":
-        raise RuleExprError("external head body concatenation is deferred to T3L.3")
 
     materialized_branches: list[list[object]] = []
     traces: list[RuleExprEvaluationTrace] = []
     head_vars = _head_var_names(plan)
     for runtime_branch_index, branch in enumerate(plan.branches):
-        body, joins = _materialize_branch(branch, plan.occurrence_map)
+        body, joins, head_links = _materialize_branch(branch, plan)
         materialized_branches.append(body)
         traces.append(
             RuleExprEvaluationTrace(
@@ -323,6 +343,7 @@ def _materialize_adapter_derivation_plan(
                 occurrence_aliases=branch.occurrence_aliases,
                 occurrence_map=plan.occurrence_map,
                 join_materializations=joins,
+                head_port_link_materializations=head_links,
                 head_binding=plan.head_binding,
             )
         )
@@ -343,11 +364,7 @@ def _materialize_adapter_derivation_plan(
 
 
 def _classify_pyreason_rule_expr_support(plan: RuleExprLoweringPlan) -> RuleExprAdapterSupport:
-    """Classify PyReason support for inline-head plans.
-
-    External-head plans still raise ``RuleExprError`` through materialization because
-    external head body concatenation remains deferred to T3L.3.
-    """
+    """Classify PyReason support for materialized RuleExpr plans."""
     compiled, traces = _materialize_adapter_derivation_plan(plan, engine="native")
     branch_join_indexes = {
         trace.runtime_branch_index: {join.materialized_atom_index for join in trace.join_materializations}
@@ -371,6 +388,14 @@ def _classify_pyreason_rule_expr_support(plan: RuleExprLoweringPlan) -> RuleExpr
 def _validate_rule_expr_head_foundation(plan: RuleExprLoweringPlan) -> RuleExprHeadValidation:
     if not isinstance(plan, RuleExprLoweringPlan):
         raise RuleExprError("plan must be RuleExprLoweringPlan")
+    declared_ports, partial_ports = _declared_port_state_for_rule_expr_plan(plan)
+    if plan.head_binding.kind == "projection":
+        _validate_head_declared_ports(plan.head, declared_ports, partial_ports=partial_ports, compare_port_types=False)
+        return RuleExprHeadValidation(
+            identity_state="projection",
+            head_binding=plan.head_binding,
+            declared_ports=declared_ports,
+        )
 
     exact_matches = [
         occurrence
@@ -391,8 +416,7 @@ def _validate_rule_expr_head_foundation(plan: RuleExprLoweringPlan) -> RuleExprH
             f"head rule {plan.head.id!r} matches multiple expression occurrences with the same content digest"
         )
 
-    declared_ports, partial_ports = _declared_port_state_for_rule_expr_plan(plan)
-    _validate_head_declared_ports(plan.head, declared_ports, partial_ports=partial_ports)
+    _validate_head_declared_ports(plan.head, declared_ports, partial_ports=partial_ports, compare_port_types=True)
 
     if not exact_matches:
         return RuleExprHeadValidation(
@@ -523,6 +547,7 @@ def _validate_head_declared_ports(
     declared_ports: tuple[RuleExprDeclaredPort, ...],
     *,
     partial_ports: frozenset[str],
+    compare_port_types: bool = True,
 ) -> None:
     declared_by_name = {port.name: port for port in declared_ports}
     issues: list[str] = []
@@ -534,9 +559,10 @@ def _validate_head_declared_ports(
             else:
                 issues.append(f"head port {name!r} is not declared by the RuleExpr")
             continue
-        head_type = head.port_types[name]
-        if declared.port_type != head_type:
-            issues.append(f"head port {name!r} type {head_type!r} does not match RuleExpr port type {declared.port_type!r}")
+        if compare_port_types:
+            head_type = head.port_types[name]
+            if declared.port_type != head_type:
+                issues.append(f"head port {name!r} type {head_type!r} does not match RuleExpr port type {declared.port_type!r}")
         if not isinstance(head_var, Var):
             issues.append(f"head port {name!r} is not backed by a Var")
     if issues:
@@ -699,17 +725,21 @@ def _assign_branch_ids(branches: tuple[RuleExprLoweringBranch, ...]) -> tuple[Ru
 
 def _materialize_branch(
     branch: RuleExprLoweringBranch,
-    occurrence_map: tuple[RuleExprOccurrenceBinding, ...],
-) -> tuple[list[object], tuple[RuleExprJoinMaterialization, ...]]:
+    plan: RuleExprLoweringPlan,
+) -> tuple[list[object], tuple[RuleExprJoinMaterialization, ...], tuple[RuleExprHeadPortLinkMaterialization, ...]]:
     materialized_atoms: list[Atom] = list(branch.body_atoms)
+    if plan.head_binding.kind == "external":
+        head_var_map = _head_alias_var_map(plan.head)
+        materialized_atoms.extend(_rewrite_atom(atom, head_var_map) for atom in plan.head.where)
+
     joins: list[RuleExprJoinMaterialization] = []
     unique_joins: dict[tuple[object, ...], RuleJoinConstraint] = {}
     for join in branch.pending_joins:
         unique_joins.setdefault(_canonical_join_constraint(join), join)
     for join_key in sorted(unique_joins, key=repr):
         join = unique_joins[join_key]
-        left = _resolve_endpoint(join.left, occurrence_map)
-        right = _resolve_endpoint(join.right, occurrence_map)
+        left = _resolve_endpoint(join.left, plan.occurrence_map)
+        right = _resolve_endpoint(join.right, plan.occurrence_map)
         if left.port_type != right.port_type:
             raise RuleExprError("join endpoint port types are incompatible")
         materialized_index = len(materialized_atoms)
@@ -731,7 +761,46 @@ def _materialize_branch(
                 materialized_atom_index=materialized_index,
             )
         )
-    return lower_ast_to_where_ir(AndExpr(materialized_atoms)), tuple(joins)
+
+    head_links: list[RuleExprHeadPortLinkMaterialization] = []
+    if plan.head_binding.kind in {"external", "projection"}:
+        declared_ports, partial_ports = _declared_port_state_for_rule_expr_plan(plan)
+        _validate_head_declared_ports(
+            plan.head,
+            declared_ports,
+            partial_ports=partial_ports,
+            compare_port_types=plan.head_binding.kind != "projection",
+        )
+        declared_by_name = {port.name: port for port in declared_ports}
+        head_var_map = _head_alias_var_map(plan.head) if plan.head_binding.kind == "external" else None
+        for port_name in sorted(plan.head.ports):
+            declared = declared_by_name[port_name]
+            source = _declared_port_branch_source(declared, branch.branch_id)
+            head_var = plan.head.ports[port_name]
+            lhs = head_var_map[head_var] if head_var_map is not None else head_var
+            materialized_index = len(materialized_atoms)
+            materialized_atoms.append(CmpAtom(op="eq", lhs=lhs, rhs=source.alias_local_execution_var))
+            head_links.append(
+                RuleExprHeadPortLinkMaterialization(
+                    branch_id=branch.branch_id,
+                    head_port_name=port_name,
+                    source_occurrence_alias=source.occurrence_alias,
+                    source_port_name=source.port_name,
+                    materialized_atom_index=materialized_index,
+                )
+            )
+
+    return lower_ast_to_where_ir(AndExpr(materialized_atoms)), tuple(joins), tuple(head_links)
+
+
+def _declared_port_branch_source(
+    declared_port: RuleExprDeclaredPort,
+    branch_id: str,
+) -> RuleExprDeclaredPortBranchSource:
+    for source in declared_port.branch_sources:
+        if source.branch_id == branch_id:
+            return source
+    raise RuleExprError(f"declared port {declared_port.name!r} is missing branch source {branch_id!r}")
 
 
 def _resolve_endpoint(
@@ -756,6 +825,12 @@ def _resolve_endpoint(
 
 
 def _head_binding(head: Rule, occurrence_map: tuple[RuleExprOccurrenceBinding, ...]) -> RuleExprHeadBinding:
+    if _is_projection_rule(head):
+        return RuleExprHeadBinding(
+            kind="projection",
+            head_rule_id=head.id,
+            head_content_digest=head.content_digest,
+        )
     matches = [
         occurrence.alias
         for occurrence in occurrence_map
@@ -778,14 +853,23 @@ def _head_binding(head: Rule, occurrence_map: tuple[RuleExprOccurrenceBinding, .
 
 
 def _head_var_names(plan: RuleExprLoweringPlan) -> tuple[str, ...]:
+    if plan.head_binding.kind == "projection":
+        return tuple(var.name for var in plan.head.ports.values())
+    if plan.head_binding.kind == "external":
+        head_var_map = _head_alias_var_map(plan.head)
+        return tuple(head_var_map[var].name for var in plan.head.ports.values())
     if plan.head_binding.projection_occurrence_alias is None:
-        raise RuleExprError("external head body concatenation is deferred to T3L.3")
+        raise RuleExprError("inline head binding requires projection occurrence alias")
     occurrence = _occurrence_binding(plan.occurrence_map, plan.head_binding.projection_occurrence_alias)
     names: list[str] = []
     for port_name in plan.head.ports:
         binding = _port_binding(occurrence, port_name)
         names.append(binding.alias_local_execution_var.name)
     return tuple(names)
+
+
+def _head_alias_var_map(head: Rule) -> dict[Var, Var]:
+    return _alias_var_map("__head", head.where)
 
 
 def _occurrence_binding(

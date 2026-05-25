@@ -9,7 +9,7 @@ from factgraph.application import build_schema_index, entity_info, field_predica
 from factgraph.application.protocol import EntitySelector, Rule, RuleExprError, RuleExprInspect
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, PredAtom, Var
+from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
 
@@ -109,13 +109,51 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 with self.assertRaisesRegex(SDKStoreError, "head= must be application Rule"):
                     graph.eval.evaluate(rule, head=invalid)
 
-    def test_external_head_rejects_with_guidance(self) -> None:
+    def test_external_head_filters_rows_and_evaluates(self) -> None:
         graph = _store()
-        body = _person_region_rule()
-        external_head = _person_exists_rule()
+        alice = _seed_person(graph, "alice", region="eu")
+        _seed_person(graph, "bob", region="us")
+        body = _person_region_rule("body_region")
+        person = Var("$person")
+        region = Var("$region")
+        external_head = Rule(
+            id="person:region",
+            where=(
+                PredAtom("Person:exists", [person]),
+                PredAtom("person:region", [person, region]),
+                CmpAtom("eq", region, Const("eu")),
+            ),
+            ports={"person": person, "region": region},
+        )
 
-        with self.assertRaisesRegex(SDKStoreError, "include the head rule as an expression occurrence"):
-            graph.eval.evaluate(body, head=external_head)
+        candidates = graph.eval.evaluate(body, head=external_head, engine="native")
+
+        self.assertTrue(candidates)
+        self.assertIn(alice, str(candidates[0].payload))
+        self.assertNotIn("bob", str(candidates[0].payload))
+
+    def test_projection_head_evaluates_and_preserves_argument_order(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "erin", region="apac")
+        rule = _person_region_rule()
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            candidates = graph.eval.evaluate(rule, head=Rule.projection("region", "person"), engine="native")
+
+        self.assertEqual(candidates, [])
+        request = evaluate.call_args.args[0]
+        self.assertEqual(request.plans[0].heads[0].head_var_names, ("$__projection_0", "$__projection_1"))
+        self.assertIn("$__projection_0", repr(request.plans[0].body_ir))
+        self.assertNotIn("__factgraph_projection_placeholder", repr(request.plans[0].body_ir))
+
+        self.assertTrue(encoded)
+
+    def test_projection_undeclared_port_uses_ruleexpr_error(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+
+        with self.assertRaisesRegex(RuleExprError, "is not declared by the RuleExpr"):
+            graph.eval.evaluate(rule, head=Rule.projection("unknown"), engine="native")
 
     def test_same_id_version_mismatch_warns_and_evaluates(self) -> None:
         graph = _store()

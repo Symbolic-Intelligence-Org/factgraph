@@ -209,6 +209,18 @@ class RuleExprPyReasonClassifierTests(unittest.TestCase):
         self.assertEqual(support.unsupported_feature, "aggregate")
         self.assertEqual(support.rejection_source, "aggregate")
 
+    def test_pyreason_classifier_rejects_aggregate_external_head_body(self) -> None:
+        total = Var("$total")
+        body = Rule(id="total_source", where=(PredAtom("TotalValue", [total]),), ports={"total": total})
+        head = _aggregate_rule()
+        plan = _lower_application_rule(body, head=head)
+
+        support = _classify_pyreason_rule_expr_support(plan)
+
+        self.assertFalse(support.supported)
+        self.assertEqual(support.unsupported_feature, "aggregate")
+        self.assertEqual(support.rejection_source, "aggregate")
+
 
 if __name__ == "__main__":
     unittest.main()

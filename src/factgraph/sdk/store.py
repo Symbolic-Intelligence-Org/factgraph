@@ -2363,11 +2363,6 @@ class SDKStore:
             raise SDKStoreError("evaluate(rule_expr, ...) expects application Rule or RuleExpr input")
 
         _validate_rule_expr_head_foundation(plan)
-        if plan.head_binding.kind == "external":
-            raise SDKStoreError(
-                "evaluate(rule_expr, ...) does not support external head= body concatenation in T3L.3; "
-                "include the head rule as an expression occurrence and pass that same application Rule as head="
-            )
 
         if engine == "pyreason":
             support = _classify_pyreason_rule_expr_support(plan)

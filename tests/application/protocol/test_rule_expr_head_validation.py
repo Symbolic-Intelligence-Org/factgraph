@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 import warnings
 
-from factgraph.application.protocol import Rule, RuleExprError
+from factgraph.application.protocol import Rule, RuleExprError, RuleValidationError
 from factgraph.application.protocol.rule_expr_lowering import (
     _declared_ports_for_rule_expr_plan,
     _lower_application_rule,
@@ -165,6 +165,44 @@ class RuleExprHeadValidationTests(unittest.TestCase):
         plan = _lower_rule_expr(left.as_("left") & right.as_("right"), head=left)
 
         with self.assertRaisesRegex(RuleExprError, "incompatible same-name port types"):
+            _validate_rule_expr_head_foundation(plan)
+
+    def test_projection_construction_rejects_invalid_arguments(self) -> None:
+        with self.assertRaisesRegex(RuleValidationError, "at least one"):
+            Rule.projection()
+        with self.assertRaisesRegex(RuleValidationError, "non-empty string"):
+            Rule.projection("person", "")
+        with self.assertRaisesRegex(RuleValidationError, "non-empty string"):
+            Rule.projection("person", 1)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(RuleValidationError, "duplicate"):
+            Rule.projection("person", "person")
+
+    def test_projection_head_validates_against_declared_ports_not_placeholder_types(self) -> None:
+        rule = _person_region_rule()
+        head = Rule.projection("region", "person")
+        plan = _lower_application_rule(rule, head=head)
+
+        validation = _validate_rule_expr_head_foundation(plan)
+
+        self.assertEqual(plan.head_binding.kind, "projection")
+        self.assertEqual(validation.identity_state, "projection")
+        self.assertEqual(tuple(head.ports), ("region", "person"))
+        self.assertEqual(tuple(port.name for port in validation.declared_ports), ("person", "region"))
+
+    def test_projection_subset_validates_against_declared_ports(self) -> None:
+        rule = _person_region_rule()
+        plan = _lower_application_rule(rule, head=Rule.projection("region"))
+
+        validation = _validate_rule_expr_head_foundation(plan)
+
+        self.assertEqual(validation.identity_state, "projection")
+        self.assertEqual(tuple(plan.head.ports), ("region",))
+
+    def test_projection_undeclared_port_rejects(self) -> None:
+        rule = _person_exists_rule()
+        plan = _lower_application_rule(rule, head=Rule.projection("unknown"))
+
+        with self.assertRaisesRegex(RuleExprError, "is not declared by the RuleExpr"):
             _validate_rule_expr_head_foundation(plan)
 
 
