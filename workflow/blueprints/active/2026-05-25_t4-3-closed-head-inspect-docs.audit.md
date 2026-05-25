@@ -9,6 +9,7 @@ Blueprint: `workflow/blueprints/active/2026-05-25_t4-3-closed-head-inspect-docs.
 | Date | Stage | Actor | Notes |
 |---|---|---|---|
 | 2026-05-25 | draft | Codex | Drafted T4.3 blueprint after pre-draft grep against the post-T4.2 baseline. Scope covers D15 closed-head inspect fields plus bounded docs updates; T5/result/evidence/adapter changes remain locked out. |
+| 2026-05-25 | draft-amend | Codex | Addressed Step 4.2 v1 WCs: append-only `RuleExprInspect` field lock, RuleExpr structural inspect "not applicable" defaults, D15 section 4.4 entity-ref atom/schema path, and projection inspect-time vs D12 evaluation-time validation boundary. |
 
 ## Source Chain
 

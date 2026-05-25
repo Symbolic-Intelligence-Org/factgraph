@@ -89,7 +89,11 @@ Extend the existing `RuleExprInspect` dataclass with two additive fields:
 
 These fields are intentionally added to the existing inspect value instead of introducing a new public DTO. Defaults preserve existing constructor behavior and preserve RuleExpr structural inspect values that do not define a closed-head guarantee.
 
+Both new fields are appended to the end of the dataclass with explicit defaults. Existing structural fields (`ast`, `occurrences`, `joins`, `unjoined_same_name_ports`, and `ports`) must remain at identical positional indexes.
+
 Application Rule inspect values compute real closed-head status. RuleExpr structural inspect values keep the conservative default: `is_closed=False` and `unbound_ports=()`, because D15 does not define a closed-head guarantee for arbitrary structural RuleExpr inspection without a head context.
+
+These two fields are authoritative only when the inspect target is an application head `Rule`. For RuleExpr structural inspect, the defaults are placeholders representing "not applicable" per D15 section 4.7. Callers must not treat those defaults as closed-head proof, and docs must explicitly say structural RuleExpr inspect does not define closed-head semantics.
 
 ### 2.2 Closed-Head Helper
 
@@ -106,10 +110,10 @@ The helper evaluates only application `Rule` values and uses D15 strict v1 seman
 
 1. Empty port sets are impossible under shipped `Rule.ports` validation, so no special empty-head path is added.
 2. For value ports, a port is closed only by a direct user-authored equality atom in `head.where`: `CmpAtom("eq", Var(port), Const(value))` or `CmpAtom("eq", Const(value), Var(port))`.
-3. For entity-ref ports, a port is closed only when every primary identity field for the port's entity type has a user-authored identity `PredAtom(identity_predicate_id, [Var(port), Const(value)])`.
+3. For entity-ref ports, a port is closed only when every primary identity field for the port's entity type has a user-authored identity `PredAtom(identity_predicate_id, [entity_ref_var, Const(value)])`. The atom shape is locked by D15 section 4.4 with positional order `[entity_ref_var, Const(value)]`. `identity_predicate_id` comes from `SchemaIndex.entities[entity_type].identity_predicates[field_name].pred_id` for each `IdentityFieldInfo(primary_key=True)`.
 4. Missing schema index, missing entity type metadata, or missing identity predicate metadata is conservative: the entity-ref port is reported unbound.
-5. Projection rules recognized by the T4.2 projection recognizer are reported closed by construction with no unbound ports. D12 validation still owns evaluation-time projected-port validity.
-6. The helper operates on user-authored `head.where` atoms, not on D13 runtime-augmented head-port link atoms.
+5. Projection rules recognized by the T4.2 projection recognizer are reported closed by construction with no unbound ports based on D14 section 4.3 placeholder-only semantics and section 4.7 argument-order output. This inspect-time report is decoupled from D12 declared-port validation, which remains an evaluation-time check in T4.1 `_validate_rule_expr_head_foundation(...)`.
+6. The helper operates on user-authored `head.where` atoms, not on D13 runtime-augmented head-port link atoms. D13 head-port link atoms link variables rather than literals and are not closure proof per D15 section 4.4.
 
 No helper result is exported from `__all__`.
 
@@ -191,7 +195,7 @@ Preservation gates:
 1. **Schema context boundary**: entity-ref closure depends on schema identity metadata. SDK inspect has schema context; direct protocol helpers may not. Missing schema must remain conservative.
 2. **Public DTO boundary**: adding fields to `RuleExprInspect` is public. Defaults and tests must preserve existing inspect callers.
 3. **RuleExpr structural ambiguity**: arbitrary RuleExpr inspect is not head inspect. T4.3 must avoid falsely claiming structural expressions are closed heads.
-4. **Projection standalone semantics**: exact T4.2 projection sugar may be closed by construction, but D12 projected-port validation remains evaluation-time.
+4. **Projection standalone semantics**: exact T4.2 projection sugar may be closed by construction at inspect time, but inspect must not run D12 evaluation-time validation. Doing so would conflate read-only reporting with evaluation-time port resolution and could make inspect raise for projected-port validity.
 5. **Docs scope creep**: docs must describe inspect metadata only and must not pre-announce T5 `EvaluateResult`, WhyNot, Explanation, or row-close behavior.
 
 ## 6. Verification Gates
