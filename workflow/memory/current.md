@@ -1,10 +1,10 @@
 # Current Operational Memory
 
-最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; push gate executed — 4 origin refs created; T3 later selected; **T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE**)
+最后更新:2026-05-25(rule-expression T1/T2 closed + T3 Stage 1-3 complete + T3.1-T3.6 archived; T3 INITIAL CYCLE COMPLETE; first push gate executed — 4 origin refs created; T3 later selected; T3L.1 + T3L.2 + T3L.3 archived; T3 LATER CYCLE COMPLETE; **T3 later push gate executed — 2 origin refs created; T4 unblocked**)
 
-## 当前阶段(2026-05-25 — T3 LATER CYCLE COMPLETE)
+## 当前阶段(2026-05-25 — T3 LATER CYCLE COMPLETE + T3 LATER PUSH GATE EXECUTED — T4 UNBLOCKED)
 
-**Current local branch:** `v0.2.0-t3l-3-public-dispatch-diagnostics-docs-2026-05-25 @ 48f925a8`.
+**Current local branch:** `v0.2.0-t3l-3-public-dispatch-diagnostics-docs-2026-05-25` (latest commit `b4d31c7c` memory consolidation + this commit; `48f925a8` is T3L.3 archive anchor).
 
 **Sacred branch state:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666` remained untouched throughout the T1/T2 local batch.
 
@@ -305,11 +305,40 @@
 | T3L.2 Adapter Matrix Parity | M | `a417fe73` + `f1726ef3` | 121 preservation tests OK; 22 focused lowering/adapter tests; ruff clean |
 | T3L.3 Public SDK Dispatch + Diagnostics + Docs | M | `25b71e64` + `762731fa` | 131 preservation tests OK; 10 focused SDK tests; ruff clean |
 
-- T3 later is complete locally: Stage 1 audit, D6-D10, Stage 3 synthesis, and all 3 implementation slices are reviewed, archived, and memory-consolidated by this commit.
+- T3 later is complete locally: Stage 1 audit, D6-D10, Stage 3 synthesis, and all 3 implementation slices are reviewed, archived, and memory-consolidated.
 - Public RuleExpr execution is now shipped through `fg.eval.evaluate(rule_expr_or_application_rule, head=...)`.
 - Private lowering / trace / adapter-support substrate remains private; public success result remains `list[CandidateSet]`.
 - T3 later preserved narrow-public-api discipline across all slices and did not reopen T4 Head or T5 result/evidence surfaces.
-- Remaining unpushed local work includes T3L.1/T3L.2/T3L.3 cycle commits and memory consolidations; push remains Human-directed.
+
+### T3 later push gate executed (2026-05-25)
+
+Single batched push session to `origin` (not `factgraph`), 2 new origin refs:
+
+| Origin ref | Anchor commit | Role |
+|---|---|---|
+| `origin/milestone/t3-later-cycle-complete-2026-05-25` | `48f925a8` (T3L.3 archive) | T3 later cycle close immutable ref |
+| `origin/v0.2.0-t3l-3-public-dispatch-diagnostics-docs-2026-05-25` | (cumulative HEAD with memory) | T3 later cumulative HEAD branch |
+
+Push semantics verified:
+
+- Destination: `origin` only — `factgraph` skipped per Human direction (consistent with first push gate).
+- No force push, no ref override; both 2 refs are NEW on origin.
+- ~27 net new commits uploaded (T3L.1 9 + T3L.2 9 + T3L.3 9).
+- Sacred `master` / `origin/master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty set unstaged → out of push history.
+- Hook bypass not used (`--no-verify` discipline preserved).
+- Session push count: 0 → 1 (T3 later cycle push gate).
+
+Push approach selected by Human: 2-ref scope (1 cycle-complete milestone + cumulative HEAD). Simpler than T1/T2/T3-initial 4-ref scope because T3 later is one cycle (not three different tracks). Aligns with cycle-close milestone pattern from first push gate (`milestone/t3-cycle-complete-2026-05-24`).
+
+### Cumulative push gate state (post-T3 later push)
+
+Combined origin refs from both push gates:
+
+- **First push gate** (T1/T2/T3-initial cycle, 2026-05-25): 4 refs (`milestone/t1-complete-2026-05-23` / `milestone/t2-complete-2026-05-23` / `milestone/t3-cycle-complete-2026-05-24` / `v0.2.0-t3-6-docs-and-examples-2026-05-24`)
+- **Second push gate** (T3 later cycle, 2026-05-25): 2 refs (`milestone/t3-later-cycle-complete-2026-05-25` / `v0.2.0-t3l-3-public-dispatch-diagnostics-docs-2026-05-25`)
+
+Total origin refs from rule-expression work: 6 (4 milestones + 2 cumulative HEAD branches).
 
 ### T3 cycle complete milestone
 
@@ -474,9 +503,8 @@ T2.3b inverted the cross-flip pattern (Claude drafts, user reviews) and needed t
 
 ### Recommended next work
 
-- **T3 later cycle complete** — T3L.1 + T3L.2 + T3L.3 are archived; RuleExpr public execution is shipped. No T3 later implementation slice remains.
-- **Push gate consideration** — T3L.1/T3L.2/T3L.3 archive and memory commits remain local unless Human authorizes a T3 later cycle-complete push gate. Prior push gate already created T1/T2/T3-initial origin refs; no automatic push.
-- **T4 Head + closed-head** — still 0% started; remains an independent next-track option.
+- **T3 later cycle complete + push gate executed** — T3L.1 + T3L.2 + T3L.3 archived + 2 new origin refs pushed; RuleExpr public execution shipped + asymmetric local-only risk eliminated for T3 later work.
+- **T4 Head + closed-head — next-track selected (Hybrid: Push + T4 per Human direction 2026-05-25)** — L-class independent track; 0% started. Codex 起 Stage 1 audit per cross-flip default (Codex drafts, Claude reviews). Acceptance anchors: parent essay §5.x + C52-C60 commitments + D6 §4.4 deferred external head body concatenation territory.
 - **T5 EvaluateResult + Semantics + legacy hard-cut + WhyNot** — 0% started; largest redesign zone and trigger for T1.3 final `Rule` flip.
 - **T2.3.b1 / T2.3.e (Nit follow-up, deferred from T2.3b)** — S-class micro-slice for `_lower_compare_with_aggregate` non-aggregate side AttrRef/BinaryExpr handling.
 - **Pytest SIGSEGV tooling investigation** — independent task; T3/T3L.1 locked unittest fallback and did not block on pytest runner instability.
