@@ -1,6 +1,6 @@
 # Task Blueprint: T5.5 Why-Not Fold + Legacy Evidence Quarantine
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted; split if hard-cut deletion or service/docs migration leaks in)

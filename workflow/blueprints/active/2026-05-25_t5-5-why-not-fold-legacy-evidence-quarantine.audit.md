@@ -1,11 +1,11 @@
 # Audit: T5.5 Why-Not Fold + Legacy Evidence Quarantine
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-25_t5-5-why-not-fold-legacy-evidence-quarantine.md`
-- Stage: T5.5 implementation blueprint draft
+- Stage: T5.5 implementation blueprint scoped
 - Class: M (predicted; split if hard-cut deletion or service/docs migration leaks in)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -14,7 +14,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-25 | draft | pending | Blueprint pair drafted | T5.5 Why-Not Fold + Legacy Evidence Quarantine draft created after T5.4 archive `7464c3e3`. Scope is M-class predicted and intentionally minimal: failed Explanation is v1 why-not envelope; legacy why-not hard-cut remains T5.7. |
+| 2026-05-25 | draft | `62c8eb1a` | Blueprint pair drafted | T5.5 Why-Not Fold + Legacy Evidence Quarantine draft created after T5.4 archive `7464c3e3`. Scope is M-class predicted and intentionally minimal: failed Explanation is v1 why-not envelope; legacy why-not hard-cut remains T5.7. |
+| 2026-05-25 | scoped | pending | Step 4.6 grep clean | Eight grep buckets completed. Existing WhyNot protocol/runtime/shells, round-event payloads, docs/examples, and T5.3/T5.4 explanation paths are expected substrate or future T5.7 territory. No public `.eval.why_not`, no result/explanation why-not method, and no lossy WhyNot/Diagnose-to-Explanation conversion path found. Scope remains M-class minimal. |
 
 ## 2. Source Chain
 
@@ -91,7 +92,22 @@ Run before scoped and record actual results.
 | 7 | SDK Rule / adapter guard | `rg "LegacyRule|ApplicationRule|src/factgraph/adapters|SemanticsProfile|raw_kind|bound" src tests workflow` | Existing substrate only; no T5.5 owner. |
 | 8 | T5 public evidence surface | `rg "row\\.explain|eval\\.explain|EvaluateResult\\.why_not|Explanation\\.why_not" src tests workflow` | T5.3/T5.4 paths expected; no result why-not method. |
 
-## 8. G7 Baseline Plan
+## 8. Step 4.6 Pre-Implementation Grep Results
+
+| # | Check | Actual result | Classification |
+|---|---|---|---|
+| 1 | Public eval why-not namespace | `SDKStore.why_not(...)`, `sdk_why_not(...)`, `fg.what_if.why_not(...)` docs/tests, and `why_not_result` round-event payload hits remain. No `_SDKEvalManager.why_not`, `fg.eval.why_not(...)`, `EvaluateResult.why_not(...)`, `why_not_v2`, or T5 public eval why-not owner exists. | Clean. Existing hits are legacy surfaces, historical docs, round events, or T5.7 hard-cut targets. |
+| 2 | WhyNot DTO family | `WhyNotUniverseRequest`, `WhyNotUniverseResult`, red-row diagnostics, atom locator, and enums remain in application protocol/runtime/tests and application-protocol exports. SDK `__all__` still does not expose `WhyNotUniverseResult`. | Expected. T5.5 classifies these as legacy/internal relative to T5; D23/T5.7 owns deletion or migration. |
+| 3 | Failed Explanation paths | `Explanation.failure_class`, the five failure classes, and `status="failed"` are present in T5.3/T5.4 implementation/tests. Other `status="failed"` hits belong to Check/Diagnose/Overlay/service payloads. | Clean substrate. T5.5 may add narrow tests; no WhyNot conversion found here. |
+| 4 | Lossy conversion guard | `rg "WhyNot.*Explanation|Explanation.*WhyNot|atom_locator.*Explanation|DiagnoseResult.*Explanation|diagnostic.*failure_class" src tests` returned no hits. | Clean. No shipped lossy WhyNot/Diagnose-to-Explanation conversion path exists. |
+| 5 | Legacy hard-cut boundary | `SDKStore.why_not`, `sdk_why_not`, `check_why_not_universe`, and `fg.what_if.why_not` hits are present in legacy runtime, shell tests, SDK docs, and older blueprint/archive material. | Expected. Behavior/signature changes are out of T5.5 scope; hard-cut remains T5.7. |
+| 6 | Service/OpenAPI/docs guard | Service/docs/examples/tests include broad why-not, counterfactual, and `what_if` references, including examples and public docs that still teach legacy why-not. | Expected. T5.5 does not migrate service/OpenAPI/examples; T5.7 owns broad migration. |
+| 7 | SDK Rule / adapter / semantics guard | `LegacyRule`, `ApplicationRule`, `SemanticsProfile`, `raw_kind`, and `bound` hits are existing T3/T4/T5 substrate, design docs, tests, and archived adapter semantics work. | Clean guard. No T5.5 implementation owner in SDK Rule naming, adapters, or C73-C78 semantics. |
+| 8 | T5 public evidence surface | `row.explain()` and `fg.eval.explain(...)` hits are T5.3/T5.4 implementation/tests and design/archive docs. No `EvaluateResult.why_not(...)` or `Explanation.why_not(...)` production owner exists. | Clean. T5.5 preserves row/manual explain as the only T5 evidence path. |
+
+Scope decision: T5.5 remains a minimal M-class quarantine/fold slice. The grep results do not trigger A-fallback, a split, D23 deletion, service/docs migration, SDK Rule work, or adapter work.
+
+## 9. G7 Baseline Plan
 
 Command:
 
@@ -125,7 +141,7 @@ Baseline record:
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
-## 9. Draft Review Checklist
+## 10. Draft Review Checklist
 
 | Item | Status |
 |---|---|
@@ -140,9 +156,10 @@ Baseline record:
 | SDK Rule flip excluded | Yes |
 | Adapter semantics excluded | Yes |
 | Step 4.6 grep plan present | Yes |
+| Step 4.6 grep results clean | Yes |
 | G7 baseline plan present | Yes |
 
-## 10. Risks For Reviewer
+## 11. Risks For Reviewer
 
 | Risk | Reviewer focus |
 |---|---|
@@ -152,6 +169,6 @@ Baseline record:
 | Failed Explanation may not yet cover enough failure paths | Confirm closed-head false/manual failed path is sufficient for T5.5. |
 | Docs migration pressure may leak in | Confirm broad docs/OpenAPI/examples remain T5.7. |
 
-## 11. Outcome
+## 12. Outcome
 
 Pending.
