@@ -35,6 +35,9 @@ from .rule_expr import (
     _coerce_rule_expr_operand,
 )
 
+RuleExprAdapterEngine = Literal["native", "souffle", "problog"]
+RuleExprAdapterRejectionSource = Literal["ruleexpr-join", "source-rule-grammar", "aggregate", "branch-shape"]
+
 
 @dataclass(frozen=True)
 class RuleExprPortBinding:
@@ -155,7 +158,7 @@ class RuleExprJoinMaterialization:
 @dataclass(frozen=True)
 class RuleExprEvaluationTrace:
     canonical_key: tuple[object, ...]
-    engine: Literal["native"]
+    engine: RuleExprAdapterEngine
     branch_id: str
     runtime_branch_index: int
     occurrence_aliases: tuple[str, ...]
@@ -168,8 +171,8 @@ class RuleExprEvaluationTrace:
     def __post_init__(self) -> None:
         if not isinstance(self.canonical_key, tuple) or not self.canonical_key:
             raise RuleExprError("RuleExprEvaluationTrace.canonical_key must be non-empty tuple")
-        if self.engine != "native":
-            raise RuleExprError("RuleExprEvaluationTrace.engine must be 'native'")
+        if self.engine not in {"native", "souffle", "problog"}:
+            raise RuleExprError("RuleExprEvaluationTrace.engine must be native, souffle, or problog")
         _require_non_empty_str(self.branch_id, field_name="branch_id")
         _require_non_negative_int(self.runtime_branch_index, field_name="runtime_branch_index")
         _require_tuple(self.occurrence_aliases, field_name="occurrence_aliases", item_type=str)
@@ -183,6 +186,34 @@ class RuleExprEvaluationTrace:
             raise RuleExprError("RuleExprEvaluationTrace.head_binding must be RuleExprHeadBinding")
         _require_optional_str(self.support_digest, field_name="support_digest")
         _require_optional_str(self.support_kind, field_name="support_kind")
+
+
+@dataclass(frozen=True)
+class RuleExprAdapterSupport:
+    engine: Literal["pyreason"]
+    supported: bool
+    unsupported_feature: str | None = None
+    rejection_source: RuleExprAdapterRejectionSource | None = None
+    alternative_engines: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.engine != "pyreason":
+            raise RuleExprError("RuleExprAdapterSupport.engine must be 'pyreason'")
+        if not isinstance(self.supported, bool):
+            raise RuleExprError("RuleExprAdapterSupport.supported must be bool")
+        _require_optional_str(self.unsupported_feature, field_name="unsupported_feature")
+        if self.rejection_source is not None and self.rejection_source not in {
+            "ruleexpr-join",
+            "source-rule-grammar",
+            "aggregate",
+            "branch-shape",
+        }:
+            raise RuleExprError("RuleExprAdapterSupport.rejection_source is unsupported")
+        _require_tuple(self.alternative_engines, field_name="alternative_engines", item_type=str)
+        if self.supported and (self.unsupported_feature is not None or self.rejection_source is not None):
+            raise RuleExprError("supported adapter classification must not include rejection details")
+        if not self.supported and (self.unsupported_feature is None or self.rejection_source is None):
+            raise RuleExprError("unsupported adapter classification requires rejection details")
 
 
 def _lower_application_rule(rule: Rule, *, head: Rule) -> RuleExprLoweringPlan:
@@ -200,8 +231,18 @@ def _lower_rule_expr(expr: _RuleExpr, *, head: Rule) -> RuleExprLoweringPlan:
 def _materialize_native_derivation_plan(
     plan: RuleExprLoweringPlan,
 ) -> tuple[CompiledDerivationPlan, tuple[RuleExprEvaluationTrace, ...]]:
+    return _materialize_adapter_derivation_plan(plan, engine="native")
+
+
+def _materialize_adapter_derivation_plan(
+    plan: RuleExprLoweringPlan,
+    *,
+    engine: RuleExprAdapterEngine,
+) -> tuple[CompiledDerivationPlan, tuple[RuleExprEvaluationTrace, ...]]:
     if not isinstance(plan, RuleExprLoweringPlan):
         raise RuleExprError("plan must be RuleExprLoweringPlan")
+    if engine not in {"native", "souffle", "problog"}:
+        raise RuleExprError("engine must be native, souffle, or problog")
     if plan.head_binding.kind == "external":
         raise RuleExprError("external head body concatenation is deferred to T3L.3")
 
@@ -214,7 +255,7 @@ def _materialize_native_derivation_plan(
         traces.append(
             RuleExprEvaluationTrace(
                 canonical_key=plan.canonical_key,
-                engine="native",
+                engine=engine,
                 branch_id=branch.branch_id,
                 runtime_branch_index=runtime_branch_index,
                 occurrence_aliases=branch.occurrence_aliases,
@@ -237,6 +278,27 @@ def _materialize_native_derivation_plan(
         heads=(CompiledHeadCall(target_pred_id=plan.head.id, head_var_names=head_vars),),
     )
     return compiled, tuple(traces)
+
+
+def _classify_pyreason_rule_expr_support(plan: RuleExprLoweringPlan) -> RuleExprAdapterSupport:
+    compiled, traces = _materialize_adapter_derivation_plan(plan, engine="native")
+    branch_join_indexes = {
+        trace.runtime_branch_index: {join.materialized_atom_index for join in trace.join_materializations}
+        for trace in traces
+    }
+    branches = _where_ir_branches(compiled.body_ir)
+    if not branches:
+        return _unsupported_pyreason("branch-shape", "branch-shape")
+    for branch_index, branch in enumerate(branches):
+        for atom_index, atom in enumerate(branch):
+            unsupported = _pyreason_unsupported_atom(
+                atom,
+                is_join_atom=atom_index in branch_join_indexes.get(branch_index, set()),
+            )
+            if unsupported is not None:
+                source, feature = unsupported
+                return _unsupported_pyreason(source, feature)
+    return RuleExprAdapterSupport(engine="pyreason", supported=True)
 
 
 def _evaluate_rule_expr_native_for_tests(
@@ -586,6 +648,58 @@ def _rewrite_term(term: Term, var_map: dict[Var, Var]) -> Term:
     raise RuleExprError(f"unsupported term for RuleExpr lowering: {type(term).__name__}")
 
 
+def _where_ir_branches(where: list[object]) -> tuple[tuple[object, ...], ...]:
+    if not isinstance(where, list) or not where:
+        return ()
+    if all(isinstance(item, list) for item in where):
+        return tuple(tuple(branch) for branch in where)
+    return (tuple(where),)
+
+
+def _pyreason_unsupported_atom(
+    atom: object,
+    *,
+    is_join_atom: bool,
+) -> tuple[RuleExprAdapterRejectionSource, str] | None:
+    if not isinstance(atom, tuple) or not atom:
+        return ("source-rule-grammar", "invalid-atom")
+    kind = atom[0]
+    if _where_ir_atom_contains_aggregate(atom):
+        return ("aggregate", "aggregate")
+    if kind == "pred":
+        return None
+    if is_join_atom and kind == "eq":
+        return ("ruleexpr-join", "eq")
+    if isinstance(kind, str):
+        return ("source-rule-grammar", kind)
+    return ("source-rule-grammar", "invalid-atom-kind")
+
+
+def _where_ir_atom_contains_aggregate(atom: tuple[object, ...]) -> bool:
+    return any(_where_ir_value_contains_aggregate(value) for value in atom[1:])
+
+
+def _where_ir_value_contains_aggregate(value: object) -> bool:
+    if isinstance(value, tuple) and value:
+        kind = value[0]
+        if kind in {"count", "sum", "min", "max", "mean"}:
+            return True
+        return any(_where_ir_value_contains_aggregate(item) for item in value[1:])
+    if isinstance(value, list):
+        return any(_where_ir_value_contains_aggregate(item) for item in value)
+    return False
+
+
+def _unsupported_pyreason(source: RuleExprAdapterRejectionSource, feature: str) -> RuleExprAdapterSupport:
+    return RuleExprAdapterSupport(
+        engine="pyreason",
+        supported=False,
+        unsupported_feature=feature,
+        rejection_source=source,
+        alternative_engines=("native", "souffle", "problog"),
+    )
+
+
 def _require_non_empty_str(value: object, *, field_name: str) -> None:
     if not isinstance(value, str) or not value:
         raise RuleExprError(f"{field_name} must be non-empty string")
@@ -610,4 +724,3 @@ def _require_tuple(value: object, *, field_name: str, item_type: type[object]) -
 
 
 __all__: list[str] = []
-
