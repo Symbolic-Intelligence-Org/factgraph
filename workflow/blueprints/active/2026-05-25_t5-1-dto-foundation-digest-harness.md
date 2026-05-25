@@ -1,6 +1,6 @@
 # Task Blueprint: T5.1 DTO Foundation + Digest Harness
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: M (predicted)
@@ -343,7 +343,7 @@ Expected inherited baseline: 163 tests OK from T4.3 final preservation gate.
 
 ### Step 4.6 grep gate
 
-Before implementation, fill the audit Step 4.6 results table and move status to `scoped` only if the grep is clean or expected.
+Completed in the paired audit. Results were clean / expected; no A-fallback amendment was required.
 
 ### G7 baseline gate
 

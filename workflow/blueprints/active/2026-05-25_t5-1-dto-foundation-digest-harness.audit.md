@@ -1,6 +1,6 @@
 # Audit: T5.1 DTO Foundation + Digest Harness
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
@@ -15,6 +15,7 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.1 DTO Foundation + Digest Harness draft created from reviewed-clean T5 Stage 1-3 design layer. |
+| 2026-05-25 | scoped | pending | Step 4.6 grep clean; scope locked | Grep found expected docs/history/agent/service/runtime hits, no shipped T5 `EvaluateResult` / `EvaluateRow` production owner, no public evaluate flip, no D20-D24 implementation collision, and no adapter edit target. |
 
 ## 2. Source Chain
 
@@ -92,7 +93,24 @@ Run these before implementation and record actual results in a scoped commit.
 
 If grep shows unexpected production DTO or digest substrate collisions, amend the blueprint before scoped.
 
-## 7. G7 Baseline Plan
+## 7. Step 4.6 Pre-Implementation Grep Results
+
+Executed on branch `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` after draft review.
+
+| # | Check | Result | Scope decision |
+|---|---|---|---|
+| 1 | Existing result DTO names | Broad workflow/design docs mention T5 DTO names. `src/agent/` has an unrelated agent-layer `EvaluateResult`. `src/factgraph/core/store/ledger.py` has storage-layer `Claim`. No `src/factgraph` production implementation of T5 `EvaluateResult`, `EvaluateRow`, `EvidenceRef`, or `DetachedRowError` exists. | Expected; no collision with application-protocol T5 DTO namespace. |
+| 2 | CandidateSet public/internal references | Many existing runtime, adapter, service, agent, docs, and tests references. `src/factgraph/application/derivation_runtime.py`, `src/factgraph/core/store/_evaluate.py`, adapters, and service routes still operate on `list[CandidateSet]`. | Expected. T5.1 may add a private conversion harness only; public flip remains T5.2 and service hard-cut remains T5.7. |
+| 3 | Digest helper namespace | Existing `sha256_hex` / `sha256_token` helpers, `Rule.content_digest`, store `view_digest_for`, and semantics/design references found. No central T5 result/digest helper path exists yet. | Expected. T5.1 can introduce one authoritative helper path and must preserve shipped `Rule.content_digest` bare-hex format. |
+| 4 | Public evaluate flip gates | `SDKStore.evaluate(...)` and application `evaluate_derivation_plans(...)` still return `list[CandidateSet]`; docs/tests still reference `engine_options`, `registry=`, and CandidateSet return shape. | Expected. T5.1 must not alter these; T5.2/D18 and T5.7/D23 own migration. |
+| 5 | Explanation / close / why-not gates | Existing Check/Diagnose/WhyNot protocol/runtime/shells and audit/service `EvidenceGraph` surfaces found. No T5 public `Explanation` DTO or `row.explain` / `row.close` implementation owner exists in `src/factgraph` result DTO surface. | Expected. T5.1 remains DTO/digest only; D20-D22 own these surfaces. |
+| 6 | SDK Rule naming gate | Current SDK namespace still has `Rule` as legacy DSL class, `LegacyRule` alias, and `ApplicationRule` alias to application protocol `Rule`; tests assert current pre-D24 behavior. | Expected. T5.1 may add DTO exports but must not change SDK `Rule` naming. |
+| 7 | Adapter / semantics gate | Existing adapter production modules and semantics profile tests/docs are extensive for ProbLog, PyReason, and Souffle. `SemanticsProfile` is already exported from SDK. | Expected. T5.1 only consumes normalized `SemanticsProfile` for digest helper; adapter edits remain out of scope. |
+| 8 | `Rule.content_digest` precision check | `Rule.content_digest` is implemented in `application/protocol/rule.py` and consumed by RuleExpr lowering/tests. It is bare 64-hex and order-sensitive. | Expected. T5.1 must embed it as named source data, not reformat or modify it. |
+| 9 | Application protocol DTO pattern | Existing protocol modules define local `__all__` and are re-exported through `application/protocol/__init__.py`; Check/Diagnose/WhyNot patterns provide DTO validation precedent. | Expected. T5.1 should follow this module + `__all__` style. |
+| 10 | T5.2-T5.8 guard words | Hits map to existing docs, tests, service/agent surfaces, or reviewed design artifacts. No unexpected implementation owner for public return-shape flip, row methods, hard-cut, final Rule flip, or adapter semantics was found. | Clean; no A-fallback amendment required. |
+
+## 8. G7 Baseline Plan
 
 Command:
 
@@ -126,7 +144,7 @@ Baseline record fields to fill later:
 | Pytest policy | Deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
-## 8. Draft Review Checklist
+## 9. Draft Review Checklist
 
 | Item | Status |
 |---|---|
@@ -139,9 +157,10 @@ Baseline record fields to fill later:
 | D26 adapter semantics excluded | Yes |
 | `view_snapshot_digest` no-placeholder rule explicit | Yes |
 | Step 4.6 grep plan present | Yes |
+| Step 4.6 grep results clean | Yes |
 | G7 baseline plan present | Yes |
 
-## 9. Risks For Reviewer
+## 10. Risks For Reviewer
 
 | Risk | Reviewer focus |
 |---|---|
@@ -151,6 +170,6 @@ Baseline record fields to fill later:
 | Row methods accidentally implement T5.3/T5.4 | Confirm only detached/live plumbing is allowed. |
 | SDK exports preempt D24 | Confirm only new DTO names are exported. |
 
-## 10. Outcome
+## 11. Outcome
 
 Pending.
