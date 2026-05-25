@@ -25,7 +25,7 @@
   - D23 legacy SDK hard-cut plan.
   - D24 T1.3 final SDK `Rule` flip.
   - D25 evaluate/explain semantics consistency.
-  - D26 semantics commitments C73-C78 boundary, if Stage 2 keeps C73-C78 in this decision cluster.
+  - D26 semantics commitments scope and adapter implementation policy, if Stage 2 keeps C73-C78 in this decision cluster.
 - Related:
   - `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md`
   - `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md`
@@ -134,7 +134,7 @@ Stage 3 may choose one of three outcomes:
 2. split T5 Semantics into a follow-up tranche after T5 Core closure;
 3. defer adapter-touching C76 / temporal C77 / iteration C78 to a later track while keeping C69/C68 minimal consistency in T5 Core.
 
-Any implementation slice that edits adapter production files because of C76 is automatically at least M-class and requires its own Step 4.6 grep and G7 baseline.
+Any implementation slice that edits adapter production files because of C76 is automatically at least M-class, potentially L-class depending on cross-adapter blast radius, and requires its own Step 4.6 grep and G7 baseline.
 
 ### 4.3 Parent §6 task split and §9 RuleExpr x evidence joins remain deferred
 
@@ -171,6 +171,8 @@ T5 Core must decide the final naming and transition plan before docs migration a
 
 D16 places the final `Rule` flip after DTO / return-shape decisions and before final public docs migration. D24 owns the exact decision. Stage 3 may schedule the implementation as its own slice or as part of the legacy hard-cut slice, but it cannot leave the flip unplanned.
 
+D17-D23 should describe head and rule values with generic terminology such as "head Rule" or "application head Rule", not by current SDK alias names. This keeps D24 free to choose the final naming flip without forcing retroactive edits on earlier D-doc design language. Concrete SDK public names appear only after D24 is reviewed clean.
+
 ### 4.6 Why-not is last among user-facing behavior decisions
 
 Parent explicitly marks `fg.eval.why_not(...)` pending. Shipped why-not exists as an independent SDK/application surface.
@@ -198,7 +200,7 @@ D16 adopts this initial D-doc ladder:
 | D23 | Legacy SDK hard-cut plan | Q10, Q13 |
 | D24 | T1.3 final SDK `Rule` flip | Q11 |
 | D25 | Evaluate/explain semantics consistency | Q14, C69 |
-| D26 | Semantics commitments boundary | Q1, Q12, C73-C78 |
+| D26 | Semantics commitments scope and adapter implementation policy | Q1, Q12, C73-C78 |
 
 Stage 2 may merge or split adjacent documents only with an explicit rationale. It must not batch-draft multiple D-docs ahead of review.
 
@@ -308,3 +310,4 @@ Stage 3 must not produce implementation blueprints until D17-D26, or a reviewed 
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T5 Stage 1 audit v2 mapped Q1/Q10/Q11/Q12/Q13/Q14 to D16. D16 locks T5 Core vs T5 Semantics boundary, requires C73-C78 Stage 2 coverage without making full semantics implementation a Core blocker, places T1.3 final `Rule` flip inside T5 Core, and requires service-route blast-radius inventory before hard-cut implementation. |
+| 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Renamed D26 to "Semantics commitments scope and adapter implementation policy", clarified adapter-touching slices are at least M and potentially L depending on blast radius, and added generic head Rule naming guidance for D17-D23 before D24 decides the final SDK `Rule` flip. |
