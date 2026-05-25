@@ -278,3 +278,4 @@ Stage 3 synthesis must ensure any projection implementation blueprint tests:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit Q5/F2 and parent C56 mapped to D14. D14 chooses a private recognizable projection-head Rule shape that preserves shipped `Rule.where` invariants while using D12 declared ports for semantic validation. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v1 clean | D14 substrate sound; WC1 projection recognizer spoofing detail deferred to implementation blueprint contract; D15 unblocked. |

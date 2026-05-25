@@ -328,3 +328,4 @@ Stage 3 synthesis must ensure closed-head implementation blueprints test:
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit Q6/Q7/Q8/Q9 and parent C72 mapped to D15. D15 locks a strict v1 closed-head algorithm, inspect-only public fields, private reusable validator, and T4/T5 boundary. |
 | 2026-05-25 | proposed-amend | Claude Step 4.2 v1 follow-up | WC1 closed-head invariant wording fixed; WC2 user-authored head body closure scope and WC3 future T5 gate relationship clarified. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1 typo, WC2 D13/D15 closure scope, and WC3 future T5 gate boundary addressed; D15 substrate sound; Stage 3 synthesis unblocked. |

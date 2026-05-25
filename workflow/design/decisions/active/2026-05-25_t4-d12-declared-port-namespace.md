@@ -279,3 +279,4 @@ Stage 3 synthesis must ensure any projection or external-head blueprint includes
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit Q2/F4 and D11 §4.7 mapped to D12. D12 chooses a private branch-total declared-port helper, exact `PortType` compatibility, no auto-join, and `RuleExprError` for head namespace failures. |
 | 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified D8 join-materialization equivalence proof, shortened the D14 projection-sugar forward reference, and replaced "T4 v1" wording with "current tranche" language. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1 join-materialization equivalence, WC2 D14 boundary, and WC3 current-tranche wording addressed; D12 substrate sound; D13 unblocked. |

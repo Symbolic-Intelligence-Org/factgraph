@@ -217,11 +217,10 @@ Sub-slice impl 期间任一发生 → **当前 slice 升级到下一 class**(per
 
 | ID | 范围 | 性质 | 备注 |
 |---|---|---|---|
-| **T4.1** | head 是 first-class Rule + `head=` 参数只接受 Rule 对象(不接 atom list / spec / string)| Additive | T1 完成后才能稳定实施(head IS Rule) |
-| **T4.2** | head=existing Rule 身份校验:`(id, content_digest)` 双匹配;digest 失配 raise / version 失配 warn | Additive | content_digest 计算来自 T1 锁定的 `content_digest` 公式 |
-| **T4.3** | head=inline Rule:`ports` keys 严格 ⊆ `expr.declared_ports` + 内部 Var 名不参与对齐(C54 封装边界)| Additive | T3 必须完成才能稳定提供 `expr.declared_ports` |
-| **T4.4** | `Rule.projection(*port_names)` sugar(v1 仅同名 projection,rename v2 deferred)| Additive | small surface |
-| **T4.5** | `inspect.is_closed` / `inspect.unbound_ports` 派生 utility(2-form 锁定:value-port literal OR primary-identity-field literal;复合 primary identity 全字段绑定才算 closed)+ invariant 锚点(`is_closed=True` ⇔ explain head 必通过 closed-head 校验)| Additive | 依赖 T3.5 inspect 表面 |
+| **T4 Stage 1-3** | Head + closed-head decision ladder:Stage 1 audit `2026-05-25_t4-head-closed-head-vs-shipped.md` + D11-D15 reviewed + Stage 3 synthesis `2026-05-25_post-q-t4-head-closed-head-synthesis.md` | L cluster | Resolves C52-C60+C72 after T3 later archive;implementation ladder split into T4.1-T4.3 |
+| **T4.1** | Head identity + declared-port foundation:D11 existing-head id/digest/version warning;D12 private branch-total declared-port helper;head port namespace validation;shared `RuleExprError` buckets | Additive(private validation + public error/warning behavior) | No external-head body concat yet;no projection sugar;no closed-head inspect;preserve T3L.3 public success `list[CandidateSet]` |
+| **T4.2** | External + projection head execution:D13 external head body branch-wise concat + head-port link atoms;D14 `Rule.projection(*port_names)` same-name sugar + private recognizable projection-head shape | Additive(public head behavior + private materialization) | No rename syntax;no public projection DTO;adapter grammar unchanged;projection placeholder atoms never materialize |
+| **T4.3** | Closed-head validator + inspect utilities:D15 strict C72 v1 closedness;`inspect.is_closed`/`unbound_ports`;private reusable validator;docs for head/projection/closed-head behavior | Additive(inspect surface + docs) | No `EvaluateResult`, `row.close()`, `fg.eval.explain`, Explanation, or WhyNot;T5 owns evidence/result surfaces |
 
 **依赖**:T1 + T3(完整 RuleExpr surface)
 

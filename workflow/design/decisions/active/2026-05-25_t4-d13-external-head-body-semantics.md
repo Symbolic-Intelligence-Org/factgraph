@@ -304,3 +304,4 @@ Stage 3 synthesis must ensure any external-head implementation blueprint tests:
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit Q4/F6 and D11/D12 deferred scope mapped to D13. D13 lifts T3L.3 external-head rejection and defines branch-wise alias-scoped head body concatenation plus explicit head-port link atoms. |
 | 2026-05-25 | proposed-amend | Claude Step 4.2 v1 follow-up | WC1 aggregate-in-head-body PyReason rejection interaction and WC2 head.ports output-schema wording clarified. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1 aggregate/PyReason cross-link and WC2 output-schema wording addressed; D13 substrate sound; D14 unblocked. |

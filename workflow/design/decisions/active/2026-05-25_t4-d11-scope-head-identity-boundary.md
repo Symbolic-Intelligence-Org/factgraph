@@ -271,3 +271,4 @@ Stage 3 synthesis must not create a blueprint that implements projection, extern
 |---|---|---|---|
 | 2026-05-25 | proposed | Decision drafted | T4 Stage 1 audit v1 mapped Q1/Q3 to D11. D11 locks T4 post-T3L.3 scope, existing-head id/digest identity, version mismatch warning mechanics, and error buckets; D12-D15 remain responsible for declared ports, external heads, projection, and closed-head utilities. |
 | 2026-05-25 | proposed-amend | Step 4.2 v1 precision amendments | Clarified that duplicate same-id multi-occurrence matching belongs to D12/D13 while inheriting D11's `RuleExprError` bucket, and added the `UserWarning` rationale for version mismatch warnings. |
+| 2026-05-25 | reviewed | Claude Step 4.2 v2 clean | WC1 multi-occurrence territory and WC2 UserWarning rationale addressed; D11 substrate sound; D12 unblocked. |
