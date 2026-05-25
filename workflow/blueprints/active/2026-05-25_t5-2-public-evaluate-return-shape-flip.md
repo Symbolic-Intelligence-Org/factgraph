@@ -1,6 +1,6 @@
 # Task Blueprint: T5.2 Public Evaluate Return-Shape Flip
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Class: L (predicted; may split into adjacent M-class local slices after Step 4.6)
@@ -151,6 +151,8 @@ Classify every hit as:
 
 If service route/OpenAPI hits must be updated to keep local public shape coherent, the blueprint should be amended before scoped to declare whether T5.2 remains one L-class slice or splits.
 
+Step 4.6 outcome: T5.2 remains one SDK-focused L-class slice. The SDK public `evaluate(...)` boundary, direct SDK fallback behavior, digest population, and `engine_options=` / `registry=` rejection are in scope. Service routes, OpenAPI, agent workflows, broad docs, examples, and CandidateSet/accept handshake migration are explicitly classified as T5.7 deferred hard-cut territory because they are coupled to `/inferences/accept`, `candidate_id`, and documented CandidateSet workflows. T5.2 must not update those service/docs surfaces except for a narrow deferral note if implementation needs one for local coherence.
+
 ### 2.2 Public SDK evaluate boundary
 
 Update `SDKStore.evaluate(...)` so success returns `EvaluateResult` for every public input path:
@@ -233,16 +235,12 @@ Public outcome must be `EvaluateResult`; internal helper shape is implementation
 
 D23 requires service-route blast-radius inventory. T5.2 draft does not assume final service hard-cut.
 
-T5.2 implementation must choose one after Step 4.6:
+Step 4.6 selected the narrow SDK-only public flip posture:
 
-- **Narrow SDK-only public flip**:
-  - SDK public shape changes;
-  - service route remains T5.7 deferred if it is classified as separate public surface and no SDK/service divergence is exposed in the same milestone.
-- **Coherent service-aligned L slice**:
-  - service runtime evaluate response, OpenAPI, service docs, and tests update in T5.2;
-  - T5.7 then removes accept/check/diagnose/why-not shells and finalizes docs.
-- **Split local slices**:
-  - service-aligned work becomes T5.2b/T5.7 only after reviewed amend.
+- SDK public shape changes in T5.2.
+- Service runtime evaluate response, OpenAPI, service docs, agent workflows, examples, and the CandidateSet/accept handshake remain T5.7 deferred hard-cut territory.
+- Service-aligned work may only enter T5.2 after a reviewed blueprint amendment.
+- No T5.2a/T5.2b split is required before scoped; implementation remains one L-class SDK public flip unless feature work proves a split is necessary.
 
 The implementation must not leave a final milestone where SDK docs claim `EvaluateResult` but the same public service route is documented as the primary CandidateSet evaluate/accept handshake without a T5.7 deferral note.
 
@@ -281,7 +279,7 @@ Likely production files:
   - only if the application runtime helper itself must expose an EvaluateResult sibling or change return shape.
 - `src/factgraph/application/protocol/evaluate_result.py`
   - only narrow helper amendments if T5.1 helpers need public-boundary adaptation; do not change DTO field contracts.
-- service files only after Step 4.6 classification:
+- service files remain deferred to T5.7 unless a later reviewed amendment brings them into T5.2:
   - `src/service/runtime_v1.py`;
   - `docs/api/openapi.yaml`;
   - service docs.
@@ -319,7 +317,7 @@ Minimum focused tests:
 11. Internal CandidateSet runtime tests remain green where CandidateSet is still internal.
 12. No `evaluate_v2`, `result_shape=`, `return_candidates=`, or public candidate compatibility flag exists.
 13. Public `row.explain()` / `row.close()` remain absent until T5.3/T5.4.
-14. Service route tests are updated or explicitly deferred according to Step 4.6 classification.
+14. Service route tests remain deferred to T5.7 unless a reviewed amendment brings service route migration into T5.2.
 15. Existing G7 suite preserves T4/T5.1 behavior except for intentional evaluate return-shape test updates.
 
 G7 preservation baseline before feat:

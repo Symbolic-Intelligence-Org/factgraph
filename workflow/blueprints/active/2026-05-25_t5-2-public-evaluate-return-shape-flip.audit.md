@@ -1,6 +1,6 @@
 # Audit: T5.2 Public Evaluate Return-Shape Flip
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
@@ -15,6 +15,7 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-25 | draft | pending | Blueprint pair drafted | T5.2 public evaluate return-shape flip draft created after T5.1 archive `53781419`. Scope is L-class default and requires D18/D23 blast-radius inventory before scoped. |
+| 2026-05-25 | scoped | pending | Step 4.6 grep clean | Ten grep buckets completed. Scope stays one SDK-focused L-class slice; service/OpenAPI/agent/docs CandidateSet/accept migration is classified as T5.7 deferred hard-cut territory. |
 
 ## 2. Source Chain
 
@@ -108,7 +109,24 @@ Run before implementation and record actual results in a scoped commit.
 
 If Step 4.6 shows service route or docs blast radius is larger than T5.2 can safely absorb, amend this blueprint before scoped.
 
-## 8. G7 Baseline Plan
+## 8. Step 4.6 Pre-Implementation Grep Results
+
+| # | Check | Result | Classification |
+|---|---|---|---|
+| 1 | SDK evaluate return shape | `SDKStore.evaluate(...)`, `_evaluate_compiled_derivation_plans(...)`, `_evaluate_rule_expr_input(...)`, and `application.derivation_runtime.evaluate_derivation_plans(...)` still return `list[CandidateSet]`; SDK docs/tests also assume CandidateSet. | T5.2 hard-cut update for SDK public boundary; internal runtime may preserve CandidateSet behind conversion. |
+| 2 | CandidateSet public assumptions | Broad hits across SDK docs, official docs, examples, service/OpenAPI, agent workflows, and runtime tests. `accept` / `candidate_id` workflows are tightly coupled to service route behavior. | SDK evaluate tests update in T5.2; service/docs/examples/accept migration deferred to T5.7; runtime tests preserve internal CandidateSet. |
+| 3 | Public param cleanup | `engine_options=` is accepted in SDK evaluate and tests; `registry=` remains in check/diagnose/why-not shells and internal runtime. | T5.2 rejects public evaluate `engine_options=` / `registry=`; internal plan options and legacy shells remain until D23/T5.7. |
+| 4 | Service route blast radius | `src/service/runtime_v1.py` evaluate route serializes candidates and pairs with `/inferences/accept`; OpenAPI and service docs describe CandidateSet output. Agent tests and tools also depend on candidate ids. | T5.7 deferred hard-cut. T5.2 must not partially migrate service/OpenAPI/agent route surfaces without a reviewed amendment. |
+| 5 | DTO/digest helper use | T5.1 `EvaluateResult`, `EvaluateRow`, digest helpers, and private CandidateSet conversion live in `src/factgraph/application/protocol/evaluate_result.py`; focused tests cover them. `src/agent/tools/evaluate.py` has unrelated agent-layer `EvaluateResult`. | T5.2 should reuse T5.1 helpers; agent-layer DTO is unrelated namespace. |
+| 6 | Row methods / Explanation gate | EvidenceGraph and failure-class hits are existing audit/adapter/test substrate. No production `row.explain`, `row.close`, public `Explanation`, or `checked_scope` owner exists in T5.2 area. | Clean guard; T5.3/T5.4 remain future slices. |
+| 7 | SDK Rule naming gate | SDK namespace still exports legacy `Rule`, `LegacyRule`, and `ApplicationRule`; tests assert current pre-D24 behavior. | Clean guard; T5.2 must not perform D24 final Rule flip. |
+| 8 | Adapter / semantics gate | Existing ProbLog/PyReason/Souffle adapter and `SemanticsProfile` code is present; no T5.2 adapter edit target found. | Internal substrate only; adapter production edits remain out of scope. |
+| 9 | Direct store fallback | `SDKStore.evaluate(...)` falls through to `self._store.evaluate(*args, **kwargs)` for direct store-style input; service route also calls `session.store.evaluate(...)`. | T5.2 must wrap or reject direct SDK fallback; service route direct call is T5.7 deferred. |
+| 10 | Docs/OpenAPI final migration pressure | CandidateSet, `list[CandidateSet]`, accept, `engine_options`, and runtime evaluate docs are widespread across SDK docs, official docs, OpenAPI, service docs, and examples. | Minimal T5.2 updates only; final docs/OpenAPI/examples migration deferred to T5.7. |
+
+Step 4.6 scope decision: T5.2 remains one SDK-focused L-class slice. No pre-scoped split is required. The service/OpenAPI/agent/docs CandidateSet/accept surface is explicitly deferred to T5.7 because it is broad and coupled to service `candidate_id` acceptance. This does not trigger A-fallback because D18 permits internal CandidateSet preservation and D23 owns service hard-cut mechanics.
+
+## 9. G7 Baseline Plan
 
 Command:
 
@@ -142,7 +160,7 @@ Baseline record fields to fill later:
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
-## 9. Draft Review Checklist
+## 10. Draft Review Checklist
 
 | Item | Status |
 |---|---|
@@ -156,9 +174,10 @@ Baseline record fields to fill later:
 | D26 adapter semantics excluded | Yes |
 | CandidateSet compatibility flags rejected | Yes |
 | Step 4.6 grep plan present | Yes |
+| Step 4.6 grep results clean | Yes |
 | G7 baseline plan present | Yes |
 
-## 10. Risks For Reviewer
+## 11. Risks For Reviewer
 
 | Risk | Reviewer focus |
 |---|---|
@@ -169,6 +188,6 @@ Baseline record fields to fill later:
 | CandidateSet internal tests may need preservation | Confirm internal runtime helpers are allowed to keep CandidateSet. |
 | `engine_options=` / `registry=` rejection may break many tests | Ensure this is intended D18/D23 hard-cut behavior. |
 
-## 11. Outcome
+## 12. Outcome
 
 Pending.
