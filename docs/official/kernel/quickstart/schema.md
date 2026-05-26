@@ -46,6 +46,13 @@ class User(Entity):
 fg = FactGraph.create(schema_classes=[Team, User])
 ```
 
+Internally, `FactGraph.create(...)` calls `compile_schema_from_classes(...)`
+to turn the classes into the compiled schema IR. The high-level SDK
+constructors (`create` / `load` / `attach`) hide that call so you only pass
+classes. When you work directly with the lower-level `Database` boundary
+(see [Database and durable views](database.md)), you compile once with
+`compile_schema_from_classes(...)` and pass the IR as `schema_ir=` instead.
+
 `User.user_id` is the logical anchor. `User.locale` is a coordinate dimension.
 Both are identity fields, so both participate in the entity reference.
 

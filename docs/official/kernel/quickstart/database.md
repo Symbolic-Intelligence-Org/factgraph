@@ -31,8 +31,23 @@ path. `Database` is useful when you need the lower Database boundary directly.
 
 ## Define a schema IR
 
-`Database.create(...)` takes a compiled schema IR, not entity classes directly.
-Use `compile_schema_from_classes(...)` when starting from SDK schema classes.
+The other quickstart pages use `FactGraph.create(schema_classes=[...])` and
+never mention a "schema IR" — that is intentional. `FactGraph.create(...)`
+calls `compile_schema_from_classes(schema_classes)` for you and stores the
+resulting compiled IR inside the runtime.
+
+`Database` is the lower identity boundary, so its constructor takes the
+**already-compiled IR directly**:
+
+| Surface | Accepts | Why |
+| --- | --- | --- |
+| `FactGraph.create(schema_classes=[...])` | Python `Entity` classes | High-level constructor. Compiles internally and stores the IR. |
+| `FactGraph.load(path, schema_classes=[...])` | Python `Entity` classes | Compiles internally and validates the compiled digest against the saved workspace digest. |
+| `FactGraph.attach(db, schema_classes=[...])` | Python `Entity` classes | Compiles internally and validates the compiled digest against `db.schema_digest`. |
+| `Database.create(path, schema_ir=...)` | Already-compiled IR | Lower Database boundary. Identity-anchored; takes the IR directly. |
+| `Database.open(path, schema_ir=...)` | Already-compiled IR | Lower Database boundary. Validates the workspace schema object against the supplied IR. |
+
+So when you work directly with `Database`, compile once and reuse the IR:
 
 ```python
 from pathlib import Path
@@ -58,8 +73,12 @@ class User(Entity):
 schema_ir = compile_schema_from_classes([User])
 ```
 
-The same schema classes are passed again when you attach an SDK runtime. The
-attach call validates that the classes compile to the Database schema digest.
+The Python `Entity` classes are still required separately when you `attach`
+an SDK runtime over the Database, because the SDK needs the class objects
+(not just the compiled IR) to bind read/write helpers. The attach call then
+compiles those classes again and checks that the compiled digest matches
+`db.schema_digest` (see [Schema strong correspondence](#schema-strong-correspondence)
+below).
 
 ## Create a Database workspace
 
