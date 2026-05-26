@@ -1,9 +1,9 @@
 # Task Blueprint: T11.2 Cross-doc Metadata Unblock
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
-- Class: L (predicted release-blocker documentation / tests / metadata decision slice; may narrow to M after Step 4.6)
+- Class: M (narrowed from predicted L after Step 4.6 bridge decision)
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
@@ -226,14 +226,78 @@ Before implementation, record:
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory classifies Step 1-6, I10, and A10.
-- [ ] Metadata decision recorded: bridge accepted or exact-field split triggered.
-- [ ] Release-facing docs no longer contradict shipped attach-based view scope.
-- [ ] `docs/official/kernel/quickstart/database.md` intro no longer contradicts its view-scoped attach section.
-- [ ] `src/factgraph/core/store/docs/README.md` no longer says view-scoped attach is future.
-- [ ] `src/factgraph/sdk/docs/README.md` no longer says view-scoped attach is future.
-- [ ] Method-level `view=` and `Database.as_of(...)` remain explicitly deferred unless a later blueprint activates them.
-- [ ] Any tests added are focused on shipped metadata/view-scope behavior.
-- [ ] No production code changes unless Step 4.6 explicitly amends scope.
-- [ ] T11.1 blueprint pair moved from `active/` to `archive/`, with archive inventory updated.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] Step 4.6 inventory classifies Step 1-6, I10, and A10.
+- [x] Metadata decision recorded: bridge accepted or exact-field split triggered.
+- [x] Release-facing docs no longer contradict shipped attach-based view scope.
+- [x] `docs/official/kernel/quickstart/database.md` intro no longer contradicts its view-scoped attach section.
+- [x] `src/factgraph/core/store/docs/README.md` no longer says view-scoped attach is future.
+- [x] `src/factgraph/sdk/docs/README.md` no longer says view-scoped attach is future.
+- [x] Method-level `view=` and `Database.as_of(...)` remain explicitly deferred unless a later blueprint activates them.
+- [x] Any tests added are focused on shipped metadata/view-scope behavior.
+- [x] No production code changes unless Step 4.6 explicitly amends scope.
+- [x] T11.1 blueprint pair moved from `active/` to `archive/`, with archive inventory updated.
+- [x] Dirty baseline and sacred master preserved.
+
+## 9. Outcome / Deviations
+
+Implemented in `3210cf53`.
+
+### 9.1 T11.2a Docs Formal Unblock
+
+Three release-facing stale docs were aligned with shipped T11.1 behavior:
+
+- `docs/official/kernel/quickstart/database.md` now says the page includes
+  attach-time view-scoped reads/evaluation through `FactGraph.attach(db,
+  view=view)` and that method-level `view=` parameters remain unsupported.
+- `src/factgraph/core/store/docs/README.md` now says view-scoped attach is
+  shipped and read-only; snapshot attach, `ReadOnlyAttachmentError`, and
+  method-level `view=` remain future slices.
+- `src/factgraph/sdk/docs/README.md` now says `FactGraph.attach(db, view=view,
+  schema_classes=...)` is the shipped read-only attach form for durable Database
+  views; snapshot attach and method-level `view=` remain future work.
+
+The stale-future grep gate for these three files has zero hits.
+
+### 9.2 T11.2b Metadata Decision
+
+`workflow/design/design-points/active/database-view-fg-layered-architecture.zh.md`
+§14 now records the v0.2 metadata bridge:
+
+- public bridge: `EvaluateResult.view_snapshot_digest`;
+- durable evidence copy: `EvidenceGraph.metadata["view_snapshot_digest"]`;
+- exact tuple fields (`db_id`, `tx_id`, `schema_digest`, `data_digest`,
+  `view_digest`) remain v2/internal expansion targets and require a future
+  blueprint to activate.
+
+This confirms the Step 4.6 bridge decision and avoids DTO, service, and OpenAPI
+churn in T11.2.
+
+### 9.3 T11.2c Tests
+
+No tests were added. Step 4.6 found existing tests already cover:
+
+- view-attached read/evaluate and stale/mismatch behavior;
+- `view_snapshot_digest_for_parts(...)`;
+- EvidenceGraph metadata copy of `view_snapshot_digest`.
+
+Since implementation was docs/lifecycle only, focused metadata tests were not
+rerun as part of this commit.
+
+### 9.4 T11.2d T11.1 Archive Cleanup
+
+The implemented T11.1 blueprint pair was moved from `active/` to `archive/`
+with `R100` renames, and `workflow/blueprints/archive/INVENTORY.md` now has a
+T11.1 row with draft/amend/scoped/baseline/feat/closure anchors.
+
+### 9.5 Class / Verification
+
+T11.2 narrowed from predicted L to actual M after Step 4.6 accepted the
+`view_snapshot_digest` bridge. Final implementation is docs/lifecycle only:
+
+- 0 production code changes;
+- 0 test changes;
+- 0 service/OpenAPI changes;
+- 0 SDK API changes;
+- `git diff --check`: clean;
+- sacred `master` preserved at `562c74195df43e933bed92a3ff25de94dd8ce666`;
+- dirty baseline preserved at 6 modified + 1 untracked.

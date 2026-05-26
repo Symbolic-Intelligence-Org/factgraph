@@ -1,12 +1,12 @@
 # Audit: T11.2 Cross-doc Metadata Unblock
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-2-cross-doc-metadata-unblock.md`
-- Stage: scoped
-- Class: L (predicted release-blocker documentation / tests / metadata decision slice; may narrow to M after Step 4.6)
+- Stage: implemented
+- Class: M (narrowed from predicted L after Step 4.6 bridge decision)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked must be preserved
 - Ownership: Codex owner, Claude reviewer (cross-flip)
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-26 | draft | `e1bdfa43` | T11.2 blueprint pair drafted | Triggered by roadmap N3 and read-only Parfit inventory of database-view Step 1-6 / I10 / A10 seams. |
 | 2026-05-26 | scoped | TBD | Step 4.6 inventory scoped | Filled Step 1-6 / I10 / A10 source map, accepted `view_snapshot_digest` as v0.2 bridge, scoped three release-facing docs fixes, and added T11.1 archive cleanup. |
+| 2026-05-26 | implemented | `3210cf53` | T11.2 implemented | Aligned three stale docs, recorded `view_snapshot_digest` as v0.2 metadata bridge in database-view design, archived T11.1 blueprint pair, and updated archive inventory. |
 
 ## 2. Read-only Agent Inventory Summary
 
@@ -101,8 +102,42 @@ Expected after implementation:
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 inventory complete.
 - [x] Metadata decision recorded.
-- [ ] Release-facing docs aligned.
-- [ ] Tests added or explicitly not needed.
-- [ ] No production code changes unless amended.
-- [ ] T11.1 blueprint pair archived.
-- [ ] Closure notes filled.
+- [x] Release-facing docs aligned.
+- [x] Tests added or explicitly not needed.
+- [x] No production code changes unless amended.
+- [x] T11.1 blueprint pair archived.
+- [x] Closure notes filled.
+
+## 8. Closure Notes
+
+Implemented with `3210cf53`.
+
+Final landed scope:
+
+- T11.2a: fixed three release-facing stale docs that claimed or implied
+  view-scoped attach was future.
+- T11.2b: recorded the v0.2 metadata bridge decision in the database-view
+  design source: `view_snapshot_digest` is the public bridge, while exact
+  db/view tuple fields remain v2/internal unless a later blueprint activates
+  them.
+- T11.2c: no tests added because Step 4.6 found existing tests already cover
+  view-scoped runtime behavior, digest generation, and EvidenceGraph metadata
+  copy.
+- T11.2d: moved the implemented T11.1 blueprint pair from `active/` to
+  `archive/` with `R100` renames and added a T11.1 row to
+  `workflow/blueprints/archive/INVENTORY.md`.
+
+Review disposition:
+
+- Step 4.7 review clean with 0 P0/P1.
+- Predicted L narrowed to M after bridge decision avoided DTO/service/OpenAPI
+  expansion.
+- No production, tests, service, OpenAPI, adapter, SDK API, example, or notebook
+  files changed.
+
+Verification:
+
+- Stale-future grep for the three scoped docs: zero hits.
+- `git diff --check`: clean.
+- Sacred `master` unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved at 6 modified + 1 untracked.
