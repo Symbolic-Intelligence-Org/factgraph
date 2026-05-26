@@ -34,6 +34,7 @@
 | Source | Snapshot |
 |---|---|
 | `src/factgraph/sdk/store.py:887-918` | `FactGraph.attach(db, *, schema_classes, default_row_format=None, **kwargs)` rejects all unknown kwargs, including `view`, then attaches current head as writable. |
+| `src/factgraph/sdk/store.py:906-912` | `FactGraph.attach(...)` compiles `schema_classes`, computes `schema_digest`, and rejects if it differs from `db.schema_digest`; incomplete schema classes are rejected rather than treated as a read/view filter. |
 | `src/factgraph/sdk/store.py:1064-1082` | `fg.read.find(...)` rejects method-level `view=` with old unsupported/policy wording. |
 | `src/factgraph/sdk/store.py:2146-2150` | `evaluate(...)` rejects method-level `view=` and `policy=` with generic evaluate wording. |
 | `tests/test_sdk_frozen_view_read_runtime_boundaries.py` | Current tests assert method-level `view=` rejection and legacy `run(..., view=...)` rejection. |
@@ -46,6 +47,7 @@
 | Risk | Current reading |
 |---|---|
 | Branch base mismatch | T11 branch starts at `efd65c0e`; local quickstart Database docs slice after T5.8 is not present. Docs work must not assume those commits unless user explicitly merges them. |
+| Schema/classes mismatch | Database data is bound to the Database schema digest. Partial `schema_classes` could make reads appear to work while silently hiding or mis-decoding data, so T11.1 must preserve exact digest validation. |
 | SDK in-memory vs durable view | SDK `fg.views` historically has a smaller in-memory view shape. Step 4.6 must decide whether accepting SDK in-memory views is possible or should reject clearly. |
 | Evaluate scoping | Current evaluate path may share Store/Ledger state with reads. Step 4.6 must identify the actual shared visibility point before implementation. |
 | Attached writes | Existing attach writes are allowed for current-head attach. T11.1 must make only view-attached runtimes read-only without regressing normal attached Database writes. |
@@ -59,6 +61,7 @@
 | §9.2 read-only view attach | In scope. |
 | §12 method-level `view=` | Out of scope for T11.1; keep rejected with hint. |
 | §13 stale / scope validation | In scope at attach time. |
+| Database schema binding | Preserve shipped exact schema digest check; schema evolution and partial schema attach are out of scope. |
 | §16 Step 2 view consumers | In scope only through attached runtime consumer. |
 | C36-C44 migrated from rule-expression essay | Consume Database/view design; do not reopen T5 rule-expression contracts. |
 | User simplification | Attach-based first, method-level deferred until demand emerges. |
@@ -71,6 +74,7 @@ Run before scoped and record actual results:
 |---|---|---|---|
 | 1 | Branch/base state | `git branch --show-current`, `git rev-parse HEAD`, `git status --short` | Confirm T11 branch from `efd65c0e`, dirty baseline preserved. |
 | 2 | `FactGraph.attach` signature and rejected kwargs | `inspect.signature(FactGraph.attach)`, source read around `store.py:887` | Add `view=None`; preserve unknown kwarg rejection. |
+| 2a | Schema digest exactness | Create/open/attach with complete, incomplete, and evolved `schema_classes`; compare compiled digest against `db.schema_digest` | Preserve exact digest rejection; partial schema attach out of scope. |
 | 3 | Durable Database view shape | Introspect core `FrozenAssertionView` fields | Need `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest`. |
 | 4 | SDK in-memory `FrozenAssertionView` shape | Introspect SDK `FrozenAssertionView` fields | Decide accept/reject policy for SDK view object. |
 | 5 | Database snapshot materialization | Source read for `Database.head`, transaction/object lookup, `_ledger_for_attach` | Find safe way to materialize `view.base_tx_id`. |

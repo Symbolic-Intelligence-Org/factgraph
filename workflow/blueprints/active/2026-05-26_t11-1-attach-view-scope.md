@@ -30,6 +30,10 @@
   - `view.db_id != db.db_id` rejects with `SDKStoreError`.
   - `view.base_tx_id` cannot be materialized from the Database rejects with `SDKStoreError`.
   - `view.asrt_ids` must exist in the materialized base snapshot; missing assertion ids reject without falling back to the full universe.
+- Preserve the exact Database schema contract:
+  - `schema_classes=[...]` must compile to the same `schema_digest` as the Database.
+  - Incomplete `schema_classes` are not a view filter and must reject if their compiled schema digest differs.
+  - Schema evolution, partial schema attach, and schema migration semantics are out of T11.1 unless shipped APIs already support them without weakening digest validation.
 - Implement attach-scoped consumers:
   - `fg.read.find(...)` and `fg.read.get(...)` on a view-attached runtime see only assertions in the view.
   - `fg.eval.evaluate(...)` on a view-attached runtime evaluates against the same visible assertion set.
@@ -68,6 +72,8 @@ Pause and amend if implementation requires:
 - broad Database or Store runtime redesign;
 - multi-engine view-scope divergence that cannot be handled in SDK substrate only;
 - changing the writable semantics of view-attached runtimes;
+- weakening Database / `schema_classes` exact digest validation;
+- implementing schema evolution, partial schema attach, or schema migration semantics;
 - new public DTOs or public exception classes;
 - adapter production edits;
 - service or OpenAPI changes;
@@ -104,6 +110,7 @@ Branch note:
 Before scoped status, record:
 
 - exact `FactGraph.attach(...)` signature and rejected kwargs;
+- exact schema digest behavior when `schema_classes` are incomplete, reordered, or evolved relative to the Database;
 - available Database APIs for materializing `view.base_tx_id`;
 - durable Database-owned `FrozenAssertionView` shape and the SDK in-memory `FrozenAssertionView` shape;
 - current `fg.read.find/get` implementation paths and where filtering by assertion id can be applied;
