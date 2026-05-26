@@ -1,6 +1,6 @@
 # Task Blueprint: Quickstart Rules Ports + RuleExpr Coverage
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: M (predicted docs-only)
@@ -202,4 +202,65 @@ Self-review must verify:
 
 ## 10. Outcome / Deviations
 
-Pending.
+Implemented in `4cdd4e54` after blueprint pair `ee14773e` (scoped with
+inventory pre-locked) and branch-label correction `10f36b6d`.
+
+Landed documentation:
+
+- `docs/official/kernel/quickstart/rules-and-inferences.md` +330 LOC.
+- Three new top-level sections inserted between "Run a Rule" and
+  "Use Query for one-off projections":
+  - **Understanding ports** — three-variable distinction; `port_types`
+    inference; ports ≠ head invariant; `desc="%port_name"` rendering;
+    undeclared-port reject example.
+  - **Composing rules with RuleExpr** — `rule.as_("alias")` with the
+    default-alias-on-colon-id foot-gun; port access (method + proxy);
+    `&` / `|` and `RuleExpr.all` / `.any` equivalence; shipped
+    same-named-port ambiguous reject; `.join_by_ports`; `.join(eq)`;
+    AND-spine reachable rejects for single-occurrence and OR-group; full
+    end-to-end cross-rule example.
+  - **Choosing the right head** — `head.id` must match a real predicate;
+    `len(head.ports) == arg_specs` count; 1-port -> Entity:exists,
+    2-port -> entity:field; cross-rule expressions select one
+    in-expression template; explicit non-goal flagging that
+    `Rule.projection(*names)` is not an evaluate head in v0.2.
+- Syntax checklist extended with 8 new bullets covering ports,
+  `port_types`, `desc`, `rule.as_`, `&` / `|`, `.join_by_ports`,
+  `.join`, AND-spine reachable, and the `head=rule` arity invariant.
+
+Verification:
+
+- 18-assertion end-to-end smoke ran against the live SDK on the actual
+  branch (`v0.2.0-t11-1-attach-view-scope-2026-05-26`):
+  - positive: `port_types` shape; `render_desc` bound and unbound; cross-rule
+    join_by_ports count=2 and count=3 via either head; explicit `.join(eq)`;
+    1-port head; 2-port head.
+  - negative (raise verified): `desc` undeclared port; default alias on
+    id with `:`; same-named ports ambiguous; single-occurrence
+    `.join` AttributeError; OR-group `.join` reject;
+    `Rule.projection` non-eval-head reject.
+- `git diff --check` clean.
+- Diff stays within `docs/official/kernel/quickstart/rules-and-inferences.md`
+  and the blueprint pair files.
+- Pre-existing 6 M + 1 untracked dirty baseline preserved end-to-end.
+- Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged
+  throughout.
+
+Deviations and notes:
+
+- Two design vs shipped drifts were teaching points:
+  - D1 (design §3.6 line 188 "independent" vs shipped "ambiguous
+    reject"): doc teaches shipped behavior; the design wording is
+    captured only in the audit, not in the user-facing page.
+  - D2 (`Rule.projection` documented in design as projection head but
+    rejected by the real evaluator): doc explicitly flags this as
+    non-eval-head in §C-5; design wording is captured in the audit.
+- Branch label initially mislabeled as
+  `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`; corrected to
+  the actual `v0.2.0-t11-1-attach-view-scope-2026-05-26` in commit
+  `10f36b6d`.
+- Cycle ran self-owned (Codex working other tracks). Cross-flip review
+  was unavailable; self-review compensated via fresh-read pass over the
+  rendered file plus the 18-assertion smoke, including 5 negative-path
+  assertions specifically targeting `RuleExprError` /
+  `RuleValidationError` / `AttributeError` / `WhereValidationError`.

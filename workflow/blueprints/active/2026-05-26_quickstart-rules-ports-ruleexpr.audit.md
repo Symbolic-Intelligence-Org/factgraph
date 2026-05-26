@@ -1,11 +1,11 @@
 # Audit: Quickstart Rules Ports + RuleExpr Coverage
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_quickstart-rules-ports-ruleexpr.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M (predicted docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -15,7 +15,9 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-26 | scoped | pending | Self-owned blueprint pair drafted with inventory pre-locked | Cross-flip cadence unavailable this cycle; rigorous self-review compensates. Inventory survey run before draft to surface design vs shipped drift. |
+| 2026-05-26 | scoped | `ee14773e` | Self-owned blueprint pair drafted with inventory pre-locked | Cross-flip cadence unavailable this cycle; rigorous self-review compensates. Inventory survey run before draft to surface design vs shipped drift. |
+| 2026-05-26 | scoped | `10f36b6d` | Branch label corrected | Original draft labeled `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`; actual working branch is `v0.2.0-t11-1-attach-view-scope-2026-05-26`. |
+| 2026-05-26 | implemented | `4cdd4e54` | Three new sections + checklist extension landed | +330 LOC docs-only; 18-assertion end-to-end smoke green (including 5 negative-path rejects). |
 
 ## 2. Source Reads
 
@@ -95,11 +97,70 @@ Pre-implementation inventory items to lock are recorded in §5 below (combined w
 ## 7. Review Checklist
 
 - [x] Step 4.6 scoped inventory recorded before implementation.
-- [ ] Implementation uses shipped APIs only; `Rule.projection` is not taught as eval head.
-- [ ] All positive examples run end-to-end; all negative examples raise the documented error.
-- [ ] Same-named-port shipped behavior is taught, with the design-doc "independent" wording recorded as historical drift in this audit only (not in the user-facing doc).
-- [ ] No production files touched; dirty baseline preserved.
+- [x] Implementation uses shipped APIs only; `Rule.projection` is not taught as eval head.
+- [x] All positive examples run end-to-end; all negative examples raise the documented error.
+- [x] Same-named-port shipped behavior is taught, with the design-doc "independent" wording recorded as historical drift in this audit only (not in the user-facing doc).
+- [x] No production files touched; dirty baseline preserved.
 
 ## 8. Closure Notes
 
-Pending.
+Implemented with `4cdd4e54`.
+
+Self-owned cycle summary:
+
+- This cycle ran without cross-flip because Codex was on other tracks
+  (T11.1 attach-view-scope). Owner and reviewer were both Claude.
+- Inventory survey was run **before** drafting the blueprint, so Step
+  4.6 was pre-loaded into the scoped state from the start (the audit
+  was created directly in `scoped`, not `draft -> scoped`).
+- Step 4.7 self-review took the form of a fresh-read pass over the
+  rendered file plus the 18-assertion end-to-end smoke, with 5 of
+  those 18 assertions specifically targeting the negative-path
+  rejections (`RuleExprError` ambiguous-port, `RuleExprError` OR-group
+  join, `AttributeError` single-occurrence join, `RuleValidationError`
+  desc undeclared port, `WhereValidationError` projection target).
+
+Final landed scope:
+
+- `docs/official/kernel/quickstart/rules-and-inferences.md` gained
+  three new sections (~330 LOC):
+  - **Understanding ports** — semantics, type inference, `desc`.
+  - **Composing rules with RuleExpr** — occurrences, operators,
+    joins, AND-spine rejects, end-to-end example.
+  - **Choosing the right head** — arity invariants, cross-rule head
+    selection, `Rule.projection` non-eval-head call-out.
+- Syntax checklist gained 8 new bullets.
+- No other quickstart pages, no SDK module docs, no production code.
+
+Drift records (kept in audit only, not in user-facing doc):
+
+- D1: design §3.6 line 188 wording "independent existential variables"
+  for same-named ports is not the shipped behavior. Shipped behavior
+  is `RuleExprError: declared port 'X' is ambiguous across
+  occurrences: <aliases>`. The doc teaches shipped behavior.
+- D2: `Rule.projection(*names)` is exported as a `Rule` factory but is
+  rejected by the real evaluator with `WhereValidationError: target
+  predicate not found: __factgraph_projection__<hash>`. Tests only
+  exercise it under `patch("factgraph.sdk.store.evaluate_derivation_plans", ...)`.
+  The doc explicitly marks it as non-eval-head in v0.2.
+
+Verification:
+
+- `python` smoke: 18/18 assertions green, including 5 negative-path
+  rejects. Ran on `v0.2.0-t11-1-attach-view-scope-2026-05-26`.
+- `git diff --check`: clean.
+- Diff scope: `docs/official/kernel/quickstart/rules-and-inferences.md`
+  + blueprint pair.
+- Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
+- Pre-existing 6 modified + 1 untracked dirty baseline preserved.
+
+Deferred / non-goals (left for future cycles):
+
+- Full enumeration of the design §3.6 nine RuleExpr commitments
+  (occurrence binding semantics, evidence tree alias display, etc.).
+- Path-dependent join distribution worked example beyond the summary
+  sentence.
+- Lifting same-named-port behavior from "shipped reject" to design's
+  "independent" (would require shipped behavior change; out of scope
+  for docs).
+- Rewriting the existing Inference section.
