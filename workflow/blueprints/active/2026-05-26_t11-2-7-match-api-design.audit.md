@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-26 | draft | `83e452f3` | T11.2.7 blueprint pair drafted | Triggered by user-identified match API design gap and T11.2.5 facade.py verdict. |
 | 2026-05-26 | scoped | TBD | Step 4.6 match API design inventory recorded | Namespace/template/return-shape comparison matrices locked; design remains docs-only. |
+| 2026-05-26 | scoped-amend | TBD | V2 match ergonomics incorporated | User rejected evaluate-style wrapper parsing; scoped design now locks snapshot/value-native `MatchView` with kwargs and `.select(...)`. |
 
 ## 2. Pre-Draft Source Scan
 
@@ -52,12 +53,13 @@ Read-only scan findings:
 | 6 | Existing docs mentions | SDK docs still discuss Query and `fg.eval.run` removal; active parent has C63 trigger references at `rule-expression-and-proof-attempt.zh.md:955`, `:1588`, `:1610`; roadmap also lists parent §5.12 `fg.eval.run` deletion trigger as replacement read/match/query entrypoint locked. |
 | 7 | Candidate namespace comparison | Matrix recorded in §3.1 below. Chosen namespace: `fg.read.match(...)`. |
 | 8 | Candidate template type comparison | Matrix recorded in §3.2 below. Chosen templates: `Rule | RuleExpr`; no list/tuple shorthand; legacy `Query` compatibility deferred. |
-| 9 | Candidate return shape comparison and facade impact | Matrix recorded in §3.3 below. Chosen semantic return shape: port-binding rows/snapshots, not `AssertionRecordSet`, `Claim`, `EvaluateRow`, or `Explanation`. Dirty `facade.py` is not required by match. |
+| 9 | Candidate return shape comparison and facade impact | Matrix recorded in §3.3 below. Chosen semantic return shape: transparent `MatchView` rows with direct snapshot/value port access and `.select(...)`, not `AssertionRecordSet`, `Claim`, `EvaluateRow`, or `Explanation`. Dirty `facade.py` is not required by match. |
 | 10 | View integration and `view=` rule | T11.1 store has attach-time view support and method-level `view=` rejection (`store.py:1083-1107`, `:1275-1278`). Match follows attach-only view scoping; no method-level `view=` in v0.2. |
 | 11 | `fg.eval.run` migration timing | This design locks replacement direction only. Deletion remains future hard-cut after `fg.read.match(...)` implementation/docs migration; T11.2.7 does not delete or edit `run`. |
-| 12 | Output location decision | Use a new active design-point `workflow/design/design-points/active/match-api-design.zh.md`; add only a narrow parent §6 cross-link/stub. Avoid D-doc only because this is synthesis, not a single decision. |
-| 13 | Final class decision | Class narrows from M/L to M for scoped design work: docs-only synthesis plus one parent cross-link, no implementation, no new DTO, no release machinery. |
-| 14 | Dirty baseline preservation check | Scoped commit edits only blueprint/audit files. Dirty baseline remains 6 modified tracked files plus untracked `rainbird-ai sdk code/`. |
+| 12 | Port constraint syntax | User feedback rejects `match(rule=RuleExpr, ports={...})` unless no better option exists. Scoped design chooses `fg.read.match(template, **port_constraints)` plus `.where(**port_constraints)`; control knobs use chaining methods like `.limit(n)`. |
+| 13 | Output location decision | Use a new active design-point `workflow/design/design-points/active/match-api-design.zh.md`; add only a narrow parent §6 cross-link/stub. Avoid D-doc only because this is synthesis, not a single decision. |
+| 14 | Final class decision | Class narrows from M/L to M for scoped design work: docs-only synthesis plus one parent cross-link, no implementation, no new DTO, no release machinery. |
+| 15 | Dirty baseline preservation check | Scoped commit edits only blueprint/audit files. Dirty baseline remains 6 modified tracked files plus untracked `rainbird-ai sdk code/`. |
 
 ### 3.1 Namespace Comparison Matrix
 
@@ -82,10 +84,20 @@ Read-only scan findings:
 
 | Candidate | Pro | Con | Facade impact | Result |
 |---|---|---|---|---|
-| Port-binding rows / snapshots | Fits `Rule.ports`; supports entity and scalar ports; read-side mental model. | Exact runtime DTO/list mechanics deferred to implementation blueprint. | Dirty `facade.py` not required. | **Chosen semantic shape.** |
+| Transparent `MatchView` rows + `.select(...)` | Fits `Rule.ports`; supports entity and scalar ports; entity ports resolve to snapshots and value ports return raw values; `.select("port")` yields direct snapshots/values. | Exact runtime class mechanics deferred to implementation blueprint. | Dirty `facade.py` not required. | **Chosen semantic shape.** |
 | `AssertionRecordSet` | Reuses assertion selection and makes `facade.py` directly relevant. | Cannot naturally express multi-port snapshot/value rows; prior note says it is not a general query engine. | Would make dirty `facade.py` blocking. | Rejected as primary match return. |
 | Rows + witness assertion ids | Bridges to views/assertion selection. | Witness semantics not designed; risk of accidental evidence/proof semantics. | Future bridge may use assertion APIs later. | Future/deferred. |
 | `Claim` / `EvaluateRow` / `Explanation` | Reuses T5 DTO ladder. | These are evaluation/explanation/evidence outputs, not read-side matching. | No direct facade relation. | Rejected. |
+
+### 3.4 Constraint Syntax / Head Treatment
+
+| Topic | Scoped result |
+|---|---|
+| Positional input | `fg.read.match(template, ...)` where `template` is the only required positional argument. |
+| Port constraints | Direct kwargs: `fg.read.match(rule, region="US")`; chained `.where(region="US")` accumulates constraints. |
+| Control parameters | Avoid keyword conflicts by using chain methods (`.limit(n)`, `.select(...)`, `.one()`, `.first()`, `.count()`), not control kwargs. |
+| Head/projection | Match output is determined by Rule/RuleExpr ports. Query/evaluate-style head/projection does not control match output. |
+| Row visibility | `MatchRow` may exist internally, but user examples should prefer attribute access (`row.user`) and `.select("user")` for direct snapshots. |
 
 ## 4. Verification Plan
 
@@ -104,4 +116,5 @@ Read-only scan findings:
 - [x] Template type decision reviewed.
 - [x] Return shape decision reviewed.
 - [x] Facade impact reviewed.
+- [x] V2 snapshot/value-native ergonomics reviewed.
 - [ ] Closure notes filled.

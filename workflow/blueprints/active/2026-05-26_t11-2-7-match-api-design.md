@@ -36,6 +36,9 @@ Primary decisions to lock:
 7. **Impact on T11.2.6 facade.py**: state whether the dirty property-style
    assertion accessor change is aligned, obsolete, or undecided after match
    return-shape selection.
+8. **Port-native ergonomics**: align with the user's desired `assertions.where`
+   mental model: match should yield snapshots/values naturally, not require
+   callers to unpack an evaluate-style `MatchResult`.
 
 Output shape:
 
@@ -145,11 +148,14 @@ assertion sets.
 |---|---|---|
 | D1 | Namespace | `fg.read.match(...)`, because matching is read-side and parent §4.9 already hints it. |
 | D2 | Template type | Accept `Rule` + `RuleExpr`; legacy `Query` compatibility either adapter-only or deferred. |
-| D3 | Return shape | Must be decided before T11.2.6; `AssertionRecordSet` is a candidate but may be too narrow for snapshot rows. |
+| D3 | Return shape | Must be decided before T11.2.6; user feedback rejects evaluate-style wrappers and prefers direct snapshots / values. |
 | D4 | Witness shape | v0.2 likely records witness support as deferred, not required in first match design. |
 | D5 | View | Follow attach-only scope; no method-level `view=` in v0.2 match unless explicitly amended. |
 | D6 | `fg.eval.run` | Match design may lock the replacement path, but deletion timing likely remains v0.3 / future hard-cut. |
 | D7 | Facade impact | If match returns/refines `AssertionRecordSet`, property-style assertion access may be aligned; otherwise dirty facade change may be obsolete or separate. |
+| D8 | Output source | Output is determined by template ports, not by Query head / evaluate head / a result envelope. |
+| D9 | User-facing collection | Use a transparent `MatchView` with attribute rows and `.select(...)` projection; users should usually see snapshots/values, not a wrapper DTO. |
+| D10 | Constraints syntax | Use direct `**port_constraints` and `.where(**port_constraints)`, not `ports={...}` unless implementation later proves kwargs impossible. |
 
 ## 4.1 Scoped Decision Lock
 
@@ -160,11 +166,14 @@ document:
 |---|---|
 | D1 Namespace | Use `fg.read.match(...)`. Match is read-side pattern search, not assertion-record filtering, evaluation, or query persistence. |
 | D2 Template type | Accept application `Rule` and `RuleExpr`; a single `Rule` is the 1-rule shorthand. Do not accept list/tuple templates; callers use `R1 & R2`, `R1 \| R2`, `RuleExpr.all(...)`, or `RuleExpr.any(...)`. Legacy `Query` remains a compatibility object and is not the primary v0.2 match template. |
-| D3 Return shape | Match is a row/snapshot read surface keyed by Rule ports. It does not return `AssertionRecordSet`, `Claim`, `EvaluateRow`, or `Explanation`. Concrete DTO/list mechanics are left to the future implementation blueprint, but the semantic shape is port-binding rows, not assertion-record collections. |
+| D3 Return shape | Match is snapshot/value-native. Iterating a `MatchView` yields transparent rows whose attributes are port values; entity-typed ports resolve to entity snapshots and value ports return raw values. `.select("port")` yields direct values/snapshots; `.select("p1", "p2")` yields tuples. |
 | D4 Witness boundary | v0.2 match does not expose witness assertion ids. Witness rows, view materialization from witnesses, and rows+evidence remain future design. |
 | D5 View integration | Match follows T11.1 attach-only view scoping. No method-level `view=` for `fg.read.match(...)` in v0.2. |
 | D6 `fg.eval.run` timing | This design locks the replacement direction but does not delete `fg.eval.run`. Deletion remains a later hard-cut after docs and implementation migration. |
 | D7 Facade impact | Dirty `facade.py` property-style assertion access is not required by v0.2 match. It may still land as a standalone assertion ergonomics slice, but match design no longer forces it. |
+| D8 Head / projection treatment | Match ignores Query/evaluate-style head concepts. Output is fully determined by Rule/RuleExpr ports and optional `.select(...)`. |
+| D9 Transparent collection | Public docs may name `MatchView` as a thin chainable collection, but should not force users through `MatchResult` / `.port(...).value` parsing. |
+| D10 Constraint syntax | Signature shape is `fg.read.match(template, **port_constraints) -> MatchView`; additional filtering uses `.where(**port_constraints)`. Control knobs such as `limit` are chaining methods to avoid port-name conflicts. |
 
 ## 4.2 Candidate Comparison Summary
 
@@ -190,7 +199,7 @@ Return-shape candidates:
 
 | Candidate | Pro | Con | Scoped result |
 |---|---|---|---|
-| Port-binding rows / snapshots | Fits `Rule.ports`; read-side mental model; works for entity and scalar ports. | Exact DTO/list mechanics still need implementation design. | **Chosen semantic shape.** |
+| Transparent `MatchView` rows + `.select(...)` | Fits `Rule.ports`; read-side mental model; entity ports yield snapshots; value ports yield values; `.select(...)` makes wrappers disappear. | Exact runtime class mechanics still need implementation design. | **Chosen semantic shape.** |
 | `AssertionRecordSet` | Reuses assertion filtering surface; aligns with dirty `facade.py`. | Too narrow for snapshot/value ports; prior note says it is not a general query engine. | Rejected as primary shape. |
 | rows + witness assertion ids | Useful bridge to views and assertions. | Witness semantics not designed; can drift into evidence/proof. | Future. |
 | `Claim` / `EvaluateRow` / `Explanation` | Reuses T5 DTO ladder. | These are evaluate/explain/evidence surfaces, not read-side match. | Rejected. |
@@ -210,9 +219,11 @@ The scoped inventory must fill:
 8. template type comparison matrix;
 9. return shape comparison matrix, including snapshot vs assertion-record and
    T5 `Claim` DTO relationships;
-10. whether `facade.py` dirty behavior aligns with each candidate return shape;
-11. recommended output location: new design-point vs D-doc vs parent essay edit;
-12. class decision after inventory: M or L.
+10. port constraint syntax comparison (`**kwargs` / `.where(...)` vs
+   `ports={...}` and control-param conflicts);
+11. whether `facade.py` dirty behavior aligns with each candidate return shape;
+12. recommended output location: new design-point vs D-doc vs parent essay edit;
+13. class decision after inventory: M or L.
 
 ## 6. Expected Implementation Shape
 
@@ -243,6 +254,7 @@ No runtime implementation is expected in T11.2.7.
 - [x] Namespace decision recorded.
 - [x] Template type decision recorded.
 - [x] Return shape decision recorded.
+- [x] Port-native ergonomics decision recorded.
 - [x] View integration decision recorded.
 - [x] `fg.eval.run` migration timing recorded.
 - [x] T11.2.6 facade impact recorded.
