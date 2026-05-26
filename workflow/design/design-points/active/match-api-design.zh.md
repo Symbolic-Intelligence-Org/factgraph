@@ -2,6 +2,7 @@
 
 - Status: active design point
 - Created: 2026-05-26
+- Last Updated: 2026-05-26
 - Owner cycle: T11.2.7
 - Related blueprint: `workflow/blueprints/active/2026-05-26_t11-2-7-match-api-design.md`
 - Parent source: `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §6
@@ -17,66 +18,115 @@ parent essay §6。
 本设计只锁定 **read-side match** 的 v0.2 形状:
 
 - 用 `Rule` / `RuleExpr` 作为匹配模板;
-- 用 `Rule.ports` 定义输出;
-- 返回用户可直接消费的 snapshot / value,而不是 evaluate-like result envelope;
+- 用 **EntityCls 作为 match 的"head"**(投影目标 entity 类);
+- 用 `Rule.ports` 定义匹配 row 内部的 binding contract;
+- 返回 **`tuple[EntityCls snapshot, ...]`**,与 `fg.read.find(...)` 同 shape;
 - 保留旧 `Query` 为兼容 / 迁移对象,不作为新主路径;
 - 为后续 `fg.eval.run` hard-cut 提供 replacement direction,但本设计不删除 `run`。
 
 ## 2. Mental Model
 
-| Surface | Input | Filter style | Returned item |
-|---|---|---|---|
-| `fg.read.find(...)` | Entity class | field kwargs | Entity snapshot |
-| `fg.assertions...where(...)` | Assertion record set | assertion/meta predicates | `AssertionRecord` |
-| `fg.read.match(...)` | `Rule` / `RuleExpr` template | port kwargs + `.where(...)` | port values: entity snapshots or raw values |
+**Match 的本质是 evaluate-style format,但 head 是单一 EntityCls,执行通过 pattern matching 而非 inference engine**。
 
-Match 是读取面(pattern search),不是推理面。它回答:
+### 2.1 与 evaluate 同构
 
-> 当前 snapshot / attached view 里,有哪些已经存在的项满足这个模板?
+```
+evaluate(template, head=projection_rule, semantics=..., view=...) -> EvaluateResult
+match    (EntityCls, template,                              ...) -> tuple[snapshot, ...]
+```
 
-它不回答:
+二者结构同构:
+- **Template body** 描述匹配的 pattern
+- **Head 投影目标** 决定 row 的核心 identity
+- **附加约束 / 配置** 在调用时传入
 
-- 这个结论是否可证明;
-- 为什么失败;
-- 哪些 evidence tree 支持推导;
-- 哪些 assertion witness 参与了匹配。
+差异:
 
-这些属于 evaluate / explain / evidence / future witness bridge。
+| | `evaluate` | **`match`** |
+|---|---|---|
+| Head | application `Rule`(projection target predicate) | **单一 EntityCls** |
+| Execution | inference engine(derives new claims) | **pattern matching**(finds existing snapshots) |
+| Output | `EvaluateResult`(rows with `Claim` + `EvidenceRef`) | `tuple[EntityCls snapshot, ...]` |
+| Semantics | optional probabilistic wrappers | deterministic |
+| Witness | EvidenceGraph(可追溯) | 不暴露(v0.2 deferred) |
+| Side effects | rows can `accept()` to persist | read-only |
+
+### 2.2 与 read.find 同 namespace shape
+
+```
+read.get  (EntityCls, **identity_kwargs)                 -> snapshot \| None
+read.find (EntityCls, **field_kwargs)                    -> tuple[snapshot, ...]
+read.match(EntityCls, template, **port_constraints)      -> tuple[snapshot, ...]
+read.ref  (EntityCls, **identity_kwargs)                 -> idref_v1 token
+```
+
+`read` namespace 完全统一:
+
+- 第一参数永远是 `EntityCls`
+- 关键字参数为 filter / constraint
+- 无 chain 累积(每次 call 都 single-shot)
+- 返回 native Python collection(tuple / single value / None / token)
+
+**Read 是 single-call namespace**,不像 `assertions` 走 chain pattern(`field(...).active.where(...).at(...)...`)。Match 遵守此约束。
+
+### 2.3 Match 回答什么 / 不回答什么
+
+回答:
+
+> 当前 snapshot / attached view 里,有哪些 `EntityCls` instance 已经满足这个 template pattern?
+
+**不**回答:
+- 这个结论是否可证明(→ evaluate / explain)
+- 为什么 fail(→ failed Explanation envelope / why-not)
+- 哪些 evidence tree 支持推导(→ EvidenceGraph)
+- 哪些 assertion 是 witness(→ future witness bridge)
 
 ## 3. Public Entry
 
-v0.2 目标形状:
+v0.2 签名:
 
 ```python
-fg.read.match(template, **port_constraints) -> MatchView
+fg.read.match(
+    entity_cls: type[Entity],
+    template: Rule | RuleExpr,
+    *,
+    limit: int | None = None,
+    **port_constraints: Any | Field,
+) -> tuple[EntitySnapshot, ...]
 ```
 
-其中:
+参数语义:
 
-- `template` 是唯一必填 positional 参数;
-- `template` 必须是 application `Rule` 或 `RuleExpr`;
-- `**port_constraints` 用 port name 作为 keyword;
-- 控制参数不放在 keyword 中,避免和 port name 冲突;
-- 控制行为使用链式方法,例如 `.where(...)`, `.limit(n)`, `.select(...)`,
-  `.one()`, `.first()`, `.count()`。
+- `entity_cls`(positional,必填)— **match 的 head**;决定投影目标和返回 item type
+- `template`(positional,必填)— `Rule` 或 `RuleExpr`,定义匹配 body
+- `limit`(kw-only,optional)— 结果 cap(safety knob)
+- `**port_constraints`(kwargs)— port name 作为 key,literal value 或本类 Field descriptor 作为 value
+
+返回:
+
+- `tuple[entity_cls 的 snapshot, ...]`,**distinct**(不重复)
+- 与 `read.find` 返回 shape 完全一致
+- 直接 iterable / indexable / `len(...)`,无 wrapper DTO
 
 示例:
 
 ```python
-matches = fg.read.match(user_in_region, region="US")
+us_users = fg.read.match(User, user_in_region, region="US")
 
-for row in matches:
-    print(row.user.user_id, row.region)
+for user in us_users:
+    print(user.user_id, user.region)
 
-for user in fg.read.match(user_in_region, region="US").select("user"):
-    print(user.user_id)
+if not us_users:
+    print("no match")
+
+first_three = us_users[:3]
 ```
 
 ## 4. Template Contract
 
 ### 4.1 `Rule`
 
-单个 application `Rule` 是基础模板。
+单个 application `Rule` 是基础 template:
 
 ```python
 with vars("u", "region") as (u, region):
@@ -85,263 +135,343 @@ with vars("u", "region") as (u, region):
         where=[User(u), User(u).region == region],
         ports={"user": u, "region": region},
     )
+
+us_users = fg.read.match(User, user_in_region, region="US")
 ```
 
-`where` 描述匹配条件,`ports` 描述输出 contract。
-Match 不使用 Query-style `head`,也不使用 evaluate-side projection target。
+`where` 描述匹配条件;`ports` 描述 row 内部的 binding contract;Match 用 EntityCls 投影到对应 port。
+
+**`Rule.head` 在 match 语境完全不参与**。`Rule.head` 是 evaluate-side projection target;match 用 EntityCls 替代该角色。
 
 ### 4.2 `RuleExpr`
 
-`RuleExpr` 是多模板组合形态。
+`RuleExpr` 是多模板组合形态:
 
 ```python
-expr = RuleExpr.all(user_in_region, order_in_region)
+u_ = user_in_region.as_("u_")
+o_ = order_in_region.as_("o_")
+expr = (u_ & o_).join_by_ports("region")
 
-for user, order in fg.read.match(expr, region="US").select("user", "order"):
-    ...
+users_with_orders = fg.read.match(User, expr)
+orders_with_users = fg.read.match(Order, expr)
 ```
+
+EntityCls 选择投影方向。**同一个 expr 可被多个 match call 复用,EntityCls 不同 → 投影不同**。
 
 v0.2 不接受 bare list / tuple:
 
 ```python
-fg.read.match([R1, R2])        # not a public shape
-fg.read.match(RuleExpr.all(R1, R2))
-fg.read.match(R1 & R2)
+fg.read.match(User, [R1, R2])              # 不接受
+fg.read.match(User, RuleExpr.all(R1, R2))  # OK
+fg.read.match(User, R1 & R2)               # OK
 ```
 
-原因: list/tuple 无法表达 AND / OR 语义,且与 `RuleExpr.all(...)` /
-`RuleExpr.any(...)` 重复。
+理由:list/tuple 无法表达 AND/OR 语义,且与 `RuleExpr.all/any` 重复。
 
 ### 4.3 Legacy `Query`
 
-旧 `Query(head, where, ...)` 是 read-side projection object,但它没有
-application `Rule.ports` contract。
-
-区别:
+旧 `Query(head, where, ...)` 是 read-side projection object,无 `ports` contract。
 
 | Aspect | Legacy `Query` | Application `Rule` |
 |---|---|---|
 | Output contract | `head` projection | `ports` |
 | Body | `where` | `where` |
 | Identity | runtime-derived query digest | application rule id/version |
-| Evidence/proof role | none | evaluate/prove can use Rule separately |
 | Match role | compatibility / migration only | primary v0.2 template |
 
-T11.2.7 不把 `Query` 作为新 `fg.read.match(...)` 主模板。若需要兼容,
-应由后续 implementation blueprint 显式决定是否提供 adapter path。
+T11.2.7 不把 `Query` 作为 `fg.read.match(...)` 主模板。compatibility adapter 留给 future implementation blueprint 决定。
 
-## 5. Output Model
+## 5. EntityCls as Match Head
 
-### 5.1 Ports Determine Output
+EntityCls 在 match 中扮演 "head" 的角色 — 决定投影目标。
 
-Match 输出完全由 template ports 决定:
+### 5.1 EntityCls 必须唯一映射到 template 中一个 entity_ref port
 
-- entity-ref port -> resolved entity snapshot;
-- value port -> raw value;
-- multiple ports -> row / tuple projection.
+每个 port 有 `PortType(kind, entity_type)`:
 
-`Rule.head` / legacy `Query.head` / evaluate-side head 不参与 match output。
+- `entity_ref` port — 绑定 Entity 实例,有 `entity_type` 元数据
+- `value` port — 绑定 raw value
 
-```python
-for row in fg.read.match(user_in_region):
-    row.user      # User snapshot
-    row.region    # raw value
-```
+`read.match(User, template, ...)` 的投影规则:
 
-### 5.2 `MatchView`
+> Template 必须**恰好一个** port 的 `port_type` 是
+> `(kind="entity_ref", entity_type="User")`。该 port 是投影 source。
+> 返回 distinct User snapshots(同一 User 出现在多 row 不重复)。
 
-`MatchView` 是 thin, chainable collection,不是 evaluate-like result envelope。
-用户可以知道它的名字,但日常不需要解析 envelope。
+### 5.2 错误处理
 
-Required v0.2 surface:
+| 情况 | 错误 |
+|---|---|
+| Template 无 entity_ref port matching EntityCls | `SDKStoreError: template has no entity_ref port of type 'User'` |
+| Template **多个** entity_ref ports matching EntityCls | `SDKStoreError: ambiguous projection — template has multiple User-typed ports: [...]` |
+| EntityCls 不是 `Entity` 子类 | `SDKStoreError: read.match(EntityCls, ...) expects Entity subclass, got '...'` |
 
-```python
-view.where(**port_constraints) -> MatchView
-view.limit(n: int) -> MatchView
-view.first() -> MatchRow | None
-view.one() -> MatchRow
-view.all() -> tuple[MatchRow, ...]
-view.count() -> int
-view.select(*port_names: str) -> ProjectedMatchView
-```
+### 5.3 跨 entity tuple 返回不支持(v0.2)
 
-`.where(...)` 可重复调用,约束累积:
+不能用一次 `read.match` 同时拿 `(User, Order)` pair:
 
 ```python
-active_us_users = (
-    fg.read.match(user_in_region)
-    .where(region="US")
-    .where(active=True)
-    .select("user")
-)
+# 不支持(v0.2 显式 non-goal)
+pairs = fg.read.match((User, Order), expr)
+
+# 想要 pair 必须两次 match 或走 evaluate
+us_users  = fg.read.match(User, expr, region="US")
+us_orders = fg.read.match(Order, expr, region="US")
+# 用户自行 zip 或 cross-reference
 ```
 
-### 5.3 `MatchRow`
+这是 v0.2 的 deliberate trade-off:换取 read namespace 的 single-call 统一性,
+multi-entity 关联留 evaluate 路径或后续 cycle。
 
-`MatchRow` 可作为内部 / 轻量公开类型存在,但设计目标是 attribute access 让
-wrapper 几乎消失。
+## 6. Output Shape
 
-Required row behavior:
+### 6.1 返回 type
 
 ```python
-row.user          # attribute access by port name
-row["user"]       # dict-style fallback
+return type: tuple[EntityCls snapshot, ...]
 ```
 
-Entity port resolution lazily returns snapshots. Value ports return raw bound
-values.
+- 永远 `tuple`(不可变,materialized)
+- Items 是 EntityCls 的 entity snapshot(`fg.read.get(EntityCls, ...)` 同 type)
+- **Distinct**(template body 允许多 row 绑定同一 User → 输出去重)
+- 直接 iterable / indexable / `len(...)` / `[:n]` slice / `bool(...)` empty check
 
-### 5.4 `.select(...)`
-
-`.select(...)` 是让 row wrapper 消失的主入口:
+### 6.2 与 `read.find` shape 对齐
 
 ```python
-fg.read.match(user_in_region, region="US").select("user")
-# iterable of User snapshots
+# find:简单字段过滤
+us_users_a = fg.read.find(User, region="US")
 
-fg.read.match(user_in_region).select("user", "region")
-# iterable of (User snapshot, region value)
+# match:同 EntityCls,同输出 shape,template 表达更复杂 pattern
+us_users_b = fg.read.match(User, user_in_region, region="US")
+
+assert type(us_users_a) == type(us_users_b)  # 同 shape
 ```
 
-Single-port projection returns direct values / snapshots.
-Multi-port projection returns tuples in requested order.
+`find` = direct field filter(无 join);`match` = rule-pattern filter(可表达 join、跨 entity)。**最终都返回 `tuple[EntityCls snapshot, ...]`**。
 
-## 6. Constraints
+### 6.3 无 wrapper DTO
 
-### 6.1 Direct kwargs
+v0.2 显式**不**引入:
 
-Primary form:
+- `MatchResult` / `MatchView` / `MatchRow` / `ProjectedMatchView` 等 wrapper
+- `.first()` / `.one()` / `.all()` / `.count()` chain 方法
+- `.where(...)` / `.limit(n)` / `.select(...)` chain 方法
+
+返回 `tuple` 自带 Python 原生操作:
+
+| 用户意图 | 操作 |
+|---|---|
+| 第一个 | `result[0] if result else None` |
+| 全部 | `result`(本身就是 tuple) |
+| 数量 | `len(result)` |
+| 唯一 | `assert len(result) == 1; user = result[0]` |
+| 截前 N | `result[:n]` |
+| 存在 | `bool(result)` 或 `if result:` |
+
+## 7. Constraint Composition
+
+### 7.1 Kwargs 接受两种 value 类型
 
 ```python
-fg.read.match(user_in_region, region="US")
+fg.read.match(User, template, region="US",            tag=User.region)
+#                              ^^^^^^^^^^^^           ^^^^^^^^^^^^^^^^
+#                              literal value          own-class Field descriptor (F-expression)
 ```
 
-This is intentionally not:
+| Kwarg RHS 类型 | 语义 | Example |
+|---|---|---|
+| **Literal**(int/str/float/bool/idref token/None) | port 值 = literal | `region="US"` |
+| **EntityCls 自身 `Field` descriptor** | port 值 = matched entity 该 field 的值 | `region=User.region` |
+| 其他 EntityCls 的 Field(e.g. `Order.region` 在 `match(User, ...)`) | **raise** | 指引用户走 `RuleExpr.join_by_ports` |
+| Var / Atom / Rule 等 SDK 内部对象 | **raise** | "kwargs accept only literal or own-class Field descriptor" |
+
+### 7.2 Literal kwargs 语义
 
 ```python
-fg.read.match(rule=user_in_region, ports={"region": "US"})
+fg.read.match(User, user_in_region, region="US")
 ```
 
-Rationale:
+合成 atom:`port_var("region") == Const("US")`
 
-- `template` is the only required object and should remain positional;
-- port constraints are the user's mental model;
-- `ports={...}` makes a simple filter feel like an engine API.
+- 等价 SQL `WHERE region = 'US'`
+- 与 `read.find(User, region="US")` 同语义
 
-### 6.2 Control Knobs
-
-Control knobs use chain methods:
+### 7.3 Own-class Field kwargs 语义(F-expression equivalent)
 
 ```python
-fg.read.match(user_in_region, region="US").limit(10)
-fg.read.match(user_in_region).select("user").one()
+fg.read.match(User, user_tagged, region=User.tag)
 ```
 
-v0.2 should avoid keyword control parameters such as `limit=` because port names
-are user-defined and may collide.
+合成 atom:`port_var("region") == FieldAccess(matched_user_var, "tag")`
 
-## 7. View Scope
+- 等价 SQL `WHERE region = tag`(同 entity 跨字段比较)
+- Django ORM `F('tag')` equivalent
+- 实用 use case:port name ≠ entity field name 时,显式 bind 到 entity 的另一字段
 
-Match follows T11.1 attach-time view scope:
+### 7.4 跨 entity Field 拒绝
+
+```python
+# 不支持:用 RuleExpr 表达
+fg.read.match(User, template, region=Order.region)
+# → SDKStoreError: "cross-entity field constraints must use RuleExpr.join_by_ports / .join, not kwargs"
+
+# 正确方式:
+expr = (u_ & o_).join_by_ports("region")
+fg.read.match(User, expr, region="US")
+```
+
+理由:跨 entity field 等值 = implicit join。Join 应通过 `RuleExpr` 显式表达,不混入 kwargs。
+
+### 7.5 Port name 验证
+
+```python
+fg.read.match(User, template, foo="bar")
+# → SDKStoreError: "port 'foo' not declared by template (ports: ['user', 'region'])"
+```
+
+Kwargs 必须命名 template 已声明的 port。
+
+### 7.6 Implementation Mechanism — Synthetic Constraint Composition
+
+**Rule 数据完全不可变**。Kwargs 在 match runtime **合成额外约束 atoms**,与 template body 通过 RuleExpr-style AND **组合在一起**:
+
+```
+template body atoms ∧ synthetic kwarg atoms = match constraint set
+                                              ↓
+                                              pattern matcher (no inference engine)
+                                              ↓
+                                              row bindings
+                                              ↓
+                                              distinct EntityCls snapshots (via projection port)
+```
+
+性质:
+
+- ✓ `Rule` 对象 immutable;digest invariant 保持
+- ✓ 无 inference engine 介入;match 是 pure constraint solving
+- ✓ 复用 `RuleExpr` 已有 `&` composition idiom
+- ✓ Body 已含同一约束时,合成约束 idempotent(无副作用)
+
+### 7.7 单 call,无 chain 累积
+
+所有约束**一次性**传入,无 `.where(...)` 累积:
+
+```python
+# v0.2:single call
+fg.read.match(User, template, region="US", active=True)
+
+# 不支持:chain
+fg.read.match(User, template).where(region="US").where(active=True)
+```
+
+理由:`read` namespace 是 single-call(对齐 `find` / `get` / `ref`)。Chain 累积 pattern 是 `assertions` namespace 的专属(`.field(...).active.where(...)`)。
+
+## 8. View Scope
+
+Match 遵循 T11.1 attach-time view scoping:
 
 ```python
 fg = FactGraph.attach(db, schema_classes=[User], view=view)
-fg.read.match(user_in_region)
+us_users = fg.read.match(User, user_in_region, region="US")
+# 匹配限制在 view 的 asrt_id universe 内
 ```
 
-Method-level `view=` remains intentionally unsupported:
+Method-level `view=` 不支持(与 T11.1 / Q5 一致):
 
 ```python
-fg.read.match(user_in_region, view=view)  # not v0.2
+fg.read.match(User, template, view=view)
+# → SDKStoreError: "method-level view= not supported; use FactGraph.attach(db, view=view) instead"
 ```
 
-If implementation later exposes an error message, it should mirror the T11.1
-read/evaluate hint:
+`view` 不是 port name — 即使 template 没有 `view` port,该 kwarg 也作为 reserved name 触发 attach-only hint。
 
-> method-level view= not supported; use FactGraph.attach(db, view=view) instead
+## 9. Witness / Assertion Boundary
 
-## 8. Witness / Assertion Boundary
+v0.2 match 返回 entity snapshot,**不暴露 witness assertion ids**。
 
-v0.2 match returns snapshots / values. It does not expose witness assertion ids.
-
-Deferred:
+Deferred 到 future cycle:
 
 ```python
-fg.read.match(...).as_assertions()
-fg.read.match(...).witnesses()
-fg.read.match(...).to_view()
+fg.read.match(...).as_assertions()    # → witness asrt_ids
+fg.read.match(...).witnesses()        # → 同上
+fg.read.match(...).to_view()          # → 用 witnesses 构造 Database view
 ```
 
-Reason:
+理由:
+- Witness rows 需要 assertion-id 语义
+- Assertion witnesses 可能成为 EvidenceGraph / Explanation 的输入
+- 跨 parent §9 RuleExpr × evidence joins 与 T6/T7 evidence cycle 边界
 
-- witness rows require assertion-id semantics;
-- assertion witnesses may become input to EvidenceGraph / explanation work;
-- this crosses into §9 RuleExpr x evidence joins and T6/T7 evidence cycles.
+v0.2 用户若需 assertion record,继续走 `fg.assertions.*` 直接 API。
 
-Users who need assertion records in v0.2 continue to use assertion APIs directly.
+## 10. Relationship to `fg.eval.run`
 
-## 9. Relationship to `fg.eval.run`
-
-This design locks replacement direction:
+本设计锁定 replacement direction:
 
 ```python
-fg.read.match(rule_or_expr, ...)
+# legacy
+result = fg.eval.run(query_value)
+
+# v0.2 替代:
+fg.read.match(EntityCls, rule_or_expr, **constraints)
 ```
 
-It does **not** delete `fg.eval.run`.
+**不**删除 `fg.eval.run`。Deletion 留 future hard-cut,需:
 
-Deletion remains a later hard-cut after:
+1. `fg.read.match(...)` 运行时实现 land
+2. docs migrate query/run examples → match
+3. compatibility / migration notes reviewed
+4. release policy 显式 authorize
 
-1. `fg.read.match(...)` implementation lands;
-2. docs migrate from run/query examples to match;
-3. compatibility / migration notes are reviewed;
-4. release policy explicitly authorizes the hard cut.
+## 11. Relationship to `facade.py`
 
-## 10. Relationship to `facade.py`
+T11.2.5 发现 dirty `facade.py` 改动(property-style assertion access + `AssertionRecordSet.__call__` compatibility)。
 
-T11.2.5 found a dirty `facade.py` change around property-style assertion access
-and `AssertionRecordSet.__call__` compatibility.
+本 match 设计**不**返回 `AssertionRecordSet`,因此**不依赖** facade.py 改动:
 
-This match design does **not** require match to return `AssertionRecordSet`.
-Therefore the dirty `facade.py` change is not required by match.
+- `facade.py` 可作为独立 assertion ergonomics slice land(`T11.2.6`),或 user stash/revert
+- Match design 不再绑定 facade.py 决策
 
-Allowed downstream decisions:
-
-- land `facade.py` as a standalone assertion ergonomics slice if desired;
-- stash/revert it before release if it is only a prototype;
-- revisit it later if witness / assertion-returning match becomes active.
-
-It should not be justified as part of v0.2 match API.
-
-## 11. Deferred Items
+## 12. Deferred Items
 
 | Item | Deferred to |
 |---|---|
 | Runtime implementation of `fg.read.match(...)` | Future implementation blueprint |
+| Cross-entity tuple return(`match((User, Order), expr)`) | Future or evaluate-route |
 | Legacy `Query` adapter path | Future compatibility decision |
-| Query persistence (`fg.queries.save/load/list`) | Lifecycle / asset cycle |
-| Witness assertion ids | Evidence / witness design |
-| `.as_assertions()` / `.to_view()` | Future witness bridge |
+| Query persistence(`fg.queries.save/load/list`) | Lifecycle / asset cycle |
+| Witness assertion ids(`.as_assertions()` / `.witnesses()` / `.to_view()`) | Evidence / witness design |
 | Method-level `view=` | v2 only if user demand appears |
-| Snapshot-at-tx matching (`at=` / `as_of`) | Database snapshot cycle |
-| RuleExpr x evidence joins | Parent §9 / evidence cycle |
-| Service / OpenAPI match endpoint | Future service design, not v0.2 design-only cycle |
+| Snapshot-at-tx matching(`at=` / `as_of`) | Database snapshot cycle |
+| Streaming / lazy iterator | Future performance cycle |
+| Pagination(`offset=` / `cursor=`) | Future API expansion |
+| Cross-entity Field kwargs(`Order.region` in `match(User, ...)`) | 与 RuleExpr.join 重叠,留 RuleExpr layer |
+| Aggregate match(`.count_only()` / `.exists()`) | Future optimization |
+| RuleExpr × evidence joins | Parent §9 / evidence cycle |
+| Service / OpenAPI match endpoint | Future service design |
 
-## 12. Commitments
+## 13. Commitments
 
 | ID | Commitment |
 |---|---|
-| M1 | Public namespace target is `fg.read.match(...)`. |
-| M2 | v0.2 match templates are application `Rule` and `RuleExpr`. |
-| M3 | Bare list/tuple template inputs are not part of the public shape. |
-| M4 | Legacy `Query` is compatibility/deferred, not the new primary template. |
-| M5 | Output is determined by ports, not by Query/evaluate-style head. |
-| M6 | Entity-ref ports resolve to entity snapshots; value ports return raw values. |
-| M7 | `MatchView` is chainable and filterable with `.where(...)`. |
-| M8 | `.select("port")` yields direct values/snapshots; multi-select yields tuples. |
-| M9 | Port constraints use direct kwargs and chained `.where(...)`, not `ports={...}`. |
-| M10 | Control knobs use chain methods to avoid port-name keyword conflicts. |
-| M11 | Match follows attach-time view scope; method-level `view=` remains rejected. |
-| M12 | Witness/assertion-returning match is deferred. |
-| M13 | `fg.eval.run` deletion is not part of T11.2.7. |
-| M14 | Dirty `facade.py` assertion ergonomics are independent of this match design. |
+| M1 | Public namespace target is `fg.read.match(EntityCls, template, **kwargs)`. |
+| M2 | EntityCls is positional, required, must be `Entity` subclass. |
+| M3 | EntityCls 扮演 match 的 "head" 角色 — 投影目标 entity 类。 |
+| M4 | Template 必须恰好一个 entity_ref port 匹配 EntityCls(unique projection)。 |
+| M5 | v0.2 templates are application `Rule` and `RuleExpr`(no bare list/tuple)。 |
+| M6 | Legacy `Query` is compatibility/deferred, not the new primary template。 |
+| M7 | `Rule.head` 在 match 中不参与;EntityCls 替代该角色。 |
+| M8 | Match is **pattern matching**, not inference. No inference engine involvement。 |
+| M9 | Return shape is `tuple[EntityCls snapshot, ...]`, distinct, materialized。 |
+| M10 | No wrapper DTO(no `MatchResult` / `MatchView` / `MatchRow`)。 |
+| M11 | No chain methods(`.where` / `.limit` / `.select` / `.first` / `.one` / `.all` / `.count`)— `read` namespace 是 single-call。 |
+| M12 | Kwargs 接受 literal 或 own-class Field descriptor;其他 raise。 |
+| M13 | Own-class Field kwarg = F-expression equivalent(同 entity 跨字段约束)。 |
+| M14 | Cross-entity Field kwarg → raise,指引 RuleExpr.join_by_ports / .join。 |
+| M15 | Implementation mechanism: synthetic constraint atoms composed with template body via RuleExpr-style AND at match runtime;Rule data immutable。 |
+| M16 | Match follows attach-time view scope; method-level `view=` rejected。 |
+| M17 | Witness/assertion-returning match is deferred(v0.2 only snapshots)。 |
+| M18 | Cross-entity tuple return(`match((User, Order), expr)`)is v0.2 non-goal。 |
+| M19 | `fg.eval.run` deletion is **not** part of T11.2.7;replacement direction locked。 |
+| M20 | Dirty `facade.py` assertion ergonomics are **independent** of this match design。 |

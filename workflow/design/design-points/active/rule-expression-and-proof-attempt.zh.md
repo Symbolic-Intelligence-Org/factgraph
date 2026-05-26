@@ -1631,11 +1631,18 @@ replacement direction 的输入:
 
 当前边界:
 
-- **match**: `fg.read.match(rule_or_expr, **port_constraints)`;输出由 ports 决定,
-  entity-ref port 返回 entity snapshot,value port 返回 raw value;wrapper 仅作为透明
-  `MatchView` / `.select(...)` 机制存在。
+- **match**: `fg.read.match(EntityCls, template, **port_constraints) -> tuple[EntityCls snapshot, ...]`;
+  EntityCls 是投影 "head"(template 必须恰好一个 entity_ref port 匹配该 EntityCls);
+  返回 distinct entity snapshots,与 `fg.read.find(...)` 同 shape;
+  single-call(无 chain methods、无 wrapper DTO);
+  kwargs 接受 literal 或 own-class Field descriptor(F-expression);
+  execution = pattern matching(非 inference engine);
+  `Rule.head` 在 match 中**不参与**(EntityCls 替代该角色)。
 - **evaluate**: 保持 T5/T5.8 的 `fg.eval.evaluate(...)` / `EvaluateResult`
-  contract。
+  contract。Evaluate 与 match 同构(都是"template + head projection"),差异:
+  evaluate head 是 application Rule、execution 走 inference engine、output 是
+  EvaluateResult(Claims + EvidenceRef);match head 是 EntityCls、execution 是
+  pattern matching、output 是 entity snapshots。
 - **prove / explain**: 保持 T5 的 explanation envelope / `row.explain()` /
   EvidenceGraph direction;不由 match API 承担。
 
