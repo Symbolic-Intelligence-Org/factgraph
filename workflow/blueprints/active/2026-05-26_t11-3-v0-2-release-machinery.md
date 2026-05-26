@@ -1,8 +1,8 @@
 # Task Blueprint: T11.3 v0.2.0 Release Machinery
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
-- Last Updated: 2026-05-26
+- Last Updated: 2026-05-27
 - Class: L (release machinery; may narrow after Step 4.6)
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
@@ -222,17 +222,112 @@ of absorbing that work into T11.3.
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory completed with release refs, dirty handling, and
+- [x] Step 4.6 inventory completed with release refs, dirty handling, and
       namespace projection findings.
-- [ ] Dirty docs/notebooks handling decided before any dry-run.
-- [ ] v0.2.0 candidate version and source ref locked.
-- [ ] Projection allowlist and verify command aligned to current public
+- [x] Dirty docs/notebooks handling decided before any dry-run.
+- [x] v0.2.0 candidate version and source ref locked.
+- [x] Projection allowlist and verify command aligned to current public
       namespace.
-- [ ] D14 PyPI rename locked and `pyproject.toml` changed to `name = "factgraph"`.
-- [ ] CHANGELOG v0.2.0-rc.1 entry includes prominent breaking package-rename
+- [x] D14 PyPI rename locked and `pyproject.toml` changed to `name = "factgraph"`.
+- [x] CHANGELOG v0.2.0-rc.1 entry includes prominent breaking package-rename
       migration note.
-- [ ] README install command updated to `pip install factgraph`.
-- [ ] Release notes / README truth aligned or explicitly deferred.
-- [ ] Dry-run passes or concrete blockers are recorded.
-- [ ] No live publish / PyPI upload / release-branch push occurs without a
+- [x] README install command updated to `pip install factgraph`.
+- [x] Release notes / README truth aligned or explicitly deferred.
+- [x] Dry-run passes or concrete blockers are recorded.
+- [x] No live publish / PyPI upload / release-branch push occurs without a
       separate user gate.
+
+## 9. Outcome / Deviations
+
+### 9.1 Release metadata and package rename
+
+Commit `4f4051c0` renamed the distribution metadata from `factpy-kernel` to
+`factgraph` and set the v0.2 candidate version to `0.2.0rc1`. The Python import
+surface remains `factgraph.*`, so the breaking change is limited to the PyPI
+distribution name and installation command. `README.md` and `CHANGELOG.md`
+include the migration path:
+
+```bash
+pip uninstall factpy-kernel
+pip install factgraph
+```
+
+The old `factpy-kernel` package remains untouched; no shim or old-package
+deprecation release was created in T11.3.
+
+### 9.2 Release machinery migration
+
+Commit `7a6fee63` migrated the release surface from the old `src/kernel`
+projection to the current `src/factgraph` package:
+
+- `.github/workflows/factpy-kernel-tests.yml` became
+  `.github/workflows/factgraph-tests.yml`;
+- `scripts/release.sh` now verifies the focused factgraph release gate instead
+  of `src/kernel/tests` discovery;
+- `scripts/project_release_surface.sh` defaults to `/tmp/factgraph_projection`
+  and scans projected `src/factgraph` docs for private/stale references;
+- `scripts/release_surface_allowlist.txt` was regenerated to 271 projected
+  files across root metadata, `src/factgraph`, and focused release tests.
+
+The focused verification list is a deliberate v0.2 release gate: it preserves
+the T5/T11 public rule/evaluate/assertion/access surface without absorbing the
+known stale full top-level test-discovery failures into release machinery.
+
+### 9.3 Release-facing text fixes
+
+Projection checks exposed additional release-facing stale text. T11.3 corrected:
+
+- `docs/SECURITY.md` to describe the `factgraph` package;
+- `src/factgraph/sdk/docs/00_user_guide.en.md` install command to
+  `python -m pip install factgraph`;
+- `src/factgraph/audit/query.py` optional-domain error message to describe the
+  current `factgraph` wheel;
+- `src/factgraph/authoring/cli.py` by removing two unused imports found by the
+  release ruff gate.
+
+The `authoring/cli.py` cleanup is a release-verification side effect, not a
+feature change: it removes dead imports only and changes no runtime behavior.
+
+### 9.4 Dry-run result
+
+The dry-run was executed from a clean auxiliary worktree at source commit
+`7a6fee63`:
+
+```bash
+./scripts/release.sh v0.2.0-rc.1 --source-ref HEAD --dry-run --yes
+```
+
+Result:
+
+- preflight clean;
+- projected 271 files;
+- `pip install -e .` plus focused release tests passed (`187 OK`);
+- dry-run release commit: `402d098d`;
+- local dry-run tag `v0.2.0-rc.1`, release branch `release/0.2.x`, and
+  milestone branch `milestone/rc-0.2.0-rc.1-2026-05-27` were cleaned up;
+- no remote refs were pushed.
+
+The first sandboxed dry-run attempt failed only because local ref creation was
+blocked by sandbox permissions. The same dry-run command passed with elevated
+local git-ref permissions. No network publish or remote mutation occurred.
+
+### 9.5 Deviations and follow-up gates
+
+Scoped inventory originally described the clean worktree dry-run as occurring
+after implementation/closure/archive. Review chose the practical path A:
+implementation first, dry-run second, closure third. Closure/archive are
+workflow-only and outside the release allowlist, so the release surface verified
+at `7a6fee63` remains representative for the final branch state. A live release
+must still receive a separate explicit user gate and may rerun the same dry-run
+from the final archived HEAD before pushing.
+
+Remaining dirty baseline files were not touched:
+
+- `docs/references/working/design-points/readme.md`;
+- `examples/01_sdk_check_diagnose.ipynb`;
+- `examples/02_overlay_why_not_frontier.ipynb`;
+- `examples/archive/01_sdk_basics.ipynb`;
+- untracked `rainbird-ai sdk code/`.
+
+T11.3 did not create a live release, PyPI upload, GitHub Release, remote
+release branch, or remote tag.

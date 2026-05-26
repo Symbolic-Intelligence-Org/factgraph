@@ -1,11 +1,11 @@
 # Audit: T11.3 v0.2.0 Release Machinery
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
-- Last Updated: 2026-05-26
+- Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-3-v0-2-release-machinery.md`
-- Stage: scoped
+- Stage: implemented
 - Class: L (release machinery; may narrow after Step 4.6)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: four tracked docs/notebooks plus untracked Rainbird reference
@@ -18,7 +18,10 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-26 | draft | `589a2f4e` | T11.3 blueprint pair drafted | Release machinery cycle after T11.2.6 pushed; current release tooling still contains old `src/kernel` assumptions. |
-| 2026-05-26 | scoped | TBD | Step 4.6 release inventory recorded | v0.2 refs absent, package rename B locked, old projection assumptions quantified, clean-worktree dry-run strategy chosen. |
+| 2026-05-26 | scoped | `f7660183` | Step 4.6 release inventory recorded | v0.2 refs absent, package rename B locked, old projection assumptions quantified, clean-worktree dry-run strategy chosen. |
+| 2026-05-26 | implementing | `4f4051c0` | Package metadata renamed to factgraph | `pyproject.toml`, README, and CHANGELOG aligned to `factgraph` / `0.2.0rc1` with explicit install migration. |
+| 2026-05-27 | implementing | `7a6fee63` | Release machinery migrated to factgraph | CI workflow renamed, release script focused tests updated, projection script and allowlist migrated to `src/factgraph`; direct projection and focused tests passed. |
+| 2026-05-27 | implemented | TBD | Dry-run passed and closure recorded | Clean auxiliary worktree dry-run passed for `v0.2.0-rc.1`; no remote refs pushed; local dry-run refs cleaned. |
 
 ## 2. Pre-Draft Inventory
 
@@ -96,10 +99,53 @@ The scoped inventory must fill:
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
+- [x] Step 4.2 review complete.
 - [x] Step 4.6 inventory complete.
 - [x] Dirty docs/notebooks dry-run handling decision reviewed.
 - [x] Projection namespace decision reviewed.
 - [x] Release notes / README truth decision reviewed.
-- [ ] Dry-run result reviewed.
-- [ ] Closure notes filled.
+- [x] Dry-run result reviewed.
+- [x] Closure notes filled.
+
+## 6. Closure Notes
+
+T11.3 landed the v0.2.0-rc.1 release machinery path in two implementation
+commits plus closure:
+
+- `4f4051c0` changed the PyPI distribution metadata to `factgraph`, set
+  `0.2.0rc1`, and added the prominent README / CHANGELOG migration note from
+  `factpy-kernel` to `factgraph`.
+- `7a6fee63` migrated the release projection and CI surface from the old
+  `src/kernel` assumption to the current `src/factgraph` package. The release
+  allowlist now projects 271 files, and release verification uses the focused
+  T5/T11 factgraph gate (`187 OK`).
+
+Dry-run verification:
+
+- command: `./scripts/release.sh v0.2.0-rc.1 --source-ref HEAD --dry-run --yes`;
+- cwd/source: clean auxiliary worktree at `7a6fee63`;
+- projection: 271 files;
+- verification: editable install plus focused tests, `187 OK`;
+- dry-run release commit: `402d098d`;
+- remote mutation: none;
+- local dry-run refs: milestone, tag, and release branch cleaned up.
+
+The only elevated command was the dry-run itself after sandboxed local ref
+creation failed. Elevation was needed for local git ref/worktree writes only;
+the run remained `--dry-run` and pushed no remote refs.
+
+Deviations:
+
+- `src/factgraph/authoring/cli.py` had two unused imports removed because the
+  release ruff gate found them. This is a dead-code cleanup with no behavior
+  change.
+- The release script now uses a focused factgraph verification list rather than
+  full top-level test discovery. Full discovery is known to include stale
+  non-release expectations; the focused list is the scoped release gate.
+- Dry-run occurred after implementation and before closure/archive, per review
+  path A. Closure/archive are workflow-only and outside the release projection.
+
+No live release, PyPI upload, GitHub Release, remote branch push, or remote tag
+push occurred. Sacred `master` remained at
+`562c74195df43e933bed92a3ff25de94dd8ce666`, and the remaining dirty docs /
+notebooks plus untracked Rainbird reference were preserved.
