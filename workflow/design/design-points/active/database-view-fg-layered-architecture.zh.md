@@ -618,6 +618,12 @@ metadata = {
 }
 ```
 
+当前 v0.2 implementation 采用 `view_snapshot_digest` 作为公开 metadata bridge:
+`EvaluateResult.view_snapshot_digest` 由 db/view snapshot parts 派生,并被
+EvidenceGraph.metadata durable copy。上面的 exact tuple fields 保留为 v2 /
+internal expansion target;若未来需要公开 `db_id` / `tx_id` / `schema_digest`
+/ `data_digest` / `view_digest`,必须经新的 blueprint 显式激活。
+
 原因:
 - evidence 离开 runtime 后仍能判断是否 stale
 - `view=` scope 是 proof semantics 的一部分,不能只存在于 API 调用栈

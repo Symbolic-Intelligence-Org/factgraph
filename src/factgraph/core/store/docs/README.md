@@ -93,5 +93,6 @@ paths bypass the Database boundary. Non-attached `FactGraph.create`,
 `FactGraph.from_schema_classes`, and `FactGraph.load` runtimes keep the shipped
 behavior.
 
-Snapshot attach (`db.as_of(...)`), view-scoped attach, `ReadOnlyAttachmentError`,
-and public `view=` read/evaluate APIs remain future slices.
+View-scoped attach is shipped through `FactGraph.attach(db, view=view)` and is
+read-only. Snapshot attach (`db.as_of(...)`), `ReadOnlyAttachmentError`, and
+public method-level `view=` read/evaluate APIs remain future slices.

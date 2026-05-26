@@ -29,8 +29,10 @@ print(snap.name)            # → Alice
 `FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle for
 the base writable attach form. Attached runtimes write through
 `fg.commit_assertions(...)` and reject the shipped SDK mutation shortcuts that
-bypass the Database boundary. Snapshot and view-scoped attach forms remain
-future work.
+bypass the Database boundary. `FactGraph.attach(db, view=view,
+schema_classes=...)` is the shipped read-only view-scoped attach form for
+durable Database views. Snapshot attach (`db.as_of(...)`) and method-level
+`view=` parameters remain future work.
 
 ## Doc Map
 

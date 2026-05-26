@@ -13,8 +13,10 @@ Database workspace -> Database.head() -> FactGraph.attach(db, schema_classes=[..
                    -> fg.commit_assertions(...) -> db.create_view(...)
 ```
 
-This page is for the shipped Database and view APIs. It does not introduce
-view-scoped reads or evaluation.
+This page is for the shipped Database and durable view APIs, including
+attach-time view-scoped reads and evaluation with
+`FactGraph.attach(db, view=view)`. Method-level `view=` parameters remain
+intentionally unsupported.
 
 ## When to use Database
 
