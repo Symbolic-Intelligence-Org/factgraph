@@ -1,14 +1,14 @@
 # Current Operational Memory
 
-最后更新:2026-05-26(T5/T11.1 complete, post-T5 roadmap published, T12 minimal housekeeping in progress)
+最后更新:2026-05-26(T5/T11.1 complete, T12 + T11.2 published, T11.2.5 dirty baseline triage in progress)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head before T12:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ e6bfe357`
+**Published branch head before T11.2.5:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ a864ada7`
 
-**Current local work:** T12 minimal housekeeping (`workflow/blueprints/active/2026-05-26_t12-minimal-housekeeping.md`) after scoped commit `7a1d31a0`.
+**Current local work:** T11.2.5 dirty baseline triage (`workflow/blueprints/active/2026-05-26_t11-2-5-dirty-baseline-triage.md`) after scoped commit `ca45729a`.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do not move it.
 
@@ -41,7 +41,7 @@ T5.1-T5.8 are complete and pushed on `v0.2.0-t5-result-evidence-explain-audit-20
 | T5.7 Legacy Hard-Cut + Service/Docs | `8173c715` | SDK/service/OpenAPI/docs aligned with EvaluateResult; legacy shells removed. |
 | T5.8 Semantics Lite + Wrapper Fix | `efd65c0e` | `ProbLogSemantics` / `PyReasonSemantics` work with application Rule / RuleExpr; C73/C75-lite. |
 
-Current T5 D-docs D16-D26 are being moved from `proposed` to `adopted` in T12 with implementation anchors.
+Current T5 D-docs D16-D26 were moved from `proposed` to `adopted` in T12 with implementation anchors.
 
 ### T11.1 Attach-Based View Consumer
 
@@ -67,28 +67,39 @@ T11.1 closes the "durable view can be created but not consumed" gap. Method-leve
 
 Roadmap ordering default: `N1 -> T12 minimal housekeeping -> T11.2 cross-doc unblock -> T11.3 release machinery -> T6/T10/T8/T9`.
 
-## Current T12 Minimal Housekeeping
+### T12 Minimal Housekeeping
 
-T12 scope:
-
-1. T12.1 track-plan lifecycle decision.
-2. T12.2 D16-D26 lifecycle review.
-3. T12.3 active design-point index update.
-4. T12.4 memory/progress sync.
-
-Current decisions in flight:
+T12 is complete and pushed on the T11 branch at `b3d17ac9`.
 
 - `rule-expression-and-proof-track-plan.zh.md` remains active with a lifecycle note: T1-T5 are complete; future scheduling is superseded by the post-T5 roadmap; the file is retained as historical decomposition index because many active/historical references still cite it.
-- D16-D26 are being adopted with `Implementation Anchors:` metadata.
-- `workflow/design/decisions/README.md` adopted index is being populated.
-- `workflow/design/design-points/README.md` is gaining a compact active design-point inventory.
-- This repo-local memory has been compacted. The global Claude memory index at `/Users/zhenzhili/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md` is still over the user-reported target and is outside repo writable roots; handle with explicit permission or a separate owner.
+- D16-D26 are adopted with `Implementation Anchors:` metadata.
+- `workflow/design/decisions/README.md` has the adopted D16-D26 index.
+- `workflow/design/design-points/README.md` has the compact active design-point inventory.
+- This repo-local memory has been compacted. The global Claude memory index at `/Users/zhenzhili/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md` remains an explicit follow-up.
+
+### T11.2 Cross-Doc Metadata Unblock
+
+T11.2 is complete and pushed at `a864ada7`.
+
+- `view_snapshot_digest` is accepted as the v0.2 public metadata bridge.
+- Exact tuple fields (`db_id`, `tx_id`, `schema_digest`, `data_digest`, `view_digest`) remain v2/internal and require a new blueprint to expose.
+- Stale "view-scoped attach is future" docs were corrected; method-level `view=` and snapshot attach remain deferred.
+
+## Current T11.2.5 Dirty Baseline Triage
+
+T11.2.5 classifies the standing dirty baseline before T11.3 release machinery.
+
+- `src/factgraph/sdk/facade.py` + `tests/test_sdk_assertion_record_set_view_filters.py`: include as dedicated `T11.2.6 SDK assertion property access` behavior slice before release, or explicitly stash/revert by user.
+- `examples/01_sdk_check_diagnose.ipynb`, `examples/02_overlay_why_not_frontier.ipynb`, `examples/archive/01_sdk_basics.ipynb`: defer to notebook namespace/output cleanup unless release scope changes.
+- `docs/references/working/design-points/readme.md`: defer as reference-index cleanup.
+- `rainbird-ai sdk code/`: leave untracked; optional provenance/license review only if user wants to retain it.
+- T11.3 may rely on this classification, but `scripts/release.sh` still requires tracked dirty files to be landed, stashed, or explicitly reverted before dry-runs.
 
 ## Recommended Next Work
 
-1. **Finish T12 minimal housekeeping**: review, close, archive, update blueprint inventory, then push with explicit authorization.
-2. **T11.2 cross-doc S1-S6 / I10-A10 formal unblock**: release-blocker candidate.
-3. **T11.3 v0.2.0 release machinery**: release branch / changelog / CI / package governance.
+1. **Finish T11.2.5 dirty baseline triage**: close, archive, and push with explicit authorization.
+2. **T11.2.6 SDK assertion property access**: resolve the only release-relevant tracked production/test dirty pair.
+3. **T11.3 v0.2.0 release machinery**: release branch / changelog / CI / package governance after tracked dirty state is resolved.
 4. **T6 Evidence-tree Phase B design skeleton**: large post-release design track unless release claims full evidence tree.
 5. **T10 semantics adapter execution**: adapter-touching C74/C76/C77/C78, post-release default.
 

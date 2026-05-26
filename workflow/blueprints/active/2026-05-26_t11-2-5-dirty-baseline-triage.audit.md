@@ -1,11 +1,11 @@
 # Audit: T11.2.5 Dirty Baseline Triage
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-2-5-dirty-baseline-triage.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M (predicted verdict-only release prerequisite)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked must be classified, not accidentally changed
@@ -16,7 +16,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-26 | draft | `f0174d4e` | T11.2.5 blueprint pair drafted | Triggered by T11.3 release prerequisite and Laplace read-only audit. |
-| 2026-05-26 | scoped | TBD | Step 4.6 dirty baseline inventory recorded | Final verdicts assigned for all seven dirty baseline entries; no dirty file edited. |
+| 2026-05-26 | scoped | `ca45729a` | Step 4.6 dirty baseline inventory recorded | Final verdicts assigned for all seven dirty baseline entries; no dirty file edited. |
+| 2026-05-26 | implemented | TBD | T11.2.5 verdict-only implementation closed | Memory handoff added; dirty baseline remains unchanged. |
 
 ## 2. Read-only Audit Summary
 
@@ -87,4 +88,34 @@ Key findings:
 - [x] Seven verdicts recorded.
 - [x] Follow-up cycles named.
 - [x] Dirty baseline preservation verified.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
+
+## 7. Closure Notes
+
+T11.2.5 implemented the scoped verdict record without editing any of the dirty
+baseline inputs.
+
+Landed scope:
+
+- seven dirty items classified with rationale and follow-up path;
+- T11.3 handoff clarified: classification is complete, but release dry-runs
+  still require tracked dirty files to be landed, stashed, or explicitly
+  reverted;
+- `workflow/memory/current.md` updated with the same handoff;
+- no release machinery changes and no production/test/notebook dirty file
+  absorbed.
+
+Follow-up sequence:
+
+1. `T11.2.6 SDK assertion property access` (S/M) for `facade.py` plus its
+   companion test, unless user chooses explicit stash/revert.
+2. `T11.x notebook namespace cleanup` (M) for three notebook files.
+3. Optional `Rainbird reference provenance review` (S/M) if the untracked
+   external SDK/demo tree should be retained or documented.
+
+Verification:
+
+- `git diff --check` clean.
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline still shows the original 6 modified tracked files plus
+  untracked `rainbird-ai sdk code/`.

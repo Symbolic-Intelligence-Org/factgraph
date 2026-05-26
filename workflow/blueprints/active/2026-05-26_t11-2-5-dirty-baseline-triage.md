@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.5 Dirty Baseline Triage
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: S/M (predicted verdict-only release prerequisite)
@@ -182,6 +182,45 @@ Expected follow-up candidates:
 - [x] Follow-up cycles are named for any include/defer verdict.
 - [x] `rainbird-ai sdk code/` has an explicit ignore/provenance decision.
 - [x] T11.3 handoff rule is recorded.
-- [ ] Dirty baseline preserved unless explicitly amended.
-- [ ] No release machinery changes.
-- [ ] No push without separate authorization.
+- [x] Dirty baseline preserved unless explicitly amended.
+- [x] No release machinery changes.
+- [x] No push without separate authorization.
+
+## 8. Outcome / Deviations
+
+### 8.1 Final verdicts
+
+T11.2.5 landed as a verdict-only release prerequisite. It did not edit any of
+the seven dirty baseline items. Final classifications:
+
+- `src/factgraph/sdk/facade.py` and
+  `tests/test_sdk_assertion_record_set_view_filters.py`: include together in a
+  dedicated `T11.2.6 SDK assertion property access` behavior slice before
+  release, unless the user explicitly stashes/reverts them instead.
+- Three notebooks: defer to `T11.x notebook namespace cleanup`.
+- `docs/references/working/design-points/readme.md`: defer to reference-index
+  cleanup.
+- `rainbird-ai sdk code/`: leave untracked; optional provenance/license review
+  only if the user chooses to retain it.
+
+### 8.2 T11.3 handoff
+
+T11.3 no longer needs to decide ownership of the dirty baseline from scratch.
+It should verify that no unclassified dirty item has appeared. However,
+`scripts/release.sh` still requires a clean tracked tree, so the tracked dirty
+files must be landed through follow-up cycles or explicitly stashed/reverted by
+the user before release dry-runs.
+
+### 8.3 Memory handoff
+
+`workflow/memory/current.md` now records the same T11.2.5 handoff so future
+sessions see the release blocker immediately.
+
+### 8.4 Verification
+
+- `git diff --check`: clean.
+- Dirty baseline remains 6 modified tracked files plus untracked
+  `rainbird-ai sdk code/`.
+- No release machinery, production, test, notebook, or external reference file
+  was modified by this cycle.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
