@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | 2026-05-26 | draft | pending | Blueprint pair drafted | T11.1 starts the post-T5 Database/view phase from pushed T5.8 archive `efd65c0e`. Scope is attach-based view consumer only: SDK attach accepts view, attached reads/evaluate are scoped, method-level `view=` remains rejected. |
 | 2026-05-26 | scoped | pending | Step 4.6 inventory recorded | Inventory locked branch/base, exact schema digest behavior, order sensitivity, core vs SDK view shapes, attach/read/evaluate insertion points, stale validation boundaries, and docs/test targets. T11.1 remains M-class and attach-based only. |
+| 2026-05-26 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `55b89f3b`: 180 tests in 0.122s, OK. Pytest remains deferred. |
 
 ## 2. Source Chain
 
@@ -162,8 +163,9 @@ Baseline record fields to fill later:
 | Branch | `v0.2.0-t11-1-attach-view-scope-2026-05-26` |
 | Sacred state | `master = 562c74195df43e933bed92a3ff25de94dd8ce666` |
 | Dirty baseline | 6 modified + 1 untracked preserved |
-| Scoped anchor | pending |
-| Result | pending |
+| Scoped anchor | `55b89f3b` |
+| Command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
+| Result | 180 tests in 0.122s, OK |
 | Pytest policy | deferred unless specifically needed |
 
 ## 9. Draft Review Checklist
