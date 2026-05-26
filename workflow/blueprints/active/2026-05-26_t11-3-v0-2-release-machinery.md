@@ -1,6 +1,6 @@
 # Task Blueprint: T11.3 v0.2.0 Release Machinery
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: L (release machinery; may narrow after Step 4.6)
@@ -139,6 +139,41 @@ on tracked dirty files.
 | D5 | Release notes | Add a v0.2.0-rc.1 changelog section that summarizes T5/T11 public API changes without claiming deferred T6/T10 work. |
 | D6 | Live release | No live publish in this cycle unless a later explicit user authorization says so after dry-run success. |
 | D7 | PyPI | No PyPI upload in the initial dry-run slice; live PyPI remains a separate authorization gate. |
+| D14 | PyPI package name | **B: rename package to `factgraph`**. `pyproject.toml` becomes `name = "factgraph"`, `version = "0.2.0rc1"`. |
+| D15 | Migration handling | Changelog and README must prominently state: `pip uninstall factpy-kernel && pip install factgraph`; Python import path remains `factgraph.*`. |
+| D16 | Old `factpy-kernel` package | Leave existing old package releases untouched; v0.2 is not published under `factpy-kernel`. |
+| D17 | Transitional shim package | Do not publish a shim package in T11.3. Any old-package deprecation release is a future post-publish task. |
+| D18 | CI workflow name | Rename `.github/workflows/factpy-kernel-tests.yml` to `.github/workflows/factgraph-tests.yml` if implementation updates CI commands. |
+
+## 4.1 Step 4.6 Inventory Results
+
+| # | Item | Result |
+|---|---|---|
+| 1 | Branch / dirty state | Local branch is one commit ahead of origin at draft time. Remaining dirty tracked files are `docs/references/working/design-points/readme.md` and three notebooks; untracked `rainbird-ai sdk code/` remains ignored. |
+| 2 | v0.2 refs | `git ls-remote --tags origin "v0.2.0*"` returned no tags; `git ls-remote --heads origin "release/0.2.x"` returned no branch. Candidate `v0.2.0-rc.1` is available. |
+| 3 | Package metadata | `pyproject.toml` currently has `name = "factpy-kernel"`, `version = "0.1.0rc3"`, and package discovery `include = ["factgraph*"]`. Scoped decision: rename distribution to `factgraph` and set `0.2.0rc1`. |
+| 4 | Release script old assumptions | `scripts/release.sh:213` still verifies projected tests from `src/kernel/tests`; T11.3 must update verification to current projected test path(s). |
+| 5 | Allowlist namespace delta | `scripts/release_surface_allowlist.txt` has 361 lines; 351 begin with `src/kernel/`; zero begin with `src/factgraph/`. The allowlist must be regenerated or migrated to current public `factgraph` surface. |
+| 6 | Projection denylist | `project_release_surface.sh` denies `docs/references/*`, `examples/*`, `src/service/*`, `src/agent/*`, `src/domains/*`, `third_party/*`, `tools/*`, and `scripts/*`. Remaining dirty docs/notebooks are outside projection but still make the primary worktree dirty. |
+| 7 | CI command shape | `.github/workflows/factpy-kernel-tests.yml` runs ruff/mypy/unittest against `src/kernel` plus service/agent/domains/tools. It must be aligned to current package/test layout or renamed to `factgraph-tests.yml`. |
+| 8 | README / changelog stale truth | `README.md` still teaches `factpy-kernel`, `kernel`, `pip install factpy-kernel`, and old `src/kernel` docs links. `CHANGELOG.md` only has `Unreleased` plus `0.1.0-rc.1`; it lacks v0.2.0 migration notes. |
+| 9 | Release traps | All v0.1 rc.3 traps apply defensively. Allowlist sync and test-projection imports definitely apply; deny-pattern and README projection gates likely apply; cleanup/no re-tag mutation remains mandatory; dependency/environment corruption is monitored but not a design change. |
+| 10 | Dirty handling | Do not stash or revert by default. Run dry-run from a clean auxiliary worktree after T11.3 implementation/closure/archive, using that clean worktree as the release command cwd so `release.sh` clean-tree preflight passes without touching the user's dirty files. |
+| 11 | Dry-run command | Expected dry-run command from the clean auxiliary worktree: `./scripts/release.sh v0.2.0-rc.1 --source-ref HEAD --dry-run --yes`. Exact source SHA is locked after T11.3 archive. |
+| 12 | Live publish boundary | No live release, PyPI upload, GitHub Release, or remote `release/0.2.x` / tag push in T11.3 without a separate explicit user authorization after dry-run success. |
+| 13 | Implementation file set | Expected: `pyproject.toml`, `CHANGELOG.md`, `README.md`, `.github/workflows/*`, `scripts/release.sh`, `scripts/project_release_surface.sh`, `scripts/release_surface_allowlist.txt`; exact docs additions only if projection gates require them. |
+
+## 4.2 Final Scoped Decisions
+
+| Decision | Scoped lock |
+|---|---|
+| Package rename | Rename PyPI distribution from `factpy-kernel` to `factgraph` for v0.2. Python import path remains `factgraph.*`, so user code imports do not change. |
+| Version | Use `0.2.0rc1` in `pyproject.toml` and release tag `v0.2.0-rc.1`. |
+| Old package | Do not publish v0.2 under `factpy-kernel`; do not mutate existing old releases. |
+| Shim package | No transitional shim package in T11.3. Future old-package deprecation message is out of scope. |
+| Migration docs | `CHANGELOG.md` and `README.md` must include prominent install migration: `pip uninstall factpy-kernel && pip install factgraph`. |
+| Dirty handling | Prefer clean auxiliary worktree dry-run over stash/revert; remaining dirty docs/notebooks stay untouched unless a later user gate says otherwise. |
+| Live release | Dry-run only. Live release / PyPI requires a later explicit gate. |
 
 ## 5. Expected Step 4.6 Inventory
 
@@ -193,6 +228,10 @@ of absorbing that work into T11.3.
 - [ ] v0.2.0 candidate version and source ref locked.
 - [ ] Projection allowlist and verify command aligned to current public
       namespace.
+- [ ] D14 PyPI rename locked and `pyproject.toml` changed to `name = "factgraph"`.
+- [ ] CHANGELOG v0.2.0-rc.1 entry includes prominent breaking package-rename
+      migration note.
+- [ ] README install command updated to `pip install factgraph`.
 - [ ] Release notes / README truth aligned or explicitly deferred.
 - [ ] Dry-run passes or concrete blockers are recorded.
 - [ ] No live publish / PyPI upload / release-branch push occurs without a
