@@ -1,8 +1,8 @@
 # Evidence Tree Design — Rainbird-Style v1
 
-- Status: working / draft skeleton (Phase A, 2026-05-18)
+- Status: working design source (Phase B skeleton completed by T6, 2026-05-27)
 - Authority: non-authoritative reference note; not current implementation truth
-- Created: 2026-05-18(Phase A skeleton 落地;§4-§12 / §14 [SKELETON pending] 待 Phase B)
+- Created: 2026-05-18(Phase A skeleton 落地;T6 在 2026-05-27 补齐 §10 / §11 / §14 Phase B design source)
 - Parent: `rule-expression-and-proof-attempt.zh.md`(主文档 §7 已 stub 化,引用本文档)
 - Sibling: `database-view-fg-layered-architecture.zh.md`(view 4-layer 子系统设计)
 - Scope: 基于 Rainbird Rule-instance-level granularity 的 v1 evidence tree 设计;承接主文档 §3-§5 已锁 Rule / RuleExpr / Head / API 架构
@@ -26,11 +26,12 @@
 §7   Explain Orchestrator(流程 / 调度)                [Phase B-5 落定 2026-05-19,C130-C135;8-step pipeline + dispatch + validator gate]
 §8   Evidence Tree Topology(格式 / 结构)              [Phase B-4 落定 + Wave 1/Wave 2 修订 + Aggregate topology 补;C114-C119 + C123/C124 + C129 + C136]
 §9   Failure-Side Handling(C81 已修订锁定 2026-05-18)  [Wave 2 #3 failure envelope 落地;C125]
-§10  Audit Channel(v1)                              [SKELETON pending — Phase B]
-§11  Rendering(沿用 audit/evidence_graph.py)         [SKELETON pending — Phase B]
+§10  Audit Channel(v1)                              [Phase B design lock 2026-05-27;sessionless audit channel]
+§11  Rendering(沿用 audit/evidence_graph.py)         [Phase B design lock 2026-05-27;reference renderer boundary]
 §12  Rainbird 对照下的产品边界声明                    [Phase B-6 落定 2026-05-19,C137;§12.1-§12.5 5 维度 + §12.6 commitment]
 §13  设计承诺 Commitments(C79-C137)                  [§7 orchestrator C130-C135 + §8.10 aggregate topology C136 + §12 product boundary C137]
-§14  显式 Deferred Items                              [SKELETON pending — Phase B]
+§14  显式 Deferred Items                              [Phase B design lock 2026-05-27;D1-D20 owner/trigger/boundary]
+§15  T8 Implementation Split Proposal                [T6 proposal only;not binding execution order]
 ```
 
 ---
@@ -1346,7 +1347,7 @@ NODE_CONCLUSION / NODE_PREMISE 的 `value_summary` 字段(per §4.2 顶层填充
                   ▼
    ┌────────────────────────────────────────────────────┐
    │ Step 7: Validate EvidenceGraph                      │  →  gate fail → status="unsupported" + errors
-   │   • schema_version present                          │  →  NOT partial graph
+   │   • §10.3 metadata sufficiency                      │  →  NOT partial graph
    │   • required keys per node_kind / source / reason   │
    │   • shipped cycle check(audit/evidence_graph.py:95) │
    │   • metadata 双驻 from EvaluateResult context       │
@@ -1563,7 +1564,7 @@ For each NODE_PREMISE:
 
 | Gate 项 | 检查内容 |
 |---|---|
-| **schema_version** | `EvidenceGraph.metadata.schema_version == "1.0"`;不存在 → reject(C124)|
+| **metadata sufficiency** | `EvidenceGraph.metadata` 满足 §10.3 v1 字段表;`schema_version` 属 C124 v1.x schema-versioning 扩展,当前 shipped graph metadata 不强制 |
 | **node_id uniqueness** | shipped `audit/evidence_graph.py:78-79` 已强制 |
 | **edge_id uniqueness** | shipped `audit/evidence_graph.py:81-83` 已强制 |
 | **root_node_id 在 nodes 内** | shipped `audit/evidence_graph.py:85-87` 已强制 |
@@ -1575,7 +1576,7 @@ For each NODE_PREMISE:
 | **NODE_PREMISE.reason.kind 4-enum** | C106(`comparison` / `arith_comparison` / `aggregate_comparison` / `compound_comparison`)|
 | **AggregateExpr `contributors.count == matched_count`** | C128 invariant |
 | **Form 1 仅 `EDGE_SUPPORTS`** | C115;Form 2 才允许 `EDGE_DERIVES` / `EDGE_UPDATES` |
-| **metadata 15 必填 fields** | C123(schema_version / evaluated_at / engine / engine_version / adapter_version / rule_content_digest / closed_head_content_digest / expr_digest / rule_set_digest / view_snapshot_digest / semantics_digest / result_id / row_id / claim_digest / evidence_ref_id)|
+| **metadata sufficiency fields** | 以 §10.3 `EvidenceGraph.metadata` v1 字段表为准;envelope-level `run_id` / `head` 等在 §10.2,不强制复制进 graph metadata |
 
 **Validator 失败行为**:**reject**(return `Explanation(status="unsupported", errors=GRAPH_VALIDATION_FAILED)`),**不**返回 partial / silently-skipped EvidenceGraph(C134)。
 
@@ -1593,7 +1594,7 @@ For each NODE_PREMISE:
 | **C132** | **`status="passed"` ⇔ `evidence != None`**(双向 iff,per C81);failed / unsupported / invalid_request **全部 `evidence=None`**;orchestrator Step 8 拼装时严格遵循;**禁止**任何中间态 partial / corrupt EvidenceGraph 返回 |
 | **C133** | **Strategy dispatch 三策略锁定**:**S1 IR replay = core / default**(总是先跑,Souffle/native/ProbLog 全适用);**S2 engine-native probe = optional advanced**(adapter opt-in;v1 可不实现);**S3 library API enrichment = ProbLog only**(per-atom probability via `problog.query()`);典型矩阵:Souffle / native = S1 only;ProbLog = S1 + S3(详 §7.6)|
 | **C134** | **Graph validation gate 必跑**(Step 7);gate 失败 → `Explanation(status="unsupported", errors=GRAPH_VALIDATION_FAILED)`,**不**返回 partial graph;validator 强制 14 项检查(详 §7.10);**禁止 silently-skipped** validator(防止 schema drift)|
-| **C135** | **EvidenceGraph.metadata 双驻 source-of-truth invariant**(per C123):metadata 15 字段必须 derive 自单一 evaluated context object(EvaluateResult or manual context);orchestrator **不允许独立 / 二次计算** metadata 字段;Phase C 实现 debug assertion 校验 metadata 与 EvaluateResult fields 跨字段一致 |
+| **C135** | **EvidenceGraph.metadata 双驻 source-of-truth invariant**(per C123 + T6 §10 修订):metadata 字段集以 §10.3 为当前 v1 source of truth,并 derive 自单一 evaluated context object(EvaluateResult or manual context);orchestrator **不允许独立 / 二次计算** metadata 字段;Phase C/T8 实现 debug assertion 校验 metadata 与 EvaluateResult fields 跨字段一致 |
 
 ### 7.12 §7 显式 deferred 项
 
@@ -1640,7 +1641,7 @@ class EvidenceGraph:
 
 **graph_id 命名**:`"<engine>:<run_id>:<closed_head.content_digest_short>"`(deterministic,跨进程稳定)。
 
-#### 8.2.1 `metadata` 必填 audit reproducibility fields(C123,Wave 1 2026-05-19)
+#### 8.2.1 `metadata` audit reproducibility fields(C123,Wave 1;T6 §10 修订)
 
 **产品立场**(响应 #7):"durable audit evidence" 是我们对 Rainbird 的核心 strict-superset 承诺(O7)。复现 context 必须 v1 落地,**不能 deferred**。否则 evidence 看似 stateless 但**实际不可复现**(ledger 变 / rule 版本变 / adapter 版本变都会"无声"使 evidence 失效)。
 
@@ -1653,25 +1654,17 @@ class EvidenceGraph:
 - **EvidenceGraph.metadata**:durable snapshot copy(JSON 离开 EvaluateResult 后 self-contained)
 - **不**两处独立 source:orchestrator 从单一 context 写两处,**不允许两处分别计算 / 演进**(双写漂移防护)
 
-**v1 必填字段**(`EvidenceGraph.metadata`):
+**T6 修订**:当前 v1 implementation source-of-truth 是 §10.3
+`EvidenceGraph.metadata` 字段表。旧 Wave 1 草案中的
+`schema_version` / `rule_content_digest` / `closed_head_content_digest` 不再作为
+当前 shipped metadata 必填字段;相应语义由 `expr_digest` / `rule_set_digest` /
+`closed_head_digest` / envelope-level `head` 承载。
 
-| field | 类型 | 来源 | 用途 |
-|---|---|---|---|
-| **`schema_version`** | `str` | 锁定 `"1.0"`(v1) | 长期 schema 演进 anchor;C124 |
-| **`evaluated_at`** | str (ISO 8601) | `EvaluateResult.evaluated_at` | 何时生成此 evidence |
-| **`engine`** | str | 同 EvidenceGraph.engine(重复一处便于 metadata-only 消费)| Engine identifier |
-| **`engine_version`** | str | adapter 报告 | 引擎版本(例 `"problog-2.2.4"`)|
-| **`adapter_version`** | str | factpy-kernel package version | adapter 实现版本 |
-| **`rule_content_digest`** | str | open Rule.content_digest(C68) | rule 漂移检测 anchor |
-| **`closed_head_content_digest`** | str | closed_head.content_digest(C68)| closed head identity |
-| **`expr_digest`** | str | `EvaluateResult.expr_digest` | RuleExpr 结构漂移检测 |
-| **`rule_set_digest`** | str | `EvaluateResult.rule_set_digest` | expr 内 Rule 内容集合漂移检测 |
-| **`view_snapshot_digest`** | str | projected view 数据 digest | fact 漂移检测 anchor |
-| **`semantics_digest`** | str \| None | semantics wrapper(C68)| semantics 漂移检测 |
-| **`result_id`** | str | `EvaluateResult.result_id` | live context 回引 |
-| **`row_id`** | str | `EvaluateRow.row_id` | row identity |
-| **`claim_digest`** | str | `EvaluateRow.claim.digest` | 被解释 Claim identity |
-| **`evidence_ref_id`** | str \| None | `EvaluateRow.evidence_ref.ref_id` | factID 等价 lightweight ref |
+**当前 v1 必填/可空字段**(`EvidenceGraph.metadata`)见 §10.3:
+`result_id`, `row_id`, `evidence_ref_id`, `claim_digest`,
+`closed_head_digest`, `expr_digest`, `rule_set_digest`, `view_snapshot_digest`,
+`semantics_digest`, `result_digest`, `engine`, `engine_version`,
+`adapter_version`, `evaluated_at`。
 
 **可选 metadata**(Phase C / 用户面 enrichment):
 - `factgraph_version` / `python_version` / `host_info` 等(audit 取证用)
@@ -1681,14 +1674,18 @@ class EvidenceGraph:
 - digest 不一致 → 显式 warning(不 raise)— 用户决定接受 stale evidence vs re-run
 - 主文档 §5.8.5 C68 digest 协议同源
 
-#### 8.2.2 Schema Versioning Lite(C124,Wave 1)
+#### 8.2.2 Schema Versioning Lite(C124,Wave 1;T6 deferred correction)
 
-**v1 strict-lite**:
-- `EvidenceGraph.metadata.schema_version = "1.0"` **必填**;不在 enum 中 raise
-- `NODE_*.engine_meta.contract_schema_version` 可选(推荐),未填默认 `"1.0"`
-- **Phase C validator 必须校验**:metadata.schema_version + node_kind 必填 keys + source enum(per C107) + reason.kind enum
-- **未知 contract keys**(在 contract namespace 内出现未文档化字段)→ v1 warning,不 raise
-- **缺失 required keys**(per node_kind 必填字段)→ raise `EvidenceValidationError`
+**T6 修订**:`metadata.schema_version` 不属于当前 shipped v1 graph metadata
+必填字段。Schema versioning lite 是 v1.x / T8+ 可激活扩展:
+
+- 若 future blueprint 添加 `EvidenceGraph.metadata.schema_version`,必须说明
+  migration/backward compatibility;
+- `NODE_*.engine_meta.contract_schema_version` 可作为 future engine-meta contract
+  extension,但当前 v1 renderer 不消费;
+- 当前 validator priority 是 §10.3 metadata sufficiency + node/edge structural
+  validation + node_kind/source/reason required keys;
+- unknown debug keys 仍 warning / ignore,不进入 canonical digest。
 
 #### 8.2.3 Contract vs Debug 字段分层(C124 协同)
 
@@ -2109,21 +2106,20 @@ LAYOUT_TIMELINE grid:
   "support_kind": "passed",
   "layout_hint": "tree",
   "metadata": {
-    "schema_version": "1.0",
-    "evaluated_at": "2026-05-19T12:00:00Z",
-    "engine": "souffle",
-    "engine_version": "souffle-2.4.1",
-    "adapter_version": "factpy-kernel-0.1.0",
-    "rule_content_digest": "sha256:abc...",
-    "closed_head_content_digest": "sha256:def...",
+    "result_id": "evalr_v1:result-1",
+    "row_id": "row-2",
+    "evidence_ref_id": "evref_v1:abc",
+    "claim_digest": "sha256:claim...",
+    "closed_head_digest": "sha256:def...",
     "expr_digest": "sha256:expr...",
     "rule_set_digest": "sha256:ruleset...",
     "view_snapshot_digest": "sha256:view...",
     "semantics_digest": null,
-    "result_id": "result-1",
-    "row_id": "row-2",
-    "claim_digest": "sha256:claim...",
-    "evidence_ref_id": "ref:abc..."
+    "result_digest": "sha256:result...",
+    "engine": "souffle",
+    "engine_version": "souffle-2.4.1",
+    "adapter_version": "factgraph-0.2.0rc1",
+    "evaluated_at": "2026-05-19T12:00:00Z"
   },
   "nodes": [
     {
@@ -2623,7 +2619,7 @@ carrier and a reference visualization, while applications own their product UI.
 
 | # | 维度 | 本设计 v1 优势 | Rainbird 对应 |
 |---|---|---|---|
-| 1 | **Audit metadata 双驻 + reproducibility** | EvidenceGraph.metadata 15 必填 fields(C123 + C135);view_snapshot_digest / rule_set_digest / semantics_digest 跨进程稳定 | session-bound;无显式 reproducibility digest |
+| 1 | **Audit metadata 双驻 + reproducibility** | EvidenceGraph.metadata 字段集以 §10.3 为准(C123 + C135);view_snapshot_digest / rule_set_digest / semantics_digest 跨进程稳定 | session-bound;无显式 reproducibility digest |
 | 2 | **Strict source enum** | 3-enum Literal + per-source 必填字段 + 构造期 validator(C107)| free-form string;SDK 不 enforce taxonomy |
 | 3 | **Live / Detached row contract** | row 有显式 _result_resolver plumbing;Detached 状态 raise DetachedRowError(C130 / C131)| HTTP API 无此区分;客户端误调可静默失败 |
 | 4 | **Validator gate 禁 partial graph** | Step 7 强校验 + gate fail → unsupported,**绝不**返回部分 / 损坏 graph(C134) | 无显式 validator gate;SDK 可能反序列化 lossy schema |
@@ -2654,7 +2650,7 @@ carrier and a reference visualization, while applications own their product UI.
 | **failed 给 diagnostic envelope,不给 evidence tree** | `failed` 时:`failure_class`(5-enum)+ `checked_scope`(digest 漂移分析)+ `suggested_next_steps`(用户行动建议);**不**有 atom-level why-not tree | C125 |
 | **v1 解释"为何这个 row 成立",不解释"为何其他可能都不成立"** | evidence 是 winning-path-only;OR alternatives / 未触发 rules 不展示 | C129 §8.6.2 |
 | **Aggregate v1 解释 aggregate result,不解释每个 contributor 的完整 proof** | aggregate premise 给 result + matched_count + filter_repr,**不**展开 N 个 contributor sub-trees | C128 / C136 |
-| **Evidence 是 durable audit artifact**(跨进程稳定 + reproducible) | metadata 15 fields 含 digest;同 view_snapshot + 同 rule_set → 同 EvidenceGraph(deterministic)| C123 / C135 |
+| **Evidence 是 durable audit artifact**(跨进程稳定 + reproducible) | metadata 字段集含 digest anchors;同 view_snapshot + 同 rule_set → 同 EvidenceGraph(deterministic)| C123 / C135 / §10.3 |
 | **Row.explain() 仅在 live row 上工作** | row 从 EvaluateResult 取出时是 live;JSON 反序列化得到的是 detached row → DetachedRowError | C130 / C131 |
 | **Manual replay 必须提供 7 字段 minimum context** | `fg.eval.explain(expr, head=closed_head, ...)` advanced path 需 engine / semantics / expr_digest / rule_set_digest / view_snapshot_digest / evaluated_at / closed_head_content_digest | §7.3.1 / C135 |
 
@@ -2772,7 +2768,7 @@ carrier and a reference visualization, while applications own their product UI.
 | **C121** | **NAF 从 source layer 退出 入 NODE_PREMISE.reason**(Wave 1 修订);`source` **3-enum**;NAF `not(p)` 满足 case **无 NODE_SEED**,仅 NODE_PREMISE.reason.naf 字段表达;C107-C109 同步修订 | §5.2.1 / §4.5.2 / §5.7 |
 | **C122** | **(Wave 1 修订 2026-05-19)** ~~explained_fact 一等在 NODE_CONCLUSION~~ → **Claim 一等表示上提至主文档 `EvaluateRow.claim`**(详主文档 C64);evidence root NODE_CONCLUSION 仅持 `explained_claim_ref`(row_id + evidence_ref_id + claim_digest + claim_repr_cache);避免双写漂移 | §4.3.1 |
 | **C123** | **(Wave 1 修订 2026-05-19)** EvidenceGraph.metadata audit reproducibility fields v1 必填(同前);**source-of-truth 锁定**:EvaluateResult 是 live context source,EvidenceGraph.metadata 是 durable snapshot copy;orchestrator 从单一 evaluated context object 写两处,**不允许独立演进**(双写漂移防护)| §8.2.1 |
-| **C124** | **Schema versioning lite + contract/debug 分层**(Wave 1 doc-level):metadata.schema_version 必填 "1.0";contract fields 列表锁定;debug fields(`engine_meta.native_*` / `<engine>_*` / `adapter_debug_*`)non-contract / digest-excluded;v1.x 可演进至显式 `engine_meta.contract / debug` 嵌套结构 | §8.2.2 / §8.2.3 |
+| **C124** | **Schema versioning lite + contract/debug 分层**(Wave 1 doc-level;T6 修订):`metadata.schema_version` 从当前 shipped v1 graph metadata 必填项降为 v1.x/T8+ 可激活扩展;contract fields 列表锁定;debug fields(`engine_meta.native_*` / `<engine>_*` / `adapter_debug_*`)non-contract / digest-excluded;v1.x 可演进至显式 `engine_meta.contract / debug` 嵌套结构 | §8.2.2 / §8.2.3 / §10.3 |
 | **C125** | **(Wave 2 #3 / row-centric 修订 2026-05-19)** `Explanation` envelope 加 failure 字段:`failure_class`(5-enum,**仅 status="failed" 填**:`no_matching_row` / `closed_head_false` / `stale_row` / `row_not_in_result` / `insufficient_closed_bindings`)/ `checked_scope`(digest 对比 dict)/ `suggested_next_steps`(hint tuple);`DetachedRowError` 是 Python programming error,不进 failure_class;**business semantic** 与 technical error(unsupported / invalid_request 走 errors)严格分离;**不**是 DiagnoseAtomLocator,避免 atom-level 误导(详主文档 §5.8.3)| 主文档 §5.8.3 |
 | **C126** | **(Wave 2 #4 落地 2026-05-19)** `NODE_SEED.engine_meta.source="ledger_assertion"` 增 `assertion_origin` Literal \| None(`import` / `manual_write` / `external_datasource` / `system_injection` / `user_input`) + `source_ref` str \| None;Ledger 无 metadata 时允许 None,但字段位置和 validator 锁定 | §4.6 / §5.2.2 / §5.5 |
 | **C127** | **(Wave 2 #6 落地 2026-05-19)** root `NODE_CONCLUSION.engine_meta.quantitative_explanation` 必填;v1 只声明 `engine_reported` carrier 与 `decomposition="not_available_v1"`,不提供 impact / salience attribution | §4.3.2 |
@@ -2783,7 +2779,7 @@ carrier and a reference visualization, while applications own their product UI.
 | **C132** | **(Phase B-5)** `status="passed"` ⇔ `evidence != None`(双向 iff per C81);其余 3 态 evidence=None;**禁止 partial / corrupt graph** | §7.9 |
 | **C133** | **(Phase B-5)** Strategy dispatch 三策略:S1 IR replay = core/default;S2 engine-native probe = optional advanced;S3 library API enrichment = ProbLog only;典型矩阵 Souffle/native=S1,ProbLog=S1+S3 | §7.6 |
 | **C134** | **(Phase B-5)** Graph validation gate 必跑(Step 7);gate fail → `status="unsupported"` + `GRAPH_VALIDATION_FAILED`;**不**返回 partial graph;14 项 validator 检查锁定 | §7.10 |
-| **C135** | **(Phase B-5)** EvidenceGraph.metadata 双驻 source-of-truth(承 C123):metadata 15 字段 derive 自单一 evaluated context;**orchestrator 不允许独立 / 二次计算**;Phase C debug assertion 校验跨字段一致 | §7.10 |
+| **C135** | **(Phase B-5;T6 §10 修订字段集)** EvidenceGraph.metadata 双驻 source-of-truth(承 C123):metadata 字段集以 §10.3 为当前 v1 source of truth,derive 自单一 evaluated context;**orchestrator 不允许独立 / 二次计算**;Phase C/T8 debug assertion 校验跨字段一致 | §7.10 / §10.3 |
 | **C136** | **(Phase B-6 补 2026-05-19)** Aggregate Premise Topology(§4.5.4 reason schema 与 §8 topology 闭环):AggregateExpr 在 evidence 内 = 单 NODE_PREMISE + 0 NODE_SEED(v1 default);v1 仅合法 `contributors.mode="omitted_v1"` + `count==matched_count` + `handle=null`;`matched_count` 是 view-projected snapshot count(C103),Step 3 frozen | §8.10 |
 | **C137** | **(Phase B-6 落定 2026-05-19)** **Product Boundary Declaration**(详 §12):§12.1-§12.5 5 维度声明(对齐点 / 有意不同 / strict stronger / strict less / user commitment)是 v1 evidence service 用户面 expectation contract 的 single source of truth;SDK docstring / README / 用户教程**保持语义一致**;**user commitment 7 条**(§12.5)是 release announcement 必须显示对齐项;违反 §12 边界需新 commitment 修订 §12,不允许"实现一致但文档不改"| §12.1-§12.6 |
 
@@ -2808,52 +2804,124 @@ carrier and a reference visualization, while applications own their product UI.
 
 ## 14. 显式 Deferred Items
 
-> **本节状态**:Phase A 锁定 11 项 deferred(承自 §1.2 + 2026-05-18 决议追加);Phase B 推进时补 trigger 条件 + scope sketch 细节。
+> **本节状态**:Phase B design lock(2026-05-27 / T6)。本节是 deferred
+> registry 的 lookup 表。D1-D19 为既有 stable IDs;T6 新增 D20 用于记录
+> match witness / assertion-returning output seam。**不得重编号已有 D-id**。
+
+字段定义:
+
+- **Owner candidate**:后续 cycle 的主要 owner;不是当前 T6 实施承诺。
+- **Trigger**:何时可以从 deferred 激活为 blueprint。
+- **v1 boundary**:当前 v1 明确不做什么。
+- **Implementation hint**:未来实现或设计入口;不是强制方案。
 
 ### 14.1 失败定位类(v1 显式不做)
 
-| # | 项目 | v2+ trigger | 算法族 |
-|---|---|---|---|
-| D1 | **`fg.diagnose` SDK 表面公开**(shipped application-layer 保留 internal)| 用户出现明确"为什么 binding 推不出"诉求 + 当前 single-locator 不够用 | 替换为 top-down(详 D2)|
-| D2 | **top-down goal-regression failure diagnosis**(替代 v1 lossy 单点 locator)| 大事实库下 single-locator 启发式不稳定 | Bourhis-Lutz-Krötzsch 2024 + Elhalawati 2022 why-not provenance |
-| D3 | Why-provenance(SAT-based minimal fact set)| 学术族算法成熟 + 用户需求成形 | SAT 编码 + minimal hitting set |
-| D4 | atom-complete failure-side probing(每 atom 打 violated 标)| 用户明确需求"failed 时每 atom 状态"| 自实现 eager probe(参 R2-C 调研方向)|
-| D5 | Why-not / counterfactual analysis | 用户出现明确 attribution / what-if 需求 | 反事实推理算法 |
+| # | 项目 | Owner candidate | Trigger | v1 boundary | Implementation hint |
+|---|---|---|---|---|---|
+| D1 | **`fg.diagnose` SDK 表面公开**(shipped application-layer 保留 internal)| Why-not / prove owner | 用户明确要求"为什么这个 binding 推不出",且 internal locator 不足 | v1 SDK 不公开 diagnose;failed Explanation 只给 envelope diagnostic | 若激活,不要公开当前 lossy single-locator;以 D2 top-down 替代 |
+| D2 | **top-down goal-regression failure diagnosis** | Why-not / prove owner + evidence owner | 大事实库下 single-locator 启发式不稳定,用户需要路径级 failure reasoning | v1 不构造 failed EvidenceGraph | Bourhis-Lutz-Krötzsch 2024 + Elhalawati 2022 why-not provenance |
+| D3 | Why-provenance(SAT-based minimal fact set)| Why-not / research owner | 需要 minimal missing/present fact set 且数据规模可控 | v1 不求 minimal hitting set | SAT 编码 + minimal hitting set;独立 research blueprint |
+| D4 | atom-complete failure-side probing(每 atom 打 violated 标)| Evidence + engine owner | 用户需要 failed 时每 atom 状态,且 cost 可接受 | v1 不 eager probe failed branch | 自实现 eager probe;必须先定义 cost/short-circuit 规则 |
+| D5 | Why-not / counterfactual analysis | Product / semantics owner | 用户需要 attribution / what-if | v1 不做 counterfactual | 需单独 counterfactual semantics + UI design |
 
 ### 14.2 量化 / 概率类(v1 收敛)
 
-| # | 项目 | v2+ trigger |
-|---|---|---|
-| D6 | `salience`(condition weight,Rainbird 等价)| 跨 condition 权重出现实际诉求 |
-| D7 | `impact` % decomposition(Shapley / 加权累加)| 用户需要 attribution analysis |
+| # | 项目 | Owner candidate | Trigger | v1 boundary | Implementation hint |
+|---|---|---|---|---|---|
+| D6 | `salience`(condition weight,Rainbird 等价)| Semantics + product owner | 跨 condition 权重出现实际诉求 | v1 only `raw_kind` + `bound`;no salience carrier | 需定义 salience source,normalization,digest impact |
+| D7 | `impact` % decomposition(Shapley / 加权累加)| Semantics + product owner | 用户需要 attribution analysis | v1 `quantitative_explanation.decomposition="not_available_v1"` | Shapley/weighted sum 需独立 math + cost policy |
 
 ### 14.3 通道扩展类(v1 不引入)
 
-| # | 项目 | v2+ trigger |
-|---|---|---|
-| D8 | session log channel(Rainbird `/interactions/` 等价)| 出现 session-style interactive flow |
-| D9 | LLM-derived NL explain | head.desc 模板渲染不够 |
-| D10 | per-fact ACL(`x-evidence-key` 等价)| multi-tenant 服务部署 |
+| # | 项目 | Owner candidate | Trigger | v1 boundary | Implementation hint |
+|---|---|---|---|---|---|
+| D8 | session log channel(Rainbird `/interactions/` 等价)| Service / audit owner | 出现 session-style interactive diagnostic flow | v1 audit is sessionless;no transcript | Separate session store/channel;do not overload graph metadata |
+| D9 | LLM-derived NL explain | Product / LLM owner | head.desc 模板渲染不够 | v1 renderer is deterministic reference HTML | Needs prompt/version/audit trail;must not change EvidenceGraph truth |
+| D10 | per-fact ACL(`x-evidence-key` 等价)| Security / service owner | multi-tenant 服务部署 | v1 local DTO has no redaction channel | Requires ACL model,redaction semantics,and service/OpenAPI design |
 
 ### 14.4 Evidence Schema 扩展类(Phase B-1+ 新增)
 
-| # | 项目 | v2+ trigger |
-|---|---|---|
-| D14 | **`compound_comparison` reason 内部 schema 完整化**(ArithExpr ⊃ AggregateExpr 多重嵌套 case;双侧均含表达式;多 AggregateExpr siblings 组合等)| 用户复合表达式场景成熟 + 调试需求 |
-| D15 | **AggregateExpr v1.x 扩展 kinds**(`any` / `all` / `isSubset` / `join` / `first` / `last` / `sort` / `group_by`)| 用户业务诉求 + adapter 实现成熟 |
-| D16 | **ArithExpr v1.x 扩展 operators**(`%` / `**` / 位运算 / 字符串拼接)| 用户业务诉求 |
-| D17 | **Overflow / NaN / inf protection**(`OverflowProtectionError` / `NaNCheckError`)| 用户出现实际数值异常诉求 |
-| D18 | **Aggregate matched_facts materialization beyond count-only envelope**(v1 已锁 `contributors {mode,count,handle}`;默认 `mode="omitted_v1"`;lazy / embedded 取数实现 deferred)| 用户需要 contributing facts 展开 |
-| D19 | **Aggregate target implicit cast**(string-to-numeric 等)| 用户场景实际出现 |
+| # | 项目 | Owner candidate | Trigger | v1 boundary | Implementation hint |
+|---|---|---|---|---|---|
+| D14 | **`compound_comparison` reason 内部 schema 完整化**(ArithExpr ⊃ AggregateExpr 多重嵌套 case;双侧均含表达式;多 AggregateExpr siblings 组合等)| RuleExpr + evidence owner | 用户复合表达式场景成熟 + 调试需求 | v1 keeps compact `compound_comparison` envelope | Needs nested expression schema + renderer summary policy |
+| D15 | **AggregateExpr v1.x 扩展 kinds**(`any` / `all` / `isSubset` / `join` / `first` / `last` / `sort` / `group_by`)| RuleExpr + adapter owner | 用户业务诉求 + adapter 实现成熟 | v1 aggregate kinds stay current locked set | Extend expression grammar,lowering,evidence reason,and tests together |
+| D16 | **ArithExpr v1.x 扩展 operators**(`%` / `**` / 位运算 / 字符串拼接)| RuleExpr owner | 用户业务诉求 | v1 operator set stays current locked set | Add operator semantics before evidence rendering |
+| D17 | **Overflow / NaN / inf protection**(`OverflowProtectionError` / `NaNCheckError`)| RuleExpr + semantics owner | 用户出现实际数值异常诉求 | v1 does not expose numeric error taxonomy | Needs runtime error taxonomy and evidence mapping |
+| D18 | **Aggregate matched_facts materialization beyond count-only envelope**(v1 已锁 `contributors {mode,count,handle}`;默认 `mode="omitted_v1"`;lazy / embedded 取数实现 deferred)| Evidence + storage owner | 用户需要 contributing facts 展开 | v1 count-only;no embedded/lazy facts | Requires handle format,view scoping,and size policy |
+| D19 | **Aggregate target implicit cast**(string-to-numeric 等)| RuleExpr + semantics owner | 用户场景实际出现 | v1 no implicit cast | Needs deterministic cast matrix + failed/error behavior |
 
 ### 14.5 引擎扩展类
 
-| # | 项目 | v2+ trigger |
-|---|---|---|
-| D11 | PyReason Form 2 evidence(时间步)| Form 2 设计独立推进;timeline layout 已 ship 可承载 |
-| D12 | Eager / Lazy 切换(目前 eager)| evidence > 10MB 或渐进 UI 需求 |
-| D13 | Nemo 作为 backend opt-in(Datalog 翻译层)| 用户真实 Datalog-only 大规模负载 + audit 要求严格 match engine |
+| # | 项目 | Owner candidate | Trigger | v1 boundary | Implementation hint |
+|---|---|---|---|---|---|
+| D11 | PyReason Form 2 evidence(时间步)| PyReason + evidence owner | Form 2 设计独立推进;timeline layout 已 ship 可承载 | v1 Form 1/default tree only for implementation slices | Define timestamp/component semantics before producer emits timeline graphs |
+| D12 | Eager / Lazy 切换(目前 eager)| Evidence + product owner | evidence >10MB or progressive UI demand | v1 may eagerly construct graph;large renderer only warns/handoffs | Needs streaming/lazy node handle design,not just renderer tweak |
+| D13 | Nemo 作为 backend opt-in(Datalog 翻译层)| Engine backend owner | 用户真实 Datalog-only 大规模负载 + audit 要求严格 match engine | v1 does not include Nemo adapter evidence | Requires Datalog translation and provenance mapping |
 
-### 14.6 deferred 项 → §1.2 映射
+### 14.6 Match / witness seam(Phase B T6 新增)
+
+| # | 项目 | Owner candidate | Trigger | v1 boundary | Implementation hint |
+|---|---|---|---|---|---|
+| D20 | **Witness / assertion-returning match output**(`fg.read.match(...).as_assertions()` / `.witnesses()` / `.to_view()` family,exact API shape deferred)| Match + evidence owner | Match runtime implementation reaches witness API gate,or user needs assertion records behind snapshot matches | T11.2.7 match design returns snapshots only;no witness ids;no Database view creation from match | Reconcile EvidenceGraph node identity,`EvidenceRef`,assertion ids,and view scoping before exposing witness output |
+
+### 14.7 deferred 项 → §1.2 / roadmap 映射
 
 §1.2 概述表与本节 D1-D19 一一对应;§1.2 是入门级别概述,本节是 lookup 表。
+D20 来自 T11.2.7 match API design 的 witness boundary,不回填 §1.2。
+
+---
+
+## 15. T8 Implementation Split Proposal
+
+> **本节状态**:T6 proposal only。它给后续 T8 blueprint 一个 starting
+> split,但不锁 T8 的实际执行顺序。T8 启动时必须基于当时 T7/T10/adapter
+> state 重新做 Step 4.6 inventory。
+
+### 15.1 Split 目标
+
+T8 的目标不是一次性实现全部 evidence graph 丰富化,而是让第一批 runtime
+implementation 有清晰边界:
+
+- 先保证 graph construction / metadata / validator gate 不再靠 ad-hoc 拼接;
+- 再实现 native/Souffle-style success-side topology;
+- 最后按 engine maturity 补 ProbLog/PyReason/Nemo 或 aggregate enrichment。
+
+### 15.2 Proposed T8 slices
+
+| Slice | Candidate scope | Preconditions | Non-goals |
+|---|---|---|---|
+| **T8-A Validator + metadata foundation** | Central metadata builder from `EvaluateResult` + row;metadata sufficiency checker;strict graph validation gate;debug assertion for envelope/graph consistency | T6 §10 complete | No richer topology;no adapter-specific math |
+| **T8-B Native/Souffle success topology** | Form 1 NODE_CONCLUSION / NODE_PREMISE / NODE_SEED population for native/Souffle-style deterministic rules;edge direction;seed reuse;winning-path-only OR;minimal aggregate count-only envelope where substrate exists | T8-A complete;existing IR replay substrate sufficient | No failed graph;no why-not tree;no match witness output |
+| **T8-C Engine enrichment** | ProbLog multi-path / probability carrier enrichment;PyReason timeline/Form 2;Nemo opt-in;engine_meta contract/debug split hardening | T10 or engine-specific blueprint has locked adapter semantics | No cross-engine fallback fields;no `engine_meta` flattening |
+| **T8-D Product/docs alignment** | Update quickstart/audit docs only for behavior implemented in T8-A/B/C;renderer examples;release claim wording | Implemented behavior exists | No teaching future match witness or failed graph APIs |
+
+### 15.3 Suggested first T8 blueprint
+
+The safest first T8 blueprint is **T8-A only**:
+
+1. lock metadata builder and sufficiency validator;
+2. add tests that `EvidenceGraph.metadata` contains all §10.3 fields;
+3. preserve minimal one-node graph output while centralizing construction;
+4. keep user-facing docs opaque except for audit developer notes.
+
+This reduces schema churn risk before topology work begins.
+
+### 15.4 Stop-amend triggers for T8
+
+Future T8 should stop and amend if implementation requires:
+
+- public `EvidenceGraph` interior guarantees beyond T6/T8 slice scope;
+- failed/why-not graph construction;
+- match witness or assertion-returning output;
+- session log, ACL, signature, or tamper-evident persistence;
+- adapter mathematical semantics changes not already scoped by T10;
+- service/OpenAPI changes.
+
+### 15.5 T9 handoff
+
+T9 docs/release alignment should claim only the T8 slices that have actually
+landed. If only T8-A lands, T9 may say "metadata/validator foundation landed"
+but must not claim rich evidence trees. If T8-B lands, T9 may teach successful
+deterministic topology. If T8-C lands, engine-specific docs must name exactly
+which engines/forms are supported.
