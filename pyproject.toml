@@ -3,8 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "factpy-kernel"
-version = "0.1.0rc3"
+name = "factgraph"
+version = "0.2.0rc1"
 description = "FactPy kernel for append-only facts, policy/view projection, and logic export."
 readme = "README.md"
 requires-python = ">=3.10"

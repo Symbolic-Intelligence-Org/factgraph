@@ -1,16 +1,29 @@
-# factpy-kernel
+# factgraph
 
 **Append-only fact substrate and auditable reasoning kernel.**
 
-The v0.1 open-source / PyPI surface of `factpy-kernel` contains only the `kernel` package. It provides:
+The v0.2 open-source / PyPI surface is the `factgraph` package. It provides:
 
 - an append-only fact ledger and field/assertion write semantics
-- the canonical Python runtime authority: `kernel.application`
-- the Python product surface: `kernel.sdk`
-- rule / query / inference authoring and runtime adapters
+- the canonical Python runtime authority: `factgraph.application`
+- the Python product surface: `factgraph.sdk`
+- rule / inference authoring, evaluation, and runtime adapters
 - audit package reader, query, DTO, and evidence graph surfaces
 
-The v0.1 public source and PyPI wheel are both scoped to the kernel-only surface. LLM extraction, HTTP delivery, domain bundles, and other companion surfaces are not part of the `factpy-kernel` v0.1 release.
+The v0.2 public source and PyPI wheel are scoped to the FactGraph package
+surface. LLM extraction, HTTP delivery, domain bundles, and other companion
+surfaces are not part of the `factgraph` release.
+
+> **Package rename in v0.2.0-rc.1**
+>
+> The PyPI package was renamed from `factpy-kernel` to `factgraph`. The Python
+> import path is already `factgraph.*`, so user code imports do not change.
+> Migrate an existing environment with:
+>
+> ```bash
+> pip uninstall factpy-kernel
+> pip install factgraph
+> ```
 
 For architecture principles, see [docs/architecture_principles.md](docs/architecture_principles.md).
 
@@ -19,7 +32,7 @@ For architecture principles, see [docs/architecture_principles.md](docs/architec
 After release:
 
 ```bash
-pip install factpy-kernel
+pip install factgraph
 ```
 
 Use the kernel from source:
@@ -33,7 +46,7 @@ pip install -e .
 ## Quickstart
 
 ```python
-from kernel.sdk import Entity, Field, Identity, FactGraph
+from factgraph.sdk import Entity, Field, Identity, FactGraph
 
 
 class User(Entity):
@@ -50,70 +63,93 @@ snapshot = fg.read.get(User, user_id="u-1")
 print(snapshot.name)  # Alice
 ```
 
-`FactGraph` is the v0.1 SDK top-level entrypoint. Its 10 taxonomy namespaces (`schema` / `read` / `write` / `rules` / `inferences` / `eval` / `what_if` / `audit` / `package` / `views`) teach the conceptual layering at first contact. `FactGraph` is a literal alias of `SDKStore`; the flat form `fg.ref(...)` / `fg.set(...)` / `fg.get(...)` is supported alongside the nested form as **foundational API** — neither deprecated nor scheduled for removal.
+`FactGraph` is the v0.2 SDK top-level entrypoint. Its taxonomy namespaces
+(`schema` / `read` / `write` / `rules` / `inferences` / `eval` / `audit` /
+`package` / `views`) teach the conceptual layering at first contact.
 
-`kernel.sdk` is the user-facing Python product surface. Runtime authority lives in `kernel.application`; the SDK adapts ergonomic APIs, schema/DSL authoring, snapshots, batches, editors, and compatibility errors into the application runtime contract.
+`factgraph.sdk` is the user-facing Python product surface. Runtime authority
+lives in `factgraph.application`; the SDK adapts ergonomic APIs, schema/DSL
+authoring, snapshots, batches, editors, and compatibility errors into the
+application runtime contract.
 
 ## Choose Your Layer
 
 | Scenario | Recommended entry | Why |
 |---|---|---|
-| Human-authored Python product code defining `Entity` / `Field` and running queries or inferences | `kernel.sdk` | Provides descriptors, DSL sugar, snapshots, batches, editors, and user-facing exceptions |
-| Automation process / HTTP bridge / wire protocol receiving JSON-like requests | `kernel.application` protocol + executor | Accepts SDK-independent DTOs and does not require SDK `Field` descriptors or Python DSL objects |
-| Lowest-level ledger / evidence / rule primitives | `kernel.core` | Intended for runtime implementers, not as the normal user entrypoint |
-| Reading an exported audit package | `kernel.audit` | Offline reader/query/DTO/evidence consumer surface |
+| Human-authored Python product code defining `Entity` / `Field` and evaluating rules | `factgraph.sdk` | Provides descriptors, DSL sugar, snapshots, batches, editors, and user-facing exceptions |
+| Automation process / wire protocol receiving JSON-like requests | `factgraph.application` protocol + executor | Accepts SDK-independent DTOs and does not require SDK `Field` descriptors or Python DSL objects |
+| Lowest-level ledger / evidence / rule primitives | `factgraph.core` | Intended for runtime implementers, not as the normal user entrypoint |
+| Reading an exported audit package | `factgraph.audit` | Offline reader/query/DTO/evidence consumer surface |
 
-## v0.1 Public Boundary
+## v0.2 Public Boundary
 
 | Tier | Surface | Commitment |
 |---|---|---|
-| Product public | `kernel.sdk` | Ergonomic API and outward compatibility surface for human-authored Python product code. |
-| Advanced importable | `kernel.application`, `kernel.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
-| Out of v0.1 package | `service`, `agent`, `domains`, internal workflow docs, tutorial/demo add-back candidates | Not part of the `factpy-kernel` v0.1 kernel-only wheel or public source surface. |
+| Product public | `factgraph.sdk` | Ergonomic API and outward compatibility surface for human-authored Python product code. |
+| Advanced importable | `factgraph.application`, `factgraph.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
+| Out of v0.2 package | service, agent, domains, internal workflow docs, tutorials, notebooks | Not part of the `factgraph` v0.2 wheel or public source surface. |
 
-L Direction G1-G5 added narrow SDK shells for Check, Diagnose, Why-not, Fact Overlay, ProofFrame Recheck, rule-action what-if, and ProofFrame Diff, now exposed through the `FactGraph` taxonomy as product API. Round events recorder lifecycle (`start_round` / `record_round_event` / `finalize_round`) and Frontier trace remain on `kernel.audit` / `kernel.core` advanced importable surfaces; promoting those boundaries to product-facing wrappers still requires a separate public API blueprint.
+T5/T11 narrowed the v0.2 product surface around `FactGraph`, `Rule` /
+`RuleExpr`, `EvaluateResult`, evidence/explanation envelopes, Database attach,
+durable views, and property-style assertion records. Legacy candidate accept,
+direct check/diagnose/why-not shells, and method-level `view=` are not part of
+the v0.2 public SDK path.
 
 ## Kernel Surface
 
 | Area | Entry | Notes |
 |---|---|---|
-| SDK product API | `kernel.sdk` | Entity / Field / Identity / FactGraph (with alias SDKStore) / Query / Inference user entrypoints |
-| Runtime authority | `kernel.application` | read/write/query/ingest/derivation protocol DTOs and executors |
-| Core primitives | `kernel.core` | ledger, rules, evidence, candidate support, low-level store semantics |
-| Authoring | `kernel.authoring` | rule/schema authoring helpers and validation surfaces |
-| Adapters | `kernel.adapters` | optional engine integration surfaces, depending on installed third-party engines |
-| Audit | `kernel.audit` | exported audit package reader/query/DTO/evidence graph consumer contract |
+| SDK product API | `factgraph.sdk` | Entity / Field / Identity / FactGraph / Rule / RuleExpr / Inference / Database user entrypoints |
+| Runtime authority | `factgraph.application` | read/write/evaluate protocol DTOs and executors |
+| Core primitives | `factgraph.core` | ledger, rules, evidence, store, Database/view identity, low-level semantics |
+| Authoring | `factgraph.authoring` | rule/schema authoring helpers and validation surfaces |
+| Adapters | `factgraph.adapters` | optional engine integration surfaces, depending on installed third-party engines |
+| Audit | `factgraph.audit` | exported audit package reader/query/DTO/evidence graph consumer contract |
 
 Current implementation docs:
 
-- [src/kernel/sdk/docs/README.md](src/kernel/sdk/docs/README.md)
-- [src/kernel/application/docs/README.md](src/kernel/application/docs/README.md)
-- [src/kernel/core/docs/01_architecture.en.md](src/kernel/core/docs/01_architecture.en.md)
-- [src/kernel/audit/docs/README.md](src/kernel/audit/docs/README.md)
-- [src/kernel/adapters/docs/README.md](src/kernel/adapters/docs/README.md)
-- [src/kernel/authoring/docs/README.md](src/kernel/authoring/docs/README.md)
+- [src/factgraph/sdk/docs/README.md](src/factgraph/sdk/docs/README.md)
+- [src/factgraph/application/docs/README.md](src/factgraph/application/docs/README.md)
+- [src/factgraph/core/docs/01_architecture.en.md](src/factgraph/core/docs/01_architecture.en.md)
+- [src/factgraph/audit/docs/README.md](src/factgraph/audit/docs/README.md)
+- [src/factgraph/adapters/docs/README.md](src/factgraph/adapters/docs/README.md)
+- [src/factgraph/authoring/docs/README.md](src/factgraph/authoring/docs/README.md)
 
 ## Audit And Optional Domains
 
-`kernel.audit` reads exported audit packages and provides offline queries for runs, candidates, rule traces, evidence graphs, and related DTOs.
+`factgraph.audit` reads exported audit packages and provides offline queries for
+runs, candidates, rule traces, evidence graphs, and related DTOs.
 
-ECSS compliance matrix row assembly belongs to `domains.ecss.compliance`; it is not a required capability of the kernel-only wheel. For monorepo compatibility, `AuditQuery.list_compliance_matrix(...)` remains as an optional-domain convenience. If `domains.ecss` is missing, it raises `AuditOptionalDomainError` instead of silently making the domain package a kernel dependency.
+Domain packages are not required capabilities of the `factgraph` wheel. Optional
+domain integrations remain outside the release surface.
 
 ## Tests
 
-Kernel-only package guard:
+Release-focused G7 preservation gate:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_wheel_kernel_only_packaging.py"
+PYTHONPATH=src python -m unittest \
+  tests.application.protocol.test_rule \
+  tests.application.protocol.test_rule_expr \
+  tests.sdk.test_ruleexpr_inspect \
+  tests.sdk.test_rule_naming \
+  tests.application.protocol.test_rule_aggregate \
+  tests.test_branch_identity_rule_inspect \
+  tests.application.protocol.test_rule_expr_lowering \
+  tests.application.protocol.test_rule_expr_lowering_adapter \
+  tests.sdk.test_rule_expr_evaluate \
+  tests.application.protocol.test_rule_expr_head_validation
 ```
 
-Kernel regression:
+Focused assertion-access gate:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py"
+PYTHONPATH=src python -m unittest tests.test_sdk_assertion_record_set_view_filters
 ```
 
-The current kernel suite baseline is tracked by CI and blueprint audit records; local environments may show additional environment-only errors for optional adapters or cold-start import order.
+The current release suite baseline is tracked by CI and blueprint audit records;
+local environments may show additional environment-only errors for optional
+adapters or cold-start import order.
 
 ## License And Security
 

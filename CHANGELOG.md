@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc.1] - 2026-05-26
+
+### Breaking
+
+- **PyPI package renamed**: install `factgraph` instead of `factpy-kernel`.
+  Existing environments should run:
+
+  ```bash
+  pip uninstall factpy-kernel
+  pip install factgraph
+  ```
+
+  Python imports do not change for the v0.2 surface:
+  `from factgraph.sdk import ...`.
+
+### Added
+
+- **Public result/evidence path**: `EvaluateResult`, `EvaluateRow`, `Claim`,
+  `EvidenceRef`, `Explanation`, `row.explain()`, `row.close()`, and
+  `fg.eval.explain(...)` are the public SDK explanation surface.
+- **Application Rule / RuleExpr evaluation**: public `Rule` and `RuleExpr`
+  values are the primary rule authoring and evaluation inputs.
+- **Public semantics wrappers**: `ProbLogSemantics` and `PyReasonSemantics`
+  lower into canonical semantics profiles for public SDK calls.
+- **Database and durable view substrate**: `Database.create(...)`,
+  `Database.open(...)`, durable assertion views, and read-only
+  `FactGraph.attach(db, view=view, schema_classes=[...])` are shipped.
+- **Property-style assertion access**: field-scoped assertion records now
+  support `snapshot.field("name").active`, `.history`, `.all`, and
+  `snapshot.assertions.name`; legacy `.active()` / `.all()` call forms remain
+  accepted.
+
+### Changed
+
+- **Public package namespace**: v0.2 releases the `factgraph` Python package
+  surface. The old `kernel` package shape and `factpy-kernel` distribution name
+  are not the v0.2 release target.
+- **SDK hard-cut**: legacy candidate `accept` workflows, direct
+  check/diagnose/why-not shells, and public candidate-set result teaching were
+  removed from the v0.2 SDK path.
+- **View scoping**: method-level `view=` remains intentionally unsupported;
+  attach-time `FactGraph.attach(db, view=view)` is the shipped scope mechanism.
+
+### Deferred
+
+- Match API implementation, witness/assertion-returning match output,
+  method-level `view=`, snapshot attach by `as_of(...)`, full EvidenceGraph
+  Phase B, and adapter-consuming semantics beyond carrier-only public wrappers
+  remain future tracks.
+
 ## [0.1.0-rc.1] - 2026-05-10
 
 First public preview release candidate.
