@@ -246,6 +246,61 @@ assert same_view.view_digest == view.view_digest
 
 Historical-base view creation is not part of the current public surface.
 
+## Durable views are immutable
+
+`Database` only ships `create_view(...)`. There is **no `update_view`**, **no
+`delete_view`**, no `get_view`, and no `list_views`. This is by design:
+durable Database views are **content-addressed immutable objects** whose file
+path on disk is the `view_digest`, not the `name`.
+
+That has three consequences worth knowing up front.
+
+### Re-creating with the same name + assertion ids is idempotent
+
+```python
+v1 = db.create_view("review", [record.asrt_id])
+v2 = db.create_view("review", [record.asrt_id])
+
+assert v1.view_digest == v2.view_digest          # same digest
+# views/objects/<view_digest>.json was written once and not rewritten.
+```
+
+The Database identity anchors (`db_id`, `base_tx_id`, `schema_digest`) and the
+sorted `asrt_ids` fully determine `view_digest`. Calling `create_view(...)`
+with the same inputs twice produces the same digest and no second filesystem
+write.
+
+### Same name, different ids creates a *new* view; the old one stays
+
+```python
+v_one = db.create_view("review", [record.asrt_id])
+v_two = db.create_view("review", [record.asrt_id, other_record.asrt_id])
+
+assert v_one.view_digest != v_two.view_digest
+# Both views/objects/<v_one_digest>.json and views/objects/<v_two_digest>.json
+# now exist on disk. The "review" name resolves to two distinct view objects.
+```
+
+`name` is just a label inside the JSON payload. The Database does not
+maintain a name → view registry, so re-using a name does not overwrite or
+shadow the prior view object.
+
+### "Update" and "delete" are deliberately not shipped
+
+To change the assertion-id set in a logical view, **create a new view object**
+with the desired `asrt_ids`. The old view object remains on disk until you
+remove it at the filesystem level (e.g. delete the corresponding
+`views/objects/<old_digest>.json` outside the SDK). The SDK does not expose a
+public delete or update path because doing so would mutate
+content-addressed objects.
+
+If you only need a short-lived assertion-id set scoped to one SDK session,
+use `fg.views.create(...)` instead — that surface **does** support
+`update(...)`, `delete(...)`, `get(...)`, and `list()`, but it is
+in-memory-only and is not written by `fg.save(...)` or restored by
+`FactGraph.load(...)`. The contrast is summarized below in
+[SDK views are different](#sdk-views-are-different).
+
 ## Open the Database again
 
 Open validates the workspace schema object against the schema IR you provide:
@@ -447,7 +502,14 @@ with TemporaryDirectory() as tmp_dir:
   when writing low-level assertions that should participate in snapshot
   projection.
 - Use `db.create_view(name, asrt_ids=[...])` for durable Database view objects.
+  Durable views are **immutable**; there is no `update_view` / `delete_view` /
+  `get_view` / `list_views`. Same name + same `asrt_ids` is idempotent; same
+  name + different `asrt_ids` writes a new view object whose file path is the
+  new `view_digest`. To "change" a view, create a new one; to "remove" one,
+  delete `views/objects/<view_digest>.json` outside the SDK.
 - Use `fg.views.create(name, asrt_ids=[...])` only for in-memory named id sets.
+  `fg.views` **does** support `get(...)`, `list()`, `update(...)`, and
+  `delete(...)`, but it is session-local and not written by `fg.save(...)`.
 - `view=` is an attach-time argument: `FactGraph.attach(db, schema_classes=[...], view=view)`
   produces a read-only, view-scoped runtime. It is not accepted as a row-level
   parameter on `fg.read.find(...)` or `fg.eval.evaluate(...)`.
