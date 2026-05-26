@@ -1,11 +1,11 @@
 # Audit: T12 Minimal Housekeeping
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t12-minimal-housekeeping.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M (predicted docs / lifecycle housekeeping)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked must be preserved
@@ -16,7 +16,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-26 | draft | `03698d9c` | T12 minimal housekeeping blueprint pair drafted | Triggered by N1 roadmap §3.8 and user-selected N1 → N5 ordering after T5/T11.1 publication. |
-| 2026-05-26 | scoped | pending | Step 4.6 inventory scoped | Added archive destination, track-plan reference blast radius, D16-D26 status table result, implementation-anchor policy, memory path inventory, and blueprint archive INVENTORY target. |
+| 2026-05-26 | scoped | `7a1d31a0` | Step 4.6 inventory scoped | Added archive destination, track-plan reference blast radius, D16-D26 status table result, implementation-anchor policy, memory path inventory, and blueprint archive INVENTORY target. |
+| 2026-05-26 | implemented | `6c7f9c1c` | T12 housekeeping implemented | Track plan retained active with superseded-for-scheduling lifecycle note; D16-D26 adopted with implementation anchors; decisions/design-points indexes updated; repo-local memory compacted 168,593 -> 5,447 bytes; global MEMORY.md deferred. |
 
 ## 2. Initial Read Summary
 
@@ -66,14 +67,33 @@ To fill during scoped inventory:
 
 ## 6. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 inventory complete.
-- [ ] T12.1 implemented or explicitly deferred.
-- [ ] T12.2 implemented or explicitly deferred.
-- [ ] T12.3 implemented or no-op recorded.
-- [ ] T12.4 implemented or explicitly deferred.
-- [ ] Closure notes filled.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 inventory complete.
+- [x] T12.1 implemented or explicitly deferred.
+- [x] T12.2 implemented or explicitly deferred.
+- [x] T12.3 implemented or no-op recorded.
+- [x] T12.4 implemented or explicitly deferred.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending.
+Implemented with `6c7f9c1c`.
+
+Final landed scope:
+
+- T12.1: `rule-expression-and-proof-track-plan.zh.md` kept in `active/` with status/lifecycle note saying T1-T5 are complete and future scheduling is superseded by the post-T5 roadmap. No broad archive/reference churn.
+- T12.2: D16-D26 are now `adopted`, each with `Implementation Anchors:` metadata. `workflow/design/decisions/README.md` adopted index is populated.
+- T12.3: `workflow/design/design-points/README.md` now lists current active design-points and marks the track plan as retained historical decomposition index.
+- T12.4: `workflow/memory/current.md` compacted from 168,593 bytes to 5,447 bytes. Global Claude `MEMORY.md` remains over the user-reported target at 31,523 bytes and is recorded as follow-up because it is outside repo writable roots.
+
+Review disposition:
+
+- Step 4.7 review found no P0/P1 blockers.
+- O1 global `MEMORY.md` prune remains an explicit follow-up / owner-permission decision, not completed in this cycle.
+- Implementation did not touch production, tests, examples, notebooks, SDK API, service, agent, or adapter files.
+
+Verification:
+
+- `git diff --check`: clean.
+- Sacred `master` unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved at 6 modified + 1 untracked.

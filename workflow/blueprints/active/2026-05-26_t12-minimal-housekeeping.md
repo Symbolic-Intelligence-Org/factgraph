@@ -1,6 +1,6 @@
 # Task Blueprint: T12 Minimal Housekeeping
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: S/M (predicted docs / lifecycle housekeeping)
@@ -180,11 +180,62 @@ Before implementation, record:
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory records lifecycle status for track plan, D16-D26, design-point index, and memory/progress files.
-- [ ] T12.1 outcome is explicit: archive, supersede-in-place, or no-op with reason.
-- [ ] T12.2 outcome is explicit for all D16-D26.
-- [ ] T12.3 either updates design-point index or records "no change needed".
-- [ ] T12.4 either prunes/syncs memory safely or records scoped follow-up.
+- [x] Step 4.6 inventory records lifecycle status for track plan, D16-D26, design-point index, and memory/progress files.
+- [x] T12.1 outcome is explicit: archive, supersede-in-place, or no-op with reason.
+- [x] T12.2 outcome is explicit for all D16-D26.
+- [x] T12.3 either updates design-point index or records "no change needed".
+- [x] T12.4 either prunes/syncs memory safely or records scoped follow-up.
 - [ ] `workflow/blueprints/archive/INVENTORY.md` updated when this blueprint archives.
-- [ ] No production behavior changes.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] No production behavior changes.
+- [x] Dirty baseline and sacred master preserved.
+
+## 9. Outcome / Deviations
+
+Implemented in `6c7f9c1c`.
+
+### 9.1 T12.1 Track-plan Lifecycle
+
+`rule-expression-and-proof-track-plan.zh.md` was not archived. It remains in `active/` with a lifecycle note:
+
+- T1-T5 implementation is complete.
+- Future scheduling is superseded by `post-t5-completion-roadmap.zh.md`.
+- The file remains active as a historical decomposition index because active audits/decisions and archived blueprints still cite it.
+- It must not be used to schedule new T6+ work.
+
+This avoids broad reference churn while making the current scheduling authority explicit.
+
+### 9.2 T12.2 D16-D26 Lifecycle
+
+All eleven T5 D-docs moved from `Status: proposed` to `Status: adopted` and now include `Implementation Anchors:` metadata:
+
+- D16-D26 remain in `workflow/design/decisions/active/`, consistent with the ADR rule that adopted decisions stay active while they remain current constraints.
+- `workflow/design/decisions/README.md` now has an adopted decisions index for D16-D26.
+
+### 9.3 T12.3 Active Design-point Index
+
+`workflow/design/design-points/README.md` now includes a compact active design-point inventory covering:
+
+- Rule/Eval parent essay.
+- Evidence-tree v1.
+- Database/view layered architecture.
+- T1-T5 track plan retained as historical decomposition index.
+- Post-T5 completion roadmap as working scheduling reference.
+
+### 9.4 T12.4 Memory / Progress Sync
+
+Repo-local `workflow/memory/current.md` was compacted from 168,593 bytes to 5,447 bytes while retaining:
+
+- current branch / sacred branch / dirty baseline;
+- T5.1-T5.8 and T11.1 milestone anchors;
+- N1 roadmap state;
+- T12 in-flight status;
+- recommended next work and governance reminders.
+
+The global Claude memory index at `/Users/zhenzhili/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md` remains 31,523 bytes and was not edited because it is outside repo writable roots. It is recorded as a follow-up requiring explicit permission or a separate owner.
+
+### 9.5 Verification
+
+- `git diff --check`: clean.
+- No production Python, tests, examples, notebooks, service, agent, SDK API, or shipped behavior changes.
+- Dirty baseline remained 6 modified + 1 untracked.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
