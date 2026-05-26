@@ -530,6 +530,11 @@ result = sdk.evaluate(inf, engine="native")
 `CandidateSet` remains an internal runtime artifact. Public code should use
 `EvaluateResult`, `EvaluateRow`, `row.explain()`, and `row.close()`.
 
+For the full envelope chain (all 13 `EvaluateResult` fields, `EvaluateRow`
+data + methods, `Claim` / `EvidenceRef` invariants, `Explanation` status /
+failure_class enum values, and runnable passed / failed examples), see
+[`docs/official/kernel/quickstart/evidence.md`](../../../../docs/official/kernel/quickstart/evidence.md).
+
 ## 9. Temporal Boundary (Current Status)
 
 Implemented:
