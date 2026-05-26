@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.6 SDK Assertion Property Access
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: S/M (predicted narrow SDK ergonomics slice)
@@ -127,6 +127,33 @@ The scoped commit must record:
 9. exact file set for implementation;
 10. release-note wording and T11.3 handoff.
 
+## 4.1 Step 4.6 Inventory Results
+
+| # | Item | Result |
+|---|---|---|
+| 1 | Dirty hunk size | `src/factgraph/sdk/facade.py` is `+17/-2`; companion test is `+15`. |
+| 2 | Layer separation | Graph-level `fg.assertions.active()` / `.all()` live in `_SDKAssertionsManager` (`store.py:459`, `:464`) and remain methods. Field-level `FieldAssertions.active/history/all` live in `facade.py:204-229` and are this cycle's property target. Snapshot namespace `snap.assertions.<field>` lives in `AssertionNamespace` (`facade.py:257-307`). |
+| 3 | Existing compatibility path | `AssertionRecordSet.__call__() -> self` makes property-returned sets callable, so old `.active()` / `.all()` field-level call sites remain valid and identity-preserving. This is a no-op compatibility shim, not refresh/evaluate/mutate behavior. |
+| 4 | Namespace proxy collision list | `AssertionNamespace` existing public names: `field`, `active`, `all`, `by_id`, `by_ids`. Existing attributes/methods win. Same-named schema fields remain reachable through `snap.assertions.field("field")`, not attribute proxy. Dunder/private names should not proxy. |
+| 5 | Docs grep | Quickstart and SDK docs contain mixed `.active()` / `.all()` and `.active` / `.history` examples. Narrow docs sync is needed in assertion-access sections only: prefer property form, mention call form remains accepted. |
+| 6 | Current tests | `tests/test_sdk_assertion_record_set.py` already uses property form broadly; dirty companion test adds legacy-call compatibility. Extra edge tests are needed for `snap.assertions.unknown_field` and reserved-name collisions. |
+| 7 | Land/stash/revert verdict | **Land** as a backward-compatible v0.2 SDK assertion ergonomics improvement. It resolves the tracked release blocker without tying it to match API. |
+| 8 | Implementation file set | Code/test: `src/factgraph/sdk/facade.py`, `tests/test_sdk_assertion_record_set_view_filters.py`. Docs: narrow assertion-access docs only, expected `docs/official/kernel/quickstart/assertions.md` plus SDK docs sections that explicitly teach `.active()` / `.all()`. |
+| 9 | Release-note wording | "Field-scoped assertion sets now support property-style access (`snapshot.field('name').active`, `.history`) while legacy `.active()` / `.all()` call forms remain accepted." |
+| 10 | T11.3 handoff | After this cycle lands, the only remaining tracked dirty files are docs/notebooks classified by T11.2.5. The release dry-run still needs those handled or explicitly stashed/reverted, but the production/test blocker is resolved. |
+
+## 4.2 Final Scoped Decisions
+
+| Decision | Scoped lock |
+|---|---|
+| D1 property vs method | Field-level access becomes property-first: `.active`, `.history`, `.all`. Legacy field-level calls work through `AssertionRecordSet.__call__`. Graph-level `fg.assertions.active()` / `.all()` stay methods. |
+| D2 `.all` vs `.history` | `.history` is preferred wording for active + revoked history; `.all` remains an alias for compatibility and symmetry with `AssertionRecordSet.all()`. |
+| D3 `AssertionRecordSet.__call__` lifetime | Treat as stable v0.2 compatibility shim with no planned removal in this release. Do not document as deprecated. |
+| D4 namespace proxy | `snap.assertions.<field>` is allowed only for field names that do not collide with existing `AssertionNamespace` attributes. Use `.field("...")` for collisions. |
+| D5 reserved names | Reserved: `field`, `active`, `all`, `by_id`, `by_ids`, and private/dunder names. Attribute lookup raises normal `AttributeError` for unknown fields. |
+| D6 docs | Prefer property form in assertion docs; preserve legacy call form as accepted compatibility, not the primary teaching path. |
+| D7 release surface | Backward-compatible user-facing SDK ergonomics; no storage/runtime/ledger semantics change and no release allowlist expansion beyond existing package code. |
+
 ## 5. Expected Implementation Shape
 
 If Step 4.6 confirms the draft leaning:
@@ -150,8 +177,8 @@ If Step 4.6 confirms the draft leaning:
 
 ## 7. Acceptance
 
-- [ ] Step 4.6 inventory completed with collision and docs-surface checks.
-- [ ] Land/stash/revert verdict recorded.
+- [x] Step 4.6 inventory completed with collision and docs-surface checks.
+- [x] Land/stash/revert verdict recorded.
 - [ ] Backward compatibility for `.active()` / `.all()` verified.
 - [ ] `AssertionNamespace.__getattr__` collision behavior verified.
 - [ ] Narrow docs sync completed or explicitly not needed.
