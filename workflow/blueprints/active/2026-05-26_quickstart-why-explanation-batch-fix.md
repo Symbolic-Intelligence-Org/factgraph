@@ -1,9 +1,9 @@
 # Task Blueprint: Quickstart WHY-Explanation Batch Fix
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
-- Class: M (predicted; may escalate L)
+- Class: M (confirmed; +244/-24 LOC across 9 files; no L escalation triggered)
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Claude
 - Reviewer: Claude (self-owned; Codex on parallel work)
@@ -316,34 +316,81 @@ Self-review must verify:
 
 ## 9. Acceptance
 
-- [ ] F1: first-factgraph.md Identity primary_key forward pointer
-- [ ] F2: first-factgraph.md schema_classes compile pointer
-- [ ] F3: schema.md `Identity(default=)` semantics
-- [ ] F4: schema.md `schema.add` deferred boundary
-- [ ] F5: read-write.md `idref_v1` token anchor
-- [ ] F6: read-write.md retract append-only WHY
-- [ ] **F7**: assertions.md **new §"Canonical quantitative carrier"** (C110 anchor)
-- [ ] F8: assertions.md annotation mirror lanes
-- [ ] F9: assertions.md frozen views WHY
-- [ ] F10: assertions.md probability/bound_* key rejection framing
-- [ ] **F11**: rules-and-inferences.md Rule/build_application_rule subsection
-- [ ] F12: rules-and-inferences.md Inference legacy/compat callout
-- [ ] F13: rules-and-inferences.md RuleRef anchor
-- [ ] F14: rules-and-inferences.md closed-head naming
-- [ ] F15: semantics.md wrappers → SemanticsProfile relationship
-- [ ] F16: semantics.md branch_probabilities single-Rule rejection
-- [ ] F17: semantics.md raw_kind row propagation → C110 cross-link
-- [ ] F18: evidence.md EvidenceGraph deferred → named invariants
-- [ ] F19: evidence.md DetachedRow contract clarification
-- [ ] F20: persistence.md durable views cross-link
-- [ ] F21: namespace-map.md fg.inferences empty namespace WHY
-- [ ] F22: namespace-map.md attach no rules= contract
-- [ ] F23: namespace-map.md namespace principles owner anchor
-- [ ] Diff stays within 8 quickstart files + blueprint pair.
-- [ ] Dirty baseline preserved at 6 M + 1 untracked.
-- [ ] Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
-- [ ] 5 Low-severity findings NOT touched (verify in diff).
+- [x] F1: first-factgraph.md Identity primary_key forward pointer
+- [x] F2: first-factgraph.md schema_classes compile pointer
+- [x] F3: schema.md `Identity(default=)` semantics
+- [x] F4: schema.md `schema.add` deferred boundary
+- [x] F5: read-write.md `idref_v1` token anchor
+- [x] F6: read-write.md retract append-only WHY
+- [x] **F7**: assertions.md **new §"Canonical quantitative carrier"** (C110 anchor)
+- [x] F8: assertions.md annotation mirror lanes
+- [x] F9: assertions.md frozen views WHY
+- [x] F10: assertions.md probability/bound_* key rejection framing
+- [x] **F11**: rules-and-inferences.md Rule/build_application_rule subsection
+- [x] F12: rules-and-inferences.md Inference legacy/compat callout
+- [x] F13: rules-and-inferences.md RuleRef anchor
+- [x] F14: rules-and-inferences.md closed-head naming
+- [x] F15: semantics.md wrappers → SemanticsProfile relationship
+- [x] F16: semantics.md branch_probabilities single-Rule rejection
+- [x] F17: semantics.md raw_kind row propagation → C110 cross-link
+- [x] F18: evidence.md EvidenceGraph deferred → named invariants
+- [x] F19: evidence.md DetachedRow contract clarification
+- [x] F20: persistence.md durable views cross-link
+- [x] F21: namespace-map.md fg.inferences empty namespace WHY
+- [x] F22: namespace-map.md attach no rules= contract
+- [x] F23: namespace-map.md namespace principles owner anchor
+- [x] Diff stays within 9 quickstart files (was "8" in blueprint draft; recount = 9) + blueprint pair.
+- [x] Dirty baseline preserved at 6 M + 1 untracked.
+- [x] Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
+- [x] 5 Low-severity findings NOT touched (verify in diff).
 
 ## 10. Outcome / Deviations
 
-(Filled at closure.)
+Implemented in `dd367166` after scoped blueprint pair `0b5d4d33`.
+
+Landed scope:
+
+- 9 quickstart files modified with +244 / -24 LOC (M-class confirmed; well
+  under the 490 LOC upper estimate, no L-class escalation triggered).
+- 23 findings (8 High + 13 Medium + cross-cutting C110 anchor + 1 minor
+  blueprint-text fix-up) all closed.
+- New §"Canonical quantitative carrier" subsection in `assertions.md` is
+  the canonical anchor; `semantics.md` and `evidence.md` cross-link
+  forward (no contract duplication).
+- 13 forward cross-link sentences added across the 9 files; all anchors
+  verified against actual heading text via GitHub-flavored markdown
+  anchor convention. One anchor fix applied during verification
+  (`rule-directly` hyphen) — caught before commit.
+
+Deviations from blueprint:
+
+- Blueprint per-file scope table said "8 files" total; actual file count
+  is 9 (first-factgraph + schema + read-write + assertions +
+  rules-and-inferences + semantics + evidence + persistence +
+  namespace-map). Minor blueprint-text fix-up — no scope drift, all 9
+  files were already enumerated in §3 per-finding subsections (3.1–3.9).
+- One anchor I cross-linked to in first-factgraph.md initially used
+  `#multi-field-identity`, which does not exist in schema.md; corrected
+  to existing `#why-the-primary-anchor-matters` heading.
+- Cross-link from semantics.md to rules-and-inferences.md initially used
+  `#why-build_application_rule-instead-of-ruledirectly` (missing hyphen);
+  corrected to `#why-build_application_rule-instead-of-rule-directly`
+  before commit.
+
+Verification:
+
+- Diff stays within 9 quickstart files + blueprint pair.
+- `git diff --check` clean.
+- Pre-existing 6 modified + 1 untracked dirty baseline preserved
+  end-to-end (verified post-commit).
+- Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
+- No production files touched; no SDK API changes; no shipped-behavior
+  changes; no new public exports.
+- 5 Low-severity findings (GNF naming; EvidenceRef WHY; migration CLI;
+  namespace-map deferred provenance; future concepts-page consideration)
+  explicitly NOT touched — deferred to future polish cycle.
+
+Cycle ran self-owned (Codex on parallel work). Self-review took the form
+of fresh-read passes over the 9 modified files plus manual anchor
+verification (cross-link map verified line-by-line against heading
+strings).

@@ -1,12 +1,12 @@
 # Audit: Quickstart WHY-Explanation Batch Fix
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_quickstart-why-explanation-batch-fix.md`
-- Stage: scoped
-- Class: M (predicted; may escalate L)
+- Stage: implemented
+- Class: M (confirmed; +244/-24 LOC; no L escalation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
 - Ownership: self-owned (Claude as both owner and reviewer; Codex on parallel work)
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-26 | scoped | pending | Blueprint pair drafted with 21-finding inventory pre-locked | Self-owned cycle. Source inventory from sub-agent audit `acbc5b94ba313ef05`. C110 anchor home pre-decided: new §"Canonical quantitative carrier" in `assertions.md`; `semantics.md` + `evidence.md` cross-link forward. |
+| 2026-05-26 | scoped | `0b5d4d33` | Blueprint pair drafted with 21-finding inventory pre-locked | Self-owned cycle. Source inventory from sub-agent audit `acbc5b94ba313ef05`. C110 anchor home pre-decided: new §"Canonical quantitative carrier" in `assertions.md`; `semantics.md` + `evidence.md` cross-link forward. |
+| 2026-05-26 | implemented | `dd367166` | 23 edits applied (21 F# findings + C110 anchor + 1 minor anchor fix-up during verify) | 9 quickstart files modified +244/-24 LOC. No production files. No SDK API changes. M-class confirmed (well below 490 LOC upper estimate). 2 anchor fixes caught + corrected during self-review before commit (`#multi-field-identity` → `#why-the-primary-anchor-matters` in first-factgraph.md; `#why-build_application_rule-instead-of-ruledirectly` → `#why-build_application_rule-instead-of-rule-directly` in semantics.md). |
 
 ## 2. Source Reads
 
@@ -125,15 +126,66 @@ database.md §"Durable views are immutable" (existing, shipped via eff86ad0)
 ## 7. Review Checklist
 
 - [x] Step 4.6 scoped inventory recorded before implementation.
-- [ ] All 21 F# findings + C110 anchor land in single feat commit (or split if commit exceeds reasonable size).
-- [ ] C110 anchor is the canonical source; no contract duplication in semantics.md or evidence.md.
-- [ ] No production files touched; dirty baseline preserved.
-- [ ] 5 Low findings explicitly NOT touched.
-- [ ] No new public exports / module surface; no shipped-behavior changes.
+- [x] All 21 F# findings + C110 anchor landed in single feat commit `dd367166`.
+- [x] C110 anchor is the canonical source; semantics.md and evidence.md cross-link forward (no contract duplication).
+- [x] No production files touched; dirty baseline preserved (6 M + 1 U).
+- [x] 5 Low findings explicitly NOT touched (verified in diff).
+- [x] No new public exports / module surface; no shipped-behavior changes.
+- [x] All 13 forward cross-links anchor-verified against actual heading text.
 
 ## 8. Closure Notes
 
-(Filled at closure.)
+Implemented with `dd367166` on top of scoped blueprint pair `0b5d4d33`.
+
+Self-owned cycle summary:
+
+- Cycle ran self-owned because Codex was on parallel work after the
+  database-view-rebase-onto-T11.1 cycle. Owner and reviewer were both
+  Claude.
+- 12-item Step 4.6 inventory was pre-locked into the scoped state at
+  blueprint creation (draft+scoped combined as a single commit,
+  mirroring the rules-ports-ruleexpr and database-view-rebase self-owned
+  patterns from earlier in the same branch).
+- Step 4.7 self-review took the form of:
+  - Fresh-read pass over the 9 modified files (post-edit visual scan).
+  - Anchor verification (every `[text](file.md#anchor)` cross-link
+    checked against the actual heading string for that anchor; 2 anchors
+    were corrected before commit).
+  - Diff sanity (`git diff --stat` matched the 9-file expectation; no
+    accidental edits to dirty-baseline files or design-point docs).
+- Step 4.8 not needed — no post-archive amends required after the
+  self-review pass.
+
+Final landed scope:
+
+- New §"Canonical quantitative carrier" in `assertions.md` is the C110
+  contract anchor; the contract is single-source across write/evaluate/
+  audit surfaces.
+- 9 quickstart files gained design-intent / named-invariant / surface-
+  relationship explanations for 23 previously-silent contracts.
+- Sub-agent audit `acbc5b94ba313ef05` source inventory fully closed
+  (21 in-scope findings done; 5 Low-severity findings explicitly
+  deferred per scope).
+
+Verification:
+
+- `git diff --check`: clean.
+- Diff scope: 9 docs files + blueprint pair only.
+- Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
+- Pre-existing 6 modified + 1 untracked dirty baseline preserved end-
+  to-end.
+- No production files touched; no SDK API changes; no shipped-behavior
+  changes; no new public exports.
+
+Deferred / non-goals (left for future cycles):
+
+- 5 Low-severity findings from the audit (GNF naming; EvidenceRef WHY;
+  migration CLI design context; namespace-map deferred provenance
+  back-links; potential cross-cutting "Concepts" page consideration).
+- The 7-track Post-T5 roadmap (T6 Evidence-tree Phase B / T7-T10 design
+  + adapter / T11.2-T11.4 Database-view + release / T12 maintenance)
+  remains open; this cycle is internal-quality and does not consume any
+  track slot.
 
 ## 9. Deferred (Low-severity, out of scope)
 
