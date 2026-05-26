@@ -1,6 +1,6 @@
 # Task Blueprint: T5.8 Semantics Lite + Wrapper-Application Rule Path Fix
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: M (predicted)
@@ -90,6 +90,14 @@ Pause and amend if implementation requires:
 - service/OpenAPI changes;
 - broad docs migration that belongs to a separate docs cleanup;
 - changing D25 semantics mismatch behavior or warning policy.
+
+Step 4.6 decision:
+
+- T5.8 remains one M-class slice.
+- Implementation is limited to SDK wrapper/context lowering, wrapper validation, narrow tests, and narrow docs.
+- Adapter production files, service/OpenAPI, and public DTO contracts remain out of scope.
+- Single application `Rule` branch-specific wrapper config must either reject clearly or support one explicit single-branch key with tests; default path is empty-wrapper success and branch-specific rejection.
+- C73 `rule_params` remains wrapper-local and profile-lowered; no new public DTO is introduced without amendment.
 
 ## 1. Inputs
 

@@ -1,11 +1,11 @@
 # Audit: T5.8 Semantics Lite + Wrapper-Application Rule Path Fix
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t5-8-semantics-lite-wrapper-fix.md`
-- Stage: T5.8 draft
+- Stage: T5.8 scoped
 - Class: M (predicted)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -15,6 +15,7 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-26 | draft | pending | Blueprint pair drafted | T5.8 Semantics Lite + Wrapper-Application Rule Path Fix draft created after user elevated Semantics Lite from optional to mandatory due to SDK public wrapper gap. Scope is predicted M-class and must stay wrapper/profile-only with no adapter production edits. |
+| 2026-05-26 | scoped | pending | Step 4.6 inventory recorded | Grep confirmed the wrapper/application Rule gap is confined to SDK public semantics resolver/lowering and docs/tests. T5.8 remains one M-class slice; adapter, service, OpenAPI, and DTO contracts stay out of scope. |
 
 ## 2. Source Chain
 
@@ -107,7 +108,31 @@ Step 4.6 must also decide:
 - whether `rule_params` shape can remain wrapper-local without new DTOs;
 - which docs are touched narrowly.
 
-## 8. G7 Baseline Plan
+## 8. Step 4.6 Pre-Implementation Grep Results
+
+| # | Check | Result | Classification |
+|---|---|---|---|
+| 1 | Public wrapper classes | `ProbLogSemantics` and `PyReasonSemantics` live in `src/factgraph/sdk/semantics.py`; no `rule_params` shape exists yet. Docstrings are inference-centered. | T5.8 wrapper/docstring update. |
+| 2 | Resolver guard | `_resolve_public_engine_and_semantics(...)` has three call sites. Legacy `Inference` passes `derivation`; structured dict and RuleExpr/application Rule paths pass `None`. The public wrapper guard at `store.py:2142-2144` rejects the `None` paths. | Primary T5.8 fix. |
+| 3 | RuleExpr evaluate path | `_evaluate_rule_expr_input(...)` accepts application `Rule` or `RuleExpr`, requires `head= Rule`, and currently resolves public semantics before source lowering with `derivation=None`. | T5.8 must pass a context that can lower wrappers for source/head. |
+| 4 | Wrapper lowering assumptions | `_lower_public_semantics(...)` is called only from the resolver and by focused tests. It assumes `_branch_id_index_for_derivation(derivation)` can inspect `.where`; `_default_semantics_name(...)` can tolerate missing ids but not missing branch context. | Extend lowering context; preserve legacy inference behavior. |
+| 5 | RuleExpr branch ids | `rule_expr_lowering.py` assigns branch ids (`b0`, `b1`, ...) through `RuleExprLoweringBranch` and lowering plan metadata. | Reuse for RuleExpr wrapper branch-key mapping. |
+| 6 | SemanticsProfile digest consumers | `semantics_digest_for(...)` consumes normalized `SemanticsProfile`; D25 policy code does not need changes. Adapter consumption of `rule_projection` exists but is not a T5.8 edit target. | Preserve D25/D19; no policy changes. |
+| 7 | Existing semantics tests | Current focused semantics tests cover `_lower_public_semantics(...)` for legacy inference-like derivations and adapter profile migration, but not application `Rule` / `RuleExpr` public wrapper evaluate matrix. | Add six-matrix tests and C73/C75 tests. |
+| 8 | Docs/docstrings | `docs/official/kernel/quickstart/semantics.md`, `src/factgraph/sdk/docs/00_user_guide.en.md`, and wrapper docstrings still emphasize `Inference` with wrappers. | Narrow docs/docstrings update; no full docs rewrite. |
+| 9 | Adapter guard | `src/factgraph/adapters/problog` and `src/factgraph/adapters/pyreason` consume `SemanticsProfile.rule_projection`, but D26 marks adapter-touching changes out of T5.8 scope. | Clean guard; do not edit adapters. |
+| 10 | Compatibility guard | No production `evaluate_v2`, `result_shape`, `return_candidates`, `EvaluateResult.why_not`, or `Explanation.why_not` owner found. Engine options and registry rejections remain in `SDKStore.evaluate(...)` and T5.2 tests. | Preserve; no compatibility surface. |
+
+Step 4.6 decision:
+
+- T5.8 stays one M-class slice.
+- Single application `Rule` empty-wrapper evaluation is in scope.
+- Single application `Rule` with branch-specific wrapper config defaults to rejection unless implementation chooses one tested single-branch key.
+- RuleExpr branch configs use existing RuleExpr branch ids.
+- `rule_params` stays wrapper-local; adding a broad public DTO would require amendment.
+- No adapter/service/OpenAPI files are implementation targets.
+
+## 9. G7 Baseline Plan
 
 Command:
 
@@ -139,15 +164,16 @@ Expected result: 171 tests OK, inherited from T5.7 archive and post-T5 docs-only
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
-## 9. Draft Review Checklist
+## 10. Draft Review Checklist
 
-- [ ] Step 4.2 reviewer confirms T5.8 is mandatory because of the wrapper/application-rule gap.
-- [ ] Scope locks include wrapper-application Rule path, C73 wrapper-only params, C75 wrapper symmetry, and narrow docs.
-- [ ] Out-of-scope section excludes adapter edits, service/OpenAPI edits, new DTOs, and D25 policy changes.
-- [ ] Six-matrix test list is explicit.
-- [ ] M-to-L triggers are explicit.
-- [ ] Pre-implementation grep plan covers resolver, lowering, RuleExpr branch ids, docs, and adapters.
+- [x] Step 4.2 reviewer confirms T5.8 is mandatory because of the wrapper/application-rule gap.
+- [x] Scope locks include wrapper-application Rule path, C73 wrapper-only params, C75 wrapper symmetry, and narrow docs.
+- [x] Out-of-scope section excludes adapter edits, service/OpenAPI edits, new DTOs, and D25 policy changes.
+- [x] Six-matrix test list is explicit.
+- [x] M-to-L triggers are explicit.
+- [x] Pre-implementation grep plan covers resolver, lowering, RuleExpr branch ids, docs, and adapters.
+- [x] Step 4.6 grep results clean: Yes.
 
-## 10. Closure Notes
+## 11. Closure Notes
 
 Pending.
