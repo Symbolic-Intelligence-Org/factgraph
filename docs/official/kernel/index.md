@@ -8,4 +8,4 @@ official path for the kernel docs: it teaches the mental model, the practical
 syntax, and the current public API surface together.
 
 For IDE hover documentation, see the `inspect.getdoc(...)` output of any
-public `kernel.sdk` export.
+public `factgraph.sdk` export.

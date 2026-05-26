@@ -472,10 +472,8 @@ Invalid `row_format` or incompatible head raises
 
 ### Rule + run
 
-A `Rule(id, version, select, where, expose=False, ...)` is a named,
-versioned single-rule inference. Required: `id`, `version`, `select`,
-`where` (all non-empty). `expose=True` is required if other rules will
-reference it via `RuleRef`.
+A `Rule(id, version, ports, where, ...)` is a named application rule.
+Required: `id`, `ports`, `where` (all non-empty); `version` is optional.
 
 ```python
 from factgraph.sdk import Rule, vars
@@ -484,12 +482,11 @@ with vars("u",) as (u,):
     r = Rule(
         id="rule_alice",
         version="1.0.0",
-        select=[u],
+        ports={"user": u},
         where=[User(u), u.name == "Alice"],
-        expose=True,
     )
 
-result = fg.eval.evaluate(r)
+result = fg.eval.evaluate(r, head=r)
 # → EvaluateResult(rows=(...), ...)
 ```
 

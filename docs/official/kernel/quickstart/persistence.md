@@ -66,11 +66,11 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = Rule(
         id="rule.seeded_tags",
         version="v1",
-        select=[u, tag],
+        ports={"user": u, "tag": tag},
         where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
     )
 
-rule_result = fg.eval.evaluate(seeded_tags)
+rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
 assert rule_result.first().bindings["tag"] == "engineer"
@@ -224,7 +224,7 @@ def make_rule() -> Rule:
         return Rule(
             id="rule.seeded_tags",
             version="v1",
-            select=[u, tag],
+            ports={"user": u, "tag": tag},
             where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
         )
 

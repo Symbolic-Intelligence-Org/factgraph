@@ -66,7 +66,7 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = Rule(
         id="rule.seeded_tags",
         version="v1",
-        select=[u, tag],
+        ports={"user": u, "tag": tag},
         where=[
             Branch(
                 [Pred("user:tag_seed", u, tag)],
@@ -76,11 +76,11 @@ with vars("u", "tag") as (u, tag):
     )
 ```
 
-The `where` clause describes what must be found. The `select` list describes
+The `where` clause describes what must be found. The `ports` mapping describes
 what the rule returns. Running the rule is read-only.
 
 ```python
-rule_result = fg.eval.evaluate(seeded_tags)
+rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
 assert rule_result.first().bindings["tag"] == "engineer"
@@ -240,11 +240,11 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = Rule(
         id="rule.seeded_tags",
         version="v1",
-        select=[u, tag],
+        ports={"user": u, "tag": tag},
         where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
     )
 
-rule_result = fg.eval.evaluate(seeded_tags)
+rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
 
@@ -287,8 +287,8 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
 - Use `vars(...)` to create logic variables for DSL bodies.
 - Use `Pred("entity:field", ...)` for explicit predicate literals.
 - Use `Branch([...], id="...")` when branch identity matters.
-- Use `Rule(id=..., select=[...], where=[...])` for reusable read patterns.
-- Evaluate rules with `fg.eval.evaluate(rule)`; evaluation does not write.
+- Use `Rule(id=..., ports={...}, where=[...])` for reusable read patterns.
+- Evaluate rules with `fg.eval.evaluate(rule, head=rule)`; evaluation does not write.
 - Use read APIs for ad-hoc projections; public `fg.eval.run(...)` was removed.
 - Use `Inference(id=..., where=[...], target=..., head_vars=[...])` for
   proposed facts.

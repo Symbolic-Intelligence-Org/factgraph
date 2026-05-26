@@ -30,7 +30,7 @@ with vars("u",) as (u,):              # rule declaration
     r = Rule(
         id="rule_alice",
         version="1.0.0",
-        select=[u],
+        ports={"user": u},
         where=[User(u), u.name == "Alice"],
     )
 ```

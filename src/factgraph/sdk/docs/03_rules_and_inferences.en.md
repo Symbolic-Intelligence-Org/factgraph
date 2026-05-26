@@ -59,21 +59,20 @@ with vars("li", "u", "c") as (li, u, c):
     rule = Rule(
         id="q_user_country",
         version="1.0.0",
-        select=[u, c],
+        ports={"user": u, "country": c},
         where=[
             LivesIn(li),
             li.user == u,
             li.country == c,
         ],
-        expose=True,
     )
 
-result = sdk.eval.evaluate(rule)
+result = sdk.eval.evaluate(rule, head=rule)
 ```
 
 Stable contract:
 - `Rule.id/version` must be non-empty strings.
-- `Rule.select/where` must be non-empty lists.
+- `Rule.ports/where` must be non-empty lists.
 - `Rule` is engine-independent public syntax. Adapter-specific rule
   projection is not carried by public `engine_ext` fields.
 - `Rule.condition_weights` remains public as certainty/explain

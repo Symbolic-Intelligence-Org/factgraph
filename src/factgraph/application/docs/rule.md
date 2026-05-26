@@ -82,8 +82,8 @@ explicit port name into pairwise joins. Same-name ports are not auto-joined;
 inputs keep their existing dict inspect shape.
 
 Public execution is exposed through the SDK layer, not this protocol module:
-`fg.eval.evaluate(rule_expr, head=application_rule, engine=...)` returns the
-existing `list[CandidateSet]` success shape. The head may be an inline
+`fg.eval.evaluate(rule_expr, head=application_rule, engine=...)` returns an
+`EvaluateResult` envelope (per T5 hard-cut). The head may be an inline
 application `Rule`, an external application `Rule`, or
 `Rule.projection("port", ...)`; the protocol layer supplies the frozen Rule and
 RuleExpr values while SDK evaluation owns execution. `fg.rules.inspect(rule)`
