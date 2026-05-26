@@ -1621,6 +1621,29 @@ else:
 
 ---
 
+## 6. 三任务划分:match / evaluate / prove
+
+§6 的完整 match / evaluate / prove 任务拆分仍未在本文档内展开。当前只提前
+冻结了 read-side match API 的 v0.2 设计,作为旧 `Query` 迁移和 `fg.eval.run`
+replacement direction 的输入:
+
+> **Active design source:** [`match-api-design.zh.md`](match-api-design.zh.md)
+
+当前边界:
+
+- **match**: `fg.read.match(rule_or_expr, **port_constraints)`;输出由 ports 决定,
+  entity-ref port 返回 entity snapshot,value port 返回 raw value;wrapper 仅作为透明
+  `MatchView` / `.select(...)` 机制存在。
+- **evaluate**: 保持 T5/T5.8 的 `fg.eval.evaluate(...)` / `EvaluateResult`
+  contract。
+- **prove / explain**: 保持 T5 的 explanation envelope / `row.explain()` /
+  EvidenceGraph direction;不由 match API 承担。
+
+§6 后续完整展开时必须以该 match 设计为已冻结输入,但仍需单独处理 evaluate /
+prove 命名对齐、RuleExpr x evidence joins、witness/assertion bridge 等后续议题。
+
+---
+
 ## 7. Evidence Tree(详细设计已迁出 — 独立文档)
 
 > **本章已完整迁出** 至独立设计文档:
