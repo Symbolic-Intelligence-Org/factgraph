@@ -2139,8 +2139,8 @@ class SDKStore:
                     f"engine='{engine}' does not match semantics.engine='{semantics_engine}'"
                 )
 
-        if derivation is None or not hasattr(derivation, "where"):
-            raise SDKStoreError("SDK public semantics require SDK Rule or Inference object input")
+        if derivation is None:
+            raise SDKStoreError("SDK public semantics require Rule, RuleExpr, or Inference object input")
         return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
 
     def evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
@@ -2384,12 +2384,6 @@ class SDKStore:
                 "legacy SDK Rule, Inference, dict, string, and inspect objects are not accepted"
             )
 
-        engine, semantics_profile = self._resolve_public_engine_and_semantics(
-            raw_engine,
-            raw_semantics,
-            derivation=None,
-            api_path="evaluate(rule_expr)",
-        )
         source = args[0]
         if isinstance(source, ApplicationRule):
             if _RULE_EXPR_DEFAULT_ALIAS_RE.fullmatch(source.id):
@@ -2402,6 +2396,12 @@ class SDKStore:
             raise SDKStoreError("evaluate(rule_expr, ...) expects application Rule or RuleExpr input")
 
         _validate_rule_expr_head_foundation(plan)
+        engine, semantics_profile = self._resolve_public_engine_and_semantics(
+            raw_engine,
+            raw_semantics,
+            derivation=_semantics_context_for_ruleexpr_plan(source, head=head, plan=plan),
+            api_path="evaluate(rule_expr)",
+        )
 
         if engine == "pyreason":
             support = _classify_pyreason_rule_expr_support(plan)
@@ -3088,11 +3088,21 @@ def _public_semantics_engine(value: Any) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class _SemanticsLoweringContext:
+    name: str
+    branch_indexes: Mapping[str, int]
+    known_rule_ids: frozenset[str]
+    branch_specific_allowed: bool = True
+
+
 def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> SemanticsProfile:
     if isinstance(value, ProbLogSemantics):
+        rule_params = _rule_param_entries(value.rule_params, known_rule_ids=None)
         return SemanticsProfile(
             name=value.name or "problog",
             engine="problog",
+            rule_projection={"sdk_rule_params": rule_params} if rule_params else {},
             fallback=value.fallback,
         )
     if isinstance(value, PyReasonSemantics):
@@ -3103,10 +3113,16 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
             rule_entries.append({"target": f"branch:{branch_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
             rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
+        rule_projection: dict[str, list[dict[str, Any]]] = {}
+        if rule_entries:
+            rule_projection["pyreason"] = rule_entries
+        rule_params = _rule_param_entries(value.rule_params, known_rule_ids=None)
+        if rule_params:
+            rule_projection["sdk_rule_params"] = rule_params
         return SemanticsProfile(
             name=value.name or "pyreason",
             engine="pyreason",
-            rule_projection={"pyreason": rule_entries} if rule_entries else {},
+            rule_projection=rule_projection,
             temporal_projection=dict(value.temporal_projection),
             uncertainty_projection=dict(value.uncertainty_projection),
             fallback=value.fallback,
@@ -3115,11 +3131,16 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
 
 
 def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
+    context = _semantics_lowering_context(derivation)
     if isinstance(value, ProbLogSemantics):
-        branch_indexes = _branch_id_index_for_derivation(derivation)
         entries: list[dict[str, Any]] = []
+        if value.branch_probabilities and not context.branch_specific_allowed:
+            raise SDKStoreError(
+                "ProbLogSemantics.branch_probabilities requires RuleExpr branches or legacy Inference branches; "
+                "single application Rule inputs only accept empty branch_probabilities"
+            )
         for branch_id, probability in value.branch_probabilities.items():
-            branch_index = branch_indexes.get(branch_id)
+            branch_index = context.branch_indexes.get(branch_id)
             if branch_index is None:
                 raise SDKStoreError(f"unknown branch id {branch_id!r} for ProbLogSemantics.branch_probabilities")
             entries.append(
@@ -3129,31 +3150,47 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
                     "value": probability,
                 }
             )
+        rule_projection: dict[str, list[dict[str, Any]]] = {}
+        if entries:
+            rule_projection["problog"] = entries
+        rule_params = _rule_param_entries(value.rule_params, known_rule_ids=context.known_rule_ids)
+        if rule_params:
+            rule_projection["sdk_rule_params"] = rule_params
         return SemanticsProfile(
-            name=value.name or _default_semantics_name(derivation, engine="problog"),
+            name=value.name or _default_semantics_name(context, engine="problog"),
             engine="problog",
-            rule_projection={"problog": entries} if entries else {},
+            rule_projection=rule_projection,
             fallback=value.fallback,
         )
     if isinstance(value, PyReasonSemantics):
         rule_entries: list[dict[str, Any]] = []
         if value.head_bound is not None:
             rule_entries.append({"target": "head:0", "kind": "interval", "value": list(value.head_bound)})
-        branch_indexes = _branch_id_index_for_derivation(derivation)
+        if value.branch_bounds and not context.branch_specific_allowed:
+            raise SDKStoreError(
+                "PyReasonSemantics.branch_bounds requires RuleExpr branches or legacy Inference branches; "
+                "single application Rule inputs only accept empty branch_bounds"
+            )
         for branch_id, interval in value.branch_bounds.items():
-            branch_index = branch_indexes.get(branch_id)
+            branch_index = context.branch_indexes.get(branch_id)
             if branch_index is None:
-                known = ", ".join(sorted(branch_indexes)) or "<none>"
+                known = ", ".join(sorted(context.branch_indexes)) or "<none>"
                 raise SDKStoreError(
                     f"branch_bounds contains unknown branch id {branch_id!r}; known branch ids: {known}"
                 )
             rule_entries.append({"target": f"branch:{branch_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
             rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
+        rule_projection = {}
+        if rule_entries:
+            rule_projection["pyreason"] = rule_entries
+        rule_params = _rule_param_entries(value.rule_params, known_rule_ids=context.known_rule_ids)
+        if rule_params:
+            rule_projection["sdk_rule_params"] = rule_params
         return SemanticsProfile(
-            name=value.name or _default_semantics_name(derivation, engine="pyreason"),
+            name=value.name or _default_semantics_name(context, engine="pyreason"),
             engine="pyreason",
-            rule_projection={"pyreason": rule_entries} if rule_entries else {},
+            rule_projection=rule_projection,
             temporal_projection=dict(value.temporal_projection),
             uncertainty_projection=dict(value.uncertainty_projection),
             fallback=value.fallback,
@@ -3185,6 +3222,63 @@ def _semantics_profile_preview(profile: SemanticsProfile) -> dict[str, Any]:
     }
 
 
+def _rule_param_entries(
+    rule_params: Mapping[str, Mapping[str, Any]],
+    *,
+    known_rule_ids: frozenset[str] | None,
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for rule_id in sorted(rule_params):
+        if known_rule_ids is not None and rule_id not in known_rule_ids:
+            known = ", ".join(sorted(known_rule_ids)) or "<none>"
+            raise SDKStoreError(f"rule_params contains unknown Rule.id {rule_id!r}; known Rule ids: {known}")
+        entries.append({"target": f"rule:{rule_id}", "kind": "rule_params", "value": dict(rule_params[rule_id])})
+    return entries
+
+
+def _semantics_lowering_context(derivation: Any) -> _SemanticsLoweringContext:
+    if isinstance(derivation, _SemanticsLoweringContext):
+        return derivation
+    if isinstance(derivation, ApplicationRule):
+        return _SemanticsLoweringContext(
+            name=derivation.id,
+            branch_indexes={},
+            known_rule_ids=frozenset({derivation.id}),
+            branch_specific_allowed=False,
+        )
+    branch_indexes = _branch_id_index_for_derivation(derivation)
+    derivation_id = getattr(derivation, "id", None)
+    known_rule_ids = frozenset({derivation_id}) if isinstance(derivation_id, str) and derivation_id else frozenset()
+    return _SemanticsLoweringContext(
+        name=derivation_id if isinstance(derivation_id, str) and derivation_id else "semantics",
+        branch_indexes=branch_indexes,
+        known_rule_ids=known_rule_ids,
+    )
+
+
+def _semantics_context_for_ruleexpr_plan(
+    source: Any,
+    *,
+    head: ApplicationRule,
+    plan: Any,
+) -> _SemanticsLoweringContext:
+    if isinstance(source, ApplicationRule):
+        return _SemanticsLoweringContext(
+            name=source.id,
+            branch_indexes={},
+            known_rule_ids=frozenset({source.id, head.id}),
+            branch_specific_allowed=False,
+        )
+    branch_indexes = {branch.branch_id: index for index, branch in enumerate(plan.branches)}
+    known_rule_ids = {head.id}
+    known_rule_ids.update(binding.rule_id for binding in plan.occurrence_map)
+    return _SemanticsLoweringContext(
+        name=head.id,
+        branch_indexes=branch_indexes,
+        known_rule_ids=frozenset(rule_id for rule_id in known_rule_ids if rule_id),
+    )
+
+
 def _branch_id_index_for_derivation(derivation: Any) -> dict[str, int]:
     where = getattr(derivation, "where", None)
     branches = _inspect_where_branches(where)
@@ -3200,8 +3294,12 @@ def _branch_id_index_for_derivation(derivation: Any) -> dict[str, int]:
     return out
 
 
-def _default_semantics_name(derivation: Any, *, engine: str) -> str:
-    derivation_id = getattr(derivation, "id", None)
+def _default_semantics_name(context: Any, *, engine: str) -> str:
+    if isinstance(context, _SemanticsLoweringContext):
+        if context.name:
+            return f"{context.name}:{engine}"
+        return engine
+    derivation_id = getattr(context, "id", None)
     if isinstance(derivation_id, str) and derivation_id:
         return f"{derivation_id}:{engine}"
     return engine

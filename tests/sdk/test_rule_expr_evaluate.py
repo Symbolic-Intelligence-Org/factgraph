@@ -315,6 +315,132 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "registry"):
             graph.eval.evaluate(rule, head=rule, engine="native", registry=object())
 
+    def test_application_rule_accepts_problog_semantics_wrapper(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            result = graph.eval.evaluate(rule, head=rule, semantics=sdk.ProbLogSemantics())
+
+        self.assertIsInstance(result, EvaluateResult)
+        request = evaluate.call_args.args[0]
+        self.assertEqual(request.engine, "problog")
+        self.assertEqual(request.semantics_profile.engine, "problog")
+        self.assertEqual(request.semantics_profile.rule_projection, {})
+        self.assertIsNotNone(result.semantics_digest)
+
+    def test_application_rule_accepts_pyreason_semantics_wrapper(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            result = graph.eval.evaluate(rule, head=rule, semantics=sdk.PyReasonSemantics())
+
+        self.assertIsInstance(result, EvaluateResult)
+        request = evaluate.call_args.args[0]
+        self.assertEqual(request.engine, "pyreason")
+        self.assertEqual(request.semantics_profile.engine, "pyreason")
+        self.assertEqual(request.semantics_profile.rule_projection, {})
+
+    def test_ruleexpr_accepts_problog_semantics_wrapper_branch_ids(self) -> None:
+        graph = _store()
+        left = _person_exists_rule("left")
+        right = _person_region_rule("right")
+        expr = left.as_("left") | right.as_("right")
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            result = graph.eval.evaluate(
+                expr,
+                head=left,
+                semantics=sdk.ProbLogSemantics(branch_probabilities={"b0": 0.7}),
+            )
+
+        self.assertIsInstance(result, EvaluateResult)
+        profile = evaluate.call_args.args[0].semantics_profile
+        self.assertEqual(profile.engine, "problog")
+        self.assertIn({"target": "branch:0", "kind": "branch_probability", "value": 0.7}, profile.rule_projection["problog"])
+
+    def test_legacy_inference_still_accepts_problog_semantics_wrapper(self) -> None:
+        graph = _store()
+        with sdk.vars("p") as (p,):
+            inference = sdk.Inference(
+                id="legacy_wrapper_inference",
+                version="v1",
+                where=[sdk.Branch([sdk.Pred("Person:exists", p)], id="seed_path")],
+                target="Person:exists",
+                head_vars=[p],
+            )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            result = graph.eval.evaluate(
+                inference,
+                semantics=sdk.ProbLogSemantics(branch_probabilities={"seed_path": 0.8}),
+            )
+
+        self.assertIsInstance(result, EvaluateResult)
+        profile = evaluate.call_args.args[0].semantics_profile
+        self.assertEqual(profile.rule_projection["problog"], [{"target": "branch:0", "kind": "branch_probability", "value": 0.8}])
+
+    def test_application_rule_still_accepts_direct_semantics_profile(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+        profile = sdk.SemanticsProfile(name="profile.t5_8.problog", engine="problog")
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            result = graph.eval.evaluate(rule, head=rule, semantics=profile)
+
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertIs(evaluate.call_args.args[0].semantics_profile, profile)
+
+    def test_application_rule_still_accepts_explicit_problog_engine(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        self.assertIsInstance(result, EvaluateResult)
+        self.assertEqual(evaluate.call_args.args[0].engine, "problog")
+        self.assertIsNone(evaluate.call_args.args[0].semantics_profile)
+
+    def test_single_application_rule_rejects_branch_specific_wrapper_config(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+
+        with self.assertRaisesRegex(SDKStoreError, "single application Rule"):
+            graph.eval.evaluate(rule, head=rule, semantics=sdk.ProbLogSemantics(branch_probabilities={"b0": 0.7}))
+
+    def test_ruleexpr_wrapper_rejects_unknown_branch_ids(self) -> None:
+        graph = _store()
+        left = _person_exists_rule("left")
+        right = _person_region_rule("right")
+        expr = left.as_("left") | right.as_("right")
+
+        with self.assertRaisesRegex(SDKStoreError, "unknown branch id 'missing'"):
+            graph.eval.evaluate(expr, head=left, semantics=sdk.ProbLogSemantics(branch_probabilities={"missing": 0.7}))
+
+    def test_wrapper_rule_params_lower_and_reject_unknown_rule_id(self) -> None:
+        graph = _store()
+        rule = _person_exists_rule()
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
+            first = graph.eval.evaluate(
+                rule,
+                head=rule,
+                semantics=sdk.ProbLogSemantics(rule_params={rule.id: {"label": "primary"}}),
+            )
+            second = graph.eval.evaluate(rule, head=rule, semantics=sdk.ProbLogSemantics())
+
+        profile = evaluate.call_args_list[0].args[0].semantics_profile
+        self.assertEqual(
+            profile.rule_projection["sdk_rule_params"],
+            [{"target": f"rule:{rule.id}", "kind": "rule_params", "value": {"label": "primary"}}],
+        )
+        self.assertNotEqual(first.semantics_digest, second.semantics_digest)
+
+        with self.assertRaisesRegex(SDKStoreError, "unknown Rule.id 'missing'"):
+            graph.eval.evaluate(rule, head=rule, semantics=sdk.ProbLogSemantics(rule_params={"missing": {"label": "bad"}}))
+
     def test_pyreason_pred_only_path_preflights_and_evaluates_when_supported(self) -> None:
         graph = _store()
         rule = _person_exists_rule()

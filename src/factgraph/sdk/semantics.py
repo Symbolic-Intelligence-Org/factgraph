@@ -58,21 +58,37 @@ def _normalize_interval_map(value: Any, *, field_name: str) -> dict[str, tuple[f
     return out
 
 
+def _normalize_rule_params_map(value: Any, *, field_name: str) -> dict[str, dict[str, Any]]:
+    raw = _copy_mapping(value, field_name=field_name)
+    out: dict[str, dict[str, Any]] = {}
+    for key, raw_value in raw.items():
+        if not isinstance(key, str) or not key:
+            raise SDKStoreError(f"{field_name} keys must be non-empty Rule ids")
+        if not isinstance(raw_value, Mapping):
+            raise SDKStoreError(f"{field_name}[{key!r}] must be an object")
+        out[key] = dict(raw_value)
+    return out
+
+
 @dataclass(frozen=True)
 class ProbLogSemantics:
-    """Public ProbLog semantics wrapper for inference evaluation.
+    """Public ProbLog semantics wrapper for Rule or Inference evaluation.
 
-    Pass to `fg.eval.evaluate(inference, semantics=...)` to configure ProbLog
-    branch probabilities without constructing a raw `SemanticsProfile`. The SDK
-    derives `engine="problog"` from this wrapper.
+    Pass to `fg.eval.evaluate(application_rule_or_inference, semantics=...)` to
+    configure ProbLog semantics without constructing a raw `SemanticsProfile`.
+    The SDK derives `engine="problog"` from this wrapper.
 
     Args:
         branch_probabilities: Mapping from branch id to probability in `(0, 1]`.
+        rule_params: Per-Rule metadata keyed by application `Rule.id`; lowered
+            into canonical `SemanticsProfile.rule_projection` for future
+            adapter cycles.
         name: Optional profile name used in the lowered canonical profile.
         fallback: Policy for unconfigured semantics.
     """
 
     branch_probabilities: dict[str, float] = field(default_factory=dict)
+    rule_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     name: str | None = None
     fallback: str = "reject_unconfigured"
 
@@ -90,25 +106,34 @@ class ProbLogSemantics:
             "branch_probabilities",
             _normalize_probability_map(self.branch_probabilities, field_name="branch_probabilities"),
         )
+        object.__setattr__(
+            self,
+            "rule_params",
+            _normalize_rule_params_map(self.rule_params, field_name="rule_params"),
+        )
 
 
 @dataclass(frozen=True)
 class PyReasonSemantics:
-    """Public PyReason semantics wrapper for inference evaluation.
+    """Public PyReason semantics wrapper for Rule or Inference evaluation.
 
-    Pass to `fg.eval.evaluate(inference, semantics=...)` to configure PyReason
-    time delay and interval bounds. The SDK derives `engine="pyreason"` from
-    this wrapper.
+    Pass to `fg.eval.evaluate(application_rule_or_inference, semantics=...)` to
+    configure PyReason time delay and interval bounds. The SDK derives
+    `engine="pyreason"` from this wrapper.
 
     Args:
         timestep_delay: Non-negative timestep delay for compiled rules.
         head_bound: Optional global `[lower, upper]` interval for rule heads.
         branch_bounds: Optional per-branch interval overrides keyed by branch id.
+        rule_params: Per-Rule metadata keyed by application `Rule.id`; lowered
+            into canonical `SemanticsProfile.rule_projection` for future
+            adapter cycles.
     """
 
     timestep_delay: int = 0
     head_bound: tuple[float, float] | None = None
     branch_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    rule_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     temporal_projection: dict[str, Any] = field(default_factory=lambda: {"mode": "none"})
     uncertainty_projection: dict[str, Any] = field(default_factory=dict)
     name: str | None = None
@@ -133,6 +158,11 @@ class PyReasonSemantics:
             self,
             "branch_bounds",
             _normalize_interval_map(self.branch_bounds, field_name="branch_bounds"),
+        )
+        object.__setattr__(
+            self,
+            "rule_params",
+            _normalize_rule_params_map(self.rule_params, field_name="rule_params"),
         )
         object.__setattr__(
             self,
