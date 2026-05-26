@@ -1,6 +1,6 @@
 # Task Blueprint: T5.8 Semantics Lite + Wrapper-Application Rule Path Fix
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: M (predicted)
@@ -327,4 +327,63 @@ Reviewer should focus on:
 
 ## 10. Outcome
 
-Pending.
+### Commit References
+
+- Blueprint draft: `01e03eb8`
+- Scoped inventory: `76817e66`
+- G7 baseline: `eaac5db0`
+- Feature implementation: `58ba78e1`
+- Step 4.7 disposition: reviewed clean v1, 0 P0 / 0 P1, no fix commit required.
+
+### Final Landed Code
+
+T5.8 landed a wrapper-only Semantics Lite fix across four files:
+
+- `src/factgraph/sdk/store.py`
+  - relaxed the public semantics resolver guard so application `Rule` and `RuleExpr` inputs can use public wrappers;
+  - passed a concrete semantics lowering context from `_evaluate_rule_expr_input(...)`;
+  - added application `Rule`, `RuleExpr`, and legacy `Inference` wrapper lowering contexts;
+  - rejected branch-specific wrapper configuration for single application `Rule` inputs;
+  - mapped RuleExpr branch keys through existing RuleExpr branch ids;
+  - lowered wrapper-level C73 `rule_params` into `SemanticsProfile.rule_projection`.
+- `src/factgraph/sdk/semantics.py`
+  - added wrapper-level `rule_params` validation for `ProbLogSemantics` and `PyReasonSemantics`;
+  - updated wrapper docstrings from inference-only wording to `Rule` or `Inference` evaluation wording.
+- `tests/sdk/test_rule_expr_evaluate.py`
+  - added the six-matrix wrapper/application-rule tests;
+  - added negative tests for unknown RuleExpr branch ids, single-rule branch-specific config, and unknown `Rule.id` in `rule_params`;
+  - asserted wrapper defaults and `rule_params` affect normalized profile / digest behavior.
+- `docs/official/kernel/quickstart/semantics.md`
+  - rewrote the quickstart to teach application `Rule` plus public wrappers as the primary path;
+  - retained `Inference` / `Branch` as v0.2 compatibility for branch-id authoring.
+
+No adapter, service, OpenAPI, database, or public DTO files were edited.
+
+### Delivered Behavior
+
+The user-found SDK gap is closed: public semantics wrappers now work with the T5 primary application `Rule` and `RuleExpr` evaluate paths.
+
+The following public calls are covered:
+
+- `fg.eval.evaluate(rule, head=rule, semantics=ProbLogSemantics())`
+- `fg.eval.evaluate(rule, head=rule, semantics=PyReasonSemantics())`
+- `fg.eval.evaluate(rule_expr, head=rule, semantics=ProbLogSemantics(...))`
+- `fg.eval.evaluate(inference, semantics=ProbLogSemantics(...))`
+- `fg.eval.evaluate(rule, head=rule, semantics=SemanticsProfile(...))`
+- `fg.eval.evaluate(rule, head=rule, engine="problog")`
+
+T5.8 implements the D26 Semantics Lite portions of C73 and C75 only. `rule_params` is wrapper-local and profile-lowered; C75 wrapper symmetry is represented through shared wrapper normalization and docs. D17 / D19 carrier and digest contracts remain unchanged, and D25 mismatch policy remains strict and untouched.
+
+### Test Gates
+
+- Focused T5.8 suite: `PYTHONPATH=src python -m unittest tests.sdk.test_rule_expr_evaluate -v` -> 31 tests OK.
+- G7 preservation: inherited 10-module command -> 180 tests OK, up from 171 at baseline.
+- Touched-file ruff: clean for `src/factgraph/sdk/store.py`, `src/factgraph/sdk/semantics.py`, `tests/sdk/test_rule_expr_evaluate.py`, and `docs/official/kernel/quickstart/semantics.md`.
+- `git diff --check`: clean.
+
+### Deviations / Follow-Ups
+
+- No Step 4.7 fixes were required.
+- Adapter-touching C74, C76, C77, and C78 remain deferred to T10 / post-T5 per D26.
+- T5.8 intentionally does not change adapter execution behavior, service routes, OpenAPI, database state, public DTOs, or D25 mismatch policy.
+- The existing dirty baseline remains preserved and unrelated to T5.8.

@@ -1,11 +1,11 @@
 # Audit: T5.8 Semantics Lite + Wrapper-Application Rule Path Fix
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t5-8-semantics-lite-wrapper-fix.md`
-- Stage: T5.8 scoped
+- Stage: T5.8 implemented
 - Class: M (predicted)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -17,6 +17,8 @@
 | 2026-05-26 | draft | pending | Blueprint pair drafted | T5.8 Semantics Lite + Wrapper-Application Rule Path Fix draft created after user elevated Semantics Lite from optional to mandatory due to SDK public wrapper gap. Scope is predicted M-class and must stay wrapper/profile-only with no adapter production edits. |
 | 2026-05-26 | scoped | pending | Step 4.6 inventory recorded | Grep confirmed the wrapper/application Rule gap is confined to SDK public semantics resolver/lowering and docs/tests. T5.8 remains one M-class slice; adapter, service, OpenAPI, and DTO contracts stay out of scope. |
 | 2026-05-26 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `76817e66`: 171 tests in 0.118s, OK. Pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded from G7. |
+| 2026-05-26 | feat | `58ba78e1` | Semantics wrapper application Rule path fixed | Implemented wrapper lowering for application `Rule`, `RuleExpr`, and compatibility `Inference`; added C73 wrapper `rule_params`; updated C75 docs/docstrings; added six-matrix and negative tests. |
+| 2026-05-26 | implemented | pending | Closure recorded | Step 4.7 reviewed clean v1 with 0 P0 / 0 P1. Gates recorded: 31 focused tests OK, 180 G7 tests OK, touched-file ruff clean, and `git diff --check` clean. |
 
 ## 2. Source Chain
 
@@ -83,7 +85,7 @@ T5.8 consumes:
 | G4 | Includes shipped-source preflight | Satisfied in audit sections 3-4. |
 | G5 | Defines tests and preservation gates | Satisfied in blueprint sections 4 and 6. |
 | G6 | Preserves sacred branch and dirty baseline | Satisfied; draft docs only. |
-| G7 | Establishes baseline before feat | Pending after scoped; expected 171 tests OK. |
+| G7 | Establishes baseline before feat | Satisfied; 171 tests OK at scoped anchor `76817e66`. |
 
 ## 7. Step 4.6 Pre-Implementation Grep Plan
 
@@ -177,4 +179,41 @@ Expected result: 171 tests OK, inherited from T5.7 archive and post-T5 docs-only
 
 ## 11. Closure Notes
 
-Pending.
+### Commit References
+
+- Draft: `01e03eb8`
+- Scoped: `76817e66`
+- Baseline: `eaac5db0`
+- Feature: `58ba78e1`
+- Closure: pending in this commit
+
+### Final Landed Code
+
+T5.8 landed as a contained M-class wrapper/profile slice. The feature commit changed only:
+
+- `src/factgraph/sdk/store.py`
+- `src/factgraph/sdk/semantics.py`
+- `tests/sdk/test_rule_expr_evaluate.py`
+- `docs/official/kernel/quickstart/semantics.md`
+
+It did not edit adapter production files, service routes, OpenAPI, database schema, public DTO modules, or T5.1-T5.7 contract files outside the SDK wrapper path.
+
+### Delivered Behavior
+
+Public semantics wrappers now support application `Rule` and `RuleExpr` evaluate inputs. Legacy `Inference` wrapper compatibility remains intact. Direct `SemanticsProfile` and explicit engine calls remain intact.
+
+C73 is implemented only as wrapper-level `rule_params` validation and lowering into `SemanticsProfile.rule_projection`. C75 is implemented as public wrapper symmetry and documentation of carrier-only result fields. D25 semantics mismatch policy was not changed.
+
+### Test Gates
+
+- Focused `tests.sdk.test_rule_expr_evaluate`: 31 tests OK.
+- G7 preservation command: 180 tests OK.
+- Touched-file ruff: clean.
+- `git diff --check`: clean.
+
+### Deviations / Follow-Ups
+
+- Step 4.7 found 0 P0 / 0 P1 and required no fix commit.
+- C74 PyReason atom-bound execution, C76 ProbLog adapter consumption, C77 temporal projection runtime behavior, and C78 PyReason iteration-count execution remain deferred to T10 / post-T5.
+- One non-G7 PyReason carrier test module was observed to fail on pre-existing stale `meta[confidence]` expectations and was not folded into T5.8 scope.
+- T5.8 archive and optional push gate remain next.
