@@ -2468,13 +2468,122 @@ metadata validation.
 
 ## 11. Rendering(沿用 shipped audit/evidence_graph.py)
 
-> **[SKELETON pending]** — Phase B 推进。
+> **本节状态**:Phase B design lock(2026-05-27 / T6)。本节定义
+> `audit.evidence_graph` reference renderer 的边界。它是 debug / audit
+> inspection utility,不是 product UI contract。Product UI 可以使用同一
+> `EvidenceGraph` DTO,但不继承 reference renderer 的 visual layout 责任。
 
-**预定内容**:
-- `render_evidence_graph_html(evidence)` tree layout(已 ship)
-- `render_evidence_graph_html(evidence)` timeline layout(已 ship,PyReason Form 2 预留)
-- `evidence_graph_to_dict()` / `evidence_graph_from_dict()` JSON 序列化(已 ship)
-- Custom UI 推荐(O5 + Rainbird 立场一致 — 推荐用户自建,默认 renderer 是 reference)
+### 11.1 Renderer 分层
+
+| 层 | 入口 | 职责 | 非职责 |
+|---|---|---|---|
+| **Reference renderer** | `render_evidence_graph_html(graph)` | 生成 standalone HTML fragment;用于 audit package、debug、doc examples、developer inspection | 不提供 full page shell;不承诺 product-grade interaction/virtualization |
+| **Roundtrip helpers** | `evidence_graph_to_dict(...)` / `evidence_graph_from_dict(...)` | JSON-safe durable / test / package boundary | 不执行 semantic enrichment;不补丢失的 engine provenance |
+| **Product UI** | downstream custom renderer | 可按产品需求做 folding、search、progressive loading、accessibility、visual design | 不得改变 graph truth;不把 UI grouping 写回 DTO |
+
+Reference renderer 的目标是 **truthful and boring**:只展示 graph 已有的 nodes,
+edges,metadata,engine_meta。它不推断缺失 provenance、不生成新 reasoning、不把 failed
+business 状态展示成 partial graph。
+
+### 11.2 Layout mode matrix
+
+| `layout_hint` | 推荐用途 | 适合数据 | 不适合数据 | v1 status |
+|---|---|---|---|---|
+| `tree` | 默认 derivation / support view | native / Souffle-style acyclic support tree;single root row explanation;minimal row graph | time-step dense evidence;many repeated component updates | shipped |
+| `timeline` | temporal / update-oriented view | PyReason Form 2 future evidence;node timestamp present;component repeated over time | non-temporal proof tree with no timestamps;deep dependency inspection | shipped renderer,Form 2 producer deferred |
+
+若 producer 没有强理由,默认 `layout_hint="tree"`。`timeline` 是可用 renderer mode,但
+timeline 的 rich producer contract 仍等 PyReason Form 2 evidence cycle。
+
+### 11.3 Tree layout contract
+
+Tree layout:
+
+- starts at `root_node_id`;
+- follows the current edge convention where incoming edges to a node are rendered
+  as supporting branches;
+- sorts child/support edges deterministically by renderer sort key;
+- renders node label, component, value summary, and relevant engine metadata;
+- must preserve DAG truth:shared support nodes may converge in graph identity even
+  if the simple HTML fragment repeats visual branches for readability.
+
+Tree renderer error handling:
+
+- invalid `layout_hint` is rejected by DTO construction before rendering;
+- missing root / duplicate ids / cycles are DTO validation errors, not renderer
+  warnings;
+- a valid graph with one root and zero edges is a normal minimal evidence graph.
+
+### 11.4 Timeline layout contract
+
+Timeline layout:
+
+- groups cards by `timestamp` / component when timestamps are present;
+- may render `timestamp=None` nodes in a fallback column/bucket;
+- renders incoming-edge annotation when edges exist;
+- is intended for temporal engine evidence, not as a general proof-tree
+  replacement.
+
+Timeline renderer is allowed to be sparse. Absence of timestamps is not a graph
+validation error; it only reduces timeline readability. Product UI may choose to
+fallback to tree layout when timeline data is too sparse.
+
+### 11.5 Empty, minimal, and invalid graphs
+
+| Case | Reference renderer behavior | Product UI guidance |
+|---|---|---|
+| **Minimal valid graph**(1 node,0 edges) | render a single-node graph | treat as successful but low-detail evidence |
+| **Empty graph**(0 nodes) | impossible under DTO validation because `root_node_id` must exist | show validation error if encountered from untrusted external JSON |
+| **Invalid graph**(duplicate ids,missing endpoint,cycle) | constructor / `from_dict` raises before rendering | do not attempt partial render;show diagnostic error |
+| **Unsupported explanation**(`evidence=None`) | no renderer call | show `Explanation.errors` / unsupported state instead |
+
+Reference renderer must not invent placeholder nodes to make invalid input
+look valid.
+
+### 11.6 Large graph guidance
+
+No shipped runtime threshold exists today. T6 defines the reference renderer
+guideline:
+
+- **large** = more than `250` nodes or more than `500` edges;
+- reference renderer may emit a warning/banner or metadata note before rendering;
+- reference renderer should not silently truncate;
+- reference renderer should not refuse a graph solely because it is large unless
+  the host environment imposes resource limits;
+- product UI may set stricter thresholds and should prefer custom folding,
+  search, progressive disclosure, or virtualization.
+
+This is design guidance, not a new DTO invariant. T8/T9 may tune threshold
+numbers if implementation evidence shows different practical limits.
+
+### 11.7 JSON roundtrip and renderer inputs
+
+Rendering should accept an already constructed `EvidenceGraph`. Durable package
+or external JSON input should first pass through `evidence_graph_from_dict(...)`,
+which reruns DTO validation. The safe path is:
+
+```text
+external/durable row -> evidence_graph_from_dict(...) -> render_evidence_graph_html(...)
+```
+
+Do not render unvalidated dicts directly.
+
+### 11.8 Custom UI obligations
+
+Custom renderers may choose any UI shape, but they must preserve these graph
+truth boundaries:
+
+- `graph_id`, `root_node_id`, node ids, and edge ids remain identifiers, not
+  display labels;
+- `node_kind` / `edge_kind` enums retain semantic meaning;
+- `engine_meta` remains namespaced engine detail;do not flatten engine-specific
+  keys into cross-engine guarantees;
+- `metadata` remains audit context, not user-facing business copy;
+- UI grouping/folding/search state is view state and must not be written back
+  into the `EvidenceGraph` DTO.
+
+This keeps the Rainbird-aligned product stance:we provide a trustworthy evidence
+carrier and a reference visualization, while applications own their product UI.
 
 ---
 
