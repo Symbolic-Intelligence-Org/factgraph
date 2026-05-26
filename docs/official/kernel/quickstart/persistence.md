@@ -138,6 +138,11 @@ is read-only and automatically scopes `fg.read.*` and `fg.eval.evaluate(...)` to
 the view's assertion ids. Session-local `fg.views.create(...)` entries do not
 carry Database anchors and cannot be passed to `FactGraph.attach(...)`.
 
+See [Database and durable views](database.md) for the full Database identity
+boundary, `Database.create/open/head/commit_assertions`, durable view object
+shape (`name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest`),
+and the view-scoped attach pattern.
+
 ## Load the workspace
 
 Load requires the schema classes. Class-less dynamic load is not part of the

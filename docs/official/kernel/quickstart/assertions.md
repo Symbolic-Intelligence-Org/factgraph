@@ -475,6 +475,13 @@ and `asrt_ids` (a `frozenset[str]`). It is intentionally not in
 does not write view membership, and `FactGraph.load(...)` does not restore
 it. Views are session-scoped name -> id-set bindings.
 
+Database-owned durable view objects are a separate surface created with
+`Database.create_view(...)`; they carry Database identity anchors and are
+consumed through `FactGraph.attach(db, schema_classes=[...], view=view)`
+for a read-only view-scoped runtime. See
+[Database and durable views](database.md) for the full Database / durable
+view tutorial.
+
 For read-time assertion selection, use field-level `active`, `history`,
 `.where(...)`, `.at(...)`, and `.version(...)`. Frozen views are id-set
 containers.
