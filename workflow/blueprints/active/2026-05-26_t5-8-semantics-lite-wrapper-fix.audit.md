@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | 2026-05-26 | draft | pending | Blueprint pair drafted | T5.8 Semantics Lite + Wrapper-Application Rule Path Fix draft created after user elevated Semantics Lite from optional to mandatory due to SDK public wrapper gap. Scope is predicted M-class and must stay wrapper/profile-only with no adapter production edits. |
 | 2026-05-26 | scoped | pending | Step 4.6 inventory recorded | Grep confirmed the wrapper/application Rule gap is confined to SDK public semantics resolver/lowering and docs/tests. T5.8 remains one M-class slice; adapter, service, OpenAPI, and DTO contracts stay out of scope. |
+| 2026-05-26 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `76817e66`: 171 tests in 0.118s, OK. Pytest remains deferred and `tests.test_public_inference_factgraph_create` remains excluded from G7. |
 
 ## 2. Source Chain
 
@@ -158,9 +159,9 @@ Expected result: 171 tests OK, inherited from T5.7 archive and post-T5 docs-only
 | Branch | `v0.2.0-t5-result-evidence-explain-audit-2026-05-25` |
 | Sacred state | `master = 562c74195df43e933bed92a3ff25de94dd8ce666` |
 | Dirty baseline | 6 modified + 1 untracked preserved |
-| Scoped anchor | pending |
+| Scoped anchor | `76817e66` |
 | Command | `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule tests.application.protocol.test_rule_expr tests.sdk.test_ruleexpr_inspect tests.sdk.test_rule_naming tests.application.protocol.test_rule_aggregate tests.test_branch_identity_rule_inspect tests.application.protocol.test_rule_expr_lowering tests.application.protocol.test_rule_expr_lowering_adapter tests.sdk.test_rule_expr_evaluate tests.application.protocol.test_rule_expr_head_validation -v` |
-| Result | pending |
+| Result | 171 tests in 0.118s, OK |
 | Pytest policy | deferred per existing SIGSEGV environment lock |
 | Exclusion | `tests.test_public_inference_factgraph_create` remains outside G7 command |
 
