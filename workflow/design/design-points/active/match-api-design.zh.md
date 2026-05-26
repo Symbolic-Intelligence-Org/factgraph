@@ -223,6 +223,111 @@ us_orders = fg.read.match(Order, expr, region="US")
 这是 v0.2 的 deliberate trade-off:换取 read namespace 的 single-call 统一性,
 multi-entity 关联留 evaluate 路径或后续 cycle。
 
+### 5.4 Pattern Connectivity Requirement
+
+#### 5.4.1 问题
+
+Rule 的 `__post_init__`(`rule.py:91`)仅强制 port Var 必须在 `where` 中**出现**,
+但不保证 port Var 之间通过 atoms 形成 connected graph。换言之,以下 rule 合法:
+
+```python
+# port Var 在 where 中存在,但 u 与 r 在 body 中无连接
+with vars("u", "r") as (u, r):
+    disconnected = build_application_rule(
+        id="user:region:disconnect",
+        where=[
+            User(u),         # User existence
+            Region(r),       # Region existence
+            # NO atom connecting u and r
+        ],
+        ports={"user": u, "region": r},
+    )
+```
+
+若直接执行:
+
+```python
+fg.read.match(User, disconnected, region="US")
+# Cartesian product:对每个 User u,只要存在 Region r=="US",均纳入结果
+# → 返回 ALL Users(只要至少存在一个 region 为 "US" 的 Region 实例)
+```
+
+由于 match 投影到 `EntityCls snapshot` 后丢失了所有非 EntityCls port 的 bindings,
+**cartesian product 维度对 user invisibly 隐藏**。这是 silent failure mode,
+比 evaluate(返回 EvaluateRow 含全部 port bindings,user 可视觉检测)更危险。
+
+#### 5.4.2 强制约束(Match Runtime Invariant)
+
+Match runtime 在执行 pattern matching 之前,**必须**验证 template 的
+**effective body**(`template.where atoms` ∪ F-expression synthetic atoms)
+形成 connected pattern:
+
+> Projected EntityCls 的 port Var 与每个 constrained port 的 port Var,
+> 必须**在同一 connected component** 内。
+
+若不在,raise:
+
+```text
+SDKStoreError: ports {'user', 'region'} are not transitively connected
+through template body — match would produce cross-product results.
+Add a body atom linking these ports (e.g., User(u).region == r), or
+use RuleExpr.join_by_ports to express the join explicitly.
+```
+
+#### 5.4.3 算法
+
+```
+1. 收集 effective body atoms:
+   atoms = template.where atoms ∪ synthetic atoms from F-expression kwargs
+
+   synthetic atoms from kwargs:
+   - literal kwarg `region="US"`        → CmpAtom(r_var, Const("US"))
+   - F-expression `region=User.tag`     → CmpAtom(r_var, FieldAccess(u_var, "tag"))
+
+2. 构造 Var-graph:
+   - nodes = 所有出现在 atoms 中的 Vars
+   - edges = 同一 atom 内的 Var 两两相连
+   - 注意:Const / FieldAccess 等非 Var term 不创造 edge
+
+3. Connected components(union-find / DFS):
+   将所有 Vars 划分为若干 component
+
+4. Verify:
+   - projected_var = EntityCls 投影的 port Var
+   - constrained_vars = 所有 kwarg-constrained port 的 Vars
+   - 必须 ∀ v ∈ {projected_var} ∪ constrained_vars,v 与 projected_var 在同一 component
+
+5. 失败 → raise SDKStoreError;成功 → 继续 pattern matching
+```
+
+#### 5.4.4 Edge Cases
+
+| Case | Connectivity check 结果 |
+|---|---|
+| Single Rule,body 紧密 connected,所有 port 在同一 component | ✓ pass |
+| Single Rule,body 有 disconnected island(本节示例)| ✗ raise |
+| RuleExpr 通过 `.join_by_ports("region")` 连接 | ✓ pass(join 创 cross-occurrence edge) |
+| RuleExpr 通过 `.join(constraint)` 连接 | ✓ pass(constraint 创 edge) |
+| RuleExpr `R1 & R2` 无 join,无 shared port | RuleExpr 层 reject 在前(ambiguous port reject 或类似);match 不到此步 |
+| Literal kwarg `region="US"` | Synthetic atom 仅涉及 `r_var` 自身,**不**新增 Var-graph edge;不能"救"原本 disconnected 的 body |
+| F-expression kwarg `region=User.tag` | Synthetic atom 涉及 `r_var` 与 `u_var`,**新增** edge;可"救"某些 disconnected case |
+
+#### 5.4.5 与 evaluate 的差异(deliberate)
+
+`fg.eval.evaluate(...)` 当前**不强制** pattern connectivity check。在
+disconnected body 下,evaluate 同样会产生 cartesian product,但:
+
+- Evaluate 返回 `EvaluateResult` / `EvaluateRow`,含所有 port bindings
+- User 可以视觉检查每行,识别 cartesian 配对
+- Silent failure 风险**显著低于** match 的 flat snapshot 投影
+
+v0.2 仅 match 强制 connectivity check 是 deliberate decision:
+- Match 是新 API,initial 严格门槛低成本
+- Evaluate 已 ship,加 invariant 需 backward-compat 评估
+- Match flat 投影让 silent cartesian 后果更严重 → 需要更早 fence
+
+Evaluate 同步加 check 留 future cycle 评估(parent §6 task split 期间或更晚)。
+
 ## 6. Output Shape
 
 ### 6.1 返回 type
@@ -475,3 +580,4 @@ T11.2.5 发现 dirty `facade.py` 改动(property-style assertion access + `Asser
 | M18 | Cross-entity tuple return(`match((User, Order), expr)`)is v0.2 non-goal。 |
 | M19 | `fg.eval.run` deletion is **not** part of T11.2.7;replacement direction locked。 |
 | M20 | Dirty `facade.py` assertion ergonomics are **independent** of this match design。 |
+| M21 | Match runtime enforces **pattern connectivity**: projected EntityCls port Var and all kwarg-constrained port Vars must be in the same connected component of effective body atoms(template body ∪ F-expression synthetic atoms)。Disconnected templates raise `SDKStoreError` before pattern matching runs。这是 v0.2 deliberate safety invariant,unique to match(evaluate 同步 check 留 future cycle)。 |
