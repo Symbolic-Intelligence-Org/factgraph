@@ -206,6 +206,21 @@ Inference -> evaluate -> EvaluateResult rows -> explain/close -> explicit writes
 
 Learn the lifecycle first. Engine-specific semantics are an advanced topic.
 
+## Stability of `Inference` and `Branch`
+
+Application `Rule` (built via `build_application_rule(...)`) is the
+preferred read-pattern surface for new code in v0.2. `Inference` and
+`Branch` remain available as the compatibility surface: same
+`EvaluateResult` / `EvaluateRow` / `Explanation` shapes, same lower
+evaluation pipeline. The design has committed to retiring `Branch` from
+user-facing layers and folding `Inference` into a `RuleExpr`-based
+runtime entry in a later cycle, but the migration spec is pending a
+future blueprint and **no `DeprecationWarning` is raised in v0.2**.
+
+For the full positioning (invariants, what to use for new code, why
+`build_application_rule` rejects `Branch`), see
+[`evidence.md` §7 Stability of `Inference` and `Branch`](evidence.md).
+
 ## Complete example
 
 ```python

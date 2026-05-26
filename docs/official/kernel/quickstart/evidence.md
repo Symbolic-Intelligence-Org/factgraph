@@ -240,6 +240,39 @@ audit ingestion for durable replay.
 A dedicated cycle covering `EvidenceGraph` shape (`EvidenceNode`,
 `EvidenceEdge`, `layout_hint`, engine-meta payloads) is pending.
 
+## 7. Stability of `Inference` and `Branch`
+
+Application `Rule` (built via `build_application_rule(...)`) plus
+`RuleExpr` composition is the **preferred read-pattern surface for new
+code** in v0.2. `Inference` and `Branch` (legacy DSL) remain available as
+the **compatibility surface**: they produce the same `EvaluateResult` /
+`EvaluateRow` / `Claim` / `Explanation` shapes documented in §§1–5 and
+share the same lower evaluation pipeline (`SemanticsProfile`, engine
+adapters, evidence runtime).
+
+The design has committed to retiring `Branch` from user-facing layers and
+folding `Inference` into a `RuleExpr`-based runtime entry in a later
+cycle:
+
+> 在新 user-facing 表达层 (`Rule` / `RuleExpr`),`Branch` 不出现 …
+> 与 Inference 关系: 新设计 = **解耦** — Inference 是运行时入口,接受 RuleExpr
+> — `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §3.10
+
+Until that migration spec is locked by a future blueprint:
+
+- No `DeprecationWarning` is raised; no public symbol is removed.
+- `Inference(..., where=[Branch([...], id="...")])` remains stable for
+  current use and continues to be exercised by tests and adapters.
+- `Branch` is not a stand-alone user-facing concept — it is the OR-body
+  primitive inside `Inference` only. `build_application_rule(...)`
+  rejects `Branch` because application `Rule` bodies are AND-only;
+  multi-pattern composition belongs at the `RuleExpr` level (`&` / `|`
+  operators on application `Rule` values).
+- New quickstart examples and SDK docs introduce application `Rule`
+  first; `Inference` is shown for cases that need the legacy
+  `Branch`-list OR-body syntax (e.g. for compatibility with engine
+  adapters that historically consumed it).
+
 ## A note on naming collisions
 
 `result[i].explain()` is the subscript form of `row.explain()` — the dot is
