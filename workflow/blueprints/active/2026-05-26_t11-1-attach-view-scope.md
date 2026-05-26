@@ -30,10 +30,14 @@
   - `view.db_id != db.db_id` rejects with `SDKStoreError`.
   - `view.base_tx_id` cannot be materialized from the Database rejects with `SDKStoreError`.
   - `view.asrt_ids` must exist in the materialized base snapshot; missing assertion ids reject without falling back to the full universe.
+- Enforce the schema consistency chain before any scoped reads/evaluate:
+  - `schema_digest(compile_schema_from_classes(schema_classes)) == db.schema_digest == view.schema_digest`.
+  - If any link in that chain differs, attach fails before read/evaluate.
 - Preserve the exact Database schema contract:
   - `schema_classes=[...]` must compile to the same `schema_digest` as the Database.
   - Incomplete `schema_classes` are not a view filter and must reject if their compiled schema digest differs.
   - Schema evolution, partial schema attach, and schema migration semantics are out of T11.1 unless shipped APIs already support them without weakening digest validation.
+  - Step 4.6 must verify whether class order affects the compiled schema digest; if order-sensitive today, T11.1 records that shipped behavior rather than fixing it.
 - Implement attach-scoped consumers:
   - `fg.read.find(...)` and `fg.read.get(...)` on a view-attached runtime see only assertions in the view.
   - `fg.eval.evaluate(...)` on a view-attached runtime evaluates against the same visible assertion set.
@@ -111,6 +115,7 @@ Before scoped status, record:
 
 - exact `FactGraph.attach(...)` signature and rejected kwargs;
 - exact schema digest behavior when `schema_classes` are incomplete, reordered, or evolved relative to the Database;
+- exact consistency-chain validation for `compiled_schema_digest`, `db.schema_digest`, and `view.schema_digest`;
 - available Database APIs for materializing `view.base_tx_id`;
 - durable Database-owned `FrozenAssertionView` shape and the SDK in-memory `FrozenAssertionView` shape;
 - current `fg.read.find/get` implementation paths and where filtering by assertion id can be applied;
@@ -136,9 +141,11 @@ Implementation should use existing Database internals or shipped helpers to load
 Required validation:
 
 - match `db_id`;
-- match `schema_digest`;
+- match `schema_digest` across compiled schema, Database, and view;
 - materialize `base_tx_id`;
 - verify `asrt_ids` are members of the base snapshot.
+
+Implementation may improve schema mismatch diagnostics if this remains a small SDK boundary message change, for example by listing missing/extra entity names. This is optional and must not relax digest matching or become schema migration support.
 
 The implementation must not silently use the current head if the base transaction is missing.
 
@@ -222,6 +229,8 @@ Likely docs:
 - Method-level `fg.read.find(..., view=...)` rejects with attach-based hint.
 - Method-level `fg.eval.evaluate(..., view=...)` rejects with attach-based hint.
 - Schema mismatch rejects at attach.
+- Incomplete or evolved `schema_classes` reject at attach.
+- Reordered `schema_classes` behavior is tested or explicitly recorded according to shipped schema digest semantics.
 - DB mismatch rejects at attach.
 - Missing `base_tx_id` rejects at attach.
 - Missing assertion id rejects at attach or first materialization, without full-universe fallback.
@@ -243,6 +252,7 @@ Likely docs:
 |---|---|
 | View scope is applied to reads but not evaluate | Use shared visibility substrate or explicit paired tests proving both paths agree. |
 | View attach silently falls back to current head | Validate and materialize `view.base_tx_id` at attach time. |
+| Partial schema attach hides or mis-decodes data | Preserve exact schema digest matching and test incomplete/evolved schema classes. |
 | SDK in-memory view object lacks enough durable metadata | Step 4.6 decides reject vs narrow support; no guessing. |
 | Read-only enforcement misses a write path | Reuse existing attached write rejection helpers and add focused write-attempt tests. |
 | Method-level `view=` accidentally becomes supported | Preserve rejection tests with attach-based hint. |

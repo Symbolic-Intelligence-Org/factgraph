@@ -35,6 +35,7 @@
 |---|---|
 | `src/factgraph/sdk/store.py:887-918` | `FactGraph.attach(db, *, schema_classes, default_row_format=None, **kwargs)` rejects all unknown kwargs, including `view`, then attaches current head as writable. |
 | `src/factgraph/sdk/store.py:906-912` | `FactGraph.attach(...)` compiles `schema_classes`, computes `schema_digest`, and rejects if it differs from `db.schema_digest`; incomplete schema classes are rejected rather than treated as a read/view filter. |
+| `src/factgraph/core/schema/schema_ir.py:62-78` | `schema_digest(...)` hashes canonical JSON with `sort_keys=True`; Step 4.6 must still verify whether upstream `compile_schema_from_classes([...])` list ordering changes entity/predicate arrays before canonicalization. |
 | `src/factgraph/sdk/store.py:1064-1082` | `fg.read.find(...)` rejects method-level `view=` with old unsupported/policy wording. |
 | `src/factgraph/sdk/store.py:2146-2150` | `evaluate(...)` rejects method-level `view=` and `policy=` with generic evaluate wording. |
 | `tests/test_sdk_frozen_view_read_runtime_boundaries.py` | Current tests assert method-level `view=` rejection and legacy `run(..., view=...)` rejection. |
@@ -48,6 +49,7 @@
 |---|---|
 | Branch base mismatch | T11 branch starts at `efd65c0e`; local quickstart Database docs slice after T5.8 is not present. Docs work must not assume those commits unless user explicitly merges them. |
 | Schema/classes mismatch | Database data is bound to the Database schema digest. Partial `schema_classes` could make reads appear to work while silently hiding or mis-decoding data, so T11.1 must preserve exact digest validation. |
+| Schema digest order sensitivity | Canonical JSON sorts object keys, but entity/predicate arrays may still reflect compiler order. Step 4.6 must test reordered `schema_classes` and record shipped behavior rather than assuming set semantics. |
 | SDK in-memory vs durable view | SDK `fg.views` historically has a smaller in-memory view shape. Step 4.6 must decide whether accepting SDK in-memory views is possible or should reject clearly. |
 | Evaluate scoping | Current evaluate path may share Store/Ledger state with reads. Step 4.6 must identify the actual shared visibility point before implementation. |
 | Attached writes | Existing attach writes are allowed for current-head attach. T11.1 must make only view-attached runtimes read-only without regressing normal attached Database writes. |
@@ -62,6 +64,7 @@
 | §12 method-level `view=` | Out of scope for T11.1; keep rejected with hint. |
 | §13 stale / scope validation | In scope at attach time. |
 | Database schema binding | Preserve shipped exact schema digest check; schema evolution and partial schema attach are out of scope. |
+| Schema consistency chain | Enforce `compiled_schema_digest == db.schema_digest == view.schema_digest` before scoped runtime use. |
 | §16 Step 2 view consumers | In scope only through attached runtime consumer. |
 | C36-C44 migrated from rule-expression essay | Consume Database/view design; do not reopen T5 rule-expression contracts. |
 | User simplification | Attach-based first, method-level deferred until demand emerges. |
@@ -75,6 +78,9 @@ Run before scoped and record actual results:
 | 1 | Branch/base state | `git branch --show-current`, `git rev-parse HEAD`, `git status --short` | Confirm T11 branch from `efd65c0e`, dirty baseline preserved. |
 | 2 | `FactGraph.attach` signature and rejected kwargs | `inspect.signature(FactGraph.attach)`, source read around `store.py:887` | Add `view=None`; preserve unknown kwarg rejection. |
 | 2a | Schema digest exactness | Create/open/attach with complete, incomplete, and evolved `schema_classes`; compare compiled digest against `db.schema_digest` | Preserve exact digest rejection; partial schema attach out of scope. |
+| 2b | Schema digest order stability | Create/open/attach with reordered complete `schema_classes`; inspect `compile_schema_from_classes` output ordering and digest | Record shipped behavior; do not fix order sensitivity unless already supported by substrate. |
+| 2c | Schema consistency chain | Attach a durable view and verify `compiled_schema_digest == db.schema_digest == view.schema_digest`; mutate/mismatch one link where feasible | Reject before read/evaluate with `SDKStoreError`. |
+| 2d | Schema mismatch diagnostics | Inspect current message and decide whether a small missing/extra entity hint is feasible | Optional secondary scope; no schema migration semantics. |
 | 3 | Durable Database view shape | Introspect core `FrozenAssertionView` fields | Need `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest`. |
 | 4 | SDK in-memory `FrozenAssertionView` shape | Introspect SDK `FrozenAssertionView` fields | Decide accept/reject policy for SDK view object. |
 | 5 | Database snapshot materialization | Source read for `Database.head`, transaction/object lookup, `_ledger_for_attach` | Find safe way to materialize `view.base_tx_id`. |
@@ -92,6 +98,7 @@ Step 4.6 must decide:
 - whether SDK in-memory `fg.views` objects are supported by attach or rejected;
 - exact helper/location for view visibility filtering;
 - exact stale/mismatch error messages;
+- whether schema mismatch diagnostics should remain digest-only or include a small entity-set delta hint;
 - whether a minimal `database.md` must be created on this branch because the post-T5 docs slice is not in the base.
 
 ## 7. G7 Baseline Plan
