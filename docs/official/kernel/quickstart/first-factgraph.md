@@ -33,6 +33,13 @@ class User(Entity):
 is not a Python storage slot by itself; it is a schema descriptor that tells the
 graph how to write and read assertions.
 
+`Identity(primary_key=True)` marks `user_id` as the **primary anchor** of
+the entity. An entity can have multiple `Identity` fields — every `Identity`
+participates in the entity reference and changes which coordinate is being
+described. The simple one-field case shown here uses only the primary anchor.
+See [Define a schema](schema.md#why-the-primary-anchor-matters) for the
+multi-field identity pattern.
+
 ## Create a graph
 
 Use `FactGraph.create(...)` as the normal constructor.
@@ -43,6 +50,14 @@ fg = FactGraph.create(schema_classes=[User])
 
 This compiles the schema and creates an empty in-memory graph. Later tutorials
 add `path=...` for a workspace that can be saved and loaded.
+
+`FactGraph.create(schema_classes=[...])` is the **high-level constructor**
+— it calls `compile_schema_from_classes(schema_classes)` for you and stores
+the resulting compiled IR inside the runtime. When you work at the lower
+`Database` boundary directly, you compile once with
+`compile_schema_from_classes(...)` and pass the IR as `schema_ir=` instead
+(see [Database and durable views](database.md#define-a-schema-ir) for the
+surface comparison).
 
 ## Write facts
 

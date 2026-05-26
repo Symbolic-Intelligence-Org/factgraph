@@ -17,8 +17,19 @@ quickstart page.
 
 ## Why these namespaces
 
-The public surface is organized concept-first, not storage-first. A few
-principles run through the whole map:
+The public surface is organized concept-first, not storage-first. The
+principles below trace back to two architecture commitments in the
+layered-architecture design:
+
+- **`FactGraph` is the runtime / connection layer** — the per-session entry
+  point that owns reads, writes, evaluation, and evidence helpers.
+- **`Database` is the only persistent write point** — the lower identity
+  boundary, where durable transactions and content-addressed objects live.
+  `FactGraph.attach(db, ...)` binds a runtime over a Database; the Database
+  itself is the persistent identity (see
+  [Database and durable views](database.md)).
+
+A few principles run through the whole map:
 
 1. **`FactGraph` owns lifecycle.**
    Creating, loading, and saving a graph workspace are top-level entry points,
@@ -66,7 +77,7 @@ that live directly on `FactGraph`, not on a namespace.
 | --- | --- |
 | `FactGraph.create(schema_classes=[...])` | Build a new graph. Pass `path=` for a path-backed workspace; pass `ledger_path=` or `artifact_store_root=` for explicit supported components. |
 | `FactGraph.load(path, schema_classes=[...])` | Restore a saved workspace. The loader validates the workspace schema digest against the supplied classes. |
-| `FactGraph.attach(db, schema_classes=[...], view=None)` | Bind the SDK to a `Database`. Passing a durable `db.create_view(...)` view creates a read-only, view-scoped runtime. See [Database and durable views](database.md) for the full Database / view tutorial. |
+| `FactGraph.attach(db, schema_classes=[...], view=None)` | Bind the SDK to a `Database`. Passing a durable `db.create_view(...)` view creates a read-only, view-scoped runtime. See [Database and durable views](database.md) for the full Database / view tutorial. The signature deliberately **does not include `rules=`** — rule sets are code artifacts, not part of the attach contract; their content digest is computed at `fg.eval.evaluate(...)` time and recorded as `EvaluateResult.rule_set_digest`. |
 | `FactGraph.from_schema_classes([...])` | Lower-level class-first constructor. `create(...)` is the normal teaching path. |
 | `fg.save(path=None)` | Persist the graph to its workspace. No-arg save requires a bound path; passing `path` rebinds the graph. |
 | `fg.batch(meta=None)` | Open a batch transaction context for grouped writes. |
@@ -130,7 +141,7 @@ described and executed.
 | Surface | Methods | Notes |
 | --- | --- | --- |
 | `fg.rules` | `inspect(rule_or_inference_or_query)` | `inspect(...)` shows structure for in-memory `Rule`, `Inference`, or `Query` values. |
-| `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. |
+| `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. The empty namespace is a deliberate **v0.2 compatibility placeholder** — `Inference` authoring stays available but new code prefers application `Rule` (`build_application_rule(...)`) + `RuleExpr` composition (see [Rules and inferences](rules-and-inferences.md#evaluate-an-inference)); the namespace remains as a reserved name without removal date. |
 | `fg.eval` | `evaluate(inference_or_expr, *, head=None, engine=None, semantics=None)`, `explain(expr, *, head=closed_head)`, `inspect_semantics(semantics_or_profile)` | `evaluate(...)` is read-only and returns `EvaluateResult`. `explain(...)` replays a closed-head explanation. `inspect_semantics(...)` previews wrapper or profile shape without running an engine. |
 
 Public DSL value objects are `Rule`, `Inference`, `Query`, `Branch`, `Pred`,

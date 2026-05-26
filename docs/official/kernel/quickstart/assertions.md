@@ -188,6 +188,29 @@ The two raw kinds are:
 The same numeric `bound` carries different meaning under each kind; the
 write protocol preserves that boundary instead of flattening it.
 
+### Canonical quantitative carrier
+
+`raw_kind` + `bound` together form the **canonical quantitative carrier**
+for any assertion that carries uncertainty. The contract is enforced on
+three surfaces, with the same two fields:
+
+1. **Write** (this page): writing `raw_kind` requires `bound`, and
+   vice versa; independent `probability` and `bound_lower`/`bound_upper`
+   keys are rejected before the assertion is appended.
+2. **Evaluate** ([Configure inference semantics](semantics.md)):
+   probabilistic and possibilistic adapters consume this lane natively;
+   deterministic rows surface with `raw_kind=None, bound=None` (not
+   `(1.0, 1.0)` and not an independent `probability=1.0`).
+3. **Audit** ([Evidence: what-if and audit](evidence.md)): `EvaluateRow`
+   and `Claim` carry the same `raw_kind` + `bound` fields; engine-specific
+   projection outputs land on separate annotation lanes
+   (`problog/semantic/probability`, `pyreason/semantic/bound_lower`,
+   etc.), preserving the no-double-write rule below.
+
+This is a **single-source contract**: the same two fields, never
+duplicated, never normalized away to a single number, never split into
+engine-specific shapes. The detailed write-side invariants follow.
+
 The contract has four invariants:
 
 1. **Paired.** `raw_kind` and `bound` must both appear or both be absent.
@@ -200,7 +223,12 @@ The contract has four invariants:
 4. **Annotation mirror.** When `raw_kind` and `bound` are present, the
    ledger also writes paired annotation rows on the
    `shared/semantic/raw_kind` and `shared/semantic/bound` lanes with
-   `origin="observed"`.
+   `origin="observed"`. These lanes are the engine-neutral query
+   interface for downstream consumers (adapters, audit) that need
+   raw-uncertainty data without parsing `meta.raw`. The mirror is
+   invariant: any update to the user-authored `raw_kind`/`bound` lands
+   a new revision on both lanes; you do not write to these lanes
+   directly, and they are kept in sync with `meta.raw` by the ledger.
 
 `raw_kind` and `bound` are not first-class slots on `AssertionMeta`. They
 land in `meta.raw["raw_kind"]` and `meta.raw["bound"]`, and you select them
@@ -225,9 +253,13 @@ revoked_asrt_id    -> filled by retract(...) on the revocation record
 ```
 
 Engine-specific uncertainty keys are rejected at write time. Use the raw
-uncertainty contract above instead. Engine adapters produce these as output
-annotations on their own lanes (`problog/semantic/probability`,
-`pyreason/semantic/bound_lower`, etc.); they are not user write inputs.
+uncertainty contract above instead. **This enforces the no-double-write
+rule**: every quantitative value lives in exactly one place — the canonical
+carrier (`raw_kind` + `bound`) on user-authored assertions, or
+engine-specific annotation lanes (`problog/semantic/probability`,
+`pyreason/semantic/bound_lower`, etc.) on engine output. Allowing both
+sides to carry the same value would create silent drift between the input
+and output sides of the same uncertainty fact.
 
 ```text
 probability        -> rejected; use raw_kind="probabilistic" + bound
@@ -474,6 +506,17 @@ and `asrt_ids` (a `frozenset[str]`). It is intentionally not in
 `fg.views` is intentionally outside workspace persistence. `fg.save(...)`
 does not write view membership, and `FactGraph.load(...)` does not restore
 it. Views are session-scoped name -> id-set bindings.
+
+The design boundary: `fg.views` carries **no Database identity anchors**
+(no `db_id`, no `base_tx_id`, no `schema_digest`) and no `view_digest`. It
+is a working-tree bookmark, not an audit-chain anchor. Anything that needs
+cross-session identity, evidence reproducibility, or participation in
+`EvaluateResult.view_snapshot_digest` must use durable Database views — see
+[Durable views are immutable](database.md#durable-views-are-immutable) for
+the persistent-identity surface. The two are not interchangeable: session
+views support full CRUD (`update(...)`, `delete(...)`) precisely because
+nothing else references them; durable views are content-addressed
+immutable for the opposite reason.
 
 Database-owned durable view objects are a separate surface created with
 `Database.create_view(...)`; they carry Database identity anchors and are

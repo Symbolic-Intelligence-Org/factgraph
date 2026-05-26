@@ -59,8 +59,9 @@ this page keeps the shape explicit.
 
 ## Run a Rule
 
-Use `vars(...)` to create logic variables, `Pred(...)` to match a predicate,
-and `Rule(...)` to name the reusable pattern.
+Use `vars(...)` to create logic variables, `Entity(var)` / `Entity(var).field == value`
+to express body atoms, and `build_application_rule(...)` to compile them
+into a reusable `Rule` value.
 
 ```python
 with vars("u", "tag") as (u, tag):
@@ -76,6 +77,42 @@ The `where` clause describes what must be found, and `ports` declares what the
 rule returns. `build_application_rule(...)` is the canonical SDK bridge that
 lowers Entity-DSL atoms into the application protocol `Rule` value. Running
 the rule is read-only.
+
+### Why `build_application_rule(...)` instead of `Rule(...)` directly
+
+`Rule` is the **data shape** — a frozen dataclass at
+`factgraph.application.protocol.Rule` with `where: tuple[Atom, ...]` and
+`ports: Mapping[str, Var]`. Its `where` field accepts **core-level atom
+objects** (`PredAtom`, `CmpAtom`, `BuiltinAtom`, `NotAtom`, `InAtom`,
+`AggregateAtom`), not the SDK DSL forms `Entity(var)` / `Entity(var).field
+== value`.
+
+`build_application_rule(...)` is the **canonical SDK factory** that bridges
+between user-facing DSL and the underlying `Rule` data shape:
+
+| Surface | Accepts | Role |
+| --- | --- | --- |
+| `build_application_rule(id=..., where=[Entity(var), ...], ports={...})` | SDK DSL atoms + `ports={name: logic_var}` | Ergonomic factory. Lowers, validates, canonicalizes Vars, returns `Rule`. |
+| `Rule(id=..., where=(PredAtom(...), CmpAtom(...)), ports={...})` | Already-canonical core atom tuple | Low-level data shape. Manual construction only required if you are working at the core protocol layer. |
+
+This is the same high-level-factory / low-level-data-shape pattern as
+`FactGraph.create(schema_classes=[...])` vs `Database.create(schema_ir=...)`
+in [Database and durable views](database.md#define-a-schema-ir).
+
+The factory does four things for you that `Rule(...)` directly does not:
+
+1. **Lowers DSL** — converts `Entity(var)` / `Entity(var).field == value` /
+   `Pred(...)` into the underlying `PredAtom` / `CmpAtom` shape.
+2. **Validates the body** — rejects `Branch` (use `Inference` for that),
+   rejects OR branch lists (application `Rule` is AND-only), rejects
+   legacy raw `Pred` atoms in `where`, rejects bare `AttrRef`.
+3. **Canonicalizes `Var` instances** — same name -> same object, so
+   cross-occurrence joins resolve correctly without manual care.
+4. **Validates `ports`** — every declared port's `Var` must appear in
+   `where`; `ports` must be non-empty.
+
+The `Rule` import in the example above is included for type hints /
+`isinstance` checks; construction goes through `build_application_rule(...)`.
 
 ```python
 rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
@@ -322,7 +359,12 @@ assert result.count() == 2
 ## Choosing the right head
 
 `fg.eval.evaluate(expr, head=rule)` projects evaluation results through
-`head`. The rule passed as `head=` has two invariants:
+`head`. The rule passed as `head=` is the rule's **closed head** — the
+shape that fixes which predicate id (and which arity) the row's `claim`
+will bind to. Open-head evaluation (no `head=`, generic projection rows)
+is not part of the v0.2 public surface.
+
+The closed head has two invariants:
 
 1. **`head.id` must be a real predicate id.** The result row's
    `claim.name` equals `head.id`.
@@ -426,6 +468,14 @@ or application configuration.
 
 ## Evaluate an Inference
 
+`Inference` is the **v0.2 compatibility surface** for rule authoring that
+uses explicit `Branch(...)` bodies and a separate `target` head predicate.
+It remains available for v0.2 and is what runtime methods like `fg.eval.evaluate(...)`
+accept when given an OR-branching rule. New tutorials and new authoring
+prefer the application `Rule` path (`build_application_rule(...)` +
+`RuleExpr` composition); `Inference` stays available without a fixed removal
+date so existing call sites keep working.
+
 An inference can use the same body and propose a new target predicate.
 
 ```python
@@ -493,9 +543,20 @@ not provide an id, the SDK still exposes a fallback id such as `b0`.
 
 ## RuleRef composes in-memory rules
 
-`RuleRef` is a lower-level body atom used when one rule body depends on another
-rule. It is not a persistence handle and it does not read from a filesystem
-registry.
+`RuleRef` is a lower-level body atom for future **Rule-in-Rule composition**
+— i.e. one rule body referencing another rule as an atom. It is part of the
+core protocol surface for completeness, but **`build_application_rule(...)`
+rejects it in the v0.2 application Rule path** (`DSLToApplicationRuleError:
+RuleRef atom is not allowed in new Rule path; compose Rules through ports`).
+Cross-rule composition in v0.2 goes through `RuleExpr` and ports
+(`rule.as_("alias")` + `.join_by_ports(...)` / `.join(...)`), covered in the
+[Composing rules with RuleExpr](#composing-rules-with-ruleexpr) section
+above.
+
+`RuleRef` is not a persistence handle, does not read from a filesystem
+registry, and is not part of any recommended v0.2 authoring path; treat
+its presence in the public surface as protocol-level rather than
+user-facing.
 
 In the quickstart, keep the model simple:
 

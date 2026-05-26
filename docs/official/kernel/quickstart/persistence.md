@@ -143,6 +143,14 @@ boundary, `Database.create/open/head/commit_assertions`, durable view object
 shape (`name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest`),
 and the view-scoped attach pattern.
 
+The two boundaries serve different concerns: **`FactGraph` is the runtime
+layer** (per-session reads, writes, evaluation, evidence helpers) while
+**`Database` is the only persistent write point** (durable identity,
+content-addressed transactions, durable views). Workspace persistence
+covered on this page (`fg.save(...)` / `FactGraph.load(...)`) is the
+high-level path that wraps a Database underneath; the database.md tutorial
+exposes the lower boundary directly when you need it.
+
 ## Load the workspace
 
 Load requires the schema classes. Class-less dynamic load is not part of the

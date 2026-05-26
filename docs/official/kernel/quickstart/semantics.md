@@ -28,6 +28,25 @@ Most application code should start with `ProbLogSemantics` or
 `PyReasonSemantics`. `SemanticsProfile` is public, but it is the advanced
 canonical form that adapters consume internally.
 
+### Wrappers lower into `SemanticsProfile`
+
+`ProbLogSemantics(...)` and `PyReasonSemantics(...)` are **high-level
+wrappers** with engine-specific ergonomics. Internally, both lower into a
+canonical `SemanticsProfile` value before any adapter sees them:
+
+| Surface | Accepts | Role |
+| --- | --- | --- |
+| `ProbLogSemantics(default=..., branch_probabilities=..., ...)` | ProbLog-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
+| `PyReasonSemantics(delay=..., branch_bounds=..., ...)` | PyReason-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
+| `SemanticsProfile(name=..., engine=..., rule_projection=..., temporal_projection=...)` | Canonical fields | Lower-level data shape. Adapter consumes this directly. |
+
+This is the same high-level-factory / low-level-data-shape pattern as
+`build_application_rule(...)` vs `Rule(...)` in
+[Rules and inferences](rules-and-inferences.md#why-build_application_rule-instead-of-rule-directly).
+The lowering result is visible at the `lowered_profile` field of
+`fg.eval.inspect_semantics(wrapper)`; for a `SemanticsProfile` argument the
+inspection returns the canonical form directly (no `lowered_profile`).
+
 ## Build an application Rule
 
 Application `Rule` is the primary public evaluation input. Use
@@ -150,7 +169,10 @@ assert {"target": "rule", "kind": "timestep_delay", "value": 2} in entries
 Branch-specific `branch_probabilities` and `branch_bounds` require a concrete
 multi-branch context such as a `RuleExpr` OR expression or a v0.2 compatibility
 `Inference` with explicit branch ids. A single application `Rule` has no public
-branch ids, so branch-specific wrapper maps are rejected for that input shape.
+branch ids — application `Rule` bodies are **AND-only by design**, with OR
+branches expressed at the composition layer via `RuleExpr` or in the
+compatibility `Inference` shape — so branch-specific wrapper maps are
+rejected for that input shape.
 
 ## Use SemanticsProfile when you need the canonical form
 
@@ -185,6 +207,9 @@ assert row is not None
 
 # A probabilistic adapter may populate raw_kind/bound carriers on rows.
 # Deterministic/native rows keep both fields as None.
+# See assertions.md "Canonical quantitative carrier" for the underlying
+# contract: raw_kind and bound are paired (both None or both populated),
+# and deterministic is None/None rather than (1.0, 1.0).
 assert (row.raw_kind is None) == (row.bound is None)
 
 row.explain()

@@ -83,6 +83,15 @@ detached.explain()   # → DetachedRowError
 detached.close()     # → DetachedRowError
 ```
 
+`DetachedRowError` is a **Python programming error**, not a failure
+classification. It indicates the row was constructed or transferred in a
+way that broke its `_result_resolver` linkage (e.g., reconstructing from
+JSON without re-binding to a result). It is **not** a `status="failed"`
+outcome, has no `failure_class`, and should not be caught as a business
+case. Code that needs cross-session explanation should use
+`fg.eval.explain(expr, head=closed_head, ...)` with an explicit closed
+head — see §5 below.
+
 `row.bindings` is keyed by `pred_id` + `terms`, not by `ports` directly.
 The bound port values live inside the `terms` list at positions matching the
 rule's port declaration; see `row.claim` and `row.close()` for richer
@@ -90,7 +99,11 @@ projections.
 
 `raw_kind` and `bound` carry quantitative uncertainty propagated from the
 ledger and engine adapters. The invariant `raw_kind is None ⇒ bound is None`
-holds; the reverse pairing is enforced by the protocol.
+holds; the reverse pairing is enforced by the protocol. This is the
+read-side projection of the same single-source contract documented at
+[Canonical quantitative carrier](assertions.md#canonical-quantitative-carrier)
+on the write side — same two fields, never duplicated, never normalized to
+a single number.
 
 ## 3. `Claim` — what was asserted
 
@@ -228,7 +241,7 @@ assert e.suggested_next_steps == (
 head=closed_head, ...)` is the advanced / cross-session manual path that
 requires the caller to supply a fully closed head.
 
-## 6. `EvidenceGraph` — deferred
+## 6. `EvidenceGraph` — intentionally opaque (v0.2)
 
 When `status == "passed"`, `explanation.evidence` is an `EvidenceGraph`
 containing the full derivation tree (nodes + edges, with engine-specific
@@ -237,8 +250,23 @@ document the graph interior; treat it as an opaque value and pass it to
 `render_evidence_graph_html(...)` (audit surface) for visualization, or to
 audit ingestion for durable replay.
 
-A dedicated cycle covering `EvidenceGraph` shape (`EvidenceNode`,
-`EvidenceEdge`, `layout_hint`, engine-meta payloads) is pending.
+The graph itself is **already shipped** with stable invariants — only the
+user-facing tutorial is deferred:
+
+- **DAG with branch convergence** — the graph is acyclic; the same fact
+  reached via multiple paths converges on a single node rather than
+  duplicating.
+- **Cycle detection** — adapters that could produce cyclic derivation
+  paths (e.g., recursive ProbLog clauses) detect and reject the cycle
+  rather than producing an `EvidenceGraph` that violates the DAG
+  invariant.
+- **Engine-meta namespace** — adapter-specific information lives under
+  scoped keys (`problog/`, `pyreason/`, `native/`) on `EvidenceNode` and
+  `EvidenceEdge`; the namespace prevents cross-engine field collisions.
+
+A dedicated cycle covering full `EvidenceGraph` API (`EvidenceNode`,
+`EvidenceEdge`, `layout_hint`, complete engine-meta payloads, rendering
+hooks) is pending.
 
 ## 7. Stability of `Inference` and `Branch`
 

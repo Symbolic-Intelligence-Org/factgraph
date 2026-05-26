@@ -67,6 +67,13 @@ Those two references point to different complete coordinates. They share the
 same primary anchor (`user_id="u-1"`), but they are not the same entity
 coordinate.
 
+`Identity(default="en")` applies the default only when the dimension is
+**omitted** from a ref-construction call (e.g. `fg.read.ref(User,
+user_id="u-1")` resolves to the same coordinate as `... locale="en"`).
+Once written, the default is not retroactively re-applied — the assertion
+records the actual `locale` value used at write time, so changing the
+schema default later does not silently rewrite existing coordinates.
+
 ## Identity vs Field
 
 Use `Identity` when a value decides where facts live. Use `Field` when a value
@@ -240,11 +247,16 @@ assert tuple(updated.skills) == ()
 
 ## What schema add will not do
 
-The current schema mutation surface is intentionally narrow. It does not delete
-fields, rename fields, change field types, change cardinality, or change
-identity fields. Those operations need an explicit migration design because
-they affect existing facts, saved rules, saved inferences, and workspace schema
-digests.
+The current schema mutation surface is **intentionally narrow and
+additive-only by design**. It does not delete fields, rename fields, change
+field types, change cardinality, or change identity fields. Each of those
+operations would change the workspace `schema_digest`, which is recorded
+on every assertion's transaction and is the anchor for `FactGraph.load(...)`,
+`FactGraph.attach(...)`, and the durable Database boundary
+(see [Database and durable views](database.md#schema-strong-correspondence)).
+Schema migration semantics that re-anchor existing facts to a new digest
+are an explicit design decision deferred to a future migration cycle, not
+an accident of incomplete coverage.
 
 ## Complete example
 

@@ -37,6 +37,13 @@ The reference is the graph coordinate for "the `User` whose `user_id` is
 `u-1`". It is an opaque `idref_v1` token. Treat it as a handle returned by
 the SDK, not as a string you parse or construct yourself.
 
+`idref_v1` is a versioned entity-reference scheme: the SDK is free to
+change its internal shape across releases as long as the same `(Entity,
+identity-field-values)` resolves to the same coordinate. Parsing the token
+substring (e.g. extracting `"u-1"` from inside it) is **not** a supported
+operation — use `fg.read.ref(...)` to obtain a token and the
+field-descriptor APIs (`User.name` etc.) to read facts.
+
 Calling `fg.read.ref(...)` does not write a fact by itself. It only gives
 later write calls a managed coordinate.
 
@@ -147,6 +154,16 @@ snapshot, use the selection-based retract pattern on
 The original assertion is not deleted. It moves out of the active set into
 history. The retract itself is a separate ledger record whose id is the
 return value.
+
+The append-only retract design is not just a storage convenience — it is
+the foundation of **evidence reproducibility**. Past evaluations,
+explanations, and audit records reference assertions by `asrt_id`; if a
+retract destroyed the original assertion, those references would dangle
+and the evidence chain would become unreproducible. By keeping the
+original record in history and adding a separate revocation record, every
+historical evidence trail can still be replayed exactly as it was —
+the "active vs historical" distinction is computed at read time from the
+two records, not stored as a mutable flag.
 
 ## Complete example
 
