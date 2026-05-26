@@ -1,6 +1,6 @@
 # Task Blueprint: T12 Minimal Housekeeping
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: S/M (predicted docs / lifecycle housekeeping)
@@ -64,7 +64,8 @@ T12 should clean these lifecycle seams without changing product behavior.
 | `workflow/design/decisions/README.md` | ADR lifecycle: proposed / adopted / superseded / withdrawn. |
 | `workflow/design/decisions/active/2026-05-25_t5-d16-*.md` through `t5-d26-*.md` | D-doc lifecycle review target set. |
 | `workflow/blueprints/archive/2026-05-25_t5-*.md`, `workflow/blueprints/archive/2026-05-26_t5-8-*.md` | Implementation evidence for D-doc status decisions. |
-| `workflow/memory/current.md` and any known external memory/index files | Memory/progress sync targets after Step 4.6 path inventory. |
+| `workflow/memory/current.md` | Repo-local memory/progress sync target; draft read measured 168,593 bytes. |
+| `/Users/zhenzhili/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md` | Known global Claude memory index; scoped read measured 31,523 bytes, above the user-reported 24.4KB target. Editing is outside repo and requires explicit handling before implementation. |
 
 ## 3. Proposed Shape
 
@@ -76,7 +77,7 @@ Step 4.6 must classify `rule-expression-and-proof-track-plan.zh.md`:
 - **Mark superseded / leave active** if there are still live T6+ references or unresolved decisions not covered elsewhere.
 - **No move** if lifecycle rules make archive unsafe; record why.
 
-If archived, use `git mv` into `workflow/design/design-points/archive/` and update any index/reference that must point to the archive path.
+If archived, use `git mv` into `workflow/design/design-points/archive/` and update any index/reference that must point to the archive path. Step 4.6 confirmed this archive directory already exists.
 
 ### 3.2 T12.2 D16-D26 Lifecycle
 
@@ -87,6 +88,8 @@ Step 4.6 must inspect each D16-D26 file and decide one of:
 - `proposed`: leave unchanged if the decision was never formally adopted or still has unresolved scope.
 
 The default expectation is conservative: many D-docs may become `adopted`, but adoption is not automatic. Each row needs a source anchor to the relevant implemented T5 slice.
+
+If a D-doc is adopted, add an `Implementation Anchors:` metadata line near the header with the relevant T5/T5.8 slice commit(s). If a D-doc remains proposed, do not add an implementation anchor merely as decoration.
 
 ### 3.3 T12.3 Active Design-Point Index
 
@@ -100,8 +103,9 @@ Inspect `workflow/design/design-points/README.md` and active design-points. Upda
 
 Step 4.6 must locate memory/progress files and classify them:
 
-- repo-local writable memory (`workflow/memory/current.md`);
-- external index/progress files, if their paths are known and writable;
+- repo-local writable memory (`workflow/memory/current.md`, currently 168,593 bytes);
+- global Claude index (`/Users/zhenzhili/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md`, currently 31,523 bytes and the main over-limit prune target);
+- other external index/progress files, if their paths are known and writable;
 - inaccessible or unknown external files, which become follow-up instructions instead of direct edits.
 
 Possible implementation actions:
@@ -120,6 +124,7 @@ Likely docs-only changes:
 - D16-D26 files status changes and/or `workflow/design/decisions/README.md` adopted index population.
 - `workflow/memory/current.md` compact summary, if safe.
 - Possibly external memory/index files only with explicit path confirmation and write permission.
+- `workflow/blueprints/archive/INVENTORY.md` entry for this T12 blueprint when it archives.
 
 Blueprint/audit pair will be closed and archived after implementation.
 
@@ -134,7 +139,24 @@ Before implementation, record:
 5. `workflow/design/design-points/README.md` current active inventory state.
 6. Memory/progress file paths, sizes, writable status, and safe-prune candidates.
 7. Dirty baseline verification.
-8. Any candidate that must be deferred because it would exceed S/M housekeeping scope.
+8. Blueprint archive `INVENTORY.md` update target.
+9. Any candidate that must be deferred because it would exceed S/M housekeeping scope.
+
+### 5.1 Scoped Inventory Results
+
+| # | Item | Result |
+|---|---|---|
+| 1 | Active design-point archive destination | `workflow/design/design-points/archive/` exists; no setup directory cost if T12.1 archives the track plan. |
+| 2 | Track-plan references | Broad repo references remain in audits, archived blueprints, active decisions, memory, and the new roadmap. Implementation must either preserve history links or update only current/live references; archive is not automatic. |
+| 3 | T12.1 candidate | Scoped as "decide after reference classification": likely archive/supersede if only historical references remain, but active audit/decision references must be checked first. |
+| 4 | D16-D26 current status | All eleven files currently say `Status: proposed`. |
+| 5 | D-doc implementation-anchor metadata | Scoped yes for adopted D-docs only: add `Implementation Anchors:` when status moves to `adopted`; do not add it to unchanged proposed docs. |
+| 6 | Decisions README adopted index | Exists but currently says `(decisions 落地后填充)`; if D16-D26 are adopted, update the adopted index. |
+| 7 | Design-points README / active inventory | README has lifecycle rules but no active inventory table; scoped candidate for compact active inventory if track-plan status changes. |
+| 8 | Repo memory path | `workflow/memory/current.md` exists and is 168,593 bytes; writable in repo. Needs size assessment before pruning. |
+| 9 | Global memory path | `/Users/zhenzhili/.claude/projects/-Users-zhenzhili-hnsm-backend/memory/MEMORY.md` exists and is 31,523 bytes; primary over-limit index target. It is outside repo writable roots, so implementation must request/obtain permission before editing or record a follow-up. |
+| 10 | Blueprint archive inventory | `workflow/blueprints/archive/INVENTORY.md` exists; `workflow/blueprints/active/INVENTORY.md` does not. Archive step must update the archive inventory only. |
+| 11 | Dirty baseline | Preserve existing 6 modified + 1 untracked; no T12 draft/scoped edit touches them. |
 
 ## 6. Verification
 
@@ -144,6 +166,7 @@ Before implementation, record:
 - Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
 - If files are moved, `git status` shows intentional renames, not delete/add churn where avoidable.
 - If memory is pruned, before/after byte counts are recorded.
+- Archive closure updates `workflow/blueprints/archive/INVENTORY.md`.
 
 ## 7. Risks
 
@@ -162,5 +185,6 @@ Before implementation, record:
 - [ ] T12.2 outcome is explicit for all D16-D26.
 - [ ] T12.3 either updates design-point index or records "no change needed".
 - [ ] T12.4 either prunes/syncs memory safely or records scoped follow-up.
+- [ ] `workflow/blueprints/archive/INVENTORY.md` updated when this blueprint archives.
 - [ ] No production behavior changes.
 - [ ] Dirty baseline and sacred master preserved.
