@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-26 | scoped | `20bae7ba` | Reconciliation blueprint pair drafted | Self-owned cycle. Triggered by retroactive review of T5 branch's `quickstart-database-view` cycle (8 commits `bf161c62..c77d0442`) which authored against pre-T11.1 state and now contradicts T11.1's shipped `attach(..., view=view)` (`76f46ada`). |
 | 2026-05-26 | implemented | `1c54f587` | Database.md content cherry-picked + A1+A2+A3 amends + 4 cross-link reconciliations | 5 docs files touched: new database.md (+388 LOC), index.md (database.md inserted as #5), persistence.md (+5-line cross-link paragraph), assertions.md (+7-line cross-link paragraph), namespace-map.md (+1-sentence cross-link in attach row). 7-step end-to-end smoke green; Complete example block also runs green. 0 production files. |
+| 2026-05-26 | fix | pending | Step 4.8 post-archive fix: schema strong correspondence explicit | User review caught that database.md mentions schema validation in two scattered places but does not name the **three-way strong correspondence chain** locked by the T11.1 blueprint: `compiled(schema_classes) == db.schema_digest == view.schema_digest`. Added (1) writable-attach 2-way chain explanation + exact error message in §"Attach a FactGraph runtime"; (2) new §"Schema strong correspondence" subsection under §"View-scoped attach" with 5-row reject table covering compiled-vs-db / view-vs-db schema / view-vs-db id / base_tx_id materialization / asrt_ids presence; (3) syntax checklist bullet summarizing the 3-way chain. 3 new negative-path smoke assertions verified green: compiled-vs-db schema mismatch (writable path), compiled-vs-db schema mismatch (view-scoped path), cross-database view db_id mismatch. |
 
 ## 2. Source Reads
 
@@ -97,10 +98,11 @@ Additionally:
 
 - [x] Step 4.6 scoped inventory recorded before implementation.
 - [x] Implementation applied amends A1+A2+A3 correctly.
-- [x] Smoke 7/7 passed.
+- [x] Smoke 7/7 passed (and post-Step-4.8 fix: smoke 7/7 + 3 new schema-correspondence reject paths green).
 - [x] No `# FactGraph.attach(db, view=view, ...)   # not shipped` line remains anywhere in docs.
 - [x] No "Do not pass `view=` ... or attach APIs" wording remains anywhere in docs.
 - [x] No production files touched; dirty baseline preserved.
+- [x] **Step 4.8 fix**: Schema **three-way strong correspondence** chain (`compiled(schema_classes) == db.schema_digest == view.schema_digest`) explicitly named, with 5-row reject table and writable-attach 2-way chain explanation.
 
 ## 8. Closure Notes
 

@@ -101,6 +101,25 @@ Attached runtimes are deliberately stricter than ordinary SDK runtimes. Writes
 route through `fg.commit_assertions(...)`, which delegates to
 `Database.commit_assertions(...)`.
 
+`schema_classes=[...]` is **not optional and not a filter**. The SDK compiles
+those classes to a schema digest and requires it to match the Database's
+schema digest exactly:
+
+```text
+schema_digest(compile_schema_from_classes(schema_classes)) == db.schema_digest
+```
+
+Any difference — missing entity classes, extra unrelated classes, or class
+order causing a different compiled digest — rejects attach with:
+
+```text
+SDKStoreError: schema mismatch: Database has schema_digest=...,
+but schema_classes compile to ...
+```
+
+`schema_classes` is not a way to view a subset of the Database; it must
+reconstruct the same compiled schema the Database was created with.
+
 Common SDK mutation shortcuts reject in attached mode:
 
 ```python
@@ -291,9 +310,36 @@ when you need to write through `fg.commit_assertions(...)`. Use the
 view-scoped attach when you need a frozen read-only view of a specific
 Database view object.
 
-Pass `view=None` (the default) for a non-view attach. The kwarg validates
-that `view.db_id == db.db_id` and `view.schema_digest == db.schema_digest`
-before the runtime is built; mismatches raise `SDKStoreError` immediately.
+Pass `view=None` (the default) for a non-view attach.
+
+### Schema strong correspondence
+
+View-scoped attach extends the writable-attach schema-digest equality into a
+**three-way correspondence chain**, all checked before the runtime is built:
+
+```text
+schema_digest(compile_schema_from_classes(schema_classes))
+  == db.schema_digest
+  == view.schema_digest
+```
+
+Plus the Database-identity binding and the view's frozen-base anchors:
+
+| Check | Reject error |
+| --- | --- |
+| `compiled(schema_classes) != db.schema_digest` | `SDKStoreError: schema mismatch: Database has schema_digest=..., but schema_classes compile to ...` |
+| `view.schema_digest != db.schema_digest` | `SDKStoreError: view schema mismatch: view.schema_digest=..., ...` |
+| `view.db_id != db.db_id` | `SDKStoreError: view db_id mismatch: view.db_id=..., Database.db_id=...` |
+| `view.base_tx_id` not materializable from this Database | `SDKStoreError: view base_tx_id not found in Database: ...` |
+| `view.asrt_ids` not present at `view.base_tx_id` | `SDKStoreError: view references assertion ids not present at base_tx_id=...` |
+
+There is no fallback to current head or the full assertion universe; any
+broken link in the chain rejects attach.
+
+This means a Database `view` object created against one Database **cannot** be
+attached against a different Database, and a view created with one schema
+**cannot** be attached with incompatible `schema_classes` — even if the view's
+`asrt_ids` happen to exist in another workspace.
 
 ## Complete example
 
@@ -386,3 +432,8 @@ with TemporaryDirectory() as tmp_dir:
 - `view=` is an attach-time argument: `FactGraph.attach(db, schema_classes=[...], view=view)`
   produces a read-only, view-scoped runtime. It is not accepted as a row-level
   parameter on `fg.read.find(...)` or `fg.eval.evaluate(...)`.
+- Attach enforces a **three-way schema strong correspondence**:
+  `compiled(schema_classes) == db.schema_digest == view.schema_digest`
+  (the third leg only on view-scoped attach). `schema_classes` is not a
+  Database-side filter; incomplete or mismatched classes reject before any
+  read.
