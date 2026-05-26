@@ -3,7 +3,7 @@
 - Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
-- Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
+- Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_quickstart-rules-ports-ruleexpr.md`
 - Stage: scoped
 - Class: M (predicted docs-only)
