@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.7 Match API Design
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: M/L (predicted docs-only design synthesis; may narrow after Step 4.6)
@@ -151,6 +151,50 @@ assertion sets.
 | D6 | `fg.eval.run` | Match design may lock the replacement path, but deletion timing likely remains v0.3 / future hard-cut. |
 | D7 | Facade impact | If match returns/refines `AssertionRecordSet`, property-style assertion access may be aligned; otherwise dirty facade change may be obsolete or separate. |
 
+## 4.1 Scoped Decision Lock
+
+Step 4.6 accepts the following design direction for the implementation design
+document:
+
+| Decision | Scoped lock |
+|---|---|
+| D1 Namespace | Use `fg.read.match(...)`. Match is read-side pattern search, not assertion-record filtering, evaluation, or query persistence. |
+| D2 Template type | Accept application `Rule` and `RuleExpr`; a single `Rule` is the 1-rule shorthand. Do not accept list/tuple templates; callers use `R1 & R2`, `R1 \| R2`, `RuleExpr.all(...)`, or `RuleExpr.any(...)`. Legacy `Query` remains a compatibility object and is not the primary v0.2 match template. |
+| D3 Return shape | Match is a row/snapshot read surface keyed by Rule ports. It does not return `AssertionRecordSet`, `Claim`, `EvaluateRow`, or `Explanation`. Concrete DTO/list mechanics are left to the future implementation blueprint, but the semantic shape is port-binding rows, not assertion-record collections. |
+| D4 Witness boundary | v0.2 match does not expose witness assertion ids. Witness rows, view materialization from witnesses, and rows+evidence remain future design. |
+| D5 View integration | Match follows T11.1 attach-only view scoping. No method-level `view=` for `fg.read.match(...)` in v0.2. |
+| D6 `fg.eval.run` timing | This design locks the replacement direction but does not delete `fg.eval.run`. Deletion remains a later hard-cut after docs and implementation migration. |
+| D7 Facade impact | Dirty `facade.py` property-style assertion access is not required by v0.2 match. It may still land as a standalone assertion ergonomics slice, but match design no longer forces it. |
+
+## 4.2 Candidate Comparison Summary
+
+Namespace candidates:
+
+| Candidate | Pro | Con | Scoped result |
+|---|---|---|---|
+| `fg.read.match(...)` | Aligns parent §4.9; read-side natural; keeps Query/Search separate from inference. | Needs new read method later. | **Chosen.** |
+| `fg.assertions.match(...)` / `AssertionRecordSet.match(...)` | Directly feeds assertion filtering. | Prior note warns it puts a query engine into assertion selection; too narrow for snapshot rows. | Rejected for v0.2. |
+| `fg.query.match(...)` / `fg.queries.*` | Names Query explicitly. | Query persistence is deferred; `fg.queries` should not exist only for symmetry. | Rejected/deferred. |
+| `fg.eval.run(...)` / `rules.run(query)` | Existing historical mental model. | T5 moved evaluation away from run; C63 wants replacement path. | Freeze only; not future target. |
+
+Template candidates:
+
+| Candidate | Pro | Con | Scoped result |
+|---|---|---|---|
+| `Rule` | Matches current application protocol; ports define output contract. | Requires users to learn `ports`. | **Chosen.** |
+| `RuleExpr` | Enables composed match patterns; already part of parent design. | Requires join/alias constraints. | **Chosen.** |
+| `Query` | Existing one-off projection object. | Has projection `head`, no ports, and legacy lowering; mixing it into match keeps old model alive. | Compatibility/defer only. |
+| list/tuple of templates | Convenient. | Ambiguous AND/OR semantics; duplicates existing RuleExpr factories. | Rejected; use `RuleExpr.all/any`. |
+
+Return-shape candidates:
+
+| Candidate | Pro | Con | Scoped result |
+|---|---|---|---|
+| Port-binding rows / snapshots | Fits `Rule.ports`; read-side mental model; works for entity and scalar ports. | Exact DTO/list mechanics still need implementation design. | **Chosen semantic shape.** |
+| `AssertionRecordSet` | Reuses assertion filtering surface; aligns with dirty `facade.py`. | Too narrow for snapshot/value ports; prior note says it is not a general query engine. | Rejected as primary shape. |
+| rows + witness assertion ids | Useful bridge to views and assertions. | Witness semantics not designed; can drift into evidence/proof. | Future. |
+| `Claim` / `EvaluateRow` / `Explanation` | Reuses T5 DTO ladder. | These are evaluate/explain/evidence surfaces, not read-side match. | Rejected. |
+
 ## 5. Proposed Step 4.6 Inventory
 
 The scoped inventory must fill:
@@ -158,12 +202,17 @@ The scoped inventory must fill:
 1. exact references to match / Query migration in active parent essay;
 2. exact references in `query-view-and-inference-handles.zh.md`;
 3. exact shipped Query class / lower / runtime behavior;
-4. current SDK public exports involving `Query`, `Rule`, `RuleExpr`,
+4. explicit application `Rule` vs legacy `Query` comparison;
+5. current SDK public exports involving `Query`, `Rule`, `RuleExpr`,
    `AssertionRecordSet`, `FactGraph.read`, and `FactGraph.assertions`;
-5. existing docs mentions of `fg.eval.run`, `Query`, and match-like behavior;
-6. whether `facade.py` dirty behavior aligns with each candidate return shape;
-7. recommended output location: new design-point vs D-doc vs parent essay edit;
-8. class decision after inventory: M or L.
+6. existing docs mentions of `fg.eval.run`, `Query`, and match-like behavior;
+7. namespace comparison matrix;
+8. template type comparison matrix;
+9. return shape comparison matrix, including snapshot vs assertion-record and
+   T5 `Claim` DTO relationships;
+10. whether `facade.py` dirty behavior aligns with each candidate return shape;
+11. recommended output location: new design-point vs D-doc vs parent essay edit;
+12. class decision after inventory: M or L.
 
 ## 6. Expected Implementation Shape
 
@@ -190,12 +239,12 @@ No runtime implementation is expected in T11.2.7.
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory completed with file/line anchors.
-- [ ] Namespace decision recorded.
-- [ ] Template type decision recorded.
-- [ ] Return shape decision recorded.
-- [ ] View integration decision recorded.
-- [ ] `fg.eval.run` migration timing recorded.
-- [ ] T11.2.6 facade impact recorded.
+- [x] Step 4.6 inventory completed with file/line anchors.
+- [x] Namespace decision recorded.
+- [x] Template type decision recorded.
+- [x] Return shape decision recorded.
+- [x] View integration decision recorded.
+- [x] `fg.eval.run` migration timing recorded.
+- [x] T11.2.6 facade impact recorded.
 - [ ] No implementation code changes.
 - [ ] Dirty baseline preserved.
