@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.6 SDK Assertion Property Access
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: S/M (predicted narrow SDK ergonomics slice)
@@ -179,9 +179,75 @@ If Step 4.6 confirms the draft leaning:
 
 - [x] Step 4.6 inventory completed with collision and docs-surface checks.
 - [x] Land/stash/revert verdict recorded.
-- [ ] Backward compatibility for `.active()` / `.all()` verified.
-- [ ] `AssertionNamespace.__getattr__` collision behavior verified.
-- [ ] Narrow docs sync completed or explicitly not needed.
-- [ ] Focused tests pass.
-- [ ] No release machinery, match API, service, OpenAPI, notebook, or unrelated
+- [x] Backward compatibility for `.active()` / `.all()` verified.
+- [x] `AssertionNamespace.__getattr__` collision behavior verified.
+- [x] Narrow docs sync completed or explicitly not needed.
+- [x] Focused tests pass.
+- [x] No release machinery, match API, service, OpenAPI, notebook, or unrelated
       dirty-baseline files touched.
+
+## 8. Outcome / Deviations
+
+### 8.1 Landed implementation
+
+Implemented with `1e7b4949` (`feat(sdk): add property-style assertion access`).
+
+Landed code:
+
+- `AssertionRecordSet.__call__() -> self` as the stable no-op compatibility
+  shim for legacy field-level call forms.
+- `FieldAssertions.active`, `.history`, and `.all` as properties.
+- `AssertionNamespace.__getattr__` for collision-free schema field proxy access.
+- Internal namespace aggregation now uses property access (`field_assertions.active`
+  and `.history`) while graph-level `fg.assertions.active()` / `.all()` remain
+  methods.
+
+### 8.2 Tests and compatibility
+
+`tests/test_sdk_assertion_record_set_view_filters.py` now covers the scoped
+compatibility and collision matrix:
+
+- field-level `.active` property and legacy `.active()` identity;
+- `.all()` legacy call identity with `.history`;
+- `snap.assertions.<known_field>` proxy hit;
+- unknown field `AttributeError`;
+- reserved `snap.assertions.field` method precedence;
+- dunder lookup preserving normal Python behavior;
+- invalid chain misuse (`snap.field("name").active.active`) raising
+  `AttributeError`;
+- `AssertionRecordSet.__call__()` identity behavior through the legacy calls.
+
+### 8.3 Docs sync
+
+Narrow assertion-access docs were updated in six files:
+
+- `docs/official/kernel/quickstart/assertions.md`;
+- `src/factgraph/sdk/docs/00_user_guide.en.md`;
+- `src/factgraph/sdk/docs/01_concepts.en.md`;
+- `src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md`;
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`;
+- `src/factgraph/sdk/docs/04_api_surface.en.md`.
+
+The docs now teach property-first field assertion access (`.active`,
+`.history`, `.all`) and explicitly state that legacy `.active()` / `.all()`
+call forms remain accepted.
+
+### 8.4 Verification
+
+Verification performed:
+
+- `PYTHONPATH=src python -m unittest tests.test_sdk_assertion_record_set_view_filters`
+  → `Ran 7 tests ... OK`;
+- `python -m ruff check src/factgraph/sdk/facade.py tests/test_sdk_assertion_record_set_view_filters.py`
+  → clean;
+- `git diff --check` → clean;
+- field-level stale-call grep for `snap/snapshot.field(...).active()` and
+  `.all()` in the touched docs surface → zero hits.
+
+### 8.5 T11.3 handoff
+
+This cycle resolves the production/test dirty pair identified by T11.2.5.
+The remaining dirty baseline is docs/notebooks plus the untracked Rainbird
+reference tree, matching the earlier triage verdicts. T11.3 release dry-runs
+still require those remaining tracked dirty files to be landed, stashed, or
+explicitly reverted.

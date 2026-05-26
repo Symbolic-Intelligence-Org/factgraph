@@ -1,11 +1,11 @@
 # Audit: T11.2.6 SDK Assertion Property Access
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-2-6-sdk-assertion-property-access.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M (predicted narrow SDK ergonomics slice)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve the standing dirty set except for the scoped
@@ -17,7 +17,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-26 | draft | `da2bdc0a` | T11.2.6 blueprint pair drafted | Triggered by T11.2.5 dirty verdict and T11.2.7 match decoupling. |
-| 2026-05-26 | scoped | TBD | Step 4.6 assertion property inventory recorded | Layer split, reserved names, docs scope, tests, and land verdict locked. |
+| 2026-05-26 | scoped | `fdf8a78b` | Step 4.6 assertion property inventory recorded | Layer split, reserved names, docs scope, tests, and land verdict locked. |
+| 2026-05-26 | implemented | `1e7b4949` | SDK assertion property access landed | Property-style field assertions, compatibility shim, namespace proxy tests, and narrow docs sync. |
 
 ## 2. Pre-Draft Inventory
 
@@ -72,10 +73,42 @@ The scoped inventory must fill:
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
+- [x] Step 4.2 review complete.
 - [x] Step 4.6 inventory complete.
 - [x] Land/stash/revert verdict recorded.
-- [ ] Compatibility decision reviewed.
-- [ ] Namespace collision decision reviewed.
-- [ ] Docs sync decision reviewed.
-- [ ] Closure notes filled.
+- [x] Compatibility decision reviewed.
+- [x] Namespace collision decision reviewed.
+- [x] Docs sync decision reviewed.
+- [x] Closure notes filled.
+
+## 6. Closure Notes
+
+Implemented with `1e7b4949` (`feat(sdk): add property-style assertion access`).
+
+Final landed scope:
+
+- `AssertionRecordSet.__call__() -> self` preserves legacy field-level
+  `.active()` / `.all()` calls.
+- `FieldAssertions.active`, `.history`, and `.all` are property-first accessors.
+- `AssertionNamespace.__getattr__` exposes collision-free schema fields through
+  `snap.assertions.<field>`.
+- Companion tests cover property access, legacy-call identity, known/unknown
+  field proxy behavior, reserved method precedence, dunder lookup, and misuse
+  chaining.
+- Six assertion-access docs files were updated to teach property-first access
+  while documenting legacy call compatibility.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.test_sdk_assertion_record_set_view_filters`
+  → `7 OK`.
+- `python -m ruff check src/factgraph/sdk/facade.py tests/test_sdk_assertion_record_set_view_filters.py`
+  → clean.
+- `git diff --check` → clean.
+- Field-level stale-call docs grep for `snap/snapshot.field(...).active()` and
+  `.all()` returned zero hits.
+
+No release machinery, match API, service, OpenAPI, notebook, external reference,
+or unrelated dirty-baseline files were touched. Remaining dirty tracked files
+are docs/notebooks deferred by T11.2.5; T11.3 still needs them landed,
+stashed, or explicitly reverted before release dry-run.
