@@ -1,0 +1,72 @@
+name: factgraph-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install factgraph package and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Ruff (factgraph gate)
+        run: |
+          python -m ruff check src/factgraph tests/application/protocol tests/sdk tests/test_branch_identity_rule_inspect.py tests/test_sdk_assertion_record_set_view_filters.py
+
+      - name: Mypy (factgraph audit)
+        continue-on-error: true
+        run: |
+          python -m mypy src/factgraph
+
+      - name: Test (G7 preservation + assertion ergonomics)
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m unittest \
+            tests.application.protocol.test_rule \
+            tests.application.protocol.test_rule_expr \
+            tests.sdk.test_ruleexpr_inspect \
+            tests.sdk.test_rule_naming \
+            tests.application.protocol.test_rule_aggregate \
+            tests.test_branch_identity_rule_inspect \
+            tests.application.protocol.test_rule_expr_lowering \
+            tests.application.protocol.test_rule_expr_lowering_adapter \
+            tests.sdk.test_rule_expr_evaluate \
+            tests.application.protocol.test_rule_expr_head_validation \
+            tests.test_sdk_assertion_record_set_view_filters
+
+      - name: Coverage report (factgraph focused, non-threshold)
+        continue-on-error: true
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m coverage run -m unittest \
+            tests.application.protocol.test_rule \
+            tests.application.protocol.test_rule_expr \
+            tests.sdk.test_ruleexpr_inspect \
+            tests.sdk.test_rule_naming \
+            tests.application.protocol.test_rule_aggregate \
+            tests.test_branch_identity_rule_inspect \
+            tests.application.protocol.test_rule_expr_lowering \
+            tests.application.protocol.test_rule_expr_lowering_adapter \
+            tests.sdk.test_rule_expr_evaluate \
+            tests.application.protocol.test_rule_expr_head_validation \
+            tests.test_sdk_assertion_record_set_view_filters
+          python -m coverage report

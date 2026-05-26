@@ -2,13 +2,13 @@
 
 ## Scope
 
-This document covers security hygiene for the v0.1 kernel-only wheel and local repository development.
+This document covers security hygiene for the FactGraph package and local repository development.
 
 It covers:
 
 - local secret handling via `.env`
 - `.env.example` hygiene
-- release-surface expectations for the kernel package
+- release-surface expectations for the `factgraph` package
 
 It does not cover:
 
@@ -18,7 +18,7 @@ It does not cover:
 - rate limiting
 - external secret-manager integration
 
-The v0.1 kernel-only wheel does not expose network endpoints, does not implement remote authentication, and does not contact external services unless user code explicitly does so through optional adapters or application-specific integrations.
+The `factgraph` wheel does not expose network endpoints, does not implement remote authentication, and does not contact external services unless user code explicitly does so through optional adapters or application-specific integrations.
 
 ## Secret Handling
 
@@ -43,4 +43,4 @@ It is a lightweight guardrail that fails if `.env.example` contains uncommented 
 
 ## Reporting Vulnerabilities
 
-Before public release, finalize the reporting channel in the public repository. Preferred target: GitHub Security Advisories for the public `factpy-kernel` repository.
+Before public release, finalize the reporting channel in the public repository. Preferred target: GitHub Security Advisories for the public `factgraph` repository.

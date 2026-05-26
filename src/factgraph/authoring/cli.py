@@ -12,10 +12,6 @@ from factgraph.authoring.dsl_bridge import (
     build_authoring_session_from_dsl_inputs_dto,
     build_authoring_session_from_dsl_inputs_safe_dto,
 )
-from factgraph.authoring.schema_dsl_parse import (
-    AuthoringSchemaDSLParseError,
-    parse_authoring_schema_dsl_v1,
-)
 from factgraph.authoring.session import build_authoring_session_dto
 from factgraph.authoring.workflow import build_authoring_publish_workflow_dry_run_bundle_dto
 

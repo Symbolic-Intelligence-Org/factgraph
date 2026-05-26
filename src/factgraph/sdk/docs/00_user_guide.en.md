@@ -34,7 +34,7 @@ For walker views and advanced importables see
 ### Install
 
 ```bash
-python -m pip install factpy-kernel
+python -m pip install factgraph
 ```
 
 For development from source:

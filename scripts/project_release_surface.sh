@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MONOREPO="${MONOREPO:-$(pwd)}"
-STAGING="${STAGING:-/tmp/factpy_kernel_projection}"
+STAGING="${STAGING:-/tmp/factgraph_projection}"
 ALLOWLIST="${ALLOWLIST:-$MONOREPO/scripts/release_surface_allowlist.txt}"
 MANIFEST="${MANIFEST:-$STAGING.manifest}"
 
@@ -97,13 +97,13 @@ while IFS= read -r rel; do
   done
 done < "$MANIFEST"
 
-bad_link_pattern='docs/blueprints|docs/blueprint_history|docs/references|memory/|\.claude|AGENTS\.md|src/agent|src/service|src/domains|third_party|tools/|requirements/dev\.txt|examples/|samples/'
+bad_link_pattern='docs/blueprints|docs/blueprint_history|docs/references|memory/|\.claude|AGENTS\.md|src/agent|src/service|src/domains|src/kernel|kernel\.sdk|from kernel|third_party|tools/|requirements/dev\.txt|examples/|samples/'
 bad_links="$(
   grep -RInE "$bad_link_pattern" \
     "$STAGING/README.md" \
     "$STAGING/README.en.md" \
     "$STAGING/docs" \
-    "$STAGING/src/kernel" \
+    "$STAGING/src/factgraph" \
     --include='*.md' 2>/dev/null || true
 )"
 if [[ -n "$bad_links" ]]; then

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# release.sh — one-command release for FactPy Kernel.
+# release.sh — one-command release for FactGraph.
 #
 # Encapsulates the full milestone → projection → release-branch → tag flow
 # documented in CONTRIBUTING.md "Releasing" section.
@@ -130,7 +130,7 @@ cat <<EOF
   Milestone (new)    : $MILESTONE_BRANCH
   Release branch     : $RELEASE_BRANCH ($([[ "$RELEASE_BRANCH_EXISTS" == true ]] && echo "exists, will append" || echo "new orphan"))
   Tag                : $VERSION (annotated)
-  Verify             : $([[ "$SKIP_VERIFY" == true ]] && echo "SKIPPED (--skip-verify)" || echo "pip install -e . && tests")
+  Verify             : $([[ "$SKIP_VERIFY" == true ]] && echo "SKIPPED (--skip-verify)" || echo "pip install -e . && focused tests")
   Mode               : $([[ "$DRY_RUN" == true ]] && echo "DRY-RUN (no push, full cleanup)" || echo "LIVE (push + persist)")
 EOF
 
@@ -210,7 +210,18 @@ if [[ "$SKIP_VERIFY" == false ]]; then
   (
     cd "$STAGING"
     python -m pip install -e . --quiet
-    PYTHONPATH=src python -m unittest discover -s src/kernel/tests -p "test_*.py" 2>&1 | tail -3
+    PYTHONPATH=src python -m unittest \
+      tests.application.protocol.test_rule \
+      tests.application.protocol.test_rule_expr \
+      tests.sdk.test_ruleexpr_inspect \
+      tests.sdk.test_rule_naming \
+      tests.application.protocol.test_rule_aggregate \
+      tests.test_branch_identity_rule_inspect \
+      tests.application.protocol.test_rule_expr_lowering \
+      tests.application.protocol.test_rule_expr_lowering_adapter \
+      tests.sdk.test_rule_expr_evaluate \
+      tests.application.protocol.test_rule_expr_head_validation \
+      tests.test_sdk_assertion_record_set_view_filters 2>&1 | tail -3
   )
   info "verify passed"
 else

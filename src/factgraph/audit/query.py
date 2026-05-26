@@ -38,7 +38,7 @@ class AuditOptionalDomainError(AuditQueryError):
 
 _ECSS_COMPLIANCE_OPTIONAL_DOMAIN_MESSAGE = (
     "AuditQuery.list_compliance_matrix requires the optional domains.ecss package. "
-    "The factpy-kernel v0.1 wheel is kernel-only and does not include domains; "
+    "The factgraph wheel does not include optional domain packages; "
     "use the monorepo/domain package, or call domains.ecss.compliance."
     "build_compliance_matrix_rows when that domain package is installed."
 )

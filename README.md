@@ -25,7 +25,7 @@ surfaces are not part of the `factgraph` release.
 > pip install factgraph
 > ```
 
-For architecture principles, see [docs/architecture_principles.md](docs/architecture_principles.md).
+For implementation architecture, see the module documentation links below.
 
 ## Install
 
