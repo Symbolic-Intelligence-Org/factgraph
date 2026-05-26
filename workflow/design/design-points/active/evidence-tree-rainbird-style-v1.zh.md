@@ -2334,15 +2334,135 @@ LAYOUT_TIMELINE grid:
 
 ## 10. Audit Channel(v1)
 
-> **[SKELETON pending]** — Phase B 推进。
+> **本节状态**:Phase B design lock(2026-05-27 / T6)。本节定义 v1
+> audit channel 的**sessionless**契约:一个 `EvaluateResult` envelope、一个
+> row-bound `Explanation`、以及可 roundtrip 的 `EvidenceGraph.metadata`
+> 共同构成 v1 audit record。它不是 Rainbird `/interactions/` session log,
+> 也不是 cryptographic provenance channel。
 
-**v1 audit 由以下承担**:
-- `EvaluateResult.run_id` / `evaluated_at` / `result_digest`(主文档 §5.8.5 / C68)
-- `Explanation.head.id` / `head.content_digest` / `expr_digest` / `evidence.graph_id`
+### 10.1 v1 audit channel 的三层
 
-**v2+ deferred**:
-- Session log channel(Rainbird `/interactions/` 等价)
-- evidence 不可篡改(hash / signature)
+| 层 | 载体 | v1 职责 | 非职责 |
+|---|---|---|---|
+| **Result envelope** | `EvaluateResult` | 记录本次 evaluate run 的 immutable identity、engine、schema/view/semantics digest、rows 与 result digest | 不记录用户 session transcript;不保证 append-only log |
+| **Row explanation** | `Explanation` | 把单个 `EvaluateRow` 的 passed/failed/unsupported/invalid_request 状态、claim、carrier、checked scope、errors/warnings 归一到一个 envelope | 不把 failed 状态伪装成 partial evidence graph |
+| **Durable graph metadata** | `EvidenceGraph.metadata` | 对 passed row 的 graph copy 单一 row/result context,供 audit package / renderer / JSON roundtrip 稳定消费 | 不承诺完整 derivation topology;不暴露 match witnesses |
+
+v1 的重要取舍是 **sessionless**:audit record 是 evaluation result 的 deterministic
+envelope,而非用户交互过程的 transcript。Rainbird `/interactions/` 风格的 session
+channel 留到 D8。
+
+### 10.2 Envelope-level audit fields
+
+这些字段属于 `EvaluateResult` / `Explanation` envelope,不是全部复制进
+`EvidenceGraph.metadata`:
+
+| 字段 | 来源 | 必需性 | 用途 |
+|---|---|---|---|
+| `result_id` | `EvaluateResult.result_id` | required | result envelope primary id;也复制到 graph metadata |
+| `run_id` | `EvaluateResult.run_id` | required | single evaluate invocation id;**当前不复制到 graph metadata** |
+| `evaluated_at` | `EvaluateResult.evaluated_at` | required | evaluate timestamp;复制为 JSON-safe metadata value |
+| `result_digest` | `EvaluateResult.result_digest` | required | complete result envelope digest;复制到 graph metadata |
+| `head` | `EvaluateResult.head` / `Explanation.claim` | required | evaluate-side projection target and row claim context |
+| `engine` | `EvaluateResult.engine` | required | engine identity;复制到 graph metadata |
+| `engine_version` | `EvaluateResult.engine_version` | optional | engine version;复制到 graph metadata |
+| `adapter_version` | `EvaluateResult.adapter_version` | optional | adapter version;复制到 graph metadata |
+| `expr_digest` | `EvaluateResult.expr_digest` | required | expression/template digest;复制到 graph metadata |
+| `rule_set_digest` | `EvaluateResult.rule_set_digest` | required | rule set digest;复制到 graph metadata |
+| `view_snapshot_digest` | `EvaluateResult.view_snapshot_digest` | required | db/view snapshot bridge(T11.2);复制到 graph metadata |
+| `semantics_digest` | `EvaluateResult.semantics_digest` | optional | semantics profile digest;复制到 graph metadata |
+
+**设计锁**:`run_id` 保持 envelope-level audit 字段。T6 不要求把它复制进
+`EvidenceGraph.metadata`;若 future consumer 需要 graph-only run grouping,必须走新的
+blueprint 明确激活。
+
+### 10.3 `EvidenceGraph.metadata` v1 字段表
+
+当前 passed row graph copy 以下单一 row/result context:
+
+| 字段 | 来源 | 说明 |
+|---|---|---|
+| `result_id` | `EvaluateResult.result_id` | graph 所属 result |
+| `row_id` | `EvaluateRow.row_id` | explained row |
+| `evidence_ref_id` | `EvaluateRow.evidence_ref.ref_id` | row evidence reference id |
+| `claim_digest` | `EvaluateRow.claim.digest` | row claim digest |
+| `closed_head_digest` | `EvaluateRow.evidence_ref.closed_head_digest` | closed head digest |
+| `expr_digest` | `EvaluateResult.expr_digest` | evaluated expression digest |
+| `rule_set_digest` | `EvaluateResult.rule_set_digest` | evaluated rule set digest |
+| `view_snapshot_digest` | `EvaluateResult.view_snapshot_digest` | db/view snapshot digest bridge |
+| `semantics_digest` | `EvaluateResult.semantics_digest` | semantics profile digest or `None` |
+| `result_digest` | `EvaluateResult.result_digest` | full result digest |
+| `engine` | `EvaluateResult.engine` | engine id |
+| `engine_version` | `EvaluateResult.engine_version` | engine version or `None` |
+| `adapter_version` | `EvaluateResult.adapter_version` | adapter version or `None` |
+| `evaluated_at` | `EvaluateResult.evaluated_at` | JSON-safe timestamp value |
+
+T8 implementation **不得 silently drop** any v1 metadata field above. Adding a new
+metadata key is allowed only when a T8/T10 blueprint declares producer, consumer,
+and backward compatibility impact.
+
+### 10.4 Validation and roundtrip contract
+
+v1 audit validation has two layers:
+
+1. **DTO construction validation**: `EvidenceGraph` rejects unsupported
+   `layout_hint`, duplicate node/edge ids, missing root node, edge endpoints not
+   present in `nodes`, and cycles.
+2. **Envelope sufficiency validation**: row-sourced passed graphs must include
+   enough metadata to connect back to `EvaluateResult`, `EvaluateRow`, claim,
+   closed head, expression, rule set, view snapshot, semantics, engine, and
+   result digest.
+
+Serialization uses `evidence_graph_to_dict(...)` / `evidence_graph_from_dict(...)`.
+The v1 roundtrip contract is:
+
+- dict roundtrip preserves graph identity, node/edge ids, layout hint, support
+  kind, and metadata values after JSON-safe normalization;
+- roundtrip must re-run the constructor validation above;
+- invalid graph rows fail closed with a validation error; callers must not render
+  partially reconstructed graphs.
+
+### 10.5 Immutability / signature stance
+
+v1 relies on:
+
+- frozen DTO dataclasses;
+- shallow-frozen `engine_meta` and `metadata` mappings;
+- deterministic ids/digests carried by `EvaluateResult` / `EvaluateRow`;
+- JSON roundtrip validation at audit/package boundaries.
+
+v1 **does not** provide:
+
+- cryptographic signature over evidence graphs;
+- append-only session/channel log;
+- tamper-evident storage ledger for evidence exports;
+- per-fact ACL redaction channel.
+
+These remain explicit deferred items:session log D8, per-fact ACL D10, and
+signature/tamper-evident channel v2+ governance.
+
+### 10.6 Audit package boundary
+
+The audit package may persist or export `EvidenceGraph` as a durable graph
+record. That durable graph is:
+
+- an engine-bound provenance artifact normalized to the shared renderer shape;
+- allowed to preserve engine truth in `engine_meta` without flattening it;
+- optional for engines/features that do not yet expose graph provenance;
+- consumed by reference renderers and audit readers, not by business logic.
+
+The audit package must not treat absence of a rich graph as failed business
+truth. For v1, minimal passed row graphs remain valid when they satisfy DTO and
+metadata validation.
+
+### 10.7 v2+ deferred audit channels
+
+| Deferred | Trigger | Boundary |
+|---|---|---|
+| Session log channel(Rainbird `/interactions/` equivalent) | user-facing interactive diagnostic flows need replay | separate session/audit design;not implicit in `EvidenceGraph.metadata` |
+| Graph signature / tamper-evident envelope | regulated audit or external artifact verification demand | new signature fields + key governance blueprint |
+| Per-fact ACL / redaction metadata | multi-tenant service deployment | security/service design;not part of local DTO shape |
+| Graph-only run grouping | consumers need `run_id` without `EvaluateResult` envelope | explicit metadata extension blueprint |
 
 ---
 
