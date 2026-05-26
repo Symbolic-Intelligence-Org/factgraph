@@ -1,11 +1,11 @@
 # Audit: T11.2 Cross-doc Metadata Unblock
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-2-cross-doc-metadata-unblock.md`
-- Stage: draft
+- Stage: scoped
 - Class: L (predicted release-blocker documentation / tests / metadata decision slice; may narrow to M after Step 4.6)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked must be preserved
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-26 | draft | TBD | T11.2 blueprint pair drafted | Triggered by roadmap N3 and read-only Parfit inventory of database-view Step 1-6 / I10 / A10 seams. |
+| 2026-05-26 | draft | `e1bdfa43` | T11.2 blueprint pair drafted | Triggered by roadmap N3 and read-only Parfit inventory of database-view Step 1-6 / I10 / A10 seams. |
+| 2026-05-26 | scoped | TBD | Step 4.6 inventory scoped | Filled Step 1-6 / I10 / A10 source map, accepted `view_snapshot_digest` as v0.2 bridge, scoped three release-facing docs fixes, and added T11.1 archive cleanup. |
 
 ## 2. Read-only Agent Inventory Summary
 
@@ -59,6 +60,7 @@ Draft-time local grep confirmed:
 | Treat method-level `view=` as v2 deferred | User simplification and T11.1 scope locked this boundary. |
 | Treat `Database.as_of(...)` as deferred | Shipped code lacks it; release docs must not imply it exists. |
 | Prefer docs/tests only | Production changes require amend unless Step 4.6 proves a shipped invariant lacks implementation. |
+| Archive T11.1 blueprint pair in T11.2 | Step 4.2 found T11.1 implemented but still in `active/`; T11.2 includes this as lifecycle cleanup with no behavior change. |
 
 ## 5. Step 4.6 Inventory Checklist
 
@@ -66,18 +68,19 @@ To fill during scoped inventory:
 
 | # | Item | Result |
 |---|---|---|
-| 1 | Database-view Step 1-6 exact source lines | TBD |
-| 2 | I10 and A10 exact source lines | TBD |
-| 3 | Step 1 durable view anchor shipped/tested status | TBD |
-| 4 | Step 2 attach vs method-level view status | TBD |
-| 5 | Step 3 metadata bridge vs exact-field decision | TBD |
-| 6 | Step 4 `DatabaseValue` / `as_of` status | TBD |
-| 7 | Step 5 attach forms status | TBD |
-| 8 | Step 6 hardening tests status | TBD |
-| 9 | Release-facing stale docs list | TBD |
-| 10 | Service/OpenAPI impact under chosen metadata decision | TBD |
-| 11 | Focused verification commands | TBD |
-| 12 | Dirty baseline verification | TBD |
+| 1 | Database-view Step 1-6 exact source lines | Step 1 line 661, Step 2 line 669, Step 3 line 675, Step 4 line 680, Step 5 line 685, Step 6 line 695. |
+| 2 | I10 and A10 exact source lines | I10 line 158; A10 line 729. |
+| 3 | Step 1 durable view anchor shipped/tested status | Shipped for durable Database views: core `FrozenAssertionView` six fields at `src/factgraph/core/store/database.py:75`, creation at `database.py:478`; SDK in-memory view remains two-field at `src/factgraph/sdk/store.py:118`. |
+| 4 | Step 2 attach vs method-level view status | Attach-based view scope shipped via `FactGraph.attach(..., view=...)` at `src/factgraph/sdk/store.py:1078`; method-level `view=` rejects with attach hint at `store.py:1277`, `store.py:2353`, `store.py:2449`. |
+| 5 | Step 3 metadata bridge vs exact-field decision | **Bridge decision accepted for v0.2**: `EvaluateResult.view_snapshot_digest` is the public bridge; EvidenceGraph metadata copies it. Exact tuple fields remain v2/internal and would require amend/split. |
+| 6 | Step 4 `DatabaseValue` / `as_of` status | `DatabaseValue` and `Database.head()` shipped; `Database.as_of(...)` absent and remains deferred. |
+| 7 | Step 5 attach forms status | Base attach and view attach shipped; snapshot attach through `db.as_of(...)` deferred. |
+| 8 | Step 6 hardening tests status | Existing tests cover view read/evaluate, stale/mismatch, read-only, method-level rejection, digest helper, and EvidenceGraph metadata copy. No new behavior test required for docs-only implementation. |
+| 9 | Release-facing stale docs list | Required fixes: `docs/official/kernel/quickstart/database.md`, `src/factgraph/core/store/docs/README.md`, `src/factgraph/sdk/docs/README.md`. |
+| 10 | Service/OpenAPI impact under chosen metadata decision | No service/OpenAPI change under bridge decision. `src/service/runtime_v1.py` already serializes `view_snapshot_digest`; exact tuple fields are not selected. |
+| 11 | Focused verification commands | Docs/lifecycle implementation: `git diff --check`, `git status --short --branch`, `git rev-parse master`, and optional focused metadata tests if any test files are touched. G7 baseline not required unless tests or production change. |
+| 12 | T11.1 blueprint archive cleanup | `workflow/blueprints/active/2026-05-26_t11-1-attach-view-scope.{md,audit.md}` are implemented but still active; implementation must `git mv` both to archive and update `archive/INVENTORY.md`. |
+| 13 | Dirty baseline verification | Preserve existing 6 modified + 1 untracked; scoped commit touches only T11.2 blueprint/audit. |
 
 ## 6. Verification Plan
 
@@ -95,11 +98,11 @@ Expected after implementation:
 
 ## 7. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 inventory complete.
-- [ ] Metadata decision recorded.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 inventory complete.
+- [x] Metadata decision recorded.
 - [ ] Release-facing docs aligned.
 - [ ] Tests added or explicitly not needed.
 - [ ] No production code changes unless amended.
+- [ ] T11.1 blueprint pair archived.
 - [ ] Closure notes filled.
-

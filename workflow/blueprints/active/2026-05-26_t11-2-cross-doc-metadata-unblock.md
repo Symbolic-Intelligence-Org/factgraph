@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2 Cross-doc Metadata Unblock
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: L (predicted release-blocker documentation / tests / metadata decision slice; may narrow to M after Step 4.6)
@@ -43,6 +43,10 @@ This slice may include:
 5. **Design-point updates**:
    - record which Step 1-6 items are shipped, partially shipped, or v2 deferred;
    - record the I10/A10 decision so release docs do not make inconsistent claims.
+6. **T11.1 blueprint archive cleanup**:
+   - move the implemented T11.1 blueprint pair from `active/` to `archive/`;
+   - update `workflow/blueprints/archive/INVENTORY.md`;
+   - treat this as lifecycle cleanup discovered during T11.2 review, not as a behavior change.
 
 ### Out of scope
 
@@ -156,6 +160,17 @@ If the bridge decision stands, tests should remain focused:
 If exact fields are required, this becomes L-class implementation and needs a
 new acceptance table before coding.
 
+### 4.4 T11.2d T11.1 Archive Cleanup
+
+Step 4.2 found that the implemented T11.1 blueprint pair still lives in
+`workflow/blueprints/active/`. T11.2 will archive it during implementation:
+
+- `workflow/blueprints/active/2026-05-26_t11-1-attach-view-scope.md`
+- `workflow/blueprints/active/2026-05-26_t11-1-attach-view-scope.audit.md`
+
+This is a lifecycle cleanup only. It must use `git mv`, preserve content
+identity, and add a compact T11.1 row to `workflow/blueprints/archive/INVENTORY.md`.
+
 ## 5. Step 4.6 Inventory Plan
 
 Before implementation, record:
@@ -168,6 +183,24 @@ Before implementation, record:
 6. Whether service/OpenAPI docs must change under the chosen metadata decision.
 7. Whether any production code is required; if yes, stop and amend.
 8. Dirty baseline verification.
+
+### 5.1 Scoped Inventory Results
+
+| # | Item | Result |
+|---|---|---|
+| 1 | Database-view Step 1-6 exact source lines | `database-view-fg-layered-architecture.zh.md` §16: Step 1 at line 661, Step 2 at 669, Step 3 at 675, Step 4 at 680, Step 5 at 685, Step 6 at 695. |
+| 2 | I10 and A10 exact source lines | I10 at line 158 requires evidence/evaluate metadata to record `db_id` / `tx_id` / `schema_digest` / optional `view_digest`; A10 at line 729 requires EvaluateResult / EvidenceGraph metadata to record db snapshot + optional view context. |
+| 3 | Step 1 durable view anchor status | Shipped for durable Database views: core `FrozenAssertionView` has `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest` at `src/factgraph/core/store/database.py:75`, and `Database.create_view(...)` fills it at `database.py:478`. SDK in-memory `FrozenAssertionView` remains intentionally two-field at `src/factgraph/sdk/store.py:118`. |
+| 4 | Step 2 attach vs method-level view status | T11.1 shipped attach-based view scope through `FactGraph.attach(..., view=...)` at `src/factgraph/sdk/store.py:1078`; method-level `view=` still rejects with attach hint at `store.py:1277`, `store.py:2353`, and `store.py:2449`. |
+| 5 | Step 3 / I10 / A10 metadata decision | **Bridge accepted for v0.2**: shipped public metadata is `EvaluateResult.view_snapshot_digest`, with EvidenceGraph metadata copying it. Exact public tuple fields remain v2/internal unless a later blueprint activates them. This keeps T11.2 docs/tests focused and avoids DTO + service/OpenAPI expansion. |
+| 6 | Step 4 `DatabaseValue` / `as_of` status | `DatabaseValue` and `Database.head()` are shipped. `Database.as_of(...)` is absent and remains deferred; release docs must not imply snapshot attach is available. |
+| 7 | Step 5 attach forms status | Base writable attach and view read-only attach are shipped. `FactGraph.attach(db.as_of(tx_id))` remains deferred because `Database.as_of(...)` is absent. |
+| 8 | Step 6 hardening tests status | View read/evaluate, stale/mismatch, read-only, and method-level rejection tests exist in `tests/test_db_attach_lifecycle.py` and `tests/test_sdk_frozen_view_read_runtime_boundaries.py`. Metadata tests exist for `view_snapshot_digest_for_parts(...)` and EvidenceGraph copy in `tests/application/protocol/test_evaluate_result_digests.py` and `test_evaluate_result_dtos.py`. |
+| 9 | Release-facing stale docs list | Required fixes: `docs/official/kernel/quickstart/database.md` intro contradiction; `src/factgraph/core/store/docs/README.md` still says view-scoped attach is future; `src/factgraph/sdk/docs/README.md` still says view-scoped attach is future. |
+| 10 | Service/OpenAPI impact under bridge decision | No service/OpenAPI change required. Service serializes `view_snapshot_digest` in `src/service/runtime_v1.py`; exact public tuple fields are not selected for v0.2. |
+| 11 | Production-code requirement | No production code required under the bridge decision. Any exact-field DTO/service/OpenAPI expansion would require amend/split. |
+| 12 | T11.1 archive cleanup | T11.1 blueprint pair is implemented but still in `workflow/blueprints/active/`; T11.2 implementation includes `git mv` to archive plus `archive/INVENTORY.md` entry. |
+| 13 | Dirty baseline verification | Preserve existing 6 modified + 1 untracked; scoped edits touch only T11.2 blueprint/audit. |
 
 ## 6. Verification Gates
 
@@ -196,8 +229,11 @@ Before implementation, record:
 - [ ] Step 4.6 inventory classifies Step 1-6, I10, and A10.
 - [ ] Metadata decision recorded: bridge accepted or exact-field split triggered.
 - [ ] Release-facing docs no longer contradict shipped attach-based view scope.
+- [ ] `docs/official/kernel/quickstart/database.md` intro no longer contradicts its view-scoped attach section.
+- [ ] `src/factgraph/core/store/docs/README.md` no longer says view-scoped attach is future.
+- [ ] `src/factgraph/sdk/docs/README.md` no longer says view-scoped attach is future.
 - [ ] Method-level `view=` and `Database.as_of(...)` remain explicitly deferred unless a later blueprint activates them.
 - [ ] Any tests added are focused on shipped metadata/view-scope behavior.
 - [ ] No production code changes unless Step 4.6 explicitly amends scope.
+- [ ] T11.1 blueprint pair moved from `active/` to `archive/`, with archive inventory updated.
 - [ ] Dirty baseline and sacred master preserved.
-
