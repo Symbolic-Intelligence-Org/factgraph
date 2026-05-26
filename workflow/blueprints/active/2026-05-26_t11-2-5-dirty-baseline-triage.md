@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.5 Dirty Baseline Triage
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: S/M (predicted verdict-only release prerequisite)
@@ -128,6 +128,26 @@ The implementation is mostly the triage record itself:
 If the user explicitly asks for a quick fix during this cycle, record it as an
 amendment before changing any dirty file.
 
+### 4.3 Scoped Verdicts
+
+Step 4.6 accepted the read-only inventory and narrowed the implementation to a
+verdict record. No dirty file should be edited in T11.2.5.
+
+| Path | Verdict | Follow-up |
+|---|---|---|
+| `docs/references/working/design-points/readme.md` | Defer as docs cleanup | Reference-index cleanup only if the missing target notes are restored or the links are explicitly removed. |
+| `examples/01_sdk_check_diagnose.ipynb` | Defer as notebook/docs cleanup | Notebook namespace/output cleanup cycle; not part of T11.3 release machinery. |
+| `examples/02_overlay_why_not_frontier.ipynb` | Defer as notebook/docs cleanup | Notebook namespace/output cleanup cycle; not part of T11.3 release machinery. |
+| `examples/archive/01_sdk_basics.ipynb` | Ignore for release / defer archive hygiene | Archived notebook cleanup only if examples archive quality becomes release work. |
+| `src/factgraph/sdk/facade.py` | Include as own behavior slice | SDK assertion property-access compatibility slice before release, paired with the companion test. |
+| `tests/test_sdk_assertion_record_set_view_filters.py` | Include with `facade.py` behavior slice | Companion focused test for the SDK assertion property-access slice. |
+| `rainbird-ai sdk code/` | Ignore / untracked reference | Leave untracked and do not add; optional future provenance/license review. |
+
+T11.3 handoff: the baseline is now classified, but `scripts/release.sh` still
+requires a clean tracked tree. Before T11.3 runs release dry-runs, the tracked
+dirty files must either be landed through their follow-up cycles or explicitly
+stashed/reverted by the user.
+
 ## 5. Expected Output
 
 Expected docs-only files:
@@ -153,15 +173,15 @@ Expected follow-up candidates:
 - No release machinery files touched.
 - No production/test/notebook dirty file modified.
 - T11.3 handoff sentence exists in outcome or memory: "dirty baseline triaged;
-  T11.3 only verifies no unclassified dirty remains."
+  T11.3 only verifies no unclassified dirty remains; release dry-runs still
+  require tracked dirty files to be resolved first."
 
 ## 7. Acceptance
 
-- [ ] All seven dirty baseline items have verdicts and short rationales.
-- [ ] Follow-up cycles are named for any include/defer verdict.
-- [ ] `rainbird-ai sdk code/` has an explicit ignore/provenance decision.
-- [ ] T11.3 handoff rule is recorded.
+- [x] All seven dirty baseline items have verdicts and short rationales.
+- [x] Follow-up cycles are named for any include/defer verdict.
+- [x] `rainbird-ai sdk code/` has an explicit ignore/provenance decision.
+- [x] T11.3 handoff rule is recorded.
 - [ ] Dirty baseline preserved unless explicitly amended.
 - [ ] No release machinery changes.
 - [ ] No push without separate authorization.
-
