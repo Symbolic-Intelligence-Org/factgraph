@@ -36,6 +36,7 @@ from factgraph.sdk import (
     Pred,
     Query,
     Rule,
+    build_application_rule,
     vars,
 )
 
@@ -63,27 +64,24 @@ and `Rule(...)` to name the reusable pattern.
 
 ```python
 with vars("u", "tag") as (u, tag):
-    seeded_tags = Rule(
-        id="rule.seeded_tags",
+    seeded_tags = build_application_rule(
+        id="user:tag",
         version="v1",
+        where=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
-        where=[
-            Branch(
-                [Pred("user:tag_seed", u, tag)],
-                id="seed_path",
-            )
-        ],
     )
 ```
 
-The `where` clause describes what must be found. The `ports` mapping describes
-what the rule returns. Running the rule is read-only.
+The `where` clause describes what must be found, and `ports` declares what the
+rule returns. `build_application_rule(...)` is the canonical SDK bridge that
+lowers Entity-DSL atoms into the application protocol `Rule` value. Running
+the rule is read-only.
 
 ```python
 rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
-assert rule_result.first().bindings["tag"] == "engineer"
+assert rule_result.first().claim.name == "user:tag"
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 ```
 
@@ -221,6 +219,7 @@ from factgraph.sdk import (
     Pred,
     Query,
     Rule,
+    build_application_rule,
     vars,
 )
 
@@ -237,11 +236,11 @@ alice = fg.read.ref(User, user_id="u-1")
 fg.write.set(User.tag_seed, alice, "engineer")
 
 with vars("u", "tag") as (u, tag):
-    seeded_tags = Rule(
-        id="rule.seeded_tags",
+    seeded_tags = build_application_rule(
+        id="user:tag",
         version="v1",
+        where=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
-        where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
     )
 
 rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
@@ -285,9 +284,12 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
 ## Syntax checklist
 
 - Use `vars(...)` to create logic variables for DSL bodies.
-- Use `Pred("entity:field", ...)` for explicit predicate literals.
-- Use `Branch([...], id="...")` when branch identity matters.
-- Use `Rule(id=..., ports={...}, where=[...])` for reusable read patterns.
+- Use `Pred("entity:field", ...)` for explicit predicate literals inside
+  `Inference` bodies.
+- Use `Branch([...], id="...")` inside `Inference` bodies when branch identity
+  matters; application `Rule` accepts only AND-flat bodies.
+- Use `build_application_rule(id=..., where=[Entity(var), ...], ports={...})`
+  to construct application `Rule` values via the canonical SDK bridge.
 - Evaluate rules with `fg.eval.evaluate(rule, head=rule)`; evaluation does not write.
 - Use read APIs for ad-hoc projections; public `fg.eval.run(...)` was removed.
 - Use `Inference(id=..., where=[...], target=..., head_vars=[...])` for

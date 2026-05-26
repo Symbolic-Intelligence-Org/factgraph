@@ -472,38 +472,37 @@ Invalid `row_format` or incompatible head raises
 
 ### Rule + run
 
-A `Rule(id, version, ports, where, ...)` is a named application rule.
-Required: `id`, `ports`, `where` (all non-empty); `version` is optional.
+An application `Rule(id, where, ports, version=..., desc=...)` is the
+canonical reusable read pattern. Required: `id`, `ports`, `where` (all
+non-empty); `version` is optional. Use the `build_application_rule(...)`
+SDK bridge to construct one from Entity-DSL atoms; direct `Rule(...)`
+construction requires raw `factgraph.core.rules.where_ast` atoms.
 
 ```python
-from factgraph.sdk import Rule, vars
+from factgraph.sdk import build_application_rule, vars
 
 with vars("u",) as (u,):
-    r = Rule(
-        id="rule_alice",
+    r = build_application_rule(
+        id="User:exists",
         version="1.0.0",
+        where=[User(u), User(u).name == "Alice"],
         ports={"user": u},
-        where=[User(u), u.name == "Alice"],
     )
 
 result = fg.eval.evaluate(r, head=r)
 # → EvaluateResult(rows=(...), ...)
 ```
 
-Rule's `where` accepts:
-- A flat list of atoms: `[User(u), u.name == "Alice"]`
-- OR a list of `Branch([...])` alternatives:
-  ```python
-  from factgraph.sdk import Branch
-  where = [
-      Branch([User(u), Pred("user:lang_pref", u, lang)], id="declared_pref"),
-      Branch([User(u), Pred("user:inferred_lang", u, lang)], id="inferred_pref"),
-  ]
-  ```
-  `where` cannot mix `Branch(...)` with bare branches.
-  The optional keyword-only `id=` is structural metadata for inspection
-  and future semantics references. It must be unique within the inspected
-  rule/inference and does not enter authoring payloads or engine adapters.
+The `id=` must match a real predicate whose argument shape lines up with
+the rule's `ports` (e.g. `User:exists` is a 1-arg existence predicate that
+fits a single `user` port). Use `<entity>:<field>` predicate ids when the
+rule projects multiple ports.
+
+Application Rule `where` is AND-only: a flat list of atoms such as
+`[User(u), User(u).name == "Alice"]`. `Branch(...)` alternatives are not
+accepted in application Rule bodies; use multi-branch composition via
+`RuleExpr` (the `&` / `|` operators on application `Rule` values) or place
+branch alternatives inside an `Inference` body.
 
 Inspect rule or inference structure before attaching runtime semantics:
 
@@ -900,15 +899,16 @@ fg = FactGraph.create(
 > surface. Rules and inferences are now used as in-memory value objects:
 
 ```python
-from factgraph.sdk import Rule, Inference, Pred, vars
+from factgraph.sdk import Inference, build_application_rule, vars
 
-my_rule = Rule(
-    rule_id="rule_alice",
-    version="1.0.0",
-    select_vars=["x"],
-    where=[Pred("Likes", vars.x, "ai")],
-)
-result = fg.eval.evaluate(my_rule)
+with vars("u",) as (u,):
+    my_rule = build_application_rule(
+        id="User:exists",
+        version="1.0.0",
+        where=[User(u), User(u).name == "Alice"],
+        ports={"user": u},
+    )
+result = fg.eval.evaluate(my_rule, head=my_rule)
 
 my_inference = Inference(...)
 candidates = fg.eval.evaluate(my_inference)

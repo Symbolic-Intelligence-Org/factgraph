@@ -55,16 +55,15 @@ Unsupported:
 ## 2. Rule DSL
 
 ```python
-with vars("li", "u", "c") as (li, u, c):
-    rule = Rule(
-        id="q_user_country",
+with vars("u", "nm") as (u, nm):
+    rule = build_application_rule(
+        id="user:name",
         version="1.0.0",
-        ports={"user": u, "country": c},
         where=[
-            LivesIn(li),
-            li.user == u,
-            li.country == c,
+            User(u),
+            User(u).name == nm,
         ],
+        ports={"user": u, "name": nm},
     )
 
 result = sdk.eval.evaluate(rule, head=rule)
@@ -95,8 +94,8 @@ Supported:
 - rule reference: `RuleRef(...)(...)`
 - negation: `Not([...])`
 - comparisons: `== != > >= < <=`
-- OR branches: `where=[[...], [...]]`
-- `Branch` branches: `where=[Branch([...], id="seed_path"), Branch([...])]` (Rule/Inference)
+- OR branches: `where=[[...], [...]]` (Inference only — application `Rule` is AND-only)
+- `Branch` branches: `where=[Branch([...], id="seed_path"), Branch([...])]` (Inference only)
 - linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
 - aggregate helpers for the application Rule bridge:
   `agg_count`, `agg_sum`, `agg_min`, `agg_max`, and `agg_mean`
@@ -465,7 +464,7 @@ Fields:
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).
 - Public SDK `Inference` is single-head. Multi-head (`head=[H1, H2, ...]`) is rejected in Track 1; define one inference per head.
-- `Rule/Inference.where` both support `Branch(...)`; it unwraps to normalized OR-branch structure.
+- `Inference.where` supports `Branch(...)`; it unwraps to normalized OR-branch structure. Application `Rule.where` is AND-only (use `RuleExpr` `&` / `|` for multi-rule composition).
 - `sdk.run(inference)` was removed; use `sdk.eval.evaluate(...)`.
 
 ## 7. Compile-Time Hard Constraints (v2)

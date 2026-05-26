@@ -27,11 +27,11 @@ class User(Entity):                   # entity declaration
     name: str = Field(cardinality="single")
 
 with vars("u",) as (u,):              # rule declaration
-    r = Rule(
+    r = build_application_rule(
         id="rule_alice",
         version="1.0.0",
+        where=[User(u), User(u).name == "Alice"],
         ports={"user": u},
-        where=[User(u), u.name == "Alice"],
     )
 ```
 

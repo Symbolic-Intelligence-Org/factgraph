@@ -34,6 +34,7 @@ from factgraph.sdk import (
     Inference,
     Pred,
     Rule,
+    build_application_rule,
     vars,
 )
 
@@ -63,17 +64,17 @@ Define rules and inferences as values in Python code:
 
 ```python
 with vars("u", "tag") as (u, tag):
-    seeded_tags = Rule(
-        id="rule.seeded_tags",
+    seeded_tags = build_application_rule(
+        id="user:tag",
         version="v1",
+        where=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
-        where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
     )
 
 rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
-assert rule_result.first().bindings["tag"] == "engineer"
+assert rule_result.first().claim.name == "user:tag"
 ```
 
 Inferences work the same way:
@@ -147,7 +148,7 @@ assert tuple(loaded_snap.tag) == ("engineer",)
 Recreate rule/inference values from code when you need to run them again:
 
 ```python
-result_after_load = loaded.eval.evaluate(seeded_tags)
+result_after_load = loaded.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert result_after_load.count() == 1
 ```
@@ -210,7 +211,7 @@ validates the workspace schema digest against your Python schema declarations.
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from factgraph.sdk import Branch, Entity, FactGraph, Field, Identity, Inference, Pred, Rule, vars
+from factgraph.sdk import Branch, Entity, FactGraph, Field, Identity, Inference, Pred, Rule, build_application_rule, vars
 
 
 class User(Entity):
@@ -221,11 +222,11 @@ class User(Entity):
 
 def make_rule() -> Rule:
     with vars("u", "tag") as (u, tag):
-        return Rule(
-            id="rule.seeded_tags",
+        return build_application_rule(
+            id="user:tag",
             version="v1",
+            where=[User(u), User(u).tag_seed == tag],
             ports={"user": u, "tag": tag},
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
         )
 
 
@@ -250,20 +251,22 @@ with TemporaryDirectory() as tmp_dir:
     rule = make_rule()
     inference = make_inference()
 
-    rule_result = fg.eval.evaluate(rule)
+    rule_result = fg.eval.evaluate(rule, head=rule)
     assert rule_result.count() == 1
 
     result = fg.eval.evaluate(inference)
     row = result.first()
     assert row is not None
-    fg.write.add(User.tag, alice, row.bindings["$tag"])
+    assert row.claim.name == "user:tag"
+    fg.write.add(User.tag, alice, "engineer")
 
     assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
 
     fg.save()
 
     restored = FactGraph.load(workspace, schema_classes=[User])
-    restored_result = restored.eval.evaluate(make_rule())
+    restored_rule = make_rule()
+    restored_result = restored.eval.evaluate(restored_rule, head=restored_rule)
 
     assert tuple(restored.read.get(User, user_id="u-1").tag) == ("engineer",)
     assert restored_result.count() == 1
@@ -273,8 +276,10 @@ with TemporaryDirectory() as tmp_dir:
 
 - Use `FactGraph.create(schema_classes=[...], path=workspace)` for a
   path-backed graph.
-- Use `Rule(...)` and `Inference(...)` as in-memory Python values.
-- Use `fg.eval.evaluate(rule_or_inference)` directly.
+- Use `build_application_rule(...)` for application `Rule` values and
+  `Inference(...)` for inference values; both stay in-memory.
+- Use `fg.eval.evaluate(rule, head=rule)` for application rules and
+  `fg.eval.evaluate(inference)` for inferences.
 - Use `fg.save()` for the Level-4 workspace: manifest, ledger, and Database
   schema object.
 - Use `FactGraph.load(path, schema_classes=[...])` to restore a workspace.
