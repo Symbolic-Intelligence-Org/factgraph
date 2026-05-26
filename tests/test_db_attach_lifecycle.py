@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import warnings
+from dataclasses import replace
 from pathlib import Path
 
 from factgraph.sdk import (
@@ -15,10 +16,13 @@ from factgraph.sdk import (
     FrozenSnapshotError,
     Identity,
     MetaEntry,
+    Rule,
     SDKStore,
     SDKStoreError,
     compile_schema_from_classes,
 )
+from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.core.protocol.idref_v1 import encode_idref_v1
 
 
 class User(Entity):
@@ -37,14 +41,25 @@ def _schema_ir(classes: list[type[Entity]] | None = None) -> dict:
 
 
 def _name_pred_id(fg: SDKStore) -> str:
+    return _field_pred_id(fg, "name")
+
+
+def _field_pred_id(fg: SDKStore, field_name: str) -> str:
     for pred in fg.schema_ir["predicates"]:
-        if pred.get("owner_type") == "User" and pred.get("py_field_name") == "name":
+        if pred.get("owner_type") == "User" and pred.get("py_field_name") == field_name:
             return pred["pred_id"]
-    raise AssertionError("User.name predicate not found")
+    raise AssertionError(f"User.{field_name} predicate not found")
+
+
+def _exists_pred_id(fg: SDKStore) -> str:
+    for pred in fg.schema_ir["predicates"]:
+        if pred.get("owner_type") == "User" and pred.get("is_entity_exists"):
+            return pred["pred_id"]
+    raise AssertionError("User exists predicate not found")
 
 
 def _user_ref(value: str = "u-1") -> str:
-    return f"idref_v1:User:{value}"
+    return encode_idref_v1("User", [("user_id", "string", value)])
 
 
 def _assertion(fg: SDKStore, name: str, *, user_id: str = "u-1") -> AssertionInput:
@@ -52,6 +67,30 @@ def _assertion(fg: SDKStore, name: str, *, user_id: str = "u-1") -> AssertionInp
         pred_id=_name_pred_id(fg),
         fact_tuple=(("entity_ref", _user_ref(user_id)), ("string", name)),
         meta=(MetaEntry("source", "str", "attach-test"),),
+    )
+
+
+def _entity_assertions(fg: SDKStore, user_id: str, name: str) -> list[AssertionInput]:
+    ref = _user_ref(user_id)
+    meta = (MetaEntry("source", "str", "attach-view-test"), MetaEntry("ingested_at", "time", 1))
+    return [
+        AssertionInput(pred_id=_exists_pred_id(fg), fact_tuple=(("entity_ref", ref),), meta=meta),
+        AssertionInput(
+            pred_id=_field_pred_id(fg, "user_id"),
+            fact_tuple=(("entity_ref", ref), ("string", user_id)),
+            meta=meta,
+        ),
+        AssertionInput(pred_id=_name_pred_id(fg), fact_tuple=(("entity_ref", ref), ("string", name)), meta=meta),
+    ]
+
+
+def _user_name_rule() -> Rule:
+    user = Var("$user")
+    name = Var("$name")
+    return Rule(
+        id="user:name",
+        where=(PredAtom("User:exists", [user]), PredAtom("user:name", [user, name])),
+        ports={"user": user, "name": name},
     )
 
 
@@ -119,8 +158,6 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.edit": lambda: fg.edit(User, user_id="u-1"),
             "fg.ingest": lambda: fg.ingest({}),
             "fg.add_schema_classes": lambda: fg.add_schema_classes(Account),
-            "fg.accept": lambda: fg.accept(object()),
-            "fg.accept_many": lambda: fg.accept_many([]),
             "fg.batch": lambda: fg.batch(),
             "fg.save": lambda: fg.save(),
         }
@@ -153,8 +190,6 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.write.edit": lambda: fg.write.edit(User, user_id="u-1"),
             "fg.schema.ingest": lambda: fg.schema.ingest({}),
             "fg.schema.add": lambda: fg.schema.add(Account),
-            "fg.eval.accept": lambda: fg.eval.accept(object()),
-            "fg.eval.accept_many": lambda: fg.eval.accept_many([]),
             "fg.views.create": lambda: fg.views.create("review", asrt_ids=[]),
             "fg.views.update": lambda: fg.views.update("review", asrt_ids=[]),
             "fg.views.delete": lambda: fg.views.delete("review"),
@@ -190,6 +225,99 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
         self.assertEqual(second_result.parent_tx_id, first_result.value.tx_id)
         self.assertEqual(db.head(), second_result.value)
+
+    def test_attach_with_durable_view_scopes_reads_and_evaluate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database.create(Path(tmp) / "workspace", schema_ir=_schema_ir())
+            writer = FactGraph.attach(db, schema_classes=[User])
+            result = writer.commit_assertions(
+                [
+                    *_entity_assertions(writer, "u-1", "Ada"),
+                    *_entity_assertions(writer, "u-2", "Grace"),
+                ]
+            )
+            ada_ids = [record.asrt_id for record in result.assertions[:3]]
+            view = db.create_view("ada_only", ada_ids)
+
+            scoped = FactGraph.attach(db, schema_classes=[User], view=view)
+
+            self.assertIs(scoped._database, db)
+            self.assertFalse(scoped._attached_writable)
+            self.assertEqual([row.name for row in scoped.read.find(User)], ["Ada"])
+            self.assertEqual(scoped.read.get(User, user_id="u-1").name, "Ada")
+            self.assertIsNone(scoped.read.get(User, user_id="u-2"))
+
+            rule = _user_name_rule()
+            evaluated = scoped.eval.evaluate(rule, head=rule, engine="native")
+
+            self.assertEqual(evaluated.count(), 1)
+            self.assertEqual(evaluated.view_snapshot_digest, view.view_digest)
+            self.assertIn("Ada", str(evaluated[0].bindings))
+            self.assertNotIn("Grace", str(evaluated[0].bindings))
+
+    def test_attach_with_view_uses_frozen_base_tx_not_current_head(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database.create(Path(tmp) / "workspace", schema_ir=_schema_ir())
+            writer = FactGraph.attach(db, schema_classes=[User])
+            first = writer.commit_assertions(_entity_assertions(writer, "u-1", "Ada"))
+            view = db.create_view("first_only", [record.asrt_id for record in first.assertions])
+            writer.commit_assertions(_entity_assertions(writer, "u-2", "Grace"))
+
+            scoped = FactGraph.attach(db, schema_classes=[User], view=view)
+            evaluated = scoped.eval.evaluate(_user_name_rule(), head=_user_name_rule(), engine="native")
+
+            self.assertEqual([row.name for row in scoped.read.find(User)], ["Ada"])
+            self.assertEqual(evaluated.count(), 1)
+            self.assertIn("Ada", str(evaluated[0].bindings))
+            self.assertEqual(scoped.ledger.get_ledger_meta("head_tx_id"), view.base_tx_id)
+
+    def test_view_attached_runtime_is_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database.create(Path(tmp) / "workspace", schema_ir=_schema_ir())
+            writer = FactGraph.attach(db, schema_classes=[User])
+            result = writer.commit_assertions(_entity_assertions(writer, "u-1", "Ada"))
+            view = db.create_view("readonly", [record.asrt_id for record in result.assertions])
+            scoped = FactGraph.attach(db, schema_classes=[User], view=view)
+
+            with self.assertRaisesRegex(SDKStoreError, "view-attached runtimes are read-only"):
+                scoped.commit_assertions(_entity_assertions(scoped, "u-2", "Grace"))
+            with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
+                scoped.views.create("another", asrt_ids=[])
+
+    def test_attach_with_view_rejects_in_memory_view_and_stale_database_anchors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database.create(Path(tmp) / "workspace", schema_ir=_schema_ir())
+            writer = FactGraph.attach(db, schema_classes=[User])
+            result = writer.commit_assertions(_entity_assertions(writer, "u-1", "Ada"))
+            view = db.create_view("ada", [record.asrt_id for record in result.assertions])
+            memory_view = FactGraph.from_schema_classes([User]).views.create(
+                "memory",
+                asrt_ids=[result.assertions[0].asrt_id],
+            )
+
+            with self.assertRaisesRegex(SDKStoreError, "durable Database view"):
+                FactGraph.attach(db, schema_classes=[User], view=memory_view)
+            with self.assertRaisesRegex(SDKStoreError, "view schema mismatch"):
+                FactGraph.attach(
+                    db,
+                    schema_classes=[User],
+                    view=replace(view, schema_digest="sha256:" + "0" * 64),
+                )
+            with self.assertRaisesRegex(SDKStoreError, "view db_id mismatch"):
+                FactGraph.attach(db, schema_classes=[User], view=replace(view, db_id="db:different"))
+            with self.assertRaisesRegex(SDKStoreError, "base_tx_id not found"):
+                FactGraph.attach(db, schema_classes=[User], view=replace(view, base_tx_id="tx:" + "0" * 64))
+
+    def test_method_level_view_kwargs_still_reject_with_attach_hint(self) -> None:
+        fg = FactGraph.from_schema_classes([User])
+        rule = _user_name_rule()
+
+        with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
+            fg.read.find(User, view=object())
+        with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
+            fg.eval.evaluate(rule, head=rule, view=object())
+        with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
+            fg.eval.explain(rule, head=rule, view=object())
 
     def test_low_level_commit_does_not_populate_sdk_identity_cache(self) -> None:
         db = Database.create(schema_ir=_schema_ir())

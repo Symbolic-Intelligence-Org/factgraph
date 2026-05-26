@@ -66,6 +66,7 @@ that live directly on `FactGraph`, not on a namespace.
 | --- | --- |
 | `FactGraph.create(schema_classes=[...])` | Build a new graph. Pass `path=` for a path-backed workspace; pass `ledger_path=` or `artifact_store_root=` for explicit supported components. |
 | `FactGraph.load(path, schema_classes=[...])` | Restore a saved workspace. The loader validates the workspace schema digest against the supplied classes. |
+| `FactGraph.attach(db, schema_classes=[...], view=None)` | Bind the SDK to a `Database`. Passing a durable `db.create_view(...)` view creates a read-only, view-scoped runtime. |
 | `FactGraph.from_schema_classes([...])` | Lower-level class-first constructor. `create(...)` is the normal teaching path. |
 | `fg.save(path=None)` | Persist the graph to its workspace. No-arg save requires a bound path; passing `path` rebinds the graph. |
 | `fg.batch(meta=None)` | Open a batch transaction context for grouped writes. |
@@ -107,14 +108,19 @@ ideas separate when reading the rest of the API.
 
 ## Frozen views
 
-`fg.views` stores named frozen selections of assertion ids. A view is not a
-read policy and not a dynamic query.
+`fg.views` stores session-local named frozen selections of assertion ids. A view
+is not a read policy and not a dynamic query.
 
 | Surface | Methods | Returns |
 | --- | --- | --- |
 | `fg.views` | `create(name, asrt_ids=[...])`, `update(name, asrt_ids=[...])`, `delete(name)`, `get(name)`, `list()` | `FrozenAssertionView` per item; `dict[str, FrozenAssertionView]` for `list()`. |
 
-Views are currently in-memory and are not part of the workspace save format.
+Session-local `fg.views` entries are in-memory and are not part of the
+workspace save format. Durable Database views are created with
+`db.create_view(...)`; consume those through `FactGraph.attach(db, view=view)`.
+The attached runtime is read-only and automatically scopes reads and evaluation
+to the view's assertion ids. Method-level `view=` on read/evaluate calls remains
+unsupported.
 
 ## Rules, inferences, and evaluation
 

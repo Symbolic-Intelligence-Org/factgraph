@@ -79,12 +79,14 @@ from factgraph.core.store.database import (
     CommitResult,
     Database,
     DatabaseError,
+    FrozenAssertionView as DatabaseFrozenAssertionView,
+    _read_tx_object,
     schema_object_exists_for_workspace,
     validate_schema_object_for_workspace,
     write_schema_object_for_workspace,
 )
 from factgraph.core.store.runtime import Store
-from factgraph.core.store.ledger import Ledger
+from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 
 from .compile import compile_schema_from_classes
 from .dsl.branch import Branch
@@ -132,7 +134,6 @@ _ATTACH_REJECTED_KWARGS = {
     "registry",
     "registry_root",
     "rules",
-    "view",
     "workspace_path",
 }
 _ATTACHED_WRITE_ERROR = (
@@ -145,6 +146,195 @@ _T5_LEGACY_SHELL_REMOVED = (
     "fg.eval.explain(expr, head=closed_head)"
 )
 _RULE_EXPR_DEFAULT_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+
+
+class _ViewScopedLedger(Ledger):
+    """Read-only Ledger view that exposes a durable Database view subset."""
+
+    def __init__(
+        self,
+        base: Ledger,
+        *,
+        view: DatabaseFrozenAssertionView,
+        base_asrt_ids: frozenset[str],
+    ) -> None:
+        self._base = base
+        self._view = view
+        self._base_asrt_ids = base_asrt_ids
+        self._visible_asrt_ids = frozenset(view.asrt_ids).intersection(base_asrt_ids)
+
+    def _is_visible(self, asrt_id: str) -> bool:
+        return asrt_id in self._visible_asrt_ids
+
+    def _filter_claims(self, claims: Iterable[Claim]) -> list[Claim]:
+        return [claim for claim in claims if self._is_visible(claim.asrt_id)]
+
+    def get_claim(self, asrt_id: str) -> Claim | None:
+        if not self._is_visible(asrt_id):
+            return None
+        return self._base.get_claim(asrt_id)
+
+    def find_claims(self, pred_id: str | None = None, e_ref: str | None = None) -> list[Claim]:
+        return self._filter_claims(self._base.find_claims(pred_id=pred_id, e_ref=e_ref))
+
+    def find_claim_args(
+        self,
+        asrt_id: str | None = None,
+        idx: int | None = None,
+        tag: str | None = None,
+    ) -> list[ClaimArg]:
+        if asrt_id is not None and not self._is_visible(asrt_id):
+            return []
+        rows = self._base.find_claim_args(asrt_id=asrt_id, idx=idx, tag=tag)
+        return [row for row in rows if self._is_visible(row.asrt_id)]
+
+    def find_meta(
+        self,
+        asrt_id: str | None = None,
+        key: str | None = None,
+        kind: str | None = None,
+    ) -> list[MetaRow]:
+        if asrt_id is not None and not self._is_visible(asrt_id):
+            return []
+        rows = self._base.find_meta(asrt_id=asrt_id, key=key, kind=kind)
+        return [row for row in rows if self._is_visible(row.asrt_id)]
+
+    def find_annotations(
+        self,
+        asrt_id: str | None = None,
+        namespace: str | None = None,
+        category: str | None = None,
+        key: str | None = None,
+    ) -> list[AnnotationRow]:
+        if asrt_id is not None and not self._is_visible(asrt_id):
+            return []
+        rows = self._base.find_annotations(
+            asrt_id=asrt_id,
+            namespace=namespace,
+            category=category,
+            key=key,
+        )
+        return [row for row in rows if self._is_visible(row.asrt_id)]
+
+    def has_active_revocation(self, revoked_asrt_id: str) -> bool:
+        if not self._is_visible(revoked_asrt_id):
+            return False
+        return any(
+            row.revoked_asrt_id == revoked_asrt_id and row.revoker_asrt_id in self._base_asrt_ids
+            for row in self._base.revokes
+        )
+
+    def find_revoker(self, revoked_asrt_id: str) -> str | None:
+        if not self._is_visible(revoked_asrt_id):
+            return None
+        for row in self._base.revokes:
+            if row.revoked_asrt_id == revoked_asrt_id and row.revoker_asrt_id in self._base_asrt_ids:
+                return row.revoker_asrt_id
+        return None
+
+    @property
+    def claims(self) -> list[Claim]:
+        return self._filter_claims(self._base.claims)
+
+    @property
+    def claim_args(self) -> list[ClaimArg]:
+        return [row for row in self._base.claim_args if self._is_visible(row.asrt_id)]
+
+    @property
+    def meta_rows(self) -> list[MetaRow]:
+        return [row for row in self._base.meta_rows if self._is_visible(row.asrt_id)]
+
+    @property
+    def annotation_rows(self) -> list[AnnotationRow]:
+        return [row for row in self._base.annotation_rows if self._is_visible(row.asrt_id)]
+
+    @property
+    def revokes(self) -> list[Revokes]:
+        return [row for row in self._base.revokes if row.revoker_asrt_id in self._base_asrt_ids]
+
+    def get_ledger_meta(self, key: str) -> str | None:
+        if key == "db_id":
+            return self._view.db_id
+        if key == "head_tx_id":
+            return self._view.base_tx_id
+        if key == "schema_digest":
+            return self._view.schema_digest
+        return self._base.get_ledger_meta(key)
+
+    def _reject_read_only(self) -> None:
+        raise SDKStoreError("view-attached FactGraph runtimes are read-only")
+
+    def append_assertion(self, **kwargs: Any) -> Any:
+        self._reject_read_only()
+
+    def append_revocation(self, *args: Any, **kwargs: Any) -> Any:
+        self._reject_read_only()
+
+    def append_claim(self, claim: Claim) -> None:
+        self._reject_read_only()
+
+    def append_claim_args(self, rows: list[ClaimArg]) -> None:
+        self._reject_read_only()
+
+    def append_meta(self, rows: list[MetaRow]) -> None:
+        self._reject_read_only()
+
+    def append_annotations(self, rows: list[AnnotationRow]) -> None:
+        self._reject_read_only()
+
+    def append_revokes(self, row: Revokes) -> None:
+        self._reject_read_only()
+
+    def set_ledger_meta(self, key: str, value: str) -> None:
+        self._reject_read_only()
+
+    def replace_ledger_meta(self, key: str, value: str) -> None:
+        self._reject_read_only()
+
+
+def _ledger_for_durable_database_view(db: Database, view: object) -> Ledger:
+    if not isinstance(view, DatabaseFrozenAssertionView):
+        raise SDKStoreError(
+            "FactGraph.attach(db, view=...) expects a durable Database view from db.create_view(...); "
+            "SDK in-memory fg.views.create(...) views are not Database-anchored"
+        )
+    if view.db_id != db.db_id:
+        raise SDKStoreError(
+            f"view db_id mismatch: view.db_id={view.db_id!r}, Database.db_id={db.db_id!r}"
+        )
+    if view.schema_digest != db.schema_digest:
+        raise SDKStoreError(
+            f"view schema mismatch: view.schema_digest={view.schema_digest!r}, "
+            f"Database.schema_digest={db.schema_digest!r}"
+        )
+    paths = getattr(db, "_workspace_paths", None)
+    if paths is None:
+        raise SDKStoreError("FactGraph.attach(db, view=...) requires a durable Database workspace")
+    try:
+        base_asrt_ids = _database_asrt_ids_at_tx(db, view.base_tx_id)
+    except DatabaseError as exc:
+        raise SDKStoreError(f"view base_tx_id not found in Database: {view.base_tx_id!r}") from exc
+    missing_ids = sorted(set(view.asrt_ids) - base_asrt_ids)
+    if missing_ids:
+        sample = ", ".join(missing_ids[:3])
+        suffix = "" if len(missing_ids) <= 3 else f", ... (+{len(missing_ids) - 3} more)"
+        raise SDKStoreError(
+            f"view references assertion ids not present at base_tx_id={view.base_tx_id!r}: {sample}{suffix}"
+        )
+    return _ViewScopedLedger(db._ledger_for_attach(), view=view, base_asrt_ids=frozenset(base_asrt_ids))
+
+
+def _database_asrt_ids_at_tx(db: Database, tx_id: str) -> set[str]:
+    paths = getattr(db, "_workspace_paths", None)
+    if paths is None:
+        raise DatabaseError("tx lookup requires a durable Database workspace")
+    current_tx_id: str | None = tx_id
+    asrt_ids: set[str] = set()
+    while current_tx_id is not None:
+        payload = _read_tx_object(paths, current_tx_id)
+        asrt_ids.update(payload["added_asrt_ids"])
+        current_tx_id = payload["parent_tx_id"]
+    return asrt_ids
 
 
 class _SDKViewsManager:
@@ -890,6 +1080,7 @@ class SDKStore:
         db: Database,
         *,
         schema_classes: list[type[Entity]],
+        view: DatabaseFrozenAssertionView | None = None,
         default_row_format: str | None = None,
         **kwargs: Any,
     ) -> "SDKStore":
@@ -910,11 +1101,16 @@ class SDKStore:
                 f"schema mismatch: Database has schema_digest={db.schema_digest!r}, "
                 f"but schema_classes compile to {digest!r}"
             )
+        ledger = db._ledger_for_attach()
+        attached_writable = True
+        if view is not None:
+            ledger = _ledger_for_durable_database_view(db, view)
+            attached_writable = False
 
-        store = Store(schema_ir=schema_ir, ledger=db._ledger_for_attach())
+        store = Store(schema_ir=schema_ir, ledger=ledger)
         attached = cls(schema_classes, store=store, default_row_format=default_row_format)
         attached._database = db
-        attached._attached_writable = True
+        attached._attached_writable = attached_writable
         return attached
 
     @classmethod
@@ -1028,6 +1224,11 @@ class SDKStore:
                 "fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; "
                 "use shipped fg.set / fg.add / fg.write.* for non-attached SDKStores"
             )
+        if not self._attached_writable:
+            raise SDKStoreError(
+                "fg.commit_assertions(...) is not available on FactGraph.attach(db, view=view) runtimes; "
+                "view-attached runtimes are read-only"
+            )
         return self._database.commit_assertions(assertions)
 
     def batch(self, *, meta: dict[str, Any] | None = None):
@@ -1072,7 +1273,10 @@ class SDKStore:
         from .facade import sdk_find
 
         if "view" in filter_kwargs:
-            raise SDKStoreError("view= is not supported by fg.read.find()", path="$.find.view")
+            raise SDKStoreError(
+                "method-level view= is not supported by fg.read.find(); use FactGraph.attach(db, view=view) instead",
+                path="$.find.view",
+            )
         self._reject_removed_read_policy(policy, api_path="fg.read.find")
         return sdk_find(
             self,
@@ -2144,10 +2348,12 @@ class SDKStore:
         return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
 
     def evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
-        if "view" in kwargs or "policy" in kwargs:
+        if "view" in kwargs:
             raise SDKStoreError(
-                "evaluate() does not accept view=; policy= was removed for read APIs and is not accepted for inference evaluation"
+                "method-level view= is not supported by evaluate(); use FactGraph.attach(db, view=view) instead"
             )
+        if "policy" in kwargs:
+            raise SDKStoreError("policy= was removed for read APIs and is not accepted for inference evaluation")
         if "semantics_profile" in kwargs:
             raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use semantics=")
         if "mode" in kwargs:
@@ -2238,6 +2444,10 @@ class SDKStore:
         head = kwargs.pop("head")
         raw_engine = kwargs.pop("engine", None)
         raw_semantics = kwargs.pop("semantics", None)
+        if "view" in kwargs:
+            raise SDKStoreError(
+                "method-level view= is not supported by eval.explain(...); use FactGraph.attach(db, view=view) instead"
+            )
         if kwargs:
             unknown = ", ".join(sorted(kwargs))
             raise SDKStoreError(f"unknown eval.explain(...) keyword(s): {unknown}")

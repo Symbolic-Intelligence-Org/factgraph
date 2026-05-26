@@ -131,6 +131,13 @@ The workspace is a level-4 graph snapshot:
 Artifact sidecars, in-memory views, audit reports, service state, package
 exports, rules, and inferences are not part of this workspace format.
 
+Durable Database views are a separate Database feature. Create them with
+`db.create_view(...)` on a `Database`, then consume them with
+`FactGraph.attach(db, schema_classes=[...], view=view)`. A view-attached runtime
+is read-only and automatically scopes `fg.read.*` and `fg.eval.evaluate(...)` to
+the view's assertion ids. Session-local `fg.views.create(...)` entries do not
+carry Database anchors and cannot be passed to `FactGraph.attach(...)`.
+
 ## Load the workspace
 
 Load requires the schema classes. Class-less dynamic load is not part of the
