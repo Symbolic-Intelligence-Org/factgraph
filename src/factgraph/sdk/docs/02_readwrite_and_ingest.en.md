@@ -193,34 +193,38 @@ Stable contract:
 
 ### 6.2 `snapshot.assertions.field(...)`
 
-- `.active()`: currently non-revoked assertions as an `AssertionRecordSet`
-- `.all()`: active plus revoked assertions as an `AssertionRecordSet`
-- `.at(t)`: shortcut for `.active().at(t)`, filtering active
+- `.active`: currently non-revoked assertions as an `AssertionRecordSet`
+- `.history`: active plus revoked assertions as an `AssertionRecordSet`
+- `.all`: compatibility alias for `.history`
+- `.at(t)`: shortcut for `.active.at(t)`, filtering active
   assertions by business valid time
   `valid_from <= t` and (`valid_to` missing or `valid_to > t`)
-- `.version(v)`: shortcut for `.active().version(v)`, filtering
+- `.version(v)`: shortcut for `.active.version(v)`, filtering
   active assertions by version metadata (`version == v`)
+
+Legacy call forms such as `.active()` and `.all()` remain accepted; the returned
+`AssertionRecordSet` is callable and returns itself.
 
 `AssertionRecordSet` is tuple-compatible (`len(...)`, indexing, and
 iteration still work) and adds read-side selection helpers:
 
 ```python
-target = snapshot.assertions.field("name").all().where(
+target = snapshot.assertions.field("name").history.where(
     value="Alice",
     source="seed",
 ).one()
 sdk.retract(target.asrt_id)
 
-same = snapshot.assertions.field("name").all().by_id(target.asrt_id).one()
+same = snapshot.assertions.field("name").history.by_id(target.asrt_id).one()
 ```
 
 The same helpers work on whatever assertion set you start from:
 
 ```python
-snapshot.assertions.field("name").active().where(source="seed")
-snapshot.assertions.field("name").all().at("2026-05-01T00:00:00Z")
-snapshot.assertions.field("name").all().version("v1")
-snapshot.assertions.field("name").all().by_id(asrt_id)
+snapshot.assertions.name.active.where(source="seed")
+snapshot.assertions.name.history.at("2026-05-01T00:00:00Z")
+snapshot.assertions.name.history.version("v1")
+snapshot.assertions.name.history.by_id(asrt_id)
 ```
 
 Boundaries:

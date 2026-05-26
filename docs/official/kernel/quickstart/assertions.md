@@ -168,7 +168,7 @@ uncertain = fg2.write.set(
 )
 
 snap2 = fg2.read.get(User, user_id="u-9")
-record = snap2.field("name").all().by_id(uncertain).one()
+record = snap2.field("name").history.by_id(uncertain).one()
 
 assert record.meta.raw["raw_kind"] == "probabilistic"
 assert record.meta.raw["bound"] == [0.2, 0.8]
@@ -235,7 +235,7 @@ land in `meta.raw["raw_kind"]` and `meta.raw["bound"]`, and you select them
 through `.where(meta={...})` like any other raw key:
 
 ```python
-uncertain_records = snap2.field("name").active().where(
+uncertain_records = snap2.field("name").active.where(
     meta={"raw_kind": "probabilistic", "bound": [0.2, 0.8]}
 )
 assert uncertain_records.one().asrt_id == uncertain
@@ -286,38 +286,43 @@ is the form that composes with snapshot-wide assertion manager methods.
 name_field = snap.field("name")
 same_field = snap.assertions.field("name")
 
-assert name_field.all().by_id(name_seed).one().value == "Alice"
-assert same_field.all().by_id(name_hr).one().value == "Alice Liddell"
+assert name_field.history.by_id(name_seed).one().value == "Alice"
+assert same_field.history.by_id(name_hr).one().value == "Alice Liddell"
 ```
 
 `FieldAssertions` exposes two base sets and two shortcuts:
 
 | Surface | Returns | Use it for |
 | --- | --- | --- |
-| `.active()` | `AssertionRecordSet` of non-revoked records | the current authoritative set |
-| `.all()` | `AssertionRecordSet` of every record, active and revoked | audit, replays, retract selection |
-| `.at(t)` | shortcut for `.active().at(t)` | business-time slice of active records |
-| `.version(v)` | shortcut for `.active().version(v)` | active records with `meta.raw["version"] == v` |
+| `.active` | `AssertionRecordSet` of non-revoked records | the current authoritative set |
+| `.history` | `AssertionRecordSet` of every record, active and revoked | audit, replays, retract selection |
+| `.all` | compatibility alias for `.history` | old code and tuple-like symmetry |
+| `.at(t)` | shortcut for `.active.at(t)` | business-time slice of active records |
+| `.version(v)` | shortcut for `.active.version(v)` | active records with `meta.raw["version"] == v` |
 
 The shortcuts mean: most of the time you want active-only filters, and the
 two common ones get a direct entry. Active-plus-revoked time or version
 filters remain explicit:
 
 ```python
-historical_v1 = snap.field("tags").all().version("tag-v1")
+historical_v1 = snap.field("tags").history.version("tag-v1")
 assert {r.value for r in historical_v1} == {"engineer"}
 ```
+
+Legacy call forms such as `.active()` and `.all()` remain accepted. The returned
+`AssertionRecordSet` is callable and returns itself, so old code does not need a
+compatibility shim.
 
 ## AssertionRecordSet selection helpers
 
 `AssertionRecordSet` is the tuple-compatible record collection returned by
-`.active()`, `.all()`, and graph-level readback. You do not import it; it is
+`.active`, `.history`, `.all`, and graph-level readback. You do not import it; it is
 the type you get back from those calls.
 
 It behaves like a tuple:
 
 ```python
-all_tags_history = snap.field("tags").all()
+all_tags_history = snap.field("tags").history
 
 assert len(all_tags_history) == 2
 
@@ -352,7 +357,7 @@ point. Selection must be unique before the write side accepts a retraction.
 ```python
 target = (
     snap.field("name")
-    .all()
+    .history
     .where(value="Alice", source="seed", trace_id="import-001")
     .one()
 )
@@ -365,8 +370,8 @@ assert target.meta.raw["trace_id"] == "import-001"
 Explicit `None` and omitted criteria are different:
 
 ```python
-unfiltered = snap.field("tags").active().where()             # all active tags
-no_source = snap.field("tags").active().where(source=None)    # source must be None
+unfiltered = snap.field("tags").active.where()             # all active tags
+no_source = snap.field("tags").active.where(source=None)    # source must be None
 
 assert len(unfiltered) == 2
 assert no_source.first() is None
@@ -381,7 +386,7 @@ assert no_source.first() is None
 ledger ingest timestamp:
 
 ```python
-visible = snap.field("tags").all().at("2026-02-01T00:00:00Z")
+visible = snap.field("tags").history.at("2026-02-01T00:00:00Z")
 
 assert {r.value for r in visible} == {"engineer"}
 ```
@@ -432,8 +437,8 @@ assert isinstance(revoker, str)
 after = fg.read.get(User, user_id="u-1")
 
 assert set(after.tags) == {"engineer"}
-assert reviewer_target.asrt_id in {r.asrt_id for r in after.field("tags").all()}
-assert reviewer_target.asrt_id not in {r.asrt_id for r in after.field("tags").active()}
+assert reviewer_target.asrt_id in {r.asrt_id for r in after.field("tags").history}
+assert reviewer_target.asrt_id not in {r.asrt_id for r in after.field("tags").active}
 ```
 
 Two id values appear in any retract:
@@ -451,13 +456,13 @@ fg.write.retract(name_seed, meta={"source": "manual-fix"})
 
 later = fg.read.get(User, user_id="u-1")
 
-assert name_seed not in {r.asrt_id for r in later.field("name").active()}
-assert name_seed in {r.asrt_id for r in later.field("name").all()}
+assert name_seed not in {r.asrt_id for r in later.field("name").active}
+assert name_seed in {r.asrt_id for r in later.field("name").history}
 assert later.name == "Alice Liddell"
 ```
 
 The original assertion is not deleted from the ledger. It moves out of
-`.active()` and stays in `.all()`.
+`.active` and stays in `.history` / `.all`.
 
 ## Frozen views: named assertion-id selections
 
@@ -473,8 +478,8 @@ assert "name_review" in fg.views.list()
 You can also create a view from objects that carry an `.asrt_id`:
 
 ```python
-seed_record = later.field("name").all().by_id(name_seed).one()
-hr_record = later.field("name").all().by_id(name_hr).one()
+seed_record = later.field("name").history.by_id(name_seed).one()
+hr_record = later.field("name").history.by_id(name_hr).one()
 
 obj_view = fg.views.create("name_review_objs", asrts=[seed_record, hr_record])
 
@@ -652,26 +657,26 @@ assert set(snap.tags) == {"engineer", "reviewer"}
 
 target = (
     snap.field("name")
-    .all()
+    .history
     .where(value="Alice", source="seed", trace_id="import-001")
     .one()
 )
 assert target.asrt_id == name_seed
 assert target.meta.raw["trace_id"] == "import-001"
 
-visible_at = snap.field("tags").all().at("2026-02-01T00:00:00Z")
-historical_v1 = snap.field("tags").all().version("tag-v1")
+visible_at = snap.field("tags").history.at("2026-02-01T00:00:00Z")
+historical_v1 = snap.field("tags").history.version("tag-v1")
 
 assert {r.value for r in visible_at} == {"engineer"}
 assert {r.value for r in historical_v1} == {"engineer"}
 
-reviewer_target = snap.field("tags").active().where(value="reviewer").one()
+reviewer_target = snap.field("tags").active.where(value="reviewer").one()
 fg.write.retract(reviewer_target.asrt_id, meta={"source": "manual-fix"})
 
 after = fg.read.get(User, user_id="u-1")
 
 assert set(after.tags) == {"engineer"}
-assert reviewer_target.asrt_id in {r.asrt_id for r in after.field("tags").all()}
+assert reviewer_target.asrt_id in {r.asrt_id for r in after.field("tags").history}
 
 review = fg.views.create("name_review", asrt_ids=[name_seed, name_hr])
 records = fg.assertions.by_ids(review.asrt_ids)
@@ -711,7 +716,9 @@ assert seed_record.meta.source == "seed"
   meta keys; user writes that include them are rejected.
 - `snap.field("name")` and `snap.assertions.field("name")` both return
   `FieldAssertions`.
-- `FieldAssertions.active()` and `.all()` return `AssertionRecordSet`.
+- `FieldAssertions.active` and `.history` return `AssertionRecordSet`;
+  `.all` is a compatibility alias for `.history`, and legacy `.active()` /
+  `.all()` call forms remain accepted.
 - `FieldAssertions.at(t)` and `.version(v)` are shortcuts over the active
   set.
 - `AssertionRecordSet` is tuple-compatible: indexing, slicing, concatenation,

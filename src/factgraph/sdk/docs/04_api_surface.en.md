@@ -409,10 +409,11 @@ Per-field editor on an `EntityEditor`: `set(value, *, meta=None)`,
 ### `FieldAssertions`, `AssertionRecordSet`, `AssertionRecord`, `AssertionMeta`
 
 `FieldAssertions` exposes a field's active assertions plus history.
-`.active()` returns currently non-revoked records as `AssertionRecordSet`;
-`.all()` returns active plus revoked records. `FieldAssertions.at(iso8601_time)`
-and `.version(v)` are active-only shortcuts for `.active().at(...)` and
-`.active().version(...)`.
+`.active` returns currently non-revoked records as `AssertionRecordSet`;
+`.history` returns active plus revoked records, and `.all` is a compatibility
+alias for `.history`. Legacy call forms such as `.active()` and `.all()` remain
+accepted. `FieldAssertions.at(iso8601_time)` and `.version(v)` are active-only
+shortcuts for `.active.at(...)` and `.active.version(...)`.
 
 `AssertionRecordSet` is a tuple-compatible returned object with
 `.where(...)`, `.at(...)`, `.version(...)`, `.by_id(...)`, `.one()`,
@@ -435,10 +436,10 @@ Example:
 ```python
 target = (
     snapshot.field("name")
-    .all().where(value="Alice", source="seed")
+    .history.where(value="Alice", source="seed")
     .one()
 )
-same = snapshot.field("name").all().by_id(target.asrt_id).one()
+same = snapshot.field("name").history.by_id(target.asrt_id).one()
 sdk.retract(target.asrt_id)
 ```
 

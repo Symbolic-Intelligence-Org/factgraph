@@ -103,6 +103,9 @@ class AssertionRecordSet(tuple):
     def __new__(cls, records: Any = ()) -> "AssertionRecordSet":
         return super().__new__(cls, tuple(records))
 
+    def __call__(self) -> "AssertionRecordSet":
+        return self
+
     def __getitem__(self, index: Any) -> Any:
         value = super().__getitem__(index)
         if isinstance(index, slice):
@@ -212,9 +215,15 @@ class FieldAssertions:
         self._active_records = AssertionRecordSet(active_records)
         self._history_records = AssertionRecordSet(history_records)
 
+    @property
     def active(self) -> AssertionRecordSet:
         return self._active_records
 
+    @property
+    def history(self) -> AssertionRecordSet:
+        return self._history_records
+
+    @property
     def all(self) -> AssertionRecordSet:
         return self._history_records
 
@@ -263,7 +272,7 @@ class AssertionNamespace:
         return AssertionRecordSet(
             record
             for field_assertions in field_map.values()
-            for record in field_assertions.active()
+            for record in field_assertions.active
         )
 
     def all(self) -> AssertionRecordSet:
@@ -271,7 +280,7 @@ class AssertionNamespace:
         return AssertionRecordSet(
             record
             for field_assertions in field_map.values()
-            for record in field_assertions.all()
+            for record in field_assertions.history
         )
 
     def by_id(self, asrt_id: str) -> AssertionRecord | None:
@@ -291,6 +300,12 @@ class AssertionNamespace:
                 raise SDKStoreError("snapshot.assertions.by_ids(asrt_ids) expects non-empty string ids")
         wanted = set(normalized)
         return AssertionRecordSet(record for record in self.all() if record.asrt_id in wanted)
+
+    def __getattr__(self, name: str) -> FieldAssertions:
+        field_map = object.__getattribute__(self, "_field_map")
+        if name in field_map:
+            return field_map[name]
+        raise AttributeError(name)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("AssertionNamespace is read-only")

@@ -540,7 +540,7 @@ failure_class enum values, and runnable passed / failed examples), see
 Implemented:
 - Read-side temporal filtering via `snapshot.assertions.<field>.at(t)` and
   `.version(v)` active shortcuts, plus `AssertionRecordSet` filters such as
-  `snapshot.assertions.field(...).all().at(t)`.
+  `snapshot.assertions.field(...).history.at(t)`.
 - `T1` temporal checks can be expressed via explicit temporal predicates plus the existing comparison syntax:
   - deadline: temporal anchor predicate + `<=` / `<`
   - window membership: temporal anchor predicate + `>=` / `<=`

@@ -132,6 +132,38 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
         )
         self.assertEqual(field.active.by_id(ids["name_new"]).one().value, "Alicia")
 
+    def test_field_assertion_sets_accept_property_and_legacy_call_forms(self) -> None:
+        sdk, _ = _seed_store()
+        snap = sdk.get(User, user_id="u-1")
+        self.assertIsNotNone(snap)
+        assert snap is not None
+
+        field = snap.field("name")
+
+        self.assertIs(field.active(), field.active)
+        self.assertIs(field.all(), field.history)
+        self.assertEqual(
+            [record.value for record in snap.assertions.name.active()],
+            [record.value for record in snap.assertions.name.active],
+        )
+
+    def test_assertion_namespace_proxy_respects_reserved_names(self) -> None:
+        sdk, _ = _seed_store()
+        snap = sdk.get(User, user_id="u-1")
+        self.assertIsNotNone(snap)
+        assert snap is not None
+
+        self.assertIs(snap.assertions.name, snap.assertions.field("name"))
+        self.assertTrue(callable(snap.assertions.field))
+        self.assertIs(snap.assertions.field("name"), snap.assertions.name)
+        self.assertIs(snap.assertions.__class__, type(snap.assertions))
+
+        with self.assertRaises(AttributeError):
+            _ = snap.assertions.missing_field
+
+        with self.assertRaises(AttributeError):
+            _ = snap.field("name").active.active
+
 
 if __name__ == "__main__":
     unittest.main()
