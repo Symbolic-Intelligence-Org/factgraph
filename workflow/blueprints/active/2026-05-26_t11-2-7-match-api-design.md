@@ -1,9 +1,9 @@
 # Task Blueprint: T11.2.7 Match API Design
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
-- Class: M/L (predicted docs-only design synthesis; may narrow after Step 4.6)
+- Class: M (docs-only design synthesis; narrowed after Step 4.6)
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
@@ -258,5 +258,77 @@ No runtime implementation is expected in T11.2.7.
 - [x] View integration decision recorded.
 - [x] `fg.eval.run` migration timing recorded.
 - [x] T11.2.6 facade impact recorded.
-- [ ] No implementation code changes.
-- [ ] Dirty baseline preserved.
+- [x] No implementation code changes.
+- [x] Dirty baseline preserved.
+
+## 9. Outcome / Deviations
+
+### 9.1 Landed artifacts
+
+T11.2.7 landed as a docs-only design cycle:
+
+- `83e452f3` drafted the blueprint pair.
+- `1d3dfe0f` scoped historical Query / match inventory and comparison
+  matrices.
+- `babd1046` incorporated the user's V2 ergonomics feedback: avoid
+  evaluate-style `MatchResult` parsing, prefer snapshot/value-native usage, and
+  keep `facade.py` independent unless match explicitly returns assertion
+  records.
+- `80d62bb3` created
+  `workflow/design/design-points/active/match-api-design.zh.md` and added a
+  narrow parent §6 cross-link in
+  `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md`.
+- `ef34d618` reworked the design to the final V4 model:
+  `fg.read.match(EntityCls, template, **constraints) -> tuple[EntityCls
+  snapshot, ...]`, with EntityCls acting as the match-side head and output
+  aligned to `fg.read.find(...)`.
+- `b1f52ede` added the §5.4 pattern-connectivity safety invariant and M21.
+
+### 9.2 Final design state
+
+The active design point now locks the v0.2 match API direction:
+
+- namespace: `fg.read.match(...)`;
+- signature: `read.match(EntityCls, Rule | RuleExpr, *, limit=None,
+  **port_constraints)`;
+- output: distinct materialized `tuple[EntityCls snapshot, ...]`;
+- constraints: literal kwargs or own-class Field descriptor kwargs;
+- execution model: deterministic pattern matching, not inference;
+- view model: attach-time view scope only, no method-level `view=`;
+- connectivity: projected EntityCls port Var and constrained port Vars must be in
+  the same effective-body connected component or match raises `SDKStoreError`;
+- witness/assertion-returning match, Query adapter, service/OpenAPI endpoints,
+  cross-entity tuple returns, method-level `view=`, and `fg.eval.run` deletion
+  remain deferred.
+
+### 9.3 Facade handoff
+
+The design explicitly decouples the dirty `src/factgraph/sdk/facade.py` /
+`tests/test_sdk_assertion_record_set_view_filters.py` pair from match. Match no
+longer returns `AssertionRecordSet`, so the property-style assertion accessor
+work is not required by T11.2.7. It may proceed as a standalone SDK assertion
+ergonomics slice, or be stashed/reverted by the user before release.
+
+### 9.4 Deviations
+
+The cycle changed shape during review:
+
+- V2/V3 considered transparent `MatchView` / `.select(...)` semantics.
+- User feedback then pushed the design toward read namespace consistency.
+- V4 settled on single-call read shape, no wrapper DTO, and EntityCls as the
+  match-side head.
+- §5.4 added an extra safety invariant after the disconnected-pattern cartesian
+  product risk was identified.
+
+These are design refinements only. No runtime implementation or SDK API code
+changed.
+
+### 9.5 Verification
+
+- `git diff --check` passed after the design commit.
+- No production, test, notebook, service, OpenAPI, release, or dirty-baseline
+  file was intentionally edited by this cycle.
+- Sacred `master` remains
+  `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remains the same 6 modified tracked files plus untracked
+  `rainbird-ai sdk code/`.

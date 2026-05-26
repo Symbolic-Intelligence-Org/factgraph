@@ -1,12 +1,12 @@
 # Audit: T11.2.7 Match API Design
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-2-7-match-api-design.md`
-- Stage: scoped
-- Class: M/L (predicted docs-only design synthesis)
+- Stage: implemented
+- Class: M (docs-only design synthesis; narrowed after Step 4.6)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve 6 modified tracked files plus untracked `rainbird-ai sdk code/`
 - Ownership: Codex owner, Claude reviewer (cross-flip)
@@ -16,8 +16,11 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-26 | draft | `83e452f3` | T11.2.7 blueprint pair drafted | Triggered by user-identified match API design gap and T11.2.5 facade.py verdict. |
-| 2026-05-26 | scoped | TBD | Step 4.6 match API design inventory recorded | Namespace/template/return-shape comparison matrices locked; design remains docs-only. |
-| 2026-05-26 | scoped-amend | TBD | V2 match ergonomics incorporated | User rejected evaluate-style wrapper parsing; scoped design now locks snapshot/value-native `MatchView` with kwargs and `.select(...)`. |
+| 2026-05-26 | scoped | `1d3dfe0f` | Step 4.6 match API design inventory recorded | Namespace/template/return-shape comparison matrices locked; design remains docs-only. |
+| 2026-05-26 | scoped-amend | `babd1046` | V2 match ergonomics incorporated | User rejected evaluate-style wrapper parsing; scoped design locked snapshot/value-native `MatchView` with kwargs and `.select(...)`. |
+| 2026-05-26 | implemented | `80d62bb3` | Initial active match design point landed | Created `match-api-design.zh.md` and parent §6 cross-link. |
+| 2026-05-26 | implemented-amend | `ef34d618` | V4 read-shape rework landed | Final model changed to `read.match(EntityCls, template, **constraints) -> tuple[snapshot, ...]` with no wrapper DTO. |
+| 2026-05-26 | implemented-amend | `b1f52ede` | Pattern-connectivity invariant landed | Added §5.4 disconnected-pattern safety invariant and commitment M21. |
 
 ## 2. Pre-Draft Source Scan
 
@@ -117,4 +120,53 @@ Read-only scan findings:
 - [x] Return shape decision reviewed.
 - [x] Facade impact reviewed.
 - [x] V2 snapshot/value-native ergonomics reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
+
+## 6. Closure Notes
+
+### 6.1 Landed scope
+
+T11.2.7 completed as a docs-only design synthesis. The final active design point
+is `workflow/design/design-points/active/match-api-design.zh.md`, and the parent
+rule-expression essay now has a narrow §6 pointer to that source.
+
+The final design is not the initial V2 `MatchView`/chain design. It was amended
+to the V4 read namespace model:
+
+```python
+fg.read.match(EntityCls, template, *, limit=None, **port_constraints)
+    -> tuple[EntityCls snapshot, ...]
+```
+
+### 6.2 Final decisions
+
+- `fg.read.match(...)` is the namespace.
+- `EntityCls` is the match-side head and determines the returned snapshot type.
+- Templates are application `Rule` / `RuleExpr`; legacy `Query` is compatibility
+  / deferred.
+- Return shape is `tuple[EntityCls snapshot, ...]`, distinct and materialized.
+- No `MatchResult`, `MatchView`, `MatchRow`, `.select(...)`, or chain methods in
+  the final v0.2 target.
+- Kwargs accept literal values or own-class Field descriptors.
+- Cross-entity Field kwargs, cross-entity tuple returns, witness assertion ids,
+  and Query persistence remain deferred.
+- Match follows attach-time view scoping; method-level `view=` remains rejected.
+- Pattern connectivity is mandatory for match and raises `SDKStoreError` before
+  runtime matching on disconnected effective bodies.
+
+### 6.3 Facade / release handoff
+
+The dirty `facade.py` assertion-ergonomics work is independent of T11.2.7.
+Because match no longer returns `AssertionRecordSet`, T11.2.6 may either land
+that work as a standalone assertion ergonomics slice or the user may
+stash/revert it before T11.3 release machinery.
+
+### 6.4 Verification
+
+- No production / tests / examples / notebooks / service / OpenAPI / release
+  files were changed by T11.2.7.
+- Dirty baseline remains the same 6 modified tracked files plus untracked
+  `rainbird-ai sdk code/`.
+- Sacred `master` remains
+  `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Class narrowed from M/L to M after Step 4.6 and final landed LOC.
