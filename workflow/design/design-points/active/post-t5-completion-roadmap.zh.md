@@ -1,6 +1,6 @@
 # Post-T5 Completion Roadmap — T6-T12 Planning Artifact
 
-- Status: draft planning artifact
+- Status: scoped planning artifact
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Authority: non-authoritative implementation roadmap / scheduling reference. This document does **not** override active design-point commitments, D-doc decisions, shipped module docs, or per-slice blueprints.
@@ -28,7 +28,7 @@ T5.1-T5.8 已完成并推送到 origin。T5 的用户面结果:
 | T5.2 Public Evaluate Return-Shape Flip | `4e590e8a` | `fg.eval.evaluate(...) -> EvaluateResult` hard-cut |
 | T5.3 Explanation Envelope + Live Row Resolver | `ba5e5c26` | `Explanation` DTO + `row.explain()` |
 | T5.4 Row Close + Manual Explain | `7464c3e3` | `row.close()` + `fg.eval.explain(expr, head=closed_head)` |
-| T5.5 Why-Not Quarantine | `ec45f12f` | failed `Explanation` is v1 why-not envelope; legacy why-not quarantined |
+| T5.5 Why-Not Quarantine | `ec45f12f` | failed `Explanation` is v1 why-not envelope; legacy `WhyNotResult` / why-not shells quarantined |
 | T5.6 SDK Rule Flip | `7aa1c6a3` | `factgraph.sdk.Rule` is application protocol Rule |
 | T5.7 Legacy Hard-Cut + Service/Docs | `8173c715` | service / OpenAPI / docs aligned with EvaluateResult |
 | T5.8 Semantics Lite + Wrapper Fix | `efd65c0e` | wrapper semantics works with application Rule / RuleExpr; C73/C75-lite |
@@ -81,27 +81,33 @@ T12 housekeeping ─────────────────────
 T11.2 cross-doc unblock ──> T11.3 release ─────┼──> v0.2.0 release gate
                                                │
 T6 evidence Phase B design ──> T8 evidence implementation ──> T9 evidence docs/release alignment
-          ▲                         ▲
-          │                         │
-          └──────── T10 semantics adapter execution ────────┘
-
-T7 evidence audit/rendering bridge ────────────┘
-          ▲
-          └──────── T10 may affect engine-specific evidence metadata
+          ▲                         ▲                            ▲
+          │                         │                            │
+          └──────── T10 semantics adapter execution ─────────────┘
+                                    │
+                                    ▼
+T7 evidence audit/rendering bridge ──────────────────────────────┘
 ```
 
 Interpretation:
 
 - **T11/T12 are release-track independent** of the larger evidence implementation chain. They can move before T6/T8.
 - **T6 → T8 → T9 is the evidence chain**: complete design skeleton first, then implementation, then docs / release claims.
-- **T10 is cross-cutting**: adapter-level semantics execution affects T6/T7/T8 evidence completeness but can run in parallel if its scope is kept engine-local.
-- **T7 is a bridge track**: it can advance audit/rendering substrate without waiting for every T8 evidence feature, but engine metadata choices must not conflict with T10.
+- **T10 is cross-cutting**: adapter-level semantics execution affects T6/T7/T8 evidence completeness and may alter T9 evidence documentation claims, but can run in parallel if its scope is kept engine-local.
+- **T7 is a bridge track**: it can advance audit/rendering substrate without waiting for every T8 evidence feature, but it still feeds T9 release/docs alignment and its engine metadata choices must not conflict with T10.
 
 ---
 
 ## 3. T6-T12 Track Map
 
 ### 3.1 Summary Table
+
+Owner candidate values are coordination hints, not authority rules:
+
+- `shared` means both Codex and Claude are expected to contribute materially, normally via cross-flip cadence.
+- `either` means either side can own the cycle after a local kickoff decision.
+- `Codex primary` means Codex drafts / implements and Claude reviews by default.
+- If Codex is unavailable or parallel work makes that impractical, a self-owned cycle is acceptable when the audit records the ownership change.
 
 | Track | Title | Prediction | Est. LOC / commits | Owner candidate | Release role |
 |---|---|---:|---:|---|---|
@@ -112,9 +118,11 @@ Interpretation:
 | T10 | Semantics adapter execution completion(C74/C76/C77/C78) | L | 1200-3000 LOC / 7-12 commits | Codex primary | post-release default unless semantics advertised |
 | T11.2 | Cross-doc S1-S6 / I10-A10 formal unblock | L | 800-1800 docs+tests LOC / 6-10 commits | shared | release blocker candidate |
 | T11.3 | v0.2.0 release machinery | L | 600-1600 LOC / 5-9 commits | Codex primary | release blocker |
+| T11.4 | DatabaseValue attach / snapshot API | M/L | 400-1000 LOC / 4-7 commits | either | tentative; activates only if T11.2/T11.3 reveal public snapshot need |
+| T11.5 | Broader Database docs migration | M | 300-800 docs LOC / 3-6 commits | either | tentative; activates only if T11.2/T11.3 leave user-facing Database docs gaps |
 | T12 | Lifecycle / design housekeeping | S/M | 200-700 docs LOC / 2-5 commits | either | release hygiene |
 
-Class predictions are planning hints only. A per-track blueprint may downgrade or escalate after Step 4.6 inventory.
+Class predictions are planning hints only. A per-track blueprint may downgrade or escalate after Step 4.6 inventory. T11.4/T11.5 are not committed release-track work; they are named here so they do not disappear if T11.2/T11.3 surface the need.
 
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton
 
@@ -366,3 +374,19 @@ Archive criteria:
 | Should dirty baseline be triaged before release branch? | Yes | before T11.3 release machinery |
 | Should `rule-expression-and-proof-track-plan.zh.md` archive now? | likely after minimal T12 | T12 Step 4.2 review |
 
+---
+
+## 8. Step 4.6 Scoped Inventory
+
+This scoped inventory records what this roadmap is allowed to claim before later tracks create authoritative blueprints.
+
+| Area | Scoped lock | Result |
+|---|---|---|
+| Current anchors | T5.1-T5.8 archive anchors and T11.1 published head are scheduling inputs only. | Anchor table in §1 remains valid as of scoped review; later tracks must cite their own source commits. |
+| Active design sources | Parent Rule/Eval, Evidence Tree, and Database/View active design-points remain the authoritative source. | This roadmap links those files but does not rewrite their §deferred registries. |
+| Dependency graph | T6→T8→T9 evidence chain, T10 cross-cutting semantics influence, and T11/T12 release-track independence are planning assumptions. | Later blueprints may narrow or reorder after their own Step 4.6 inventory. |
+| Release blockers | T11.2, T11.3, minimal T12, and dirty-baseline triage are release-blocker candidates. | Release blocker status is not final until T11.2/T11.3 blueprints inspect shipped source and docs. |
+| Deferred items | Parent §5.12/C74/C76/C77/C78, evidence §14 clusters, and database §12/§17 items remain deferred unless a future blueprint activates them. | Reactivation triggers in §6 are planning triggers, not implementation authorization. |
+| Owner model | Owner candidates are coordination hints. | Cross-flip remains default for `shared`; self-owned fallback is allowed when recorded in the relevant audit. |
+| Dirty baseline | Roadmap work must not absorb the 6M+1U dirty baseline. | This scoped document is single-file docs-only work. |
+| Push governance | Prior push authorization does not roll forward. | Any roadmap push requires explicit single-use authorization. |
