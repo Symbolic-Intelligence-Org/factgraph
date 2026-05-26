@@ -1,6 +1,6 @@
 # Task Blueprint: Quickstart Database And View — Rebase Onto T11.1
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: M (predicted docs-only)
@@ -209,16 +209,72 @@ Self-review must verify:
 
 ## 9. Acceptance
 
-- [ ] `docs/official/kernel/quickstart/database.md` exists, with A1+A2+A3 amends applied vs T5 source.
-- [ ] `index.md` lists database.md as item #5; subsequent items renumbered.
-- [ ] `persistence.md` gains a cross-link to database.md near the existing `attach(..., view=view)` paragraph.
-- [ ] `assertions.md` gains a cross-link paragraph to database.md.
-- [ ] `namespace-map.md` gains a cross-link to database.md near attach row.
-- [ ] Smoke 7-step passes on T11.1 branch.
-- [ ] Diff stays within 5 docs files + blueprint pair.
-- [ ] Dirty baseline preserved at 6 M + 1 untracked.
-- [ ] Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
+- [x] `docs/official/kernel/quickstart/database.md` exists, with A1+A2+A3 amends applied vs T5 source.
+- [x] `index.md` lists database.md as item #5; subsequent items renumbered.
+- [x] `persistence.md` gains a cross-link to database.md near the existing `attach(..., view=view)` paragraph.
+- [x] `assertions.md` gains a cross-link paragraph to database.md.
+- [x] `namespace-map.md` gains a cross-link to database.md near attach row.
+- [x] Smoke 7-step passes on T11.1 branch.
+- [x] Diff stays within 5 docs files + blueprint pair.
+- [x] Dirty baseline preserved at 6 M + 1 untracked.
+- [x] Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
 
 ## 10. Outcome / Deviations
 
-(Filled at closure.)
+Implemented in `1c54f587` after blueprint pair `20bae7ba` (scoped with
+12-item Step 4.6 inventory pre-locked).
+
+Landed documentation:
+
+- `docs/official/kernel/quickstart/database.md` (new, +388 LOC).
+- `docs/official/kernel/quickstart/index.md` (+1 line; renumbered 5..9 → 6..10).
+- `docs/official/kernel/quickstart/persistence.md` (+5 lines cross-link paragraph).
+- `docs/official/kernel/quickstart/assertions.md` (+7 lines cross-link paragraph).
+- `docs/official/kernel/quickstart/namespace-map.md` (+1 sentence to attach row).
+
+Three amends to T5 source content:
+
+- **A1** Replaced the "Neither surface is a read policy today" block:
+  the wrong line `# FactGraph.attach(db, view=view, ...)   # not shipped`
+  is gone. Replacement text states `view=` is attach-time only and
+  shows the row-level reject error message produced by the SDK.
+- **A2** Rewrote the checklist bullet `Do not pass view= to read,
+  evaluate, or attach APIs` to scope-correctly say view= is an
+  attach-time argument and is rejected on row-level read.find /
+  eval.evaluate.
+- **A3** Added a new `## View-scoped attach` section between SDK views
+  contrast and the Complete example, covering: passing view to attach,
+  the read-only consequence, automatic scoping of `fg.read.*` and
+  `fg.eval.evaluate(...)`, the `commit_assertions` reject error
+  message, db_id and schema_digest validation, and the `view=None`
+  default. The Complete example was also extended to demonstrate
+  view-scoped attach alongside writable reattach.
+
+Verification:
+
+- 7-step smoke green on `v0.2.0-t11-1-attach-view-scope-2026-05-26`:
+  Database.create -> writable attach -> commit_assertions ->
+  create_view -> view-scoped attach (read-only) -> view-attached
+  mutation reject -> Database.open + reattach with view.
+- Complete example block reproduced verbatim and runs end-to-end.
+- `git diff --check` clean.
+- Diff scope: 5 docs files + 2 blueprint files (now this commit also
+  closes the blueprint pair).
+- Pre-existing 6 modified + 1 untracked dirty baseline preserved end-
+  to-end.
+- Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666`
+  unchanged.
+
+Deviations and notes:
+
+- Cherry-pick mechanic was `git show` extraction + manual amends (as
+  planned). Not `git cherry-pick` (which would have carried 8 commits
+  of T5 blueprint cycle noise onto T11.1 branch).
+- T5 branch's `2026-05-26_quickstart-database-view` blueprint pair
+  remains in `workflow/blueprints/archive/` on the T5 branch as
+  historical record of how the original cycle was scoped. It is not
+  cherry-picked onto T11.1 because it would conflict with this
+  blueprint pair and refers to T5 branch state.
+- T5 branch is not pushed; T11.1 branch is the canonical line.
+- Cycle was self-owned (Codex on parallel work). Cross-flip will
+  resume on the next cycle.

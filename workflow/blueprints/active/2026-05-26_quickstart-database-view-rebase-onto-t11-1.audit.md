@@ -1,11 +1,11 @@
 # Audit: Quickstart Database And View — Rebase Onto T11.1
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_quickstart-database-view-rebase-onto-t11-1.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M (predicted docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-26 | scoped | pending | Reconciliation blueprint pair drafted | Self-owned cycle. Triggered by retroactive review of T5 branch's `quickstart-database-view` cycle (8 commits `bf161c62..c77d0442`) which authored against pre-T11.1 state and now contradicts T11.1's shipped `attach(..., view=view)` (`76f46ada`). |
+| 2026-05-26 | scoped | `20bae7ba` | Reconciliation blueprint pair drafted | Self-owned cycle. Triggered by retroactive review of T5 branch's `quickstart-database-view` cycle (8 commits `bf161c62..c77d0442`) which authored against pre-T11.1 state and now contradicts T11.1's shipped `attach(..., view=view)` (`76f46ada`). |
+| 2026-05-26 | implemented | `1c54f587` | Database.md content cherry-picked + A1+A2+A3 amends + 4 cross-link reconciliations | 5 docs files touched: new database.md (+388 LOC), index.md (database.md inserted as #5), persistence.md (+5-line cross-link paragraph), assertions.md (+7-line cross-link paragraph), namespace-map.md (+1-sentence cross-link in attach row). 7-step end-to-end smoke green; Complete example block also runs green. 0 production files. |
 
 ## 2. Source Reads
 
@@ -95,12 +96,64 @@ Additionally:
 ## 7. Review Checklist
 
 - [x] Step 4.6 scoped inventory recorded before implementation.
-- [ ] Implementation applied amends A1+A2+A3 correctly.
-- [ ] Smoke 7/7 passed.
-- [ ] No `# FactGraph.attach(db, view=view, ...)   # not shipped` line remains anywhere in docs.
-- [ ] No "Do not pass `view=` ... or attach APIs" wording remains anywhere in docs.
-- [ ] No production files touched; dirty baseline preserved.
+- [x] Implementation applied amends A1+A2+A3 correctly.
+- [x] Smoke 7/7 passed.
+- [x] No `# FactGraph.attach(db, view=view, ...)   # not shipped` line remains anywhere in docs.
+- [x] No "Do not pass `view=` ... or attach APIs" wording remains anywhere in docs.
+- [x] No production files touched; dirty baseline preserved.
 
 ## 8. Closure Notes
 
-(Filled at closure.)
+Implemented with `1c54f587` on top of scoped blueprint pair `20bae7ba`.
+
+Self-owned cycle summary:
+
+- Cycle ran self-owned because Codex was on parallel work after T11.1
+  attach-view-scope close. Owner and reviewer were both Claude.
+- 12-item Step 4.6 inventory was pre-locked into the scoped state at
+  blueprint creation (not draft -> scoped, but draft+scoped combined as
+  a single commit, mirroring the rules-ports-ruleexpr self-owned cycle
+  pattern from earlier today).
+- Step 4.7 self-review took the form of a fresh-read pass over the new
+  database.md content (388 LOC) plus the 7-step end-to-end smoke that
+  specifically exercises the new shipped `view=` attach branch — the
+  branch that was incorrectly marked "not shipped" in T5's original
+  database.md content.
+
+Final landed scope:
+
+- New `database.md` (388 LOC): Database identity boundary, attach
+  workflow, commit_assertions, durable view objects, SDK views vs
+  durable views contrast, **View-scoped attach (new section)**,
+  Complete example with view-scoped attach + writable reattach, and
+  syntax checklist.
+- index.md, persistence.md, assertions.md, namespace-map.md cross-links
+  reconciled.
+
+Drift records:
+
+- D1 (already resolved by T11.1 `76f46ada`): T5 database.md was
+  authored before `attach(..., view=view)` shipped. This cycle removed
+  the "not shipped" line and reframed the checklist bullet.
+
+Verification:
+
+- 7-step end-to-end smoke (Database.create -> writable attach ->
+  commit_assertions -> create_view -> view-scoped attach (read-only)
+  -> view-attached mutation reject -> Database.open + reattach with
+  view) all GREEN against the live SDK on T11.1 branch.
+- Complete example block reproduced verbatim and runs GREEN.
+- `git diff --check`: clean.
+- Diff scope: 5 docs files + blueprint pair.
+- Sacred master at `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
+- Pre-existing 6 modified + 1 untracked dirty baseline preserved end-to-end.
+
+Deferred / non-goals (left for future cycles):
+
+- T5 branch's 8 commits remain as historical record on T5 branch; not
+  pushed, not deleted.
+- Eventual T5 branch retirement / pruning is a separate decision.
+- Promoting row-level `view=` parameters on `fg.read.find` /
+  `fg.eval.evaluate` was a non-goal — these remain rejected with the
+  message "method-level view= is not supported; use FactGraph.attach
+  (db, view=view) instead", and docs now teach that.
