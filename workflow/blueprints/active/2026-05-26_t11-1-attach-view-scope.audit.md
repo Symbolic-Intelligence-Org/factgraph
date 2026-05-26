@@ -1,11 +1,11 @@
 # Audit: T11.1 Attach-Based View Scope
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-1-attach-view-scope.md`
-- Stage: draft
+- Stage: scoped
 - Class: M (predicted)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -15,6 +15,7 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-26 | draft | pending | Blueprint pair drafted | T11.1 starts the post-T5 Database/view phase from pushed T5.8 archive `efd65c0e`. Scope is attach-based view consumer only: SDK attach accepts view, attached reads/evaluate are scoped, method-level `view=` remains rejected. |
+| 2026-05-26 | scoped | pending | Step 4.6 inventory recorded | Inventory locked branch/base, exact schema digest behavior, order sensitivity, core vs SDK view shapes, attach/read/evaluate insertion points, stale validation boundaries, and docs/test targets. T11.1 remains M-class and attach-based only. |
 
 ## 2. Source Chain
 
@@ -101,7 +102,39 @@ Step 4.6 must decide:
 - whether schema mismatch diagnostics should remain digest-only or include a small entity-set delta hint;
 - whether a minimal `database.md` must be created on this branch because the post-T5 docs slice is not in the base.
 
-## 7. G7 Baseline Plan
+## 7. Step 4.6 Pre-Implementation Inventory Results
+
+| # | Check | Result | Source / evidence |
+|---|---|---|---|
+| 1 | Branch/base state | Current branch is `v0.2.0-t11-1-attach-view-scope-2026-05-26` at draft/amend lineage from `efd65c0e`; dirty baseline remains 6 modified + 1 untracked. | `git branch --show-current`; `git rev-parse --short HEAD`; `git rev-parse --short efd65c0e`; `git status --short`. |
+| 2 | `FactGraph.attach` signature and rejected kwargs | Shipped signature is `(db, *, schema_classes, default_row_format=None, **kwargs)`; `view` is currently in `_ATTACH_REJECTED_KWARGS`. T11.1 must remove `view` from rejected kwargs only for attach and preserve all other unknown/constructor-style kwarg rejection. | `src/factgraph/sdk/store.py:126-137`, `src/factgraph/sdk/store.py:887-918`; `inspect.signature(FactGraph.attach)` confirmed. |
+| 2a | Schema digest exactness | Complete matching class list attaches. Incomplete class list and evolved class list both reject with `SDKStoreError("schema mismatch...")`. `schema_classes` is not a filter. | Empirical `Database.create(schema_ir=compile_schema_from_classes([User, Account]))`; `FactGraph.attach(..., [User])` and `[UserEvolved, Account]` rejected. Source at `src/factgraph/sdk/store.py:906-912`. |
+| 2b | Schema digest order stability | Reordered complete class list changes the compiled schema digest today. `[User, Account]` and `[Account, User]` produced different digests and reordered attach rejected. T11.1 records this shipped order-sensitive behavior; it must not fix order stability inside attach-view. | Empirical digests: `sha256:59dcc3...` vs `sha256:ea0185...`; `schema_digest(...)` source at `src/factgraph/core/schema/schema_ir.py:62-78`. |
+| 2c | Schema consistency chain | Required chain is `compiled_schema_digest == db.schema_digest == view.schema_digest`. First link is shipped by current attach; second link must be added for `view=` attach before read/evaluate. | Current attach source `src/factgraph/sdk/store.py:906-912`; durable view fields include `schema_digest` at `src/factgraph/core/store/database.py:75-80`. |
+| 2d | Schema mismatch diagnostics | Current attach message is digest-only. T11.1 may add a small missing/extra entity hint if cheap, but scoped implementation does not require it. | Current error source `src/factgraph/sdk/store.py:908-912`; empirical mismatch output confirmed digest-only message. |
+| 3 | Durable Database view shape | Core durable `FrozenAssertionView` fields are `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest`. | `src/factgraph/core/store/database.py:74-81`; dataclass introspection confirmed. |
+| 4 | SDK in-memory view shape | SDK in-memory `FrozenAssertionView` fields are only `name` and `asrt_ids`; it lacks `db_id`, `base_tx_id`, `schema_digest`, and `view_digest`. T11.1 should reject SDK in-memory views for `FactGraph.attach(db, view=...)` unless implementation discovers a safe Database association, which current shape does not provide. | `src/factgraph/sdk/store.py:116-118`; dataclass introspection confirmed. |
+| 5 | Database snapshot materialization | Workspace Databases can read tx objects by id through private `_read_tx_object(...)`; `Database.head()` only exposes current head. No public `Database.as_of(...)` exists in this branch. Memory/legacy modes cannot create durable views. | `src/factgraph/core/store/database.py:724-765`, `src/factgraph/core/store/database.py:809-828`, `src/factgraph/core/store/database.py:478-512`. |
+| 6 | Assertion id existence check | `Database.create_view(...)` validates `asrt_ids` exist as ledger claims at creation time, but T11.1 attach must still verify the view's ids against the materialized base snapshot and reject missing/stale ids without falling back to full universe. | Creation check at `src/factgraph/core/store/database.py:492-495`; active id helper at `src/factgraph/core/store/database.py:548-553`. |
+| 7 | SDK read path | `fg.read.find/get` delegate to `sdk.facade`, which calls application `execute_read_request(...)` / `hydrate_entity(...)`; both build visible facts via `project_view_facts(store.ledger, store.schema_ir)`. Shared visibility should be applied at the attached `Store`/ledger boundary rather than as a read-only facade filter. | `src/factgraph/sdk/store.py:1039-1082`; `src/factgraph/application/entity_view.py:68-85`, `src/factgraph/application/entity_view.py:112-136`. |
+| 8 | SDK evaluate path | Native evaluate also projects through `project_view_facts(store.ledger, store.schema_ir)` and `project_view_facts_with_witness(...)`. The same attached Store/ledger visibility boundary can cover reads and native evaluate. Engine adapter paths may consume store/ledger differently, so focused tests must at least prove native view scope and avoid adapter edits. | `src/factgraph/core/store/_evaluate.py:183-214`; public evaluate path at `src/factgraph/sdk/store.py:2146-2231`. |
+| 9 | Attached write restrictions | Existing `_reject_attached_write(...)` rejects most write paths whenever `_database is not None`, but `fg.commit_assertions(...)` currently allows all attached runtimes. View-attached runtime must set `_attached_writable=False` and make `commit_assertions(...)` reject when attached read-only while preserving current writable Database attach. | `_attached_writable` init at `src/factgraph/sdk/store.py:721-722`; attach sets true at `src/factgraph/sdk/store.py:914-918`; commit path at `src/factgraph/sdk/store.py:1025-1031`; write guards at `src/factgraph/sdk/store.py:749-751`. |
+| 10 | Method-level `view=` rejections | `fg.read.find(..., view=...)` and `evaluate(..., view=...)` reject today. `eval.explain(..., view=...)` rejects via unknown kwargs. T11.1 updates wording only, pointing to `FactGraph.attach(db, view=view)`. | `src/factgraph/sdk/store.py:1064-1076`, `src/factgraph/sdk/store.py:2146-2150`, `src/factgraph/sdk/store.py:2233-2243`. |
+| 11 | Existing tests | Current tests lock old method-level view rejection and attach boundary behavior. T11.1 should preserve method-level rejection tests while adding/flipping attach-based view tests. | `tests/test_sdk_frozen_view_read_runtime_boundaries.py`; `tests/test_db_attach_lifecycle.py`. |
+| 12 | Docs locations | This branch does not contain `docs/official/kernel/quickstart/database.md` because it starts at `efd65c0e`. Existing docs still describe SDK in-memory `fg.views` and method-level `view=` rejection. T11.1 docs should add minimal attach-view text without importing unrelated T5 branch docs commits. | `test -f docs/official/kernel/quickstart/database.md` returned absent; `rg` hits in `quickstart/assertions.md`, SDK docs, and namespace map. |
+| 13 | Adapter/service guard | `src/service/runtime_v1.py` has unrelated request-level view/policy data; docs/api and adapters have no T11.1 implementation owner. No service/OpenAPI/adapter edits are scoped. | `rg "view=" src/service docs/api src/factgraph/adapters` classified as service/documentation only. |
+
+Step 4.6 decisions:
+
+- T11.1 remains one M-class attach-based slice.
+- SDK in-memory `fg.views` objects are rejected for `FactGraph.attach(db, view=...)` by default because they do not carry Database identity, base transaction, schema digest, or view digest.
+- The visibility boundary should be shared by read and evaluate through the attached Store/ledger path that feeds `project_view_facts(...)`.
+- Schema exactness is order-sensitive today; T11.1 records and preserves that behavior instead of changing schema canonicalization.
+- Method-level `view=` stays rejected with an attach-based hint.
+- Minimal docs for attach-based view scope are in scope because `database.md` is absent on the T11 branch base.
+- Optional schema delta diagnostics remain secondary and must not block or broaden the slice.
+
+## 8. G7 Baseline Plan
 
 Expected inherited baseline: 180 tests OK from T5.8 archive.
 
@@ -133,15 +166,15 @@ Baseline record fields to fill later:
 | Result | pending |
 | Pytest policy | deferred unless specifically needed |
 
-## 8. Draft Review Checklist
+## 9. Draft Review Checklist
 
-- [ ] Step 4.2 reviewer confirms attach-based-only scope.
-- [ ] Step 4.2 reviewer confirms method-level `view=` remains rejected.
-- [ ] Step 4.2 reviewer confirms stale/scope validation is in scope.
-- [ ] Step 4.2 reviewer confirms no adapter/service/OpenAPI work.
-- [ ] Step 4.2 reviewer confirms branch/base note is acceptable.
-- [ ] Step 4.6 inventory results recorded before implementation.
+- [x] Step 4.2 reviewer confirms attach-based-only scope.
+- [x] Step 4.2 reviewer confirms method-level `view=` remains rejected.
+- [x] Step 4.2 reviewer confirms stale/scope validation is in scope.
+- [x] Step 4.2 reviewer confirms no adapter/service/OpenAPI work.
+- [x] Step 4.2 reviewer confirms branch/base note is acceptable.
+- [x] Step 4.6 inventory results recorded before implementation.
 
-## 9. Closure Notes
+## 10. Closure Notes
 
 Pending.

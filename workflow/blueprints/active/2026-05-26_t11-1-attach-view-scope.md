@@ -1,6 +1,6 @@
 # Task Blueprint: T11.1 Attach-Based View Scope
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Class: M (predicted)
