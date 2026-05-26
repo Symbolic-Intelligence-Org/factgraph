@@ -1,6 +1,6 @@
 # Post-T5 Completion Roadmap — T6-T12 Planning Artifact
 
-- Status: scoped planning artifact
+- Status: working planning artifact
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Authority: non-authoritative implementation roadmap / scheduling reference. This document does **not** override active design-point commitments, D-doc decisions, shipped module docs, or per-slice blueprints.
@@ -376,7 +376,20 @@ Archive criteria:
 
 ---
 
-## 8. Step 4.6 Scoped Inventory
+## 8. Implementation / Use Note
+
+This roadmap is now the working scheduling reference for post-T5 planning. Future T6-T12 blueprints should use:
+
+- §2 for dependency orientation;
+- §3 for initial class / ownership / split expectations;
+- §4 for release-blocker vs post-release classification;
+- §6 for deferred-item reactivation checks.
+
+Those later blueprints must still perform their own Step 4.6 inventory against active design-points and shipped source. This roadmap stays active until the lifecycle criteria in §7.2 are met.
+
+---
+
+## 9. Step 4.6 Scoped Inventory
 
 This scoped inventory records what this roadmap is allowed to claim before later tracks create authoritative blueprints.
 
