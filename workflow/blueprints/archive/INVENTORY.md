@@ -4,10 +4,11 @@
 
 ## Inventory
 
-最后更新：2026-05-22 (cross-doc seams quickstart refresh archived on implementation-derived docs branch)
+最后更新：2026-05-26 (quickstart rules ports + RuleExpr coverage archived on T11.1 branch)
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
+| 2026-05-26 | quickstart-rules-ports-ruleexpr | implemented | Self-owned docs cycle on T11.1 branch: expanded `docs/official/kernel/quickstart/rules-and-inferences.md` with three new sections (~330 LOC) — Understanding ports (three-variable distinction, `port_types` inference, `desc="%port_name"` rendering); Composing rules with RuleExpr (`rule.as_("alias")`, `&` / `|`, `RuleExpr.all` / `.any`, `.join_by_ports`, `.join(eq)`, AND-spine reject); Choosing the right head (arity invariant, cross-rule head selection, `Rule.projection` non-eval-head call-out). Recorded two audit-only design vs shipped drifts (same-named-port ambiguous reject; `Rule.projection` not an eval head). 18-assertion end-to-end smoke green incl. 5 negative-path rejects. Implementation `4cdd4e54`, closure `118dc819`. |
 | 2026-05-22 | cross-doc-seams-quickstart-refresh | implemented | Documentation-only refresh on Slice 7C implementation branch: rewrote quickstart persistence around current workspace save/load and migration CLI, aligned rules/inferences and namespace map after registry adapter removal, preserved runtime `registry=None` evidence examples, and added current-truth pointers to rule-expression/evidence-tree design-point notes; implementation `69850a2d`, closure `d2cd83e4` + `c7ab669a`. |
 | 2026-05-20 | db-identity-substrate | implemented | DB/view Slice 1: introduced Database boundary, DatabaseValue, canonical tx/data/assertion identity protocols, canonical durable AssertionRecord, active-only no-view data_digest, MetaRow-based assertion identity, and focused tests; implementation `6e4642d7`, closure `f3c4375f`. |
 | 2026-05-20 | db-workspace-physical-layout | implemented | DB/view Slice 2: moved durable Database workspace layout to `db/objects/tx/`, `db/objects/schema/`, `db/refs/head.txt`, and `db/assertions.db`; `Database.head()` resolves head ref through tx object; registry preserved during transition; implementation `203b4f21`, closure `b606a126`. |
