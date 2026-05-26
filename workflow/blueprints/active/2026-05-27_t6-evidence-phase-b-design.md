@@ -1,6 +1,6 @@
 # Task Blueprint: T6 Evidence Phase B Design Skeleton
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: L (design skeleton; may narrow after Step 4.6)
@@ -130,9 +130,43 @@ deferred-item boundaries during implementation. T6 closes that design gap.
 | D8 | User docs | Do not add full EvidenceGraph teaching until implementation exists; at most keep forward references. |
 | D9 | Match witness seam | Keep witness-returning match output deferred; T6 may record the seam but must not design the runtime API in detail. |
 
+## 4.1 Step 4.6 Inventory Results
+
+| # | Item | Result |
+|---|---|---|
+| 1 | Branch / dirty baseline | Branch is ahead of origin by the T6 draft commit. Dirty baseline remains the four tracked docs/notebooks plus untracked Rainbird reference; T6 must not touch them. |
+| 2 | §10 current text | §10 is a skeleton at `evidence-tree-rainbird-style-v1.zh.md:2335-2345`. It names `EvaluateResult.run_id`, `evaluated_at`, `result_digest`, `Explanation.head.id`, `head.content_digest`, `expr_digest`, and `evidence.graph_id`, then defers session logs and evidence signatures. Missing: full field table, package boundary, validation/roundtrip, and immutability stance. |
+| 3 | §11 current text | §11 is a skeleton at `evidence-tree-rainbird-style-v1.zh.md:2349-2357`. It names tree/timeline HTML rendering and dict roundtrip, but lacks reference-renderer vs product-UI boundary, layout matrix, empty/error/large behavior, and custom UI obligations. |
+| 4 | §14 D-numbering | Current table is D1-D19, not D1-D11+. Rows are at `evidence-tree-rainbird-style-v1.zh.md:2588-2626`. D11-D13 are under engine extensions after D14-D19, and the status line still says "Phase A locked 11 items"; implementation must normalize the prose without renumbering existing IDs. |
+| 5 | Shipped `EvidenceGraph` | Fields: `graph_id`, `engine`, `root_node_id`, `nodes`, `edges`, `support_kind`, `layout_hint`, `metadata` at `src/factgraph/audit/evidence_graph.py:59-70`. Node fields at `:24-35`; edge fields at `:42-51`. Validation covers layout enum, duplicate node/edge ids, root existence, endpoint references, and DFS cycle detection at `:72-115`. |
+| 6 | Renderer / roundtrip truth | Shipped layouts are `tree` and `timeline` at `evidence_graph.py:8-21`; renderer dispatch is `:118-124`; JSON dict roundtrip is `:127-187`. Audit docs describe renderer role and current model at `src/factgraph/audit/docs/02_evidence_graph.md:28-56`, validation at `:79-91`, renderer at `:93-113`, and durable audit boundaries at `:115-155`. |
+| 7 | Result DTO fields | `Claim` fields are `kind/name/arguments/repr/digest` at `evaluate_result.py:52-59`; `EvidenceRef` fields are `ref_id/result_id/row_id/fact_digest/closed_head_digest` at `:69-76`; `EvaluateRow` fields are at `:85-93`; `EvaluateResult` fields include `result_id/run_id/rows/head/engine/engine_version/adapter_version/expr_digest/rule_set_digest/view_snapshot_digest/semantics_digest/evaluated_at/result_digest` at `:128-143`; `Explanation` fields are at `:202-216`. |
+| 8 | Explanation invariants | `Explanation(status="passed") iff evidence is not None`, passed requires claim/result id, failed requires `failure_class`, and unsupported/invalid_request require errors at `evaluate_result.py:218-246`. T6 must preserve this envelope boundary. |
+| 9 | Metadata bridge full key list | Current `EvidenceGraph.metadata` row/result copy includes `result_id`, `row_id`, `evidence_ref_id`, `claim_digest`, `closed_head_digest`, `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `semantics_digest`, `result_digest`, `engine`, `engine_version`, `adapter_version`, `evaluated_at` at `evaluate_result.py:823-842`. Audit channel also includes `EvaluateResult.run_id` and `EvaluateResult.evaluated_at/result_digest` at `:128-143`; `run_id` is not currently duplicated into `EvidenceGraph.metadata`. |
+| 10 | Minimal graph truth | Current passed graph builder emits one conclusion/root node, zero edges, `support_kind="evaluate_row"`, and copied metadata at `evaluate_result.py:800-820`. T5.3 explicitly allowed this minimal graph shape at `workflow/blueprints/archive/2026-05-25_t5-3-explanation-envelope-live-row-resolver.md:198-213`. |
+| 11 | T5 anchors | T5.1 scoped DTOs, SDK re-exports, digest helpers, and mandatory `view_snapshot_digest` at `workflow/blueprints/archive/2026-05-25_t5-1-dto-foundation-digest-harness.audit.md:56-69`. T5.3 delivered `Explanation`, live row `explain()`, graph validation failure behavior, and minimal graph reuse at `2026-05-25_t5-3-explanation-envelope-live-row-resolver.md:439-466`. |
+| 12 | User docs stance | Quickstart keeps `EvidenceGraph` intentionally opaque in v0.2 at `docs/official/kernel/quickstart/evidence.md:244-269`. T6 must not add full user-facing teaching until runtime support exists. |
+| 13 | Parent evidence authority | Parent §7 delegates detailed evidence authority to the evidence design at `rule-expression-and-proof-attempt.zh.md:1654-1675`; it still points to an old `docs/references/working/...` path at `:1656-1659`, so implementation may narrow-fix that pointer to the active design path. |
+| 14 | Match witness seam | Match design states match returns snapshots and does not expose witness assertion ids at `match-api-design.zh.md:45-52`; `.as_assertions()`, `.witnesses()`, and `.to_view()` are deferred at `:494-511`. T6 should add a deferred registry seam only, not API shape. |
+| 15 | Roadmap dependency | Roadmap locks T6 -> T8 -> T9 at `post-t5-completion-roadmap.zh.md:76-97`, T6 expected outputs at `:127-150`, and T8 candidate scope at `:168-184`. T6 split language must be a proposal for future T8, not a hard order lock. |
+| 16 | Large graph threshold | No shipped node/edge threshold exists in code or docs. Scoped decision: T6 should define a reference-renderer warning threshold (`>250` nodes or `>500` edges) as design guidance only; product UIs may set stricter limits. No runtime truncation or refusal is required by T6. |
+| 17 | Implementation file set | Expected implementation files: evidence design doc; optional parent §7 pointer fix. No runtime/test/release/notebook files. |
+| 18 | Stop-amend findings | None for scoped. All requested T6 work remains design-only. |
+
+## 4.2 Final Scoped Decisions
+
+| Decision | Scoped lock |
+|---|---|
+| T8 split status | T6 will provide a **proposal**, not a binding T8 execution order. T8 may revise the split based on then-current T10/T7 state. |
+| Metadata enumeration | §10 must enumerate both envelope-level audit fields and `EvidenceGraph.metadata` keys, explicitly noting that `run_id` is envelope-level and not currently duplicated into graph metadata. |
+| Large graph handling | §11 must define design guidance for reference renderer "large" graphs (`>250` nodes or `>500` edges) with warning / product-UI handoff language, not runtime truncation. |
+| Deferred numbering | §14 remains D1-D19. T6 may add new deferred items after D19 but must not renumber existing IDs. The stale "11 items" status line must be corrected. |
+| Match witness seam | Add a narrow deferred seam, expected as D20, for witness/assertion-returning match output. It records trigger/owner/boundary only; it must not design `.as_assertions()` API details. |
+| Parent cross-link | Narrow-fix parent §7 path if implementation touches the delegation paragraph; do not re-open parent evidence design. |
+
 ## 5. Expected Step 4.6 Inventory
 
-The scoped commit must fill concrete results for:
+The scoped commit filled concrete results for:
 
 1. current branch / dirty baseline status;
 2. exact current content of §10 and its missing fields;
@@ -187,4 +221,3 @@ If any step requires production code or public DTO changes, stop and amend.
 - [ ] Match witness boundary remains deferred.
 - [ ] No production / DTO / adapter / service / release changes.
 - [ ] Dirty baseline and sacred master preserved.
-
