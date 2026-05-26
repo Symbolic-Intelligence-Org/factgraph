@@ -1,11 +1,11 @@
 # Audit: T11.1 Attach-Based View Scope
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-26
 - Last Updated: 2026-05-26
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-26_t11-1-attach-view-scope.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M (predicted)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 6 modified + 1 untracked preserved
@@ -17,6 +17,8 @@
 | 2026-05-26 | draft | pending | Blueprint pair drafted | T11.1 starts the post-T5 Database/view phase from pushed T5.8 archive `efd65c0e`. Scope is attach-based view consumer only: SDK attach accepts view, attached reads/evaluate are scoped, method-level `view=` remains rejected. |
 | 2026-05-26 | scoped | pending | Step 4.6 inventory recorded | Inventory locked branch/base, exact schema digest behavior, order sensitivity, core vs SDK view shapes, attach/read/evaluate insertion points, stale validation boundaries, and docs/test targets. T11.1 remains M-class and attach-based only. |
 | 2026-05-26 | baseline | pending | G7 baseline recorded | Ran inherited G7 preservation command at scoped anchor `55b89f3b`: 180 tests in 0.122s, OK. Pytest remains deferred. |
+| 2026-05-26 | feat | `76f46ada` | Attach-based view consumer implemented | Added `FactGraph.attach(db, view=view)` for durable Database views, read-only scoped ledger, attach-time stale validation, method-level view hints, focused tests, and narrow docs. |
+| 2026-05-26 | implemented | pending | Closure recorded | Step 4.7 review clean with 0 P0/P1. Verification gates: 20 focused attach/view OK, 51 focused T5/T11 OK, 180 G7 OK, touched-file ruff clean, `git diff --check` clean. |
 
 ## 2. Source Chain
 
@@ -179,4 +181,54 @@ Baseline record fields to fill later:
 
 ## 10. Closure Notes
 
-Pending.
+### Commit Chain
+
+| Step | Commit | Notes |
+|---|---|---|
+| Draft | `7d17c7ae` | Initial T11.1 attach-based view scope blueprint pair. |
+| Amend | `c4336762` | Clarified exact schema attach contract and schema evolution boundary. |
+| Amend | `b30c9c59` | Locked `compiled_schema_digest == db.schema_digest == view.schema_digest` consistency chain. |
+| Scoped | `55b89f3b` | Recorded Step 4.6 inventory and decisions. |
+| Baseline | `88b3d729` | Recorded inherited G7 baseline: 180 tests OK. |
+| Feat | `76f46ada` | Implemented attach-based durable view consumer. |
+
+### Review Disposition
+
+Step 4.7 review was clean:
+
+- `0 P0 / 0 P1`;
+- no Step 4.7 fix commit required;
+- scope locks confirmed: no service, OpenAPI, agent, adapter, or T5 contract changes.
+
+### Landed Behavior
+
+- `FactGraph.attach(db, *, schema_classes=[...], view=view)` accepts durable Database views from `db.create_view(...)`.
+- SDK in-memory `fg.views.create(...)` objects are rejected for attach because they are not Database anchored.
+- Attach validates:
+  - compiled schema digest equals `db.schema_digest`;
+  - durable view schema digest equals `db.schema_digest`;
+  - `view.db_id == db.db_id`;
+  - `view.base_tx_id` materializes from the Database;
+  - `view.asrt_ids` are present in the frozen base transaction.
+- View-attached runtimes are read-only; `fg.commit_assertions(...)` rejects.
+- Reads and native evaluate are scoped through the same attached Store/Ledger visibility boundary.
+- `EvaluateResult.view_snapshot_digest` uses the durable view digest for view-attached evaluate.
+- Method-level `view=` remains rejected and now points users to `FactGraph.attach(db, view=view)`.
+
+### Verification Gates
+
+| Gate | Command / scope | Result |
+|---|---|---|
+| Focused attach/view | `PYTHONPATH=src python -m unittest tests.test_db_attach_lifecycle tests.test_sdk_frozen_view_read_runtime_boundaries -v` | 20 OK |
+| Focused T5/T11 evaluate preservation | `PYTHONPATH=src python -m unittest tests.sdk.test_rule_expr_evaluate tests.test_db_attach_lifecycle tests.test_sdk_frozen_view_read_runtime_boundaries -v` | 51 OK |
+| G7 preservation | baseline command from §8 | 180 OK |
+| Touched-file ruff | `python -m ruff check src/factgraph/sdk/store.py tests/test_db_attach_lifecycle.py tests/test_sdk_frozen_view_read_runtime_boundaries.py docs/official/kernel/quickstart/namespace-map.md docs/official/kernel/quickstart/persistence.md` | clean |
+| Whitespace | `git diff --check` | clean |
+
+### Deviations / Follow-Ups
+
+- `docs/official/kernel/quickstart/database.md` is absent on this T11 branch base, so docs were intentionally narrow updates to `namespace-map.md` and `persistence.md`.
+- Schema class order sensitivity remains shipped behavior. Future polish may canonicalize schema class ordering, but T11.1 did not change it.
+- Helpful schema-delta messages remain optional UX polish.
+- Method-level `view=` consumers remain v2 deferred.
+- `DatabaseValue` attach, cross-doc S1-S6/I10-A10 unblock, v0.2.0 release machinery, writable sub-fg, A11/A18, schema migration/evolution, and broader Database docs remain future work.
