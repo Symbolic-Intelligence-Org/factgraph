@@ -15,7 +15,19 @@ ADR 风格的离散决策记录。每个 decision 锁定一个 load-bearing 设�
 
 ## 当前 adopted decisions 索引
 
-(decisions 落地后填充)
+| Date | Decision | Summary |
+|---|---|---|
+| 2026-05-25 | D16 T5 Tranche Boundary | T5 Core / Semantics boundary and D17-D26 ladder. |
+| 2026-05-25 | D17 Result / Row DTO Foundation | `EvaluateResult` / `EvaluateRow` / `Claim` / `EvidenceRef` ownership and CandidateSet mapping. |
+| 2026-05-25 | D18 Return-Shape Transition | Public `evaluate(...) -> EvaluateResult` hard-cut strategy. |
+| 2026-05-25 | D19 Digest Source-of-Truth | Result, row, claim, evidence, and audit digest sources. |
+| 2026-05-25 | D20 Explanation Envelope | `Explanation`, `row.explain()`, manual explain, and EvidenceGraph integration boundary. |
+| 2026-05-25 | D21 Row Close / Closed-Head Gate | `EvaluateRow.close()` and closed-head validation for manual explain. |
+| 2026-05-25 | D22 Why-Not Disposition | Failed `Explanation` as v1 why-not envelope and legacy why-not quarantine. |
+| 2026-05-25 | D23 Legacy SDK Hard-Cut Plan | Legacy public shell removal, service/OpenAPI migration, and docs hard-cut ordering. |
+| 2026-05-25 | D24 Final SDK Rule Flip | `factgraph.sdk.Rule` final naming and legacy DSL displacement. |
+| 2026-05-25 | D25 Evaluate / Explain Semantics Consistency | Semantics digest consistency across evaluate, row explain, and manual explain. |
+| 2026-05-25 | D26 Semantics Commitments Scope | Semantics-lite boundary and adapter-touching C74/C76/C77/C78 deferral. |
 
 ## 相关
 

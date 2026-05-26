@@ -1,9 +1,10 @@
 # D20 Decision: T5 Explanation Envelope and EvidenceGraph Integration
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks public `Explanation` envelope, row explain resolution, manual explain entrypoint, EvidenceGraph boundary, and Check/Diagnose integration policy.
+- Authority: adopted design constraint; locks public `Explanation` envelope, row explain resolution, manual explain entrypoint, EvidenceGraph boundary, and Check/Diagnose integration policy.
+- Implementation Anchors: T5.3 explanation envelope feat `53551cb6`, T5.4 manual explain feat `c820f102`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q6, Q8, F4, F6, F7, and section 6 C66-C67 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.1, 4.6, 4.7, and 4.8.

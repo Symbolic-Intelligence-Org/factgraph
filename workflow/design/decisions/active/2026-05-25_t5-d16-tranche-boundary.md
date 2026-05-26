@@ -1,9 +1,10 @@
 # D16 Decision: T5 Tranche Boundary
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks the T5 Stage 2 / Stage 3 boundary before result/evidence/explain decisions.
+- Authority: adopted design constraint; locks the T5 Stage 2 / Stage 3 boundary before result/evidence/explain decisions.
+- Implementation Anchors: T5.1-T5.8 archived at `53781419`, `4e590e8a`, `ba5e5c26`, `7464c3e3`, `ec45f12f`, `7aa1c6a3`, `8173c715`, `efd65c0e`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q1, Q10, Q11, Q12, Q13, Q14, F8, F9, F12, and §6 commitment triage.
   - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.8, C61-C78, and §5.12 deferred / pending table.

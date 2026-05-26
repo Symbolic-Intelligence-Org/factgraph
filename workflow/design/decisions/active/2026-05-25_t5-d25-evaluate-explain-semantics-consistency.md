@@ -1,9 +1,10 @@
 # D25 Decision: T5 Evaluate / Explain Semantics Consistency
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks semantics consistency policy between `evaluate(...)`, `row.explain()`, and manual `fg.eval.explain(...)` replay.
+- Authority: adopted design constraint; locks semantics consistency policy between `evaluate(...)`, `row.explain()`, and manual `fg.eval.explain(...)` replay.
+- Implementation Anchors: T5.3 row.explain feat `53551cb6`, T5.4 manual explain feat `c820f102`, T5.8 wrapper semantics feat `58ba78e1`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q14, F9, and section 6 C69 triage.
   - D17 `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` sections 4.3 and 4.7.

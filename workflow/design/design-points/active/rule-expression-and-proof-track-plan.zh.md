@@ -1,8 +1,8 @@
 # Rule × Proof 实现 — 5-Track 实施分解计划
 
-- Status: working planning artifact
+- Status: working planning artifact (T1-T5 complete; future scheduling superseded by `post-t5-completion-roadmap.zh.md`)
 - Created: 2026-05-22
-- Last Updated: 2026-05-22
+- Last Updated: 2026-05-26
 - Authority: implementation decomposition / 设计调度。**Not authoritative for design semantics** — design 真源是 [`rule-expression-and-proof-attempt.zh.md`](rule-expression-and-proof-attempt.zh.md)(parent essay)。本文只锁定"如何把 parent essay 切成可实现单元 + 各单元落地顺序"。
 - Inputs:
   - [`rule-expression-and-proof-attempt.zh.md`](rule-expression-and-proof-attempt.zh.md) — parent design essay(2066 行,~100 commitments)
@@ -16,6 +16,8 @@
   - [`database-view-fg-layered-architecture.zh.md`](database-view-fg-layered-architecture.zh.md) — sibling design-point(view 子系统);独立 cadence
 
 > **Authority reminder**:本文不是 vs-shipped audit,也不是 synthesis;不能直接定义 design 语义,也不能直接锁定 acceptance criteria。Sub-slice blueprint **不能仅凭本文 cite**,必须回链 parent essay 的具体 commitment(`C<N>`)+ shipped source line cite。
+
+> **Lifecycle note(2026-05-26)**:T1-T5 implementation is complete and the forward scheduling role is superseded by [`post-t5-completion-roadmap.zh.md`](post-t5-completion-roadmap.zh.md). This file remains in `active/` as a historical decomposition index because active audits/decisions and archived blueprints still cite it as the source of their original slice scope. Do not use it to schedule new T6+ work.
 
 ## 1. 立场与轻量模式
 

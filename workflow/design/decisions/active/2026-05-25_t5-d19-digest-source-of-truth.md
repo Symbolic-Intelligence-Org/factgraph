@@ -1,9 +1,10 @@
 # D19 Decision: T5 Digest Source-of-Truth
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks authoritative sources and formulas for T5 result, row, claim, evidence, and audit digests before return-shape implementation.
+- Authority: adopted design constraint; locks authoritative sources and formulas for T5 result, row, claim, evidence, and audit digests before return-shape implementation.
+- Implementation Anchors: T5.1 digest harness feat `a3e96eb6`, T5.2 EvaluateResult population feat `7dfadd4e`, T5.8 semantics wrapper digest preservation feat `58ba78e1`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q5, F2, F6, F11, and section 6 C68 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.1, 4.7, and 4.8.

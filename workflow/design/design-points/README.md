@@ -27,4 +27,14 @@
 
 也可通过**被新 essay supersede** 归档(后继在 `Inputs` 引用前者,前者归档,即便上述三条未全部满足)。
 
+## 当前 active design-points
+
+| Design-point | Status | Role |
+|---|---|---|
+| `rule-expression-and-proof-attempt.zh.md` | active parent essay | Rule / RuleExpr / evaluate / evidence / semantics parent design source. |
+| `evidence-tree-rainbird-style-v1.zh.md` | active working skeleton | Evidence tree Phase B / rendering / deferred evidence registry source. |
+| `database-view-fg-layered-architecture.zh.md` | active minimum implementable blueprint | Database / durable view / attach lifecycle design source. |
+| `rule-expression-and-proof-track-plan.zh.md` | T1-T5 complete; retained as historical decomposition index | Superseded for future scheduling by `post-t5-completion-roadmap.zh.md`, but kept active to avoid broad historical-reference churn. |
+| `post-t5-completion-roadmap.zh.md` | working planning artifact | Non-authoritative T6-T12 scheduling reference. |
+
 完整状态机 + 权威语义见 [`workflow/design/README.md`](../README.md)。模板:`workflow/templates/design/design-point.md`。

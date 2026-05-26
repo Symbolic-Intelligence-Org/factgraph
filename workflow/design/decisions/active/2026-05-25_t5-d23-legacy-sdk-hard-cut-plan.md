@@ -1,9 +1,10 @@
 # D23 Decision: T5 Legacy SDK Hard-Cut Plan
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks T5 legacy surface removal targets, blast-radius inventory, and implementation ordering for the public hard-cut.
+- Authority: adopted design constraint; locks T5 legacy surface removal targets, blast-radius inventory, and implementation ordering for the public hard-cut.
+- Implementation Anchors: T5.7 service/OpenAPI migration feat `41f7e60f`, docs migration feat `63718d09`, legacy hard-cut feat `62279515`, archive `8173c715`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q10, Q13, F3, F4, F5, F12, and section 6 C61-C63 and C71 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.1, 4.4, 4.5, 4.7, and 4.8.

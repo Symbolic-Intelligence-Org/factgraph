@@ -1,9 +1,10 @@
 # D17 Decision: T5 Result / Row DTO Foundation
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks public result / row DTO ownership, field surfaces, and CandidateSet mapping principles.
+- Authority: adopted design constraint; locks public result / row DTO ownership, field surfaces, and CandidateSet mapping principles.
+- Implementation Anchors: T5.1 DTO foundation feat `a3e96eb6`, archive `53781419`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q2, Q4, F1, F2, F6, F11, and §6 C64-C65 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` §4.1, §4.5, §4.7, and §4.8.

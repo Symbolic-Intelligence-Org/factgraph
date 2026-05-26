@@ -1,9 +1,10 @@
 # D21 Decision: T5 `row.close()` and Closed-Head Gate
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks `EvaluateRow.close()`, closed-head Rule construction, and mandatory closed-head validation for manual explain.
+- Authority: adopted design constraint; locks `EvaluateRow.close()`, closed-head Rule construction, and mandatory closed-head validation for manual explain.
+- Implementation Anchors: T5.4 row.close + manual explain feat `c820f102`, archive `7464c3e3`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q7, F7, section 6 C66 and C72 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.1, 4.5, 4.7, and 4.8.

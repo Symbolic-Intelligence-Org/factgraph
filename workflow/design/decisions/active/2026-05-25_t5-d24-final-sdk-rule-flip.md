@@ -1,9 +1,10 @@
 # D24 Decision: T5 Final SDK Rule Flip
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks T5 final SDK `Rule` naming, transition alias survival policy, and T1.3 public namespace closure.
+- Authority: adopted design constraint; locks T5 final SDK `Rule` naming, transition alias survival policy, and T1.3 public namespace closure.
+- Implementation Anchors: T5.6 final SDK Rule flip feat `ad810f4d`, archive `7aa1c6a3`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` F8 and Q11.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.5 and 4.7.

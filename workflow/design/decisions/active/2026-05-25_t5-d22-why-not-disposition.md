@@ -1,9 +1,10 @@
 # D22 Decision: T5 Why-Not Disposition
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks the fate of shipped why-not surfaces relative to T5 `Explanation`.
+- Authority: adopted design constraint; locks the fate of shipped why-not surfaces relative to T5 `Explanation`.
+- Implementation Anchors: T5.5 why-not quarantine feat `5113e13d`, T5.7 legacy hard-cut feat `62279515`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q9, F5, section 6 C61 and C70 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.1, 4.6, 4.7, and 4.8.

@@ -1,9 +1,10 @@
 # D26 Decision: Semantics Commitments Scope and Adapter Implementation Policy
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks T5 semantics commitment scope, adapter-touching deferral policy, and the boundary between T5 Core and post-Core semantics work.
+- Authority: adopted design constraint; locks T5 semantics commitment scope, adapter-touching deferral policy, and the boundary between T5 Core and post-Core semantics work.
+- Implementation Anchors: T5.8 semantics-lite wrapper fix feat `58ba78e1`, archive `efd65c0e`; adapter-touching C74/C76/C77/C78 remain deferred to T10 per roadmap `e6bfe357`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q1, Q12, F9, and C73-C78 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.1, 4.2, and 4.7.

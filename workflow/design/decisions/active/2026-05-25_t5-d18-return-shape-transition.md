@@ -1,9 +1,10 @@
 # D18 Decision: T5 Return-Shape Transition Strategy
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-25
 - Last Updated: 2026-05-25
-- Authority: proposed design constraint; locks public `evaluate(...)` return-shape transition policy before DTO implementation.
+- Authority: adopted design constraint; locks public `evaluate(...)` return-shape transition policy before DTO implementation.
+- Implementation Anchors: T5.2 public evaluate return-shape flip feat `7dfadd4e`, archive `4e590e8a`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q3, F1, F3, F10, F12, and §6 C62-C63 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` §4.1, §4.4, §4.7, and §4.8.
