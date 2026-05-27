@@ -121,6 +121,12 @@ assert {row.name for row in reviewers} == {"Alice", "Bob"}
 for snapshot filtering over entity identities and field values. Rules,
 inferences, and saved query surfaces are separate topics.
 
+When your read pattern needs multiple predicates or a `RuleExpr` join, use
+`fg.read.match(EntityCls, rule_or_expr, **port_constraints)`. Match returns
+entity snapshots like `find(...)`, but the filter comes from an application
+`Rule` or an AND-only `RuleExpr`; see
+[Rules and inferences](rules-and-inferences.md#reading-snapshots-with-match).
+
 ## Retracting an assertion
 
 Retraction is also append-only. It records that a specific assertion should
@@ -231,6 +237,8 @@ assert tuple(after.tags) == ("engineer",)
   later inspection or retract.
 - `fg.read.get(...)` returns the current snapshot for a full identity.
 - `fg.read.find(...)` returns matching snapshots.
+- `fg.read.match(...)` returns snapshots selected by an application `Rule`
+  or AND-only `RuleExpr`.
 - `fg.write.retract(asrt_id)` records a retraction by id and returns the
   revoker's `asrt_id`.
 - The ledger is append-only; snapshots are read-time views over assertions.

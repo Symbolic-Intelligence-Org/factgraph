@@ -10,6 +10,7 @@ All flat methods are also reachable through namespaces:
 
 | Public entrypoint | Namespace |
 |---|---|
+| `fg.read.match(EntityCls, rule_or_expr, **ports)` | Return snapshots selected by a `Rule` or AND-only `RuleExpr` |
 | `fg.eval.evaluate(...)` | Evaluate an `Inference`, `Rule`, or `RuleExpr` and return `EvaluateResult` |
 | `fg.eval.explain(expr, head=closed_head, ...)` | Replay a closed-head explanation and return `Explanation` |
 | `fg.eval.inspect_semantics(...)` | Inspect semantics configuration without running an engine |
@@ -376,6 +377,34 @@ aggregate-containing branches before adapter invocation with `SDKStoreError`
 guidance that names the engine, unsupported feature, rejection source, and
 known alternative engines.
 
+### Rule and RuleExpr snapshot matching
+
+`fg.read.match(EntityCls, template, **port_constraints)` is the read-side
+runtime for application rules. It returns distinct snapshots of `EntityCls`
+selected by a `Rule` or AND-only `RuleExpr`.
+
+```python
+users = fg.read.match(User, user_region, region="US")
+```
+
+The runtime resolves the projected entity from exactly one entity-ref port of
+the requested class. Entity-ref constraints accept either an `idref_v1` token
+or an `EntitySnapshot`; value constraints use ordinary Python values. A value
+constraint may also reference a field descriptor on the projected entity class:
+
+```python
+same_region = fg.read.match(User, user_region, region=User.region)
+```
+
+First-tranche limits:
+
+- `Rule` and AND-only `RuleExpr` (`&` / `RuleExpr.all(...)`) are supported.
+- OR expressions (`|` / `RuleExpr.any(...)`) raise a clear unsupported-shape
+  error.
+- Result rows are snapshots, not witness assertions or `EvaluateResult` rows.
+- Method-level `view=` is rejected; attach a durable Database view and call
+  `fg.read.match(...)` on the attached runtime.
+
 ## 4. RuleRef and Dependency Registration
 
 Construction:
@@ -437,8 +466,9 @@ Stable contract:
 - Query remains importable as a legacy DSL value object for internal tests and
   future read-projection work.
 - T5 public runtime does not expose `sdk.run(...)`; use `sdk.read.find(...)`
-  for snapshot reads or `sdk.eval.evaluate(Rule(...))` for replay-anchored
-  rule evaluation.
+  for simple snapshot reads, `sdk.read.match(...)` for application-rule
+  snapshot reads, or `sdk.eval.evaluate(Rule(...))` for replay-anchored rule
+  evaluation.
 
 ## 6. Inference DSL
 

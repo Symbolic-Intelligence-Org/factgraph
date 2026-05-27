@@ -14,7 +14,7 @@ The short version is:
 
 | Need | Use |
 | --- | --- |
-| Read matching facts | `Rule` + `fg.eval.evaluate(...)` |
+| Read matching snapshots | `Rule` / AND-only `RuleExpr` + `fg.read.match(...)` |
 | Propose new facts | `Inference` + `fg.eval.evaluate(...)` |
 | Explain evaluated rows | `row.explain()` / `fg.eval.explain(...)` |
 | Inspect rule shape | `fg.rules.inspect(...)` |
@@ -124,6 +124,38 @@ assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 
 The second assertion matters. The rule found the `tag_seed` fact, but it did
 not write a `tag` fact.
+
+## Reading snapshots with match
+
+Use `fg.read.match(EntityCls, rule_or_expr, **port_constraints)` when you want
+snapshots selected by an application `Rule`. The first argument says which
+entity snapshot to return; the template's ports define the available filters.
+
+```python
+matched = fg.read.match(User, seeded_tags, tag="engineer")
+
+assert [row.user_id for row in matched] == ["u-1"]
+assert matched[0].tag_seed == "engineer"
+```
+
+Entity-ref ports accept either an `idref_v1` token or an `EntitySnapshot`.
+Value ports accept ordinary Python values. A constraint may also use a field
+descriptor from the projected entity class:
+
+```python
+same_tag = fg.read.match(User, seeded_tags, tag=User.tag_seed)
+
+assert [row.user_id for row in same_tag] == ["u-1"]
+```
+
+The first runtime tranche is intentionally narrow:
+
+- `Rule` and AND-only `RuleExpr` (`&` / `RuleExpr.all(...)`) are supported.
+- OR expressions (`|` / `RuleExpr.any(...)`) are deferred.
+- Match returns distinct projected entity snapshots, not evidence rows or
+  assertion witnesses.
+- Method-level `view=` is not accepted; attach a durable Database view with
+  `FactGraph.attach(db, view=view)` and then call `fg.read.match(...)`.
 
 ## Understanding ports
 
@@ -354,6 +386,9 @@ expr = (u_ & o_).join_by_ports("region")
 result = fg.eval.evaluate(expr, head=user_region)
 # 2 user rows: alice has matching o1 in US; bob has matching o2 and o3 in DE
 assert result.count() == 2
+
+matched_users = fg.read.match(User, expr)
+assert {row.user_id for row in matched_users} == {"alice", "bob"}
 ```
 
 ## Choosing the right head
@@ -446,8 +481,9 @@ instead.
 
 `Query` remains a DSL value object for internal and future read-projection
 work, but the T5 public runtime path no longer exposes `fg.eval.run(...)`.
-Use `fg.read.find(...)` for snapshot reads or an application `Rule` with
-`fg.eval.evaluate(...)` when you need replay anchors and evidence.
+Use `fg.read.find(...)` for simple snapshot reads, `fg.read.match(...)` for
+application-rule snapshot reads, or `fg.eval.evaluate(...)` when you need
+replay anchors and evidence.
 
 ```python
 with vars("u", "tag") as (u, tag):

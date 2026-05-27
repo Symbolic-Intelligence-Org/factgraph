@@ -36,7 +36,7 @@ fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 | Namespace | Methods |
 |---|---|
 | `schema` | `ingest`, `validate_provenance` |
-| `read` | `get`, `find`, `ref` |
+| `read` | `get`, `find`, `match`, `ref` |
 | `write` | `set`, `add`, `retract`, `edit` |
 | `eval` | `evaluate`, `explain`, `inspect_semantics` |
 | `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` |
@@ -254,6 +254,7 @@ public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
 |---|---|
 | `get(entity_cls, **identity)` | Fetch single entity by identity or `None` |
 | `find(entity_cls, *, limit=None, **filters)` | Filter entities |
+| `match(entity_cls, template, *, limit=None, **port_constraints)` | Return distinct snapshots selected by a `Rule` or AND-only `RuleExpr` |
 | `ref(entity_cls, **identity)` | Encode an entity reference string |
 
 ### 2.4 Write namespace (`fg.write.*`)
@@ -476,7 +477,8 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 ### 6.1 Query
 
 - Public `fg.run(Query(...))` was removed by the T5 hard-cut.
-- Use `fg.read.find(...)` for snapshot reads.
+- Use `fg.read.find(...)` for simple snapshot reads and `fg.read.match(...)`
+  for application-rule snapshot reads.
 - `on_missing` and `on_type_mismatch` accept `error | skip | null`
 - Query head supports only schema `single` fields
 - Legacy Query construction remains available for internal/future-track code,
