@@ -325,6 +325,7 @@ def _vars_in_atom_ir(atom_ir: Any) -> set[str]:
 
 
 def _vars_in_raw_term(term: Any) -> set[str]:
+    # Lowered where IR represents Vars by their canonical "$..." names.
     if isinstance(term, str) and term.startswith("$") and len(term) > 1:
         return {term}
     if isinstance(term, tuple) and term and term[0] in {"count", "sum", "min", "max", "mean"}:
