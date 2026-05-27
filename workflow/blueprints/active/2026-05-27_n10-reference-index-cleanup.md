@@ -1,6 +1,6 @@
 # Task Blueprint: N10 Reference Index Cleanup
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S (docs-only top-level index rebase)
@@ -155,21 +155,49 @@ To fill at scoped commit:
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory recorded in §5.1.
-- [ ] Governance lines 16-18, 25 use current canonical paths.
-- [ ] Design-points subsection routes to canonical `workflow/design/design-points/`.
-- [ ] `factgraph-namespace-test-proposals/` indexed.
-- [ ] `post-routemap-direction-selection-input/` indexed (amend addition).
-- [ ] Anchor date refreshed.
+- [x] Step 4.6 inventory recorded in §5.1.
+- [x] Governance lines 16-18, 25 use current canonical paths.
+- [x] Design-points subsection routes to canonical `workflow/design/design-points/`.
+- [x] `factgraph-namespace-test-proposals/` indexed.
+- [x] `post-routemap-direction-selection-input/` indexed (amend addition).
+- [x] Anchor date refreshed.
 - [ ] `workflow/blueprints/archive/INVENTORY.md` updated when this blueprint archives.
-- [ ] No production behavior changes.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] No production behavior changes.
+- [x] Dirty baseline and sacred master preserved.
 
 ## 9. Outcome / Deviations
 
-To fill at closure.
+Implemented in `06ada1b2`.
 
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+### 9.1 Final landed scope
+
+- `docs/references/README.md` only. Single-file diff in implementation commit.
+- Governance lines 16-18, 25: rebased to `src/factgraph/*/docs/`, `workflow/blueprints/`, `workflow/heritage/blueprint_history/` + `workflow/blueprints/archive/`, and `workflow/foundations/architecture_principles.md`.
+- Design-points subsection (lines 53-62 in pre-edit form): replaced inline per-note listing with two-bullet canonical pointer to `workflow/design/design-points/{active,archive}/`, enumerating both the 6 active design-points and the 8 archived notes by short name. Subsection header retained as breadcrumb and explicitly tagged `（已迁移）`. The local `working/design-points/readme.md` is acknowledged as a non-authoritative breadcrumb whose inline links remain at pre-migration paths (dirty baseline).
+- Two new working/ subsections added (chronological order):
+  - `working/post-routemap-direction-selection-input/` — 2026-05-07 strategic A+B input bundle (8 files including 7 numbered design notes + README).
+  - `working/factgraph-namespace-test-proposals/` — 2026-05-14 namespace-test review packet (4 .md + 3 .py).
+- Anchor date `2026-05-06 wrap-up 后` → `2026-05-27 N10 cleanup 后`. Brittle "全 56 个文件（54 .md + 2 binary）" count claim softened to a scope-statement form, with explicit note that historical bundle sub-READMEs are not rewritten.
+
+### 9.2 Deviations from draft
+
+- Pre-implementation re-read found a second unindexed `working/` bundle (`post-routemap-direction-selection-input/`). Scope amended at `a4c7de15` to include it. Class remained S; symmetric same-class addition avoided spawning an immediate follow-up cycle.
+- Draft anticipated "≥4 missing design-points entries" but the migration-pointer formulation made per-note enumeration in the README unnecessary; the §9.1 pointer wording covers all 8 archived notes by short name in two bullets.
+
+### 9.3 Rationale
+
+- Pointer-rather-than-inline-relink for design-points: relinking each name to its archive location (`workflow/design/design-points/archive/<note>`) was feasible but would have created a confusing "directory at A is described by note at B" frame. The pointer keeps the breadcrumb and routes readers to the canonical home where the README and lifecycle rules live.
+- Date refresh paired with count-claim softening: re-asserting "56 files" without recounting would risk introducing a new staleness; the softer "scope statement" wording is durable across future cleanup batches.
+
+### 9.4 Archive
+
+Blueprint and audit move to `workflow/blueprints/archive/` in the archive commit; `workflow/blueprints/archive/INVENTORY.md` gets an N10 entry summarizing the rebase + amend + impl.
+
+### 9.5 Verification
+
+- `git diff --check`: clean (verified twice — once after impl, once at closure).
+- Sacred `master`: unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline: 4 modified + 1 untracked preserved throughout the cycle.
+- `docs/references/README.md` has no remaining `src/factpy_kernel`, `docs/blueprints/`, `docs/blueprint_history`, or `docs/architecture_principles` references (`grep` confirmed empty).
+- All inline links in the new + modified subsections resolve to existing files (`ls` confirmed for both new bundle directories and the canonical workflow/design/design-points/ paths).
+- No production Python, tests, examples, notebooks, SDK API, service, agent, or adapter files touched.

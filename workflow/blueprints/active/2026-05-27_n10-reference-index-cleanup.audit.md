@@ -1,11 +1,11 @@
 # Audit: N10 Reference Index Cleanup
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_n10-reference-index-cleanup.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S (docs-only top-level index rebase)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 4 modified + 1 untracked must be preserved
@@ -17,7 +17,8 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | `e5570dfb` | N10 blueprint pair drafted | Targets only top-level `docs/references/README.md`. Tier A scope per user authorization. |
 | 2026-05-27 | scoped | `ef63ebcb` | Step 4.6 inventory filled, scope frozen | Stale lines 16/17/18/25; design-points content migrated to `workflow/design/design-points/{active,archive}/`; `factgraph-namespace-test-proposals` description captured; no inbound anchor references found. |
-| 2026-05-27 | scoped (amend) | (pending) | Scope amended to index a second missing `working/` bundle | Pre-implementation re-read of full README found `working/post-routemap-direction-selection-input/` also unindexed; same class as `factgraph-namespace-test-proposals/`; both included for symmetry rather than leaving an immediate follow-up cycle. Class stays S. |
+| 2026-05-27 | scoped (amend) | `a4c7de15` | Scope amended to index a second missing `working/` bundle | Pre-implementation re-read of full README found `working/post-routemap-direction-selection-input/` also unindexed; same class as `factgraph-namespace-test-proposals/`; both included for symmetry rather than leaving an immediate follow-up cycle. Class stays S. |
+| 2026-05-27 | implemented | `06ada1b2` | `docs/references/README.md` rebased | Governance lines 16-18, 25 rebased; design-points subsection points to `workflow/design/design-points/{active,archive}/`; two new working/ bundle subsections added (post-routemap + factgraph-namespace-tests); anchor date refreshed; brittle count claim softened. |
 
 ## 2. Initial Read Summary
 
@@ -62,12 +63,41 @@ To fill during scoped commit:
 
 ## 6. Review Checklist
 
-- [ ] Step 4.2 draft review complete.
-- [ ] Step 4.6 inventory complete.
-- [ ] Implementation diff matches scope.
-- [ ] Verification clean.
-- [ ] Closure notes filled.
+- [x] Step 4.2 draft review complete.
+- [x] Step 4.6 inventory complete.
+- [x] Implementation diff matches scope.
+- [x] Verification clean.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-To fill at closure.
+Implemented at `06ada1b2`. Cycle chain: draft `e5570dfb` → scoped `ef63ebcb` → scope amend `a4c7de15` → impl `06ada1b2` → closure (this commit) → archive (next commit).
+
+### 7.1 Landed scope
+
+- Single-file edit: `docs/references/README.md`.
+- Governance lines 16-18, 25 rebased to current canonical workflow paths.
+- Design-points subsection replaced inline per-note listing with canonical pointer to `workflow/design/design-points/{active,archive}/`; subsection header retained as breadcrumb.
+- Two unindexed `working/` bundles indexed: `post-routemap-direction-selection-input/` (2026-05-07, A+B input) and `factgraph-namespace-test-proposals/` (2026-05-14, namespace tests).
+- Anchor date refreshed to "2026-05-27 N10 cleanup 后"; brittle "全 56 个文件" claim softened.
+
+### 7.2 Disposition
+
+- No P0/P1 blockers found.
+- One scope amend at Step 4.6 re-read (second unindexed bundle); recorded and incorporated symmetrically.
+- No production Python / tests / examples / notebooks / SDK / service / agent / adapter changes.
+- Historical bundle sub-READMEs (load-test-2026-04-11/, etc.) preserved verbatim per scope lock.
+- Dirty-baseline `docs/references/working/design-points/readme.md` left untouched per scope lock; it remains a non-authoritative breadcrumb pointing at pre-migration paths. A separate cycle that owns the dirty baseline can later normalize it.
+
+### 7.3 Verification
+
+- `git diff --check`: clean.
+- Sacred `master` unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved at 4 modified + 1 untracked.
+- All inline links in the modified + new subsections resolve to existing files.
+- `grep -n 'src/factpy_kernel|docs/blueprints/|docs/blueprint_history|docs/architecture_principles' docs/references/README.md` returns no matches.
+
+### 7.4 Follow-ups
+
+- O-N10-1: `docs/references/working/design-points/readme.md` (dirty baseline) still lists migrated note files at non-existent local paths. When that file moves out of dirty-baseline status, a follow-up should either delete its inline list or rewrite each link to its `workflow/design/design-points/archive/` destination.
+- O-N10-2: Historical bundle sub-READMEs (e.g. `working/load-test-2026-04-11/README.md`, `commit_path_plan_2026-04-11.md`) still reference `src/factpy_kernel/...` and `docs/blueprints/...` paths. These are time-frozen historical artifacts and are explicitly out of scope for N10. If a future cleanup batch decides historical bundles should be promoted to `bridges/`, that batch can also decide whether to add a top-of-bundle "paths reflect 2026-04-11 state" note.
