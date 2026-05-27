@@ -16,7 +16,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-27 | draft | `e5570dfb` | N10 blueprint pair drafted | Targets only top-level `docs/references/README.md`. Tier A scope per user authorization. |
-| 2026-05-27 | scoped | (pending) | Step 4.6 inventory filled, scope frozen | Stale lines 16/17/18/25; design-points content migrated to `workflow/design/design-points/{active,archive}/`; `factgraph-namespace-test-proposals` description captured; no inbound anchor references found. |
+| 2026-05-27 | scoped | `ef63ebcb` | Step 4.6 inventory filled, scope frozen | Stale lines 16/17/18/25; design-points content migrated to `workflow/design/design-points/{active,archive}/`; `factgraph-namespace-test-proposals` description captured; no inbound anchor references found. |
+| 2026-05-27 | scoped (amend) | (pending) | Scope amended to index a second missing `working/` bundle | Pre-implementation re-read of full README found `working/post-routemap-direction-selection-input/` also unindexed; same class as `factgraph-namespace-test-proposals/`; both included for symmetry rather than leaving an immediate follow-up cycle. Class stays S. |
 
 ## 2. Initial Read Summary
 

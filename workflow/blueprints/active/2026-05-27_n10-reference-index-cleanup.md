@@ -21,7 +21,8 @@ Update only the top-level `docs/references/README.md` so it accurately routes a 
 - the current historical archive (`workflow/heritage/blueprint_history/`);
 - the current architecture principles (`workflow/foundations/architecture_principles.md`);
 - the canonical home of design-point research notes (`workflow/design/design-points/{active,archive}/`), which is where the notes referenced inline by name now live;
-- the previously unindexed `working/factgraph-namespace-test-proposals/` bundle.
+- the previously unindexed `working/factgraph-namespace-test-proposals/` bundle;
+- the previously unindexed `working/post-routemap-direction-selection-input/` bundle (added at amend; same class as `factgraph-namespace-test-proposals/`).
 
 Refresh the "当前条目 (... wrap-up 后)" header date to 2026-05-27 to match the cleanup batch.
 
@@ -83,9 +84,14 @@ Replace the inline per-note listing with a single concise pointer:
 
 Do not delete the subsection header — keep it as a visible breadcrumb, with the pointer body.
 
-### 3.3 `factgraph-namespace-test-proposals/` entry
+### 3.3 Unindexed working/ bundle entries
 
-Add a row under the `working/` section describing the bundle. Pull one-line description from the bundle's own README.
+Two `working/` sub-bundles exist on disk but are not in the top-level index. Add a subsection for each, pulling one-line descriptions from the bundle READMEs:
+
+- `working/factgraph-namespace-test-proposals/` — review packet for the 2026-05-14 namespace-test-coverage blueprint.
+- `working/post-routemap-direction-selection-input/` — 8-file post-routemap direction selection bundle (2026-05-07; produced A+B path).
+
+Both subsections live under the `working/` heading, alongside the existing `working/load-test-2026-04-11/` and `working/rule-replay-line-redesign-input/` subsections.
 
 ### 3.4 Anchor date refresh
 
@@ -124,6 +130,7 @@ To fill at scoped commit:
 | 1 | Stale path lines in `docs/references/README.md` | Line 16 `src/factpy_kernel/*/docs/`; line 17 `docs/blueprints/`; line 18 `docs/blueprint_history/` + `docs/blueprints/archive/`; line 25 `docs/architecture_principles.md`. Line 28 anchor date `2026-05-06`. |
 | 2 | `workflow/design/design-points/` structure | `README.md` present. `active/` holds 6 notes (database-view, evidence-tree-v1, match-api-design, post-t5-completion-roadmap, rule-expression-and-proof-attempt, rule-expression-and-proof-track-plan). `archive/` holds 9 migrated notes including the four previously listed inline in `docs/references/README.md` (identity-primary-key-coordinate-semantics{,.zh}, possibility-probability-transmission.zh, post-track3-semantics-public-api.zh, rule-query-inference-head-semantics.zh) plus five others (read-write-snapshot-assertion-selection.zh, rule-policy-function-tree-and-syntax.zh, factgraph-lifecycle-and-assets.zh, query-view-and-inference-handles.zh). |
 | 3 | `factgraph-namespace-test-proposals` description | Review packet of proposed test changes for the 2026-05-14 namespace-test-coverage blueprint; contains stale/conflict/missing analysis notes plus three Python test files; not part of root `tests/`, not discovered by unittest, not release-gate truth. |
+| 3a | `post-routemap-direction-selection-input` description (added at amend) | 2026-05-07 strategic input bundle (8 files: inventory, implicit gaps, 9 candidates, recommendation A+B, walker/builder design sketches, migration path); non-authoritative working reference equivalent to `rule-replay-line-redesign-input/`; produced the A+B paths that became `project_a_b_v0.1_surface_published.md`. |
 | 4 | Dirty baseline | 4 modified (`docs/references/working/design-points/readme.md`, three example notebooks) + 1 untracked (`"rainbird-ai sdk code/"`). Preserved. |
 | 5 | Sacred master | `562c74195df43e933bed92a3ff25de94dd8ce666`. Confirmed. |
 | 6 | Inbound references to about-to-change anchors | `rg -l 'docs/references/README.md#' . --type md` returns only the N10 blueprint pair itself. No external/historical doc anchors into the design-points subsection header. Safe to keep header text or rename; this cycle keeps the header text unchanged out of conservatism. |
@@ -152,6 +159,7 @@ To fill at scoped commit:
 - [ ] Governance lines 16-18, 25 use current canonical paths.
 - [ ] Design-points subsection routes to canonical `workflow/design/design-points/`.
 - [ ] `factgraph-namespace-test-proposals/` indexed.
+- [ ] `post-routemap-direction-selection-input/` indexed (amend addition).
 - [ ] Anchor date refreshed.
 - [ ] `workflow/blueprints/archive/INVENTORY.md` updated when this blueprint archives.
 - [ ] No production behavior changes.
