@@ -34,9 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Database and durable view substrate**: `Database.create(...)`,
   `Database.open(...)`, durable assertion views, and read-only
   `FactGraph.attach(db, view=view, schema_classes=[...])` are shipped.
-- **Read-side match runtime**: `fg.read.match(EntityCls, Rule | AND RuleExpr,
+- **Read-side match runtime**: `fg.read.match(EntityCls, Rule | RuleExpr,
   **port_constraints)` returns distinct entity snapshots selected by
-  application-rule patterns.
+  application-rule patterns, including AND and OR `RuleExpr` combinations.
 - **Property-style assertion access**: field-scoped assertion records now
   support `snapshot.field("name").active`, `.history`, `.all`, and
   `snapshot.assertions.name`; legacy `.active()` / `.all()` call forms remain

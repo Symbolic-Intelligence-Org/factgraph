@@ -2,11 +2,11 @@
 
 - Status: active design point
 - Created: 2026-05-26
-- Last Updated: 2026-05-26
+- Last Updated: 2026-05-27
 - Owner cycle: T11.2.7
 - Related blueprint: `workflow/blueprints/active/2026-05-26_t11-2-7-match-api-design.md`
 - Parent source: `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §6
-- Scope: v0.2 match API shape only. Runtime implementation is deferred.
+- Scope: v0.2 match API shape and shipped read-side runtime contract.
 
 ## 1. 目的
 
@@ -168,11 +168,10 @@ fg.read.match(User, R1 & R2)               # OK
 
 理由:list/tuple 无法表达 AND/OR 语义,且与 `RuleExpr.all/any` 重复。
 
-**T11.2.9 implementation tranche**:首个 runtime 落地只承诺 single `Rule`
-和 **AND-only `RuleExpr`**(`&` / `RuleExpr.all(...)`)。OR
-(`|` / `RuleExpr.any(...)`)仍是本设计的 future target,但不在首个 runtime
-scope 内。用户文档在 OR runtime 真正 land 前不得教学 `read.match(...)` 的 OR
-用法。
+**T11.2.10 implementation tranche**:`fg.read.match(...)` 支持 single
+`Rule`、AND `RuleExpr`(`&` / `RuleExpr.all(...)`)和 OR `RuleExpr`
+(`|` / `RuleExpr.any(...)`)。Bare list / tuple 仍不接受;用户必须用
+`RuleExpr.all(...)` / `RuleExpr.any(...)` 或 `&` / `|` 显式表达组合语义。
 
 ### 4.3 Legacy `Query`
 
@@ -266,10 +265,11 @@ fg.read.match(User, disconnected, region="US")
 
 Match runtime 在执行 pattern matching 之前,**必须**验证 template 的
 **effective body**(`template.where atoms` ∪ F-expression synthetic atoms)
-形成 connected pattern:
+形成 connected pattern。对 OR `RuleExpr`,该检查按 **每个 effective
+branch** 独立执行:
 
 > Projected EntityCls 的 port Var 与每个 constrained port 的 port Var,
-> 必须**在同一 connected component** 内。
+> 必须在每个 effective branch 的**同一 connected component** 内。
 
 若不在,raise:
 
@@ -284,7 +284,7 @@ use RuleExpr.join_by_ports to express the join explicitly.
 
 ```
 1. 收集 effective body atoms:
-   atoms = template.where atoms ∪ synthetic atoms from F-expression kwargs
+   atoms = branch body atoms ∪ synthetic atoms from F-expression kwargs
 
    synthetic atoms from kwargs:
    - literal kwarg `region="US"`        → CmpAtom(r_var, Const("US"))
@@ -298,12 +298,12 @@ use RuleExpr.join_by_ports to express the join explicitly.
 3. Connected components(union-find / DFS):
    将所有 Vars 划分为若干 component
 
-4. Verify:
+4. Verify each effective branch independently:
    - projected_var = EntityCls 投影的 port Var
    - constrained_vars = 所有 kwarg-constrained port 的 Vars
    - 必须 ∀ v ∈ {projected_var} ∪ constrained_vars,v 与 projected_var 在同一 component
 
-5. 失败 → raise SDKStoreError;成功 → 继续 pattern matching
+5. 任一 branch 失败 → raise SDKStoreError;全部成功 → 继续 pattern matching
 ```
 
 #### 5.4.4 Edge Cases
@@ -315,6 +315,7 @@ use RuleExpr.join_by_ports to express the join explicitly.
 | RuleExpr 通过 `.join_by_ports("region")` 连接 | ✓ pass(join 创 cross-occurrence edge) |
 | RuleExpr 通过 `.join(constraint)` 连接 | ✓ pass(constraint 创 edge) |
 | RuleExpr `R1 & R2` 无 join,无 shared port | RuleExpr 层 reject 在前(ambiguous port reject 或类似);match 不到此步 |
+| RuleExpr `R1 | R2`,其中一个 branch disconnected | ✗ raise(per-branch check;不能被另一个 connected branch 掩盖) |
 | Literal kwarg `region="US"` | Synthetic atom 仅涉及 `r_var` 自身,**不**新增 Var-graph edge;不能"救"原本 disconnected 的 body |
 | F-expression kwarg `region=User.tag` | Synthetic atom 涉及 `r_var` 与 `u_var`,**新增** edge;可"救"某些 disconnected case |
 
@@ -549,7 +550,6 @@ T11.2.5 发现 dirty `facade.py` 改动(property-style assertion access + `Asser
 | Item | Deferred to |
 |---|---|
 | Runtime implementation of `fg.read.match(...)` | Future implementation blueprint |
-| RuleExpr OR matching(`|` / `RuleExpr.any(...)`) | Follow-up runtime tranche after T11.2.9 AND path lands |
 | Cross-entity tuple return(`match((User, Order), expr)`) | Future or evaluate-route |
 | Legacy `Query` adapter path | Future compatibility decision |
 | Query persistence(`fg.queries.save/load/list`) | Lifecycle / asset cycle |
@@ -571,7 +571,7 @@ T11.2.5 发现 dirty `facade.py` 改动(property-style assertion access + `Asser
 | M2 | EntityCls is positional, required, must be `Entity` subclass. |
 | M3 | EntityCls 扮演 match 的 "head" 角色 — 投影目标 entity 类。 |
 | M4 | Template 必须恰好一个 entity_ref port 匹配 EntityCls(unique projection)。 |
-| M5 | First runtime tranche supports application `Rule` and AND-only `RuleExpr`(`&` / `RuleExpr.all(...)`);OR RuleExpr is a follow-up runtime target(no bare list/tuple)。 |
+| M5 | Runtime supports application `Rule` plus AND/OR `RuleExpr`(`&` / `RuleExpr.all(...)`,`|` / `RuleExpr.any(...)`);bare list/tuple remains unsupported。 |
 | M6 | Legacy `Query` is compatibility/deferred, not the new primary template。 |
 | M7 | `Rule.head` 在 match 中不参与;EntityCls 替代该角色。 |
 | M8 | Match is **pattern matching**, not inference. No inference engine involvement。 |
@@ -587,4 +587,4 @@ T11.2.5 发现 dirty `facade.py` 改动(property-style assertion access + `Asser
 | M18 | Cross-entity tuple return(`match((User, Order), expr)`)is v0.2 non-goal。 |
 | M19 | `fg.eval.run` deletion is **not** part of T11.2.7;replacement direction locked。 |
 | M20 | Dirty `facade.py` assertion ergonomics are **independent** of this match design。 |
-| M21 | Match runtime enforces **pattern connectivity**: projected EntityCls port Var and all kwarg-constrained port Vars must be in the same connected component of effective body atoms(template body ∪ F-expression synthetic atoms)。Disconnected templates raise `SDKStoreError` before pattern matching runs。这是 v0.2 deliberate safety invariant,unique to match(evaluate 同步 check 留 future cycle)。 |
+| M21 | Match runtime enforces **pattern connectivity**: projected EntityCls port Var and all kwarg-constrained port Vars must be in the same connected component of each effective branch(template branch body ∪ F-expression synthetic atoms)。Disconnected templates raise `SDKStoreError` before pattern matching runs。这是 v0.2 deliberate safety invariant,unique to match(evaluate 同步 check 留 future cycle)。 |

@@ -10,7 +10,7 @@ All flat methods are also reachable through namespaces:
 
 | Public entrypoint | Namespace |
 |---|---|
-| `fg.read.match(EntityCls, rule_or_expr, **ports)` | Return snapshots selected by a `Rule` or AND-only `RuleExpr` |
+| `fg.read.match(EntityCls, rule_or_expr, **ports)` | Return snapshots selected by a `Rule` or `RuleExpr` |
 | `fg.eval.evaluate(...)` | Evaluate an `Inference`, `Rule`, or `RuleExpr` and return `EvaluateResult` |
 | `fg.eval.explain(expr, head=closed_head, ...)` | Replay a closed-head explanation and return `Explanation` |
 | `fg.eval.inspect_semantics(...)` | Inspect semantics configuration without running an engine |
@@ -381,7 +381,7 @@ known alternative engines.
 
 `fg.read.match(EntityCls, template, **port_constraints)` is the read-side
 runtime for application rules. It returns distinct snapshots of `EntityCls`
-selected by a `Rule` or AND-only `RuleExpr`.
+selected by a `Rule` or `RuleExpr`.
 
 ```python
 users = fg.read.match(User, user_region, region="US")
@@ -396,11 +396,20 @@ constraint may also reference a field descriptor on the projected entity class:
 same_region = fg.read.match(User, user_region, region=User.region)
 ```
 
-First-tranche limits:
+OR `RuleExpr` works when each branch exposes the same constrained ports:
 
-- `Rule` and AND-only `RuleExpr` (`&` / `RuleExpr.all(...)`) are supported.
-- OR expressions (`|` / `RuleExpr.any(...)`) raise a clear unsupported-shape
-  error.
+```python
+users = fg.read.match(User, tagged_users | regional_users, marker="US")
+```
+
+The runtime distributes constraints into each OR branch, unions branch results,
+and returns each projected snapshot once.
+
+Runtime limits:
+
+- `Rule` and `RuleExpr` (`&` / `RuleExpr.all(...)`, `|` /
+  `RuleExpr.any(...)`) are supported.
+- Ports constrained by kwargs must be declared in every OR branch.
 - Result rows are snapshots, not witness assertions or `EvaluateResult` rows.
 - Method-level `view=` is rejected; attach a durable Database view and call
   `fg.read.match(...)` on the attached runtime.

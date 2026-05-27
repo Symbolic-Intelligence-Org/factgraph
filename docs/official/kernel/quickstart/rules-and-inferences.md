@@ -14,7 +14,7 @@ The short version is:
 
 | Need | Use |
 | --- | --- |
-| Read matching snapshots | `Rule` / AND-only `RuleExpr` + `fg.read.match(...)` |
+| Read matching snapshots | `Rule` / `RuleExpr` + `fg.read.match(...)` |
 | Propose new facts | `Inference` + `fg.eval.evaluate(...)` |
 | Explain evaluated rows | `row.explain()` / `fg.eval.explain(...)` |
 | Inspect rule shape | `fg.rules.inspect(...)` |
@@ -148,12 +148,23 @@ same_tag = fg.read.match(User, seeded_tags, tag=User.tag_seed)
 assert [row.user_id for row in same_tag] == ["u-1"]
 ```
 
-The first runtime tranche is intentionally narrow:
+RuleExpr OR works when the branches share the same public ports:
 
-- `Rule` and AND-only `RuleExpr` (`&` / `RuleExpr.all(...)`) are supported.
-- OR expressions (`|` / `RuleExpr.any(...)`) are deferred.
+```python
+tag_or_region = tag_rule | region_rule
+matched = fg.read.match(User, tag_or_region, tag="engineer")
+```
+
+The match runtime distributes port constraints across OR branches, unions the
+branch results, then returns each projected snapshot once.
+
+Runtime boundaries:
+
+- `Rule` and `RuleExpr` (`&` / `RuleExpr.all(...)`, `|` /
+  `RuleExpr.any(...)`) are supported.
 - Match returns distinct projected entity snapshots, not evidence rows or
   assertion witnesses.
+- Ports constrained by kwargs must be present in every OR branch.
 - Method-level `view=` is not accepted; attach a durable Database view with
   `FactGraph.attach(db, view=view)` and then call `fg.read.match(...)`.
 
