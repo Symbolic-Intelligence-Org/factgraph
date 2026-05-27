@@ -1,11 +1,11 @@
 # Audit: T8-B Native/Souffle Form 1 Topology
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-b-form1-topology.md`
-- Stage: scoped
+- Stage: closure
 - Class: M/L (scoped to T8-B-1 native Form 1 topology)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current four modified tracked docs/notebooks plus two untracked reference directories
@@ -17,6 +17,10 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | this commit | T8-B Form 1 topology blueprint pair drafted | Triggered by T8-A completion; Q1-Q9 intentionally pending for source-backed Step 4.6. |
 | 2026-05-27 | scoped | this commit | Step 4.6 inventory completed | T8-B narrowed to T8-B-1 native Form 1; Souffle deferred to T8-B-2 / adapter-specific alignment. |
+| 2026-05-27 | implementation | `d1597344` | Native Form 1 runtime bridge landed | Private support context plumbing plus native Form 1 graph helper; T8-A gates preserved. |
+| 2026-05-27 | implementation | `31eab30c` | Native Form 1 tests landed | Protocol coverage plus SDK end-to-end assertion upgrade. |
+| 2026-05-27 | implementation | `b99c978a` | Audit docs updated | Native row explanations documented as live row-level Form 1 graphs. |
+| 2026-05-27 | closure | this commit | Cycle closure recorded | Focused 126 OK; full-discover scoped/current failure names identical at 72 failures / 233 errors. |
 
 ## 2. Draft Source Scan
 
@@ -134,8 +138,61 @@ Chosen tranche: **T8-B-1 native Form 1 topology**.
 - [x] Narrowed implementation tranche locked.
 - [x] Reuse-before-rewrite map complete.
 - [x] Tests and verification gates locked.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending inventory / implementation / closure.
+T8-B shipped as **T8-B-1 native Form 1 topology**.
+
+Landed chain:
+
+```text
+34dfcd3d  docs(blueprint): draft T8-B form1 topology
+31405dea  docs(blueprint): scope T8-B form1 topology
+d1597344  feat(protocol): build native form1 row evidence
+31eab30c  test(protocol): cover native form1 row evidence
+b99c978a  docs(audit): document native form1 row evidence
+```
+
+Runtime outcome:
+
+- Native passed row explanations now emit live row-level Form 1
+  `EvidenceGraph`s when private native support context exists.
+- `_build_passed_row_evidence_graph(...)` remains the single metadata
+  validation gate and falls back to the previous single-conclusion graph for
+  detached/manual rows without support context.
+- The private `_row_support_artifacts` carrier preserves public
+  `EvaluateResult` representation, equality, and hash behavior.
+- Native Form 1 uses existing `NODE_CONCLUSION`, `NODE_PREMISE`, `NODE_SEED`,
+  and `EDGE_SUPPORTS` only. `EDGE_DERIVES` and `EDGE_UPDATES` remain reserves.
+- Intra-graph seed reuse and C129 winning-path-only OR are now runtime-visible
+  for native row explanations.
+- C136 aggregate count-only envelope and Souffle row-result alignment remain
+  deferred.
+
+Test/docs outcome:
+
+- Focused T8-B suite: 126 OK.
+- SDK end-to-end rule-expression evaluation assertion was upgraded from weak
+  `Explanation` instance checking to Form 1 graph shape checking.
+- Audit docs now distinguish live native row Form 1 graphs from candidate
+  evidence tree readback APIs.
+
+Full-discover note:
+
+- Review initially observed a possible 234-error run. Closure reran current
+  HEAD and scoped `31405dea` in an auxiliary worktree.
+- Both runs report `Ran 2004 tests` and `FAILED (failures=72, errors=233)`.
+- Sorted `ERROR:` / `FAIL:` names are identical, so T8-B introduced no
+  full-discover failure-name delta.
+
+Scope preservation:
+
+- No `EvidenceGraph` schema change.
+- No new node/edge kind.
+- No public SDK/API shape change.
+- No T8-A validation weakening.
+- No candidate evidence tree rewrite.
+- No Souffle/ProbLog/PyReason adapter topology change.
+- No service/OpenAPI/release/match/database/view/dirty-baseline touch.
+- Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.

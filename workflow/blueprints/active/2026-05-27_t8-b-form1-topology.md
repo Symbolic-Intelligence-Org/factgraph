@@ -1,6 +1,6 @@
 # Task Blueprint: T8-B Native/Souffle Form 1 Topology
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M/L (scoped to T8-B-1 native Form 1 topology)
@@ -225,19 +225,19 @@ implementation rather than landing a partial hidden split.
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 answers Q1-Q9 with source-backed evidence.
-- [ ] Narrow decision is locked with LOC/test/risk rationale.
-- [ ] Reuse-before-rewrite mapping is complete.
-- [ ] Form 1 node/edge/seed/OR/aggregate boundaries are locked for the selected
+- [x] Step 4.6 answers Q1-Q9 with source-backed evidence.
+- [x] Narrow decision is locked with LOC/test/risk rationale.
+- [x] Reuse-before-rewrite mapping is complete.
+- [x] Form 1 node/edge/seed/OR/aggregate boundaries are locked for the selected
       tranche or explicitly deferred with rationale.
-- [ ] T8-A metadata validation and 14-key contract are preserved.
-- [ ] Existing candidate evidence and Souffle tests remain green or any
+- [x] T8-A metadata validation and 14-key contract are preserved.
+- [x] Existing candidate evidence and Souffle tests remain green or any
       regression causes stop/amend.
-- [ ] Focused tests cover shipped T8-B behavior.
-- [ ] No `EvidenceGraph` schema, node/edge kind, service/OpenAPI, release,
+- [x] Focused tests cover shipped T8-B behavior.
+- [x] No `EvidenceGraph` schema, node/edge kind, service/OpenAPI, release,
       match, database/view, or dirty-baseline changes land.
-- [ ] `git diff --check` passes.
-- [ ] Sacred master and dirty baseline are preserved.
+- [x] `git diff --check` passes.
+- [x] Sacred master and dirty baseline are preserved.
 
 ## 9. Verification Commands
 
@@ -270,4 +270,117 @@ Step 4.6 must confirm the final suite based on selected tranche.
 
 ## 10. Outcome / Deviations
 
-Pending implementation / closure.
+### 10.1 Landed artifacts
+
+| Commit | Role | Notes |
+|---|---|---|
+| `34dfcd3d` | Draft | T8-B Form 1 topology blueprint pair drafted with Q1-Q9 pending. |
+| `31405dea` | Scoped | Source-backed inventory; T8-B narrowed to native Form 1 first tranche. |
+| `d1597344` | Runtime | Native row explanations now build Form 1 `EvidenceGraph`s when native support context exists. |
+| `31eab30c` | Tests | Protocol and SDK end-to-end Form 1 coverage added. |
+| `b99c978a` | Docs | Audit module docs updated for native row Form 1 graphs. |
+
+### 10.2 Runtime outcome
+
+T8-B-1 shipped native row-level Form 1 topology without changing the public row
+or result shape. `EvaluateResult` gained a private `_row_support_artifacts`
+carrier with `repr=False`, `compare=False`, and `hash=False`, preserving public
+`EvaluateResult` display/equality/hash behavior. SDK result construction passes
+native `SupportArtifact`s through this private context when a candidate has
+`support_kind == "native_binding_v1"`.
+
+`_build_passed_row_evidence_graph(...)` remains the single T8-A validation gate:
+it validates the 14-key metadata payload first, then delegates to a private
+native Form 1 helper when support context exists, and otherwise keeps the
+previous single-conclusion fallback for detached/manual rows. The after-builder
+validation in `_explain_live_row(...)` remains in place, so the T8-A C135
+runtime invariant is preserved.
+
+The native Form 1 helper reuses `SupportArtifact` instead of rewriting the
+candidate evidence tree. It emits:
+
+- root `NODE_CONCLUSION` for the passed row claim,
+- selected-branch `NODE_PREMISE` nodes for predicate witnesses and non-fact
+  checks,
+- assertion `NODE_SEED` nodes for predicate witnesses,
+- `EDGE_SUPPORTS` from seed to premise and premise to conclusion.
+
+Seed reuse is intra-graph only: repeated assertion ids create one seed node and
+multiple support edges. The root conclusion records winning-path-only OR via
+`engine_meta["alternative_paths"] = {"mode": "winning_path_only",
+"omitted_count": None}`. Aggregate count-only envelopes remain deferred because
+current `NonFactStep` support data does not expose matched-count contributor
+state.
+
+### 10.3 Tests and docs
+
+Protocol tests now cover both paths:
+
+- fallback single-conclusion graphs for manual/detached rows without support
+  context,
+- native Form 1 row graphs with root conclusion, premise nodes, seed nodes,
+  `EDGE_SUPPORTS` direction, winning-path-only metadata, quantitative
+  explanation envelope, and intra-graph seed reuse.
+
+`tests/sdk/test_rule_expr_evaluate.py` was upgraded from a weak
+`assertIsInstance(explanation, Explanation)` check to end-to-end Form 1 graph
+assertions. This is a small scope amendment in test coverage only; it strengthens
+the SDK regression gate and does not change runtime behavior.
+
+Audit docs were updated because passed native row explanations now expose a
+user-visible Form 1 `EvidenceGraph`. The docs distinguish live row-level Form 1
+graphs from the older candidate evidence tree readback APIs, and record that
+native Form 1 uses `supports` only while `derives` / `updates` remain reserved.
+
+### 10.4 Deviations and implementation observations
+
+- T8-B-1 is native-only. Souffle remains regression-gated and deferred because
+  its converter is graph-shaped but adapter-local, not row-result Form 1.
+- `tests/sdk/test_rule_expr_evaluate.py` was touched even though it was not in
+  the initial scoped file list; the change is a stronger SDK end-to-end
+  assertion for the shipped behavior.
+- `_pred_id_from_atom_key(...)` and `_atom_index_from_key(...)` depend on the
+  current atom-key naming convention and fail safe to `None` for unknown shapes.
+  Future support-capture format changes should revisit these helpers.
+- `_quantitative_explanation_for_row(...)` intentionally ships only the minimal
+  v1 envelope: `mode` is `engine_reported` or `not_applicable`, and
+  `decomposition` remains `not_available_v1`. T8-C engine enrichment may extend
+  this.
+- `evaluate_result.py` now imports the private `SupportArtifact` dataclass from
+  `factgraph.core.store._support` for SDK-internal plumbing. This is an
+  implementation dependency only and does not expose `SupportArtifact` at the
+  SDK boundary.
+
+### 10.5 Verification
+
+Focused verification:
+
+```text
+PYTHONPATH=src python -m unittest \
+  tests.test_audit_evidence_graph \
+  tests.test_audit_evidence_graph_render \
+  tests.test_candidate_evidence_steps \
+  tests.test_souffle_evidence_graph \
+  tests.application.protocol.test_evaluate_result_dtos \
+  tests.sdk.test_rule_expr_evaluate
+→ 126 OK
+```
+
+`ruff check` passed for the touched runtime/test files, and `git diff --check`
+is clean.
+
+Full discover was rerun after review raised a possible `234`-error delta. The
+current HEAD and scoped `31405dea` auxiliary worktree both report:
+
+```text
+Ran 2004 tests
+FAILED (failures=72, errors=233)
+```
+
+The sorted `ERROR:` / `FAIL:` name lists are identical, so the earlier
+`234`-error observation was transient and T8-B introduced no full-discover
+failure-name delta.
+
+Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`. Dirty
+baseline remains the four tracked docs/notebooks plus two untracked reference
+directories.
