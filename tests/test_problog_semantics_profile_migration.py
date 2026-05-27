@@ -7,13 +7,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 import factgraph.application as application  # noqa: F401
+from factgraph.adapters.problog.problog_export import ProbLogExportError, _claim_probability
 from factgraph.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import Inference, Pred
 from factgraph.sdk.schema import Entity, Field, Identity
-from factgraph.sdk.store import SDKStore
+from factgraph.sdk.semantics import ProbLogSemantics
+from factgraph.sdk.store import SDKStore, _lower_public_semantics
 
 
 class User(Entity):
@@ -30,11 +32,17 @@ def _two_branch_where() -> list[list[tuple[str, str, list[str]]]]:
     ]
 
 
-def _profile(*, engine: str = "problog", entries: list[dict[str, object]] | None = None) -> SemanticsProfile:
+def _profile(
+    *,
+    engine: str = "problog",
+    entries: list[dict[str, object]] | None = None,
+    uncertainty_projection: dict[str, object] | None = None,
+) -> SemanticsProfile:
     return SemanticsProfile(
         name="profile.c.problog",
         engine=engine,
         rule_projection={"problog": entries or [{"target": "branch:0", "kind": "branch_probability", "value": 0.4}]},
+        uncertainty_projection=uncertainty_projection or {},
     )
 
 
@@ -154,7 +162,7 @@ class ProbLogSemanticsProfileResolverTests(unittest.TestCase):
 
 
 class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
-    def _make_sdk(self) -> SDKStore:
+    def _make_sdk(self, *, seed_meta: dict[str, object] | None = None) -> SDKStore:
         sdk = SDKStore([User])
         alice_ref = sdk.ref(User, user_id="Alice")
         set_field(
@@ -169,7 +177,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             pred_id="user:tag_seed",
             e_ref=alice_ref,
             rest_terms=[("string", "vip")],
-            meta={"source": "test"},
+            meta=seed_meta or {"source": "test"},
         )
         return sdk
 
@@ -240,6 +248,47 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
 
         self.assertIn("mode='problog'", str(ctx.exception))
 
+    def test_core_store_evaluate_rejects_raw_uncertainty_by_default(self) -> None:
+        sdk = self._make_sdk(seed_meta={"source": "test", "raw_kind": "probabilistic", "bound": [0.2, 0.8]})
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+
+        with self.assertRaises(ProbLogExportError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="problog",
+                semantics_profile=_profile(),
+            )
+
+        self.assertIn("policy=reject", str(ctx.exception))
+
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
+    def test_core_store_evaluate_projects_midpoint_raw_uncertainty(self, mock_run) -> None:
+        sdk = self._make_sdk(seed_meta={"source": "test", "raw_kind": "probabilistic", "bound": [0.2, 0.8]})
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        seen: dict[str, str] = {}
+
+        def _fake_run(pl_path, *, timeout, trace):
+            seen["program"] = pl_path.read_text(encoding="utf-8")
+            return self._mock_output(sdk)
+
+        mock_run.side_effect = _fake_run
+
+        sdk.store.evaluate(
+            derivation_id=compiled["derivation_id"],
+            version=compiled["version"],
+            target_pred_id=compiled["target_pred_id"],
+            head_vars=compiled["head_vars"],
+            where=compiled["where"],
+            mode="problog",
+            semantics_profile=_profile(uncertainty_projection={"probabilistic": {"policy": "midpoint"}}),
+        )
+
+        self.assertIn("0.5::edb_fact", seen["program"])
+
 
 class ProbLogSemanticsProfileGuardTests(unittest.TestCase):
     def test_exporter_stays_profile_agnostic(self) -> None:
@@ -266,6 +315,102 @@ class ProbLogSemanticsProfileGuardTests(unittest.TestCase):
 
         self.assertIsInstance(resolved, ProbLogRuleExt)
         self.assertEqual(resolved.branch_probabilities, (0.7, 0.6))
+
+
+class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
+    def test_problog_semantics_defaults_to_reject_uncertainty_projection(self) -> None:
+        semantics = ProbLogSemantics()
+
+        self.assertEqual(
+            semantics.uncertainty_projection,
+            {
+                "probabilistic": {"policy": "reject"},
+                "possibilistic": {"policy": "reject"},
+                "fallback": "reject_unconfigured",
+            },
+        )
+
+    def test_lowering_preserves_explicit_uncertainty_projection(self) -> None:
+        semantics = ProbLogSemantics(
+            uncertainty_projection={
+                "probabilistic": {"policy": "midpoint"},
+                "fallback": "reject_unconfigured",
+            }
+        )
+
+        profile = _lower_public_semantics(
+            semantics,
+            derivation=ProbLogSemanticsProfileCoreEvaluateTests()._make_derivation(),
+        )
+
+        self.assertEqual(profile.engine, "problog")
+        self.assertEqual(profile.uncertainty_projection["probabilistic"], {"policy": "midpoint"})
+        self.assertEqual(profile.uncertainty_projection["fallback"], "reject_unconfigured")
+
+    def test_direct_probability_projection_policies(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="Alice")
+        asrt_id = set_field(
+            sdk.ledger,
+            pred_id="user:tag_seed",
+            e_ref=ref,
+            rest_terms=[("string", "vip")],
+            meta={"source": "test", "raw_kind": "probabilistic", "bound": [0.2, 0.8]},
+        )
+
+        cases = {
+            "lower": 0.2,
+            "midpoint": 0.5,
+            "upper": 0.8,
+        }
+        for policy, expected in cases.items():
+            with self.subTest(policy=policy):
+                actual = _claim_probability(
+                    sdk.store,
+                    asrt_id,
+                    uncertainty_projection={"probabilistic": {"policy": policy}, "fallback": "reject_unconfigured"},
+                )
+                self.assertEqual(actual, expected)
+
+    def test_identity_probability_requires_degenerate_probabilistic_bound(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="Alice")
+        asrt_id = set_field(
+            sdk.ledger,
+            pred_id="user:tag_seed",
+            e_ref=ref,
+            rest_terms=[("string", "vip")],
+            meta={"source": "test", "raw_kind": "probabilistic", "bound": [0.4, 0.4]},
+        )
+
+        actual = _claim_probability(
+            sdk.store,
+            asrt_id,
+            uncertainty_projection={"probabilistic": {"policy": "identity_probability"}},
+        )
+
+        self.assertEqual(actual, 0.4)
+
+    def test_interval_policies_reject_for_problog_point_export(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="Alice")
+        asrt_id = set_field(
+            sdk.ledger,
+            pred_id="user:tag_seed",
+            e_ref=ref,
+            rest_terms=[("string", "vip")],
+            meta={"source": "test", "raw_kind": "probabilistic", "bound": [0.2, 0.8]},
+        )
+
+        for policy in ("probability_interval", "possibility_interval"):
+            with self.subTest(policy=policy):
+                with self.assertRaises(ProbLogExportError) as ctx:
+                    _claim_probability(
+                        sdk.store,
+                        asrt_id,
+                        uncertainty_projection={"probabilistic": {"policy": policy}},
+                    )
+                self.assertIn("not supported by ProbLog point export", str(ctx.exception))
 
 
 if __name__ == "__main__":
