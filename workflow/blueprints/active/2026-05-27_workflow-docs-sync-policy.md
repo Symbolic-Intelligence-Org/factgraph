@@ -1,6 +1,6 @@
 # Task Blueprint: Workflow Docs Sync Policy Clarification
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S (governance docs-only)
@@ -68,37 +68,73 @@ over-expanding lightweight exceptions.
 | `workflow/blueprints/README.md` | 8-state lifecycle and lightweight exception details. |
 | Recent docs sync commits | Historical examples to classify: docs sync round 1, round 2, round 3. |
 
-## 3. Draft Source Scan
+## 3. Step 4.6 Inventory Results
 
-Draft orientation only:
+### 3.1 Current governance wording
 
-- `CLAUDE.md` currently allows tiny typo, comment-only, and clearly local test
-  fixes to skip a blueprint, but does not classify multi-file shipped-state
-  docs sync.
-- `workflow/AGENTS.md` states tiny local fixes may use the lightweight path but
-  must not bypass blueprint requirements when the task changes workflow,
-  architecture, protocol, or cross-module behavior.
-- `workflow/CADENCE.md` explicitly says docs-only work can follow the full
-  audit-to-archive cadence when it has a defined deliverable.
-- The docs-sync micro-passes changed changelog/memory/roadmap style files and
-  reflected already-shipped state; they did not create new runtime behavior or
-  design commitments.
+| Source | Existing wording / finding |
+|---|---|
+| `CLAUDE.md:26-43` | Required workflow says non-trivial feature/refactor/protocol/cross-module/architecture-facing tasks must create or reuse a blueprint. Exceptions are "Tiny typo fixes, comment-only edits, and clearly local test fixes". No shipped-state docs-sync category is defined. |
+| `workflow/AGENTS.md:21-25` | Primary work mode applies to large-scope workflow, architecture, migration, and audit-first implementation work. Tiny local fixes may use the lightweight path but must not bypass blueprint requirements for workflow, architecture, protocol, or cross-module behavior. |
+| `workflow/CADENCE.md:21-29` | Cadence is not mandatory for tiny typo/comment/test-helper/internal-refactor cases, but workflow/architecture/protocol/cross-module changes must follow cadence regardless of size. |
+| `workflow/CADENCE.md:44` | Docs-only work can follow audit-to-archive cadence when it has a defined deliverable. |
+| `workflow/blueprints/README.md:24-39` | Blueprint required for cross-module, protocol/contract/DTO/DSL, architecture, new module docs / main docs entry, or complex drift-prone tasks. Skip cases are local typos, non-behavior comments, and tiny test fixes that cannot cause docs drift. |
+| `AGENTS.md:1-5` | Root compatibility file only points to `CLAUDE.md`; substantive content lives in `CLAUDE.md`. |
 
-This draft scan does not lock final wording or target files. Step 4.6 must
-replace it with source-backed file:line evidence and policy decisions.
+### 3.2 Historical docs-sync rounds
+
+| Commit | Files | Classification |
+|---|---|---|
+| `d281a5f8` `docs: sync shipped session state` | 5 files: `CHANGELOG.md`, `docs/README.md`, `workflow/design/design-points/README.md`, roadmap, memory. | Multi-file shipped-state/status sync. Historical maintenance exception; no retroactive blueprint. |
+| `0a2e1926` `docs: sync evidence track shipped state` | 3 files: `CHANGELOG.md`, roadmap, memory. | Multi-file shipped-state/status sync. Historical maintenance exception; no retroactive blueprint. |
+| `3a8afee6` `docs: sync roadmap after T10 inventory` | 3 files: `CHANGELOG.md`, roadmap, memory. | Multi-file shipped-state/status sync. Historical maintenance exception; no retroactive blueprint. |
+
+### 3.3 Policy decision
+
+Selected policy: **middle path**.
+
+- Do **not** extend the tiny-exception path to all shipped-state docs sync:
+  multi-file state/index sync can affect future agent orientation and should
+  not live only in transcript judgment.
+- Do **not** require full heavy cadence for every typo or single-file status
+  correction: local typo/comment/docs nits remain lightweight exceptions.
+- Future multi-file shipped-state synchronization that updates workflow memory,
+  roadmap, changelog, docs index, design-point inventory, or similar state
+  surfaces should use a small blueprint/audit cycle. It may be S-class and
+  docs-only, but it should still record scope, source refs, closure, and
+  archive.
+
+### 3.4 File scope decision
+
+Edit three governance files:
+
+1. `CLAUDE.md` — root entry where agents first see Required Workflow /
+   Exceptions.
+2. `workflow/AGENTS.md` — canonical workflow governance and cross-pillar
+   lock-in.
+3. `workflow/blueprints/README.md` — blueprint pillar rule where skip cases are
+   already listed.
+
+Leave alone:
+
+- Root `AGENTS.md`: compatibility pointer only; changing it would duplicate
+  substantive governance already delegated to `CLAUDE.md`.
+- `workflow/CADENCE.md`: already states docs-only work can use cadence and that
+  workflow/architecture changes cannot bypass cadence. No contradiction; no
+  edit required.
 
 ## 4. Open Questions For Step 4.6
 
 | ID | Question | Required scoped output |
 |---|---|---|
-| Q1 | What does current governance say about blueprint requirements and lightweight exceptions? | Source-backed summary with file:line refs. |
-| Q2 | How should future docs-sync work be classified? | Policy distinction between tiny local docs fixes, status/index sync, and design/workflow-changing docs. |
-| Q3 | Which docs-sync cases may skip a blueprint? | Narrow criteria and examples. |
-| Q4 | Which docs-sync cases must use a blueprint cycle? | Trigger list, including multi-file shipped-state sync if selected. |
-| Q5 | How should the three 2026-05-27 docs-sync micro-passes be recorded? | Historical exception / grandfathering wording without retroactive blueprint requirement. |
-| Q6 | Which file(s) should change? | Target file list with rationale and max edit scope. |
-| Q7 | Does this require updating `AGENTS.md` at repo root? | Yes/no with compatibility rationale. |
-| Q8 | Verification plan? | Docs-only checks (`git diff --check`, status, maybe grep) and dirty baseline preservation. |
+| Q1 | What does current governance say about blueprint requirements and lightweight exceptions? | `CLAUDE.md`, `workflow/AGENTS.md`, `workflow/CADENCE.md`, and `workflow/blueprints/README.md` all limit lightweight exceptions to tiny local fixes; none defines multi-file shipped-state sync. |
+| Q2 | How should future docs-sync work be classified? | Middle path: tiny local docs fixes may skip; multi-file shipped-state/status sync should use a small blueprint/audit cycle; workflow/design-changing docs already require cadence. |
+| Q3 | Which docs-sync cases may skip a blueprint? | Single-file typo/link wording fixes, comment/prose-only nits, or local doc corrections that do not update state/index surfaces or affect future planning. |
+| Q4 | Which docs-sync cases must use a blueprint cycle? | Multi-file shipped-state sync across changelog/memory/roadmap/docs index/design inventory; any docs sync that changes workflow status, planning priorities, active/archive inventories, or cross-session handoff truth. |
+| Q5 | How should the three 2026-05-27 docs-sync micro-passes be recorded? | Grandfather as historical maintenance exceptions: `d281a5f8`, `0a2e1926`, `3a8afee6` are not retroactive workflow violations and need no retroactive blueprints. |
+| Q6 | Which file(s) should change? | Edit `CLAUDE.md`, `workflow/AGENTS.md`, and `workflow/blueprints/README.md`; leave root `AGENTS.md` and `workflow/CADENCE.md` unchanged. |
+| Q7 | Does this require updating `AGENTS.md` at repo root? | No. Root `AGENTS.md` is a compatibility pointer to `CLAUDE.md`; duplicating policy there would create drift risk. |
+| Q8 | Verification plan? | `git diff --check`, grep for docs-sync policy wording, and status check preserving dirty baseline. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -133,10 +169,10 @@ Likely commits:
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 source-backed inventory complete.
-- [ ] Future docs-sync policy is explicit and bounded.
-- [ ] Historical docs-sync rounds are recorded without retroactive churn.
-- [ ] File scope is no broader than Step 4.6 locks.
+- [x] Step 4.6 source-backed inventory complete.
+- [x] Future docs-sync policy is explicit and bounded.
+- [x] Historical docs-sync rounds are recorded without retroactive churn.
+- [x] File scope is no broader than Step 4.6 locks.
 - [ ] No runtime/test/dirty-baseline files are edited.
 - [ ] `git diff --check` clean.
 - [ ] Sacred master and dirty baseline preserved.
