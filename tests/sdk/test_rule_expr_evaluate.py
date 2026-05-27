@@ -18,6 +18,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
+from factgraph.audit.evidence_graph import EDGE_SUPPORTS, NODE_PREMISE, NODE_SEED
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
@@ -89,7 +90,14 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIsNone(result.semantics_digest)
         self.assertFalse(hasattr(result[0], "candidate_id"))
         self.assertFalse(hasattr(result[0], "support_digest"))
-        self.assertIsInstance(result[0].explain(), Explanation)
+        explanation = result[0].explain()
+        self.assertIsInstance(explanation, Explanation)
+        self.assertIsNotNone(explanation.evidence)
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.support_kind, "native_binding_v1")
+        self.assertTrue(any(node.node_kind == NODE_PREMISE for node in explanation.evidence.nodes))
+        self.assertTrue(any(node.node_kind == NODE_SEED for node in explanation.evidence.nodes))
+        self.assertTrue(all(edge.edge_kind == EDGE_SUPPORTS for edge in explanation.evidence.edges))
         self.assertIsInstance(result[0].close(), Rule)
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:

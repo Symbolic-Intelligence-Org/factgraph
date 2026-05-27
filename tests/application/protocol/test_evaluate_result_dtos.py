@@ -24,10 +24,18 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
 )
-from factgraph.audit.evidence_graph import EvidenceGraph, EvidenceNode, NODE_CONCLUSION
+from factgraph.audit.evidence_graph import (
+    EDGE_SUPPORTS,
+    EvidenceGraph,
+    EvidenceNode,
+    NODE_CONCLUSION,
+    NODE_PREMISE,
+    NODE_SEED,
+)
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
+from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact
 
 
 def _head_rule() -> Rule:
@@ -98,7 +106,11 @@ def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[st
     )
 
 
-def _single_row_result(bindings: dict[str, object] | None = None) -> EvaluateResult:
+def _single_row_result(
+    bindings: dict[str, object] | None = None,
+    *,
+    support_artifact: SupportArtifact | None = None,
+) -> EvaluateResult:
     (
         run_id,
         result_id,
@@ -126,6 +138,7 @@ def _single_row_result(bindings: dict[str, object] | None = None) -> EvaluateRes
         view_snapshot_digest=view_snapshot_digest,
         semantics_digest=semantics_digest,
     )
+    row_support_artifacts = {row.row_id: support_artifact} if support_artifact is not None else None
     return EvaluateResult(
         result_id=result_id,
         run_id=run_id,
@@ -140,6 +153,21 @@ def _single_row_result(bindings: dict[str, object] | None = None) -> EvaluateRes
         semantics_digest=semantics_digest,
         evaluated_at="2026-05-25T00:00:00Z",
         result_digest=result_digest,
+        _row_support_artifacts=row_support_artifacts,
+    )
+
+
+def _native_support_artifact(
+    pred_witnesses: tuple[PredWitness, ...],
+    *,
+    non_fact_steps: tuple[NonFactStep, ...] = (),
+) -> SupportArtifact:
+    return SupportArtifact(
+        kind="native_binding_v1",
+        root_result_kind="row",
+        binding_items=(("$person", "p1"),),
+        pred_witnesses=pred_witnesses,
+        non_fact_steps=non_fact_steps,
     )
 
 
@@ -408,6 +436,65 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.evidence.metadata["engine_version"], None)
         self.assertEqual(explanation.evidence.metadata["adapter_version"], None)
         self.assertEqual(explanation.evidence.metadata["evaluated_at"], "2026-05-25T00:00:00Z")
+        self.assertEqual(len(explanation.evidence.nodes), 1)
+        self.assertEqual(explanation.evidence.edges, ())
+        self.assertEqual(explanation.evidence.support_kind, "evaluate_row")
+
+    def test_live_row_explain_uses_native_form1_support_topology(self) -> None:
+        support = _native_support_artifact(
+            (
+                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("asrt-1",)),
+            ),
+            non_fact_steps=(
+                NonFactStep(step_key="b0.a1:eq", kind="eq", status="satisfied", details=(("atom_repr", "eq"),)),
+            ),
+        )
+        result = _single_row_result(support_artifact=support)
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        graph = explanation.evidence
+        self.assertEqual(graph.support_kind, "native_binding_v1")
+        self.assertEqual(graph.root_node_id, result[0].row_id)
+        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
+        self.assertEqual(root.node_kind, NODE_CONCLUSION)
+        self.assertEqual(root.component, result.head.id)
+        self.assertEqual(root.engine_meta["alternative_paths"], {"mode": "winning_path_only", "omitted_count": None})
+        self.assertEqual(root.engine_meta["explained_claim_ref"]["row_id"], result[0].row_id)
+        self.assertEqual(root.engine_meta["quantitative_explanation"]["mode"], "not_applicable")
+
+        premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
+        seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
+        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:b0.a0:Person:exists", "premise:b0.a1:eq"})
+        self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:asrt-1"})
+        self.assertTrue(all(edge.edge_kind == EDGE_SUPPORTS for edge in graph.edges))
+        self.assertIn(("premise:b0.a0:Person:exists", result[0].row_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
+        self.assertIn(
+            ("seed:assertion:asrt-1", "premise:b0.a0:Person:exists"),
+            {(e.from_node_id, e.to_node_id) for e in graph.edges},
+        )
+
+    def test_native_form1_support_reuses_seed_node_with_multiple_edges(self) -> None:
+        support = _native_support_artifact(
+            (
+                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("asrt-1",)),
+                PredWitness(pred_atom_key="b0.a1:Person:active", asrt_ids=("asrt-1",)),
+            )
+        )
+        result = _single_row_result(support_artifact=support)
+
+        explanation = result[0].explain()
+
+        assert explanation.evidence is not None
+        seed_nodes = [node for node in explanation.evidence.nodes if node.node_kind == NODE_SEED]
+        self.assertEqual([node.node_id for node in seed_nodes], ["seed:assertion:asrt-1"])
+        seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:asrt-1"]
+        self.assertEqual(
+            {edge.to_node_id for edge in seed_edges},
+            {"premise:b0.a0:Person:exists", "premise:b0.a1:Person:active"},
+        )
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
         run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
