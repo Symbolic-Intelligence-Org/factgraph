@@ -14,12 +14,21 @@ from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.schema_runtime import EntityRef
-from factgraph.audit.evidence_graph import EvidenceGraph, EvidenceNode, NODE_CONCLUSION
+from factgraph.audit.evidence_graph import (
+    EDGE_SUPPORTS,
+    EvidenceEdge,
+    EvidenceGraph,
+    EvidenceNode,
+    NODE_CONCLUSION,
+    NODE_PREMISE,
+    NODE_SEED,
+)
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
 from factgraph.core.store.database import view_digest_for
+from factgraph.core.store._support import SupportArtifact
 
 
 class DetachedRowError(RuntimeError):
@@ -164,6 +173,12 @@ class EvaluateResult:
         compare=False,
         hash=False,
     )
+    _row_support_artifacts: Mapping[str, SupportArtifact] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
 
     def __post_init__(self) -> None:
         _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
@@ -195,6 +210,11 @@ class EvaluateResult:
             if row.evidence_ref.result_id != self.result_id:
                 raise ProtocolShapeError("EvaluateRow.evidence_ref.result_id must equal EvaluateResult.result_id")
             bound_rows.append(replace(row, _result_resolver=lambda self_ref=self: self_ref))
+        row_support_artifacts = _validate_row_support_artifacts(
+            self._row_support_artifacts,
+            valid_row_ids=seen,
+        )
+        object.__setattr__(self, "_row_support_artifacts", row_support_artifacts)
         object.__setattr__(self, "rows", tuple(bound_rows))
 
     def __iter__(self) -> Iterator[EvaluateRow]:
@@ -822,6 +842,9 @@ def _build_passed_row_evidence_graph(
     metadata: Mapping[str, Any],
 ) -> EvidenceGraph:
     _validate_evidence_metadata_for_row_result(metadata, row, result)
+    support_artifact = result._row_support_artifacts.get(row.row_id)
+    if support_artifact is not None:
+        return _build_native_form1_evidence_graph(row, result, metadata, support_artifact)
     node = EvidenceNode(
         node_id=row.row_id,
         node_kind=NODE_CONCLUSION,
@@ -838,6 +861,164 @@ def _build_passed_row_evidence_graph(
         support_kind="evaluate_row",
         metadata=metadata,
     )
+
+
+def _build_native_form1_evidence_graph(
+    row: EvaluateRow,
+    result: EvaluateResult,
+    metadata: Mapping[str, Any],
+    support_artifact: SupportArtifact,
+) -> EvidenceGraph:
+    if support_artifact.kind != "native_binding_v1":
+        raise ValueError("native Form 1 evidence requires native_binding_v1 support")
+
+    nodes: list[EvidenceNode] = [
+        EvidenceNode(
+            node_id=row.row_id,
+            node_kind=NODE_CONCLUSION,
+            component=result.head.id,
+            label=row.claim.name,
+            value_summary=row.claim.repr,
+            engine_meta={
+                "rule_id": result.head.id,
+                "is_head": True,
+                "explained_claim_ref": {
+                    "row_id": row.row_id,
+                    "evidence_ref_id": row.evidence_ref.ref_id,
+                    "claim_digest": row.claim.digest,
+                    "claim_repr_cache": row.claim.repr,
+                },
+                "quantitative_explanation": _quantitative_explanation_for_row(row),
+                "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
+                "bindings": dict(row.bindings),
+                "desc_template": None,
+                "content_digest": result.head.content_digest,
+                "version": result.head.version,
+                "raw_kind": row.raw_kind,
+                "bound": row.bound,
+                "support_root_result_kind": support_artifact.root_result_kind,
+            },
+        )
+    ]
+    edges: list[EvidenceEdge] = []
+    seed_node_ids: set[str] = set()
+
+    def _append_edge(from_node_id: str, to_node_id: str, *, label: str | None, index: int) -> None:
+        edges.append(
+            EvidenceEdge(
+                edge_id=f"edge:{from_node_id}->{to_node_id}:{index}",
+                from_node_id=from_node_id,
+                to_node_id=to_node_id,
+                edge_kind=EDGE_SUPPORTS,
+                rule_label=label,
+            )
+        )
+
+    edge_index = 0
+    for witness in support_artifact.pred_witnesses:
+        premise_id = f"premise:{witness.pred_atom_key}"
+        pred_id = _pred_id_from_atom_key(witness.pred_atom_key)
+        nodes.append(
+            EvidenceNode(
+                node_id=premise_id,
+                node_kind=NODE_PREMISE,
+                component=witness.pred_atom_key,
+                label=f"Predicate witness {pred_id}",
+                value_summary="satisfied",
+                engine_meta={
+                    "atom_id": witness.pred_atom_key,
+                    "atom_kind": "pred",
+                    "atom_index": _atom_index_from_key(witness.pred_atom_key),
+                    "parent_rule_id": result.head.id,
+                    "reason": {
+                        "kind": "predicate_witness",
+                        "pred_id": pred_id,
+                        "asrt_ids": witness.asrt_ids,
+                    },
+                    "raw_kind": row.raw_kind,
+                    "bound": row.bound,
+                },
+            )
+        )
+        edge_index += 1
+        _append_edge(premise_id, row.row_id, label=result.head.id, index=edge_index)
+        for asrt_id in witness.asrt_ids:
+            seed_id = f"seed:assertion:{asrt_id}"
+            if seed_id not in seed_node_ids:
+                nodes.append(
+                    EvidenceNode(
+                        node_id=seed_id,
+                        node_kind=NODE_SEED,
+                        component=f"ledger:{asrt_id}",
+                        label=f"Assertion {asrt_id}",
+                        value_summary="ledger assertion",
+                        engine_meta={"source": "assertion", "asrt_id": asrt_id},
+                    )
+                )
+                seed_node_ids.add(seed_id)
+            edge_index += 1
+            _append_edge(seed_id, premise_id, label=None, index=edge_index)
+
+    for step in support_artifact.non_fact_steps:
+        premise_id = f"premise:{step.step_key}"
+        nodes.append(
+            EvidenceNode(
+                node_id=premise_id,
+                node_kind=NODE_PREMISE,
+                component=step.step_key,
+                label=f"{step.kind} check",
+                value_summary=step.status,
+                engine_meta={
+                    "atom_id": step.step_key,
+                    "atom_kind": step.kind,
+                    "atom_index": _atom_index_from_key(step.step_key),
+                    "parent_rule_id": result.head.id,
+                    "reason": {
+                        "kind": step.kind,
+                        "status": step.status,
+                        "details": dict(step.details),
+                    },
+                    "raw_kind": row.raw_kind,
+                    "bound": row.bound,
+                },
+            )
+        )
+        edge_index += 1
+        _append_edge(premise_id, row.row_id, label=result.head.id, index=edge_index)
+
+    return EvidenceGraph(
+        graph_id=f"{result.result_id}:{row.row_id}",
+        engine=result.engine,
+        root_node_id=row.row_id,
+        nodes=tuple(nodes),
+        edges=tuple(edges),
+        support_kind=support_artifact.kind,
+        metadata=metadata,
+    )
+
+
+def _quantitative_explanation_for_row(row: EvaluateRow) -> Mapping[str, Any]:
+    if row.raw_kind is None:
+        mode = "not_applicable"
+    else:
+        mode = "engine_reported"
+    return {
+        "mode": mode,
+        "carrier": {"raw_kind": row.raw_kind, "bound": row.bound},
+        "decomposition": "not_available_v1",
+    }
+
+
+def _pred_id_from_atom_key(atom_key: str) -> str:
+    return atom_key.split(":", 1)[1] if ":" in atom_key else atom_key
+
+
+def _atom_index_from_key(atom_key: str) -> int | None:
+    prefix = atom_key.split(":", 1)[0]
+    for part in prefix.split("."):
+        if part.startswith("a") and part[1:].isdigit():
+            return int(part[1:])
+    return None
 
 
 def _evidence_metadata_for_row_result(row: EvaluateRow, result: EvaluateResult) -> Mapping[str, Any]:
@@ -888,6 +1069,26 @@ def _validate_evidence_metadata_for_row_result(
     for key in _EVIDENCE_GRAPH_METADATA_KEYS:
         if metadata[key] != expected[key]:
             raise ValueError(f"EvidenceGraph.metadata[{key!r}] must match EvaluateResult/EvaluateRow context")
+
+
+def _validate_row_support_artifacts(
+    artifacts: Mapping[str, SupportArtifact] | None,
+    *,
+    valid_row_ids: set[str],
+) -> Mapping[str, SupportArtifact]:
+    if artifacts is None:
+        return MappingProxyType({})
+    if not isinstance(artifacts, Mapping):
+        raise ProtocolShapeError("EvaluateResult._row_support_artifacts must be mapping or None")
+    normalized: dict[str, SupportArtifact] = {}
+    for row_id, artifact in artifacts.items():
+        _require_non_empty_str(row_id, field_name="EvaluateResult._row_support_artifacts key")
+        if row_id not in valid_row_ids:
+            raise ProtocolShapeError("EvaluateResult._row_support_artifacts contains unknown row_id")
+        if not isinstance(artifact, SupportArtifact):
+            raise ProtocolShapeError("EvaluateResult._row_support_artifacts values must be SupportArtifact")
+        normalized[row_id] = artifact
+    return MappingProxyType(normalized)
 
 
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:

@@ -73,6 +73,7 @@ from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
+from factgraph.core.store._support import SupportArtifact
 from factgraph.adapters.souffle.runner import run_package
 from factgraph.core.store.database import (
     AssertionInput,
@@ -2698,6 +2699,7 @@ class SDKStore:
                 )
                 for candidate in candidates
             )
+            row_support_artifacts = self._row_support_artifacts_for_candidates(candidates, rows)
             row_digests = tuple(_row_digest_for(row) for row in rows)
             result_digest = result_digest_for(
                 result_id=result_id,
@@ -2729,11 +2731,26 @@ class SDKStore:
                 result_digest=result_digest,
                 _schema_index=self._application_schema_index,
                 _row_close_builder=self._close_evaluate_row,
+                _row_support_artifacts=row_support_artifacts,
             )
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _row_support_artifacts_for_candidates(
+        self,
+        candidates: Sequence[CandidateSet],
+        rows: Sequence[Any],
+    ) -> Mapping[str, SupportArtifact]:
+        out: dict[str, SupportArtifact] = {}
+        for candidate, row in zip(candidates, rows):
+            if candidate.support_kind != "native_binding_v1":
+                continue
+            artifact = self._store._lookup_support_artifact(candidate.support_digest)
+            if isinstance(artifact, SupportArtifact):
+                out[row.row_id] = artifact
+        return out
 
     def _close_evaluate_row(self, row: Any, result: Any) -> ApplicationRule:
         return _build_closed_head_from_row(
