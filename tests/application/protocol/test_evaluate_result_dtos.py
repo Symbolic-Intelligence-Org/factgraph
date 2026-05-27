@@ -35,7 +35,13 @@ from factgraph.audit.evidence_graph import (
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
-from factgraph.core.store._support import SOUFFLE_WITNESS_KIND, NonFactStep, PredWitness, SupportArtifact
+from factgraph.core.store._support import (
+    SOUFFLE_WITNESS_KIND,
+    NonFactStep,
+    PredWitness,
+    ProvenanceEnvelope,
+    SupportArtifact,
+)
 
 
 def _head_rule() -> Rule:
@@ -111,6 +117,7 @@ def _single_row_result(
     bindings: dict[str, object] | None = None,
     *,
     support_artifact: SupportArtifact | None = None,
+    provenance_envelope: ProvenanceEnvelope | None = None,
 ) -> EvaluateResult:
     (
         run_id,
@@ -140,6 +147,7 @@ def _single_row_result(
         semantics_digest=semantics_digest,
     )
     row_support_artifacts = {row.row_id: support_artifact} if support_artifact is not None else None
+    row_provenance_envelopes = {row.row_id: provenance_envelope} if provenance_envelope is not None else None
     return EvaluateResult(
         result_id=result_id,
         run_id=run_id,
@@ -155,6 +163,7 @@ def _single_row_result(
         evaluated_at="2026-05-25T00:00:00Z",
         result_digest=result_digest,
         _row_support_artifacts=row_support_artifacts,
+        _row_provenance_envelopes=row_provenance_envelopes,
     )
 
 
@@ -170,6 +179,20 @@ def _native_support_artifact(
         binding_items=(("$person", "p1"),),
         pred_witnesses=pred_witnesses,
         non_fact_steps=non_fact_steps,
+    )
+
+
+def _problog_provenance_envelope() -> ProvenanceEnvelope:
+    return ProvenanceEnvelope(
+        candidate_id="cand_v2:problog",
+        engine="problog",
+        payload_type="proof_trace",
+        payload={
+            "engine": "problog",
+            "trace_type": "proof_trace",
+            "events": [],
+            "answers": [],
+        },
     )
 
 
@@ -277,6 +300,39 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(result.count(), 1)
         self.assertIs(result.first(), result[0])
         self.assertIs(result[0]._require_live_result(), result)
+
+    def test_row_provenance_envelopes_reject_unknown_row_id(self) -> None:
+        result = _single_row_result()
+        row = result.rows[0]
+
+        with self.assertRaisesRegex(ProtocolShapeError, "unknown row_id"):
+            EvaluateResult(
+                result_id=result.result_id,
+                run_id=result.run_id,
+                rows=(row,),
+                head=result.head,
+                engine=result.engine,
+                engine_version=result.engine_version,
+                adapter_version=result.adapter_version,
+                expr_digest=result.expr_digest,
+                rule_set_digest=result.rule_set_digest,
+                view_snapshot_digest=result.view_snapshot_digest,
+                semantics_digest=result.semantics_digest,
+                evaluated_at=result.evaluated_at,
+                result_digest=result.result_digest,
+                _row_provenance_envelopes={"missing-row": _problog_provenance_envelope()},
+            )
+
+    def test_row_provenance_envelopes_reject_non_problog_payload(self) -> None:
+        bad_envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:pyreason",
+            engine="pyreason",
+            payload_type="trace",
+            payload={},
+        )
+
+        with self.assertRaisesRegex(ProtocolShapeError, "ProbLog proof traces"):
+            _single_row_result(provenance_envelope=bad_envelope)
 
     def test_detached_row_live_helper_raises(self) -> None:
         run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()

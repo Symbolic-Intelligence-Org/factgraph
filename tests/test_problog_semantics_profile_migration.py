@@ -9,8 +9,10 @@ from unittest.mock import patch
 import factgraph.application as application  # noqa: F401
 from factgraph.adapters.problog.problog_export import ProbLogExportError, _claim_probability
 from factgraph.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
+from factgraph.audit import EDGE_DERIVES
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.semantics import SemanticsProfile
+from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import Inference, Pred
 from factgraph.sdk.schema import Entity, Field, Identity
@@ -206,6 +208,27 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             ]
         )
 
+    def _mock_nested_output(self, sdk: SDKStore) -> str:
+        alice_ref = sdk.ref(User, user_id="Alice")
+        return "\n".join(
+            [
+                " call query(X1,X2) {0.00000} []",
+                f'  result query(X1,X2) ("vip","{alice_ref}") {{{{}}}} {{0.00012}} []',
+                " complete query(X1,X2) {0.00013} {0.00013} []",
+                f' call answer("vip","{alice_ref}") {{0.00019}} [at 4:7]',
+                f'  call rule_body_0("vip","{alice_ref}") {{0.00020}} [at 3:1]',
+                f'   call edb_fact(_, "user:tag_seed", "{alice_ref}", "vip") {{0.00021}} [at 2:1]',
+                f'    result edb_fact(_, "user:tag_seed", "{alice_ref}", "vip") ("{alice_ref}","vip") {{{{}}}} {{0.00022}} []',
+                f'   complete edb_fact(_, "user:tag_seed", "{alice_ref}", "vip") {{0.00023}} {{0.00002}} []',
+                f'   result rule_body_0("vip","{alice_ref}") ("vip","{alice_ref}") {{{{}}}} {{0.00024}} []',
+                f'  complete rule_body_0("vip","{alice_ref}") {{0.00025}} {{0.00005}} []',
+                f'  result answer("vip","{alice_ref}") ("vip","{alice_ref}") {{{{}}}} {{0.00060}} []',
+                f' complete answer("vip","{alice_ref}") {{0.00061}} {{0.00042}} []',
+                "",
+                f'answer("vip","{alice_ref}"):\t0.42',
+            ]
+        )
+
     @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_core_store_evaluate_semantics_profile_drives_exported_probability(self, mock_run) -> None:
         sdk = self._make_sdk()
@@ -289,6 +312,63 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
 
         self.assertIn("0.5::edb_fact", seen["program"])
 
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
+    def test_row_explain_uses_problog_provenance_bridge(self, mock_run) -> None:
+        sdk = self._make_sdk(seed_meta={"source": "test", "raw_kind": "probabilistic", "bound": [0.2, 0.8]})
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        mock_run.return_value = self._mock_nested_output(sdk)
+
+        result = sdk.eval.evaluate(
+            self._make_derivation(),
+            semantics=ProbLogSemantics(uncertainty_projection={"probabilistic": {"policy": "midpoint"}}),
+        )
+
+        self.assertEqual(result.count(), 1)
+        explanation = result[0].explain()
+        graph = explanation.evidence
+        self.assertIsNotNone(graph)
+        assert graph is not None
+        self.assertEqual(graph.support_kind, PROBLOG_PROVENANCE_KIND)
+        self.assertEqual(graph.engine, "problog")
+        self.assertGreater(len(graph.nodes), 1)
+        self.assertTrue(all(edge.edge_kind == EDGE_DERIVES for edge in graph.edges))
+        self.assertEqual(
+            set(graph.metadata),
+            {
+                "result_id",
+                "row_id",
+                "evidence_ref_id",
+                "claim_digest",
+                "closed_head_digest",
+                "expr_digest",
+                "rule_set_digest",
+                "view_snapshot_digest",
+                "semantics_digest",
+                "result_digest",
+                "engine",
+                "engine_version",
+                "adapter_version",
+                "evaluated_at",
+            },
+        )
+        self.assertNotIn("event_count", graph.metadata)
+        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
+        self.assertNotIn("goal", root.engine_meta)
+        problog_meta = root.engine_meta["problog"]
+        self.assertEqual(problog_meta["trace_summary"]["event_count"], 12)
+        self.assertEqual(problog_meta["trace_summary"]["answer_count"], 1)
+        self.assertEqual(problog_meta["trace_summary"]["root_answer_probability"], 0.42)
+        uncertainty = problog_meta["uncertainty_projection"]
+        self.assertEqual(uncertainty["schema_version"], 1)
+        self.assertEqual(uncertainty["decision_count"], 1)
+        decision = next(iter(uncertainty["decisions_by_asrt_id"].values()))
+        self.assertEqual(decision["source"], "uncertainty_projection")
+        self.assertEqual(decision["raw_kind"], "probabilistic")
+        self.assertEqual(decision["bound"], [0.2, 0.8])
+        self.assertEqual(decision["policy"], "midpoint")
+        self.assertEqual(decision["resolved_probability"], 0.5)
+        self.assertEqual(compiled["target_pred_id"], "user:tag")
+
 
 class ProbLogSemanticsProfileGuardTests(unittest.TestCase):
     def test_exporter_stays_profile_agnostic(self) -> None:
@@ -371,6 +451,38 @@ class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
                     uncertainty_projection={"probabilistic": {"policy": policy}, "fallback": "reject_unconfigured"},
                 )
                 self.assertEqual(actual, expected)
+
+    def test_claim_probability_records_projection_decisions_without_changing_return_value(self) -> None:
+        sdk = SDKStore([User])
+        ref = sdk.ref(User, user_id="Alice")
+        asrt_id = set_field(
+            sdk.ledger,
+            pred_id="user:tag_seed",
+            e_ref=ref,
+            rest_terms=[("string", "vip")],
+            meta={"source": "test", "raw_kind": "probabilistic", "bound": [0.2, 0.8]},
+        )
+        decisions: dict[str, dict[str, object]] = {}
+
+        actual = _claim_probability(
+            sdk.store,
+            asrt_id,
+            uncertainty_projection={"probabilistic": {"policy": "upper"}, "fallback": "reject_unconfigured"},
+            projection_decisions=decisions,
+        )
+
+        self.assertEqual(actual, 0.8)
+        self.assertEqual(
+            decisions[asrt_id],
+            {
+                "asrt_id": asrt_id,
+                "source": "uncertainty_projection",
+                "raw_kind": "probabilistic",
+                "bound": [0.2, 0.8],
+                "policy": "upper",
+                "resolved_probability": 0.8,
+            },
+        )
 
     def test_identity_probability_requires_degenerate_probabilistic_bound(self) -> None:
         sdk = SDKStore([User])
