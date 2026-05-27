@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.10 OR RuleExpr Match Runtime
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M (OR RuleExpr support for the existing match runtime)
@@ -29,7 +29,7 @@ Required work areas:
 4. **Partial ports**: preserve RuleExpr lowering's partial-port rejection behavior and add user-facing tests.
 5. **Union semantics**: lock and test branch union, cross-branch de-duplication, `limit`, and deterministic ordering.
 6. **Tests**: extend `tests/test_sdk_read_match_runtime.py` for OR-specific behavior and regress AND behavior.
-7. **Docs**: update match docs to teach only the shipped OR behavior, not witnesses/query persistence/cross-entity tuple output.
+7. **Docs**: update match docs and `CHANGELOG.md` to teach/record only the shipped OR behavior, not witnesses/query persistence/cross-entity tuple output.
 8. **Design note**: update `workflow/design/design-points/active/match-api-design.zh.md` so M5 moves from "OR follow-up target" to shipped OR support and M21 states the OR connectivity invariant.
 
 ### Out of scope
@@ -52,7 +52,9 @@ Pause and amend if Step 4.6 or implementation shows:
 - OR support requires a public wrapper DTO or return shape change.
 - M21 cannot be made precise for OR without changing the T11.2.7 match design.
 - Partial ports cannot be rejected through current lowering/projection paths.
-- Deterministic ordering or de-duplication cannot be preserved without broad runtime redesign.
+- Deterministic ordering or de-duplication cannot be explained by the existing
+  `evaluate_where(...)` final sort plus match's projected-ref de-duplication,
+  or requires broad runtime redesign.
 - Implementation touches service/OpenAPI/EvidenceGraph/release machinery or unrelated dirty baseline files.
 
 ## 1. Problem
@@ -118,6 +120,22 @@ design and blueprint:
 | M17-M20 | No witness output, no cross-entity tuple output, no `fg.eval.run` deletion, no assertion facade coupling. |
 | M21 | Connectivity safety remains mandatory and must become precise for OR. |
 
+## 4.1 Final Scoped Decisions
+
+| Decision | Scoped lock |
+|---|---|
+| Q1 Body IR shape | Use **uniform branch bodies** inside `_MatchPlan`: even single `Rule` and AND `RuleExpr` normalize to one branch, while OR `RuleExpr` has multiple branches. Build the public where IR as a one-level list for one branch and a two-level OR-of-AND list for multiple branches before calling `evaluate_where(...)`. This mirrors `_materialize_adapter_derivation_plan(...)` and preserves current AND behavior. |
+| Q2 Constraint distribution | Append synthetic constraint atoms to **every effective branch**. This represents `constraint AND (branch1 OR branch2)` as `(branch1 AND constraint) OR (branch2 AND constraint)`, which is the shape `where_eval` already accepts. `_materialize_branch(...)` already emits head-port links per branch; match constraints are applied after those branch-local links. |
+| Q3 OR connectivity | M21 becomes **per-effective-branch connectivity**. The current fallback that flattens every `OrExpr` branch into one graph is unsafe because one connected branch could mask a disconnected branch. Each branch must independently connect the projected entity port var and all constrained port vars. |
+| Q4 Partial ports | Track partial ports from `_declared_port_state_for_rule_expr_plan(...)` in the match plan and reject constrained partial ports with `SDKStoreError` before matching: "match port '<name>' is only declared in some RuleExpr branches". Do not let partial ports fall through as generic unknown ports. |
+| Q5 Cross-branch de-duplication | Preserve T11.2.9 projected-ref de-duplication: `evaluate_where(...)` may return multiple bindings across branches, then match uses `seen_refs: set[str]` to return each projected `idref_v1` once. |
+| Q6 Limit semantics | `limit` applies **after** branch union and projected-ref de-duplication, never per branch. |
+| Q7 Ordering | Public match order is deterministic because `evaluate_where(...)` sorts all bindings by sorted variable/value pairs before match projection. Match preserves that binding order while skipping duplicate projected refs. No semantic branch-priority ordering is promised. |
+| Q8 Test matrix | Add pure OR, mixed AND+OR, duplicate entity across branches, per-branch disconnected reject, partial-port reject, constraint distribution across branches, limit-after-union, and empty/invalid OR construction coverage where the public builders allow it. |
+| S1 Design section anchors | Actual anchors confirmed: §4.2 RuleExpr, §5.4 connectivity, §7 constraint composition, §12 deferred items, §13 commitments. |
+| S2 Verification modules | Existing relevant modules: `tests/test_sdk_read_match_runtime.py`, `tests/test_db_attach_lifecycle.py`, `tests/application/protocol/test_rule_expr.py`, `tests/application/protocol/test_rule_expr_lowering.py`, `tests/application/protocol/test_rule_expr_lowering_adapter.py`, `tests/application/protocol/test_rule_expr_head_validation.py`, `tests/sdk/test_rule_expr_evaluate.py`. |
+| S5 Fixture scope | Existing `Person` / `Account` match fixtures are sufficient for OR duplicate, constraint distribution, partial-port, and disconnected tests. Add helper rules in `tests/test_sdk_read_match_runtime.py`; no new schema module is required. |
+
 ## 5. Preliminary Implementation Hypothesis
 
 The likely implementation path is to consume existing lowering branches and
@@ -125,10 +143,10 @@ existing `evaluate_where(...)` OR semantics:
 
 1. Lower `RuleExpr` using current `_lower_rule_expr(...)` and port-state
    helpers.
-2. Materialize every lowering branch into a branch body.
-3. Compose kwarg constraints onto the effective branch bodies according to the
-   Step 4.6 Q2 decision.
-4. Validate connectivity according to the Step 4.6 Q3 decision.
+2. Materialize every lowering branch into a branch body and store branch bodies
+   uniformly in `_MatchPlan`.
+3. Compose kwarg constraints onto every effective branch.
+4. Validate connectivity independently for every effective branch.
 5. Evaluate a one-level or two-level where IR through current `evaluate_where`.
 6. Project and de-duplicate entity refs exactly as T11.2.9 does.
 
@@ -137,22 +155,23 @@ stays inside scope, use that and record the decision in Step 4.6.
 
 ## 6. Step 4.6 Inventory Plan
 
-Step 4.6 must complete a source-backed inventory before implementation:
+Step 4.6 inventory is complete and locked these source-backed results:
 
-1. Current OR reject points in `match_runtime.py`: constant, branch count
-   checks, and affected tests/docs.
-2. `_MatchPlan` shape and call sites.
-3. Current `_build_match_plan(...)` two-pass lowering and partial-port behavior.
-4. `_apply_port_constraints(...)` shape and how synthetic atoms should distribute.
-5. `_validate_connectivity(...)` current `OrExpr` flattening fallback and why it is or is not correct.
-6. `where_eval._normalize_where(...)`, branch union, final sorting, and de-dup behavior.
-7. `rule_expr_lowering` branch materialization and `_materialize_adapter_derivation_plan(...)` multi-branch precedent.
-8. Partial-port rejection path with a concrete RuleExpr example.
-9. Existing T11.2.9 tests to preserve and OR test additions.
-10. Docs files needing OR examples and docs files that must remain silent.
-11. Design doc sections to update: §4.2, §5.4, §7, §12, §13 M5/M21.
-12. Stop-amend check: verify no core engine/service/EvidenceGraph/release file is required.
-13. Dirty baseline and sacred master preservation.
+| # | Item | Result |
+|---|---|---|
+| 1 | Current OR reject points | `_MATCH_OR_UNSUPPORTED` at `match_runtime.py:40` plus branch-count raises at `:126` and `:131`. Removing these requires changing `_MatchPlan` and branch materialization, not core engine code. |
+| 2 | `_MatchPlan` shape and call sites | `_MatchPlan` currently stores `body_ir: list[Any]` at `match_runtime.py:53-57`; `_apply_port_constraints(...)`, `_validate_connectivity(...)`, and `evaluate_where(...)` consume that flat body. Scoped replacement is uniform branch bodies plus a helper that lowers one branch to one-level IR and multiple branches to OR-of-AND IR. |
+| 3 | `_build_match_plan(...)` lowering and partial ports | Current RuleExpr path probes with `Rule.projection("__fg_match_probe")`, rejects multiple branches, then builds a head from declared ports (`match_runtime.py:115-134`). `_declared_port_state_for_rule_expr_plan(...)` returns declared and partial ports (`rule_expr_lowering.py:457-481`), and `_validate_head_declared_ports(...)` reports "only declared in some RuleExpr branches" (`:545-569`). T11.2.10 should preserve partial-port names in `_MatchPlan` for clearer SDK errors. |
+| 4 | Constraint distribution | `_apply_port_constraints(...)` currently appends synthetic atoms to one flat body (`match_runtime.py:171-189`). `where_eval` accepts only one-level AND or two-level OR-of-AND (`where_eval.py:125-143`), so a logical outer AND must be distributed into each branch. `_materialize_branch(...)` already appends branch-local head-port links (`rule_expr_lowering.py:726-793`), so constraints can be appended after branch materialization. |
+| 5 | Connectivity under OR | Current `_validate_connectivity(...)` flattens `OrExpr` branches (`match_runtime.py:241-277`), which is unsafe for OR. M21 must be per effective branch: every branch independently connects projected and constrained vars. |
+| 6 | `where_eval` OR behavior | `evaluate_where(...)` normalizes OR-of-AND into `bodies`, evaluates every body, de-duplicates full bindings via `seen`, then sorts all bindings by sorted variable/value pairs (`where_eval.py:50-97`). Empty OR branches are rejected by `_normalize_where(...)` (`:125-143`). |
+| 7 | RuleExpr branch materialization precedent | `_materialize_adapter_derivation_plan(...)` materializes every branch and emits one-level body for one branch or two-level body for multiple branches (`rule_expr_lowering.py:321-363`). `_lower_or(...)` expands OR children to branch tuples (`:682-693`). Match should mirror this representation and not alter lowering. |
+| 8 | Partial-port concrete path | For `expr = rule_with_region | rule_without_region`, `_declared_port_state_for_rule_expr_plan(...)` marks `region` partial because at least one branch lacks it (`rule_expr_lowering.py:457-481`). If `region` appears in `port_constraints`, scoped behavior is a direct `SDKStoreError` for partial port before matching, not a generic unknown-port error. |
+| 9 | OR test matrix | Extend `tests/test_sdk_read_match_runtime.py`: pure OR, mixed AND+OR, duplicate entity across branches, per-branch disconnected reject, partial-port reject, constraint distribution across every branch, limit-after-union, invalid empty OR builder behavior, and unchanged AND behavior. |
+| 10 | Docs/design update set | Update `match-api-design.zh.md` §4.2/§5.4/§7/§12/§13, `docs/official/kernel/quickstart/rules-and-inferences.md`, `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`, and `CHANGELOG.md`. Keep witness/query/method-level view docs deferred. |
+| 11 | Verification modules | Relevant modules exist: `tests/test_sdk_read_match_runtime.py`, `tests/test_db_attach_lifecycle.py`, `tests/application/protocol/test_rule_expr.py`, `tests/application/protocol/test_rule_expr_lowering.py`, `tests/application/protocol/test_rule_expr_lowering_adapter.py`, `tests/application/protocol/test_rule_expr_head_validation.py`, and `tests/sdk/test_rule_expr_evaluate.py`. |
+| 12 | Scope-stop findings | No core engine/lowering/service/EvidenceGraph/release change is required by inventory. If implementation contradicts this, stop and amend. |
+| 13 | Dirty baseline and sacred master | Dirty baseline remains the known 4 tracked docs/notebooks plus untracked `rainbird-ai sdk code/`; sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`. |
 
 ## 7. Implementation Split Proposal
 
@@ -169,7 +188,7 @@ Likely split after Step 4.6:
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory answers Q1-Q8 with source-backed rationale.
+- [x] Step 4.6 inventory answers Q1-Q8 with source-backed rationale.
 - [ ] OR RuleExpr runtime support lands without core engine/lowering changes.
 - [ ] Single Rule and AND RuleExpr match behavior remains unchanged.
 - [ ] OR with literal constraints works.
