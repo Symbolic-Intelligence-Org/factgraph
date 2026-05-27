@@ -248,8 +248,10 @@ class DBAttachLifecycleTests(unittest.TestCase):
             self.assertIsNone(scoped.read.get(User, user_id="u-2"))
 
             rule = _user_name_rule()
+            matched = scoped.read.match(User, rule)
             evaluated = scoped.eval.evaluate(rule, head=rule, engine="native")
 
+            self.assertEqual([row.name for row in matched], ["Ada"])
             self.assertEqual(evaluated.count(), 1)
             self.assertEqual(evaluated.view_snapshot_digest, view.view_digest)
             self.assertIn("Ada", str(evaluated[0].bindings))
@@ -314,6 +316,8 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
             fg.read.find(User, view=object())
+        with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
+            fg.read.match(User, rule, view=object())
         with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
             fg.eval.evaluate(rule, head=rule, view=object())
         with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
