@@ -1,6 +1,6 @@
 # Task Blueprint: T10-1 ProbLog Uncertainty Projection
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M
@@ -203,16 +203,16 @@ Pending Step 4.6. Expected shape if Q1-Q10 confirm the current assumptions:
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
+- [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed inventory completed.
 - [x] Q1-Q10 answered.
-- [ ] Scope amended before implementation if any stop trigger fires.
-- [ ] C76 ships all scoped layers together.
-- [ ] Focused ProbLog semantics tests pass.
-- [ ] T8-A/T8-B evidence regressions pass.
-- [ ] Full discover delta recorded.
-- [ ] `git diff --check` clean.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] Scope amended before implementation if any stop trigger fires.
+- [x] C76 ships all scoped layers together.
+- [x] Focused ProbLog semantics tests pass.
+- [x] T8-A/T8-B evidence regressions pass.
+- [x] Full discover delta recorded.
+- [x] `git diff --check` clean.
+- [x] Dirty baseline and sacred master preserved.
 
 ## 9. Verification Commands
 
@@ -228,4 +228,62 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending scoped inventory / implementation.
+Implemented in five runtime/test commits after the draft and scoped commits:
+
+- `4d3ed74e` `fix(test): migrate problog fixtures off legacy confidence`
+- `bb619279` `feat(sdk): add problog uncertainty projection lowering`
+- `b7823086` `feat(problog): consume uncertainty projection`
+- `efcaa36f` `test(problog): cover uncertainty projection policies`
+- `e7cad68c` `fix(problog): default direct uncertainty projection`
+
+Shipped C76 as one coherent slice:
+
+- SDK shell: `ProbLogSemantics.uncertainty_projection` now accepts the same
+  schema as `SemanticsProfile.uncertainty_projection` and defaults to the C76
+  reject projection.
+- Lowering: public ProbLog semantics preview/lowering now passes the projection
+  into the canonical `SemanticsProfile`.
+- Adapter consumption: ProbLog export now consumes `shared/semantic/raw_kind`
+  plus `shared/semantic/bound` and applies explicit policy semantics instead
+  of silently ignoring raw uncertainty rows.
+
+The two pre-existing ProbLog migration errors were fixture drift from legacy
+`meta[confidence]` writes and were fixed without weakening C110 write-time
+rejection. Existing `branch_probabilities`, `rule_params`, explicit probability
+annotations, T8-A metadata, T8-B native/Souffle Form 1 evidence, and T8-D user
+docs remain unchanged.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.test_problog_export.TestProbLogExportReadsSharedProbability tests.test_problog_semantics_profile_migration`
+  passed: 24 tests OK.
+- Focused suite including ProbLog export, ProbLog semantics migration, ProbLog
+  evidence graph, audit evidence graph, protocol DTOs, and SDK RuleExpr
+  evaluation passed: 113 tests OK.
+- `python -m ruff check` on the changed runtime/test files passed.
+- `git diff --check` passed.
+- Full discover now reports 2011 tests with 72 failures and 231 errors.
+  Compared with the T10 inventory baseline of 2004 tests / 72 failures /
+  233 errors, T10-1 adds seven tests and removes the two ProbLog migration
+  errors without introducing replacement errors.
+
+Step 4.7 found and fixed one blocker: `_claim_probability(...)` originally
+made `uncertainty_projection` a required keyword-only argument, which broke two
+existing direct-call tests in `tests/test_problog_export.py`. The first full
+discover run still showed 233 errors because the two fixed fixture errors were
+replaced by two new direct-call errors. The amend commit `e7cad68c` made direct
+callers default to the same reject projection, restoring the old call shape and
+turning the full-discover delta into a real net drop from 233 errors to 231.
+Closure records this as a composition-vs-total verification lesson: matching
+failure/error counts are insufficient when a cycle fixes known baseline errors.
+
+Residual non-blocking observations:
+
+- The fixture migration briefly moved through `raw_kind` / `bound` before the
+  final source-only fixture state; the final state is correct because default
+  ProbLog raw uncertainty now rejects unless explicitly projected.
+- Defensive error branches for malformed raw uncertainty annotations and some
+  unsupported policy shapes remain production-guarded but are not exhaustively
+  unit-tested in this slice.
+- T10-1 unblocks T8-C-1 from the C76 side only. ProbLog evidence enrichment is
+  still a future T8-C-1 cycle and user-facing evidence docs remain accurate.

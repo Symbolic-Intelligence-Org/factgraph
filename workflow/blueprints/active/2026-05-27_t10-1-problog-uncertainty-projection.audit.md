@@ -1,11 +1,11 @@
 # Audit: T10-1 ProbLog Uncertainty Projection
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t10-1-problog-uncertainty-projection.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current `4 M + 1 D + 4 U`
@@ -17,6 +17,9 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | this commit | T10-1 ProbLog uncertainty projection blueprint pair drafted | Triggered after T10 inventory selected T10-1 C76 as the first staged hybrid implementation slice; Q1-Q10 intentionally pending for Step 4.6. |
 | 2026-05-27 | scoped | pending | Source-backed T10-1 C76 inventory completed | Fixture drift included in scope; C76 three-layer gap verified; v1 adapter consumption selects explicit reject plus point-projection policies, with no silent ignore. |
+| 2026-05-27 | implementation | `4d3ed74e` / `bb619279` / `b7823086` / `efcaa36f` | C76 implementation and tests landed | Fixture drift fixed, SDK shell/lowering added, ProbLog adapter consumption added, and policy tests covered. |
+| 2026-05-27 | amend | `e7cad68c` | Step 4.7 blocker fixed | Direct `_claim_probability(...)` callers now default to the reject projection, resolving the silent replacement of two fixed fixture errors with two new direct-call errors. |
+| 2026-05-27 | closure | pending | Closure prepared | Verification records 113 focused tests OK and full discover at 2011 tests / 72 failures / 231 errors. |
 
 ## 2. Draft Inventory Summary
 
@@ -80,11 +83,59 @@ implementation.
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q10 answered.
-- [ ] Implementation commits reviewed.
-- [ ] Focused verification recorded.
-- [ ] Full discover delta recorded.
-- [ ] Closure notes filled.
+- [x] Implementation commits reviewed.
+- [x] Focused verification recorded.
+- [x] Full discover delta recorded.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending scoped inventory / implementation.
+T10-1 shipped C76 across all three scoped layers:
+
+- SDK shell: `ProbLogSemantics.uncertainty_projection` now exists, uses the
+  canonical `SemanticsProfile.uncertainty_projection` schema, and defaults to
+  the C76 reject projection.
+- Lowering: ProbLog SDK semantics preview/lowering now passes the projection
+  into `SemanticsProfile`.
+- Adapter consumption: ProbLog export consumes `shared/semantic/raw_kind` and
+  `shared/semantic/bound` with explicit point-projection policy handling.
+
+Implementation chain:
+
+- `4d3ed74e` fixed the two pre-existing ProbLog migration fixture errors
+  without weakening C110 legacy `confidence` rejection.
+- `bb619279` added the SDK field and lowering path.
+- `b7823086` threaded projection into ProbLog export and added explicit
+  raw-uncertainty consumption.
+- `efcaa36f` added the T10-1 focused policy tests.
+- `e7cad68c` fixed the Step 4.7 blocker by defaulting direct
+  `_claim_probability(...)` callers to the reject projection.
+
+Verification:
+
+- `tests.test_problog_export.TestProbLogExportReadsSharedProbability` plus
+  `tests.test_problog_semantics_profile_migration`: 24 tests OK.
+- Focused suite including ProbLog export, ProbLog semantics migration, ProbLog
+  evidence graph, audit evidence graph, protocol DTOs, and SDK RuleExpr
+  evaluation: 113 tests OK.
+- Ruff on changed runtime/test files: clean.
+- `git diff --check`: clean.
+- Full discover: 2011 tests / 72 failures / 231 errors. This is a real
+  two-error improvement from the T10 inventory baseline of 2004 tests /
+  72 failures / 233 errors, with seven new T10-1 tests added.
+
+Step 4.7 caught a baseline-equivalence hazard: the first full discover run
+still showed 233 errors because T10-1 fixed two known ProbLog fixture errors
+but introduced two new direct-call `TypeError`s in `tests/test_problog_export`.
+The amend commit removed the replacement errors. Future cycles that fix known
+baseline failures should compare failure/error composition, not just totals.
+
+Non-blocking notes:
+
+- The fixture fix moved through an intermediate raw-uncertainty fixture before
+  the final source-only fixture state; final behavior is correct because raw
+  uncertainty now rejects by default unless projected explicitly.
+- Some defensive malformed-annotation branches remain production-guarded but
+  not exhaustively unit-tested.
+- T10-1 only ships adapter execution semantics. T8-C-1 ProbLog evidence
+  enrichment remains a future cycle, now unblocked from the C76 side.
