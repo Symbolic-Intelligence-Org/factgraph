@@ -45,6 +45,12 @@ is populated as a Form 1 tree with a root `conclusion`, selected-branch
 separate from the older candidate evidence tree and Souffle proof-tree readback
 APIs.
 
+ProbLog row explanations also use the same DTO family, but they remain
+provenance-row graphs rather than Form 1 graphs. For passed ProbLog rows,
+`EvaluateRow.explain()` wraps the adapter proof trace into row-result
+`EvidenceGraph` metadata, uses ProbLog trace topology, and keeps ProbLog-specific
+trace and uncertainty-projection details under `engine_meta["problog"]`.
+
 ## 2. Current data model
 
 The current v1 exposes three frozen dataclasses:
@@ -117,9 +123,10 @@ Only the minimal shared enumerations are frozen at v1:
   - `derives`
   - `updates`
 
-Native and Souffle Form 1 row graphs use `supports` only. `derives` and
-`updates` remain reserved for Form 2 / temporal engine paths. The `dag` layout
-and the `rule_fire` node kind are not in v1 scope yet.
+Native and Souffle Form 1 row graphs use `supports` only. ProbLog row
+provenance graphs use `derives`. `updates` remains reserved for PyReason /
+temporal engine paths. The `dag` layout and the `rule_fire` node kind are not in
+v1 scope yet.
 
 ## 4. Validation and invariants
 
@@ -194,9 +201,11 @@ Large graph guidance follows the active evidence design:
     - `problog`: converted from the proof trace in
       `ProvenanceEnvelope.payload`
   - `native` and `souffle` row explanations produce live row-level Form 1
-    graphs; native candidate readback still keeps the candidate evidence tree /
-    summary / narrative DTOs, and Souffle proof-tree readback still uses the
-    adapter proof-tree converter
+    graphs; `problog` row explanations produce live row-level provenance graphs
+    using `derives` edges and namespaced `engine_meta["problog"]`; native
+    candidate readback still keeps the candidate evidence tree / summary /
+    narrative DTOs, and Souffle / ProbLog proof-tree readback still uses the
+    adapter proof-tree converters
 - `AuditQuery.get_candidate_evidence_graph(...)` reads the durable
   graph
 - `service.static_ui`'s candidate evidence page now prefers rendering
@@ -209,7 +218,7 @@ Boundaries that still hold:
   an explain surface that every candidate must have
 - Runtime live `explain-tree` / `explain-summary` /
   `explain-narrative` / `explain-nl` still do not directly support
-  `pyreason_provenance_v1` / `problog_provenance_v1`
+  `pyreason_provenance_v1`
 - `EvidenceGraph` still does not replace engine-native provenance
   carriers; the durable package writes only the converter output
   without flattening engine truth
