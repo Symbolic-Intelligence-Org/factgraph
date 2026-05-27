@@ -1,6 +1,6 @@
 # Task Blueprint: T8-C-1 ProbLog Evidence Enrichment Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S/M (design-only planning inventory)
@@ -333,4 +333,56 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 inventory / closure.
+Implemented as a design-only inventory cycle. No runtime, test, user-facing
+docs, governance, dirty-baseline, or sacred-branch files changed.
+
+Cycle chain:
+
+- Draft: `ab7972df`
+- Scoped inventory: `8d3a1634`
+- Closure: this commit
+
+Step 4.6 completed the source-backed ProbLog row-enrichment plan:
+
+- Verified that ProbLog remains provenance-bearing, not witness-bearing:
+  `PROBLOG_PROVENANCE_KIND` flows through `ProvenanceEnvelope`, not
+  `SupportArtifact`, so T8-C inventory Option C remains valid.
+- Found one additional non-test converter call site:
+  `src/service/runtime_v1.py:1973-2040` uses
+  `problog_trace_to_evidence_graph(...)` for legacy service audit-package
+  materialization; it is not the row-result `EvaluateRow.explain()` path.
+- Selected trace-payload attachment as the future projection-decision memory
+  channel, because ProbLog export is where C76 policy is applied before the
+  `.pl` program stores only a point probability.
+- Selected private provenance row context plus a
+  `_build_passed_row_evidence_graph(...)` branch as the future row bridge,
+  preserving the T8-A metadata-validation gates and not widening
+  `_FORM1_ROW_SUPPORT_KINDS`.
+- Locked the row-result metadata policy: exact T8-A 14-key top-level metadata,
+  with ProbLog trace summary and uncertainty projection decisions namespaced
+  inside `engine_meta["problog"]`.
+- Preserved the existing candidate converter's flat adapter-local engine_meta
+  shape; future row-result enrichment should use a wrapper/thin adapter rather
+  than one-shot migrating `problog_trace_to_evidence_graph(...)`.
+- Kept C119 full multi-path DAG deferred. Current tests exercise selected
+  single trace/candidate behavior, and ProbLog import collapses duplicate
+  bindings by max probability before candidate creation.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.test_problog_evidence_graph tests.test_problog_semantics_profile_migration tests.test_audit_evidence_graph`
+  passed with 38 tests OK.
+- `git diff --check` clean.
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline stayed at `4 M + 1 D + 4 U`.
+
+Future implementation pings recorded by reviewer:
+
+- Decide the exact `engine_meta["problog"]["trace_summary"]` and
+  `engine_meta["problog"]["uncertainty_projection"]` schema in the runtime
+  blueprint.
+- Decide whether projection summaries attach only to matched nodes, root
+  summary, or both.
+- Add a stop trigger in the future runtime blueprint that default `reject`
+  remains an execution error and must not be converted into an empty row
+  evidence graph.

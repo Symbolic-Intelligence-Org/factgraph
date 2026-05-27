@@ -1,11 +1,11 @@
 # Audit: T8-C-1 ProbLog Evidence Enrichment Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-c-1-problog-evidence-enrichment-inventory.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M (design-only planning inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current `4 M + 1 D + 4 U`
@@ -15,8 +15,9 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-27 | draft | this commit | T8-C-1 ProbLog evidence enrichment inventory blueprint pair drafted | Triggered after T10-1 C76 shipped at `cde072fa`; Q1-Q10 intentionally pending for Step 4.6. |
-| 2026-05-27 | scoped | pending | Source-backed T8-C-1 ProbLog inventory completed | Selected trace-payload projection memory, private provenance row context, T8-A 14-key top-level metadata with namespaced ProbLog engine metadata, and C119 single-path defer. |
+| 2026-05-27 | draft | `ab7972df` | T8-C-1 ProbLog evidence enrichment inventory blueprint pair drafted | Triggered after T10-1 C76 shipped at `cde072fa`; Q1-Q10 intentionally pending for Step 4.6. |
+| 2026-05-27 | scoped | `8d3a1634` | Source-backed T8-C-1 ProbLog inventory completed | Selected trace-payload projection memory, private provenance row context, T8-A 14-key top-level metadata with namespaced ProbLog engine metadata, and C119 single-path defer. |
+| 2026-05-27 | implemented | this commit | T8-C-1 ProbLog evidence enrichment inventory closed | Design-only cycle; no runtime/test/user-doc/governance changes. |
 
 ## 2. Draft Inventory Summary
 
@@ -82,8 +83,49 @@ Step 4.6 source-backed and refined these findings:
 - [x] Q1-Q10 answered.
 - [x] No runtime/test/user-doc/governance files changed.
 - [x] Future implementation shape recorded.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 inventory / closure.
+Closed as a blueprint-only inventory. No runtime, tests, user-facing docs,
+governance files, dirty-baseline files, or sacred branch state changed.
+
+Key outcomes:
+
+- Confirmed that T10-1 C76 unblocked the ProbLog side for planning, but did
+  not itself ship row-level ProbLog evidence enrichment.
+- Verified that current ProbLog evidence is a provenance-envelope /
+  adapter-trace path; row-result `EvaluateRow.explain()` still falls back to
+  single-node evidence until a future runtime T8-C-1 cycle adds a bridge.
+- Selected trace-payload attachment for projection decision memory, because
+  export-time policy application is the last point before the `.pl` program
+  stores only a point probability.
+- Selected private provenance row context plus
+  `_build_passed_row_evidence_graph(...)` dispatch as the future bridge shape.
+  This preserves T8-A validation gates and avoids widening the native/Souffle
+  Form 1 support-kind allowlist.
+- Locked metadata ownership: T8-A 14-key top-level graph metadata remains
+  exact; ProbLog trace summary and uncertainty projection details belong under
+  namespaced `engine_meta["problog"]`.
+- Preserved current candidate/readback converter behavior. Existing flat
+  ProbLog `engine_meta` remains protected by `tests/test_problog_evidence_graph`;
+  row-result namespacing should be implemented by a wrapper or thin adapter in
+  the future runtime cycle.
+- Kept C119 multi-path DAG and C136 aggregate envelope deferred.
+
+Verification:
+
+- Focused no-op baseline: 38 OK across ProbLog evidence, ProbLog semantics
+  migration, and audit evidence graph tests.
+- `git diff --check` clean.
+- Dirty baseline preserved as `4 M + 1 D + 4 U`.
+- Sacred `master` preserved at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+Future runtime blueprint reminders:
+
+- Define the concrete namespaced ProbLog engine_meta schema instead of leaving
+  `trace_summary` / projection summary wording soft.
+- Keep default `reject` as a semantics execution error, not a row-evidence
+  graph.
+- Update audit-module docs when runtime row-level ProbLog evidence ships; defer
+  user-facing docs to a later T8-D round 3.
