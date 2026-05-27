@@ -2,7 +2,7 @@
 
 - Status: working planning artifact
 - Created: 2026-05-26
-- Last Updated: 2026-05-26
+- Last Updated: 2026-05-27
 - Authority: non-authoritative implementation roadmap / scheduling reference. This document does **not** override active design-point commitments, D-doc decisions, shipped module docs, or per-slice blueprints.
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Inputs:
@@ -71,6 +71,13 @@ At roadmap creation:
 - Dirty baseline remains intentionally isolated: 6 modified + 1 untracked.
 - This roadmap must not absorb dirty baseline files.
 
+2026-05-27 status note:
+
+- Sacred `master` still remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Current dirty baseline observed during docs sync is 4 modified tracked files
+  plus 3 untracked reference directories.
+- This roadmap still must not absorb dirty baseline files.
+
 ---
 
 ## 2. Dependency Graph
@@ -95,6 +102,14 @@ Interpretation:
 - **T6 → T8 → T9 is the evidence chain**: complete design skeleton first, then implementation, then docs / release claims.
 - **T10 is cross-cutting**: adapter-level semantics execution affects T6/T7/T8 evidence completeness and may alter T9 evidence documentation claims, but can run in parallel if its scope is kept engine-local.
 - **T7 is a bridge track**: it can advance audit/rendering substrate without waiting for every T8 evidence feature, but it still feeds T9 release/docs alignment and its engine metadata choices must not conflict with T10.
+
+2026-05-27 status note:
+
+- T6 and T7 are complete and archived.
+- T8 has been split into T8-A/B/C/D. T8-A and T8-B-1(native Form 1) are
+  complete; T8-D A+B user docs are complete.
+- Remaining evidence candidates are T8-B-2(Souffle conformance), T8-C engine
+  enrichment, and a later T8-D docs pass after additional shipped behavior.
 
 ---
 
@@ -124,6 +139,17 @@ Owner candidate values are coordination hints, not authority rules:
 
 Class predictions are planning hints only. A per-track blueprint may downgrade or escalate after Step 4.6 inventory. T11.4/T11.5 are not committed release-track work; they are named here so they do not disappear if T11.2/T11.3 surface the need.
 
+2026-05-27 shipped status overlay:
+
+| Track | Current status |
+|---|---|
+| T6 | Complete: Phase B design source landed and archived at `8fe7abdc`. |
+| T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
+| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`. T8-B-2 and T8-C remain future. |
+| T9 | Superseded in part by T8-D A+B docs for shipped native evidence behavior; broader release alignment remains conditional on future T8-B-2/T8-C behavior. |
+| T10 | Still pending. |
+| T11.2/T11.3/T12 | Complete for the release-path work described here. |
+
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton
 
 **Goal**: turn `evidence-tree-rainbird-style-v1.zh.md` §10 / §11 / §14 from skeleton/deferred notes into implementable design source.
@@ -151,14 +177,18 @@ Out of scope:
 
 ### 3.3 T7 — Audit Channel + Rendering Bridge
 
+**Status(2026-05-27)**: complete and archived at `e2abc6d2`.
+
 **Goal**: implement or harden the non-invasive substrate that evidence rendering and audit channel need, without claiming full evidence tree implementation.
 
-Possible slices:
+Shipped slices:
 
-- EvidenceGraph serialization roundtrip tests and docs.
-- Renderer reference contract hardening.
-- Metadata validator gates around existing `audit.evidence_graph`.
-- Audit-channel naming / storage boundary if T6 design makes it concrete.
+- Renderer reference contract hardening: non-`EvidenceGraph` type guard and
+  large graph warning at `>250` nodes or `>500` edges.
+- Metadata bridge tests: exact §10.3 14-key graph metadata set with `run_id`
+  envelope-only.
+- Audit docs alignment for the sessionless three-layer contract and safe JSON
+  render path.
 
 Dependencies:
 
@@ -167,15 +197,30 @@ Dependencies:
 
 ### 3.4 T8 — Evidence Tree Implementation Tranche
 
+**Status(2026-05-27)**: partially complete after T8 split inventory, T8-A,
+T8-B-1, and T8-D A+B docs.
+
 **Goal**: implement the first substantial evidence tree tranche after T6 design locks shape.
 
-Candidate scope:
+Shipped / split scope:
 
-- S1 IR replay core/default path for native/Souffle-style rules.
-- Strict EvidenceGraph validator gate.
-- NODE_CONCLUSION / NODE_PREMISE / NODE_SEED schema population.
-- Quantitative carrier propagation using C110 raw_kind/bound only.
-- Winning-path-only OR handling and aggregate count-only envelope where substrate exists.
+- T8 split inventory locked T8-A/B/C/D boundaries and the dependency graph.
+- T8-A shipped metadata/validation foundation: C135 is runtime-enforced for the
+  §10.3 14-key graph metadata bridge.
+- T8-B-1 shipped native row Form 1 topology: native passed-row explanations now
+  populate `NODE_CONCLUSION`, `NODE_PREMISE`, `NODE_SEED`, and `EDGE_SUPPORTS`
+  seed -> premise -> conclusion edges.
+- T8-D A+B docs aligned user-facing evidence quickstart and SDK guide with
+  T8-A/T8-B-1 shipped behavior.
+
+Remaining candidate scope:
+
+- T8-B-2 Souffle row-result Form 1 conformance.
+- T8-C engine enrichment for ProbLog/PyReason, gated by T10 or an
+  engine-specific semantics lock.
+- Later T8-D docs pass after additional T8-B-2/T8-C behavior ships.
+- Aggregate count-only envelope remains deferred until matched-count substrate
+  exists.
 
 Dependencies:
 
@@ -184,13 +229,17 @@ Dependencies:
 
 ### 3.5 T9 — Evidence Docs / Product Boundary Release Alignment
 
+**Status(2026-05-27)**: T8-D A+B has already aligned user-facing docs for the
+T8-A/T8-B-1 shipped subset. Broader T9 remains conditional on future evidence
+behavior and release claims.
+
 **Goal**: align public docs and release claims with whatever T6-T8 actually ship.
 
-Scope:
+Remaining scope, if reactivated:
 
-- Quickstart evidence docs.
-- SDK docs for `row.explain()`, `fg.eval.explain(...)`, `EvidenceGraph`.
-- Release notes / expectation boundary if v0.2.0 claims evidence improvements.
+- Release notes / expectation boundary if v0.2.0 claims evidence improvements
+  beyond the T8-D A+B docs pass.
+- Additional quickstart/SDK docs after T8-B-2 or T8-C ships.
 
 T9 should not invent behavior. It documents only shipped evidence capabilities and explicit deferred items.
 
@@ -292,6 +341,11 @@ N1 roadmap(this doc)
   -> T8 evidence implementation
   -> T9 evidence docs/release alignment
 ```
+
+This original sequence has been partially executed. As of 2026-05-27:
+T12, T11.2, T11.3, T6, T7, T8 split inventory, T8-A, T8-B-1, and T8-D A+B docs
+are complete. T10, T8-B-2, T8-C, and any later T8-D/T9 release-alignment pass
+remain open.
 
 Rationale:
 
@@ -401,5 +455,5 @@ This scoped inventory records what this roadmap is allowed to claim before later
 | Release blockers | T11.2, T11.3, minimal T12, and dirty-baseline triage are release-blocker candidates. | Release blocker status is not final until T11.2/T11.3 blueprints inspect shipped source and docs. |
 | Deferred items | Parent §5.12/C74/C76/C77/C78, evidence §14 clusters, and database §12/§17 items remain deferred unless a future blueprint activates them. | Reactivation triggers in §6 are planning triggers, not implementation authorization. |
 | Owner model | Owner candidates are coordination hints. | Cross-flip remains default for `shared`; self-owned fallback is allowed when recorded in the relevant audit. |
-| Dirty baseline | Roadmap work must not absorb the 6M+1U dirty baseline. | This scoped document is single-file docs-only work. |
+| Dirty baseline | Roadmap work must not absorb dirty baseline files. | Creation-time baseline was 6M+1U; 2026-05-27 observed baseline is 4M+3U. This document remains docs-only. |
 | Push governance | Prior push authorization does not roll forward. | Any roadmap push requires explicit single-use authorization. |

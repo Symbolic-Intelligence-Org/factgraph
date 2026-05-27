@@ -9,7 +9,7 @@
 | [`SECURITY.md`](./SECURITY.md) | v0.1 kernel-only wheel 的 local secret handling、`.env` hygiene、release-surface expectations |
 | [`SECURITY_monorepo.md`](./SECURITY_monorepo.md) | Monorepo-specific 安全:kernel API key auth、`FACTPY_KERNEL_API_KEYS`、service v1 routes 认证约定 |
 | [`api/openapi.yaml`](./api/openapi.yaml) | Service API spec(技术契约)|
-| [`official/kernel/`](./official/kernel/) | `factpy-kernel` 官方用户 quickstart 文档(kernel-only,公开发布面)|
+| [`official/kernel/`](./official/kernel/) | `factgraph` 官方用户 quickstart 文档(公开 SDK / kernel 发布面)|
 | [`references/external/`](./references/external/) + [`references/bridges/`](./references/bridges/) | **Parked**:等待迁移到 `~/obsidian_workspace/`(per Q1 §4.3,obsidian integration slice 未启动)|
 
 ## 工作流治理

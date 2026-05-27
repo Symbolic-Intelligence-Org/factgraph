@@ -32,6 +32,7 @@
 | Design-point | Status | Role |
 |---|---|---|
 | `rule-expression-and-proof-attempt.zh.md` | active parent essay | Rule / RuleExpr / evaluate / evidence / semantics parent design source. |
+| `match-api-design.zh.md` | active implementation-backed design | `fg.read.match(...)` public API, connectivity, constraint, and witness-boundary design source; AND + OR runtime shipped, witness/cross-entity tuple output deferred. |
 | `evidence-tree-rainbird-style-v1.zh.md` | active working skeleton | Evidence tree Phase B / rendering / deferred evidence registry source. |
 | `database-view-fg-layered-architecture.zh.md` | active minimum implementable blueprint | Database / durable view / attach lifecycle design source. |
 | `rule-expression-and-proof-track-plan.zh.md` | T1-T5 complete; retained as historical decomposition index | Superseded for future scheduling by `post-t5-completion-roadmap.zh.md`, but kept active to avoid broad historical-reference churn. |
