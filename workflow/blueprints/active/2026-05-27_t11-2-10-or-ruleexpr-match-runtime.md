@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.10 OR RuleExpr Match Runtime
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M (OR RuleExpr support for the existing match runtime)
@@ -189,20 +189,20 @@ Likely split after Step 4.6:
 ## 8. Acceptance
 
 - [x] Step 4.6 inventory answers Q1-Q8 with source-backed rationale.
-- [ ] OR RuleExpr runtime support lands without core engine/lowering changes.
-- [ ] Single Rule and AND RuleExpr match behavior remains unchanged.
-- [ ] OR with literal constraints works.
-- [ ] OR with own-class Field constraints works or is explicitly rejected with a scoped rationale.
-- [ ] Cross-branch duplicate entity refs return one snapshot.
-- [ ] `limit` behavior under OR is tested and documented.
-- [ ] Union ordering is deterministic and documented.
-- [ ] Partial-port constraints reject with a clear error and test.
-- [ ] M21 connectivity behavior under OR is tested and reflected in `match-api-design.zh.md`.
-- [ ] Method-level `view=` remains rejected; attach-view scope still works.
-- [ ] Docs teach only shipped OR match behavior, not witness/query/method-level view features.
-- [ ] Focused tests and relevant suites pass.
-- [ ] `ruff` and `git diff --check` pass.
-- [ ] Dirty baseline and sacred master are preserved.
+- [x] OR RuleExpr runtime support lands without core engine/lowering changes.
+- [x] Single Rule and AND RuleExpr match behavior remains unchanged.
+- [x] OR with literal constraints works.
+- [x] OR with own-class Field constraints works or is explicitly rejected with a scoped rationale.
+- [x] Cross-branch duplicate entity refs return one snapshot.
+- [x] `limit` behavior under OR is tested and documented.
+- [x] Union ordering is deterministic and documented.
+- [x] Partial-port constraints reject with a clear error and test.
+- [x] M21 connectivity behavior under OR is tested and reflected in `match-api-design.zh.md`.
+- [x] Method-level `view=` remains rejected; attach-view scope still works.
+- [x] Docs teach only shipped OR match behavior, not witness/query/method-level view features.
+- [x] Focused tests and relevant suites pass.
+- [x] `ruff` and `git diff --check` pass.
+- [x] Dirty baseline and sacred master are preserved.
 
 ## 9. Verification Commands
 
@@ -219,4 +219,100 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending implementation.
+### 10.1 Landed Artifacts
+
+T11.2.10 landed as six commits:
+
+| Step | Commit | Outcome |
+|---|---|---|
+| Draft | `298f4581` | Blueprint pair drafted around OR RuleExpr support and Q1-Q8 open questions. |
+| Scoped | `ece08453` | Step 4.6 source inventory answered Q1-Q8 and locked branch-body shape, constraint distribution, per-branch connectivity, partial-port errors, dedup, limit, ordering, tests, and docs scope. |
+| Runtime | `b7bd48f0` | `src/factgraph/sdk/match_runtime.py` now supports OR `RuleExpr` by storing uniform branch bodies, distributing constraints into each branch, converting one/many branches to the existing one-level/two-level where IR, and preserving projected-ref de-duplication. |
+| Tests | `5b41f341` | `tests/test_sdk_read_match_runtime.py` now covers pure OR, mixed AND+OR, duplicate entity matches across branches, per-branch connectivity rejection, partial-port rejection, distributed constraints, limit-after-union, and empty OR construction. |
+| Docs/design | `dd88f1a0` | `match-api-design.zh.md`, quickstart rules docs, SDK rules docs, and `CHANGELOG.md` now describe OR match support as shipped while keeping witness/query/method-level view features deferred. |
+| Clarity fix | `be759a1b` | Added one runtime comment documenting that lowered where IR represents variables as canonical `"$..."` names. |
+
+### 10.2 Runtime Outcome
+
+Runtime implementation stayed inside the SDK match layer:
+
+- `_MatchPlan` now stores `body_branches: tuple[tuple[Any, ...], ...]` plus
+  `partial_ports`.
+- `_branches_to_where_ir(...)` emits a flat body for one branch and OR-of-AND
+  two-level IR for multiple branches, matching existing `where_eval(...)`
+  input shape.
+- `_apply_port_constraints(...)` appends synthetic literal / own-class Field
+  constraints to every branch.
+- `_validate_connectivity(...)` now checks every effective branch
+  independently; the previous OR flattening fallback is removed.
+- Constrained partial ports raise `SDKStoreError` before matching.
+- `evaluate_where(...)` still supplies deterministic binding order; match
+  preserves that order while skipping duplicate projected `idref_v1` refs.
+- `limit` remains after branch union and projected-ref de-duplication.
+
+No `where_eval`, `where_ast`, `rule_expr_lowering`, service/OpenAPI,
+EvidenceGraph, release machinery, or dirty-baseline files were changed.
+
+### 10.3 Tests And Verification
+
+Verification performed during implementation:
+
+```text
+PYTHONPATH=src python -m unittest tests.test_sdk_read_match_runtime tests.test_db_attach_lifecycle
+→ Ran 25 tests, OK
+
+PYTHONPATH=src python -m unittest \
+  tests.application.protocol.test_rule_expr \
+  tests.application.protocol.test_rule_expr_lowering \
+  tests.application.protocol.test_rule_expr_lowering_adapter \
+  tests.application.protocol.test_rule_expr_head_validation \
+  tests.sdk.test_rule_expr_evaluate \
+  tests.test_sdk_read_match_runtime
+→ Ran 121 tests, OK
+
+python -m ruff check src/factgraph/sdk/match_runtime.py tests/test_sdk_read_match_runtime.py
+→ clean
+
+git diff --check
+→ clean
+```
+
+The existing full-discovery caveat from T11.2.9 still applies: unrelated
+legacy/frontier/why-not failures are not part of this cycle's gate.
+
+### 10.4 Documentation Outcome
+
+Documentation now matches shipped runtime:
+
+- `match-api-design.zh.md` M5 now states RuleExpr AND/OR support is shipped;
+  M21 now states per-effective-branch connectivity.
+- `rules-and-inferences.md` and SDK rules docs teach OR match only in the
+  supported snapshot-returning shape.
+- `CHANGELOG.md` now describes read-side match runtime as `Rule | RuleExpr`
+  with AND and OR combinations.
+- Witness output, legacy Query adapter, method-level `view=`, cross-entity
+  tuple output, and service/OpenAPI remain deferred.
+
+### 10.5 Deviations / Reviewer Observations
+
+Implementation introduced one engineering choice not explicitly named in
+Q1-Q8: connectivity variable extraction now reads lowered where IR tuples
+directly instead of parsing each branch back into `WhereExpr` AST nodes. The
+tuple convention was independently reviewed against `_lower_atom(...)`
+(`pred`, `ruleref`, comparison ops, `in`, arithmetic, `not`, and `Var`
+lowering). To make this choice visible, `be759a1b` added a comment that lowered
+where IR represents Vars by canonical `"$..."` names.
+
+This is a conservative safety path. If a literal string beginning with `$`
+appears in a raw term, the connectivity scanner may conservatively treat it as
+a Var and reject a match that might otherwise pass. That failure mode is
+preferable to silently accepting a disconnected OR branch.
+
+### 10.6 Final State
+
+- Class remains M.
+- Scope remained within SDK match runtime, tests, docs, and design status.
+- Sacred `master` remained untouched at
+  `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained the known 4 tracked docs/notebooks plus untracked
+  `rainbird-ai sdk code/`.

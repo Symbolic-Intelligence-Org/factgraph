@@ -1,11 +1,11 @@
 # Audit: T11.2.10 OR RuleExpr Match Runtime
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t11-2-10-or-ruleexpr-match-runtime.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current 4 modified tracked files plus untracked `rainbird-ai sdk code/`
@@ -16,7 +16,12 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-27 | draft | `298f4581` | T11.2.10 blueprint pair drafted | Triggered by user handoff after T11.2.9 shipped AND-only match runtime and deferred OR RuleExpr support. |
-| 2026-05-27 | scoped | this commit | Step 4.6 OR match inventory recorded | Q1-Q8 answered; branch-body shape, constraint distribution, per-branch connectivity, partial-port rejection, dedup/limit/order, tests, and docs scope locked. |
+| 2026-05-27 | scoped | `ece08453` | Step 4.6 OR match inventory recorded | Q1-Q8 answered; branch-body shape, constraint distribution, per-branch connectivity, partial-port rejection, dedup/limit/order, tests, and docs scope locked. |
+| 2026-05-27 | implementation | `b7bd48f0` | OR match runtime core landed | SDK match now consumes uniform branch bodies, distributes constraints per branch, and validates connectivity per branch. |
+| 2026-05-27 | implementation | `5b41f341` | OR match tests landed | OR runtime matrix added in `tests/test_sdk_read_match_runtime.py`. |
+| 2026-05-27 | implementation | `dd88f1a0` | OR match docs/design updated | Match design, quickstart, SDK docs, and CHANGELOG now record OR support. |
+| 2026-05-27 | implementation | `be759a1b` | IR variable convention comment added | One-line runtime comment records lowered where IR variable naming convention. |
+| 2026-05-27 | closure | this commit | T11.2.10 implemented | Outcome, deviations, and verification recorded. |
 
 ## 2. Draft Source Scan
 
@@ -90,11 +95,32 @@ Step 4.6 must answer:
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 inventory complete.
 - [x] Q1-Q8 answered.
-- [ ] Runtime implementation reviewed.
-- [ ] Tests reviewed.
-- [ ] Docs/design updates reviewed.
-- [ ] Closure notes filled.
+- [x] Runtime implementation reviewed.
+- [x] Tests reviewed.
+- [x] Docs/design updates reviewed.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending implementation.
+T11.2.10 shipped OR `RuleExpr` support for `fg.read.match(...)`:
+
+- Runtime core stayed in `src/factgraph/sdk/match_runtime.py`; no core
+  `where_eval`, `where_ast`, or RuleExpr lowering changes were required.
+- `_MatchPlan` now stores uniform branch bodies and partial ports.
+- Synthetic constraints are distributed to every effective branch.
+- M21 connectivity is enforced per effective branch, preventing one connected
+  OR branch from masking a disconnected branch.
+- Partial-port kwargs raise explicit `SDKStoreError`.
+- Cross-branch duplicate projected refs are de-duplicated by the existing
+  `seen_refs` set; `limit` applies after union and de-dup.
+- Tests cover pure OR, mixed AND+OR, duplicate entity across branches,
+  per-branch connectivity rejection, partial port rejection, distributed
+  constraints, limit-after-union, and empty OR construction.
+- Docs/design now describe OR as shipped and continue to defer witness,
+  Query adapter, method-level view, cross-entity tuple, and service/OpenAPI
+  surfaces.
+- Verification: 25 focused match/attach tests OK, 121 RuleExpr/match focused
+  tests OK, touched-file ruff clean, and `git diff --check` clean.
+- Deviation recorded: connectivity scanning now reads lowered where IR tuples
+  directly. A comment was added to document the `"$..."` Var-name convention.
+- Dirty baseline and sacred master were preserved.
