@@ -1655,9 +1655,9 @@ prove 命名对齐、RuleExpr x evidence joins、witness/assertion bridge 等后
 
 > **本章已完整迁出** 至独立设计文档:
 >
-> **`docs/references/working/design-points/evidence-tree-rainbird-style-v1.zh.md`**
+> **`workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md`**
 >
-> 创建于 2026-05-18(Phase A skeleton);状态:§1 立场 / §2 词汇 / §3 架构 / §13 承诺 落地,§4-§12 / §14 [SKELETON pending] 待 Phase B 推进。
+> 创建于 2026-05-18(Phase A skeleton);T6 在 2026-05-27 补齐 §10 Audit Channel / §11 Rendering / §14 Deferred Items / §15 T8 split proposal。
 
 ### 7.1 迁出理由
 
