@@ -1,9 +1,9 @@
 # Task Blueprint: T7 Evidence Audit + Rendering Bridge
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
-- Class: M/L (design-to-shipped bridge; expected to narrow after Step 4.6)
+- Class: M (scoped bridge: renderer input/large warning + tests/docs)
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
@@ -108,14 +108,44 @@ file:line-backed shipped/partial/missing classifications.
 
 | ID | Question | Required scoped output |
 |---|---|---|
-| Q1 | Shipped vs design gap map | For each T6 §10/§11 contract area, classify current runtime as shipped / partial / missing with file:line refs. |
-| Q2 | Layered metadata consistency | Decide whether current `EvaluateResult` envelope, row `Explanation`, and durable `EvidenceGraph.metadata` have enough runtime consistency checks; identify the layer where any new invariant belongs. |
-| Q3 | Large graph threshold | Determine whether `render_evidence_graph_html(...)` implements `>250` node or `>500` edge warning/handoff; if not, choose bridge-sized behavior and test surface. |
-| Q4 | Renderer fallback cases | Classify current minimal, empty, invalid, and unsupported graph render behavior against T6 §11. |
-| Q5 | T8 split mapping | Map T8-A/B/C/D to T7-in or T7-out, with explicit deferral for graph construction/enrichment. |
-| Q6 | §14 D-series triggers | Identify D1-D20 items touched by T7, if any. D20 match witness seam must remain API-shape deferred unless scoped otherwise. |
-| Q7 | Audit docs alignment | List concrete stale or incomplete statements in `src/factgraph/audit/docs/02_evidence_graph.md` and decide docs edits. |
-| Q8 | Test matrix | Lock focused tests for metadata consistency, roundtrip metadata preservation, threshold warning, fallback cases, and relevant regressions. |
+| Q1 | Shipped vs design gap map | Completed in §4.2. |
+| Q2 | Layered metadata consistency | Current row-explain path derives graph metadata from one evaluated context; central metadata sufficiency validator remains T8-A. T7 adds regression tests for the full §10.3 key set and `run_id` envelope-only stance. |
+| Q3 | Large graph threshold | Missing in renderer; T7 implements a reference-renderer warning banner for `>250` nodes or `>500` edges. No truncation or refusal. |
+| Q4 | Renderer fallback cases | Minimal/invalid/unsupported behavior is mostly shipped; safe-render input guard is partial because the renderer is duck-typed. T7 requires `EvidenceGraph` input before dispatch. |
+| Q5 | T8 split mapping | T7-in: only bridge-class renderer/docs/tests. T8-A/B/C/D implementation slices remain out of scope. |
+| Q6 | §14 D-series triggers | D12 is touched by large-graph warning. D20 gets docs cross-reference only; no API shape. D1-D11/D13-D19 remain deferred. |
+| Q7 | Audit docs alignment | `src/factgraph/audit/docs/02_evidence_graph.md` needs T6 §10/§11 sessionless audit, metadata key, renderer threshold, safe JSON path, and T8/D20 boundary updates. |
+| Q8 | Test matrix | Add render threshold/type guard tests and row-explain metadata key coverage; preserve existing audit/engine evidence focused suites. |
+
+## 4.1 Final Scoped Decisions
+
+| Decision | Scoped lock |
+|---|---|
+| Runtime bridge size | T7 is a small bridge, not T8-A. Runtime changes are limited to `src/factgraph/audit/evidence_graph.py` renderer input validation and large-graph warning banner. |
+| Metadata consistency | Do not introduce a central metadata sufficiency checker in T7. Current row-explain builder already derives metadata from one `EvaluateResult`/row context; T7 tests the full §10.3 copied key set and records that central validation belongs to T8-A. |
+| Large graph behavior | Add warning HTML when `len(nodes) > 250` or `len(edges) > 500`; still render the graph. No truncation, refusal, logging API, or DTO field. |
+| Safe JSON render path | `render_evidence_graph_html(...)` should accept only constructed `EvidenceGraph` instances. External/durable dicts must pass through `evidence_graph_from_dict(...)` first. |
+| Fallback behavior | Minimal valid graphs render; empty/invalid graphs fail at constructor/from_dict; unsupported explanations call no renderer. T7 documents and tests these boundaries, but does not add placeholder graph behavior. |
+| T8 mapping | T8-A central metadata builder/sufficiency checker, T8-B topology, T8-C engine enrichment, and T8-D product docs remain future T8 work. |
+| D-series | D12 large-graph guidance is activated only as a renderer warning. D20 receives docs hygiene cross-reference only. |
+| Class | M. The source inventory found bridge-sized runtime work plus docs/tests; no production graph-construction work is needed. |
+
+## 4.2 T6 §10 / §11 Contract Matrix
+
+| Contract area | T6 anchor | Current shipped state | T7 decision |
+|---|---|---|---|
+| Three-layer sessionless audit | `evidence-tree...:2331-2349` | Partial/shipped: `EvaluateResult` fields and validation exist at `evaluate_result.py:128-181`; `Explanation` status and evidence envelope exist at `:202-272`; `EvidenceGraph.metadata` exists at `evidence_graph.py:59-75`. No session log is present. | No session work. Record as aligned; docs should call it sessionless. |
+| Envelope fields | `evidence-tree...:2351-2373` | Shipped: `EvaluateResult` validates `result_id`, `run_id`, engine, digests, view digest, semantics digest, result digest, and rows at `evaluate_result.py:151-181`. | Preserve. `run_id` remains envelope-only. |
+| Graph metadata §10.3 fields | `evidence-tree...:2375-2398` | Shipped for passed row graphs: `_evidence_metadata_for_row_result(...)` writes 14 keys at `evaluate_result.py:823-842`; `_build_passed_row_evidence_graph(...)` copies them at `:800-820`. Existing test checks selected keys at `tests/application/protocol/test_evaluate_result_dtos.py:293-312`, but not the full set. | Add regression test for all 14 keys plus absent `run_id`. Central checker deferred to T8-A. |
+| Validation / roundtrip | `evidence-tree...:2400-2419` | Shipped DTO validation: layout, duplicate nodes/edges, missing root, endpoints, cycles at `evidence_graph.py:72-115`. Roundtrip helpers are at `:127-187`; tests cover roundtrip at `tests/test_audit_evidence_graph.py:158-197`. | Preserve. Add no new schema. |
+| Immutability / signature stance | `evidence-tree...:2421-2438` | Shipped shallow freeze: node/edge engine_meta and graph metadata use `MappingProxyType` at `evidence_graph.py:36-37`, `:53-56`, `:72-75`; tests cover freeze at `tests/test_audit_evidence_graph.py:134-156`. | Preserve; no signature/session/ACL work. |
+| Audit package boundary | `evidence-tree...:2440-2461` | Partial/shipped: package reader reads optional `evidence_graphs` and reconstructs via `evidence_graph_from_dict(...)` at `reader.py:192-208`; duplicate candidate ids fail at `:202-207`; docs are stale from 2026-04-30. | Docs update only. |
+| Renderer layering | `evidence-tree...:2465-2482` | Shipped entrypoint and tree/timeline dispatch at `evidence_graph.py:118-124`; docs describe standalone fragment at `audit/docs/02_evidence_graph.md:93-113`. | Preserve entrypoint; update docs with reference-vs-product boundary. |
+| Layout matrix | `evidence-tree...:2484-2492` | Shipped modes are constants at `evidence_graph.py:8-21`; tree renderer at `:190-269`; timeline at `:272-371`. Existing tests cover both layouts at `tests/test_audit_evidence_graph_render.py:21-150`. | Preserve. |
+| Minimal / empty / invalid / unsupported | `evidence-tree...:2527-2537` | Minimal valid graphs render via normal tree/timeline paths. Empty graph impossible because root must be in nodes (`evidence_graph.py:85-87`). Invalid graph constructors/from_dict raise. Unsupported explanation has `evidence=None` by `Explanation` invariant at `evaluate_result.py:218-246`. | Add/adjust focused tests if needed; no placeholder graphs. |
+| Large graph guidance | `evidence-tree...:2539-2553` | Missing: renderer has no node/edge threshold scan or warning (`evidence_graph.py:118-124`, `:190-371`). | Implement warning banner; still render graph. |
+| Safe JSON renderer path | `evidence-tree...:2555-2565` | Partial: `evidence_graph_from_dict(...)` validates durable dicts (`evidence_graph.py:164-187`), but `render_evidence_graph_html(...)` is duck-typed and current test passes a fake object at `tests/test_audit_evidence_graph_render.py:152-157`. | Require `EvidenceGraph` instance at renderer entry and update tests/docs. |
+| Custom UI obligations | `evidence-tree...:2567-2582` | Product UI not implemented in audit runtime. Current docs mention service/static_ui embedding at `audit/docs/02_evidence_graph.md:111-155`. | Docs update; no product UI work. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -136,42 +166,41 @@ file:line-backed shipped/partial/missing classifications.
 - Dirty baseline remains the known four tracked docs/notebooks plus untracked
   `rainbird-ai sdk code/`.
 
-## 6. Step 4.6 Inventory Plan
+## 6. Step 4.6 Inventory Results
 
-Step 4.6 must complete a source-backed inventory before implementation:
-
-1. Current `EvidenceGraph` fields, immutability, validation, and roundtrip
-   behavior with file:line refs.
-2. Current renderer entrypoints, layout behavior, and unsupported-layout
-   behavior with file:line refs.
-3. Current behavior for minimal, empty, invalid, and large graphs.
-4. Current `EvaluateResult`, `Explanation`, and metadata bridge fields with
-   file:line refs.
-5. Current audit docs claims and gaps against T6 §10/§11.
-6. Existing focused test modules and what they already cover.
-7. T6 §10/§11 requirement matrix: shipped / partial / missing.
-8. T8-A/B/C/D mapping: T7-in bridge work vs T8-out implementation work.
-9. D1-D20 triggered item scan.
-10. Proposed test matrix and exact test files to add/extend.
-11. Verification commands and any known unrelated full-discover failures.
-12. Dirty baseline and sacred master preservation check.
-13. Stop/amend findings, if any.
+| # | Item | Result |
+|---|---|---|
+| 1 | `EvidenceGraph` DTO / validation | Fields at `evidence_graph.py:59-70`; validation at `:72-115`; metadata freeze at `:72-75`; node/edge freeze at `:36-37` and `:53-56`. Shipped and preserved. |
+| 2 | Roundtrip | `evidence_graph_to_dict(...)` at `evidence_graph.py:127-161`; `evidence_graph_from_dict(...)` at `:164-187`; roundtrip test at `tests/test_audit_evidence_graph.py:158-197`. Shipped and preserved. |
+| 3 | Renderer entrypoints | `render_evidence_graph_html(...)` dispatches at `evidence_graph.py:118-124`; tree layout at `:190-269`; timeline at `:272-371`. Shipped, but lacks type guard and large warning. |
+| 4 | Minimal / empty / invalid / unsupported | Minimal graph renders through normal renderer; empty graph cannot satisfy root validation; invalid graph raises in constructor/from_dict; unsupported explanation enforces `evidence=None` at `evaluate_result.py:218-246`. |
+| 5 | Result/explanation metadata bridge | `EvaluateResult` fields at `evaluate_result.py:128-143`, validation at `:151-181`; `_explain_live_row(...)` builds checked scope and graph metadata at `:553-630`; metadata writer at `:823-842`. |
+| 6 | Audit docs gap | `audit/docs/02_evidence_graph.md` is last updated 2026-04-30 (`:1-5`), predates T6 §10/§11, does not list §10.3 metadata keys, large graph warning, safe JSON path, or T8/D20 boundary. |
+| 7 | Focused tests | Existing audit graph/render tests cover validation, roundtrip, tree/timeline render, and duplicate candidate ids. Engine graph tests cover PyReason/Souffle/ProbLog conversions. Focused baseline: 17 audit graph/render OK, 9 engine graph OK, 95 related audit/match OK. |
+| 8 | T6 matrix | Completed in §4.2; implementation scope is renderer type guard + large warning + tests/docs. |
+| 9 | T8 mapping | T7-in: none of T8-A/B/C/D implementation slices. T7 may record that T8-A should own central metadata sufficiency. T8-out: T8-A metadata builder/checker, T8-B topology, T8-C enrichment, T8-D product docs. |
+| 10 | D1-D20 scan | D12 large graph is touched by a renderer warning. D20 match witness seam receives docs cross-reference only. D1-D11 and D13-D19 remain deferred. |
+| 11 | Test plan | Extend `tests/test_audit_evidence_graph_render.py` for type guard, no-warning below threshold, warning above node/edge thresholds. Extend `tests/application/protocol/test_evaluate_result_dtos.py` for full §10.3 metadata keys and envelope-only `run_id`. Existing tests cover roundtrip and invalid graph. |
+| 12 | Full discover baseline | `PYTHONPATH=src python -m unittest discover tests` ran 2001 tests and failed with 72 failures / 233 errors, matching unrelated frontier/legacy/why_not/redesign-invariant categories; not a T7 gate. |
+| 13 | Stop/amend findings | None. No T8 graph construction, service/OpenAPI, SDK API, or release change is required. |
+| 14 | Dirty / sacred | Dirty baseline remains four tracked docs/notebooks plus untracked `rainbird-ai sdk code/`; sacred master remains `562c74195df43e933bed92a3ff25de94dd8ce666`. |
 
 ## 7. Implementation Split Proposal
 
-Likely split after Step 4.6:
+Scoped implementation split:
 
-1. **Runtime bridge**: validator/metadata/render warning/safe path work only if
-   Step 4.6 finds bridge-sized gaps.
-2. **Tests**: focused audit/render/roundtrip/metadata tests for every bridge
-   runtime change.
-3. **Docs**: update `src/factgraph/audit/docs/02_evidence_graph.md` and, only
-   if needed, narrow design cross-links.
-4. **Closure**: record shipped/partial/missing map, explicit T8 deferrals, test
-   results, and any full-discover status note.
-
-If Step 4.6 finds no runtime gap, implementation may narrow to docs/tests only;
-if it finds T8-sized work, stop and amend.
+1. **Runtime bridge**: update `src/factgraph/audit/evidence_graph.py` with an
+   `EvidenceGraph` type guard at `render_evidence_graph_html(...)` and a
+   reference-renderer large-graph warning banner for `>250` nodes or `>500`
+   edges. No schema, graph construction, or product UI change.
+2. **Tests**: extend renderer tests for type guard and warning/no-warning
+   behavior; extend evaluate-result DTO tests for the full §10.3 metadata key
+   set and absent `run_id` in graph metadata.
+3. **Docs**: update `src/factgraph/audit/docs/02_evidence_graph.md` with T6
+   §10/§11 sessionless audit, metadata key, renderer threshold, safe JSON path,
+   T8 split, and D20 boundary notes.
+4. **Closure**: record shipped/partial/missing map, T8 deferrals, focused
+   results, and full-discover baseline.
 
 ## 8. Acceptance
 
