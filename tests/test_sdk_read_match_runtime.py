@@ -4,7 +4,7 @@ import unittest
 
 import factgraph.sdk as sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
-from factgraph.application.protocol import EntitySelector, Rule
+from factgraph.application.protocol import EntitySelector, Rule, RuleExpr, RuleExprError
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.sdk import Entity, Field, Identity
@@ -40,6 +40,17 @@ def _seed_person(graph: sdk.SDKStore, name: str, region: str = "us", *, tags: tu
     return encoded
 
 
+def _seed_account(graph: sdk.SDKStore, account_id: str, label: str) -> str:
+    index = build_schema_index(graph.schema_ir)
+    ref = resolve_selector(EntitySelector(entity_type="Account", identity={"account_id": account_id}), index=index)
+    info = entity_info(index, "Account")
+    encoded = ref.encoded_ref or ""
+    set_field(graph.ledger, info.exists_predicate_id, encoded, [])
+    set_field(graph.ledger, info.identity_predicates["account_id"].pred_id, encoded, [("string", account_id)])
+    set_field(graph.ledger, field_predicate(index, "Account", "label").pred_id, encoded, [("string", label)])
+    return encoded
+
+
 def _person_region_rule(rule_id: str = "person_region") -> Rule:
     person = Var("$person")
     region = Var("$region")
@@ -62,6 +73,41 @@ def _person_tag_rule() -> Rule:
         id="person_tag",
         where=(PredAtom("Person:exists", [person]), PredAtom("person:tag", [person, tag])),
         ports={"person": person, "tag": tag},
+    )
+
+
+def _person_region_marker_rule(rule_id: str = "person_region_marker") -> Rule:
+    person = Var("$person")
+    marker = Var("$marker")
+    return Rule(
+        id=rule_id,
+        where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, marker])),
+        ports={"person": person, "marker": marker},
+    )
+
+
+def _person_tag_marker_rule(rule_id: str = "person_tag_marker") -> Rule:
+    person = Var("$person")
+    marker = Var("$marker")
+    return Rule(
+        id=rule_id,
+        where=(PredAtom("Person:exists", [person]), PredAtom("person:tag", [person, marker])),
+        ports={"person": person, "marker": marker},
+    )
+
+
+def _person_account_label_disconnected_rule() -> Rule:
+    person = Var("$person")
+    account = Var("$account")
+    marker = Var("$marker")
+    return Rule(
+        id="person_account_label_disconnected",
+        where=(
+            PredAtom("Person:exists", [person]),
+            PredAtom("Account:exists", [account]),
+            PredAtom("account:label", [account, marker]),
+        ),
+        ports={"person": person, "marker": marker},
     )
 
 
@@ -100,7 +146,7 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "cross-entity Field constraints"):
             graph.read.match(Person, _person_region_rule(), region=Account.label)
 
-    def test_ruleexpr_and_match_works_and_or_rejects(self) -> None:
+    def test_ruleexpr_and_match_works_and_or_matches(self) -> None:
         graph = _store()
         _seed_person(graph, "alice", "us")
         exists = _person_exists_rule()
@@ -108,8 +154,33 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         expr = (exists.as_("exists") & region.as_("region")).join_by_ports("person")
 
         self.assertEqual([row.region for row in graph.read.match(Person, expr, region="us")], ["us"])
-        with self.assertRaisesRegex(SDKStoreError, "Rule and AND RuleExpr only"):
-            graph.read.match(Person, exists | region)
+        self.assertEqual([row.region for row in graph.read.match(Person, exists | region)], ["us"])
+
+    def test_ruleexpr_or_distributes_constraints_and_deduplicates_across_branches(self) -> None:
+        graph = _store()
+        alice_ref = _seed_person(graph, "alice", "vip", tags=("vip",))
+        bob_ref = _seed_person(graph, "bob", "vip")
+        _seed_person(graph, "carol", "eu")
+        expr = _person_region_marker_rule().as_("region") | _person_tag_marker_rule().as_("tag")
+
+        matches = graph.read.match(Person, expr, marker="vip")
+        limited = graph.read.match(Person, expr, marker="vip", limit=1)
+
+        self.assertEqual([row.ref for row in matches], [alice_ref, bob_ref])
+        self.assertEqual([row.ref for row in limited], [alice_ref])
+
+    def test_ruleexpr_mixed_and_or_match_works(self) -> None:
+        graph = _store()
+        alice_ref = _seed_person(graph, "alice", "vip", tags=("vip",))
+        bob_ref = _seed_person(graph, "bob", "vip")
+        _seed_person(graph, "carol", "eu")
+        exists = _person_exists_rule()
+        expr = (
+            (exists.as_("exists_region") & _person_region_marker_rule().as_("region")).join_by_ports("person")
+            | (exists.as_("exists_tag") & _person_tag_marker_rule().as_("tag")).join_by_ports("person")
+        )
+
+        self.assertEqual([row.ref for row in graph.read.match(Person, expr, marker="vip")], [alice_ref, bob_ref])
 
     def test_projection_missing_ambiguous_unknown_and_legacy_template_errors(self) -> None:
         graph = _store()
@@ -139,6 +210,8 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
             query = Query(head=Person(p), where=[Person(p)])
         with self.assertRaisesRegex(SDKStoreError, "template must be application Rule or AND RuleExpr"):
             graph.read.match(Person, query)
+        with self.assertRaisesRegex(RuleExprError, "require at least one operand"):
+            RuleExpr.any()
 
     def test_disconnected_constrained_port_rejects_before_matching(self) -> None:
         graph = _store()
@@ -154,6 +227,19 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SDKStoreError, "silent cross product"):
             graph.read.match(Person, rule, other=alice)
+
+    def test_ruleexpr_or_rejects_disconnected_branch_and_partial_port_constraint(self) -> None:
+        graph = _store()
+        _seed_person(graph, "alice", "us", tags=("vip",))
+        _seed_account(graph, "a-1", "vip")
+        connected = _person_region_marker_rule().as_("region")
+        disconnected = _person_account_label_disconnected_rule().as_("account_label")
+        partial = _person_region_rule().as_("region") | _person_exists_rule().as_("exists")
+
+        with self.assertRaisesRegex(SDKStoreError, "silent cross product"):
+            graph.read.match(Person, connected | disconnected, marker="vip")
+        with self.assertRaisesRegex(SDKStoreError, "only declared in some RuleExpr branches"):
+            graph.read.match(Person, partial, region="us")
 
 
 if __name__ == "__main__":
