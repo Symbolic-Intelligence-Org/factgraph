@@ -38,11 +38,12 @@ three layers:
 `run_id` remains envelope-level. It is intentionally not duplicated into
 `EvidenceGraph.metadata`; graph-only run grouping is a future design.
 
-Native row explanations now use the same DTO family. For passed native
-`EvaluateRow.explain()` calls, the row-level `EvidenceGraph` is populated
-as a Form 1 tree with a root `conclusion`, selected-branch `premise`
-nodes, assertion `seed` nodes, and `supports` edges. This is separate
-from the older candidate evidence tree readback APIs.
+Native and Souffle row explanations now use the same DTO family. For passed
+native or Souffle `EvaluateRow.explain()` calls, the row-level `EvidenceGraph`
+is populated as a Form 1 tree with a root `conclusion`, selected-branch
+`premise` nodes, assertion `seed` nodes, and `supports` edges. This is
+separate from the older candidate evidence tree and Souffle proof-tree readback
+APIs.
 
 ## 2. Current data model
 
@@ -116,9 +117,9 @@ Only the minimal shared enumerations are frozen at v1:
   - `derives`
   - `updates`
 
-Native Form 1 row graphs use `supports` only. `derives` and `updates`
-remain reserved for Form 2 / temporal engine paths. The `dag` layout and
-the `rule_fire` node kind are not in v1 scope yet.
+Native and Souffle Form 1 row graphs use `supports` only. `derives` and
+`updates` remain reserved for Form 2 / temporal engine paths. The `dag` layout
+and the `rule_fire` node kind are not in v1 scope yet.
 
 ## 4. Validation and invariants
 
@@ -192,9 +193,10 @@ Large graph guidance follows the active evidence design:
       `ProvenanceEnvelope.payload`
     - `problog`: converted from the proof trace in
       `ProvenanceEnvelope.payload`
-  - `native` row explanations produce live row-level Form 1 graphs;
-    native candidate readback still keeps the candidate evidence tree /
-    summary / narrative DTOs
+  - `native` and `souffle` row explanations produce live row-level Form 1
+    graphs; native candidate readback still keeps the candidate evidence tree /
+    summary / narrative DTOs, and Souffle proof-tree readback still uses the
+    adapter proof-tree converter
 - `AuditQuery.get_candidate_evidence_graph(...)` reads the durable
   graph
 - `service.static_ui`'s candidate evidence page now prefers rendering
