@@ -1,12 +1,12 @@
 # Audit: T11.2.9 Match Runtime Implementation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t11-2-9-match-runtime-implementation.md`
-- Stage: draft
-- Class: M/L (runtime + tests + user docs; may narrow after Step 4.6)
+- Stage: scoped
+- Class: M (first runtime tranche: Rule + AND RuleExpr + docs/tests)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current 4 modified tracked files plus untracked `rainbird-ai sdk code/`
 - Ownership: Codex owner, Claude reviewer (cross-flip)
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-27 | draft | this commit | T11.2.9 blueprint pair drafted | Triggered by user selecting N9 after T11.2.7 match design and T6 evidence design were published. |
+| 2026-05-27 | draft | `90b6c59e` | T11.2.9 blueprint pair drafted | Triggered by user selecting N9 after T11.2.7 match design and T6 evidence design were published. |
+| 2026-05-27 | scoped | this commit | Step 4.6 match runtime inventory recorded | OR support deferred; idref comparison, materialized matcher, test matrix, and docs scope locked. |
 
 ## 2. Pre-Draft Source Scan
 
@@ -37,23 +38,33 @@ Read-only draft scan findings:
 
 ## 3. Step 4.6 Inventory Results
 
-Pending. The scoped pass must fill the table below with file:line references.
-
 | # | Item | Result |
 |---|---|---|
-| 1 | SDK read namespace call chain | pending |
-| 2 | Snapshot hydration path | pending |
-| 3 | Rule ports / `_port_types` projection data | pending |
-| 4 | RuleExpr lowering / inspect support | pending |
-| 5 | SDK Field descriptor validation path | pending |
-| 6 | Legacy Query runtime reuse / non-reuse | pending |
-| 7 | Pattern connectivity algorithm data sources | pending |
-| 8 | View-scoped attach read path | pending |
-| 9 | Error taxonomy and message lock | pending |
-| 10 | Test matrix | pending |
-| 11 | User docs update set | pending |
-| 12 | Release-facing docs/deferred language update set | pending |
-| 13 | Stop-amend findings and final class | pending |
+| 1 | SDK read namespace call chain | `_SDKReadManager` currently exposes `get` / `find` / `ref` and no `match` at `src/factgraph/sdk/store.py:527-559`; `SDKStore.read` returns that manager at `store.py:1186-1189`; `SDKStore.find(...)` is at `store.py:1265-1286`. Add read manager + store match entrypoints next to `find`. |
+| 2 | Snapshot hydration path | `sdk_find(...)` validates entity class, calls `execute_read_request(mode="find")`, and hydrates DTOs to SDK snapshots at `src/factgraph/sdk/facade.py:585-669`; `_build_snapshot(...)` and `_dto_to_sdk_snapshot(...)` exist at `facade.py:794-851`. Match should reuse these helpers instead of constructing snapshots directly. |
+| 3 | Rule ports / `_port_types` projection data | `Rule.__post_init__` validates and freezes ports, then sets `_port_types` at `src/factgraph/application/protocol/rule.py:85-104`; entity-ref type inference comes from `:exists` atoms at `rule.py:508-545`. Projection validation can require exactly one `PortType(kind="entity_ref", entity_type=EntityCls.__name__)`. |
+| 4 | RuleExpr lowering / inspect support | RuleExpr supports AND/OR via factories/operators at `rule_expr.py:43-64`; joins only attach to `_AndGroup`, and OR group join methods raise at `rule_expr.py:97-131`; lowering branches expose `body_atoms`, `occurrence_aliases`, and `pending_joins` at `rule_expr_lowering.py:99-137`; lowerer supports OR branches at `rule_expr_lowering.py:614-625`. T11.2.9 supports only single Rule and AND RuleExpr; OR raises unsupported for first tranche. |
+| 5 | SDK Field descriptor validation path | SDK `Field` descriptors are declared at `src/factgraph/sdk/schema.py:91-125`; descriptor names come from `_DeclaredMember.sdk_attr_name` at `schema.py:22-33`; `SDKStore._index_schema` maps descriptor objects to schema predicate/declaration at `store.py:3010-3033`. Own-class Field kwargs are valid only when descriptor belongs to the projected EntityCls; cross-entity descriptors reject. |
+| 6 | Legacy Query runtime reuse / non-reuse | Legacy `Query` is defined at `src/factgraph/sdk/dsl/rule.py:198-224` with head/where projection semantics. `execute_query_plan(...)` lowers to a `QueryRuntimeRequest` and returns dict/instance rows at `sdk/query_runtime.py:35-74`; it dedups rows by row key at `query_runtime.py:200-240`. It is not reused as the public match path because it preserves Query-head semantics, but row dedup ideas may inform implementation. |
+| 7 | Pattern connectivity algorithm data sources | Single Rule connectivity uses `Rule.where` atoms and `Rule.ports`. AND RuleExpr connectivity uses lowered branch atoms/pending joins from `RuleExprLoweringBranch` and `RuleJoinConstraint` materialization data (`rule_expr_lowering.py:99-145`, `:629-650`). Synthetic F-expression kwargs add edges between the constrained port var and projected entity var. OR is rejected before connectivity. |
+| 8 | View-scoped attach read path | `FactGraph.attach(db, view=view)` replaces the ledger via `_ledger_for_durable_database_view(...)` and marks the runtime read-only at `store.py:1078-1114`. `sdk_find(...)` reads `sdk.store` (`facade.py:642-652`), so match must also read only `self.store` / `self.ledger`, not `Database.head()`. |
+| 9 | Error taxonomy and message lock | Public runtime rejections use `SDKStoreError`. Locked messages: method-level `view=` mirrors find (`store.py:1275-1278`); unsupported OR: `"fg.read.match(...) currently supports Rule and AND RuleExpr only"`; unsupported Query/list/tuple names accepted types; unknown port lists valid ports; cross-entity Field says use `RuleExpr.join_by_ports`; disconnected pattern mentions cross-product risk. |
+| 10 | Test matrix | New `tests/test_sdk_read_match_runtime.py`: Rule literal constraints, own-class Field constraints, idref/snapshot entity-ref constraints, distinct snapshots, limit-after-dedup, projection missing/ambiguous, unknown port, Query/list/tuple reject, OR reject, disconnected reject. Extend `tests/test_db_attach_lifecycle.py` for attach-view scoped match and method-level `view=` rejection. Run existing RuleExpr suites: `tests/application/protocol/test_rule_expr.py`, `tests/application/protocol/test_rule_expr_lowering.py`, `tests/sdk/test_rule_expr_evaluate.py`. |
+| 11 | User docs update set | If runtime lands, update `docs/official/kernel/quickstart/read-write.md`, `docs/official/kernel/quickstart/rules-and-inferences.md`, `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`, and `src/factgraph/sdk/docs/04_api_surface.en.md`. Existing quickstart currently teaches Query as future/internal and `read.find(...)` as snapshot read (`rules-and-inferences.md`, `read-write.md` grep hits); docs must teach only AND match behavior. |
+| 12 | Release-facing docs/deferred language update set | `CHANGELOG.md:53-58` currently lists "Match API implementation" as deferred. If match lands, remove that phrase while keeping witness/assertion-returning output, method-level view, as_of, EvidenceGraph Phase B, and adapter-consuming semantics deferred. No release machinery changes. |
+| 13 | Stop-amend findings and final class | No blocker for Rule + AND RuleExpr first tranche. OR support is explicitly deferred and recorded in `match-api-design.zh.md`. Final class narrows to M. Stop/amend if AND RuleExpr matching still requires broad runtime redesign during implementation. |
+
+## 3.1 Final Scoped Decisions
+
+| Decision | Lock |
+|---|---|
+| OR support(N1) | Defer. T11.2.9 implements single Rule and AND-only RuleExpr. OR `RuleExpr.any(...)` / `|` raises clear unsupported error and gets a follow-up runtime tranche. |
+| Entity-ref comparison(N2) | Compare canonical `idref_v1` tokens. Snapshot constraints normalize to `.ref`; Python object identity is never used. |
+| Runtime strategy(N3) | Use a materialized first-tranche matcher with visible snapshot/candidate enumeration, effective AND pattern filtering, and no new index. Future optimization trigger: performance failure, large datasets, streaming, OR, or pagination. |
+| Test matrix(N4) | New match runtime test module plus attach lifecycle extension, as listed in inventory item 10. |
+| Connectivity RuleExpr path(N5) | Single Rule graph from `where`; AND RuleExpr graph from lowered branch atoms + pending joins + synthetic F-expression atoms; OR rejected before connectivity. |
+| Limit timing | Apply `limit` after distinct de-duplication. |
+| Docs scope | Quickstart + SDK docs + CHANGELOG deferred line only after runtime passes. No OR/witness/Query adapter teaching. |
 
 ## 4. Draft Risk Register
 
@@ -67,11 +78,11 @@ Pending. The scoped pass must fill the table below with file:line references.
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 inventory complete.
-- [ ] Runtime scope accepted or amended.
-- [ ] Test matrix accepted.
-- [ ] Docs update scope accepted.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 inventory complete.
+- [x] Runtime scope accepted or amended.
+- [x] Test matrix accepted.
+- [x] Docs update scope accepted.
 - [ ] Implementation reviewed.
 - [ ] Closure notes filled.
 

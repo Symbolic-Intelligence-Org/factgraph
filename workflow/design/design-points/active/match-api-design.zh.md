@@ -168,6 +168,12 @@ fg.read.match(User, R1 & R2)               # OK
 
 理由:list/tuple 无法表达 AND/OR 语义,且与 `RuleExpr.all/any` 重复。
 
+**T11.2.9 implementation tranche**:首个 runtime 落地只承诺 single `Rule`
+和 **AND-only `RuleExpr`**(`&` / `RuleExpr.all(...)`)。OR
+(`|` / `RuleExpr.any(...)`)仍是本设计的 future target,但不在首个 runtime
+scope 内。用户文档在 OR runtime 真正 land 前不得教学 `read.match(...)` 的 OR
+用法。
+
 ### 4.3 Legacy `Query`
 
 旧 `Query(head, where, ...)` 是 read-side projection object,无 `ports` contract。
@@ -543,6 +549,7 @@ T11.2.5 发现 dirty `facade.py` 改动(property-style assertion access + `Asser
 | Item | Deferred to |
 |---|---|
 | Runtime implementation of `fg.read.match(...)` | Future implementation blueprint |
+| RuleExpr OR matching(`|` / `RuleExpr.any(...)`) | Follow-up runtime tranche after T11.2.9 AND path lands |
 | Cross-entity tuple return(`match((User, Order), expr)`) | Future or evaluate-route |
 | Legacy `Query` adapter path | Future compatibility decision |
 | Query persistence(`fg.queries.save/load/list`) | Lifecycle / asset cycle |
@@ -564,7 +571,7 @@ T11.2.5 发现 dirty `facade.py` 改动(property-style assertion access + `Asser
 | M2 | EntityCls is positional, required, must be `Entity` subclass. |
 | M3 | EntityCls 扮演 match 的 "head" 角色 — 投影目标 entity 类。 |
 | M4 | Template 必须恰好一个 entity_ref port 匹配 EntityCls(unique projection)。 |
-| M5 | v0.2 templates are application `Rule` and `RuleExpr`(no bare list/tuple)。 |
+| M5 | First runtime tranche supports application `Rule` and AND-only `RuleExpr`(`&` / `RuleExpr.all(...)`);OR RuleExpr is a follow-up runtime target(no bare list/tuple)。 |
 | M6 | Legacy `Query` is compatibility/deferred, not the new primary template。 |
 | M7 | `Rule.head` 在 match 中不参与;EntityCls 替代该角色。 |
 | M8 | Match is **pattern matching**, not inference. No inference engine involvement。 |
