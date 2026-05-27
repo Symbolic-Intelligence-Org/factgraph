@@ -56,6 +56,15 @@ and `semantics_digest` evaluated the same logical query against the same
 snapshot under the same semantics — they are replay-equivalent regardless of
 when they ran.
 
+The evidence audit channel is sessionless. `run_id` identifies the evaluation
+envelope and stays on `EvaluateResult`; it is intentionally not copied into an
+`EvidenceGraph`. Passed row graphs keep a durable row/result metadata bridge
+instead: result id, row id, evidence ref id, claim and closed-head digests,
+expression/rule/view/semantics/result digests, engine identity/version, adapter
+version, and evaluated timestamp. Prefer the typed DTO fields above for
+application logic; graph metadata is the audit bridge, not the primary SDK
+branching surface.
+
 ## 2. `EvaluateRow` — one derived fact
 
 `EvaluateRow` is frozen with 6 data fields and 2 live methods:
@@ -241,32 +250,66 @@ assert e.suggested_next_steps == (
 head=closed_head, ...)` is the advanced / cross-session manual path that
 requires the caller to supply a fully closed head.
 
-## 6. `EvidenceGraph` — intentionally opaque (v0.2)
+If the graph itself is malformed or its row/result metadata no longer matches
+the explanation context, the normal user-facing outcome is
+`Explanation(status="unsupported")` with an error code
+`GRAPH_VALIDATION_FAILED`. A non-`EvidenceGraph` value returned by an internal
+custom graph builder is a protocol contract violation and is not normal
+application flow.
 
-When `status == "passed"`, `explanation.evidence` is an `EvidenceGraph`
-containing the full derivation tree (nodes + edges, with engine-specific
-metadata per ProbLog / PyReason / native adapters). This page does not yet
-document the graph interior; treat it as an opaque value and pass it to
-`render_evidence_graph_html(...)` (audit surface) for visualization, or to
-audit ingestion for durable replay.
+## 6. `EvidenceGraph` — shipped native Form 1 graph (v0.2)
 
-The graph itself is **already shipped** with stable invariants — only the
-user-facing tutorial is deferred:
+When `status == "passed"`, `explanation.evidence` is an `EvidenceGraph`.
+For native passed rows with support context, this graph now exposes the current
+Form 1 shape:
 
-- **DAG with branch convergence** — the graph is acyclic; the same fact
-  reached via multiple paths converges on a single node rather than
-  duplicating.
-- **Cycle detection** — adapters that could produce cyclic derivation
-  paths (e.g., recursive ProbLog clauses) detect and reject the cycle
-  rather than producing an `EvidenceGraph` that violates the DAG
-  invariant.
-- **Engine-meta namespace** — adapter-specific information lives under
-  scoped keys (`problog/`, `pyreason/`, `native/`) on `EvidenceNode` and
-  `EvidenceEdge`; the namespace prevents cross-engine field collisions.
+```text
+NODE_SEED --supports--> NODE_PREMISE --supports--> NODE_CONCLUSION
+```
 
-A dedicated cycle covering full `EvidenceGraph` API (`EvidenceNode`,
-`EvidenceEdge`, `layout_hint`, complete engine-meta payloads, rendering
-hooks) is pending.
+The root `NODE_CONCLUSION` represents the row claim. `NODE_PREMISE` nodes
+represent the selected native support atoms/checks. `NODE_SEED` nodes represent
+ledger assertion witnesses. If the same assertion id supports multiple
+premises in one row graph, the graph reuses one `NODE_SEED` and adds multiple
+`supports` edges.
+
+For OR-shaped native evaluation, the graph is **winning-path-only**: it shows
+the selected successful branch, not every possible or failed branch. The root
+metadata exposes that boundary with `alternative_paths.mode` set to
+`"winning_path_only"`. Other engine metadata fields are implementation
+details; do not write SDK code that depends on their full shape.
+
+Rows without native support context, including manually constructed/detached
+rows, keep the older single-`NODE_CONCLUSION` fallback graph. Non-native
+adapter rows may also use fallback or adapter-specific graph shapes until their
+Form 1 alignment lands.
+
+Stable graph invariants:
+
+- **DAG with branch convergence** — the graph is acyclic; repeated support for
+  the same assertion can converge on one seed node rather than duplicating it.
+- **Structural validation** — graph layout, root id, node ids, edge ids, and
+  edge endpoints are validated at construction.
+- **Renderer input guard** — `render_evidence_graph_html(...)` accepts a
+  constructed `EvidenceGraph`, not a raw dictionary or duck-typed stand-in.
+- **Large graph warning** — more than 250 nodes or more than 500 edges emits a
+  warning banner. The reference renderer still renders the graph; it does not
+  truncate or reject solely because the graph is large.
+
+Current boundaries:
+
+- Souffle / ProbLog / PyReason row-level Form 1 alignment is future work.
+- Aggregate count-only envelopes are future work; current native non-fact
+  checks do not expose the matched-count contributor envelope.
+- Failed graph, why-not, and counterfactual trees are future evidence tracks.
+- Match witness / assertion-returning output is a future match/evidence seam.
+- Cross-row seed de-duplication is not a v1 contract; each row explanation owns
+  its graph.
+- Session logs, `/interactions/{sessionID}`, signatures, ACL, `x-evidence-key`,
+  salience, and impact remain outside the sessionless v1 audit channel.
+- `EDGE_DERIVES` and `EDGE_UPDATES` are reserved for Form 2 / temporal engine
+  paths. Native Form 1 row graphs use `EDGE_SUPPORTS`.
+- `dag` layout and `rule_fire` node kind are not in v1 scope.
 
 ## 7. Stability of `Inference` and `Branch`
 
