@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-27_workflow-docs-sync-policy.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-27_workflow-docs-sync-policy.audit.md`
 - Trigger: Three docs-sync micro-passes were treated as lightweight maintenance, but the distinction between tiny typo/comment exceptions and multi-file shipped-state synchronization is not persisted in governance docs.
 
 ## 0. Scope Locks

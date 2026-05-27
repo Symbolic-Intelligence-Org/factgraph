@@ -4,11 +4,11 @@
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
-- Blueprint: `workflow/blueprints/active/2026-05-27_workflow-docs-sync-policy.md`
+- Blueprint: `workflow/blueprints/archive/2026-05-27_workflow-docs-sync-policy.md`
 - Stage: abandoned
 - Class: S (governance docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
-- Dirty baseline: preserve current `4 M + 1 D + 3 U`
+- Dirty baseline: preserve current `4 M + 1 D + 4 U`
 - Ownership: Codex owner, Claude reviewer (cross-flip)
 
 ## 1. Event Log
