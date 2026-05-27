@@ -28,7 +28,7 @@ from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
 from factgraph.core.store.database import view_digest_for
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import SOUFFLE_WITNESS_KIND, SupportArtifact
 
 
 class DetachedRowError(RuntimeError):
@@ -73,6 +73,8 @@ _EVIDENCE_GRAPH_METADATA_KEYS = (
     "evaluated_at",
 )
 _EVIDENCE_GRAPH_METADATA_KEY_SET = frozenset(_EVIDENCE_GRAPH_METADATA_KEYS)
+_NATIVE_FORM1_SUPPORT_KIND = "native_binding_v1"
+_FORM1_ROW_SUPPORT_KINDS = frozenset({_NATIVE_FORM1_SUPPORT_KIND, SOUFFLE_WITNESS_KIND})
 
 
 @dataclass(frozen=True)
@@ -844,7 +846,7 @@ def _build_passed_row_evidence_graph(
     _validate_evidence_metadata_for_row_result(metadata, row, result)
     support_artifact = result._row_support_artifacts.get(row.row_id)
     if support_artifact is not None:
-        return _build_native_form1_evidence_graph(row, result, metadata, support_artifact)
+        return _build_form1_evidence_graph(row, result, metadata, support_artifact)
     node = EvidenceNode(
         node_id=row.row_id,
         node_kind=NODE_CONCLUSION,
@@ -863,14 +865,15 @@ def _build_passed_row_evidence_graph(
     )
 
 
-def _build_native_form1_evidence_graph(
+def _build_form1_evidence_graph(
     row: EvaluateRow,
     result: EvaluateResult,
     metadata: Mapping[str, Any],
     support_artifact: SupportArtifact,
 ) -> EvidenceGraph:
-    if support_artifact.kind != "native_binding_v1":
-        raise ValueError("native Form 1 evidence requires native_binding_v1 support")
+    if support_artifact.kind not in _FORM1_ROW_SUPPORT_KINDS:
+        supported = ", ".join(sorted(_FORM1_ROW_SUPPORT_KINDS))
+        raise ValueError(f"Form 1 row evidence requires support kind in {{{supported}}}")
 
     nodes: list[EvidenceNode] = [
         EvidenceNode(

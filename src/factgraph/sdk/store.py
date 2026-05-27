@@ -36,6 +36,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.evaluate_result import (
     EvaluateResult,
+    _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
     _candidate_set_to_evaluate_row,
     _row_digest_for,
@@ -2745,7 +2746,7 @@ class SDKStore:
     ) -> Mapping[str, SupportArtifact]:
         out: dict[str, SupportArtifact] = {}
         for candidate, row in zip(candidates, rows):
-            if candidate.support_kind != "native_binding_v1":
+            if candidate.support_kind not in _FORM1_ROW_SUPPORT_KINDS:
                 continue
             artifact = self._store._lookup_support_artifact(candidate.support_digest)
             if isinstance(artifact, SupportArtifact):
