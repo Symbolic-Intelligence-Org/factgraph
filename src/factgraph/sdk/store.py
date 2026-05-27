@@ -74,7 +74,7 @@ from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND, ProvenanceEnvelope, SupportArtifact
 from factgraph.adapters.souffle.runner import run_package
 from factgraph.core.store.database import (
     AssertionInput,
@@ -2701,6 +2701,7 @@ class SDKStore:
                 for candidate in candidates
             )
             row_support_artifacts = self._row_support_artifacts_for_candidates(candidates, rows)
+            row_provenance_envelopes = self._row_provenance_envelopes_for_candidates(candidates, rows)
             row_digests = tuple(_row_digest_for(row) for row in rows)
             result_digest = result_digest_for(
                 result_id=result_id,
@@ -2733,6 +2734,7 @@ class SDKStore:
                 _schema_index=self._application_schema_index,
                 _row_close_builder=self._close_evaluate_row,
                 _row_support_artifacts=row_support_artifacts,
+                _row_provenance_envelopes=row_provenance_envelopes,
             )
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
@@ -2751,6 +2753,20 @@ class SDKStore:
             artifact = self._store._lookup_support_artifact(candidate.support_digest)
             if isinstance(artifact, SupportArtifact):
                 out[row.row_id] = artifact
+        return out
+
+    def _row_provenance_envelopes_for_candidates(
+        self,
+        candidates: Sequence[CandidateSet],
+        rows: Sequence[Any],
+    ) -> Mapping[str, ProvenanceEnvelope]:
+        out: dict[str, ProvenanceEnvelope] = {}
+        for candidate, row in zip(candidates, rows):
+            if candidate.support_kind != PROBLOG_PROVENANCE_KIND:
+                continue
+            envelope = self._store._lookup_provenance_envelope(candidate.support_digest)
+            if isinstance(envelope, ProvenanceEnvelope):
+                out[row.row_id] = envelope
         return out
 
     def _close_evaluate_row(self, row: Any, result: Any) -> ApplicationRule:

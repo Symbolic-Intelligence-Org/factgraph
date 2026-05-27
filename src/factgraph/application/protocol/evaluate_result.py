@@ -28,7 +28,11 @@ from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
 from factgraph.core.store.database import view_digest_for
-from factgraph.core.store._support import SOUFFLE_WITNESS_KIND, SupportArtifact
+from factgraph.core.store._support import (
+    SOUFFLE_WITNESS_KIND,
+    ProvenanceEnvelope,
+    SupportArtifact,
+)
 
 
 class DetachedRowError(RuntimeError):
@@ -181,6 +185,12 @@ class EvaluateResult:
         compare=False,
         hash=False,
     )
+    _row_provenance_envelopes: Mapping[str, ProvenanceEnvelope] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
 
     def __post_init__(self) -> None:
         _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
@@ -216,7 +226,12 @@ class EvaluateResult:
             self._row_support_artifacts,
             valid_row_ids=seen,
         )
+        row_provenance_envelopes = _validate_row_provenance_envelopes(
+            self._row_provenance_envelopes,
+            valid_row_ids=seen,
+        )
         object.__setattr__(self, "_row_support_artifacts", row_support_artifacts)
+        object.__setattr__(self, "_row_provenance_envelopes", row_provenance_envelopes)
         object.__setattr__(self, "rows", tuple(bound_rows))
 
     def __iter__(self) -> Iterator[EvaluateRow]:
@@ -1091,6 +1106,28 @@ def _validate_row_support_artifacts(
         if not isinstance(artifact, SupportArtifact):
             raise ProtocolShapeError("EvaluateResult._row_support_artifacts values must be SupportArtifact")
         normalized[row_id] = artifact
+    return MappingProxyType(normalized)
+
+
+def _validate_row_provenance_envelopes(
+    envelopes: Mapping[str, ProvenanceEnvelope] | None,
+    *,
+    valid_row_ids: set[str],
+) -> Mapping[str, ProvenanceEnvelope]:
+    if envelopes is None:
+        return MappingProxyType({})
+    if not isinstance(envelopes, Mapping):
+        raise ProtocolShapeError("EvaluateResult._row_provenance_envelopes must be mapping or None")
+    normalized: dict[str, ProvenanceEnvelope] = {}
+    for row_id, envelope in envelopes.items():
+        _require_non_empty_str(row_id, field_name="EvaluateResult._row_provenance_envelopes key")
+        if row_id not in valid_row_ids:
+            raise ProtocolShapeError("EvaluateResult._row_provenance_envelopes contains unknown row_id")
+        if not isinstance(envelope, ProvenanceEnvelope):
+            raise ProtocolShapeError("EvaluateResult._row_provenance_envelopes values must be ProvenanceEnvelope")
+        if envelope.engine != "problog" or envelope.payload_type != "proof_trace":
+            raise ProtocolShapeError("EvaluateResult._row_provenance_envelopes values must be ProbLog proof traces")
+        normalized[row_id] = envelope
     return MappingProxyType(normalized)
 
 
