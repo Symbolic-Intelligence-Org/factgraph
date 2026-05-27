@@ -1,6 +1,6 @@
 # Task Blueprint: N10 Reference Index Cleanup
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S (docs-only top-level index rebase)
@@ -121,12 +121,12 @@ To fill at scoped commit:
 
 | # | Item | Result |
 |---|---|---|
-| 1 | Stale path lines in `docs/references/README.md` | (to fill in scoped commit) |
-| 2 | `workflow/design/design-points/` structure | (to fill in scoped commit) |
-| 3 | `factgraph-namespace-test-proposals` description | (to fill in scoped commit) |
-| 4 | Dirty baseline | (to fill in scoped commit) |
-| 5 | Sacred master | (to fill in scoped commit) |
-| 6 | Inbound references to about-to-change anchors | (to fill in scoped commit) |
+| 1 | Stale path lines in `docs/references/README.md` | Line 16 `src/factpy_kernel/*/docs/`; line 17 `docs/blueprints/`; line 18 `docs/blueprint_history/` + `docs/blueprints/archive/`; line 25 `docs/architecture_principles.md`. Line 28 anchor date `2026-05-06`. |
+| 2 | `workflow/design/design-points/` structure | `README.md` present. `active/` holds 6 notes (database-view, evidence-tree-v1, match-api-design, post-t5-completion-roadmap, rule-expression-and-proof-attempt, rule-expression-and-proof-track-plan). `archive/` holds 9 migrated notes including the four previously listed inline in `docs/references/README.md` (identity-primary-key-coordinate-semantics{,.zh}, possibility-probability-transmission.zh, post-track3-semantics-public-api.zh, rule-query-inference-head-semantics.zh) plus five others (read-write-snapshot-assertion-selection.zh, rule-policy-function-tree-and-syntax.zh, factgraph-lifecycle-and-assets.zh, query-view-and-inference-handles.zh). |
+| 3 | `factgraph-namespace-test-proposals` description | Review packet of proposed test changes for the 2026-05-14 namespace-test-coverage blueprint; contains stale/conflict/missing analysis notes plus three Python test files; not part of root `tests/`, not discovered by unittest, not release-gate truth. |
+| 4 | Dirty baseline | 4 modified (`docs/references/working/design-points/readme.md`, three example notebooks) + 1 untracked (`"rainbird-ai sdk code/"`). Preserved. |
+| 5 | Sacred master | `562c74195df43e933bed92a3ff25de94dd8ce666`. Confirmed. |
+| 6 | Inbound references to about-to-change anchors | `rg -l 'docs/references/README.md#' . --type md` returns only the N10 blueprint pair itself. No external/historical doc anchors into the design-points subsection header. Safe to keep header text or rename; this cycle keeps the header text unchanged out of conservatism. |
 
 ## 6. Verification
 

@@ -1,11 +1,11 @@
 # Audit: N10 Reference Index Cleanup
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_n10-reference-index-cleanup.md`
-- Stage: draft
+- Stage: scoped
 - Class: S (docs-only top-level index rebase)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: 4 modified + 1 untracked must be preserved
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-27 | draft | (pending) | N10 blueprint pair drafted | Targets only top-level `docs/references/README.md`. Tier A scope per user authorization. |
+| 2026-05-27 | draft | `e5570dfb` | N10 blueprint pair drafted | Targets only top-level `docs/references/README.md`. Tier A scope per user authorization. |
+| 2026-05-27 | scoped | (pending) | Step 4.6 inventory filled, scope frozen | Stale lines 16/17/18/25; design-points content migrated to `workflow/design/design-points/{active,archive}/`; `factgraph-namespace-test-proposals` description captured; no inbound anchor references found. |
 
 ## 2. Initial Read Summary
 
@@ -43,12 +44,12 @@ To fill during scoped commit:
 
 | # | Item | Result |
 |---|---|---|
-| 1 | Exact line numbers in `docs/references/README.md` for each stale path | (to fill) |
-| 2 | `workflow/design/design-points/` structure (active + archive + README) | (to fill) |
-| 3 | `factgraph-namespace-test-proposals` bundle description | (to fill) |
-| 4 | Dirty baseline verification | (to fill) |
-| 5 | Sacred master verification | (to fill) |
-| 6 | Inbound references to the about-to-change subsection anchors | (to fill) |
+| 1 | Exact line numbers in `docs/references/README.md` for each stale path | Line 16 `src/factpy_kernel/*/docs/`; line 17 `docs/blueprints/`; line 18 `docs/blueprint_history/` + `docs/blueprints/archive/`; line 25 `docs/architecture_principles.md`; line 28 anchor date `2026-05-06`. |
+| 2 | `workflow/design/design-points/` structure (active + archive + README) | README present; `active/` 6 notes; `archive/` 9 migrated notes (incl. all four currently listed inline in the README plus five additional notes). |
+| 3 | `factgraph-namespace-test-proposals` bundle description | Review packet for 2026-05-14 namespace-test-coverage blueprint; not part of root `tests/`, not discovered by unittest, not release-gate truth. |
+| 4 | Dirty baseline verification | 4 M + 1 U. Confirmed preserved. |
+| 5 | Sacred master verification | `562c74195df43e933bed92a3ff25de94dd8ce666`. Confirmed. |
+| 6 | Inbound references to the about-to-change subsection anchors | None outside the N10 blueprint pair itself (`rg -l 'docs/references/README.md#' . --type md`). |
 
 ## 5. Verification Plan
 
