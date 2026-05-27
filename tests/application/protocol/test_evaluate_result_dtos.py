@@ -35,7 +35,7 @@ from factgraph.audit.evidence_graph import (
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
-from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact
+from factgraph.core.store._support import SOUFFLE_WITNESS_KIND, NonFactStep, PredWitness, SupportArtifact
 
 
 def _head_rule() -> Rule:
@@ -49,6 +49,7 @@ def _token(label: str) -> str:
 
 def _result_parts() -> tuple[str, str, str, str, str, str, str, str, str, Rule]:
     head = _head_rule()
+    engine = "native"
     run_id = "run_v1:" + "1" * 64
     expr_digest = _token("expr")
     rule_set_digest = _token("rules")
@@ -60,7 +61,7 @@ def _result_parts() -> tuple[str, str, str, str, str, str, str, str, str, Rule]:
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
         semantics_digest=semantics_digest,
-        engine="native",
+        engine=engine,
         head_id=head.id,
         head_content_digest=head.content_digest,
     )
@@ -74,7 +75,7 @@ def _result_parts() -> tuple[str, str, str, str, str, str, str, str, str, Rule]:
         semantics_digest,
         closed_head_digest,
         head.content_digest,
-        "native",
+        engine,
         head,
     )
 
@@ -160,10 +161,11 @@ def _single_row_result(
 def _native_support_artifact(
     pred_witnesses: tuple[PredWitness, ...],
     *,
+    kind: str = "native_binding_v1",
     non_fact_steps: tuple[NonFactStep, ...] = (),
 ) -> SupportArtifact:
     return SupportArtifact(
-        kind="native_binding_v1",
+        kind=kind,
         root_result_kind="row",
         binding_items=(("$person", "p1"),),
         pred_witnesses=pred_witnesses,
@@ -491,6 +493,85 @@ class EvaluateResultDTOTests(unittest.TestCase):
         seed_nodes = [node for node in explanation.evidence.nodes if node.node_kind == NODE_SEED]
         self.assertEqual([node.node_id for node in seed_nodes], ["seed:assertion:asrt-1"])
         seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:asrt-1"]
+        self.assertEqual(
+            {edge.to_node_id for edge in seed_edges},
+            {"premise:b0.a0:Person:exists", "premise:b0.a1:Person:active"},
+        )
+
+    def test_live_row_explain_uses_souffle_form1_support_topology(self) -> None:
+        support = _native_support_artifact(
+            (
+                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("souffle-asrt-1",)),
+            ),
+            kind=SOUFFLE_WITNESS_KIND,
+            non_fact_steps=(
+                NonFactStep(step_key="b0.a1:eq", kind="eq", status="satisfied", details=(("source", "souffle"),)),
+            ),
+        )
+        result = _single_row_result(support_artifact=support)
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        graph = explanation.evidence
+        self.assertEqual(graph.support_kind, SOUFFLE_WITNESS_KIND)
+        self.assertEqual(graph.root_node_id, result[0].row_id)
+        self.assertEqual(
+            set(graph.metadata),
+            {
+                "result_id",
+                "row_id",
+                "evidence_ref_id",
+                "claim_digest",
+                "closed_head_digest",
+                "expr_digest",
+                "rule_set_digest",
+                "view_snapshot_digest",
+                "semantics_digest",
+                "result_digest",
+                "engine",
+                "engine_version",
+                "adapter_version",
+                "evaluated_at",
+            },
+        )
+        self.assertEqual(graph.metadata["result_id"], result.result_id)
+        self.assertEqual(graph.metadata["row_id"], result[0].row_id)
+        self.assertNotIn("run_id", graph.metadata)
+        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
+        self.assertEqual(root.node_kind, NODE_CONCLUSION)
+        self.assertEqual(root.engine_meta["alternative_paths"], {"mode": "winning_path_only", "omitted_count": None})
+
+        premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
+        seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
+        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:b0.a0:Person:exists", "premise:b0.a1:eq"})
+        self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:souffle-asrt-1"})
+        self.assertIn(
+            ("premise:b0.a0:Person:exists", result[0].row_id),
+            {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
+        )
+        self.assertIn(
+            ("seed:assertion:souffle-asrt-1", "premise:b0.a0:Person:exists"),
+            {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
+        )
+
+    def test_souffle_form1_support_reuses_seed_node_with_multiple_edges(self) -> None:
+        support = _native_support_artifact(
+            (
+                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("souffle-asrt-1",)),
+                PredWitness(pred_atom_key="b0.a1:Person:active", asrt_ids=("souffle-asrt-1",)),
+            ),
+            kind=SOUFFLE_WITNESS_KIND,
+        )
+        result = _single_row_result(support_artifact=support)
+
+        explanation = result[0].explain()
+
+        assert explanation.evidence is not None
+        seed_nodes = [node for node in explanation.evidence.nodes if node.node_kind == NODE_SEED]
+        self.assertEqual([node.node_id for node in seed_nodes], ["seed:assertion:souffle-asrt-1"])
+        seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:souffle-asrt-1"]
         self.assertEqual(
             {edge.to_node_id for edge in seed_edges},
             {"premise:b0.a0:Person:exists", "premise:b0.a1:Person:active"},
