@@ -1,11 +1,11 @@
 # Audit: T8-D Round 3 ProbLog User Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-d-round3-problog-user-docs.md`
-- Stage: draft
+- Stage: scoped
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 5 U`
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-28 | draft | this commit | T8-D round 3 ProbLog user-docs blueprint pair drafted | Triggered by T8-C-1 runtime `5ffd4850`; Q1-Q9 pending for Step 4.6. |
+| 2026-05-28 | draft | `e13686db` | T8-D round 3 ProbLog user-docs blueprint pair drafted | Triggered by T8-C-1 runtime `5ffd4850`; Q1-Q9 pending for Step 4.6. |
+| 2026-05-28 | scoped | pending | Source-backed inventory and Q1-Q9 completed | File scope locked to `evidence.md` + SDK `00_user_guide.en.md`; planned user wording treats ProbLog as shipped row provenance evidence, not Form 1. |
 
 ## 2. Draft Source Scan
 
@@ -38,34 +39,34 @@ two-file scope, and audit-doc wording consistency before implementation.
 
 | ID | Question | Status |
 |---|---|---|
-| Q1 | Is the file scope exactly two user docs? | Pending Step 4.6. |
-| Q2 | What is the `evidence.md` edit map? | Pending Step 4.6. |
-| Q3 | What is the SDK guide edit map? | Pending Step 4.6. |
-| Q4 | How should the deferred boundary change? | Pending Step 4.6. |
-| Q5 | How should the edge-kind reservation line change? | Pending Step 4.6. |
-| Q6 | Should the quickstart add a ProbLog ASCII topology example? | Pending Step 4.6. |
-| Q7 | How much `engine_meta["problog"]` detail should user docs teach? | Pending Step 4.6. |
-| Q8 | What verification baseline is appropriate? | Pending Step 4.6. |
-| Q9 | Are any stop/amend triggers hit? | Pending Step 4.6. |
+| Q1 | Is the file scope exactly two user docs? | Answered: yes, `evidence.md` and SDK `00_user_guide.en.md`; other ProbLog hits are semantics/annotation/adapter concept or already-aligned audit docs. |
+| Q2 | What is the `evidence.md` edit map? | Answered: §6 title, new ProbLog provenance paragraph, fallback paragraph, deferred boundary line, and edge-kind reservation line. |
+| Q3 | What is the SDK guide edit map? | Answered: lines 658-665 concise summary only. |
+| Q4 | How should the deferred boundary change? | Answered: remove ProbLog from future row evidence while not calling ProbLog Form 1. |
+| Q5 | How should the edge-kind reservation line change? | Answered: native/Souffle `supports`, ProbLog `derives`, PyReason `updates` future. |
+| Q6 | Should the quickstart add a ProbLog ASCII topology example? | Answered: yes, one short `derives` line distinct from Form 1. |
+| Q7 | How much `engine_meta["problog"]` detail should user docs teach? | Answered: one high-level mention of trace summary and uncertainty projection; no schema dump. |
+| Q8 | What verification baseline is appropriate? | Answered: focused docs-only suite plus T8-C-1 ProbLog sanity test, `git diff --check`, status, and sacred check. |
+| Q9 | Are any stop/amend triggers hit? | Answered: none. |
 
 ## 4. Risk Register
 
 | Risk | Impact | Step 4.6 / implementation check |
 |---|---|---|
-| ProbLog is documented as Form 1 | User docs overstate the shipped topology and edge semantics | Step 4.6 must teach provenance-row graph as sibling shape. |
-| `EDGE_DERIVES` remains documented as reserved | User docs contradict T8-C-1 shipped row provenance behavior | Edge-kind line must match audit docs. |
-| `engine_meta["problog"]` schema is fully dumped | User docs become implementation docs and drift risk increases | Mention only trace summary / uncertainty projection at a high level. |
-| SDK guide duplicates quickstart detail | Future user-doc drift | Preserve quickstart-detail / SDK-summary split. |
-| Audit docs are edited again | Scope duplicates T8-C-1 completed audit alignment | Treat audit docs as wording source unless Step 4.6 finds a gap. |
-| PyReason / aggregate / C119 / failed evidence enters scope | S-cycle grows into evidence design work | Keep non-shipped tracks deferred. |
-| Dirty baseline is touched | Workflow violation | Stage only blueprint/docs target files. |
+| ProbLog is documented as Form 1 | User docs overstate the shipped topology and edge semantics | Step 4.6 completed: teach provenance-row graph as sibling shape. |
+| `EDGE_DERIVES` remains documented as reserved | User docs contradict T8-C-1 shipped row provenance behavior | Step 4.6 completed: edge-kind line will match audit docs. |
+| `engine_meta["problog"]` schema is fully dumped | User docs become implementation docs and drift risk increases | Step 4.6 completed: mention only trace summary / uncertainty projection at a high level. |
+| SDK guide duplicates quickstart detail | Future user-doc drift | Step 4.6 completed: preserve quickstart-detail / SDK-summary split. |
+| Audit docs are edited again | Scope duplicates T8-C-1 completed audit alignment | Step 4.6 completed: audit docs are wording source only. |
+| PyReason / aggregate / C119 / failed evidence enters scope | S-cycle grows into evidence design work | Step 4.6 completed: keep non-shipped tracks deferred. |
+| Dirty baseline is touched | Workflow violation | Step 4.6 completed: only blueprint/audit files touched so far. |
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 source-backed inventory complete.
-- [ ] Q1-Q9 answered.
-- [ ] Two-file scope locked.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 source-backed inventory complete.
+- [x] Q1-Q9 answered.
+- [x] Two-file scope locked.
 - [ ] Quickstart / SDK implementation complete.
 - [ ] Focused docs-only verification complete.
 - [ ] Closure notes filled.

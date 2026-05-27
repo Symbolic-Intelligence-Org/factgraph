@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Round 3 ProbLog User Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S (docs-only)
@@ -95,58 +95,85 @@ native/Souffle Form 1 `EDGE_SUPPORTS` shape.
 
 ## 3. Step 4.6 Source-Backed Inventory
 
-Pending Step 4.6. Required subsections:
-
 ### 3.1 `evidence.md` Edit Inventory
 
-Source-back the five current wording locations:
+| Location | Current wording | Decision |
+|---|---|---|
+| `docs/official/kernel/quickstart/evidence.md:260` | `## 6. EvidenceGraph — shipped native and Souffle Form 1 graph (v0.2)` | Edit title to neutral shipped row-level graphs wording, such as `shipped row-level graphs (v0.2)`, so the section can contain both native/Souffle Form 1 and ProbLog provenance-row shapes. |
+| `evidence.md:262-281` | Native/Souffle Form 1 intro and ASCII topology. | Preserve the Form 1 paragraph and ASCII `NODE_SEED --supports--> NODE_PREMISE --supports--> NODE_CONCLUSION` block byte-for-byte except wrapping if needed; add a separate ProbLog provenance-row paragraph immediately after it. |
+| `evidence.md:283-286` | Rows without native/Souffle support fall back; other adapter rows may use fallback or adapter-specific graph shapes until Form 1 alignment lands. | Remove ProbLog from the fallback implication. New wording should say manually constructed/detached rows still use fallback, ProbLog passed rows now use row provenance graphs, and other unaligned adapters may still fall back. |
+| `evidence.md:302` | `ProbLog / PyReason row-level Form 1 alignment is future work.` | Replace with a PyReason-only future boundary. Do not teach ProbLog as Form 1; it is shipped as row provenance evidence. |
+| `evidence.md:311-312` | ``EDGE_DERIVES` and `EDGE_UPDATES` are reserved for Form 2 / temporal engine paths. Native and Souffle Form 1 row graphs use `EDGE_SUPPORTS`.` | Match audit docs: native/Souffle use `EDGE_SUPPORTS`, ProbLog row provenance graphs use `EDGE_DERIVES`, and `EDGE_UPDATES` remains reserved for PyReason / Form 2 / temporal paths. |
 
-1. Section 6 title.
-2. Form 1 intro / native-Souffle body.
-3. Fallback / adapter-specific graph paragraph.
-4. Current boundaries ProbLog/PyReason line.
-5. `EDGE_DERIVES` / `EDGE_UPDATES` reservation line.
+The new ProbLog paragraph should be concise and user-facing:
+
+- ProbLog passed rows now produce row-level provenance graphs.
+- Their proof-trace shape uses `derives` edges, not Form 1 `supports` edges.
+- A short ASCII example is useful:
+  `NODE_SEED --derives--> NODE_PREMISE --derives--> NODE_CONCLUSION`.
+- Top-level metadata remains the same row/result audit context.
+- ProbLog trace summary and uncertainty projection details live under
+  `engine_meta["problog"]`; do not dump the schema.
 
 ### 3.2 SDK User Guide Edit Inventory
 
-Source-back the concise evidence summary around `row.explain().evidence` and
-the future evidence tracks sentence.
+`src/factgraph/sdk/docs/00_user_guide.en.md:658-665` currently says native or
+Souffle rows produce row-level Form 1 graphs and treats `ProbLog/PyReason Form
+1 graphs` as future work.
+
+Decision:
+
+- Keep the concise summary style and quickstart link.
+- Preserve native/Souffle Form 1 as the first sentence.
+- Add one short sentence for ProbLog row provenance graphs using `derives` edges
+  with trace / uncertainty-projection details under `engine_meta["problog"]`.
+- Change future work from `ProbLog/PyReason Form 1 graphs` to PyReason-only
+  row evidence / Form 1 wording while preserving aggregate, failed-graph, and
+  match witness future tracks.
 
 ### 3.3 Leave-Alone File Sweep
 
-Verify nearby quickstart / SDK docs do not require edits:
-
-- `src/factgraph/audit/docs/02_evidence_graph.md`
-- `docs/official/kernel/quickstart/namespace-map.md`
-- `docs/official/kernel/quickstart/semantics.md`
-- `docs/official/kernel/quickstart/assertions.md`
-- `docs/official/kernel/quickstart/rules-and-inferences.md`
-- `src/factgraph/sdk/docs/01_concepts.en.md`
-- `src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md`
-- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
+| File | Finding | Decision |
+|---|---|---|
+| `src/factgraph/audit/docs/02_evidence_graph.md` | Already aligned by T8-C-1: lines 48-52 teach ProbLog row provenance graphs; lines 126-128 assign `derives` to ProbLog and reserve `updates`; lines 203-208 describe live ProbLog row provenance graphs. | Leave. It is the wording source, not an edit target. |
+| `docs/official/kernel/quickstart/namespace-map.md` | ProbLog appears only as semantics / engine naming context. | Leave. No row-evidence boundary. |
+| `docs/official/kernel/quickstart/semantics.md` | Teaches `ProbLogSemantics` and `PyReasonSemantics`. | Leave. T10-1 / semantics wrapper docs are separate. |
+| `docs/official/kernel/quickstart/assertions.md` | Teaches ProbLog semantic probability annotation context. | Leave. Do not re-teach raw uncertainty carriers here. |
+| `docs/official/kernel/quickstart/rules-and-inferences.md` | Lines 620ff discuss high-level engine lifecycle and semantics options. | Leave. No stale row evidence contract. |
+| `src/factgraph/sdk/docs/01_concepts.en.md` | ProbLog appears as adapter / semantics concept. | Leave. No row evidence section. |
+| `src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md` | Mentions ProbLog annotation namespaces and export behavior. | Leave. T10-1 semantics/execution topic, not user evidence summary. |
+| `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` | Delegates evidence chain detail to evidence docs; mentions engine support table. | Leave. Existing delegation remains correct. |
 
 ### 3.4 Audit Docs Consistency Cross-Check
 
-Cross-check planned user wording against `a916a856` audit docs:
+`src/factgraph/audit/docs/02_evidence_graph.md` is consistent with the planned
+user wording:
 
-- Native/Souffle row graphs remain Form 1 with `EDGE_SUPPORTS`.
-- ProbLog row graphs are provenance-row graphs with `EDGE_DERIVES`.
-- `EDGE_UPDATES` remains reserved for PyReason / Form 2 / temporal paths.
-- ProbLog details are namespaced under `engine_meta["problog"]`.
+- Lines 41-45: native/Souffle row explanations are Form 1 with `supports`
+  edges.
+- Lines 48-52: ProbLog row explanations are provenance-row graphs rather than
+  Form 1 graphs, and ProbLog trace / uncertainty-projection details live under
+  `engine_meta["problog"]`.
+- Lines 126-128: native/Souffle use `supports`, ProbLog uses `derives`, and
+  `updates` remains reserved for PyReason / temporal paths.
+- Lines 203-208: audit package docs distinguish native/Souffle live Form 1
+  row graphs from ProbLog live row-level provenance graphs.
+
+No behavior/doc mismatch found; no stop trigger.
 
 ## 4. Step 4.6 Open Questions
 
-| ID | Question | Required answer shape |
+| ID | Answer |
 |---|---|---|
-| Q1 | Is the file scope exactly two user docs? | Yes/no with source-backed leave-alone rationale. |
-| Q2 | What is the `evidence.md` edit map? | Five location table with line refs and narrow wording decisions. |
-| Q3 | What is the SDK guide edit map? | Line refs and concise summary wording decision. |
-| Q4 | How should the deferred boundary change? | Remove ProbLog from future row evidence without teaching ProbLog Form 1. |
-| Q5 | How should the edge-kind reservation line change? | Match audit docs: native/Souffle `supports`, ProbLog `derives`, PyReason `updates` future. |
-| Q6 | Should the quickstart add a ProbLog ASCII topology example? | Yes/no with rationale; if yes, keep it short and distinct from Form 1. |
-| Q7 | How much `engine_meta["problog"]` detail should user docs teach? | Likely one sentence only; no full schema dump. |
-| Q8 | What verification baseline is appropriate? | Docs-only focused baseline plus `git diff --check` and status checks. |
-| Q9 | Are any stop/amend triggers hit? | None or explicit trigger with next action. |
+| Q1 | Yes: exactly `docs/official/kernel/quickstart/evidence.md` and `src/factgraph/sdk/docs/00_user_guide.en.md`. Leave-alone sweep found other ProbLog hits are semantics, annotation, adapter concept, or already-aligned audit docs. |
+| Q2 | Edit `evidence.md` §6 only: title line 260; preserve native/Souffle Form 1 body lines 262-281 and add a separate ProbLog paragraph; adjust fallback paragraph lines 283-286; replace deferred boundary line 302; replace edge-kind line 311-312. |
+| Q3 | Edit SDK guide lines 658-665 only: keep native/Souffle Form 1 summary, add a concise ProbLog provenance sentence, and remove ProbLog from the future evidence tracks sentence. |
+| Q4 | Replace `ProbLog / PyReason row-level Form 1 alignment is future work.` with PyReason-only future wording. ProbLog is shipped as row provenance evidence, not Form 1. |
+| Q5 | Match audit docs: native/Souffle row Form 1 graphs use `EDGE_SUPPORTS`; ProbLog row provenance graphs use `EDGE_DERIVES`; `EDGE_UPDATES` remains reserved for PyReason / Form 2 / temporal paths. |
+| Q6 | Yes, add one short ASCII line for ProbLog provenance: `NODE_SEED --derives--> NODE_PREMISE --derives--> NODE_CONCLUSION`. It is intentionally separate from the Form 1 `supports` ASCII block. |
+| Q7 | Mention only that ProbLog trace summary and uncertainty projection details live under `engine_meta["problog"]`; do not enumerate subkeys or JSON. No audit-module cross-link is needed in the user docs. |
+| Q8 | Use docs-only focused baseline plus the direct T8-C-1 sanity test: `tests.test_audit_evidence_graph`, `tests.test_audit_evidence_graph_render`, `tests.application.protocol.test_evaluate_result_dtos`, `tests.test_problog_evidence_graph`, and `tests.test_problog_semantics_profile_migration`; then `git diff --check`, status, and sacred-master check. |
+| Q9 | None. T8-C-1 behavior matches audit docs, file scope is exactly two user docs, and no implementation/governance/dirty-baseline change is needed. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -204,9 +231,9 @@ why the quickstart-detail / SDK-summary boundary remains clear.
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed inventory completed.
-- [ ] Q1-Q9 answered.
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed inventory completed.
+- [x] Q1-Q9 answered.
 - [ ] File scope remains exactly the two user-facing docs files.
 - [ ] Quickstart teaches ProbLog row provenance graphs as shipped but not Form 1.
 - [ ] SDK guide remains concise and links to quickstart for full detail.
