@@ -1,6 +1,6 @@
 # Task Blueprint: T8-B-2 Souffle Form 1 Conformance
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S/M
@@ -241,8 +241,10 @@ This matches the T8-B-1 recorded baseline (`2004 tests`, `72 failures`,
   `/interactions/{sessionID}`, ACL, signatures, salience, impact, or
   `x-evidence-key`.
 - Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
-- Dirty baseline remains the known four modified tracked docs/notebooks plus
-  three untracked reference directories.
+- Dirty baseline remains the known four modified tracked docs/notebooks, the
+  local deleted `workflow/working/.gitkeep`, and three untracked reference /
+  design files or directories. The `.gitkeep` deletion is a pre-existing
+  working tree state, not introduced or staged by this cycle.
 
 ## 6. Step 4.6 Inventory Plan
 
@@ -292,16 +294,16 @@ Step 4.6 narrowed implementation to a shared row-result Form 1 bridge:
 
 - [x] Step 4.6 answers Q1-Q9 with source-backed evidence.
 - [x] Souffle strategy is selected with file/test/LOC/risk rationale.
-- [ ] T8-A metadata validation and 14-key contract are preserved.
-- [ ] T8-B-1 native Form 1 behavior does not regress.
-- [ ] Existing Souffle converter tests remain green or any regression causes
+- [x] T8-A metadata validation and 14-key contract are preserved.
+- [x] T8-B-1 native Form 1 behavior does not regress.
+- [x] Existing Souffle converter tests remain green or any regression causes
       stop/amend.
-- [ ] Focused tests cover any shipped Souffle row Form 1 behavior.
-- [ ] No `EvidenceGraph` schema, node/edge kind, metadata-contract, T8-C,
+- [x] Focused tests cover any shipped Souffle row Form 1 behavior.
+- [x] No `EvidenceGraph` schema, node/edge kind, metadata-contract, T8-C,
       service/OpenAPI, release, match, database/view, or dirty-baseline changes
       land.
-- [ ] `git diff --check` passes.
-- [x] Sacred master and dirty baseline are preserved through Step 4.6.
+- [x] `git diff --check` passes.
+- [x] Sacred master and dirty baseline are preserved.
 
 ## 9. Verification Commands
 
@@ -336,4 +338,109 @@ Step 4.6 must confirm final commands after strategy selection.
 
 ## 10. Outcome / Deviations
 
-Pending scoped inventory / implementation / closure.
+### 10.1 Landed Artifacts
+
+| Commit | Role | Notes |
+|---|---|---|
+| `6f3f20c7` | Draft | Opened T8-B-2 Souffle Form 1 conformance cycle with Q1-Q9 pending. |
+| `5f67b109` | Scoped | Verified Souffle support artifacts are native-like and selected shared Form 1 helper extension. |
+| `08afd76c` | Runtime | Extended row-level Form 1 evidence to Souffle via protocol-local support-kind allowlist and SDK plumbing. |
+| `2a90c338` | Tests | Added Souffle row Form 1 protocol tests for topology, 14-key metadata, `run_id` absence, `winning_path_only`, and seed reuse. |
+| `8eae09d1` | Audit docs | Updated audit module docs from native-only row Form 1 to native + Souffle row Form 1 while preserving proof-tree readback boundary. |
+
+### 10.2 Runtime Outcome
+
+T8-B-2 shipped the scoped option (a) trivial extension. `_build_native_form1_evidence_graph(...)`
+was renamed to `_build_form1_evidence_graph(...)`, and its body stayed unchanged
+apart from accepting the protocol-local `_FORM1_ROW_SUPPORT_KINDS` allowlist.
+This confirms the Step 4.6 source finding that Souffle `SupportArtifact`s mirror
+the native support shape.
+
+The runtime intentionally defines `_FORM1_ROW_SUPPORT_KINDS` in
+`evaluate_result.py` instead of importing core `_WITNESS_BEARING_SUPPORT_KINDS`.
+The two sets are equal today, but they model different layers: core
+"witness-bearing support" vs protocol "row Form 1 evidence-ready support". Future
+adapter witness kinds may be witness-bearing without being row Form 1-ready.
+
+T8-A metadata validation gates are preserved:
+
+- `_evidence_metadata_for_row_result(...)` still builds, freezes, and validates
+  the 14-key graph metadata payload.
+- `_build_passed_row_evidence_graph(...)` still validates metadata before any
+  support-artifact dispatch.
+- `_explain_live_row(...)` still validates returned `EvidenceGraph.metadata`
+  before producing a passed explanation.
+
+### 10.3 Tests And Docs
+
+`tests/application/protocol/test_evaluate_result_dtos.py` now covers Souffle row
+Form 1 support kind, node kinds, `EDGE_SUPPORTS` direction, exact 14-key graph
+metadata, `run_id` absence, `alternative_paths.mode == "winning_path_only"`,
+and intra-graph seed reuse. Existing native Form 1 and SDK end-to-end assertions
+remain unchanged.
+
+`src/factgraph/audit/docs/02_evidence_graph.md` now says native and Souffle row
+explanations produce live row-level Form 1 graphs. It also preserves the
+candidate/proof-tree boundary: Souffle proof-tree readback still uses the
+adapter proof-tree converter. User-facing quickstart / SDK docs remain a T8-D
+round 2 follow-up.
+
+### 10.4 Verification
+
+Focused T8-B-2 suite:
+
+```text
+PYTHONPATH=src python -m unittest \
+  tests.test_souffle_evidence_graph \
+  tests.test_audit_evidence_graph \
+  tests.test_audit_evidence_graph_render \
+  tests.application.protocol.test_evaluate_result_dtos \
+  tests.test_sdk_read_match_runtime \
+  tests.test_candidate_evidence_steps \
+  tests.test_pyreason_evidence_graph \
+  tests.test_problog_evidence_graph
+
+Ran 112 tests; OK.
+```
+
+Additional gates:
+
+```text
+ruff check src/factgraph/application/protocol/evaluate_result.py \
+  src/factgraph/sdk/store.py \
+  tests/application/protocol/test_evaluate_result_dtos.py
+
+All checks passed.
+
+git diff --check
+
+clean
+```
+
+Full discovery:
+
+```text
+PYTHONPATH=src python -m unittest discover tests
+
+Ran 2004 tests; FAILED (failures=72, errors=233).
+```
+
+This matches the T8-B-1 baseline and shows no T8-B-2 regression delta.
+
+### 10.5 State Notes
+
+No `EvidenceGraph` schema, node/edge kind, metadata-contract, T8-C, service,
+OpenAPI, release, match, database/view, quickstart/SDK user-doc, or dirty
+baseline files were changed.
+
+Dirty baseline at closure is `4 M + 1 D + 3 U`:
+
+- four modified tracked docs/notebooks,
+- deleted `workflow/working/.gitkeep`,
+- untracked `docs/references/working/change-requests-2026-05-27/`,
+- untracked `rainbird-ai sdk code/`,
+- untracked `workflow/design/design-points/active/identity-and-data-model-redesign.zh.md`.
+
+The untracked identity/data-model artifact moved into active design-point
+location during the environment/session, but it remains untracked and untouched
+by this cycle.

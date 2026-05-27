@@ -1,14 +1,14 @@
 # Audit: T8-B-2 Souffle Form 1 Conformance
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-b-2-souffle-form1-conformance.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
-- Dirty baseline: preserve current four modified tracked docs/notebooks plus three untracked reference directories
+- Dirty baseline: preserve current four modified tracked docs/notebooks, deleted `workflow/working/.gitkeep`, and three untracked reference/design artifacts
 - Ownership: Codex owner, Claude reviewer (cross-flip)
 
 ## 1. Event Log
@@ -17,6 +17,10 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | this commit | T8-B-2 Souffle Form 1 conformance blueprint pair drafted | Triggered by T8-B-1 native lane completion; Q1-Q9 intentionally pending for source-backed Step 4.6. |
 | 2026-05-27 | scoped | this commit | Step 4.6 source-backed inventory completed | Souffle support artifacts verified native-like; scoped strategy is shared Form 1 helper + explicit native/Souffle allowlist; class narrowed to S/M. |
+| 2026-05-27 | implementation | `08afd76c` | Runtime bridge shipped | Extended Form 1 row evidence dispatch to Souffle with protocol-local support-kind allowlist and SDK row support plumbing. |
+| 2026-05-27 | implementation | `2a90c338` | Souffle row Form 1 tests added | Added protocol tests for Souffle topology, metadata bridge, `run_id` absence, `winning_path_only`, and seed reuse. |
+| 2026-05-27 | implementation | `8eae09d1` | Audit docs updated | Audit module docs now describe native + Souffle row-level Form 1 graphs and keep proof-tree converter boundary. |
+| 2026-05-27 | closure | this commit | T8-B-2 cycle closed | Focused suite 112 OK; full discover baseline remains 2004 tests / 72 failures / 233 errors. |
 
 ## 2. Draft Source Scan
 
@@ -121,8 +125,69 @@ The full discover result matches the T8-B-1 closure baseline (`2004 tests`,
 - [x] Q1-Q9 answered.
 - [x] Strategy and class locked.
 - [x] Test matrix and verification gates locked.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending inventory / implementation / closure.
+### 7.1 Outcome
+
+T8-B-2 completed the Souffle lane for T8-B row-level Form 1 evidence. The cycle
+landed a small shared-helper extension rather than a dedicated Souffle helper or
+proof-tree converter migration:
+
+- `_build_native_form1_evidence_graph(...)` was renamed to
+  `_build_form1_evidence_graph(...)`.
+- A protocol-local `_FORM1_ROW_SUPPORT_KINDS` allowlist now accepts native and
+  Souffle support kinds for row-result Form 1 graph construction.
+- `SDKStore._row_support_artifacts_for_candidates(...)` now admits Souffle
+  support artifacts through the same explicit allowlist.
+- The helper body is otherwise unchanged, confirming the Step 4.6 finding that
+  Souffle support artifacts mirror native support shape.
+
+The protocol-local allowlist is intentionally not imported from core
+`_WITNESS_BEARING_SUPPORT_KINDS`. Core witness-bearing support and protocol row
+Form 1 readiness are separate concepts that may diverge for future adapters.
+
+### 7.2 Boundary Preservation
+
+- T8-A 14-key metadata validation gates remain in place.
+- `run_id` remains envelope-only and absent from graph metadata.
+- `EvidenceGraph` DTO schema, node kinds, and edge kinds are unchanged.
+- Souffle proof-tree converter remains the candidate/proof-tree readback path.
+- T8-C ProbLog/PyReason enrichment, aggregate envelope, failed/why-not graphs,
+  match witness output, and T8-D user-facing docs remain deferred.
+
+### 7.3 Verification
+
+Focused suite:
+
+```text
+Ran 112 tests; OK.
+```
+
+Ruff and diff checks:
+
+```text
+All checks passed.
+git diff --check clean.
+```
+
+Full discover:
+
+```text
+Ran 2004 tests; FAILED (failures=72, errors=233).
+```
+
+The full discover result matches the T8-B-1 baseline and has no T8-B-2 delta.
+
+### 7.4 Dirty / Sacred State
+
+Sacred master remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+Dirty baseline at closure is `4 M + 1 D + 3 U`: four modified tracked
+docs/notebooks, deleted `workflow/working/.gitkeep`, untracked
+`docs/references/working/change-requests-2026-05-27/`, untracked
+`rainbird-ai sdk code/`, and untracked
+`workflow/design/design-points/active/identity-and-data-model-redesign.zh.md`.
+The `.gitkeep` deletion and untracked identity/data-model design point were not
+introduced or staged by this cycle.
