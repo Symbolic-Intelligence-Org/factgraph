@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Evidence metadata validation foundation** is runtime-enforced: graph
   metadata keeps the v1 14-key bridge, `run_id` remains envelope-only, and
   inconsistent graph metadata fails through `GRAPH_VALIDATION_FAILED`.
+- **T8-C engine enrichment inventory is archived** as a planning artifact:
+  ProbLog/PyReason enrichment remains deferred, with an adapter-side metadata
+  bridge direction and T10 dependency gates recorded.
+- **T10 semantics adapter execution inventory is archived** as a planning
+  artifact: C76 ProbLog, C74+C78 PyReason, and C77 PyReason temporal work are
+  split into planned follow-up implementation cycles.
 
 ### Changed
 
@@ -34,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Workflow/reference docs were refreshed**: the reference index was rebased
   onto current `workflow/` and `src/factgraph/` paths, and T8 split planning now
   records T8-A/B/C/D implementation dependencies.
+- **Evidence and adapter planning docs were refreshed**: T8-C and T10
+  inventories now record that ProbLog/PyReason runtime enrichment is not yet
+  shipped and remains gated by adapter semantics work.
 
 ### Deferred
 

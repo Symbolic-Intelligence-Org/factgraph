@@ -1,17 +1,17 @@
 # Current Operational Memory
 
-最后更新:2026-05-27(T8-D round 2 shipped to origin; docs sync round 2 complete)
+最后更新:2026-05-27(T8-C/T10 inventory shipped to origin; docs sync round 3 complete)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ c6fa481f`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ 580b2636`
 
-**Most recent local work:** docs synchronization round 2 for shipped-state
-indexes after T8-B-2 + T8-D round 2. This work reflects already-published state
-only and does not change runtime, tests, release machinery, or design
-commitments.
+**Most recent local work:** docs synchronization round 3 for shipped-state
+indexes after the T8-C engine enrichment inventory and T10 semantics adapter
+inventory. This work reflects already-published planning state only and does
+not change runtime, tests, release machinery, or design commitments.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do
 not move it.
@@ -83,6 +83,8 @@ gate.
 | T8-D A+B Docs Alignment | `22891808` | Quickstart and SDK guide now document T8-A + T8-B-1 shipped behavior and deferred evidence boundaries. |
 | T8-B-2 Souffle Form 1 Conformance | `5fcf7722` | Souffle row explanations now use the same row-level Form 1 graph bridge as native rows. |
 | T8-D Round 2 Souffle User Docs | `c6fa481f` | Quickstart and SDK guide now document Souffle row-level Form 1 as shipped and leave ProbLog/PyReason as future. |
+| T8-C Engine Enrichment Inventory | `f45739de` | Planning-only inventory selected adapter-side metadata bridge / provenance row bridge; T8-C-1 ProbLog and T8-C-2 PyReason remain gated by T10 or engine-specific semantics locks. |
+| T10 Semantics Adapter Inventory | `580b2636` | Planning-only inventory split T10 into T10-1 C76 ProbLog, T10-2 C74+C78 PyReason, and T10-3 C77 PyReason temporal work. |
 
 Evidence track current state:
 
@@ -91,18 +93,25 @@ Evidence track current state:
 - C115 `EDGE_SUPPORTS` direction is runtime-enforced and documented.
 - C118 intra-graph seed reuse is runtime-enforced and documented.
 - Souffle row Form 1 conformance is shipped and documented.
-- ProbLog/PyReason enrichment remains T8-C and is gated by T10 or an
-  engine-specific semantics lock.
+- ProbLog/PyReason enrichment remains deferred. T8-C inventory is complete, and
+  T10 inventory refined the gates: T8-C-1 requires full C76 ProbLog ship;
+  T8-C-2 requires C74+C77, with C78 required for multi-round PyReason
+  enrichment.
 
 ## Recommended Next Work
 
-1. **T8-C engine enrichment inventory**: decide whether ProbLog/PyReason can
-   start from engine-specific semantics locks or must wait for broader T10.
-2. **T10 semantics adapter execution**: adapter-touching C74/C76/C77/C78 work,
-   likely L-class unless narrowed by engine.
-3. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
+1. **T10-1 C76 ProbLog implementation**: add the missing ProbLog
+   `uncertainty_projection` SDK shell, lowering, and adapter `raw_kind + bound`
+   consumption. It unblocks T8-C-1 after full ship; first verify the two
+   pre-existing ProbLog migration test errors recorded by the T10 inventory.
+2. **T10-2 C74+C78 PyReason canonical migration**: canonicalize PyReason
+   bounds / atom-id handling and introduce `iteration_count`, preserving legacy
+   compatibility.
+3. **T10-3 C77 PyReason temporal migration**: add canonical `fact_boundaries`
+   / `time_binned` policy and decouple legacy `fixed_timesteps`.
+4. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
-4. **Identity/data-model redesign intake**: classify the untracked active
+5. **Identity/data-model redesign intake**: classify the untracked active
    design-point file before adopting it into workflow state.
 
 ## Governance Reminders
