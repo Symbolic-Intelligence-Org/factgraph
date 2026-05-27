@@ -1,9 +1,9 @@
 # Task Blueprint: T8-B Native/Souffle Form 1 Topology
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
-- Class: L unless Step 4.6 narrows to native-only or Souffle-only
+- Class: M/L (scoped to T8-B-1 native Form 1 topology)
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
@@ -108,8 +108,7 @@ Draft scan confirms orientation only:
 - T8-A validation is now the required metadata foundation for any new graph
   construction path.
 
-This scan does not answer Q1-Q9. Step 4.6 must replace it with source-backed
-file:line evidence and final scoped decisions.
+This scan is superseded by the source-backed Step 4.6 decisions below.
 
 ## 4. Open Questions For Step 4.6
 
@@ -124,6 +123,52 @@ file:line evidence and final scoped decisions.
 | Q7 | Where does C136 aggregate count-only envelope live? | Decision on `engine_meta` placement or explicit deferral if aggregate substrate is out of tranche. |
 | Q8 | What is the test matrix? | Matrix covering selected native/Souffle topology, seed reuse, OR/aggregate if scoped, and T7/T8-A regressions. |
 | Q9 | How should `_build_passed_row_evidence_graph(...)` change? | Direct replacement vs new helper selection vs defer; must preserve T8-A validation gates. |
+
+## 4.1 Final Scoped Decisions
+
+| Decision | Lock |
+|---|---|
+| Tranche | **T8-B-1 native Form 1 only**. Souffle remains regression-gated and deferred to T8-B-2 / adapter-specific alignment. |
+| Class | M/L. Native requires private support plumbing plus topology conversion, but avoids adapter metadata alignment. |
+| Runtime boundary | Preserve T8-A metadata gates and `_evidence_metadata_for_row_result(row, result)` signature. No public SDK/API shape change. |
+| EvidenceGraph schema | Existing `NODE_CONCLUSION`, `NODE_PREMISE`, `NODE_SEED`, and `EDGE_SUPPORTS` only. `EDGE_DERIVES` / `EDGE_UPDATES` remain Form 2 / temporal reserves. |
+| Native support source | Reuse existing `SupportArtifact` / support capture substrate; do not rewrite candidate evidence tree. Existing candidate tree dict helpers are compatibility/readback surfaces, not direct `EvidenceGraph` node emitters. |
+| Support carrier | Add private row/result support context only if needed by implementation. Exact private carrier shape is implementation detail, but it must be backward-compatible for direct `EvaluateRow(...)` construction. |
+| Seed reuse | Deduplicate seeds **within one row `EvidenceGraph`** by assertion/fact identity. Do not attempt cross-row shared graph objects; each `Explanation` owns an independent graph. |
+| OR | Native support capture is already winning-branch-only via selected branch support artifacts. T8-B-1 must expose that boundary on the root conclusion, without rendering failed branches. |
+| Aggregates | C136 remains out of T8-B-1 unless current support artifact data already exposes aggregate matched-count details. Do not fabricate aggregate envelopes. |
+| Docs | No user-facing docs commit unless the implemented native graph changes audit module user contract. Blueprint closure must record the no-doc or docs decision. |
+
+## 4.2 Q1-Q9 Answers
+
+| Q | Scoped answer |
+|---|---|
+| Q1 Narrow decision | **Split T8-B into T8-B-1 native and T8-B-2 Souffle.** Native-only touches `evaluate_result.py`, existing native support artifact plumbing, and protocol tests. Souffle-only is smaller at the converter level but does not satisfy row-result Form 1 because its metadata is adapter-local. Combined native+Souffle would mix two metadata/topology problems and remains L. |
+| Q2 Reuse mapping | Reuse `SupportArtifact` (`_support.py:96-105`) and support capture (`_support_capture.py:29-91`) as source data. Treat `_candidate_evidence_tree.py` helpers as logic/readback references: `_build_support_sections` (`:103-164`) maps support sections, `_build_predicate_witness_group` (`:167-185`) maps predicate witness grouping, `_build_assertion_leaf` (`:257-280`) maps assertion seed normalization. Build a thin native Form 1 adapter rather than emitting the legacy tree dict shape. |
+| Q3 Souffle conformance | Existing `souffle_proof_tree_to_evidence_graph(...)` already emits Form-1-like node kinds and `EDGE_SUPPORTS` (`provenance.py:48-137`; tests `test_souffle_evidence_graph.py:40-89`), but it is not row-result Form 1: metadata is adapter-local (`query`, `rule_count`, `root_relation`, `root_rule_number` at `:131-136`), root meta lacks §4.3 fields, and seed reuse is not C118-complete. Defer. |
+| Q4 Node/edge rules | Native Form 1 uses root `NODE_CONCLUSION` for the row claim, `NODE_PREMISE` for selected support atoms/checks, and `NODE_SEED` for predicate assertion witnesses. Edges are `EDGE_SUPPORTS` from child/downstream to parent/upstream per C115 (`evidence-tree...:2259`), matching §4.7 examples (`:623-628`). |
+| Q5 Seed reuse | Dedup repeated assertion seeds inside the row graph. C118 says same fact has one `NODE_SEED` with multiple incoming support edges (`evidence-tree...:2262`). Cross-row sharing is not in scope because each row explanation has its own `EvidenceGraph`. |
+| Q6 Winning-path-only OR | Native support capture already selects one branch: `_evaluate_where_over_view_with_support(...)` calls `find_winning_branch_index(...)` then builds a support artifact for that branch (`_evaluate.py:224-255`; `_support_capture.py:145-167`). T8-B-1 exposes this as winning-path-only root metadata and does not render failed branches. |
+| Q7 Aggregate envelope | Deferred for T8-B-1. C136 requires a specific aggregate premise envelope and matched-count semantics (`evidence-tree...:1879-1953`, `:2264`), but current `NonFactStep` only carries generic `kind/status/details` (`_support.py:47-63`) and support capture does not expose aggregate matched counts. |
+| Q8 Tests | Add native Form 1 protocol tests in `tests/application/protocol/test_evaluate_result_dtos.py`; keep T7/T8-A regressions and run `test_candidate_evidence_steps`, `test_souffle_evidence_graph`, audit graph/render tests. Souffle remains regression only. |
+| Q9 Replacement strategy | Preserve `_build_passed_row_evidence_graph(...)` as the single validation gate (`evaluate_result.py:819-840`). Delegate internally to a private native Form 1 helper when native support context exists; fallback to the existing single-conclusion graph for detached/manual rows without support. T8-A validation remains before/after graph construction. |
+
+## 4.3 Source-Backed Inventory Highlights
+
+| Area | Evidence | T8-B-1 implication |
+|---|---|---|
+| Current row graph | `_build_passed_row_evidence_graph(...)` emits one `NODE_CONCLUSION`, no edges, support_kind `evaluate_row` (`evaluate_result.py:819-840`). | Replace internals conditionally; keep function as gate wrapper. |
+| Row conversion gap | `_candidate_set_to_evaluate_row(...)` currently copies bindings/raw_kind/bound/evidence_ref only (`evaluate_result.py:527-567`); `CandidateSet` carries `support_digest/support_kind` (`candidates.py:13-30`). | Native topology needs private support context plumbing; current public row fields are insufficient. |
+| Store result creation | SDK result builder converts candidates to rows at `sdk/store.py:2691-2732` and already has candidate list in scope. | Implementation can attach private support context without changing public API. |
+| Support artifact source | Native evaluation stores support artifacts at `_evaluate.py:238-247`; candidate support backrefs at `:258-289`. | Use existing native witness substrate; no candidate tree rewrite. |
+| Winning branch | `find_winning_branch_index(...)` returns first satisfying branch (`_support_capture.py:145-167`); support artifact is built from selected branch only (`:29-91`). | C129 winning-path-only is source-backed. |
+| Candidate tree compatibility | Existing tree helper emits legacy dict nodes (`candidate_result`, `support_section`, `predicate_witness_group`, `assertion_fact`) (`_candidate_evidence_tree.py:39-54`, `:103-185`, `:257-280`). | Treat as readback compatibility/regression, not direct EvidenceGraph output. |
+| Candidate steps | Step traversal consumes the legacy dict shape (`_candidate_evidence_tree_steps.py:48-116`, `:133-139`, `:231-246`). | Regression gate only; T8-B-1 does not rewrite this surface. |
+| Souffle converter | Converter already builds `NODE_CONCLUSION/PREMISE/SEED` and `EDGE_SUPPORTS` (`provenance.py:72-118`). | Structurally close, semantically separate; defer adapter alignment. |
+| Edge kinds | Design C115 says Form 1 only `EDGE_SUPPORTS`; `EDGE_DERIVES`/`EDGE_UPDATES` are Form 2 reserves (`evidence-tree...:2259`, `:623-628`). | T8-B-1 must not use derives/updates. |
+| Aggregate | C136 locks aggregate as single premise + 0 seed with `contributors.mode="omitted_v1"` (`evidence-tree...:1879-1953`, `:2264`). | Deferred because current support capture lacks matched-count envelope. |
+| Baseline focused tests | `PYTHONPATH=src python -m unittest ...` across audit/candidate/Souffle/protocol ran **93 OK**. | Implementation must preserve or improve. |
+| Full discover baseline | `PYTHONPATH=src python -m unittest discover tests` ran **2004 tests**, with existing `72 failures / 233 errors` in legacy/frontier/why_not/redesign areas. | Closure must record baseline; not a T8-B gate unless failure set changes in scoped files. |
 
 ## 5. Existing Invariants To Preserve
 
