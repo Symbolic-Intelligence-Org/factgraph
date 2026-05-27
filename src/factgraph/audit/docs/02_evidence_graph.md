@@ -1,7 +1,7 @@
 # EvidenceGraph (audit)
 
 - Scope: `src/factgraph/audit/evidence_graph.py`
-- Last updated: 2026-04-30
+- Last updated: 2026-05-27
 - Audience: developers implementing cross-engine explainability
   consumers in the audit layer
 
@@ -24,6 +24,19 @@ It currently does not:
 - Replace each engine's own provenance carrier
 - Replace Souffle's existing `CandidateEvidenceTree`
 - Replace `service.static_ui`'s full-page templates
+- Act as a user session transcript or cryptographic provenance channel
+
+The v1 audit contract is **sessionless**. An audit record is carried by
+three layers:
+
+- `EvaluateResult`: the result envelope with `run_id`, engine identity,
+  view/semantics digests, row ids, and result digest
+- `Explanation`: the row-bound status envelope returned by `row.explain()`
+- `EvidenceGraph.metadata`: a durable graph-local copy of the row/result
+  context for passed rows
+
+`run_id` remains envelope-level. It is intentionally not duplicated into
+`EvidenceGraph.metadata`; graph-only run grouping is a future design.
 
 ## 2. Current data model
 
@@ -58,6 +71,29 @@ The current v1 exposes three frozen dataclasses:
 correspond to a single entity identity. Relational expressions such
 as `alice→bob` are also allowed as a `component`.
 
+For row-sourced passed explanations, `metadata` carries the current v1
+audit bridge keys:
+
+| Key | Meaning |
+|---|---|
+| `result_id` | owning `EvaluateResult` id |
+| `row_id` | explained row id |
+| `evidence_ref_id` | row `EvidenceRef.ref_id` |
+| `claim_digest` | row claim digest |
+| `closed_head_digest` | closed-head digest |
+| `expr_digest` | evaluated expression digest |
+| `rule_set_digest` | rule set digest |
+| `view_snapshot_digest` | database/view snapshot digest |
+| `semantics_digest` | semantics profile digest, or `None` |
+| `result_digest` | full result digest |
+| `engine` | engine id |
+| `engine_version` | engine version, or `None` |
+| `adapter_version` | adapter version, or `None` |
+| `evaluated_at` | JSON-safe evaluated timestamp |
+
+Future metadata keys need an owning blueprint that names the producer,
+consumer, and compatibility impact.
+
 ## 3. Frozen enumerations
 
 Only the minimal shared enumerations are frozen at v1:
@@ -90,6 +126,11 @@ The `dag` layout and the `rule_fire` node kind are not in v1 scope yet.
 `engine_meta` and `metadata` are shallow-frozen via `MappingProxyType`
 to prevent consumers from mutating the shared DTO during rendering.
 
+Durable or external graph dictionaries should be reconstructed through
+`evidence_graph_from_dict(...)` before rendering. The reference renderer
+accepts constructed `EvidenceGraph` instances, not raw dictionaries or
+duck-typed stand-ins.
+
 ## 5. Current renderer
 
 `audit/evidence_graph.py` currently implements:
@@ -111,6 +152,18 @@ to prevent consumers from mutating the shared DTO during rendering.
 The renderer produces a **standalone HTML fragment**, not a full HTML
 page. It is designed to be embedded later by
 `service.static_ui`'s candidate evidence page.
+
+The renderer is a reference diagnostic utility. It should be truthful and
+boring: display graph data that already exists, never infer missing
+provenance, and never invent placeholder nodes for invalid inputs.
+
+Large graph guidance follows the active evidence design:
+
+- more than `250` nodes or more than `500` edges emits a warning banner
+- the reference renderer still renders the graph
+- the renderer does not truncate solely because the graph is large
+- product UIs should provide folding, search, virtualization, or
+  progressive disclosure for repeated inspection
 
 ## 6. Current boundaries
 
@@ -153,6 +206,11 @@ Boundaries that still hold:
 - The candidate evidence page still keeps the existing Souffle
   provenance-tree section; `EvidenceGraph` is an additional unified
   explain block, not a replacement for the older tree viewer
+- Rich topology population, central metadata sufficiency validation,
+  and engine-specific enrichment belong to future T8 slices
+- Witness/assertion-returning match output is a future match/evidence
+  seam; this module does not define `.as_assertions()`, `.witnesses()`,
+  or view-creation APIs
 
 ## 7. Known Issues (confirmed during 2026-03-29 walkthrough)
 
