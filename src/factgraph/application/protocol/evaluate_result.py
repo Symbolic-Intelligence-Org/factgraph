@@ -23,7 +23,6 @@ from factgraph.audit.evidence_graph import (
     NODE_PREMISE,
     NODE_SEED,
 )
-from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
@@ -891,6 +890,8 @@ def _build_problog_provenance_row_evidence_graph(
     metadata: Mapping[str, Any],
     provenance_envelope: ProvenanceEnvelope,
 ) -> EvidenceGraph:
+    from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
+
     if provenance_envelope.engine != "problog" or provenance_envelope.payload_type != "proof_trace":
         raise ValueError("ProbLog row evidence requires a problog proof_trace provenance envelope")
     payload = provenance_envelope.payload
