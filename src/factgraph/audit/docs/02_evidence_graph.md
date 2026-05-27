@@ -38,6 +38,12 @@ three layers:
 `run_id` remains envelope-level. It is intentionally not duplicated into
 `EvidenceGraph.metadata`; graph-only run grouping is a future design.
 
+Native row explanations now use the same DTO family. For passed native
+`EvaluateRow.explain()` calls, the row-level `EvidenceGraph` is populated
+as a Form 1 tree with a root `conclusion`, selected-branch `premise`
+nodes, assertion `seed` nodes, and `supports` edges. This is separate
+from the older candidate evidence tree readback APIs.
+
 ## 2. Current data model
 
 The current v1 exposes three frozen dataclasses:
@@ -110,7 +116,9 @@ Only the minimal shared enumerations are frozen at v1:
   - `derives`
   - `updates`
 
-The `dag` layout and the `rule_fire` node kind are not in v1 scope yet.
+Native Form 1 row graphs use `supports` only. `derives` and `updates`
+remain reserved for Form 2 / temporal engine paths. The `dag` layout and
+the `rule_fire` node kind are not in v1 scope yet.
 
 ## 4. Validation and invariants
 
@@ -184,9 +192,9 @@ Large graph guidance follows the active evidence design:
       `ProvenanceEnvelope.payload`
     - `problog`: converted from the proof trace in
       `ProvenanceEnvelope.payload`
-  - `native` derivations do not produce an `EvidenceGraph`; the
-    reader-side explain surface for native candidates is the
-    candidate evidence tree / summary / narrative DTOs
+  - `native` row explanations produce live row-level Form 1 graphs;
+    native candidate readback still keeps the candidate evidence tree /
+    summary / narrative DTOs
 - `AuditQuery.get_candidate_evidence_graph(...)` reads the durable
   graph
 - `service.static_ui`'s candidate evidence page now prefers rendering
@@ -206,8 +214,8 @@ Boundaries that still hold:
 - The candidate evidence page still keeps the existing Souffle
   provenance-tree section; `EvidenceGraph` is an additional unified
   explain block, not a replacement for the older tree viewer
-- Rich topology population, central metadata sufficiency validation,
-  and engine-specific enrichment belong to future T8 slices
+- Rich adapter topology population and engine-specific enrichment belong
+  to future T8 slices
 - Witness/assertion-returning match output is a future match/evidence
   seam; this module does not define `.as_assertions()`, `.witnesses()`,
   or view-creation APIs
