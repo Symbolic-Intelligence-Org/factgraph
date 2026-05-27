@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Native row Form 1 evidence graphs** are shipped for passed native
   `EvaluateRow.explain()` results: native support context now populates
   `NODE_CONCLUSION`, `NODE_PREMISE`, `NODE_SEED`, and `EDGE_SUPPORTS` topology.
+- **Souffle row Form 1 evidence graphs** are shipped for passed Souffle
+  `EvaluateRow.explain()` results through the same row-level Form 1 bridge as
+  native rows.
 - **Evidence metadata validation foundation** is runtime-enforced: graph
   metadata keeps the v1 14-key bridge, `run_id` remains envelope-only, and
   inconsistent graph metadata fails through `GRAPH_VALIDATION_FAILED`.
@@ -22,9 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Evidence docs now reflect shipped behavior**: the quickstart and SDK guide
-  document the sessionless three-layer audit model, native Form 1 graph shape,
-  winning-path-only OR marker, renderer guard/large-graph boundary, and current
-  deferred evidence surfaces.
+  document the sessionless three-layer audit model, native and Souffle Form 1
+  graph shape, winning-path-only OR marker, renderer guard/large-graph
+  boundary, and current deferred evidence surfaces.
 - **Evidence audit/rendering bridge hardened**: the reference renderer rejects
   non-`EvidenceGraph` inputs and warns, without truncating or refusing, when a
   graph exceeds 250 nodes or 500 edges.
@@ -34,10 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deferred
 
-- Souffle row Form 1 conformance, ProbLog/PyReason evidence enrichment,
-  aggregate contributor envelopes, failed/why-not/counterfactual evidence
-  graphs, match witness output, and session/signature/ACL evidence channels
-  remain future tracks.
+- ProbLog/PyReason evidence enrichment, aggregate contributor envelopes,
+  failed/why-not/counterfactual evidence graphs, match witness output, and
+  session/signature/ACL evidence channels remain future tracks.
 
 ## [0.2.0-rc.1] - 2026-05-26
 

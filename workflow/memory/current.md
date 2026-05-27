@@ -1,30 +1,31 @@
 # Current Operational Memory
 
-最后更新:2026-05-27(T8-D shipped to origin; docs sync micro-pass in progress)
+最后更新:2026-05-27(T8-D round 2 shipped to origin; docs sync round 2 complete)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ 22891808`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ c6fa481f`
 
-**Most recent local work:** docs synchronization micro-pass for shipped-state indexes
-(`CHANGELOG.md`, repo memory, roadmap, docs index, design-point index). This
-work reflects already-published state only and does not change runtime, tests,
-release machinery, or design commitments.
+**Most recent local work:** docs synchronization round 2 for shipped-state
+indexes after T8-B-2 + T8-D round 2. This work reflects already-published state
+only and does not change runtime, tests, release machinery, or design
+commitments.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do
 not move it.
 
-**Dirty baseline intentionally preserved(4 M + 3 U as of this sync):**
+**Dirty baseline intentionally preserved(4 M + 1 D + 3 U as of this sync):**
 
 - `docs/references/working/design-points/readme.md`
 - `examples/01_sdk_check_diagnose.ipynb`
 - `examples/02_overlay_why_not_frontier.ipynb`
 - `examples/archive/01_sdk_basics.ipynb`
+- deleted `workflow/working/.gitkeep`
 - untracked `docs/references/working/change-requests-2026-05-27/`
-- untracked `docs/references/working/identity-and-data-model-redesign-2026-05-27/`
 - untracked `rainbird-ai sdk code/`
+- untracked `workflow/design/design-points/active/identity-and-data-model-redesign.zh.md`
 
 Do not absorb these into unrelated release, evidence, docs-sync, or cleanup work
 without explicit reclassification.
@@ -80,6 +81,8 @@ gate.
 | T8-A Metadata + Validation Foundation | `40a0ce47` | C135 runtime-enforced with 14-key exact-set/value checks and always-on metadata validation gates. |
 | T8-B-1 Native Form 1 Topology | `9e9a7f49` | Native row `EvidenceGraph` now uses Form 1 topology with `NODE_CONCLUSION`, `NODE_PREMISE`, `NODE_SEED`, and `EDGE_SUPPORTS`. |
 | T8-D A+B Docs Alignment | `22891808` | Quickstart and SDK guide now document T8-A + T8-B-1 shipped behavior and deferred evidence boundaries. |
+| T8-B-2 Souffle Form 1 Conformance | `5fcf7722` | Souffle row explanations now use the same row-level Form 1 graph bridge as native rows. |
+| T8-D Round 2 Souffle User Docs | `c6fa481f` | Quickstart and SDK guide now document Souffle row-level Form 1 as shipped and leave ProbLog/PyReason as future. |
 
 Evidence track current state:
 
@@ -87,20 +90,20 @@ Evidence track current state:
 - C129 winning-path-only OR is runtime-visible and documented.
 - C115 `EDGE_SUPPORTS` direction is runtime-enforced and documented.
 - C118 intra-graph seed reuse is runtime-enforced and documented.
-- Souffle row Form 1 conformance remains T8-B-2.
+- Souffle row Form 1 conformance is shipped and documented.
 - ProbLog/PyReason enrichment remains T8-C and is gated by T10 or an
   engine-specific semantics lock.
 
 ## Recommended Next Work
 
-1. **T8-B-2 Souffle conformance**: align the existing Souffle converter with
-   row-result Form 1 metadata and T8-B native topology expectations.
-2. **T8-C engine enrichment inventory**: decide whether ProbLog/PyReason can
+1. **T8-C engine enrichment inventory**: decide whether ProbLog/PyReason can
    start from engine-specific semantics locks or must wait for broader T10.
+2. **T10 semantics adapter execution**: adapter-touching C74/C76/C77/C78 work,
+   likely L-class unless narrowed by engine.
 3. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
-4. **T10 semantics adapter execution**: adapter-touching C74/C76/C77/C78 work,
-   likely L-class unless narrowed by engine.
+4. **Identity/data-model redesign intake**: classify the untracked active
+   design-point file before adopting it into workflow state.
 
 ## Governance Reminders
 
