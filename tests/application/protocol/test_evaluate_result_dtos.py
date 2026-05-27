@@ -307,9 +307,38 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.checked_scope["explain_semantics_digest"], semantics_digest)
         self.assertEqual(explanation.checked_scope["semantics_match"], True)
         self.assertEqual(explanation.evidence.root_node_id, result[0].row_id)
+        expected_metadata_keys = {
+            "result_id",
+            "row_id",
+            "evidence_ref_id",
+            "claim_digest",
+            "closed_head_digest",
+            "expr_digest",
+            "rule_set_digest",
+            "view_snapshot_digest",
+            "semantics_digest",
+            "result_digest",
+            "engine",
+            "engine_version",
+            "adapter_version",
+            "evaluated_at",
+        }
+        self.assertEqual(set(explanation.evidence.metadata), expected_metadata_keys)
+        self.assertNotIn("run_id", explanation.evidence.metadata)
         self.assertEqual(explanation.evidence.metadata["result_id"], result.result_id)
+        self.assertEqual(explanation.evidence.metadata["row_id"], result[0].row_id)
         self.assertEqual(explanation.evidence.metadata["evidence_ref_id"], result[0].evidence_ref.ref_id)
+        self.assertEqual(explanation.evidence.metadata["claim_digest"], result[0].claim.digest)
+        self.assertEqual(explanation.evidence.metadata["closed_head_digest"], result[0].evidence_ref.closed_head_digest)
+        self.assertEqual(explanation.evidence.metadata["expr_digest"], expr_digest)
+        self.assertEqual(explanation.evidence.metadata["rule_set_digest"], rule_set_digest)
         self.assertEqual(explanation.evidence.metadata["view_snapshot_digest"], view_snapshot_digest)
+        self.assertEqual(explanation.evidence.metadata["semantics_digest"], semantics_digest)
+        self.assertEqual(explanation.evidence.metadata["result_digest"], result_digest)
+        self.assertEqual(explanation.evidence.metadata["engine"], engine)
+        self.assertEqual(explanation.evidence.metadata["engine_version"], None)
+        self.assertEqual(explanation.evidence.metadata["adapter_version"], None)
+        self.assertEqual(explanation.evidence.metadata["evaluated_at"], "2026-05-25T00:00:00Z")
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
         run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()

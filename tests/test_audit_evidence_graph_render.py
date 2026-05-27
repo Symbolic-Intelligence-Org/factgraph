@@ -149,12 +149,107 @@ class AuditEvidenceGraphRenderTests(unittest.TestCase):
         self.assertIn("evidence-graph-timeline", html)
         self.assertNotIn("evidence-timeline-edge-note", html)
 
-    def test_renderer_dispatch_rejects_unknown_layout(self) -> None:
+    def test_renderer_rejects_unvalidated_non_graph_input(self) -> None:
         class BadGraph:
             layout_hint = "dag"
 
-        with self.assertRaisesRegex(ValueError, "unsupported layout_hint: dag"):
+        with self.assertRaisesRegex(ValueError, "graph must be EvidenceGraph"):
             render_evidence_graph_html(BadGraph())  # type: ignore[arg-type]
+
+    def test_renderer_does_not_warn_below_large_graph_threshold(self) -> None:
+        nodes = tuple(
+            EvidenceNode(
+                node_id=f"n:{idx}",
+                node_kind=NODE_CONCLUSION if idx == 0 else NODE_PREMISE,
+                component="c",
+                label=f"node {idx}",
+                value_summary="v",
+            )
+            for idx in range(250)
+        )
+        graph = EvidenceGraph(
+            graph_id="eg:not-large",
+            engine="test",
+            root_node_id="n:0",
+            nodes=nodes,
+            edges=(),
+            support_kind="test",
+        )
+
+        html = render_evidence_graph_html(graph)
+
+        self.assertIn("evidence-graph-tree", html)
+        self.assertNotIn("evidence-graph-large-warning", html)
+
+    def test_renderer_warns_for_large_node_count_without_truncating(self) -> None:
+        nodes = tuple(
+            EvidenceNode(
+                node_id=f"n:{idx}",
+                node_kind=NODE_CONCLUSION if idx == 0 else NODE_PREMISE,
+                component="c",
+                label=f"node {idx}",
+                value_summary="v",
+            )
+            for idx in range(251)
+        )
+        edges = tuple(
+            EvidenceEdge(
+                edge_id=f"e:{idx}",
+                from_node_id=f"n:{idx + 1}",
+                to_node_id="n:0",
+                edge_kind=EDGE_DERIVES,
+            )
+            for idx in range(250)
+        )
+        graph = EvidenceGraph(
+            graph_id="eg:large-nodes",
+            engine="test",
+            root_node_id="n:0",
+            nodes=nodes,
+            edges=edges,
+            support_kind="test",
+        )
+
+        html = render_evidence_graph_html(graph)
+
+        self.assertIn("evidence-graph-large-warning", html)
+        self.assertIn("251 nodes / 250 edges", html)
+        self.assertIn("node 250", html)
+
+    def test_renderer_warns_for_large_edge_count_without_truncating(self) -> None:
+        nodes = tuple(
+            EvidenceNode(
+                node_id=f"n:{idx}",
+                node_kind=NODE_CONCLUSION if idx == 0 else NODE_PREMISE,
+                component="c",
+                label=f"node {idx}",
+                value_summary="v",
+            )
+            for idx in range(502)
+        )
+        edges = tuple(
+            EvidenceEdge(
+                edge_id=f"e:{idx}",
+                from_node_id=f"n:{idx + 1}",
+                to_node_id="n:0",
+                edge_kind=EDGE_DERIVES,
+            )
+            for idx in range(501)
+        )
+        graph = EvidenceGraph(
+            graph_id="eg:large-edges",
+            engine="test",
+            root_node_id="n:0",
+            nodes=nodes,
+            edges=edges,
+            support_kind="test",
+        )
+
+        html = render_evidence_graph_html(graph)
+
+        self.assertIn("evidence-graph-large-warning", html)
+        self.assertIn("502 nodes / 501 edges", html)
+        self.assertIn("node 501", html)
 
 
 if __name__ == "__main__":
