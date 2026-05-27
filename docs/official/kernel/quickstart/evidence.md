@@ -257,7 +257,7 @@ the explanation context, the normal user-facing outcome is
 custom graph builder is a protocol contract violation and is not normal
 application flow.
 
-## 6. `EvidenceGraph` — shipped native and Souffle Form 1 graph (v0.2)
+## 6. `EvidenceGraph` — shipped row-level graphs (v0.2)
 
 When `status == "passed"`, `explanation.evidence` is an `EvidenceGraph`.
 For native or Souffle passed rows with support context, this graph now exposes
@@ -280,10 +280,22 @@ possible or failed branch. The root metadata exposes that boundary with
 `"winning_path_only"`. Other engine metadata fields are implementation
 details; do not write SDK code that depends on their full shape.
 
+ProbLog passed rows now produce a row-level provenance graph rather than this
+Form 1 support tree. Its proof-trace shape uses `derives` edges:
+
+```text
+NODE_SEED --derives--> NODE_PREMISE --derives--> NODE_CONCLUSION
+```
+
+The exact frame hierarchy comes from the ProbLog proof trace. Top-level graph
+metadata still mirrors the same row/result audit context; ProbLog trace summary
+and uncertainty projection details live under `engine_meta["problog"]`.
+
 Rows without native or Souffle support context, including manually
 constructed/detached rows, keep the older single-`NODE_CONCLUSION` fallback
-graph. Other adapter rows may also use fallback or adapter-specific graph
-shapes until their Form 1 alignment lands.
+graph. ProbLog passed rows no longer use that fallback; they use the provenance
+graph described above. PyReason and other unaligned adapter rows may still use
+fallback or adapter-specific graph shapes until their row-level alignment lands.
 
 Stable graph invariants:
 
@@ -299,7 +311,7 @@ Stable graph invariants:
 
 Current boundaries:
 
-- ProbLog / PyReason row-level Form 1 alignment is future work.
+- PyReason row-level Form 1 alignment is future work.
 - Aggregate count-only envelopes are future work; current native non-fact
   checks do not expose the matched-count contributor envelope.
 - Failed graph, why-not, and counterfactual trees are future evidence tracks.
@@ -308,8 +320,9 @@ Current boundaries:
   its graph.
 - Session logs, `/interactions/{sessionID}`, signatures, ACL, `x-evidence-key`,
   salience, and impact remain outside the sessionless v1 audit channel.
-- `EDGE_DERIVES` and `EDGE_UPDATES` are reserved for Form 2 / temporal engine
-  paths. Native and Souffle Form 1 row graphs use `EDGE_SUPPORTS`.
+- Native and Souffle Form 1 row graphs use `EDGE_SUPPORTS`. ProbLog row
+  provenance graphs use `EDGE_DERIVES`. `EDGE_UPDATES` remains reserved for
+  PyReason / Form 2 / temporal engine paths.
 - `dag` layout and `rule_fire` node kind are not in v1 scope.
 
 ## 7. Stability of `Inference` and `Branch`
