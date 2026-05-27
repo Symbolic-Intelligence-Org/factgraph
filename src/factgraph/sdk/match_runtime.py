@@ -14,20 +14,13 @@ from factgraph.application.protocol.rule_expr_lowering import (
 )
 from factgraph.application.schema_runtime import entity_type_from_ref
 from factgraph.core.rules.where_ast import (
-    AggregateAtom,
     AndExpr,
     Atom,
-    BuiltinAtom,
     CmpAtom,
     Const,
-    InAtom,
-    NotAtom,
     PredAtom,
-    RuleRefAtom,
-    Term,
     Var,
     lower_ast_to_where_ir,
-    parse_where_ir_to_ast,
 )
 from factgraph.core.rules.where_eval import evaluate_where
 from factgraph.core.view.projector import project_view_facts
@@ -37,7 +30,6 @@ from .facade import EntitySnapshot, _build_snapshot
 from .schema import Entity, Field
 
 
-_MATCH_OR_UNSUPPORTED = "fg.read.match(...) currently supports Rule and AND RuleExpr only"
 _MATCH_VIEW_UNSUPPORTED = (
     "method-level view= is not supported by fg.read.match(); use FactGraph.attach(db, view=view) instead"
 )
@@ -52,9 +44,10 @@ class _DeclaredMatchPort:
 
 @dataclass(frozen=True)
 class _MatchPlan:
-    body_ir: list[Any]
+    body_branches: tuple[tuple[Any, ...], ...]
     projection_port: _DeclaredMatchPort
     ports_by_name: Mapping[str, _DeclaredMatchPort]
+    partial_ports: frozenset[str]
 
 
 def sdk_match(
@@ -81,20 +74,20 @@ def sdk_match(
         )
 
     plan = _build_match_plan(sdk, entity_cls, template)
-    effective_ir = _apply_port_constraints(
+    effective_branches = _apply_port_constraints(
         sdk,
         entity_cls,
         plan,
         port_constraints,
     )
     _validate_connectivity(
-        effective_ir,
+        effective_branches,
         projected_var=plan.projection_port.var.name,
         constrained_vars={plan.ports_by_name[name].var.name for name in port_constraints},
     )
 
     view_facts = project_view_facts(sdk.ledger, sdk.schema_ir)
-    rows = evaluate_where(view_facts, effective_ir)
+    rows = evaluate_where(view_facts, _branches_to_where_ir(effective_branches))
     out: list[EntitySnapshot] = []
     seen_refs: set[str] = set()
     for row in rows:
@@ -119,19 +112,25 @@ def _build_match_plan(sdk: Any, entity_cls: type[Entity], template: Rule | _Rule
             for name, var in template.ports.items()
         )
         body_ir = lower_ast_to_where_ir(AndExpr(list(template.where)))
-        return _plan_from_declared_ports(entity_cls, declared, body_ir)
+        return _plan_from_declared_ports(
+            entity_cls,
+            declared,
+            body_branches=(tuple(body_ir),),
+            partial_ports=frozenset(),
+        )
 
     probe_plan = _lower_rule_expr(template, head=Rule.projection("__fg_match_probe"))
-    if len(probe_plan.branches) != 1:
-        raise SDKStoreError(_MATCH_OR_UNSUPPORTED)
-    declared_ports, _partial_ports = _declared_port_state_for_rule_expr_plan(probe_plan)
+    declared_ports, partial_ports = _declared_port_state_for_rule_expr_plan(probe_plan)
     head = Rule.projection(*(port.name for port in declared_ports))
     plan = _lower_rule_expr(template, head=head)
-    if len(plan.branches) != 1:
-        raise SDKStoreError(_MATCH_OR_UNSUPPORTED)
-    body_ir, _joins, _head_links = _materialize_branch(plan.branches[0], plan)
+    body_branches = tuple(tuple(_materialize_branch(branch, plan)[0]) for branch in plan.branches)
     declared = tuple(_declared_match_port_from_rule_expr(head, port) for port in declared_ports)
-    return _plan_from_declared_ports(entity_cls, declared, body_ir)
+    return _plan_from_declared_ports(
+        entity_cls,
+        declared,
+        body_branches=body_branches,
+        partial_ports=partial_ports,
+    )
 
 
 def _declared_match_port_from_rule_expr(head: Rule, declared: RuleExprDeclaredPort) -> _DeclaredMatchPort:
@@ -145,7 +144,9 @@ def _declared_match_port_from_rule_expr(head: Rule, declared: RuleExprDeclaredPo
 def _plan_from_declared_ports(
     entity_cls: type[Entity],
     declared: tuple[_DeclaredMatchPort, ...],
-    body_ir: list[Any],
+    *,
+    body_branches: tuple[tuple[Any, ...], ...],
+    partial_ports: frozenset[str],
 ) -> _MatchPlan:
     ports_by_name = {port.name: port for port in declared}
     matches = [
@@ -165,7 +166,12 @@ def _plan_from_declared_ports(
             f"fg.read.match({entity_cls.__name__}, ...) is ambiguous: multiple {entity_cls.__name__!r} "
             f"entity_ref ports are declared ({names})"
         )
-    return _MatchPlan(body_ir=list(body_ir), projection_port=matches[0], ports_by_name=ports_by_name)
+    return _MatchPlan(
+        body_branches=body_branches,
+        projection_port=matches[0],
+        ports_by_name=ports_by_name,
+        partial_ports=partial_ports,
+    )
 
 
 def _apply_port_constraints(
@@ -173,11 +179,13 @@ def _apply_port_constraints(
     entity_cls: type[Entity],
     plan: _MatchPlan,
     constraints: Mapping[str, Any],
-) -> list[Any]:
+) -> tuple[tuple[Any, ...], ...]:
     if not constraints:
-        return list(plan.body_ir)
+        return plan.body_branches
     atoms: list[Atom] = []
     for name, value in constraints.items():
+        if name in plan.partial_ports:
+            raise SDKStoreError(f"match port {name!r} is only declared in some RuleExpr branches")
         port = plan.ports_by_name.get(name)
         if port is None:
             available = ", ".join(sorted(plan.ports_by_name))
@@ -186,7 +194,14 @@ def _apply_port_constraints(
             atoms.extend(_field_constraint_atoms(sdk, entity_cls, plan.projection_port, port, value))
         else:
             atoms.append(CmpAtom(op="eq", lhs=port.var, rhs=Const(_normalize_constraint_value(port, value))))
-    return [*plan.body_ir, *lower_ast_to_where_ir(AndExpr(atoms))]
+    constraint_ir = tuple(lower_ast_to_where_ir(AndExpr(atoms)))
+    return tuple((*branch, *constraint_ir) for branch in plan.body_branches)
+
+
+def _branches_to_where_ir(branches: tuple[tuple[Any, ...], ...]) -> list[Any]:
+    if len(branches) == 1:
+        return list(branches[0])
+    return [list(branch) for branch in branches]
 
 
 def _field_constraint_atoms(
@@ -238,13 +253,26 @@ def _normalize_constraint_value(port: _DeclaredMatchPort, value: Any) -> Any:
     return value
 
 
-def _validate_connectivity(body_ir: list[Any], *, projected_var: str, constrained_vars: set[str]) -> None:
+def _validate_connectivity(
+    body_branches: tuple[tuple[Any, ...], ...],
+    *,
+    projected_var: str,
+    constrained_vars: set[str],
+) -> None:
     required = {projected_var, *constrained_vars}
     if len(required) <= 1:
         return
-    expr = parse_where_ir_to_ast(body_ir)
-    atoms = expr.atoms if isinstance(expr, AndExpr) else [atom for branch in expr.branches for atom in branch.atoms]
-    parent: dict[str, str] = {name: name for atom in atoms for name in _vars_in_atom(atom)}
+    for branch in body_branches:
+        _validate_branch_connectivity(branch, projected_var=projected_var, constrained_vars=constrained_vars)
+
+
+def _validate_branch_connectivity(
+    body_ir: tuple[Any, ...],
+    *,
+    projected_var: str,
+    constrained_vars: set[str],
+) -> None:
+    parent: dict[str, str] = {name: name for atom in body_ir for name in _vars_in_atom_ir(atom)}
 
     def find(name: str) -> str:
         parent.setdefault(name, name)
@@ -259,8 +287,8 @@ def _validate_connectivity(body_ir: list[Any], *, projected_var: str, constraine
         if root_left != root_right:
             parent[root_right] = root_left
 
-    for atom in atoms:
-        names = sorted(_vars_in_atom(atom))
+    for atom in body_ir:
+        names = sorted(_vars_in_atom_ir(atom))
         if len(names) < 2:
             continue
         head = names[0]
@@ -277,30 +305,33 @@ def _validate_connectivity(body_ir: list[Any], *, projected_var: str, constraine
         )
 
 
-def _vars_in_atom(atom: Atom) -> set[str]:
-    if isinstance(atom, PredAtom | RuleRefAtom):
-        return {name for term in atom.terms for name in _vars_in_term(term)}
-    if isinstance(atom, CmpAtom):
-        return {*_vars_in_term(atom.lhs), *_vars_in_term(atom.rhs)}
-    if isinstance(atom, InAtom):
-        return _vars_in_term(atom.var) | {name for value in atom.values for name in _vars_in_term(value)}
-    if isinstance(atom, BuiltinAtom):
-        return {name for term in atom.args for name in _vars_in_term(term)}
-    if isinstance(atom, NotAtom):
-        if isinstance(atom.body, AndExpr):
-            return {name for inner in atom.body.atoms for name in _vars_in_atom(inner)}
-        return {name for branch in atom.body.branches for inner in branch.atoms for name in _vars_in_atom(inner)}
+def _vars_in_atom_ir(atom_ir: Any) -> set[str]:
+    if isinstance(atom_ir, tuple) and atom_ir:
+        tag = atom_ir[0]
+        if tag in {"pred", "ruleref"}:
+            terms = atom_ir[2] if tag == "pred" else atom_ir[3]
+            return {name for term in terms for name in _vars_in_raw_term(term)}
+        if tag in {"eq", "ne", "gt", "ge", "lt", "le"}:
+            return {*_vars_in_raw_term(atom_ir[1]), *_vars_in_raw_term(atom_ir[2])}
+        if tag == "in":
+            return _vars_in_raw_term(atom_ir[1]) | {name for value in atom_ir[2] for name in _vars_in_raw_term(value)}
+        if tag in {"add", "sub", "neg", "addc", "mulc"}:
+            return {name for term in atom_ir[1:] for name in _vars_in_raw_term(term)}
+        if tag == "not":
+            body = atom_ir[1]
+            branches = body if body and all(isinstance(item, list) for item in body) else [body]
+            return {name for branch in branches for inner in branch for name in _vars_in_atom_ir(inner)}
     return set()
 
 
-def _vars_in_term(term: Term) -> set[str]:
-    if isinstance(term, Var):
-        return {term.name}
-    if isinstance(term, Const):
-        return set()
-    if isinstance(term, AggregateAtom):
-        names = set() if term.target is None else _vars_in_term(term.target)
-        for atom in term.filter:
-            names.update(_vars_in_atom(atom))
+def _vars_in_raw_term(term: Any) -> set[str]:
+    if isinstance(term, str) and term.startswith("$") and len(term) > 1:
+        return {term}
+    if isinstance(term, tuple) and term and term[0] in {"count", "sum", "min", "max", "mean"}:
+        target = term[1] if len(term) > 1 else None
+        names = set() if target is None else _vars_in_raw_term(target)
+        body = term[2] if len(term) > 2 else ()
+        for atom in body:
+            names.update(_vars_in_atom_ir(atom))
         return names
     return set()
