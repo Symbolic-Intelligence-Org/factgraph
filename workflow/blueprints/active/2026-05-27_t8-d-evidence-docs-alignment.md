@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Evidence Docs Alignment
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S/M (docs-only)
@@ -247,16 +247,16 @@ No runtime/test implementation commit is expected.
 
 - [x] Step 4.6 answers Q1-Q9 with source-backed evidence.
 - [x] File scope is narrow and justified.
-- [ ] Docs teach T8-A / T8-B-1 shipped behavior accurately.
-- [ ] Docs do not teach T8-B-2 / T8-C / failed graph / match witness / v2
+- [x] Docs teach T8-A / T8-B-1 shipped behavior accurately.
+- [x] Docs do not teach T8-B-2 / T8-C / failed graph / match witness / v2
       features as shipped.
-- [ ] Quickstart vs SDK docs roles are clear and not needlessly duplicated.
-- [ ] `src/factgraph/audit/docs/02_evidence_graph.md` is left untouched unless
+- [x] Quickstart vs SDK docs roles are clear and not needlessly duplicated.
+- [x] `src/factgraph/audit/docs/02_evidence_graph.md` is left untouched unless
       Step 4.6 finds a concrete leftover gap.
-- [ ] No runtime/test/release/dirty-baseline changes land.
-- [ ] Focused no-op evidence baseline passes or is recorded as unchanged.
-- [ ] `git diff --check` passes.
-- [ ] Sacred master and dirty baseline are preserved.
+- [x] No runtime/test/release/dirty-baseline changes land.
+- [x] Focused no-op evidence baseline passes or is recorded as unchanged.
+- [x] `git diff --check` passes.
+- [x] Sacred master and dirty baseline are preserved.
 
 ## 9. Verification Commands
 
@@ -277,4 +277,81 @@ needed based on selected files.
 
 ## 10. Outcome / Deviations
 
-Pending implementation / closure.
+### 10.1 Landed artifacts
+
+| Commit | Role | Notes |
+|---|---|---|
+| `14d1129f` | Draft | T8-D evidence docs alignment blueprint pair drafted with Q1-Q9 pending. |
+| `df20a64e` | Scoped | Source-backed docs inventory; scope narrowed to `evidence.md` + SDK user guide. |
+| `518c4e51` | Quickstart docs | Evidence quickstart aligned with T8-A metadata and T8-B-1 native Form 1 graphs. |
+| `6a890e8e` | SDK docs | SDK user guide gained concise native Form 1 summary and link to quickstart. |
+
+### 10.2 Documentation outcome
+
+`docs/official/kernel/quickstart/evidence.md` now reflects shipped T8-A and
+T8-B-1 behavior:
+
+- `EvaluateResult` / `EvidenceGraph.metadata` are described as a sessionless
+  three-layer audit channel, with `run_id` staying envelope-only.
+- The current 14-key metadata bridge is described in prose groups instead of
+  set notation: result/row/evidence-ref ids, claim and closed-head digests,
+  expression/rule/view/semantics/result digests, engine identity/version,
+  adapter version, and evaluated timestamp.
+- Users are told to prefer typed DTO fields for application logic rather than
+  branching on exact metadata key sets.
+- `GRAPH_VALIDATION_FAILED` is documented as the normal soft unsupported path
+  for malformed/inconsistent graph metadata; non-`EvidenceGraph` builder
+  returns are framed as internal protocol contract violations.
+- §6 now teaches the shipped native Form 1 concept:
+  `NODE_SEED --supports--> NODE_PREMISE --supports--> NODE_CONCLUSION`.
+- The user-visible winning-path marker
+  `alternative_paths.mode == "winning_path_only"` is documented while other
+  `engine_meta` fields are explicitly marked implementation details.
+- The current-boundaries block records adapter Form 1, aggregate envelopes,
+  failed/why-not/counterfactual graphs, match witness output, cross-row seed
+  reuse, session logs/interactions, signatures, ACL, `x-evidence-key`,
+  salience/impact, `EDGE_DERIVES`/`EDGE_UPDATES`, `dag`, and `rule_fire` as
+  non-shipped/deferred surfaces.
+
+`src/factgraph/sdk/docs/00_user_guide.en.md` intentionally stays concise: it
+adds one summary paragraph and links to the evidence quickstart rather than
+duplicating the full deferred map or graph explanation.
+
+### 10.3 Deviations and design observations
+
+- File scope stayed at two files, below the Step 4.6 stop trigger.
+- `src/factgraph/audit/docs/02_evidence_graph.md` was left untouched because
+  T7/T8-B-1 had already aligned it.
+- The 14-key metadata presentation uses prose grouping to communicate the
+  complete shipped bridge without encouraging user code to compare metadata key
+  sets.
+- The Form 1 topology uses ASCII art rather than JSON/HTML. This teaches the
+  stable node/edge semantics while avoiding implementation-only `engine_meta`
+  payloads.
+- SDK docs summarize only the most important categories and delegate details to
+  the quickstart, reducing duplicate drift risk.
+
+### 10.4 Verification
+
+Focused no-op evidence baseline:
+
+```text
+PYTHONPATH=src python -m unittest \
+  tests.test_audit_evidence_graph \
+  tests.test_audit_evidence_graph_render \
+  tests.application.protocol.test_evaluate_result_dtos
+→ 36 OK
+```
+
+`git diff --name-only df20a64e..HEAD` contains exactly:
+
+```text
+docs/official/kernel/quickstart/evidence.md
+src/factgraph/sdk/docs/00_user_guide.en.md
+```
+
+`git diff --check` is clean. No runtime/test/release/audit-module docs,
+dirty-baseline, service/OpenAPI, Database/view, or SDK API shape changes landed.
+Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`, and the
+dirty baseline remains four tracked docs/notebooks plus two untracked reference
+directories.

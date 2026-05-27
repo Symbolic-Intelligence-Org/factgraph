@@ -1,11 +1,11 @@
 # Audit: T8-D Evidence Docs Alignment
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-d-evidence-docs-alignment.md`
-- Stage: scoped
+- Stage: closure
 - Class: S/M (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current four modified tracked docs/notebooks plus two untracked reference directories
@@ -17,6 +17,9 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | this commit | T8-D evidence docs alignment blueprint pair drafted | Triggered by shipped T8-A + T8-B-1 behavior; Q1-Q9 intentionally pending for source-backed Step 4.6. |
 | 2026-05-27 | scoped | this commit | Step 4.6 docs inventory completed | Scope narrowed to `evidence.md` + `00_user_guide.en.md`; all other candidate docs leave-alone. |
+| 2026-05-27 | implementation | `518c4e51` | Evidence quickstart aligned | T8-A metadata and T8-B-1 native Form 1 shipped behavior documented. |
+| 2026-05-27 | implementation | `6a890e8e` | SDK user guide aligned | Concise native Form 1 evidence summary plus quickstart link. |
+| 2026-05-27 | closure | this commit | Cycle closure recorded | Docs-only scope preserved; focused no-op baseline 36 OK. |
 
 ## 2. Draft Source Scan
 
@@ -102,9 +105,50 @@ PYTHONPATH=src python -m unittest \
 - [x] Q1-Q9 answered.
 - [x] File scope locked.
 - [x] Shipped/deferred evidence behavior map complete.
-- [ ] Docs-only boundary preserved.
-- [ ] Closure notes filled.
+- [x] Docs-only boundary preserved.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending inventory / implementation / closure.
+T8-D shipped as a docs-only A+B evidence alignment cycle.
+
+Landed chain:
+
+```text
+14d1129f  docs(blueprint): draft T8-D evidence docs alignment
+df20a64e  docs(blueprint): scope T8-D evidence docs alignment
+518c4e51  docs(quickstart): align evidence with native form1 graphs
+6a890e8e  docs(sdk): summarize native form1 evidence
+```
+
+Docs outcome:
+
+- `evidence.md` no longer describes `EvidenceGraph` as intentionally opaque.
+  It now teaches native row Form 1 as the shipped shape:
+  `NODE_SEED --supports--> NODE_PREMISE --supports--> NODE_CONCLUSION`.
+- The metadata bridge is complete but user-safe: all 14 shipped v1 keys are
+  represented through prose grouping, and users are directed to typed DTO fields
+  instead of metadata set equality.
+- The quickstart documents `GRAPH_VALIDATION_FAILED` as the soft unsupported
+  path and treats non-`EvidenceGraph` builder returns as internal protocol
+  contract violations.
+- The quickstart records the full deferred boundary map for adapter Form 1,
+  aggregates, failed/why-not/counterfactual graphs, match witness output,
+  cross-row seed reuse, sessions/signatures/ACL/x-evidence-key/salience/impact,
+  `EDGE_DERIVES`/`EDGE_UPDATES`, `dag`, and `rule_fire`.
+- The SDK user guide adds only an eight-line summary and links to the
+  quickstart, avoiding duplication.
+
+Verification:
+
+- Focused no-op evidence baseline: 36 OK.
+- `git diff --check` clean.
+- Changed implementation files since scoped: exactly `evidence.md` and
+  `00_user_guide.en.md`.
+
+Scope preservation:
+
+- No runtime/test/release/audit-module docs changes.
+- No `src/factgraph/audit/docs/02_evidence_graph.md` edit.
+- No SDK API, service/OpenAPI, Database/view, dirty-baseline, or sacred-master
+  changes.
