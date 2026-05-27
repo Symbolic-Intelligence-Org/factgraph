@@ -657,11 +657,13 @@ candidate-universe shell in T5.
 
 For native or Souffle passed rows, `row.explain().evidence` is a row-level Form
 1 `EvidenceGraph`: a root conclusion, selected-branch premises, assertion
-seeds, and `supports` edges. The graph metadata mirrors the row/result audit
-context; `run_id` stays on the `EvaluateResult` envelope. Treat ProbLog/PyReason
-Form 1 graphs, aggregate contributor envelopes, failed-graph trees, and match
-witness output as future evidence tracks. The full DTO chain and boundaries are
-documented in the official
+seeds, and `supports` edges. For ProbLog passed rows, it is a row-level
+provenance graph with `derives` edges and ProbLog trace / uncertainty projection
+details under `engine_meta["problog"]`. The graph metadata mirrors the
+row/result audit context; `run_id` stays on the `EvaluateResult` envelope.
+Treat PyReason row-level graphs, aggregate contributor envelopes, failed-graph
+trees, and match witness output as future evidence tracks. The full DTO chain
+and boundaries are documented in the official
 [evidence quickstart](../../../../docs/official/kernel/quickstart/evidence.md).
 
 ---
