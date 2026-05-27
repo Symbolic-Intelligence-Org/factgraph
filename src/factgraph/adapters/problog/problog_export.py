@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import json
 import re
@@ -17,6 +18,11 @@ _NONE_VALUE = "__none__"
 _VAR_IDENT_RE = re.compile(r"[^A-Za-z0-9_]")
 _AGGREGATE_KINDS = {"count", "sum", "min", "max", "mean"}
 _AGGREGATE_FILTER_ATOM_KINDS = {"pred", "eq", "ne", "gt", "ge", "lt", "le", "in", "not"}
+_DEFAULT_UNCERTAINTY_PROJECTION = {
+    "probabilistic": {"policy": "reject"},
+    "possibilistic": {"policy": "reject"},
+    "fallback": "reject_unconfigured",
+}
 
 
 class ProbLogExportError(Exception):
@@ -35,11 +41,18 @@ class _CompileContext:
         return name
 
 
-def export_problog(store: Store, rule_spec: dict[str, Any], out_path: Path) -> None:
+def export_problog(
+    store: Store,
+    rule_spec: dict[str, Any],
+    out_path: Path,
+    *,
+    uncertainty_projection: Mapping[str, Any] | None = None,
+) -> None:
     if not isinstance(store, Store):
         raise ProbLogExportError("store must be Store")
     if not isinstance(rule_spec, dict):
         raise ProbLogExportError("rule_spec must be object")
+    projection = _normalize_uncertainty_projection(uncertainty_projection)
 
     where = rule_spec.get("where")
     if not isinstance(where, list) or not where:
@@ -80,7 +93,7 @@ def export_problog(store: Store, rule_spec: dict[str, Any], out_path: Path) -> N
     active_claims.sort(key=lambda row: row.asrt_id)
 
     for claim in active_claims:
-        prob = _claim_probability(store, claim.asrt_id)
+        prob = _claim_probability(store, claim.asrt_id, uncertainty_projection=projection)
         value_term = _claim_value_term(claim.rest_terms)
         lines.append(
             f"{_format_probability(prob)}::edb_fact("
@@ -121,7 +134,12 @@ def _normalize_where_bodies(where: list[Any]) -> list[list[Any]]:
     return [list(where)]
 
 
-def _claim_probability(store: Store, asrt_id: str) -> float:
+def _claim_probability(
+    store: Store,
+    asrt_id: str,
+    *,
+    uncertainty_projection: dict[str, Any],
+) -> float:
     annotations = store.ledger.find_annotations(
         asrt_id=asrt_id,
         namespace="problog",
@@ -166,7 +184,112 @@ def _claim_probability(store: Store, asrt_id: str) -> float:
                 f"shared/semantic/probability must be numeric for asrt_id={asrt_id}"
             )
 
+    raw_probability = _claim_raw_uncertainty_probability(
+        store,
+        asrt_id,
+        uncertainty_projection=uncertainty_projection,
+    )
+    if raw_probability is not None:
+        return raw_probability
+
     return 1.0
+
+
+def _claim_raw_uncertainty_probability(
+    store: Store,
+    asrt_id: str,
+    *,
+    uncertainty_projection: dict[str, Any],
+) -> float | None:
+    raw_kind_rows = store.ledger.find_annotations(
+        asrt_id=asrt_id,
+        namespace="shared",
+        category="semantic",
+        key="raw_kind",
+    )
+    bound_rows = store.ledger.find_annotations(
+        asrt_id=asrt_id,
+        namespace="shared",
+        category="semantic",
+        key="bound",
+    )
+    if not raw_kind_rows and not bound_rows:
+        return None
+    if not raw_kind_rows or not bound_rows:
+        raise ProbLogExportError(
+            f"shared raw uncertainty annotations must include raw_kind and bound for asrt_id={asrt_id}"
+        )
+
+    raw_kind = raw_kind_rows[-1].value
+    if not isinstance(raw_kind, str):
+        raise ProbLogExportError(f"shared/semantic/raw_kind must be string for asrt_id={asrt_id}")
+    bound = _normalize_uncertainty_bound(bound_rows[-1].value, asrt_id=asrt_id)
+
+    config = uncertainty_projection.get(raw_kind)
+    if config is None:
+        return _fallback_uncertainty_probability(
+            uncertainty_projection.get("fallback", "reject_unconfigured"),
+            raw_kind=raw_kind,
+            asrt_id=asrt_id,
+        )
+    if not isinstance(config, Mapping):
+        raise ProbLogExportError(f"uncertainty_projection.{raw_kind} must be object")
+    policy = config.get("policy")
+    if policy == "reject":
+        raise ProbLogExportError(
+            f"uncertainty_projection.{raw_kind}.policy=reject for asrt_id={asrt_id}"
+        )
+    if policy == "lower":
+        return bound[0]
+    if policy == "midpoint":
+        return (bound[0] + bound[1]) / 2.0
+    if policy == "upper":
+        return bound[1]
+    if policy == "identity_probability":
+        if raw_kind != "probabilistic":
+            raise ProbLogExportError("identity_probability only supports raw_kind='probabilistic'")
+        if bound[0] != bound[1]:
+            raise ProbLogExportError(
+                f"identity_probability requires degenerate bound for asrt_id={asrt_id}"
+            )
+        return bound[0]
+    if policy in {"probability_interval", "possibility_interval"}:
+        raise ProbLogExportError(
+            f"uncertainty_projection.{raw_kind}.policy={policy} is not supported by ProbLog point export"
+        )
+    raise ProbLogExportError(f"unsupported uncertainty_projection.{raw_kind}.policy: {policy!r}")
+
+
+def _fallback_uncertainty_probability(raw_fallback: Any, *, raw_kind: str, asrt_id: str) -> float:
+    if raw_fallback == "reject_unconfigured":
+        raise ProbLogExportError(
+            f"uncertainty_projection has no policy for raw_kind={raw_kind!r} at asrt_id={asrt_id}"
+        )
+    if raw_fallback in {"warn_default", "use_default"}:
+        return 1.0
+    raise ProbLogExportError(f"unsupported uncertainty_projection.fallback: {raw_fallback!r}")
+
+
+def _normalize_uncertainty_projection(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    projection = dict(_DEFAULT_UNCERTAINTY_PROJECTION)
+    if raw:
+        projection.update(dict(raw))
+    return projection
+
+
+def _normalize_uncertainty_bound(value: Any, *, asrt_id: str) -> tuple[float, float]:
+    if not isinstance(value, list) or len(value) != 2:
+        raise ProbLogExportError(f"shared/semantic/bound must be a two-element list for asrt_id={asrt_id}")
+    lower_raw, upper_raw = value
+    if isinstance(lower_raw, bool) or isinstance(upper_raw, bool):
+        raise ProbLogExportError(f"shared/semantic/bound values must be numeric for asrt_id={asrt_id}")
+    if not isinstance(lower_raw, (int, float)) or not isinstance(upper_raw, (int, float)):
+        raise ProbLogExportError(f"shared/semantic/bound values must be numeric for asrt_id={asrt_id}")
+    lower = float(lower_raw)
+    upper = float(upper_raw)
+    if lower < 0.0 or upper > 1.0 or lower > upper:
+        raise ProbLogExportError(f"shared/semantic/bound must satisfy 0 <= lower <= upper <= 1 for asrt_id={asrt_id}")
+    return (lower, upper)
 
 
 def _claim_value_term(rest_terms: list[tuple[str, Any]]) -> str:

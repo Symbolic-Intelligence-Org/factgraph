@@ -162,14 +162,14 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             pred_id="user:name",
             e_ref=alice_ref,
             rest_terms=[("string", "Alice")],
-            meta={"source": "test", "raw_kind": "probabilistic", "bound": [1.0, 1.0]},
+            meta={"source": "test"},
         )
         set_field(
             sdk.ledger,
             pred_id="user:tag_seed",
             e_ref=alice_ref,
             rest_terms=[("string", "vip")],
-            meta={"source": "test", "raw_kind": "probabilistic", "bound": [1.0, 1.0]},
+            meta={"source": "test"},
         )
         return sdk
 

@@ -94,7 +94,14 @@ def evaluate_problog(
     }
     with tempfile.TemporaryDirectory() as tmpdir:
         pl_path = Path(tmpdir) / "query.pl"
-        export_problog(store, rule_spec, pl_path)
+        export_problog(
+            store,
+            rule_spec,
+            pl_path,
+            uncertainty_projection=None
+            if semantics_profile is None
+            else dict(semantics_profile.uncertainty_projection),
+        )
         raw_output = run_problog(pl_path, timeout=timeout, trace=True)
 
     parse_spec = dict(rule_spec)
