@@ -550,6 +550,10 @@ class _SDKReadManager:
         """
         return self._sdk.find(*args, **kwargs)
 
+    def match(self, *args: Any, **kwargs: Any) -> Any:
+        """Match visible snapshots against an application Rule or AND RuleExpr."""
+        return self._sdk.match(*args, **kwargs)
+
     def ref(self, *args: Any, **kwargs: Any) -> Any:
         """Build an entity reference from identity values without writing.
 
@@ -1283,6 +1287,24 @@ class SDKStore:
             entity_cls,
             limit=limit,
             **filter_kwargs,
+        )
+
+    def match(
+        self,
+        entity_cls: type[Entity],
+        template: ApplicationRule | _RuleExpr,
+        *,
+        limit: int | None = None,
+        **port_constraints: Any,
+    ):
+        from .match_runtime import sdk_match
+
+        return sdk_match(
+            self,
+            entity_cls,
+            template,
+            limit=limit,
+            **port_constraints,
         )
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any):
