@@ -13,21 +13,21 @@
 
 ## 边界
 
-- 本目录不是当前实现真相；当前实现请看 `src/factpy_kernel/*/docs/`。
-- 本目录不是 blueprint 状态机；任务决策、边界和验收仍写在 `docs/blueprints/`。
-- 本目录不是历史蓝图归档；历史蓝图和 reconstructed archive 仍按既有规则分别放在 `docs/blueprint_history/` 与 `docs/blueprints/archive/`。
+- 本目录不是当前实现真相；当前实现请看 `src/factgraph/*/docs/`。
+- 本目录不是 blueprint 状态机；任务决策、边界和验收仍写在 `workflow/blueprints/`。
+- 本目录不是历史蓝图归档；历史蓝图和 reconstructed archive 仍按既有规则分别放在 `workflow/heritage/blueprint_history/` 与 `workflow/blueprints/archive/`。
 
 ## 工作流规则
 
 1. 新的参考材料应放到本目录的子目录，不要散落在 `docs/references/` 根级或仓库根目录。
 2. 文件名应尽量使用可读的描述性 slug，避免再出现 `temp.md` 这类失去语义的命名。
 3. 如果某份 reference 文档影响了 blueprint 的问题边界、设计决策或验收标准，必须把被采纳的结论写回 active blueprint 和 audit。
-4. 如果某份 reference 文档中的内容已经成为当前实现语义或稳定系统边界，必须继续回写到模块 docs 或 `docs/architecture_principles.md`。
+4. 如果某份 reference 文档中的内容已经成为当前实现语义或稳定系统边界，必须继续回写到模块 docs 或 `workflow/foundations/architecture_principles.md`。
 5. `working/` 下的文档必须在 header 显式标明其非权威性质（typically `Status: working / ...` + `Authority: non-authoritative ...`）；它们可以在后续被提升到 `external/` / `bridges/`，也可以在失去价值后删除。
 
-## 当前条目（2026-05-06 wrap-up 后）
+## 当前条目（2026-05-27 N10 cleanup 后）
 
-> Index 完整覆盖全 56 个文件（54 .md + 2 binary）。每条目附简短性质描述。
+> Index 覆盖 `docs/references/` 下的所有 .md 与 binary 入口；每条目附简短性质描述。N10 cleanup 仅整理顶层 README 的路径与子目录指针，未改写时间冻结的历史 bundle 子 README。
 
 ### `external/` —— 外部标准、竞品、benchmark
 
@@ -50,16 +50,14 @@
 - `working/extraction_benchmark_report.json` — Extraction benchmark 结构化数据。
 - `working/factpy_esa_demo.pptx` — ESA demo 幻灯（binary）。
 
-#### `working/design-points/` —— design-point research notes
+#### `working/design-points/` —— design-point research notes（已迁移）
 
-Focused investigations that clarify one design concept before it is promoted into module docs or stable architecture principles.
+Design-point research notes have migrated to the canonical home under `workflow/design/design-points/` (see `workflow/design/design-points/README.md` for lifecycle rules):
 
-- [working/design-points/readme.md](./working/design-points/readme.md) — Directory purpose, lifecycle, and note template.
-- [working/design-points/identity-primary-key-coordinate-semantics.md](./working/design-points/identity-primary-key-coordinate-semantics.md) — Working note on `Identity`, `primary_key=True`, `Field`, and entity-reference coordinate semantics.
-- [working/design-points/identity-primary-key-coordinate-semantics.zh.md](./working/design-points/identity-primary-key-coordinate-semantics.zh.md) — Expanded Chinese blog-style working article for iterative design and documentation edits.
-- [working/design-points/possibility-probability-transmission.zh.md](./working/design-points/possibility-probability-transmission.zh.md) — Working note on raw uncertainty semantics, transmission policies, and runtime projection into ProbLog / PyReason-style engine views.
-- [working/design-points/post-track3-semantics-public-api.zh.md](./working/design-points/post-track3-semantics-public-api.zh.md) — Working note on post-Track-3 public semantics API direction: Branch identity, rule inspect, `*Semantics` wrappers, and PyReason branch-bound projection.
-- [working/design-points/rule-query-inference-head-semantics.zh.md](./working/design-points/rule-query-inference-head-semantics.zh.md) — Working note on `Rule` / `Query` / `Inference` positioning, head/projection/select/conclusion semantics, candidate evidence ownership, and post-release redesign direction.
+- Active design-points (parent essay, evidence-tree v1, database-view layered architecture, match API design, post-T5 completion roadmap, rule-expression track plan) live in [`workflow/design/design-points/active/`](../../workflow/design/design-points/active/).
+- Migrated historical notes (identity-primary-key coordinate semantics, possibility-probability transmission, post-Track-3 semantics public API, rule-query-inference head semantics, read-write snapshot/assertion selection, rule-policy function tree and syntax, factgraph lifecycle and assets, query-view and inference handles) live in [`workflow/design/design-points/archive/`](../../workflow/design/design-points/archive/).
+
+The local [`working/design-points/readme.md`](./working/design-points/readme.md) remains as a non-authoritative breadcrumb to that migration; inline links inside it still point at the pre-migration paths and are not the current source of truth.
 
 #### `working/load-test-2026-04-11/` —— Layer 4C 全链路 load test bundle（2026-04-11）
 
@@ -97,6 +95,26 @@ Agent extraction → batch → resolve → bundle → commit 全链 load test �
   - [engine-extension-surface-architecture.md](./working/rule-replay-line-redesign-input/80_conceptual-interaction-design/engine-extension-surface-architecture.md)
 
 > **Lifecycle note:** Future cleanup batch 可考虑 promote 此 bundle → `bridges/`（涉及 ~12 inbound refs 更新，包括 1 active master plan + 11 archived blueprints + 1 memory anchor）。Routemap closure 已 captured 此 bundle 全部决议至 archived blueprints，promote 是 lifecycle 整理而非内容迁移。
+
+#### `working/post-routemap-direction-selection-input/` —— Post-Routemap 方向选择 input bundle（2026-05-07）
+
+> Non-authoritative strategic alignment input (NOT a blueprint, NOT a feasibility study). Equivalent authority to `rule-replay-line-redesign-input/`. Produced the A+B paths that were later shipped (see `project_a_b_v0.1_surface_published.md`).
+
+- 入口：[README.md](./working/post-routemap-direction-selection-input/README.md)
+- 库存：[00_inventory.md](./working/post-routemap-direction-selection-input/00_inventory.md) — Active blueprints + 19-item deferred catalog + branch state.
+- 隐性缺口：[10_implicit-gaps.md](./working/post-routemap-direction-selection-input/10_implicit-gaps.md) — 四项 2026-05-07 浮现的隐性战略缺口。
+- 候选方向：[20_candidates.md](./working/post-routemap-direction-selection-input/20_candidates.md) — A 至 I 共九条 next-layer 方向及 trade-off 表（B 经验证细分 B1+B2 mandatory + B3 optional）。
+- 推荐：[30_recommendation.md](./working/post-routemap-direction-selection-input/30_recommendation.md) — 推荐 A+B 方向、定稿清单、scoping next。
+- 设计草图：[40_walker-mechanism-design-sketch.md](./working/post-routemap-direction-selection-input/40_walker-mechanism-design-sketch.md), [41_application-builders-design-sketch.md](./working/post-routemap-direction-selection-input/41_application-builders-design-sketch.md)。
+- 迁移路径：[50_migration-path.md](./working/post-routemap-direction-selection-input/50_migration-path.md)。
+
+#### `working/factgraph-namespace-test-proposals/` —— Namespace test 提案 review packet（2026-05-14）
+
+> Review packet of proposed test changes for the scoped blueprint `workflow/blueprints/active/2026-05-14_factgraph-namespace-test-coverage.{md,audit.md}`. Files here are working reference material, are not part of root `tests/`, are not discovered by unittest, and are not release-gate truth.
+
+- 入口：[README.md](./working/factgraph-namespace-test-proposals/README.md)
+- Proposal notes：[stale-conflict.md](./working/factgraph-namespace-test-proposals/stale-conflict.md), [flat-only.md](./working/factgraph-namespace-test-proposals/flat-only.md), [missing.md](./working/factgraph-namespace-test-proposals/missing.md)。
+- 候选测试文件：[test_factgraph_namespace_flat_only.py](./working/factgraph-namespace-test-proposals/test_factgraph_namespace_flat_only.py), [test_factgraph_namespace_missing.py](./working/factgraph-namespace-test-proposals/test_factgraph_namespace_missing.py), [test_sdk_fg_assertions_namespace.py](./working/factgraph-namespace-test-proposals/test_sdk_fg_assertions_namespace.py)。
 
 ### 根级 .md（待 future cleanup batch 迁移到 `external/`，inbound refs 需同步更新）
 
