@@ -1,11 +1,11 @@
 # Audit: T7 Evidence Audit + Rendering Bridge
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t7-evidence-audit-rendering-bridge.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current 4 modified tracked files plus untracked `rainbird-ai sdk code/`
@@ -16,7 +16,11 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-27 | draft | `c9979476` | T7 blueprint pair drafted | Triggered by user selection after T6 design published and T11.2.10 OR match runtime completed. |
-| 2026-05-27 | scoped | this commit | Step 4.6 source-backed inventory recorded | Q1-Q8 answered; renderer type guard / large warning bridge, metadata tests, docs updates, T8 deferrals, D12/D20 handling, and full-discover baseline locked. |
+| 2026-05-27 | scoped | `5c5187e2` | Step 4.6 source-backed inventory recorded | Q1-Q8 answered; renderer type guard / large warning bridge, metadata tests, docs updates, T8 deferrals, D12/D20 handling, and full-discover baseline locked. |
+| 2026-05-27 | implementation | `c6b76878` | Runtime bridge landed | `render_evidence_graph_html(...)` now rejects non-`EvidenceGraph` input and emits non-blocking large-graph guidance for tree/timeline layouts. |
+| 2026-05-27 | implementation | `04697038` | Focused tests landed | Renderer type/threshold cases plus §10.3 metadata key and envelope-only `run_id` regression. |
+| 2026-05-27 | implementation | `3d77dc94` | Audit docs aligned | `audit/docs/02_evidence_graph.md` updated for sessionless contract, metadata keys, safe JSON path, renderer threshold, T8 boundary, and D20 future seam. |
+| 2026-05-27 | closure | this commit | T7 closure recorded | Outcome, deviations, verification, and reviewer observations recorded. |
 
 ## 2. Draft Source Scan
 
@@ -86,11 +90,54 @@ Read-only draft scan findings:
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q8 answered.
-- [ ] Runtime bridge changes reviewed, if any.
-- [ ] Tests reviewed.
-- [ ] Docs/design updates reviewed.
-- [ ] Closure notes filled.
+- [x] Runtime bridge changes reviewed, if any.
+- [x] Tests reviewed.
+- [x] Docs/design updates reviewed.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending implementation.
+T7 landed as a narrow audit/rendering bridge rather than a T8 implementation
+cycle.
+
+Landed scope:
+
+- `c6b76878` added the renderer bridge: `render_evidence_graph_html(...)`
+  rejects non-`EvidenceGraph` inputs and emits a non-blocking large-graph warning
+  when a graph has more than 250 nodes or more than 500 edges.
+- `04697038` added focused tests for renderer type guard, threshold boundaries,
+  non-truncating warning behavior, the full §10.3 graph metadata key set, and
+  envelope-only `run_id`.
+- `3d77dc94` aligned `src/factgraph/audit/docs/02_evidence_graph.md` with T6
+  §10/§11, including sessionless layering, safe JSON path, T8 boundary, and D20
+  future match witness seam.
+
+Verification:
+
+- `tests.test_audit_evidence_graph` + `tests.test_audit_evidence_graph_render`:
+  20 OK.
+- `tests.test_pyreason_evidence_graph` + `tests.test_souffle_evidence_graph` +
+  `tests.test_problog_evidence_graph`: 9 OK.
+- `tests.test_audit_proof_frame_diff` + `tests.test_audit_round_events` +
+  `tests.test_candidate_evidence_steps` + `tests.test_core_annotation_evidence`
+  + `tests.test_sdk_read_match_runtime` +
+  `tests.application.protocol.test_evaluate_result_dtos`: 106 OK.
+- `ruff` passed for touched runtime/test files.
+- `git diff --check` passed.
+
+Boundary notes:
+
+- The large-graph banner uses `role='note'`, an implementation choice matching
+  guidance/handoff semantics rather than alert/error semantics.
+- The existing unsupported-layout `ValueError` after renderer dispatch is now
+  defensive dead code under normal construction because `EvidenceGraph` validates
+  layout hints and the renderer now rejects non-`EvidenceGraph` inputs first. It
+  remains as defense in depth.
+- Central metadata sufficiency remains deferred to T8-A. T7 only added a strict
+  regression test for the current 14-key §10.3 graph metadata contract.
+- T8-A/B/C/D, service/OpenAPI, SDK API shape, database/view runtime, release
+  machinery, and dirty-baseline cleanup stayed out of scope.
+
+Sacred master remained `562c74195df43e933bed92a3ff25de94dd8ce666`; dirty
+baseline remained the four tracked docs/notebooks plus untracked
+`rainbird-ai sdk code/`.

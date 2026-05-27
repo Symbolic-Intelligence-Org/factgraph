@@ -1,6 +1,6 @@
 # Task Blueprint: T7 Evidence Audit + Rendering Bridge
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M (scoped bridge: renderer input/large warning + tests/docs)
@@ -204,17 +204,17 @@ Scoped implementation split:
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory answers Q1-Q8 with source-backed evidence.
-- [ ] T6 §10/§11 contract areas are mapped to shipped / partial / missing.
-- [ ] Any runtime bridge changes are limited to audit/rendering bridge scope.
-- [ ] Existing `EvidenceGraph` schema and JSON roundtrip remain compatible.
-- [ ] Reference renderer large-graph and fallback behavior are either shipped or explicitly deferred with rationale.
-- [ ] T8-A/B/C/D mapping is recorded and does not silently start T8.
-- [ ] Audit docs align with the final scoped bridge behavior.
-- [ ] Focused audit/render/engine evidence tests pass.
-- [ ] Full `unittest discover` status is recorded.
-- [ ] `ruff` and `git diff --check` pass for touched files.
-- [ ] Dirty baseline and sacred master are preserved.
+- [x] Step 4.6 inventory answers Q1-Q8 with source-backed evidence.
+- [x] T6 §10/§11 contract areas are mapped to shipped / partial / missing.
+- [x] Any runtime bridge changes are limited to audit/rendering bridge scope.
+- [x] Existing `EvidenceGraph` schema and JSON roundtrip remain compatible.
+- [x] Reference renderer large-graph and fallback behavior are either shipped or explicitly deferred with rationale.
+- [x] T8-A/B/C/D mapping is recorded and does not silently start T8.
+- [x] Audit docs align with the final scoped bridge behavior.
+- [x] Focused audit/render/engine evidence tests pass.
+- [x] Full `unittest discover` status is recorded.
+- [x] `ruff` and `git diff --check` pass for touched files.
+- [x] Dirty baseline and sacred master are preserved.
 
 ## 9. Verification Commands
 
@@ -233,4 +233,89 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending implementation.
+## 10.1 Landed artifacts
+
+| Stage | Commit | Scope |
+|---|---|---|
+| Draft | `c9979476` | Blueprint pair for T7 evidence audit + rendering bridge. |
+| Scoped | `5c5187e2` | Source-backed Q1-Q8 inventory, T6 §10/§11 matrix, T8/D-series mapping, and focused/full-discover baseline. |
+| Runtime bridge | `c6b76878` | `render_evidence_graph_html(...)` type guard plus large-graph warning banner for tree and timeline layouts. |
+| Tests | `04697038` | Renderer type/threshold tests and full §10.3 metadata key regression. |
+| Docs | `3d77dc94` | Audit module docs aligned to T6 §10/§11, T8 boundary, and D20 future seam. |
+
+## 10.2 Runtime bridge outcome
+
+T7 landed two bridge-sized runtime changes in
+`src/factgraph/audit/evidence_graph.py`:
+
+- `render_evidence_graph_html(...)` now rejects unvalidated non-`EvidenceGraph`
+  inputs with `ValueError("graph must be EvidenceGraph")`, aligning the render
+  entrypoint with `evidence_graph_to_dict(...)` and `Explanation` evidence type
+  checks.
+- Tree and timeline renderers now include a reference-renderer warning banner
+  when `len(nodes) > 250` or `len(edges) > 500`.
+
+The warning is non-blocking:graphs still render, no nodes/edges are truncated,
+and no DTO field or product-UI state is added. The banner uses `role='note'` as
+an implementation choice:it is guidance / handoff, not an alert or error.
+
+The existing unsupported-layout `ValueError` after the layout dispatch is now
+defensive dead code under normal construction: invalid `layout_hint` is rejected
+by `EvidenceGraph.__post_init__`, and non-`EvidenceGraph` inputs are rejected by
+the new type guard. It remains as defense in depth.
+
+## 10.3 Test outcome
+
+Tests now enforce the scoped bridge:
+
+- renderer rejects duck-typed fake graph input;
+- exactly `250` nodes does not warn;
+- `251` nodes warns and still renders the last node;
+- `501` edges warns and still renders the last node;
+- row-sourced passed explanations produce exactly the 14 §10.3 metadata keys;
+- `run_id` remains envelope-only and absent from `EvidenceGraph.metadata`.
+
+Focused verification:
+
+```text
+tests.test_audit_evidence_graph + tests.test_audit_evidence_graph_render: 20 OK
+tests.test_pyreason_evidence_graph + tests.test_souffle_evidence_graph + tests.test_problog_evidence_graph: 9 OK
+tests.test_audit_proof_frame_diff + tests.test_audit_round_events + tests.test_candidate_evidence_steps + tests.test_core_annotation_evidence + tests.test_sdk_read_match_runtime + tests.application.protocol.test_evaluate_result_dtos: 106 OK
+```
+
+Full discover baseline remains recorded from Step 4.6:
+`PYTHONPATH=src python -m unittest discover tests` ran 2001 tests and failed
+with 72 failures / 233 errors in unrelated frontier / legacy / why_not /
+redesign-invariant categories. T7 did not use full discover as a pass/fail gate.
+
+## 10.4 Docs outcome
+
+`src/factgraph/audit/docs/02_evidence_graph.md` now records:
+
+- the v1 sessionless three-layer audit contract;
+- `run_id` as envelope-level rather than graph metadata;
+- the full 14-key `EvidenceGraph.metadata` bridge;
+- safe JSON path: external/durable dicts pass through
+  `evidence_graph_from_dict(...)` before rendering;
+- reference renderer truthfulness and large-graph guidance;
+- T8 ownership for central metadata sufficiency, richer topology, and engine
+  enrichment;
+- D20 match witness seam as future-only docs hygiene, not an API stub.
+
+## 10.5 Deviations and boundary notes
+
+- §0 listed conditional candidate areas; §4.1 became the scoped source of truth
+  after inventory. Runtime narrowed to type guard + large warning only.
+- Central metadata sufficiency validation stayed deferred to T8-A; T7 added a
+  regression test for the current §10.3 key set instead.
+- T8-A/B/C/D were all mapped out of T7 implementation scope.
+- No service/OpenAPI, SDK API, database/view runtime, release machinery,
+  match/evaluate API, or dirty-baseline files were touched.
+
+## 10.6 Verification
+
+- `python -m ruff check src/factgraph/audit/evidence_graph.py tests/test_audit_evidence_graph_render.py tests/application/protocol/test_evaluate_result_dtos.py` passed.
+- `git diff --check` passed.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained the four tracked docs/notebooks plus untracked
+  `rainbird-ai sdk code/`.
