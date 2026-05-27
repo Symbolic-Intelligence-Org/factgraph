@@ -1,6 +1,6 @@
 # Task Blueprint: T8-A Metadata + Validation Foundation
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M (may split to S/M sub-cycles after Step 4.6)
@@ -113,15 +113,76 @@ source-backed file:line evidence and final scoped decisions.
 
 | ID | Question | Required scoped output |
 |---|---|---|
-| Q1 | Should T8-A ship as one blueprint or split into T8-A-1 / T8-A-2? | Decision with rationale and commit/subcycle plan. |
-| Q2 | What is the central metadata builder shape? | Choose boundary without changing the 14-key contract; list current callers and backward-compat plan. |
-| Q3 | What is the metadata sufficiency checker shape? | Decide callable/helper semantics, exact error type, and whether it is public/internal. |
-| Q4 | How should the strict graph validation gate integrate with `_explain_live_row(...)`? | Decide whether validation remains `ValueError -> unsupported` or gains a narrower error path; preserve existing behavior unless justified. |
-| Q5 | How should debug assertion be enabled? | Decide always-on vs test-only/helper-only vs explicit debug flag, with risk assessment. |
-| Q6 | Which tests are mandatory before implementation? | Matrix mapping each T8-A subitem to existing/new test modules and backwards-compat regression cases. |
-| Q7 | Are module docs or design docs required in this cycle? | File list or explicit no-doc decision with rationale. |
-| Q8 | What remains deferred to T8-B/T8-C/T8-D? | Explicit non-goals after inventory, including D-series boundaries. |
-| Q9 | Are there any stop/amend findings from source inventory? | None or explicit amend trigger. |
+| Q1 | Should T8-A ship as one blueprint or split into T8-A-1 / T8-A-2? | One M-class blueprint, implemented as two commits if scope stays inside `evaluate_result.py` + focused tests. |
+| Q2 | What is the central metadata builder shape? | Keep the existing private module-level builder path; add a private key-set/checker companion. No class, public method, or cross-module builder. |
+| Q3 | What is the metadata sufficiency checker shape? | Private module-level checker; exact-set validation of §10.3 keys plus row/result value consistency; raises `ValueError` so existing unsupported fallback is preserved. |
+| Q4 | How should the strict graph validation gate integrate with `_explain_live_row(...)`? | Keep `ValueError -> Explanation(status="unsupported", code="GRAPH_VALIDATION_FAILED")`; run metadata validation inside the graph-builder/row-explain gate. |
+| Q5 | How should debug assertion be enabled? | Always-on internal consistency check for evidence graphs returned by the builder, scoped to metadata/envelope consistency only; no env var, no public flag, no Python `assert`. |
+| Q6 | Which tests are mandatory before implementation? | Completed in §4.6. |
+| Q7 | Are module docs or design docs required in this cycle? | No docs required unless implementation changes user-visible wording; behavior is internal contract hardening. |
+| Q8 | What remains deferred to T8-B/T8-C/T8-D? | Completed in §4.8. |
+| Q9 | Are there any stop/amend findings from source inventory? | None; class remains M. |
+
+## 4.1 Final Scoped Decisions
+
+| Decision | Scoped lock |
+|---|---|
+| Cycle shape | Keep T8-A as one M-class blueprint. Implement as A-1 metadata builder/checker and A-2 validation/debug assertion commits. Split into T8-A-1/A-2 only if implementation reveals helper-module or public-schema churn. |
+| Central metadata builder | Preserve the existing private module-level `_evidence_metadata_for_row_result(row, result)` caller contract and make it the central builder by adding an internal key tuple/frozenset plus validation helper nearby. Do not introduce `EvidenceMetadataBuilder`, `EvaluateResult.metadata_for(...)`, audit-module builder APIs, or public SDK surface. |
+| Metadata sufficiency checker | Add a private module-level checker in `evaluate_result.py` that enforces the exact §10.3 key set and row/result value consistency. It raises `ValueError` with graph-validation wording so `_explain_live_row(...)` keeps the current unsupported fallback. |
+| Strict validation gate | Keep `_explain_live_row(...)`'s `ValueError -> GRAPH_VALIDATION_FAILED` behavior. The graph builder / row-explain path becomes the gate; no new `Explanation.status`, error code, or public exception. |
+| Debug assertion | Use an always-on internal validation helper, not a Python `assert`, env flag, or test-only helper. Scope is metadata/envelope consistency only, so it does not add topology or engine enrichment. |
+| Docs | No public docs or design docs in this cycle unless implementation changes the scoped contract. Current audit docs already say central metadata sufficiency is future T8; this cycle makes that internal foundation real without changing user-facing semantics. |
+| T8-B/C/D | Remain deferred. T8-A must not import candidate evidence, adapter provenance, or topology helpers. |
+| Dirty baseline | Preserve current 4 modified tracked files plus 2 untracked directories. |
+
+## 4.2 Source-Backed Inventory Results
+
+| # | Item | Result |
+|---|---|---|
+| 1 | `EvaluateResult` envelope fields | `EvaluateResult` fields are `result_id`, `run_id`, `rows`, `head`, `engine`, `engine_version`, `adapter_version`, `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `semantics_digest`, `evaluated_at`, and `result_digest` at `evaluate_result.py:128-142`; validation for ids/digests/rows is at `:151-181`. |
+| 2 | Row explain path | `_explain_live_row(...)` validates row/result types at `evaluate_result.py:553-562`, resolves checked scope and row membership/staleness at `:564-594`, builds metadata at `:596`, calls the graph builder at `:597-599`, converts `ValueError` to `Explanation(status="unsupported", errors[0].code="GRAPH_VALIDATION_FAILED")` at `:600-618`, and returns passed explanation at `:620-630`. |
+| 3 | Current metadata writer | `_evidence_metadata_for_row_result(...)` writes the current 14 keys at `evaluate_result.py:823-842`: `result_id`, `row_id`, `evidence_ref_id`, `claim_digest`, `closed_head_digest`, `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `semantics_digest`, `result_digest`, `engine`, `engine_version`, `adapter_version`, `evaluated_at`. |
+| 4 | Current passed-row graph builder | `_build_passed_row_evidence_graph(...)` creates a single `NODE_CONCLUSION` node and copies the provided metadata into `EvidenceGraph(metadata=metadata)` at `evaluate_result.py:800-820`. This is the current single-node T8-A boundary; no topology expansion. |
+| 5 | EvidenceGraph structural validation | `EvidenceGraph.__post_init__` freezes metadata and validates `layout_hint`, duplicate node/edge ids, root existence, edge endpoints, and cycles at `evidence_graph.py:74-117`. |
+| 6 | Current metadata tests | `test_live_row_explain_returns_passed_explanation` asserts passed explanation shape, exact graph metadata key set, absent `run_id`, and every graph metadata value at `tests/application/protocol/test_evaluate_result_dtos.py:249-341`. |
+| 7 | Unsupported graph fallback tests | Existing test injects a failing `graph_builder` and asserts `status="unsupported"`, `GRAPH_VALIDATION_FAILED`, and `evidence is None` at `tests/application/protocol/test_evaluate_result_dtos.py:520-539`. |
+| 8 | EvidenceGraph validation / roundtrip tests | Graph validation tests cover valid tree, duplicate node/edge, missing root, endpoint, unsupported layout, mapping freeze, and JSON roundtrip at `tests/test_audit_evidence_graph.py:18-197`; cycle detection continues after `:200`. |
+| 9 | Callers/importers | `rg` over `src` and `tests` found `_evidence_metadata_for_row_result(...)` called only by `_explain_live_row(...)` at `evaluate_result.py:596`; `_build_passed_row_evidence_graph(...)` is selected only at `:597`; no external importers were found. `_explain_live_row(...)` is imported by `tests/application/protocol/test_evaluate_result_dtos.py:18` and inspected by quarantine test `tests/sdk/test_t5_why_not_quarantine.py:110`. |
+| 10 | Design anchors | §10.3 names the 14 v1 graph metadata fields at `evidence-tree...:2375-2398`; §10.4 defines metadata sufficiency and validation/roundtrip at `:2400-2419`; C134/C135 require graph validation and metadata source-of-truth/debug assertion at `:2781-2782`; §15.2 names T8-A at `:2894`; §15.3 recommends T8-A first at `:2899-2904`. |
+| 11 | Docs state | `src/factgraph/audit/docs/02_evidence_graph.md` already records `run_id` envelope-only, §10.3 metadata keys, safe JSON path, large graph warning, and future central metadata sufficiency at lines found by `rg`; no stale user-facing claim requires a docs commit for this internal hardening. |
+| 12 | Focused baseline | `PYTHONPATH=src python -m unittest tests.application.protocol.test_evaluate_result_dtos tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render` ran 31 OK during Step 4.6. |
+| 13 | Dirty / sacred | `git status --short --branch` shows 4 modified tracked docs/notebooks and 2 untracked directories (`docs/references/working/change-requests-2026-05-27/`, `rainbird-ai sdk code/`). Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`. |
+| 14 | Stop/amend findings | None. No service/OpenAPI, release, database/view, match, adapter topology, or dirty-baseline work is needed. Class remains M. |
+
+## 4.3 Candidate Shapes Considered
+
+### Central metadata builder (Q2)
+
+| Candidate | Pros | Cons | Decision |
+|---|---|---|---|
+| A. Keep private module-level builder `_evidence_metadata_for_row_result(row, result)` and add nearby internal constants/checker | Minimal churn; preserves existing private call path; no new public surface; easiest backward compatibility; keeps source of truth near `EvaluateResult` and row context | Name remains "for row result" rather than generic future builder; T8-B/C may later need a broader builder | **Selected** for T8-A. Future T8-B/C can generalize only after topology/enrichment scope exists. |
+| B. New `EvidenceMetadataBuilder` class | Extensible and testable as a unit; could carry future contexts | Premature abstraction; likely accidental public-ish API; unnecessary for one current caller | Rejected. |
+| C. Method on `EvaluateResult` or `EvaluateRow` | Discoverable from envelope/row objects | Public shape drift; couples DTO API to audit internals; hard to revise | Rejected. |
+| D. Move builder into `factgraph.audit` | Seems aligned with `EvidenceGraph` ownership | Would introduce application-protocol -> audit helper dependency beyond current DTO imports and obscure live result context ownership | Rejected for T8-A. |
+
+### Metadata sufficiency checker (Q3)
+
+| Candidate | Pros | Cons | Decision |
+|---|---|---|---|
+| A. Private module-level checker in `evaluate_result.py`, exact key set + value consistency, raises `ValueError` | Fits existing `_explain_live_row` unsupported fallback; no public surface; directly testable through row explain and private builder paths | Private helper is not reusable outside this module without future refactor | **Selected**. |
+| B. Public/dataclass validator object | Stronger named contract for future graph builders | Adds public or semi-public API before T8-B/C know their needs | Rejected. |
+| C. Test-only assertion helper | Zero runtime risk | Does not enforce C134/C135 at runtime; too weak for T8-A | Rejected. |
+| D. `ProtocolShapeError` checker | Matches protocol DTO validation style | Would bypass existing `ValueError -> unsupported` graph validation fallback unless more control flow changed | Rejected. |
+
+### Debug assertion enablement (Q5)
+
+| Candidate | Pros | Cons | Decision |
+|---|---|---|---|
+| A. Always-on internal validation helper, raising `ValueError` inside the existing graph gate | Enforces C135 in normal runtime; preserves unsupported fallback; no env/config state | Could reject custom internal graph builders that return incomplete metadata | **Selected**, scoped to metadata/envelope consistency only. Existing graph-builder injection is private/test-facing and should obey the contract. |
+| B. Python `assert` | Simple and obviously debug-like | Disabled under optimization; not reliable contract enforcement | Rejected. |
+| C. Env-var / explicit debug flag | Avoids runtime breakage | Adds configuration surface and inconsistent behavior | Rejected. |
+| D. Test-only helper | No runtime risk | Does not deliver T8-A validation foundation | Rejected. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -141,7 +202,7 @@ source-backed file:line evidence and final scoped decisions.
 
 ## 6. Step 4.6 Inventory Plan
 
-Fill these with source-backed results before implementation:
+Filled in §4.2. Original planned checks:
 
 1. Exact source refs for `EvaluateResult` fields, validation, and row binding.
 2. Exact source refs for `_explain_live_row(...)`, graph-builder injection,
@@ -165,30 +226,42 @@ Fill these with source-backed results before implementation:
 
 ## 7. Proposed Implementation Split
 
-Implementation is deliberately hypothetical until Step 4.6:
+Scoped implementation split:
 
-1. **Metadata foundation**: centralize metadata builder/checker without changing
-   the 14-key output or callers' public behavior.
-2. **Validation/debug**: add the strict validation gate / debug assertion chosen
-   in Step 4.6, preserving existing `unsupported` fallback semantics unless
-   scoped otherwise.
-3. **Tests**: extend focused protocol/audit graph tests for builder/checker,
-   sufficiency failures, validation/debug behavior, exact metadata keys, and
-   backwards compatibility.
-4. **Docs/closure**: update only the docs that Step 4.6 explicitly scopes.
+1. **Runtime A-1**: add internal metadata key constants and private checker in
+   `evaluate_result.py`; keep `_evidence_metadata_for_row_result(...)` as the
+   builder entry and preserve the 14-key result exactly.
+2. **Runtime A-2**: wire strict metadata/envelope consistency validation into
+   `_build_passed_row_evidence_graph(...)` / `_explain_live_row(...)` without
+   changing `ValueError -> unsupported` semantics.
+3. **Tests**: extend `tests/application/protocol/test_evaluate_result_dtos.py`
+   for positive checker behavior, missing/extra/wrong metadata rejection, and
+   unchanged unsupported fallback; preserve existing audit graph tests.
+4. **Closure**: no docs commit by default; record no-doc rationale and focused
+   verification.
+
+## 7.1 Test Matrix
+
+| T8-A subitem | Existing coverage | New / extended coverage |
+|---|---|---|
+| Central metadata builder | Exact 14 keys and values at `test_evaluate_result_dtos.py:249-341` | Keep set equality; add direct/private-path or row-explain regression if implementation exposes a narrower helper. |
+| Metadata sufficiency checker | No reusable checker coverage today | Missing key rejects, extra key rejects, wrong value rejects; all surface as `Explanation(status="unsupported", code="GRAPH_VALIDATION_FAILED")` when reached through `_explain_live_row(...)`. |
+| Strict graph validation gate | Graph structural tests at `test_audit_evidence_graph.py:18-197`; unsupported fallback test at `test_evaluate_result_dtos.py:520-539` | Ensure metadata checker failures use the same unsupported fallback and do not return partial evidence. |
+| Debug assertion consistency | Current value assertions in passed explanation test | Add mismatch path using injected graph builder returning an `EvidenceGraph` with inconsistent metadata. |
+| Backward compatibility | Existing row explain pass / fail / stale / unsupported tests | Focused suite remains green; no external callers of private builder were found. |
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 answers Q1-Q9 with source-backed evidence.
-- [ ] T8-A single-cycle vs split decision is locked.
-- [ ] Metadata builder/checker shape is locked without changing the current
+- [x] Step 4.6 answers Q1-Q9 with source-backed evidence.
+- [x] T8-A single-cycle vs split decision is locked.
+- [x] Metadata builder/checker shape is locked without changing the current
       14-key metadata contract.
-- [ ] `run_id` remains envelope-only.
+- [x] `run_id` remains envelope-only.
 - [ ] Strict validation/debug behavior is implemented or explicitly deferred
       with rationale.
 - [ ] Focused tests cover all implemented T8-A behavior and existing T7
       metadata/validation regressions.
-- [ ] T8-B/T8-C/T8-D and D-series non-goals remain deferred.
+- [x] T8-B/T8-C/T8-D and D-series non-goals remain deferred.
 - [ ] No service/OpenAPI, release, match, database/view, adapter topology, or
       dirty-baseline changes are made.
 - [ ] `git diff --check` passes.
