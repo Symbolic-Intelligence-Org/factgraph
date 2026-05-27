@@ -4,8 +4,8 @@
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
-- Blueprint: `workflow/blueprints/active/2026-05-27_t8-c-engine-enrichment-inventory.md`
-- Stage: closure
+- Blueprint: `workflow/blueprints/archive/2026-05-27_t8-c-engine-enrichment-inventory.md`
+- Stage: archived
 - Class: S/M (design-only planning inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current `4 M + 1 D + 3 U`
@@ -17,7 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | `e3bb4ecc` | T8-C inventory blueprint pair drafted | Triggered after T8-B-2 + T8-D round 2 completed native/Souffle loop; Q1-Q12 intentionally pending for Step 4.6. |
 | 2026-05-27 | scoped | `17d07d48` | Step 4.6 source-backed inventory completed | Verified ProbLog/PyReason are provenance-bearing, mapped T10 dependency per C-id, selected blueprint-only split plan. |
-| 2026-05-27 | closure | this commit | T8-C inventory cycle closed | Design-only cycle; no runtime/test/docs implementation. |
+| 2026-05-27 | closure | `d6b4eed3` | T8-C inventory cycle closed | Design-only cycle; no runtime/test/docs implementation. |
 
 ## 2. Step 4.6 Inventory Results
 

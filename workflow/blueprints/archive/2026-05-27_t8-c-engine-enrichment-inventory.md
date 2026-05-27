@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-27_t8-c-engine-enrichment-inventory.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-27_t8-c-engine-enrichment-inventory.audit.md`
 - Trigger: T8-A, T8-B-1, T8-B-2, and T8-D round 2 are shipped; T8-C remains the evidence track's engine-enrichment lane and is gated by T10 or engine-specific semantics locks.
 
 ## 0. Scope Locks
@@ -331,7 +331,7 @@ Cycle chain:
 
 - Draft: `e3bb4ecc`
 - Scoped inventory: `17d07d48`
-- Closure: this commit
+- Closure: `d6b4eed3`
 
 Outcome:
 
