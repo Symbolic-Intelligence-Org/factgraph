@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **T10 semantics adapter execution inventory is archived** as a planning
   artifact: C76 ProbLog, C74+C78 PyReason, and C77 PyReason temporal work are
   split into planned follow-up implementation cycles.
+- **ProbLog uncertainty projection execution is shipped** for C76: public
+  `ProbLogSemantics` can carry `uncertainty_projection`, SDK lowering preserves
+  it in `SemanticsProfile`, and the ProbLog adapter consumes canonical
+  `raw_kind` / `bound` uncertainty annotations with explicit reject or
+  point-projection policies instead of silently ignoring them.
 
 ### Changed
 
@@ -43,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Evidence and adapter planning docs were refreshed**: T8-C and T10
   inventories now record that ProbLog/PyReason runtime enrichment is not yet
   shipped and remains gated by adapter semantics work.
+- **ProbLog semantics fixtures were migrated off removed uncertainty keys**:
+  legacy `meta.confidence` remains rejected by the C110 write protocol, and the
+  ProbLog migration tests now use canonical non-uncertainty fixture metadata.
 
 ### Deferred
 

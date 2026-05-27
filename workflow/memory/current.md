@@ -1,22 +1,23 @@
 # Current Operational Memory
 
-最后更新:2026-05-27(T8-C/T10 inventory shipped to origin; docs sync round 3 complete)
+最后更新:2026-05-27(T10-1 implemented and archived locally; pending push gate)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ 580b2636`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ f50ed05a`
 
-**Most recent local work:** docs synchronization round 3 for shipped-state
-indexes after the T8-C engine enrichment inventory and T10 semantics adapter
-inventory. This work reflects already-published planning state only and does
-not change runtime, tests, release machinery, or design commitments.
+**Most recent local work:** T10-1 ProbLog uncertainty projection implemented
+and archived locally after Step 4.7 review. It ships C76's SDK shell, SDK
+lowering, and ProbLog adapter consumption for canonical `raw_kind` / `bound`
+uncertainty annotations, fixes two legacy ProbLog fixture errors, and is
+pending the next push gate.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do
 not move it.
 
-**Dirty baseline intentionally preserved(4 M + 1 D + 3 U as of this sync):**
+**Dirty baseline intentionally preserved(4 M + 1 D + 4 U):**
 
 - `docs/references/working/design-points/readme.md`
 - `examples/01_sdk_check_diagnose.ipynb`
@@ -25,6 +26,7 @@ not move it.
 - deleted `workflow/working/.gitkeep`
 - untracked `docs/references/working/change-requests-2026-05-27/`
 - untracked `rainbird-ai sdk code/`
+- untracked `workflow/design/design-points/active/append-only-ledger-evaluation.zh.md`
 - untracked `workflow/design/design-points/active/identity-and-data-model-redesign.zh.md`
 
 Do not absorb these into unrelated release, evidence, docs-sync, or cleanup work
@@ -85,6 +87,7 @@ gate.
 | T8-D Round 2 Souffle User Docs | `c6fa481f` | Quickstart and SDK guide now document Souffle row-level Form 1 as shipped and leave ProbLog/PyReason as future. |
 | T8-C Engine Enrichment Inventory | `f45739de` | Planning-only inventory selected adapter-side metadata bridge / provenance row bridge; T8-C-1 ProbLog and T8-C-2 PyReason remain gated by T10 or engine-specific semantics locks. |
 | T10 Semantics Adapter Inventory | `580b2636` | Planning-only inventory split T10 into T10-1 C76 ProbLog, T10-2 C74+C78 PyReason, and T10-3 C77 PyReason temporal work. |
+| T10-1 ProbLog Uncertainty Projection | pending push | C76 three-layer ship completed locally: `ProbLogSemantics.uncertainty_projection`, SDK lowering, and adapter `raw_kind` / `bound` consumption with explicit reject / point-projection policies. Full discover improved from 233 to 231 errors while adding 7 tests. |
 
 Evidence track current state:
 
@@ -93,26 +96,30 @@ Evidence track current state:
 - C115 `EDGE_SUPPORTS` direction is runtime-enforced and documented.
 - C118 intra-graph seed reuse is runtime-enforced and documented.
 - Souffle row Form 1 conformance is shipped and documented.
-- ProbLog/PyReason enrichment remains deferred. T8-C inventory is complete, and
-  T10 inventory refined the gates: T8-C-1 requires full C76 ProbLog ship;
-  T8-C-2 requires C74+C77, with C78 required for multi-round PyReason
-  enrichment.
+- ProbLog/PyReason evidence enrichment remains deferred. T8-C inventory is
+  complete, and T10 inventory refined the gates. T10-1 now satisfies the C76
+  prerequisite locally, so T8-C-1 is unblocked from the ProbLog uncertainty
+  projection side after push; T8-C-2 still requires C74+C77, with C78 required
+  for multi-round PyReason enrichment.
 
 ## Recommended Next Work
 
-1. **T10-1 C76 ProbLog implementation**: add the missing ProbLog
-   `uncertainty_projection` SDK shell, lowering, and adapter `raw_kind + bound`
-   consumption. It unblocks T8-C-1 after full ship; first verify the two
-   pre-existing ProbLog migration test errors recorded by the T10 inventory.
-2. **T10-2 C74+C78 PyReason canonical migration**: canonicalize PyReason
+1. **T10-1 push gate / docs-sync follow-up**: push the local T10-1 archive
+   chain after explicit authorization, then optionally refresh this memory
+   head from pending to published.
+2. **T8-C-1 ProbLog evidence enrichment**: now unblocked from the C76 side by
+   T10-1; still needs its own evidence-enrichment blueprint and Step 4.6
+   source inventory before runtime evidence changes.
+3. **T10-2 C74+C78 PyReason canonical migration**: canonicalize PyReason
    bounds / atom-id handling and introduce `iteration_count`, preserving legacy
    compatibility.
-3. **T10-3 C77 PyReason temporal migration**: add canonical `fact_boundaries`
+4. **T10-3 C77 PyReason temporal migration**: add canonical `fact_boundaries`
    / `time_binned` policy and decouple legacy `fixed_timesteps`.
-4. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
+5. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
-5. **Identity/data-model redesign intake**: classify the untracked active
-   design-point file before adopting it into workflow state.
+6. **Identity/data-model / append-only-ledger design-point intake**: classify
+   the untracked active design-point files before adopting them into workflow
+   state.
 
 ## Governance Reminders
 
