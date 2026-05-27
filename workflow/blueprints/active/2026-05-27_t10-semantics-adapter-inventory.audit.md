@@ -1,11 +1,11 @@
 # Audit: T10 Semantics Adapter Execution Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t10-semantics-adapter-inventory.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M (design-only planning inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current `4 M + 1 D + 3 U`
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | this commit | T10 inventory blueprint pair drafted | Triggered after T8-C inventory completed and identified C74/C76/C77/C78 as T8-C gates; Q1-Q13 intentionally pending for Step 4.6. |
 | 2026-05-27 | scoped | pending | Source-backed T10 inventory completed | C77 partial substrate verified under legacy names; C76 gap verified and expanded to include missing ProbLog SDK shell/lowering; staged hybrid split selected. |
+| 2026-05-27 | implemented | pending | T10 inventory cycle closed | Blueprint-only split plan selected; no runtime/test implementation commit. |
 
 ## 2. Step 4.6 Inventory Summary
 
@@ -111,8 +112,35 @@ No runtime/test files are changed in this design-only cycle.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q13 answered.
 - [x] Output shape selected.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 8. Closure Notes
 
-Pending inventory / closure.
+Closed as a design-only inventory cycle. Draft `1e1baf06`; scoped
+`2fcbc377`; closure this commit.
+
+Outcome summary:
+
+- Reviewer hints were independently verified and refined. C77 is partial under
+  legacy names (`valid_time_boundaries` / `fixed_timesteps`), not canonical
+  `fact_boundaries` / `time_binned`. C76 is missing at all C76-specific layers:
+  ProbLog SDK shell, SDK lowering, and adapter consumption.
+- Selected staged hybrid split: T10-1 ProbLog C76, T10-2 PyReason C74+C78,
+  T10-3 PyReason C77.
+- T8-C-1 remains gated on full C76. T8-C-2 remains gated on C74+C77, with C78
+  required when multi-round PyReason evidence enrichment is in scope.
+- Recorded two migration risks for future sub-cycles: the three-way atom-id
+  convention mismatch (`<rule_id>:atom_<index>` vs `body_atom:{branch}:{atom}`
+  vs `b<n>.a<n>:pred_id`) and the C77/C78 legacy coupling through
+  `fixed_timesteps`.
+- T10-1 should explicitly handle the pre-existing ProbLog migration baseline
+  drift: two focused tests still write legacy `meta[confidence]`, which the
+  current write protocol rejects.
+
+Verification:
+
+- Focused adapter-semantics baseline: 46 tests run, 44 OK / 2 pre-existing
+  ProbLog migration errors.
+- `git diff --check` clean.
+- Dirty baseline preserved as `4 M + 1 D + 3 U`.
+- Sacred master preserved at `562c74195df43e933bed92a3ff25de94dd8ce666`.

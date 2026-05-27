@@ -1,6 +1,6 @@
 # Task Blueprint: T10 Semantics Adapter Execution Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S/M (design-only planning inventory)
@@ -278,4 +278,50 @@ Step 4.6 may refine these commands after source-backed inventory.
 
 ## 10. Outcome / Deviations
 
-Pending scoped inventory / closure.
+Implemented as a design-only inventory cycle. No runtime, test, user-doc,
+release, service/OpenAPI, SDK API, database/view, dirty-baseline, or
+sacred-master files were changed.
+
+Cycle chain:
+
+- Draft: `1e1baf06`
+- Scoped inventory: `2fcbc377`
+- Closure: this commit
+
+Key outcomes:
+
+- The reviewer C77 partial-implementation hint was source-backed and refined:
+  runtime substrate exists, but under legacy `valid_time_boundaries` /
+  `fixed_timesteps` names. Canonical `fact_boundaries` and `time_binned` remain
+  missing.
+- The reviewer C76 adapter-consumption gap was source-backed and broadened:
+  ProbLog is missing the C76 SDK shell, SDK lowering, and adapter consumption
+  layers. Only the generic core `SemanticsProfile.uncertainty_projection`
+  carrier exists.
+- Selected staged hybrid split:
+  1. T10-1 ProbLog C76 full three-layer ship.
+  2. T10-2 PyReason C74 + C78 canonical shell / migration.
+  3. T10-3 PyReason C77 temporal rename / time-binned.
+- T8-C unblock rule is refined: T8-C-1 requires full C76, not partial carrier
+  substrate; T8-C-2 requires C74 + C77, with C78 required for multi-round
+  PyReason enrichment.
+- The inventory found a three-way atom-id convention mismatch:
+  application `Rule.atom_ids` use `<rule_id>:atom_<index>`, current PyReason
+  lowering uses `body_atom:{branch}:{atom}` targets, and T8-B witness support
+  keys use `b<n>.a<n>:pred_id`. Future C74 should add a conversion layer rather
+  than reuse T8-B witness atom keys.
+- The inventory found a migration coupling: C77 and C78 are orthogonal by
+  design, but shipped `fixed_timesteps` couples iteration count into temporal
+  projection. Future T10-2/T10-3 must decouple this legacy behavior explicitly.
+- T10-1 prerequisite note: the focused adapter-semantics baseline currently has
+  two pre-existing `tests.test_problog_semantics_profile_migration` errors from
+  legacy `meta[confidence]` writes. T10-1 should explicitly verify or clean up
+  this drift before using that suite as a green gate.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.test_problog_semantics_profile_migration tests.test_pyreason_semantics_profile_migration tests.test_problog_evidence_graph tests.test_pyreason_evidence_graph`
+  ran 46 tests with 44 OK / 2 pre-existing errors as described above.
+- `git diff --check` clean.
+- Dirty baseline preserved as `4 M + 1 D + 3 U`.
+- Sacred master remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
