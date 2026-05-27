@@ -1,6 +1,6 @@
 # Task Blueprint: T8-C-1 ProbLog Evidence Enrichment Runtime
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: M (runtime implementation)
@@ -133,118 +133,313 @@ silently rendered as a graph.
 
 ## 3. Step 4.6 Inventory Results
 
-Pending Step 4.6. Required source-backed subsections:
-
 ### 3.1 Projection Decision Table Schema
 
-Define the decision table schema and payload embedding point. The scoped answer
-must cover:
+Source facts:
 
-- `schema_version`.
-- `asrt_id`.
-- `raw_kind`.
-- `bound`.
-- `policy`.
-- `resolved_probability`.
-- `source`, such as `uncertainty_projection`, `legacy_probability`, or
-  `default`.
-- Whether non-raw legacy probability annotations also get decision rows.
-- `payload["uncertainty_projections"]` shape and keying.
+- `export_problog(...)` normalizes the C76 projection once at
+  `src/factgraph/adapters/problog/problog_export.py:44-55`.
+- Each active claim calls `_claim_probability(...)` at `problog_export.py:95-99`
+  before the `.pl` line stores only `_format_probability(prob)`.
+- Raw uncertainty policy is applied in `_claim_raw_uncertainty_probability(...)`
+  at `problog_export.py:203-265`.
+- `_attach_problog_provenance(...)` constructs the `ProvenanceEnvelope.payload`
+  from `trace_dict` at `src/factgraph/adapters/problog/engine_eval.py:173-203`.
+- `ProvenanceEnvelope.payload` is already an arbitrary `dict[str, Any]` per
+  `src/factgraph/core/store/_support.py:147-162`, so no envelope DTO/schema
+  change is needed.
+
+Scoped schema:
+
+```python
+payload["uncertainty_projections"] = {
+    "schema_version": 1,
+    "decisions_by_asrt_id": {
+        "<asrt_id>": {
+            "asrt_id": "<asrt_id>",
+            "source": "uncertainty_projection" | "legacy_probability" | "default",
+            "raw_kind": "probabilistic" | "possibilistic" | None,
+            "bound": [lower, upper] | None,
+            "policy": "reject" | "lower" | "midpoint" | "upper" | "identity_probability" | None,
+            "resolved_probability": float,
+        },
+    },
+}
+```
+
+Rules:
+
+- `uncertainty_projection` decisions are recorded only for raw
+  `shared/semantic/raw_kind` + `shared/semantic/bound` carriers that reach
+  `_claim_raw_uncertainty_probability(...)`.
+- Existing `problog/semantic/probability` and `shared/semantic/probability`
+  point carriers may record `source="legacy_probability"` so row evidence can
+  distinguish raw projection from pre-projected point probability.
+- Claims with no probability annotation may record `source="default"` and
+  `resolved_probability=1.0` only if tests need to explain why the ProbLog line
+  received `1.0`; otherwise the implementation may omit default rows to keep
+  metadata compact. The scoped implementation should choose one behavior and
+  test it.
+- `reject` decisions do not produce row evidence because export raises
+  `ProbLogExportError` before candidates and rows exist.
 
 ### 3.2 `_claim_probability(...)` Minimal API Shape
 
-Decide how `_claim_probability(...)` and
-`_claim_raw_uncertainty_probability(...)` expose structured decisions while
-remaining compatible with existing direct callers and T10-1 tests.
+| Option | Shape | Risk | Decision |
+|---|---|---|---|
+| A. Change `_claim_probability(...)` to return a decision object | Existing direct callers and tests must unwrap `.resolved_probability`; T10-1 already fixed direct-call compatibility once. | Medium. Reopens the same direct-call surface that Step 4.7 protected in T10-1. | Reject. |
+| B. Keep `_claim_probability(...) -> float` and add an optional collector/sink | Existing callers still get `float`; export can pass a dict that `_claim_probability(...)` fills with decision dicts keyed by `asrt_id`. | Low/medium. Side-effect API needs careful tests, but preserves all direct callers. | **Selected.** |
+| C. Add a new public-ish `_claim_probability_decision(...)` helper and make `_claim_probability(...)` a wrapper | Clear separation, but larger refactor of `_claim_raw_uncertainty_probability(...)` and tests. | Medium. More code churn than needed for first bridge. | Defer unless B becomes awkward during implementation. |
 
-Compare at least:
+Scoped answer: future implementation should keep `_claim_probability(...)`
+returning `float` and add an optional keyword-only decision sink, for example
+`projection_decisions: dict[str, dict[str, Any]] | None = None`. The sink is
+filled only after probability validation succeeds. This preserves:
 
-- return a dataclass / tuple with `value` + decision;
-- keep float return and fill a collector/sink;
-- another source-backed option.
+- direct helper tests in `tests/test_problog_export.py` that call
+  `_claim_probability(...)` without projection plumbing;
+- T10-1 tests in `tests/test_problog_semantics_profile_migration.py`;
+- `export_problog(...)`'s current writer loop, which only needs the point
+  probability at `problog_export.py:95-104`.
 
 ### 3.3 Private Row Provenance Context Shape
 
-Specify the SDK/protocol private mapping shape, likely
-`_row_provenance_envelopes: Mapping[str, ProvenanceEnvelope] | None`, including:
+Source facts:
 
-- where SDK constructs it;
-- freeze/copy semantics;
-- repr/equality/hash behavior;
-- why it stays parallel to `_row_support_artifacts`.
+- `EvaluateResult` already has private `_row_support_artifacts` with
+  `repr=False`, `compare=False`, and `hash=False` at
+  `src/factgraph/application/protocol/evaluate_result.py:156-184`.
+- `EvaluateResult.__post_init__` validates and freezes row support artifacts at
+  `evaluate_result.py:215-220`.
+- SDK row construction happens at `src/factgraph/sdk/store.py:2693-2736`.
+- `_row_support_artifacts_for_candidates(...)` only admits
+  `_FORM1_ROW_SUPPORT_KINDS` at `sdk/store.py:2742-2754`.
+
+Scoped field:
+
+```python
+_row_provenance_envelopes: Mapping[str, ProvenanceEnvelope] | None = field(
+    default=None,
+    repr=False,
+    compare=False,
+    hash=False,
+)
+```
+
+Implementation policy:
+
+- Add `_validate_row_provenance_envelopes(...)` beside
+  `_validate_row_support_artifacts(...)`.
+- Validate keys are known `row_id`s.
+- Validate values are `ProvenanceEnvelope`.
+- Freeze with `MappingProxyType`.
+- SDK adds `_row_provenance_envelopes_for_candidates(candidates, rows)` parallel
+  to `_row_support_artifacts_for_candidates(...)`.
+- That SDK helper should accept only `candidate.support_kind ==
+  PROBLOG_PROVENANCE_KIND`, then look up `store._lookup_provenance_envelope(...)`
+  using `candidate.support_digest`.
+- Do not widen `_FORM1_ROW_SUPPORT_KINDS`; ProbLog is provenance-bearing, not a
+  witness-bearing Form 1 support kind.
 
 ### 3.4 Row Dispatch Branch Position
 
-Define the `_build_passed_row_evidence_graph(...)` branch order. The branch must
-preserve the existing metadata validation before dispatch, avoid widening
-`_FORM1_ROW_SUPPORT_KINDS`, and keep native/Souffle Form 1 behavior unchanged.
+Source facts:
+
+- `_explain_live_row(...)` builds metadata at `evaluate_result.py:635`, calls
+  the builder at `:637-638`, and revalidates an `EvidenceGraph` at `:639-640`.
+- `_build_passed_row_evidence_graph(...)` currently validates metadata before
+  dispatch at `evaluate_result.py:841-847`.
+- Native/Souffle Form 1 dispatch starts at `evaluate_result.py:847-849`.
+
+Scoped branch order:
+
+```python
+_validate_evidence_metadata_for_row_result(metadata, row, result)
+provenance_envelope = result._row_provenance_envelopes.get(row.row_id)
+if provenance_envelope is not None:
+    return _build_problog_provenance_row_evidence_graph(row, result, metadata, provenance_envelope)
+support_artifact = result._row_support_artifacts.get(row.row_id)
+if support_artifact is not None:
+    return _build_form1_evidence_graph(row, result, metadata, support_artifact)
+return single_node_fallback
+```
+
+Rationale:
+
+- This follows the reviewer telegraph: the new provenance branch is after the
+  T8-A metadata validation and before `_build_form1_evidence_graph(...)`.
+- Native/Souffle rows do not receive `_row_provenance_envelopes`, so Form 1
+  behavior remains unchanged.
+- If an impossible future row has both a ProbLog provenance envelope and a
+  support artifact, the provenance mapping is a narrower row-context signal and
+  should win only after validating that the envelope is ProbLog-shaped.
 
 ### 3.5 ProbLog Row Graph Builder Location
 
-Decide the builder function shape and location, likely a new
-`_build_problog_provenance_row_evidence_graph(...)` beside
-`_build_form1_evidence_graph(...)` in `evaluate_result.py`.
+Scoped builder:
 
-The scoped answer must explain how it reuses or wraps
-`problog_trace_to_evidence_graph(...)` while preserving the existing converter's
-flat candidate/readback behavior.
+```python
+def _build_problog_provenance_row_evidence_graph(
+    row: EvaluateRow,
+    result: EvaluateResult,
+    metadata: Mapping[str, Any],
+    provenance_envelope: ProvenanceEnvelope,
+) -> EvidenceGraph:
+    ...
+```
+
+Location: `src/factgraph/application/protocol/evaluate_result.py`, beside
+`_build_form1_evidence_graph(...)`.
+
+Implementation strategy:
+
+1. Validate `provenance_envelope.engine == "problog"` and
+   `payload_type == "proof_trace"`.
+2. Convert or parse the envelope payload into the existing ProbLog trace model.
+3. Call `problog_trace_to_evidence_graph(...)` for topology and adapter truth.
+4. Return a row-result wrapper graph:
+   - `graph_id=f"{result.result_id}:{row.row_id}"`.
+   - `engine=result.engine`.
+   - `support_kind=PROBLOG_PROVENANCE_KIND`.
+   - `metadata=metadata`.
+   - same nodes/edges/topology as converter, but row-result `engine_meta`
+     normalized to `engine_meta["problog"]`.
+
+Why wrap instead of rewrite:
+
+- Existing candidate converter flat assertions live at
+  `tests/test_problog_evidence_graph.py:67-99`.
+- Existing converter graph metadata is adapter-local at
+  `src/factgraph/adapters/problog/provenance.py:291-296`.
+- Row-result top-level metadata must be T8-A 14-key metadata from
+  `evaluate_result.py:59-75`.
+- A wrapper lets future row evidence use the converter as topology substrate
+  while preserving candidate/readback behavior.
 
 ### 3.6 Namespaced `engine_meta` Field Set
 
-Define exact row-result namespaced fields:
+Current converter fields:
 
-- `engine_meta["problog"]["trace_summary"]`.
-- `engine_meta["problog"]["uncertainty_projection"]`.
-- Any per-node / per-edge namespaced subfields.
+- Graph metadata at `src/factgraph/adapters/problog/provenance.py:291-296`:
+  `event_count`, `answer_count`, `root_goal`, `answer_probability`.
+- Node flat `engine_meta` at `provenance.py:244-256`: `goal`, `goal_name`,
+  `goal_args`, `call_started_seconds`, `location`, `result_terms`,
+  `bindings_text`, `elapsed_seconds`, `event_status`, `synthetic_goal`,
+  `answer_probability`.
+- Edge flat `engine_meta` at `provenance.py:275-279`: `parent_goal`,
+  `child_goal`, `parent_location`.
 
-The scoped answer must explain where current converter metadata keys
-`event_count`, `answer_count`, `root_goal`, and `answer_probability` move.
+Scoped row-result shape:
+
+Root node:
+
+```python
+engine_meta={
+    "problog": {
+        "trace_summary": {
+            "event_count": <int>,
+            "answer_count": <int>,
+            "root_goal": <str>,
+            "root_answer_probability": <float | None>,
+        },
+        "trace": { ... namespaced former flat node fields ... },
+        "uncertainty_projection": {
+            "schema_version": 1,
+            "decision_count": <int>,
+            "decisions_by_asrt_id": {...},
+        },
+    }
+}
+```
+
+Non-root nodes:
+
+```python
+engine_meta={
+    "problog": {
+        "trace": { ... namespaced former flat node fields ... },
+        "uncertainty_projection": <decision | None>,
+    }
+}
+```
+
+Edges:
+
+```python
+engine_meta={
+    "problog": {
+        "trace_edge": {
+            "parent_goal": ...,
+            "child_goal": ...,
+            "parent_location": ...,
+        }
+    }
+}
+```
+
+The implementation may attach per-node projection decisions only when a trace
+node can be tied to an assertion id, for example by an `edb_fact(...)` goal.
+The root summary must still include aggregate projection count / decisions so
+projection memory is not lost when no individual node match is available.
 
 ### 3.7 Audit Docs Update Scope
 
-Identify the exact `src/factgraph/audit/docs/02_evidence_graph.md` sections to
-change. The draft expectation is:
+Source facts:
 
-- Mark ProbLog row-result evidence as shipped once runtime lands.
-- Explain it remains provenance-row evidence using `EDGE_DERIVES`, not Form 1
-  `EDGE_SUPPORTS`.
-- Explain namespaced ProbLog `engine_meta`.
-- Keep user-facing docs deferred to T8-D round 3.
+- The intro currently says only native and Souffle row explanations produce
+  live row-level graphs at `src/factgraph/audit/docs/02_evidence_graph.md:41-46`.
+- Frozen enumeration text says native/Souffle row graphs use `supports`, while
+  `derives` and `updates` are reserved at `02_evidence_graph.md:120-122`.
+- Current boundaries list durable package converter behavior for `problog` at
+  `02_evidence_graph.md:186-195`, and row explanations for native/Souffle at
+  `:196-199`.
+- Boundary text still says runtime live explain paths do not directly support
+  `problog_provenance_v1` at `:210-212`.
+
+Scoped docs edits after runtime ships:
+
+- Update §1 to say native/Souffle row explanations produce Form 1 graphs, and
+  ProbLog row explanations produce provenance-row graphs using ProbLog trace
+  topology.
+- Update §3 enumeration text: `supports` remains native/Souffle Form 1;
+  ProbLog row evidence uses `derives`; `updates` remains PyReason/timeline.
+- Update §6 current boundaries to add ProbLog row explanations as live
+  row-level provenance graphs and keep candidate/service audit-package
+  converter behavior separate.
+- Remove `problog_provenance_v1` from the "runtime live explain does not
+  directly support" line once the bridge ships.
+- Mention namespaced `engine_meta["problog"]` at audit-module level only.
+- Do not update user-facing quickstart or SDK guide in this cycle.
 
 ### 3.8 Test Matrix
 
-Turn the inventory §3.7 sketch into concrete test files/functions. Required
-coverage:
+Future implementation should add or update tests in this shape:
 
-1. Existing `tests.test_problog_evidence_graph` converter regressions unchanged.
-2. Row-result ProbLog `EvaluateRow.explain()` returns multi-node ProbLog
-   evidence rather than single-node fallback.
-3. Row-result graph top-level metadata is exactly the T8-A 14-key set and
-   excludes ProbLog adapter-local keys.
-4. Row-result graph support kind remains `PROBLOG_PROVENANCE_KIND`; edge kind
-   remains `EDGE_DERIVES`.
-5. Namespaced `engine_meta["problog"]` contains trace summary and no new generic
-   flattened ProbLog keys.
-6. Midpoint/lower/upper uncertainty projection fixtures record export-time
-   projection decision metadata.
-7. Default `reject` remains a semantics execution error, not a row evidence
-   graph.
-8. T8-A/T8-B/T8-D/T10-1 regressions.
+| Area | Candidate test |
+|---|---|
+| Existing converter regression | Keep `tests.test_problog_evidence_graph` unchanged; it protects flat candidate/readback shape. |
+| Projection decision producer | Add `tests/test_problog_semantics_profile_migration.py` tests proving `export_problog(...)` emits decision payload when given a sink or return wrapper, while `_claim_probability(...)` direct callers still return `float`. |
+| Row provenance context validation | Add protocol DTO tests that unknown row ids or non-`ProvenanceEnvelope` mapping values raise `ProtocolShapeError`. |
+| Row bridge topology | Add a protocol or SDK test where a ProbLog candidate with `PROBLOG_PROVENANCE_KIND` yields `EvaluateRow.explain().evidence` with multiple nodes/`EDGE_DERIVES`, not single-node fallback. |
+| 14-key metadata | Assert exact T8-A metadata keys and absence of ProbLog adapter-local top-level keys. |
+| Namespaced engine_meta | Assert root/node/edge `engine_meta` only exposes `problog` namespace for row-result graph, including `trace_summary` and projection decision metadata. |
+| Reject anti-silent-ignore | Keep/extend T10-1 test proving default reject raises before rows exist; assert no row evidence graph is produced for reject. |
+| Horizontal regressions | Run native/Souffle Form 1 protocol tests, T10-1 ProbLog tests, audit evidence graph tests, and full discover. |
 
 ## 4. Open Questions For Step 4.6
 
 | ID | Question | Required scoped output |
 |---|---|---|
-| Q1 | What is the projection decision table schema? | Exact fields, version marker, keying, and payload embedding point. |
-| Q2 | How should `_claim_probability(...)` expose structured decisions? | Compare float+collector, return-object, and any discovered alternative; preserve existing direct callers. |
-| Q3 | What private row provenance context field should `EvaluateResult` use? | Field name, type, freeze/copy behavior, repr/equality/hash stance, and SDK construction path. |
-| Q4 | Where exactly should `_build_passed_row_evidence_graph(...)` branch? | Branch order and T8-A gate trace. |
-| Q5 | What is the complete namespaced `engine_meta` field set? | Root/node/edge `engine_meta["problog"]` keys, trace summary shape, uncertainty projection subkeys, and compatibility rationale. |
-| Q6 | What audit docs change is required? | Exact section/table edits and wording boundary for user docs defer. |
-| Q7 | What implementation commit split should be used? | Dependency-ordered commit list and file/test scope per commit. |
-| Q8 | How is anti-silent-ignore enforced at row bridge level? | Reject path behavior and any additional tests/assertions. |
-| Q9 | Does this unblock T8-D round 3? | Expected answer: yes after runtime ships, but user docs remain a separate follow-up cycle. |
-| Q10 | Are there stop/amend findings? | None or explicit trigger with next action. |
+| Q1 | What is the projection decision table schema? | Use `payload["uncertainty_projections"] = {"schema_version": 1, "decisions_by_asrt_id": {...}}`; each decision records `asrt_id`, `source`, `raw_kind`, `bound`, `policy`, and `resolved_probability`. Raw C76 decisions use `source="uncertainty_projection"`. Legacy point probability and default `1.0` may be recorded with `source="legacy_probability"` / `"default"` if implementation chooses compact-vs-complete behavior and tests it. |
+| Q2 | How should `_claim_probability(...)` expose structured decisions? | Keep `_claim_probability(...) -> float`; add optional keyword-only decision sink. Reject return-object as unnecessary direct-caller churn. Defer a separate `_claim_probability_decision(...)` helper unless the sink becomes awkward in implementation. |
+| Q3 | What private row provenance context field should `EvaluateResult` use? | Add `_row_provenance_envelopes: Mapping[str, ProvenanceEnvelope] | None` with `repr=False`, `compare=False`, `hash=False`, validation/freeze in `__post_init__`, and SDK helper parallel to `_row_support_artifacts_for_candidates(...)` that admits only `PROBLOG_PROVENANCE_KIND`. |
+| Q4 | Where exactly should `_build_passed_row_evidence_graph(...)` branch? | After `_validate_evidence_metadata_for_row_result(...)`, check `_row_provenance_envelopes` first, then Form 1 `_row_support_artifacts`, then single-node fallback. The provenance branch must validate ProbLog envelope shape before building. |
+| Q5 | What is the complete namespaced `engine_meta` field set? | Root `engine_meta["problog"]` contains `trace_summary`, `trace`, and `uncertainty_projection`; non-root nodes contain namespaced `trace` plus per-node projection decision when linkable; edges contain `engine_meta["problog"]["trace_edge"]`. Former top-level graph metadata keys move under `trace_summary`. Former flat node/edge keys move under `trace` / `trace_edge`. |
+| Q6 | What audit docs change is required? | Update `src/factgraph/audit/docs/02_evidence_graph.md` §1, §3, and §6 only. Mark ProbLog row-result evidence as shipped provenance-row evidence using `EDGE_DERIVES`, document namespaced `engine_meta["problog"]`, keep candidate converter/readback distinct, and defer user docs to T8-D round 3. |
+| Q7 | What implementation commit split should be used? | Keep draft §7 split: projection decision producer, private row provenance context, row bridge, tests, audit docs, closure, archive. Commits 2+3 may combine only if audit explains partial-ship control. |
+| Q8 | How is anti-silent-ignore enforced at row bridge level? | Reject remains export/evaluation failure: no candidates, no rows, no row evidence. Add/keep tests that default reject raises `ProbLogExportError` / SDK error before `EvaluateResult`; do not add fallback empty evidence for reject. |
+| Q9 | Does this unblock T8-D round 3? | Yes, after runtime and audit docs ship. User-facing quickstart / SDK guide remain an independent T8-D round 3 follow-up and are out of this cycle. |
+| Q10 | Are there stop/amend findings? | None. `ProvenanceEnvelope.payload` can hold dict data; private row context can preserve T8-A gates; wrapper namespacing avoids candidate converter changes; C119 remains deferred. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -322,9 +517,9 @@ audit records why partial-ship risk remains controlled.
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed inventory completed.
-- [ ] Q1-Q10 answered.
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed inventory completed.
+- [x] Q1-Q10 answered.
 - [ ] Projection decision memory producer shipped.
 - [ ] Private row provenance context shipped.
 - [ ] ProbLog row-result bridge shipped.
@@ -353,4 +548,4 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 inventory / implementation.
+Pending implementation / closure.

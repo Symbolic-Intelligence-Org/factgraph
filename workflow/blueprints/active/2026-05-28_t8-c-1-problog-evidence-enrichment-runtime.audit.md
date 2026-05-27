@@ -1,11 +1,11 @@
 # Audit: T8-C-1 ProbLog Evidence Enrichment Runtime
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-c-1-problog-evidence-enrichment-runtime.md`
-- Stage: draft
+- Stage: scoped
 - Class: M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 5 U`
@@ -16,6 +16,7 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-28 | draft | this commit | T8-C-1 ProbLog evidence enrichment runtime blueprint pair drafted | Triggered by T10-1 C76 ship at `cde072fa` and T8-C-1 inventory at `bd5baeec`; Q1-Q10 pending for Step 4.6. |
+| 2026-05-28 | scoped | pending | Source-backed T8-C-1 runtime implementation plan completed | Selected optional decision sink for `_claim_probability`, private `_row_provenance_envelopes`, provenance branch before Form 1 dispatch, namespaced `engine_meta["problog"]`, audit-doc-only docs update, and no stop/amend findings. |
 
 ## 2. Draft Inventory Summary
 
@@ -32,43 +33,55 @@ This runtime cycle starts from locked inventory decisions:
 - Preserve the existing candidate converter's flat adapter-local `engine_meta`.
 - Keep C119 multi-path DAG and C136 aggregate envelope deferred.
 
-Step 4.6 must source-back concrete schema and implementation choices without
-reopening these decisions.
+Step 4.6 source-backed concrete implementation choices without reopening these
+decisions:
+
+- `ProvenanceEnvelope.payload` can carry the decision table without envelope
+  schema changes.
+- `_claim_probability(...)` should keep returning `float` and fill an optional
+  decision sink, preserving direct callers.
+- `EvaluateResult` should add private `_row_provenance_envelopes` mapping
+  parallel to `_row_support_artifacts`.
+- `_build_passed_row_evidence_graph(...)` should check ProbLog provenance after
+  metadata validation and before Form 1 dispatch.
+- Row-result graph metadata remains exact 14-key top-level metadata; ProbLog
+  trace/projection details move under `engine_meta["problog"]`.
+- Existing candidate/readback converter flat `engine_meta` remains unchanged.
 
 ## 3. Open Questions Register
 
 | ID | Question | Status |
 |---|---|---|
-| Q1 | What is the projection decision table schema? | Pending Step 4.6. |
-| Q2 | How should `_claim_probability(...)` expose structured decisions? | Pending Step 4.6. |
-| Q3 | What private row provenance context field should `EvaluateResult` use? | Pending Step 4.6. |
-| Q4 | Where exactly should `_build_passed_row_evidence_graph(...)` branch? | Pending Step 4.6. |
-| Q5 | What is the complete namespaced `engine_meta` field set? | Pending Step 4.6. |
-| Q6 | What audit docs change is required? | Pending Step 4.6. |
-| Q7 | What implementation commit split should be used? | Pending Step 4.6. |
-| Q8 | How is anti-silent-ignore enforced at row bridge level? | Pending Step 4.6. |
-| Q9 | Does this unblock T8-D round 3? | Pending Step 4.6. |
-| Q10 | Are there stop/amend findings? | Pending Step 4.6. |
+| Q1 | What is the projection decision table schema? | Answered: `payload["uncertainty_projections"]` with `schema_version=1` and `decisions_by_asrt_id`; per decision records `asrt_id`, `source`, `raw_kind`, `bound`, `policy`, and `resolved_probability`. |
+| Q2 | How should `_claim_probability(...)` expose structured decisions? | Answered: keep returning `float`; add optional decision sink to avoid direct-caller churn. |
+| Q3 | What private row provenance context field should `EvaluateResult` use? | Answered: `_row_provenance_envelopes: Mapping[str, ProvenanceEnvelope] | None`, private/frozen/non-comparable like `_row_support_artifacts`. |
+| Q4 | Where exactly should `_build_passed_row_evidence_graph(...)` branch? | Answered: after metadata validation and before Form 1 dispatch, validating ProbLog envelope shape before building. |
+| Q5 | What is the complete namespaced `engine_meta` field set? | Answered: root `engine_meta["problog"]` with `trace_summary`, `trace`, and `uncertainty_projection`; non-root nodes get namespaced `trace` plus optional projection decision; edges get `trace_edge`. |
+| Q6 | What audit docs change is required? | Answered: update audit docs §1/§3/§6 only; user docs deferred to T8-D round 3. |
+| Q7 | What implementation commit split should be used? | Answered: projection producer, private row context, row bridge, tests, audit docs, closure, archive. |
+| Q8 | How is anti-silent-ignore enforced at row bridge level? | Answered: reject stays export/evaluation failure; no candidates/rows means no row evidence graph. |
+| Q9 | Does this unblock T8-D round 3? | Answered: yes after runtime/audit docs ship, but as a separate follow-up cycle. |
+| Q10 | Are there stop/amend findings? | Answered: none. |
 
 ## 4. Risk Register
 
 | Risk | Impact | Step 4.6 / implementation check |
 |---|---|---|
-| Inventory decisions are reopened silently | Runtime implementation drifts from the archived source-backed plan | Treat T8-C-1 inventory Q1-Q9 as locked; stop and amend archive if wrong. |
-| Projection decisions are reconstructed after export | Evidence metadata may lie about how probabilities were produced | Produce the decision table at export time before `.pl` point-probability collapse. |
-| Row bridge bypasses T8-A validation | ProbLog row graphs could miss 14-key metadata validation | Trace metadata validation before and after dispatch. |
-| `_FORM1_ROW_SUPPORT_KINDS` is widened | ProbLog provenance could be misclassified as native/Souffle Form 1 | Keep private provenance row context separate. |
-| Existing ProbLog converter flat engine_meta is migrated in-place | Existing candidate/readback tests and service audit-package path may regress | Use row-result wrapper, not one-shot converter migration. |
-| Default `reject` is rendered as empty evidence | T10-1 anti-silent-ignore guarantee is weakened | Reject remains execution error; no row evidence graph exists on reject. |
-| C119 multi-path enters scope | M-class bridge grows into graph algorithm work | Keep full multi-path DAG deferred unless source disproves single-path assumption and stop/amend. |
-| User docs are updated in this cycle | T8-D round 3 boundary is violated | Limit docs to audit module. |
-| Dirty baseline is touched | Workflow violation | Stage only cycle-owned files and scoped runtime/test/docs files. |
+| Inventory decisions are reopened silently | Runtime implementation drifts from the archived source-backed plan | Completed Step 4.6: inventory Q1-Q9 remain locked; no archive amendment needed. |
+| Projection decisions are reconstructed after export | Evidence metadata may lie about how probabilities were produced | Completed Step 4.6: selected optional decision sink filled at `_claim_probability(...)` / export time. |
+| Row bridge bypasses T8-A validation | ProbLog row graphs could miss 14-key metadata validation | Completed Step 4.6: branch occurs after `_validate_evidence_metadata_for_row_result(...)`; `_explain_live_row(...)` still revalidates. |
+| `_FORM1_ROW_SUPPORT_KINDS` is widened | ProbLog provenance could be misclassified as native/Souffle Form 1 | Completed Step 4.6: use private `_row_provenance_envelopes`; do not widen Form 1 allowlist. |
+| Existing ProbLog converter flat engine_meta is migrated in-place | Existing candidate/readback tests and service audit-package path may regress | Completed Step 4.6: row-result wrapper owns namespaced metadata; converter flat shape stays protected. |
+| Default `reject` is rendered as empty evidence | T10-1 anti-silent-ignore guarantee is weakened | Completed Step 4.6: reject remains export/evaluation failure and should be tested as no-row/no-evidence. |
+| C119 multi-path enters scope | M-class bridge grows into graph algorithm work | Completed Step 4.6: no multi-path source correction; keep C119 deferred. |
+| User docs are updated in this cycle | T8-D round 3 boundary is violated | Completed Step 4.6: audit docs only; user docs deferred. |
+| Dirty baseline is touched | Workflow violation | Completed Step 4.6: only blueprint/audit files touched so far; preserve `4 M + 1 D + 5 U`. |
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 source-backed inventory complete.
-- [ ] Q1-Q10 answered.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 source-backed inventory complete.
+- [x] Q1-Q10 answered.
 - [ ] Projection memory producer implemented.
 - [ ] Private row provenance context implemented.
 - [ ] ProbLog row bridge implemented.
@@ -79,4 +92,4 @@ reopening these decisions.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 inventory / implementation / closure.
+Pending implementation / closure.
