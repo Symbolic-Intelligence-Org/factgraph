@@ -257,32 +257,33 @@ the explanation context, the normal user-facing outcome is
 custom graph builder is a protocol contract violation and is not normal
 application flow.
 
-## 6. `EvidenceGraph` — shipped native Form 1 graph (v0.2)
+## 6. `EvidenceGraph` — shipped native and Souffle Form 1 graph (v0.2)
 
 When `status == "passed"`, `explanation.evidence` is an `EvidenceGraph`.
-For native passed rows with support context, this graph now exposes the current
-Form 1 shape:
+For native or Souffle passed rows with support context, this graph now exposes
+the current Form 1 shape:
 
 ```text
 NODE_SEED --supports--> NODE_PREMISE --supports--> NODE_CONCLUSION
 ```
 
 The root `NODE_CONCLUSION` represents the row claim. `NODE_PREMISE` nodes
-represent the selected native support atoms/checks. `NODE_SEED` nodes represent
-ledger assertion witnesses. If the same assertion id supports multiple
-premises in one row graph, the graph reuses one `NODE_SEED` and adds multiple
-`supports` edges.
+represent the selected native or Souffle support atoms/checks. `NODE_SEED`
+nodes represent ledger assertion witnesses. If the same assertion id supports
+multiple premises in one row graph, the graph reuses one `NODE_SEED` and adds
+multiple `supports` edges.
 
-For OR-shaped native evaluation, the graph is **winning-path-only**: it shows
-the selected successful branch, not every possible or failed branch. The root
-metadata exposes that boundary with `alternative_paths.mode` set to
+For OR-shaped native or Souffle evaluation, the graph is
+**winning-path-only**: it shows the selected successful branch, not every
+possible or failed branch. The root metadata exposes that boundary with
+`alternative_paths.mode` set to
 `"winning_path_only"`. Other engine metadata fields are implementation
 details; do not write SDK code that depends on their full shape.
 
-Rows without native support context, including manually constructed/detached
-rows, keep the older single-`NODE_CONCLUSION` fallback graph. Non-native
-adapter rows may also use fallback or adapter-specific graph shapes until their
-Form 1 alignment lands.
+Rows without native or Souffle support context, including manually
+constructed/detached rows, keep the older single-`NODE_CONCLUSION` fallback
+graph. Other adapter rows may also use fallback or adapter-specific graph
+shapes until their Form 1 alignment lands.
 
 Stable graph invariants:
 
@@ -298,7 +299,7 @@ Stable graph invariants:
 
 Current boundaries:
 
-- Souffle / ProbLog / PyReason row-level Form 1 alignment is future work.
+- ProbLog / PyReason row-level Form 1 alignment is future work.
 - Aggregate count-only envelopes are future work; current native non-fact
   checks do not expose the matched-count contributor envelope.
 - Failed graph, why-not, and counterfactual trees are future evidence tracks.
@@ -308,7 +309,7 @@ Current boundaries:
 - Session logs, `/interactions/{sessionID}`, signatures, ACL, `x-evidence-key`,
   salience, and impact remain outside the sessionless v1 audit channel.
 - `EDGE_DERIVES` and `EDGE_UPDATES` are reserved for Form 2 / temporal engine
-  paths. Native Form 1 row graphs use `EDGE_SUPPORTS`.
+  paths. Native and Souffle Form 1 row graphs use `EDGE_SUPPORTS`.
 - `dag` layout and `rule_fire` node kind are not in v1 scope.
 
 ## 7. Stability of `Inference` and `Branch`
