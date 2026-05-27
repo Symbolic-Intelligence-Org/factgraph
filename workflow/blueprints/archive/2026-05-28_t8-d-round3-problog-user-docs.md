@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-28_t8-d-round3-problog-user-docs.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-28_t8-d-round3-problog-user-docs.audit.md`
 - Trigger: T8-C-1 ProbLog evidence enrichment runtime shipped at `5ffd4850`; audit docs were aligned by `a916a856`. This cycle updates the two user-facing evidence docs to reflect shipped ProbLog row provenance graphs while keeping PyReason and other evidence surfaces deferred.
 
 ## 0. Scope Locks

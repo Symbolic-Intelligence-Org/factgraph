@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-28(T8-C-1 ProbLog evidence runtime archived locally; pending push gate)
+最后更新:2026-05-28(T8-D round 3 ProbLog user docs archived locally; pending push gate)
 
 ## 当前阶段
 
@@ -8,12 +8,11 @@
 
 **Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ cde072fa`
 
-**Most recent local work:** T8-C-1 ProbLog evidence enrichment runtime completed
-and archived locally after Step 4.7 review. ProbLog passed rows now produce
-row-result provenance `EvidenceGraph`s through trace-payload projection memory,
-private provenance row context, exact T8-A 14-key top-level metadata,
-`EDGE_DERIVES`, and namespaced `engine_meta["problog"]`. User-facing docs remain
-deferred to T8-D round 3.
+**Most recent local work:** T8-D round 3 ProbLog user-docs alignment completed
+and archived locally after Step 4.7 review. The quickstart and SDK guide now
+teach ProbLog passed-row evidence as a shipped row-level provenance graph with
+`EDGE_DERIVES` and namespaced `engine_meta["problog"]`, not as Form 1. PyReason
+and other non-shipped evidence tracks remain deferred.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do
 not move it.
@@ -92,6 +91,7 @@ gate.
 | T10-1 ProbLog Uncertainty Projection | `cde072fa` | C76 three-layer ship completed and pushed: `ProbLogSemantics.uncertainty_projection`, SDK lowering, and adapter `raw_kind` / `bound` consumption with explicit reject / point-projection policies. Full discover improved from 233 to 231 errors while adding 7 tests. |
 | T8-C-1 ProbLog Evidence Enrichment Inventory | `bd5baeec` | Design-only inventory locked the row-result bridge shape: trace-payload projection memory, private provenance row context, exact T8-A 14-key top-level metadata, namespaced `engine_meta["problog"]`, current candidate converter preservation, and C119/C136 defer. |
 | T8-C-1 ProbLog Evidence Enrichment Runtime | pending push | Runtime implementation shipped ProbLog row-result provenance graphs with `EDGE_DERIVES`, exact 14-key metadata, namespaced `engine_meta["problog"]`, and export-time uncertainty projection decisions preserved in the provenance payload. |
+| T8-D Round 3 ProbLog User Docs | pending push | Quickstart and SDK guide now document ProbLog row provenance graphs as shipped, while preserving native/Souffle Form 1 wording and keeping PyReason plus other unshipped evidence tracks deferred. |
 
 Evidence track current state:
 
@@ -100,24 +100,22 @@ Evidence track current state:
 - C115 `EDGE_SUPPORTS` direction is runtime-enforced and documented.
 - C118 intra-graph seed reuse is runtime-enforced and documented.
 - Souffle row Form 1 conformance is shipped and documented.
-- ProbLog row-result provenance evidence is shipped locally and pending push.
-  User-facing ProbLog docs remain deferred to T8-D round 3. T8-C-2 still
-  requires C74+C77, with C78 required for multi-round PyReason enrichment.
+- ProbLog row-result provenance evidence and user-facing ProbLog docs are
+  shipped locally and pending push. T8-C-2 still requires C74+C77, with C78
+  required for multi-round PyReason enrichment.
 
 ## Recommended Next Work
 
-1. **T8-C-1 runtime push gate**: push the local T8-C-1 runtime archive chain
-   after explicit authorization.
-2. **T8-D round 3 ProbLog user docs**: align quickstart / SDK user docs with
-   shipped ProbLog row-result provenance graphs after the runtime push lands.
-3. **T10-2 C74+C78 PyReason canonical migration**: canonicalize PyReason
+1. **T8-D round 3 push gate**: push the local ProbLog runtime + user-docs
+   archive chain after explicit authorization.
+2. **T10-2 C74+C78 PyReason canonical migration**: canonicalize PyReason
    bounds / atom-id handling and introduce `iteration_count`, preserving legacy
    compatibility.
-4. **T10-3 C77 PyReason temporal migration**: add canonical `fact_boundaries`
+3. **T10-3 C77 PyReason temporal migration**: add canonical `fact_boundaries`
    / `time_binned` policy and decouple legacy `fixed_timesteps`.
-5. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
+4. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
-6. **Identity/data-model / append-only-ledger / ledger-schema design-point
+5. **Identity/data-model / append-only-ledger / ledger-schema design-point
    intake**: classify the untracked active design-point files before adopting
    them into workflow state.
 

@@ -46,8 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Evidence docs now reflect shipped behavior**: the quickstart and SDK guide
   document the sessionless three-layer audit model, native and Souffle Form 1
-  graph shape, winning-path-only OR marker, renderer guard/large-graph
-  boundary, and current deferred evidence surfaces.
+  graph shape, ProbLog row provenance graphs, winning-path-only OR marker,
+  renderer guard/large-graph boundary, and current deferred evidence surfaces.
 - **Evidence audit/rendering bridge hardened**: the reference renderer rejects
   non-`EvidenceGraph` inputs and warns, without truncating or refusing, when a
   graph exceeds 250 nodes or 500 edges.
@@ -63,15 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Evidence planning docs were refined for ProbLog**: C119 multi-path DAG,
   aggregate envelopes, per-node projection enrichment, and user-facing ProbLog
   evidence docs remain deferred to future follow-up cycles.
-- **Evidence audit docs now include ProbLog row provenance graphs** while keeping
-  native/Souffle Form 1 and user-facing quickstart/SDK docs boundaries intact.
+- **Evidence user docs now include ProbLog row provenance graphs** while keeping
+  native/Souffle Form 1, PyReason future boundaries, and audit/user-doc
+  separation intact.
 
 ### Deferred
 
-- PyReason evidence enrichment, ProbLog user-facing docs, ProbLog multi-path DAG
-  enrichment, aggregate contributor envelopes, failed/why-not/counterfactual
-  evidence graphs, match witness output, and session/signature/ACL evidence
-  channels remain future tracks.
+- PyReason evidence enrichment, ProbLog multi-path DAG enrichment, aggregate
+  contributor envelopes, failed/why-not/counterfactual evidence graphs, match
+  witness output, and session/signature/ACL evidence channels remain future
+  tracks.
 
 ## [0.2.0-rc.1] - 2026-05-26
 

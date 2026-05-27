@@ -107,13 +107,14 @@ Interpretation:
 
 - T6 and T7 are complete and archived.
 - T8 has been split into T8-A/B/C/D. T8-A, T8-B-1(native Form 1),
-  T8-B-2(Souffle Form 1), T8-D A+B docs, and T8-D round 2 Souffle user docs
-  are complete. T8-C engine enrichment inventory is complete as a design-only
-  planning artifact. T8-C-1 ProbLog evidence enrichment inventory and runtime
-  implementation are complete locally; the runtime archive is pending push.
+  T8-B-2(Souffle Form 1), T8-D A+B docs, T8-D round 2 Souffle user docs, and
+  T8-D round 3 ProbLog user docs are complete locally. T8-C engine enrichment
+  inventory is complete as a design-only planning artifact. T8-C-1 ProbLog
+  evidence enrichment inventory and runtime implementation are complete
+  locally; the runtime + user-doc archives are pending push.
 - Remaining evidence candidates are T8-C-2 PyReason runtime implementation
-  after its semantics locks, plus T8-D round 3 / T9 docs after the ProbLog
-  runtime push and any later T8-C behavior.
+  after its semantics locks, plus later T8-D/T9 docs after any future T8-C
+  behavior.
 
 ---
 
@@ -149,8 +150,8 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 |---|---|
 | T6 | Complete: Phase B design source landed and archived at `8fe7abdc`. |
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
-| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime complete locally and pending push. T8-C-2 PyReason runtime implementation remains future. |
-| T9 | Superseded in part by T8-D docs for shipped native + Souffle evidence behavior; T8-D round 3 / broader release alignment remains conditional on pushing and documenting ProbLog row provenance behavior and any later T8-C behavior. |
+| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime complete locally; T8-D round 3 ProbLog user docs complete locally and pending push. T8-C-2 PyReason runtime implementation remains future. |
+| T9 | Superseded in part by T8-D docs for shipped native + Souffle + ProbLog evidence behavior; broader release alignment remains conditional on any later T8-C behavior. |
 | T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2/T10-3 implementation remains future. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
@@ -204,7 +205,8 @@ Dependencies:
 **Status(2026-05-28)**: partially complete after T8 split inventory, T8-A,
 T8-B-1, T8-D A+B docs, T8-B-2, T8-D round 2 Souffle docs, T8-C
 engine-enrichment inventory, T8-C-1 ProbLog evidence enrichment inventory, and
-local T8-C-1 ProbLog evidence enrichment runtime.
+local T8-C-1 ProbLog evidence enrichment runtime plus T8-D round 3 ProbLog user
+docs.
 
 **Goal**: implement the first substantial evidence tree tranche after T6 design locks shape.
 
@@ -243,11 +245,12 @@ Shipped / split scope:
   provenance graphs with `EDGE_DERIVES`, exact T8-A 14-key top-level metadata,
   namespaced `engine_meta["problog"]`, and export-time uncertainty projection
   decisions. The runtime archive is pending push.
+- T8-D round 3 completed locally: quickstart and SDK guide now teach ProbLog
+  row provenance graphs as shipped while preserving native/Souffle Form 1
+  wording and keeping PyReason row-level evidence deferred.
 
 Remaining candidate scope:
 
-- T8-D round 3 user-facing docs for shipped ProbLog row provenance after the
-  T8-C-1 runtime archive is pushed.
 - T8-C-2 PyReason enrichment after C74 + C77 are locked, with C78 required for
   multi-round PyReason enrichment.
 - Later T8-D docs passes after additional T8-C behavior ships.
