@@ -19,6 +19,8 @@ EDGE_UPDATES = "updates"
 _VALID_LAYOUT_HINTS = frozenset((LAYOUT_TREE, LAYOUT_TIMELINE))
 _VALID_NODE_KINDS = frozenset((NODE_CONCLUSION, NODE_PREMISE, NODE_SEED))
 _VALID_EDGE_KINDS = frozenset((EDGE_SUPPORTS, EDGE_DERIVES, EDGE_UPDATES))
+_LARGE_GRAPH_NODE_THRESHOLD = 250
+_LARGE_GRAPH_EDGE_THRESHOLD = 500
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,8 @@ class EvidenceGraph:
 
 def render_evidence_graph_html(graph: EvidenceGraph) -> str:
     """Render an EvidenceGraph as a standalone HTML fragment."""
+    if not isinstance(graph, EvidenceGraph):
+        raise ValueError("graph must be EvidenceGraph")
     if graph.layout_hint == LAYOUT_TREE:
         return _render_tree_layout(graph)
     if graph.layout_hint == LAYOUT_TIMELINE:
@@ -207,6 +211,7 @@ def _render_tree_layout(graph: EvidenceGraph) -> str:
         "style='background:var(--color-surface,#fffdf8);border:1px solid var(--color-border,#d6d1c4);"
         "border-radius:10px;padding:18px 20px;margin:14px 0;box-shadow:0 10px 30px rgba(43,43,43,0.08)'>"
         f"{_render_graph_header(graph, title='Unified Evidence Graph', subtitle='Tree Layout')}"
+        f"{_render_large_graph_warning(graph)}"
         "<div class='evidence-tree-root' style='display:block'>"
         f"{tree_html}"
         "</div>"
@@ -366,6 +371,7 @@ def _render_timeline_layout(graph: EvidenceGraph) -> str:
         "style='background:var(--color-surface,#fffdf8);border:1px solid var(--color-border,#d6d1c4);"
         "border-radius:10px;padding:18px 20px;margin:14px 0;box-shadow:0 10px 30px rgba(43,43,43,0.08)'>"
         f"{_render_graph_header(graph, title='Unified Evidence Graph', subtitle='Timeline Layout')}"
+        f"{_render_large_graph_warning(graph)}"
         f"{''.join(grid_parts)}"
         "</section>"
     )
@@ -459,6 +465,24 @@ def _header_chip(label: str, value: str) -> str:
         "border-radius:999px;background:#f1ede3;border:1px solid var(--color-border,#d6d1c4);font-size:.78rem'>"
         f"<strong style='color:var(--color-muted,#6b6b6b)'>{escape(label)}:</strong>{escape(value)}"
         "</span>"
+    )
+
+
+def _render_large_graph_warning(graph: EvidenceGraph) -> str:
+    node_count = len(graph.nodes)
+    edge_count = len(graph.edges)
+    if node_count <= _LARGE_GRAPH_NODE_THRESHOLD and edge_count <= _LARGE_GRAPH_EDGE_THRESHOLD:
+        return ""
+    return (
+        "<div class='evidence-graph-warning evidence-graph-large-warning' role='note' "
+        "style='margin:0 0 14px;padding:10px 12px;border:1px solid #c88719;border-radius:8px;"
+        "background:#fff7e6;color:#5f3b00;font-size:.86rem'>"
+        "<strong>Large evidence graph:</strong> "
+        f"{node_count} nodes / {edge_count} edges. "
+        f"Reference renderer guidance threshold is {_LARGE_GRAPH_NODE_THRESHOLD} nodes or "
+        f"{_LARGE_GRAPH_EDGE_THRESHOLD} edges; product UIs should provide folding, search, "
+        "or progressive disclosure for repeated inspection."
+        "</div>"
     )
 
 
