@@ -1,6 +1,6 @@
 # Task Blueprint: T8 Implementation Split Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S/M (design-only planning inventory)
@@ -254,8 +254,8 @@ inventory before implementing.
 - [x] Output shape is locked and produced if needed.
 - [x] No runtime/test/docs/release/dirty-baseline files are edited unless
       explicitly amended.
-- [ ] `git diff --check` passes.
-- [ ] Dirty baseline and sacred master are preserved.
+- [x] `git diff --check` passes.
+- [x] Dirty baseline and sacred master are preserved.
 
 ## 9. Verification Commands
 
@@ -272,4 +272,81 @@ is required because no runtime/test code changed.
 
 ## 10. Outcome / Deviations
 
-Pending implementation / closure.
+### 10.1 Landed artifacts
+
+| Commit | Stage | Result |
+|---|---|---|
+| `2a7f082f` | draft | Created the T8 implementation split inventory blueprint pair and kept Q1-Q9 pending for cross-flip review. |
+| `87dfd635` | scoped | Filled the source-backed Step 4.6 inventory, answered Q1-Q9, and locked Option B as the durable output shape. |
+| this commit | closure | Recorded the planning outcome, verification, and handoff guidance for future T8-A/T8-B/T8-C/T8-D cycles. |
+
+No runtime, test, audit docs, release, dirty-baseline, or design-point files
+were edited. This was a planning-only meta-cycle.
+
+### 10.2 Final split decision
+
+The T6 §15 top-level split remains valid after T7:
+
+- **T8-A** remains the first recommended implementation slice. It should cover
+  metadata/validation foundation work and may be scoped as two internal
+  sub-steps: A-1 central metadata builder + sufficiency checker, then A-2
+  strict graph validation gate + debug assertion.
+- **T8-B** remains the Native/Souffle success-topology slice. It should reuse
+  existing candidate evidence tree, candidate step, and Souffle provenance
+  surfaces before considering any rewrite.
+- **T8-C** remains engine enrichment and is gated by T10 or a targeted
+  engine-specific semantics blueprint. It does not require all of T10 to ship,
+  but it does require locked producer/consumer semantics for the targeted
+  engine.
+- **T8-D** remains docs/product alignment and can run after any shipped T8
+  behavior. It may run after T8-A/B and later again after T8-C.
+
+Output shape is **Option B: blueprint-only**. This archived blueprint/audit pair
+is the durable split plan; no new active design-point note was added.
+
+### 10.3 Q1-Q9 outcome summary
+
+- Q1: Keep T8-A/B/C/D as the top-level split; refine only T8-A internally.
+- Q2: The T7 contract matrix has **12** rows, not the 10-row estimate in the
+  handoff. All 12 rows are mapped in §4.2.
+- Q3: T8-A's real boundary is `evaluate_result.py`,
+  `evidence_graph.py`, and protocol/audit graph tests, with the four sub-items
+  estimated at roughly 280-580 LOC total before any scoped narrowing.
+- Q4: T8-A may ship as one blueprint with two commits if scoped tightly; split
+  into T8-A-1/T8-A-2 if helper-module/schema churn appears.
+- Q5: T8-B is bridge-class work over existing candidate evidence and Souffle
+  surfaces, not from-zero graph construction.
+- Q6: T8-C is gated by T10 or engine-specific semantics lock; engine-local
+  slices may proceed independently once their semantics are scoped.
+- Q7: Dependency graph is T8-A -> T8-B/T8-C, with T8-D after the relevant
+  shipped behavior and T10 gating cross-engine T8-C.
+- Q8: D-series mapping is recorded in §4.6. T8-A activates no D-item directly;
+  T8-B may activate D18/D12 only if it broadens beyond default bounds; T8-C may
+  activate D11/D13/D6/D7; D20 remains non-T8 future match witness work.
+- Q9: Option B blueprint-only selected.
+
+### 10.4 Planning insights
+
+Two review findings are now part of the handoff:
+
+- The T7 contract matrix contains 12 rows. The initial handoff said 10, but the
+  source-backed inventory corrected that count instead of copying the prompt.
+- The evidence track is consistently **bridge-class** work. T6 supplied the
+  design contract, T7 bridged it to existing runtime, and T8-B/C should likewise
+  bridge existing candidate/provenance surfaces into the §15 topology and
+  enrichment contracts before considering rewrites.
+
+Future T8-A blueprints should explicitly list backwards-compatibility test
+entry points before touching metadata builders or validation paths. At minimum,
+they should account for the 14-key metadata test, EvidenceGraph validation /
+roundtrip tests, and existing engine/candidate evidence tests.
+
+### 10.5 Verification
+
+- No-op baseline:
+  `PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render`
+  ran **20 OK** during Step 4.6.
+- `git diff --check` passed at closure.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty tracked docs/notebooks and untracked reference material were preserved.
+- No runtime, test, docs, service, release, or dirty-baseline files were edited.

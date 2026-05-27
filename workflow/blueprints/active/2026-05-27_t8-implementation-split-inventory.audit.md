@@ -1,11 +1,11 @@
 # Audit: T8 Implementation Split Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-implementation-split-inventory.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current 4 modified tracked files plus untracked `rainbird-ai sdk code/`
@@ -16,7 +16,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-27 | draft | `2a7f082f` | T8 split inventory blueprint pair drafted | Triggered after T7 evidence audit/rendering bridge shipped and user selected T8 planning before T8-A runtime. |
-| 2026-05-27 | scoped | this commit | Step 4.6 source-backed split inventory recorded | Q1-Q9 answered; T8-A/B/C/D retained; T8-A internal split, T8/T10 dependency, D-series mapping, and Option B output locked. |
+| 2026-05-27 | scoped | `87dfd635` | Step 4.6 source-backed split inventory recorded | Q1-Q9 answered; T8-A/B/C/D retained; T8-A internal split, T8/T10 dependency, D-series mapping, and Option B output locked. |
+| 2026-05-27 | closure | this commit | T8 split inventory closed | Outcome recorded; Option B blueprint-only output confirmed; verification and future T8-A handoff documented. |
 
 ## 2. Draft Source Scan
 
@@ -85,8 +86,40 @@ Q1-Q9 before source-backed inventory.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q9 answered.
 - [x] Output shape selected.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending inventory / closure.
+### Landed scope
+
+- Confirmed that T6 §15's T8-A/B/C/D split still holds after T7.
+- Mapped the T7 contract matrix to T8 slices. The source-backed inventory found
+  12 matrix rows, correcting the handoff's rough 10-row estimate.
+- Quantified T8-A as a metadata/validation foundation slice with optional
+  A-1/A-2 internal split: metadata builder + sufficiency checker, then strict
+  validation gate + debug assertion.
+- Quantified T8-B/T8-C/T8-D boundaries and dependencies: T8-B should reuse
+  existing candidate evidence and Souffle surfaces; T8-C is gated by T10 or an
+  engine-specific semantics lock; T8-D documents only shipped behavior.
+- Selected Option B: the archived blueprint/audit pair is the durable split
+  planning artifact. No new design-point note was added.
+
+### Handoff
+
+Future T8-A work should redo Step 4.6 before implementation and explicitly list
+backwards-compatibility test entry points for metadata builders and validation
+paths. The likely starting tests are the 14-key metadata test, EvidenceGraph
+validation/roundtrip tests, candidate evidence fixtures, and engine evidence
+graph tests.
+
+The evidence track remains bridge-class work: existing runtime/provenance
+surfaces should be mapped into T6/T7 contracts before any rewrite is considered.
+
+### Verification
+
+- No-op baseline ran 20 OK:
+  `PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render`.
+- `git diff --check` passed.
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline and untracked reference material were preserved.
+- No runtime/test/docs/release files were edited.
