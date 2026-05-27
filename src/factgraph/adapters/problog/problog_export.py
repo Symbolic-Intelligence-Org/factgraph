@@ -138,8 +138,13 @@ def _claim_probability(
     store: Store,
     asrt_id: str,
     *,
-    uncertainty_projection: dict[str, Any],
+    uncertainty_projection: dict[str, Any] | None = None,
 ) -> float:
+    projection = (
+        uncertainty_projection
+        if uncertainty_projection is not None
+        else dict(_DEFAULT_UNCERTAINTY_PROJECTION)
+    )
     annotations = store.ledger.find_annotations(
         asrt_id=asrt_id,
         namespace="problog",
@@ -187,7 +192,7 @@ def _claim_probability(
     raw_probability = _claim_raw_uncertainty_probability(
         store,
         asrt_id,
-        uncertainty_projection=uncertainty_projection,
+        uncertainty_projection=projection,
     )
     if raw_probability is not None:
         return raw_probability
