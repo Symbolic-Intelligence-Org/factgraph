@@ -614,6 +614,8 @@ def _explain_live_row(
     builder = _build_passed_row_evidence_graph if graph_builder is None else graph_builder
     try:
         evidence = builder(row, result, metadata)
+        if isinstance(evidence, EvidenceGraph):
+            _validate_evidence_metadata_for_row_result(evidence.metadata, row, result)
     except ValueError as exc:
         return Explanation(
             status="unsupported",
@@ -819,6 +821,7 @@ def _build_passed_row_evidence_graph(
     result: EvaluateResult,
     metadata: Mapping[str, Any],
 ) -> EvidenceGraph:
+    _validate_evidence_metadata_for_row_result(metadata, row, result)
     node = EvidenceNode(
         node_id=row.row_id,
         node_kind=NODE_CONCLUSION,
