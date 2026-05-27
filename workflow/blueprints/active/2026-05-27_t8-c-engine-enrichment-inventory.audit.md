@@ -1,11 +1,11 @@
 # Audit: T8-C Engine Enrichment Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-c-engine-enrichment-inventory.md`
-- Stage: scoped
+- Stage: closure
 - Class: S/M (design-only planning inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current `4 M + 1 D + 3 U`
@@ -16,7 +16,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-27 | draft | `e3bb4ecc` | T8-C inventory blueprint pair drafted | Triggered after T8-B-2 + T8-D round 2 completed native/Souffle loop; Q1-Q12 intentionally pending for Step 4.6. |
-| 2026-05-27 | scoped | this commit | Step 4.6 source-backed inventory completed | Verified ProbLog/PyReason are provenance-bearing, mapped T10 dependency per C-id, selected blueprint-only split plan. |
+| 2026-05-27 | scoped | `17d07d48` | Step 4.6 source-backed inventory completed | Verified ProbLog/PyReason are provenance-bearing, mapped T10 dependency per C-id, selected blueprint-only split plan. |
+| 2026-05-27 | closure | this commit | T8-C inventory cycle closed | Design-only cycle; no runtime/test/docs implementation. |
 
 ## 2. Step 4.6 Inventory Results
 
@@ -79,8 +80,29 @@ git status --short --branch
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q12 answered.
 - [x] Output shape selected.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending closure.
+Closed as implemented design-only planning.
+
+Key decisions:
+
+- Reviewer SupportArtifact-free finding was source-backed verified, not assumed.
+- T8-C cannot reuse the T8-B witness-bearing Form 1 helper path directly.
+- Future T8-C implementation should use an adapter-side metadata bridge /
+  provenance row bridge, preserving adapter converter boundaries and T8-A
+  row-result metadata gates.
+- T8-C splits into T8-C-1 ProbLog and T8-C-2 PyReason.
+- T8-C-1 starts only after C76 or a ProbLog-specific semantics blueprint locks
+  probability producer/consumer fields.
+- T8-C-2 waits for D11/Form 2 plus C74/C77/C78 locks.
+- Engine-specific fields should be namespaced inside `engine_meta`; no
+  flattening into generic root fields and no top-level graph metadata changes.
+
+Verification:
+
+- Focused no-op baseline: 19 OK.
+- `git diff --check`: clean.
+- Dirty baseline preserved as `4 M + 1 D + 3 U`.
+- Sacred master unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`.

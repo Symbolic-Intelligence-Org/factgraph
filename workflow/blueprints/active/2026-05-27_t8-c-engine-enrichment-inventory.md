@@ -1,6 +1,6 @@
 # Task Blueprint: T8-C Engine Enrichment Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S/M (design-only planning inventory)
@@ -325,4 +325,42 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending closure.
+Implemented as a design-only inventory cycle.
+
+Cycle chain:
+
+- Draft: `e3bb4ecc`
+- Scoped inventory: `17d07d48`
+- Closure: this commit
+
+Outcome:
+
+- Verified the reviewer SupportArtifact-free finding with source-backed grep:
+  ProbLog and PyReason adapters do not create `SupportArtifact` values and are
+  currently provenance-bearing, not witness-bearing.
+- Locked the T8-C architecture direction to **adapter-side metadata bridge /
+  provenance row bridge**, not T8-B-style SupportArtifact widening.
+- Split the future implementation lane:
+  - **T8-C-1 ProbLog** after C76 or a ProbLog-specific semantics blueprint
+    locks probability producer/consumer fields.
+  - **T8-C-2 PyReason** after D11/Form 2 plus C74/C77/C78 locks.
+- Deferred full C119 ProbLog multi-path DAG from first ProbLog tranche unless
+  the adapter proves multiple same-binding candidate paths are already emitted.
+- Deferred C136 aggregate envelope and Nemo.
+- Locked future engine-specific metadata policy: namespaced per-engine fields
+  inside `engine_meta`, no generic flattening and no top-level 14-key graph
+  metadata changes.
+- Selected Option B output shape: blueprint-only split plan. No separate active
+  design-point note was created.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.test_problog_evidence_graph tests.test_pyreason_evidence_graph tests.test_audit_evidence_graph`
+  - `Ran 19 tests in 0.004s - OK`
+- `git diff --check`
+  - OK
+- Dirty baseline preserved as `4 M + 1 D + 3 U`.
+- Sacred master preserved at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+No runtime, test, user-doc, release, service/OpenAPI, SDK API, database/view,
+dirty-baseline, or sacred-master changes.
