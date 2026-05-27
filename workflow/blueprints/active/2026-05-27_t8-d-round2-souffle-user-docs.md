@@ -1,9 +1,9 @@
 # Task Blueprint: T8-D Round 2 Souffle User Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
-- Class: S (docs-only, pending Step 4.6)
+- Class: S (docs-only)
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
@@ -79,34 +79,58 @@ and keep the same user-facing boundaries as T8-D first round.
 | `src/factgraph/sdk/docs/00_user_guide.en.md` | SDK user-guide summary target. |
 | `src/factgraph/audit/docs/02_evidence_graph.md` | Already-aligned audit-module reference; not a default edit target. |
 
-## 3. Draft Source Scan
+## 3. Step 4.6 Source-Backed Inventory
 
-Draft orientation only:
+### Shipped Behavior Source
 
-- `docs/official/kernel/quickstart/evidence.md` currently contains native-only
-  Form 1 wording and still mentions Souffle row-level Form 1 as future work.
-- `src/factgraph/sdk/docs/00_user_guide.en.md` currently contains a concise
-  native-only Form 1 summary.
-- T8-B-2 archive records that Souffle row explanations now use the same
-  `_build_form1_evidence_graph(...)` row-result path as native.
-- Audit module docs were already updated by T8-B-2 and should be used as a
-  wording reference, not edited by default.
+T8-B-2 records the required shipped behavior:
 
-This scan does not answer Q1-Q8. Step 4.6 must replace it with source-backed
-line refs and exact edit decisions.
+- Souffle row artifacts mirror native support shape: the T8-B-2 audit says
+  `engine_eval.py:400-431` builds a native-like artifact and copies
+  `root_result_kind`, `binding_items`, `pred_witnesses`, `non_fact_steps`,
+  `rule_refs`, and `rule_ref_edges`
+  (`workflow/blueprints/archive/2026-05-27_t8-b-2-souffle-form1-conformance.audit.md:63`).
+- Souffle witness atom keys use the native convention
+  (`...t8-b-2-souffle-form1-conformance.audit.md:64`).
+- Souffle support is winning-branch only, so `winning_path_only` is valid for
+  row-result Souffle Form 1
+  (`...t8-b-2-souffle-form1-conformance.audit.md:65`).
+- The selected implementation was the shared Form 1 helper extension, not a
+  dedicated Souffle helper or converter reuse
+  (`...t8-b-2-souffle-form1-conformance.audit.md:47-51`,
+  `:76-78`, `:138-143`).
+- T8-B-2 explicitly keeps `souffle_proof_tree_to_evidence_graph(...)` as the
+  candidate/proof-tree converter and not the row-result path
+  (`...t8-b-2-souffle-form1-conformance.audit.md:49`, `:70`,
+  `:156`, `:382-385`).
+- T8-B-2 closure says protocol tests now cover Souffle row Form 1 support kind,
+  node kinds, `EDGE_SUPPORTS` direction, exact 14-key metadata, `run_id`
+  absence, `alternative_paths.mode == "winning_path_only"`, and seed reuse
+  (`...t8-b-2-souffle-form1-conformance.md:376-379`).
 
-## 4. Open Questions For Step 4.6
+### File Inventory
 
-| ID | Question | Required scoped output |
+| File | Current wording | Decision |
 |---|---|---|
-| Q1 | Is the file scope exactly `evidence.md` + SDK `00_user_guide.en.md`? | Per-file diagnosis for target and non-target docs, with edit/leave decision. |
-| Q2 | Which exact `evidence.md` locations need native -> native + Souffle expansion? | Line refs and a narrow edit map. |
-| Q3 | Which exact SDK user-guide locations need native -> native + Souffle expansion? | Line refs and a narrow edit map. |
-| Q4 | How should the "Current boundaries" deferred row-level Form 1 line change? | Wording decision that removes Souffle but keeps ProbLog/PyReason deferred. |
-| Q5 | Does the existing ASCII Form 1 topology remain valid for Souffle? | Source-backed yes/no and decision to preserve or amend. |
-| Q6 | Does the `winning_path_only` marker apply to Souffle user docs? | Source-backed yes/no and wording decision. |
-| Q7 | What verification is appropriate for docs-only round 2? | Focused no-op baseline / `git diff --check` plan. |
-| Q8 | Should user docs mention Souffle proof-tree converter boundary? | In-cycle vs omit/leave-to-audit-docs decision. |
+| `docs/official/kernel/quickstart/evidence.md` | §6 title and body are native-only at lines 260-285; Current boundaries line 301 still says Souffle / ProbLog / PyReason row-level Form 1 alignment is future work; line 311 says Native Form 1 row graphs use `EDGE_SUPPORTS`. | **Edit.** This is the primary user-facing Form 1 section and contains the stale Souffle deferred claim. |
+| `src/factgraph/sdk/docs/00_user_guide.en.md` | Lines 658-663 summarize native-only Form 1 and treat adapter Form 1 graphs as future. | **Edit.** Keep concise SDK summary, expanding native -> native + Souffle and linking to quickstart. |
+| `docs/official/kernel/quickstart/rules-and-inferences.md` | Lines 619-625 discuss high-level engine lifecycle only. | Leave. No Form 1 topology or stale Souffle evidence boundary. |
+| `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` | Lines 572-575 delegate the full evidence envelope chain to `evidence.md`. | Leave. Existing handoff remains correct. |
+| `src/factgraph/audit/docs/02_evidence_graph.md` | Lines 41-45 and 196-199 already say native + Souffle row explanations produce Form 1 and preserve the Souffle proof-tree converter boundary. | Leave. T8-B-2 already aligned audit-module docs. |
+| Other grep hits (`namespace-map.md`, audit overview/API docs) | High-level cross-engine or audit-module mentions; no user-facing row-level Form 1 deferred claim found. | Leave. Editing would exceed the narrow mirror cycle. |
+
+## 4. Step 4.6 Q1-Q8 Answers
+
+| ID | Answer |
+|---|---|
+| Q1 file scope | Exactly two implementation files: `docs/official/kernel/quickstart/evidence.md` and `src/factgraph/sdk/docs/00_user_guide.en.md`. Other files either delegate to `evidence.md`, discuss high-level engine lifecycle, or are already-aligned audit-module docs. |
+| Q2 `evidence.md` edit map | Narrow §6 edits only: title line 260 native -> native + Souffle; lines 263-285 native/support-context wording -> native or Souffle row support; preserve ASCII topology at 266-268; line 276 winning-path wording -> native or Souffle; line 301 remove Souffle from deferred row-level Form 1; line 311 Native -> Native and Souffle. |
+| Q3 SDK user-guide edit map | Lines 658-663 only: native passed rows -> native or Souffle passed rows; keep the concise shape summary and quickstart link; change "adapter Form 1 graphs" future wording so Souffle is no longer classified as future. |
+| Q4 deferred boundary | Replace exactly `Souffle / ProbLog / PyReason row-level Form 1 alignment is future work.` with `ProbLog / PyReason row-level Form 1 alignment is future work.` Preserve the other Current boundaries bullets byte-for-byte unless wrapping changes are unavoidable. |
+| Q5 ASCII topology | Yes, preserve. T8-B-2 selected the shared Form 1 helper and records existing `NODE_CONCLUSION`, `NODE_PREMISE`, `NODE_SEED`, and `EDGE_SUPPORTS` topology with no new node/edge kind (`...t8-b-2-souffle-form1-conformance.md:140`, `:238-239`). |
+| Q6 `winning_path_only` | Yes. T8-B-2 records Souffle support as selected-branch only and explicitly validates `alternative_paths.mode == "winning_path_only"` for Souffle row Form 1 (`...t8-b-2-souffle-form1-conformance.audit.md:65`; `...t8-b-2-souffle-form1-conformance.md:376-379`). |
+| Q7 verification | Use the T8-D first-round focused no-op baseline: `PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render tests.application.protocol.test_evaluate_result_dtos`, then `git diff --check` and `git status --short --branch`. |
+| Q8 proof-tree boundary | Omit from user docs. Audit docs already state the candidate/proof-tree converter boundary (`src/factgraph/audit/docs/02_evidence_graph.md:196-199`). User docs should focus on row-level evidence now shipped for native + Souffle, not audit-module implementer separation. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -123,20 +147,25 @@ line refs and exact edit decisions.
 - Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
 - Dirty baseline remains `4 M + 1 D + 3 U` and must not be touched.
 
-## 6. Step 4.6 Inventory Plan
+## 6. Step 4.6 Inventory Outcome
 
-Step 4.6 must produce:
+Step 4.6 completed with no stop trigger:
 
-1. Per-file wording refs for `evidence.md` and SDK `00_user_guide.en.md`.
-2. Leave-alone check for nearby docs if grep finds relevant mentions.
-3. Source-backed shipped-behavior refs from T8-B-2 archive.
-4. Exact two-file edit plan or stop/amend if more files are needed.
-5. Deferred boundary edit plan.
-6. Verification plan and dirty/sacred status.
+1. File scope is exactly the two T8-D first-round user-facing docs files.
+2. Leave-alone checks found no non-target user docs requiring edits.
+3. T8-B-2 source refs confirm Souffle row Form 1 uses the native-compatible
+   shared helper path.
+4. Deferred boundary edit is a single-item removal: Souffle leaves future work;
+   ProbLog / PyReason remain future work.
+5. ASCII topology and `winning_path_only` wording remain valid for Souffle.
+6. Verification baseline ran clean at 38 OK:
+   `PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render tests.application.protocol.test_evaluate_result_dtos`.
+   The count grew from the earlier T8-D round because later protocol tests were
+   added; the no-op baseline remains green.
 
 ## 7. Proposed Implementation Shape
 
-Implementation is intentionally narrow and pending Step 4.6:
+Implementation is intentionally narrow:
 
 1. Quickstart docs commit: native -> native + Souffle wording in the existing
    EvidenceGraph section, and deferred boundary update.
@@ -145,8 +174,8 @@ Implementation is intentionally narrow and pending Step 4.6:
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 answers Q1-Q8 with source-backed evidence.
-- [ ] File scope is exactly the two user-facing docs files or the cycle is
+- [x] Step 4.6 answers Q1-Q8 with source-backed evidence.
+- [x] File scope is exactly the two user-facing docs files or the cycle is
       amended before edits.
 - [ ] Quickstart no longer teaches Souffle row-level Form 1 as future work.
 - [ ] SDK user guide summarizes native + Souffle without duplicating
@@ -171,7 +200,8 @@ git diff --check
 git status --short --branch
 ```
 
-Step 4.6 must confirm final commands after source-backed inventory.
+Step 4.6 confirmed the focused baseline command above; implementation/closure
+also runs `git diff --check` and dirty/sacred status checks.
 
 ## 10. Outcome / Deviations
 
