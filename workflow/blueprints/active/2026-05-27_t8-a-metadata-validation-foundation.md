@@ -1,6 +1,6 @@
 # Task Blueprint: T8-A Metadata + Validation Foundation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M (may split to S/M sub-cycles after Step 4.6)
@@ -257,15 +257,15 @@ Scoped implementation split:
 - [x] Metadata builder/checker shape is locked without changing the current
       14-key metadata contract.
 - [x] `run_id` remains envelope-only.
-- [ ] Strict validation/debug behavior is implemented or explicitly deferred
+- [x] Strict validation/debug behavior is implemented or explicitly deferred
       with rationale.
-- [ ] Focused tests cover all implemented T8-A behavior and existing T7
+- [x] Focused tests cover all implemented T8-A behavior and existing T7
       metadata/validation regressions.
 - [x] T8-B/T8-C/T8-D and D-series non-goals remain deferred.
-- [ ] No service/OpenAPI, release, match, database/view, adapter topology, or
+- [x] No service/OpenAPI, release, match, database/view, adapter topology, or
       dirty-baseline changes are made.
-- [ ] `git diff --check` passes.
-- [ ] Sacred master and dirty baseline are preserved.
+- [x] `git diff --check` passes.
+- [x] Sacred master and dirty baseline are preserved.
 
 ## 9. Verification Commands
 
@@ -283,4 +283,91 @@ Step 4.6 must confirm the final focused suite based on scoped file set.
 
 ## 10. Outcome / Deviations
 
-Pending implementation / closure.
+### 10.1 Landed artifacts
+
+| Commit | Stage | Result |
+|---|---|---|
+| `1ad49592` | draft | Created the T8-A metadata/validation foundation blueprint pair with Q1-Q9 pending for source-backed inventory. |
+| `35d6fe61` | scoped | Completed Step 4.6 inventory, selected a private module-level builder/checker shape, and kept T8-A as one M-class blueprint split into A-1/A-2 implementation commits. |
+| `b78a4091` | runtime A-1 | Added the central metadata payload helper, exact §10.3 key constants, and private metadata checker while preserving `_evidence_metadata_for_row_result(row, result)`. |
+| `916f0813` | runtime A-2 | Wired metadata/envelope consistency validation into the row explanation graph gate and passed-row graph builder. |
+| `406a7001` | tests | Added metadata gate tests for missing, extra, and wrong metadata while preserving existing fallback behavior. |
+
+### 10.2 Runtime outcome
+
+T8-A shipped the metadata/validation foundation without changing public API
+shape. `evaluate_result.py` now has a private §10.3 metadata key tuple and set,
+plus `_evidence_metadata_payload_for_row_result(...)` as the single source of
+truth for graph metadata. `_evidence_metadata_for_row_result(row, result)` keeps
+its existing signature and now follows a build -> freeze -> validate path.
+
+The checker is deliberately private and exact: it rejects missing keys, extra
+keys, and per-key value drift by regenerating the expected payload from the same
+`EvaluateResult` + row context. That regenerate-and-compare shape keeps value
+consistency DRY: future field maintenance happens in one payload helper instead
+of two parallel maps.
+
+### 10.3 C135 runtime invariant
+
+C135 moved from design commitment to runtime-enforced invariant. The graph
+metadata set remains the exact 14-key §10.3 contract, `run_id` remains
+envelope-only, and row graph metadata is validated against the same
+row/result context that produced the explanation envelope.
+
+The validation is always-on and internal. It does not use Python `assert`, an
+environment flag, a public validator object, or a new SDK/audit API surface.
+
+### 10.4 Failure semantics
+
+The existing `ValueError -> Explanation(status="unsupported",
+code="GRAPH_VALIDATION_FAILED")` behavior is preserved. A builder that raises
+`ValueError`, or returns a structurally valid `EvidenceGraph` with bad
+metadata, still becomes an unsupported explanation with no partial graph.
+
+Non-`EvidenceGraph` builder returns remain hard protocol violations. The new
+`isinstance(evidence, EvidenceGraph)` guard avoids reclassifying that path as a
+soft graph-validation failure; `Explanation.__post_init__` continues to raise
+`ProtocolShapeError` for invalid evidence object shape as it did before T8-A.
+
+### 10.5 Verification
+
+Focused verification passed:
+
+```bash
+PYTHONPATH=src python -m unittest \
+  tests.application.protocol.test_evaluate_result_dtos \
+  tests.test_audit_evidence_graph \
+  tests.test_audit_evidence_graph_render
+# 34 OK
+
+PYTHONPATH=src python -m unittest \
+  tests.test_pyreason_evidence_graph \
+  tests.test_souffle_evidence_graph \
+  tests.test_problog_evidence_graph
+# 9 OK
+
+ruff check \
+  src/factgraph/application/protocol/evaluate_result.py \
+  src/factgraph/audit/evidence_graph.py \
+  tests/application/protocol/test_evaluate_result_dtos.py \
+  tests/test_audit_evidence_graph.py
+# clean
+
+git diff --check
+# clean
+```
+
+Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+The dirty baseline remained the four modified tracked docs/notebooks plus two
+untracked reference directories.
+
+### 10.6 Deviations and non-goals
+
+No docs commit was needed: the shipped behavior is internal contract hardening
+for the already documented §10.3 metadata bridge and does not change user-facing
+audit, SDK, or renderer semantics.
+
+No T8-B/T8-C/T8-D work landed. The cycle did not import candidate evidence tree
+or adapter provenance code, did not add richer graph topology, did not change
+`EvidenceGraph` schema, did not change service/OpenAPI, and did not touch
+release machinery, match, database/view runtime, or the dirty baseline.

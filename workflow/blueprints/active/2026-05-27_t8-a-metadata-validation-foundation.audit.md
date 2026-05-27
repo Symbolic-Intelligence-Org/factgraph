@@ -1,11 +1,11 @@
 # Audit: T8-A Metadata + Validation Foundation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-a-metadata-validation-foundation.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current modified docs/notebooks plus untracked reference material
@@ -17,6 +17,10 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | `1ad49592` | T8-A metadata/validation foundation blueprint pair drafted | Triggered by T8 split inventory after T7 bridge shipped; Q1-Q9 intentionally pending for Step 4.6. |
 | 2026-05-27 | scoped | this commit | Step 4.6 inventory and final scoped decisions recorded | T8-A kept as one M-class blueprint; private builder/checker shape locked; tests and non-goals scoped. |
+| 2026-05-27 | implementation | `b78a4091` | Runtime A-1 metadata builder/checker foundation landed | Added private §10.3 metadata key constants, payload helper, and exact metadata checker while preserving `_evidence_metadata_for_row_result(row, result)`. |
+| 2026-05-27 | implementation | `916f0813` | Runtime A-2 metadata consistency gate wired | Validates returned row evidence graph metadata and default builder input while preserving `ValueError -> GRAPH_VALIDATION_FAILED`. |
+| 2026-05-27 | implementation | `406a7001` | Metadata gate tests landed | Covers missing, extra, and wrong metadata through the existing unsupported explanation fallback. |
+| 2026-05-27 | closure | this commit | T8-A closure recorded | Acceptance complete; C135 runtime invariant, verification, and non-goals documented. |
 
 ## 2. Draft Source Scan
 
@@ -85,8 +89,56 @@ builder/checker/debug assertion shape before source-backed inventory.
 - [x] Q1-Q9 answered.
 - [x] Scope split / implementation shape locked.
 - [x] Tests and verification gates locked.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending inventory / implementation / closure.
+T8-A shipped as one M-class implementation cycle with two runtime commits and
+one test commit. The runtime work stayed inside
+`src/factgraph/application/protocol/evaluate_result.py`; tests stayed inside
+`tests/application/protocol/test_evaluate_result_dtos.py`; no docs commit was
+needed because the behavior is internal contract hardening.
+
+Implemented outcomes:
+
+- `b78a4091` introduced the private §10.3 metadata key tuple/set,
+  `_evidence_metadata_payload_for_row_result(...)`, and
+  `_validate_evidence_metadata_for_row_result(...)`.
+- `_evidence_metadata_for_row_result(row, result)` kept its existing signature
+  and now follows build -> freeze -> validate.
+- `916f0813` made the metadata/envelope consistency check always-on in the
+  row explanation graph path and default passed-row graph builder.
+- `406a7001` added tests for missing key, extra key including `run_id`, and
+  wrong-value metadata failures.
+
+C135 is now runtime-enforced: graph metadata is exact-set checked against the
+14-key §10.3 contract and value-checked by regenerating the expected payload
+from the same `EvaluateResult` + row context. The regenerate-and-compare checker
+keeps the payload helper as the single source of truth.
+
+Failure semantics remain intentionally split:
+
+- Builder `ValueError` and bad-metadata `EvidenceGraph` results use the existing
+  soft fallback: `Explanation(status="unsupported",
+  errors[0].code="GRAPH_VALIDATION_FAILED")`.
+- Non-`EvidenceGraph` builder returns remain hard protocol shape violations via
+  `Explanation.__post_init__`, preserving pre-T8-A behavior.
+
+Verification:
+
+- `tests.application.protocol.test_evaluate_result_dtos`
+  + `tests.test_audit_evidence_graph`
+  + `tests.test_audit_evidence_graph_render`: 34 OK.
+- `tests.test_pyreason_evidence_graph`
+  + `tests.test_souffle_evidence_graph`
+  + `tests.test_problog_evidence_graph`: 9 OK.
+- Touched-file `ruff check` clean.
+- `git diff --check` clean.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved: four modified tracked docs/notebooks plus two
+  untracked reference directories.
+
+Non-goals preserved: no public builder/checker API, no `EvidenceGraph` schema
+change, no `run_id` in graph metadata, no T8-B/T8-C/T8-D topology/enrichment,
+no service/OpenAPI, no release machinery, no match or database/view runtime,
+and no dirty-baseline edits.
