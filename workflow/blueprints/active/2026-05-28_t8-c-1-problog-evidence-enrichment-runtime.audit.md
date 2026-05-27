@@ -1,11 +1,11 @@
 # Audit: T8-C-1 ProbLog Evidence Enrichment Runtime
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-c-1-problog-evidence-enrichment-runtime.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 5 U`
@@ -15,8 +15,9 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-28 | draft | this commit | T8-C-1 ProbLog evidence enrichment runtime blueprint pair drafted | Triggered by T10-1 C76 ship at `cde072fa` and T8-C-1 inventory at `bd5baeec`; Q1-Q10 pending for Step 4.6. |
-| 2026-05-28 | scoped | pending | Source-backed T8-C-1 runtime implementation plan completed | Selected optional decision sink for `_claim_probability`, private `_row_provenance_envelopes`, provenance branch before Form 1 dispatch, namespaced `engine_meta["problog"]`, audit-doc-only docs update, and no stop/amend findings. |
+| 2026-05-28 | draft | `29f32cb1` | T8-C-1 ProbLog evidence enrichment runtime blueprint pair drafted | Triggered by T10-1 C76 ship at `cde072fa` and T8-C-1 inventory at `bd5baeec`; Q1-Q10 pending for Step 4.6. |
+| 2026-05-28 | scoped | `6ac4f2cb` | Source-backed T8-C-1 runtime implementation plan completed | Selected optional decision sink for `_claim_probability`, private `_row_provenance_envelopes`, provenance branch before Form 1 dispatch, namespaced `engine_meta["problog"]`, audit-doc-only docs update, and no stop/amend findings. |
+| 2026-05-28 | implemented | pending | Runtime implementation completed and Step 4.7-reviewed | Implementation commits `bc0b0b96`, `70f305be`, `b3ec909b`, `22a06ea5`, `a916a856`, and `73c26f5f`; focused 117 OK, full discover `2013 / 72F / 231E`. |
 
 ## 2. Draft Inventory Summary
 
@@ -82,14 +83,54 @@ decisions:
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q10 answered.
-- [ ] Projection memory producer implemented.
-- [ ] Private row provenance context implemented.
-- [ ] ProbLog row bridge implemented.
-- [ ] Focused test matrix implemented.
-- [ ] Audit docs updated.
-- [ ] Full discover delta explained.
-- [ ] Closure notes filled.
+- [x] Projection memory producer implemented.
+- [x] Private row provenance context implemented.
+- [x] ProbLog row bridge implemented.
+- [x] Focused test matrix implemented.
+- [x] Audit docs updated.
+- [x] Full discover delta explained.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending implementation / closure.
+T8-C-1 runtime shipped the locked inventory plan without reopening the archived
+inventory decisions:
+
+- `bc0b0b96` records ProbLog probability/projection decisions at export time and
+  embeds them in `ProvenanceEnvelope.payload["uncertainty_projections"]`.
+- `70f305be` adds private `_row_provenance_envelopes` plumbing parallel to
+  `_row_support_artifacts` and keeps Form 1 support-kind allowlists unchanged.
+- `b3ec909b` bridges ProbLog provenance envelopes into row-result
+  `EvidenceGraph`s with `EDGE_DERIVES`, exact 14-key top-level metadata, and
+  namespaced `engine_meta["problog"]`.
+- `22a06ea5` adds focused tests for row provenance validation, row bridge
+  topology/metadata, and projection-decision recording.
+- `a916a856` updates the audit module docs only; user docs remain a T8-D round 3
+  follow-up.
+- `73c26f5f` fixes an in-cycle protocol/adapter import cycle by moving the
+  ProbLog provenance import into the private row bridge builder.
+
+Verification:
+
+- Focused suite: 117 OK.
+- Full discover: `2013 tests / 72 failures / 231 errors`, from T10-1 baseline
+  `2011 tests / 72 failures / 231 errors`; failures and errors did not move.
+- `ruff check` on touched source files passed.
+- `git diff --check` clean.
+- Sacred `master` and the `4 M + 1 D + 5 U` dirty baseline were preserved.
+
+Notes for future cycles:
+
+- Projection recording uses compact mode: default `1.0` probability rows are not
+  emitted as `source="default"` decisions.
+- Projection decisions are available at graph root under
+  `engine_meta["problog"]["uncertainty_projection"]`; per-node projection
+  attachment remains a possible UI-driven enrichment.
+- `trace_summary.uncertainty_projection_decision_count` is a convenience copy of
+  the nested decision count.
+- The row builder passes `dict(row.bindings)` as the candidate payload to the
+  existing converter; the current focused fixture validates it, but broader
+  fixture shapes should source-back this fallback before relying on it.
+- Full discover total increased by 2 while the focused test method count
+  increased by 4. Because failures and errors were unchanged, Step 4.7 found no
+  composition-shift regression.

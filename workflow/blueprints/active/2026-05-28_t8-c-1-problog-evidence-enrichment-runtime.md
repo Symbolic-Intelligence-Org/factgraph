@@ -1,6 +1,6 @@
 # Task Blueprint: T8-C-1 ProbLog Evidence Enrichment Runtime
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: M (runtime implementation)
@@ -520,19 +520,19 @@ audit records why partial-ship risk remains controlled.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed inventory completed.
 - [x] Q1-Q10 answered.
-- [ ] Projection decision memory producer shipped.
-- [ ] Private row provenance context shipped.
-- [ ] ProbLog row-result bridge shipped.
-- [ ] Namespaced `engine_meta["problog"]` shipped.
-- [ ] Focused tests cover the T8-C-1 matrix.
-- [ ] Audit module docs updated.
-- [ ] Anti-silent-ignore behavior preserved.
-- [ ] T8-A/T8-B/T8-D/T10-1 invariants preserved.
-- [ ] `git diff --check` clean.
-- [ ] Focused tests pass.
-- [ ] Full discover run and delta explained against baseline
+- [x] Projection decision memory producer shipped.
+- [x] Private row provenance context shipped.
+- [x] ProbLog row-result bridge shipped.
+- [x] Namespaced `engine_meta["problog"]` shipped.
+- [x] Focused tests cover the T8-C-1 matrix.
+- [x] Audit module docs updated.
+- [x] Anti-silent-ignore behavior preserved.
+- [x] T8-A/T8-B/T8-D/T10-1 invariants preserved.
+- [x] `git diff --check` clean.
+- [x] Focused tests pass.
+- [x] Full discover run and delta explained against baseline
   `2011 tests / 72 failures / 231 errors`.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] Dirty baseline and sacred master preserved.
 
 ## 9. Verification Commands
 
@@ -548,4 +548,63 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending implementation / closure.
+Implemented and reviewed. Cycle chain:
+
+1. `29f32cb1` draft blueprint/audit.
+2. `6ac4f2cb` source-backed scoped plan.
+3. `bc0b0b96` projection decision table producer.
+4. `70f305be` private row provenance context.
+5. `b3ec909b` ProbLog row-result provenance bridge.
+6. `22a06ea5` focused row bridge tests.
+7. `a916a856` audit docs alignment.
+8. `73c26f5f` lazy import fix for the ProbLog row bridge.
+
+Shipped behavior:
+
+- ProbLog export now records probability/projection decisions in
+  `ProvenanceEnvelope.payload["uncertainty_projections"]` without changing
+  `_claim_probability(...) -> float` or direct helper call compatibility.
+- `EvaluateResult` now carries private frozen `_row_provenance_envelopes`
+  parallel to `_row_support_artifacts`; `_FORM1_ROW_SUPPORT_KINDS` and
+  `_WITNESS_BEARING_SUPPORT_KINDS` were not widened.
+- Passed ProbLog rows now build row-result provenance `EvidenceGraph`s using
+  the existing ProbLog trace topology, `EDGE_DERIVES`, exact T8-A 14-key
+  top-level metadata, and namespaced `engine_meta["problog"]`.
+- Existing candidate/readback converter behavior remains flat and unchanged;
+  `provenance.py` and `tests/test_problog_evidence_graph.py` were not touched.
+- Audit module docs now mark ProbLog row-result provenance graphs as shipped;
+  user-facing docs remain deferred to T8-D round 3.
+
+Verification:
+
+- Focused suite:
+  `tests.test_problog_evidence_graph`,
+  `tests.test_problog_semantics_profile_migration`,
+  `tests.test_problog_export`,
+  `tests.test_audit_evidence_graph`,
+  `tests.application.protocol.test_evaluate_result_dtos`, and
+  `tests.sdk.test_rule_expr_evaluate`: 117 OK.
+- Full discover: `2013 tests / 72 failures / 231 errors`, compared with the
+  T10-1 baseline `2011 tests / 72 failures / 231 errors`; no failure/error
+  composition regression was introduced.
+- `ruff check` on touched source files passed.
+- `git diff --check` clean.
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved as `4 M + 1 D + 5 U`.
+
+Deviations and future pings:
+
+- A real protocol/adapter import cycle appeared after the row bridge was added;
+  `73c26f5f` resolved it with a lazy import inside the private builder.
+- The implementation chose compact projection recording: default `1.0`
+  probability rows are not emitted as `source="default"` decisions.
+- Projection decisions are carried at the graph root only; per-node projection
+  attachment remains a future enrichment if UI needs it.
+- `trace_summary.uncertainty_projection_decision_count` duplicates the nested
+  projection `decision_count` as a convenience summary.
+- The row builder passes `dict(row.bindings)` as the candidate payload to the
+  existing converter. The focused fixture validates this path; future broader
+  fixture shapes should source-back the fallback behavior before relying on it.
+- Full discover total increased by 2 while four focused test methods were
+  added; failures and errors remained exactly stable, so no silent regression
+  was found.
