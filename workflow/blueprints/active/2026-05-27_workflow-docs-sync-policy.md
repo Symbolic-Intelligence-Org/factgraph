@@ -1,6 +1,6 @@
 # Task Blueprint: Workflow Docs Sync Policy Clarification
 
-- Status: scoped
+- Status: abandoned
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S (governance docs-only)
@@ -24,7 +24,7 @@
    - how to handle status/memory/roadmap/changelog-only maintenance.
 4. Decide target files for the policy update: likely `CLAUDE.md`,
    `workflow/AGENTS.md`, and/or `workflow/blueprints/README.md`.
-5. Implement governance-doc wording only after Step 4.6 locks the file scope.
+5. Implementation was explicitly cancelled before governance files were edited.
 
 ### Out of scope
 
@@ -188,4 +188,32 @@ git status --short --branch
 
 ## 10. Outcome / Deviations
 
-Pending scoped inventory / closure.
+Abandoned by user decision after Step 4.6 scoped inventory and before
+implementation. Reason: changing workflow rules was judged too risky relative
+to the current goal of continuing design/runtime landing work. The scoped
+policy proposal remains historical rationale only and does **not** change
+repository governance.
+
+No implementation occurred:
+
+- `CLAUDE.md` was not edited.
+- `workflow/AGENTS.md` was not edited.
+- `workflow/blueprints/README.md` was not edited.
+- Root `AGENTS.md` and `workflow/CADENCE.md` were not edited.
+
+Historical notes:
+
+- The scoped inventory identified a possible middle path for future docs-sync
+  classification, but it was not adopted.
+- The three previous docs-sync micro-passes remain what they already were:
+  shipped maintenance commits. This abandoned blueprint does not retroactively
+  reclassify them and creates no new future policy.
+
+Verification:
+
+- `git diff --check` clean.
+- Runtime/test/user-doc/release files untouched by this abandoned cycle.
+- Dirty baseline intentionally preserved; current working tree includes the
+  existing 4 modified tracked files, deleted `workflow/working/.gitkeep`, and
+  untracked working/design-point notes.
+- Sacred master remains `562c74195df43e933bed92a3ff25de94dd8ce666`.

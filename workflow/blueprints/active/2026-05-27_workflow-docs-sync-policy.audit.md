@@ -1,11 +1,11 @@
 # Audit: Workflow Docs Sync Policy Clarification
 
-- Status: scoped
+- Status: abandoned
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_workflow-docs-sync-policy.md`
-- Stage: scoped
+- Stage: abandoned
 - Class: S (governance docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current `4 M + 1 D + 3 U`
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | this commit | Workflow docs sync policy blueprint pair drafted | Triggered after docs sync round 3 exposed that shipped-state sync policy existed only in transcript, not governance files. |
 | 2026-05-27 | scoped | pending | Source-backed policy inventory completed | Middle path selected: tiny docs fixes may skip; future multi-file shipped-state/status sync should use a small blueprint/audit cycle; rounds 1/2/3 grandfathered as historical maintenance exceptions. |
+| 2026-05-27 | abandoned | pending | User cancelled governance rule change before implementation | Workflow-rule changes were judged too risky; no governance files were edited. |
 
 ## 2. Step 4.6 Inventory Summary
 
@@ -75,9 +76,33 @@ Policy decision:
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q8 answered.
-- [ ] Policy wording implemented.
-- [ ] Closure notes filled.
+- [x] Policy wording intentionally not implemented.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending inventory / closure.
+Abandoned after Step 4.6 scoped inventory by explicit user instruction. The
+policy proposal is not adopted and is historical rationale only.
+
+No implementation files were touched:
+
+- `CLAUDE.md` unchanged.
+- `workflow/AGENTS.md` unchanged.
+- `workflow/blueprints/README.md` unchanged.
+- Root `AGENTS.md` unchanged.
+- `workflow/CADENCE.md` unchanged.
+
+Reason:
+
+- Changing workflow rules was judged too risky for the current session goal.
+- Current task direction returns to design/runtime landing work rather than
+  governance policy mutation.
+
+Verification:
+
+- `git diff --check` clean.
+- Dirty baseline preserved. Current working tree includes the prior notebook /
+  working-note dirty baseline plus newly observed untracked
+  `workflow/design/design-points/active/append-only-ledger-evaluation.zh.md`,
+  which this cycle did not touch.
+- Sacred master remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
