@@ -1,11 +1,11 @@
 # Audit: T8-D Round 3 ProbLog User Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-d-round3-problog-user-docs.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 5 U`
@@ -16,7 +16,10 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-28 | draft | `e13686db` | T8-D round 3 ProbLog user-docs blueprint pair drafted | Triggered by T8-C-1 runtime `5ffd4850`; Q1-Q9 pending for Step 4.6. |
-| 2026-05-28 | scoped | pending | Source-backed inventory and Q1-Q9 completed | File scope locked to `evidence.md` + SDK `00_user_guide.en.md`; planned user wording treats ProbLog as shipped row provenance evidence, not Form 1. |
+| 2026-05-28 | scoped | `38ae43a9` | Source-backed inventory and Q1-Q9 completed | File scope locked to `evidence.md` + SDK `00_user_guide.en.md`; planned user wording treats ProbLog as shipped row provenance evidence, not Form 1. |
+| 2026-05-28 | implementation | `902f1b76` | Quickstart docs aligned | `evidence.md` now teaches ProbLog row provenance graphs as shipped and removes ProbLog from future row evidence boundaries. |
+| 2026-05-28 | implementation | `6098b9a8` | SDK guide aligned | SDK guide now summarizes ProbLog row provenance graphs while keeping PyReason and other evidence tracks future. |
+| 2026-05-28 | closure | pending | Closure recorded | Verification 67 OK, `git diff --check` clean, dirty baseline preserved. |
 
 ## 2. Draft Source Scan
 
@@ -67,10 +70,31 @@ two-file scope, and audit-doc wording consistency before implementation.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q9 answered.
 - [x] Two-file scope locked.
-- [ ] Quickstart / SDK implementation complete.
-- [ ] Focused docs-only verification complete.
-- [ ] Closure notes filled.
+- [x] Quickstart / SDK implementation complete.
+- [x] Focused docs-only verification complete.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / implementation / closure.
+T8-D round 3 completed as a docs-only follow-up to T8-C-1 runtime:
+
+- Implementation touched exactly two user-facing docs files:
+  `docs/official/kernel/quickstart/evidence.md` and
+  `src/factgraph/sdk/docs/00_user_guide.en.md`.
+- Quickstart §6 now teaches native/Souffle Form 1 and ProbLog row provenance as
+  sibling shipped row-level graph shapes.
+- ProbLog is explicitly not Form 1: it uses a separate `derives` ASCII block
+  and `EDGE_DERIVES` wording.
+- ProbLog was removed from the future row-evidence boundary; PyReason and other
+  non-shipped evidence tracks remain future.
+- SDK guide stays concise and delegates details to the quickstart.
+- Audit module docs were not edited because `a916a856` already aligned them.
+- Verification: five-module focused baseline 67 OK, `git diff --check` clean,
+  dirty baseline still `4 M + 1 D + 5 U`, sacred master unchanged.
+
+Notes:
+
+- Future adapter wording uses "row-level alignment" rather than "Form 1
+  alignment" where PyReason might ship as Form 2.
+- User docs mention `engine_meta["problog"]` only at high level; no schema dump
+  was added.

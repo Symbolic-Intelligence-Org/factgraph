@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Round 3 ProbLog User Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S (docs-only)
@@ -234,15 +234,15 @@ why the quickstart-detail / SDK-summary boundary remains clear.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed inventory completed.
 - [x] Q1-Q9 answered.
-- [ ] File scope remains exactly the two user-facing docs files.
-- [ ] Quickstart teaches ProbLog row provenance graphs as shipped but not Form 1.
-- [ ] SDK guide remains concise and links to quickstart for full detail.
-- [ ] PyReason and all non-shipped evidence tracks remain deferred.
-- [ ] Audit module docs, runtime, tests, governance, release, service/OpenAPI,
+- [x] File scope remains exactly the two user-facing docs files.
+- [x] Quickstart teaches ProbLog row provenance graphs as shipped but not Form 1.
+- [x] SDK guide remains concise and links to quickstart for full detail.
+- [x] PyReason and all non-shipped evidence tracks remain deferred.
+- [x] Audit module docs, runtime, tests, governance, release, service/OpenAPI,
       Database/view, and dirty-baseline files are untouched.
-- [ ] Focused docs-only verification passes.
-- [ ] `git diff --check` clean.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] Focused docs-only verification passes.
+- [x] `git diff --check` clean.
+- [x] Dirty baseline and sacred master preserved.
 
 ## 9. Verification Commands
 
@@ -253,7 +253,8 @@ PYTHONPATH=src python -m unittest \
   tests.test_audit_evidence_graph \
   tests.test_audit_evidence_graph_render \
   tests.application.protocol.test_evaluate_result_dtos \
-  tests.test_problog_evidence_graph
+  tests.test_problog_evidence_graph \
+  tests.test_problog_semantics_profile_migration
 
 git diff --check
 git status --short --branch
@@ -262,4 +263,48 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Implemented and reviewed.
+
+### Cycle chain
+
+| Commit | Stage | Notes |
+|---|---|---|
+| `e13686db` | Draft | Opened T8-D round 3 ProbLog user-docs alignment cycle. |
+| `38ae43a9` | Scoped | Locked two-file user-doc scope and source-backed Q1-Q9 answers. |
+| `902f1b76` | Quickstart docs | Updated `evidence.md` to teach ProbLog row provenance graphs as shipped without calling them Form 1. |
+| `6098b9a8` | SDK guide docs | Updated SDK guide summary with a concise ProbLog row provenance sentence and PyReason-only future wording. |
+
+### Shipped docs alignment
+
+- Quickstart §6 now uses neutral shipped row-level graph wording.
+- Native/Souffle Form 1 text, ASCII topology, and `winning_path_only` wording
+  were preserved.
+- ProbLog passed rows are taught as row-level provenance graphs with
+  `derives` edges, a separate ASCII shape, and high-level
+  `engine_meta["problog"]` placement.
+- ProbLog was removed from the future boundary; PyReason row-level alignment
+  remains future.
+- Edge-kind wording now matches audit docs: native/Souffle use `EDGE_SUPPORTS`,
+  ProbLog uses `EDGE_DERIVES`, and `EDGE_UPDATES` remains reserved for PyReason
+  / Form 2 / temporal paths.
+- SDK guide remains a concise summary and still delegates the full DTO chain to
+  the evidence quickstart.
+- Audit module docs, runtime, tests, governance, release, service/OpenAPI,
+  Database/view docs, and dirty-baseline files were not edited.
+
+### Verification
+
+- Focused docs-only baseline plus T8-C-1 sanity:
+  `PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render tests.application.protocol.test_evaluate_result_dtos tests.test_problog_evidence_graph tests.test_problog_semantics_profile_migration`
+  ran 67 tests OK.
+- `git diff --check` clean.
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved as `4 M + 1 D + 5 U`.
+
+### Notes
+
+- The wording intentionally uses `row-level alignment` for remaining adapter
+  future work because PyReason may ship as Form 2 rather than Form 1.
+- User docs mention only that ProbLog trace summary and uncertainty projection
+  details live under `engine_meta["problog"]`; the implementation schema stays
+  out of user docs.
