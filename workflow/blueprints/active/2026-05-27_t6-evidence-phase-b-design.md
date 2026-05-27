@@ -1,6 +1,6 @@
 # Task Blueprint: T6 Evidence Phase B Design Skeleton
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: L (design skeleton; may narrow after Step 4.6)
@@ -212,12 +212,95 @@ If any step requires production code or public DTO changes, stop and amend.
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 inventory completed with source refs.
-- [ ] §10 Audit Channel is no longer a skeleton.
-- [ ] §11 Rendering is no longer a skeleton.
-- [ ] §14 Deferred Items has owner / trigger / non-goal / implementation hint
+- [x] Step 4.6 inventory completed with source refs.
+- [x] §10 Audit Channel is no longer a skeleton.
+- [x] §11 Rendering is no longer a skeleton.
+- [x] §14 Deferred Items has owner / trigger / non-goal / implementation hint
       coverage for D1-D19.
-- [ ] T8 implementation split proposal exists.
-- [ ] Match witness boundary remains deferred.
-- [ ] No production / DTO / adapter / service / release changes.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] T8 implementation split proposal exists.
+- [x] Match witness boundary remains deferred.
+- [x] No production / DTO / adapter / service / release changes.
+- [x] Dirty baseline and sacred master preserved.
+
+## 9. Outcome / Deviations
+
+### 9.1 Landed artifacts
+
+T6 landed five commits:
+
+| Stage | Commit | Summary |
+|---|---|---|
+| Draft | `7f1a9e85` | Blueprint pair drafted from Hubble read-only inventory. |
+| Scoped | `3c9fb398` | Step 4.6 inventory locked metadata fields, D-numbering, renderer threshold, match witness seam, and T8 proposal boundary. |
+| Implementation §10 | `fccb21ee` | Replaced Audit Channel skeleton with sessionless v1 audit contract. |
+| Implementation §11 | `2309cab0` | Replaced Rendering skeleton with reference-renderer and product-UI boundary. |
+| Implementation §14/§15 | `42e5e281` | Expanded deferred registry, added D20 match seam, added T8 split proposal, and reconciled old metadata wording. |
+| Cross-link | `8a37e132` | Narrow-fixed parent §7 path and status note to the active evidence design. |
+
+### 9.2 §10 Audit Channel outcome
+
+§10 now defines a sessionless v1 audit channel with three layers:
+
+- `EvaluateResult` envelope;
+- row-bound `Explanation`;
+- durable `EvidenceGraph.metadata`.
+
+It enumerates envelope-level audit fields separately from current graph metadata
+keys. The design explicitly records that `run_id` remains envelope-level and is
+not currently duplicated into `EvidenceGraph.metadata`. It also defines
+validation / JSON roundtrip, immutability, audit package, and v2+ audit-channel
+boundaries.
+
+### 9.3 §11 Rendering outcome
+
+§11 now defines:
+
+- reference renderer vs roundtrip helpers vs product UI;
+- `tree` / `timeline` layout matrix;
+- tree/timeline behavior;
+- minimal / empty / invalid / unsupported cases;
+- large graph guidance (`>250` nodes or `>500` edges) as warning / product-UI
+  handoff only;
+- safe JSON path through `evidence_graph_from_dict(...)`;
+- custom UI obligations preserving graph truth.
+
+### 9.4 §14 Deferred Items + §15 T8 proposal outcome
+
+§14 now treats D1-D19 as stable IDs and expands each with owner candidate,
+trigger, v1 boundary, and implementation hint. T6 added D20 as the match witness
+/ assertion-returning output seam. D20 records trigger and coordination boundary
+only; it does not design `.as_assertions()` / `.witnesses()` / `.to_view()` API
+shape.
+
+§15 proposes T8-A/B/C/D:
+
+- T8-A validator + metadata foundation;
+- T8-B native/Souffle success topology;
+- T8-C engine enrichment gated by T10 / engine-specific work;
+- T8-D docs alignment.
+
+This is proposal language, not a binding T8 execution order. Future T8
+blueprints must redo Step 4.6 based on then-current T7/T10 state.
+
+### 9.5 Deviations and reconciliation
+
+Implementation discovered stale internal evidence-design wording that treated
+`metadata 15 fields` and `metadata.schema_version` as current v1 graph metadata
+requirements. T6 reconciled those references to §10.3, the current source of
+truth. `schema_version` is now documented as a v1.x / T8+ extension candidate
+rather than a current shipped graph metadata requirement.
+
+Parent §7 still pointed at the old `docs/references/working/...` design path and
+described §10/§11/§14 as pending skeletons. T6 narrow-fixed that pointer and
+status note in `8a37e132`.
+
+### 9.6 Verification
+
+- `git diff --check` clean before implementation commits.
+- Changed files are limited to the evidence design doc, the parent essay
+  pointer, and this blueprint pair.
+- No production, test, adapter, service, OpenAPI, release, notebook, or dirty
+  baseline files were changed.
+- Sacred `master` remained untouched.
+- Dirty baseline remained the four tracked docs/notebooks plus untracked
+  Rainbird reference.

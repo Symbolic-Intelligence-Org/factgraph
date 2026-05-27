@@ -1,11 +1,11 @@
 # Audit: T6 Evidence Phase B Design Skeleton
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t6-evidence-phase-b-design.md`
-- Stage: scoped
+- Stage: implemented
 - Class: L (design skeleton; may narrow after Step 4.6)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: four tracked docs/notebooks plus untracked Rainbird reference
@@ -17,7 +17,12 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-27 | draft | `7f1a9e85` | T6 blueprint pair drafted | Draft uses Hubble read-only inventory and locks T6 as design-only Phase B evidence skeleton work. |
-| 2026-05-27 | scoped | TBD | Step 4.6 inventory recorded | Inventory locked metadata fields, D1-D19 numbering, renderer threshold guidance, match witness seam, and T8 proposal boundary. |
+| 2026-05-27 | scoped | `3c9fb398` | Step 4.6 inventory recorded | Inventory locked metadata fields, D1-D19 numbering, renderer threshold guidance, match witness seam, and T8 proposal boundary. |
+| 2026-05-27 | implementing | `fccb21ee` | §10 Audit Channel defined | Sessionless audit channel, envelope vs graph metadata, validation, roundtrip, and v2+ channel boundaries landed. |
+| 2026-05-27 | implementing | `2309cab0` | §11 Rendering boundary defined | Reference renderer, layout matrix, large graph guidance, JSON input path, and custom UI obligations landed. |
+| 2026-05-27 | implementing | `42e5e281` | §14 deferred registry and §15 T8 split landed | D1-D19 expanded, D20 match seam added, old metadata wording reconciled, T8 proposal added. |
+| 2026-05-27 | implementing | `8a37e132` | Parent §7 pointer fixed | Parent essay now points at the active evidence design path and T6-completed sections. |
+| 2026-05-27 | implemented | TBD | T6 closure recorded | Outcome, deviations, and verification recorded. |
 
 ## 2. Pre-Draft Inventory
 
@@ -114,15 +119,49 @@ baseline files are expected.
 
 ## 6. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 inventory complete.
-- [ ] §10 audit channel contract reviewed.
-- [ ] §11 rendering contract reviewed.
-- [ ] §14 deferred registry reviewed.
-- [ ] T8 split proposal reviewed.
-- [ ] No production / DTO / adapter / service / release changes.
-- [ ] Closure notes filled.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 inventory complete.
+- [x] §10 audit channel contract reviewed.
+- [x] §11 rendering contract reviewed.
+- [x] §14 deferred registry reviewed.
+- [x] T8 split proposal reviewed.
+- [x] No production / DTO / adapter / service / release changes.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending.
+T6 completed as a design-only Phase B skeleton cycle.
+
+Landed scope:
+
+- `fccb21ee` replaced §10 with an implementable v1 audit channel contract:
+  sessionless audit, envelope-vs-graph metadata separation, validation,
+  roundtrip, immutability, audit package boundary, and v2+ channel deferrals.
+- `2309cab0` replaced §11 with reference-renderer design:
+  renderer/product-UI split, layout matrix, minimal/invalid/large graph
+  behavior, JSON roundtrip path, and custom UI obligations.
+- `42e5e281` expanded §14 into D1-D20 owner/trigger/boundary/hint registry and
+  added §15 T8 split proposal. It also reconciled stale internal
+  `metadata 15 fields` / `schema_version required` wording to the §10.3 field
+  source of truth.
+- `8a37e132` narrow-fixed parent §7 to point at the active evidence design and
+  to reflect T6 completion.
+
+Key decisions:
+
+- T8-A/B/C/D is a proposal only; it does not bind future T8 execution order.
+- `run_id` remains envelope-level and is not currently duplicated into
+  `EvidenceGraph.metadata`.
+- Large graph threshold is reference-renderer guidance (`>250` nodes or
+  `>500` edges), not a DTO invariant.
+- D20 records match witness / assertion-returning output as a seam only; it
+  does not design API shape.
+
+Verification:
+
+- `git diff --check` was clean during implementation.
+- No production, DTO, adapter, service, OpenAPI, release, test, notebook, or
+  dirty-baseline files were changed.
+- Sacred `master` remained unchanged.
+- Dirty baseline remained the same four tracked docs/notebooks plus untracked
+  Rainbird reference.
