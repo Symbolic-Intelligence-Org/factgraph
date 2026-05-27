@@ -1,6 +1,6 @@
 # Task Blueprint: T11.2.9 Match Runtime Implementation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M (first runtime tranche: Rule + AND RuleExpr + docs/tests)
@@ -186,20 +186,20 @@ requires a separate helper slice.
 
 ## 7. Acceptance
 
-- [ ] Step 4.6 inventory completed with file:line references.
-- [ ] Final runtime path preserves T11.2.7 M1-M21 or records an explicit amend.
-- [ ] `fg.read.match(EntityCls, Rule, **kwargs)` works for literal constraints.
-- [ ] `fg.read.match(EntityCls, Rule, field=EntityCls.other_field)` works for own-class Field constraints.
-- [ ] `fg.read.match(EntityCls, RuleExpr, **kwargs)` works for AND joined patterns.
-- [ ] OR `RuleExpr` raises a clear unsupported error and remains documented as deferred.
-- [ ] Projection ambiguity / missing projection / unsupported template / unknown port / cross-entity Field / disconnected pattern all raise clear errors.
-- [ ] View-attached runtime scopes match to the attached view; method-level `view=` remains rejected.
-- [ ] Runtime returns `tuple` of distinct snapshots, no wrapper DTO.
-- [ ] User-facing docs teach only shipped match behavior and do not teach deferred witness/query persistence features.
-- [ ] Focused tests and relevant SDK/application suites pass.
-- [ ] `ruff` for touched Python files clean.
-- [ ] `git diff --check` clean.
-- [ ] Dirty baseline and sacred master preserved.
+- [x] Step 4.6 inventory completed with file:line references.
+- [x] Final runtime path preserves T11.2.7 M1-M21 or records an explicit amend.
+- [x] `fg.read.match(EntityCls, Rule, **kwargs)` works for literal constraints.
+- [x] `fg.read.match(EntityCls, Rule, field=EntityCls.other_field)` works for own-class Field constraints.
+- [x] `fg.read.match(EntityCls, RuleExpr, **kwargs)` works for AND joined patterns.
+- [x] OR `RuleExpr` raises a clear unsupported error and remains documented as deferred.
+- [x] Projection ambiguity / missing projection / unsupported template / unknown port / cross-entity Field / disconnected pattern all raise clear errors.
+- [x] View-attached runtime scopes match to the attached view; method-level `view=` remains rejected.
+- [x] Runtime returns `tuple` of distinct snapshots, no wrapper DTO.
+- [x] User-facing docs teach only shipped match behavior and do not teach deferred witness/query persistence features.
+- [x] Focused tests and relevant SDK/application suites pass.
+- [x] `ruff` for touched Python files clean.
+- [x] `git diff --check` clean.
+- [x] Dirty baseline and sacred master preserved.
 
 ## 8. Verification Commands
 
@@ -224,3 +224,98 @@ git status --short --branch
    `.ref`.
 5. Docs update includes quickstart + SDK docs + CHANGELOG deferred line, but
    only for shipped AND-only behavior.
+
+## 10. Outcome / Deviations
+
+### 10.1 Landed Artifacts
+
+T11.2.9 landed as five commits:
+
+| Step | Commit | Outcome |
+|---|---|---|
+| Draft | `90b6c59e` | Blueprint pair drafted for N9 / match runtime implementation. |
+| Scoped | `ee59414d` | Step 4.6 inventory locked; OR deferred; idref comparison, materialized matcher, tests, and docs scope fixed. |
+| Runtime core | `4dad8a33` | Added `src/factgraph/sdk/match_runtime.py` and wired `_SDKReadManager.match(...)` / `SDKStore.match(...)`. |
+| Tests | `37e3662c` | Added `tests/test_sdk_read_match_runtime.py` and extended attach lifecycle coverage. |
+| Docs | `49960bef` | Updated quickstart, SDK docs, and `CHANGELOG.md` to teach shipped AND-only match behavior. |
+
+### 10.2 Runtime Core
+
+The first runtime tranche implements:
+
+- `fg.read.match(EntityCls, Rule | AND RuleExpr, *, limit=None, **port_constraints)`.
+- Projection validation requiring exactly one entity-ref port for `EntityCls`.
+- Literal constraints and own-class `Field` constraints.
+- Canonical `idref_v1` comparison for entity-ref ports, with snapshot constraints normalized through `.ref`.
+- Simple materialized matching over `project_view_facts(sdk.ledger, sdk.schema_ir)` and `evaluate_where(...)`.
+- Distinct projected snapshots with `limit` applied after de-duplication.
+- T11.2.7 M21 connectivity enforcement via a union-find over effective pattern vars.
+
+The implementation deliberately does not introduce a `MatchResult`,
+`MatchView`, or `MatchRow`; users receive a plain `tuple` of snapshots.
+
+### 10.3 Tests
+
+Focused coverage landed in `tests/test_sdk_read_match_runtime.py`, with
+attach-view behavior extended in `tests/test_db_attach_lifecycle.py`.
+The covered matrix includes literal constraints, own-class `Field`
+constraints, idref and snapshot entity-ref constraints, distinct snapshots,
+limit-after-dedup, missing and ambiguous projection errors, unknown port,
+legacy `Query` / list rejection, OR rejection, disconnected-pattern
+rejection, view-attached scoping, and method-level `view=` rejection.
+
+Verification run:
+
+```text
+PYTHONPATH=src python -m unittest tests.test_sdk_read_match_runtime tests.test_db_attach_lifecycle
+22 tests OK
+
+PYTHONPATH=src python -m unittest \
+  tests.application.protocol.test_rule_expr \
+  tests.application.protocol.test_rule_expr_lowering \
+  tests.sdk.test_rule_expr_evaluate \
+  tests.test_sdk_read_match_runtime \
+  tests.test_db_attach_lifecycle
+108 tests OK
+```
+
+### 10.4 Docs
+
+Docs now teach only shipped match behavior:
+
+- `docs/official/kernel/quickstart/read-write.md` links from simple
+  snapshot reads to rule-pattern matching.
+- `docs/official/kernel/quickstart/rules-and-inferences.md` adds
+  "Reading snapshots with match" with Rule, AND-only RuleExpr, idref/snapshot
+  constraints, own-class Field constraints, attach-only view scoping, and
+  explicit deferred boundaries.
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` and
+  `04_api_surface.en.md` add the SDK reference surface.
+- `CHANGELOG.md` adds read-side match runtime to Added and removes
+  "Match API implementation" from Deferred while keeping witness,
+  method-level `view=`, `as_of(...)`, EvidenceGraph Phase B, and adapter
+  semantics deferred.
+
+Docs intentionally do not teach OR, legacy Query adapters, witness/assertion
+output, cross-entity tuple output, or method-level `view=`.
+
+### 10.5 Full Discovery Status
+
+`PYTHONPATH=src python -m unittest discover tests` was run after the focused
+gates. It executed `1998` tests and reported `72` failures plus `233` errors.
+The visible failure classes are the existing legacy/frontier/why-not and
+stale redesign invariant categories, not the files touched by T11.2.9.
+
+This cycle therefore keeps the verification gate at the focused match /
+RuleExpr / attach-view suites plus ruff and diff checks. Full discovery
+cleanup remains a separate cleanup concern.
+
+### 10.6 Verification
+
+- `python -m ruff check src/factgraph/sdk/match_runtime.py src/factgraph/sdk/store.py tests/test_sdk_read_match_runtime.py tests/test_db_attach_lifecycle.py` passed.
+- `git diff --check` passed.
+- Sacred `master` remained at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained the known 4 modified tracked docs/notebooks plus
+  untracked `rainbird-ai sdk code/`.
+- No service, OpenAPI, release machinery, adapter, EvidenceGraph, or notebook
+  files were touched.

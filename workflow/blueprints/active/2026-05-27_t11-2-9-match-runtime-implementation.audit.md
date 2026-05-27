@@ -1,11 +1,11 @@
 # Audit: T11.2.9 Match Runtime Implementation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t11-2-9-match-runtime-implementation.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M (first runtime tranche: Rule + AND RuleExpr + docs/tests)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current 4 modified tracked files plus untracked `rainbird-ai sdk code/`
@@ -16,7 +16,11 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-27 | draft | `90b6c59e` | T11.2.9 blueprint pair drafted | Triggered by user selecting N9 after T11.2.7 match design and T6 evidence design were published. |
-| 2026-05-27 | scoped | this commit | Step 4.6 match runtime inventory recorded | OR support deferred; idref comparison, materialized matcher, test matrix, and docs scope locked. |
+| 2026-05-27 | scoped | `ee59414d` | Step 4.6 match runtime inventory recorded | OR support deferred; idref comparison, materialized matcher, test matrix, and docs scope locked. |
+| 2026-05-27 | implementation | `4dad8a33` | Runtime core implemented | Added `sdk/match_runtime.py` plus `fg.read.match(...)` / `SDKStore.match(...)` wiring. |
+| 2026-05-27 | implementation | `37e3662c` | Match runtime tests added | New focused matrix plus attach-view scoped match coverage. |
+| 2026-05-27 | implementation | `49960bef` | Match runtime docs updated | Quickstart, SDK docs, and CHANGELOG now teach only shipped AND-only match behavior. |
+| 2026-05-27 | closure | this commit | T11.2.9 implemented | Outcome, full-discovery caveat, and verification recorded. |
 
 ## 2. Pre-Draft Source Scan
 
@@ -83,9 +87,30 @@ Read-only draft scan findings:
 - [x] Runtime scope accepted or amended.
 - [x] Test matrix accepted.
 - [x] Docs update scope accepted.
-- [ ] Implementation reviewed.
-- [ ] Closure notes filled.
+- [x] Implementation reviewed.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending.
+T11.2.9 shipped the first read-side match runtime tranche:
+
+- Public entry: `fg.read.match(EntityCls, Rule | AND RuleExpr, *, limit=None, **port_constraints)`.
+- Runtime core: `src/factgraph/sdk/match_runtime.py` reuses Rule/RuleExpr
+  lowering, `project_view_facts(...)`, `evaluate_where(...)`, and existing
+  snapshot hydration. It returns distinct projected snapshots and applies
+  `limit` after de-duplication.
+- Scope preserved: OR, legacy Query adapter, witness/assertion output,
+  cross-entity tuple output, method-level `view=`, service/OpenAPI, and
+  EvidenceGraph changes remain deferred.
+- Error coverage: unsupported OR, unsupported template, unknown port,
+  cross-entity Field, disconnected pattern, projection missing/ambiguous, and
+  method-level `view=` all raise `SDKStoreError` with scoped messages.
+- Tests: `tests.test_sdk_read_match_runtime` + `tests.test_db_attach_lifecycle`
+  passed 22 tests; the broader focused RuleExpr/match/attach suite passed
+  108 tests.
+- Full discovery note: `PYTHONPATH=src python -m unittest discover tests`
+  ran 1998 tests and reported unrelated existing legacy/frontier/why-not and
+  stale invariant failures. This was recorded in the blueprint outcome and is
+  not a T11.2.9 gate.
+- Verification: touched-file ruff and `git diff --check` passed; dirty
+  baseline and sacred master were preserved.
