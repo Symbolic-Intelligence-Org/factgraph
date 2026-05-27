@@ -47,6 +47,7 @@ def export_problog(
     out_path: Path,
     *,
     uncertainty_projection: Mapping[str, Any] | None = None,
+    projection_decisions: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     if not isinstance(store, Store):
         raise ProbLogExportError("store must be Store")
@@ -93,7 +94,12 @@ def export_problog(
     active_claims.sort(key=lambda row: row.asrt_id)
 
     for claim in active_claims:
-        prob = _claim_probability(store, claim.asrt_id, uncertainty_projection=projection)
+        prob = _claim_probability(
+            store,
+            claim.asrt_id,
+            uncertainty_projection=projection,
+            projection_decisions=projection_decisions,
+        )
         value_term = _claim_value_term(claim.rest_terms)
         lines.append(
             f"{_format_probability(prob)}::edb_fact("
@@ -139,6 +145,7 @@ def _claim_probability(
     asrt_id: str,
     *,
     uncertainty_projection: dict[str, Any] | None = None,
+    projection_decisions: dict[str, dict[str, Any]] | None = None,
 ) -> float:
     projection = (
         uncertainty_projection
@@ -162,6 +169,15 @@ def _claim_probability(
                     raise ProbLogExportError(
                         f"problog/semantic/probability out of range for asrt_id={asrt_id}: {prob}"
                     )
+                _record_probability_decision(
+                    projection_decisions,
+                    asrt_id=asrt_id,
+                    source="legacy_probability",
+                    raw_kind=None,
+                    bound=None,
+                    policy=None,
+                    resolved_probability=prob,
+                )
                 return prob
             raise ProbLogExportError(
                 f"problog/semantic/probability must be numeric for asrt_id={asrt_id}"
@@ -184,6 +200,15 @@ def _claim_probability(
                     raise ProbLogExportError(
                         f"shared/semantic/probability out of range for asrt_id={asrt_id}: {prob}"
                     )
+                _record_probability_decision(
+                    projection_decisions,
+                    asrt_id=asrt_id,
+                    source="legacy_probability",
+                    raw_kind=None,
+                    bound=None,
+                    policy=None,
+                    resolved_probability=prob,
+                )
                 return prob
             raise ProbLogExportError(
                 f"shared/semantic/probability must be numeric for asrt_id={asrt_id}"
@@ -193,6 +218,7 @@ def _claim_probability(
         store,
         asrt_id,
         uncertainty_projection=projection,
+        projection_decisions=projection_decisions,
     )
     if raw_probability is not None:
         return raw_probability
@@ -205,6 +231,7 @@ def _claim_raw_uncertainty_probability(
     asrt_id: str,
     *,
     uncertainty_projection: dict[str, Any],
+    projection_decisions: dict[str, dict[str, Any]] | None = None,
 ) -> float | None:
     raw_kind_rows = store.ledger.find_annotations(
         asrt_id=asrt_id,
@@ -232,11 +259,21 @@ def _claim_raw_uncertainty_probability(
 
     config = uncertainty_projection.get(raw_kind)
     if config is None:
-        return _fallback_uncertainty_probability(
+        probability = _fallback_uncertainty_probability(
             uncertainty_projection.get("fallback", "reject_unconfigured"),
             raw_kind=raw_kind,
             asrt_id=asrt_id,
         )
+        _record_probability_decision(
+            projection_decisions,
+            asrt_id=asrt_id,
+            source="uncertainty_projection",
+            raw_kind=raw_kind,
+            bound=bound,
+            policy=str(uncertainty_projection.get("fallback", "reject_unconfigured")),
+            resolved_probability=probability,
+        )
+        return probability
     if not isinstance(config, Mapping):
         raise ProbLogExportError(f"uncertainty_projection.{raw_kind} must be object")
     policy = config.get("policy")
@@ -245,11 +282,41 @@ def _claim_raw_uncertainty_probability(
             f"uncertainty_projection.{raw_kind}.policy=reject for asrt_id={asrt_id}"
         )
     if policy == "lower":
-        return bound[0]
+        probability = bound[0]
+        _record_probability_decision(
+            projection_decisions,
+            asrt_id=asrt_id,
+            source="uncertainty_projection",
+            raw_kind=raw_kind,
+            bound=bound,
+            policy=policy,
+            resolved_probability=probability,
+        )
+        return probability
     if policy == "midpoint":
-        return (bound[0] + bound[1]) / 2.0
+        probability = (bound[0] + bound[1]) / 2.0
+        _record_probability_decision(
+            projection_decisions,
+            asrt_id=asrt_id,
+            source="uncertainty_projection",
+            raw_kind=raw_kind,
+            bound=bound,
+            policy=policy,
+            resolved_probability=probability,
+        )
+        return probability
     if policy == "upper":
-        return bound[1]
+        probability = bound[1]
+        _record_probability_decision(
+            projection_decisions,
+            asrt_id=asrt_id,
+            source="uncertainty_projection",
+            raw_kind=raw_kind,
+            bound=bound,
+            policy=policy,
+            resolved_probability=probability,
+        )
+        return probability
     if policy == "identity_probability":
         if raw_kind != "probabilistic":
             raise ProbLogExportError("identity_probability only supports raw_kind='probabilistic'")
@@ -257,7 +324,17 @@ def _claim_raw_uncertainty_probability(
             raise ProbLogExportError(
                 f"identity_probability requires degenerate bound for asrt_id={asrt_id}"
             )
-        return bound[0]
+        probability = bound[0]
+        _record_probability_decision(
+            projection_decisions,
+            asrt_id=asrt_id,
+            source="uncertainty_projection",
+            raw_kind=raw_kind,
+            bound=bound,
+            policy=policy,
+            resolved_probability=probability,
+        )
+        return probability
     if policy in {"probability_interval", "possibility_interval"}:
         raise ProbLogExportError(
             f"uncertainty_projection.{raw_kind}.policy={policy} is not supported by ProbLog point export"
@@ -273,6 +350,28 @@ def _fallback_uncertainty_probability(raw_fallback: Any, *, raw_kind: str, asrt_
     if raw_fallback in {"warn_default", "use_default"}:
         return 1.0
     raise ProbLogExportError(f"unsupported uncertainty_projection.fallback: {raw_fallback!r}")
+
+
+def _record_probability_decision(
+    projection_decisions: dict[str, dict[str, Any]] | None,
+    *,
+    asrt_id: str,
+    source: str,
+    raw_kind: str | None,
+    bound: tuple[float, float] | None,
+    policy: str | None,
+    resolved_probability: float,
+) -> None:
+    if projection_decisions is None:
+        return
+    projection_decisions[asrt_id] = {
+        "asrt_id": asrt_id,
+        "source": source,
+        "raw_kind": raw_kind,
+        "bound": list(bound) if bound is not None else None,
+        "policy": policy,
+        "resolved_probability": resolved_probability,
+    }
 
 
 def _normalize_uncertainty_projection(raw: Mapping[str, Any] | None) -> dict[str, Any]:

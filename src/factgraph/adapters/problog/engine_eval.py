@@ -94,6 +94,7 @@ def evaluate_problog(
     }
     with tempfile.TemporaryDirectory() as tmpdir:
         pl_path = Path(tmpdir) / "query.pl"
+        projection_decisions: dict[str, dict[str, Any]] = {}
         export_problog(
             store,
             rule_spec,
@@ -101,13 +102,19 @@ def evaluate_problog(
             uncertainty_projection=None
             if semantics_profile is None
             else dict(semantics_profile.uncertainty_projection),
+            projection_decisions=projection_decisions,
         )
         raw_output = run_problog(pl_path, timeout=timeout, trace=True)
 
     parse_spec = dict(rule_spec)
     parse_spec["store"] = store
     candidates = parse_problog_output(raw_output, parse_spec, store.ledger)
-    candidates = _attach_problog_provenance(store, candidates, raw_output)
+    candidates = _attach_problog_provenance(
+        store,
+        candidates,
+        raw_output,
+        projection_decisions=projection_decisions,
+    )
     _remember_pending_probability_annotations(store, candidates)
     return candidates
 
@@ -174,6 +181,8 @@ def _attach_problog_provenance(
     store: Any,
     candidates: list[CandidateSet],
     raw_output: str,
+    *,
+    projection_decisions: dict[str, dict[str, Any]] | None = None,
 ) -> list[CandidateSet]:
     if not candidates or not isinstance(raw_output, str):
         return candidates
@@ -182,6 +191,11 @@ def _attach_problog_provenance(
     if not trace.events:
         return candidates
     trace_dict = problog_trace_to_dict(trace)
+    if projection_decisions:
+        trace_dict["uncertainty_projections"] = {
+            "schema_version": 1,
+            "decisions_by_asrt_id": copy.deepcopy(projection_decisions),
+        }
 
     attached: list[CandidateSet] = []
     for candidate in candidates:
