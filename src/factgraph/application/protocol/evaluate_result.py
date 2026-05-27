@@ -23,12 +23,14 @@ from factgraph.audit.evidence_graph import (
     NODE_PREMISE,
     NODE_SEED,
 )
+from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
 from factgraph.core.store.database import view_digest_for
 from factgraph.core.store._support import (
+    PROBLOG_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
     ProvenanceEnvelope,
     SupportArtifact,
@@ -859,6 +861,9 @@ def _build_passed_row_evidence_graph(
     metadata: Mapping[str, Any],
 ) -> EvidenceGraph:
     _validate_evidence_metadata_for_row_result(metadata, row, result)
+    provenance_envelope = result._row_provenance_envelopes.get(row.row_id)
+    if provenance_envelope is not None:
+        return _build_problog_provenance_row_evidence_graph(row, result, metadata, provenance_envelope)
     support_artifact = result._row_support_artifacts.get(row.row_id)
     if support_artifact is not None:
         return _build_form1_evidence_graph(row, result, metadata, support_artifact)
@@ -878,6 +883,109 @@ def _build_passed_row_evidence_graph(
         support_kind="evaluate_row",
         metadata=metadata,
     )
+
+
+def _build_problog_provenance_row_evidence_graph(
+    row: EvaluateRow,
+    result: EvaluateResult,
+    metadata: Mapping[str, Any],
+    provenance_envelope: ProvenanceEnvelope,
+) -> EvidenceGraph:
+    if provenance_envelope.engine != "problog" or provenance_envelope.payload_type != "proof_trace":
+        raise ValueError("ProbLog row evidence requires a problog proof_trace provenance envelope")
+    payload = provenance_envelope.payload
+    trace = problog_trace_from_dict(payload)
+    candidate_graph = problog_trace_to_evidence_graph(
+        trace,
+        candidate_id=provenance_envelope.candidate_id,
+        candidate_payload=dict(row.bindings),
+        support_kind=PROBLOG_PROVENANCE_KIND,
+    )
+    uncertainty_projection = _problog_uncertainty_projection_meta(payload)
+    trace_summary = _problog_trace_summary(candidate_graph, uncertainty_projection)
+
+    nodes = tuple(
+        EvidenceNode(
+            node_id=node.node_id,
+            node_kind=node.node_kind,
+            component=node.component,
+            label=node.label,
+            value_summary=node.value_summary,
+            timestamp=node.timestamp,
+            engine_meta=_problog_node_engine_meta(
+                node.engine_meta,
+                trace_summary=trace_summary if node.node_id == candidate_graph.root_node_id else None,
+                uncertainty_projection=uncertainty_projection if node.node_id == candidate_graph.root_node_id else None,
+            ),
+        )
+        for node in candidate_graph.nodes
+    )
+    edges = tuple(
+        EvidenceEdge(
+            edge_id=edge.edge_id,
+            from_node_id=edge.from_node_id,
+            to_node_id=edge.to_node_id,
+            edge_kind=edge.edge_kind,
+            rule_label=edge.rule_label,
+            engine_meta={"problog": {"trace_edge": dict(edge.engine_meta)}},
+        )
+        for edge in candidate_graph.edges
+    )
+    return EvidenceGraph(
+        graph_id=f"{result.result_id}:{row.row_id}",
+        engine=result.engine,
+        root_node_id=candidate_graph.root_node_id,
+        nodes=nodes,
+        edges=edges,
+        support_kind=PROBLOG_PROVENANCE_KIND,
+        layout_hint=candidate_graph.layout_hint,
+        metadata=metadata,
+    )
+
+
+def _problog_trace_summary(
+    candidate_graph: EvidenceGraph,
+    uncertainty_projection: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    return {
+        "event_count": candidate_graph.metadata.get("event_count"),
+        "answer_count": candidate_graph.metadata.get("answer_count"),
+        "root_goal": candidate_graph.metadata.get("root_goal"),
+        "root_answer_probability": candidate_graph.metadata.get("answer_probability"),
+        "uncertainty_projection_decision_count": uncertainty_projection.get("decision_count"),
+    }
+
+
+def _problog_uncertainty_projection_meta(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    raw = payload.get("uncertainty_projections")
+    if not isinstance(raw, Mapping):
+        return {
+            "schema_version": 1,
+            "decision_count": 0,
+            "decisions_by_asrt_id": {},
+        }
+    raw_decisions = raw.get("decisions_by_asrt_id")
+    decisions = dict(raw_decisions) if isinstance(raw_decisions, Mapping) else {}
+    schema_version = raw.get("schema_version", 1)
+    return {
+        "schema_version": schema_version,
+        "decision_count": len(decisions),
+        "decisions_by_asrt_id": decisions,
+    }
+
+
+def _problog_node_engine_meta(
+    trace_meta: Mapping[str, Any],
+    *,
+    trace_summary: Mapping[str, Any] | None,
+    uncertainty_projection: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    problog_meta: dict[str, Any] = {"trace": dict(trace_meta)}
+    if trace_summary is not None:
+        problog_meta["trace_summary"] = dict(trace_summary)
+    if uncertainty_projection is not None:
+        problog_meta["uncertainty_projection"] = dict(uncertainty_projection)
+    return {"problog": problog_meta}
 
 
 def _build_form1_evidence_graph(
