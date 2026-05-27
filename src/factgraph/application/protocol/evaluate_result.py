@@ -47,6 +47,23 @@ _SHA256_HEX_LEN = 64
 _RESULT_ID_PREFIX = "evalr_v1:"
 _EVIDENCE_REF_ID_PREFIX = "evref_v1:"
 _RUN_ID_PREFIX = "run_v1:"
+_EVIDENCE_GRAPH_METADATA_KEYS = (
+    "result_id",
+    "row_id",
+    "evidence_ref_id",
+    "claim_digest",
+    "closed_head_digest",
+    "expr_digest",
+    "rule_set_digest",
+    "view_snapshot_digest",
+    "semantics_digest",
+    "result_digest",
+    "engine",
+    "engine_version",
+    "adapter_version",
+    "evaluated_at",
+)
+_EVIDENCE_GRAPH_METADATA_KEY_SET = frozenset(_EVIDENCE_GRAPH_METADATA_KEYS)
 
 
 @dataclass(frozen=True)
@@ -821,25 +838,53 @@ def _build_passed_row_evidence_graph(
 
 
 def _evidence_metadata_for_row_result(row: EvaluateRow, result: EvaluateResult) -> Mapping[str, Any]:
-    return _freeze_mapping(
-        {
-            "result_id": result.result_id,
-            "row_id": row.row_id,
-            "evidence_ref_id": row.evidence_ref.ref_id,
-            "claim_digest": row.claim.digest,
-            "closed_head_digest": row.evidence_ref.closed_head_digest,
-            "expr_digest": result.expr_digest,
-            "rule_set_digest": result.rule_set_digest,
-            "view_snapshot_digest": result.view_snapshot_digest,
-            "semantics_digest": result.semantics_digest,
-            "result_digest": result.result_digest,
-            "engine": result.engine,
-            "engine_version": result.engine_version,
-            "adapter_version": result.adapter_version,
-            "evaluated_at": _metadata_value(result.evaluated_at),
-        },
-        field_name="EvidenceGraph.metadata",
-    )
+    metadata = _freeze_mapping(_evidence_metadata_payload_for_row_result(row, result), field_name="EvidenceGraph.metadata")
+    _validate_evidence_metadata_for_row_result(metadata, row, result)
+    return metadata
+
+
+def _evidence_metadata_payload_for_row_result(row: EvaluateRow, result: EvaluateResult) -> dict[str, Any]:
+    return {
+        "result_id": result.result_id,
+        "row_id": row.row_id,
+        "evidence_ref_id": row.evidence_ref.ref_id,
+        "claim_digest": row.claim.digest,
+        "closed_head_digest": row.evidence_ref.closed_head_digest,
+        "expr_digest": result.expr_digest,
+        "rule_set_digest": result.rule_set_digest,
+        "view_snapshot_digest": result.view_snapshot_digest,
+        "semantics_digest": result.semantics_digest,
+        "result_digest": result.result_digest,
+        "engine": result.engine,
+        "engine_version": result.engine_version,
+        "adapter_version": result.adapter_version,
+        "evaluated_at": _metadata_value(result.evaluated_at),
+    }
+
+
+def _validate_evidence_metadata_for_row_result(
+    metadata: Mapping[str, Any],
+    row: EvaluateRow,
+    result: EvaluateResult,
+) -> None:
+    if not isinstance(metadata, Mapping):
+        raise ValueError("EvidenceGraph.metadata must be a mapping")
+    actual_keys = set(metadata)
+    if actual_keys != _EVIDENCE_GRAPH_METADATA_KEY_SET:
+        missing = tuple(key for key in _EVIDENCE_GRAPH_METADATA_KEYS if key not in actual_keys)
+        extra = tuple(sorted(actual_keys - _EVIDENCE_GRAPH_METADATA_KEY_SET))
+        details: list[str] = []
+        if missing:
+            details.append(f"missing {missing!r}")
+        if extra:
+            details.append(f"extra {extra!r}")
+        suffix = "; ".join(details) if details else "key mismatch"
+        raise ValueError(f"EvidenceGraph.metadata must contain exactly the v1 row-result keys: {suffix}")
+
+    expected = _evidence_metadata_payload_for_row_result(row, result)
+    for key in _EVIDENCE_GRAPH_METADATA_KEYS:
+        if metadata[key] != expected[key]:
+            raise ValueError(f"EvidenceGraph.metadata[{key!r}] must match EvaluateResult/EvaluateRow context")
 
 
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:

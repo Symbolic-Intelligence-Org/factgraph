@@ -67,7 +67,7 @@ builder/checker/debug assertion shape before source-backed inventory.
 | 11 | Dirty/sacred | Status shows 4 modified tracked docs/notebooks plus 2 untracked directories; sacred master remains `562c74195df43e933bed92a3ff25de94dd8ce666`. |
 | 12 | Stop/amend | None. No T8-B/C/D, service/OpenAPI, release, match, database/view, adapter topology, or dirty-baseline work is needed. |
 
-## 4. Draft Risk Register
+## 5. Draft Risk Register
 
 | Risk | Impact | Step 4.6 check |
 |---|---|---|
@@ -78,7 +78,7 @@ builder/checker/debug assertion shape before source-backed inventory.
 | Validation gate expands into topology | Scope drift into T8-B/T8-C | Keep T8-A to metadata/validation foundation only. |
 | Dirty baseline edited accidentally | Workflow violation | Status checks before commit/closure. |
 
-## 5. Review Checklist
+## 6. Review Checklist
 
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 source-backed inventory complete.
@@ -87,6 +87,6 @@ builder/checker/debug assertion shape before source-backed inventory.
 - [x] Tests and verification gates locked.
 - [ ] Closure notes filled.
 
-## 6. Closure Notes
+## 7. Closure Notes
 
 Pending inventory / implementation / closure.
