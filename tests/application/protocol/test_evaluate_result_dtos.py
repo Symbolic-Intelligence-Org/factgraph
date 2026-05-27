@@ -98,6 +98,75 @@ def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[st
     )
 
 
+def _single_row_result(bindings: dict[str, object] | None = None) -> EvaluateResult:
+    (
+        run_id,
+        result_id,
+        expr_digest,
+        rule_set_digest,
+        view_snapshot_digest,
+        semantics_digest,
+        closed_head_digest,
+        head_content_digest,
+        engine,
+        head,
+    ) = _result_parts()
+    row = _row(result_id, run_id, closed_head_digest, {"person": "p1"} if bindings is None else bindings)
+    result_digest = result_digest_for(
+        result_id=result_id,
+        run_id=run_id,
+        row_digests=(_row_digest_for(row),),
+        head_id=head.id,
+        head_content_digest=head_content_digest,
+        engine=engine,
+        engine_version=None,
+        adapter_version=None,
+        expr_digest=expr_digest,
+        rule_set_digest=rule_set_digest,
+        view_snapshot_digest=view_snapshot_digest,
+        semantics_digest=semantics_digest,
+    )
+    return EvaluateResult(
+        result_id=result_id,
+        run_id=run_id,
+        rows=(row,),
+        head=head,
+        engine=engine,
+        engine_version=None,
+        adapter_version=None,
+        expr_digest=expr_digest,
+        rule_set_digest=rule_set_digest,
+        view_snapshot_digest=view_snapshot_digest,
+        semantics_digest=semantics_digest,
+        evaluated_at="2026-05-25T00:00:00Z",
+        result_digest=result_digest,
+    )
+
+
+def _graph_with_metadata(
+    row: EvaluateRow,
+    result: EvaluateResult,
+    metadata: dict[str, object],
+) -> EvidenceGraph:
+    return EvidenceGraph(
+        graph_id=f"{result.result_id}:{row.row_id}",
+        engine=result.engine,
+        root_node_id=row.row_id,
+        nodes=(
+            EvidenceNode(
+                node_id=row.row_id,
+                node_kind=NODE_CONCLUSION,
+                component="evaluate.row",
+                label=row.claim.name,
+                value_summary=row.claim.repr,
+            ),
+        ),
+        edges=(),
+        support_kind="evaluate_row",
+        metadata=metadata,
+    )
+
+
 class EvaluateResultDTOTests(unittest.TestCase):
     def test_evidence_ref_fact_digest_must_equal_claim_digest(self) -> None:
         run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
@@ -536,6 +605,53 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         self.assertEqual(explanation.status, "unsupported")
         self.assertEqual(explanation.errors[0].code, "GRAPH_VALIDATION_FAILED")
+        self.assertIsNone(explanation.evidence)
+
+    def test_graph_metadata_checker_rejects_missing_key(self) -> None:
+        result = _single_row_result()
+        explanation = _explain_live_row(
+            result[0],
+            result,
+            graph_builder=lambda row, build_result, metadata: _graph_with_metadata(
+                row,
+                build_result,
+                {key: value for key, value in metadata.items() if key != "result_id"},
+            ),
+        )
+
+        self.assertEqual(explanation.status, "unsupported")
+        self.assertEqual(explanation.errors[0].code, "GRAPH_VALIDATION_FAILED")
+        self.assertIn("missing", explanation.errors[0].message)
+        self.assertIsNone(explanation.evidence)
+
+    def test_graph_metadata_checker_rejects_extra_key(self) -> None:
+        result = _single_row_result()
+
+        def _builder(row: EvaluateRow, build_result: EvaluateResult, metadata: object) -> EvidenceGraph:
+            mutated = dict(metadata)  # type: ignore[arg-type]
+            mutated["run_id"] = build_result.run_id
+            return _graph_with_metadata(row, build_result, mutated)
+
+        explanation = _explain_live_row(result[0], result, graph_builder=_builder)
+
+        self.assertEqual(explanation.status, "unsupported")
+        self.assertEqual(explanation.errors[0].code, "GRAPH_VALIDATION_FAILED")
+        self.assertIn("extra", explanation.errors[0].message)
+        self.assertIsNone(explanation.evidence)
+
+    def test_graph_metadata_checker_rejects_wrong_value(self) -> None:
+        result = _single_row_result()
+
+        def _builder(row: EvaluateRow, build_result: EvaluateResult, metadata: object) -> EvidenceGraph:
+            mutated = dict(metadata)  # type: ignore[arg-type]
+            mutated["row_id"] = "row:wrong"
+            return _graph_with_metadata(row, build_result, mutated)
+
+        explanation = _explain_live_row(result[0], result, graph_builder=_builder)
+
+        self.assertEqual(explanation.status, "unsupported")
+        self.assertEqual(explanation.errors[0].code, "GRAPH_VALIDATION_FAILED")
+        self.assertIn("row_id", explanation.errors[0].message)
         self.assertIsNone(explanation.evidence)
 
     def test_evaluate_result_rejects_duplicate_row_id(self) -> None:
