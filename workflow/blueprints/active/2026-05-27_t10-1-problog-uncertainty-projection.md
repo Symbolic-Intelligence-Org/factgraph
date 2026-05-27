@@ -1,6 +1,6 @@
 # Task Blueprint: T10-1 ProbLog Uncertainty Projection
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: M
@@ -100,38 +100,52 @@ cycle should either ship all three layers or stop with a clear reason.
 | `src/factgraph/core/evidence/write_protocol.py` | C110 write-time rejection of removed uncertainty keys. |
 | `tests/test_problog_semantics_profile_migration.py` | Existing ProbLog semantics tests and reported fixture drift. |
 
-## 3. Draft Source Scan
+## 3. Step 4.6 Inventory Results
 
-Draft orientation only; Step 4.6 must verify or correct these hints with
-source refs:
+### 3.1 Reviewer finding verification
 
-- `tests/test_problog_semantics_profile_migration.py` appears to contain two
-  setup writes that still use legacy `meta={"confidence": ...}`.
-- `write_protocol._validate_no_removed_uncertainty_keys(...)` rejects
-  `confidence` and points callers to `raw_kind` / `bound`.
-- `ProbLogSemantics` appears to expose `branch_probabilities`, `rule_params`,
-  `name`, and `fallback`, but not `uncertainty_projection`.
-- `SemanticsProfile.uncertainty_projection` appears to exist and normalize /
-  validate raw-kind policy mappings.
-- The ProbLog adapter appears to consume existing rule probabilities, not
-  `uncertainty_projection`.
+| Finding | Source-backed result | Decision impact |
+|---|---|---|
+| Two ProbLog migration errors are fixture drift | Running `PYTHONPATH=src python -m unittest tests.test_problog_semantics_profile_migration` yields exactly two errors, both from `_make_sdk()` fixture writes at `tests/test_problog_semantics_profile_migration.py:160-172` using `meta={"confidence": 1.0}`. `src/factgraph/core/evidence/write_protocol.py:268-274` rejects `confidence` with "Use raw_kind / bound for uncertainty inputs." | Treat as C110 fixture drift, not runtime bug. Fix inside T10-1 as first implementation commit so the ProbLog semantics suite becomes a useful regression baseline. |
+| C76 SDK shell missing | `src/factgraph/sdk/semantics.py:73-114` defines `ProbLogSemantics` with `branch_probabilities`, `rule_params`, `name`, and `fallback`; no `uncertainty_projection` field. | Add `ProbLogSemantics.uncertainty_projection` in T10-1. |
+| C76 lowering missing | `src/factgraph/core/semantics/profile.py:43,66-77,128-147` already normalizes `SemanticsProfile.uncertainty_projection`, but ProbLog lowering at `src/factgraph/sdk/store.py:3385-3414` returns a profile with only `rule_projection` and `fallback`. | Lower the SDK field into the existing substrate; do not redesign `SemanticsProfile`. |
+| C76 adapter consumption missing | `src/factgraph/adapters/problog/engine_eval.py:45-51` passes only `semantics_profile` to `resolve_problog_engine_ext(...)`; `src/factgraph/adapters/problog/rule_ext.py:72-117` consumes rule-projection branch probabilities only. `src/factgraph/adapters/problog/problog_export.py:82-100,124-169` materializes fact probabilities from engine-specific/shared `probability` annotations or defaults to `1.0`; it does not read `raw_kind` / `bound`. | Add adapter consumption in the ProbLog export/probability materialization path, where fact probabilities are written into the `.pl` program. |
 
-This scan does not answer Q1-Q10.
+### 3.2 C76 design anchors
+
+| Anchor | Finding |
+|---|---|
+| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1360-1418` | `ProbLogSemantics` should gain `uncertainty_projection`; schema must follow `SemanticsProfile._normalize_uncertainty_projection`; default rejects `probabilistic` and `possibilistic`; midpoint-like choices require explicit opt-in; all three layers must ship. |
+| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1599-1601` | C75 says both `PyReasonSemantics` and `ProbLogSemantics` have `uncertainty_projection`; C76 defines the schema and three-layer promise. |
+| `src/factgraph/core/semantics/profile.py:10-21` | Generic policy vocabulary already includes `identity_probability`, `probability_interval`, `possibility_interval`, `lower`, `midpoint`, `upper`, and `reject`; fallback vocabulary already includes `reject_unconfigured`, `warn_default`, and `use_default`. |
+
+### 3.3 Scoped decisions
+
+| Topic | Selected decision | Rationale |
+|---|---|---|
+| Fixture drift | Include in T10-1. | It is a local test-fixture C110 migration issue in the same ProbLog semantics suite; leaving it failing would make T10-1 verification noisy. It does not require weakening runtime `confidence` rejection. |
+| SDK field shape | Use the same schema as `SemanticsProfile.uncertainty_projection`. | C76 explicitly says the SDK schema strictly follows the `SemanticsProfile` normalizer; a simplified wrapper shape would add translation complexity and new drift surface. |
+| Default lowering | `ProbLogSemantics()` lowers the C76 default reject projection: `{"probabilistic": {"policy": "reject"}, "possibilistic": {"policy": "reject"}, "fallback": "reject_unconfigured"}`. | C76 defines conservative reject as the v1 default. Empty profile would recreate silent-ignore risk for raw uncertainty rows. |
+| Adapter consumption | ProbLog export must apply the projection when a fact has `shared/semantic/raw_kind` + `shared/semantic/bound` annotations. `reject` raises a `ProbLogExportError`; supported point-projection policies materialize a point probability. | The adapter's probability decision point is `_claim_probability(...)` in `problog_export.py`; explicit reject avoids silently ignoring raw uncertainty. |
+| v1 policy support | Support `reject`, `lower`, `midpoint`, and `upper` for both raw kinds. Support `identity_probability` only for probabilistic degenerate intervals `[p, p]`. Reject `probability_interval` and `possibility_interval` in ProbLog v1 because ProbLog export needs a point probability. | This honors the C76 "midpoint requires explicit opt-in" rule while avoiding false support for interval-valued policies that cannot be represented as a ProbLog point probability. |
+| Low-level `SemanticsProfile` default | If callers pass a raw `SemanticsProfile(engine="problog")` with empty `uncertainty_projection`, adapter consumption should use the same C76 default reject projection for raw uncertainty rows. | C76 is an adapter semantics commitment, not only an SDK-wrapper convenience; direct profile callers should not get silent ignore. |
+| Docs | No user-facing or audit docs update in this cycle. | T10-1 changes adapter execution semantics only. ProbLog row-level Form 1 evidence remains deferred until T8-C-1. |
+| T8-C-1 unblock | Full T10-1 ship unblocks T8-C-1 ProbLog from the C76 side, but T8-C-1 still needs its own evidence-enrichment blueprint before runtime evidence changes. | Matches T10 inventory: T8-C-1 requires full C76, not partial. T10-1 is prerequisite, not the evidence implementation itself. |
 
 ## 4. Open Questions For Step 4.6
 
 | ID | Question | Required scoped output |
 |---|---|---|
-| Q1 | Should the two ProbLog migration errors be fixed inside T10-1, before T10-1, or left as known drift? | Three-option decision with source refs and rationale. |
-| Q2 | What is the verified C76 three-layer current state? | Source-backed SDK shell / lowering / adapter consumption table. |
-| Q3 | What SDK field shape should `ProbLogSemantics.uncertainty_projection` expose? | Same schema as `SemanticsProfile` vs simplified wrapper shape, with rationale. |
-| Q4 | What is the default lowering policy when SDK callers omit `uncertainty_projection`? | C76 default reject vs empty profile field, with source-backed rationale. |
-| Q5 | What adapter consumption semantics should v1 ship? | Reject vs silent ignore vs midpoint/substitution behavior for `raw_kind` / `bound`. |
-| Q6 | Which policies are supported in v1? | Reject-only vs explicit midpoint support, with design and test implications. |
-| Q7 | What is the focused test matrix? | Field, lowering, adapter consumption, default behavior, explicit policy behavior, and branch-probability regressions. |
-| Q8 | Does full T10-1 ship unblock T8-C-1? | Yes/no with dependency analysis and any remaining preconditions. |
-| Q9 | Do audit docs or user docs change? | Docs/no-docs decision with audience rationale. |
-| Q10 | Are there stop/amend findings? | None or explicit trigger with next action. |
+| Q1 | Should the two ProbLog migration errors be fixed inside T10-1, before T10-1, or left as known drift? | Include in T10-1 as the first implementation commit. They are test-fixture C110 drift in `tests/test_problog_semantics_profile_migration.py:160-172`, not runtime behavior to preserve. Closure baseline should show these two errors fixed. |
+| Q2 | What is the verified C76 three-layer current state? | SDK shell missing, lowering missing, adapter consumption missing; only generic core `SemanticsProfile.uncertainty_projection` substrate ships. See §3.1. |
+| Q3 | What SDK field shape should `ProbLogSemantics.uncertainty_projection` expose? | Same schema as `SemanticsProfile.uncertainty_projection`, per C76. |
+| Q4 | What is the default lowering policy when SDK callers omit `uncertainty_projection`? | Lower C76 default reject projection, not an empty profile field. |
+| Q5 | What adapter consumption semantics should v1 ship? | Explicit consumption in ProbLog export: default / explicit `reject` raises; explicit point-projection policies materialize a point probability; no silent ignore. |
+| Q6 | Which policies are supported in v1? | `reject`, `lower`, `midpoint`, `upper`, and degenerate `identity_probability`; reject interval-valued `probability_interval` / `possibility_interval` for ProbLog point export. |
+| Q7 | What is the focused test matrix? | Fixture drift fix; field construction/normalization; lowering default and explicit configs; default reject on raw uncertainty facts; explicit midpoint/lower/upper behavior; unsupported interval policies; existing branch-probability/rule-param regressions. |
+| Q8 | Does full T10-1 ship unblock T8-C-1? | Yes for the C76 prerequisite after all three layers ship and the two fixture errors are fixed; T8-C-1 still remains a separate evidence-enrichment cycle. |
+| Q9 | Do audit docs or user docs change? | No. T10-1 does not ship ProbLog row-level Form 1 evidence or user-facing evidence docs changes. |
+| Q10 | Are there stop/amend findings? | None. Findings refine implementation shape but do not require scope expansion beyond T10-1. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -175,17 +189,23 @@ rg -n "uncertainty_projection|raw_kind|bound|resolve_problog_engine_ext" src/fac
 
 Pending Step 4.6. Expected shape if Q1-Q10 confirm the current assumptions:
 
-1. Test fixture prerequisite / migration fix, if scoped in.
-2. SDK shell + lowering implementation.
-3. ProbLog adapter consumption implementation.
-4. Focused tests.
+1. Test fixture migration fix: replace legacy `meta[confidence]` writes in the
+   ProbLog semantics profile fixture with canonical `raw_kind` + `bound`.
+2. SDK shell + lowering: add `ProbLogSemantics.uncertainty_projection`, default
+   it to the C76 reject projection, and lower it into
+   `SemanticsProfile.uncertainty_projection`.
+3. Adapter consumption: thread projection config to ProbLog export and project
+   raw uncertainty annotations into fact probabilities with explicit policy
+   handling.
+4. Focused tests for field/lowering/adapter/default/explicit-policy behavior
+   plus existing branch probability regressions.
 5. Closure + archive.
 
 ## 8. Acceptance Checklist
 
 - [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed inventory completed.
-- [ ] Q1-Q10 answered.
+- [x] Step 4.6 source-backed inventory completed.
+- [x] Q1-Q10 answered.
 - [ ] Scope amended before implementation if any stop trigger fires.
 - [ ] C76 ships all scoped layers together.
 - [ ] Focused ProbLog semantics tests pass.
