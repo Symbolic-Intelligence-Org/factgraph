@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from factgraph.core.semantics import SemanticsProfile
+
 from .errors import SDKStoreError
 
 
@@ -70,6 +72,27 @@ def _normalize_rule_params_map(value: Any, *, field_name: str) -> dict[str, dict
     return out
 
 
+def _default_problog_uncertainty_projection() -> dict[str, Any]:
+    return {
+        "probabilistic": {"policy": "reject"},
+        "possibilistic": {"policy": "reject"},
+        "fallback": "reject_unconfigured",
+    }
+
+
+def _normalize_uncertainty_projection_map(value: Any, *, field_name: str) -> dict[str, Any]:
+    raw = _copy_mapping(value, field_name=field_name)
+    try:
+        profile = SemanticsProfile(
+            name="_sdk_probe",
+            engine="problog",
+            uncertainty_projection=raw,
+        )
+    except ValueError as exc:
+        raise SDKStoreError(str(exc)) from exc
+    return dict(profile.uncertainty_projection)
+
+
 @dataclass(frozen=True)
 class ProbLogSemantics:
     """Public ProbLog semantics wrapper for Rule or Inference evaluation.
@@ -83,12 +106,15 @@ class ProbLogSemantics:
         rule_params: Per-Rule metadata keyed by application `Rule.id`; lowered
             into canonical `SemanticsProfile.rule_projection` for future
             adapter cycles.
+        uncertainty_projection: Raw uncertainty projection policy mapping,
+            using the same schema as `SemanticsProfile.uncertainty_projection`.
         name: Optional profile name used in the lowered canonical profile.
         fallback: Policy for unconfigured semantics.
     """
 
     branch_probabilities: dict[str, float] = field(default_factory=dict)
     rule_params: dict[str, dict[str, Any]] = field(default_factory=dict)
+    uncertainty_projection: dict[str, Any] = field(default_factory=_default_problog_uncertainty_projection)
     name: str | None = None
     fallback: str = "reject_unconfigured"
 
@@ -110,6 +136,14 @@ class ProbLogSemantics:
             self,
             "rule_params",
             _normalize_rule_params_map(self.rule_params, field_name="rule_params"),
+        )
+        object.__setattr__(
+            self,
+            "uncertainty_projection",
+            _normalize_uncertainty_projection_map(
+                self.uncertainty_projection,
+                field_name="uncertainty_projection",
+            ),
         )
 
 

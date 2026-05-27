@@ -3353,6 +3353,7 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
             name=value.name or "problog",
             engine="problog",
             rule_projection={"sdk_rule_params": rule_params} if rule_params else {},
+            uncertainty_projection=dict(value.uncertainty_projection),
             fallback=value.fallback,
         )
     if isinstance(value, PyReasonSemantics):
@@ -3410,6 +3411,7 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
             name=value.name or _default_semantics_name(context, engine="problog"),
             engine="problog",
             rule_projection=rule_projection,
+            uncertainty_projection=dict(value.uncertainty_projection),
             fallback=value.fallback,
         )
     if isinstance(value, PyReasonSemantics):
