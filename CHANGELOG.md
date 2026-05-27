@@ -32,11 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it in `SemanticsProfile`, and the ProbLog adapter consumes canonical
   `raw_kind` / `bound` uncertainty annotations with explicit reject or
   point-projection policies instead of silently ignoring them.
-- **T8-C-1 ProbLog evidence enrichment inventory is archived** as a planning
-  artifact: future runtime should bridge ProbLog provenance into row-result
-  evidence through trace-payload projection memory, private provenance row
-  context, exact 14-key graph metadata, and namespaced
-  `engine_meta["problog"]`.
+- **T8-C-1 ProbLog evidence enrichment inventory is archived** as the planning
+  artifact for the now-shipped ProbLog row-result bridge: trace-payload
+  projection memory, private provenance row context, exact 14-key graph
+  metadata, and namespaced `engine_meta["problog"]`.
+- **ProbLog row-level provenance evidence graphs are shipped** for passed
+  `EvaluateRow.explain()` results: ProbLog rows now use existing trace topology
+  with `EDGE_DERIVES`, exact 14-key row graph metadata, namespaced
+  `engine_meta["problog"]`, and export-time uncertainty projection decisions
+  preserved from the T10-1 C76 semantics path.
 
 ### Changed
 
@@ -57,14 +61,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   legacy `meta.confidence` remains rejected by the C110 write protocol, and the
   ProbLog migration tests now use canonical non-uncertainty fixture metadata.
 - **Evidence planning docs were refined for ProbLog**: C119 multi-path DAG,
-  aggregate envelopes, and user-facing ProbLog evidence docs remain deferred
-  until the future T8-C-1 runtime cycle ships row-level behavior.
+  aggregate envelopes, per-node projection enrichment, and user-facing ProbLog
+  evidence docs remain deferred to future follow-up cycles.
+- **Evidence audit docs now include ProbLog row provenance graphs** while keeping
+  native/Souffle Form 1 and user-facing quickstart/SDK docs boundaries intact.
 
 ### Deferred
 
-- ProbLog/PyReason evidence enrichment, aggregate contributor envelopes,
-  failed/why-not/counterfactual evidence graphs, match witness output, and
-  session/signature/ACL evidence channels remain future tracks.
+- PyReason evidence enrichment, ProbLog user-facing docs, ProbLog multi-path DAG
+  enrichment, aggregate contributor envelopes, failed/why-not/counterfactual
+  evidence graphs, match witness output, and session/signature/ACL evidence
+  channels remain future tracks.
 
 ## [0.2.0-rc.1] - 2026-05-26
 

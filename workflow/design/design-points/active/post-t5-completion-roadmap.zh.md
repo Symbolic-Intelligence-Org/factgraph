@@ -2,7 +2,7 @@
 
 - Status: working planning artifact
 - Created: 2026-05-26
-- Last Updated: 2026-05-27
+- Last Updated: 2026-05-28
 - Authority: non-authoritative implementation roadmap / scheduling reference. This document does **not** override active design-point commitments, D-doc decisions, shipped module docs, or per-slice blueprints.
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Inputs:
@@ -71,7 +71,7 @@ At roadmap creation:
 - Dirty baseline remains intentionally isolated: 6 modified + 1 untracked.
 - This roadmap must not absorb dirty baseline files.
 
-2026-05-27 status note:
+2026-05-28 status note:
 
 - Sacred `master` still remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
 - Current dirty baseline observed during docs sync round 3 is 4 modified
@@ -103,17 +103,17 @@ Interpretation:
 - **T10 is cross-cutting**: adapter-level semantics execution affects T6/T7/T8 evidence completeness and may alter T9 evidence documentation claims, but can run in parallel if its scope is kept engine-local.
 - **T7 is a bridge track**: it can advance audit/rendering substrate without waiting for every T8 evidence feature, but it still feeds T9 release/docs alignment and its engine metadata choices must not conflict with T10.
 
-2026-05-27 status note:
+2026-05-28 status note:
 
 - T6 and T7 are complete and archived.
 - T8 has been split into T8-A/B/C/D. T8-A, T8-B-1(native Form 1),
   T8-B-2(Souffle Form 1), T8-D A+B docs, and T8-D round 2 Souffle user docs
   are complete. T8-C engine enrichment inventory is complete as a design-only
-  planning artifact, and T8-C-1 ProbLog evidence enrichment inventory is
-  complete locally as a design-only pre-implementation plan.
-- Remaining evidence candidates are T8-C-1 ProbLog and T8-C-2 PyReason
-  runtime implementation after their inventory / semantics locks, plus later
-  T8-D/T9 docs after additional shipped behavior.
+  planning artifact. T8-C-1 ProbLog evidence enrichment inventory and runtime
+  implementation are complete locally; the runtime archive is pending push.
+- Remaining evidence candidates are T8-C-2 PyReason runtime implementation
+  after its semantics locks, plus T8-D round 3 / T9 docs after the ProbLog
+  runtime push and any later T8-C behavior.
 
 ---
 
@@ -143,14 +143,14 @@ Owner candidate values are coordination hints, not authority rules:
 
 Class predictions are planning hints only. A per-track blueprint may downgrade or escalate after Step 4.6 inventory. T11.4/T11.5 are not committed release-track work; they are named here so they do not disappear if T11.2/T11.3 surface the need.
 
-2026-05-27 shipped status overlay:
+2026-05-28 shipped status overlay:
 
 | Track | Current status |
 |---|---|
 | T6 | Complete: Phase B design source landed and archived at `8fe7abdc`. |
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
-| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete locally and pending push. T8-C runtime implementation remains future. |
-| T9 | Superseded in part by T8-D docs for shipped native + Souffle evidence behavior; broader release alignment remains conditional on future T8-C behavior. |
+| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime complete locally and pending push. T8-C-2 PyReason runtime implementation remains future. |
+| T9 | Superseded in part by T8-D docs for shipped native + Souffle evidence behavior; T8-D round 3 / broader release alignment remains conditional on pushing and documenting ProbLog row provenance behavior and any later T8-C behavior. |
 | T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2/T10-3 implementation remains future. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
@@ -201,10 +201,10 @@ Dependencies:
 
 ### 3.4 T8 — Evidence Tree Implementation Tranche
 
-**Status(2026-05-27)**: partially complete after T8 split inventory, T8-A,
+**Status(2026-05-28)**: partially complete after T8 split inventory, T8-A,
 T8-B-1, T8-D A+B docs, T8-B-2, T8-D round 2 Souffle docs, T8-C
-engine-enrichment inventory, and local T8-C-1 ProbLog evidence enrichment
-inventory.
+engine-enrichment inventory, T8-C-1 ProbLog evidence enrichment inventory, and
+local T8-C-1 ProbLog evidence enrichment runtime.
 
 **Goal**: implement the first substantial evidence tree tranche after T6 design locks shape.
 
@@ -238,14 +238,19 @@ Shipped / split scope:
   private provenance row context, exact T8-A 14-key top-level metadata, and
   namespaced `engine_meta["problog"]`. It did **not** ship runtime row-level
   ProbLog evidence.
+- T8-C-1 ProbLog evidence enrichment runtime completed locally after the
+  inventory plan: ProbLog passed-row explanations now use row-result
+  provenance graphs with `EDGE_DERIVES`, exact T8-A 14-key top-level metadata,
+  namespaced `engine_meta["problog"]`, and export-time uncertainty projection
+  decisions. The runtime archive is pending push.
 
 Remaining candidate scope:
 
-- T8-C-1 ProbLog runtime enrichment after the local T8-C-1 inventory archive is
-  pushed and a runtime blueprint scopes implementation.
+- T8-D round 3 user-facing docs for shipped ProbLog row provenance after the
+  T8-C-1 runtime archive is pushed.
 - T8-C-2 PyReason enrichment after C74 + C77 are locked, with C78 required for
   multi-round PyReason enrichment.
-- Later T8-D docs pass after additional T8-C behavior ships.
+- Later T8-D docs passes after additional T8-C behavior ships.
 - Aggregate count-only envelope remains deferred until matched-count substrate
   exists.
 
@@ -399,13 +404,14 @@ N1 roadmap(this doc)
   -> T9 evidence docs/release alignment
 ```
 
-This original sequence has been partially executed. As of 2026-05-27:
+This original sequence has been partially executed. As of 2026-05-28:
 T12, T11.2, T11.3, T6, T7, T8 split inventory, T8-A, T8-B-1, T8-D A+B docs,
 T8-B-2, T8-D round 2 Souffle docs, T8-C inventory, and T10 inventory are
 complete. T10-1 C76 ProbLog implementation is complete and pushed at
-`cde072fa`; T8-C-1 ProbLog evidence enrichment inventory is complete locally
-and pending push. T10-2/T10-3 implementation, T8-C-1/T8-C-2 runtime
-implementation, and any later T8-D/T9 release-alignment pass remain open.
+`cde072fa`; T8-C-1 ProbLog evidence enrichment inventory is complete at
+`bd5baeec`; T8-C-1 ProbLog runtime is complete locally and pending push.
+T10-2/T10-3 implementation, T8-C-2 runtime implementation, T8-D round 3
+ProbLog user docs, and any later T8-D/T9 release-alignment pass remain open.
 
 Rationale:
 
@@ -515,5 +521,5 @@ This scoped inventory records what this roadmap is allowed to claim before later
 | Release blockers | T11.2, T11.3, minimal T12, and dirty-baseline triage are release-blocker candidates. | Release blocker status is not final until T11.2/T11.3 blueprints inspect shipped source and docs. |
 | Deferred items | Parent §5.12/C74/C76/C77/C78, evidence §14 clusters, and database §12/§17 items remain deferred unless a future blueprint activates them. | Reactivation triggers in §6 are planning triggers, not implementation authorization. |
 | Owner model | Owner candidates are coordination hints. | Cross-flip remains default for `shared`; self-owned fallback is allowed when recorded in the relevant audit. |
-| Dirty baseline | Roadmap work must not absorb dirty baseline files. | Creation-time baseline was 6M+1U; 2026-05-27 observed baseline is 4M+1D+3U. This document remains docs-only. |
+| Dirty baseline | Roadmap work must not absorb dirty baseline files. | Creation-time baseline was 6M+1U; 2026-05-28 observed baseline is 4M+1D+5U. This document remains docs-only. |
 | Push governance | Prior push authorization does not roll forward. | Any roadmap push requires explicit single-use authorization. |

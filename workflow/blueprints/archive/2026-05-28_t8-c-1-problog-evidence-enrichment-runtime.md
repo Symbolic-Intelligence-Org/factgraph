@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-28_t8-c-1-problog-evidence-enrichment-runtime.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-28_t8-c-1-problog-evidence-enrichment-runtime.audit.md`
 - Trigger: T10-1 shipped C76 ProbLog uncertainty projection at `cde072fa`, and T8-C-1 inventory shipped at `bd5baeec`. This runtime cycle implements the T8-C-1 inventory decisions: trace-payload projection memory, private provenance row context, ProbLog row-result bridge, exact 14-key metadata, and namespaced `engine_meta["problog"]`.
 
 ## 0. Scope Locks

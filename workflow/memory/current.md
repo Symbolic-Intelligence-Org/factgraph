@@ -1,6 +1,6 @@
 # Current Operational Memory
 
-最后更新:2026-05-27(T8-C-1 ProbLog evidence inventory archived locally; pending push gate)
+最后更新:2026-05-28(T8-C-1 ProbLog evidence runtime archived locally; pending push gate)
 
 ## 当前阶段
 
@@ -8,17 +8,17 @@
 
 **Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ cde072fa`
 
-**Most recent local work:** T8-C-1 ProbLog evidence enrichment inventory
-completed and archived locally after Step 4.6 review. It is a design-only
-planning artifact: no runtime row-level ProbLog evidence shipped yet. It locks
-trace-payload projection memory, private provenance row context, exact 14-key
-row graph metadata, namespaced `engine_meta["problog"]`, and C119 multi-path
-defer for the future T8-C-1 runtime blueprint.
+**Most recent local work:** T8-C-1 ProbLog evidence enrichment runtime completed
+and archived locally after Step 4.7 review. ProbLog passed rows now produce
+row-result provenance `EvidenceGraph`s through trace-payload projection memory,
+private provenance row context, exact T8-A 14-key top-level metadata,
+`EDGE_DERIVES`, and namespaced `engine_meta["problog"]`. User-facing docs remain
+deferred to T8-D round 3.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do
 not move it.
 
-**Dirty baseline intentionally preserved(4 M + 1 D + 4 U):**
+**Dirty baseline intentionally preserved(4 M + 1 D + 5 U):**
 
 - `docs/references/working/design-points/readme.md`
 - `examples/01_sdk_check_diagnose.ipynb`
@@ -29,6 +29,7 @@ not move it.
 - untracked `rainbird-ai sdk code/`
 - untracked `workflow/design/design-points/active/append-only-ledger-evaluation.zh.md`
 - untracked `workflow/design/design-points/active/identity-and-data-model-redesign.zh.md`
+- untracked `workflow/design/design-points/active/ledger-schema-specification.zh.md`
 
 Do not absorb these into unrelated release, evidence, docs-sync, or cleanup work
 without explicit reclassification.
@@ -89,7 +90,8 @@ gate.
 | T8-C Engine Enrichment Inventory | `f45739de` | Planning-only inventory selected adapter-side metadata bridge / provenance row bridge; T8-C-1 ProbLog and T8-C-2 PyReason remain gated by T10 or engine-specific semantics locks. |
 | T10 Semantics Adapter Inventory | `580b2636` | Planning-only inventory split T10 into T10-1 C76 ProbLog, T10-2 C74+C78 PyReason, and T10-3 C77 PyReason temporal work. |
 | T10-1 ProbLog Uncertainty Projection | `cde072fa` | C76 three-layer ship completed and pushed: `ProbLogSemantics.uncertainty_projection`, SDK lowering, and adapter `raw_kind` / `bound` consumption with explicit reject / point-projection policies. Full discover improved from 233 to 231 errors while adding 7 tests. |
-| T8-C-1 ProbLog Evidence Enrichment Inventory | pending push | Design-only inventory locked the future row-result bridge shape: trace-payload projection memory, private provenance row context, exact T8-A 14-key top-level metadata, namespaced `engine_meta["problog"]`, current candidate converter preservation, and C119/C136 defer. |
+| T8-C-1 ProbLog Evidence Enrichment Inventory | `bd5baeec` | Design-only inventory locked the row-result bridge shape: trace-payload projection memory, private provenance row context, exact T8-A 14-key top-level metadata, namespaced `engine_meta["problog"]`, current candidate converter preservation, and C119/C136 defer. |
+| T8-C-1 ProbLog Evidence Enrichment Runtime | pending push | Runtime implementation shipped ProbLog row-result provenance graphs with `EDGE_DERIVES`, exact 14-key metadata, namespaced `engine_meta["problog"]`, and export-time uncertainty projection decisions preserved in the provenance payload. |
 
 Evidence track current state:
 
@@ -98,21 +100,16 @@ Evidence track current state:
 - C115 `EDGE_SUPPORTS` direction is runtime-enforced and documented.
 - C118 intra-graph seed reuse is runtime-enforced and documented.
 - Souffle row Form 1 conformance is shipped and documented.
-- ProbLog/PyReason evidence enrichment remains deferred. T8-C inventory is
-  complete, T10 inventory refined the gates, and T10-1 now satisfies the C76
-  prerequisite for ProbLog. T8-C-1 inventory is complete locally and records
-  how to bridge ProbLog provenance into row-result evidence, but the runtime
-  bridge itself remains future. T8-C-2 still requires C74+C77, with C78
-  required for multi-round PyReason enrichment.
+- ProbLog row-result provenance evidence is shipped locally and pending push.
+  User-facing ProbLog docs remain deferred to T8-D round 3. T8-C-2 still
+  requires C74+C77, with C78 required for multi-round PyReason enrichment.
 
 ## Recommended Next Work
 
-1. **T8-C-1 inventory push gate**: push the local T8-C-1 inventory archive
-   chain after explicit authorization.
-2. **T8-C-1 ProbLog evidence enrichment runtime**: now unblocked from the C76
-   side by T10-1 and pre-scoped by this inventory; next runtime blueprint
-   should implement trace-payload projection memory, private row provenance
-   context, row-result metadata wrapper, and audit docs.
+1. **T8-C-1 runtime push gate**: push the local T8-C-1 runtime archive chain
+   after explicit authorization.
+2. **T8-D round 3 ProbLog user docs**: align quickstart / SDK user docs with
+   shipped ProbLog row-result provenance graphs after the runtime push lands.
 3. **T10-2 C74+C78 PyReason canonical migration**: canonicalize PyReason
    bounds / atom-id handling and introduce `iteration_count`, preserving legacy
    compatibility.
@@ -120,9 +117,9 @@ Evidence track current state:
    / `time_binned` policy and decouple legacy `fixed_timesteps`.
 5. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
-6. **Identity/data-model / append-only-ledger design-point intake**: classify
-   the untracked active design-point files before adopting them into workflow
-   state.
+6. **Identity/data-model / append-only-ledger / ledger-schema design-point
+   intake**: classify the untracked active design-point files before adopting
+   them into workflow state.
 
 ## Governance Reminders
 
