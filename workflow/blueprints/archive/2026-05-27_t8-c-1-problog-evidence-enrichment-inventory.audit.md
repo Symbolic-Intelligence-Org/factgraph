@@ -4,7 +4,7 @@
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
-- Blueprint: `workflow/blueprints/active/2026-05-27_t8-c-1-problog-evidence-enrichment-inventory.md`
+- Blueprint: `workflow/blueprints/archive/2026-05-27_t8-c-1-problog-evidence-enrichment-inventory.md`
 - Stage: implemented
 - Class: S/M (design-only planning inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
@@ -17,7 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | `ab7972df` | T8-C-1 ProbLog evidence enrichment inventory blueprint pair drafted | Triggered after T10-1 C76 shipped at `cde072fa`; Q1-Q10 intentionally pending for Step 4.6. |
 | 2026-05-27 | scoped | `8d3a1634` | Source-backed T8-C-1 ProbLog inventory completed | Selected trace-payload projection memory, private provenance row context, T8-A 14-key top-level metadata with namespaced ProbLog engine metadata, and C119 single-path defer. |
-| 2026-05-27 | implemented | this commit | T8-C-1 ProbLog evidence enrichment inventory closed | Design-only cycle; no runtime/test/user-doc/governance changes. |
+| 2026-05-27 | implemented | `bfb5faf1` | T8-C-1 ProbLog evidence enrichment inventory closed | Design-only cycle; no runtime/test/user-doc/governance changes. |
 
 ## 2. Draft Inventory Summary
 

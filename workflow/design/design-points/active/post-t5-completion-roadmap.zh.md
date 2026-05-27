@@ -109,9 +109,10 @@ Interpretation:
 - T8 has been split into T8-A/B/C/D. T8-A, T8-B-1(native Form 1),
   T8-B-2(Souffle Form 1), T8-D A+B docs, and T8-D round 2 Souffle user docs
   are complete. T8-C engine enrichment inventory is complete as a design-only
-  planning artifact.
+  planning artifact, and T8-C-1 ProbLog evidence enrichment inventory is
+  complete locally as a design-only pre-implementation plan.
 - Remaining evidence candidates are T8-C-1 ProbLog and T8-C-2 PyReason
-  implementation after T10 / engine-specific semantics locks, plus later
+  runtime implementation after their inventory / semantics locks, plus later
   T8-D/T9 docs after additional shipped behavior.
 
 ---
@@ -148,9 +149,9 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 |---|---|
 | T6 | Complete: Phase B design source landed and archived at `8fe7abdc`. |
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
-| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`. T8-C runtime implementation remains future, but T8-C-1 is now unblocked from the C76 side by local T10-1 implementation pending push. |
+| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete locally and pending push. T8-C runtime implementation remains future. |
 | T9 | Superseded in part by T8-D docs for shipped native + Souffle evidence behavior; broader release alignment remains conditional on future T8-C behavior. |
-| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete locally and pending push; T10-2/T10-3 implementation remains future. |
+| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2/T10-3 implementation remains future. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton
@@ -201,8 +202,9 @@ Dependencies:
 ### 3.4 T8 — Evidence Tree Implementation Tranche
 
 **Status(2026-05-27)**: partially complete after T8 split inventory, T8-A,
-T8-B-1, T8-D A+B docs, T8-B-2, T8-D round 2 Souffle docs, and T8-C
-engine-enrichment inventory.
+T8-B-1, T8-D A+B docs, T8-B-2, T8-D round 2 Souffle docs, T8-C
+engine-enrichment inventory, and local T8-C-1 ProbLog evidence enrichment
+inventory.
 
 **Goal**: implement the first substantial evidence tree tranche after T6 design locks shape.
 
@@ -226,15 +228,21 @@ Shipped / split scope:
 - T10 inventory refined the T8-C gates: T8-C-1 requires full C76 ProbLog ship;
   T8-C-2 requires C74 + C77, with C78 required if multi-round PyReason
   enrichment is in scope.
-- T10-1 implemented C76 locally: `ProbLogSemantics.uncertainty_projection`,
+- T10-1 implemented and pushed C76 at `cde072fa`:
+  `ProbLogSemantics.uncertainty_projection`,
   SDK lowering, and adapter `raw_kind` / `bound` consumption now ship together
   with explicit reject / point-projection semantics. This does **not** ship
   ProbLog evidence enrichment; it only satisfies the C76 prerequisite.
+- T8-C-1 ProbLog evidence enrichment inventory completed locally as a
+  design-only plan: future runtime should use trace-payload projection memory,
+  private provenance row context, exact T8-A 14-key top-level metadata, and
+  namespaced `engine_meta["problog"]`. It did **not** ship runtime row-level
+  ProbLog evidence.
 
 Remaining candidate scope:
 
-- T8-C-1 ProbLog enrichment after T10-1 C76 is pushed and the T8-C-1 blueprint
-  independently scopes evidence enrichment.
+- T8-C-1 ProbLog runtime enrichment after the local T8-C-1 inventory archive is
+  pushed and a runtime blueprint scopes implementation.
 - T8-C-2 PyReason enrichment after C74 + C77 are locked, with C78 required for
   multi-round PyReason enrichment.
 - Later T8-D docs pass after additional T8-C behavior ships.
@@ -265,7 +273,7 @@ T9 should not invent behavior. It documents only shipped evidence capabilities a
 ### 3.6 T10 — Semantics Adapter Execution Completion
 
 **Status(2026-05-27)**: design-only T10 inventory complete at `580b2636`;
-T10-1 C76 ProbLog runtime implementation complete locally and pending push.
+T10-1 C76 ProbLog runtime implementation complete and pushed at `cde072fa`.
 T10-2/T10-3 remain future.
 
 **Goal**: finish adapter-touching semantics deferred from T5.8.
@@ -300,7 +308,7 @@ Inventory result:
 Planned implementation split:
 
 1. **T10-1 ProbLog C76**: full three-layer ship for SDK shell, lowering, and
-   adapter consumption. Implemented locally: default reject projection, explicit
+   adapter consumption. Shipped at `cde072fa`: default reject projection, explicit
    raw-uncertainty consumption in ProbLog export, point-projection policies, and
    fixture migration off legacy `confidence`.
 2. **T10-2 PyReason C74 + C78**: canonical PyReason shell/migration for
@@ -394,9 +402,10 @@ N1 roadmap(this doc)
 This original sequence has been partially executed. As of 2026-05-27:
 T12, T11.2, T11.3, T6, T7, T8 split inventory, T8-A, T8-B-1, T8-D A+B docs,
 T8-B-2, T8-D round 2 Souffle docs, T8-C inventory, and T10 inventory are
-complete. T10-1 C76 ProbLog implementation is complete locally and pending
-push. T10-2/T10-3 implementation, T8-C-1/T8-C-2 implementation, and any later
-T8-D/T9 release-alignment pass remain open.
+complete. T10-1 C76 ProbLog implementation is complete and pushed at
+`cde072fa`; T8-C-1 ProbLog evidence enrichment inventory is complete locally
+and pending push. T10-2/T10-3 implementation, T8-C-1/T8-C-2 runtime
+implementation, and any later T8-D/T9 release-alignment pass remain open.
 
 Rationale:
 

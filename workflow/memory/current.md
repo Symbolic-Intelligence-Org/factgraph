@@ -1,18 +1,19 @@
 # Current Operational Memory
 
-最后更新:2026-05-27(T10-1 implemented and archived locally; pending push gate)
+最后更新:2026-05-27(T8-C-1 ProbLog evidence inventory archived locally; pending push gate)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ f50ed05a`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ cde072fa`
 
-**Most recent local work:** T10-1 ProbLog uncertainty projection implemented
-and archived locally after Step 4.7 review. It ships C76's SDK shell, SDK
-lowering, and ProbLog adapter consumption for canonical `raw_kind` / `bound`
-uncertainty annotations, fixes two legacy ProbLog fixture errors, and is
-pending the next push gate.
+**Most recent local work:** T8-C-1 ProbLog evidence enrichment inventory
+completed and archived locally after Step 4.6 review. It is a design-only
+planning artifact: no runtime row-level ProbLog evidence shipped yet. It locks
+trace-payload projection memory, private provenance row context, exact 14-key
+row graph metadata, namespaced `engine_meta["problog"]`, and C119 multi-path
+defer for the future T8-C-1 runtime blueprint.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do
 not move it.
@@ -87,7 +88,8 @@ gate.
 | T8-D Round 2 Souffle User Docs | `c6fa481f` | Quickstart and SDK guide now document Souffle row-level Form 1 as shipped and leave ProbLog/PyReason as future. |
 | T8-C Engine Enrichment Inventory | `f45739de` | Planning-only inventory selected adapter-side metadata bridge / provenance row bridge; T8-C-1 ProbLog and T8-C-2 PyReason remain gated by T10 or engine-specific semantics locks. |
 | T10 Semantics Adapter Inventory | `580b2636` | Planning-only inventory split T10 into T10-1 C76 ProbLog, T10-2 C74+C78 PyReason, and T10-3 C77 PyReason temporal work. |
-| T10-1 ProbLog Uncertainty Projection | pending push | C76 three-layer ship completed locally: `ProbLogSemantics.uncertainty_projection`, SDK lowering, and adapter `raw_kind` / `bound` consumption with explicit reject / point-projection policies. Full discover improved from 233 to 231 errors while adding 7 tests. |
+| T10-1 ProbLog Uncertainty Projection | `cde072fa` | C76 three-layer ship completed and pushed: `ProbLogSemantics.uncertainty_projection`, SDK lowering, and adapter `raw_kind` / `bound` consumption with explicit reject / point-projection policies. Full discover improved from 233 to 231 errors while adding 7 tests. |
+| T8-C-1 ProbLog Evidence Enrichment Inventory | pending push | Design-only inventory locked the future row-result bridge shape: trace-payload projection memory, private provenance row context, exact T8-A 14-key top-level metadata, namespaced `engine_meta["problog"]`, current candidate converter preservation, and C119/C136 defer. |
 
 Evidence track current state:
 
@@ -97,19 +99,20 @@ Evidence track current state:
 - C118 intra-graph seed reuse is runtime-enforced and documented.
 - Souffle row Form 1 conformance is shipped and documented.
 - ProbLog/PyReason evidence enrichment remains deferred. T8-C inventory is
-  complete, and T10 inventory refined the gates. T10-1 now satisfies the C76
-  prerequisite locally, so T8-C-1 is unblocked from the ProbLog uncertainty
-  projection side after push; T8-C-2 still requires C74+C77, with C78 required
-  for multi-round PyReason enrichment.
+  complete, T10 inventory refined the gates, and T10-1 now satisfies the C76
+  prerequisite for ProbLog. T8-C-1 inventory is complete locally and records
+  how to bridge ProbLog provenance into row-result evidence, but the runtime
+  bridge itself remains future. T8-C-2 still requires C74+C77, with C78
+  required for multi-round PyReason enrichment.
 
 ## Recommended Next Work
 
-1. **T10-1 push gate / docs-sync follow-up**: push the local T10-1 archive
-   chain after explicit authorization, then optionally refresh this memory
-   head from pending to published.
-2. **T8-C-1 ProbLog evidence enrichment**: now unblocked from the C76 side by
-   T10-1; still needs its own evidence-enrichment blueprint and Step 4.6
-   source inventory before runtime evidence changes.
+1. **T8-C-1 inventory push gate**: push the local T8-C-1 inventory archive
+   chain after explicit authorization.
+2. **T8-C-1 ProbLog evidence enrichment runtime**: now unblocked from the C76
+   side by T10-1 and pre-scoped by this inventory; next runtime blueprint
+   should implement trace-payload projection memory, private row provenance
+   context, row-result metadata wrapper, and audit docs.
 3. **T10-2 C74+C78 PyReason canonical migration**: canonicalize PyReason
    bounds / atom-id handling and introduce `iteration_count`, preserving legacy
    compatibility.

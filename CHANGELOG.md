@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it in `SemanticsProfile`, and the ProbLog adapter consumes canonical
   `raw_kind` / `bound` uncertainty annotations with explicit reject or
   point-projection policies instead of silently ignoring them.
+- **T8-C-1 ProbLog evidence enrichment inventory is archived** as a planning
+  artifact: future runtime should bridge ProbLog provenance into row-result
+  evidence through trace-payload projection memory, private provenance row
+  context, exact 14-key graph metadata, and namespaced
+  `engine_meta["problog"]`.
 
 ### Changed
 
@@ -51,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ProbLog semantics fixtures were migrated off removed uncertainty keys**:
   legacy `meta.confidence` remains rejected by the C110 write protocol, and the
   ProbLog migration tests now use canonical non-uncertainty fixture metadata.
+- **Evidence planning docs were refined for ProbLog**: C119 multi-path DAG,
+  aggregate envelopes, and user-facing ProbLog evidence docs remain deferred
+  until the future T8-C-1 runtime cycle ships row-level behavior.
 
 ### Deferred
 

@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-27_t8-c-1-problog-evidence-enrichment-inventory.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-27_t8-c-1-problog-evidence-enrichment-inventory.audit.md`
 - Trigger: T10-1 shipped C76 ProbLog uncertainty projection at `cde072fa`, satisfying the T8-C inventory prerequisite for T8-C-1 from the ProbLog side. This cycle starts from T8-C inventory §4.1 Option C (adapter-side metadata bridge / provenance row bridge) and §7 trigger guidance, and should verify those assumptions before any runtime T8-C-1 implementation starts.
 
 ## 0. Scope Locks
@@ -340,7 +340,7 @@ Cycle chain:
 
 - Draft: `ab7972df`
 - Scoped inventory: `8d3a1634`
-- Closure: this commit
+- Closure: `bfb5faf1`
 
 Step 4.6 completed the source-backed ProbLog row-enrichment plan:
 
