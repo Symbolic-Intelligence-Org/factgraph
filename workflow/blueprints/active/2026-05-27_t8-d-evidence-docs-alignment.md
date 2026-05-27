@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Evidence Docs Alignment
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S/M (docs-only)
@@ -130,6 +130,74 @@ wording evidence and scoped docs decisions.
 | Q8 | Should quickstart/SDK docs cross-link to audit module docs? | Link/no-link decision with audience rationale. |
 | Q9 | Should docs cite tests or line numbers? | Decision to avoid brittle links or justify stable references. |
 
+## 4.1 Final Scoped Decisions
+
+| Decision | Lock |
+|---|---|
+| File scope | Edit **2 files**: primary `docs/official/kernel/quickstart/evidence.md` and summary `src/factgraph/sdk/docs/00_user_guide.en.md`. Leave the other 8 candidate docs untouched. |
+| Class | S/M, docs-only. File count is primary + 1 secondary, below the stop trigger of more than five secondary files. |
+| `evidence.md` shape | Rewrite §6 from "intentionally opaque" into a compact shipped/deferred EvidenceGraph section. Add a small §1 metadata bridge note and a §5 validation-failure note. Keep §§1-5 DTO walkthrough structure. |
+| Form 1 example policy | Show conceptual graph shape and stable node/edge kinds; do **not** dump full JSON or HTML. Mention `engine_meta` only as implementation detail, except the user-relevant winning-path-only marker. |
+| Metadata presentation | Present `EvidenceGraph.metadata` as v1 row-result bridge categories with the full key list in compact text, but warn users to prefer DTO fields over exact metadata-set branching. |
+| Hard vs soft failure | Document the user-facing soft path: bad graph metadata becomes `Explanation(status="unsupported", code="GRAPH_VALIDATION_FAILED")`. Mention hard protocol violations only as internal/advanced builder contract issues, not normal app flow. |
+| Deferred boundary placement | Add one dedicated "Current boundaries" block in `evidence.md`; keep SDK overview concise and link to quickstart. |
+| Quickstart vs SDK split | Quickstart owns detailed DTO/evidence semantics. SDK user guide owns a short "what this means for SDK users" summary and link. |
+| Audit docs cross-link | Do not link quickstart/SDK docs directly to `src/factgraph/audit/docs/02_evidence_graph.md`; it remains module-implementer reference, not primary user docs. |
+| Tests / line refs in docs | Do not cite test files or source line numbers in user docs. Keep source refs in blueprint/audit only. |
+
+## 4.2 Source-Backed File Inventory
+
+| File | Current wording / source evidence | Gap diagnosis | Decision |
+|---|---|---|---|
+| `docs/official/kernel/quickstart/evidence.md` | §6 lines 244-269 says `EvidenceGraph` is "intentionally opaque", "graph interior" is not documented, and full API tutorial is pending. | Stale after T8-B-1: native passed rows now expose stable Form 1 concepts (`conclusion` / `premise` / `seed` + `supports`) and T8-A metadata strictness is user-relevant. | **Edit.** Replace §6 and add narrow notes to §1/§5. |
+| `docs/official/kernel/quickstart/rules-and-inferences.md` | Lines 752-758 summarize evaluate/explain lifecycle and link evidence quickstart; match section says match returns snapshots, not evidence rows. | No stale claim; detailed evidence semantics belong in `evidence.md`. | Leave. |
+| `docs/official/kernel/quickstart/semantics.md` | Lines 12 and 215/321 mention evaluate -> explain workflow only. | No stale evidence graph claim; semantics page should not absorb evidence topology. | Leave. |
+| `docs/official/kernel/quickstart/namespace-map.md` | Lines 145-163 list eval/audit surfaces and mention persisted audit `EvidenceGraph` objects. | No direct stale native row claim; namespace page should remain map-like. | Leave. |
+| `src/factgraph/sdk/docs/00_user_guide.en.md` | Lines 644-656 define evidence path only as `EvaluateResult` plus `Explanation`; lines 634-637 mention adapter-native evidence. | Missing short T8-A/B-1 SDK-facing summary. | **Edit.** Add compact summary and link to evidence quickstart. |
+| `src/factgraph/sdk/docs/01_concepts.en.md` | Lines 52-55 / 101 mention row evidence through `row.explain()`; no graph topology claim. | Adequate conceptual overview; avoid duplication. | Leave. |
+| `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` | Lines 557-575 list key fields and already link to `evidence.md` for full chain. | Link remains the right handoff; no direct stale claim. | Leave. |
+| `src/factgraph/sdk/docs/04_api_surface.en.md` | Lines 287/314-319/367 mention eval/explain API surfaces and removed legacy shells. | API surface docs should not teach topology; no stale claim. | Leave. |
+| `src/factgraph/sdk/docs/06_what_if_and_proof.en.md` | Lines 1-23 define evidence workflow after removing what-if shells. | Correct high-level workflow; defer topology to quickstart. | Leave. |
+| `src/factgraph/sdk/docs/07_walker_and_advanced.en.md` | Lines 279-280 point advanced users to `EvaluateResult`, `EvaluateRow`, `Explanation`. | No stale topology claim. | Leave. |
+| `src/factgraph/audit/docs/02_evidence_graph.md` | Lines 41-45, 80-101, 119-121, 168-174, 195-219 already describe native Form 1, metadata keys, supports-only, threshold, and deferred seams. | Already aligned by T7 + T8-B-1. | Leave. |
+
+## 4.3 Shipped Behavior Anchors
+
+| Behavior | Source | Docs implication |
+|---|---|---|
+| 14-key metadata list | `evaluate_result.py:59-75` | Explain as v1 graph metadata bridge; `run_id` stays envelope-only. |
+| Validation failure soft path | `evaluate_result.py:635-657` | `ValueError` during graph validation becomes unsupported `GRAPH_VALIDATION_FAILED`. |
+| Native Form 1 dispatch | `evaluate_result.py:839-847` | Native support context produces Form 1 graph; no support context keeps fallback graph. |
+| Native Form 1 shape | `evaluate_result.py:866-980` | Root conclusion, selected-branch premises, assertion seeds, supports edges, winning-path-only marker. |
+| Metadata exact/value validation | `evaluate_result.py:1049-1071` | Metadata is runtime-checked against row/result context. |
+| Renderer type guard | `evidence_graph.py:120-128` | Render only constructed `EvidenceGraph` instances. |
+| Large graph warning | `evidence_graph.py:471-486` | Warning at more than 250 nodes or more than 500 edges; no truncate/refuse. |
+| Audit module docs already aligned | `audit/docs/02_evidence_graph.md:41-45`, `:80-101`, `:119-121`, `:168-174`, `:195-219` | Treat as reference, not edit target. |
+
+## 4.4 Q1-Q9 Answers
+
+| Q | Scoped answer |
+|---|---|
+| Q1 File scope | Edit `evidence.md` and `00_user_guide.en.md` only. All other candidate docs are leave-alone because they either link to `evidence.md` or contain high-level workflow wording without stale topology claims. |
+| Q2 `evidence.md` shape | Inline/narrow section rewrite: keep §§1-5 DTO chain, add metadata bridge note to §1, add validation-failure note to §5, replace §6 with shipped native Form 1 + renderer + boundaries. |
+| Q3 Form 1 example | No full JSON/HTML. Use bullets and maybe minimal code assertions over `node_kind` / `edge_kind`; avoid `engine_meta` full schema. It is acceptable to name the root `alternative_paths.mode == "winning_path_only"` marker because T8-B-1 made it runtime-visible. |
+| Q4 14-key metadata | Include full key list but phrase as "current v1 bridge keys" and direct application code toward DTO fields (`EvaluateResult`, `EvaluateRow`, `Explanation`) rather than branching on metadata set equality. |
+| Q5 Hard vs soft fail | Document normal user-facing soft failure: malformed/inconsistent graph metadata returns `unsupported` with `GRAPH_VALIDATION_FAILED`. Mention non-`EvidenceGraph` custom-builder returns only as an internal protocol violation, not a normal app case. |
+| Q6 Deferred markers | Use a dedicated current-boundaries block in §6: adapter row Form 1, aggregate envelope, failed graph/why-not/counterfactual, match witness, cross-row seed dedup, sessions/signatures/ACL/x-evidence-key/salience/impact, `EDGE_DERIVES`/`EDGE_UPDATES`, `dag`/`rule_fire`. |
+| Q7 Quickstart vs SDK | Quickstart owns full semantics. SDK guide gets concise summary plus link to quickstart; other SDK docs retain existing links. |
+| Q8 Audit docs cross-link | No user-facing cross-link to `src/factgraph/audit/docs/02_evidence_graph.md`; avoid exposing module-implementer docs as primary user guidance. |
+| Q9 Test/line refs | No test/source line references in user docs. Source refs stay in blueprint/audit. |
+
+## 4.5 Verification Baseline
+
+- Focused no-op baseline:
+  `PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render tests.application.protocol.test_evaluate_result_dtos`
+  → **36 OK**.
+- Runtime/test files remain untouched in this cycle.
+- Dirty/sacred status: branch ahead origin by 1 draft commit; sacred master
+  remains `562c74195df43e933bed92a3ff25de94dd8ce666`; dirty baseline remains
+  four tracked modified docs/notebooks plus two untracked reference dirs.
+
 ## 5. Existing Invariants To Preserve
 
 - Docs-only: no runtime or test edits.
@@ -177,8 +245,8 @@ No runtime/test implementation commit is expected.
 
 ## 8. Acceptance
 
-- [ ] Step 4.6 answers Q1-Q9 with source-backed evidence.
-- [ ] File scope is narrow and justified.
+- [x] Step 4.6 answers Q1-Q9 with source-backed evidence.
+- [x] File scope is narrow and justified.
 - [ ] Docs teach T8-A / T8-B-1 shipped behavior accurately.
 - [ ] Docs do not teach T8-B-2 / T8-C / failed graph / match witness / v2
       features as shipped.
