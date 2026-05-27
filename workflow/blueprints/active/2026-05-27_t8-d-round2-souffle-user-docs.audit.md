@@ -1,11 +1,11 @@
 # Audit: T8-D Round 2 Souffle User Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-27_t8-d-round2-souffle-user-docs.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current `4 M + 1 D + 3 U`
@@ -17,6 +17,9 @@
 |---|---|---|---|---|
 | 2026-05-27 | draft | this commit | T8-D round 2 Souffle user docs blueprint pair drafted | Triggered by T8-B-2 Q8 / closure follow-up; Q1-Q8 intentionally pending for Step 4.6. |
 | 2026-05-27 | scoped | pending scoped commit | Source-backed inventory and Q1-Q8 completed | File scope locked to `evidence.md` + SDK `00_user_guide.en.md`; focused baseline ran 38 OK. |
+| 2026-05-27 | implementation | `9616c28d` | Quickstart docs aligned | `evidence.md` now describes native + Souffle Form 1 and removes Souffle from the deferred row-level Form 1 boundary. |
+| 2026-05-27 | implementation | `476eaabb` | SDK guide aligned | SDK summary now names native or Souffle rows as shipped and ProbLog/PyReason Form 1 graphs as future. |
+| 2026-05-27 | closure | pending closure commit | Closure recorded | Verification 38 OK, `git diff --check` clean, dirty baseline preserved. |
 
 ## 2. Draft Source Scan
 
@@ -75,8 +78,24 @@ and file scope before implementation.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q8 answered.
 - [x] File scope and verification locked.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 7. Closure Notes
 
-Pending implementation / closure.
+T8-D round 2 completed as a narrow mirror of T8-D first round:
+
+- Implementation touched exactly two user-facing docs files:
+  `docs/official/kernel/quickstart/evidence.md` and
+  `src/factgraph/sdk/docs/00_user_guide.en.md`.
+- Quickstart changed native-only Form 1 wording to native + Souffle, preserved
+  the ASCII topology, preserved the metadata/failure-mode sections, and removed
+  only Souffle from the deferred row-level Form 1 line.
+- SDK guide kept the concise-summary role and changed future adapter wording to
+  ProbLog/PyReason Form 1 only.
+- Audit module docs were not edited; they were already aligned by T8-B-2.
+- Verification: focused no-op evidence baseline 38 OK, `git diff --check`
+  clean, dirty baseline still `4 M + 1 D + 3 U`.
+
+The evidence track user-facing loop now reflects T8-A metadata validation,
+T8-B-1 native Form 1, and T8-B-2 Souffle Form 1. T8-C remains the future lane
+for ProbLog/PyReason enrichment.

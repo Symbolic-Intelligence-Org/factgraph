@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Round 2 Souffle User Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-27
 - Last Updated: 2026-05-27
 - Class: S (docs-only)
@@ -177,14 +177,14 @@ Implementation is intentionally narrow:
 - [x] Step 4.6 answers Q1-Q8 with source-backed evidence.
 - [x] File scope is exactly the two user-facing docs files or the cycle is
       amended before edits.
-- [ ] Quickstart no longer teaches Souffle row-level Form 1 as future work.
-- [ ] SDK user guide summarizes native + Souffle without duplicating
+- [x] Quickstart no longer teaches Souffle row-level Form 1 as future work.
+- [x] SDK user guide summarizes native + Souffle without duplicating
       quickstart detail.
-- [ ] ProbLog / PyReason and all other deferred items remain marked future.
-- [ ] No runtime, test, audit-module docs, release, service/OpenAPI,
+- [x] ProbLog / PyReason and all other deferred items remain marked future.
+- [x] No runtime, test, audit-module docs, release, service/OpenAPI,
       Database/view, or dirty-baseline files are touched.
-- [ ] Focused no-op baseline and `git diff --check` pass.
-- [ ] Sacred master and dirty baseline are preserved.
+- [x] Focused no-op baseline and `git diff --check` pass.
+- [x] Sacred master and dirty baseline are preserved.
 
 ## 9. Verification Commands
 
@@ -205,4 +205,51 @@ also runs `git diff --check` and dirty/sacred status checks.
 
 ## 10. Outcome / Deviations
 
-Pending scoped inventory / implementation / closure.
+Implemented and ready to archive.
+
+### Cycle chain
+
+| Commit | Stage | Notes |
+|---|---|---|
+| `102cfee4` | Draft | Opened T8-D round 2 Souffle user-docs alignment cycle. |
+| `e2924665` | Scoped | Locked two-file scope and source-backed Q1-Q8 answers. |
+| `9616c28d` | Quickstart docs | Extended `evidence.md` native Form 1 wording to native + Souffle. |
+| `476eaabb` | SDK docs | Extended SDK evidence summary to native + Souffle without duplicating quickstart detail. |
+
+### Shipped docs alignment
+
+- `docs/official/kernel/quickstart/evidence.md` now describes shipped row-level
+  Form 1 graphs for native and Souffle passed rows.
+- The Form 1 ASCII topology remains unchanged:
+  `NODE_SEED --supports--> NODE_PREMISE --supports--> NODE_CONCLUSION`.
+- The `winning_path_only` marker is now described for OR-shaped native or
+  Souffle evaluation.
+- The current-boundaries block removed only Souffle from row-level Form 1
+  future work. ProbLog / PyReason and the other deferred evidence categories
+  remain marked future.
+- `src/factgraph/sdk/docs/00_user_guide.en.md` keeps the concise summary +
+  quickstart-link pattern, now naming native or Souffle rows as shipped and
+  ProbLog/PyReason Form 1 graphs as future.
+
+### Verification
+
+```text
+PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_audit_evidence_graph_render tests.application.protocol.test_evaluate_result_dtos
+Ran 38 tests in 0.019s
+OK
+
+git diff --check
+clean
+```
+
+Dirty baseline preserved as `4 M + 1 D + 3 U`; sacred `master` remains
+`562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+### Notes
+
+- Quickstart wording changed "Non-native adapter rows" to "Other adapter rows"
+  so the fallback category now excludes both shipped lanes: native and Souffle.
+- SDK wording changed "adapter Form 1 graphs" to "ProbLog/PyReason Form 1
+  graphs", avoiding ambiguity now that Souffle is shipped.
+- Evidence track user-facing docs now reflect the current T8-A + T8-B-1 +
+  T8-B-2 runtime state: metadata foundation, native Form 1, and Souffle Form 1.
