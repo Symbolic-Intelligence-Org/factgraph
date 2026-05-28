@@ -42,9 +42,10 @@ This is a design-only inventory cycle before any T10-2 implementation.
 5. T10-2 implementation split decision:
    - Single T10-2 cycle versus T10-2-A C74 + T10-2-B C78.
    - Relationship to T8-C-2 PyReason evidence unblock rules.
-6. Read-only overlap check for the three untracked active design-point files:
+6. Read-only overlap check for the four untracked active design-point files:
    - `workflow/design/design-points/active/append-only-ledger-evaluation.zh.md`
    - `workflow/design/design-points/active/identity-and-data-model-redesign.zh.md`
+   - `workflow/design/design-points/active/identity-mechanism-redesign.zh.md`
    - `workflow/design/design-points/active/ledger-schema-specification.zh.md`
 
 ### Out of scope
@@ -69,11 +70,11 @@ This is a design-only inventory cycle before any T10-2 implementation.
 - C110 legacy `confidence` rejection.
 - Governance / workflow rule changes.
 - Sacred `master`.
-- Dirty baseline `4 M + 1 D + 5 U`, including the three untracked active
+- Dirty baseline `4 M + 1 D + 6 U`, including the four untracked active
   design-point files.
 - Audit module docs; this inventory ships no runtime behavior.
 - User-facing docs; a future docs cycle can follow shipped behavior.
-- Absorbing or classifying the three untracked design-point files. If Step 4.6
+- Absorbing or classifying the four untracked design-point files. If Step 4.6
   finds they are strongly coupled to T10-2, stop and run a design-point intake
   cycle first.
 
@@ -123,7 +124,7 @@ need source-backed locking first:
 | `src/factgraph/adapters/pyreason/engine_eval.py` | Temporal projection / timesteps consumer. |
 | `src/factgraph/application/docs/rule.md` | Application canonical `atom_ids` documentation. |
 | `src/factgraph/core/store/_support.py` | T8-B witness key helpers. |
-| Three untracked active design-point files | Read-only overlap check only. |
+| Four untracked active design-point files | Read-only overlap check only. |
 
 ## 3. Step 4.6 Source-Backed Inventory
 
@@ -183,7 +184,7 @@ must preserve or explicitly migrate with compatibility policy.
 
 ### 3.7 Untracked Design-Point Overlap Check
 
-Classify the three untracked active design-point files as unrelated,
+Classify the four untracked active design-point files as unrelated,
 adjacent-but-not-blocking, or blocking for T10-2. If blocking, trigger stop /
 amend.
 
@@ -197,7 +198,7 @@ amend.
 | Q4 | Can `fixed_timesteps` be decoupled so C78 ships independently from C77? | Yes/no with migration policy and stop-trigger assessment. |
 | Q5 | Should T10-2 implementation be one cycle or split into T10-2-A/T10-2-B? | Compare options with file/test/LOC/risk estimates. |
 | Q6 | After T10-2 ships, does T8-C-2 PyReason evidence only lack C77, or are other gates still present? | Updated unblock map. |
-| Q7 | Do the three untracked active design-point files overlap T10-2? | Grep-backed classification and next action. |
+| Q7 | Do the four untracked active design-point files overlap T10-2? | Grep-backed classification and next action. |
 | Q8 | Are any stop/amend findings present? | None or explicit trigger with next action. |
 
 ## 5. Existing Invariants To Preserve
@@ -214,7 +215,7 @@ amend.
 - C119 / C136 / D11 / D13 / Nemo / Form 2 remain deferred unless a later cycle
   explicitly activates them.
 - Sacred `master = 562c74195df43e933bed92a3ff25de94dd8ce666`.
-- Dirty baseline `4 M + 1 D + 5 U`.
+- Dirty baseline `4 M + 1 D + 6 U`.
 
 ## 6. Step 4.6 Inventory Plan
 
@@ -224,7 +225,7 @@ Commands:
 rg -n "timestep_delay|derived_bound|atom_bounds|head_bound" src/factgraph workflow/design workflow/blueprints/archive/2026-05-27_t10-semantics-adapter-inventory.md
 rg -n "iteration_count|fixed_timesteps|valid_time_boundaries" src/factgraph workflow/design workflow/blueprints/archive/2026-05-27_t10-semantics-adapter-inventory.md
 rg -n "atom_id|body_atom|atom_index|make_pred_atom_key|branch:" src/factgraph tests workflow/blueprints/archive/2026-05-27_t10-semantics-adapter-inventory.md
-rg -n "PyReason|atom|timestep|iteration_count|fixed_timesteps|C74|C78" workflow/design/design-points/active/append-only-ledger-evaluation.zh.md workflow/design/design-points/active/identity-and-data-model-redesign.zh.md workflow/design/design-points/active/ledger-schema-specification.zh.md
+rg -n "PyReason|atom|timestep|iteration_count|fixed_timesteps|C74|C78" workflow/design/design-points/active/append-only-ledger-evaluation.zh.md workflow/design/design-points/active/identity-and-data-model-redesign.zh.md workflow/design/design-points/active/identity-mechanism-redesign.zh.md workflow/design/design-points/active/ledger-schema-specification.zh.md
 PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration
 git diff --check
 git status --short --branch

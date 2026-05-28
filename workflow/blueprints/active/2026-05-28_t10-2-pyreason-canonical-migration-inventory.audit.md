@@ -8,7 +8,7 @@
 - Stage: draft
 - Class: S/M (design-only inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
-- Dirty baseline: preserve current observed `4 M + 1 D + 5 U`
+- Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
 - Ownership: Codex owner, Claude reviewer (cross-flip)
 
 ## 1. Event Log
@@ -32,8 +32,11 @@ Read-only orientation findings:
   `head:0`, `branch:{index}`, and `rule`.
 - `SemanticsProfile.temporal_projection` currently supports legacy modes
   `none`, `fixed_timesteps`, and `valid_time_boundaries`.
-- Three untracked active design-point files mention PyReason only around ledger
-  / valid-time / edge-model adjacency in the initial grep. Step 4.6 must
+- Four untracked active design-point files are present after baseline drift; the
+  initial grep covered three and Step 4.6 must include
+  `identity-mechanism-redesign.zh.md` before classifying overlap.
+- The initially grepped design-point files mention PyReason only around ledger
+  / valid-time / edge-model adjacency. Step 4.6 must
   classify whether that is blocking or out-of-scope.
 
 This draft scan is not a Step 4.6 answer. Step 4.6 must verify or correct each
@@ -49,7 +52,7 @@ claim with source refs.
 | Q4 | Can `fixed_timesteps` be decoupled so C78 ships independently from C77? | Pending Step 4.6. |
 | Q5 | Should T10-2 implementation be one cycle or split into T10-2-A/T10-2-B? | Pending Step 4.6. |
 | Q6 | After T10-2 ships, does T8-C-2 PyReason evidence only lack C77, or are other gates still present? | Pending Step 4.6. |
-| Q7 | Do the three untracked active design-point files overlap T10-2? | Pending Step 4.6. |
+| Q7 | Do the four untracked active design-point files overlap T10-2? | Pending Step 4.6. |
 | Q8 | Are any stop/amend findings present? | Pending Step 4.6. |
 
 ## 4. Risk Register
