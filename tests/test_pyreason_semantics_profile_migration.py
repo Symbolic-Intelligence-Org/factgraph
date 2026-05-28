@@ -443,6 +443,24 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertEqual(profile.temporal_projection["mode"], "valid_time_boundaries")
         self.assertEqual(profile.temporal_projection["universe"], ["2026-01-01", "2026-12-31"])
 
+    def test_fact_boundaries_profile_is_accepted_with_canonical_mode(self) -> None:
+        profile = _profile(
+            rule_entries=[],
+            temporal_projection={"mode": "fact_boundaries", "universe": ["2026-01-01", "2026-12-31"]},
+        )
+
+        self.assertEqual(profile.temporal_projection["mode"], "fact_boundaries")
+        self.assertEqual(profile.temporal_projection["universe"], ["2026-01-01", "2026-12-31"])
+
+    def test_fact_boundaries_profile_reuses_universe_validation(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            _profile(
+                rule_entries=[],
+                temporal_projection={"mode": "fact_boundaries", "universe": ["2026-12-31", "2026-01-01"]},
+            )
+
+        self.assertIn("temporal_projection.universe start must be before end", str(ctx.exception))
+
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_fixed_timesteps_profile_drives_pyreason_run_config(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
@@ -545,6 +563,29 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertIn("SemanticsProfile.iteration_count", message)
         self.assertIn("SemanticsProfile.temporal_projection.valid_time_boundaries", message)
 
+    def test_iteration_count_conflicts_with_fact_boundaries(self) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="pyreason",
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    iteration_count=3,
+                    temporal_projection={"mode": "fact_boundaries", "universe": ["2026-01-01", "2026-12-31"]},
+                ),
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("SemanticsProfile.iteration_count", message)
+        self.assertIn("SemanticsProfile.temporal_projection.fact_boundaries", message)
+
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_map_valid_meta_to_active_steps(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
@@ -560,6 +601,32 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
             semantics_profile=_profile(
                 rule_entries=[],
                 temporal_projection={"mode": "valid_time_boundaries", "universe": ["2026-01-01", "2026-12-31"]},
+            ),
+        )
+
+        session = mock_run.call_args.args[0]
+        rows = {(fact["value"], fact["active_from"], fact["active_to"]) for fact in session.node_facts}
+        self.assertIn(("Alice", 1, 3), rows)
+        self.assertIn(("Bob", 0, 4), rows)
+        self.assertIn(("Carol", 2, None), rows)
+        config = mock_run.call_args.kwargs["config"]
+        self.assertEqual(config.timesteps, 5)
+
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    def test_fact_boundaries_map_valid_meta_to_active_steps(self, mock_run) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        sdk.store.evaluate(
+            derivation_id=compiled["derivation_id"],
+            version=compiled["version"],
+            target_pred_id=compiled["target_pred_id"],
+            head_vars=compiled["head_vars"],
+            where=compiled["where"],
+            mode="pyreason",
+            semantics_profile=_profile(
+                rule_entries=[],
+                temporal_projection={"mode": "fact_boundaries", "universe": ["2026-01-01", "2026-12-31"]},
             ),
         )
 
