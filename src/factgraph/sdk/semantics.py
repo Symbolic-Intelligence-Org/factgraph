@@ -157,6 +157,7 @@ class PyReasonSemantics:
 
     Args:
         timestep_delay: Non-negative timestep delay for compiled rules.
+        iteration_count: Positive global PyReason inference round count.
         head_bound: Optional global `[lower, upper]` interval for rule heads.
         branch_bounds: Optional per-branch interval overrides keyed by branch id.
         rule_params: Per-Rule metadata keyed by application `Rule.id`; lowered
@@ -165,6 +166,7 @@ class PyReasonSemantics:
     """
 
     timestep_delay: int = 0
+    iteration_count: int = 1
     head_bound: tuple[float, float] | None = None
     branch_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     rule_params: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -184,6 +186,10 @@ class PyReasonSemantics:
             raise SDKStoreError("PyReasonSemantics.timestep_delay must be int")
         if self.timestep_delay < 0:
             raise SDKStoreError("PyReasonSemantics.timestep_delay must be >= 0")
+        if isinstance(self.iteration_count, bool) or not isinstance(self.iteration_count, int):
+            raise SDKStoreError("PyReasonSemantics.iteration_count must be int")
+        if self.iteration_count < 1:
+            raise SDKStoreError("PyReasonSemantics.iteration_count must be >= 1")
         if not isinstance(self.fallback, str) or not self.fallback:
             raise SDKStoreError("PyReasonSemantics.fallback must be non-empty string")
         head_bound = None if self.head_bound is None else _normalize_interval(self.head_bound, field_name="head_bound")
