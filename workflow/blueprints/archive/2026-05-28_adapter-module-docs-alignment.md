@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-28_adapter-module-docs-alignment.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-28_adapter-module-docs-alignment.audit.md`
 - Trigger: T8-D round 5 shipped at `1f5427ee`, closing the PyReason evidence
   deferred-state quickstart contract. T8-D round 4 (`06e575dd`) and T8-D round
   5 (`1f5427ee`) both named adapter module docs as future work. Quickstart

@@ -1,14 +1,14 @@
 # Current Operational Memory
 
-最后更新:2026-05-28(T8-D round 5 PyReason evidence docs archived locally; pending push gate)
+最后更新:2026-05-28(adapter module docs archived locally; pending push gate)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ 06e575dd`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ 1f5427ee`
 
-**Most recent local work:** T8-D round 5 PyReason evidence deferred-state docs archived locally;
+**Most recent local work:** Adapter module docs alignment archived locally;
 pending push gate.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do not move it.
@@ -53,9 +53,13 @@ Release-facing shipped/deferred summaries live in `CHANGELOG.md`.
   `92fd6013`, T10-3 inventory at `da896f0c`, T10-3-A `fact_boundaries` at
   `e7bab90f`, and T10-3-B `time_binned` at `ac42a379`.
 - T8-D round 4 canonical user docs are pushed at `06e575dd`; round 5 PyReason
-  evidence deferred-state docs are complete locally. User docs now teach shipped
-  ProbLog/PyReason semantics and state that PyReason row evidence is currently a
-  safe single-conclusion fallback while rich temporal evidence waits for Form 2.
+  evidence deferred-state docs are pushed at `1f5427ee`. User docs now teach
+  shipped ProbLog/PyReason semantics and state that PyReason row evidence is
+  currently a safe single-conclusion fallback while rich temporal evidence waits
+  for Form 2.
+- Adapter module docs are complete locally: ProbLog adapter docs now cover C76
+  uncertainty projection and T8-C-1 row provenance; PyReason adapter docs now
+  cover C78/C74/C77 canonical semantics and the T8-D round 5 evidence boundary.
 
 ## Recommended Next Work
 

@@ -81,6 +81,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Adapter module docs are aligned with shipped semantics**: ProbLog adapter
+  docs now cover C76 `uncertainty_projection`, raw `raw_kind` / `bound`
+  projection, and T8-C-1 row provenance graphs; PyReason adapter docs now cover
+  C78 `iteration_count`, C74 `derived_bound` / `atom_bounds`, C77
+  `fact_boundaries` / `time_binned`, and the T8-D round 5 deferred row-evidence
+  boundary.
 - **PyReason evidence deferred-state docs are explicit**: the evidence
   quickstart now states that PyReason inference, bounds, and temporal
   materialization are shipped, while rich row-level temporal evidence remains

@@ -148,7 +148,7 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 |---|---|
 | T6 | Complete: Phase B design source landed and archived at `8fe7abdc`. |
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
-| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`; T8-D round 4 canonical semantics user docs pushed at `06e575dd`; T8-D round 5 PyReason evidence deferred-state docs complete locally. T8-C-2 PyReason runtime implementation remains future after D11/Form 2. |
+| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`; T8-D round 4 canonical semantics user docs pushed at `06e575dd`; T8-D round 5 PyReason evidence deferred-state docs pushed at `1f5427ee`; adapter module docs alignment complete locally. T8-C-2 PyReason runtime implementation remains future after D11/Form 2. |
 | T9 | Superseded in part by T8-D docs for shipped native + Souffle + ProbLog evidence behavior; broader release alignment remains conditional on any later T8-C behavior. |
 | T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason canonical rule params pushed at `92fd6013`; T10-3 C77 temporal inventory pushed at `da896f0c`; T10-3-A `fact_boundaries` alias / compatibility pushed at `e7bab90f`; T10-3-B `time_binned` pushed at `ac42a379`. T10 PyReason canonical semantics C74/C77/C78 are complete; T8-C-2 remains gated by D11/Form 2 evidence work. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
@@ -251,10 +251,13 @@ Shipped / split scope:
   teach shipped ProbLog/PyReason canonical semantics, while
   `rules-and-inferences.md` leads with current `Rule` / `RuleExpr` / match /
   evaluate APIs.
-- T8-D round 5 completed locally: evidence quickstart now makes PyReason
+- T8-D round 5 pushed at `1f5427ee`: evidence quickstart now makes PyReason
   row-level evidence deferred state explicit, documenting the current safe
   single-conclusion fallback and keeping rich temporal row evidence deferred to
   future Form 2 design.
+- Adapter module docs alignment completed locally: ProbLog and PyReason adapter
+  module docs now mirror shipped C76/C74/C77/C78 behavior, T8-C-1 ProbLog row
+  provenance, and the T8-D round 5 PyReason evidence boundary.
 
 Remaining candidate scope:
 
@@ -435,9 +438,10 @@ This original sequence has been partially executed. As of 2026-05-28:
 T12, T11.2, T11.3, T6, T7, T8 split inventory, T8-A, T8-B-1, T8-D A+B docs,
 T8-B-2, T8-D round 2 Souffle docs, T8-C inventory, T10 inventory, T10-1,
 T8-C-1 inventory/runtime, T8-D round 3, T10-2 inventory, T10-2-A, T10-2-B,
-T10-3 inventory, T10-3-A, T10-3-B, and T8-D round 4 are complete and pushed.
-T8-D round 5 is complete locally and pending push. T8-C-2 runtime
-implementation and any later T8-D/T9 release-alignment pass remain open.
+T10-3 inventory, T10-3-A, T10-3-B, T8-D round 4, and T8-D round 5 are complete
+and pushed. Adapter module docs alignment is complete locally and pending push.
+T8-C-2 runtime implementation and any later T8-D/T9 release-alignment pass
+remain open.
 
 Rationale:
 
