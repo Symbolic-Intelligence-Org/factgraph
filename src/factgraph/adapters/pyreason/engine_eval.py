@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -432,6 +433,140 @@ def _materialize_valid_time_boundaries(
         timesteps=max(0, len(ordered) - 1),
         active_by_asrt_id=active_by_asrt_id,
     )
+
+
+def _materialize_time_binned(
+    store: Any,
+    schema_ir: dict[str, Any],
+    *,
+    universe_start: str,
+    universe_end: str,
+    bin_size: str,
+) -> _TemporalProjectionState:
+    start = _parse_time_binned_instant(
+        universe_start,
+        path="SemanticsProfile.temporal_projection.time_binned.universe[0]",
+    )
+    end = _parse_time_binned_instant(
+        universe_end,
+        path="SemanticsProfile.temporal_projection.time_binned.universe[1]",
+    )
+    if end <= start:
+        raise ValueError("SemanticsProfile.temporal_projection.time_binned.universe start must be before end")
+
+    step = _parse_time_binned_bin_size(bin_size)
+    universe_duration = end - start
+    universe_units = _timedelta_microseconds(universe_duration)
+    step_units = _timedelta_microseconds(step)
+    quotient, remainder = divmod(universe_units, step_units)
+    if remainder != 0:
+        raise ValueError(
+            "SemanticsProfile.temporal_projection.time_binned universe duration "
+            "must be an exact multiple of bin_size"
+        )
+
+    projected_by_pred = project_view_facts_with_witness(store.ledger, schema_ir)
+    projected_facts = [
+        fact
+        for projected in projected_by_pred.values()
+        for fact in projected
+    ]
+
+    active_by_asrt_id: dict[str, tuple[int, int | None]] = {}
+    for projected_fact in projected_facts:
+        valid_from, valid_to = _valid_range_for_asrt_id(store, projected_fact.asrt_id)
+        active_from_dt = (
+            start
+            if valid_from is None
+            else _parse_time_binned_instant(valid_from, path=f"{projected_fact.asrt_id}.valid_from")
+        )
+        active_to_dt = (
+            None
+            if valid_to is None
+            else _parse_time_binned_instant(valid_to, path=f"{projected_fact.asrt_id}.valid_to")
+        )
+        if active_to_dt is not None and active_to_dt <= active_from_dt:
+            raise ValueError(f"{projected_fact.asrt_id} valid_to must be after valid_from")
+        if active_from_dt < start or active_from_dt >= end:
+            raise ValueError(f"{projected_fact.asrt_id} valid_from must be within time_binned universe")
+        if active_to_dt is not None and active_to_dt > end:
+            raise ValueError(f"{projected_fact.asrt_id} valid_to must be within time_binned universe")
+
+        active_from = _floor_bin_index(active_from_dt - start, step)
+        active_to = None if active_to_dt is None else _ceil_bin_index(active_to_dt - start, step)
+        active_by_asrt_id[projected_fact.asrt_id] = (active_from, active_to)
+
+    return _TemporalProjectionState(
+        timesteps=quotient,
+        active_by_asrt_id=active_by_asrt_id,
+    )
+
+
+def _parse_time_binned_instant(value: str, *, path: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{path} must be non-empty string")
+    if "T" not in value and " " not in value:
+        try:
+            parsed_date = date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(f"{path} must be ISO date or timezone-aware ISO datetime") from exc
+        return datetime(
+            parsed_date.year,
+            parsed_date.month,
+            parsed_date.day,
+            tzinfo=timezone.utc,
+        )
+    text = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{path} must be ISO date or timezone-aware ISO datetime") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{path} must include timezone when time is present")
+    return parsed.astimezone(timezone.utc)
+
+
+def _parse_time_binned_bin_size(value: str) -> timedelta:
+    path = "SemanticsProfile.temporal_projection.time_binned.bin_size"
+    if value == "1d":
+        return timedelta(days=1)
+    if value == "1h":
+        return timedelta(hours=1)
+    if value == "15m":
+        return timedelta(minutes=15)
+    if value == "1m":
+        return timedelta(minutes=1)
+    amount: str | None = None
+    unit: str | None = None
+    if value.startswith("PT") and value.endswith(("H", "M")):
+        amount = value[2:-1]
+        unit = value[-1]
+    elif value.startswith("P") and value.endswith("D"):
+        amount = value[1:-1]
+        unit = "D"
+    if amount is None or not amount.isdigit() or int(amount) <= 0:
+        raise ValueError(f"{path} must be one of: P<n>D, PT<n>H, PT<n>M, 1d, 1h, 15m, 1m")
+    count = int(amount)
+    if unit == "D":
+        return timedelta(days=count)
+    if unit == "H":
+        return timedelta(hours=count)
+    return timedelta(minutes=count)
+
+
+def _floor_bin_index(offset: timedelta, step: timedelta) -> int:
+    return _timedelta_microseconds(offset) // _timedelta_microseconds(step)
+
+
+def _ceil_bin_index(offset: timedelta, step: timedelta) -> int:
+    offset_units = _timedelta_microseconds(offset)
+    step_units = _timedelta_microseconds(step)
+    quotient, remainder = divmod(offset_units, step_units)
+    return quotient if remainder == 0 else quotient + 1
+
+
+def _timedelta_microseconds(value: timedelta) -> int:
+    return ((value.days * 24 * 60 * 60) + value.seconds) * 1_000_000 + value.microseconds
 
 
 def _valid_range_for_asrt_id(store: Any, asrt_id: str) -> tuple[str | None, str | None]:
