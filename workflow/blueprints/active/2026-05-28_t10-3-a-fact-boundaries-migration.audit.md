@@ -1,11 +1,11 @@
 # Audit: T10-3-A PyReason Fact Boundaries Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-3-a-fact-boundaries-migration.md`
-- Stage: draft
+- Stage: scoped
 - Class: S/M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-28 | draft | this commit | T10-3-A `fact_boundaries` alias migration drafted | Triggered by T10-3 inventory `da896f0c`, T10-2-A `65cc79a3`, T10-2-B `92fd6013`, and current memory next-work #1; Q1-Q9 pending Step 4.6. |
+| 2026-05-28 | draft | `30240f16` | T10-3-A `fact_boundaries` alias migration drafted | Triggered by T10-3 inventory `da896f0c`, T10-2-A `65cc79a3`, T10-2-B `92fd6013`, and current memory next-work #1; Q1-Q9 pending Step 4.6. |
+| 2026-05-28 | scoped | this commit | Step 4.6 source-backed implementation plan completed | Selected input-spelling-preserving normalization, direct valid-time validation reuse, existing materializer/conflict-helper reuse, and a focused test matrix with 90 OK baseline. |
 
 ## 2. Draft Source Scan
 
@@ -40,45 +41,62 @@ Read-only orientation findings:
 This draft scan is not a Step 4.6 answer. Step 4.6 must verify or correct each
 claim with source refs.
 
+### 2.1 Step 4.6 Source-Backed Summary
+
+- Profile normalization currently accepts `none`, `fixed_timesteps`, and
+  `valid_time_boundaries` at `profile.py:164-181`; `fact_boundaries` is missing.
+- Existing `_normalize_valid_time_boundaries(...)` at `profile.py:193-209`
+  validates exactly the universe shape T10-3-A needs, so `fact_boundaries` can
+  reuse it directly.
+- Adapter `_resolve_temporal_projection_state(...)` currently handles
+  `valid_time_boundaries` at `engine_eval.py:317-335` by calling
+  `_reject_iteration_temporal_conflict(...)`,
+  `_materialize_valid_time_boundaries(...)`, and
+  `_reject_temporal_timesteps_conflict(...)`.
+- Step 4.6 selected input-spelling preservation: canonical inputs normalize to
+  mode `fact_boundaries`, legacy inputs continue to normalize to
+  `valid_time_boundaries`.
+- Focused PyReason no-op baseline remains 90 OK.
+
 ## 3. Open Questions Register
 
 | ID | Question | Status |
 |---|---|---|
-| Q1 | Which normalization strategy wins: preserve input spelling, normalize canonical, or normalize legacy? | Pending Step 4.6. |
-| Q2 | What profile changes are required for `fact_boundaries` acceptance and universe validation? | Pending Step 4.6. |
-| Q3 | Can adapter consumption reuse `_materialize_valid_time_boundaries(...)` unchanged? | Pending Step 4.6. |
-| Q4 | Does `fact_boundaries` reuse `_reject_iteration_temporal_conflict(...)`? | Pending Step 4.6. |
-| Q5 | What test matrix protects `fact_boundaries`, legacy `valid_time_boundaries`, T10-2-A, and T10-2-B? | Pending Step 4.6. |
-| Q6 | What implementation split should be used? | Pending Step 4.6. |
-| Q7 | How does T10-3-A update the T8-C-2 unblock map? | Pending Step 4.6. |
-| Q8 | Are there behavior changes to warn about? | Pending Step 4.6. |
-| Q9 | Are there stop/amend findings? | Pending Step 4.6. |
+| Q1 | Which normalization strategy wins: preserve input spelling, normalize canonical, or normalize legacy? | Answered: preserve input spelling. |
+| Q2 | What profile changes are required for `fact_boundaries` acceptance and universe validation? | Answered: add a `fact_boundaries` branch using `_normalize_valid_time_boundaries(...)`, no SDK shell change. |
+| Q3 | Can adapter consumption reuse `_materialize_valid_time_boundaries(...)` unchanged? | Answered: yes. |
+| Q4 | Does `fact_boundaries` reuse `_reject_iteration_temporal_conflict(...)`? | Answered: yes, with carrier string naming the supplied mode. |
+| Q5 | What test matrix protects `fact_boundaries`, legacy `valid_time_boundaries`, T10-2-A, and T10-2-B? | Answered: new profile/materialization/conflict tests plus existing focused PyReason regression gate. |
+| Q6 | What implementation split should be used? | Answered: profile alias, adapter alias, tests. |
+| Q7 | How does T10-3-A update the T8-C-2 unblock map? | Answered: T8-C-2 remains gated by T10-3-B `time_binned` plus D11/Form 2. |
+| Q8 | Are there behavior changes to warn about? | Answered: no default shift expected; additive alias only. |
+| Q9 | Are there stop/amend findings? | Answered: none. |
 
 ## 4. Risk Register
 
 | Risk | Impact | Step 4.6 / implementation check |
 |---|---|---|
-| Normalization strategy is ambiguous | Tests or users may see unstable spelling | Step 4.6 must choose A/B/C and record preview/normalized output expectations. |
-| Alias does not fit existing valid-time substrate | Implementation grows beyond scoped alias slice | Stop/amend if `_normalize_valid_time_boundaries(...)` or `_materialize_valid_time_boundaries(...)` cannot be reused. |
-| `fact_boundaries` conflict behavior differs from legacy `valid_time_boundaries` | T10-2-A anti-silent conflict discipline regresses | Require symmetric `_reject_iteration_temporal_conflict` behavior and tests. |
-| SDK shell is edited unnecessarily | Public API churn outside the generic temporal mapping surface | Scope lock says SDK shell remains pass-through for T10-3-A. |
-| T10-2-A C78 behavior regresses | Recently shipped PyReason C78 becomes unstable | Include T10-2-A focused tests and invariant spot-checks. |
-| T10-2-B C74 behavior regresses | Recently shipped C74 canonical rule params become unstable | Include C74 focused tests and invariant spot-checks. |
+| Normalization strategy is ambiguous | Tests or users may see unstable spelling | Mitigated: Q1 selects input-spelling preservation and records preview/normalized output expectations. |
+| Alias does not fit existing valid-time substrate | Implementation grows beyond scoped alias slice | Mitigated: Q2/Q3 verified direct reuse of valid-time validation and materializer. |
+| `fact_boundaries` conflict behavior differs from legacy `valid_time_boundaries` | T10-2-A anti-silent conflict discipline regresses | Mitigated: Q4 requires the same `_reject_iteration_temporal_conflict(...)` helper and symmetric test coverage. |
+| SDK shell is edited unnecessarily | Public API churn outside the generic temporal mapping surface | Mitigated: Q2 records no SDK shell change. |
+| T10-2-A C78 behavior regresses | Recently shipped PyReason C78 becomes unstable | Mitigated: Q5 keeps T10-2-A focused tests and invariant spot-checks. |
+| T10-2-B C74 behavior regresses | Recently shipped C74 canonical rule params become unstable | Mitigated: Q5 keeps C74 focused tests and invariant spot-checks. |
 | Work drifts into `time_binned` or `fixed_timesteps` removal | Scope creep into T10-3-B or cleanup cycle | Keep `time_binned` and fixed-timesteps deprecation/removal out-of-scope. |
 | Full discover composition shifts silently | T10-1 Step 4.7 lesson regresses | Compare against `2025 tests / 72 failures / 231 errors`. |
 | Sacred / dirty baseline touched | Workflow violation | Status checks before closure and push. |
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 source-backed plan complete.
-- [ ] Q1-Q9 answered.
-- [ ] Normalization strategy reviewed.
-- [ ] Profile alias plan reviewed.
-- [ ] Adapter alias plan reviewed.
-- [ ] Conflict behavior reviewed.
-- [ ] T10-2-A / T10-2-B invariant protection reviewed.
-- [ ] Focused verification plan reviewed.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 source-backed plan complete.
+- [x] Q1-Q9 answered.
+- [x] Normalization strategy reviewed.
+- [x] Profile alias plan reviewed.
+- [x] Adapter alias plan reviewed.
+- [x] Conflict behavior reviewed.
+- [x] T10-2-A / T10-2-B invariant protection reviewed.
+- [x] Focused verification plan reviewed.
 - [ ] Closure notes filled.
 
 ## 6. Closure Notes

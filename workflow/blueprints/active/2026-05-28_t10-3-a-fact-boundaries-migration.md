@@ -1,6 +1,6 @@
 # Task Blueprint: T10-3-A PyReason Fact Boundaries Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S/M (runtime implementation)
@@ -147,112 +147,178 @@ internal spelling.
 
 ### 3.1 Normalization Strategy Decision
 
-Step 4.6 must compare:
+**Decision: Option A, preserve input spelling.**
 
-| Option | Shape | Required analysis |
+Source-backed comparison:
+
+| Option | Shape | Assessment | Decision |
 |---|---|---|
-| A. Preserve input spelling | `fact_boundaries` remains `fact_boundaries`; legacy input remains `valid_time_boundaries`. | Best external observability and compatibility, but adapter must handle both modes. |
-| B. Normalize to canonical | Both inputs normalize to `fact_boundaries`. | Simplifies canonical internals, but may break tests or code that expects legacy normalized spelling. |
-| C. Normalize to legacy internal | Both inputs normalize to `valid_time_boundaries`. | Minimizes adapter changes, but hides canonical spelling after profile normalization. |
+| **A. Preserve input spelling** | `fact_boundaries` remains `fact_boundaries`; legacy input remains `valid_time_boundaries`. | Existing tests assert legacy normalized spelling (`tests/test_pyreason_semantics_profile_migration.py:437-443`). This option adds canonical observability without changing legacy inspection output. Adapter can handle both modes with one shared branch. | **Selected.** |
+| B. Normalize to canonical | Both inputs normalize to `fact_boundaries`. | Would likely require changing existing legacy normalized-output tests and would make legacy profile inspection report a different mode than supplied. | Reject. |
+| C. Normalize to legacy internal | Both inputs normalize to `valid_time_boundaries`. | Minimal adapter change, but hides the new canonical spelling after profile normalization and weakens the point of the alias migration. | Reject. |
 
-The decision must be source-backed against existing tests around
-`valid_time_boundaries` and the T10-3 inventory decision to keep legacy spelling
-accepted through T10-3. The selected strategy must also state how preview /
-inspection surfaces should display the mode.
+Implementation implication: profile normalization preserves `mode` as supplied
+for `fact_boundaries` or `valid_time_boundaries`; preview / inspection surfaces
+therefore reveal whether the caller used canonical or legacy spelling. This is
+consistent with T10-3 inventory Q2: add canonical spelling while keeping
+legacy accepted through T10-3.
 
 ### 3.2 Profile `_normalize_temporal_projection` Extension
 
-Step 4.6 must locate the exact profile branch for current mode validation and
-choose whether implementation should:
+Current source:
 
-- call `_normalize_valid_time_boundaries(...)` directly for `fact_boundaries`;
-- add a thin `_normalize_fact_boundaries(...)` wrapper that delegates to the
-  existing helper but preserves canonical naming in errors or output; or
-- refactor the helper name to neutral wording only if tests prove it is needed.
+- `src/factgraph/core/semantics/profile.py:164-181` dispatches modes and
+  currently accepts `none`, `fixed_timesteps`, and `valid_time_boundaries`.
+- The legacy branch calls `_normalize_valid_time_boundaries(raw)` at
+  `profile.py:175-178`.
+- `_normalize_valid_time_boundaries(...)` at `profile.py:193-209` only
+  validates allowed keys `mode` / `universe`, universe shape, non-empty string
+  bounds, and `start < end`.
 
-Default expectation: add the smallest possible `fact_boundaries` branch and
-reuse existing universe validation. Do not change SDK shell behavior.
+**Decision: add the smallest possible `fact_boundaries` branch and call
+`_normalize_valid_time_boundaries(raw)` directly.** Set
+`normalized["mode"] = "fact_boundaries"` for canonical inputs. Update the
+unsupported-mode allowlist string to include `fact_boundaries`.
+
+No new `_normalize_fact_boundaries(...)` wrapper is needed for T10-3-A because
+the validation rules and error paths are identical. Do not rename
+`_normalize_valid_time_boundaries(...)`; that would create churn without
+changing behavior. Do not touch SDK shell: T10-3 inventory classified
+`PyReasonSemantics.temporal_projection` as generic pass-through, and
+`sdk/store.py:3458-3464` already lowers the mapping unchanged.
 
 ### 3.3 Adapter `_resolve_temporal_projection_state` Extension
 
-Step 4.6 must source-back the current adapter branches and decide the exact
-branch placement for `fact_boundaries`.
+Current source:
 
-Default expectation:
+- `src/factgraph/adapters/pyreason/engine_eval.py:301-336` handles
+  `none`, `fixed_timesteps`, and `valid_time_boundaries`.
+- The `valid_time_boundaries` branch calls
+  `_reject_iteration_temporal_conflict(...)` at `engine_eval.py:317-321`.
+- The same branch calls `_materialize_valid_time_boundaries(...)` at
+  `engine_eval.py:322-328`, then rejects engine-options timesteps conflicts at
+  `engine_eval.py:329-334`.
+- `_materialize_valid_time_boundaries(...)` at `engine_eval.py:398-433`
+  returns the `_TemporalProjectionState` shape T10-3 inventory selected for
+  reuse.
 
-- `fact_boundaries` follows the existing `valid_time_boundaries` branch.
-- The branch calls `_reject_iteration_temporal_conflict(...)` before
-  materialization, matching T10-2-A behavior.
-- The branch reuses `_materialize_valid_time_boundaries(...)` unchanged.
+**Decision: extend the existing valid-time branch to handle both
+`valid_time_boundaries` and `fact_boundaries`.** Use the actual supplied mode
+in the conflict carrier string:
 
-If a new helper or new materializer is required, that is a stop/amend signal
-unless the source-backed analysis shows the parent inventory was too narrow.
+```python
+carrier = f"SemanticsProfile.temporal_projection.{mode}"
+```
+
+Then reuse `_reject_iteration_temporal_conflict(...)`,
+`_materialize_valid_time_boundaries(...)`, and
+`_reject_temporal_timesteps_conflict(...)` unchanged. No new helper and no new
+materializer are needed for T10-3-A.
 
 ### 3.4 Test Matrix
 
-Step 4.6 should lock focused tests for:
+Implementation tests:
 
-1. `SemanticsProfile(temporal_projection={"mode": "fact_boundaries", ...})`
-   acceptance and normalized mode behavior per Q1.
-2. `fact_boundaries` universe validation parity with `valid_time_boundaries`.
-3. Adapter materialization parity with `valid_time_boundaries`.
-4. Explicit `iteration_count` + `fact_boundaries` conflict rejection.
-5. Legacy `valid_time_boundaries` tests unchanged.
-6. T10-2-A `iteration_count` tests unchanged.
-7. T10-2-B C74 canonical tests unchanged.
-8. Full discover composition compared against
+1. Profile accepts `{"mode": "fact_boundaries", "universe": [...]}` and
+   preserves normalized mode `fact_boundaries`.
+2. Profile `fact_boundaries` rejects invalid universe shape through the same
+   validation rules as `valid_time_boundaries`.
+3. Adapter materializes `fact_boundaries` with the same active-step behavior as
+   `valid_time_boundaries`.
+4. Explicit `SemanticsProfile.iteration_count` plus `fact_boundaries` rejects,
+   with message containing `SemanticsProfile.iteration_count` and
+   `SemanticsProfile.temporal_projection.fact_boundaries`.
+5. Existing `valid_time_boundaries` tests at
+   `tests/test_pyreason_semantics_profile_migration.py:437-443,549-627`
+   remain unchanged and green.
+6. Existing T10-2-A tests at
+   `tests/test_pyreason_semantics_profile_migration.py:384-423,464-546` remain
+   green.
+7. Existing T10-2-B tests at
+   `tests/test_pyreason_semantics_profile_migration.py:293-410` remain green.
+8. Full discover composition is compared against
    `2025 tests / 72 failures / 231 errors`.
+
+Focused baseline for Step 4.6 remains `90 OK`:
+
+```text
+Ran 90 tests in 0.359s
+OK
+```
 
 ### 3.5 Shipped Invariants
 
-T10-3-A must preserve the T10-3 inventory §3.7 manifest:
+T10-3-A must preserve the T10-3 inventory §3.7 manifest. The files touched by
+T10-3-A (`profile.py`, `engine_eval.py`, and
+`tests/test_pyreason_semantics_profile_migration.py`) overlap T10-2-A tests and
+adapter conflict helpers, so the focused gate must keep those tests in scope.
+T10-2-B implementation lives primarily in `sdk/semantics.py` and
+`sdk/store.py`, which T10-3-A should not touch, but its tests remain in the
+focused gate.
 
 T10-2-A:
 
 1. SDK `PyReasonSemantics.iteration_count: int = 1` with positive-int
-   validation.
-2. Optional top-level `SemanticsProfile.iteration_count`.
-3. Lowering omission rule for default `1` plus legacy temporal mode.
-4. Adapter consumption mapping canonical `iteration_count` to run timesteps.
-5. Explicit conflicts with `fixed_timesteps` and `valid_time_boundaries`.
-6. No-profile engine default timesteps remains 2.
+   validation (`tests/test_pyreason_semantics_profile_migration.py:384-397`).
+2. Optional top-level `SemanticsProfile.iteration_count`
+   (`tests/test_pyreason_semantics_profile_migration.py:398-408`).
+3. Lowering omission rule for default `1` plus legacy temporal mode
+   (`tests/test_pyreason_semantics_profile_migration.py:410-423`).
+4. Adapter consumption mapping canonical `iteration_count` to run timesteps
+   (`tests/test_pyreason_semantics_profile_migration.py:464-480`).
+5. Explicit conflicts with `fixed_timesteps` and `valid_time_boundaries`
+   (`tests/test_pyreason_semantics_profile_migration.py:502-546`).
+6. No-profile engine default timesteps remains 2
+   (`tests/test_pyreason_engine_eval.py:355-377`).
 
 T10-2-B:
 
-1. SDK `derived_bound` / `atom_bounds` validation.
-2. `rule_projection["pyreason"]` carrier reuse.
-3. SDK atom-id conversion to `body_atom:0:<index>`.
+1. SDK `derived_bound` / `atom_bounds` validation
+   (`tests/test_pyreason_semantics_profile_migration.py:293-313`).
+2. `rule_projection["pyreason"]` carrier reuse
+   (`tests/test_pyreason_semantics_profile_migration.py:315-340`).
+3. SDK atom-id conversion to `body_atom:0:<index>`
+   (`tests/test_pyreason_semantics_profile_migration.py:315-340`).
 4. Legacy Inference / missing application atom ids reject canonical
-   `atom_bounds`.
+   `atom_bounds` (`tests/test_pyreason_semantics_profile_migration.py:342-377`).
 5. Asymmetric conflict policy for `derived_bound` / `head_bound` and
-   `atom_bounds` / `branch_bounds`.
-6. No T8-B witness-key reuse.
-
-Step 4.6 should source-back whether T10-3-A touches any files containing these
-behaviors and record the regression tests to keep in the focused gate.
+   `atom_bounds` / `branch_bounds`
+   (`tests/test_pyreason_semantics_profile_migration.py:379-410`).
+6. No T8-B witness-key reuse
+   (`tests/test_pyreason_semantics_profile_migration.py:315-331`).
 
 ### 3.6 Behavior Change Warning
 
-T10-3 inventory predicted no default behavior shift for T10-3-A. Step 4.6 must
-verify this. Any behavior change similar to T10-2-A's default-timesteps
-`2 -> 1` shift must be recorded before implementation. Expected behavior:
-`fact_boundaries` is additive alias behavior only; default `none`,
-`fixed_timesteps`, `valid_time_boundaries`, and no-profile engine defaults do
-not change.
+Step 4.6 confirms the T10-3 inventory prediction: **no default behavior shift is
+expected for T10-3-A**.
+
+Reasoning:
+
+- Default profile mode remains `none` (`profile.py:166-170`).
+- `fixed_timesteps` branch remains unchanged (`profile.py:171-174`;
+  `engine_eval.py:305-316`).
+- `valid_time_boundaries` branch remains accepted and preserves its normalized
+  spelling under Option A (`profile.py:175-178`; tests `:437-443`).
+- No-profile engine default timesteps remains covered by
+  `tests/test_pyreason_engine_eval.py:355-377`.
+
+The only new behavior is additive: callers may spell the existing valid-time
+boundary behavior as canonical `fact_boundaries`. Closure must still record the
+chosen normalization strategy and any observed composition-shift delta.
 
 ## 4. Open Questions
 
 | ID | Question | Required answer shape |
 |---|---|---|
-| Q1 | Which normalization strategy wins: preserve input spelling, normalize canonical, or normalize legacy? | Pick A/B/C with source-backed compatibility reasoning. |
-| Q2 | What profile changes are required for `fact_boundaries` acceptance and universe validation? | Exact helper/branch choice and expected normalized output. |
-| Q3 | Can adapter consumption reuse `_materialize_valid_time_boundaries(...)` unchanged? | Yes/no with source refs; no implies stop/amend unless justified. |
-| Q4 | Does `fact_boundaries` reuse `_reject_iteration_temporal_conflict(...)`? | Prefer yes; otherwise explain why a new helper is unavoidable. |
-| Q5 | What test matrix protects `fact_boundaries`, legacy `valid_time_boundaries`, T10-2-A, and T10-2-B? | Concrete focused tests plus full discover composition baseline. |
-| Q6 | What implementation split should be used? | `profile` + `adapter` + `tests`, or combined if LOC is small with audit rationale. |
-| Q7 | How does T10-3-A update the T8-C-2 unblock map? | It does not fully unblock T8-C-2; `time_binned` plus D11/Form 2 remain. |
-| Q8 | Are there behavior changes to warn about? | Expected no default shift; verify explicitly. |
-| Q9 | Are there stop/amend findings? | Yes/no, with trigger mapping. |
+| Q1 | Which normalization strategy wins: preserve input spelling, normalize canonical, or normalize legacy? | Answered: Option A preserve input spelling. It preserves legacy normalized output and exposes canonical spelling for canonical callers. |
+| Q2 | What profile changes are required for `fact_boundaries` acceptance and universe validation? | Answered: add a `fact_boundaries` mode branch in `_normalize_temporal_projection`, call `_normalize_valid_time_boundaries(raw)`, then set mode to `fact_boundaries`; no SDK shell change. |
+| Q3 | Can adapter consumption reuse `_materialize_valid_time_boundaries(...)` unchanged? | Answered: yes. `fact_boundaries` follows the existing valid-time branch and reuses the materializer unchanged. |
+| Q4 | Does `fact_boundaries` reuse `_reject_iteration_temporal_conflict(...)`? | Answered: yes. Use the supplied mode in the carrier string so conflict messages name `fact_boundaries` for canonical inputs. |
+| Q5 | What test matrix protects `fact_boundaries`, legacy `valid_time_boundaries`, T10-2-A, and T10-2-B? | Answered: new profile/materialization/conflict tests plus existing legacy `valid_time_boundaries`, T10-2-A, and T10-2-B tests in the focused PyReason suite. |
+| Q6 | What implementation split should be used? | Answered: keep three implementation commits: profile alias, adapter alias, tests. Commits 3-4 may combine only if audit records anti-partial-ship rationale. |
+| Q7 | How does T10-3-A update the T8-C-2 unblock map? | Answered: it does not fully unblock T8-C-2; `time_binned` and D11/Form 2 remain after T10-3-A. |
+| Q8 | Are there behavior changes to warn about? | Answered: no default shift expected; additive alias only. Closure must record actual composition-shift results. |
+| Q9 | Are there stop/amend findings? | Answered: none. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -322,9 +388,9 @@ consumption are still reviewed together without partial-ship risk.
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed plan completed.
-- [ ] Q1-Q9 answered.
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed plan completed.
+- [x] Q1-Q9 answered.
 - [ ] Profile accepts `fact_boundaries`.
 - [ ] Adapter consumes `fact_boundaries` through the existing valid-time
   substrate.
