@@ -53,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected instead of silently choosing a winner. The wrapper default is the
   canonical `iteration_count=1`; no-profile adapter execution keeps its existing
   engine default.
+- **PyReason canonical C74 rule parameters are shipped**: public
+  `PyReasonSemantics(derived_bound=..., atom_bounds=...)` lowers into existing
+  `rule_projection["pyreason"]` entries, full application atom ids
+  `<rule_id>:atom_<index>` convert to PyReason `body_atom:0:<index>` targets,
+  `derived_bound` conflicts explicitly with legacy `head_bound`, and legacy
+  `branch_bounds` remains compatible with canonical body-atom thresholds.
 
 ### Changed
 

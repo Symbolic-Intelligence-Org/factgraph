@@ -108,10 +108,9 @@ Interpretation:
 - T6 and T7 are complete and archived.
 - T8 has been split into T8-A/B/C/D. T8-A, T8-B-1(native Form 1),
   T8-B-2(Souffle Form 1), T8-D A+B docs, T8-D round 2 Souffle user docs, and
-  T8-D round 3 ProbLog user docs are complete locally. T8-C engine enrichment
-  inventory is complete as a design-only planning artifact. T8-C-1 ProbLog
-  evidence enrichment inventory and runtime implementation are complete
-  locally; the runtime + user-doc archives are pending push.
+  T8-D round 3 ProbLog user docs are pushed. T8-C engine enrichment inventory
+  is complete as a design-only planning artifact. T8-C-1 ProbLog evidence
+  enrichment inventory and runtime implementation are pushed.
 - Remaining evidence candidates are T8-C-2 PyReason runtime implementation
   after its semantics locks, plus later T8-D/T9 docs after any future T8-C
   behavior.
@@ -152,7 +151,7 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
 | T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`. T8-C-2 PyReason runtime implementation remains future. |
 | T9 | Superseded in part by T8-D docs for shipped native + Souffle + ProbLog evidence behavior; broader release alignment remains conditional on any later T8-C behavior. |
-| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` complete locally and pending push; T10-2-B/T10-3 implementation remains future. |
+| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason canonical rule params complete locally and pending push; T10-3 implementation remains future. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton
@@ -282,8 +281,9 @@ T9 should not invent behavior. It documents only shipped evidence capabilities a
 **Status(2026-05-28)**: design-only T10 inventory complete at `580b2636`;
 T10-1 C76 ProbLog runtime implementation complete and pushed at `cde072fa`;
 T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A
-C78 PyReason `iteration_count` complete locally and pending push. T10-2-B /
-T10-3 implementation remains future.
+C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason
+canonical rule params complete locally and pending push. T10-3 implementation
+remains future.
 
 **Goal**: finish adapter-touching semantics deferred from T5.8.
 
@@ -309,11 +309,14 @@ Inventory result:
 - C77 is partial under legacy names: `valid_time_boundaries` and
   `fixed_timesteps` ship, while canonical `fact_boundaries` and `time_binned`
   remain future.
-- C74 is partial/legacy: `timestep_delay` ships, but canonical
-  `derived_bound` / full-atom-id `atom_bounds` are not shipped.
-- C78 `iteration_count` is shipped locally through SDK shell, canonical profile
-  carrier, adapter consumption, and conflict tests; legacy `fixed_timesteps`
-  remains an alias/fallback when canonical C78 is absent.
+- C74 canonical `derived_bound` / full-atom-id `atom_bounds` is complete
+  locally and pending push. It lowers through existing
+  `rule_projection["pyreason"]`, converts application atom ids to PyReason
+  body-atom targets, rejects duplicate `derived_bound` / `head_bound`, and
+  preserves legacy `head_bound` / `branch_bounds` compatibility.
+- C78 `iteration_count` is pushed at `65cc79a3` through SDK shell, canonical
+  profile carrier, adapter consumption, and conflict tests; legacy
+  `fixed_timesteps` remains an alias/fallback when canonical C78 is absent.
 
 Planned implementation split:
 
@@ -321,13 +324,14 @@ Planned implementation split:
    adapter consumption. Shipped at `cde072fa`: default reject projection, explicit
    raw-uncertainty consumption in ProbLog export, point-projection policies, and
    fixture migration off legacy `confidence`.
-2. **T10-2-A PyReason C78**: canonical `iteration_count` migration complete
-   locally; push pending. It ships wrapper default `iteration_count=1`, optional
+2. **T10-2-A PyReason C78**: canonical `iteration_count` migration pushed at
+   `65cc79a3`. It ships wrapper default `iteration_count=1`, optional
    `SemanticsProfile.iteration_count`, adapter consumption, and explicit
    conflict rejection with legacy temporal timesteps modes.
 3. **T10-2-B PyReason C74**: canonical `derived_bound` and full-atom-id
-   `atom_bounds` conversion, preserving or explicitly migrating legacy
-   `head_bound` / `branch_bounds` / positional PyReason targets.
+   `atom_bounds` conversion complete locally; push pending. It preserves legacy
+   `head_bound` / `branch_bounds` compatibility and does not reuse T8-B witness
+   keys.
 4. **T10-3 PyReason C77**: canonical `fact_boundaries` rename / compatibility
    alias and `time_binned` temporal runtime behavior.
 
@@ -415,12 +419,11 @@ N1 roadmap(this doc)
 
 This original sequence has been partially executed. As of 2026-05-28:
 T12, T11.2, T11.3, T6, T7, T8 split inventory, T8-A, T8-B-1, T8-D A+B docs,
-T8-B-2, T8-D round 2 Souffle docs, T8-C inventory, and T10 inventory are
-complete. T10-1 C76 ProbLog implementation is complete and pushed at
-`cde072fa`; T8-C-1 ProbLog evidence enrichment inventory is complete at
-`bd5baeec`; T8-C-1 ProbLog runtime is complete locally and pending push.
-T10-2/T10-3 implementation, T8-C-2 runtime implementation, T8-D round 3
-ProbLog user docs, and any later T8-D/T9 release-alignment pass remain open.
+T8-B-2, T8-D round 2 Souffle docs, T8-C inventory, T10 inventory, T10-1,
+T8-C-1 inventory/runtime, T8-D round 3, T10-2 inventory, and T10-2-A are
+complete and pushed. T10-2-B C74 PyReason canonical rule params are complete
+locally and pending push. T10-3, T8-C-2 runtime implementation, and any later
+T8-D/T9 release-alignment pass remain open.
 
 Rationale:
 
@@ -528,7 +531,7 @@ This scoped inventory records what this roadmap is allowed to claim before later
 | Active design sources | Parent Rule/Eval, Evidence Tree, and Database/View active design-points remain the authoritative source. | This roadmap links those files but does not rewrite their §deferred registries. |
 | Dependency graph | T6→T8→T9 evidence chain, T10 cross-cutting semantics influence, and T11/T12 release-track independence are planning assumptions. | Later blueprints may narrow or reorder after their own Step 4.6 inventory. |
 | Release blockers | T11.2, T11.3, minimal T12, and dirty-baseline triage are release-blocker candidates. | Release blocker status is not final until T11.2/T11.3 blueprints inspect shipped source and docs. |
-| Deferred items | Parent §5.12/C74/C76/C77/C78, evidence §14 clusters, and database §12/§17 items remain deferred unless a future blueprint activates them. | Reactivation triggers in §6 are planning triggers, not implementation authorization. |
+| Deferred items | Parent §5.12/C77, evidence §14 clusters, and database §12/§17 items remain deferred unless a future blueprint activates them; C74/C76/C78 have been activated by T10-1/T10-2 implementation cycles. | Reactivation triggers in §6 are planning triggers, not implementation authorization. |
 | Owner model | Owner candidates are coordination hints. | Cross-flip remains default for `shared`; self-owned fallback is allowed when recorded in the relevant audit. |
-| Dirty baseline | Roadmap work must not absorb dirty baseline files. | Creation-time baseline was 6M+1U; 2026-05-28 observed baseline is 4M+1D+5U. This document remains docs-only. |
+| Dirty baseline | Roadmap work must not absorb dirty baseline files. | Creation-time baseline was 6M+1U; 2026-05-28 observed baseline is 4M+1D+6U. This document remains docs-only. |
 | Push governance | Prior push authorization does not roll forward. | Any roadmap push requires explicit single-use authorization. |
