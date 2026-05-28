@@ -68,15 +68,18 @@ def pyreason_engine_eval(
         engine_ext=engine_ext,
         semantics_profile=semantics_profile,
     )
+    iteration_count = _resolve_iteration_count(semantics_profile)
     temporal_state = _resolve_temporal_projection_state(
         store,
         store.schema_ir,
         semantics_profile=semantics_profile,
         engine_options=engine_options,
+        iteration_count=iteration_count,
     )
     effective_engine_options = _engine_options_with_temporal_projection(
         engine_options,
         temporal_state=temporal_state,
+        iteration_count=iteration_count,
     )
     config = replace(resolve_pyreason_run_config(effective_engine_options), atom_trace=True)
     session = _materialize_edb_session(store, store.schema_ir, temporal_state=temporal_state)
@@ -282,6 +285,7 @@ def _resolve_temporal_projection_state(
     *,
     semantics_profile: SemanticsProfile | None,
     engine_options: dict[str, Any] | None,
+    iteration_count: int | None = None,
 ) -> _TemporalProjectionState | None:
     if semantics_profile is None:
         return None
@@ -300,6 +304,10 @@ def _resolve_temporal_projection_state(
         return None
     if mode == "fixed_timesteps":
         timesteps = projection["timesteps"]
+        _reject_iteration_temporal_conflict(
+            iteration_count,
+            carrier="SemanticsProfile.temporal_projection.fixed_timesteps",
+        )
         _reject_temporal_timesteps_conflict(
             timesteps,
             engine_options=engine_options,
@@ -307,6 +315,10 @@ def _resolve_temporal_projection_state(
         )
         return _TemporalProjectionState(timesteps=timesteps)
     if mode == "valid_time_boundaries":
+        _reject_iteration_temporal_conflict(
+            iteration_count,
+            carrier="SemanticsProfile.temporal_projection.valid_time_boundaries",
+        )
         universe = projection["universe"]
         state = _materialize_valid_time_boundaries(
             store,
@@ -328,12 +340,44 @@ def _engine_options_with_temporal_projection(
     engine_options: dict[str, Any] | None,
     *,
     temporal_state: _TemporalProjectionState | None,
+    iteration_count: int | None = None,
 ) -> dict[str, Any] | None:
+    if iteration_count is not None:
+        _reject_temporal_timesteps_conflict(
+            iteration_count,
+            engine_options=engine_options,
+            carrier="SemanticsProfile.iteration_count",
+        )
+        effective = dict(engine_options or {})
+        effective["timesteps"] = iteration_count
+        return effective
     if temporal_state is None or temporal_state.timesteps is None:
         return engine_options
     effective = dict(engine_options or {})
     effective["timesteps"] = temporal_state.timesteps
     return effective
+
+
+def _resolve_iteration_count(semantics_profile: SemanticsProfile | None) -> int | None:
+    if semantics_profile is None:
+        return None
+    if not isinstance(semantics_profile, SemanticsProfile):
+        raise ValueError(
+            f"semantics_profile must be SemanticsProfile or None, got {type(semantics_profile).__name__}"
+        )
+    if semantics_profile.engine != "pyreason":
+        raise ValueError(
+            f"PyReason consumption expected SemanticsProfile.engine='pyreason', got {semantics_profile.engine!r}"
+        )
+    return semantics_profile.iteration_count
+
+
+def _reject_iteration_temporal_conflict(iteration_count: int | None, *, carrier: str) -> None:
+    if iteration_count is None:
+        return
+    raise ValueError(
+        f"Conflicting PyReason timesteps between SemanticsProfile.iteration_count and {carrier}"
+    )
 
 
 def _reject_temporal_timesteps_conflict(
