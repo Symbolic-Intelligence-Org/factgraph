@@ -81,6 +81,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Canonical semantics user docs are aligned**: quickstarts now teach ProbLog
+  `uncertainty_projection`, PyReason `iteration_count`, `derived_bound`,
+  `atom_bounds`, `fact_boundaries`, and `time_binned`; `rules-and-inferences`
+  now leads with `Rule` / `RuleExpr` / `fg.read.match(...)` /
+  `fg.eval.evaluate(...)`, keeps `Inference` as v0.2 compatibility, and no
+  longer teaches `Query` as a user-facing projection path.
 - **Evidence docs now reflect shipped behavior**: the quickstart and SDK guide
   document the sessionless three-layer audit model, native and Souffle Form 1
   graph shape, ProbLog row provenance graphs, winning-path-only OR marker,

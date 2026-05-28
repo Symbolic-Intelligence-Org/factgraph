@@ -1,15 +1,15 @@
 # Current Operational Memory
 
-最后更新:2026-05-28(T10-3-B time_binned migration archived locally; pending push gate)
+最后更新:2026-05-28(T8-D round 4 canonical user docs archived locally; pending push gate)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ e7bab90f`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ ac42a379`
 
-**Most recent local work:** T10-3-B `time_binned` new mode
-archived locally; pending push gate.
+**Most recent local work:** T8-D round 4 canonical user docs archived locally;
+pending push gate.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do not move it.
 
@@ -48,11 +48,14 @@ Release-facing shipped/deferred summaries live in `CHANGELOG.md`.
 - ProbLog lane is now closed through user docs: T10-1 C76 uncertainty projection
   at `cde072fa`, T8-C-1 row provenance runtime at `5ffd4850`, and T8-D round 3
   user docs at `c23ce097`.
-- PyReason canonical semantics are complete locally through T10-3-B: T10-2
+- PyReason canonical semantics are complete and pushed through T10-3-B: T10-2
   inventory at `f8e08905`, T10-2-A C78 at `65cc79a3`, T10-2-B C74 at
   `92fd6013`, T10-3 inventory at `da896f0c`, T10-3-A `fact_boundaries` at
-  `e7bab90f`, and T10-3-B `time_binned` pending push. T8-C-2 PyReason evidence
-  is now gated by D11/Form 2.
+  `e7bab90f`, and T10-3-B `time_binned` at `ac42a379`.
+- T8-D round 4 canonical user docs are complete locally: quickstart semantics
+  and assertions teach shipped ProbLog/PyReason canonical semantics, SDK guide
+  summarizes them, and `rules-and-inferences.md` now demotes `Inference` /
+  `Query` teaching. T8-C-2 PyReason evidence is now gated by D11/Form 2.
 
 ## Recommended Next Work
 

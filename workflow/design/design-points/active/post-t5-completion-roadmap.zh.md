@@ -112,8 +112,7 @@ Interpretation:
   is complete as a design-only planning artifact. T8-C-1 ProbLog evidence
   enrichment inventory and runtime implementation are pushed.
 - Remaining evidence candidates are T8-C-2 PyReason runtime implementation
-  after its semantics locks, plus later T8-D/T9 docs after any future T8-C
-  behavior.
+  after D11/Form 2, plus later T8-D/T9 docs after any future T8-C behavior.
 
 ---
 
@@ -149,9 +148,9 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 |---|---|
 | T6 | Complete: Phase B design source landed and archived at `8fe7abdc`. |
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
-| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`. T8-C-2 PyReason runtime implementation remains future. |
+| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`; T8-D round 4 canonical semantics user docs complete locally. T8-C-2 PyReason runtime implementation remains future after D11/Form 2. |
 | T9 | Superseded in part by T8-D docs for shipped native + Souffle + ProbLog evidence behavior; broader release alignment remains conditional on any later T8-C behavior. |
-| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason canonical rule params pushed at `92fd6013`; T10-3 C77 temporal inventory pushed at `da896f0c`; T10-3-A `fact_boundaries` alias / compatibility pushed at `e7bab90f`; T10-3-B `time_binned` is complete locally and pending push. T10 PyReason canonical semantics C74/C77/C78 are complete after T10-3-B; T8-C-2 remains gated by D11/Form 2 evidence work. |
+| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason canonical rule params pushed at `92fd6013`; T10-3 C77 temporal inventory pushed at `da896f0c`; T10-3-A `fact_boundaries` alias / compatibility pushed at `e7bab90f`; T10-3-B `time_binned` pushed at `ac42a379`. T10 PyReason canonical semantics C74/C77/C78 are complete; T8-C-2 remains gated by D11/Form 2 evidence work. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton

@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-28_t8-d-round4-pyreason-problog-canonical-user-docs.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-28_t8-d-round4-pyreason-problog-canonical-user-docs.audit.md`
 - Trigger: Five public semantics cycles have shipped without a matching
   user-facing quickstart refresh: T10-1 ProbLog C76 uncertainty projection at
   `cde072fa`, T10-2-A C78 `iteration_count` at `65cc79a3`, T10-2-B C74
