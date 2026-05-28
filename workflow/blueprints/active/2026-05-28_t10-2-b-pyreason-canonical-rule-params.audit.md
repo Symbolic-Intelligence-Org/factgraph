@@ -1,11 +1,11 @@
 # Audit: T10-2-B PyReason Canonical Rule Params
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-2-b-pyreason-canonical-rule-params.md`
-- Stage: draft
+- Stage: scoped
 - Class: M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-28 | draft | this commit | T10-2-B PyReason C74 canonical rule params drafted | Triggered by T10-2 inventory split decision and T10-2-A C78 ship; Q1-Q12 pending Step 4.6. |
+| 2026-05-28 | draft | `109c4c6f` | T10-2-B PyReason C74 canonical rule params drafted | Triggered by T10-2 inventory split decision and T10-2-A C78 ship; Q1-Q12 pending Step 4.6. |
+| 2026-05-28 | scoped | this commit | Step 4.6 source-backed plan completed | Selected existing `rule_projection["pyreason"]` carrier, SDK-lowering atom-id conversion, and three-impl commit split. |
 
 ## 2. Draft Source Scan
 
@@ -36,22 +37,47 @@ Read-only orientation findings:
 This draft scan is not a Step 4.6 answer. Step 4.6 must verify or correct each
 claim with source refs.
 
+## 2.1 Step 4.6 Source-Backed Summary
+
+- Carrier: use existing `SemanticsProfile.rule_projection["pyreason"]`, not new
+  top-level C74 fields. Source refs: `profile.py:36, :46, :119-139`;
+  `rule_ext.py:155-229`.
+- SDK fields: add `PyReasonSemantics.derived_bound` and `atom_bounds` with
+  canonical field-specific validation. Existing public shell lacks those fields
+  (`sdk/semantics.py:150-176`).
+- Atom-id conversion: SDK lowering converts application full ids
+  `<rule_id>:atom_<index>` (`application/protocol/rule.py:98-100`) into
+  existing positional `body_atom:{branch}:{atom}` targets. The private lowering
+  context must gain atom-id data because it currently carries only name, branch
+  indexes, known rule ids, and branch-specific allowance (`sdk/store.py:3357-3363`).
+  T8-B witness keys (`core/store/_support.py:201-212`) remain out of scope and
+  unused.
+- Compatibility: `derived_bound` + `head_bound` rejects; `atom_bounds` +
+  `branch_bounds` coexists because they lower to body-atom thresholds vs branch
+  head intervals.
+- Adapter: no new adapter carrier is required; existing `rule_ext.py` already
+  consumes `head:0`, `branch:{index}`, and `body_atom:{branch}:{atom}` entries.
+- Baseline: agreed four-module PyReason suite ran `84 OK`. Adding
+  `tests.test_pyreason_branch_bounds_carrier` shows two pre-existing C110
+  `meta[confidence]` errors, so that file remains source context rather than a
+  T10-2-B focused gate.
+
 ## 3. Open Questions Register
 
 | ID | Question | Status |
 |---|---|---|
-| Q1 | Which canonical carrier should C74 use for `derived_bound` / `atom_bounds`? | Pending Step 4.6. |
-| Q2 | What SDK validation should canonical fields use, and how do they coexist with legacy fields? | Pending Step 4.6. |
-| Q3 | Where should atom-id conversion happen? | Pending Step 4.6. |
-| Q4 | How should SDK lowering implement the omission rule? | Pending Step 4.6. |
-| Q5 | How should adapter consumption prioritize canonical vs legacy carriers? | Pending Step 4.6. |
-| Q6 | What is the conflict behavior for canonical + legacy pairs? | Pending Step 4.6. |
-| Q7 | What is the legacy compatibility policy for `head_bound` / `branch_bounds`? | Pending Step 4.6. |
-| Q8 | What is the focused test matrix? | Pending Step 4.6. |
-| Q9 | What is the implementation commit split? | Pending Step 4.6. |
-| Q10 | Does T10-2-B change the T8-C-2 unblock map? | Pending Step 4.6. |
-| Q11 | Are there behavior changes that need explicit closure notes? | Pending Step 4.6. |
-| Q12 | Are there stop/amend findings? | Pending Step 4.6. |
+| Q1 | Which canonical carrier should C74 use for `derived_bound` / `atom_bounds`? | Answered: existing `rule_projection["pyreason"]`. |
+| Q2 | What SDK validation should canonical fields use, and how do they coexist with legacy fields? | Answered: interval validation + full atom-id key validation; normalize independently before conflict checks. |
+| Q3 | Where should atom-id conversion happen? | Answered: SDK lowering; never T8-B witness keys. |
+| Q4 | How should SDK lowering implement the omission rule? | Answered: default canonical emits nothing; legacy-only preserved; canonical-only emits canonical; duplicate head carriers reject. |
+| Q5 | How should adapter consumption prioritize canonical vs legacy carriers? | Answered: no new priority path; lowering emits existing adapter-local entries. |
+| Q6 | What is the conflict behavior for canonical + legacy pairs? | Answered: `derived_bound` + `head_bound` rejects; `atom_bounds` + `branch_bounds` coexists. |
+| Q7 | What is the legacy compatibility policy for `head_bound` / `branch_bounds`? | Answered: both remain accepted through T10-3; no warning in T10-2-B. |
+| Q8 | What is the focused test matrix? | Answered: canonical SDK/lowering/conversion/conflict/coexistence + T10-2-A isolation + discover comparison. |
+| Q9 | What is the implementation commit split? | Answered: SDK shell, lowering/conversion, tests, then close/archive. |
+| Q10 | Does T10-2-B change the T8-C-2 unblock map? | Answered: removes C74 only; C77 and D11/Form 2 remain. |
+| Q11 | Are there behavior changes that need explicit closure notes? | Answered: no default behavior shift expected; new dual head-bound spelling conflict should be recorded. |
+| Q12 | Are there stop/amend findings? | Answered: none. |
 
 ## 4. Risk Register
 
@@ -68,16 +94,16 @@ claim with source refs.
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 source-backed plan complete.
-- [ ] Q1-Q12 answered.
-- [ ] SDK shell / lowering / carrier / adapter plan reviewed.
-- [ ] Atom-id conversion plan reviewed.
-- [ ] Conflict and compatibility policy reviewed.
-- [ ] Test matrix reviewed.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 source-backed plan complete.
+- [x] Q1-Q12 answered.
+- [x] SDK shell / lowering / carrier / adapter plan reviewed.
+- [x] Atom-id conversion plan reviewed.
+- [x] Conflict and compatibility policy reviewed.
+- [x] Test matrix reviewed.
 - [ ] Implementation review complete.
 - [ ] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / implementation / closure.
+Pending implementation / closure.

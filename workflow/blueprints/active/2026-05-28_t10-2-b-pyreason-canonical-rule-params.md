@@ -1,6 +1,6 @@
 # Task Blueprint: T10-2-B PyReason Canonical Rule Params
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: M (runtime implementation)
@@ -143,98 +143,198 @@ land coherently.
 
 ## 3. Step 4.6 Source-Backed Implementation Plan
 
-Pending Step 4.6. Required subsections:
-
 ### 3.1 Canonical Carrier Decision
 
-Compare:
+Decision: use existing `SemanticsProfile.rule_projection["pyreason"]` entries
+as the C74 profile carrier. Do not add top-level
+`SemanticsProfile.derived_bound` or `SemanticsProfile.atom_bounds` fields.
 
-- Option A: top-level `SemanticsProfile.derived_bound` and
-  `SemanticsProfile.atom_bounds`.
-- Option B: canonical entries inside `SemanticsProfile.rule_projection`.
-- Option C: hybrid carrier, if source-backed by the existing adapter shape.
+Source-back:
 
-Step 4.6 must source-back validation impact, existing `rule_projection`
-behavior, T10-2-A carrier precedent, and adapter consumption surface before
-selecting.
+- `SemanticsProfile` already has the global T10-2-A carrier
+  `iteration_count` next to `engine_options`, `uncertainty_projection`,
+  `temporal_projection`, and `rule_projection` (`profile.py:39-48`).
+- `rule_projection` is the existing per-engine rule-annotation carrier
+  (`profile.py:36, :46`) and its normalizer already accepts structured entries
+  with non-empty `target` and `kind` (`profile.py:119-139`).
+- Existing PyReason lowering emits legacy `head_bound` as `head:0 / interval`
+  and `branch_bounds` as `branch:{index} / interval`
+  (`sdk/store.py:3376-3385, :3435-3455`).
+- Existing PyReason adapter consumption materializes `head:0`,
+  `branch:{index}`, and `body_atom:{branch}:{atom}` entries into
+  `PyReasonRuleExt` (`rule_ext.py:155-229`).
+
+Rationale: C78 is global, so T10-2-A's top-level `iteration_count` was correct.
+C74 is rule/atom-local, and the adapter already consumes rule-local entries
+through `rule_projection`. Top-level C74 fields would duplicate this surface.
 
 ### 3.2 SDK Field Shape
 
-Decide:
+Add public canonical fields to `PyReasonSemantics`:
 
-- `PyReasonSemantics.derived_bound` shape and validation.
-- `PyReasonSemantics.atom_bounds` key/value validation.
-- How public errors distinguish canonical `derived_bound` / `atom_bounds` from
-  legacy `head_bound` / `branch_bounds`.
-- Whether SDK shell should normalize canonical and legacy fields independently
-  before conflict policy is applied in lowering.
+- `derived_bound: tuple[float, float] | None = None`
+- `atom_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)`
+
+Validation policy:
+
+- Reuse existing interval semantics: two numeric values, bool rejected, and
+  `0 <= lower <= upper <= 1`.
+- `atom_bounds` keys must be non-empty full atom ids using
+  `<rule_id>:atom_<index>`.
+- Error messages name `PyReasonSemantics.derived_bound` or
+  `PyReasonSemantics.atom_bounds`, not legacy `head_bound`, `branch_bounds`,
+  `iteration_count`, or `timestep_delay`.
+- Normalize canonical and legacy fields independently, then apply conflict
+  policy.
+
+Source-back: public `PyReasonSemantics` currently exposes `timestep_delay`,
+`iteration_count`, `head_bound`, `branch_bounds`, `rule_params`,
+`temporal_projection`, and `uncertainty_projection`, but no C74 canonical fields
+(`sdk/semantics.py:150-176`). Existing `head_bound` / `branch_bounds`
+normalization is at `sdk/semantics.py:195-200`.
 
 ### 3.3 Atom-ID Conversion Layer
 
-Source-back the three known conventions and decide where conversion happens:
+Decision: convert public full atom ids during SDK lowering, then emit existing
+PyReason positional profile entries.
 
-- SDK lowering time.
-- Adapter consumption time.
-- Shared helper used by both, if needed.
+Source-back for the three conventions:
 
-The conversion design must not reuse T8-B witness keys.
+- Application Rule DTOs expose full atom ids as `<rule_id>:atom_<index>`
+  (`application/protocol/rule.py:98-100`; `application/docs/rule.md:47-49`).
+- PyReason profile targets are positional: `head:0`, `branch:{index}`,
+  `body_atom:{branch}:{atom}`, and `rule` (`rule_ext.py:173-221`).
+- T8-B witness support keys are evidence identifiers generated as
+  `b{branch_index}.a{atom_index}:{pred_id}` (`core/store/_support.py:201-212`)
+  and must not be reused for C74.
+
+Conversion shape:
+
+- Validate that `atom_bounds` keys use the current rule id and an integer atom
+  index.
+- For application `Rule` inputs, map `<rule_id>:atom_<index>` to
+  `body_atom:0:{index}` because the SDK application Rule bridge accepts AND-only
+  where bodies (`sdk/dsl/application_rule.py:85-91`).
+- Extend the private `_SemanticsLoweringContext` with source-backed atom id
+  information for application Rule inputs. The current context only carries
+  name, branch indexes, known rule ids, and branch-specific allowance
+  (`sdk/store.py:3357-3363, :3517-3534`), while application Rules expose the
+  needed atom ids via `Rule.atom_ids` (`application/protocol/rule.py:98-100`).
+- For legacy `Inference` / branched SDK inputs, do not invent a new full-atom-id
+  surface in T10-2-B. Reject canonical `atom_bounds` unless lowering has an
+  application full atom-id mapping. Legacy branch/position carriers remain
+  available through `branch_bounds` and direct `SemanticsProfile.rule_projection`.
+
+No adapter-side conversion is needed because the adapter already consumes
+positional body atom targets and performs branch/atom validation
+(`rule_ext.py:199-218, :245-290`).
 
 ### 3.4 SDK Lowering Path
 
-Source-back exactly where `_preview_public_semantics(...)` and
-`_lower_public_semantics(...)` should emit canonical carriers, how they coexist
-with T10-2-A `iteration_count`, and how the omission rule preserves legacy
-`head_bound` / `branch_bounds` users.
+Update both `_preview_public_semantics(...)` and `_lower_public_semantics(...)`
+for `PyReasonSemantics`:
+
+- If `derived_bound` is present, emit `head:0 / interval`.
+- Else if legacy `head_bound` is present, emit the existing legacy entry.
+- Preserve `branch_bounds` lowering to `branch:{index} / interval`.
+- Convert each canonical `atom_bounds` full atom id to
+  `body_atom:{branch}:{atom} / interval_threshold`.
+- `_preview_public_semantics(...)` has no derivation context; it may parse the
+  atom index for display-only `body_atom:0:{index}` preview entries, while
+  `_lower_public_semantics(...)` performs authoritative rule-id and atom-count
+  validation with the extended lowering context.
+- Preserve T10-2-A `iteration_count=_pyreason_iteration_count_carrier(value)`
+  unchanged (`sdk/store.py:3392, :3462, :3480-3484`).
+
+Omission rule:
+
+| Canonical fields | Legacy fields | Lowering behavior |
+|---|---|---|
+| default `derived_bound=None`, `atom_bounds={}` | empty legacy | emit no C74 entries |
+| default canonical | `head_bound` / `branch_bounds` set | emit legacy entries only |
+| canonical non-empty | legacy empty | emit canonical entries |
+| canonical non-empty | conflicting legacy set | reject before emitting |
+
+Source-back: current lowering builds `rule_entries` in both preview and runtime
+paths before creating `rule_projection["pyreason"]`
+(`sdk/store.py:3376-3393, :3435-3463`).
 
 ### 3.5 Adapter Consumption
 
-Source-back `rule_ext.py` changes:
+No new adapter carrier is required. Leave `rule_ext.py` behaviorally stable
+unless implementation tests reveal a small helper or wording need.
 
-- Canonical-first consumption.
-- Legacy fallback.
-- Conversion responsibilities if not performed in SDK lowering.
-- Error helper shape for explicit conflicts.
+Source-back:
+
+- `resolve_pyreason_engine_ext(...)` already prefers profile materialization over
+  explicit `PyReasonRuleExt`, and rejects conflicting profile-vs-explicit
+  carriers (`rule_ext.py:73-92`).
+- `_materialize_profile_rule_ext(...)` already consumes `head:0`,
+  `branch:{index}`, and `body_atom:{branch}:{atom}` entries and returns a
+  `PyReasonRuleExt` (`rule_ext.py:155-229`).
+- Duplicate positional targets already reject (`rule_ext.py:184-186,
+  :194-205`), and body atom targets resolve to predicate ids without witness-key
+  helpers (`rule_ext.py:206-218, :272-290`).
+
+Thus "adapter consumption shipped" means the SDK emits the already-supported
+adapter-local entries, and tests prove existing adapter consumption handles them.
 
 ### 3.6 Conflict Behavior And Compatibility Policy
 
-Decide:
+Policy:
 
-- `derived_bound` + `head_bound`: reject vs compatibility exception.
-- `atom_bounds` + `branch_bounds`: reject vs compatibility exception.
-- Legacy acceptance horizon: T10-2-B vs T10-3 vs later.
-- Omission-rule test scenarios.
+- `derived_bound` + `head_bound` explicitly supplied: reject. They lower to the
+  same `head:0` target.
+- `atom_bounds` + `branch_bounds`: allow coexistence with explicit tests.
+  `atom_bounds` lowers to body-atom interval thresholds, while `branch_bounds`
+  lowers to per-branch head intervals. Existing tests already prove global head
+  and branch head bounds coexist (`tests/test_pyreason_branch_bounds_carrier.py:228-244`).
+- `derived_bound` + `branch_bounds`: allow coexistence, matching existing
+  global-head + branch-head behavior.
+- Legacy `head_bound` and `branch_bounds` remain accepted through T10-3. T10-3
+  may define deprecation/removal; T10-2-B only adds canonical spelling.
+- No warnings are introduced; warning behavior is a separate API surface.
 
 ### 3.7 Test Matrix
 
-At minimum:
+Implementation tests should add focused coverage:
 
-- SDK accepts/normalizes `derived_bound` and `atom_bounds`.
-- SDK rejects invalid interval shapes and bad atom ids.
-- Lowering converts full atom ids to PyReason positional targets or records a
-  canonical carrier for adapter-side conversion.
-- Adapter consumes canonical `derived_bound` / `atom_bounds`.
-- Legacy `head_bound` / `branch_bounds` tests remain passing.
-- Explicit conflicts reject.
-- T10-2-A `iteration_count` tests remain passing.
-- Full discover delta is compared against `2019 tests / 72 failures / 231
-  errors`.
+1. `PyReasonSemantics` accepts and normalizes `derived_bound` and `atom_bounds`.
+2. Invalid intervals, bools, malformed atom ids, wrong rule id, and out-of-range
+   atom indexes reject with canonical field names.
+3. Lowering maps `derived_bound` to `head:0 / interval`.
+4. Lowering maps `<rule_id>:atom_<index>` to
+   `body_atom:0:{index} / interval_threshold` for application Rule-compatible
+   inputs.
+5. `derived_bound` + `head_bound` rejects.
+6. `atom_bounds` + `branch_bounds` coexist and lower to distinct targets.
+7. Legacy `head_bound` / `branch_bounds` tests remain passing.
+8. T10-2-A `iteration_count` tests remain passing.
+9. The T8-B witness-key helper is not imported or called by the C74 conversion.
+10. Full discover compares against baseline `2019 tests / 72 failures /
+    231 errors`.
+
+Focused Step 4.6 baseline: the agreed four-module PyReason suite runs `84 OK`.
+Adding `tests.test_pyreason_branch_bounds_carrier` exposes two pre-existing
+C110 `meta[confidence]` errors; use that file as source context, not as a new
+focused baseline gate for T10-2-B.
 
 ## 4. Step 4.6 Open Questions
 
 | ID | Question | Required answer shape |
 |---|---|---|
-| Q1 | Which canonical carrier should C74 use for `derived_bound` / `atom_bounds`? | Source-backed selection with tradeoffs and T10-2-A precedent. |
-| Q2 | What SDK validation should canonical fields use, and how do they coexist with legacy fields? | Decide interval validation, key validation, and error wording. |
-| Q3 | Where should atom-id conversion happen? | SDK lowering vs adapter consumption vs shared helper, with source refs. |
-| Q4 | How should SDK lowering implement the omission rule? | Four scenario matrix for canonical defaults/empty maps plus legacy fields. |
-| Q5 | How should adapter consumption prioritize canonical vs legacy carriers? | Canonical-first / legacy-fallback or alternate plan with rationale. |
-| Q6 | What is the conflict behavior for canonical + legacy pairs? | Reject/winner/exception decision, with test expectations. |
-| Q7 | What is the legacy compatibility policy for `head_bound` / `branch_bounds`? | Acceptance horizon and any deprecation/warning decision. |
-| Q8 | What is the focused test matrix? | Concrete test list plus regression suite, including T10-2-A isolation. |
-| Q9 | What is the implementation commit split? | Commit plan and anti-partial-ship rationale. |
-| Q10 | Does T10-2-B change the T8-C-2 unblock map? | Expected: it removes C74 only; C77 and D11/Form 2 remain. |
-| Q11 | Are there behavior changes that need explicit closure notes? | Identify default/compatibility changes, if any. |
-| Q12 | Are there stop/amend findings? | None or explicit trigger with next action. |
+| Q1 | Which canonical carrier should C74 use for `derived_bound` / `atom_bounds`? | Use existing `SemanticsProfile.rule_projection["pyreason"]` entries. Top-level C74 fields are rejected because C74 is rule/atom-local and adapter consumption already speaks rule projection. |
+| Q2 | What SDK validation should canonical fields use, and how do they coexist with legacy fields? | Use existing interval validation semantics; require `<rule_id>:atom_<index>` keys; normalize canonical and legacy fields independently, then apply conflict policy. |
+| Q3 | Where should atom-id conversion happen? | SDK lowering time. Extend private lowering context with application atom ids, then convert full ids to positional `body_atom:{branch}:{atom}` entries. Do not use T8-B witness keys. |
+| Q4 | How should SDK lowering implement the omission rule? | Default canonical fields emit no C74 entries; legacy-only lowers as today; canonical-only lowers canonical entries; explicit duplicate head carriers reject. |
+| Q5 | How should adapter consumption prioritize canonical vs legacy carriers? | No new adapter priority path. SDK lowering emits one set of adapter-local entries, and existing duplicate-target validation catches direct-profile conflicts. |
+| Q6 | What is the conflict behavior for canonical + legacy pairs? | `derived_bound` + `head_bound` rejects. `atom_bounds` + `branch_bounds` is allowed because body atom thresholds and branch head intervals target different adapter fields. |
+| Q7 | What is the legacy compatibility policy for `head_bound` / `branch_bounds`? | Both remain accepted through T10-3; no warning in T10-2-B. T10-3 owns any deprecation/removal policy. |
+| Q8 | What is the focused test matrix? | Add canonical SDK/lowering/conversion/conflict/coexistence tests; keep four-module PyReason `84 OK`; compare full discover to `2019/72F/231E`. |
+| Q9 | What is the implementation commit split? | Three implementation commits: SDK shell, lowering/conversion, tests. No adapter commit unless implementation discovers a small required helper. |
+| Q10 | Does T10-2-B change the T8-C-2 unblock map? | It removes C74 only. C77 and D11/Form 2 remain required for T8-C-2 implementation. |
+| Q11 | Are there behavior changes that need explicit closure notes? | No default behavior shift is expected. New dual `derived_bound`/`head_bound` input rejects, and `atom_bounds` is a new canonical SDK spelling. |
+| Q12 | Are there stop/amend findings? | None. T10-2 inventory and T10-2-A decisions remain valid; no fourth atom-id convention or witness-key reuse need was found. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -289,25 +389,25 @@ Expected Step 4.6 outputs:
 
 ## 7. Proposed Implementation Split
 
-Candidate commits:
+Scoped candidate commits:
 
 1. `feat(sdk): add PyReasonSemantics derived and atom bounds`
-2. `feat(profile): add canonical PyReason C74 carriers`
-3. `feat(sdk): lower PyReason C74 carriers with atom conversion`
-4. `feat(pyreason): consume canonical C74 bounds`
-5. `test(pyreason): cover C74 canonical migration`
-6. `docs(blueprint): close T10-2-B C74 migration`
-7. `docs(blueprint): archive T10-2-B C74 migration`
+2. `feat(sdk): lower PyReason C74 bounds with atom conversion`
+3. `test(pyreason): cover C74 canonical migration`
+4. `docs(blueprint): close T10-2-B C74 migration`
+5. `docs(blueprint): archive T10-2-B C74 migration`
 
-If Step 4.6 shows adjacent runtime changes are small, commits 1-2 or 3-4 may be
-combined only if the audit records why the anti-partial-ship risk remains
-controlled.
+The draft's profile/adapter commits are intentionally collapsed because Step 4.6
+found that the existing `rule_projection["pyreason"]` carrier and adapter
+consumption path already cover C74 once SDK lowering emits the correct entries.
+This keeps anti-partial-ship intact: SDK shell, lowering/conversion, and tests
+remain separate reviewable layers.
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed plan completed.
-- [ ] Q1-Q12 answered.
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed plan completed.
+- [x] Q1-Q12 answered.
 - [ ] SDK shell shipped.
 - [ ] SDK lowering / carrier shipped.
 - [ ] Atom-id conversion shipped without reusing T8-B witness keys.
@@ -338,4 +438,4 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Pending implementation / closure.
