@@ -1,7 +1,7 @@
 # ProbLog Adapter overview (factgraph)
 
 - Scope: `src/factgraph/adapters/problog`
-- Last updated: 2026-03-29
+- Last updated: 2026-05-28
 - Audience: developers who need to understand the ProbLog export,
   execution, and result-readback path
 
@@ -21,6 +21,11 @@ It is responsible for:
   candidate sets
 - Writing probability into `CandidateSet.confidence` and tagging
   `confidence_kind="probability"`
+- Projecting shared raw uncertainty (`raw_kind` + `bound`) into
+  ProbLog point probabilities only when an explicit
+  `uncertainty_projection` policy is configured
+- Building row-level ProbLog provenance graphs for passed rows when
+  proof-trace data is available
 - Persisting accepted ProbLog candidates' probabilities into the
   Annotation Store as `problog/semantic/probability` (via the
   post-accept binder)
@@ -101,6 +106,12 @@ Main flow of `evaluate_problog(...)`:
 4. Assemble `rule_spec` (containing
    `where/head/head_vars/query_vars/engine_ext`)
 5. `export_problog(...)` produces a temporary `query.pl`
+   - If a canonical `SemanticsProfile.uncertainty_projection` is
+     present, raw `shared/semantic/raw_kind` + `shared/semantic/bound`
+     annotations are projected to the ProbLog point probability lane
+     according to that policy.
+   - If raw uncertainty is present and no matching policy is
+     configured, export rejects instead of silently choosing a point.
 6. `run_problog(...)` invokes the ProbLog CLI
 7. `parse_problog_output(...)` parses the result and maps it into
    `CandidateSet`
@@ -114,6 +125,8 @@ Main flow of `evaluate_problog(...)`:
     - `support_digest=<ProvenanceEnvelope digest>`
     - Runtime `explain_ref(kind="candidate")` can read back the
       provenance envelope of `payload_type="proof_trace"`
+    - The envelope payload also includes `uncertainty_projections`
+      when raw uncertainty was projected during export.
 11. `evaluate_problog(...)` caches the
     `problog/semantic/probability` templates pending persistence
     in store pending state
@@ -123,43 +136,25 @@ Main flow of `evaluate_problog(...)`:
 
 Explainability addendum:
 
-- The current ProbLog adapter can wire CLI `--trace` output into
+- The current ProbLog adapter wires CLI `--trace` output into
   runtime candidate explain:
   - `support_kind="problog_provenance_v1"`
   - `support_digest=<ProvenanceEnvelope digest>`
   - Runtime `explain_ref(kind="candidate")` returns the
     engine-native provenance envelope
-- This provenance is not forcibly converted into a
-  `SupportArtifact`
-- However, the runtime now allows projecting an anchorable ProbLog
-  trace into a `candidate_evidence_tree`:
-  - Builder: `problog_trace_to_candidate_evidence_tree(...)`
-  - Tree-family support:
-    - `explain-tree`
-    - `explain-summary`
-    - `explain-narrative`
-    - `explain-nl`
-    - `GET /evidence/candidate/{candidate_id}`
-  - This projection currently requires that the candidate payload
-    be traceable from accepted claim / ledger
-    - For pre-accept candidates or unrecoverable payloads, the
-      tree family returns `explain_not_supported`
-- The ProbLog tree contract does not reuse witness-leaf
-  semantics:
-  - Non-leaf logical frames → `proof_goal`
-  - Terminal logical leaves → `proof_leaf`
-  - `proof_leaf` does not carry an `asrt_id` and does not link to
-    an assertion detail page
-- When the trace answer probability is available:
-  - The raw tree root writes
-    `root.engine_meta.probability`
-  - The summary appends `problog_probability`
-  - The narrative appends `probability_lines`
-  - The NL further derives a probability paragraph
-- If a future engine path lacks a trace, the candidate falls back
-  to:
-  - `support_kind="engine_no_witness_v1"`
-  - `support_digest="sha256:000...0"`
+- This provenance is not forcibly converted into a `SupportArtifact`.
+- Row-result evidence now has a separate protocol bridge: for passed
+  ProbLog rows, `EvaluateRow.explain().evidence` materializes a
+  row-level `EvidenceGraph` from the proof trace instead of falling
+  back to a single conclusion node.
+- The row graph uses:
+  - `support_kind="problog_provenance_v1"`
+  - `edge_kind="derives"`
+  - namespaced `engine_meta["problog"]` trace summary and, when
+    present, uncertainty projection metadata
+- Lower-level candidate / static export surfaces may still use the
+  adapter converter directly. Treat those as adapter-level surfaces,
+  not the primary public row-result evidence path.
 
 EvidenceGraph addendum:
 
@@ -196,6 +191,10 @@ EvidenceGraph addendum:
     into a complete rule-level semantic tree
   - Does not recover richer rule labels here; `location` remains
     in `engine_meta`
+- The row-result bridge wraps converter nodes / edges so ProbLog
+  trace details remain namespaced under `engine_meta["problog"]`.
+  The root node also carries a trace summary and uncertainty
+  projection decision summary when present.
 
 Semantic-delivery addendum:
 
@@ -214,6 +213,16 @@ Semantic-delivery addendum:
   - user-authored `probability`, `bound_lower`, and `bound_upper` meta
     are rejected; those names are reserved for adapter projection / output
     lanes
+  - `ProbLogSemantics()` and canonical
+    `SemanticsProfile.uncertainty_projection` default to rejecting raw
+    uncertainty; configure a policy explicitly before projecting raw
+    intervals into ProbLog point probabilities
+  - supported point policies are `lower`, `midpoint`, `upper`, and
+    degenerate `identity_probability` for probabilistic bounds such as
+    `[0.7, 0.7]`
+  - canonical interval policies (`probability_interval` and
+    `possibility_interval`) are valid policy names but are not accepted by
+    ProbLog point export
 - engine-native semantic lane:
   - `persist_problog_annotations(...)` writes the probabilities of
     accepted fact candidates as
@@ -233,9 +242,12 @@ Semantic-delivery addendum:
   - If the engine-native annotation is absent, read from
     `shared/semantic/probability` (adapter/internal shared probability
     lane, not the user-facing raw uncertainty write contract)
+  - If paired `shared/semantic/raw_kind` and `shared/semantic/bound`
+    exist, use `uncertainty_projection` to derive a point probability
+    before falling back to the deterministic default
   - Generic `confidence` meta is not a public probability input; if both
-    semantic lanes are absent, the adapter uses the deterministic default
-    `1.0`
+    semantic lanes and raw uncertainty projection are absent, the adapter
+    uses the deterministic default `1.0`
 - Branch probabilities for `where` are currently carried internally by
   `ProbLogRuleExt.branch_probabilities`:
   - `branch_probabilities[i]` corresponds to normalized `where`
@@ -266,6 +278,8 @@ Semantic-delivery addendum:
   canonical `SemanticsProfile.rule_projection.problog`, then reuses the
   Track 3 / C adapter consumption path. Service and compiled paths still use
   canonical `SemanticsProfile`, not wrapper-shaped JSON.
+  `ProbLogSemantics.uncertainty_projection` lowers into the canonical
+  profile-level projection map and follows the same export path.
 - The output program contains:
   - `edb_fact(...)` facts
   - `rule_body_i` branch rules
@@ -333,9 +347,10 @@ Constraints:
   mappings
 - Targets derivation query execution; does not cover Deontic
   specification execution
-- Currently commits only the runtime `explain_ref(kind="candidate")`
-  flat provenance envelope; does not auto-generate candidate
-  evidence tree / summary / narrative / NL
+- Candidate explain still stores the engine-native provenance envelope by
+  digest. Row-result evidence for passed ProbLog rows now materializes a
+  row-level provenance `EvidenceGraph`; candidate static / tree-family
+  surfaces remain lower-level adapter or audit-module concerns.
 - No ProbLog session API; the shared runtime options currently
   expose only `timeout`
 - The internal ProbLog engine extension currently contains only a
