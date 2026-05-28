@@ -461,6 +461,68 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
 
         self.assertIn("temporal_projection.universe start must be before end", str(ctx.exception))
 
+    def test_time_binned_profile_accepts_whitelisted_bin_sizes(self) -> None:
+        accepted = ["P1D", "PT1H", "PT30M", "PT15M", "1d", "1h", "15m", "1m"]
+
+        for bin_size in accepted:
+            with self.subTest(bin_size=bin_size):
+                profile = _profile(
+                    rule_entries=[],
+                    temporal_projection={
+                        "mode": "time_binned",
+                        "universe": ["2026-01-01", "2026-01-02"],
+                        "bin_size": bin_size,
+                    },
+                )
+
+                self.assertEqual(profile.temporal_projection["mode"], "time_binned")
+                self.assertEqual(profile.temporal_projection["bin_size"], bin_size)
+
+    def test_time_binned_profile_rejects_ambiguous_bin_sizes(self) -> None:
+        rejected = [
+            "1 month",
+            "approximately a week",
+            "P1M",
+            "P1Y",
+            "PT1S",
+            "P1DT1H",
+            "PT1.5H",
+            "P0D",
+            "0d",
+            "2d",
+            "3h",
+            "30m",
+        ]
+
+        for bin_size in rejected:
+            with self.subTest(bin_size=bin_size):
+                with self.assertRaises(ValueError) as ctx:
+                    _profile(
+                        rule_entries=[],
+                        temporal_projection={
+                            "mode": "time_binned",
+                            "universe": ["2026-01-01", "2026-01-02"],
+                            "bin_size": bin_size,
+                        },
+                    )
+
+                message = str(ctx.exception)
+                self.assertIn("SemanticsProfile.temporal_projection.time_binned.bin_size", message)
+                self.assertNotIn("iteration_count", message)
+
+    def test_time_binned_profile_reuses_universe_validation(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            _profile(
+                rule_entries=[],
+                temporal_projection={
+                    "mode": "time_binned",
+                    "universe": ["2026-12-31", "2026-01-01"],
+                    "bin_size": "P1D",
+                },
+            )
+
+        self.assertIn("temporal_projection.universe start must be before end", str(ctx.exception))
+
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_fixed_timesteps_profile_drives_pyreason_run_config(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
@@ -586,6 +648,33 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertIn("SemanticsProfile.iteration_count", message)
         self.assertIn("SemanticsProfile.temporal_projection.fact_boundaries", message)
 
+    def test_iteration_count_conflicts_with_time_binned(self) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="pyreason",
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    iteration_count=3,
+                    temporal_projection={
+                        "mode": "time_binned",
+                        "universe": ["2026-01-01", "2026-04-01"],
+                        "bin_size": "P1D",
+                    },
+                ),
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("SemanticsProfile.iteration_count", message)
+        self.assertIn("SemanticsProfile.temporal_projection.time_binned", message)
+
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_map_valid_meta_to_active_steps(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
@@ -637,6 +726,171 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertIn(("Carol", 2, None), rows)
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 5)
+
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    def test_time_binned_maps_valid_meta_to_fixed_bins(self, mock_run) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        sdk.store.evaluate(
+            derivation_id=compiled["derivation_id"],
+            version=compiled["version"],
+            target_pred_id=compiled["target_pred_id"],
+            head_vars=compiled["head_vars"],
+            where=compiled["where"],
+            mode="pyreason",
+            semantics_profile=_profile(
+                rule_entries=[],
+                temporal_projection={
+                    "mode": "time_binned",
+                    "universe": ["2026-01-01", "2026-04-01"],
+                    "bin_size": "P1D",
+                },
+            ),
+        )
+
+        session = mock_run.call_args.args[0]
+        rows = {(fact["value"], fact["active_from"], fact["active_to"]) for fact in session.node_facts}
+        self.assertIn(("Alice", 9, 40), rows)
+        self.assertIn(("Bob", 0, 59), rows)
+        self.assertIn(("Carol", 31, None), rows)
+        config = mock_run.call_args.kwargs["config"]
+        self.assertEqual(config.timesteps, 90)
+
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    def test_time_binned_maps_partial_fact_span_to_covering_bins(self, mock_run) -> None:
+        sdk = SDKStore([User])
+        alice_ref = sdk.ref(User, user_id="Alice")
+        set_field(
+            sdk.ledger,
+            pred_id="user:name",
+            e_ref=alice_ref,
+            rest_terms=[("string", "Alice")],
+            meta={
+                "source": "test",
+                "valid_from": "2026-01-01T00:30:00Z",
+                "valid_to": "2026-01-01T02:15:00Z",
+            },
+        )
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        sdk.store.evaluate(
+            derivation_id=compiled["derivation_id"],
+            version=compiled["version"],
+            target_pred_id=compiled["target_pred_id"],
+            head_vars=compiled["head_vars"],
+            where=compiled["where"],
+            mode="pyreason",
+            semantics_profile=_profile(
+                rule_entries=[],
+                temporal_projection={
+                    "mode": "time_binned",
+                    "universe": ["2026-01-01T00:00:00Z", "2026-01-01T03:00:00Z"],
+                    "bin_size": "PT1H",
+                },
+            ),
+        )
+
+        session = mock_run.call_args.args[0]
+        self.assertEqual(session.node_facts[0]["active_from"], 0)
+        self.assertEqual(session.node_facts[0]["active_to"], 3)
+        config = mock_run.call_args.kwargs["config"]
+        self.assertEqual(config.timesteps, 3)
+
+    def test_time_binned_rejects_non_divisible_universe(self) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="pyreason",
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    temporal_projection={
+                        "mode": "time_binned",
+                        "universe": ["2026-01-01", "2026-01-10"],
+                        "bin_size": "P2D",
+                    },
+                ),
+            )
+
+        self.assertIn("exact multiple of bin_size", str(ctx.exception))
+
+    def test_time_binned_rejects_out_of_universe_and_naive_datetimes(self) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        with self.assertRaises(ValueError) as outside_ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="pyreason",
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    temporal_projection={
+                        "mode": "time_binned",
+                        "universe": ["2026-01-01", "2026-02-01"],
+                        "bin_size": "P1D",
+                    },
+                ),
+            )
+        self.assertIn("within time_binned universe", str(outside_ctx.exception))
+
+        empty_sdk = SDKStore([User])
+        empty_compiled = empty_sdk._compile_derivation_input(_make_derivation())[0]
+        with self.assertRaises(ValueError) as naive_ctx:
+            empty_sdk.store.evaluate(
+                derivation_id=empty_compiled["derivation_id"],
+                version=empty_compiled["version"],
+                target_pred_id=empty_compiled["target_pred_id"],
+                head_vars=empty_compiled["head_vars"],
+                where=empty_compiled["where"],
+                mode="pyreason",
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    temporal_projection={
+                        "mode": "time_binned",
+                        "universe": ["2026-01-01T00:00:00", "2026-01-02T00:00:00Z"],
+                        "bin_size": "P1D",
+                    },
+                ),
+            )
+        self.assertIn("include timezone", str(naive_ctx.exception))
+
+    def test_time_binned_conflicts_with_engine_options_timesteps(self) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="pyreason",
+                engine_options={"timesteps": 2},
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    temporal_projection={
+                        "mode": "time_binned",
+                        "universe": ["2026-01-01", "2026-04-01"],
+                        "bin_size": "P1D",
+                    },
+                ),
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("SemanticsProfile.temporal_projection.time_binned", message)
+        self.assertIn("engine_options.timesteps", message)
 
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_without_fact_times_uses_universe_only(self, mock_run) -> None:
