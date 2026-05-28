@@ -81,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **PyReason evidence deferred-state docs are explicit**: the evidence
+  quickstart now states that PyReason inference, bounds, and temporal
+  materialization are shipped, while rich row-level temporal evidence remains
+  deferred to a future Form 2 design cycle. Current PyReason row evidence is
+  described as the safe single-`NODE_CONCLUSION` fallback, not a timeline, with
+  `pyreason_trace_to_evidence_graph(...)` named only as an advanced adapter
+  helper.
 - **Canonical semantics user docs are aligned**: quickstarts now teach ProbLog
   `uncertainty_projection`, PyReason `iteration_count`, `derived_bound`,
   `atom_bounds`, `fact_boundaries`, and `time_binned`; `rules-and-inferences`

@@ -1,14 +1,14 @@
 # Current Operational Memory
 
-最后更新:2026-05-28(T8-D round 4 canonical user docs archived locally; pending push gate)
+最后更新:2026-05-28(T8-D round 5 PyReason evidence docs archived locally; pending push gate)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ ac42a379`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ 06e575dd`
 
-**Most recent local work:** T8-D round 4 canonical user docs archived locally;
+**Most recent local work:** T8-D round 5 PyReason evidence deferred-state docs archived locally;
 pending push gate.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do not move it.
@@ -23,9 +23,9 @@ pending push gate.
 - untracked `docs/references/working/change-requests-2026-05-27/`
 - untracked `rainbird-ai sdk code/`
 - untracked `workflow/design/design-points/active/append-only-ledger-evaluation.zh.md`
-- untracked `workflow/design/design-points/active/identity-and-data-model-redesign.zh.md`
 - untracked `workflow/design/design-points/active/identity-mechanism-redesign.zh.md`
 - untracked `workflow/design/design-points/active/ledger-schema-specification.zh.md`
+- untracked `workflow/design/design-points/archive/identity-and-data-model-redesign.zh.md`
 
 Do not absorb these into unrelated release, evidence, docs-sync, or cleanup work
 without explicit reclassification.
@@ -52,18 +52,19 @@ Release-facing shipped/deferred summaries live in `CHANGELOG.md`.
   inventory at `f8e08905`, T10-2-A C78 at `65cc79a3`, T10-2-B C74 at
   `92fd6013`, T10-3 inventory at `da896f0c`, T10-3-A `fact_boundaries` at
   `e7bab90f`, and T10-3-B `time_binned` at `ac42a379`.
-- T8-D round 4 canonical user docs are complete locally: quickstart semantics
-  and assertions teach shipped ProbLog/PyReason canonical semantics, SDK guide
-  summarizes them, and `rules-and-inferences.md` now demotes `Inference` /
-  `Query` teaching. T8-C-2 PyReason evidence is now gated by D11/Form 2.
+- T8-D round 4 canonical user docs are pushed at `06e575dd`; round 5 PyReason
+  evidence deferred-state docs are complete locally. User docs now teach shipped
+  ProbLog/PyReason semantics and state that PyReason row evidence is currently a
+  safe single-conclusion fallback while rich temporal evidence waits for Form 2.
 
 ## Recommended Next Work
 
-1. **Design-point intake**: classify the identity/data-model,
-   identity-mechanism, append-only-ledger, and ledger-schema untracked files.
-2. **T8-C-2 PyReason Form 2 inventory**: source-back the evidence enrichment
+1. **D11/Form 2 PyReason evidence design**: define timeline row-evidence
+   semantics before any T8-C-2 runtime bridge.
+2. **Design-point intake**: classify the untracked ledger/identity files.
+3. **T8-C-2 PyReason Form 2 inventory**: source-back the evidence enrichment
    lane before implementation; expect D11/Form 2 gates.
-3. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
+4. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
 
 ## Governance Reminders
