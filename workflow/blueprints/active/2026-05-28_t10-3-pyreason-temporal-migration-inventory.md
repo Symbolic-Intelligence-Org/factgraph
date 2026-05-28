@@ -1,6 +1,6 @@
 # Task Blueprint: T10-3 PyReason Temporal Migration Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S/M (design-only inventory)
@@ -414,4 +414,57 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / closure.
+Design-only inventory completed with no runtime, test, user-doc, audit-doc,
+governance, dirty-baseline, or sacred-master edits.
+
+Key outcomes:
+
+1. C77 is **partial / legacy** across the shipped stack. SDK shell and SDK
+   lowering pass through `temporal_projection`; `SemanticsProfile` and the
+   PyReason adapter support `none`, `fixed_timesteps`, and legacy
+   `valid_time_boundaries`; canonical `fact_boundaries` and `time_binned` are
+   missing.
+2. `fact_boundaries` should ship first as a canonical alias to the existing
+   valid-time-boundary substrate. Legacy `valid_time_boundaries` should remain
+   accepted through T10-3; no hard cut in the first implementation.
+3. `time_binned` is a true new C77 mode, not an alias. It needs
+   `bin_size` validation, a duration/short-form parser, and a binned
+   materializer; it can reuse `_TemporalProjectionState` output shape but not
+   `_materialize_valid_time_boundaries(...)` unchanged.
+4. Legacy `fixed_timesteps` should remain accepted as a compatibility alias
+   when canonical `iteration_count` is absent. T10-3 must preserve T10-2-A's
+   explicit conflict between canonical `iteration_count` and temporal modes.
+5. Recommended implementation split is **T10-3-A C77 `fact_boundaries`
+   alias/compatibility** followed by **T10-3-B C77 `time_binned`**. T10-3-A is
+   a smaller rename/alias slice; T10-3-B owns the new binning materializer.
+6. T8-C-2 PyReason evidence remains gated after T10-3-A because `time_binned`
+   is still missing. After T10-3-B, C74/C77/C78 semantics gates are complete,
+   but D11/Form 2 remains required.
+7. The four untracked design-point files were classified as adjacent, not
+   blocking. They discuss ledger valid time, identity/as-of, or PyReason edge
+   modeling rather than C77 adapter-local temporal mode implementation.
+
+Future implementation pings:
+
+- The active design says `fixed_timesteps` is ultimately an old mode to remove,
+  but this inventory deliberately defers removal to preserve T10-2-A
+  compatibility. A later cleanup/docs cycle should own deprecation or removal.
+- T10-3-A must choose and test the exact normalization strategy for
+  `fact_boundaries` / `valid_time_boundaries`: preserve spelling or normalize
+  canonical spelling while keeping legacy spelling for legacy inputs.
+- T10-3-B must follow the strict `bin_size` design: ISO 8601 durations plus the
+  small short-form whitelist (`1d`, `1h`, `15m`, `1m`), and reject ambiguous
+  human-readable strings such as `"1 month"`.
+- Future T10-3-A/B Step 4.7 reviews should spot-check the §3.7 12-item shipped
+  PyReason invariant manifest because line numbers may drift after runtime
+  edits.
+- T10-3-A must preserve `_reject_iteration_temporal_conflict` behavior for the
+  new `fact_boundaries` alias unless a future blueprint explicitly changes the
+  iteration/temporal coexistence policy.
+
+Verification:
+
+- Focused PyReason no-op suite remained `90 OK`.
+- `git diff --check` was clean.
+- Sacred master remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.

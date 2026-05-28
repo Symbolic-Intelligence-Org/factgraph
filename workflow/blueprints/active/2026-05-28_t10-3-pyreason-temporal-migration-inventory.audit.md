@@ -1,11 +1,11 @@
 # Audit: T10-3 PyReason Temporal Migration Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-3-pyreason-temporal-migration-inventory.md`
-- Stage: scoped
+- Stage: closure
 - Class: S/M (design-only inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-28 | draft | `bd24d2fb` | T10-3 PyReason temporal migration inventory drafted | Triggered by T10 staged-hybrid plan, T10-2-A C78 ship, T10-2-B C74 ship, and current memory next-work #1; Q1-Q10 pending Step 4.6. |
 | 2026-05-28 | scoped | this commit | Step 4.6 source-backed inventory completed | Confirmed C77 partial/legacy state, selected `fact_boundaries` alias first then `time_binned`, preserved `fixed_timesteps` compatibility, and classified design-point overlap as adjacent. |
+| 2026-05-28 | closure | this commit | T10-3 inventory closed | Blueprint status moved to implemented; closure notes recorded with split decision, compatibility policy, invariant manifest, and verification summary. |
 
 ## 2. Draft Source Scan
 
@@ -104,8 +105,56 @@ claim with source refs.
 - [x] `fixed_timesteps` disposition reviewed.
 - [x] T10-2-A / T10-2-B invariant protection reviewed.
 - [x] Untracked design-point overlap reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / closure.
+Design-only inventory completed with no runtime, test, user-doc, audit-doc,
+governance, dirty-baseline, or sacred-master edits.
+
+Key closure decisions:
+
+- C77 is partial / legacy. SDK shell and SDK lowering pass through
+  `temporal_projection`; `SemanticsProfile` and the PyReason adapter support
+  `none`, `fixed_timesteps`, and legacy `valid_time_boundaries`; canonical
+  `fact_boundaries` and `time_binned` are missing.
+- `fact_boundaries` should ship first as a canonical alias to the existing
+  valid-time-boundary substrate. Legacy `valid_time_boundaries` remains
+  accepted through T10-3.
+- `time_binned` is a true new mode and should ship second. It needs
+  `bin_size` validation, a strict duration parser / whitelist, and a binned
+  materializer; it can reuse `_TemporalProjectionState` output shape but not
+  `_materialize_valid_time_boundaries(...)` unchanged.
+- Legacy `fixed_timesteps` remains accepted as a compatibility alias when
+  canonical `iteration_count` is absent. T10-3 must preserve T10-2-A's explicit
+  conflict between canonical `iteration_count` and temporal modes.
+- Recommended implementation split is T10-3-A `fact_boundaries`
+  alias/compatibility followed by T10-3-B `time_binned`.
+- T8-C-2 PyReason evidence remains gated after T10-3-A because `time_binned`
+  is still missing. After T10-3-B, C74/C77/C78 semantics gates are complete,
+  but D11/Form 2 remains required.
+- The four untracked design-point files were classified as adjacent, not
+  blocking.
+
+Implementation pings for future T10-3-A/B cycles:
+
+- The active design intends eventual `fixed_timesteps` removal, but this
+  inventory deliberately preserves it for compatibility; a later cleanup/docs
+  cycle should own deprecation or removal.
+- T10-3-A must choose and test the exact normalization strategy for
+  `fact_boundaries` / `valid_time_boundaries`.
+- T10-3-B must keep `bin_size` strict: ISO 8601 durations plus the short-form
+  whitelist (`1d`, `1h`, `15m`, `1m`), rejecting ambiguous strings such as
+  `"1 month"`.
+- Future implementation reviews should spot-check the 12-item shipped
+  PyReason invariant manifest because line numbers may drift after edits.
+- T10-3-A must preserve `_reject_iteration_temporal_conflict` for the new
+  `fact_boundaries` alias unless a future blueprint changes the
+  iteration/temporal coexistence policy.
+
+Verification:
+
+- Focused PyReason no-op suite remained `90 OK`.
+- `git diff --check` was clean.
+- Sacred master remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.
