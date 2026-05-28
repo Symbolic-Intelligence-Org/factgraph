@@ -31,11 +31,27 @@
 
 | Design-point | Status | Role |
 |---|---|---|
-| `rule-expression-and-proof-attempt.zh.md` | active parent essay | Rule / RuleExpr / evaluate / evidence / semantics parent design source. |
-| `match-api-design.zh.md` | active implementation-backed design | `fg.read.match(...)` public API, connectivity, constraint, and witness-boundary design source; AND + OR runtime shipped, witness/cross-entity tuple output deferred. |
-| `evidence-tree-rainbird-style-v1.zh.md` | active working skeleton | Evidence tree Phase B / rendering / deferred evidence registry source. |
-| `database-view-fg-layered-architecture.zh.md` | active minimum implementable blueprint | Database / durable view / attach lifecycle design source. |
-| `rule-expression-and-proof-track-plan.zh.md` | T1-T5 complete; retained as historical decomposition index | Superseded for future scheduling by `post-t5-completion-roadmap.zh.md`, but kept active to avoid broad historical-reference churn. |
-| `post-t5-completion-roadmap.zh.md` | working planning artifact | Non-authoritative T6-T12 scheduling reference. |
+| `explanation-completion-roadmap.zh.md` | active strategic synthesis (2026-05-28 draft) | User-facing explainability completion stack inheriting evidence-tree §14 deferred items (D1/D5/D6/D7/D11/D15/D18/D20). Also carries §10/§11/§12 legacy backlog from 6 superseded design-points (RuleExpr v1 / Database-View / Post-T5 roadmap residuals). |
+
+### 当前 untracked design-points (不在版本控制内, 战略 backlog)
+
+| Design-point | Status | Note |
+|---|---|---|
+| `append-only-ledger-evaluation.zh.md` | untracked exploration | Claim-first append-only ledger 设计探索; 未 intake 决策 |
+| `identity-mechanism-redesign.zh.md` | untracked exploration | Identity 机制重设计探索; 未 intake 决策 |
+| `ledger-schema-specification.zh.md` | untracked exploration | Ledger schema 规范探索; 未 intake 决策 |
+
+## 2026-05-28 archive batch
+
+6 design-points 通过 supersede 规则 (per §"生命周期") 一次性 archive 到 `workflow/design/design-points/archive/`:
+
+| 文件 | 主要 supersede 路径 |
+|---|---|
+| `rule-expression-and-proof-attempt.zh.md` | inherited as `explanation-completion-roadmap.zh.md` §10 legacy + Inputs 引用 |
+| `match-api-design.zh.md` | D20 witness 收编 + AND+OR runtime shipped via module docs |
+| `evidence-tree-rainbird-style-v1.zh.md` | §14 deferred 8 项 inherited via §0 Inputs + §4 Inheritance Map + Tier S/A/B 三档; §1-§13 Phase B shipped via module docs |
+| `database-view-fg-layered-architecture.zh.md` | inherited as `explanation-completion-roadmap.zh.md` §11 legacy + Inputs 引用; A1-A20 shipped via module docs |
+| `rule-expression-and-proof-track-plan.zh.md` | 自标 superseded by `post-t5-completion-roadmap.zh.md` (后者亦在本批 archive) |
+| `post-t5-completion-roadmap.zh.md` | inherited as `explanation-completion-roadmap.zh.md` §12 legacy + Inputs 引用 |
 
 完整状态机 + 权威语义见 [`workflow/design/README.md`](../README.md)。模板:`workflow/templates/design/design-point.md`。
