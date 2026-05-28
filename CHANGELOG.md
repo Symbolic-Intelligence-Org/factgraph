@@ -71,6 +71,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `valid_time_boundaries` compatibility intact. Explicit conflicts with
   canonical `iteration_count` remain rejected with carrier-specific error
   messages.
+- **PyReason canonical `time_binned` temporal projection is shipped** as the
+  T10-3-B C77 new-mode slice: `SemanticsProfile.temporal_projection` now accepts
+  mode `time_binned` with explicit `universe` and strict `bin_size` validation
+  (`P<n>D`, `PT<n>H`, `PT<n>M`, `1d`, `1h`, `15m`, `1m`). The adapter
+  materializes fixed-width temporal bins, rejects non-divisible universes and
+  ambiguous duration strings, and keeps `iteration_count` conflict behavior
+  explicit.
 
 ### Changed
 
