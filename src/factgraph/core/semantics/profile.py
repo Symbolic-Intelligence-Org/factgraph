@@ -176,7 +176,11 @@ def _normalize_temporal_projection(value: Any) -> dict[str, Any]:
         normalized = _normalize_valid_time_boundaries(raw)
         normalized["mode"] = "valid_time_boundaries"
         return normalized
-    allowed = "fixed_timesteps, none, valid_time_boundaries"
+    if mode == "fact_boundaries":
+        normalized = _normalize_valid_time_boundaries(raw)
+        normalized["mode"] = "fact_boundaries"
+        return normalized
+    allowed = "fact_boundaries, fixed_timesteps, none, valid_time_boundaries"
     raise ValueError(
         f"temporal_projection.mode {mode!r} is not supported in D; supported modes: {allowed}"
     )
