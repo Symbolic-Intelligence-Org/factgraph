@@ -1,6 +1,6 @@
 # Task Blueprint: T10-3-B PyReason Time Binned Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: M (runtime implementation)
@@ -467,20 +467,20 @@ anti-partial-ship risk remains controlled.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed plan completed.
 - [x] Q1-Q10 answered.
-- [ ] Profile accepts `time_binned` with strict `bin_size` validation.
-- [ ] New binned materializer shipped.
-- [ ] Adapter consumes `time_binned` through the new materializer.
-- [ ] `time_binned` + canonical `iteration_count` conflict behavior tested.
-- [ ] Legacy `fact_boundaries`, `valid_time_boundaries`, and `fixed_timesteps`
+- [x] Profile accepts `time_binned` with strict `bin_size` validation.
+- [x] New binned materializer shipped.
+- [x] Adapter consumes `time_binned` through the new materializer.
+- [x] `time_binned` + canonical `iteration_count` conflict behavior tested.
+- [x] Legacy `fact_boundaries`, `valid_time_boundaries`, and `fixed_timesteps`
   behavior preserved.
-- [ ] T10-3-A, T10-2-A, and T10-2-B invariants preserved.
-- [ ] T10-3 inventory decisions preserved.
-- [ ] T8-A/B/C-1/D and T10-1 invariants preserved.
-- [ ] `git diff --check` clean.
-- [ ] Focused PyReason tests pass.
-- [ ] Full discover delta compared against
+- [x] T10-3-A, T10-2-A, and T10-2-B invariants preserved.
+- [x] T10-3 inventory decisions preserved.
+- [x] T8-A/B/C-1/D and T10-1 invariants preserved.
+- [x] `git diff --check` clean.
+- [x] Focused PyReason tests pass.
+- [x] Full discover delta compared against
   `2029 tests / 72 failures / 231 errors`.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -497,4 +497,52 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Implemented and ready for archive.
+
+Implementation commits:
+
+1. `8f80ad7c` `feat(profile): accept time_binned with bin_size whitelist`
+   - Added `time_binned` profile mode.
+   - Added strict `bin_size` validation for `P<n>D`, `PT<n>H`, `PT<n>M`, and
+     exact short forms `1d`, `1h`, `15m`, `1m`.
+   - Refactored shared temporal universe validation for valid-time,
+     fact-boundary, and time-binned modes.
+2. `f6ab296e` `feat(pyreason): materialize time_binned temporal projection`
+   - Added `_materialize_time_binned(...)`.
+   - Uses microsecond integer arithmetic for exact bin divisibility.
+   - Parses ISO dates as midnight UTC and timezone-aware datetimes with `Z` /
+     explicit offset; rejects naive datetimes.
+   - Implements floor-start / ceil-end fact bin mapping, open-ended facts as
+     `active_to=None`, and out-of-universe rejection.
+3. `e35abe66` `feat(pyreason): consume time_binned in temporal projection state`
+   - Added an independent `time_binned` branch in
+     `_resolve_temporal_projection_state(...)`.
+   - Reuses T10-3-A dynamic carrier wording and both conflict helpers.
+4. `c70574f6` `test(pyreason): cover time_binned migration`
+   - Added 9 focused tests covering whitelist acceptance/rejection,
+     materialization, divisibility, timezone rejection, conflict behavior, and
+     engine-options conflict.
+
+Verification:
+
+- Focused PyReason: `103 OK` (`94 -> 103`, +9 tests).
+- Full discover: `2038 tests / 72 failures / 231 errors`
+  (`2029 -> 2038`, failures/errors unchanged).
+- `ruff check` clean on touched files.
+- `git diff --check` clean.
+- Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remains `4 M + 1 D + 6 U`.
+
+Implementation notes / deviations:
+
+- The materializer uses integer microsecond arithmetic instead of
+  `total_seconds()` floating-point math to avoid divisibility drift.
+- Datetime strings with time must include timezone; ISO dates remain accepted as
+  midnight UTC.
+- `Z` suffixes are normalized to `+00:00` before parsing for compatibility.
+- `valid_to == universe_end` is accepted; only `valid_to > universe_end`
+  rejects.
+- The parser accepts ISO datetimes with either `T` or a space separator; this is
+  an ergonomic parser detail, while `bin_size` remains strict.
+- T10-3-B completes the T10 canonical PyReason semantics stack; T8-C-2 PyReason
+  evidence remains gated on D11/Form 2, not on C74/C77/C78 semantics.

@@ -1,11 +1,11 @@
 # Audit: T10-3-B PyReason Time Binned Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-3-b-time-binned-migration.md`
-- Stage: scoped
+- Stage: implemented
 - Class: M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-28 | draft | `c07510ea` | T10-3-B `time_binned` migration drafted | Triggered by T10-3 inventory `da896f0c`, T10-3-A `e7bab90f`, T10-2-A `65cc79a3`, T10-2-B `92fd6013`, and current memory next-work #1; Q1-Q10 pending Step 4.6. |
 | 2026-05-28 | scoped | this commit | T10-3-B `time_binned` source-backed plan completed | Q1-Q10 answered; strict day/hour/minute `bin_size` whitelist, exact-divisible universe policy, new `_materialize_time_binned`, independent adapter branch, and 14-item invariant manifest locked. |
+| 2026-05-28 | implemented | this commit | T10-3-B implementation review passed | Four impl commits shipped; focused PyReason 103 OK; full discover 2038 / 72F / 231E; no amend findings. |
 
 ## 2. Draft Source Scan
 
@@ -88,8 +89,36 @@ Step 4.6 verification confirms and narrows the draft scan:
 - [x] Conflict behavior reviewed.
 - [x] T10-3-A / T10-2-A / T10-2-B invariant protection reviewed.
 - [x] Focused verification plan reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / implementation / closure.
+Implementation commits:
+
+- `8f80ad7c` profile mode + strict `bin_size` whitelist.
+- `f6ab296e` `_materialize_time_binned(...)` with exact-divisible bins.
+- `e35abe66` adapter consumption branch with dynamic carrier conflict wording.
+- `c70574f6` 9 focused tests.
+
+Verification:
+
+- Focused PyReason: `103 OK` (`94 -> 103`, +9).
+- Full discover: `2038 tests / 72 failures / 231 errors`
+  (`2029 -> 2038`, failures/errors unchanged).
+- `ruff check` clean on touched files.
+- `git diff --check` clean.
+- Sacred `master` and dirty baseline preserved.
+
+Review notes:
+
+- `bin_size` reject list covers ambiguous and near-miss forms including `P1M`,
+  `P1Y`, `PT1S`, `P1DT1H`, `PT1.5H`, `P0D`, `0d`, `2d`, `3h`, `30m`, and
+  prose strings.
+- The binned materializer uses integer microsecond arithmetic, not floating
+  division.
+- Naive datetimes are rejected when time is present; dates are interpreted as
+  midnight UTC.
+- `time_binned` has symmetric `iteration_count` and `engine_options.timesteps`
+  conflict checks with canonical `time_binned` carrier wording.
+- T10-3-A, T10-2-A, and T10-2-B invariants remain covered by the 103 OK focused
+  suite.
