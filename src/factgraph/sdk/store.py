@@ -3359,6 +3359,7 @@ class _SemanticsLoweringContext:
     name: str
     branch_indexes: Mapping[str, int]
     known_rule_ids: frozenset[str]
+    atom_ids: tuple[str, ...] = ()
     branch_specific_allowed: bool = True
 
 
@@ -3374,8 +3375,7 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
         )
     if isinstance(value, PyReasonSemantics):
         rule_entries: list[dict[str, Any]] = []
-        if value.head_bound is not None:
-            rule_entries.append({"target": "head:0", "kind": "interval", "value": list(value.head_bound)})
+        rule_entries.extend(_preview_pyreason_bound_entries(value))
         for branch_index, interval in _preview_branch_bounds(value.branch_bounds):
             rule_entries.append({"target": f"branch:{branch_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
@@ -3433,8 +3433,7 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
         )
     if isinstance(value, PyReasonSemantics):
         rule_entries: list[dict[str, Any]] = []
-        if value.head_bound is not None:
-            rule_entries.append({"target": "head:0", "kind": "interval", "value": list(value.head_bound)})
+        rule_entries.extend(_lower_pyreason_bound_entries(value, context=context))
         if value.branch_bounds and not context.branch_specific_allowed:
             raise SDKStoreError(
                 "PyReasonSemantics.branch_bounds requires RuleExpr branches or legacy Inference branches; "
@@ -3475,6 +3474,70 @@ def _preview_branch_bounds(
     for idx, interval in enumerate(branch_bounds.values()):
         preview.append((idx, interval))
     return preview
+
+
+def _preview_pyreason_bound_entries(value: PyReasonSemantics) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    head_interval = value.derived_bound if value.derived_bound is not None else value.head_bound
+    if head_interval is not None:
+        entries.append({"target": "head:0", "kind": "interval", "value": list(head_interval)})
+    for atom_id, interval in value.atom_bounds.items():
+        _rule_id, atom_index = _parse_pyreason_atom_bound_id(
+            atom_id,
+            field_name="PyReasonSemantics.atom_bounds",
+        )
+        entries.append(
+            {
+                "target": f"body_atom:0:{atom_index}",
+                "kind": "interval_threshold",
+                "value": list(interval),
+            }
+        )
+    return entries
+
+
+def _lower_pyreason_bound_entries(
+    value: PyReasonSemantics,
+    *,
+    context: _SemanticsLoweringContext,
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    head_interval = value.derived_bound if value.derived_bound is not None else value.head_bound
+    if head_interval is not None:
+        entries.append({"target": "head:0", "kind": "interval", "value": list(head_interval)})
+    if not value.atom_bounds:
+        return entries
+    if not context.atom_ids:
+        raise SDKStoreError(
+            "PyReasonSemantics.atom_bounds requires application Rule atom ids; "
+            "use direct SemanticsProfile.rule_projection.pyreason body_atom targets for legacy branched inputs"
+        )
+    atom_index_by_id = {atom_id: idx for idx, atom_id in enumerate(context.atom_ids)}
+    known = ", ".join(context.atom_ids)
+    for atom_id, interval in value.atom_bounds.items():
+        _parse_pyreason_atom_bound_id(atom_id, field_name="PyReasonSemantics.atom_bounds")
+        atom_index = atom_index_by_id.get(atom_id)
+        if atom_index is None:
+            raise SDKStoreError(
+                f"PyReasonSemantics.atom_bounds contains unknown atom id {atom_id!r}; known atom ids: {known}"
+            )
+        entries.append(
+            {
+                "target": f"body_atom:0:{atom_index}",
+                "kind": "interval_threshold",
+                "value": list(interval),
+            }
+        )
+    return entries
+
+
+def _parse_pyreason_atom_bound_id(value: str, *, field_name: str) -> tuple[str, int]:
+    rule_id, marker, atom_index_text = value.rpartition(":atom_")
+    if not rule_id or marker != ":atom_" or not atom_index_text:
+        raise SDKStoreError(f"{field_name} keys must use <rule_id>:atom_<index>")
+    if not atom_index_text.isdigit():
+        raise SDKStoreError(f"{field_name} keys must use non-negative atom indexes")
+    return (rule_id, int(atom_index_text))
 
 
 def _pyreason_iteration_count_carrier(value: PyReasonSemantics) -> int | None:
@@ -3522,6 +3585,7 @@ def _semantics_lowering_context(derivation: Any) -> _SemanticsLoweringContext:
             name=derivation.id,
             branch_indexes={},
             known_rule_ids=frozenset({derivation.id}),
+            atom_ids=tuple(derivation.atom_ids),
             branch_specific_allowed=False,
         )
     branch_indexes = _branch_id_index_for_derivation(derivation)
@@ -3545,6 +3609,7 @@ def _semantics_context_for_ruleexpr_plan(
             name=source.id,
             branch_indexes={},
             known_rule_ids=frozenset({source.id, head.id}),
+            atom_ids=tuple(source.atom_ids),
             branch_specific_allowed=False,
         )
     branch_indexes = {branch.branch_id: index for index, branch in enumerate(plan.branches)}
