@@ -1,11 +1,11 @@
 # Audit: T8-D Round 5 PyReason Evidence Deferred-State Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-d-round5-pyreason-evidence-deferred-state-docs.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -18,6 +18,7 @@
 | 2026-05-28 | pre-draft | n/a | Dirty-baseline composition observed | User moved `identity-and-data-model-redesign.zh.md` from untracked `workflow/design/design-points/active/` to untracked `workflow/design/design-points/archive/`; numerical dirty baseline remains `4 M + 1 D + 6 U`, and design-point intake remains out of scope. |
 | 2026-05-28 | draft | this commit | T8-D round 5 PyReason evidence deferred-state docs blueprint pair drafted | Triggered by T8-D round 4 `06e575dd`, clean PyReason row-evidence boundary source-back, and user direction to document deferred state before D11/Form 2 design. |
 | 2026-05-28 | scoped | this commit | Step 4.6 source-backed inventory completed | Implementation narrowed to one docs file: `docs/official/kernel/quickstart/evidence.md`; focused baseline `140 OK`; full discover matched `2038 / 72F / 231E` with `PYTHONPATH=src`. |
+| 2026-05-28 | implemented | `61f8b99d` | Step 4.7 implementation accepted | Added a narrow PyReason deferred-state paragraph to `evidence.md`; focused baseline `140 OK`; full discover matched `2038 / 72F / 231E`; sacred and dirty baseline preserved. |
 
 ## 2. Draft Source Scan
 
@@ -123,8 +124,45 @@ line refs, signatures, and target insertion points.
 - [x] Form 2 deferred wording reviewed.
 - [x] Cross-doc PyReason promise sweep reviewed.
 - [x] Focused docs-only verification baseline reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending implementation.
+Implementation:
+
+- `61f8b99d docs(quickstart): clarify PyReason evidence deferred state`
+  updated only `docs/official/kernel/quickstart/evidence.md`.
+- The inserted paragraph lives after the existing single-conclusion fallback
+  wording and leaves the native/Souffle Form 1, ProbLog row-provenance, stable
+  graph invariants, current-boundaries, and `Inference` / `Branch` stability
+  sections byte-stable.
+- The paragraph teaches that PyReason inference, bounds, and temporal
+  materialization are shipped, while rich PyReason row-level temporal evidence is
+  deferred to a future Form 2 design cycle.
+- The paragraph describes current PyReason row evidence as a safe
+  single-`NODE_CONCLUSION` row anchor, not a timeline and not proof of
+  timestep-by-timestep state changes.
+- The paragraph mentions
+  `factgraph.adapters.pyreason.provenance.pyreason_trace_to_evidence_graph(...)`
+  as an advanced adapter-level helper and explicitly keeps it out of the main
+  quickstart path.
+
+Verification:
+
+- `git diff --check` clean.
+- Focused docs-only baseline: `Ran 140 tests ... OK`.
+- Full discover: `Ran 2038 tests ... FAILED (failures=72, errors=231)`,
+  matching the established baseline exactly.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`, including untracked design-point
+  files.
+
+Scope notes:
+
+- The optional SDK guide edit was declined because the SDK guide already points
+  PyReason row-level graph readers to the evidence quickstart as future evidence
+  work.
+- No runtime, tests, governance, adapter docs, audit docs, or dirty-baseline
+  files were changed.
+- No Form 2 schema details were introduced; D11 / Form 2 design remains future
+  work.

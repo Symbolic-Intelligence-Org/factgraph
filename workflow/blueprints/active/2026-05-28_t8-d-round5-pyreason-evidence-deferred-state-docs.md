@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Round 5 PyReason Evidence Deferred-State Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S (docs-only)
@@ -335,24 +335,24 @@ already points to the evidence quickstart for these boundaries.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed inventory completed.
 - [x] Q1-Q9 answered.
-- [ ] `evidence.md` PyReason deferred-state section shipped.
-- [ ] Optional SDK guide decision implemented or explicitly declined.
-- [ ] Current PyReason `row.evidence` single-conclusion fallback documented
+- [x] `evidence.md` PyReason deferred-state section shipped.
+- [x] Optional SDK guide decision implemented or explicitly declined.
+- [x] Current PyReason `row.evidence` single-conclusion fallback documented
       without implying a bug or timeline support.
-- [ ] Future Form 2 design cycle deferred state documented without schema
+- [x] Future Form 2 design cycle deferred state documented without schema
       details.
-- [ ] `pyreason_trace_to_evidence_graph(...)` advanced escape hatch documented
+- [x] `pyreason_trace_to_evidence_graph(...)` advanced escape hatch documented
       only if source-backed and framed as non-main-path.
-- [ ] T8-D round 3 ProbLog row-provenance docs preserved.
-- [ ] T8-D round 1 `Inference` / `Branch` stability wording preserved.
-- [ ] T8-D round 4 canonical semantics docs preserved.
-- [ ] No runtime, tests, governance, adapter docs, audit docs, or dirty-baseline
+- [x] T8-D round 3 ProbLog row-provenance docs preserved.
+- [x] T8-D round 1 `Inference` / `Branch` stability wording preserved.
+- [x] T8-D round 4 canonical semantics docs preserved.
+- [x] No runtime, tests, governance, adapter docs, audit docs, or dirty-baseline
       files touched.
-- [ ] File scope stayed at two files or fewer for implementation.
-- [ ] Focused docs-only baseline passes.
-- [ ] Full discover compared against `2038 tests / 72 failures / 231 errors`.
-- [ ] `git diff --check` clean.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] File scope stayed at two files or fewer for implementation.
+- [x] Focused docs-only baseline passes.
+- [x] Full discover compared against `2038 tests / 72 failures / 231 errors`.
+- [x] `git diff --check` clean.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -366,4 +366,37 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Implemented in `61f8b99d docs(quickstart): clarify PyReason evidence deferred state`.
+
+Outcome:
+
+- Added one narrow PyReason paragraph to `docs/official/kernel/quickstart/evidence.md`
+  after the existing single-conclusion fallback paragraph.
+- Documented that PyReason inference, bounds, and temporal materialization are
+  available through the PyReason evaluation path, while rich row-level temporal
+  evidence remains deferred to a future Form 2 design cycle.
+- Documented the current safe single-`NODE_CONCLUSION` fallback as a row anchor,
+  not a timeline and not proof of timestep-by-timestep state changes.
+- Mentioned `factgraph.adapters.pyreason.provenance.pyreason_trace_to_evidence_graph(...)`
+  as an advanced adapter-level helper, not the main quickstart path, and noted it
+  may evolve with future Form 2 design.
+
+Verification:
+
+- Focused docs-only baseline: `Ran 140 tests ... OK`.
+- Full discover: `Ran 2038 tests ... FAILED (failures=72, errors=231)`,
+  matching the established baseline exactly.
+- `git diff --check` clean.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.
+
+Deviations / notes:
+
+- The optional SDK guide edit was explicitly declined at Step 4.6 because
+  `src/factgraph/sdk/docs/00_user_guide.en.md:678-681` already points PyReason
+  row-level evidence readers to the evidence quickstart as a future evidence
+  track.
+- Implementation file scope was stricter than the two-file cap: only
+  `docs/official/kernel/quickstart/evidence.md` changed.
+- No Form 2 schema details were introduced; D11 / Form 2 design remains a
+  separate future design cycle.
