@@ -9,10 +9,13 @@ from unittest.mock import patch
 
 import factgraph.application as application  # noqa: F401
 import factgraph.adapters.pyreason  # noqa: F401
+from factgraph.application.protocol import Rule as ApplicationRule
 from factgraph.adapters.pyreason.rule_ext import PyReasonRuleExt, compile_pyreason_rule
 from factgraph.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunResult
 from factgraph.adapters.pyreason.session import PyReasonSession
 from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.rules.where_ast import PredAtom as CorePredAtom
+from factgraph.core.rules.where_ast import Var as CoreVar
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.sdk.errors import SDKStoreError
 from factgraph.sdk.semantics import PyReasonSemantics
@@ -116,6 +119,20 @@ def _make_derivation() -> Inference:
             target="user:popular",
             head_vars=[u],
         )
+
+
+def _application_rule_two_atoms() -> ApplicationRule:
+    user = CoreVar("$u")
+    name = CoreVar("$name")
+    risk = CoreVar("$risk")
+    return ApplicationRule(
+        id="rule.c74",
+        where=(
+            CorePredAtom("user:name", [user, name]),
+            CorePredAtom("user:risk_score", [user, risk]),
+        ),
+        ports={"user": user},
+    )
 
 
 def _mock_run_empty(session, *, rules=None, rule_defs=None, facts=None, fact_defs=None, config=None):
@@ -270,6 +287,97 @@ class PyReasonSemanticsProfileResolverTests(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("SemanticsProfile.rule_projection.pyreason", message)
         self.assertIn("PyReasonRuleExt", message)
+
+
+class PyReasonCanonicalC74Tests(unittest.TestCase):
+    def test_pyreason_semantics_accepts_derived_and_atom_bounds(self) -> None:
+        semantics = PyReasonSemantics(
+            derived_bound=[0.7, 0.9],
+            atom_bounds={"rule.c74:atom_1": [0.4, 0.8]},
+        )
+
+        self.assertEqual(semantics.derived_bound, (0.7, 0.9))
+        self.assertEqual(semantics.atom_bounds["rule.c74:atom_1"], (0.4, 0.8))
+
+    def test_pyreason_semantics_rejects_invalid_c74_fields_with_canonical_names(self) -> None:
+        with self.assertRaises(SDKStoreError) as derived_ctx:
+            PyReasonSemantics(derived_bound=[0.9, 0.2])
+        self.assertIn("PyReasonSemantics.derived_bound", str(derived_ctx.exception))
+        self.assertNotIn("iteration_count", str(derived_ctx.exception))
+        self.assertNotIn("timestep_delay", str(derived_ctx.exception))
+
+        with self.assertRaises(SDKStoreError) as atom_ctx:
+            PyReasonSemantics(atom_bounds={"rule.c74:not_atom": [0.1, 0.9]})
+        self.assertIn("PyReasonSemantics.atom_bounds", str(atom_ctx.exception))
+        self.assertNotIn("head_bound", str(atom_ctx.exception))
+        self.assertNotIn("branch_bounds", str(atom_ctx.exception))
+
+    def test_lowering_converts_canonical_c74_bounds_for_application_rule(self) -> None:
+        profile = _lower_public_semantics(
+            PyReasonSemantics(
+                derived_bound=[0.7, 0.9],
+                atom_bounds={"rule.c74:atom_1": [0.4, 0.8]},
+            ),
+            derivation=_application_rule_two_atoms(),
+        )
+
+        entries = profile.rule_projection["pyreason"]
+        self.assertIn({"target": "head:0", "kind": "interval", "value": [0.7, 0.9]}, entries)
+        self.assertIn(
+            {"target": "body_atom:0:1", "kind": "interval_threshold", "value": [0.4, 0.8]},
+            entries,
+        )
+        self.assertNotIn("b0.a", str(entries))
+        self.assertNotIn("user:risk_score", str(entries))
+
+        resolved = _resolve_pyreason_engine_ext()(
+            where=_where_two_body_atoms(),
+            schema_ir=_schema_ir(),
+            engine_ext=None,
+            semantics_profile=profile,
+        )
+        self.assertEqual(tuple(resolved.head_bound or ()), (0.7, 0.9))
+        self.assertEqual(resolved.body_predicate_bounds["user:risk_score"], (0.4, 0.8))
+
+    def test_canonical_atom_bounds_reject_unknown_or_unsupported_inputs(self) -> None:
+        with self.assertRaises(SDKStoreError) as unknown_ctx:
+            _lower_public_semantics(
+                PyReasonSemantics(atom_bounds={"other_rule:atom_0": [0.4, 0.8]}),
+                derivation=_application_rule_two_atoms(),
+            )
+        self.assertIn("unknown atom id 'other_rule:atom_0'", str(unknown_ctx.exception))
+
+        with self.assertRaises(SDKStoreError) as legacy_ctx:
+            _lower_public_semantics(
+                PyReasonSemantics(atom_bounds={"drv.d.pyreason_popular:atom_0": [0.4, 0.8]}),
+                derivation=_make_derivation(),
+            )
+        self.assertIn("requires application Rule atom ids", str(legacy_ctx.exception))
+
+    def test_derived_bound_conflicts_with_legacy_head_bound(self) -> None:
+        with self.assertRaises(SDKStoreError) as ctx:
+            PyReasonSemantics(derived_bound=[0.7, 0.9], head_bound=[0.6, 0.8])
+
+        message = str(ctx.exception)
+        self.assertIn("derived_bound", message)
+        self.assertIn("head_bound", message)
+        self.assertNotIn("iteration_count", message)
+        self.assertNotIn("timestep_delay", message)
+
+    def test_atom_bounds_and_branch_bounds_coexist_in_preview(self) -> None:
+        profile = _preview_public_semantics(
+            PyReasonSemantics(
+                atom_bounds={"rule.c74:atom_1": [0.4, 0.8]},
+                branch_bounds={"legacy_branch": [0.6, 0.9]},
+            )
+        )
+
+        entries = profile.rule_projection["pyreason"]
+        self.assertIn(
+            {"target": "body_atom:0:1", "kind": "interval_threshold", "value": [0.4, 0.8]},
+            entries,
+        )
+        self.assertIn({"target": "branch:0", "kind": "interval", "value": [0.6, 0.9]}, entries)
 
 
 class PyReasonTemporalProjectionTests(unittest.TestCase):
