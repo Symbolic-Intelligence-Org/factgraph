@@ -19,8 +19,8 @@ mathematics of ProbLog or PyReason.
 
 | Need | Use |
 | --- | --- |
-| ProbLog evaluation defaults or branch probabilities | `ProbLogSemantics(...)` |
-| PyReason time delay or interval bounds | `PyReasonSemantics(...)` |
+| ProbLog branch probabilities or raw-uncertainty projection | `ProbLogSemantics(...)` |
+| PyReason iteration count, rule bounds, or temporal projection | `PyReasonSemantics(...)` |
 | Lower-level canonical control | `SemanticsProfile(...)` |
 | See what a semantics object means | `fg.eval.inspect_semantics(...)` |
 
@@ -36,9 +36,9 @@ canonical `SemanticsProfile` value before any adapter sees them:
 
 | Surface | Accepts | Role |
 | --- | --- | --- |
-| `ProbLogSemantics(default=..., branch_probabilities=..., ...)` | ProbLog-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
-| `PyReasonSemantics(delay=..., branch_bounds=..., ...)` | PyReason-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
-| `SemanticsProfile(name=..., engine=..., rule_projection=..., temporal_projection=...)` | Canonical fields | Lower-level data shape. Adapter consumes this directly. |
+| `ProbLogSemantics(branch_probabilities=..., uncertainty_projection=..., ...)` | ProbLog-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
+| `PyReasonSemantics(iteration_count=..., derived_bound=..., atom_bounds=..., temporal_projection=..., ...)` | PyReason-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
+| `SemanticsProfile(name=..., engine=..., iteration_count=..., uncertainty_projection=..., temporal_projection=..., rule_projection=...)` | Canonical fields | Lower-level data shape. Adapter consumes this directly. |
 
 This is the same high-level-factory / low-level-data-shape pattern as
 `build_application_rule(...)` vs `Rule(...)` in
@@ -138,24 +138,32 @@ the engine from `ProbLogSemantics` or `PyReasonSemantics`.
 
 ## Use PyReasonSemantics with a Rule
 
-`PyReasonSemantics` configures PyReason-specific time and interval behavior.
-The common quickstart knobs are:
+`PyReasonSemantics` configures PyReason-specific iteration count, rule bounds,
+and temporal projection. The canonical quickstart knobs are:
 
-- `timestep_delay`: delay attached to compiled rules
-- `head_bound`: global interval for rule heads
-- `branch_bounds`: per-branch interval overrides keyed by branch id
+- `iteration_count`: global PyReason inference round count. The wrapper
+  default is `1`.
+- `derived_bound`: canonical interval for rule heads.
+- `atom_bounds`: body atom intervals keyed by application atom id
+  (`<rule_id>:atom_<index>`).
+- `temporal_projection`: temporal mode, such as `fact_boundaries` or
+  `time_binned`.
 
-For a single application `Rule`, use the global fields and leave
-`branch_bounds` empty:
+For a single application `Rule`, prefer canonical `derived_bound` and
+`atom_bounds`:
 
 ```python
 pyreason = PyReasonSemantics(
     timestep_delay=2,
-    head_bound=[0.7, 0.9],
+    iteration_count=3,
+    derived_bound=[0.7, 0.9],
+    atom_bounds={"rule.tags_from_seed:atom_1": [0.4, 0.8]},
 )
 
 assert pyreason.engine == "pyreason"
-assert pyreason.head_bound == (0.7, 0.9)
+assert pyreason.iteration_count == 3
+assert pyreason.derived_bound == (0.7, 0.9)
+assert pyreason.atom_bounds["rule.tags_from_seed:atom_1"] == (0.4, 0.8)
 
 preview = fg.eval.inspect_semantics(pyreason)
 entries = preview["lowered_profile"]["rule_projection"]["pyreason"]
@@ -165,6 +173,66 @@ assert preview["engine"] == "pyreason"
 assert {"target": "head:0", "kind": "interval", "value": [0.7, 0.9]} in entries
 assert {"target": "rule", "kind": "timestep_delay", "value": 2} in entries
 ```
+
+`atom_bounds` uses the application atom id, not the PyReason positional target
+and not an evidence witness key. For a rule with id `rule.tags_from_seed`, body
+atoms are addressed as `rule.tags_from_seed:atom_0`,
+`rule.tags_from_seed:atom_1`, and so on.
+
+Legacy names remain accepted for compatibility:
+
+- `head_bound` is the old spelling for the rule-head interval. Do not pass both
+  `derived_bound` and `head_bound`; that conflict is rejected.
+- `branch_bounds` is still accepted for branch-head intervals keyed by explicit
+  branch id or fallback branch id. It can coexist with `atom_bounds` because
+  body-atom intervals and branch-head intervals are different surfaces.
+
+### PyReason temporal projection
+
+Use `fact_boundaries` for canonical valid-time projection:
+
+```python
+by_fact_time = PyReasonSemantics(
+    temporal_projection={
+        "mode": "fact_boundaries",
+        "universe": ["2026-01-01", "2026-12-31"],
+    }
+)
+```
+
+Legacy `valid_time_boundaries` remains accepted for existing profiles, but new
+examples should use `fact_boundaries`.
+
+Use `time_binned` when you want a fixed temporal grid:
+
+```python
+hourly = PyReasonSemantics(
+    temporal_projection={
+        "mode": "time_binned",
+        "universe": ["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"],
+        "bin_size": "PT1H",
+    }
+)
+```
+
+`time_binned.bin_size` is intentionally strict. Accepted forms are:
+
+- ISO-style positive days/hours/minutes: `P<n>D`, `PT<n>H`, `PT<n>M`
+- short forms: `1d`, `1h`, `15m`, `1m`
+
+The universe duration must be an exact multiple of `bin_size`. Universe
+endpoints may be ISO dates or timezone-aware ISO datetimes; datetimes without a
+timezone are rejected. Prose such as `"1 month"` or `"approximately a week"` is
+not accepted.
+
+`iteration_count` is a global round count and cannot be combined with temporal
+modes that also imply PyReason timesteps (`fixed_timesteps`,
+`fact_boundaries`, `valid_time_boundaries`, or `time_binned`). The adapter
+rejects explicit conflicts instead of choosing a winner.
+
+The default is worth calling out: `PyReasonSemantics()` lowers to canonical
+`iteration_count=1`. Direct no-profile PyReason adapter execution still keeps
+its existing engine default.
 
 Branch-specific `branch_probabilities` and `branch_bounds` require a concrete
 multi-branch context such as a `RuleExpr` OR expression or a v0.2 compatibility
@@ -178,7 +246,9 @@ rejected for that input shape.
 
 `SemanticsProfile` is the lower-level profile shape consumed by runtime
 adapters. It remains public for advanced users, service JSON compatibility,
-and direct canonical configuration.
+and direct canonical configuration. Public wrappers lower into this shape,
+including `iteration_count`, `uncertainty_projection`, `temporal_projection`,
+and per-engine `rule_projection` entries.
 
 ```python
 profile = SemanticsProfile(name="manual.native", engine="native")
@@ -301,7 +371,12 @@ with vars("u", "tag") as (u, tag):
 
 
 problog = ProbLogSemantics()
-pyreason = PyReasonSemantics(timestep_delay=2, head_bound=[0.7, 0.9])
+pyreason = PyReasonSemantics(
+    timestep_delay=2,
+    iteration_count=3,
+    derived_bound=[0.7, 0.9],
+    atom_bounds={"rule.tags_from_seed:atom_1": [0.4, 0.8]},
+)
 
 assert fg.eval.inspect_semantics(problog)["engine"] == "problog"
 assert fg.eval.inspect_semantics(pyreason)["engine"] == "pyreason"
@@ -326,8 +401,15 @@ assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 
 - Semantics are evaluate-time configuration.
 - Use `ProbLogSemantics(...)` for ProbLog defaults or branch probabilities.
-- Use `PyReasonSemantics(...)` for PyReason delays, head bounds, and branch
-  bounds.
+- Use `PyReasonSemantics(...)` for PyReason delays, iteration count, canonical
+  rule bounds, and temporal projection.
+- Prefer `derived_bound` over legacy `head_bound`.
+- Use `atom_bounds={"<rule_id>:atom_<index>": [lower, upper]}` for body atom
+  intervals.
+- Prefer `temporal_projection={"mode": "fact_boundaries", ...}` over legacy
+  `valid_time_boundaries`.
+- Use `temporal_projection={"mode": "time_binned", "universe": [...],
+  "bin_size": ...}` for fixed temporal bins.
 - Use `SemanticsProfile(...)` only when you need the canonical lower-level
   profile.
 - `fg.eval.inspect_semantics(...)` inspects configuration; it does not run an
