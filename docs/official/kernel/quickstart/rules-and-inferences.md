@@ -1,40 +1,37 @@
 # Rules and inferences
 
-The previous pages wrote facts directly. Rules and inferences let you describe
+The previous pages wrote facts directly. Rules let you describe reusable
 patterns over those facts.
 
 A `Rule` asks the graph what is already true. It is a reusable read query over
 the current snapshot.
 
-An `Inference` evaluates possible derived rows from existing facts. It does not
-write by itself. Evaluation returns an `EvaluateResult`; explicit writes still
-go through `fg.write.*` or `fg.batch(...)`.
+`fg.eval.evaluate(...)` evaluates a `Rule` or `RuleExpr` and returns possible
+derived rows. It does not write by itself. Evaluation returns an
+`EvaluateResult`; explicit writes still go through `fg.write.*` or
+`fg.batch(...)`.
 
 The short version is:
 
 | Need | Use |
 | --- | --- |
 | Read matching snapshots | `Rule` / `RuleExpr` + `fg.read.match(...)` |
-| Propose new facts | `Inference` + `fg.eval.evaluate(...)` |
+| Propose new facts | `Rule` / `RuleExpr` + `fg.eval.evaluate(...)` |
+| Maintain v0.2 branch-id compatibility | `Inference` / `Branch` |
 | Explain evaluated rows | `row.explain()` / `fg.eval.explain(...)` |
 | Inspect rule shape | `fg.rules.inspect(...)` |
 
 ## Start with facts
 
-Rules and inferences work over facts already in the graph. This example keeps
-the schema small: `tag_seed` is a direct fact, and `tag` will be inferred from
-it.
+Rules work over facts already in the graph. This example keeps the schema
+small: `tag_seed` is a direct fact, and `tag` will be evaluated from it.
 
 ```python
 from factgraph.sdk import (
-    Branch,
     Entity,
     FactGraph,
     Field,
     Identity,
-    Inference,
-    Pred,
-    Query,
     Rule,
     build_application_rule,
     vars,
@@ -488,32 +485,23 @@ It is reserved for `RuleExpr` inspection and mocked-evaluation tests
 only. Use the field-predicate or existence-predicate head pattern
 instead.
 
-## Use Query for one-off projections
+## Use read APIs for one-off projections
 
-`Query` remains a DSL value object for internal and future read-projection
-work, but the T5 public runtime path no longer exposes `fg.eval.run(...)`.
-Use `fg.read.find(...)` for simple snapshot reads, `fg.read.match(...)` for
-application-rule snapshot reads, or `fg.eval.evaluate(...)` when you need
-replay anchors and evidence.
+For one-off snapshot reads, use read APIs directly:
 
 ```python
-with vars("u", "tag") as (u, tag):
-    seeded_tag_query = Query(
-        head=[User(u), User.tag_seed(value=tag)],
-        where=[User(u), u.tag_seed == tag],
-    )
-
-
 snapshot = fg.read.get(User, user_id="u-1")
 assert snapshot is not None
 assert snapshot.tag_seed == "engineer"
 ```
 
-Queries are read-time projections. They are useful for one-off shapes. Rules
-and inferences remain Python value objects; keep reusable definitions in code
-or application configuration.
+Use `fg.read.find(...)` for simple snapshot filters,
+`fg.read.match(...)` for application-rule snapshot reads, or
+`fg.eval.evaluate(...)` when you need replay anchors and evidence. `Query`
+still exists as an internal DSL value, but it is not the user-facing
+quickstart path.
 
-## Evaluate an Inference
+## Legacy compatibility: evaluate an Inference
 
 `Inference` is the **v0.2 compatibility surface** for rule authoring that
 uses explicit `Branch(...)` bodies and a separate `target` head predicate.
@@ -526,6 +514,8 @@ date so existing call sites keep working.
 An inference can use the same body and propose a new target predicate.
 
 ```python
+from factgraph.sdk import Branch, Inference, Pred
+
 with vars("u", "tag") as (u, tag):
     tags_from_seed = Inference(
         id="inf.tags_from_seed",
@@ -607,21 +597,22 @@ user-facing.
 
 In the quickstart, keep the model simple:
 
-- `Rule` reads.
-- `Inference` proposes.
+- `Rule` and `RuleExpr` describe reusable patterns.
+- `fg.read.match(...)` reads matching snapshots.
+- `fg.eval.evaluate(...)` proposes evaluated rows.
 - `EvaluateResult` rows wait for review.
 - explicit writes persist changes.
-- Keep reusable rule/inference definitions in Python code and pass the value
-  objects directly to runtime methods.
+- Keep reusable rule definitions in Python code and pass the value objects
+  directly to runtime methods.
 
 ## Where semantics engines fit
 
 The default examples here use the native evaluation path. FactGraph also has
 semantics options for engines such as ProbLog and PyReason. Those options
-change how an inference is evaluated; they do not change the basic lifecycle:
+change how a rule is evaluated; they do not change the basic lifecycle:
 
 ```text
-Inference -> evaluate -> EvaluateResult rows -> explain/close -> explicit writes if needed
+Rule / RuleExpr -> evaluate -> EvaluateResult rows -> explain/close -> explicit writes if needed
 ```
 
 Learn the lifecycle first. Engine-specific semantics are an advanced topic.
@@ -645,14 +636,10 @@ For the full positioning (invariants, what to use for new code, why
 
 ```python
 from factgraph.sdk import (
-    Branch,
     Entity,
     FactGraph,
     Field,
     Identity,
-    Inference,
-    Pred,
-    Query,
     Rule,
     build_application_rule,
     vars,
@@ -682,47 +669,22 @@ rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
 
-with vars("u", "tag") as (u, tag):
-    seeded_tag_query = Query(
-        head=[User(u), User.tag_seed(value=tag)],
-        where=[User(u), u.tag_seed == tag],
-    )
-
 snapshot = fg.read.get(User, user_id="u-1")
 assert snapshot is not None
 assert snapshot.tag_seed == "engineer"
-
-with vars("u", "tag") as (u, tag):
-    tags_from_seed = Inference(
-        id="inf.tags_from_seed",
-        version="v1",
-        where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-        target="user:tag",
-        head_vars=[u, tag],
-    )
-
-result = fg.eval.evaluate(tags_from_seed)
-
-assert result.count() == 1
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 
 fg.write.add(User.tag, alice, "engineer")
 assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
 
-inspected = fg.rules.inspect(tags_from_seed)
+inspected = fg.rules.inspect(seeded_tags)
 
-assert inspected["kind"] == "Inference"
-assert inspected["branches"][0]["id"] == "seed_path"
-assert inspected["branches"][0]["fallback_id"] == "b0"
+assert inspected["id"] == "user:tag"
 ```
 
 ## Syntax checklist
 
 - Use `vars(...)` to create logic variables for DSL bodies.
-- Use `Pred("entity:field", ...)` for explicit predicate literals inside
-  `Inference` bodies.
-- Use `Branch([...], id="...")` inside `Inference` bodies when branch identity
-  matters; application `Rule` accepts only AND-flat bodies.
 - Use `build_application_rule(id=..., where=[Entity(var), ...], ports={...})`
   to construct application `Rule` values via the canonical SDK bridge.
 - Declare `ports={...}` explicitly; the SDK does not auto-collect them.
@@ -745,13 +707,14 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
   arg arity. `Rule.projection(...)` is not an evaluate head in v0.2.
 - Evaluate rules with `fg.eval.evaluate(rule, head=rule)`; evaluation does not write.
 - Use read APIs for ad-hoc projections; public `fg.eval.run(...)` was removed.
-- Use `Inference(id=..., where=[...], target=..., head_vars=[...])` for
-  proposed facts.
-- Evaluate inferences with `fg.eval.evaluate(inference)`; evaluation does not
-  write.
 - Explain rows with `row.explain()` or replay with
   `fg.eval.explain(expr, head=row.close())`.
 - Inspect rule or inference structure with `fg.rules.inspect(...)`.
+- Use `Inference(id=..., where=[...], target=..., head_vars=[...])` only for
+  v0.2 compatibility call sites that still need explicit `Branch` ids.
+- Use `Pred("entity:field", ...)` inside legacy `Inference` bodies.
+- Use `Branch([...], id="...")` inside legacy `Inference` bodies when branch
+  identity matters; application `Rule` accepts only AND-flat bodies.
 - `RuleRef` is a body-composition tool, not a persistence handle.
 - Rule and inference persistence handles were removed; runtime methods consume
   in-memory value objects directly.
