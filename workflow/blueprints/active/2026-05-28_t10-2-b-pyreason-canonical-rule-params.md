@@ -1,6 +1,6 @@
 # Task Blueprint: T10-2-B PyReason Canonical Rule Params
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: M (runtime implementation)
@@ -408,20 +408,20 @@ remain separate reviewable layers.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed plan completed.
 - [x] Q1-Q12 answered.
-- [ ] SDK shell shipped.
-- [ ] SDK lowering / carrier shipped.
-- [ ] Atom-id conversion shipped without reusing T8-B witness keys.
-- [ ] Adapter consumption shipped.
-- [ ] Legacy `head_bound` / `branch_bounds` compatibility policy shipped.
-- [ ] Canonical + legacy conflict behavior tested.
-- [ ] Existing PyReason behavior preserved.
-- [ ] T10-2-A behavior preserved.
-- [ ] T8-A/B/C-1/D and T10-1 invariants preserved.
-- [ ] T10-2 inventory decisions preserved.
-- [ ] `git diff --check` clean.
-- [ ] Focused PyReason tests pass.
-- [ ] Full discover delta compared against `2019 tests / 72 failures / 231 errors`.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] SDK shell shipped.
+- [x] SDK lowering / carrier shipped.
+- [x] Atom-id conversion shipped without reusing T8-B witness keys.
+- [x] Adapter consumption shipped.
+- [x] Legacy `head_bound` / `branch_bounds` compatibility policy shipped.
+- [x] Canonical + legacy conflict behavior tested.
+- [x] Existing PyReason behavior preserved.
+- [x] T10-2-A behavior preserved.
+- [x] T8-A/B/C-1/D and T10-1 invariants preserved.
+- [x] T10-2 inventory decisions preserved.
+- [x] `git diff --check` clean.
+- [x] Focused PyReason tests pass.
+- [x] Full discover delta compared against `2019 tests / 72 failures / 231 errors`.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -438,4 +438,51 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending implementation / closure.
+Implemented in three runtime/test commits:
+
+1. `e7787478` `feat(sdk): add PyReasonSemantics derived and atom bounds`
+   added `PyReasonSemantics.derived_bound` and `atom_bounds`, canonical
+   interval / atom-id validation, and explicit `derived_bound` + `head_bound`
+   conflict rejection.
+2. `e5ae7ad1` `feat(sdk): lower PyReason C74 bounds with atom conversion`
+   extended SDK lowering context with application atom ids and lowered
+   canonical `<rule_id>:atom_<index>` keys into existing
+   `body_atom:0:<index>` `rule_projection["pyreason"]` entries. Legacy
+   Inference / non-application-Rule inputs reject canonical `atom_bounds`
+   rather than silently guessing a branch.
+3. `e158bf7b` `test(pyreason): cover C74 canonical migration` added six
+   focused tests for SDK validation, lowering conversion, adapter consumption,
+   legacy rejection, conflict behavior, coexistence with `branch_bounds`, and
+   T8-B witness-key non-reuse.
+
+Verification:
+
+- Focused PyReason suite:
+  `PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration`
+  ran `90 OK`.
+- Full discover with `PYTHONPATH=src` ran `2025 tests / 72 failures / 231
+  errors`, a clean `+6 tests / +0 failures / +0 errors` delta from the
+  T10-2-A baseline `2019 / 72F / 231E`.
+- `ruff check` on touched files passed.
+- `git diff --check` passed.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.
+
+Implementation notes:
+
+- The scoped carrier decision held: C74 uses existing
+  `rule_projection["pyreason"]`, not new top-level profile fields.
+- Adapter consumption required no new `rule_ext.py` path; tests exercise the
+  existing resolver end-to-end by checking resolved head and body predicate
+  bounds.
+- T8-B witness keys remain physically isolated: no witness helper import was
+  added, and tests assert the `b0.a` witness-key shape does not appear in
+  lowered entries.
+- T10-2-A `iteration_count` behavior remained isolated; the implementation did
+  not edit `_pyreason_iteration_count_carrier` or `_resolve_iteration_count`.
+- Preview lowering is intentionally looser than runtime lowering: preview can
+  show canonical atom-bound entries without application context, while runtime
+  lowering rejects when atom ids are unavailable.
+- One accidental full-discover run omitted `PYTHONPATH=src` and produced import
+  errors. The valid verification is the rerun with `PYTHONPATH=src` recorded
+  above; future Step 4.7 checks should keep the environment prefix explicit.

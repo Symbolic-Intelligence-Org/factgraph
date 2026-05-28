@@ -1,6 +1,6 @@
 # Audit: T10-2-B PyReason Canonical Rule Params
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
@@ -16,7 +16,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-28 | draft | `109c4c6f` | T10-2-B PyReason C74 canonical rule params drafted | Triggered by T10-2 inventory split decision and T10-2-A C78 ship; Q1-Q12 pending Step 4.6. |
-| 2026-05-28 | scoped | this commit | Step 4.6 source-backed plan completed | Selected existing `rule_projection["pyreason"]` carrier, SDK-lowering atom-id conversion, and three-impl commit split. |
+| 2026-05-28 | scoped | `87429f04` | Step 4.6 source-backed plan completed | Selected existing `rule_projection["pyreason"]` carrier, SDK-lowering atom-id conversion, and three-impl commit split. |
+| 2026-05-28 | implemented | this commit | T10-2-B implementation reviewed and closed | Three implementation commits shipped SDK shell, lowering/conversion, and tests; focused PyReason suite `90 OK`; full discover `2025 / 72F / 231E`. |
 
 ## 2. Draft Source Scan
 
@@ -101,9 +102,48 @@ claim with source refs.
 - [x] Atom-id conversion plan reviewed.
 - [x] Conflict and compatibility policy reviewed.
 - [x] Test matrix reviewed.
-- [ ] Implementation review complete.
-- [ ] Closure notes filled.
+- [x] Implementation review complete.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending implementation / closure.
+Implementation commits:
+
+- `e7787478` `feat(sdk): add PyReasonSemantics derived and atom bounds`
+- `e5ae7ad1` `feat(sdk): lower PyReason C74 bounds with atom conversion`
+- `e158bf7b` `test(pyreason): cover C74 canonical migration`
+
+Shipped outcome:
+
+- Public SDK shell now exposes canonical `PyReasonSemantics.derived_bound` and
+  `atom_bounds` while retaining legacy `head_bound` / `branch_bounds`.
+- SDK lowering emits existing `rule_projection["pyreason"]` entries and
+  converts canonical application atom ids `<rule_id>:atom_<index>` to
+  positional `body_atom:0:<index>` targets.
+- Legacy Inference / non-application-Rule contexts reject canonical
+  `atom_bounds` explicitly instead of guessing a branch.
+- `derived_bound` + `head_bound` rejects; `atom_bounds` + `branch_bounds`
+  coexists because they target body-atom thresholds vs branch head intervals.
+- Existing adapter resolver code consumed the lowered entries without a new
+  adapter path.
+
+Verification:
+
+- Focused PyReason suite: `90 OK`.
+- Full discover with `PYTHONPATH=src`: `2025 tests / 72 failures / 231 errors`;
+  clean `+6 / +0F / +0E` delta from the `2019 / 72F / 231E` baseline.
+- `ruff check` on touched files passed.
+- `git diff --check` passed.
+- Sacred `master` and dirty baseline were preserved.
+
+Implementation notes:
+
+- Test 3 validates the full SDK -> profile -> adapter chain by resolving
+  canonical head and body predicate bounds through `_resolve_pyreason_engine_ext`.
+- Test 4 covers both unknown atom-id rejection and missing application-Rule
+  context rejection.
+- T8-B witness-key non-reuse is asserted directly (`"b0.a"` absent from lowered
+  entries) and no witness helper import was added.
+- T10-2-A C78 helpers remained untouched.
+- The valid full-discover command requires `PYTHONPATH=src`; a no-prefix run
+  produced import errors and was discarded before rerunning correctly.
