@@ -1,15 +1,15 @@
 # Current Operational Memory
 
-最后更新:2026-05-28(T10-2 PyReason canonical migration inventory archived locally; pending push gate)
+最后更新:2026-05-28(T10-2-A PyReason iteration_count migration archived locally; pending push gate)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ c8ca97f5`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ f8e08905`
 
-**Most recent local work:** T10-2 PyReason canonical migration inventory
-archived locally; split = C78 `iteration_count` first, then C74 bounds / atom-id conversion.
+**Most recent local work:** T10-2-A PyReason `iteration_count` migration
+archived locally; pending push gate.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do not move it.
 
@@ -48,25 +48,23 @@ Release-facing shipped/deferred summaries live in `CHANGELOG.md`.
 - ProbLog lane is now closed through user docs: T10-1 C76 uncertainty projection
   at `cde072fa`, T8-C-1 row provenance runtime at `5ffd4850`, and T8-D round 3
   user docs at `c23ce097`.
-- T8-C / T10 planning remains the source for PyReason: T10-2 inventory is
-  complete locally and recommends T10-2-A C78 before T10-2-B C74; T10-3 C77 is
-  deferred, and T8-C-2 PyReason evidence remains gated on those semantics locks.
+- T8-C / T10 planning remains the source for PyReason: T10-2 inventory pushed
+  at `f8e08905`; T10-2-A C78 is complete locally and pending push; T10-2-B C74
+  and T10-3 C77 remain future, so T8-C-2 PyReason evidence remains gated.
 
 ## Recommended Next Work
 
-1. **T10-2-A C78 PyReason `iteration_count` migration**: introduce canonical
-   engine iteration count and `fixed_timesteps` compatibility.
-2. **T8-C-2 PyReason Form 2 inventory**: source-back the evidence enrichment
-   lane before implementation; expect D11 plus C74/C77/C78 gates.
-3. **T10-2-B C74 PyReason canonical bounds / atom-id conversion**: add
+1. **T10-2-B C74 PyReason canonical bounds / atom-id conversion**: add
    `derived_bound` / full-atom-id `atom_bounds` while preserving legacy
    `head_bound` / `branch_bounds` compatibility.
-4. **T10-3 C77 PyReason temporal migration**: after T10-2, add canonical
+2. **T10-3 C77 PyReason temporal migration**: add canonical
    `fact_boundaries` / `time_binned` policy and decouple legacy
    `fixed_timesteps`.
-5. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
+3. **T8-C-2 PyReason Form 2 inventory**: source-back the evidence enrichment
+   lane before implementation; expect D11 plus C74/C77 gates.
+4. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
-6. **Design-point intake**: classify the identity/data-model,
+5. **Design-point intake**: classify the identity/data-model,
    identity-mechanism, append-only-ledger, and ledger-schema untracked files.
 
 ## Governance Reminders

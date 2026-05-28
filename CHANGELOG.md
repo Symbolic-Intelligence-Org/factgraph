@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `derived_bound` / full-atom-id `atom_bounds`, with legacy `fixed_timesteps`,
   `head_bound`, and `branch_bounds` handled through explicit compatibility
   policy.
+- **PyReason canonical `iteration_count` execution is shipped** for C78:
+  public `PyReasonSemantics(iteration_count=...)` lowers into canonical
+  `SemanticsProfile.iteration_count`, the adapter consumes it as PyReason run
+  timesteps, and explicit conflicts with legacy temporal timesteps modes are
+  rejected instead of silently choosing a winner. The wrapper default is the
+  canonical `iteration_count=1`; no-profile adapter execution keeps its existing
+  engine default.
 
 ### Changed
 

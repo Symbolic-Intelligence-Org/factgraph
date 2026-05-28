@@ -152,7 +152,7 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
 | T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`. T8-C-2 PyReason runtime implementation remains future. |
 | T9 | Superseded in part by T8-D docs for shipped native + Souffle + ProbLog evidence behavior; broader release alignment remains conditional on any later T8-C behavior. |
-| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory complete locally; T10-2-A/T10-2-B/T10-3 implementation remains future. |
+| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` complete locally and pending push; T10-2-B/T10-3 implementation remains future. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton
@@ -281,8 +281,9 @@ T9 should not invent behavior. It documents only shipped evidence capabilities a
 
 **Status(2026-05-28)**: design-only T10 inventory complete at `580b2636`;
 T10-1 C76 ProbLog runtime implementation complete and pushed at `cde072fa`;
-T10-2 PyReason canonical migration inventory complete locally. T10-2-A /
-T10-2-B / T10-3 implementation remains future.
+T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A
+C78 PyReason `iteration_count` complete locally and pending push. T10-2-B /
+T10-3 implementation remains future.
 
 **Goal**: finish adapter-touching semantics deferred from T5.8.
 
@@ -310,8 +311,9 @@ Inventory result:
   remain future.
 - C74 is partial/legacy: `timestep_delay` ships, but canonical
   `derived_bound` / full-atom-id `atom_bounds` are not shipped.
-- C78 `iteration_count` is missing; legacy `fixed_timesteps` currently couples
-  iteration count into temporal projection and must be decoupled.
+- C78 `iteration_count` is shipped locally through SDK shell, canonical profile
+  carrier, adapter consumption, and conflict tests; legacy `fixed_timesteps`
+  remains an alias/fallback when canonical C78 is absent.
 
 Planned implementation split:
 
@@ -319,8 +321,10 @@ Planned implementation split:
    adapter consumption. Shipped at `cde072fa`: default reject projection, explicit
    raw-uncertainty consumption in ProbLog export, point-projection policies, and
    fixture migration off legacy `confidence`.
-2. **T10-2-A PyReason C78**: canonical `iteration_count` migration first,
-   with explicit compatibility policy for legacy `fixed_timesteps`.
+2. **T10-2-A PyReason C78**: canonical `iteration_count` migration complete
+   locally; push pending. It ships wrapper default `iteration_count=1`, optional
+   `SemanticsProfile.iteration_count`, adapter consumption, and explicit
+   conflict rejection with legacy temporal timesteps modes.
 3. **T10-2-B PyReason C74**: canonical `derived_bound` and full-atom-id
    `atom_bounds` conversion, preserving or explicitly migrating legacy
    `head_bound` / `branch_bounds` / positional PyReason targets.

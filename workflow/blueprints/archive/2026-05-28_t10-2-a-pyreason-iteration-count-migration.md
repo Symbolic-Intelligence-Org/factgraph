@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-28_t10-2-a-pyreason-iteration-count-migration.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-28_t10-2-a-pyreason-iteration-count-migration.audit.md`
 - Trigger: T10-2 inventory archived at `f8e08905` selected Option C:
   T10-2-A ships C78 canonical `iteration_count` before T10-2-B C74 atom-bound
   conversion. The same inventory confirmed C78 is missing at SDK/profile/adapter
