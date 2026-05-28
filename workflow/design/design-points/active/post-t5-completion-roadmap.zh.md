@@ -74,8 +74,8 @@ At roadmap creation:
 2026-05-28 status note:
 
 - Sacred `master` still remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
-- Current dirty baseline observed during docs sync round 3 is 4 modified
-  tracked files, 1 deleted tracked file, and 3 untracked files/directories.
+- Current dirty baseline observed during T10-3 inventory is 4 modified tracked
+  files, 1 deleted tracked file, and 6 untracked files/directories.
 - This roadmap still must not absorb dirty baseline files.
 
 ---
@@ -151,7 +151,7 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
 | T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`. T8-C-2 PyReason runtime implementation remains future. |
 | T9 | Superseded in part by T8-D docs for shipped native + Souffle + ProbLog evidence behavior; broader release alignment remains conditional on any later T8-C behavior. |
-| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason canonical rule params complete locally and pending push; T10-3 implementation remains future. |
+| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason canonical rule params pushed at `92fd6013`; T10-3 C77 temporal inventory complete locally and pending push. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton
@@ -282,8 +282,8 @@ T9 should not invent behavior. It documents only shipped evidence capabilities a
 T10-1 C76 ProbLog runtime implementation complete and pushed at `cde072fa`;
 T10-2 PyReason canonical migration inventory pushed at `f8e08905`; T10-2-A
 C78 PyReason `iteration_count` pushed at `65cc79a3`; T10-2-B C74 PyReason
-canonical rule params complete locally and pending push. T10-3 implementation
-remains future.
+canonical rule params pushed at `92fd6013`; T10-3 C77 temporal inventory
+complete locally and pending push.
 
 **Goal**: finish adapter-touching semantics deferred from T5.8.
 
@@ -308,9 +308,10 @@ Inventory result:
   `SemanticsProfile.uncertainty_projection` carrier exists.
 - C77 is partial under legacy names: `valid_time_boundaries` and
   `fixed_timesteps` ship, while canonical `fact_boundaries` and `time_binned`
-  remain future.
-- C74 canonical `derived_bound` / full-atom-id `atom_bounds` is complete
-  locally and pending push. It lowers through existing
+  remain future. T10-3 inventory selected `fact_boundaries` alias /
+  compatibility as T10-3-A and `time_binned` as T10-3-B.
+- C74 canonical `derived_bound` / full-atom-id `atom_bounds` is pushed at
+  `92fd6013`. It lowers through existing
   `rule_projection["pyreason"]`, converts application atom ids to PyReason
   body-atom targets, rejects duplicate `derived_bound` / `head_bound`, and
   preserves legacy `head_bound` / `branch_bounds` compatibility.
@@ -329,11 +330,14 @@ Planned implementation split:
    `SemanticsProfile.iteration_count`, adapter consumption, and explicit
    conflict rejection with legacy temporal timesteps modes.
 3. **T10-2-B PyReason C74**: canonical `derived_bound` and full-atom-id
-   `atom_bounds` conversion complete locally; push pending. It preserves legacy
+   `atom_bounds` conversion pushed at `92fd6013`. It preserves legacy
    `head_bound` / `branch_bounds` compatibility and does not reuse T8-B witness
    keys.
-4. **T10-3 PyReason C77**: canonical `fact_boundaries` rename / compatibility
-   alias and `time_binned` temporal runtime behavior.
+4. **T10-3-A PyReason C77 alias**: canonical `fact_boundaries` rename /
+   compatibility alias, preserving legacy `valid_time_boundaries`,
+   `fixed_timesteps`, and T10-2-A conflict behavior.
+5. **T10-3-B PyReason C77 bins**: `time_binned` temporal runtime behavior with
+   strict `bin_size` validation and binned materialization.
 
 ### 3.7 T11 — Database/View Release Track
 
@@ -420,10 +424,10 @@ N1 roadmap(this doc)
 This original sequence has been partially executed. As of 2026-05-28:
 T12, T11.2, T11.3, T6, T7, T8 split inventory, T8-A, T8-B-1, T8-D A+B docs,
 T8-B-2, T8-D round 2 Souffle docs, T8-C inventory, T10 inventory, T10-1,
-T8-C-1 inventory/runtime, T8-D round 3, T10-2 inventory, and T10-2-A are
-complete and pushed. T10-2-B C74 PyReason canonical rule params are complete
-locally and pending push. T10-3, T8-C-2 runtime implementation, and any later
-T8-D/T9 release-alignment pass remain open.
+T8-C-1 inventory/runtime, T8-D round 3, T10-2 inventory, T10-2-A, and T10-2-B
+are complete and pushed. T10-3 C77 temporal inventory is complete locally and
+pending push. T10-3-A/B implementation, T8-C-2 runtime implementation, and any
+later T8-D/T9 release-alignment pass remain open.
 
 Rationale:
 
@@ -531,7 +535,7 @@ This scoped inventory records what this roadmap is allowed to claim before later
 | Active design sources | Parent Rule/Eval, Evidence Tree, and Database/View active design-points remain the authoritative source. | This roadmap links those files but does not rewrite their §deferred registries. |
 | Dependency graph | T6→T8→T9 evidence chain, T10 cross-cutting semantics influence, and T11/T12 release-track independence are planning assumptions. | Later blueprints may narrow or reorder after their own Step 4.6 inventory. |
 | Release blockers | T11.2, T11.3, minimal T12, and dirty-baseline triage are release-blocker candidates. | Release blocker status is not final until T11.2/T11.3 blueprints inspect shipped source and docs. |
-| Deferred items | Parent §5.12/C77, evidence §14 clusters, and database §12/§17 items remain deferred unless a future blueprint activates them; C74/C76/C78 have been activated by T10-1/T10-2 implementation cycles. | Reactivation triggers in §6 are planning triggers, not implementation authorization. |
+| Deferred items | Parent §5.12/C77 implementation, evidence §14 clusters, and database §12/§17 items remain deferred unless a future blueprint activates them; C74/C76/C78 have been activated by T10-1/T10-2 implementation cycles, and C77 has a T10-3-A/B inventory split. | Reactivation triggers in §6 are planning triggers, not implementation authorization. |
 | Owner model | Owner candidates are coordination hints. | Cross-flip remains default for `shared`; self-owned fallback is allowed when recorded in the relevant audit. |
 | Dirty baseline | Roadmap work must not absorb dirty baseline files. | Creation-time baseline was 6M+1U; 2026-05-28 observed baseline is 4M+1D+6U. This document remains docs-only. |
 | Push governance | Prior push authorization does not roll forward. | Any roadmap push requires explicit single-use authorization. |

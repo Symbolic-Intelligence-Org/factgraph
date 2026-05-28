@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `<rule_id>:atom_<index>` convert to PyReason `body_atom:0:<index>` targets,
   `derived_bound` conflicts explicitly with legacy `head_bound`, and legacy
   `branch_bounds` remains compatible with canonical body-atom thresholds.
+- **T10-3 PyReason temporal migration inventory is archived** as a planning
+  artifact: canonical C77 should ship as T10-3-A `fact_boundaries`
+  alias/compatibility followed by T10-3-B `time_binned`; legacy
+  `valid_time_boundaries` and `fixed_timesteps` remain compatibility surfaces
+  through the first implementation slice.
 
 ### Changed
 
