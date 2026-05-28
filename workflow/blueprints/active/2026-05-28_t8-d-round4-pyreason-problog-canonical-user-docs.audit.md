@@ -1,11 +1,11 @@
 # Audit: T8-D Round 4 PyReason + ProbLog Canonical User Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-d-round4-pyreason-problog-canonical-user-docs.md`
-- Stage: draft
+- Stage: scoped
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-28 | draft | this commit | T8-D round 4 canonical user-docs blueprint pair drafted | Triggered by T10-1 `cde072fa`, T10-2-A `65cc79a3`, T10-2-B `92fd6013`, T10-3-A `e7bab90f`, and T10-3-B `ac42a379`; Q1-Q12 pending Step 4.6 after amend. |
 | 2026-05-28 | draft amend | this commit | Scope expanded to include `rules-and-inferences.md` deprecation cleanup | User source-backed stale first-class `Inference` / `Query` teaching; Q11-Q12 added. |
+| 2026-05-28 | scoped | this commit | Step 4.6 source-backed inventory completed | Four-file implementation surface selected; focused docs-only baseline `140 OK`. |
 
 ## 2. Draft Source Scan
 
@@ -43,22 +44,47 @@ Read-only orientation findings:
 This draft scan is not a Step 4.6 answer. Step 4.6 must verify or correct each
 claim with source refs and target-file line refs.
 
+## 2A. Step 4.6 Scoped Findings
+
+- `semantics.md` edit map: wrapper table `:18-41`, ProbLog section `:101-137`,
+  PyReason section `:139-175`, SemanticsProfile note `:177-194`, complete
+  example/checklist `:269-340`.
+- `assertions.md` already has raw carrier teaching at `:136-231`; add a short
+  T10-1 projection-policy note instead of duplicating schema.
+- `rules-and-inferences.md` cleanup is real: stale `Query` section `:491-514`,
+  large `Inference` compatibility section `:516-589`, lifecycle/checklist
+  mentions `:608-625, :644-759`. Current `Rule` / `RuleExpr` / match/evaluate
+  sections `:60-489` should be preserved.
+- `00_user_guide.en.md` is stale enough to include as the fourth file:
+  `:578-630` and `:1038-1081` still list old PyReason temporal/canonical
+  surfaces.
+- Source-backed behavior anchors:
+  - ProbLog default reject and policies:
+    `tests/test_problog_semantics_profile_migration.py:400-525`.
+  - PyReason C74/C78/C77 tests:
+    `tests/test_pyreason_semantics_profile_migration.py:293-893`.
+  - SemanticsProfile temporal modes:
+    `src/factgraph/core/semantics/profile.py:165-250`.
+  - PyReason temporal adapter conflicts/materializers:
+    `src/factgraph/adapters/pyreason/engine_eval.py:283-580`.
+- Verification: focused docs-only set ran `140 tests` and passed.
+
 ## 3. Open Questions Register
 
 | ID | Question | Status |
 |---|---|---|
-| Q1 | What exact `semantics.md` sections will be edited? | Pending Step 4.6. |
-| Q2 | Where does the `assertions.md` raw uncertainty annotation text belong? | Pending Step 4.6. |
-| Q3 | Should the SDK guide be edited? | Pending Step 4.6. |
-| Q4 | How should T10-2-A's default `iteration_count=1` behavior change be explained? | Pending Step 4.6. |
-| Q5 | How deep should `bin_size` documentation go? | Pending Step 4.6. |
-| Q6 | How deep should `atom_bounds` atom-id documentation go? | Pending Step 4.6. |
-| Q7 | How should `fact_boundaries` be taught without encouraging legacy spelling? | Pending Step 4.6. |
-| Q8 | Which files are explicitly left alone? | Pending Step 4.6. |
-| Q9 | What implementation split should be used? | Pending Step 4.6. |
-| Q10 | Are there stop/amend findings? | Pending Step 4.6. |
-| Q11 | How should `Inference` be taught? | Pending Step 4.6. |
-| Q12 | How should `Query` be taught? | Pending Step 4.6. |
+| Q1 | What exact `semantics.md` sections will be edited? | Answered: `:18-41`, `:101-175`, light `:177-194`, `:269-340`. |
+| Q2 | Where does the `assertions.md` raw uncertainty annotation text belong? | Answered: existing raw carrier area `:177-212`. |
+| Q3 | Should the SDK guide be edited? | Answered: yes, stale `:578-630` and `:1038-1081`. |
+| Q4 | How should T10-2-A's default `iteration_count=1` behavior change be explained? | Answered: wrapper default 1 vs no-profile engine default 2; explicit temporal conflicts reject. |
+| Q5 | How deep should `bin_size` documentation go? | Answered: full whitelist + reject examples, no parser dump. |
+| Q6 | How deep should `atom_bounds` atom-id documentation go? | Answered: user-facing `<rule_id>:atom_<index>` only, no internal conversion dump. |
+| Q7 | How should `fact_boundaries` be taught without encouraging legacy spelling? | Answered: canonical-first; legacy compatibility sentence only. |
+| Q8 | Which files are explicitly left alone? | Answered: evidence, audit docs, adapter docs, unrelated quickstarts, runtime/tests, dirty baseline, design-points. |
+| Q9 | What implementation split should be used? | Answered: four docs commits plus close/archive. |
+| Q10 | Are there stop/amend findings? | Answered: no. |
+| Q11 | How should `Inference` be taught? | Answered: legacy compatibility section, not first/default path. |
+| Q12 | How should `Query` be taught? | Answered: remove one-off projection example; mark internal-only only if referenced. |
 
 ## 4. Risk Register
 
@@ -78,18 +104,18 @@ claim with source refs and target-file line refs.
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 source-backed inventory complete.
-- [ ] Q1-Q12 answered.
-- [ ] File scope stays at four files or fewer.
-- [ ] T10-2-A default warning reviewed.
-- [ ] `bin_size` whitelist wording reviewed.
-- [ ] `atom_bounds` atom-id wording reviewed.
-- [ ] `rules-and-inferences.md` deprecation cleanup map reviewed.
-- [ ] Leave-alone sweep reviewed.
-- [ ] Focused docs-only verification plan reviewed.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 source-backed inventory complete.
+- [x] Q1-Q12 answered.
+- [x] File scope stays at four files or fewer.
+- [x] T10-2-A default warning reviewed.
+- [x] `bin_size` whitelist wording reviewed.
+- [x] `atom_bounds` atom-id wording reviewed.
+- [x] `rules-and-inferences.md` deprecation cleanup map reviewed.
+- [x] Leave-alone sweep reviewed.
+- [x] Focused docs-only verification plan reviewed.
 - [ ] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / implementation / closure.
+Pending implementation / closure.

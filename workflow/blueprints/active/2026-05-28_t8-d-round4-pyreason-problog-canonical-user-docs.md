@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Round 4 PyReason + ProbLog Canonical User Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S (docs-only)
@@ -140,100 +140,171 @@ lifecycle state.
 | `workflow/blueprints/archive/2026-05-28_t10-3-b-time-binned-migration.md` | T10-3-B `time_binned` behavior and `bin_size` whitelist. |
 | `docs/official/kernel/quickstart/semantics.md` | Primary user-facing target. |
 | `docs/official/kernel/quickstart/assertions.md` | Secondary ProbLog raw-uncertainty annotation target. |
+| `docs/official/kernel/quickstart/rules-and-inferences.md` | Deprecation cleanup target for stale `Inference` / `Query` teaching. |
 | `src/factgraph/sdk/docs/00_user_guide.en.md` | Optional concise SDK summary target. |
 | T8-D round 1/2/3 archive pairs | Docs-only cadence and leave-alone discipline. |
 
-## 3. Step 4.6 Source-Backed Inventory Skeleton
+## 3. Step 4.6 Source-Backed Inventory
 
 ### 3.1 `semantics.md` Current Wording
 
-Inventory the current `ProbLogSemantics` / `PyReasonSemantics` sections:
+`docs/official/kernel/quickstart/semantics.md` is the primary edit surface.
 
-- Existing wrapper examples and policy tables.
-- Current mentions of `uncertainty_projection`, `iteration_count`,
-  `derived_bound`, `atom_bounds`, `fact_boundaries`, and `time_binned`.
-- Sections that should remain byte-stable because they cover already-shipped
-  T8-D round 1/2/3 or non-semantic topics.
+| Lines | Current state | Step 4.7 edit decision |
+|---|---|---|
+| `:18-41` | Wrapper table still teaches ProbLog defaults / branch probabilities and PyReason delays / `head_bound` / `branch_bounds`. | Rewrite table and wrapper descriptions to include `uncertainty_projection`, `iteration_count`, `derived_bound`, `atom_bounds`, `fact_boundaries`, and `time_binned`. |
+| `:101-137` | `ProbLogSemantics` section teaches default wrapper and engine mismatch only. | Expand with T10-1 uncertainty projection policy map, default reject behavior, supported point policies, and rejected interval policies. |
+| `:139-175` | `PyReasonSemantics` teaches `timestep_delay`, `head_bound`, `branch_bounds`; no C78/C74/C77 canonical fields. | Rewrite as canonical-first PyReason section: `iteration_count`, `derived_bound`, `atom_bounds`, `fact_boundaries`, `time_binned`; keep legacy aliases as compatibility notes. |
+| `:177-194` | `SemanticsProfile` section still generic and accurate. | Minimal update only if needed to mention canonical lower form now includes `iteration_count`, `uncertainty_projection`, and temporal modes. |
+| `:196-229` | Read-only/evaluation lifecycle wording remains accurate. | Leave mostly stable; ensure row `raw_kind`/`bound` comment still points to assertions. |
+| `:231-255` | `Inference` branch-id compatibility remains accurate for branch-specific maps. | Keep as compatibility section; do not move in this cycle. |
+| `:269-340` | Complete example/checklist still uses `head_bound` and omits new fields. | Update example/checklist to canonical spellings and mention docs for legacy branch ids. |
+
+Runtime source-back:
+
+- `ProbLogSemantics.uncertainty_projection` exists and normalizes in
+  `src/factgraph/sdk/semantics.py:131-139, :162-169`.
+- Default ProbLog projection rejects both configured raw kinds with fallback
+  `reject_unconfigured`, verified by
+  `tests/test_problog_semantics_profile_migration.py:400-411`.
+- Supported ProbLog point policies are `lower`, `midpoint`, `upper`, and
+  `identity_probability`; interval policies `probability_interval` /
+  `possibility_interval` are accepted by profile validation but rejected by
+  ProbLog point export, verified by
+  `tests/test_problog_semantics_profile_migration.py:430-453, :487-525` and
+  `src/factgraph/adapters/problog/problog_export.py:284-346`.
+- PyReason public fields are source-backed at
+  `src/factgraph/sdk/semantics.py:180-199, :215-239`.
+- Temporal modes are source-backed at
+  `src/factgraph/core/semantics/profile.py:165-190` and adapter consumption at
+  `src/factgraph/adapters/pyreason/engine_eval.py:283-359`.
 
 ### 3.2 `assertions.md` Annotation Surface
 
-Inventory existing ProbLog / PyReason assertion annotation text and decide the
-smallest insertion point for `shared/semantic/raw_kind` +
-`shared/semantic/bound`.
+`docs/official/kernel/quickstart/assertions.md` already teaches the raw carrier
+well:
+
+- Convention meta table includes `raw_kind` and `bound` at `:136-146`.
+- Raw uncertainty section explains probabilistic / possibilistic kinds at
+  `:148-189`.
+- Canonical quantitative carrier explains write/evaluate/audit surfaces and
+  shared annotation rows at `:191-231`.
+- Reserved-key section rejects `probability`, `bound_lower`, `bound_upper` at
+  `:244-271`.
+
+Edit decision: add a short T10-1 projection note inside the existing raw
+uncertainty / canonical carrier area, not a new schema dump. The note should
+say that `ProbLogSemantics.uncertainty_projection` decides how probabilistic
+interval bounds are projected, and that unsupported/default paths reject rather
+than silently picking a point.
+
+Source-back:
+
+- Write protocol enforces paired raw carrier and removed keys in
+  `src/factgraph/core/evidence/write_protocol.py:282-314`.
+- ProbLog export consumes canonical `shared/semantic/raw_kind` and
+  `shared/semantic/bound`, with projection decisions attached to trace metadata
+  in `src/factgraph/adapters/problog/engine_eval.py:97-106, :180-199`.
 
 ### 3.3 Five-Cycle Teaching Plan
 
-For each shipped cycle, Step 4.6 must record the exact user-facing content:
-
-1. T10-1: ProbLog `uncertainty_projection` policies and raw uncertainty
-   annotations.
-2. T10-2-A: PyReason `iteration_count`, default behavior, and conflict
-   behavior.
-3. T10-2-B: PyReason `derived_bound`, `atom_bounds`, atom id format, and
-   legacy compatibility.
-4. T10-3-A: `fact_boundaries` canonical alias and legacy
-   `valid_time_boundaries` compatibility.
-5. T10-3-B: `time_binned`, strict `bin_size` whitelist, universe divisibility,
-   date/datetime parsing, and conflict behavior.
+| Cycle | User-facing teaching point | Source-back |
+|---|---|---|
+| T10-1 | `ProbLogSemantics(uncertainty_projection={...})` maps raw uncertainty intervals to ProbLog point probabilities. Defaults reject unsupported uncertainty. | SDK field `semantics.py:131-139`; default reject test `test_problog...py:400-411`; point policy tests `:430-453`; interval reject tests `:506-525`. |
+| T10-2-A | `PyReasonSemantics.iteration_count` is a positive global inference round count. Wrapper default is `1`; explicit canonical count conflicts with temporal timesteps carriers. | SDK field/validation `semantics.py:182-193, :215-218`; omission/default tests `test_pyreason...py:384-423`; conflict tests `:582-676`; adapter conflict helper `engine_eval.py:398-403`. |
+| T10-2-B | `derived_bound` is canonical head interval; `atom_bounds` uses `<rule_id>:atom_<index>` and lowers to PyReason body atom targets. `derived_bound + head_bound` rejects; `atom_bounds + branch_bounds` may coexist. | SDK fields `semantics.py:183-197`; conflict check `:221-227`; lowering tests `test_pyreason...py:293-380`; store lowering `src/factgraph/sdk/store.py:3481-3528`. |
+| T10-3-A | `fact_boundaries` is the canonical valid-time spelling. Option A preserves input spelling; legacy `valid_time_boundaries` remains accepted. | Profile modes `profile.py:176-183`; adapter dynamic carrier `engine_eval.py:318-337`; tests `test_pyreason...py:437-462, :628-649, :705-728`. |
+| T10-3-B | `time_binned` is a new temporal mode with `universe` and strict `bin_size`. It requires exact universe divisibility and rejects naive datetimes / arbitrary prose durations. | Profile validation `profile.py:184-190, :207-250`; materializer `engine_eval.py:459-580`; tests `test_pyreason...py:464-524, :651-676, :731-893`. |
 
 ### 3.4 SDK Guide Decision
 
-Decide whether `src/factgraph/sdk/docs/00_user_guide.en.md` needs a concise
-summary update. If yes, keep it short and point to the quickstart. If no,
-record why the existing SDK guide is not stale.
+Decision: edit `src/factgraph/sdk/docs/00_user_guide.en.md` as the optional
+fourth file.
+
+Rationale: the guide is stale in two visible places:
+
+- Engine runtime options still show
+  `PyReasonSemantics(temporal_projection={"timesteps": 10})` at `:578-582`,
+  which omits `mode` and no longer matches the normalized temporal projection
+  shape.
+- The PyReason transition section at `:1038-1081` lists only
+  `none`, `fixed_timesteps`, and `valid_time_boundaries`, omitting
+  `iteration_count`, `derived_bound`, `atom_bounds`, `fact_boundaries`, and
+  `time_binned`.
+
+Implementation should keep this concise: update the transition summary and
+point readers to `docs/official/kernel/quickstart/semantics.md` for detail.
+Do not duplicate the full quickstart.
 
 ### 3.5 Cross-Doc Consistency
 
-Check whether `namespace-map.md`, `rules-and-inferences.md`, `evidence.md`, and
-audit docs contain stale semantics claims. The default expectation is
-leave-alone unless Step 4.6 finds direct contradiction.
+| File | Finding | Decision |
+|---|---|---|
+| `namespace-map.md` | Semantics row at `:188` generically lists wrappers and `SemanticsProfile`; no stale field list. | Leave alone. |
+| `evidence.md` | T8-D round 3 ProbLog row provenance section remains accurate; stability section `:328-357` positions `Inference` / `Branch` as legacy compatibility and links to rules. | Leave alone; preserve link target. |
+| `rules-and-inferences.md` | Current API sections for `Rule`, `RuleExpr`, `fg.read.match`, `fg.eval.evaluate` at `:60-489` are useful; `Inference` / `Query` teaching is over-prominent and duplicated. | Edit only stale `Inference` / `Query` teaching and opening/checklist. |
+| Adapter docs | `03_pyreason_adapter.md` has stale mode list, but adapter docs are named future work. | Leave alone by scope. |
 
 ### 3.6 Anti-Silent-Ignore Teaching
 
-Record how the docs should explain explicit rejection / conflict behavior:
+Docs should teach explicit conflicts without turning quickstart into an error
+catalog:
 
-- T10-1 default ProbLog projection rejects unsupported uncertainty.
-- T10-2-A rejects explicit `iteration_count` plus legacy temporal timesteps.
-- T10-2-B rejects `derived_bound` plus `head_bound`, while `atom_bounds` and
-  `branch_bounds` can coexist.
-- T10-3-A/B temporal modes reject explicit `iteration_count` conflicts with
-  carrier-specific messages.
+- T10-1: default ProbLog projection rejects unsupported raw uncertainty; users
+  configure a policy rather than relying on silent midpoint.
+- T10-2-A: wrapper default `iteration_count=1` is valid. The behavior warning is
+  that `PyReasonSemantics()` now lowers to canonical timesteps 1, while direct
+  no-profile PyReason adapter execution still keeps engine default timesteps 2.
+  Explicit `iteration_count` plus `fixed_timesteps`, `valid_time_boundaries`,
+  `fact_boundaries`, or `time_binned` rejects.
+- T10-2-B: `derived_bound + head_bound` rejects because both target the rule
+  head; `atom_bounds + branch_bounds` can coexist because body-atom and branch
+  head intervals are different surfaces.
+- T10-3-A/B: temporal conflict errors include the supplied carrier spelling
+  (`fact_boundaries` or `time_binned`), following dynamic carrier tests at
+  `tests/test_pyreason_semantics_profile_migration.py:628-676`.
 
 ### 3.7 Leave-Alone Sweep
 
-List all files intentionally not edited, including evidence quickstart, audit
-module docs, adapter module docs, other quickstart files, and the four
-untracked design-point files.
+| Surface | Reason |
+|---|---|
+| `docs/official/kernel/quickstart/evidence.md` | T8-D round 3 aligned row provenance; no contradiction found. |
+| `src/factgraph/audit/docs/02_evidence_graph.md` | Audit-module evidence docs are outside this quickstart cycle. |
+| `src/factgraph/adapters/docs/02_problog_adapter.md` / `03_pyreason_adapter.md` | Adapter docs alignment is named future work. |
+| Other quickstart files | `namespace-map.md` and evidence are not stale for this cycle; database/persistence/schema/index/read-write are unrelated. |
+| Runtime and tests | Docs-only cycle; no behavior changes. |
+| Four untracked design-point files | Claim-first / design-point intake remains separate strategic work. |
 
-### 3.8 `rules-and-inferences.md` Deprecation Cleanup
+### 3.8 `rules-and-inferences.md` Deprecation Cleanup Map
 
-Source-back every `Inference` / `Query` occurrence in
-`docs/official/kernel/quickstart/rules-and-inferences.md` and classify each
-stale segment:
-
-- Delete or rewrite stale `Query` one-off projection teaching.
-- Move `Inference` content to a legacy compatibility section when it remains
-  useful.
-- Keep `Rule`, `RuleExpr`, `fg.read.match()`, and `fg.eval.evaluate()` as the
-  leading current API.
-- Check any cross-link to `evidence.md` stability wording before editing.
+| Lines | Current state | Step 4.7 treatment |
+|---|---|---|
+| `:6-20` | Opening table presents `Inference` as first-class "Propose new facts" path. | Rewrite to lead with `Rule` / `RuleExpr`, `fg.read.match`, and `fg.eval.evaluate`; mention `Inference` only as legacy compatibility. |
+| `:28-41` and `:647-659` | Imports include `Branch`, `Inference`, `Pred`, `Query` in broad examples. | Remove `Query`; keep legacy imports only in a scoped legacy section. |
+| `:60-489` | Current `Rule`, `RuleExpr`, `match`, `evaluate`, head selection content. | Preserve, except line `:106` can say `Branch` belongs to legacy `Inference` rather than "use Inference for that". |
+| `:491-514` | "Use Query for one-off projections" includes `Query(...)` example. | Delete or replace with a short internal-only note; public path is `fg.read.find`, `fg.read.match`, or `fg.eval.evaluate`. |
+| `:516-589` | "Evaluate an Inference" is already labeled v0.2 compatibility but too large for the main path. | Move/demote under a "Legacy compatibility: Inference and Branch" section after current API path; keep enough example to preserve compatibility teaching. |
+| `:608-625` | Lifecycle summary still says `Inference -> evaluate`. | Rewrite to `Rule / RuleExpr -> evaluate`; note legacy `Inference` can still be evaluated. |
+| `:629-642` | Stability link to evidence §7. | Keep and ensure target remains valid. |
+| `:644-717` | Complete example repeats both `Query` and `Inference`. | Remove `Query`; either omit legacy inference from complete example or move it below the legacy section. |
+| `:719-759` | Syntax checklist still leads with `Inference` body details and Query removal. | Reorder to current canonical API first; leave legacy bullets clearly marked. |
 
 ## 4. Open Questions
 
-| ID | Question | Required answer shape |
-|---|---|---|
-| Q1 | What exact `semantics.md` sections will be edited? | Line refs, section names, and leave-alone ranges. |
-| Q2 | Where does the `assertions.md` raw uncertainty annotation text belong? | Line refs and minimal insertion plan. |
-| Q3 | Should the SDK guide be edited? | Yes/no with source-backed rationale. |
-| Q4 | How should T10-2-A's default `iteration_count=1` behavior change be explained? | User-facing warning that distinguishes wrapper default from no-profile engine default. |
-| Q5 | How deep should `bin_size` documentation go? | Full whitelist and rejection examples without schema dump. |
-| Q6 | How deep should `atom_bounds` atom-id documentation go? | Explain `<rule_id>:atom_<index>` enough for users to write it; no internal conversion dump. |
-| Q7 | How should `fact_boundaries` be taught without encouraging legacy spelling? | Canonical-first wording plus compatibility note. |
-| Q8 | Which files are explicitly left alone? | Table with reason for each leave-alone file. |
-| Q9 | What implementation split should be used? | 1-4 docs commits plus close/archive. |
-| Q10 | Are there stop/amend findings? | Trigger-by-trigger assessment. |
-| Q11 | How should `Inference` be taught? | Prefer legacy compatibility section over first-class/default API teaching. |
-| Q12 | How should `Query` be taught? | Prefer deleting user-facing one-off projection teaching; if referenced, mark internal-only. |
+| ID | Answer |
+|---|---|
+| Q1 | Edit `semantics.md` lines `:18-41`, `:101-175`, `:177-194` lightly, `:269-340`; keep `:50-99`, `:196-229`, and `:231-255` mostly stable. See §3.1. |
+| Q2 | Insert a short T10-1 note in `assertions.md` around `:177-212`, where raw uncertainty and canonical carrier are already explained. Do not add a new schema dump. |
+| Q3 | Yes, edit `src/factgraph/sdk/docs/00_user_guide.en.md`: `:578-630` and `:1038-1081` are stale after T10-2/T10-3. Keep it concise and point to the quickstart. |
+| Q4 | Wording: "`PyReasonSemantics()` uses canonical `iteration_count=1`; direct no-profile PyReason adapter execution still has its existing engine default. If you also supply legacy temporal timesteps (`fixed_timesteps`, `fact_boundaries`, `valid_time_boundaries`, or `time_binned`), the adapter rejects the explicit conflict instead of choosing a winner." |
+| Q5 | Document the full `bin_size` accept list: `P<n>D`, `PT<n>H`, `PT<n>M`, `1d`, `1h`, `15m`, `1m`; mention exact universe divisibility, ISO date / timezone-aware datetime rules, and examples of rejected prose/ambiguous forms. No full parser dump. |
+| Q6 | Explain `atom_bounds` keys as application atom ids from the rule, formatted `<rule_id>:atom_<index>`, with a short example. Do not teach internal `body_atom:0:<index>` conversion or T8-B witness keys. |
+| Q7 | Teach `fact_boundaries` first as canonical. Add one compatibility sentence: legacy `valid_time_boundaries` remains accepted and preserves its spelling for existing profiles. |
+| Q8 | Leave alone: `evidence.md`, audit docs, adapter docs, unrelated quickstarts, runtime/tests, dirty baseline, four untracked design-point files. See §3.7. |
+| Q9 | Use four docs commits plus close/archive: PyReason quickstart, ProbLog quickstart/assertions, `rules-and-inferences.md` cleanup, SDK guide summary. Commits 1-2 may combine only if small; commit 3 should stay independent. |
+| Q10 | No stop/amend findings. All findings refine docs scope; no shipped archive contradiction. |
+| Q11 | Teach `Inference` only as v0.2 legacy compatibility after current `Rule` / `RuleExpr` / `fg.eval.evaluate` path. Keep runtime compatibility wording; do not imply removal. |
+| Q12 | Remove the user-facing `Query` one-off projection example. If `Query` remains mentioned, mark it internal/future DSL value and direct users to `fg.read.find`, `fg.read.match`, or `fg.eval.evaluate`. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -288,6 +359,14 @@ Expected Step 4.6 outputs:
 6. Verification baseline plan.
 7. Stop/amend assessment.
 
+Step 4.6 verification baseline:
+
+```text
+PYTHONPATH=src python -m unittest ...  # focused docs-only set
+Ran 140 tests in 0.455s
+OK
+```
+
 ## 7. Proposed Implementation Shape
 
 Candidate chain:
@@ -295,8 +374,7 @@ Candidate chain:
 1. `docs(quickstart): teach PyReason canonical semantics`
 2. `docs(quickstart): teach ProbLog uncertainty projection`
 3. `docs(quickstart): clean deprecated Inference Query references`
-4. `docs(sdk-guide): summarize canonical semantics additions` (only if Step 4.6
-   decides the SDK guide is stale)
+4. `docs(sdk-guide): summarize canonical semantics additions`
 5. `docs(blueprint): close T8-D round 4 canonical user docs`
 6. `docs(blueprint): archive T8-D round 4 canonical user docs`
 
@@ -307,9 +385,9 @@ is trivial; it has a different review surface than teaching new T10 semantics.
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed inventory completed.
-- [ ] Q1-Q12 answered.
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed inventory completed.
+- [x] Q1-Q12 answered.
 - [ ] `semantics.md` teaches the five shipped semantics cycles accurately.
 - [ ] `assertions.md` teaches ProbLog raw uncertainty annotation only as needed.
 - [ ] `rules-and-inferences.md` demotes deprecated `Inference` / `Query`
@@ -339,4 +417,4 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Pending implementation / closure.
