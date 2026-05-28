@@ -1,14 +1,14 @@
 # Current Operational Memory
 
-最后更新:2026-05-28(T10-3 PyReason temporal inventory archived locally; pending push gate)
+最后更新:2026-05-28(T10-3-A fact_boundaries migration archived locally; pending push gate)
 
 ## 当前阶段
 
 **Current branch:** `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 
-**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ 92fd6013`
+**Published branch head:** `origin/v0.2.0-t11-1-attach-view-scope-2026-05-26 @ da896f0c`
 
-**Most recent local work:** T10-3 PyReason temporal migration inventory
+**Most recent local work:** T10-3-A `fact_boundaries` alias / compatibility
 archived locally; pending push gate.
 
 **Sacred branch:** `master = 562c74195df43e933bed92a3ff25de94dd8ce666`; do not move it.
@@ -50,20 +50,19 @@ Release-facing shipped/deferred summaries live in `CHANGELOG.md`.
   user docs at `c23ce097`.
 - T8-C / T10 planning remains the source for PyReason: T10-2 inventory pushed
   at `f8e08905`; T10-2-A C78 pushed at `65cc79a3`; T10-2-B C74 pushed at
-  `92fd6013`; T10-3 inventory is complete locally and pending push. T10-3-A/B
-  implementation and D11/Form 2 still gate T8-C-2 PyReason evidence.
+  `92fd6013`; T10-3 inventory pushed at `da896f0c`; T10-3-A
+  `fact_boundaries` is complete locally and pending push. T10-3-B `time_binned`
+  plus D11/Form 2 still gate T8-C-2 PyReason evidence.
 
 ## Recommended Next Work
 
-1. **T10-3-A C77 `fact_boundaries` alias/compatibility**: add canonical alias
-   while preserving legacy `valid_time_boundaries` / `fixed_timesteps`.
-2. **T10-3-B C77 `time_binned` mode**: add strict `bin_size` validation and
+1. **T10-3-B C77 `time_binned` mode**: add strict `bin_size` validation and
    binned temporal materialization.
-3. **T8-C-2 PyReason Form 2 inventory**: source-back the evidence enrichment
+2. **T8-C-2 PyReason Form 2 inventory**: source-back the evidence enrichment
    lane before implementation; expect D11 plus C74/C77 gates.
-4. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
+3. **N6 notebook namespace cleanup**: reduce the dirty baseline by addressing
    the three tracked notebook files.
-5. **Design-point intake**: classify the identity/data-model,
+4. **Design-point intake**: classify the identity/data-model,
    identity-mechanism, append-only-ledger, and ledger-schema untracked files.
 
 ## Governance Reminders

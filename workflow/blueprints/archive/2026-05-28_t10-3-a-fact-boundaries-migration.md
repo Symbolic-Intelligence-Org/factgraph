@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-28_t10-3-a-fact-boundaries-migration.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-28_t10-3-a-fact-boundaries-migration.audit.md`
 - Trigger: T10-3 inventory archived at `da896f0c` selected the split
   T10-3-A `fact_boundaries` alias / compatibility migration followed by
   T10-3-B `time_binned`, and recorded the §3.7 12-item shipped PyReason

@@ -4,7 +4,7 @@
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
-- Blueprint: `workflow/blueprints/active/2026-05-28_t10-3-a-fact-boundaries-migration.md`
+- Blueprint: `workflow/blueprints/archive/2026-05-28_t10-3-a-fact-boundaries-migration.md`
 - Stage: implemented
 - Class: S/M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`

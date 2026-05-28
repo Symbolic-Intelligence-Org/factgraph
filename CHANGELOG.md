@@ -64,6 +64,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alias/compatibility followed by T10-3-B `time_binned`; legacy
   `valid_time_boundaries` and `fixed_timesteps` remain compatibility surfaces
   through the first implementation slice.
+- **PyReason canonical `fact_boundaries` temporal projection is shipped** as
+  the T10-3-A C77 alias slice: `SemanticsProfile.temporal_projection` now accepts
+  mode `fact_boundaries`, preserves canonical spelling, reuses the existing
+  valid-time-boundary materialization substrate, and keeps legacy
+  `valid_time_boundaries` compatibility intact. Explicit conflicts with
+  canonical `iteration_count` remain rejected with carrier-specific error
+  messages.
 
 ### Changed
 
