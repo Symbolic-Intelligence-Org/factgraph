@@ -4,7 +4,7 @@
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
-- Blueprint: `workflow/blueprints/active/2026-05-28_memory-current-compaction.md`
+- Blueprint: `workflow/blueprints/archive/2026-05-28_memory-current-compaction.md`
 - Stage: implemented
 - Class: S (housekeeping / docs-only memory compaction)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
@@ -18,7 +18,8 @@
 | 2026-05-28 | draft | `0af67764` | Memory current compaction blueprint pair drafted | Triggered after T8-D round 3 `c23ce097`; Q1-Q6 pending Step 4.6. |
 | 2026-05-28 | scoped | `95b2cdbb` | Step 4.6 source-backed inventory completed | Target implementation: single-file `workflow/memory/current.md` compaction to <=80 lines, published head refreshed to `c23ce097`, dirty list preserved. |
 | 2026-05-28 | implementation | `eb7f5edb` | Current memory compacted and stale anchors refreshed | `current.md` went from 132 to 80 lines; dirty list remained visible; published head now `c23ce097`. |
-| 2026-05-28 | closure | this commit | Cycle closed | Closure notes filled; archive pending. |
+| 2026-05-28 | closure | `ef92284c` | Cycle closed | Closure notes filled; archive pending. |
+| 2026-05-28 | archive | this commit | Blueprint pair archived | Inventory updated. |
 
 ## 2. Draft Source Scan
 

@@ -7,7 +7,7 @@
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Owner: Codex
 - Reviewer: Claude (cross-flip)
-- Related audit: `workflow/blueprints/active/2026-05-28_memory-current-compaction.audit.md`
+- Related audit: `workflow/blueprints/archive/2026-05-28_memory-current-compaction.audit.md`
 - Trigger: T8-D round 3 shipped at `c23ce097`, leaving the repo-local `workflow/memory/current.md` stale (`Published branch head` still `cde072fa`) and at 132 lines. This cycle compacts the committed repo-local memory handoff before the next large T10/T8 cycle.
 
 ## 0. Scope Locks
@@ -283,7 +283,7 @@ Commit chain:
 - Scoped: `95b2cdbb`
 - Implementation: `eb7f5edb`
 - Closure: this commit
-- Archive: pending
+- Archive: this commit
 
 Outcome:
 
