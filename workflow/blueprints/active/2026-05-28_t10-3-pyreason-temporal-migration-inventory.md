@@ -1,6 +1,6 @@
 # Task Blueprint: T10-3 PyReason Temporal Migration Inventory
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S/M (design-only inventory)
@@ -135,123 +135,186 @@ avoid regressing the already-shipped T10-2-A C78 and T10-2-B C74 slices.
 | PyReason tests | Focused regression baseline and current temporal behavior fixtures. |
 | Four untracked active design-point files | Read-only overlap check only. |
 
-## 3. Step 4.6 Source-Backed Inventory Skeleton
+## 3. Step 4.6 Source-Backed Inventory
 
 ### 3.1 Current Temporal Projection State
 
-Pending Step 4.6 source-back:
+| Layer | Current state | Classification |
+|---|---|---|
+| SDK shell | `PyReasonSemantics.temporal_projection` remains a raw mapping field with default `{"mode": "none"}` at `src/factgraph/sdk/semantics.py:199`; `__post_init__` only copies the mapping at `:246-250`. | **Partial / generic shell.** No SDK-specific C77 validation; profile layer owns mode validation. |
+| SDK lowering | Public PyReason lowering copies `temporal_projection=dict(value.temporal_projection)` into `SemanticsProfile` at `src/factgraph/sdk/store.py:3458-3464`; T10-2-A `iteration_count` lowering stays separate through `_pyreason_iteration_count_carrier(...)` at `:3544-3548`. | **Shipped generic pass-through.** |
+| Profile carrier | `SemanticsProfile.temporal_projection` is a top-level carrier at `src/factgraph/core/semantics/profile.py:45` and normalizes at `:69`. Supported modes are `none`, `fixed_timesteps`, and `valid_time_boundaries` at `:164-181`; `fact_boundaries` / `time_binned` are rejected as unsupported. | **Partial / legacy.** |
+| Adapter consumption | `pyreason.engine_eval` resolves temporal projection before run config at `src/factgraph/adapters/pyreason/engine_eval.py:71-84`. `_resolve_temporal_projection_state(...)` accepts `none`, `fixed_timesteps`, and `valid_time_boundaries` at `:282-336`. `_materialize_valid_time_boundaries(...)` computes active ranges and timesteps from `valid_from` / `valid_to` metadata at `:398-450`. | **Partial / legacy.** `valid_time_boundaries` has real runtime behavior; canonical names are missing. |
+| Tests | Existing tests cover `fixed_timesteps` profile acceptance, run-config driving, conflicts, `valid_time_boundaries` profile acceptance, active-step mapping, universe-only behavior, and engine-option conflicts at `tests/test_pyreason_semantics_profile_migration.py:425-627`. | **Legacy coverage.** No `fact_boundaries` / `time_binned` tests yet. |
 
-- Enumerate current `temporal_projection` modes in `SemanticsProfile`.
-- Source-back SDK `PyReasonSemantics.temporal_projection` shell and validation.
-- Source-back SDK lowering into `SemanticsProfile.temporal_projection`.
-- Source-back adapter functions:
-  - `_resolve_temporal_projection_state(...)`
-  - `_materialize_valid_time_boundaries(...)`
-  - `_engine_options_with_temporal_projection(...)`
-- Identify which parts now belong to C78 compatibility after T10-2-A and which
-  parts are true C77 temporal behavior.
+T10 inventory's C77 classification remains accurate: `none` and legacy
+`valid_time_boundaries` ship; canonical `fact_boundaries` / `time_binned` are
+missing. T10-2-A changed the C78 side by adding `SemanticsProfile.iteration_count`
+at `profile.py:43,67-80` and adapter consumption at
+`engine_eval.py:71-84,339-358`; it did not add canonical C77 modes.
 
 ### 3.2 C77 Canonical Design Source-Back
 
-Pending Step 4.6 source-back:
+The active design anchor states that `temporal_projection` should only decide
+fact lifecycle, while global inference rounds are controlled by
+`iteration_count` at
+`workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1420-1446`.
+Its three canonical modes are:
 
-- Locate C77 design anchor in `rule-expression-and-proof-attempt.zh.md`.
-- Extract canonical names and intended semantics:
-  - `fact_boundaries`
-  - `time_binned`
-  - any relation to legacy `valid_time_boundaries`
-  - any relation to legacy `fixed_timesteps`
-- Determine whether C77 is purely a rename/alias issue, a new-mode issue, or
-  both.
+| Mode | Design anchor | Current implementation state | Step 4.6 classification |
+|---|---|---|---|
+| `none` | `{"mode": "none"}` at `rule-expression-and-proof-attempt.zh.md:1424-1427`. | Shipped in profile and adapter (`profile.py:167-170`; `engine_eval.py:301-304`). | **Shipped.** |
+| `fact_boundaries` | Fact metadata automatic mode at `rule-expression-and-proof-attempt.zh.md:1428-1430`; C77 table says legacy `valid_time_boundaries` -> `fact_boundaries` at `:1602`. | Runtime substrate exists under legacy `valid_time_boundaries` (`profile.py:175-178`; `engine_eval.py:317-335,398-450`). | **Rename / alias work.** |
+| `time_binned` | Equal time buckets, new in v1, with `bin_size` and `universe` at `rule-expression-and-proof-attempt.zh.md:1431-1439,1456-1465,1602`. | No profile or adapter support found; grep only finds design/docs mentions. | **True new mode.** |
+
+The design also says legacy `fixed_timesteps` should be removed and split to
+independent `iteration_count`, and `valid_time_boundaries` should be renamed at
+`rule-expression-and-proof-attempt.zh.md:1468-1471`. It records that a
+deprecation-warning period for `fixed_timesteps` / `valid_time_boundaries` is
+optional and alpha can hard-cut at `:1616`.
 
 ### 3.3 `valid_time_boundaries` -> `fact_boundaries` Rename Policy
 
-Pending Step 4.6 source-back:
+Candidate comparison:
 
-- Compare policy candidates:
-  - hard rename
-  - alias with deprecation window
-  - dual support through T10-3
-  - defer rename and ship only docs/source-back
-- Identify conflict behavior if both legacy and canonical names are supplied.
-- Record whether T10-3 implementation should reject, prefer canonical, or
-  preserve both.
+| Option | Shape | Pros | Cons | Decision |
+|---|---|---|---|---|
+| Hard rename | Accept only `fact_boundaries`; reject `valid_time_boundaries`. | Matches canonical design and alpha-hard-cut allowance. | Breaks existing tests and users that T10-2-A/T10-2-B kept stable; larger docs blast radius. | Reject for first implementation. |
+| Preserve legacy only | Keep `valid_time_boundaries`; do not add canonical mode. | No behavior risk. | Fails C77 canonical migration. | Reject. |
+| **Alias canonical + legacy** | Accept `fact_boundaries` and `valid_time_boundaries`, both routed to the existing materialization substrate. Preserve input spelling in normalized profile for compatibility, or normalize canonical to canonical and keep legacy spelling for legacy inputs. | Adds canonical name without breaking legacy tests; fits T10 inventory Q9 "keep `valid_time_boundaries` as compatibility alias initially". | Leaves two spellings until a later cleanup/docs cycle. | **Selected.** |
+
+Conflict behavior: mode is a single scalar field, so users cannot specify both
+`fact_boundaries` and `valid_time_boundaries` in one normalized
+`temporal_projection`. There is no winner policy to define. Implementation
+should reject invalid mixed keys by normal mode validation, and should keep the
+existing universe validation shape from `_normalize_valid_time_boundaries(...)`
+(`profile.py:193-209`).
+
+Recommended first implementation: add `fact_boundaries` as a canonical alias to
+the existing universe-based materialization, keep `valid_time_boundaries`
+accepted through at least T10-3, and rename helper/error wording only if tests
+record compatibility impact. User-facing docs can move users to canonical
+`fact_boundaries` in a later T8-D round.
 
 ### 3.4 `time_binned` New Mode Design
 
-Pending Step 4.6 source-back:
+`time_binned` is a real new mode, not a rename. The design describes equal
+duration buckets with `bin_size` and `universe` at
+`rule-expression-and-proof-attempt.zh.md:1431-1439,1456-1465,1602`, and
+explicitly says `time_binned` is new at `:1471`.
 
-- Determine whether `time_binned` is a real new mode or a spelling of existing
-  valid-time boundaries behavior.
-- Map it against shipped modes:
-  - `none`
-  - `fixed_timesteps`
-  - `valid_time_boundaries`
-- Determine adapter consumption shape and whether PyReason engine_eval already
-  has enough substrate.
+Relationship to shipped modes:
+
+| Mode | Time coordinate source | Runtime substrate today | T10-3 implication |
+|---|---|---|---|
+| `none` | No temporal coordinate; facts active from 0 to open end. | Shipped. | Preserve. |
+| `fixed_timesteps` | Explicit timesteps count; after T10-2-A it is legacy iteration-depth compatibility, not true C77. | Shipped but semantically legacy. | Preserve as compatibility unless implementation cycle chooses removal with tests/docs. |
+| `valid_time_boundaries` / `fact_boundaries` | Boundaries derived from fact `valid_from` / `valid_to` metadata plus explicit universe. | Shipped under legacy name. | Alias canonical name to existing substrate. |
+| `time_binned` | Equal bins computed from `universe` and `bin_size`; facts map to bin indexes by their valid-time ranges. | Not shipped. No duration parser or bin materializer exists. | Requires new normalization, duration parsing/whitelist, and adapter materialization. |
+
+Adapter substrate can reuse the `_TemporalProjectionState` shape and the
+`active_by_asrt_id` / `timesteps` contract returned by
+`_materialize_valid_time_boundaries(...)` at `engine_eval.py:430-433`. However,
+`time_binned` needs a new materializer that computes ordered bin boundaries from
+`universe` and `bin_size`; it cannot reuse valid-time boundary deduplication
+unchanged.
 
 ### 3.5 Legacy `fixed_timesteps` Disposition
 
-Pending Step 4.6 source-back:
+T10-2-A shipped canonical `iteration_count` and preserved legacy
+`fixed_timesteps` as alias/fallback when canonical C78 is absent. The adapter
+currently rejects explicit `iteration_count` with both `fixed_timesteps` and
+`valid_time_boundaries` (`engine_eval.py:305-320`; tests at
+`tests/test_pyreason_semantics_profile_migration.py:502-546`). No warning was
+added in T10-2-A.
 
-- Use T10-2-A archive to lock what already shipped:
-  - canonical `iteration_count`
-  - omission rule
-  - conflict with legacy temporal timesteps modes
-  - no warning in T10-2-A
-- Decide what T10-3 owns now:
-  - leave `fixed_timesteps` as compatibility alias
-  - deprecate / warn
-  - remove from `temporal_projection`
-  - narrow to tests/docs-only policy
+Disposition options:
+
+| Option | Effect | Assessment |
+|---|---|---|
+| Remove `fixed_timesteps` in T10-3 | Fully matches design's "old mode -> remove" note. | Too disruptive for the first C77 implementation; breaks accepted legacy tests at `tests/test_pyreason_semantics_profile_migration.py:425-463`. |
+| Add warning while preserving behavior | Starts deprecation. | Introduces warning API surface and test churn; not needed for design-only inventory and should be considered in implementation scope if chosen. |
+| **Preserve as compatibility alias** | Keep accepting `fixed_timesteps` when canonical `iteration_count` is absent; keep explicit conflict with `iteration_count`. | **Selected for the first T10-3 implementation.** It honors T10-2-A shipped behavior and avoids reopening C78. |
+| Narrow to docs-only policy | Record future removal but no runtime change. | Equivalent to preserve for runtime; docs belong to future T8-D round, not this inventory. |
+
+Step 4.6 decision: T10-3 should not remove `fixed_timesteps` in the first
+implementation plan. It should keep the T10-2-A compatibility path and conflict
+helpers intact. Removal/deprecation can be a later cleanup/docs cycle after
+canonical `fact_boundaries` / `time_binned` behavior has shipped and user-facing
+docs have a migration story.
 
 ### 3.6 T10-3 Split Candidates and T8-C-2 Unblock
 
-Pending Step 4.6 source-back:
+| Option | Shape | Pros | Cons | Decision |
+|---|---|---|---|---|
+| Single T10-3 implementation | Alias `fact_boundaries`, add `time_binned`, and preserve `fixed_timesteps` compatibility in one cycle. | One user-visible C77 ship; no half-C77 state. | Larger runtime/test surface: profile validation, duration parser, two adapter materializers, conflict tests. | Viable, but M-class. |
+| **T10-3-A rename/alias, T10-3-B `time_binned`** | First add canonical `fact_boundaries` alias to existing substrate and lock compatibility; then implement new binned materializer. | Best risk split. Keeps first slice small and validates C77 carrier migration before new duration/binning behavior. | Leaves `time_binned` deferred after T10-3-A. | **Selected.** |
+| T10-3-A cleanup/removal, T10-3-B new mode | Remove/deprecate legacy `fixed_timesteps` first, then add modes. | Cleans legacy first. | Risks breaking T10-2-A compatibility before canonical C77 is complete. | Reject. |
 
-- Compare split options:
-  - single T10-3 implementation
-  - T10-3-A `fact_boundaries` rename, then T10-3-B `time_binned`
-  - T10-3-A compatibility cleanup, then T10-3-B new temporal mode
-  - other shape Step 4.6 finds
-- Update T8-C-2 PyReason evidence unblock map:
-  - after T10-2-A and T10-2-B, does T10-3 remove the last semantics gate?
-  - does D11/Form 2 remain the only non-semantics gate?
+Recommended split:
+
+1. **T10-3-A C77 rename / compatibility**: add canonical `fact_boundaries` as
+   an alias to `valid_time_boundaries`, preserve legacy spelling and
+   `fixed_timesteps`, keep T10-2-A conflict behavior, and add tests.
+2. **T10-3-B C77 `time_binned`**: add duration/bin-size validation and binned
+   temporal materialization, with explicit behavior-change notes.
+
+T8-C-2 unblock: after T10-3-A, C77 is only partially canonical because
+`time_binned` remains missing. After T10-3-B, the semantics gates C74/C77/C78
+are complete, but T8-C-2 implementation still needs D11/Form 2 evidence design.
 
 ### 3.7 Shipped PyReason Invariants
 
-Pending Step 4.6 source-back:
+T10-3 must preserve:
 
-- T10-2-A C78 invariants:
-  - SDK field.
-  - profile carrier.
-  - lowering omission rule.
-  - adapter consumption.
-  - dual conflict helpers.
-  - error wording distinct from `timestep_delay`.
-- T10-2-B C74 invariants:
-  - SDK `derived_bound` / `atom_bounds`.
-  - `rule_projection["pyreason"]` carrier reuse.
-  - SDK atom-id conversion.
-  - asymmetric conflict policy.
-  - no T8-B witness-key reuse.
-  - error wording distinct from `iteration_count`, `timestep_delay`,
-    `head_bound`, and `branch_bounds`.
+| Slice | Invariant | Source-back |
+|---|---|---|
+| T10-2-A | SDK `PyReasonSemantics.iteration_count: int = 1` with positive-int validation. | `src/factgraph/sdk/semantics.py:193,215-218`; tests `tests/test_pyreason_semantics_profile_migration.py:384-397`. |
+| T10-2-A | Optional top-level `SemanticsProfile.iteration_count`. | `src/factgraph/core/semantics/profile.py:43,67-80`; tests `tests/test_pyreason_semantics_profile_migration.py:398-408`. |
+| T10-2-A | Lowering omission rule: default `1` plus legacy temporal mode omits canonical carrier. | `src/factgraph/sdk/store.py:3544-3548`; tests `tests/test_pyreason_semantics_profile_migration.py:410-423`. |
+| T10-2-A | Adapter consumption maps canonical `iteration_count` to run timesteps when no temporal conflict exists. | `engine_eval.py:71-84,339-358`; test `tests/test_pyreason_semantics_profile_migration.py:464-480`. |
+| T10-2-A | Explicit conflicts with `fixed_timesteps` and `valid_time_boundaries`. | `engine_eval.py:305-320`; tests `tests/test_pyreason_semantics_profile_migration.py:502-546`. |
+| T10-2-A | No-profile engine default timesteps remains 2. | `tests/test_pyreason_engine_eval.py:355-377`. |
+| T10-2-B | SDK `derived_bound` / `atom_bounds` validation. | `src/factgraph/sdk/semantics.py:194-195,221-233`; tests `tests/test_pyreason_semantics_profile_migration.py:292-313`. |
+| T10-2-B | `rule_projection["pyreason"]` carrier reuse, not new top-level fields. | `src/factgraph/sdk/store.py:3460-3464,3488-3535`; tests `tests/test_pyreason_semantics_profile_migration.py:315-340`. |
+| T10-2-B | SDK atom-id conversion from full ids to `body_atom:0:<index>`. | `src/factgraph/sdk/store.py:3509-3535`; tests `tests/test_pyreason_semantics_profile_migration.py:315-340`. |
+| T10-2-B | Legacy Inference / missing application atom ids reject canonical `atom_bounds`. | `src/factgraph/sdk/store.py:3511-3515`; tests `tests/test_pyreason_semantics_profile_migration.py:342-377`. |
+| T10-2-B | Asymmetric conflict policy: `derived_bound` + `head_bound` rejects; `atom_bounds` + `branch_bounds` can coexist. | `src/factgraph/sdk/semantics.py:221-227`; tests `tests/test_pyreason_semantics_profile_migration.py:379-410`. |
+| T10-2-B | No T8-B witness-key reuse. | Tests assert no `b0.a` witness key shape at `tests/test_pyreason_semantics_profile_migration.py:315-331`; implementation imports no witness helper. |
+
+Hidden coupling assessment: C77 still shares PyReason run `timesteps` with
+temporal materialization. T10-2-A intentionally rejects canonical
+`iteration_count` with legacy temporal modes. T10-3 implementation must
+preserve that conflict unless a later design explicitly introduces a separate
+engine-time axis. This is not a stop trigger because T10-2-A already made the
+compatibility boundary explicit; it is a behavior warning for T10-3 closure.
+
+### 3.8 Untracked Design-Point Overlap
+
+| File | Relevant mentions | Classification |
+|---|---|---|
+| `append-only-ledger-evaluation.zh.md` | Lines 83-87 distinguish PyReason `valid_time_boundaries` from ledger valid time; lines 171, 238, and 446 discuss ledger bitemporal gaps and cite current PyReason as adapter-local. | Adjacent, not blocking. It reinforces that PyReason temporal projection is adapter-local and not ledger valid-time schema. |
+| `identity-and-data-model-redesign.zh.md` | Line 806 references append-only ledger future gaps; line 873 lists Q-PR1 migration impact, not C77 mode semantics. | Adjacent, not blocking. |
+| `identity-mechanism-redesign.zh.md` | Lines 232, 503, 507, 511, and 563 discuss as-of/bitemporal identity future surfaces; lines 525, 533, 539, and 587 discuss PyReason edge relationship modeling. | Adjacent, not blocking. It is about identity/edge modeling, not temporal projection mode implementation. |
+| `ledger-schema-specification.zh.md` | Lines 419-420 reserve ledger `valid_from` / `valid_to` fields for future bitemporal; lines 286 and 825 discuss PyReason edge modeling Q-PR1. | Adjacent, not blocking. Ledger valid-time schema is separate from C77 adapter-local temporal projection. |
+
+No untracked file requires adoption before T10-3 inventory or future
+implementation.
 
 ## 4. Open Questions
 
 | ID | Question | Required answer shape |
 |---|---|---|
-| Q1 | What is C77's current ship state across SDK shell, SDK lowering, profile carrier, and adapter consumption? | Layer table with `fact_boundaries`, `time_binned`, and legacy `valid_time_boundaries` / `fixed_timesteps` called out separately. |
-| Q2 | What policy should govern `valid_time_boundaries` -> `fact_boundaries`? | Rename / alias / deprecate / removal decision with conflict behavior. |
-| Q3 | What is the `time_binned` mode design and relationship to existing modes? | Source-backed mode semantics and adapter consumption shape. |
-| Q4 | What should happen to legacy `fixed_timesteps` in T10-3? | Preserve / deprecate / remove / narrow decision, explicitly tied to T10-2-A. |
-| Q5 | What is the T10-3 implementation split? | Single cycle versus T10-3-A/B and rationale. |
-| Q6 | After T10-3 ships, does T8-C-2 PyReason evidence only lack D11/Form 2? | Updated unblock map. |
-| Q7 | Do the four untracked design-point files overlap T10-3 strongly? | Four-file grep classification; stop if blocking. |
-| Q8 | Do T10-2-A or T10-2-B shipped behaviors have hidden coupling with C77? | Explicit invariant and coupling assessment. |
-| Q9 | Are there behavior changes that need warning, like T10-2-A's default timesteps 2 -> 1? | Closure-note candidates and default/compatibility changes. |
-| Q10 | Are there stop/amend findings? | Yes/no with trigger-by-trigger status. |
+| Q1 | What is C77's current ship state across SDK shell, SDK lowering, profile carrier, and adapter consumption? | Partial / legacy. SDK shell and lowering pass through generic `temporal_projection`; profile and adapter support `none`, `fixed_timesteps`, and `valid_time_boundaries`; canonical `fact_boundaries` / `time_binned` are missing. |
+| Q2 | What policy should govern `valid_time_boundaries` -> `fact_boundaries`? | Add `fact_boundaries` as canonical alias to the existing valid-time-boundary substrate; keep `valid_time_boundaries` accepted through T10-3; no hard cut in the first implementation. |
+| Q3 | What is the `time_binned` mode design and relationship to existing modes? | It is a real new mode, not a spelling alias. It needs `bin_size` validation and a binned materializer; it can reuse `_TemporalProjectionState` output shape but not `_materialize_valid_time_boundaries(...)` unchanged. |
+| Q4 | What should happen to legacy `fixed_timesteps` in T10-3? | Preserve as compatibility alias when canonical `iteration_count` is absent; keep explicit conflict with `iteration_count`; no warning/removal in the first T10-3 implementation plan. |
+| Q5 | What is the T10-3 implementation split? | Split as T10-3-A `fact_boundaries` alias/compatibility, then T10-3-B `time_binned` new mode. |
+| Q6 | After T10-3 ships, does T8-C-2 PyReason evidence only lack D11/Form 2? | After T10-3-B yes: C74/C77/C78 semantics gates are complete and D11/Form 2 remains the major evidence gate. After T10-3-A only, `time_binned` remains a C77 gap. |
+| Q7 | Do the four untracked design-point files overlap T10-3 strongly? | No. They are adjacent ledger/identity/PyReason-edge notes and remain out-of-scope. |
+| Q8 | Do T10-2-A or T10-2-B shipped behaviors have hidden coupling with C77? | Yes for T10-2-A: PyReason run `timesteps` is still shared by temporal materialization and iteration count, so T10-3 must preserve existing iteration/temporal conflict behavior. T10-2-B has no hidden C77 coupling. |
+| Q9 | Are there behavior changes that need warning, like T10-2-A's default timesteps 2 -> 1? | No default shift is expected for T10-3-A. T10-3-B may change behavior by adding binned temporal activation; closure must record bin boundary and conflict semantics. |
+| Q10 | Are there stop/amend findings? | None. Current findings refine implementation split and behavior warnings but do not contradict T10/T10-2/T10-2-A/T10-2-B archives. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -322,21 +385,21 @@ Candidate chain:
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed inventory completed.
-- [ ] Q1-Q10 answered.
-- [ ] C77 current layer state recorded.
-- [ ] `valid_time_boundaries` -> `fact_boundaries` policy recorded.
-- [ ] `time_binned` design and split recommendation recorded.
-- [ ] `fixed_timesteps` disposition recorded.
-- [ ] T8-C-2 unblock map updated.
-- [ ] Four untracked design-point files classified as blocking or adjacent.
-- [ ] T10-2-A and T10-2-B invariants preserved.
-- [ ] No runtime, test, user-doc, audit-doc, governance, sacred, or dirty
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed inventory completed.
+- [x] Q1-Q10 answered.
+- [x] C77 current layer state recorded.
+- [x] `valid_time_boundaries` -> `fact_boundaries` policy recorded.
+- [x] `time_binned` design and split recommendation recorded.
+- [x] `fixed_timesteps` disposition recorded.
+- [x] T8-C-2 unblock map updated.
+- [x] Four untracked design-point files classified as blocking or adjacent.
+- [x] T10-2-A and T10-2-B invariants preserved.
+- [x] No runtime, test, user-doc, audit-doc, governance, sacred, or dirty
   baseline files touched.
-- [ ] `git diff --check` clean.
-- [ ] Focused PyReason no-op baseline remains `90 OK`.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] `git diff --check` clean.
+- [x] Focused PyReason no-op baseline remains `90 OK`.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
