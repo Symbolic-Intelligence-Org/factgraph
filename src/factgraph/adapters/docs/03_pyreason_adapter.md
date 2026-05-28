@@ -1,7 +1,7 @@
 # PyReason Adapter (factgraph)
 
 - Scope: `src/factgraph/adapters/pyreason`
-- Last updated: 2026-03-29
+- Last updated: 2026-05-28
 - Status: execution-surface V1 (engine_options: timesteps) +
   bounded materialization L3b + runtime provenance explain +
   EvidenceGraph audit/static delivery
@@ -271,17 +271,27 @@ result = run_pyreason(
   coordinates. Track 3 / E exposes the durable public call-site:
   `fg.eval.evaluate(..., engine="pyreason", semantics=profile)` and service
   top-level `"semantics": {...}`.
-- Track 2 adds the preferred SDK wrapper for currently lowerable PyReason
-  lanes:
+- Track 2 / T10 adds the preferred SDK wrapper for currently lowerable
+  PyReason lanes:
   `fg.eval.evaluate(..., semantics=PyReasonSemantics(...))`. The wrapper can
-  express `timestep_delay`, global `head_bound`, `temporal_projection`, and
-  `uncertainty_projection`, then lowers into canonical `SemanticsProfile`
-  before adapter consumption.
-- Track 3-post adds `PyReasonSemantics.branch_bounds` and the adapter-local
-  `PyReasonRuleExt.branch_head_bounds` carrier. SDK branch ids lower to
-  canonical `rule_projection.pyreason` `branch:{index}` interval entries.
-  During compilation, a branch-specific bound overrides the global
-  `head_bound`; branches without an override keep the global bound.
+  express `timestep_delay`, canonical `iteration_count`, canonical
+  `derived_bound`, canonical `atom_bounds`, and `temporal_projection`, then
+  lowers into canonical `SemanticsProfile` before adapter consumption.
+- Canonical C74 bound fields are preferred for new single-Rule call sites:
+  - `derived_bound=[lower, upper]` lowers to the internal `head:0`
+    interval target.
+  - `atom_bounds={"<rule_id>:atom_<index>": [lower, upper]}` uses the
+    application atom id. The SDK converts it to the adapter-local
+    `body_atom:0:<index>` target while the application `Rule` atom order is
+    still known.
+  - `atom_bounds` keys are not evidence witness keys.
+- Legacy compatibility remains explicit:
+  - Passing both `derived_bound` and `head_bound` rejects.
+  - `branch_bounds` remains accepted for branch-head intervals and lowers to
+    `rule_projection.pyreason` `branch:{index}` entries. `atom_bounds` and
+    `branch_bounds` may coexist because they target different surfaces.
+  - During compilation, a branch-specific bound overrides the global
+    head interval; branches without an override keep the global bound.
 - `compile_pyreason_rule(...)` currently supports only
   `PredAtom` + `LogicVar` + literals; `CompareExpr` / `NotExpr` /
   `RuleRefAtom` raise an explicit error
@@ -314,27 +324,18 @@ Cleanup contract:
 
 The current shared execution path is:
 
-```python
-import factgraph.adapters.pyreason
-
-candidates = sdk.evaluate(
-    Derivation(
-        id="drv.pyreason_popular",
-        version="v1",
-        where=[Pred("user:name", u, name)],
-        target="user:popular",
-        head_vars=[u],
-    ),
-    mode="pyreason",
-    engine_options={"timesteps": 5},
-)
-```
+Public SDK calls should use `PyReasonSemantics` or an advanced
+`SemanticsProfile` through the public `semantics=` argument. Core /
+application internals may still call `Store.evaluate(..., mode="pyreason",
+semantics_profile=profile)` directly.
 
 Execution sequence:
 
-1. `SDKStore.evaluate(...)` keeps call-time `engine_options` at the
-   evaluate-call layer; they do not enter `to_authoring_payload()`.
-   Public `Rule` / `Derivation` objects do not carry `engine_ext`.
+1. Public `fg.eval.evaluate(...)` lowers `PyReasonSemantics(...)` to
+   `SemanticsProfile` before crossing into the adapter. Core
+   `Store.evaluate(...)` keeps call-time `engine_options` at the evaluate-call
+   layer; they do not enter authoring payloads. Public `Rule` / `RuleExpr` /
+   compatibility `Inference` values do not carry `engine_ext`.
 2. `evaluate_store(...)` / `Store.evaluate_engine(...)` forwards
    `mode="pyreason"`, `engine_options`, and optional
    `semantics_profile` to the adapter. Internal compiled plans may still
@@ -352,9 +353,11 @@ Execution sequence:
      `compile_where_ir_to_pyreason(...)`
    - Normalizes run config via
      `resolve_pyreason_run_config(engine_options)`. In
-     `fixed_timesteps` mode, profile `timesteps` maps 1:1 to this
-     run config. In `valid_time_boundaries` mode, the adapter derives
-     `timesteps` from the sorted boundary ordinal map.
+     `fixed_timesteps` mode, profile `timesteps` maps 1:1 to this run
+     config. In `valid_time_boundaries` or `fact_boundaries` mode, the
+     adapter derives `timesteps` from the sorted boundary ordinal map. In
+     `time_binned` mode, the adapter derives `timesteps` from the exact
+     universe / `bin_size` grid.
    - Calls `run_pyreason(...)`; the shared evaluate path
      internally forces `atom_trace=True` to produce runtime
      provenance
@@ -383,9 +386,11 @@ shared evaluate surface:
 
 Constraints:
 
-- `sdk.evaluate(..., engine="pyreason", engine_options={"timesteps": 5})`
-  takes effect
+- Core `Store.evaluate(..., mode="pyreason",
+  engine_options={"timesteps": 5})` takes effect
 - When omitted, the adapter default `timesteps=2` is used
+- This direct no-profile default is distinct from the public wrapper default:
+  `PyReasonSemantics()` lowers to canonical `iteration_count=1`.
 - Unknown keys raise `ValueError`
 - `atom_trace` / `convergence_*` remain adapter-internal and are
   not exposed via the shared evaluate surface
@@ -399,6 +404,11 @@ Constraints:
   another mode rejects instead of silently ignoring the profile.
 - Track 3 / E adds the public SDK/service call-site:
   `fg.eval.evaluate(..., engine="pyreason", semantics=profile)`.
+- `SemanticsProfile.iteration_count` maps to effective PyReason timesteps.
+  It conflicts with temporal projection modes that also imply timesteps:
+  `fixed_timesteps`, `valid_time_boundaries`, `fact_boundaries`, and
+  `time_binned`. The adapter rejects explicit conflicts rather than choosing a
+  winner.
 
 ### 5C.0a SemanticsProfile consumption
 
@@ -415,6 +425,17 @@ Supported rule-projection targets:
 | `head:0` | `interval` | `[lower, upper]` with `0 <= lower <= upper <= 1` | Sets `PyReasonRuleExt.head_bound` |
 | `branch:{index}` | `interval` | `[lower, upper]` with `0 <= lower <= upper <= 1` | Sets `PyReasonRuleExt.branch_head_bounds[index]`; this branch-specific head bound overrides `head_bound` for that branch |
 | `rule` | `timestep_delay` | non-negative integer | Sets `PyReasonRuleExt.timestep_delay` |
+
+Public wrappers hide most positional targets:
+
+- `PyReasonSemantics.derived_bound` is the canonical wrapper spelling for the
+  `head:0` interval target.
+- `PyReasonSemantics.atom_bounds` uses application atom ids in the form
+  `<rule_id>:atom_<index>`. The SDK resolves those ids while the application
+  `Rule` is still available and lowers them to internal
+  `body_atom:0:<index>` interval-threshold entries.
+- Direct `SemanticsProfile.rule_projection.pyreason` remains the advanced
+  adapter-local shape for service JSON or lower-level profile users.
 
 The adapter enforces a carrier-conflict rule:
 
@@ -437,13 +458,22 @@ adapter-internal carrier, not a public SDK argument; public callers use
 | `none` | `{"mode": "none"}` | Existing behavior |
 | `fixed_timesteps` | `{"mode": "fixed_timesteps", "timesteps": N}` | Maps 1:1 to `engine_options.timesteps` / `PyReasonRunConfig.timesteps` |
 | `valid_time_boundaries` | `{"mode": "valid_time_boundaries", "universe": [start, end]}` | Collects selected assertion `valid_from` / `valid_to` boundaries plus the explicit universe, sorts and deduplicates them, and maps them to ordinal PyReason time coordinates |
+| `fact_boundaries` | `{"mode": "fact_boundaries", "universe": [start, end]}` | Canonical spelling for the same valid-time boundary substrate as `valid_time_boundaries`; input spelling is preserved in normalized profiles |
+| `time_binned` | `{"mode": "time_binned", "universe": [start, end], "bin_size": size}` | Builds a fixed temporal grid from an exact universe / `bin_size` division and maps facts to covering bins |
 
-`valid_time_boundaries` uses the current PyReason EDB materialization
-scope. Missing `valid_from` maps to the universe start. Missing
-`valid_to` maps to open-ended `active_to=None`. If both are missing, the
-fact is active for the full universe. The derived `timesteps` value is
-the highest ordinal boundary index. If this derived value conflicts with
+`valid_time_boundaries` and `fact_boundaries` use the current PyReason EDB
+materialization scope. Missing `valid_from` maps to the universe start.
+Missing `valid_to` maps to open-ended `active_to=None`. If both are missing,
+the fact is active for the full universe. The derived `timesteps` value is the
+highest ordinal boundary index. If this derived value conflicts with
 `engine_options.timesteps`, the adapter rejects the run.
+
+`time_binned.bin_size` is intentionally strict. Accepted forms are ISO-style
+positive days / hours / minutes (`P<n>D`, `PT<n>H`, `PT<n>M`) or exactly one
+of `1d`, `1h`, `15m`, `1m`. The universe duration must be an exact multiple of
+`bin_size`; endpoints may be ISO dates or timezone-aware ISO datetimes.
+Datetime values without timezone and prose durations such as `"1 month"` are
+rejected.
 
 Recurring or multi-interval validity is out of scope for D. Applications
 can materialize recurring validity into multiple single-interval
@@ -587,7 +617,11 @@ Based on the two real samples (Souffle + PyReason):
 ## 6A. Current EvidenceGraph converter (Step 2)
 
 `pyreason_trace_to_evidence_graph(...)` currently implements a
-**candidate-anchored timeline converter**:
+**candidate-anchored timeline converter**. This is an advanced adapter-level
+helper, not the main row-result quickstart path. Rich row-level PyReason
+temporal evidence is still deferred to a future Form 2 design / T8-C-2 bridge;
+current PyReason row evidence can still be the safe single-conclusion fallback
+described in the evidence quickstart.
 
 - Input:
   - `PyReasonTraceV0`
@@ -633,12 +667,12 @@ honest timeline + intra-fact update chain".
 
 ## 7. Current limitations
 
-- The shared evaluate surface is implemented, but rule registry
-  / rule builder integration is still pending
-- Currently commits only the runtime
-  `explain_ref(kind="candidate")` provenance envelope of
-  `payload_type="event_log"`; does not auto-generate candidate
-  evidence tree / summary / narrative / NL
+- The shared evaluate surface and public `PyReasonSemantics` wrapper are
+  implemented for the canonical C78/C74/C77 lanes described above.
+- Candidate explain stores the runtime `explain_ref(kind="candidate")`
+  provenance envelope of `payload_type="event_log"`. Row-result rich temporal
+  evidence is not yet bridged into a Form 2 `EvidenceGraph`; unaligned
+  PyReason rows may still use the safe single-conclusion fallback.
 - `session.annotation_templates` can already land in the Ledger
   via `accept_pyreason_session(...)`; however accept still
   relies on adapter-local synthetic `entity_ref` materialization
