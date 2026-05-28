@@ -60,6 +60,28 @@ def _normalize_interval_map(value: Any, *, field_name: str) -> dict[str, tuple[f
     return out
 
 
+def _normalize_atom_interval_map(value: Any, *, field_name: str) -> dict[str, tuple[float, float]]:
+    raw = _copy_mapping(value, field_name=field_name)
+    out: dict[str, tuple[float, float]] = {}
+    for key, raw_value in raw.items():
+        if not isinstance(key, str) or not key:
+            raise SDKStoreError(f"{field_name} keys must be non-empty atom ids")
+        _require_canonical_atom_id(key, field_name=field_name)
+        try:
+            out[key] = _normalize_interval(raw_value, field_name=f"{field_name}[{key!r}]")
+        except SDKStoreError as exc:
+            raise SDKStoreError(f"{field_name}[{key!r}] value must be [lower, upper]") from exc
+    return out
+
+
+def _require_canonical_atom_id(value: str, *, field_name: str) -> None:
+    rule_id, marker, atom_index = value.rpartition(":atom_")
+    if not rule_id or marker != ":atom_" or not atom_index:
+        raise SDKStoreError(f"{field_name} keys must use <rule_id>:atom_<index>")
+    if not atom_index.isdigit():
+        raise SDKStoreError(f"{field_name} keys must use non-negative atom indexes")
+
+
 def _normalize_rule_params_map(value: Any, *, field_name: str) -> dict[str, dict[str, Any]]:
     raw = _copy_mapping(value, field_name=field_name)
     out: dict[str, dict[str, Any]] = {}
@@ -158,6 +180,8 @@ class PyReasonSemantics:
     Args:
         timestep_delay: Non-negative timestep delay for compiled rules.
         iteration_count: Positive global PyReason inference round count.
+        derived_bound: Optional canonical `[lower, upper]` interval for rule heads.
+        atom_bounds: Optional body atom intervals keyed by `<rule_id>:atom_<index>`.
         head_bound: Optional global `[lower, upper]` interval for rule heads.
         branch_bounds: Optional per-branch interval overrides keyed by branch id.
         rule_params: Per-Rule metadata keyed by application `Rule.id`; lowered
@@ -167,6 +191,8 @@ class PyReasonSemantics:
 
     timestep_delay: int = 0
     iteration_count: int = 1
+    derived_bound: tuple[float, float] | None = None
+    atom_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     head_bound: tuple[float, float] | None = None
     branch_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     rule_params: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -192,6 +218,19 @@ class PyReasonSemantics:
             raise SDKStoreError("PyReasonSemantics.iteration_count must be >= 1")
         if not isinstance(self.fallback, str) or not self.fallback:
             raise SDKStoreError("PyReasonSemantics.fallback must be non-empty string")
+        derived_bound = (
+            None
+            if self.derived_bound is None
+            else _normalize_interval(self.derived_bound, field_name="PyReasonSemantics.derived_bound")
+        )
+        if derived_bound is not None and self.head_bound is not None:
+            raise SDKStoreError("PyReasonSemantics.derived_bound conflicts with PyReasonSemantics.head_bound")
+        object.__setattr__(self, "derived_bound", derived_bound)
+        object.__setattr__(
+            self,
+            "atom_bounds",
+            _normalize_atom_interval_map(self.atom_bounds, field_name="PyReasonSemantics.atom_bounds"),
+        )
         head_bound = None if self.head_bound is None else _normalize_interval(self.head_bound, field_name="head_bound")
         object.__setattr__(self, "head_bound", head_bound)
         object.__setattr__(
