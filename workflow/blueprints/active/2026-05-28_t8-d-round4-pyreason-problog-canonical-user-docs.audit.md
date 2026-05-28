@@ -1,11 +1,11 @@
 # Audit: T8-D Round 4 PyReason + ProbLog Canonical User Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-d-round4-pyreason-problog-canonical-user-docs.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -18,6 +18,7 @@
 | 2026-05-28 | draft | this commit | T8-D round 4 canonical user-docs blueprint pair drafted | Triggered by T10-1 `cde072fa`, T10-2-A `65cc79a3`, T10-2-B `92fd6013`, T10-3-A `e7bab90f`, and T10-3-B `ac42a379`; Q1-Q12 pending Step 4.6 after amend. |
 | 2026-05-28 | draft amend | this commit | Scope expanded to include `rules-and-inferences.md` deprecation cleanup | User source-backed stale first-class `Inference` / `Query` teaching; Q11-Q12 added. |
 | 2026-05-28 | scoped | this commit | Step 4.6 source-backed inventory completed | Four-file implementation surface selected; focused docs-only baseline `140 OK`. |
+| 2026-05-28 | implemented | this commit | Step 4.7 implementation accepted | Four docs commits landed; focused baseline stayed `140 OK`; full discover stayed `2038 / 72F / 231E`; sacred and dirty baseline preserved. |
 
 ## 2. Draft Source Scan
 
@@ -114,8 +115,40 @@ claim with source refs and target-file line refs.
 - [x] `rules-and-inferences.md` deprecation cleanup map reviewed.
 - [x] Leave-alone sweep reviewed.
 - [x] Focused docs-only verification plan reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending implementation / closure.
+Closed as implemented after Step 4.7 review.
+
+Implementation commits:
+
+- `be12f426` — PyReason canonical semantics quickstart update.
+- `d24bfe00` — ProbLog uncertainty projection quickstart/assertions update.
+- `1545964a` — `rules-and-inferences.md` `Inference` / `Query` cleanup.
+- `b4824443` — SDK guide canonical semantics summary update.
+
+Verification:
+
+- Focused docs-only command: `Ran 140 tests in 0.430s — OK`.
+- Full discover: `Ran 2038 tests in 3.132s — FAILED (failures=72, errors=231)`,
+  exactly matching the established baseline.
+- `git diff --check` clean.
+- Sacred `master` remained
+  `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`; no design-point files were
+  absorbed.
+
+Closure notes:
+
+- User-facing quickstart docs now teach the shipped T10 semantics additions:
+  ProbLog `uncertainty_projection`; PyReason `iteration_count`,
+  `derived_bound`, `atom_bounds`, `fact_boundaries`, and `time_binned`.
+- `rules-and-inferences.md` now leads with current `Rule` / `RuleExpr` /
+  `fg.read.match(...)` / `fg.eval.evaluate(...)` teaching. `Inference` remains
+  as v0.2 compatibility; `Query` is described only as an internal DSL value.
+- The T8-D round 1 `Inference` / `Branch` stability link to `evidence.md` was
+  preserved. `evidence.md`, audit docs, adapter docs, runtime, tests,
+  governance, and dirty-baseline files were not touched.
+- Adapter module docs remain named future work; this cycle intentionally
+  aligned user quickstarts and SDK user guide only.

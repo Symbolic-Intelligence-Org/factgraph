@@ -1,6 +1,6 @@
 # Task Blueprint: T8-D Round 4 PyReason + ProbLog Canonical User Docs
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S (docs-only)
@@ -388,21 +388,21 @@ is trivial; it has a different review surface than teaching new T10 semantics.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed inventory completed.
 - [x] Q1-Q12 answered.
-- [ ] `semantics.md` teaches the five shipped semantics cycles accurately.
-- [ ] `assertions.md` teaches ProbLog raw uncertainty annotation only as needed.
-- [ ] `rules-and-inferences.md` demotes deprecated `Inference` / `Query`
+- [x] `semantics.md` teaches the five shipped semantics cycles accurately.
+- [x] `assertions.md` teaches ProbLog raw uncertainty annotation only as needed.
+- [x] `rules-and-inferences.md` demotes deprecated `Inference` / `Query`
   teaching without weakening current canonical API docs.
-- [ ] SDK guide decision implemented.
-- [ ] T10-2-A default behavior warning is user-friendly and accurate.
-- [ ] Existing T8-D round 1/2/3 user docs are not regressed.
-- [ ] Evidence quickstart, audit module docs, adapter module docs, runtime,
+- [x] SDK guide decision implemented.
+- [x] T10-2-A default behavior warning is user-friendly and accurate.
+- [x] Existing T8-D round 1/2/3 user docs are not regressed.
+- [x] Evidence quickstart, audit module docs, adapter module docs, runtime,
   tests, governance, and dirty-baseline files are untouched.
-- [ ] All 11 session archives remain locked.
-- [ ] Focused docs-only no-op verification passes.
-- [ ] Full discover delta, if run, is compared against
+- [x] All 11 session archives remain locked.
+- [x] Focused docs-only no-op verification passes.
+- [x] Full discover delta, if run, is compared against
   `2038 tests / 72 failures / 231 errors`.
-- [ ] `git diff --check` clean.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] `git diff --check` clean.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -417,4 +417,43 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending implementation / closure.
+Implemented in six commits:
+
+1. `fa63e851` — draft blueprint/audit pair.
+2. `abce9fb9` — scoped source-backed implementation plan.
+3. `be12f426` — `semantics.md` teaches PyReason canonical semantics:
+   `iteration_count`, `derived_bound`, `atom_bounds`, `fact_boundaries`, and
+   `time_binned`, including compatibility and conflict boundaries.
+4. `d24bfe00` — `semantics.md` and `assertions.md` teach ProbLog
+   `uncertainty_projection`, default reject behavior, supported point
+   projection policies, and raw `raw_kind` / `bound` annotation usage.
+5. `1545964a` — `rules-and-inferences.md` demotes `Inference` to v0.2 legacy
+   compatibility, removes `Query` as a one-off projection teaching path, and
+   keeps `Rule` / `RuleExpr` / `fg.read.match(...)` / `fg.eval.evaluate(...)`
+   as the leading user path.
+6. `b4824443` — SDK user guide summarizes canonical ProbLog/PyReason
+   semantics additions and points readers to the quickstart for full examples.
+
+Verification:
+
+- Focused docs-only no-op set: `Ran 140 tests in 0.430s — OK`.
+- Full discover: `Ran 2038 tests in 3.132s — FAILED (failures=72, errors=231)`,
+  matching the established `2038 / 72F / 231E` baseline with zero composition
+  shift.
+- `git diff --check` clean.
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline stayed at `4 M + 1 D + 6 U`; the four untracked design-point
+  files were not absorbed.
+
+Deviations / notes:
+
+- The cycle expanded from the initial T10 semantics teaching target to include
+  `rules-and-inferences.md` deprecation cleanup after user source-back showed
+  stale first-class `Inference` / `Query` teaching. The cleanup stayed within
+  the amended four-file cap and remained docs-only.
+- Adapter module docs remain explicitly deferred to a separate adapter-docs
+  alignment cycle.
+- `Query` runtime/DSL code remains implemented; user docs now mark it as an
+  internal DSL value rather than a quickstart projection path.
+- `Inference` / `Branch` remain documented as v0.2 compatibility surfaces, and
+  the T8-D round 1 stability link to `evidence.md` was preserved.
