@@ -3389,6 +3389,7 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
         return SemanticsProfile(
             name=value.name or "pyreason",
             engine="pyreason",
+            iteration_count=_pyreason_iteration_count_carrier(value),
             rule_projection=rule_projection,
             temporal_projection=dict(value.temporal_projection),
             uncertainty_projection=dict(value.uncertainty_projection),
@@ -3458,6 +3459,7 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
         return SemanticsProfile(
             name=value.name or _default_semantics_name(context, engine="pyreason"),
             engine="pyreason",
+            iteration_count=_pyreason_iteration_count_carrier(value),
             rule_projection=rule_projection,
             temporal_projection=dict(value.temporal_projection),
             uncertainty_projection=dict(value.uncertainty_projection),
@@ -3475,12 +3477,20 @@ def _preview_branch_bounds(
     return preview
 
 
+def _pyreason_iteration_count_carrier(value: PyReasonSemantics) -> int | None:
+    mode = value.temporal_projection.get("mode", "none")
+    if mode != "none" and value.iteration_count == 1:
+        return None
+    return value.iteration_count
+
+
 def _semantics_profile_preview(profile: SemanticsProfile) -> dict[str, Any]:
     return {
         "name": profile.name,
         "version": profile.version,
         "engine": profile.engine,
         "fallback": profile.fallback,
+        "iteration_count": profile.iteration_count,
         "rule_projection": profile.rule_projection,
         "engine_options": profile.engine_options,
         "uncertainty_projection": profile.uncertainty_projection,

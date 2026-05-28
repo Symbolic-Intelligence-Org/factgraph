@@ -40,6 +40,7 @@ class SemanticsProfile:
     engine: str
     version: str = SUPPORTED_VERSION
     engine_options: dict[str, Any] = field(default_factory=dict)
+    iteration_count: int | None = None
     uncertainty_projection: dict[str, Any] = field(default_factory=dict)
     temporal_projection: dict[str, Any] = field(default_factory=lambda: {"mode": "none"})
     rule_projection: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
@@ -63,6 +64,7 @@ class SemanticsProfile:
             raise ValueError(f"fallback must be one of: {allowed}")
 
         engine_options = _copy_mapping(self.engine_options, path="engine_options")
+        iteration_count = _normalize_iteration_count(self.iteration_count)
         uncertainty_projection = _normalize_uncertainty_projection(self.uncertainty_projection)
         temporal_projection = _normalize_temporal_projection(self.temporal_projection)
         rule_projection = _normalize_rule_projection(self.rule_projection)
@@ -74,6 +76,7 @@ class SemanticsProfile:
         object.__setattr__(self, "version", version)
         object.__setattr__(self, "fallback", fallback)
         object.__setattr__(self, "engine_options", engine_options)
+        object.__setattr__(self, "iteration_count", iteration_count)
         object.__setattr__(self, "uncertainty_projection", uncertainty_projection)
         object.__setattr__(self, "temporal_projection", temporal_projection)
         object.__setattr__(self, "rule_projection", rule_projection)
@@ -92,6 +95,7 @@ def inspect_semantics_profile(profile: SemanticsProfile) -> dict[str, Any]:
         "fallback": profile.fallback,
         "uses": {
             "engine_options": bool(profile.engine_options),
+            "iteration_count": profile.iteration_count is not None,
             "uncertainty_projection": bool(profile.uncertainty_projection),
             "temporal_projection": profile.temporal_projection != {"mode": "none"},
             "rule_projection": bool(profile.rule_projection),
@@ -100,6 +104,16 @@ def inspect_semantics_profile(profile: SemanticsProfile) -> dict[str, Any]:
         },
         "warnings": [],
     }
+
+
+def _normalize_iteration_count(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("iteration_count must be int or None")
+    if value < 1:
+        raise ValueError("iteration_count must be >= 1")
+    return value
 
 
 def _normalize_rule_projection(value: Any) -> dict[str, list[dict[str, Any]]]:
