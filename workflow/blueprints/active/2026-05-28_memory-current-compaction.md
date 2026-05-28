@@ -1,6 +1,6 @@
 # Task Blueprint: Memory Current Compaction
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S (housekeeping / docs-only memory compaction)
@@ -254,13 +254,13 @@ rewriting history into `current.md`.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed inventory completed.
 - [x] Q1-Q6 answered.
-- [ ] Implementation touches only `workflow/memory/current.md`.
-- [ ] Stale anchors are repaired, including published head -> `c23ce097`.
-- [ ] Final line count meets the Step 4.6 target.
-- [ ] Dirty baseline full file list remains visible and complete.
-- [ ] Archive/changelog/blueprint source-of-truth links remain clear.
-- [ ] `git diff --check` clean.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] Implementation touches only `workflow/memory/current.md`.
+- [x] Stale anchors are repaired, including published head -> `c23ce097`.
+- [x] Final line count meets the Step 4.6 target.
+- [x] Dirty baseline full file list remains visible and complete.
+- [x] Archive/changelog/blueprint source-of-truth links remain clear.
+- [x] `git diff --check` clean.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -275,4 +275,46 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Implemented as a single-file housekeeping slice.
+
+Commit chain:
+
+- Draft: `0af67764`
+- Scoped: `95b2cdbb`
+- Implementation: `eb7f5edb`
+- Closure: this commit
+- Archive: pending
+
+Outcome:
+
+- `workflow/memory/current.md` was compacted from 132 lines to 80 lines,
+  meeting the Step 4.6 hard target (`<= 80`).
+- Six stale anchors were repaired: last-updated text, published branch head,
+  most-recent-work wording, pending-push evidence rows, local-pending evidence
+  state, and the recommended next-work push-gate item.
+- Published branch head now points to `c23ce097`.
+- The full `4 M + 1 D + 5 U` dirty-baseline file list remains visible.
+- Long milestone tables were replaced by compact grouped bullets plus source
+  links to `workflow/blueprints/archive/INVENTORY.md` and `CHANGELOG.md`.
+- No runtime, tests, governance, sibling workflow files, auto-memory
+  `MEMORY.md`, dirty-baseline files, or sacred `master` were touched.
+
+Verification:
+
+- `wc -l workflow/memory/current.md`: 80.
+- Stale local-pending grep returned no matches.
+- `git diff --check`: clean.
+- `git status --short --branch`: expected dirty baseline preserved.
+- `git rev-parse master`: `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+Deviations / notes:
+
+- The target reached the hard upper bound of 80 lines rather than the
+  aspirational 65-75 range because the full dirty-baseline list is intentionally
+  preserved.
+- The governance reminder section replaced two detailed lifecycle reminders
+  with one role reminder: archive inventory, changelog, and archived blueprint
+  pairs are the historical source of truth; this file remains operational
+  handoff only.
+- Cross-references use stable file paths rather than line-number anchors to
+  avoid future rot as archive inventory grows.

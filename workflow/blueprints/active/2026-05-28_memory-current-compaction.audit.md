@@ -1,11 +1,11 @@
 # Audit: Memory Current Compaction
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_memory-current-compaction.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S (housekeeping / docs-only memory compaction)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 5 U`
@@ -16,7 +16,9 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-28 | draft | `0af67764` | Memory current compaction blueprint pair drafted | Triggered after T8-D round 3 `c23ce097`; Q1-Q6 pending Step 4.6. |
-| 2026-05-28 | scoped | this commit | Step 4.6 source-backed inventory completed | Target implementation: single-file `workflow/memory/current.md` compaction to <=80 lines, published head refreshed to `c23ce097`, dirty list preserved. |
+| 2026-05-28 | scoped | `95b2cdbb` | Step 4.6 source-backed inventory completed | Target implementation: single-file `workflow/memory/current.md` compaction to <=80 lines, published head refreshed to `c23ce097`, dirty list preserved. |
+| 2026-05-28 | implementation | `eb7f5edb` | Current memory compacted and stale anchors refreshed | `current.md` went from 132 to 80 lines; dirty list remained visible; published head now `c23ce097`. |
+| 2026-05-28 | closure | this commit | Cycle closed | Closure notes filled; archive pending. |
 
 ## 2. Draft Source Scan
 
@@ -75,10 +77,31 @@ ranges, staleness, and target length before implementation.
 - [x] Step 4.2 review complete.
 - [x] Step 4.6 source-backed inventory complete.
 - [x] Q1-Q6 answered.
-- [ ] Single-file implementation complete.
-- [ ] Line target verified.
-- [ ] Closure notes filled.
+- [x] Single-file implementation complete.
+- [x] Line target verified.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / implementation / closure.
+Implemented as planned.
+
+- Implementation commit: `eb7f5edb docs(memory): compact current memory and
+  refresh anchors`.
+- File scope: exactly `workflow/memory/current.md` for implementation.
+- Line count: 132 -> 80, meeting the `<= 80` acceptance gate.
+- Stale anchors repaired:
+  - Last-updated text no longer says T8-D round 3 is local / pending push.
+  - Published branch head is `c23ce097`.
+  - Most-recent-work wording now says pushed work.
+  - Pending-push evidence-table rows were removed by compaction.
+  - Evidence state now says the ProbLog lane is closed through user docs.
+  - Recommended next work no longer starts with a push gate.
+- Dirty baseline: full `4 M + 1 D + 5 U` file list remains visible.
+- Source-of-truth ownership: detailed history is delegated to archive inventory,
+  changelog, and archived blueprint pairs.
+- Verification: `wc -l workflow/memory/current.md` = 80; stale local-pending
+  grep returned no matches; `git diff --check` clean; sacred master unchanged.
+- Deviations: the final line count reached the hard upper bound instead of the
+  aspirational 65-75 range because the complete dirty-baseline list was
+  preserved. The governance reminder section was compressed into a role reminder
+  that this file is operational handoff, not a historical ledger.
