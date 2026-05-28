@@ -150,9 +150,9 @@ Class predictions are planning hints only. A per-track blueprint may downgrade o
 |---|---|
 | T6 | Complete: Phase B design source landed and archived at `8fe7abdc`. |
 | T7 | Complete: audit/rendering bridge landed and archived at `e2abc6d2`. |
-| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime complete locally; T8-D round 3 ProbLog user docs complete locally and pending push. T8-C-2 PyReason runtime implementation remains future. |
+| T8 | Split inventory complete at `a872fa5b`; T8-A complete at `40a0ce47`; T8-B-1 native Form 1 complete at `9e9a7f49`; T8-D A+B docs complete at `22891808`; T8-B-2 Souffle Form 1 complete at `5fcf7722`; T8-D round 2 Souffle user docs complete at `c6fa481f`; T8-C engine enrichment inventory complete at `f45739de`; T8-C-1 ProbLog evidence enrichment inventory complete at `bd5baeec`; T8-C-1 ProbLog runtime pushed at `5ffd4850`; T8-D round 3 ProbLog user docs pushed at `c23ce097`. T8-C-2 PyReason runtime implementation remains future. |
 | T9 | Superseded in part by T8-D docs for shipped native + Souffle + ProbLog evidence behavior; broader release alignment remains conditional on any later T8-C behavior. |
-| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2/T10-3 implementation remains future. |
+| T10 | Semantics adapter execution inventory complete at `580b2636`; T10-1 C76 ProbLog implementation complete and pushed at `cde072fa`; T10-2 PyReason canonical migration inventory complete locally; T10-2-A/T10-2-B/T10-3 implementation remains future. |
 | T11.2/T11.3/T12 | Complete for the release-path work described here. |
 
 ### 3.2 T6 — Evidence-tree Phase B Design Skeleton
@@ -204,9 +204,8 @@ Dependencies:
 
 **Status(2026-05-28)**: partially complete after T8 split inventory, T8-A,
 T8-B-1, T8-D A+B docs, T8-B-2, T8-D round 2 Souffle docs, T8-C
-engine-enrichment inventory, T8-C-1 ProbLog evidence enrichment inventory, and
-local T8-C-1 ProbLog evidence enrichment runtime plus T8-D round 3 ProbLog user
-docs.
+engine-enrichment inventory, T8-C-1 ProbLog evidence enrichment inventory,
+T8-C-1 ProbLog evidence enrichment runtime, and T8-D round 3 ProbLog user docs.
 
 **Goal**: implement the first substantial evidence tree tranche after T6 design locks shape.
 
@@ -240,14 +239,14 @@ Shipped / split scope:
   private provenance row context, exact T8-A 14-key top-level metadata, and
   namespaced `engine_meta["problog"]`. It did **not** ship runtime row-level
   ProbLog evidence.
-- T8-C-1 ProbLog evidence enrichment runtime completed locally after the
+- T8-C-1 ProbLog evidence enrichment runtime pushed at `5ffd4850` after the
   inventory plan: ProbLog passed-row explanations now use row-result
   provenance graphs with `EDGE_DERIVES`, exact T8-A 14-key top-level metadata,
   namespaced `engine_meta["problog"]`, and export-time uncertainty projection
-  decisions. The runtime archive is pending push.
-- T8-D round 3 completed locally: quickstart and SDK guide now teach ProbLog
-  row provenance graphs as shipped while preserving native/Souffle Form 1
-  wording and keeping PyReason row-level evidence deferred.
+  decisions.
+- T8-D round 3 pushed at `c23ce097`: quickstart and SDK guide now teach
+  ProbLog row provenance graphs as shipped while preserving native/Souffle Form
+  1 wording and keeping PyReason row-level evidence deferred.
 
 Remaining candidate scope:
 
@@ -280,9 +279,10 @@ T9 should not invent behavior. It documents only shipped evidence capabilities a
 
 ### 3.6 T10 — Semantics Adapter Execution Completion
 
-**Status(2026-05-27)**: design-only T10 inventory complete at `580b2636`;
-T10-1 C76 ProbLog runtime implementation complete and pushed at `cde072fa`.
-T10-2/T10-3 remain future.
+**Status(2026-05-28)**: design-only T10 inventory complete at `580b2636`;
+T10-1 C76 ProbLog runtime implementation complete and pushed at `cde072fa`;
+T10-2 PyReason canonical migration inventory complete locally. T10-2-A /
+T10-2-B / T10-3 implementation remains future.
 
 **Goal**: finish adapter-touching semantics deferred from T5.8.
 
@@ -319,10 +319,12 @@ Planned implementation split:
    adapter consumption. Shipped at `cde072fa`: default reject projection, explicit
    raw-uncertainty consumption in ProbLog export, point-projection policies, and
    fixture migration off legacy `confidence`.
-2. **T10-2 PyReason C74 + C78**: canonical PyReason shell/migration for
-   `derived_bound`, full-atom-id `atom_bounds`, `timestep_delay`, and
-   `iteration_count`.
-3. **T10-3 PyReason C77**: canonical `fact_boundaries` rename / compatibility
+2. **T10-2-A PyReason C78**: canonical `iteration_count` migration first,
+   with explicit compatibility policy for legacy `fixed_timesteps`.
+3. **T10-2-B PyReason C74**: canonical `derived_bound` and full-atom-id
+   `atom_bounds` conversion, preserving or explicitly migrating legacy
+   `head_bound` / `branch_bounds` / positional PyReason targets.
+4. **T10-3 PyReason C77**: canonical `fact_boundaries` rename / compatibility
    alias and `time_binned` temporal runtime behavior.
 
 ### 3.7 T11 — Database/View Release Track

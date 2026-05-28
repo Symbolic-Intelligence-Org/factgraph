@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `EDGE_DERIVES`, exact 14-key row graph metadata, namespaced
   `engine_meta["problog"]`, and export-time uncertainty projection decisions
   preserved from the T10-1 C76 semantics path.
+- **T10-2 PyReason canonical migration inventory is archived** as a planning
+  artifact: C78 `iteration_count` should ship before C74 canonical
+  `derived_bound` / full-atom-id `atom_bounds`, with legacy `fixed_timesteps`,
+  `head_bound`, and `branch_bounds` handled through explicit compatibility
+  policy.
 
 ### Changed
 
