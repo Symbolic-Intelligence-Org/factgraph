@@ -14,10 +14,12 @@ from factgraph.adapters.pyreason.runner import PyReasonRunConfig, PyReasonRunRes
 from factgraph.adapters.pyreason.session import PyReasonSession
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.semantics import SemanticsProfile
+from factgraph.sdk.errors import SDKStoreError
+from factgraph.sdk.semantics import PyReasonSemantics
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import Branch, Inference, Pred, Rule
 from factgraph.sdk.schema import Entity, Field, Identity
-from factgraph.sdk.store import SDKStore
+from factgraph.sdk.store import SDKStore, _lower_public_semantics, _preview_public_semantics
 
 
 class User(Entity):
@@ -55,6 +57,7 @@ def _profile(
     engine: str = "pyreason",
     rule_entries: list[dict[str, object]] | None = None,
     temporal_projection: dict[str, object] | None = None,
+    iteration_count: int | None = None,
 ) -> SemanticsProfile:
     kwargs: dict[str, object] = {
         "name": "profile.d.pyreason",
@@ -70,6 +73,8 @@ def _profile(
     }
     if temporal_projection is not None:
         kwargs["temporal_projection"] = temporal_projection
+    if iteration_count is not None:
+        kwargs["iteration_count"] = iteration_count
     return SemanticsProfile(**kwargs)
 
 
@@ -268,6 +273,47 @@ class PyReasonSemanticsProfileResolverTests(unittest.TestCase):
 
 
 class PyReasonTemporalProjectionTests(unittest.TestCase):
+    def test_pyreason_semantics_iteration_count_default_and_validation(self) -> None:
+        self.assertEqual(PyReasonSemantics().iteration_count, 1)
+        self.assertEqual(PyReasonSemantics(iteration_count=3).iteration_count, 3)
+
+        invalid_values = [True, "3", 0, -1]
+        for value in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaises(SDKStoreError) as ctx:
+                    PyReasonSemantics(iteration_count=value)  # type: ignore[arg-type]
+
+                message = str(ctx.exception)
+                self.assertIn("iteration_count", message)
+                self.assertNotIn("timestep_delay", message)
+
+    def test_semantics_profile_iteration_count_validates(self) -> None:
+        profile = _profile(rule_entries=[], iteration_count=3)
+
+        self.assertEqual(profile.iteration_count, 3)
+
+        for value in [True, "3", 0, -1]:
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError) as ctx:
+                    _profile(rule_entries=[], iteration_count=value)  # type: ignore[arg-type]
+
+                self.assertIn("iteration_count", str(ctx.exception))
+
+    def test_pyreason_semantics_lowering_emits_iteration_count_with_compat_omission(self) -> None:
+        preview = _preview_public_semantics(PyReasonSemantics())
+        lowered = _lower_public_semantics(PyReasonSemantics(iteration_count=3), derivation=_make_derivation())
+        legacy_default = _preview_public_semantics(
+            PyReasonSemantics(temporal_projection={"mode": "fixed_timesteps", "timesteps": 5})
+        )
+        legacy_explicit = _preview_public_semantics(
+            PyReasonSemantics(iteration_count=3, temporal_projection={"mode": "fixed_timesteps", "timesteps": 5})
+        )
+
+        self.assertEqual(preview.iteration_count, 1)
+        self.assertEqual(lowered.iteration_count, 3)
+        self.assertIsNone(legacy_default.iteration_count)
+        self.assertEqual(legacy_explicit.iteration_count, 3)
+
     def test_fixed_timesteps_profile_is_accepted(self) -> None:
         profile = _profile(rule_entries=[], temporal_projection={"mode": "fixed_timesteps", "timesteps": 4})
 
@@ -307,6 +353,24 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 4)
 
+    @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
+    def test_iteration_count_profile_drives_pyreason_run_config(self, mock_run) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        sdk.store.evaluate(
+            derivation_id=compiled["derivation_id"],
+            version=compiled["version"],
+            target_pred_id=compiled["target_pred_id"],
+            head_vars=compiled["head_vars"],
+            where=compiled["where"],
+            mode="pyreason",
+            semantics_profile=_profile(rule_entries=[], iteration_count=3),
+        )
+
+        config = mock_run.call_args.kwargs["config"]
+        self.assertEqual(config.timesteps, 3)
+
     def test_fixed_timesteps_conflicts_with_engine_options_timesteps(self) -> None:
         sdk = _make_sdk_with_valid_times()
         compiled = sdk._compile_derivation_input(_make_derivation())[0]
@@ -326,6 +390,52 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("SemanticsProfile.temporal_projection.fixed_timesteps", message)
         self.assertIn("engine_options.timesteps", message)
+
+    def test_iteration_count_conflicts_with_fixed_timesteps(self) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="pyreason",
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    iteration_count=3,
+                    temporal_projection={"mode": "fixed_timesteps", "timesteps": 4},
+                ),
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("SemanticsProfile.iteration_count", message)
+        self.assertIn("SemanticsProfile.temporal_projection.fixed_timesteps", message)
+
+    def test_iteration_count_conflicts_with_valid_time_boundaries(self) -> None:
+        sdk = _make_sdk_with_valid_times()
+        compiled = sdk._compile_derivation_input(_make_derivation())[0]
+
+        with self.assertRaises(ValueError) as ctx:
+            sdk.store.evaluate(
+                derivation_id=compiled["derivation_id"],
+                version=compiled["version"],
+                target_pred_id=compiled["target_pred_id"],
+                head_vars=compiled["head_vars"],
+                where=compiled["where"],
+                mode="pyreason",
+                semantics_profile=_profile(
+                    rule_entries=[],
+                    iteration_count=3,
+                    temporal_projection={"mode": "valid_time_boundaries", "universe": ["2026-01-01", "2026-12-31"]},
+                ),
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("SemanticsProfile.iteration_count", message)
+        self.assertIn("SemanticsProfile.temporal_projection.valid_time_boundaries", message)
 
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_map_valid_meta_to_active_steps(self, mock_run) -> None:
