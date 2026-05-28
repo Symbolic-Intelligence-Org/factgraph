@@ -188,6 +188,13 @@ The two raw kinds are:
 The same numeric `bound` carries different meaning under each kind; the
 write protocol preserves that boundary instead of flattening it.
 
+For ProbLog, this raw carrier is paired with an explicit semantics projection.
+`ProbLogSemantics()` defaults to rejecting both `probabilistic` and
+`possibilistic` raw uncertainty until you choose a policy such as `lower`,
+`midpoint`, `upper`, or `identity_probability`. The default reject behavior is
+intentional: the SDK should not silently turn an interval into a point
+probability.
+
 ### Canonical quantitative carrier
 
 `raw_kind` + `bound` together form the **canonical quantitative carrier**

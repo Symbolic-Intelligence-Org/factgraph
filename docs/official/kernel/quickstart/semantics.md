@@ -101,7 +101,7 @@ Evaluation returns `EvaluateResult`; it does not write derived facts.
 ## Use ProbLogSemantics with a Rule
 
 `ProbLogSemantics` selects the ProbLog engine. Empty wrappers are useful when
-you want the engine's default projection without branch-specific configuration.
+you want ProbLog evaluation without branch-specific configuration.
 
 ```python
 problog = ProbLogSemantics()
@@ -135,6 +135,49 @@ else:
 
 Most code should omit `engine=` when using a public wrapper. The SDK derives
 the engine from `ProbLogSemantics` or `PyReasonSemantics`.
+
+### ProbLog raw uncertainty projection
+
+Facts can carry raw uncertainty as paired `raw_kind` and `bound` fields; see
+[Write assertions](assertions.md#raw-uncertainty-raw_kind-and-bound) for the
+write-side contract. ProbLog consumes the probabilistic lane natively, but it
+does not silently choose a projection for intervals.
+
+By default, `ProbLogSemantics()` rejects raw uncertainty unless you explicitly
+choose a projection policy:
+
+```python
+assert problog.uncertainty_projection == {
+    "probabilistic": {"policy": "reject"},
+    "possibilistic": {"policy": "reject"},
+    "fallback": "reject_unconfigured",
+}
+```
+
+Use an explicit policy when you want to project a raw interval into the point
+probability that ProbLog exports:
+
+```python
+project_midpoint = ProbLogSemantics(
+    uncertainty_projection={
+        "probabilistic": {"policy": "midpoint"},
+        "fallback": "reject_unconfigured",
+    }
+)
+
+profile = fg.eval.inspect_semantics(project_midpoint)["lowered_profile"]
+assert profile["uncertainty_projection"]["probabilistic"] == {"policy": "midpoint"}
+```
+
+ProbLog point export supports `lower`, `midpoint`, and `upper` for interval
+bounds. It also supports `identity_probability` for probabilistic degenerate
+bounds such as `[0.7, 0.7]`. `probability_interval` and
+`possibility_interval` are canonical policy names, but they are not accepted by
+ProbLog point export.
+
+This is intentionally anti-silent-ignore: midpoint is a semantic choice, not a
+default. If raw uncertainty is present and no matching policy is configured,
+the adapter rejects instead of guessing.
 
 ## Use PyReasonSemantics with a Rule
 
@@ -400,7 +443,10 @@ assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
 ## Syntax checklist
 
 - Semantics are evaluate-time configuration.
-- Use `ProbLogSemantics(...)` for ProbLog defaults or branch probabilities.
+- Use `ProbLogSemantics(...)` for ProbLog defaults, branch probabilities, or
+  explicit raw-uncertainty projection.
+- ProbLog raw uncertainty defaults to reject; configure
+  `uncertainty_projection` when projecting `raw_kind` + `bound` intervals.
 - Use `PyReasonSemantics(...)` for PyReason delays, iteration count, canonical
   rule bounds, and temporal projection.
 - Prefer `derived_bound` over legacy `head_bound`.
