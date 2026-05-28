@@ -1,11 +1,11 @@
 # Audit: Adapter Module Docs Alignment
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_adapter-module-docs-alignment.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-28 | draft | this commit | Adapter module docs alignment blueprint pair drafted | Triggered by T8-D round 4/5 named future work, completed T10 shipped semantics, completed T8-C-1 ProbLog row provenance, and user direction to align only `02_problog_adapter.md` / `03_pyreason_adapter.md`. |
 | 2026-05-28 | scoped | pending commit | Step 4.6 source-backed inventory completed | Found bounded adapter-doc drift in `02_problog_adapter.md` and `03_pyreason_adapter.md`; no stop/amend triggers; focused `140 OK`; full discover baseline remains `2038 / 72F / 231E`. |
+| 2026-05-28 | implemented | pending commit | Step 4.7 implementation accepted | Two adapter-doc commits aligned ProbLog and PyReason module docs; focused `140 OK`; full discover remained `2038 / 72F / 231E`; sacred and dirty baseline preserved. |
 
 ## 2. Draft Source Scan
 
@@ -161,8 +162,42 @@ per engine.
 - [x] Form 2 deferred boundary reviewed.
 - [x] File-scope decision reviewed.
 - [x] Focused docs-only verification baseline reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending implementation.
+Implementation:
+
+- `dd8a5a2f` updated `src/factgraph/adapters/docs/02_problog_adapter.md`:
+  - added C76 `uncertainty_projection` default reject and policy details;
+  - connected raw `raw_kind` / `bound` projection to ProbLog point export;
+  - aligned row-result ProbLog provenance with `PROBLOG_PROVENANCE_KIND`,
+    `derives` edges, and namespaced `engine_meta["problog"]`;
+  - clarified adapter-level candidate/static provenance remains distinct from
+    public row-result evidence.
+- `601e6ec0` updated `src/factgraph/adapters/docs/03_pyreason_adapter.md`:
+  - replaced stale wrapper-field wording with canonical
+    `iteration_count`, `derived_bound`, `atom_bounds`, and temporal projection
+    fields;
+  - documented C78 dual default and timesteps conflict behavior;
+  - documented C74 public atom ids and internal `body_atom:0:<index>`
+    conversion without reusing evidence witness keys;
+  - added C77 `fact_boundaries` and `time_binned` details, including strict
+    `bin_size` forms and exact universe divisibility;
+  - aligned adapter-level helper wording with T8-D round 5's deferred
+    row-evidence boundary.
+
+Verification:
+
+- Focused docs-only baseline: `Ran 140 tests ... OK`.
+- Full discover: `Ran 2038 tests` with expected `72 failures / 231 errors`.
+- `git diff --check` clean.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.
+
+Scope notes:
+
+- Quickstart docs, SDK guide, audit docs, runtime, tests, governance, and
+  untracked design-point files were not touched.
+- No Form 2 schema details were introduced.
+- 13 archive lockout remained intact.

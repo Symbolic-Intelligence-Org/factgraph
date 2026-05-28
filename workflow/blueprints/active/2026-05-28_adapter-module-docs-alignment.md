@@ -1,6 +1,6 @@
 # Task Blueprint: Adapter Module Docs Alignment
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S (docs-only)
@@ -362,18 +362,18 @@ Step 4.7 review readable.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed inventory completed.
 - [x] Q1-Q9 answered.
-- [ ] `02_problog_adapter.md` aligned with T10-1 and T8-C-1 shipped behavior.
-- [ ] `03_pyreason_adapter.md` aligned with T10-2-A/B, T10-3-A/B, and T8-D
+- [x] `02_problog_adapter.md` aligned with T10-1 and T8-C-1 shipped behavior.
+- [x] `03_pyreason_adapter.md` aligned with T10-2-A/B, T10-3-A/B, and T8-D
       round 5 boundaries.
-- [ ] Quickstart docs left untouched.
-- [ ] Runtime, tests, governance, audit docs, dirty baseline, and untracked
+- [x] Quickstart docs left untouched.
+- [x] Runtime, tests, governance, audit docs, dirty baseline, and untracked
       design-point files untouched.
-- [ ] No Form 2 schema details introduced.
-- [ ] 13 archive lockout preserved.
-- [ ] Focused docs-only baseline passes.
-- [ ] Full discover compared against `2038 tests / 72 failures / 231 errors`.
-- [ ] `git diff --check` clean.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] No Form 2 schema details introduced.
+- [x] 13 archive lockout preserved.
+- [x] Focused docs-only baseline passes.
+- [x] Full discover compared against `2038 tests / 72 failures / 231 errors`.
+- [x] `git diff --check` clean.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -387,4 +387,53 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Implemented in six local commits:
+
+1. `d5ffea35` — drafted the adapter module docs alignment blueprint/audit pair.
+2. `ffe12a81` — scoped the source-backed inventory and selected one
+   implementation commit per engine.
+3. `dd8a5a2f` — aligned `02_problog_adapter.md` with T10-1 C76
+   `uncertainty_projection` and T8-C-1 row provenance behavior.
+4. `601e6ec0` — aligned `03_pyreason_adapter.md` with T10-2-A/B, T10-3-A/B,
+   and T8-D round 5 PyReason evidence boundaries.
+5. This closure commit.
+6. Planned archive commit.
+
+Outcome:
+
+- ProbLog adapter module docs now teach explicit raw-uncertainty projection:
+  default reject, `lower`, `midpoint`, `upper`, degenerate
+  `identity_probability`, and interval-policy rejection.
+- ProbLog module docs now distinguish adapter-level candidate provenance from
+  row-result `EvaluateRow.explain().evidence` provenance graphs with
+  `PROBLOG_PROVENANCE_KIND`, `derives` edges, and namespaced
+  `engine_meta["problog"]`.
+- PyReason adapter module docs now teach canonical C78/C74/C77 surfaces:
+  `iteration_count`, `derived_bound`, `atom_bounds`, `fact_boundaries`, and
+  `time_binned`, while preserving legacy compatibility wording for
+  `head_bound`, `branch_bounds`, `fixed_timesteps`, and
+  `valid_time_boundaries`.
+- PyReason module docs now carry the T8-D round 5 boundary: adapter-level
+  `pyreason_trace_to_evidence_graph(...)` remains advanced/module-level, while
+  rich row-result temporal evidence remains deferred to future Form 2 / T8-C-2
+  work and current unaligned rows may use the safe single-conclusion fallback.
+
+Verification:
+
+- Focused docs-only baseline:
+  `PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration tests.test_problog_semantics_profile_migration tests.test_audit_evidence_graph`
+  → `Ran 140 tests ... OK`.
+- Full discover:
+  `PYTHONPATH=src python -m unittest discover tests` → `Ran 2038 tests` with
+  the expected `72 failures / 231 errors` baseline.
+- `git diff --check` clean.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.
+
+Deviations:
+
+- Implementation used two docs commits, one per engine, as decided in Step 4.6.
+- Quickstart docs and SDK user guide were intentionally left untouched because
+  T8-D rounds 4/5 already aligned them.
+- No Form 2 schema details were introduced; PyReason row-level temporal evidence
+  remains a named future design/runtime track.
