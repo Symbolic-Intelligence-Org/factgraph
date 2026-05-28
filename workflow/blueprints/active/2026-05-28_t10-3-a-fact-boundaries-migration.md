@@ -1,6 +1,6 @@
 # Task Blueprint: T10-3-A PyReason Fact Boundaries Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S/M (runtime implementation)
@@ -353,7 +353,7 @@ rg -n "_normalize_temporal_projection|_normalize_valid_time_boundaries|fact_boun
 rg -n "_resolve_temporal_projection_state|_materialize_valid_time_boundaries|_reject_iteration_temporal_conflict|fact_boundaries" src/factgraph/adapters/pyreason/engine_eval.py
 rg -n "valid_time_boundaries|fact_boundaries|iteration_count.*temporal" tests/test_pyreason_semantics_profile_migration.py
 PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration
-python -m unittest discover tests
+PYTHONPATH=src python -m unittest discover tests
 ruff check src/factgraph/core/semantics/profile.py src/factgraph/adapters/pyreason/engine_eval.py tests/test_pyreason_semantics_profile_migration.py
 git diff --check
 git status --short --branch
@@ -391,19 +391,19 @@ consumption are still reviewed together without partial-ship risk.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed plan completed.
 - [x] Q1-Q9 answered.
-- [ ] Profile accepts `fact_boundaries`.
-- [ ] Adapter consumes `fact_boundaries` through the existing valid-time
+- [x] Profile accepts `fact_boundaries`.
+- [x] Adapter consumes `fact_boundaries` through the existing valid-time
   substrate.
-- [ ] `fact_boundaries` + canonical `iteration_count` conflict behavior tested.
-- [ ] Legacy `valid_time_boundaries` behavior preserved.
-- [ ] T10-2-A and T10-2-B invariants preserved.
-- [ ] T10-3 inventory decisions preserved.
-- [ ] T8-A/B/C-1/D and T10-1 invariants preserved.
-- [ ] `git diff --check` clean.
-- [ ] Focused PyReason tests pass.
-- [ ] Full discover delta compared against
+- [x] `fact_boundaries` + canonical `iteration_count` conflict behavior tested.
+- [x] Legacy `valid_time_boundaries` behavior preserved.
+- [x] T10-2-A and T10-2-B invariants preserved.
+- [x] T10-3 inventory decisions preserved.
+- [x] T8-A/B/C-1/D and T10-1 invariants preserved.
+- [x] `git diff --check` clean.
+- [x] Focused PyReason tests pass.
+- [x] Full discover delta compared against
   `2025 tests / 72 failures / 231 errors`.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -411,7 +411,7 @@ Runtime implementation verification:
 
 ```bash
 PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration
-python -m unittest discover tests
+PYTHONPATH=src python -m unittest discover tests
 ruff check src/factgraph/core/semantics/profile.py src/factgraph/adapters/pyreason/engine_eval.py tests/test_pyreason_semantics_profile_migration.py
 git diff --check
 git status --short --branch
@@ -420,4 +420,51 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Implemented in three runtime commits:
+
+1. `c5ea4a4b` `feat(profile): accept fact_boundaries as canonical alias`
+   - Added the smallest possible `fact_boundaries` branch in
+     `_normalize_temporal_projection`.
+   - Reused `_normalize_valid_time_boundaries(...)` unchanged.
+   - Preserved Option A input spelling and kept the allowed-mode string
+     alphabetical.
+2. `3d6fc258` `feat(pyreason): consume fact_boundaries via valid-time substrate`
+   - Extended the existing valid-time branch to handle both
+     `valid_time_boundaries` and `fact_boundaries`.
+   - Reused `_reject_iteration_temporal_conflict(...)`,
+     `_materialize_valid_time_boundaries(...)`, and
+     `_reject_temporal_timesteps_conflict(...)` unchanged.
+   - Switched the conflict carrier string to the supplied mode, so canonical
+     callers see `SemanticsProfile.temporal_projection.fact_boundaries`.
+3. `03f94aba` `test(pyreason): cover fact_boundaries alias migration`
+   - Added four tests for profile acceptance, universe validation parity,
+     `iteration_count` conflict behavior, and adapter materialization parity.
+
+Verification:
+
+- Focused PyReason suite:
+  `PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration`
+  -> `Ran 94 tests ... OK`.
+- Full discover:
+  `PYTHONPATH=src python -m unittest discover tests`
+  -> `Ran 2029 tests ... FAILED (failures=72, errors=231)`.
+  This is the expected clean composition delta from the T10-2-B baseline
+  `2025 tests / 72 failures / 231 errors`: +4 tests, +0 failures, +0 errors.
+- `ruff check src/factgraph/core/semantics/profile.py src/factgraph/adapters/pyreason/engine_eval.py tests/test_pyreason_semantics_profile_migration.py`
+  -> clean.
+- `git diff --check` -> clean.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.
+
+Deviations / notes:
+
+- Source footprint is the smallest runtime footprint in this session: 9 source LOC
+  plus 67 test LOC. This matches the Step 4.6 "absolute minimum viable" plan.
+- Scoped §3.5 test line refs shifted after adding the four new tests, but the
+  underlying T10-2-A and T10-2-B tests remained unchanged and passed in the
+  focused 94 OK suite.
+- An initial full-discover command was run without `PYTHONPATH=src`, producing
+  import errors. The corrected `PYTHONPATH=src` command was rerun and is the
+  verification result recorded above. Future cycles should keep `PYTHONPATH=src`
+  explicit in full-discover commands or consolidate this into a checked script /
+  Makefile target.

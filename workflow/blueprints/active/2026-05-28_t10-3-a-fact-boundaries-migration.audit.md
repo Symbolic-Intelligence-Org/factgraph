@@ -1,11 +1,11 @@
 # Audit: T10-3-A PyReason Fact Boundaries Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-3-a-fact-boundaries-migration.md`
-- Stage: scoped
+- Stage: implemented
 - Class: S/M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -16,7 +16,8 @@
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
 | 2026-05-28 | draft | `30240f16` | T10-3-A `fact_boundaries` alias migration drafted | Triggered by T10-3 inventory `da896f0c`, T10-2-A `65cc79a3`, T10-2-B `92fd6013`, and current memory next-work #1; Q1-Q9 pending Step 4.6. |
-| 2026-05-28 | scoped | this commit | Step 4.6 source-backed implementation plan completed | Selected input-spelling-preserving normalization, direct valid-time validation reuse, existing materializer/conflict-helper reuse, and a focused test matrix with 90 OK baseline. |
+| 2026-05-28 | scoped | `30c253a9` | Step 4.6 source-backed implementation plan completed | Selected input-spelling-preserving normalization, direct valid-time validation reuse, existing materializer/conflict-helper reuse, and a focused test matrix with 90 OK baseline. |
+| 2026-05-28 | implemented | this commit | Step 4.7 implementation closed | Three implementation commits shipped `fact_boundaries` alias support with focused 94 OK and full-discover `2029 / 72F / 231E`. |
 
 ## 2. Draft Source Scan
 
@@ -97,8 +98,43 @@ claim with source refs.
 - [x] Conflict behavior reviewed.
 - [x] T10-2-A / T10-2-B invariant protection reviewed.
 - [x] Focused verification plan reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / implementation / closure.
+Implementation commits:
+
+- `c5ea4a4b` `feat(profile): accept fact_boundaries as canonical alias`
+- `3d6fc258` `feat(pyreason): consume fact_boundaries via valid-time substrate`
+- `03f94aba` `test(pyreason): cover fact_boundaries alias migration`
+
+Verification:
+
+- Focused PyReason suite: `94 OK` (`90 -> 94`, +4).
+- Full discover: `2029 tests / 72 failures / 231 errors`
+  (`2025 -> 2029`, +4 tests, +0 failures, +0 errors).
+- `ruff check` on touched files: clean.
+- `git diff --check`: clean.
+- Sacred `master`: `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline: `4 M + 1 D + 6 U`.
+
+Implementation notes:
+
+- The runtime footprint is 9 source LOC plus 67 test LOC, matching the scoped
+  "absolute minimum viable" plan.
+- The profile change preserves input spelling: canonical `fact_boundaries`
+  normalizes to `fact_boundaries`; legacy `valid_time_boundaries` remains
+  `valid_time_boundaries`.
+- The adapter uses a dynamic carrier string, so conflict messages name
+  `SemanticsProfile.temporal_projection.fact_boundaries` for canonical callers
+  and preserve the legacy carrier for legacy callers.
+- T10-2-A and T10-2-B invariant tests remain part of the focused 94 OK gate.
+
+Deviations / future pings:
+
+- Scoped §3.5 test line refs shifted after new test insertion, but the covered
+  test logic remained unchanged.
+- A full-discover command run without `PYTHONPATH=src` produced import errors;
+  the corrected `PYTHONPATH=src` invocation produced the recorded composition
+  delta. Future cycles should keep `PYTHONPATH=src` explicit or move this check
+  into a small maintained command target.
