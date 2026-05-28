@@ -314,10 +314,11 @@ def _resolve_temporal_projection_state(
             carrier="SemanticsProfile.temporal_projection.fixed_timesteps",
         )
         return _TemporalProjectionState(timesteps=timesteps)
-    if mode == "valid_time_boundaries":
+    if mode in {"valid_time_boundaries", "fact_boundaries"}:
+        carrier = f"SemanticsProfile.temporal_projection.{mode}"
         _reject_iteration_temporal_conflict(
             iteration_count,
-            carrier="SemanticsProfile.temporal_projection.valid_time_boundaries",
+            carrier=carrier,
         )
         universe = projection["universe"]
         state = _materialize_valid_time_boundaries(
@@ -330,7 +331,7 @@ def _resolve_temporal_projection_state(
             _reject_temporal_timesteps_conflict(
                 state.timesteps,
                 engine_options=engine_options,
-                carrier="SemanticsProfile.temporal_projection.valid_time_boundaries",
+                carrier=carrier,
             )
         return state
     raise ValueError(f"Unsupported PyReason temporal_projection.mode: {mode!r}")
