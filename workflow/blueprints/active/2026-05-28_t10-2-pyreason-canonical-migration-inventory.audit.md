@@ -1,11 +1,11 @@
 # Audit: T10-2 PyReason Canonical Migration Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-2-pyreason-canonical-migration-inventory.md`
-- Stage: scoped
+- Stage: closure
 - Class: S/M (design-only inventory)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -17,7 +17,8 @@
 |---|---|---|---|---|
 | 2026-05-28 | draft | `138a8461` | T10-2 PyReason canonical migration inventory drafted | Triggered by T10 staged-hybrid inventory and current memory next-work #1; Q1-Q8 pending Step 4.6. |
 | 2026-05-28 | amend | `3efff8b9` | Dirty baseline drift recorded | Updated observed baseline from `5 U` to `6 U` and added `identity-mechanism-redesign.zh.md` to read-only overlap surface. |
-| 2026-05-28 | scoped | pending | Step 4.6 source-backed inventory completed | C74/C78 per-layer states, atom-id conventions, fixed-timesteps decoupling, split recommendation, and untracked overlap classification recorded. |
+| 2026-05-28 | scoped | `f9737cd4` | Step 4.6 source-backed inventory completed | C74/C78 per-layer states, atom-id conventions, fixed-timesteps decoupling, split recommendation, and untracked overlap classification recorded. |
+| 2026-05-28 | closure | this commit | T10-2 inventory closed | Blueprint status moved to implemented; closure notes recorded. |
 
 ## 2. Draft Source Scan
 
@@ -104,8 +105,35 @@ Source-backed findings:
 - [x] Atom-id convention map reviewed.
 - [x] `fixed_timesteps` decoupling reviewed.
 - [x] Untracked design-point overlap reviewed.
-- [ ] Closure notes filled.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending closure.
+Design-only inventory completed with no runtime, test, user-doc, governance, or
+dirty-baseline edits.
+
+Key closure decisions:
+
+- C74 implementation should not treat legacy `head_bound` / `branch_bounds` as
+  canonical C74. Future C74 must introduce canonical `derived_bound` and
+  full-atom-id `atom_bounds`, with a conversion layer into adapter-local
+  PyReason targets.
+- C78 implementation should happen first as **T10-2-A**, because
+  `fixed_timesteps` currently couples iteration depth into temporal projection
+  and should be clarified before T10-3 temporal work.
+- C74 canonical migration should follow as **T10-2-B**, preserving or explicitly
+  migrating existing `timestep_delay`, `head_bound`, `branch_bounds`, direct
+  profile target, and rule-extension behavior.
+- T8-C-2 PyReason evidence remains future after T10-2 until T10-3 C77 and
+  D11/Form 2 evidence design are locked.
+- The four untracked design-point files are adjacent but not blocking. They
+  discuss ledger temporal modeling, identity/data model, or PyReason edge
+  relationship modeling; none defines C74/C78 canonical adapter semantics.
+
+Verification:
+
+- Focused PyReason no-op suite: 78 OK.
+- `git diff --check`: clean.
+- Sacred master preserved:
+  `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved at `4 M + 1 D + 6 U`.

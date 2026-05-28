@@ -1,6 +1,6 @@
 # Task Blueprint: T10-2 PyReason Canonical Migration Inventory
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S/M (design-only inventory)
@@ -341,4 +341,52 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending closure.
+Implemented as a design-only inventory cycle.
+
+Commit chain:
+
+1. Draft: `138a8461`.
+2. Baseline amend: `3efff8b9`, recording dirty-baseline drift from
+   `4 M + 1 D + 5 U` to `4 M + 1 D + 6 U` and adding
+   `identity-mechanism-redesign.zh.md` to the read-only overlap surface.
+3. Scoped: `f9737cd4`, completing Step 4.6 source-backed inventory.
+4. Closure: this commit.
+
+Source-backed outcome:
+
+- C74 remains partial / legacy. `timestep_delay` is shipped end-to-end;
+  canonical `derived_bound` is currently legacy `head_bound`; canonical
+  `atom_bounds` is missing as a full-atom-id SDK shell/lowering surface.
+- C78 remains missing canonically. Legacy `fixed_timesteps` currently feeds
+  PyReason engine timesteps through `temporal_projection`, so T10-2-A should
+  introduce canonical `iteration_count` and define compatibility for
+  `fixed_timesteps`.
+- The three atom-id conventions are distinct and must not be conflated:
+  application full atom ids, PyReason positional profile targets, and T8-B
+  witness keys. Future C74 needs a conversion layer from full atom id to
+  adapter-local targets.
+- `fixed_timesteps` is decouplable; C78 can ship before C77. T10-3 remains the
+  owner of canonical temporal projection rename / `time_binned`.
+- Selected implementation split: **T10-2-A C78 first**, then **T10-2-B C74**.
+- T8-C-2 PyReason evidence remains gated after T10-2 by T10-3 C77 and
+  D11/Form 2 evidence design.
+- Four untracked design-point files are adjacent but not blocking; they remain
+  dirty baseline and are not absorbed by this cycle.
+
+Verification:
+
+- PyReason focused no-op baseline:
+  `PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration`
+  -> 78 tests OK.
+- `git diff --check` clean.
+- Sacred `master` preserved at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved at `4 M + 1 D + 6 U`.
+
+Deviations / notes:
+
+- The only deviation from draft was observed dirty-baseline drift to six
+  untracked files; it was recorded before Step 4.6 and did not touch any
+  untracked file.
+- The scoped split refines T10 inventory's "T10-2 C74 + C78" bucket into two
+  implementation sub-slices under the same umbrella, not a T10 inventory
+  contradiction.
