@@ -8,7 +8,7 @@
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q2, Q4, F1, F2, F6, F11, and §6 C64-C65 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` §4.1, §4.5, §4.7, and §4.8.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.8.2, C64, and C65.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.8.2, C64, and C65.
   - Shipped `src/factgraph/sdk/__init__.py:28-56` and `:88-108`.
   - Shipped `src/factgraph/core/derivation/candidates.py:13-70`.
   - Shipped `src/factgraph/application/protocol/derivation.py:21-126`.

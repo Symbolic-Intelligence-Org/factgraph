@@ -10,7 +10,7 @@
   - `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md`
   - `workflow/design/decisions/active/2026-05-24_t3-d3-inspect-coexistence.md`
   - `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md`
-  - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:180-196`
+  - Track plan `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:180-196`
 - Outputs / Downstream:
   - Stage 3 T3 synthesis.
   - T3.x per-slice blueprints.

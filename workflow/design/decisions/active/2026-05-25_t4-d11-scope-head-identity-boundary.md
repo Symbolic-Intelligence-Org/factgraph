@@ -6,8 +6,8 @@
 - Authority: proposed design constraint; locks the T4 post-T3L.3 scope boundary and existing-head identity / warning semantics.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t4-head-closed-head-vs-shipped.md` Q1, Q3, F1, F3, F8, F9, and §6 commitment triage.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.0-§5.7, C52-C60, and C72 boundary references.
-  - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:210-230`.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.0-§5.7, C52-C60, and C72 boundary references.
+  - Track plan `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:210-230`.
   - D6 `workflow/design/decisions/active/2026-05-25_t3-later-d6-public-entrypoint-head-dependency.md` §4.4 and §4.6.
   - T3L.3 archived blueprint `workflow/blueprints/archive/2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md`.
   - Shipped `src/factgraph/application/protocol/rule.py:47-108`.

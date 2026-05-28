@@ -7,8 +7,8 @@
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t3-later-execution-vs-shipped.md` Q1, Q2, F2, F4, F9, F10, and §10 D6 mapping.
   - D5 `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.8 execution-lowering deferral.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.1, §4.9, and §5.1-§5.4.
-  - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:180-196`.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §4.1, §4.9, and §5.1-§5.4.
+  - Track plan `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:180-196`.
   - Shipped `src/factgraph/sdk/store.py:406-434` and `src/factgraph/sdk/store.py:2197-2264`.
   - Shipped `src/factgraph/application/protocol/rule_expr.py:134-179`.
 - Outputs / Downstream:

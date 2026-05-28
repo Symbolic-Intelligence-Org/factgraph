@@ -12,8 +12,8 @@
   - D19 `workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md` sections 4.3, 4.5, and 4.6.
   - D20 `workflow/design/decisions/active/2026-05-25_t5-d20-explanation-envelope.md` sections 4.3, 4.4, and 4.6.
   - T4 D15 `workflow/design/decisions/active/2026-05-25_t4-d15-closed-head-inspect.md` sections 4.1-4.10.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1020-1081`.
-  - Sibling future-design note `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md:1285-1321` as non-authoritative manual replay pipeline context.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md:1020-1081`.
+  - Sibling future-design note `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md:1285-1321` as non-authoritative manual replay pipeline context.
   - Shipped `src/factgraph/application/protocol/rule.py:55-113` and `src/factgraph/application/protocol/rule_expr_inspect.py:89-230`.
 - Outputs / Downstream:
   - D22 why-not disposition.

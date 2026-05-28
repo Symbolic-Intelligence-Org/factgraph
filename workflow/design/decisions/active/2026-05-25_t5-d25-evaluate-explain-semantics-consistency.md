@@ -11,7 +11,7 @@
   - D19 `workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md` sections 4.4, 4.5, and 7.3.
   - D20 `workflow/design/decisions/active/2026-05-25_t5-d20-explanation-envelope.md` sections 4.1, 4.4, 4.6, and 7.3.
   - D24 `workflow/design/decisions/active/2026-05-25_t5-d24-final-sdk-rule-flip.md` sections 4.1-4.8.
-  - Evidence-tree v1 `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md` sections 6.1-6.8 and C110-C113.
+  - Evidence-tree v1 `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md` sections 6.1-6.8 and C110-C113.
   - Shipped `src/factgraph/core/semantics/profile.py:24-102`.
   - Shipped SDK semantics lowering `src/factgraph/sdk/store.py:2159-2196`, `src/factgraph/sdk/store.py:2872-2944`.
 - Outputs / Downstream:
@@ -22,7 +22,7 @@
 - Related:
   - `workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md`
   - `workflow/design/decisions/active/2026-05-25_t5-d20-explanation-envelope.md`
-  - `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md`
+  - `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md`
   - `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md`
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Depends on: D16-D24 reviewed clean.

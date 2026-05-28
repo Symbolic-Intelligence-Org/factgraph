@@ -9,7 +9,7 @@
   - D6 `workflow/design/decisions/active/2026-05-25_t3-later-d6-public-entrypoint-head-dependency.md`.
   - D7 `workflow/design/decisions/active/2026-05-25_t3-later-d7-lowering-plan-shape.md`.
   - D8 `workflow/design/decisions/active/2026-05-25_t3-later-d8-join-lowering-semantics.md`.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §8 and §10.6.3.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §8 and §10.6.3.
   - Shipped `src/factgraph/core/rules/where_eval.py:125-143`, `src/factgraph/core/rules/where_eval.py:364-426`, and `src/factgraph/core/rules/where_eval.py:429-470`.
   - Shipped `src/factgraph/core/rules/where_eval.py:526-563`.
   - Shipped `src/factgraph/adapters/souffle/where_compile.py:443-580`, `src/factgraph/adapters/souffle/where_compile.py:741-798`, and `src/factgraph/adapters/souffle/where_compile.py:832-848`.

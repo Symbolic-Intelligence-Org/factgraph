@@ -25,8 +25,8 @@
 - Related:
   - `workflow/audit/active/2026-05-25_post-q-t4-head-closed-head-synthesis.md`
   - `workflow/memory/current.md`
-  - `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md`
-  - `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md`
+  - `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md`
+  - `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md`
 - Source audit: `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md`
 - Closed Q decisions:
   - D16 T5 Tranche Boundary

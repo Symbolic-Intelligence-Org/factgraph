@@ -9,7 +9,7 @@
   - D11 `workflow/design/decisions/active/2026-05-25_t4-d11-scope-head-identity-boundary.md` §4.1, §4.5, and §4.7.
   - D12 `workflow/design/decisions/active/2026-05-25_t4-d12-declared-port-namespace.md` §4.1-§4.8.
   - D13 `workflow/design/decisions/active/2026-05-25_t4-d13-external-head-body-semantics.md` §4.1-§4.9.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.7 and C56.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.7 and C56.
   - Shipped `src/factgraph/application/protocol/rule.py:35-39`, `:47-108`, `:125-127`, `:226-230`, and `:456-489`.
   - Shipped `src/factgraph/core/rules/where_ast.py:13-64`.
   - T3L.3 archived blueprint `workflow/blueprints/archive/2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md` §10.

@@ -352,7 +352,7 @@ cycle:
 
 > 在新 user-facing 表达层 (`Rule` / `RuleExpr`),`Branch` 不出现 …
 > 与 Inference 关系: 新设计 = **解耦** — Inference 是运行时入口,接受 RuleExpr
-> — `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §3.10
+> — `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §3.10
 
 Until that migration spec is locked by a future blueprint:
 

@@ -39,10 +39,10 @@ Out of scope:
 | Source | Lines read | Relevance |
 |---|---:|---|
 | `workflow/memory/current.md` | 1-16, 504-510 | Confirms T3 later push gate executed and T4 selected as next track. |
-| `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` | 210-230 | T4 planned scope and sub-slices. |
-| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 713-923 | Parent §5.0-§5.7 Head commitments C52-C60. |
-| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 1126-1147, 1163-1208 | T5-adjacent closed-head replay, `row.close()`, and Explanation boundary. |
-| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 1535-1571, 1577-1597 | C72 closed-head inspect utility and consolidated C52-C60/C72 commitment table. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md` | 210-230 | T4 planned scope and sub-slices. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` | 713-923 | Parent §5.0-§5.7 Head commitments C52-C60. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` | 1126-1147, 1163-1208 | T5-adjacent closed-head replay, `row.close()`, and Explanation boundary. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` | 1535-1571, 1577-1597 | C72 closed-head inspect utility and consolidated C52-C60/C72 commitment table. |
 | `workflow/design/decisions/active/2026-05-25_t3-later-d6-public-entrypoint-head-dependency.md` | 120-166 | T3 later minimal head subset and explicit T4 deferrals. |
 | `workflow/blueprints/archive/2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md` | 37-111, 176-246 | T3L.3 public dispatch scope and explicit no-full-T4 boundary. |
 

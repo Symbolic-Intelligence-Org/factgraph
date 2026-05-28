@@ -7,7 +7,7 @@
 - Inputs:
   - `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md` Q4, A3, A10-A12, and hash/canonical friction.
   - `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md`
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` C25, C33, C34, and lines 1298-1306.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` C25, C33, C34, and lines 1298-1306.
 - Outputs / Downstream:
   - T3 RuleExpr value implementation.
   - T3-D5 slice split and bool-guard timing.

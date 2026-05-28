@@ -445,7 +445,7 @@ D18 (aggregate matched_facts 展开) 与 D20 (match witness output) 的 view sco
 
 ### 12.3 Lifecycle archive 自我说明
 
-本 cycle (2026-05-28) 通过 supersede 规则一次性 archive 6 个 design-points 到 `workflow/design/design-points/archive/`:
+本 cleanup cycle (commits 实际落地 2026-05-29 早晨, session 起始 2026-05-28) 通过 supersede 规则一次性 archive 6 个 design-points 到 `workflow/design/design-points/archive/`:
 
 | # | File | Supersede 路径 |
 |---|---|---|
@@ -472,8 +472,9 @@ archive 后 `design-points/active/` 仅余本文件作为 tracked 唯一 design-
 
 | 日期 | 变更 |
 |---|---|
-| 2026-05-28 (初版) | §1-§9 explanation completion 主体创建 |
-| 2026-05-28 (legacy 扩展) | §0 Inputs 扩展至 5 个 archive 源; 新增 §10/§11/§12 legacy backlog 段; §10/§11 → §13/§14 |
+| 2026-05-28 (初版) | §1-§9 explanation completion 主体创建 (session 内 Write 时刻) |
+| 2026-05-29 (legacy 扩展 + 6-file archive batch) | §0 Inputs 扩展至 5 个 archive 源; 新增 §10/§11/§12 legacy backlog 段; §10/§11 → §13/§14; 同 cycle 通过 supersede 规则一次性 archive 6 design-points (commits `00eb28b5` / `27d49586` / `fc90eefe`) |
+| 2026-05-29 (cross-ref cleanup) | 修复 archived 6 design-points 在 `docs/official/` / `workflow/audit/active/` / `workflow/design/decisions/active/` 中的 active→archive path 引用 (post-archive cross-reference hygiene); 同时精修本文件 + README 中的 commit-time date precision |
 
 ---
 

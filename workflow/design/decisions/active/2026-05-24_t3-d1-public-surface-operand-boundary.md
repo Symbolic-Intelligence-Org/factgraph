@@ -7,7 +7,7 @@
 - Inputs:
   - `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md` Q1, D1, A1, A13, and T4/T5 naming seam.
   - `workflow/design/decisions/archive/2026-05-23_t1-3-sdk-rule-top-level-naming.md`
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` C23-C26, C28, and C35.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` C23-C26, C28, and C35.
   - `src/factgraph/sdk/__init__.py:1-94` current staged SDK namespace.
 - Outputs / Downstream:
   - T3 RuleExpr import/export blueprint.

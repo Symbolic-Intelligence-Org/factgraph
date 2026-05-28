@@ -9,7 +9,7 @@
   - D6 `workflow/design/decisions/active/2026-05-25_t3-later-d6-public-entrypoint-head-dependency.md`.
   - D4 `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md`.
   - D5 `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.8 execution-lowering deferral.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.1 and §5.1-§5.4.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §4.1 and §5.1-§5.4.
   - Shipped `src/factgraph/application/protocol/rule_expr.py:73-236` and `src/factgraph/application/protocol/rule_expr.py:295-330`.
   - Shipped `src/factgraph/application/protocol/derivation.py:21-43` and `src/factgraph/application/derivation_runtime.py:69-139`.
   - Shipped `src/factgraph/core/store/_evaluate.py:33-49` and `src/factgraph/core/store/types.py:8-14`.

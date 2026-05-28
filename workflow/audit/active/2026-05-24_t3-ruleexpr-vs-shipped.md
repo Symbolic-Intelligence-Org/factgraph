@@ -5,8 +5,8 @@
 - Last Updated: 2026-05-24
 - Authority: working triage document; informs but does not lock implementation. Implementation decisions follow only after audit-row review.
 - Inputs:
-  - Parent design: `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` sections 3.6, 4, 5.9, and 5.10.
-  - Track plan: `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` section 1.2.6 / T3 rows.
+  - Parent design: `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` sections 3.6, 4, 5.9, and 5.10.
+  - Track plan: `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md` section 1.2.6 / T3 rows.
   - Shipped source files read completely per Rule 1, listed in section 1.
 - Outputs / Downstream:
   - Stage 2 T3 RuleExpr decision docs.
@@ -25,8 +25,8 @@ Primary surfaces read completely per Rule 1:
 
 | Layer | File | Path / line anchors |
 |---|---|---|
-| Parent design | Rule-expression essay | `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:160-226`, `:397-699`, `:1298-1306`, `:1484-1533` |
-| Track plan | Rule-expression track plan | `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:115`, `:180-196` |
+| Parent design | Rule-expression essay | `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md:160-226`, `:397-699`, `:1298-1306`, `:1484-1533` |
+| Track plan | Rule-expression track plan | `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:115`, `:180-196` |
 | Application protocol | Rule DTO and T1.4 occurrence substrate | `src/factgraph/application/protocol/rule.py:1-540` |
 | Application protocol | Public protocol exports | `src/factgraph/application/protocol/__init__.py:1-176` |
 | SDK top level | Transitional public SDK namespace | `src/factgraph/sdk/__init__.py:1-94` |

@@ -12,8 +12,8 @@
   - D18 `workflow/design/decisions/active/2026-05-25_t5-d18-return-shape-transition.md` sections 4.1, 4.3, 4.6, and 4.8.
   - D20 `workflow/design/decisions/active/2026-05-25_t5-d20-explanation-envelope.md` sections 4.2, 4.7, and 7.3.
   - D21 `workflow/design/decisions/active/2026-05-25_t5-d21-row-close-closed-head-gate.md` sections 4.1-4.7.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1265-1278`.
-  - Sibling future-design note `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md:2282-2331` and `:2406-2432`.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md:1265-1278`.
+  - Sibling future-design note `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md:2282-2331` and `:2406-2432`.
   - Shipped `src/factgraph/application/protocol/derivation_why_not.py:1-346`, `src/factgraph/application/why_not_runtime.py:1-190`, `src/factgraph/application/why_not_runtime.py:300-380`, `src/factgraph/sdk/store.py:1243-1288`, and `src/factgraph/sdk/shells/why_not.py:1-119`.
 - Outputs / Downstream:
   - D23 legacy SDK hard-cut plan.

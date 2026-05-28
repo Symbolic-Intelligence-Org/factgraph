@@ -9,8 +9,8 @@
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q3, F1, F3, F10, F12, and §6 C62-C63 triage.
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` §4.1, §4.4, §4.7, and §4.8.
   - D17 `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` §4.1-§4.9.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.8.1, §5.8.2, C61-C63, and C65.
-  - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:241-252` and `:256-261`.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.8.1, §5.8.2, C61-C63, and C65.
+  - Track plan `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:241-252` and `:256-261`.
   - Shipped `src/factgraph/sdk/store.py:420-475`, `:2211-2384`, and `:2388-2445`.
   - Shipped docs and tests grep showing public `list[CandidateSet]`, `engine_options`, `registry`, `accept`, and `accept_many` assumptions.
 - Outputs / Downstream:

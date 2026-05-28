@@ -10,7 +10,7 @@
   - D12 `workflow/design/decisions/active/2026-05-25_t4-d12-declared-port-namespace.md` §4.1-§4.8.
   - D13 `workflow/design/decisions/active/2026-05-25_t4-d13-external-head-body-semantics.md` §4.4, §4.8, and §4.9.
   - D14 `workflow/design/decisions/active/2026-05-25_t4-d14-rule-projection-sugar.md` §4.4-§4.9.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.10.1 and C72.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.10.1 and C72.
   - Shipped `src/factgraph/application/protocol/rule_expr_inspect.py:36-135`, `:155-172`, `:189-228`, and `:243-257`.
   - Shipped `src/factgraph/sdk/store.py:392-399` and `:2099-2111`.
   - Shipped `src/factgraph/sdk/schema.py:50-88` and `:155-199`.

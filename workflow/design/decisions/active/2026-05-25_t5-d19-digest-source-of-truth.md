@@ -10,8 +10,8 @@
   - D16 `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md` sections 4.1, 4.7, and 4.8.
   - D17 `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` sections 4.3-4.8.
   - D18 `workflow/design/decisions/active/2026-05-25_t5-d18-return-shape-transition.md` sections 4.1-4.8.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` sections 5.8.2, 5.8.5, C64-C68, and C69.
-  - Sibling future-design note `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md:1-14`, `:272-325`, and `:771-792` as non-authoritative evidence runtime context.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` sections 5.8.2, 5.8.5, C64-C68, and C69.
+  - Sibling future-design note `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md:1-14`, `:272-325`, and `:771-792` as non-authoritative evidence runtime context.
   - Shipped `src/factgraph/core/protocol/digests.py:7-12`, `src/factgraph/application/protocol/rule.py:107-113`, `src/factgraph/core/derivation/candidates.py:13-115`, `src/factgraph/core/semantics/profile.py:25-95`, `src/factgraph/sdk/store.py:2289-2390`, `src/factgraph/application/derivation_runtime.py:64-148`, and `src/factgraph/core/store/database.py:193-199`, `:407-410`.
 - Outputs / Downstream:
   - D20 explanation envelope and evidence graph replay.

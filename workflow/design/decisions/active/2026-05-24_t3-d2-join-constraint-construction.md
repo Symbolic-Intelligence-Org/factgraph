@@ -6,7 +6,7 @@
 - Authority: design constraint; locks RuleExpr join-constraint syntax and substrate preservation before T3 join implementation.
 - Inputs:
   - `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md` Q2, D4, A8, A9, and frictions.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` section 3.6 commitments 2, 4, and 7; section 4 C30-C31; section 5.9 C58.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` section 3.6 commitments 2, 4, and 7; section 4 C30-C31; section 5.9 C58.
   - T1.4 shipped substrate in `src/factgraph/application/protocol/rule.py:122-170` and `tests/application/protocol/test_rule.py:199-213`.
 - Outputs / Downstream:
   - T3 join IR decision input.

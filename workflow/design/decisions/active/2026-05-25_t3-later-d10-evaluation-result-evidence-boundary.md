@@ -10,7 +10,7 @@ Inputs:
 - D8 `workflow/design/decisions/active/2026-05-25_t3-later-d8-join-lowering-semantics.md`.
 - D9 `workflow/design/decisions/active/2026-05-25_t3-later-d9-adapter-matrix.md`.
 - D5 `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` §4.8 execution-lowering deferral.
-- Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.9, §5.1-§5.4, and T5 result/evidence commitments.
+- Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §4.9, §5.1-§5.4, and T5 result/evidence commitments.
 - Shipped `src/factgraph/core/derivation/candidates.py:13-30`.
 - Shipped `src/factgraph/application/derivation_runtime.py:69-89`.
 - Shipped `src/factgraph/sdk/store.py:2197-2298`.

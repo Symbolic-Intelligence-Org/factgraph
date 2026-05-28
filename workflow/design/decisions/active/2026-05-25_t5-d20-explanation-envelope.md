@@ -11,8 +11,8 @@
   - D17 `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` sections 4.1, 4.5, 4.8, and 7.3.
   - D18 `workflow/design/decisions/active/2026-05-25_t5-d18-return-shape-transition.md` sections 4.1-4.8.
   - D19 `workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md` sections 4.2-4.8.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` sections 5.8.3, 5.8.5, C66-C68, C69, and C72.
-  - Sibling future-design note `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md:1285-1415`, `:1542-1596`, `:1620-1690`, `:2282-2338`, and `:2349-2392`.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` sections 5.8.3, 5.8.5, C66-C68, C69, and C72.
+  - Sibling future-design note `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md:1285-1415`, `:1542-1596`, `:1620-1690`, `:2282-2338`, and `:2349-2392`.
   - Shipped `src/factgraph/application/protocol/derivation_check.py:62-160`, `src/factgraph/application/protocol/derivation_diagnose.py:1-220`, and `src/factgraph/audit/evidence_graph.py:24-160`.
 - Outputs / Downstream:
   - D21 `row.close()` and closed-head construction.

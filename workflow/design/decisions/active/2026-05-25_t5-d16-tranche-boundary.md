@@ -7,8 +7,8 @@
 - Implementation Anchors: T5.1-T5.8 archived at `53781419`, `4e590e8a`, `ba5e5c26`, `7464c3e3`, `ec45f12f`, `7aa1c6a3`, `8173c715`, `efd65c0e`.
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md` Q1, Q10, Q11, Q12, Q13, Q14, F8, F9, F12, and §6 commitment triage.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.8, C61-C78, and §5.12 deferred / pending table.
-  - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:233-264`.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.8, C61-C78, and §5.12 deferred / pending table.
+  - Track plan `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:233-264`.
   - T4 Stage 3 synthesis `workflow/audit/active/2026-05-25_post-q-t4-head-closed-head-synthesis.md`.
   - T4.1 archived blueprint `workflow/blueprints/archive/2026-05-25_t4-1-head-identity-declared-port-foundation.md`.
   - T4.2 archived blueprint `workflow/blueprints/archive/2026-05-25_t4-2-external-projection-head-execution.md`.
@@ -29,8 +29,8 @@
   - D26 semantics commitments scope and adapter implementation policy, if Stage 2 keeps C73-C78 in this decision cluster.
 - Related:
   - `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md`
-  - `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md`
-  - `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md`
+  - `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md`
+  - `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md`
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Depends on: T4 cycle complete and pushed; T5 Stage 1 audit reviewed clean v2.
 

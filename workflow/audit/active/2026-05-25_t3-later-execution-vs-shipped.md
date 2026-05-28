@@ -45,11 +45,11 @@ Out of scope for this Stage 1 audit:
 | `workflow/memory/current.md` | 307-334 | Human-direct next-track selection, cross-flip assignment, source refs, hold gates. |
 | `workflow/design/decisions/active/2026-05-24_t3-d5-slice-split-bool-guard.md` | 155-167 | D5 explicitly excludes execution lowering from T3.1-T3.6 and requires later decision/synthesis. |
 | `workflow/audit/active/2026-05-24_post-q-t3-ruleexpr-synthesis.md` | 203-208, 212-218 | Synthesis records later tranche dependencies and cadence reminders. |
-| `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md` | 180-198 | Track plan row for T3 later tranche and initial T3 slice ladder. |
-| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 397-409 | Parent §4 states RuleExpr is composition only and has no head/projection/claim. |
-| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 713-816 | Parent §5 head contract and `fg.eval.evaluate(expr, head=...)` examples. |
-| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 1670-1765 | Parent §8 engine capability and lowering matrix. |
-| `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` | 1835-1867, 1873-1959 | Parent §10 atom grammar and ArithExpr/AggregateExpr restrictions. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md` | 180-198 | Track plan row for T3 later tranche and initial T3 slice ladder. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` | 397-409 | Parent §4 states RuleExpr is composition only and has no head/projection/claim. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` | 713-816 | Parent §5 head contract and `fg.eval.evaluate(expr, head=...)` examples. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` | 1670-1765 | Parent §8 engine capability and lowering matrix. |
+| `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` | 1835-1867, 1873-1959 | Parent §10 atom grammar and ArithExpr/AggregateExpr restrictions. |
 | `workflow/blueprints/archive/2026-05-24_t3-1-*` through `t3-6-*` | archive pairs | T3.1-T3.6 closure trail and negative-action gates. |
 
 Line ranges are pinned to the Stage 1 audit branch state; the initial audit commit was `4ac498f0`.

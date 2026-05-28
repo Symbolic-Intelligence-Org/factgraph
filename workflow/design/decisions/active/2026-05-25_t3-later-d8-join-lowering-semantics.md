@@ -10,7 +10,7 @@
   - D7 `workflow/design/decisions/active/2026-05-25_t3-later-d7-lowering-plan-shape.md`.
   - D2 `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md`.
   - D4 `workflow/design/decisions/active/2026-05-24_t3-d4-structural-equality-hash.md`.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §4.7 and §5.1-§5.4.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §4.7 and §5.1-§5.4.
   - Shipped `src/factgraph/application/protocol/rule.py:35-39`, `src/factgraph/application/protocol/rule.py:145-185`, and `src/factgraph/application/protocol/rule.py:80-99`.
   - Shipped `src/factgraph/application/protocol/rule_expr.py:20-40`, `src/factgraph/application/protocol/rule_expr.py:105-115`, and `src/factgraph/application/protocol/rule_expr.py:217-236`.
   - Shipped `src/factgraph/application/protocol/rule_expr.py:283-330`.

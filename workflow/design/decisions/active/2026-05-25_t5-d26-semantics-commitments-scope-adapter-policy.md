@@ -11,9 +11,9 @@
   - D17 `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` section 4.3.
   - D19 `workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md` section 4.4.
   - D25 `workflow/design/decisions/active/2026-05-25_t5-d25-evaluate-explain-semantics-consistency.md` sections 4.1-4.8.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1598-1603`.
-  - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:244-250`.
-  - Evidence-tree v1 `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md` sections 6.1-6.8 and C110-C113.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md:1598-1603`.
+  - Track plan `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:244-250`.
+  - Evidence-tree v1 `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md` sections 6.1-6.8 and C110-C113.
   - Shipped semantics wrappers `src/factgraph/sdk/semantics.py:61-149`.
   - Shipped semantics lowering `src/factgraph/sdk/store.py:2870-2950`.
   - Shipped core `SemanticsProfile` `src/factgraph/core/semantics/profile.py:24-102`.
@@ -25,7 +25,7 @@
 - Related:
   - `workflow/design/decisions/active/2026-05-25_t5-d16-tranche-boundary.md`
   - `workflow/design/decisions/active/2026-05-25_t5-d25-evaluate-explain-semantics-consistency.md`
-  - `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md`
+  - `workflow/design/design-points/archive/evidence-tree-rainbird-style-v1.zh.md`
   - `workflow/audit/active/2026-05-25_t5-result-evidence-explain-vs-shipped.md`
 - Branch: `v0.2.0-t5-result-evidence-explain-audit-2026-05-25`
 - Depends on: D16-D25 reviewed clean.

@@ -7,7 +7,7 @@
 - Inputs:
   - `workflow/audit/active/2026-05-24_t3-ruleexpr-vs-shipped.md` Q3, D2, D6, A10, and R2 amendment.
   - `workflow/design/decisions/active/2026-05-24_t3-d2-join-constraint-construction.md` for the `RuleExprInspect.joins` input DTO shape.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` C32, C49-C51, C59.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` C32, C49-C51, C59.
   - Current SDK store inspect implementation in `src/factgraph/sdk/store.py:2088-2089`, `:2907-2964`.
 - Outputs / Downstream:
   - T3 inspect DTO blueprint.

@@ -8,7 +8,7 @@
   - Stage 1 audit `workflow/audit/active/2026-05-25_t4-head-closed-head-vs-shipped.md` Q4, F1, F5, F6, F8, and §6 C55 triage.
   - D11 `workflow/design/decisions/active/2026-05-25_t4-d11-scope-head-identity-boundary.md` §4.1, §4.2, §4.3, §4.5, and §4.7.
   - D12 `workflow/design/decisions/active/2026-05-25_t4-d12-declared-port-namespace.md` §4.1-§4.8.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.1-§5.5 and C52-C55.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.1-§5.5 and C52-C55.
   - T3L.3 archived blueprint `workflow/blueprints/archive/2026-05-25_t3l-3-public-dispatch-diagnostics-docs.md` §5.5 and §10.
   - Shipped `src/factgraph/application/protocol/rule_expr_lowering.py:42-134`, `:237-280`, `:320-334`, `:352-385`, `:388-482`, and `:506-536`.
   - Shipped `src/factgraph/application/protocol/rule.py:47-108`.

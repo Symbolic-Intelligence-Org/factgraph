@@ -41,9 +41,9 @@
 | `identity-mechanism-redesign.zh.md` | untracked exploration | Identity 机制重设计探索; 未 intake 决策 |
 | `ledger-schema-specification.zh.md` | untracked exploration | Ledger schema 规范探索; 未 intake 决策 |
 
-## 2026-05-28 archive batch
+## 2026-05-29 archive batch
 
-6 design-points 通过 supersede 规则 (per §"生命周期") 一次性 archive 到 `workflow/design/design-points/archive/`:
+6 design-points 通过 supersede 规则 (per §"生命周期") 一次性 archive 到 `workflow/design/design-points/archive/` (commits 2026-05-29 早晨; session 起始 2026-05-28):
 
 | 文件 | 主要 supersede 路径 |
 |---|---|

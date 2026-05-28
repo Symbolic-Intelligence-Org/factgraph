@@ -7,8 +7,8 @@
 - Inputs:
   - Stage 1 audit `workflow/audit/active/2026-05-25_t4-head-closed-head-vs-shipped.md` Q2, F4, F5, WC2, and §6 C54 triage.
   - D11 `workflow/design/decisions/active/2026-05-25_t4-d11-scope-head-identity-boundary.md` §4.1, §4.2, §4.5, and §4.7.
-  - Parent design `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md` §5.3, C54, and C56 interaction.
-  - Track plan `workflow/design/design-points/active/rule-expression-and-proof-track-plan.zh.md:210-230`.
+  - Parent design `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §5.3, C54, and C56 interaction.
+  - Track plan `workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md:210-230`.
   - Shipped `src/factgraph/application/protocol/rule.py:35-39`, `:47-108`, and `:145-185`.
   - Shipped `src/factgraph/application/protocol/rule_expr_inspect.py:36-135`, `:161-172`, `:212-228`, and `:243-257`.
   - Shipped `src/factgraph/application/protocol/rule_expr_lowering.py:42-72`, `:95-134`, `:320-334`, `:352-385`, `:388-439`, and `:448-536`.
