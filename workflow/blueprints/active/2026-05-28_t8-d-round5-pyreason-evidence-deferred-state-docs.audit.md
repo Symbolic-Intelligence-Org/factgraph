@@ -1,11 +1,11 @@
 # Audit: T8-D Round 5 PyReason Evidence Deferred-State Docs
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t8-d-round5-pyreason-evidence-deferred-state-docs.md`
-- Stage: draft
+- Stage: scoped
 - Class: S (docs-only)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -17,6 +17,7 @@
 |---|---|---|---|---|
 | 2026-05-28 | pre-draft | n/a | Dirty-baseline composition observed | User moved `identity-and-data-model-redesign.zh.md` from untracked `workflow/design/design-points/active/` to untracked `workflow/design/design-points/archive/`; numerical dirty baseline remains `4 M + 1 D + 6 U`, and design-point intake remains out of scope. |
 | 2026-05-28 | draft | this commit | T8-D round 5 PyReason evidence deferred-state docs blueprint pair drafted | Triggered by T8-D round 4 `06e575dd`, clean PyReason row-evidence boundary source-back, and user direction to document deferred state before D11/Form 2 design. |
+| 2026-05-28 | scoped | this commit | Step 4.6 source-backed inventory completed | Implementation narrowed to one docs file: `docs/official/kernel/quickstart/evidence.md`; focused baseline `140 OK`; full discover matched `2038 / 72F / 231E` with `PYTHONPATH=src`. |
 
 ## 2. Draft Source Scan
 
@@ -41,19 +42,59 @@ source-back:
 This draft scan is not a Step 4.6 answer. Step 4.6 must independently verify
 line refs, signatures, and target insertion points.
 
+## 2A. Step 4.6 Scoped Findings
+
+- `evidence.md` target: insert a narrow PyReason deferred-state paragraph after
+  the single-conclusion fallback paragraph at `docs/official/kernel/quickstart/evidence.md:294-298`.
+- Preserve byte-stable sections:
+  - Native / Souffle Form 1 row graph wording at `evidence.md:260-281`.
+  - T8-D round 3 ProbLog row-provenance wording at `evidence.md:283-292`.
+  - Stable graph invariants and current-boundaries list at `evidence.md:300-326`.
+  - T8-D round 1 `Inference` / `Branch` stability wording at `evidence.md:328-359`.
+- SDK guide decision: no edit. `src/factgraph/sdk/docs/00_user_guide.en.md:678-681`
+  already marks PyReason row-level graphs as future evidence tracks and points
+  to the evidence quickstart.
+- Runtime source-back:
+  - Single-conclusion fallback:
+    `src/factgraph/application/protocol/evaluate_result.py:857-884`.
+  - ProbLog-only row provenance gate:
+    `src/factgraph/application/protocol/evaluate_result.py:1221-1240`.
+  - Native/Souffle Form 1 row support kinds:
+    `src/factgraph/application/protocol/evaluate_result.py:81-82`.
+  - PyReason is provenance-bearing but not witness-bearing Form 1:
+    `src/factgraph/core/store/_support.py:13-20`.
+- Advanced helper source-back:
+  `src/factgraph/adapters/pyreason/provenance.py:113-119` has
+  `pyreason_trace_to_evidence_graph(trace, *, candidate_id, candidate_payload,
+  support_kind="pyreason_provenance_v1")`; `:339-359` validates
+  `candidate_payload.pred_id`, `terms`, and at least one entity ref term.
+- Form 2 deferred source-back:
+  `workflow/design/design-points/active/evidence-tree-rainbird-style-v1.zh.md:2070`,
+  `:2095`, `:2270`, and `:2858`.
+- Cross-doc promise sweep: no quickstart or SDK promise of PyReason row-level
+  timeline evidence. Adapter/audit docs discuss lower-level timeline surfaces
+  and remain out of scope.
+- Verification:
+  - Focused command: `Ran 140 tests in 0.348s — OK`.
+  - Bare `python -m unittest discover tests` fails in this environment because
+    `factgraph` is not importable without `PYTHONPATH=src`; scoped plan updates
+    discovery to `PYTHONPATH=src python -m unittest discover tests`.
+  - Corrected full discover: `Ran 2038 tests in 3.310s — FAILED (failures=72,
+    errors=231)`, matching the established baseline exactly.
+
 ## 3. Open Questions Register
 
 | ID | Question | Status |
 |---|---|---|
-| Q1 | What are exact `evidence.md` line refs and byte-stable preserve ranges? | Pending Step 4.6. |
-| Q2 | Does `00_user_guide.en.md` need an additional note? | Pending Step 4.6. |
-| Q3 | What is the exact single-conclusion fallback wording? | Pending Step 4.6. |
-| Q4 | What is the exact advanced helper signature and import path? | Pending Step 4.6. |
-| Q5 | Should docs mention D11 or use neutral Form 2 wording? | Pending Step 4.6. |
-| Q6 | Is `pyreason_trace_to_evidence_graph(...)` importable without SDK re-export? | Pending Step 4.6. |
-| Q7 | Are there other PyReason timeline promises across docs? | Pending Step 4.6. |
-| Q8 | Should implementation use one docs commit or two? | Pending Step 4.6. |
-| Q9 | Do any stop/amend triggers fire? | Pending Step 4.6. |
+| Q1 | What are exact `evidence.md` line refs and byte-stable preserve ranges? | Answered: target `:294-298`; preserve `:260-292`, `:300-326`, `:328-359`. |
+| Q2 | Does `00_user_guide.en.md` need an additional note? | Answered: no; `:678-681` already points to the evidence quickstart and calls PyReason row graphs future evidence tracks. |
+| Q3 | What is the exact single-conclusion fallback wording? | Answered: safe single-`NODE_CONCLUSION` row anchor, not a timeline; rich temporal evidence deferred. |
+| Q4 | What is the exact advanced helper signature and import path? | Answered: `factgraph.adapters.pyreason.provenance.pyreason_trace_to_evidence_graph(trace, *, candidate_id, candidate_payload, support_kind=...)`. |
+| Q5 | Should docs mention D11 or use neutral Form 2 wording? | Answered: neutral "future Form 2 design cycle" wording. |
+| Q6 | Is `pyreason_trace_to_evidence_graph(...)` importable without SDK re-export? | Answered: yes, direct adapter import with `PYTHONPATH=src`; no SDK re-export. |
+| Q7 | Are there other PyReason timeline promises across docs? | Answered: no quickstart/SDK promise; adapter/audit docs remain out of scope. |
+| Q8 | Should implementation use one docs commit or two? | Answered: one docs commit, `evidence.md` only. |
+| Q9 | Do any stop/amend triggers fire? | Answered: no. |
 
 ## 4. Risk Register
 
@@ -73,15 +114,15 @@ line refs, signatures, and target insertion points.
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 source-backed inventory complete.
-- [ ] Q1-Q9 answered.
-- [ ] `evidence.md` preserve ranges reviewed.
-- [ ] Optional SDK guide decision reviewed.
-- [ ] Advanced helper signature/import path reviewed.
-- [ ] Form 2 deferred wording reviewed.
-- [ ] Cross-doc PyReason promise sweep reviewed.
-- [ ] Focused docs-only verification baseline reviewed.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 source-backed inventory complete.
+- [x] Q1-Q9 answered.
+- [x] `evidence.md` preserve ranges reviewed.
+- [x] Optional SDK guide decision reviewed.
+- [x] Advanced helper signature/import path reviewed.
+- [x] Form 2 deferred wording reviewed.
+- [x] Cross-doc PyReason promise sweep reviewed.
+- [x] Focused docs-only verification baseline reviewed.
 - [ ] Closure notes filled.
 
 ## 6. Closure Notes
