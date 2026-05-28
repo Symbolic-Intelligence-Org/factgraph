@@ -1,6 +1,6 @@
 # Task Blueprint: T10-3-B PyReason Time Binned Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: M (runtime implementation)
@@ -159,138 +159,234 @@ active, and what happens when `universe` is not evenly divisible by `bin_size`.
 
 ### 3.1 `bin_size` Strict Whitelist Design
 
-Step 4.6 must source-back:
+Decision: accept only unambiguous positive day/hour/minute durations for v1.
 
-- The exact ISO 8601 duration subset allowed for v1.
-- The exact short-form whitelist allowed for v1.
-- Whether all accepted durations can be represented without month/year
-  ambiguity.
-- Error wording for invalid `bin_size`, including rejection of arbitrary
-  human-readable strings.
+Source-back:
 
-Draft expectation from T10-3 inventory: accept explicit, unambiguous day/hour
-and minute forms; reject ambiguous month/year and prose durations. If the design
-anchor requires broader ISO support, Step 4.6 must record the parser scope and
-test matrix before implementation.
+- `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1432`
+  shows `time_binned` with `bin_size: "PT1H"`.
+- `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1436-1439`
+  requires explicit ISO 8601 duration examples such as `P1D`, `PT1H`,
+  `PT30M`, and `PT15M`; allows short forms `1d`, `1h`, `15m`, and `1m`; rejects
+  arbitrary human-readable strings such as `1 month`; and says accepted values
+  may be normalized internally to a duration value.
+- `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1602`
+  repeats the same whitelist and rejection rule for C77.
+
+Accepted v1 `bin_size` forms:
+
+- ISO subset: `P<n>D`, `PT<n>H`, `PT<n>M`, where `<n>` is a positive integer.
+- Short whitelist: exactly `1d`, `1h`, `15m`, and `1m`.
+
+Rejected v1 forms:
+
+- Month/year/seconds/combined/decimal/zero/negative forms such as `P1M`,
+  `P1Y`, `PT1S`, `P1DT1H`, `PT1.5H`, `P0D`, and `0d`.
+- Arbitrary prose or human-readable strings such as `1 month` or
+  `approximately a week`.
+
+The profile should preserve the supplied `bin_size` spelling for inspection;
+the adapter materializer should parse it privately to `datetime.timedelta`.
+Error wording should name `SemanticsProfile.temporal_projection.time_binned.bin_size`
+and should not mention `iteration_count`, `fact_boundaries`, or
+`valid_time_boundaries`.
 
 ### 3.2 Profile `_normalize_temporal_projection` Extension
 
-Step 4.6 must source-back the minimal profile changes:
+Decision: add a `time_binned` branch in
+`SemanticsProfile._normalize_temporal_projection(...)` and factor shared
+universe validation without touching SDK shell.
 
-- Add `time_binned` to `_normalize_temporal_projection`.
-- Reuse the existing valid-time `universe` validation if it is semantically
-  identical, or factor a shared universe validator if direct reuse would force
-  wrong `mode` semantics.
-- Add `bin_size` validation and normalized output shape.
-- Preserve existing `none`, `fixed_timesteps`, `valid_time_boundaries`, and
-  `fact_boundaries` behavior.
-- Do not touch public SDK shell unless a stop trigger fires.
+Source-back:
+
+- `src/factgraph/core/semantics/profile.py:164-186` currently dispatches
+  `none`, `fixed_timesteps`, `valid_time_boundaries`, and `fact_boundaries`.
+- `src/factgraph/core/semantics/profile.py:197-213` validates valid-time
+  `universe` shape (`[start, end]`, string endpoints, start before end).
+- `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1617`
+  defers open universe / auto-from-facts behavior, so `time_binned` should
+  require explicit `universe` in this cycle.
+
+Implementation shape:
+
+- Add `_normalize_time_binned(raw)` with allowed keys `mode`, `universe`, and
+  `bin_size`.
+- Factor the shared `[start, end]` universe validation out of
+  `_normalize_valid_time_boundaries(...)` so both valid-boundary modes and
+  `time_binned` use identical universe checks.
+- Return `{"mode": "time_binned", "universe": [start, end], "bin_size": value}`
+  while preserving the supplied `bin_size` spelling.
+- Extend the allowed-mode error string to
+  `fact_boundaries, fixed_timesteps, none, time_binned, valid_time_boundaries`.
+- Do not edit `PyReasonSemantics`; the SDK shell remains generic mapping
+  pass-through for temporal projection.
 
 ### 3.3 New `_materialize_time_binned` Materializer Design
 
-Step 4.6 must source-back the algorithm before code:
+Decision: implement a new materializer that returns the existing
+`_TemporalProjectionState` shape and rejects non-divisible universes.
 
-1. Parse `universe` start/end values.
-2. Parse / normalize `bin_size`.
-3. Compute ordered bin boundaries and final bin count.
-4. Decide whether a non-divisible final partial bin is accepted or rejected.
-5. Map fact valid-time ranges to active bin indexes.
-6. Return `_TemporalProjectionState(active_by_asrt_id=..., timesteps=...)`.
+Source-back:
 
-The materializer may share parsing helpers with valid-time materialization, but
-it must not pretend `time_binned` is a spelling alias for
-`valid_time_boundaries`. T10-3 inventory classified it as a true new mode.
+- T10-3 inventory classified `time_binned` as a true new mode, not a spelling
+  alias. The design anchor says `time_binned` is "新增功能, v1 需要实现" at
+  `workflow/design/design-points/active/rule-expression-and-proof-attempt.zh.md:1471`.
+- `src/factgraph/adapters/pyreason/engine_eval.py:35-38` defines the reusable
+  `_TemporalProjectionState(timesteps, active_by_asrt_id)` shape.
+- `src/factgraph/adapters/pyreason/engine_eval.py:399-434` is valid-boundary
+  materialization, which builds boundaries from fact times. `time_binned` must
+  instead build fixed-width bins.
+
+Algorithm:
+
+1. Parse the explicit `universe` start/end as temporal instants.
+   - Accept ISO dates (`YYYY-MM-DD`) as midnight UTC.
+   - Accept aware ISO datetimes with `Z` or explicit offset.
+   - Reject naive datetime strings that include time but no timezone.
+2. Parse `bin_size` to `datetime.timedelta` using the whitelist in §3.1.
+3. Require `universe_end > universe_start`.
+4. Require `(universe_end - universe_start)` to be exactly divisible by
+   `bin_size`; reject partial final bins for v1. This matches the design's
+   strict-parser posture and keeps the first implementation deterministic.
+5. Set `timesteps = bin_count`.
+6. For each fact in `schema_ir.asrt_ids`:
+   - Missing `valid_from` maps to `universe_start`.
+   - Missing `valid_to` maps to open-ended `active_to = None`.
+   - Present fact times are parsed with the same instant parser.
+   - Reject `valid_to <= valid_from`.
+   - Reject fact ranges outside the explicit universe; open-ended ranges may
+     start within the universe and remain active after the final bin.
+   - `active_from` is the floor bin index of `valid_from`.
+   - `active_to` is the ceiling bin index of `valid_to`, or `None` when
+     `valid_to` is absent.
+7. Return `_TemporalProjectionState(active_by_asrt_id=..., timesteps=bin_count)`.
+
+This intentionally differs from `_materialize_valid_time_boundaries(...)`:
+valid-boundary mode derives boundaries from facts, while `time_binned` derives
+boundaries from the fixed `universe` / `bin_size` grid.
 
 ### 3.4 Adapter `_resolve_temporal_projection_state` Extension
 
-Step 4.6 must identify the exact branch point in
-`_resolve_temporal_projection_state(...)`:
+Decision: use a distinct `if mode == "time_binned"` adapter branch.
 
-- Add a `time_binned` mode branch.
-- Use `carrier = f"SemanticsProfile.temporal_projection.{mode}"`, matching
-  T10-3-A dynamic carrier behavior.
-- Reuse `_reject_iteration_temporal_conflict(...)`.
-- Reuse `_reject_temporal_timesteps_conflict(...)` when materialized timesteps
-  conflicts with `engine_options["timesteps"]`.
+Source-back:
+
+- `src/factgraph/adapters/pyreason/engine_eval.py:282-337` is the temporal mode
+  dispatch point.
+- T10-3-A already uses a dynamic carrier for valid/fact boundaries at
+  `src/factgraph/adapters/pyreason/engine_eval.py:317-335`.
+- `src/factgraph/adapters/pyreason/engine_eval.py:376-397` contains the two
+  conflict helpers to reuse.
+
+Implementation shape:
+
+- Add the `time_binned` branch after the valid/fact boundary branch.
+- Use `carrier = f"SemanticsProfile.temporal_projection.{mode}"`.
+- Call `_reject_iteration_temporal_conflict(iteration_count, carrier=carrier)`.
+- Call `_materialize_time_binned(...)`.
+- If materialized `timesteps` is present, call
+  `_reject_temporal_timesteps_conflict(..., carrier=carrier)`.
 - Preserve `fixed_timesteps`, `valid_time_boundaries`, and `fact_boundaries`
-  paths.
+  branches exactly.
 
 ### 3.5 Conflict Behavior Symmetry
 
-`time_binned` must reject explicit canonical `iteration_count` the same way
-`fact_boundaries` and `valid_time_boundaries` do. The error message must name:
+Decision: `time_binned` has the same explicit-conflict policy as
+`fact_boundaries` and `valid_time_boundaries`.
 
-- `SemanticsProfile.iteration_count`
-- `SemanticsProfile.temporal_projection.time_binned`
+Source-back:
 
-No silent winner policy is allowed.
+- `src/factgraph/adapters/pyreason/engine_eval.py:319-322` rejects
+  `iteration_count` with `valid_time_boundaries` / `fact_boundaries`.
+- `tests/test_pyreason_semantics_profile_migration.py:566-587` verifies the
+  `fact_boundaries` conflict message includes the canonical carrier.
+
+T10-3-B must add the same coverage for `time_binned`: the error message names
+both `SemanticsProfile.iteration_count` and
+`SemanticsProfile.temporal_projection.time_binned`. No silent merge or winner
+policy is allowed.
 
 ### 3.6 Test Matrix
 
-Expected implementation test surface:
+Required implementation test surface:
 
-1. Profile accepts `time_binned` with valid `universe` and `bin_size`.
-2. `bin_size` accepts source-backed ISO 8601 forms.
-3. `bin_size` accepts source-backed short whitelist forms.
-4. `bin_size` rejects arbitrary human-readable / ambiguous strings.
-5. `_materialize_time_binned` maps single-bin facts correctly.
-6. `_materialize_time_binned` maps facts spanning multiple bins correctly.
-7. Edge behavior for non-divisible `universe` / `bin_size` is tested according
-   to the Step 4.6 decision.
-8. `time_binned` plus `iteration_count` rejects with canonical carrier names.
-9. Existing `fact_boundaries`, `valid_time_boundaries`, and `fixed_timesteps`
+1. Profile accepts `time_binned` with valid `universe` and `bin_size`, preserving
+   `mode = "time_binned"` and the supplied `bin_size` spelling.
+2. `bin_size` accepts ISO subset examples: `P1D`, `PT1H`, `PT30M`, `PT15M`.
+3. `bin_size` accepts short whitelist examples: `1d`, `1h`, `15m`, `1m`.
+4. `bin_size` rejects arbitrary / ambiguous / unsupported strings:
+   `1 month`, `approximately a week`, `P1M`, `P1Y`, `PT1S`, `P1DT1H`, and
+   `0d`.
+5. `_materialize_time_binned` maps a fact with exact bin-aligned valid times.
+6. `_materialize_time_binned` maps a fact spanning multiple bins using
+   floor-start / ceil-end semantics.
+7. Non-divisible universe / `bin_size` rejects.
+8. Fact times outside the explicit universe reject; open-ended facts starting
+   inside the universe remain active with `active_to = None`.
+9. `time_binned` plus `iteration_count` rejects with canonical carrier names.
+10. Existing `fact_boundaries`, `valid_time_boundaries`, and `fixed_timesteps`
    tests remain green.
-10. Existing T10-2-A C78 and T10-2-B C74 tests remain green.
-11. Full discover composition is compared against
+11. Existing T10-2-A C78, T10-2-B C74, and T10-3-A alias tests remain green.
+12. Full discover composition is compared against
     `2029 tests / 72 failures / 231 errors`.
 
 ### 3.7 Shipped Invariants
 
-T10-3-B must preserve a 14-item manifest:
+T10-3-B must preserve a 14-item manifest. Step 4.6 uses current source/test
+line refs because T10-3-A inserted tests after the inventory archive.
 
 T10-2-A:
 
-1. SDK `PyReasonSemantics.iteration_count: int = 1` with positive-int validation.
-2. Optional top-level `SemanticsProfile.iteration_count`.
-3. Lowering omission rule for default `1` plus legacy temporal mode.
-4. Adapter consumption mapping canonical `iteration_count` to run timesteps.
-5. Explicit conflicts with `fixed_timesteps` and `valid_time_boundaries`.
-6. No-profile engine default timesteps remains 2.
+1. SDK `PyReasonSemantics.iteration_count: int = 1` with positive-int
+   validation: `tests/test_pyreason_semantics_profile_migration.py:384-397`.
+2. Optional top-level `SemanticsProfile.iteration_count`:
+   `tests/test_pyreason_semantics_profile_migration.py:398-408`.
+3. Lowering omission rule for default `1` plus legacy temporal mode:
+   `tests/test_pyreason_semantics_profile_migration.py:410-423`.
+4. Adapter consumption mapping canonical `iteration_count` to run timesteps:
+   `tests/test_pyreason_semantics_profile_migration.py:483-498`.
+5. Explicit conflicts with `fixed_timesteps` and valid-time modes:
+   `tests/test_pyreason_semantics_profile_migration.py:520-587`.
+6. No-profile engine default timesteps remains 2:
+   `tests/test_pyreason_engine_eval.py:355-377`.
 
 T10-2-B:
 
-1. SDK `derived_bound` / `atom_bounds` validation.
-2. `rule_projection["pyreason"]` carrier reuse.
-3. SDK atom-id conversion to `body_atom:0:<index>`.
+1. SDK `derived_bound` / `atom_bounds` validation:
+   `tests/test_pyreason_semantics_profile_migration.py:293-313`.
+2. `rule_projection["pyreason"]` carrier reuse:
+   `tests/test_pyreason_semantics_profile_migration.py:315-340`.
+3. SDK atom-id conversion to `body_atom:0:<index>`:
+   `tests/test_pyreason_semantics_profile_migration.py:315-340`.
 4. Legacy Inference / missing application atom ids reject canonical
-   `atom_bounds`.
+   `atom_bounds`: `tests/test_pyreason_semantics_profile_migration.py:342-377`.
 5. Asymmetric conflict policy for `derived_bound` / `head_bound` and
-   `atom_bounds` / `branch_bounds`.
-6. No T8-B witness-key reuse.
+   `atom_bounds` / `branch_bounds`:
+   `tests/test_pyreason_semantics_profile_migration.py:379-410`.
+6. No T8-B witness-key reuse:
+   `tests/test_pyreason_semantics_profile_migration.py:315-331`.
 
 T10-3-A:
 
 1. `fact_boundaries` accepted as canonical alias while preserving normalized
-   input spelling.
+   input spelling: `tests/test_pyreason_semantics_profile_migration.py:446-453`.
 2. `fact_boundaries` dynamic carrier appears in iteration conflict messages.
-
-Step 4.6 must replace this draft manifest with source-backed line refs or
-state why the existing T10-3-A archive line refs remain sufficient.
+   `tests/test_pyreason_semantics_profile_migration.py:566-587`.
 
 ## 4. Open Questions
 
-| ID | Question | Required answer shape |
+| ID | Question | Answer |
 |---|---|---|
-| Q1 | What exact `bin_size` whitelist should v1 accept? | Source-backed ISO subset and short-form set; explicit rejected examples. |
-| Q2 | What profile validation shape should `time_binned` use? | `mode`, `universe`, `bin_size` normalized shape and error wording. |
-| Q3 | What is the `_materialize_time_binned` algorithm and edge-case policy? | Ordered algorithm, partial-bin decision, fact-span mapping semantics. |
-| Q4 | How much of T10-3-A's dynamic carrier pattern is reused? | Exact adapter branch and helper reuse map. |
-| Q5 | Is `time_binned` conflict behavior fully symmetric with `fact_boundaries`? | Reject policy and error-message requirements. |
-| Q6 | What tests cover whitelist, materializer, conflict behavior, and invariants? | Test matrix with existing regression anchors. |
-| Q7 | What implementation split should be used? | 4-5 implementation commit plan or scoped merge rationale. |
-| Q8 | How does T10-3-B update the T8-C-2 unblock map? | After T10-3-B, C74/C77/C78 semantics gates should be complete; D11/Form 2 remain. |
-| Q9 | What behavior changes must closure warn about? | Bin boundary semantics, partial-bin behavior, and new materialization behavior. |
-| Q10 | Are there stop/amend findings? | Trigger-by-trigger assessment. |
+| Q1 | What exact `bin_size` whitelist should v1 accept? | ISO subset `P<n>D`, `PT<n>H`, `PT<n>M` plus exact short forms `1d`, `1h`, `15m`, `1m`; reject month/year/seconds/combined/decimal/zero/negative/prose forms. |
+| Q2 | What profile validation shape should `time_binned` use? | `{"mode": "time_binned", "universe": [start, end], "bin_size": supplied}` with shared universe validation and field-specific `bin_size` errors. |
+| Q3 | What is the `_materialize_time_binned` algorithm and edge-case policy? | New fixed-width bin materializer; reject partial final bins; floor valid_from, ceil valid_to; reject out-of-universe bounded ranges; return `_TemporalProjectionState`. |
+| Q4 | How much of T10-3-A's dynamic carrier pattern is reused? | Reuse carrier string and both conflict helpers, but use an independent `time_binned` branch because the materializer differs. |
+| Q5 | Is `time_binned` conflict behavior fully symmetric with `fact_boundaries`? | Yes. Explicit `iteration_count` plus `time_binned` rejects and names both canonical carriers. |
+| Q6 | What tests cover whitelist, materializer, conflict behavior, and invariants? | Add whitelist, reject, materializer, partial-bin, out-of-universe, and conflict tests; keep focused 94 OK regression set and full discover delta baseline. |
+| Q7 | What implementation split should be used? | Four impl commits: profile/parser, materializer, adapter, tests; close/archive after review. |
+| Q8 | How does T10-3-B update the T8-C-2 unblock map? | After T10-3-B, C74/C77/C78 semantics gates are complete; T8-C-2 still needs D11/Form 2. |
+| Q9 | What behavior changes must closure warn about? | New mode semantics: accepted `bin_size` set, exact universe divisibility, fact range bin mapping, and out-of-universe rejection. |
+| Q10 | Are there stop/amend findings? | No. All stop triggers are not hit; source-back refined implementation details without contradicting locked archives. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -368,9 +464,9 @@ anti-partial-ship risk remains controlled.
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed plan completed.
-- [ ] Q1-Q10 answered.
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed plan completed.
+- [x] Q1-Q10 answered.
 - [ ] Profile accepts `time_binned` with strict `bin_size` validation.
 - [ ] New binned materializer shipped.
 - [ ] Adapter consumes `time_binned` through the new materializer.
