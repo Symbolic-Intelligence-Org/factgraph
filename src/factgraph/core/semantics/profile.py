@@ -19,6 +19,7 @@ UNCERTAINTY_POLICIES = frozenset(
     }
 )
 FALLBACK_POLICIES = frozenset({"reject_unconfigured", "warn_default", "use_default"})
+TIME_BIN_SHORT_FORMS = frozenset({"1d", "1h", "15m", "1m"})
 
 
 @dataclass(frozen=True)
@@ -180,7 +181,11 @@ def _normalize_temporal_projection(value: Any) -> dict[str, Any]:
         normalized = _normalize_valid_time_boundaries(raw)
         normalized["mode"] = "fact_boundaries"
         return normalized
-    allowed = "fact_boundaries, fixed_timesteps, none, valid_time_boundaries"
+    if mode == "time_binned":
+        normalized = _normalize_time_binned(raw)
+        normalized["mode"] = "time_binned"
+        return normalized
+    allowed = "fact_boundaries, fixed_timesteps, none, time_binned, valid_time_boundaries"
     raise ValueError(
         f"temporal_projection.mode {mode!r} is not supported in D; supported modes: {allowed}"
     )
@@ -196,6 +201,22 @@ def _normalize_fixed_timesteps(raw: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_valid_time_boundaries(raw: dict[str, Any]) -> dict[str, Any]:
     _reject_unknown_keys(raw, path="temporal_projection", allowed={"mode", "universe"})
+    return {"universe": _normalize_temporal_universe(raw)}
+
+
+def _normalize_time_binned(raw: dict[str, Any]) -> dict[str, Any]:
+    _reject_unknown_keys(
+        raw,
+        path="temporal_projection",
+        allowed={"mode", "universe", "bin_size"},
+    )
+    return {
+        "universe": _normalize_temporal_universe(raw),
+        "bin_size": _normalize_time_binned_bin_size(raw.get("bin_size")),
+    }
+
+
+def _normalize_temporal_universe(raw: dict[str, Any]) -> list[str]:
     universe = raw.get("universe")
     if (
         isinstance(universe, (str, bytes))
@@ -210,7 +231,23 @@ def _normalize_valid_time_boundaries(raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("temporal_projection.universe[1] must be non-empty string")
     if start >= end:
         raise ValueError("temporal_projection.universe start must be before end")
-    return {"universe": [start, end]}
+    return [start, end]
+
+
+def _normalize_time_binned_bin_size(value: Any) -> str:
+    path = "SemanticsProfile.temporal_projection.time_binned.bin_size"
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{path} must be one of: P<n>D, PT<n>H, PT<n>M, 1d, 1h, 15m, 1m")
+    if value in TIME_BIN_SHORT_FORMS:
+        return value
+    amount: str | None = None
+    if value.startswith("PT") and value.endswith(("H", "M")):
+        amount = value[2:-1]
+    elif value.startswith("P") and value.endswith("D"):
+        amount = value[1:-1]
+    if amount is None or not amount.isdigit() or int(amount) <= 0:
+        raise ValueError(f"{path} must be one of: P<n>D, PT<n>H, PT<n>M, 1d, 1h, 15m, 1m")
+    return value
 
 
 def _reject_unknown_keys(raw: dict[str, Any], *, path: str, allowed: set[str]) -> None:
