@@ -578,7 +578,15 @@ SDK; persist new facts with explicit `fg.write.*` or `fg.batch(...)` writes.
 ### Engine runtime options
 
 ```python
-fg.eval.evaluate(inf, semantics=PyReasonSemantics(temporal_projection={"timesteps": 10}))
+fg.eval.evaluate(
+    inf,
+    semantics=PyReasonSemantics(
+        temporal_projection={
+            "mode": "fact_boundaries",
+            "universe": ["2026-01-01", "2026-12-31"],
+        },
+    ),
+)
 ```
 
 Engine-specific rule projection is intentionally not carried by public SDK
@@ -608,9 +616,9 @@ fg.eval.evaluate(
     inf,
     semantics=PyReasonSemantics(
         timestep_delay=2,
-        head_bound=[0.7, 0.9],
+        iteration_count=3,
+        derived_bound=[0.7, 0.9],
         branch_bounds={"seed_path": [0.8, 1.0], "b1": [0.2, 0.8]},
-        temporal_projection={"mode": "fixed_timesteps", "timesteps": 4},
     ),
 )
 ```
@@ -623,11 +631,17 @@ to inspect configured projection lanes and the wrapper's lowered canonical
 profile preview. The public SDK rejects `semantics_profile=`; that name is
 reserved for core/application internals.
 
-For PyReason, `head_bound` is the default head interval for all branches.
-`branch_bounds` is a per-branch override map keyed by explicit
-`Branch(id=...)` values or fallback positional ids such as `b0` / `b1`.
-Fallback ids are useful for quick experiments, but explicit branch ids are
-more stable when an inference's branch order changes.
+For ProbLog, `uncertainty_projection` controls how raw `raw_kind` + `bound`
+inputs are projected to point probabilities. The default rejects raw
+uncertainty until you choose a policy such as `lower`, `midpoint`, `upper`, or
+`identity_probability`.
+
+For PyReason, prefer canonical `iteration_count`, `derived_bound`,
+`atom_bounds`, `fact_boundaries`, and `time_binned` for new code. Legacy
+`head_bound`, `branch_bounds`, `fixed_timesteps`, and `valid_time_boundaries`
+remain compatibility surfaces. `atom_bounds` keys use application atom ids such
+as `<rule_id>:atom_<index>` and are for application `Rule` inputs. For full
+examples, see `docs/official/kernel/quickstart/semantics.md`.
 
 ### Semantic annotations
 
@@ -1016,9 +1030,9 @@ Notable changes:
 `Branch(...)` represents rule structure only. It does not carry
 probability, confidence, or engine-specific parameters. Public
 `body_confidences` and `engine_ext` payloads are rejected. The old names
-remain only in rejection messages and adapter/internal bridges until
-Track 2 makes `ProbLogSemantics` the preferred public wrapper for
-branch probabilities:
+remain only in rejection messages and adapter/internal bridges.
+`ProbLogSemantics` is the preferred public wrapper for branch probabilities
+and raw-uncertainty projection:
 
 ```python
 fg.eval.evaluate(
@@ -1030,6 +1044,11 @@ fg.eval.evaluate(
 `SemanticsProfile.rule_projection.problog` remains the advanced/canonical
 shape for direct profile users and service JSON.
 
+`ProbLogSemantics()` rejects raw uncertainty by default. Configure
+`uncertainty_projection` explicitly when projecting
+`meta={"raw_kind": ..., "bound": ...}` intervals into ProbLog point
+probabilities; use the quickstart semantics page for the policy list.
+
 Track 1 adds optional structural branch ids and rule inspection:
 `Branch([...], id="declared_pref")` and `fg.rules.inspect(rule_or_inference)`.
 Branch ids are inspect-only SDK metadata; authoring payloads, compiled
@@ -1040,43 +1059,48 @@ plans, registries, and adapters still receive positional branch structure.
 PyReason now has a core-only `SemanticsProfile` consumption path:
 `Store.evaluate(..., mode="pyreason", semantics_profile=profile)`.
 It accepts `rule_projection.pyreason` entries for body intervals, head
-intervals, and rule `timestep_delay`, plus `temporal_projection` modes
-`none`, `fixed_timesteps`, and `valid_time_boundaries`.
+intervals, and rule `timestep_delay`, plus canonical profile fields such as
+`iteration_count`, `temporal_projection`, and `rule_projection.pyreason`.
+Current temporal modes are `none`, `fixed_timesteps`, `fact_boundaries`,
+`valid_time_boundaries`, and `time_binned`.
 
-Track 2 makes `PyReasonSemantics` the preferred public wrapper for
-currently lowerable PyReason lanes:
+`PyReasonSemantics` is the preferred public wrapper for currently lowerable
+PyReason lanes:
 
 ```python
 fg.eval.evaluate(
     inf,
     semantics=PyReasonSemantics(
         timestep_delay=2,
-        head_bound=[0.7, 0.9],
-        temporal_projection={"mode": "fixed_timesteps", "timesteps": 4},
+        iteration_count=3,
+        derived_bound=[0.7, 0.9],
     ),
 )
 ```
 
-Track 3-post adds per-branch head interval overrides:
+Use `fact_boundaries` for canonical valid-time projection and `time_binned`
+for fixed temporal bins:
 
 ```python
 fg.eval.evaluate(
     inf,
     semantics=PyReasonSemantics(
-        head_bound=[0.5, 1.0],
-        branch_bounds={
-            "sensor_path": [0.8, 1.0],
-            "b1": [0.2, 0.8],
+        temporal_projection={
+            "mode": "time_binned",
+            "universe": ["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"],
+            "bin_size": "PT1H",
         },
     ),
 )
 ```
 
-The SDK resolves branch ids while it still has the SDK `Inference`
-object, lowers them into canonical `rule_projection.pyreason`
-`target="branch:{index}", kind="interval"` entries, and the PyReason
-adapter compiles those entries as per-branch head annotations. Empty
-`branch_bounds={}` is equivalent to omitting branch-specific overrides.
+`PyReasonSemantics()` lowers to canonical `iteration_count=1`; do not combine
+`iteration_count` with temporal modes that also imply timesteps. Legacy
+`head_bound`, `branch_bounds`, `fixed_timesteps`, and
+`valid_time_boundaries` remain accepted for compatibility, but new examples
+should prefer `derived_bound`, `atom_bounds`, `fact_boundaries`, and
+`time_binned`. `time_binned.bin_size` is strict: ISO-style `P<n>D` /
+`PT<n>H` / `PT<n>M`, or exactly `1d`, `1h`, `15m`, `1m`.
 `SemanticsProfile` remains the advanced/canonical shape for lower-level
 profile users.
 
