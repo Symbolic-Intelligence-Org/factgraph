@@ -1,6 +1,6 @@
 # Task Blueprint: T10-2-A PyReason Iteration Count Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S/M (runtime implementation)
@@ -400,18 +400,18 @@ controlled.
 - [x] Step 4.2 review completed.
 - [x] Step 4.6 source-backed plan completed.
 - [x] Q1-Q10 answered.
-- [ ] SDK shell shipped.
-- [ ] SDK lowering / carrier shipped.
-- [ ] Adapter consumption shipped.
-- [ ] Legacy `fixed_timesteps` compatibility policy shipped.
-- [ ] Canonical + legacy conflict behavior tested.
-- [ ] Existing PyReason behavior preserved.
-- [ ] T8-A/B/C-1/D and T10-1 invariants preserved.
-- [ ] T10-2 inventory decisions preserved.
-- [ ] `git diff --check` clean.
-- [ ] Focused PyReason tests pass.
-- [ ] Full discover delta compared against `2013 tests / 72 failures / 231 errors`.
-- [ ] Sacred master and dirty baseline preserved.
+- [x] SDK shell shipped.
+- [x] SDK lowering / carrier shipped.
+- [x] Adapter consumption shipped.
+- [x] Legacy `fixed_timesteps` compatibility policy shipped.
+- [x] Canonical + legacy conflict behavior tested.
+- [x] Existing PyReason behavior preserved.
+- [x] T8-A/B/C-1/D and T10-1 invariants preserved.
+- [x] T10-2 inventory decisions preserved.
+- [x] `git diff --check` clean.
+- [x] Focused PyReason tests pass.
+- [x] Full discover delta compared against `2013 tests / 72 failures / 231 errors`.
+- [x] Sacred master and dirty baseline preserved.
 
 ## 9. Verification Commands
 
@@ -428,4 +428,53 @@ git rev-parse master
 
 ## 10. Outcome / Deviations
 
-Pending Step 4.6 / implementation / closure.
+Implemented T10-2-A C78 as scoped.
+
+Implementation commits:
+
+1. `8953f3ec` `feat(sdk): add PyReasonSemantics.iteration_count`
+   - Added public `PyReasonSemantics.iteration_count: int = 1`.
+   - Validation rejects bool, non-int, zero, and negative values.
+   - Error wording names `iteration_count` and does not mention `timestep_delay`.
+2. `c5cca89b` `feat(profile): add canonical PyReason iteration carrier`
+   - Added optional top-level `SemanticsProfile.iteration_count: int | None = None`.
+   - Added profile validation and inspection/preview output.
+   - Added SDK preview/runtime lowering with the scoped omission rule:
+     implicit default `1` is omitted only when a legacy temporal timesteps mode is present.
+3. `1742bba2` `feat(pyreason): consume canonical iteration_count`
+   - Added canonical adapter consumption into PyReason run `timesteps`.
+   - Preserved no-profile engine default behavior.
+   - Rejected explicit canonical `iteration_count` with `fixed_timesteps` or
+     `valid_time_boundaries`.
+   - Reused existing `_reject_temporal_timesteps_conflict(...)` for
+     canonical-vs-`engine_options.timesteps`; added a focused helper for
+     canonical-vs-temporal-mode conflict.
+4. `f8d90307` `test(pyreason): cover iteration_count migration`
+   - Added 6 tests covering SDK default/validation, profile validation,
+     lowering + omission rule, adapter consumption, `fixed_timesteps` conflict,
+     and `valid_time_boundaries` conflict.
+
+Verification:
+
+- Focused PyReason suite: `84 OK` (baseline `78 OK`, +6).
+- Full discover: `2019 tests / 72 failures / 231 errors` versus baseline
+  `2013 / 72 / 231`, so +6 tests and no failure/error composition regression.
+- `ruff check` on touched runtime/test files: clean.
+- `git diff --check`: clean.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline remained `4 M + 1 D + 6 U`.
+
+Notable implementation notes:
+
+- `PyReasonSemantics()` now lowers canonical `iteration_count=1`, so adapter
+  execution uses PyReason run `timesteps=1` for that wrapper instead of the old
+  no-profile engine default `2`. This is the intentional C78 default; future
+  T8-D round 4 user docs should document it.
+- Low-level `SemanticsProfile(... temporal_projection={"mode": "fixed_timesteps"})`
+  still omits canonical C78 by default and preserves legacy behavior.
+- The implementation uses two small conflict helpers: existing
+  `_reject_temporal_timesteps_conflict(...)` for run-config `timesteps`
+  conflicts, and new `_reject_iteration_temporal_conflict(...)` for canonical
+  `iteration_count` vs temporal-mode conflicts. This keeps call sites explicit.
+- T10-2-A removes only the C78/multi-round PyReason gate. T10-2-B C74, T10-3
+  C77, and D11/Form 2 remain before T8-C-2 PyReason evidence implementation.

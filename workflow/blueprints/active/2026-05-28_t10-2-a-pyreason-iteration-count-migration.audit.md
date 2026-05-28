@@ -1,11 +1,11 @@
 # Audit: T10-2-A PyReason Iteration Count Migration
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-2-a-pyreason-iteration-count-migration.md`
-- Stage: scoped
+- Stage: closure
 - Class: S/M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -17,6 +17,8 @@
 |---|---|---|---|---|
 | 2026-05-28 | draft | `0b76ec4f` | T10-2-A PyReason iteration_count migration drafted | Triggered by T10-2 inventory split decision; Q1-Q10 pending Step 4.6. |
 | 2026-05-28 | scoped | this commit | Step 4.6 source-backed plan completed | Selected optional top-level `SemanticsProfile.iteration_count` carrier; locked alias/fallback compatibility for legacy `fixed_timesteps` and explicit conflict rejection. |
+| 2026-05-28 | implementation | `8953f3ec` / `c5cca89b` / `1742bba2` / `f8d90307` | C78 implementation shipped | SDK shell, optional profile carrier + lowering, adapter consumption, conflict policy, and tests. |
+| 2026-05-28 | closure | this commit | Cycle closed | Step 4.7 review passed with no amend findings; archive next. |
 
 ## 2. Draft Source Scan
 
@@ -96,9 +98,39 @@ Step 4.6 verified the C78 implementation surface without changing runtime code:
 - [x] SDK shell / lowering / carrier / adapter plan reviewed.
 - [x] Conflict and compatibility policy reviewed.
 - [x] Test matrix reviewed.
-- [ ] Implementation review complete.
-- [ ] Closure notes filled.
+- [x] Implementation review complete.
+- [x] Closure notes filled.
 
 ## 6. Closure Notes
 
-Pending Step 4.6 / implementation / closure.
+Outcome:
+
+- C78 canonical `iteration_count` shipped end-to-end for PyReason:
+  `PyReasonSemantics.iteration_count`, optional
+  `SemanticsProfile.iteration_count`, SDK lowering, and adapter consumption.
+- Legacy `temporal_projection.fixed_timesteps` remains an alias/fallback when
+  canonical C78 is absent. Explicit canonical `iteration_count` conflicts with
+  both `fixed_timesteps` and `valid_time_boundaries`; tests cover both.
+- Implementation commits:
+  - `8953f3ec` SDK shell.
+  - `c5cca89b` profile carrier + lowering / omission rule.
+  - `1742bba2` adapter consumption + conflict helpers.
+  - `f8d90307` six tests.
+- Verification:
+  - Focused PyReason suite: `84 OK`.
+  - Full discover: `2019 tests / 72 failures / 231 errors`, compared with
+    baseline `2013 / 72 / 231`.
+  - `ruff check` on touched files: clean.
+  - `git diff --check`: clean.
+  - Sacred master and dirty baseline preserved.
+
+Implementation notes / future pings:
+
+- `PyReasonSemantics()` now intentionally drives `timesteps=1` through
+  canonical `iteration_count=1`; the old no-profile adapter default remains
+  `timesteps=2`. Future user docs should teach the wrapper default.
+- The dual-helper conflict shape is deliberate: existing
+  `_reject_temporal_timesteps_conflict(...)` still owns run-config timesteps
+  conflicts, while `_reject_iteration_temporal_conflict(...)` owns canonical
+  iteration-vs-temporal-mode conflicts.
+- C74 and C77 were not touched. T10-2-B and T10-3 remain separate cycles.
