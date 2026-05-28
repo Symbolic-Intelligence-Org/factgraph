@@ -335,6 +335,27 @@ def _resolve_temporal_projection_state(
                 carrier=carrier,
             )
         return state
+    if mode == "time_binned":
+        carrier = f"SemanticsProfile.temporal_projection.{mode}"
+        _reject_iteration_temporal_conflict(
+            iteration_count,
+            carrier=carrier,
+        )
+        universe = projection["universe"]
+        state = _materialize_time_binned(
+            store,
+            schema_ir,
+            universe_start=universe[0],
+            universe_end=universe[1],
+            bin_size=projection["bin_size"],
+        )
+        if state.timesteps is not None:
+            _reject_temporal_timesteps_conflict(
+                state.timesteps,
+                engine_options=engine_options,
+                carrier=carrier,
+            )
+        return state
     raise ValueError(f"Unsupported PyReason temporal_projection.mode: {mode!r}")
 
 
