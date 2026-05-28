@@ -297,6 +297,17 @@ graph. ProbLog passed rows no longer use that fallback; they use the provenance
 graph described above. PyReason and other unaligned adapter rows may still use
 fallback or adapter-specific graph shapes until their row-level alignment lands.
 
+For PyReason specifically, inference, bounds, and temporal materialization are
+available through the PyReason evaluation path, but rich row-level temporal
+evidence is deferred to a future Form 2 design cycle. Today, PyReason rows that
+do not have row-level aligned provenance use the safe single-`NODE_CONCLUSION`
+fallback graph. Treat that graph as a row anchor, not as a timeline and not as a
+proof of timestep-by-timestep state changes. Advanced users who already have a
+PyReason trace payload can build an adapter-level timeline graph with
+`factgraph.adapters.pyreason.provenance.pyreason_trace_to_evidence_graph(...)`;
+that helper is not the main quickstart path and may evolve with the future
+Form 2 design.
+
 Stable graph invariants:
 
 - **DAG with branch convergence** — the graph is acyclic; repeated support for
