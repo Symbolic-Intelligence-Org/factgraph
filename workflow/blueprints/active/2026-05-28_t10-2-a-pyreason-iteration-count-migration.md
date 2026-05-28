@@ -1,6 +1,6 @@
 # Task Blueprint: T10-2-A PyReason Iteration Count Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Class: S/M (runtime implementation)
@@ -130,93 +130,206 @@ adapter consumption, conflict behavior, and tests must land coherently.
 
 ## 3. Step 4.6 Source-Backed Implementation Plan
 
-Pending Step 4.6. Required subsections:
-
 ### 3.1 Canonical Carrier Decision
 
-Compare:
+**Decision: Option A, with an optional top-level `SemanticsProfile.iteration_count` carrier.**
 
-- Option A: `SemanticsProfile.iteration_count` top-level field.
-- Option B: `SemanticsProfile.engine_options["iteration_count"]`.
+Source-backed state:
 
-Step 4.6 must source-back validation impact, existing `engine_options` behavior,
-future T10-3 compatibility, and implementation/test surface before selecting.
+| Source | Finding |
+|---|---|
+| `rule-expression-and-proof-attempt.zh.md:1422-1446` | C78 says `temporal_projection` owns fact lifecycle only, while `iteration_count: int = 1` is the independent global PyReason inference round count. |
+| `rule-expression-and-proof-attempt.zh.md:1468-1470` | The old `fixed_timesteps` name must be removed/split: temporal lifecycle and iteration depth are separate concerns. |
+| `rule-expression-and-proof-attempt.zh.md:1603` | C78's public shell is `PyReasonSemantics.iteration_count: int = 1`. |
+| `profile.py:39-48` | `SemanticsProfile` has top-level semantic carriers (`uncertainty_projection`, `temporal_projection`, `rule_projection`) and generic `engine_options`, but no `iteration_count`. |
+| `engine_eval.py:129-155` | `engine_options` currently normalizes adapter-local run config only and supports exactly `timesteps`. Unknown keys are rejected. |
+
+Rationale:
+
+- A top-level carrier keeps C78 in the semantic profile layer, next to
+  `temporal_projection`, instead of hiding it inside adapter-local
+  `engine_options`.
+- Keeping it out of `engine_options` preserves the existing
+  `resolve_pyreason_run_config(...)` contract, where `engine_options` remains a
+  low-level run-config override accepting `timesteps` only.
+- T10-3 can later rename temporal modes without disentangling a canonical C78
+  field from generic engine options.
+
+Carrier shape:
+
+- Add `SemanticsProfile.iteration_count: int | None = None`.
+- `None` means "canonical C78 carrier absent"; this preserves direct low-level
+  `SemanticsProfile(... temporal_projection={"mode": "fixed_timesteps", ...})`
+  compatibility tests.
+- Public `PyReasonSemantics.iteration_count` remains `int = 1`; the SDK lowering
+  decides when to emit the carrier.
+
+Option B (`engine_options["iteration_count"]`) is rejected because it would make
+canonical C78 look like an adapter run option and would require widening
+`engine_options` validation in `engine_eval.py:139-148`.
 
 ### 3.2 SDK Field Shape
 
-Decide default and validation for `PyReasonSemantics.iteration_count`.
+**Decision: `PyReasonSemantics.iteration_count: int = 1`, positive int only.**
 
-Questions to answer:
+Source-backed state:
 
-- Does validation require `>= 1` or allow `0`?
-- Is `bool` rejected like `timestep_delay`?
-- How does error wording distinguish global `iteration_count` from per-rule
-  `timestep_delay`?
+- `sdk/semantics.py:167-172` currently has `timestep_delay`, `head_bound`,
+  `branch_bounds`, `rule_params`, `temporal_projection`, and
+  `uncertainty_projection`, but no `iteration_count`.
+- `sdk/semantics.py:183-186` rejects bool/non-int `timestep_delay` and allows
+  `timestep_delay >= 0`.
+- `engine_eval.py:146-148` already requires PyReason run `timesteps` to be a
+  positive int.
+
+Implementation lock:
+
+- Add `iteration_count: int = 1` after `timestep_delay`.
+- Reject bool and non-int with wording naming `PyReasonSemantics.iteration_count`.
+- Reject values `< 1`. Do not allow `0`; zero inference rounds would not match
+  the current positive-int PyReason run-config boundary.
+- Error wording must not mention `timestep_delay`. `timestep_delay` remains a
+  per-rule delay with `>= 0` validation; `iteration_count` is global and
+  positive.
 
 ### 3.3 SDK Lowering Path
 
-Source-back exactly where `_preview_public_semantics(...)` and
-`_lower_public_semantics(...)` should emit the canonical carrier, and how it
-coexists with existing `temporal_projection`, `uncertainty_projection`, and
-`rule_projection` lowering.
+Source-backed state:
+
+- `_preview_public_semantics(...)` lowers PyReason wrappers at
+  `sdk/store.py:3375-3396`.
+- `_lower_public_semantics(...)` lowers runtime PyReason wrappers at
+  `sdk/store.py:3433-3465`.
+- Both paths currently pass `rule_projection`, `temporal_projection`, and
+  `uncertainty_projection`, but no `iteration_count`.
+
+Implementation lock:
+
+- Add a small helper for the PyReason wrapper lowering path:
+  - emit `iteration_count=value.iteration_count` when
+    `value.temporal_projection["mode"] == "none"`;
+  - emit `iteration_count=value.iteration_count` when
+    `value.iteration_count != 1`;
+  - omit the carrier when the only C78 value is the SDK's implicit default `1`
+    and a legacy temporal timesteps mode is present.
+- The omission rule is a compatibility bridge: existing legacy
+  `fixed_timesteps` wrapper usage should remain a fallback unless the user gives
+  an explicit non-default canonical round count.
+- Direct `SemanticsProfile(iteration_count=...)` still represents an explicit
+  canonical carrier.
+
+This keeps `PyReasonSemantics()` canonical by default for ordinary usage while
+avoiding a false conflict for legacy `fixed_timesteps` users who never opted
+into C78.
 
 ### 3.4 Adapter Consumption
 
-Source-back changes around `_resolve_temporal_projection_state(...)` and
-`_engine_options_with_temporal_projection(...)` in `engine_eval.py`.
+Source-backed state:
 
-Required decision:
+- `_resolve_temporal_projection_state(...)` currently consumes
+  `temporal_projection.fixed_timesteps` at `engine_eval.py:301-308`.
+- `valid_time_boundaries` can also derive timesteps at `engine_eval.py:309-323`.
+- `_engine_options_with_temporal_projection(...)` writes temporal-derived
+  timesteps into effective `engine_options` at `engine_eval.py:327-336`.
+- `_reject_temporal_timesteps_conflict(...)` currently rejects only differing
+  temporal vs `engine_options.timesteps` values at `engine_eval.py:339-351`.
 
-- Canonical `iteration_count` takes precedence when present.
-- Legacy `fixed_timesteps` remains fallback when canonical is absent.
-- Conflict behavior must be explicit.
+Implementation lock:
+
+- Add a canonical iteration resolver that reads
+  `semantics_profile.iteration_count`.
+- If canonical iteration is present and `temporal_projection.mode == "none"`,
+  write `engine_options["timesteps"] = iteration_count`.
+- If canonical iteration is present and `temporal_projection.mode ==
+  "fixed_timesteps"`, reject explicit conflict before constructing run options.
+- If canonical iteration is absent, keep current legacy behavior exactly:
+  `fixed_timesteps` and `valid_time_boundaries` continue through
+  `_resolve_temporal_projection_state(...)`.
+- Preserve existing no-profile behavior: `tests/test_pyreason_engine_eval.py`
+  still expects default config timesteps `2` when no semantics profile or
+  engine options are supplied (`:355-377`).
 
 ### 3.5 Conflict Behavior And Compatibility Policy
 
-Decide:
+**Decision: alias/fallback compatibility for legacy `fixed_timesteps`, explicit reject for real dual carriers.**
 
-- canonical + legacy both supplied: reject vs winner.
-- Legacy `fixed_timesteps` policy: alias, deprecate, warning, or other.
-- Error/warning wording.
+Rules:
 
-Default expectation: reject explicit conflicts, following the explicit-reject
-discipline established in T10-1 for unsafe ambiguity.
+- `SemanticsProfile(iteration_count=N, temporal_projection={"mode":
+  "fixed_timesteps", "timesteps": M})` rejects, even if `N == M`. This prevents
+  dual source-of-truth configuration.
+- `PyReasonSemantics(temporal_projection={"mode": "fixed_timesteps", ...})`
+  with the implicit default `iteration_count=1` omits the canonical carrier
+  during lowering and therefore remains a legacy alias/fallback.
+- `PyReasonSemantics(iteration_count=N, temporal_projection={"mode":
+  "fixed_timesteps", ...})` where `N != 1` lowers the canonical carrier and
+  rejects the conflict.
+- Existing direct low-level `engine_options={"timesteps": ...}` without a
+  semantics profile remains valid (`tests/test_pyreason_semantics_profile_migration.py:498-514`).
+
+T10-1 discipline reference: ProbLog raises explicitly for configured reject
+policy at `problog_export.py:280-283`. C78's default is not reject, but explicit
+dual carriers are similarly unsafe and must not silently choose a winner.
+
+No warning is added in T10-2-A. Python warning policy would be a separate API
+surface; this cycle records compatibility through tests and explicit errors.
 
 ### 3.6 Test Matrix
 
-At minimum:
+Focused baseline:
 
-- SDK accepts default `iteration_count=1`.
-- SDK rejects invalid `iteration_count` values.
-- Lowering emits the selected canonical carrier.
-- Adapter drives PyReason run timesteps from canonical `iteration_count`.
-- Legacy `fixed_timesteps` behavior remains covered by existing tests.
-- Canonical + legacy conflict raises.
-- Existing `timestep_delay`, `head_bound`, `branch_bounds`, and rule-extension
-  tests still pass.
-- Full discover delta is compared against `2013 tests / 72 failures / 231
-  errors`.
+- `PYTHONPATH=src python -m unittest tests.test_pyreason_engine_eval tests.test_pyreason_rule_ext tests.test_pyreason_evidence_graph tests.test_pyreason_semantics_profile_migration`
+- Result at Step 4.6: **78 OK**.
+
+New/updated test coverage:
+
+1. SDK accepts `PyReasonSemantics()` and exposes `iteration_count == 1`.
+2. SDK rejects bool / non-int / zero / negative `iteration_count`, with error
+   wording naming `iteration_count`.
+3. Preview/runtime lowering emits canonical `SemanticsProfile.iteration_count`
+   for default `PyReasonSemantics()` and for explicit non-default values.
+4. `SemanticsProfile(iteration_count=...)` validates positive ints and rejects
+   bool / non-int / zero.
+5. Adapter uses canonical `iteration_count` to drive `PyReasonRunConfig.timesteps`.
+6. Existing fixed-timesteps tests at
+   `tests/test_pyreason_semantics_profile_migration.py:271-327` remain passing.
+7. Canonical + legacy fixed_timesteps conflict raises and mentions both
+   `iteration_count` and `fixed_timesteps`.
+8. Existing no-profile engine option behavior remains passing:
+   `tests/test_pyreason_engine_eval.py:355-401` and
+   `tests/test_pyreason_semantics_profile_migration.py:498-514`.
+9. Existing `timestep_delay`, `head_bound`, `branch_bounds`, and rule-extension
+   tests remain passing through the focused suite.
+10. Full discover after implementation must be compared with
+    `2013 tests / 72 failures / 231 errors`.
 
 ### 3.7 Anti-Silent-Ignore Boundary
 
-`iteration_count` default is not an error: absence means default 1. However,
-explicit canonical and legacy carriers must not be silently merged. Step 4.6
-must define tests that prove conflict behavior is explicit.
+C78 differs from T10-1's ProbLog reject default:
+
+- Missing public SDK `iteration_count` means the SDK default `1`, not an error.
+- Missing low-level `SemanticsProfile.iteration_count` means "canonical C78
+  carrier absent", so legacy profiles continue to behave as before.
+- Explicit canonical + legacy fixed-timesteps dual carriers reject. They do not
+  silently merge and do not silently choose a winner.
+
+This boundary must be tested directly: one default success case and one explicit
+conflict failure case are required before closure.
 
 ## 4. Step 4.6 Open Questions
 
 | ID | Question | Required answer shape |
 |---|---|---|
-| Q1 | Which canonical carrier should C78 use: top-level `SemanticsProfile.iteration_count` or `engine_options["iteration_count"]`? | Source-backed selection with tradeoffs and future T10-3 impact. |
-| Q2 | What SDK validation should `PyReasonSemantics.iteration_count` use? | Decide `>= 1` vs `>= 0`, bool rejection, and error wording. |
-| Q3 | How should SDK lowering emit the carrier? | Preview/runtime lowering plan with file/function refs. |
-| Q4 | How should adapter consumption prioritize canonical vs legacy carriers? | Canonical-first / legacy-fallback or alternate plan with rationale. |
-| Q5 | What is the conflict behavior when canonical and legacy are both specified? | Reject/winner decision, with test expectation. |
-| Q6 | What is the legacy `fixed_timesteps` compatibility policy? | Alias/deprecate/warning decision and scope. |
-| Q7 | What is the focused test matrix? | Concrete test list plus regression suite. |
-| Q8 | What is the implementation commit split? | Commit plan and anti-partial-ship rationale. |
-| Q9 | Does T10-2-A change the T8-C-2 unblock map? | Expected: it removes the C78/multi-round gate only; C74/C77/D11 remain. |
-| Q10 | Are there stop/amend findings? | None or explicit trigger with next action. |
+| Q1 | Which canonical carrier should C78 use: top-level `SemanticsProfile.iteration_count` or `engine_options["iteration_count"]`? | **Option A**: optional top-level `SemanticsProfile.iteration_count: int \| None = None`. Keeps C78 semantic, avoids widening adapter-local `engine_options`, and lets T10-3 reason about temporal projection separately. |
+| Q2 | What SDK validation should `PyReasonSemantics.iteration_count` use? | `int = 1`, bool rejected, non-int rejected, values `< 1` rejected. Error wording names global `iteration_count`, distinct from per-rule `timestep_delay`. |
+| Q3 | How should SDK lowering emit the carrier? | Emit in preview/runtime PyReason lowering. For compatibility, suppress only the implicit default `1` when a legacy temporal timesteps mode is present; emit default `1` for ordinary `PyReasonSemantics()` and emit explicit non-default values. |
+| Q4 | How should adapter consumption prioritize canonical vs legacy carriers? | Canonical carrier drives timesteps when present with temporal mode `none`. Legacy `fixed_timesteps` and `valid_time_boundaries` continue when canonical is absent. |
+| Q5 | What is the conflict behavior when canonical and legacy are both specified? | Reject explicit canonical + `fixed_timesteps`; test must assert an error mentioning `iteration_count` and `fixed_timesteps`. |
+| Q6 | What is the legacy `fixed_timesteps` compatibility policy? | Alias/fallback in T10-2-A. No warning. T10-3 owns rename/removal policy. Existing fixed_timesteps tests remain regression guards. |
+| Q7 | What is the focused test matrix? | The 10-item matrix in §3.6, plus focused PyReason suite and full discover composition comparison. |
+| Q8 | What is the implementation commit split? | Keep 4 implementation commits unless LOC is tiny: SDK shell, profile/lowering carrier, adapter consumption/compat, tests. Commits 1-3 may merge only with audit rationale. |
+| Q9 | Does T10-2-A change the T8-C-2 unblock map? | It removes the C78/multi-round gate only. T10-2-B C74, T10-3 C77, and D11/Form 2 remain before PyReason evidence implementation. |
+| Q10 | Are there stop/amend findings? | None. T10-2 inventory C78 state and decoupling assessment still hold; no archive amendment needed. |
 
 ## 5. Existing Invariants To Preserve
 
@@ -284,9 +397,9 @@ controlled.
 
 ## 8. Acceptance Checklist
 
-- [ ] Step 4.2 review completed.
-- [ ] Step 4.6 source-backed plan completed.
-- [ ] Q1-Q10 answered.
+- [x] Step 4.2 review completed.
+- [x] Step 4.6 source-backed plan completed.
+- [x] Q1-Q10 answered.
 - [ ] SDK shell shipped.
 - [ ] SDK lowering / carrier shipped.
 - [ ] Adapter consumption shipped.

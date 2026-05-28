@@ -1,11 +1,11 @@
 # Audit: T10-2-A PyReason Iteration Count Migration
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-28
 - Last Updated: 2026-05-28
 - Branch: `v0.2.0-t11-1-attach-view-scope-2026-05-26`
 - Blueprint: `workflow/blueprints/active/2026-05-28_t10-2-a-pyreason-iteration-count-migration.md`
-- Stage: draft
+- Stage: scoped
 - Class: S/M (runtime implementation)
 - Sacred branch: `master` must remain at `562c74195df43e933bed92a3ff25de94dd8ce666`
 - Dirty baseline: preserve current observed `4 M + 1 D + 6 U`
@@ -15,7 +15,8 @@
 
 | Date | Stage | Commit | Event | Notes |
 |---|---|---|---|---|
-| 2026-05-28 | draft | this commit | T10-2-A PyReason iteration_count migration drafted | Triggered by T10-2 inventory split decision; Q1-Q10 pending Step 4.6. |
+| 2026-05-28 | draft | `0b76ec4f` | T10-2-A PyReason iteration_count migration drafted | Triggered by T10-2 inventory split decision; Q1-Q10 pending Step 4.6. |
+| 2026-05-28 | scoped | this commit | Step 4.6 source-backed plan completed | Selected optional top-level `SemanticsProfile.iteration_count` carrier; locked alias/fallback compatibility for legacy `fixed_timesteps` and explicit conflict rejection. |
 
 ## 2. Draft Source Scan
 
@@ -36,20 +37,43 @@ Read-only orientation findings:
 This draft scan is not a Step 4.6 answer. Step 4.6 must verify or correct each
 claim with source refs.
 
+## 2.1 Step 4.6 Source-Backed Summary
+
+Step 4.6 verified the C78 implementation surface without changing runtime code:
+
+- `rule-expression-and-proof-attempt.zh.md:1422-1446` and `:1603` define
+  canonical `iteration_count: int = 1` as global PyReason inference rounds,
+  orthogonal to fact temporal lifecycle and distinct from `timestep_delay`.
+- `sdk/semantics.py:167-172` has no `iteration_count`; `:183-186` shows the
+  existing `timestep_delay` validation pattern and confirms the semantic
+  distinction needed in error wording.
+- `profile.py:39-48` has top-level semantic carriers but no `iteration_count`;
+  `engine_options` is generic and copied at `:65-76`.
+- `engine_eval.py:129-155` treats `engine_options` as adapter-local run config
+  and accepts only `timesteps`; therefore C78 should not be hidden under
+  `engine_options["iteration_count"]`.
+- `engine_eval.py:301-308` consumes legacy `fixed_timesteps`;
+  `:309-323` consumes `valid_time_boundaries`; `:327-336` writes temporal
+  timesteps into effective engine options.
+- Legacy tests at `tests/test_pyreason_semantics_profile_migration.py:271-327`
+  and `:498-514`, plus `tests/test_pyreason_engine_eval.py:355-401`, must
+  remain regression guards.
+- Focused PyReason baseline was run at Step 4.6: `78 OK`.
+
 ## 3. Open Questions Register
 
 | ID | Question | Status |
 |---|---|---|
-| Q1 | Which canonical carrier should C78 use: top-level `SemanticsProfile.iteration_count` or `engine_options["iteration_count"]`? | Pending Step 4.6. |
-| Q2 | What SDK validation should `PyReasonSemantics.iteration_count` use? | Pending Step 4.6. |
-| Q3 | How should SDK lowering emit the carrier? | Pending Step 4.6. |
-| Q4 | How should adapter consumption prioritize canonical vs legacy carriers? | Pending Step 4.6. |
-| Q5 | What is the conflict behavior when canonical and legacy are both specified? | Pending Step 4.6. |
-| Q6 | What is the legacy `fixed_timesteps` compatibility policy? | Pending Step 4.6. |
-| Q7 | What is the focused test matrix? | Pending Step 4.6. |
-| Q8 | What is the implementation commit split? | Pending Step 4.6. |
-| Q9 | Does T10-2-A change the T8-C-2 unblock map? | Pending Step 4.6. |
-| Q10 | Are there stop/amend findings? | Pending Step 4.6. |
+| Q1 | Which canonical carrier should C78 use: top-level `SemanticsProfile.iteration_count` or `engine_options["iteration_count"]`? | Answered: optional top-level `SemanticsProfile.iteration_count: int \| None = None`. |
+| Q2 | What SDK validation should `PyReasonSemantics.iteration_count` use? | Answered: `int = 1`, bool/non-int rejected, values `< 1` rejected; wording names global `iteration_count`. |
+| Q3 | How should SDK lowering emit the carrier? | Answered: emit for ordinary/default PyReason semantics and explicit non-default values; suppress only implicit default `1` when a legacy timesteps mode would otherwise create false conflict. |
+| Q4 | How should adapter consumption prioritize canonical vs legacy carriers? | Answered: canonical drives timesteps when present with temporal mode `none`; legacy temporal modes continue when canonical absent. |
+| Q5 | What is the conflict behavior when canonical and legacy are both specified? | Answered: explicit canonical + `fixed_timesteps` rejects. |
+| Q6 | What is the legacy `fixed_timesteps` compatibility policy? | Answered: alias/fallback in T10-2-A; no warning; T10-3 owns removal/rename. |
+| Q7 | What is the focused test matrix? | Answered: SDK default/invalid/lowering/profile/adapter/conflict/legacy/no-profile/regression/full-discover composition matrix. |
+| Q8 | What is the implementation commit split? | Answered: four implementation commits unless LOC is tiny and audit records merge rationale. |
+| Q9 | Does T10-2-A change the T8-C-2 unblock map? | Answered: removes only C78/multi-round gate; C74/C77/D11 remain. |
+| Q10 | Are there stop/amend findings? | Answered: none. |
 
 ## 4. Risk Register
 
@@ -66,12 +90,12 @@ claim with source refs.
 
 ## 5. Review Checklist
 
-- [ ] Step 4.2 review complete.
-- [ ] Step 4.6 source-backed plan complete.
-- [ ] Q1-Q10 answered.
-- [ ] SDK shell / lowering / carrier / adapter plan reviewed.
-- [ ] Conflict and compatibility policy reviewed.
-- [ ] Test matrix reviewed.
+- [x] Step 4.2 review complete.
+- [x] Step 4.6 source-backed plan complete.
+- [x] Q1-Q10 answered.
+- [x] SDK shell / lowering / carrier / adapter plan reviewed.
+- [x] Conflict and compatibility policy reviewed.
+- [x] Test matrix reviewed.
 - [ ] Implementation review complete.
 - [ ] Closure notes filled.
 
