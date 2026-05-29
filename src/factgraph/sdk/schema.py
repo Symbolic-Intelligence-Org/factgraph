@@ -503,6 +503,8 @@ def _annotation_plan_from_object(annotation: Any) -> _AnnotationPlan:
         raise SDKSchemaError("Optional/Union annotations are not supported in Form I schema declarations")
     if origin is dict:
         raise SDKSchemaError("dict annotations are not supported in Form I schema declarations")
+    if origin is not None:
+        raise SDKSchemaError("unsupported generic annotation in Form I schema declarations")
 
     return _scalar_annotation_plan(annotation)
 
@@ -608,6 +610,7 @@ def _annotation_plan_from_ast(node: ast.AST) -> _AnnotationPlan:
             raise SDKSchemaError("dict annotations are not supported in Form I schema declarations")
         if name in {"Optional", "typing.Optional", "Union", "typing.Union"}:
             raise SDKSchemaError("Optional/Union annotations are not supported in Form I schema declarations")
+        raise SDKSchemaError("unsupported generic annotation in Form I schema declarations")
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
         raise SDKSchemaError("Optional/Union annotations are not supported in Form I schema declarations")
     return _AnnotationPlan("entity_ref")
