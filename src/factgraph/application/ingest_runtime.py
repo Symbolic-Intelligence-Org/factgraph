@@ -29,6 +29,7 @@ from .protocol import (
     IngestSetItem,
     WarningDTO,
 )
+from .retract_guard import RetractGuardError, check_retract_allowed
 from .schema_runtime import SchemaIndex, SchemaResolutionError
 
 
@@ -98,7 +99,7 @@ def _apply_item(
     index: SchemaIndex,
 ) -> tuple[list[ErrorDTO], list[WarningDTO], list[str], list[int]]:
     if isinstance(item, IngestRetractItem):
-        return _apply_retract(idx, item, store=store)
+        return _apply_retract(idx, item, store=store, index=index)
     if isinstance(item, (IngestSetItem, IngestAddItem)):
         return _apply_write(idx, item, store=store, index=index)
     raise IngestRuntimeError(
@@ -164,7 +165,50 @@ def _apply_retract(
     item: IngestRetractItem,
     *,
     store: Store,
+    index: SchemaIndex,
 ) -> tuple[list[ErrorDTO], list[WarningDTO], list[str], list[int]]:
+    # Slice 2 Step 4: application ingest path leg of three-layer retract guard.
+    # check_retract_allowed raises RetractGuardError for INV-7c-protected
+    # Identity Claims or :exists Claims (existence-claim transitional guard).
+    # Field Claims and unknown asrt pass-through to retract_by_asrt unchanged.
+    try:
+        check_retract_allowed(
+            item.assertion_id,
+            ledger=store.ledger,
+            schema_index=index,
+        )
+    except RetractGuardError as guard_exc:
+        if guard_exc.classification == "identity":
+            message = (
+                f"Identity Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) is immutable per INV-7c; "
+                "Identity bundle modification requires delete + recreate of the entity. "
+                "See ADR-IC §4.1."
+            )
+        else:  # classification == "exists"
+            message = (
+                f"<EntityType>:exists Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted independently; "
+                ":exists is co-emitted atomically with Identity Claims (existence-claim "
+                "transitional guard). See ADR-IC §4.4."
+            )
+        return (
+            [
+                ErrorDTO(
+                    code=guard_exc.code,  # propagated directly, NOT wrapped in INGEST_RETRACT_FAILED
+                    message=message,
+                    path=("items", str(idx)),
+                    details={
+                        "assertion_id": guard_exc.asrt_id,
+                        "pred_id": guard_exc.pred_id,
+                        "classification": guard_exc.classification,
+                    },
+                )
+            ],
+            [],
+            [],
+            [],
+        )
     try:
         revoker_id = retract_by_asrt(store.ledger, item.assertion_id, dict(item.meta) or None)
     except Exception as exc:
