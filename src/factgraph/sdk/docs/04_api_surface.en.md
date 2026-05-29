@@ -201,6 +201,9 @@ Use `from factgraph.sdk import build_application_rule` and
 | `QUERY_ALIAS_CONFLICT` | Query alias collision |
 | `QUERY_UNBOUND_VAR` | Query variable not bound in body |
 | `QUERY_NOT_IMPLEMENTED` | Query feature not yet implemented |
+| `INV_7C_IDENTITY_PROTECTED` | Identity field write or Identity Claim retract attempt (per ADR-IC §4.1 / INV-7c); see §7 |
+| `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` | `<EntityType>:exists` Claim independent retract attempt (per ADR-IC §4.4 transitional guard); see §7 |
+| `UNRESOLVABLE_E_REF` | `e_ref` string was not produced by `sdk.ref(...)` (shadow store fail-fast per ADR-IC §4.2.1); see §7 |
 
 ---
 
@@ -593,7 +596,131 @@ SDK path. Evaluation is read-only; explicit writes go through `fg.write.*` or
 
 ---
 
-## 7. What's Not in the SDK
+## 7. Identity Claim Emission and Reject Semantics
+
+Per ADR-IC (Identity-as-Claim, adopted 2026-05-29 @ `2d0866ed`) and Slice 2
+implementation (landed 2026-05-30 on
+`v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29`).
+
+### 7.1 Identity Claim emission contract
+
+Per ADR-IC §4.2: Identity Claim emission is owned by the **application
+layer** (`factgraph.application.entity_write._materialization_ops`), not the
+SDK shell. The SDK shell routes `fg.set` / `fg.add` / `EntityEditor.commit()`
+/ `SDKBatchTx.commit()` through `plan_write_command`, which delegates
+materialization to `_materialization_ops` when the target entity is not yet
+visible.
+
+**Emission input contract** (per ADR-IC §4.2.1) — emission only accepts an
+`EntityRef` that **carries the complete identity bundle**. The SDK shell
+shadow store (see §7.4) is a compatibility detail that lets `fg.set(Field,
+e_ref_string, value)` succeed by recovering the bundle from a prior
+`sdk.ref(...)` call.
+
+**What gets emitted on the first Field write to a freshly `fg.ref`-ed
+entity** (atomic, single `_write_session`):
+
+| Claim | Count | Pred ID example (class `User`) |
+|---|---|---|
+| Identity Claim | N (one per `Identity` field) | `user:user_id`, `user:tenant_id`, ... |
+| `:exists` Claim | 1 | `User:exists` |
+| Field Claim | 1 (the triggering write) | `user:name` |
+
+Pred ID convention (Slice 1 shipped):
+
+- Identity / Field predicates → `<snake_owner_prefix>:<field_name>` (e.g.
+  class `EmissionUser`'s Identity field `user_id` → `emission_user:user_id`)
+- `:exists` predicates → `<EntityType>:exists` (Capitalized, e.g.
+  `EmissionUser:exists`)
+
+**Dedup**: subsequent Field writes on the **same** `e_ref` do NOT
+re-emit Identity Claims or `:exists`. Dedup happens at two levels — within a
+single `plan_write_command` call via `_materialization_ops`'s
+`materialized_refs` set, and across calls via the `entity_visible` check
+that gates materialization.
+
+**Materialization paths** (all atomic):
+
+| Path | Materialization trigger |
+|---|---|
+| `fg.set(Field, e_ref, value)` / `fg.add(Field, e_ref, value)` | Auto on first Field write when target not visible |
+| `tx = fg.batch(); h = tx.entity(...); h.field.set(...); tx.commit()` | Auto via `RecordExistsOp` injected when any `set`/`add` is staged |
+| `editor = fg.edit(...); editor.field.set(...); editor.commit()` | **NOT a materialization path** — `fg.edit` pre-validates `:exists` (raises `EntityNotFoundError` if entity not materialized) |
+
+The full-entity API path `fg.entities.create(EntityCls, **identity_kwargs)`
+is the **target** of the ADR-IC §4.2 emission contract but is not shipped in
+Slice 2; it is carried forward to Slice 3a (ADR-API Q10 namespace
+migration). Slice 2 error messages reference `fg.entities.create` /
+`fg.entities.delete` as user-migration guidance only.
+
+### 7.2 INV-7c Identity reject behavior
+
+Per ADR-IC §4.1: Identity Claims are immutable anchors (`INV-7c`). The
+following paths all raise with `code="INV_7C_IDENTITY_PROTECTED"`:
+
+| Path | Layer | Behavior | Raise type |
+|---|---|---|---|
+| `editor.<identity_field>.set(value)` | Layer 2 (SDK shell) | Reject — `IdentityEditor.set/add/retract` is a write guard | `SDKStoreError` |
+| `editor.<identity_field>.add(value)` / `.retract(value)` | Layer 2 (SDK shell) | Reject (delegate to `.set` wording) | `SDKStoreError` |
+| `plan_write_command` with `FieldMutation` targeting an Identity field | Layer 2 (application source-of-truth) | Reject via `is_identity_field` check | `EntityWriteError` → `SDKStoreError` |
+| `fg.retract(asrt_id)` where `asrt_id` is an Identity Claim | Layer 3 (SDK shell + application retract guard) | Reject via `check_retract_allowed` (Identity classification) | `SDKStoreError` |
+| Application ingest path retract op on Identity Claim asrt | Layer 3 (application ingest) | Reject — code propagated directly (not wrapped as `INGEST_RETRACT_FAILED`) | `ErrorDTO(code=INV_7C_IDENTITY_PROTECTED)` |
+| Application `_apply_op` retract branch on Identity Claim asrt | Layer 3 (application entity_write) | Reject — code propagated directly (not wrapped as `ENTITY_WRITE_FAILED`) | `EntityWriteError(code=INV_7C_IDENTITY_PROTECTED)` |
+
+The `code="INV_7C_IDENTITY_PROTECTED"` is shared across all paths — single
+source of truth for caller branching.
+
+**Error message anatomy** (per ADR-IC §4.1 adopted wording):
+
+- Cites `INV-7c` (the protected anchor invariant)
+- Cites `INV-7a` (the underlying Identity immutable anchor)
+- References `fg.entities.delete` + `fg.entities.create` as the future
+  migration path (Slice 3a)
+- References `ADR-IC §4.1` as the authoritative source
+
+The protocol/core direct paths (`core/evidence/write_protocol.py` /
+`core/store/ledger.py` / `core/derivation/accept.py:401` internal rollback)
+are **intentionally unguarded** per the Q-PR1 carve-out — Slice 2 enforces
+INV-7c only at the application source-of-truth and SDK shell layers
+(defense-in-depth).
+
+### 7.3 `<EntityType>:exists` transitional guard
+
+Per ADR-IC §4.4: `:exists` Claims are protected by an **existence-claim
+transitional guard**, **NOT** by `INV-7c`. The two guard lifecycles are
+explicitly decoupled:
+
+- INV-7c is the permanent Identity anchor invariant.
+- The existence-claim guard is bound to the `:exists` co-emission lifecycle
+  — when Step 2+ removes `:exists` emission, the guard retires in lockstep.
+
+Independent retract attempts on a `<EntityType>:exists` Claim asrt raise
+with `code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD"`. The error message
+references `ADR-IC §4.4` and explicitly does **not** mention `INV-7c`
+(per ADR-IC §4.4.2 naming).
+
+### 7.4 Shadow store legacy positioning
+
+`SDKStore._identity_values_by_e_ref` is a **legacy / internal compatibility
+detail**, NOT part of the Layer 2 fields API contract (per ADR-IC §4.2.3).
+It exists so that `fg.set(Field, e_ref_string, value)` can succeed when the
+shadow store has previously seen that `e_ref` via a prior `sdk.ref(...)`
+call.
+
+| Input | Behavior |
+|---|---|
+| `e_ref` **NOT** in shadow store (externally-constructed) | Fail-fast `SDKStoreError(code="UNRESOLVABLE_E_REF")` at `_apply_field_mutation` target check + at `_build_application_write_value` entity_ref value check |
+| `e_ref` in shadow store, target not yet visible | Lazy materialization through `_materialization_ops` — emits the Identity bundle + `:exists` atomically with the Field write |
+| `e_ref` in shadow store, target already visible | Field write only, no re-emission (dedup) |
+
+**Forward direction** (per ADR-IC §4.2.4): Step 2+ will introduce eager
+emission at `fg.entities.create(...)` and remove the shadow store. Slice 2
+explicitly does NOT remove the shadow store (Slice 3a ADR-API Q10 carry-
+forward; compatibility preservation in Slice 2).
+
+---
+
+## 8. What's Not in the SDK
 
 These are reachable via direct imports, not through `factgraph.sdk`:
 

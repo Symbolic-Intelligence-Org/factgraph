@@ -336,6 +336,32 @@ fg.assertions.retract(asrt_id)
 - 删除字段 ✗ 拒绝(非 additive;Step 2+ 评估"deprecate field" 机制)
 - Identity / Field role change ✗ 拒绝(如上)
 
+#### Slice 2 ADR-IC 锁定 + 落地状态(2026-05-30)
+
+**ADR-IC adopted**:[`2026-05-29_q-ic-identity-as-claim-decision.md`](../../decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md) @ `2d0866ed` 锁定 4 个子决策:
+
+| ADR-IC sub-decision | 锁定内容 | 本 §5.2 对应段 |
+|---|---|---|
+| **§4.1 Q1** — Layer 2 schema-aware rejection 双路径硬拒绝 | Layer 2 fields(Identity descriptor)+ Layer 3 asrt 两入口都 reject;Identity → INV-7c;`<EntityType>:exists` → existence-claim transitional guard(**非** INV-7c) | INV-7c 强制点 1-4(已实施 — 三层 enforcement)|
+| **§4.2 Q2** — Identity Claim emission 在 application 层 derive | `_materialization_ops`(已 shipped 基线);emission input contract = 完整 identity bundle;Layer 2 fields API 不作为 emission path | INV-7b mirrored Claim(已实施 — 通过 `_materialization_ops`)|
+| **§4.3 Q3** — INV-7c 策略 C cache lifecycle = hybrid init + schema-evolution hook;**两个独立 frozenset** `identity_pred_ids` ∪ `exists_pred_ids` = `protected_anchor_pred_ids` | `application/state` 2 个 frozenset fields + `Store.__init__` build + `fg.schema.extend/register` hook | 策略 C 表格(已实施 — schema_runtime.py)|
+| **§4.4 Q16** — `:exists` Step 1 保留 co-emission + existence-claim transitional guard(**非** INV-7c) | Rule layer 继续依赖 `<EntityType>:exists`;Step 2+ 评估移除时 guard 同步退役 | 本 §5.2 新增"existence-claim transitional guard" 概念(独立于 INV-7c lifecycle)|
+
+**Slice 2 三层 enforcement landed**(2026-05-30 on `v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29`):
+
+1. **Application source-of-truth** — `application/retract_guard.py:check_retract_allowed`(commit `187a2918` Step 2)用 `Ledger.get_claim` + `identity_pred_ids` / `exists_pred_ids` O(1) membership 分类 + `RetractGuardError(classification=identity|exists|unprotected)`
+2. **SDK shell fail-fast** — `sdk/store.py:SDKStore.retract` wrap(commit `12475859` Step 3)走 `check_retract_allowed` + `RetractGuardError` → `SDKStoreError(code="INV_7C_IDENTITY_PROTECTED")` / `code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD"`
+3. **Application 2 个写入路径** — `application/ingest_runtime.py:_apply_retract`(commit `16aeff69` Step 4)+ `application/entity_write.py:_apply_op` retract branch(commit `a4853a0a` Step 5);两个路径都 propagate `code=guard_exc.code` directly,不被 wrap 为 generic `INGEST_RETRACT_FAILED` / `ENTITY_WRITE_FAILED`
+4. **Layer 2 Identity field write 拒绝** — `IdentityEditor.set/add/retract`(commit `c2d659c1` Step 6 wording 更新)+ `plan_write_command:is_identity_field` check(同 commit Step 6 wording + code 同步)
+
+**Q-PR1 carve-out**(Slice 2 SF5)保留:`core/evidence/write_protocol.py` / `core/store/ledger.py` / `core/store/_builders.py` / `adapters/pyreason/*` / `core/derivation/accept.py:401`(internal rollback per SF11)— 全 0 diff;协议 / 核心 / pyreason 直接路径 intentionally unguarded(三层 enforcement 的 defense-in-depth 边界在 application + SDK shell)。
+
+**Error code 统一**:Layer 2 reject(IdentityEditor + plan_write_command)+ Layer 3 reject(retract guard)三个 enforcement 点全部 surface `code="INV_7C_IDENTITY_PROTECTED"` — single caller branching source-of-truth per ADR-IC §4.1。
+
+**Error message 文案 markers**(per ADR-IC §4.1 adopted wording,Slice 2 Step 6 落地):INV-7c / INV-7a / `fg.entities.delete` / `fg.entities.create` / `ADR-IC §4.1`;`fg.entities.delete/create` 作为 user migration guidance(Slice 3a ADR-API Q10 future API),Slice 2 implementation 不依赖 unshipped。
+
+**Shadow store legacy**(per ADR-IC §4.2.3 + Slice 2 Step 7):`SDKStore._identity_values_by_e_ref` 标 LEGACY / INTERNAL COMPATIBILITY only(commit `d46b9fe7`)— NOT part of Layer 2 fields API contract;两分支语义:e_ref ∉ shadow store → fail-fast `UNRESOLVABLE_E_REF`;e_ref ∈ shadow store → lazy materialization through `_materialization_ops`。Step 2+ 方向(per ADR-IC §4.2.4):`fg.entities.create` eager emission + shadow store removal(Slice 3a carry-forward,Slice 2 显式 NOT remove)。
+
 ### §5.3 ~~INV-8~~(alpha 状态下消解)
 
 > **原 INV-8**:已发布 idref_v1 token 兼容路径 — alpha 无已发布 entity_ref token 流通,**取消该不变量**。
@@ -1504,6 +1530,51 @@ Step 1 落地的设计扩展点不会反过来推翻 Step 1 决策:
 - 唯一性强制是在 `create` / `set` 路径上加 validation,API 表面不变
 - 专用 Lookup 索引是底层 SQLite 优化,API 表面不变
 - bitemporal 历史查询是 `where` 的 `at=` / `as_of=` 扩展 kwarg,不冲突 Step 1 `where` 签名
+
+### §13.4 Slice 1 + Slice 2 落地状态(2026-05-30)
+
+§13.1 中标的 "Step 1" 是 ADR-IC adopt 之前的单批次范围(Form I + Identity-as-Claim 合并)。ADR-IC adopt 后(@ `2d0866ed`),Step 1 split 成两个独立 slice 各自完成 audit-to-archive cadence:
+
+#### §13.4.1 Slice 1 — Form I schema refactor(landed 2026-05-29 @ `9cef674b`)
+
+Branch:`v0.2.0-blueprint-slice-1-form-i-schema-refactor-2026-05-29` → master
+
+落地的 §13.1 in-scope 项(Form I 范畴):
+
+| §13.1 项 | Slice 1 status |
+|---|---|
+| **Schema 声明** Form I — Identity / Field 二分 + `_DataMember` 共通基类 + 类型推断 cardinality + 去除 `primary_key` | ✅ shipped(Form I 完整 — Identity()/Field() 注解驱动,移除 primary_key kwarg)|
+| **6 条硬定义**(§12.5)的部分 schema-相关项 | ✅ shipped 跟 Form I 同步落地的部分 |
+
+未完成项滚到 Slice 2 + 后续 slice。
+
+#### §13.4.2 Slice 2 — Identity-as-Claim core(landed 2026-05-30 on `v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29`)
+
+Blueprint:[`workflow/blueprints/active/2026-05-29_slice-2-identity-claim-emission.md`](../../../blueprints/active/2026-05-29_slice-2-identity-claim-emission.md)
+
+落地的 §13.1 in-scope 项(Identity-as-Claim 范畴 + ADR-IC §4.1/§4.2/§4.3/§4.4):
+
+| §13.1 项 | Slice 2 commit |
+|---|---|
+| **INV-7a Identity Anchor immutable** | 文案 + reject 路径 Step 6 落地 @ `c2d659c1`(IdentityEditor + plan_write_command 文案统一 ADR-IC §4.1 wording + `code="INV_7C_IDENTITY_PROTECTED"`)|
+| **INV-7b Identity-as-Claim 镜像** | application 层 `_materialization_ops` 已 shipped 基线;Slice 2 Step 8 emission contract tests @ `ab168063` 实证覆盖 `fg.ref + fg.set` / `SDKBatchTx.commit` / `EntityEditor.commit` 三路径 atomic + dedup |
+| **INV-7c Identity Claim ↔ e_ref hash 一致性** | 三层 enforcement Step 2-5 全部落地:application source-of-truth `retract_guard.py` @ `187a2918` Step 2;SDK shell `SDKStore.retract` wrap @ `12475859` Step 3;application ingest `_apply_retract` @ `16aeff69` Step 4;application entity_write `_apply_op` retract branch @ `a4853a0a` Step 5 |
+| **INV-7c 实施策略 C**(application 层 in-memory Identity pred_id set + O(1) membership 检查)| `SchemaIndex.identity_pred_ids` + `exists_pred_ids` + `protected_anchor_pred_ids` property Step 1 落地 @ `73993ebd` |
+| **Schema evolution 约束** Identity / Field 互转拒绝 + Identity 新增拒绝 | Slice 2 Step 1 cache 提供 enforce 基础;`fg.schema.extend` hook 留 ADR-API Q14 carry-forward(per Slice 2 SF4 + N1)|
+| `<EntityType>:exists` co-emission + transitional guard | application + SDK shell 三层 enforcement 都识别 `:exists` classification 并 raise `code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD"`(NON INV-7c per ADR-IC §4.4)|
+| Shadow store legacy 定位 | Step 7 落地 @ `d46b9fe7`(`sdk/store.py:_identity_values_by_e_ref` class-level 注释 — LEGACY / INTERNAL COMPATIBILITY only,NOT Layer 2 contract;两分支 fail-fast / lazy materialization 显式记录;forward direction = `fg.entities.create` eager emission + shadow store removal carry-forward)|
+| Load-bearing docs sync | Step 9(本 commit)— `sdk/docs/04_api_surface.en.md` 新增 §7 Identity Claim Emission and Reject Semantics + §5.2 ADR-IC adopted wording 对齐 + 本 §13.4 Slice 2 landed status note |
+
+**§13.1 carry-forward 项**(留 Slice 3a 或之后):
+
+- `fg.entities.create / fg.entities.delete / fg.entities.exists` 三个 entities namespace 入口 — Slice 3a ADR-API Q10 namespace migration scope(Slice 2 error wording 引用 `fg.entities.delete + fg.entities.create` 作为 user migration guidance,implementation 不依赖 unshipped API)
+- `fg.fields.* / fg.assertions.*` namespace 重组 — Slice 3a ADR-API Q10
+- `AssertionView` 统一 / `_meta` 统一输入 / `_DataMember.pattern` / `fg.schema.register / extend / apply` 三分 — 留待后续 slice
+- 内部 rollback `core/derivation/accept.py:401` retract_by_asrt — 跟 Q-PR1 carve-out 一致 intentionally unguarded(Slice 2 SF11 锁定 — internal classification preserved,不走 retract guard)
+
+#### §13.4.3 Slice 2 Q-PR1 carve-out preservation
+
+Per Slice 2 SF5 + N11:`core/evidence/write_protocol.py` / `core/store/ledger.py` / `core/store/_builders.py` / `adapters/pyreason/*` / `core/derivation/accept.py:401`(internal rollback)— 全 0 diff,不被 Slice 2 三层 enforcement 触达;协议 / 核心 / pyreason 直接路径继续走原 shipped 行为。Slice 2 enforcement 边界严格落在 application(source-of-truth)+ SDK shell(fail-fast)— defense-in-depth 但不下沉到协议层。
 
 ---
 
