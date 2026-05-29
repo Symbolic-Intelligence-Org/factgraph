@@ -1,6 +1,6 @@
 # Q-meta Decision: Stage 2 Q grouping + slice boundaries + cross-cluster separation contracts
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
 - Authority: meta-cadence constraint;locks Stage 2 Q-batch grouping + slice acceptance boundary granularity + cross-cluster separation contracts **before** any per-Q ADR work begins.
@@ -296,4 +296,6 @@ post-adoption verification:
 
 | Date | Stage | Event | Notes |
 |---|---|---|---|
-| 2026-05-29 | proposed | Meta-ADR drafted | Sub-issues 1-4 锁定;基于 audit Status: complete @ `aa50332d` + user reviewer P2 findings;Q grouping = Option B Moderate(8 ADRs);Slice 3b boundary granularity 不锁技术细节(留 Q15 ADR);Q4 + Q-PR1 separation contract Step 1 zero-blocker hard rule |
+| 2026-05-29 | proposed | Meta-ADR drafted | Sub-issues 1-4 锁定;基于 audit Status: complete @ `aa50332d` + user reviewer P2 findings;Q grouping = Option B Moderate(8 ADRs);Slice 3b boundary granularity 不锁技术细节(留 Q15 ADR);Q4 + Q-PR1 separation contract Step 1 zero-blocker hard rule。Commit: `278c9d3e` |
+| 2026-05-29 | proposed | Amended P1+P2 wording per user reviewer | P1:§4.1 Q5b row 去除 implementation 锁定,改为 "可能机制" 列举不锁;P2-1:§4.4.1 重写为 4-layer enforcement table,明确 SDK/application strict + ledger/protocol delayed to Slice 5+;P2-2:§4.1 Q5a row 加 "仅保留 namespace 不定义 revokes payload" 显式 disclaim。No structural changes. Commit: `54c3c87d` |
+| 2026-05-29 | **adopted** | Meta-ADR adopted | User reviewer "先做 P1 wording fix,然后可以 adopt" — wording fixes landed at `54c3c87d`;direction unchanged;ready as binding constraint for Stage 2 normal ADR work。§7.2 follow-up actions 开始(audit doc Q list Q5 split 同步先做)|
