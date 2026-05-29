@@ -1,6 +1,6 @@
 # Q-SYS-A Decision: `__system__.*` user-facing namespace reservation
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
 - Authority: design constraint;locks Q5a — `__system__.*` user-facing pred_id namespace reservation。**仅锁 user-facing reservation 拒绝点**;**不**锁 `__system__.revokes` payload shape / internal emission exception / read-path default filter(全留 ADR-SYS-B per meta-ADR §4.2 grouping)。
@@ -154,40 +154,58 @@ ADR-SYS-A draft 启动前 user reviewer 给出 4 项 directional guidance:
 
 **位置**:ADR-API §4.5.1 锁的 `register/extend/apply` 三分 method 入口。
 
-**Schema declaration 双路径**:本 layer 覆盖 **entity + relationship** 两类 schema declaration(per shipped SDK public surface):
+**Schema declaration 双路径**:本 layer 覆盖 **entity + relationship** 两类 schema declaration(per shipped SDK public surface)。**owner_type 必须从 SDK schema spec 提取**,不从假定的 class attr — 跟 shipped pattern 一致。
 
-##### 4.2.1.1 Entity 路径(`EntityClass.entity_type`)
+##### 4.2.1.0 Owner type 提取 contract(critical implementation note)
+
+Shipped pattern(per `sdk/schema.py`):
+- **Entity**:`Entity.sdk_entity_spec()` classmethod(`sdk/schema.py:241-245`)返回 dict;`spec["entity_type"]` 是权威 owner type
+- **Relationship**:`Relationship.sdk_relationship_spec()` classmethod(`sdk/schema.py:302-307`)返回 dict;`spec["relationship_type"]` 是权威 owner type;**`RelationshipMeta.__new__`(`sdk/schema.py:286-295`)将 `name`(Python class name)写入 `spec["relationship_type"]`**
+
+**Implementation MUST extract from SDK schema spec, not from class attribute**:
+- `getattr(cls, "entity_type", None)` — **错误**;Entity 不保证有 public `entity_type` class attribute
+- `getattr(cls, "relationship_type", None)` — **错误**;Relationship 的 relationship_type 存在 `__sdk_relationship_spec__` dict 中,不在 class attr
+- `cls.__name__` — **错误**;Python class name 可能跟 schema spec 中的 owner_type 不同(尤其 entity 端有可能 customize)
+
+##### 4.2.1.1 G2 owner guard helper(共用 G2 check)
 
 ```python
-def _check_user_facing_entity_type(entity_class: type[Entity]) -> None:
-    entity_type = getattr(entity_class, "entity_type", None) or entity_class.__name__
-    if entity_type.startswith("__system__"):   # G2 schema owner guard
+def _check_user_facing_owner_type(owner_type: str, *, kind: str) -> None:
+    """G2 schema owner guard — applied to entity_type and relationship_type.
+
+    Args:
+        owner_type: extracted from SDK schema spec (entity_type or relationship_type)
+        kind: "entity_type" or "relationship_type" — used in error message
+    """
+    if owner_type.startswith("__system__"):   # G2 schema owner guard (per §4.1.2)
         raise SDKStoreError(
-            f"entity_type {entity_type!r} uses reserved system namespace.\n"
+            f"{kind} {owner_type!r} uses reserved system namespace.\n"
             f"  `__system__` is reserved for ledger internal mechanisms\n"
             f"  (see ADR-SYS-A §4.1 G2 schema owner guard). User-facing schema\n"
-            f"  registration cannot declare entity_type starting with '__system__'.\n"
-            f"  Choose a different entity_type (e.g., 'MyEntity' instead of\n"
-            f"  '__system__MyEntity')."
+            f"  registration cannot declare {kind} starting with '__system__'.\n"
+            f"  Choose a different {kind} (e.g., a non-system name)."
         )
 ```
 
-##### 4.2.1.2 Relationship 路径(`RelationshipClass.relationship_type`)
+##### 4.2.1.2 Entity 路径(extract via `sdk_entity_spec()`)
 
 ```python
-def _check_user_facing_relationship_type(relationship_class: type[Relationship]) -> None:
-    relationship_type = getattr(relationship_class, "relationship_type", None) or relationship_class.__name__
-    if relationship_type.startswith("__system__"):   # G2 schema owner guard
-        raise SDKStoreError(
-            f"relationship_type {relationship_type!r} uses reserved system namespace.\n"
-            f"  `__system__` is reserved for ledger internal mechanisms\n"
-            f"  (see ADR-SYS-A §4.1 G2 schema owner guard). User-facing schema\n"
-            f"  registration cannot declare relationship_type starting with '__system__'.\n"
-            f"  Choose a different relationship_type."
-        )
+def _register_entity_with_g2(entity_class: type[Entity]) -> None:
+    spec = entity_class.sdk_entity_spec()                          # raises SDKSchemaError if not compiled
+    _check_user_facing_owner_type(spec["entity_type"], kind="entity_type")
+    # ... dispatch to ADR-API §4.5 register implementation
 ```
 
-**为什么覆盖 relationship 路径**:`sdk/schema.py:248-...` `Relationship` descriptor 是 shipped public surface;`authoring/schema_compile.py:175-182` `_compile_relationship` 接受 `relationship_type` 并 `_owner_prefix(relationship_type)` 产生 relationship predicate prefix(`authoring/schema_compile.py:460-478` `_compile_relationship_pred_id`)。**不**加 reject = user 可 `class MyRel(Relationship): relationship_type = "__system__X"` 产 `__system__x:field` 落地 ledger,违反 INV-10。
+##### 4.2.1.3 Relationship 路径(extract via `sdk_relationship_spec()`)
+
+```python
+def _register_relationship_with_g2(relationship_class: type[Relationship]) -> None:
+    spec = relationship_class.sdk_relationship_spec()              # raises SDKSchemaError if not compiled
+    _check_user_facing_owner_type(spec["relationship_type"], kind="relationship_type")
+    # ... dispatch to ADR-API §4.5 register implementation
+```
+
+**为什么覆盖 relationship 路径**:`sdk/schema.py:248-307` `Relationship` / `RelationshipMeta` descriptor 是 shipped public surface;`RelationshipMeta.__new__`(`:286-295`)把 Python class name 作为 `relationship_type` 写进 `__sdk_relationship_spec__`;`authoring/schema_compile.py:175-182` `_compile_relationship` 接受 `relationship_type` 并 `_owner_prefix(relationship_type)` 产生 relationship predicate prefix(`authoring/schema_compile.py:460-478` `_compile_relationship_pred_id`)。**不**加 reject = user 可 `class __system__MyRel(Relationship): ...` 产 spec["relationship_type"] = "__system__MyRel" → schema_compile 产 `__system__my_rel:field` 落地 ledger,违反 INV-10。
 
 **为什么 strict 在 SDK shell**:fail-fast — 在 schema 声明早期 catch,user 立刻收到 error;不浪费 schema_compile 路径资源。
 
@@ -308,9 +326,9 @@ def write(self, *, pred_id: str, e_ref: str, value: Any, ...) -> str:
 #### 4.4.2 跟 ADR-IC §4.3.1 `protected_anchor_pred_ids` cache 不冲突
 
 - ADR-IC §4.3.1 `_identity_pred_ids` ∪ `_exists_pred_ids` cache 来自 schema_ir 的 `is_identity_field == True` + `is_entity_exists == True` filter
-- 本 ADR §4.2 Layer A + B reject 保证 `entity_type` 不以 `__system__` 开头 → schema_ir 中不会出现 `__system__.*` pred_id → ADR-IC cache **自然不含** `__system__.*` entries
-- 反向也成立:`__system__.*` system claims(若 ADR-SYS-B 决策走 Claim emission path,per Q5b)由 internal emission path 产生,**不**经 `is_identity_field` / `is_entity_exists` flag → cache 自然不收
-- **结论**:两个 namespace **概念正交**;cache 跟 reservation 互不依赖、互不污染
+- 本 ADR §4.2 Layer A + B G2 reject 保证 entity_type / relationship_type 不以 `__system__` 开头 → schema_ir 中不会出现 **schema-derived system-owner predicates**(冒号形式如 `__system__x:exists` / `__system__x:<field>` / `__system__y:<rel_field>`)→ ADR-IC cache **自然不含** 任何 schema-derived `__system__:*` entries
+- 反向也成立:**future internal `__system__.*` claims**(点形式如 `__system__.revokes`)由 ADR-SYS-B 锁定的 internal emission path 产生(per Q5b),**不**经 schema_ir 的 `is_identity_field` / `is_entity_exists` flag → ADR-IC cache 自然不收;这类 system claims 是 SYS-B-owned emission concern,本 ADR scope 外
+- **结论**:两类 namespace **概念正交**;两类形态(G2 防的 schema-derived 冒号形式 + G1 防的 future raw 点形式)cache 跟 reservation 互不依赖、互不污染
 
 #### 4.4.3 跟 ADR-FI Identity / Field descriptor 不冲突
 
@@ -501,4 +519,6 @@ Post-adoption verification(implementation 阶段验证):
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-29 | proposed | ADR-SYS-A drafted | 1 Q(Q5a `__system__.*` user-facing namespace reservation;**仅锁 reservation**,不锁 emission / payload / INV-11/13/15 / migration — 全留 ADR-SYS-B per user reviewer §1.3 directional guidance)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-FI adopted @ `b288ea9e` + ADR-IC adopted @ `2d0866ed` + ADR-API adopted @ `66434490` + user reviewer 2026-05-29 ADR-SYS-A 4 项 directional review focus + ledger-spec §4.7 INV-10 design-point。Branch: `v0.2.0-q-sys-a-system-namespace-decision-2026-05-29`。Commit: `def20c74` |
-| 2026-05-29 | proposed | ADR-SYS-A amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 3 findings:**(P1)** Relationship schema path 未覆盖 coverage gap — shipped `_compile_relationship` 接受 `relationship_type` + public `Relationship` descriptor + 产 `f"{relationship_prefix}:{local}"` pred_id;原 §4.2 只 cover `EntityClass.entity_type` → user 可 `class MyRel(Relationship): relationship_type = "__system__X"` 走 schema 路径产 `__system__x:field` 污染 ledger。**(P2)** "exact `__system__.` prefix" 跟 "`entity_type.startswith("__system__")`(无点)" 是两个不同 rule 但 §4.1 混在一起 — 应拆成两条命名清楚的 guard。**(Non-blocking)** `WireBatchPlan` raw pred_id 入口分类。**重构方案**:§4.1 完整重写引入 **G1 raw pred_id guard**(精确 `__system__.` 含点)+ **G2 schema owner guard**(精确 `__system__` 不含点,覆盖 entity_type / relationship_type / 任何未来 owner-type 概念);§4.1.3 加 G1-only / G2-only / G1+G2 对比表论证不可合并;§4.1.4 pattern 精确性 rules。§4.2 layer 从 4 扩到 5:Layer A.1+A.2(entity + relationship 对称 G2)/ B.1+B.2(schema_compile entity + relationship 对称 G2 defense)/ C(forward-looking G1)/ D(自动安全)/ E(新增 — `WireBatchPlan` schema-bound binding-validated transitive G2 covered;`sdk/batch.py` 不动)。同步 cascade:§2 Scope 表 reflect 5 layer / §4.3 cross-Q summary 重写 / §5.1 加 4 项 alternative reject(单 guard × 2 + Skip relationship + Wire-replay 独立 reject)/ §6.2 shipped citation 扩 relationship 路径 + wire-replay 路径 / §7.2 follow-up 加 relationship + Layer E grep 任务 / §7.4 no-retroactive boundary 扩 双 guard + 5 layer + 未来 owner-type 概念 G2 inherit / §8 Acceptance Criteria 重写(11 项 proposed-stage ✓ + 12 项 post-adoption ☐ 含 entity+relationship 对称 verify + Layer E transitive verify)。 |
+| 2026-05-29 | proposed | ADR-SYS-A amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 3 findings:**(P1)** Relationship schema path 未覆盖 coverage gap — shipped `_compile_relationship` 接受 `relationship_type` + public `Relationship` descriptor + 产 `f"{relationship_prefix}:{local}"` pred_id;原 §4.2 只 cover `EntityClass.entity_type` → user 可 `class MyRel(Relationship): relationship_type = "__system__X"` 走 schema 路径产 `__system__x:field` 污染 ledger。**(P2)** "exact `__system__.` prefix" 跟 "`entity_type.startswith("__system__")`(无点)" 是两个不同 rule 但 §4.1 混在一起 — 应拆成两条命名清楚的 guard。**(Non-blocking)** `WireBatchPlan` raw pred_id 入口分类。**重构方案**:§4.1 完整重写引入 **G1 raw pred_id guard**(精确 `__system__.` 含点)+ **G2 schema owner guard**(精确 `__system__` 不含点,覆盖 entity_type / relationship_type / 任何未来 owner-type 概念);§4.1.3 加 G1-only / G2-only / G1+G2 对比表论证不可合并;§4.1.4 pattern 精确性 rules。§4.2 layer 从 4 扩到 5:Layer A.1+A.2(entity + relationship 对称 G2)/ B.1+B.2(schema_compile entity + relationship 对称 G2 defense)/ C(forward-looking G1)/ D(自动安全)/ E(新增 — `WireBatchPlan` schema-bound binding-validated transitive G2 covered;`sdk/batch.py` 不动)。同步 cascade:§2 Scope 表 reflect 5 layer / §4.3 cross-Q summary 重写 / §5.1 加 4 项 alternative reject(单 guard × 2 + Skip relationship + Wire-replay 独立 reject)/ §6.2 shipped citation 扩 relationship 路径 + wire-replay 路径 / §7.2 follow-up 加 relationship + Layer E grep 任务 / §7.4 no-retroactive boundary 扩 双 guard + 5 layer + 未来 owner-type 概念 G2 inherit / §8 Acceptance Criteria 重写(11 项 proposed-stage ✓ + 12 项 post-adoption ☐ 含 entity+relationship 对称 verify + Layer E transitive verify)。Commit: `ed36f2ec` |
+| 2026-05-29 | proposed | ADR-SYS-A re-amended(P2/P3 second-round fixes,still proposed)| User reviewer 第 2 轮 review 结论:基本闭环但 P2 substantive + P3 wording。**(P2)** §4.2.1 Layer A pseudo-code 用 `getattr(cls, "entity_type", None) or cls.__name__` 误导 — shipped `EntityMeta` / `RelationshipMeta` 把 owner_type 写进 `__sdk_entity_spec__` / `__sdk_relationship_spec__` dict,通过 `sdk_entity_spec()` / `sdk_relationship_spec()` classmethod 暴露(per `sdk/schema.py:241-245` + `:286-307`);class 不保证有 public `entity_type` / `relationship_type` class attribute,也不应用 `__name__` fallback(可能跟 spec 中的 owner_type 不同)。**重构 §4.2.1**:加 §4.2.1.0 "Owner type 提取 contract" — 显式锁 implementation MUST extract from SDK schema spec,not class attr;§4.2.1.1 改为 `_check_user_facing_owner_type(owner_type, kind)` 共用 G2 helper;§4.2.1.2 + §4.2.1.3 改为分别用 `EntityCls.sdk_entity_spec()["entity_type"]` + `RelCls.sdk_relationship_spec()["relationship_type"]` 提取后调 G2 helper。**(P3)** §4.4.2 cache 不冲突 wording — 原 "schema_ir 中不会出现 `__system__.*` pred_id" 措辞不精确;G2 实际防的是 schema-derived 冒号形式(`__system__x:*`);future internal `__system__.*` claims(点形式)由 SYS-B 锁的 emission path 产生,本 ADR scope 外。重写区分 G2 schema-derived 冒号形式 + future raw 点形式 + SYS-B owned emission。 |
+| 2026-05-29 | **adopted** | User reviewer 第 2 轮 review 通过 → adopt | 第 2 轮 review 结论:可在修掉 P2 后 adopt;P3 顺手修不阻断。两项已采纳:**§4.2.1 owner-type 提取契约**(extract from SDK schema spec,not class attr)+ **§4.4.2 cache compat wording** 区分 G2 schema-derived 冒号形式 vs future raw 点形式 SYS-B-owned。本 ADR 现 binding constraint;ADR-SYS-B 起草(Q5b/Q15 emission + ledger migration)Header `Depends on:` 须引用本 ADR adopt commit;Slice 3a implementation 实施 Layer A.1/A.2 + B.1/B.2 + Layer E transitive coverage;blueprints / 后续 ADR 不可单方面 override §4.1 双 guard(G1/G2 不可合并)+ §4.2 5 layer reject + §4.2.1 owner-type 提取契约;Slice 5+ / SYS-B 不可弱化 wire-replay binding validation(否则 Layer E transitive 失效)。override 需走"superseded by ADR-SYS-A-v2"路径。Commit: TBD post-stage |
