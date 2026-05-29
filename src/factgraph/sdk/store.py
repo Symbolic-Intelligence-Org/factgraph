@@ -19,6 +19,10 @@ from factgraph.application.workspace_runtime import load_workspace as app_load_w
 from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
+from factgraph.application.retract_guard import (
+    RetractGuardError,
+    check_retract_allowed,
+)
 from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
@@ -2121,6 +2125,41 @@ class SDKStore:
             retracted).
         """
         self._reject_attached_write("fg.retract")
+        # Slice 2 Step 3: SDK shell fail-fast layer of three-layer retract guard.
+        # check_retract_allowed raises RetractGuardError for INV-7c-protected
+        # Identity Claims or :exists Claims (existence-claim transitional guard).
+        # Field Claims and unknown asrt pass-through to retract_by_asrt unchanged.
+        try:
+            check_retract_allowed(
+                asrt_id,
+                ledger=self._store.ledger,
+                schema_index=self._application_schema_index,
+            )
+        except RetractGuardError as guard_exc:
+            if guard_exc.classification == "identity":
+                raise SDKStoreError(
+                    f"Identity Claim {guard_exc.asrt_id} "
+                    f"(pred_id={guard_exc.pred_id}) is immutable per INV-7c. "
+                    "Identity Claims can only be: "
+                    "(a) created via fg.entities.create(EntityCls, **identity_kwargs); "
+                    "(b) removed as part of fg.entities.delete(e_ref) "
+                    "(atomic full-entity revoke). "
+                    "To modify the identity bundle of an entity, delete the old entity "
+                    "and create a new one with the new identity values "
+                    "(Identity is immutable per INV-7a). See ADR-IC §4.1.",
+                    code=guard_exc.code,
+                ) from guard_exc
+            # classification == "exists"
+            raise SDKStoreError(
+                f"<EntityType>:exists Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted independently. "
+                "The :exists Claim is co-emitted atomically with Identity Claims "
+                "and can only be removed via fg.entities.delete(e_ref) "
+                "(atomic full-entity revoke). "
+                "This guard is transitional — Step 2+ may remove :exists emission "
+                "entirely (see ADR-IC §4.4).",
+                code=guard_exc.code,
+            ) from guard_exc
         try:
             return retract_by_asrt(self._store.ledger, asrt_id, meta)
         except WriteProtocolError as exc:
