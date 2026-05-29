@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass
 from typing import Any
 
 from factgraph.core.schema.schema_ir import CANONICAL_TAGS
@@ -28,6 +29,13 @@ class AuthoringSchemaDSLParseError(Exception):
         self.path = path
         self.kind = kind
         self.details = details
+
+
+@dataclass(frozen=True)
+class _AnnotationPlan:
+    type_domain: str
+    cardinality: str = "single"
+    enum_values: tuple[Any, ...] | None = None
 
 
 def parse_authoring_schema_dsl_v1(source: str) -> dict[str, Any]:
@@ -160,14 +168,14 @@ def _parse_entity_member_annassign(*, item: ast.AnnAssign, path: str, entity_nam
     if callee_name not in {"Identity", "Field"}:
         raise _parse_error("annotated assignment must call Identity(...) or Field(...)", path=path)
 
-    type_domain = _annotation_to_type_domain(item.annotation)
+    annotation_plan = _annotation_to_plan(item.annotation)
     kwargs = _parse_call_kwargs(item.value, path=f"{path}.{callee_name}")
 
     if callee_name == "Identity":
-        return _build_identity_from_kwargs(field_name=field_name, type_domain=type_domain, kwargs=kwargs, path=path)
+        return _build_identity_from_kwargs(field_name=field_name, annotation_plan=annotation_plan, kwargs=kwargs, path=path)
     return _build_field_from_kwargs(
         field_name=field_name,
-        type_domain=type_domain,
+        annotation_plan=annotation_plan,
         kwargs=kwargs,
         path=path,
         entity_name=entity_name,
@@ -177,64 +185,89 @@ def _parse_entity_member_annassign(*, item: ast.AnnAssign, path: str, entity_nam
 def _build_identity_from_kwargs(
     *,
     field_name: str,
-    type_domain: str,
+    annotation_plan: _AnnotationPlan,
     kwargs: dict[str, Any],
     path: str,
 ) -> dict[str, Any]:
-    allowed = {"default", "default_factory", "primary_key"}
-    _reject_unknown_keys(kwargs, allowed, path=f"{path}.Identity")
+    if annotation_plan.cardinality != "single":
+        raise _parse_error("Identity fields must use a single-value annotation", path=f"{path}.annotation")
+    allowed = {"description", "pattern"}
+    _reject_unknown_keys(
+        kwargs,
+        allowed,
+        path=f"{path}.Identity",
+        message=(
+            "Identity() only accepts description= and pattern= in Form I; "
+            "remove primary_key/default/default_factory and provide all identity values explicitly"
+        ),
+    )
     out = {
         "__kind__": "identity",
         "name": field_name,
-        "type_domain": type_domain,
+        "type_domain": annotation_plan.type_domain,
     }
-    if "default" in kwargs:
-        out["default"] = kwargs["default"]
-    if "default_factory" in kwargs:
-        value = kwargs["default_factory"]
-        if not isinstance(value, str) or not value:
-            raise _parse_error("Identity.default_factory must be non-empty string", path=f"{path}.Identity.default_factory")
-        out["default_factory"] = value
-    if "primary_key" in kwargs:
-        primary_key = kwargs["primary_key"]
-        if not isinstance(primary_key, bool):
-            raise _parse_error("Identity.primary_key must be bool", path=f"{path}.Identity.primary_key")
-        out["primary_key"] = primary_key
+    _apply_common_member_kwargs(out=out, kwargs=kwargs, annotation_plan=annotation_plan, path=f"{path}.Identity")
     return out
 
 
 def _build_field_from_kwargs(
     *,
     field_name: str,
-    type_domain: str,
+    annotation_plan: _AnnotationPlan,
     kwargs: dict[str, Any],
     path: str,
     entity_name: str,
 ) -> dict[str, Any]:
     del entity_name
-    allowed = {"cardinality", "description"}
-    _reject_unknown_keys(kwargs, allowed, path=f"{path}.Field")
-
-    cardinality = kwargs.get("cardinality")
-    if cardinality not in {"single", "multi"}:
-        raise _parse_error(
-            "Field.cardinality must be one of single|multi",
-            path=f"{path}.Field.cardinality",
-        )
+    allowed = {"description", "pattern"}
+    _reject_unknown_keys(
+        kwargs,
+        allowed,
+        path=f"{path}.Field",
+        message=(
+            "Field() only accepts description= and pattern= in Form I; "
+            "replace cardinality= with scalar or collection type annotations"
+        ),
+    )
 
     out: dict[str, Any] = {
         "__kind__": "field",
         "py_name": field_name,
-        "type_domain": type_domain,
-        "cardinality": cardinality,
+        "type_domain": annotation_plan.type_domain,
+        "cardinality": annotation_plan.cardinality,
     }
+    if annotation_plan.enum_values is not None:
+        out["enum_values"] = list(annotation_plan.enum_values)
 
+    _apply_common_member_kwargs(out=out, kwargs=kwargs, annotation_plan=annotation_plan, path=f"{path}.Field")
+    return out
+
+
+def _apply_common_member_kwargs(
+    *,
+    out: dict[str, Any],
+    kwargs: dict[str, Any],
+    annotation_plan: _AnnotationPlan,
+    path: str,
+) -> None:
     if "description" in kwargs:
         value = kwargs["description"]
         if not isinstance(value, str) or not value:
-            raise _parse_error("Field.description must be non-empty string", path=f"{path}.Field.description")
+            raise _parse_error("description must be non-empty string", path=f"{path}.description")
         out["description"] = value
-    return out
+    if "pattern" in kwargs:
+        value = kwargs["pattern"]
+        if annotation_plan.type_domain != "string":
+            raise _parse_error("pattern is only supported for string-typed Identity/Field members", path=f"{path}.pattern")
+        if not isinstance(value, str) or not value:
+            raise _parse_error("pattern must be non-empty string", path=f"{path}.pattern")
+        try:
+            import re
+
+            re.compile(value)
+        except re.error as exc:
+            raise _parse_error(f"pattern must be valid regex: {exc}", path=f"{path}.pattern")
+        out["pattern"] = value
 
 
 def _call_name(func: ast.expr) -> str | None:
@@ -271,20 +304,45 @@ def _parse_call_kwargs(call: ast.Call, *, path: str) -> dict[str, Any]:
     return kwargs
 
 
-def _annotation_to_type_domain(node: ast.expr) -> str:
+def _annotation_to_plan(node: ast.expr) -> _AnnotationPlan:
     if isinstance(node, ast.Name):
-        return _python_name_to_type_domain(node.id)
+        return _AnnotationPlan(_python_name_to_type_domain(node.id))
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         if node.value in CANONICAL_TAGS:
-            return node.value
-        return "entity_ref"
+            return _AnnotationPlan(node.value)
+        return _AnnotationPlan("entity_ref")
     if isinstance(node, ast.Attribute):
         dotted = _dotted_name(node)
         if dotted in {"uuid.UUID"}:
-            return "uuid"
+            return _AnnotationPlan("uuid")
         if dotted in {"datetime.datetime"}:
-            return "time"
-        return "entity_ref"
+            return _AnnotationPlan("time")
+        return _AnnotationPlan("entity_ref")
+    if isinstance(node, ast.Subscript):
+        name = _annotation_head_name(node.value)
+        args = _annotation_subscript_args(node.slice)
+        if name in {"list", "List", "set", "Set", "frozenset", "FrozenSet"}:
+            if len(args) != 1:
+                raise _parse_error(f"{name}[...] must specify exactly one element type", path="$.dsl.annotation")
+            inner = _annotation_to_plan(args[0])
+            if inner.cardinality != "single":
+                raise _parse_error("multi-cardinality fields must use a scalar element annotation", path="$.dsl.annotation")
+            return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi", enum_values=inner.enum_values)
+        if name in {"tuple", "Tuple"}:
+            if len(args) == 2 and isinstance(args[1], ast.Constant) and args[1].value is Ellipsis:
+                inner = _annotation_to_plan(args[0])
+                if inner.cardinality != "single":
+                    raise _parse_error("multi-cardinality fields must use a scalar element annotation", path="$.dsl.annotation")
+                return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi", enum_values=inner.enum_values)
+            raise _parse_error("tuple fields must use tuple[T, ...] for multi-cardinality Form I fields", path="$.dsl.annotation")
+        if name in {"Literal", "typing.Literal"}:
+            return _literal_annotation_plan(tuple(_literal_value(arg) for arg in args))
+        if name in {"dict", "Dict", "typing.Dict"}:
+            raise _parse_error("dict annotations are not supported in Form I schema declarations", path="$.dsl.annotation")
+        if name in {"Optional", "typing.Optional", "Union", "typing.Union"}:
+            raise _parse_error("Optional/Union annotations are not supported in Form I schema declarations", path="$.dsl.annotation")
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        raise _parse_error("Optional/Union annotations are not supported in Form I schema declarations", path="$.dsl.annotation")
     raise _parse_error("unsupported type annotation", path="$.dsl.annotation")
 
 
@@ -306,6 +364,56 @@ def _dotted_name(node: ast.Attribute) -> str | None:
         parts.append(cur.id)
         return ".".join(reversed(parts))
     return None
+
+
+def _annotation_head_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return _dotted_name(node)
+    return None
+
+
+def _annotation_subscript_args(node: ast.expr) -> tuple[ast.expr, ...]:
+    if isinstance(node, ast.Tuple):
+        return tuple(node.elts)
+    return (node,)
+
+
+def _literal_annotation_plan(values: tuple[Any, ...]) -> _AnnotationPlan:
+    if not values:
+        raise _parse_error("Literal[...] enum fields must declare at least one value", path="$.dsl.annotation")
+    domains = {_literal_value_type_domain(value) for value in values}
+    if len(domains) != 1:
+        raise _parse_error("Literal[...] enum values must all use the same canonical type", path="$.dsl.annotation")
+    type_domain = next(iter(domains))
+    if type_domain == "float64":
+        raise _parse_error("Literal[...] float enum values are not supported", path="$.dsl.annotation")
+    return _AnnotationPlan(type_domain=type_domain, enum_values=tuple(values))
+
+
+def _literal_value(node: ast.expr) -> Any:
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, SyntaxError) as exc:
+        raise _parse_error("Literal[...] values must be literal constants", path="$.dsl.annotation") from exc
+
+
+def _literal_value_type_domain(value: Any) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float64"
+    if isinstance(value, bytes):
+        return "bytes"
+    raise _parse_error(
+        f"Literal[...] enum value has unsupported type: {type(value).__name__}",
+        path="$.dsl.annotation",
+    )
 
 
 def _literal_eval_supported(node: ast.AST, *, path: str) -> Any:
@@ -332,12 +440,18 @@ def _literal_eval_supported(node: ast.AST, *, path: str) -> Any:
     raise _parse_error("unsupported expression in DSL call arguments", path=path)
 
 
-def _reject_unknown_keys(kwargs: dict[str, Any], allowed: set[str], *, path: str) -> None:
+def _reject_unknown_keys(
+    kwargs: dict[str, Any],
+    allowed: set[str],
+    *,
+    path: str,
+    message: str | None = None,
+) -> None:
     unknown = [key for key in kwargs.keys() if key not in allowed]
     if unknown:
         unknown_sorted = sorted(unknown)
         raise _parse_error(
-            f"unsupported keyword(s): {', '.join(unknown_sorted)}",
+            message or f"unsupported keyword(s): {', '.join(unknown_sorted)}",
             path=path,
             detail_code="unsupported_keywords",
             details={

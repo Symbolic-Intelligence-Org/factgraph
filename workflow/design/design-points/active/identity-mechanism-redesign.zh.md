@@ -415,7 +415,7 @@ class User(Entity):
     name: str = Field()
 ```
 
-当前三层（`src/factgraph/sdk/schema.py`）:
+Form I 之前的三层（旧 `src/factgraph/sdk/schema.py` baseline）:
 - `Identity(primary_key=True)`
 - `Identity()`（非 primary）
 - `Field(cardinality=...)`
