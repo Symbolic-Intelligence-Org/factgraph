@@ -120,7 +120,7 @@ Slice 2 不引入 PyReason adapter / claims.rest_terms / INV-9 runtime strict �
 
 ### 5.1 SchemaIndex cache extension(`application/schema_runtime.py`)
 
-Extend `SchemaIndex` frozen dataclass with two independent caches + union helper:
+Extend `SchemaIndex` frozen dataclass with two independent caches + union property(**P2 #1 naming amend 2026-05-29**:public field names,无下划线;ADR-IC §4.3.1 中的 `_..._pred_ids` 命名只是 implementation sketch,实际 dataclass field 使用 public 命名):
 
 ```python
 @dataclass(frozen=True)
@@ -150,7 +150,9 @@ exists_pred_ids = frozenset(
 )
 ```
 
-**Per SF9** — 必须是两个**独立** frozenset。`_protected_anchor_pred_ids` 是读 helper,**不**作为 storage 单一 set。Step 2+ 移除 `:exists` 时 `exists_pred_ids` → empty,INV-7c 范围不受影响。
+**Per SF9** — 必须是两个**独立** frozenset。`protected_anchor_pred_ids` 是读 property,**不**作为 storage 单一 set。Step 2+ 移除 `:exists` 时 `exists_pred_ids` → empty,INV-7c 范围不受影响。
+
+**ADR-IC §4.3.1 vs implementation naming**:ADR-IC 文本中使用 `_identity_pred_ids` / `_exists_pred_ids` 作为 implementation sketch — 这是 ADR 写作时的内部 attribute 表达。实际 Slice 2 实施在 `SchemaIndex` frozen dataclass 中使用 **public 命名**(无下划线)— 因为这些是公开的 schema-derived truth,跟其他 SchemaIndex 公开字段(`entities` / `field_predicates` / `predicates_by_id`)命名风格一致。
 
 ### 5.2 Application source-of-truth retract guard(`application/retract_guard.py` NEW)
 
@@ -180,22 +182,26 @@ def classify_retract_target(
     *,
     ledger: Ledger,
     schema_index: SchemaIndex,
-) -> Literal["identity", "exists", "field"]:
+) -> Literal["identity", "exists", "unprotected"]:
     """Classify what kind of Claim the asrt_id targets.
 
     Returns:
-      "identity" — Identity Claim, INV-7c protected
-      "exists"   — :exists Claim, existence-claim transitional guard
-      "field"    — Field Claim, no Slice 2 guard (default allow)
+      "identity"    — Identity Claim, INV-7c protected
+      "exists"      — :exists Claim, existence-claim transitional guard
+      "unprotected" — Field Claim, unknown asrt, or non-anchor pred — no Slice 2 guard
+                      (downstream retract_by_asrt handles unknown asrt error path)
     """
-    pred_id = ledger.get_claim_pred_id(asrt_id)  # NEW Ledger helper, or use existing lookup
-    if pred_id is None:
-        return "field"  # unknown asrt: downstream handles
+    # P1 #1 amend 2026-05-29: use existing Ledger.get_claim(asrt_id), NO new Ledger helper.
+    # This preserves SF5 Q-PR1 carve-out (core/store/ledger.py 0 diff).
+    claim = ledger.get_claim(asrt_id)
+    if claim is None:
+        return "unprotected"  # unknown asrt — downstream retract_by_asrt produces appropriate error
+    pred_id = claim.pred_id
     if pred_id in schema_index.identity_pred_ids:
         return "identity"
     if pred_id in schema_index.exists_pred_ids:
         return "exists"
-    return "field"
+    return "unprotected"  # Field Claim or other non-anchor — pass through
 
 def check_retract_allowed(
     asrt_id: str,
@@ -207,22 +213,31 @@ def check_retract_allowed(
 
     SDK shell catches and maps to SDKStoreError per ADR-IC §4.1 error messages.
     Application paths catch and produce ErrorDTO with appropriate code.
+
+    "unprotected" classification is pass-through (no raise) — downstream
+    retract_by_asrt handles Field Claim retract and unknown asrt error paths.
     """
+    # Re-fetch claim once here OR have classify return both classification + pred_id.
+    # Implementation note: avoid double Ledger.get_claim lookup; refactor to return (classification, pred_id)
+    # from classify_retract_target, or inline the lookup here. Decision deferred to Step 2 implementation.
     classification = classify_retract_target(asrt_id, ledger=ledger, schema_index=schema_index)
     if classification == "identity":
+        claim = ledger.get_claim(asrt_id)  # safe: classify only returns "identity" if claim exists
         raise RetractGuardError(
             code="INV_7C_IDENTITY_PROTECTED",
             asrt_id=asrt_id,
-            pred_id=pred_id,
+            pred_id=claim.pred_id,
             classification="identity",
         )
     if classification == "exists":
+        claim = ledger.get_claim(asrt_id)
         raise RetractGuardError(
             code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD",
             asrt_id=asrt_id,
-            pred_id=pred_id,
+            pred_id=claim.pred_id,
             classification="exists",
         )
+    # classification == "unprotected" → pass-through (no raise)
 ```
 
 Per SF2(P2 wording precision)— this is **application source-of-truth**;SDK shell and application ingest/entity_write paths are **consumers**。
@@ -255,12 +270,21 @@ def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | 
     return retract_by_asrt(self._store.ledger, asrt_id, meta)
 ```
 
-### 5.4 Application ingest path wrap(`application/ingest_runtime.py:_apply_retract`)— **P1 fix**
+### 5.4 Application ingest path wrap(`application/ingest_runtime.py:_apply_retract`)— **P1 ingest fix**
+
+**P1 #2 amend 2026-05-29**:`store.schema_index` attr 不存在 — `SchemaIndex` must be passed via parameter from upstream caller。`_apply_retract` signature 加 `index: SchemaIndex`,上游 `_apply_item` 已经持有 index(由 `apply_ingest_plan` 传入)→ 透传至 `_apply_retract`。
 
 ```python
-def _apply_retract(idx, item, *, store):
+# application/ingest_runtime.py
+def _apply_retract(
+    idx: int,
+    item: IngestRetractItem,
+    *,
+    store: Store,
+    index: SchemaIndex,    # NEW parameter — passed from _apply_item / apply_ingest_plan
+) -> tuple[list[ErrorDTO], list[WarningDTO], list[str], list[int]]:
     try:
-        check_retract_allowed(item.assertion_id, ledger=store.ledger, schema_index=store.schema_index)
+        check_retract_allowed(item.assertion_id, ledger=store.ledger, schema_index=index)
     except RetractGuardError as exc:
         return ([
             ErrorDTO(
@@ -278,16 +302,39 @@ def _apply_retract(idx, item, *, store):
         # ... existing failure path (INGEST_RETRACT_FAILED)
 ```
 
+**Caller chain update**(`_apply_item` → `_apply_retract`):
+```python
+# application/ingest_runtime.py:_apply_item (existing)
+def _apply_item(idx, item, *, store, index):  # index already passed in shipped code
+    if isinstance(item, IngestRetractItem):
+        return _apply_retract(idx, item, store=store, index=index)  # NEW pass-through
+    # ... other item types
+```
+
+**Step 0.1 preflight grep**(verification):shipped `_apply_item` 已经持有 `index: SchemaIndex` 参数(来自 `apply_ingest_plan`)— 若 preflight grep 发现 shipped chain 不持 index,则需 amend blueprint 添加 caller chain extension。
+
 ### 5.5 Application entity_write path wrap(`application/entity_write.py:_apply_op` retract branch)
 
+**P1 #2 amend 2026-05-29**:`_apply_op` already takes `index: SchemaIndex` parameter(per Slice 1 Step 11 integration with `validate_field_value`)— use existing parameter directly,no `store.schema_index` attr access。
+
 ```python
-# In _apply_op around line 412:
+# In application/entity_write.py:_apply_op around line 412:
 elif op.op == "retract":
-    check_retract_allowed(op.assertion_id, ledger=store.ledger, schema_index=store.schema_index)
+    try:
+        check_retract_allowed(op.assertion_id, ledger=store.ledger, schema_index=index)
+    except RetractGuardError as exc:
+        raise EntityWriteError(
+            str(exc),
+            code=exc.code,  # propagate INV_7C_IDENTITY_PROTECTED or EXISTENCE_CLAIM_TRANSITIONAL_GUARD
+            path=("planned_ops", "assertion_id"),
+            details={"assertion_id": op.assertion_id, "pred_id": exc.pred_id},
+        )
     return retract_by_asrt(store.ledger, op.assertion_id, dict(op.meta) if op.meta else None)
 ```
 
 `RetractGuardError` 在 entity_write 路径 maps 到 `EntityWriteError`(same pattern as Slice 1 value validation,per ADR-FI §4.4.2 integration model)。
+
+**SchemaIndex parameter source**:`_apply_op` signature 已有 `index: SchemaIndex`(per Slice 1 Step 11 `validate_field_value` integration);无需新增 parameter — 直接复用。
 
 ### 5.6 Protocol/core direct path classification(NOT modified — SF5 + N11)
 
@@ -353,7 +400,7 @@ Slice 2 blueprint records this **carry-forward dependency** in §10 Outcome。
 | **SF4** | **NO `fg.schema.register/extend/apply` stub** in Slice 2;hook-ready contract documented but no empty API created;wiring deferred to ADR-API Q14 implementation slice | OQ3 verdict 2026-05-29 |
 | **SF5** | Q-PR1 carve-out preserved:zero diff in `core/evidence/write_protocol.py` / `core/store/ledger.py` / `core/store/_builders.py` / `adapters/pyreason/*` / `claims.rest_terms` / INV-9 runtime strict / **`core/derivation/accept.py:401` internal rollback path** | OQ4 verdict 2026-05-29 + N11 classification |
 | **SF6** | Slice 2 load-bearing docs only:`04_api_surface.en.md`(INV-7c reject + existence-claim transitional guard + Identity Claim emission + shadow store legacy)+ `identity-mechanism-redesign.zh.md §5.2/§13`;wider docs polish 留 Slice 4 | OQ5 verdict + ADR-DOCS §4.2.2 |
-| **SF7** | **Tests directory(`tests/`)IS in scope for Slice 2**(Slice 1 SF6 factgraph-only correction NOT inherited)— BUT only NEW Slice 2 test files for cache + guard + emission contract;legacy `Identity(primary_key=)` test fixtures from pre-Slice-1 remain as legacy carryover(out of Slice 2 scope) | OQ6 verdict 2026-05-29 |
+| **SF7** | **Tests directory(`tests/`)IS in scope for Slice 2**(Slice 1 SF6 factgraph-only correction NOT inherited)— Slice 2 实施可在 `tests/` 添加 NEW test files for cache + guard + emission contract。**关键边界**(P2 #2 amend 2026-05-29):Slice 2 close acceptance 只要求 **新增 / 相关 tests 通过**(Slice 2-relevant tests only);**不要求** legacy `tests/` 全量 green;legacy pre-Slice-1 fixtures(`Identity(primary_key=)` 等)留 carryover technical debt,**不在 Slice 2 清理范围**(Slice 3a namespace migration 或 docstring-only legacy cleanup slice 处理)| OQ6 verdict 2026-05-29 + P2 #2 amend 2026-05-29 |
 | **SF8** | Identity Claim emission contract:**MUST carry complete identity bundle**(per ADR-IC §4.2.1);Layer 2 fields API(`fg.set/add/...`)is NOT and NEVER an emission path;shadow store is legacy compatibility,not contract | ADR-IC §4.2.1 + §4.2.2 + §4.2.3 |
 | **SF9** | **Two independent frozensets**(NOT single set)— `_identity_pred_ids` 和 `_exists_pred_ids` 概念分离;`_protected_anchor_pred_ids` 仅是读 helper property;Step 2+ 移除 `:exists` 时 INV-7c 范围不收窄 | ADR-IC §4.3.1 |
 | **SF10** | `:exists` guard 命名 = **existence-claim transitional guard**,**NOT** INV-7c;error code = `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`;`:exists` co-emission 跟 guard lifecycle 绑定,Step 2+ 移除 `:exists` 时 guard 同步退役不影响 INV-7c | ADR-IC §4.4.2 |
@@ -415,19 +462,20 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] Test:fixture schema with 2 entity types(User + Order),each with 2 identity fields → identity_pred_ids has 4 members;exists_pred_ids has 2 members
 - [ ] Test:Empty schema_ir → both frozensets are `frozenset()` (empty);union property is also empty
 
-### 7.2 Application retract guard helper(G2 + SF2)
+### 7.2 Application retract guard helper(G2 + SF2 + P1 #1 amend)
 
 - [ ] `application/retract_guard.py` module exists
 - [ ] `RetractGuardError(Exception)` with `code`/`pred_id`/`asrt_id`/`classification` fields
-- [ ] `classify_retract_target(asrt_id, *, ledger, schema_index)` returns one of `"identity"`/`"exists"`/`"field"`
+- [ ] `classify_retract_target(asrt_id, *, ledger, schema_index)` returns one of `"identity"`/`"exists"`/`"unprotected"` (P1 #1 — naming changed from `"field"` to `"unprotected"` to make pass-through semantics explicit)
+- [ ] `classify_retract_target` uses **existing** `Ledger.get_claim(asrt_id)` lookup — **NO new Ledger helper added**(SF5 Q-PR1 carve-out)
 - [ ] `check_retract_allowed(asrt_id, *, ledger, schema_index)`:
   - identity classification → raise `RetractGuardError(code="INV_7C_IDENTITY_PROTECTED", classification="identity")`
   - exists classification → raise `RetractGuardError(code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD", classification="exists")`
-  - field classification(default)→ no raise(allow downstream `retract_by_asrt`)
+  - unprotected classification → **no raise**(pass-through;downstream `retract_by_asrt` handles Field Claim retract and unknown asrt error path)
 - [ ] Test:Identity Claim asrt → identity classification → raise INV_7C
 - [ ] Test:`:exists` Claim asrt → exists classification → raise EXISTENCE_CLAIM_TRANSITIONAL_GUARD
-- [ ] Test:Field Claim asrt → field classification → no raise
-- [ ] Test:Unknown asrt → field classification(downstream handles)→ no raise
+- [ ] Test:Field Claim asrt → unprotected classification → no raise
+- [ ] Test:Unknown asrt(`ledger.get_claim` returns None)→ unprotected classification → no raise(downstream produces appropriate error)
 - [ ] **Error code distinction**:Identity vs exists produce DIFFERENT codes(`INV_7C_IDENTITY_PROTECTED` vs `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`) — caller can distinguish per ADR-IC §8 acceptance
 
 ### 7.3 SDK shell fail-fast wrap(G3 + SF2 + SF12)
@@ -441,21 +489,25 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] Test:`fg.retract(field_claim_asrt_id)` succeeds
 - [ ] **Error message classification**:Identity vs exists produce distinguishable error wording
 
-### 7.4 Application ingest path wrap(G3 + SF3 — P1 fix)
+### 7.4 Application ingest path wrap(G3 + SF3 — P1 #1 + P1 #2 ingest fix)
 
-- [ ] `application/ingest_runtime._apply_retract` calls `check_retract_allowed` BEFORE `retract_by_asrt`
+- [ ] `application/ingest_runtime._apply_retract` signature 加 `index: SchemaIndex` parameter(P1 #2 — `store.schema_index` 不存在)
+- [ ] `_apply_item` caller pass-through `index` 到 `_apply_retract`(verify shipped chain holds index — Step 0.1 preflight gate)
+- [ ] `_apply_retract` calls `check_retract_allowed(item.assertion_id, ledger=store.ledger, schema_index=index)` BEFORE `retract_by_asrt`
 - [ ] Identity Claim asrt → `ErrorDTO(code="INV_7C_IDENTITY_PROTECTED", ...)` in ingest result
 - [ ] `:exists` Claim asrt → `ErrorDTO(code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD", ...)` in ingest result
-- [ ] Field Claim asrt → passes through(existing `INGEST_RETRACT_FAILED` path on actual retract failure)
+- [ ] Field Claim asrt(unprotected classification)→ passes through(existing `INGEST_RETRACT_FAILED` path on actual retract failure)
+- [ ] Unknown asrt(unprotected classification)→ passes through(downstream handles)
 - [ ] Test:bulk ingest with Identity Claim retract item → ErrorDTO with INV-7c code
 
-### 7.5 Application entity_write path wrap(G3 + SF3)
+### 7.5 Application entity_write path wrap(G3 + SF3 — P1 #2 fix)
 
-- [ ] `application/entity_write._apply_op` retract branch calls `check_retract_allowed` BEFORE `retract_by_asrt`(line 412)
-- [ ] Identity Claim asrt → `EntityWriteError` mapped from `RetractGuardError`
-- [ ] `:exists` Claim asrt → `EntityWriteError` mapped from `RetractGuardError`
-- [ ] Field Claim asrt → passes through
-- [ ] Test:entity write with retract op for Identity Claim asrt → `EntityWriteError`
+- [ ] `application/entity_write._apply_op` retract branch calls `check_retract_allowed(op.assertion_id, ledger=store.ledger, schema_index=index)` BEFORE `retract_by_asrt`(line 412)— **uses existing `index: SchemaIndex` parameter**(no new parameter — per Slice 1 Step 11 integration baseline)
+- [ ] Identity Claim asrt → `EntityWriteError` mapped from `RetractGuardError`(with `code` propagated)
+- [ ] `:exists` Claim asrt → `EntityWriteError` mapped from `RetractGuardError`(with `code` propagated)
+- [ ] Field Claim asrt(unprotected classification)→ passes through
+- [ ] Unknown asrt(unprotected classification)→ passes through
+- [ ] Test:entity write with retract op for Identity Claim asrt → `EntityWriteError(code="INV_7C_IDENTITY_PROTECTED", ...)`
 
 ### 7.6 Protocol/core direct path zero diff(G7 + SF5 + SF11)
 
@@ -482,10 +534,17 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 
 ### 7.9 Form I + Identity Claim emission integration(G7 — cross-Slice contract)
 
-- [ ] `fg.entities.create(EntityCls, **identity_kwargs)` atomic emit:N Identity Claims + 1 `:exists` Claim(N = identity field count)— in single `_write_session`
-- [ ] `fg.entities.delete(e_ref)` atomic full revoke:all Identity Claims + `:exists` Claim + all Field Claims for that e_ref retracted
-- [ ] Test:`fg.entities.create(User, user_id="u1", tenant_id="t1")` → ledger Active set increases by 3(2 Identity + 1 `:exists`)
-- [ ] Test:`fg.entities.delete(e_ref)` followed by Active set query → 0 active Claims for that e_ref
+**P1 #3 amend 2026-05-29**:`fg.entities.create/delete` 是 Slice 3a namespace migration scope,Slice 2 不应依赖 unshipped API。改用 shipped path 测试 Identity Claim emission atomic + bundle:
+
+- [ ] **shipped path emission atomic**:`fg.ref(EntityCls, **identity_kwargs)` + first Field write(`fg.set(...)` 或 `EntityEditor.commit()` 或 `SDKBatchTx.commit()`)→ ledger Active set 增加 N+2 Claims(N Identity + 1 `:exists` + 1 Field)in single `_write_session`
+- [ ] Test:`fg.ref(User, user_id="u1", tenant_id="t1")` + `fg.set(User.name, e_ref, "Alice")` → Active set verifies:
+  - `pred_id="user:user_id"` Active Claim with value `"u1"`
+  - `pred_id="user:tenant_id"` Active Claim with value `"t1"`
+  - `pred_id="user:exists"` Active Claim
+  - `pred_id="user:name"` Active Claim with value `"Alice"`
+- [ ] Test:Two field writes to same e_ref(`fg.ref` + `fg.set(User.name, ...)` + `fg.add(User.tags, ...)`)— Identity Claims emit only ONCE(materialized_refs dedup verified per `_materialization_ops:331-334`)
+- [ ] Test:**`SDKBatchTx.commit()` atomic**(per ADR-IC §4.2 atomic 保证)— full identity bundle + Field write in same `_write_session`
+- [ ] **`fg.entities.delete(e_ref)` full-entity revoke**:**NOT a Slice 2 acceptance** — recorded as **carry-forward dependency** to Slice 3a namespace migration(per ADR-API Q10)。`fg.entities.delete` is the **ADR-IC §4.1 target API path**(per Identity Claim error message wording — "delete via fg.entities.delete + create new entity")但 Slice 2 不实施该 API。Slice 2 error message 保留对该 future path 的引用,作为 user migration guidance — implementation/acceptance 不依赖 unshipped API
 
 ### 7.10 Load-bearing docs(G6 + ADR-DOCS §4.2.2)
 
@@ -529,9 +588,11 @@ Per `feedback_smaller_batch_design_blueprints`,Slice 2 不是 rule-touching(Slic
 
 ### Step 2 — Application retract guard helper(`application/retract_guard.py` NEW)
 
+**P1 #1 amend 2026-05-29**:Use **existing** `Ledger.get_claim(asrt_id)` API — read `claim.pred_id`。**NO new helper added to Ledger**(SF5 Q-PR1 carve-out / `core/store/ledger.py` 0 diff)。
+
 - 2.1 NEW module `application/retract_guard.py` with `RetractGuardError` + `classify_retract_target` + `check_retract_allowed` per §5.2
-- 2.2 Identify `Ledger.get_claim_pred_id(asrt_id)` lookup primitive — either reuse existing or add minimal helper to Ledger(if needed,that's a question for Step 0 to verify)
-- 2.3 Unit test:4 cases(identity / exists / field / unknown asrt)
+- 2.2 Use existing `Ledger.get_claim(asrt_id)` → `claim.pred_id` lookup — NO Ledger API extension
+- 2.3 Unit test:4 cases(identity → INV_7C raise / exists → EXISTENCE_CLAIM_TRANSITIONAL_GUARD raise / Field Claim → unprotected pass-through / unknown asrt → unprotected pass-through)
 - 2.4 — commit boundary
 
 ### Step 3 — SDK shell wrap(`sdk/store.py:SDKStore.retract`)
@@ -541,17 +602,19 @@ Per `feedback_smaller_batch_design_blueprints`,Slice 2 不是 rule-touching(Slic
 - 3.3 Integration test through `fg.retract(asrt_id)` — Identity / exists / field 3 cases
 - 3.4 — commit boundary
 
-### Step 4 — Application ingest path wrap(`application/ingest_runtime.py:_apply_retract`)— **P1 fix**
+### Step 4 — Application ingest path wrap(`application/ingest_runtime.py:_apply_retract`)— **P1 #2 + P1 #3 ingest fix**
 
-- 4.1 Add `check_retract_allowed` call before `retract_by_asrt`
-- 4.2 Map `RetractGuardError` to `ErrorDTO(code=..., message=..., path=("items", str(idx)), ...)`
-- 4.3 Integration test through bulk ingest retract — Identity / exists / field 3 cases
-- 4.4 — commit boundary
+- 4.1 Add `index: SchemaIndex` parameter to `_apply_retract` signature(per P1 #2 — `store.schema_index` attr does not exist)
+- 4.2 Update `_apply_item` caller to pass through `index` parameter(verify shipped chain already holds index;若 preflight Step 0.1 grep 发现不持,则 amend blueprint 加 chain extension)
+- 4.3 Add `check_retract_allowed(item.assertion_id, ledger=store.ledger, schema_index=index)` call before `retract_by_asrt`
+- 4.4 Map `RetractGuardError` to `ErrorDTO(code=..., message=..., path=("items", str(idx)), ...)`
+- 4.5 Integration test through bulk ingest retract — Identity / exists / Field/unknown 3 cases
+- 4.6 — commit boundary
 
-### Step 5 — Application entity_write path wrap(`application/entity_write.py:_apply_op`)
+### Step 5 — Application entity_write path wrap(`application/entity_write.py:_apply_op`)— **P1 #2 fix**
 
-- 5.1 Add `check_retract_allowed` call before `retract_by_asrt` in retract branch
-- 5.2 Map `RetractGuardError` to `EntityWriteError`
+- 5.1 Add `check_retract_allowed(op.assertion_id, ledger=store.ledger, schema_index=index)` call before `retract_by_asrt` in retract branch — **use existing `index: SchemaIndex` parameter**(already present per Slice 1 Step 11 `validate_field_value` integration;no new parameter)
+- 5.2 Map `RetractGuardError` to `EntityWriteError` with `code` propagated(INV_7C_IDENTITY_PROTECTED or EXISTENCE_CLAIM_TRANSITIONAL_GUARD)
 - 5.3 Unit test
 - 5.4 — commit boundary
 
@@ -568,13 +631,18 @@ Per `feedback_smaller_batch_design_blueprints`,Slice 2 不是 rule-touching(Slic
 - 7.2 (No behavior change,doc-only)
 - 7.3 — commit boundary
 
-### Step 8 — Contract tests(emission atomic + Identity bundle + entity delete)
+### Step 8 — Contract tests(emission atomic via shipped path + Identity bundle dedup)— **P1 #3 amend 2026-05-29**
 
-- 8.1 Test:`fg.entities.create(User, ...)` atomic emit N Identity Claims + 1 `:exists` Claim
-- 8.2 Test:`fg.entities.delete(e_ref)` atomic full revoke
-- 8.3 Test:Identity Claims atomic with first Field write(lazy materialization path)
-- 8.4 Test:e_ref not in shadow store → UNRESOLVABLE_E_REF
-- 8.5 — commit boundary
+Tests based on **shipped API paths only**(no `fg.entities.create/delete` dependency per P1 #3):
+
+- 8.1 Test:`fg.ref(User, **identity_kwargs)` + first `fg.set(User.<field>, e_ref, value)` atomic emit N Identity Claims + 1 `:exists` Claim + 1 Field Claim(in single `_write_session`)
+- 8.2 Test:`EntityEditor.commit()` path same atomic emission contract
+- 8.3 Test:`SDKBatchTx.commit()` path same atomic emission contract(per ADR-IC §4.2)
+- 8.4 Test:Two field writes to same e_ref — Identity Claims emit only ONCE(materialized_refs dedup per `_materialization_ops:331-334`)
+- 8.5 Test:Identity Claims atomic with first Field write(lazy materialization path through `_identity_values_by_e_ref` shadow store)
+- 8.6 Test:e_ref not in shadow store → `UNRESOLVABLE_E_REF` raise(existing fail-fast behavior — verify carries forward per §4.2.1 emission input contract)
+- 8.7 **NOT TESTED**(carry-forward to Slice 3a):`fg.entities.create/delete` full-entity API paths — recorded as Slice 3a ADR-API Q10 namespace migration scope
+- 8.8 — commit boundary
 
 ### Step 9 — Load-bearing docs sync
 
@@ -636,6 +704,7 @@ Per `feedback_smaller_batch_design_blueprints`,Slice 2 不是 rule-touching(Slic
 - Slice 2 load-bearing docs landed confirmation:
 - Carry-forward dependencies recorded:
   - ADR-API Q14 schema-evolution hook(`fg.schema.register/extend/apply` 实施时 wire cache hook per ADR-IC §4.3.3)
+  - **ADR-API Q10 `fg.entities.create/delete` namespace migration**(Slice 3a)— Identity Claim emission user-facing API + full-entity revoke 路径;Slice 2 error message wording 引用该 future API path 作为 user migration guidance,但 Slice 2 implementation + acceptance 不依赖 unshipped API(per P1 #3 amend 2026-05-29)
   - Step 2+ `:exists` removal(per ADR-IC §4.4.4 forward-pointer)— guard 同步退役不动 INV-7c
   - Step 2+ shadow store removal(per ADR-IC §4.2.4 eager-emission 演化方向)
 - 归档说明:
