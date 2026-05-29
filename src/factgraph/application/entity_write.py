@@ -29,6 +29,7 @@ from .schema_runtime import (
     field_value_type,
     resolve_selector,
 )
+from .retract_guard import RetractGuardError, check_retract_allowed
 from .value_validation import FieldValueValidationError, validate_field_value
 
 
@@ -409,6 +410,41 @@ def _apply_op(
             return set_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
         return add_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
     assert op.assertion_id is not None
+    # Slice 2 Step 5: application entity_write path leg of three-layer retract guard.
+    # check_retract_allowed raises RetractGuardError for INV-7c-protected Identity
+    # Claims or :exists Claims (existence-claim transitional guard).
+    # Field Claims and unknown asrt pass-through to retract_by_asrt unchanged.
+    try:
+        check_retract_allowed(
+            op.assertion_id,
+            ledger=store.ledger,
+            schema_index=index,
+        )
+    except RetractGuardError as guard_exc:
+        if guard_exc.classification == "identity":
+            message = (
+                f"Identity Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) is immutable per INV-7c; "
+                "Identity bundle modification requires delete + recreate of the entity. "
+                "See ADR-IC §4.1."
+            )
+        else:  # classification == "exists"
+            message = (
+                f"<EntityType>:exists Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted independently; "
+                ":exists is co-emitted atomically with Identity Claims (existence-claim "
+                "transitional guard). See ADR-IC §4.4."
+            )
+        raise EntityWriteError(
+            message,
+            code=guard_exc.code,  # propagated directly, NOT swallowed
+            path=("planned_ops", "assertion_id"),
+            details={
+                "assertion_id": guard_exc.asrt_id,
+                "pred_id": guard_exc.pred_id,
+                "classification": guard_exc.classification,
+            },
+        ) from guard_exc
     return retract_by_asrt(store.ledger, op.assertion_id, dict(op.meta) if op.meta else None)
 
 
