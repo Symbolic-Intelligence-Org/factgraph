@@ -121,11 +121,11 @@ ADR-IC adopted `2d0866ed` §4.3.6 要求本 ADR(Q14)锁定:
 
 #### 4.1.1 三层 navigation key 排他边界
 
-| Layer | namespace | navigation key | 语义 | 排他原则 |
-|---|---|---|---|---|
-| **Layer 1** | `fg.entities.*` | `EntityClass + identity` 或 `e_ref` | 实体宏观(create/get/where/delete/edit/exists/ref/match)| **不接受** `asrt_id` 参数;**不接受** `(Field, e_ref)` value 写入(写 Identity Claim 走 `create`,写 Field 走 Layer 2)|
-| **Layer 2** | `fg.fields.*` | `(Field, e_ref)` + value | per-cell 操作(set/add/retract/delete/get)| **不接受** `asrt_id` 参数(per ADR-IC §4.1 P2-1 fix);**不接受** `EntityClass + identity` 形态(用 `fg.entities.ref(...)` 先算 e_ref)|
-| **Layer 3** | `fg.assertions.*` | `asrt_id` 或 canonical filter(field/e_ref/value/value_tag/_meta)| 原子 assertion(by_id/by_ids/active/all/field/where/retract)| **不接受** `EntityClass` 类型参数(用 `field=EntityCls.field` 走 Field descriptor);`fg.assertions.retract(asrt_id)` 是唯一 asrt_id-based mutation entry |
+| Layer | namespace | Manager / View 类型 | navigation key | 语义 | 排他原则 |
+|---|---|---|---|---|---|
+| **Layer 1** | `fg.entities.*` | `EntitiesManager`(新)| `EntityClass + identity` 或 `e_ref` | 实体宏观(create/get/where/delete/edit/exists/ref/match)| **不接受** `asrt_id` 参数;**不接受** `(Field, e_ref)` value 写入(写 Identity Claim 走 `create`,写 Field 走 Layer 2)|
+| **Layer 2** | `fg.fields.*` | `FieldsManager`(新)| `(Field, e_ref)` + value | per-cell 操作(set/add/retract/delete/get)| **不接受** `asrt_id` 参数(per ADR-IC §4.1 P2-1 fix);**不接受** `EntityClass + identity` 形态(用 `fg.entities.ref(...)` 先算 e_ref)|
+| **Layer 3** | `fg.assertions.*` | `AssertionsManager`(per §4.2.1 — **非** `AssertionView`)| `asrt_id` 或 canonical filter(field/e_ref/value/value_tag/_meta)| 原子 assertion(by_id/by_ids/active/all/field/where/retract)| **不接受** `EntityClass` 类型参数(用 `field=EntityCls.field` 走 Field descriptor);`fg.assertions.retract(asrt_id)` 是唯一 asrt_id-based mutation entry(挂在 manager 不在 view)|
 
 **排他原则的 enforcement**:type signature 层(Python type hints + runtime type check);跨 layer 参数形态用错(如 `fg.fields.set(asrt_id, value)`)raise `SDKStoreError`,error message 含正确 layer 提示。
 
@@ -165,61 +165,114 @@ ADR-IC adopted `2d0866ed` §4.3.6 要求本 ADR(Q14)锁定:
 | `find` 动词(任何层)| 统一为 `where` |
 | `fg.fields.where` / `fg.fields.history` / `fg.fields.scan` / `fg.fields.find` | 用 `fg.assertions.where(field=F, ...)` 替代(per design-point §12.2;输入语言一致,无独特价值)|
 
-### 4.2 Q11 — `AssertionView` 统一类型:**Step 1 直接合并 + 纯 read view**
+### 4.2 Q11 — `AssertionView` 统一类型 + `AssertionsManager` 分离:**Step 1 直接合并 + 纯 read view + namespace manager 显式分离**
 
-**锁定**:`AssertionView` 是 scope-aware 统一类型;**Step 1 直接**合并 `FieldAssertions` + `AssertionNamespace`,**无** transitional alias 期。`AssertionView` **是纯读 view,无 mutation method**。
+**锁定**:**两个独立类型**:
+- `AssertionsManager` — **仅一个实例 `fg.assertions`**;Layer 3 namespace manager;承载 `retract(asrt_id)` mutation
+- `AssertionView` — scope-aware 统一类型;**纯读 view 无 mutation**;Step 1 直接合并 `FieldAssertions` + `AssertionNamespace`;**无** transitional alias 期
 
-#### 4.2.1 类型契约
+#### 4.2.1 对象身份模型(P1 critical)
+
+**`fg.assertions` 是 `AssertionsManager`(不是 `AssertionView`)**:
+
+```python
+class AssertionsManager:
+    """Layer 3 namespace manager — entry point for assertion-level operations.
+
+    NOT an AssertionView. Has mutation method (retract) AND read shortcuts.
+    Internally delegates read operations to a ledger-scope AssertionView.
+    """
+    # ─── Mutation(唯一 Layer 3 mutation 入口)───
+    def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str: ...
+
+    # ─── Read shortcuts — 委托到内部 ledger-scope AssertionView ───
+    @property
+    def active(self) -> AssertionRecordSet:
+        return self._ledger_view.active
+    @property
+    def all(self) -> AssertionRecordSet:
+        return self._ledger_view.all
+    def by_id(self, asrt_id: str) -> AssertionRecord | None:
+        return self._ledger_view.by_id(asrt_id)
+    def by_ids(self, ids: list[str], *, strict: bool = True) -> AssertionRecordSet:
+        return self._ledger_view.by_ids(ids, strict=strict)
+    def field(self, f: Field) -> "AssertionView":          # Rule 6: ledger scope 必须 Field descriptor
+        return self._ledger_view.field(f)
+    def where(self, *, field=_MISSING, e_ref=_MISSING,
+              value=_MISSING, value_tag=_MISSING,
+              _meta: dict[str, Any] | None | type[_MISSING] = _MISSING) -> AssertionRecordSet:
+        return self._ledger_view.where(
+            field=field, e_ref=e_ref, value=value, value_tag=value_tag, _meta=_meta,
+        )
+```
+
+**`snap.assertions` / `snap.field(...)` / `fg.assertions.field(F)` 返回 `AssertionView`(纯读)**。
+
+#### 4.2.2 `AssertionView` 类型契约(纯读)
 
 ```python
 class AssertionView:
-    """Scope-aware view into assertions (pure read).
+    """Scope-aware pure-read view into assertions.
 
     Scope axes (internal): ledger / entity / field 组合。
     窄化操作返回 AssertionView;终结操作返回 AssertionRecordSet / AssertionRecord。
+    NOT a mutation entry — retract 走 fg.assertions.retract(asrt_id) (AssertionsManager)
+    或 fg.fields.retract(F, e_ref, value) (Layer 2)。
     """
     # ─── 窄化操作(scope chain)— 返回新 AssertionView ───
-    def field(self, f: Field | str) -> "AssertionView": ...
+    def field(self, f: Field) -> "AssertionView": ...        # Rule 6: ledger scope 必须 Field descriptor
 
-    # ─── 时间维度(默认基于 active)─────
-    def at(self, t: datetime) -> "AssertionView": ...    # Rule 4
-    # Step 2+: def during(self, range) -> "AssertionView"; ...
+    # ─── 时间维度终结 — 返回 RecordSet(per Rule 4: view.at(t) == view.active.at(t)) ───
+    def at(self, t: datetime) -> AssertionRecordSet: ...
+    # Step 2+: def during(self, range) -> AssertionRecordSet: ...
 
-    # ─── 终结操作 — 返回 RecordSet ─────
+    # ─── Property 终结 — 返回 RecordSet ─────
     @property
     def active(self) -> AssertionRecordSet: ...
     @property
     def all(self) -> AssertionRecordSet: ...
-    def by_id(self, asrt_id: str) -> AssertionRecord | None: ...   # Rule 5
+
+    # ─── ID-based 终结 ─────
+    def by_id(self, asrt_id: str) -> AssertionRecord | None: ...     # Rule 5: 查 .all 不是 .active
     def by_ids(self, ids: list[str], *, strict: bool = True) -> AssertionRecordSet: ...
-    def where(self, *, value=_MISSING, value_tag=_MISSING,
-              _meta: dict[str, Any] | None = None) -> AssertionRecordSet: ...
+
+    # ─── Canonical filter 终结 — 返回 RecordSet ─────
+    def where(self, *, field=_MISSING, e_ref=_MISSING,
+              value=_MISSING, value_tag=_MISSING,
+              _meta: dict[str, Any] | None | type[_MISSING] = _MISSING) -> AssertionRecordSet: ...
 
     # ─── 显式 NOT in AssertionView ─────
-    # def retract(...) — 不存在;走 fg.assertions.retract(asrt_id) 或 fg.fields.retract(F, e_ref, value)
+    # def retract(...) — 不存在;走 fg.assertions.retract(asrt_id) (AssertionsManager) 或 fg.fields.retract(F, e_ref, value) (Layer 2)
     # def set / add / delete — 不存在;Layer 2 mutation 走 fg.fields.*
     # def version(v) — 不存在(per §4.3 Q12);改 where(_meta={"version": v})
 ```
 
-#### 4.2.2 为什么纯 read view 不允许 mutation
+**Read shortcut return types**(per design-point §12.5 Rule 4 + Rule 5):
+- `view.at(t)` **不**返回 narrowed view;**返回 `AssertionRecordSet`**(等价于 `view.active.at(t)` 的 sugar — 含 revoke 边界处理后的 active set);要含 revoke 历史走 `view.all.at(t)` 显式
+- `view.by_id(asrt_id)` 默认查 `.all`(per Rule 5 — 审计 / 重放需要按 id 拿 revoked record)
 
-- **三层边界 separation of concerns**(per §4.1 排他原则):mutation 走 Layer 2/3 显式 method;AssertionView 是 Layer 3 内 query/navigation 工具
-- **scope-aware view 加 mutation 会引入歧义**:`snap.assertions.field(F).retract(...)` 在 entity scope 内意义?整 entity?该 entity 的该 field?跟 `fg.fields.retract(F, e_ref, value)` 区别?— 三种 mutation 入口分散语义
-- **跟 ADR-IC §4.1 双路径 reject 模式一致**:mutation entry points 集中在两个明确 API(Layer 2 value-oriented + Layer 3 asrt_id-based);AssertionView 加 mutation 是第三 entry,违反集中原则
-- **per design-point §12.5 补充约束 + Rule 6**:`snap.assertions.retract(...)` 不存在;ledger scope `field(str)` 硬拒绝(必须 Field descriptor)
+#### 4.2.3 为什么必须区分 `AssertionsManager` 和 `AssertionView`
 
-#### 4.2.3 合并范围
+- **纯读约束的 type-level 保证**:`AssertionView` 类**根本不存在** `retract` method → user 无法误调;若 `fg.assertions` 本身是 `AssertionView`,要么 view 必须有 retract(破坏纯读)要么 `fg.assertions.retract` 不存在(破坏三层 mutation 入口集中原则)— 不可调和。namespace manager 单独类型是唯一一致路径
+- **`snap.assertions` / `snap.field(...)` 的归属清晰**:它们必须是 view(无 entity/field scope 内的独立 mutation 入口 — entity 内 mutation 走 `fg.fields.*`);`AssertionView` 类型 → IDE / type checker 直接 enforce
+- **Read shortcuts 委托模式**:`AssertionsManager` 的 `active/all/by_id/by_ids/where/field` 全部委托到内部 `_ledger_view: AssertionView` — manager 不重复实现,view 是 source of truth
+- **跟 ADR-IC §4.1 双路径 reject 模式一致**:mutation 路径只有两个 — Layer 2 value-oriented + Layer 3 asrt_id-based(后者唯一住所是 `AssertionsManager.retract`)
+- **per design-point §12.5 补充约束**:`fg.assertions.retract(asrt_id)` 挂 namespace manager,`snap.assertions.retract(...)` 不存在;本 ADR §4.2.1 显式 model 这一约束
+
+#### 4.2.4 合并范围
 
 | 当前 shipped | 合并后 |
 |---|---|
 | `FieldAssertions`(`sdk/facade.py:482`)| 删除 — 合并进 `AssertionView` |
 | `AssertionNamespace`(`sdk/facade.py`)| 删除 — 合并进 `AssertionView` |
+| `_SDKAssertionsManager`(`sdk/store.py:427`)| rename → `AssertionsManager`;扩 `where/retract` + 内部委托到 `_ledger_view: AssertionView` |
 | `snap.field(name)` 返回 `FieldAssertions` | 返回 `AssertionView`(scope = entity + field)|
 | `snap.assertions` 返回 `AssertionNamespace` | 返回 `AssertionView`(scope = entity)|
 | `fg.assertions.field(F)` 返回 `AssertionRecordSet` | 返回 `AssertionView`(scope = ledger + field)|
+| `fg.assertions` 自身 | 返回 `AssertionsManager`(Layer 3 namespace manager — 唯一 instance;**非** AssertionView)|
 | `view.history` deprecated alias | 保留为 alias of `.all`;**不**默认发 DeprecationWarning(防测试失败);env var opt-in `FACTGRAPH_WARN_DEPRECATED=1`(per design-point §12.5 补充)|
 
-#### 4.2.4 为什么 Step 1 直接合并不留 transitional alias
+#### 4.2.5 为什么 Step 1 直接合并不留 transitional alias
 
 - 双类型同时存在(`FieldAssertions` + `AssertionView`)— user 不知道用哪个;internal helper 需要 `isinstance` check;type union 蔓延
 - alpha 阶段无 API 用户兼容承诺(同 §4.1.3 rationale)
@@ -392,7 +445,7 @@ def apply(EntityClass):
 | Sub-decision | Decision | Implementation surface | Step 1 Slice |
 |---|---|---|---|
 | Q10 | 三层 alpha 直接 breaking rename + 排他 navigation key + no alias | `sdk/store.py` 4 namespace manager + 2 个新 manager(`_SDKEntitiesManager` / `_SDKFieldsManager`)+ shipped 路径 migrate | Slice 3a |
-| Q11 | `AssertionView` 统一 + 纯 read view + 删 `FieldAssertions` / `AssertionNamespace` | `sdk/facade.py` 类合并 + scope-aware 实现 + mutation method 显式 absent | Slice 3a |
+| Q11 | `AssertionView` 统一 + 纯 read view + 删 `FieldAssertions` / `AssertionNamespace`;**`AssertionsManager` 类型分离**(`fg.assertions` 是 manager 不是 view;承载 `retract`)| `sdk/facade.py` 类合并 + scope-aware 实现 + mutation method 显式 absent;`sdk/store.py:_SDKAssertionsManager` rename → `AssertionsManager` + 委托 `_ledger_view: AssertionView` | Slice 3a |
 | Q12 | `version(v)` hard remove + migration note only | `sdk/facade.py` 删 `version(v)` method;docs Slice 4 加 migration note | Slice 3a + 4 |
 | Q13 | `_meta` 统一 + flat kwargs hard remove + 无双轨 | `sdk/facade.py:136-139` signature 改 `where(_meta=...)`;Layer 1 / Layer 3 `where` 同步 | Slice 3a + 4 |
 | Q14 | `schema.add` → `register/extend/apply` + 7 种 non-additive diff reject + `:exists` predicate protection(**ADR-IC §4.3.6 contract 满足**)| `sdk/store.py:_SDKSchemaManager` 重写 + `authoring/schema_compile.py` diff 算法 + ADR-IC cache hook 集成 | Slice 3a |
@@ -423,6 +476,14 @@ def apply(EntityClass):
 #### Q11 alternative — `AssertionView` 加 `.retract(...)` mutation method 便利
 
 - **Why rejected**:per user reviewer 第 2 项 review focus("不把 mutation 混进去");三层 mutation entry point 集中原则(per ADR-IC §4.1 双路径);scope-aware view 加 mutation 引入歧义(entity-scope retract 应该 retract 整 entity?该 entity 该 field?);跟 design-point §12.5 补充约束冲突
+
+#### Q11 alternative — `fg.assertions` 自身是 `AssertionView` 且承载 `.retract`
+
+- **Why rejected**:**让 view 类型同时承载 mutation 和纯读**会让 Q11 的"纯读约束"在 type level 失效;`snap.assertions` 是同 type → 必须同样有 `.retract`(违反 entity scope view 拒绝 mutation 原则 per design-point §12.5);或 `snap.assertions` 是 subtype 且 override 掉 retract → type 多态地 violate LSP。**两个独立类型**(`AssertionsManager` for `fg.assertions` + `AssertionView` for `snap.assertions` / `snap.field(...)` / `fg.assertions.field(F)`)是唯一一致路径(per §4.2.3 rationale 第 1 条)。
+
+#### Q11 alternative — `AssertionView.at(t)` 返回 narrowed `AssertionView`(支持后续 chain)
+
+- **Why rejected**:per design-point §12.5 Rule 4 — `view.at(t) == view.active.at(t)` 是 sugar **on top of `.active` RecordSet**,语义上是终结操作(应用 revoke 边界处理后 active set at 时间点 t)。返回 narrowed view 会:(i) 让 `view.at(t).at(t')` 二次 narrow 语义模糊(intersection? override?);(ii) 跟 `.active` property 的 RecordSet 返回类型不对齐(用户可能写 `view.at(t).where(...)` 期望 RecordSet 行为);(iii) `during(...)` step 2+ 同 pattern 应同样返回 RecordSet。终结返回 RecordSet 保 Rule 4 + Rule 5(`.by_id` 查 `.all`)语义一致。
 
 #### Q12 alternative — `version(v)` 留作 deprecated alias of `where(_meta={"version": v})`
 
@@ -481,9 +542,10 @@ def apply(EntityClass):
 ### 6.2 Shipped code citations
 
 - `src/factgraph/sdk/store.py:427-528` 4 个 namespace manager 当前形态(`_SDKReadManager` / `_SDKWriteManager` / `_SDKAssertionsManager` / `_SDKSchemaManager`)
+- `src/factgraph/sdk/store.py:427` `_SDKAssertionsManager` rename target → `AssertionsManager`(per §4.2.4;扩 `where/retract`)
 - `src/factgraph/sdk/store.py:518` `_SDKSchemaManager.add(*classes)` 当前混杂 register / extend(Q14 拆三 target)
 - `src/factgraph/sdk/facade.py:127-180` `AssertionRecordSet.where(...)` 当前 flat kwargs signature(Q13 target)
-- `src/factgraph/sdk/facade.py:482-...` `FieldAssertions` class 当前形态(Q11 删除 target)
+- `src/factgraph/sdk/facade.py:482-...` `FieldAssertions` class 当前形态(Q11 删除 target — 合并进 `AssertionView`)
 - `src/factgraph/sdk/facade.py:1928-1932` `set_field` docstring 中的 "auto-materialize on first write" 说明(per ADR-IC §4.2.3 legacy 定位)
 - `src/factgraph/authoring/schema_compile.py:140-150` `<EntityType>:exists` predicate declaration 路径(§4.5.3 protection 输入)
 - `src/factgraph/authoring/schema_compile.py:227-260` `_compile_identity_predicate` `is_identity_field: True` 路径(§4.5.2 swap reject 输入)
@@ -556,7 +618,7 @@ def apply(EntityClass):
 
 - 本 ADR §4 Decision adopted 后,Slice 3a blueprint 不可单方面 override Q10/Q11/Q12/Q13/Q14 决策;若需要 override,走"本 ADR superseded by 新 ADR-API-v2"路径
 - §4.1 三层 navigation key 排他原则:carry-forward 到任何 future namespace 修订 — Layer 1 不接 asrt_id / Layer 2 不接 EntityClass / Layer 3 不接 EntityClass
-- §4.2 AssertionView 纯读 view:carry-forward — 不可添加 mutation method(违反三层 separation);`fg.assertions.retract` 永远挂 namespace manager
+- §4.2 AssertionView 纯读 view + AssertionsManager 类型分离:carry-forward — `AssertionView` 不可添加 mutation method(违反三层 separation);`fg.assertions` 永远是 `AssertionsManager` 不是 `AssertionView`;`AssertionsManager.retract` 是 Layer 3 唯一 asrt_id-based mutation 入口;不可让 `fg.assertions` 同时承担两种身份(per §4.2.3 type-level 一致性 rationale)
 - §4.3 `version(v)` hard remove:carry-forward — 不可重新作为 deprecated alias 加回;招纳原则永久有效(普通 meta equality 不上 view 一等接口)
 - §4.4 `_meta` 统一:carry-forward — flat kwarg `source/trace_id/version/meta` 永远不可加回;`_meta` dict 是唯一 meta 输入路径
 - §4.5 schema.extend enforcement:carry-forward;**ADR-IC §4.3.6 contract 是永久 cross-ADR 依赖**,本 ADR 7 种 non-additive diff reject 不可单独放松;若 future 需要支持某 diff(如 description metadata 改),走 supersede 路径
@@ -574,6 +636,9 @@ ADR adoption(本 ADR commit Status: proposed → adopted)前:
 - [x] §4.5.2 + §4.5.3 显式满足 ADR-IC §4.3.6 contract 两个 enforcement points(Identity↔Field swap reject + `:exists` predicate protection)
 - [x] §6.6.2 显式列出 ADR-IC §4.3.6 contract satisfaction 路径(每项 part 对应到 §4.5.2 / §4.5.3 具体行)
 - [x] §1.5 含 user reviewer 5 项 review focus 每项落点
+- [x] §4.2.1 显式区分 `AssertionsManager`(`fg.assertions`,含 `retract` mutation)vs `AssertionView`(纯读)— 对象身份不冲突
+- [x] §4.2.2 `AssertionView.at(t)` / `during` 返回 `AssertionRecordSet`(per Rule 4 终结操作)
+- [x] §4.2.2 `AssertionView.where(...)` 含完整 canonical filter signature(`field` / `e_ref` / `value` / `value_tag` / `_meta`)
 
 Post-adoption verification(implementation 阶段验证):
 
@@ -583,9 +648,14 @@ Post-adoption verification(implementation 阶段验证):
 - [ ] Slice 3a implementation:`fg.entities.where(User, status="active", _meta={"source": "seed"})` work + per-assertion AND 语义 verify(per §4.4.3)
 - [ ] Slice 3a implementation:`fg.fields.set(asrt_id, value)` raise `SDKStoreError` 含 layer hint(per §4.1.1 排他)
 - [ ] Slice 3a implementation:`fg.assertions.retract(asrt_id)` work(挪自 `fg.write.retract`)(per §4.1.2)
-- [ ] Slice 3a implementation:`AssertionView` 类型存在;`FieldAssertions` / `AssertionNamespace` 已删(import 报 ImportError)(per §4.2.3)
-- [ ] Slice 3a implementation:`snap.assertions.retract(...)` raise `AttributeError`(`AssertionView` 无 mutation method)(per §4.2.1)
-- [ ] Slice 3a implementation:`AssertionView` 仅暴露 `field/at/active/all/by_id/by_ids/where`(per §4.2.1 contract)
+- [ ] Slice 3a implementation:`AssertionView` 类型存在;`FieldAssertions` / `AssertionNamespace` 已删(import 报 ImportError)(per §4.2.4)
+- [ ] Slice 3a implementation:`AssertionsManager` 类型存在(rename 自 `_SDKAssertionsManager`)+ `fg.assertions` instance 是 `AssertionsManager` 类型(`isinstance(fg.assertions, AssertionsManager) is True`;`isinstance(fg.assertions, AssertionView) is False`)(per §4.2.1)
+- [ ] Slice 3a implementation:`snap.assertions` / `snap.field("name")` / `fg.assertions.field(F)` 返回 `AssertionView` 类型(`isinstance(snap.assertions, AssertionView) is True`)(per §4.2.4)
+- [ ] Slice 3a implementation:`snap.assertions.retract(...)` raise `AttributeError`(`AssertionView` 无 mutation method)(per §4.2.2)
+- [ ] Slice 3a implementation:`fg.assertions.retract(asrt_id)` work(`AssertionsManager.retract` 是 Layer 3 唯一 asrt_id-based mutation 入口)(per §4.2.1)
+- [ ] Slice 3a implementation:`AssertionView` 仅暴露 `field/at/active/all/by_id/by_ids/where`(无 `retract` / `set` / `add` / `delete` / `version`)(per §4.2.2 contract)
+- [ ] Slice 3a implementation:`view.at(t)` 返回 `AssertionRecordSet` 类型(`isinstance(view.at(t), AssertionRecordSet)`)— 终结操作 per Rule 4(per §4.2.2)
+- [ ] Slice 3a implementation:`AssertionsManager.where(field=F, e_ref=R, value=v, value_tag=t, _meta={...})` + `AssertionView.where(field=F, e_ref=R, value=v, value_tag=t, _meta={...})` signature 一致(per §4.2.1 委托模式)
 - [ ] Slice 3a implementation:`view.version("v1")` raise `AttributeError`(method 已删)(per §4.3.1)
 - [ ] Slice 3a implementation:`view.where(_meta={"version": "v1"})` work(per §4.3.1 替代)
 - [ ] Slice 3a implementation:`record_set.where(source="x")` raise `TypeError`(flat kwarg 已删)(per §4.4.1)
@@ -602,4 +672,5 @@ Post-adoption verification(implementation 阶段验证):
 
 | Date | Stage | Event | Notes |
 |---|---|---|---|
-| 2026-05-29 | proposed | ADR-API drafted | 5 Qs(Q10 三层 alpha breaking rename / Q11 AssertionView 统一 + 纯 read / Q12 version() hard remove / Q13 `_meta` 统一 / Q14 schema 三分 + ADR-IC §4.3.6 contract 满足)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-FI adopted @ `b288ea9e` + ADR-IC adopted @ `2d0866ed` + user reviewer 2026-05-29 ADR-API 5 项 directional review focus。Branch: `v0.2.0-q-api-namespace-decision-2026-05-29`。Commit: TBD post-stage |
+| 2026-05-29 | proposed | ADR-API drafted | 5 Qs(Q10 三层 alpha breaking rename / Q11 AssertionView 统一 + 纯 read / Q12 version() hard remove / Q13 `_meta` 统一 / Q14 schema 三分 + ADR-IC §4.3.6 contract 满足)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-FI adopted @ `b288ea9e` + ADR-IC adopted @ `2d0866ed` + user reviewer 2026-05-29 ADR-API 5 项 directional review focus。Branch: `v0.2.0-q-api-namespace-decision-2026-05-29`。Commit: `a4bd94a5` |
+| 2026-05-29 | proposed | ADR-API amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 3 findings:**(P1-1)** `fg.assertions` 对象身份 vs `AssertionView` 纯读冲突 — 若 `fg.assertions` 本身是 `AssertionView`,则 view 必须有 retract(破坏纯读)或 fg.assertions 无 retract(破坏三层 mutation 集中)。重构 §4.2 为 5 子节:§4.2.1 `AssertionsManager` 类型(`fg.assertions` 唯一 instance;承载 `retract` + 委托 read shortcuts 到内部 `_ledger_view: AssertionView`)+ §4.2.2 `AssertionView` 类型(纯读)+ §4.2.3 rationale 5 条 type-level 一致性 + §4.2.4 合并范围(加 `_SDKAssertionsManager` rename → `AssertionsManager`)+ §4.2.5 Step 1 直接合并 rationale。**(P1-2)** `AssertionView.at(t)` 返回类型错(原 `→ AssertionView`)— per Rule 4 `view.at(t) == view.active.at(t)` 是终结操作 → 改为 `→ AssertionRecordSet`;`during` 同改。**(P2)** `AssertionView.where(...)` signature 缺 `field/e_ref`(原仅 `value/value_tag/_meta`)— 跟 §4.1.2 / §4.4.2 canonical filter 不一致 → 补全 5 参数 signature(`field/e_ref/value/value_tag/_meta`)。同步 cascade:§4.1.1 表加 "Manager / View 类型" 列(`EntitiesManager` / `FieldsManager` / `AssertionsManager`)+ Layer 3 行明确 `AssertionsManager` 非 `AssertionView`/ §4.6 cross-Q summary Q11 row update / §5.1 加 2 项 Q11 alternative reject(fg.assertions 是 view + at(t) 返回 view)/ §6.2 shipped citation 加 `_SDKAssertionsManager` rename target / §7.4 no-retroactive boundary §4.2 row 扩 type 分离 carry-forward / §8 Acceptance Criteria 加 3 项 proposed-stage check + 5 项 post-adoption verification(含 isinstance 类型 check + signature 一致性 check)。 |
