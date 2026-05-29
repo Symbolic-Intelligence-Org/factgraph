@@ -1,6 +1,6 @@
 # Audit: Identity-as-Claim design-points vs Shipped Runtime
 
-- Status: skeleton (Phase 1 inventory only — Phases 2-4 deferred to subsequent commits)
+- Status: **complete** (Phase 1-4 all landed;ready for Stage 2 Q-decisions + Stage 3 synthesis)
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
 - Authority: working triage document; informs but does not lock implementation. Implementation decisions follow only after audit-row review + Stage 2 Q-decisions + Stage 3 synthesis.
@@ -444,6 +444,249 @@ Phase 2 已识别 3 cluster;A-series 浮出 2 个新 cluster:
 ### 7.2 A-series Q candidates(Phase 3 surfaced;Phase 4 finalize)
 
 详见 §5.2 末尾 12 个 Q-A1 → Q-A12 候选 + Q-I 跟 Q-A 关联清单。Phase 4 时统一编号 + 加 ADR structure。
+
+### 5.3 D-series — Cross-doc seams + specific discrepancies(Phase 4)
+
+I-series 覆盖 invariant 层;A-series 覆盖 architecture commitment 层;**D-series 是 cross-doc seam + 具体 shipped contract 不一致**项(已 published docs / module docs / public quickstart 会随 Step 1 stale)。
+
+| # | Cross-doc / contract location | Design impact | shipped current state | 分类 | Stage 4 docs slice 处理 |
+|---|---|---|---|---|---|
+| **D1** | `src/factgraph/sdk/docs/04_api_surface.en.md` §0 Namespace Map 第 23-24 行示例 `fg.read.get(User, user_id="u-1")` / `fg.write.add(User.tag, alice, "engineer")` | A11(三层重组)— `fg.read` / `fg.write` 替换为 `fg.entities` / `fg.fields` | shipped 权威文档 | **(c) shape conflict**(doc-level) | docs sync slice;Step 1 与 API slice 同周期 update |
+| **D2** | `04_api_surface.en.md` §2.3 / §2.4 / §2.5 / §2.6+ namespace 表格 | A11 + A17 — 表格结构按 fg.entities / fg.fields / fg.assertions / fg.schema 三分重写 | shipped doc 描述 `fg.read.get/find/match/ref` / `fg.write.set/add/retract/edit` / `fg.assertions.by_id/by_ids/active/all/field` / `fg.schema.add/ingest/validate_provenance` | **(c) shape conflict**(doc-level) | docs sync slice;新增 `fg.entities.create/where/exists/delete` / `fg.fields.retract/delete/get` / `fg.assertions.where/retract` / `fg.schema.register/extend/apply` 表 |
+| **D3** | `04_api_surface.en.md` §4 `FieldAssertions, AssertionRecordSet, AssertionRecord, AssertionMeta` types section | A12(AssertionView 统一)— `FieldAssertions` 合并进 `AssertionView`;独立类型删除 | shipped doc 描述独立 `FieldAssertions` 类型 + `AssertionNamespace` 间接覆盖 | **(c) shape conflict**(doc-level) | docs sync slice;type 重组同步 |
+| **D4** | `docs/official/kernel/quickstart/assertions.md` line 145 `valid_from / valid_to | Used by .at(t)` | A15 Rule 4(at 默认 active)+ Step 2+ `during` planned | shipped `.at(t)` 用 valid_from/valid_to 半开区间(per A15 ✓);Step 2+ `during((t1, t2))` 还没 doc | **(a) shipped covers** + **(e) deferred-aligned** | docs Step 1 sync slice 仅小修;`during` Step 2+ 文档扩展 |
+| **D5** | `assertions.md` lines 307-308 `.at(t) = .active.at(t)` + `.version(v) = .active.version(v)` shortcuts | A13 招纳原则 + A15 Rule 4 — `.at(t)` 留;**`.version(v)` 删除**(普通 meta equality 不上一等方法) | shipped doc 文档化 `.version(v)` 一等方法 | **(c) shape conflict**(doc-level) | docs sync slice;`.version()` 删除文档 + 改用 `.where(_meta={"version": v})` 等价示例 |
+| **D6** | `assertions.md` line 348 `.where(value=..., source=..., trace_id=..., version=..., meta={...})` table row | A14 `_meta` 统一 — flat `source/trace_id/version` kwargs 折叠进 `_meta={...}` | shipped doc 描述 half-flat half-dict | **(c) shape conflict**(doc-level) | docs sync slice;`.where` signature 改 `(value=, value_tag=, _meta={...})` |
+| **D7** | `assertions.md` lines 599-602 "fg.assertions.where(...), fg.assertions.at(...) are intentionally NOT supported" | A11(三层重组)+ A12(AssertionView)— design **ADDS** `fg.assertions.where(field=, e_ref=, value=, value_tag=, _meta=)` 作为 canonical ledger filter;assertions namespace 上的 `at(...)` 不上(留 view scope `.at(t)`)|✗| 直接与 design 矛盾的 doc 陈述 | **(c) shape conflict**(doc-level — 关键!) | docs sync slice;line 599-602 必须重写 — 改为 "fg.assertions.where(...) shipped after Step 1;fg.assertions.at(...) intentionally NOT supported(time semantics 仅在 view scope)" |
+| **D8** | `04_api_surface.en.md` §2.14 `FrozenAssertionView` type 命名 | PDF triage C6 — `FrozenAssertionView` → `FrozenAssertionSet` / `AssertionIdSet`(Step 2+) | shipped FrozenAssertionView 类型 | **(e) deferred-aligned**(Step 2+) | docs Step 2+ 重命名同步 |
+| **D9** | `04_api_surface.en.md` §2.14 + `fg.views` namespace | PDF triage C5 — `fg.views` → `fg.assertion_views`(Step 2+) | shipped `fg.views.create/update/delete/get/list` | **(e) deferred-aligned**(Step 2+) | docs Step 2+ namespace 重命名同步 |
+| **D10** | `core/store/ledger.py:512-580+` `append_claim` / `append_claim_args` / `append_meta_rows` 等 deprecated public 方法 | INV-1 + INV-3 — deprecated 路径仍存在,可能 Step 1+ cleanup 时移除 | shipped 标 `deprecated::` 提示但仍 public | **(b) small gap**(cleanup-eligible) | 跟随 ledger migration slice 时一并 evaluate 删除 |
+| **D11** | `core/store/_builders.py:315-318` `is_entity_exists` + `is_identity_field` flag 使用点 | A4(Identity-as-Claim emission)+ A20(`:exists` legacy 降级)| shipped `is_identity_field` flag declared in schema_ir(`schema_compile.py:256`)但 **Identity field Claim 本身 NOT emitted**;`is_entity_exists` flag 用于 `:exists` Claim emit via `application/entity_write.py:389 record_exists` op | **(f) target-gap / pending migration** | Identity Claim emission slice;同 INV-7c implementation |
+
+### 5.4 N-series — Verified shipped honors design(positive findings,Phase 4 verification 结果)
+
+记录 audit 过程中**spot-check 完成 + 确认 shipped honors design** 的 finding,作为正面 baseline(避免后续 slice 误认为 gap):
+
+| # | Item | Verification evidence | Status |
+|---|---|---|---|
+| **N1** | INV-3 SQLite 单事务原子写 | `core/store/ledger.py:430-451` `append_assertion` uses `with self._write_session() as (conn, post_commit)` 单 connection;所有 inserts(claims/claim_args/meta_rows/annotation_rows/ingest_keys)在同一 `_conn` context;`post_commit` hook 延迟 in-memory cache flip 到 DB commit 后。`append_revocation`(`:492-510`)同样模式 | ✅ Phase 4 final spot-check 通过 — INV-3 完整 honored |
+| **N2** | Identity field 在 schema_ir 已 declared(为 Step 1 emission 提供 infrastructure) | `authoring/schema_compile.py:152-159` 每个 Identity field 生成 predicate with `is_identity_field: True` flag + pred_id `{owner_prefix}:{field_name}`;`is_identity_field` flag 在 `_builders.py:317` / `derivation_compile.py:365` / `where_schema_lowering.py:74` 多处被读取使用 | ✅ Step 1 Identity Claim emission **不需要新 schema_ir 字段** — 复用现有 `is_identity_field` flag |
+| **N3** | `:exists` Claim emission 路径 shipped | `application/entity_write.py:389` `op == "record_exists"` handler;`schema_compile.py:140-150` 已 declare `<EntityType>:exists` predicate with `is_entity_exists: True`;`application/protocol/entity_write.py:90` 协议接口含此 op | ✅ `:exists` Claim Step 1 transitional 降级 **不破坏现有 emission 路径**;只需 Identity Claim emission 启用后 `:exists` 加冗余降级 |
+| **N4** | `IdentityEditor` immutability shipped(per INV-7a Editor part) | `sdk/facade.py:448-479` 三个 mutation 方法 `set` / `add` / `retract` 全部 raise `SDKStoreError("identity field is immutable in editor; open a new editor with different identity instead")` | ✅ INV-7a Layer 1 editor-time immutability 完整 honored |
+| **N5** | `encode_idref_v1` typed content-derived hash 路径完整 | `core/protocol/idref_v1.py:67-73` 完整;`sdk/store.py:1916` + `application/schema_runtime.py:367` 两个调用点都 use canonical Identity bundle;`tup_v1` 8 tag 协议稳定 | ✅ X-style typed Thing constructor 完整 shipped — A1 / Q1 idref_v1 lock 不需要新 implementation |
+
+## 6. Commitment Triage
+
+### 6.3 Total triage summary(Phase 4)
+
+合 §5.1 / §5.2 / §5.3 — **48 项 finding 总分类**:
+
+| 桶 | I-series | A-series | D-series | 合计 |
+|---|---:|---:|---:|---:|
+| (a) shipped covers | 7 | 3 | 0 | 10 |
+| (a)+(b) / (a)+(f) / (b)+(d) 混合 | 3 | 5 | 0 | 8 |
+| (b)+(d) | — | 1 | 0 | 1 |
+| (b) small gap | — | — | 1 | 1 |
+| (c) shape conflict / (c)+(d) | 0 | 6 | 6 | 12 |
+| (d) genuinely new | 0 | 4 | 0 | 4 |
+| (e) deferred-aligned | 0 | 0 | 2 | 2 |
+| (f) pure target-gap | 6 | 3 | 1 | 10 |
+
+(部分 finding 跨多桶,所以总和 > 单 finding 计数)
+
+**关键观察**(全局):
+1. **Zero pure (c) shape conflict 在 invariant 层** — 没有 ledger / Identity invariant 直接 conflict shipped(全是 target-gap)
+2. **(c) shape conflict 集中在 API surface + 已发布 docs** — 6 项 A-series + 6 项 D-series — 这是 Step 1 主要 migration 复杂度来源
+3. **(f) target-gap 集中在 Step 1 + 精简-migration** — Identity-as-Claim cluster(I/A 4 项)+ system namespace cluster(I 4 项 + A 1 项)
+4. **(e) deferred-aligned 仅 2 项** — `FrozenAssertionView` 重命名 + `fg.views` 重命名(都 Step 2+)
+5. **INV-3 + Identity schema_ir infrastructure + idref_v1 全 shipped** — Step 1 实施有非常 solid baseline
+
+## 7. Stage 2 Questions
+
+### 7.3 Q finalize(Phase 4) — 17 Qs with ADR skeleton
+
+per user reviewer 2026-05-29 Phase 4 guidance:**保留粒度,不急合并**。每个 Q 加 ADR 入口字段(Q-D? 是 cross-doc 性质,合并到 Q-A 中)。完整 ADR doc 在 Stage 2 独立分支 + 独立 ADR file。
+
+#### Q list
+
+| Q | Title | Source | Decision target | Cluster | Slice(per §10) |
+|---|---|---|---|---|---|
+| **Q1** | `fg.fields.set(IdentityField, ...)` schema-aware rejection at Layer 2 | Q-I1 + A2 / A16 | 是否在 Layer 2 拒绝 Identity 写入(SDK 端 application 层 schema-aware check)?vs 仅在 `fg.assertions.retract` 应用 INV-7c? | Identity-as-Claim cluster | Slice 2 |
+| **Q2** | Identity Claim emission layer(SDK `create` 内 vs application 层 derive) | Q-I2 + A4 + N2 + N3 | 复用现有 `is_identity_field` flag,Identity Claim emission 路径具体在哪层?`fg.entities.create` SDK shell 内 emit 还是 application 层(类似 `record_exists` op)自动 derive? | Identity-as-Claim cluster | Slice 2 |
+| **Q3** | INV-7c 策略 C cache lifecycle(init/lazy/schema-evolution hook) | Q-I3 + A16 + A18 | Identity pred_id set 何时建?启动时一次扫 schema_ir;lazy 第一次 retract 时建;schema.extend/register 触发重建。3 选 1 + invalidation/concurrency 行为 | Identity-as-Claim cluster | Slice 2 |
+| **Q4** | INV-9 enforcement timing vs Q-PR1 adapter rewrite 解耦 | Q-I4 + A19 + A21 | per user reviewer Phase 3 guidance:**不让 Step 1 被 adapter rewrite 阻塞**。INV-9 strict enforcement(set_field len<=1 check)能否独立于 PyReason adapter rewrite?option (a) Step 1 INV-9 strict + adapter 同步 rewrite;(b) Step 1 不 enforce INV-9,留 Step 2+ adapter rewrite slice 一起 lock | System namespace cluster + adapter | Slice 3b + 5(Step 2+) |
+| **Q5** | `__system__.*` rejection enforcement layer | Q-I5 + A19 | rejection 在 application 层(SDK shell)还是 protocol 层(`set_field`)?protocol 层更严(防 internal API 误用)但跟 internal `retract_by_asrt` 路径(本身写 `__system__.revokes`)冲突 — 需 internal/external API 分离 | System namespace cluster | Slice 3a |
+| **Q6** | Boundary rule: mutable Field 设计 contract — `volatile=False` 显式 vs 文档化 | Q-A1 | 是否在 descriptor 上加 `volatile: bool = False` 显式 contract(违反时 schema validation 提示);还是仅作为 schema 设计 best-practice 文档(没有机械 enforce) | Form I cluster | Slice 1 + 4(docs) |
+| **Q7** | `_DataMember` 共通基类 public API exposure | Q-A2 + A10 | `_DataMember` 是否暴露为 public API(`from factgraph.sdk import _DataMember`)— 影响 user-defined descriptor extension 能力;还是 internal? | Form I cluster | Slice 1 |
+| **Q8** | Cardinality 推断 backward-compat strategy | Q-A3 + A7 | alpha 阶段直接 breaking(`Field()` 必须无 cardinality kwarg,从类型推断)还是 backward-compat(同时支持 explicit + 推断)?user §17 lock-in "no alias",audit 期 confirm | Form I cluster | Slice 1 |
+| **Q9** | Layer 4 enum/pattern validation layer(compile-time vs write-time) | Q-A4 + Q-A5 + A8 + A9 | Literal enum + pattern regex 在哪验?(a) compile time(`schema_compile.py` static)— 用户写错立刻报;(b) write time(`set_field` runtime)— 数据写入前最后一道关卡;(c) 两层都做 | Form I cluster | Slice 1 |
+| **Q10** | API namespace 3-layer migration strategy | Q-A6 + A11 | alpha 直接 breaking rename(`fg.read.*` → `fg.entities.*`;`fg.write.*` → `fg.fields.*`)+ 加新方法?vs namespace 并行(新加 entities/fields,read/write 留 deprecated alias)?user §17 lock-in "no alias",audit 期 confirm | API namespace cluster | Slice 3a |
+| **Q11** | AssertionView 类型合并时机 | Q-A7 + A12 | Step 1 直接合并 `FieldAssertions` + `AssertionNamespace` 入 `AssertionView`(breaking)还是 Step 1 引入 `AssertionView` + 保留 deprecated alias 一周期 | API namespace cluster | Slice 3a |
+| **Q12** | `version(v)` 招纳原则 enforcement strategy | Q-A8 + A13 + D5 | hard remove(breaking;cleanest)还是 `DeprecationWarning` 一周期(softer)?docs `assertions.md` 同步删 | API namespace cluster | Slice 3a + 4(docs) |
+| **Q13** | `_meta` 统一 — flat kwargs 删除策略 | Q-A9 + A14 + D6 | shipped `where(source=, trace_id=, version=, meta=)` flat kwargs 直接 breaking 删?还是双向接受(both `source=` flat 和 `_meta={"source": ...}`)一周期? | API namespace cluster | Slice 3a + 4(docs) |
+| **Q14** | `fg.schema.add` 3-way split + schema evolution constraint slice grouping | Q-A10 + A17 + A18 | `register/extend/apply` 三分跟 schema evolution `extend` 拒绝 Identity↔Field swap 是同 slice 还是分?三分本身 vs evolution enforcement 的 dependency | API namespace cluster | Slice 3a |
+| **Q15** | 7 数据精简 migration slice strategy | Q-A11 + A19 + A21 + D10 | 7 步精简 → 几个 implementation slice?Step 1 跟随哪些?哪些独立 slice?跟 Q4(INV-9 adapter coupling)关联 | Ledger migration cluster + System namespace cluster | Slice 3a + 3b |
+| **Q16** | `:exists` Claim emission removal timing | Q-A12 + A20 + D11 | Step 1 Identity Claim emission 后,`:exists` 同步移除(breaking;clean)?vs 双写一段时间然后剔除(read path 兼容性)?vs 永久保留为 legacy emission(无强制) | Identity-as-Claim cluster | Slice 2 |
+| **Q17** | Cross-doc + public quickstart sync timing | D1-D9 cumulative | docs `04_api_surface.en.md` + `assertions.md` 是 Step 1 各 slice 完成后立即同步,还是合并到一个 docs sync slice 最后一起做?后者干净,前者 step-by-step shippable | Docs cluster | Slice 4 |
+
+#### Q 跨 cluster 依赖图(simplified)
+
+```text
+Form I cluster (Q6 / Q7 / Q8 / Q9)
+   │ slice 1 完成提供 _DataMember + Identity/Field 二分基础
+   ↓
+Identity-as-Claim cluster (Q1 / Q2 / Q3 / Q16)
+   │ slice 2 完成提供 Identity Claim emission + INV-7c enforcement
+   ↓
+API namespace cluster (Q10 / Q11 / Q12 / Q13 / Q14)
+   │ slice 3a 完成提供 entities/fields/assertions 三层 + AssertionView
+   ↓
+System namespace cluster (Q4 / Q5 / Q15) ⇆ adapter rewrite slice 5 (Step 2+)
+   │ slice 3b 部分 — INV-9 strict + revokes → __system__ 取决于 Q4 decision
+   ↓
+Docs cluster (Q17)
+   │ slice 4 完成 — 04_api_surface + assertions.md + 其他 quickstart sync
+```
+
+## 8. Reviewer focus
+
+按重要性排序,后续 reviewer(Stage 2 ADR / Stage 4 blueprint preflight)应该特别关注:
+
+1. **Q1 / Q2 / Q3 cluster 的 implementation interaction** — Identity Claim emission(Q2)→ Identity pred_id set cache 建立(Q3)→ Layer 2 fields.set boundary check(Q1)是 chain dependency,3 个 Q 必须 cohesive decisions 否则 INV-7c 实施分裂
+2. **Q4 vs Q-PR1 cluster 分离** — per user reviewer:identity-as-claim Step 1 **不能被 adapter rewrite 阻塞**。Q4 decision 必须明确 Step 1 INV-9 enforcement scope(可能弱化为"identity Claim 是 unary,Field Claim 也是 unary,只有 adapter 写的 edge Claim 暂时是 n-ary,标 known-exception 直到 Step 2+ adapter rewrite")
+3. **Q10 / Q11 / Q12 / Q13 cluster 跟 docs slice(Q17)同步** — API surface 大改动 + public docs 同步,任何一项掉队就形成 cross-doc drift
+4. **N2 / N3 / N5 baseline 是 Step 1 implementation 的 advantage** — Identity field 已 declared in schema_ir + `:exists` emission 路径已存在 + idref_v1 完整 shipped,大幅降低 Slice 2 实施风险
+5. **D7 "fg.assertions.where intentionally NOT supported" doc seam 是高优** — 不及时删 docs 会让 users 学错的契约;Step 1 docs slice(Slice 4)首条目
+
+## 9. Acceptance Criteria
+
+本 audit 的 acceptance:
+
+- [x] Phase 1 inventory:design-points referenced + shipped 文件 inventory 完整(§3 + §4 + §4.10)
+- [x] Phase 2 I-series:16 invariants 全部 triage,5+1 state 分类完整,5 Q candidates 浮(§5.1 + §6.1 + §7.1)
+- [x] Phase 3 A-series:21 architecture commitments 全部 triage,4 batches × 5-6,12 Q candidates 浮 + Q-I ↔ Q-A 关联(§5.2 + §6.2 + §7.2)
+- [x] Phase 4 D-series:cross-doc seams + 具体 contract discrepancies 11 项 triage,5+1 state 分类(§5.3)
+- [x] Phase 4 N-series:5 positive findings(INV-3 + schema_ir Identity infrastructure + `:exists` emission + IdentityEditor immutability + idref_v1)— 提供 Step 1 implementation baseline confidence(§5.4)
+- [x] Phase 4 total triage:48 finding 全局分类汇总(§6.3)
+- [x] Phase 4 Q finalize:17 Qs with ADR skeleton(scope/decision target/cluster/slice membership)— ready for Stage 2 ADR drafting(§7.3)
+- [x] Phase 4 reviewer focus:5 高优 reviewer 关注点(§8)
+- [x] Phase 4 recommended implementation slice order(per user reviewer 2026-05-29 新增需求 — §10)
+- [x] Cross-doc seams 11 项识别(§5.3 D1-D9)
+- [x] INV-3 transaction boundary final spot-check 完成(§5.4 N1)
+- [x] Phase 4 published reference docs row-drafting time re-read(`04_api_surface.en.md` + `assertions.md` cross-doc seam 部分)
+
+## 10. Recommended Implementation Slice Order
+
+**per user reviewer 2026-05-29 Phase 4 新增需求**:不仅出 Q list,也出 recommended slice 顺序作为 Stage 3 synthesis 的输入。
+
+### 10.1 Slice 顺序(按依赖排)
+
+```text
+Slice 1 — Schema / Form I refactor                              [Step 1, foundational]
+  └ Q6 / Q7 / Q8 / Q9
+  └ _DataMember 共通基类 + Identity/Field 二分(已 partial shipped 微调)
+  └ description 提升 + pattern 新增 + cardinality 推断 + Literal 枚举
+  └ schema_compile 路径接受新 descriptor 形态
+  └ 不动 ledger / API namespace / docs(只动 SDK schema 层 + schema_ir)
+  └ 完成度高时 ship gate;不强制等其他 slice
+
+Slice 2 — Identity Claim emission + INV-7c implementation       [Step 1, depends on Slice 1]
+  └ Q1 / Q2 / Q3 / Q16
+  └ Identity Claim emission 路径(复用 is_identity_field flag,在 N2 baseline 上加 emission)
+  └ INV-7c 策略 C — Identity pred_id set + retract path lookup + schema-evolution hook
+  └ `:exists` Claim 处理(legacy/transitional 标 + 可选移除)
+  └ Layer 1/2/3 三层 Identity write boundary enforce
+  └ 必须 Slice 1 (_DataMember + Identity descriptor 稳定) 后做
+
+Slice 3a — API surface 三层重组 + AssertionView 统一            [Step 1, depends on Slice 1+2]
+  └ Q5 / Q10 / Q11 / Q12 / Q13 / Q14
+  └ fg.read/write → fg.entities/fields(rename + 重组)
+  └ fg.entities 新方法:create / where / exists / delete(create 依赖 Slice 2 Identity emission)
+  └ AssertionView 统一(合并 FieldAssertions + AssertionNamespace)
+  └ _meta 统一 meta 入口(flat → dict)
+  └ version() 招纳原则 enforce
+  └ fg.schema 三分(register/extend/apply)+ evolution 约束 enforce
+  └ __system__.* rejection(per Q5 decision)
+  └ 最大工作量 slice;Step 1 收尾
+
+Slice 3b — Ledger schema partial migration(NOT 同步 INV-9 strict)[Step 1, parallel-eligible with 3a]
+  └ Q4(部分 — Step 1 INV-9 weak enforce,strict 留 Step 2+)/ Q15
+  └ 3-table consolidation 部分:meta_rows → claim_meta 改名 + 复合 PK
+  └ revokes 表 → __system__.revokes Claim(per Q5 decision 配合)
+  └ ingest_keys 删除(per 精简 6)
+  └ 暂时 NOT enforce INV-9 strict(`len(rest_terms) <= 1`)— 留 Q-PR1 adapter rewrite slice
+  └ 可跟 Slice 3a 并行(不同模块,无 schema 依赖)
+
+Slice 4 — Docs / public quickstart sync                         [Step 1, depends on Slice 1-3]
+  └ Q17 + D1-D9 cumulative
+  └ 04_api_surface.en.md 全面 rewrite(namespace 三层 + AssertionView + _meta 等)
+  └ assertions.md 删 .version(v) + 改 _meta + 删 D7 误导 line 599 陈述
+  └ 其他 quickstart docs Identity-as-Claim 概念引入
+  └ docs/references/* 静态 cross-ref 修正
+  └ 必须 Slice 1+2+3 都稳定后做 — 否则 docs 跟代码漂移
+  └ docs-only slice(无代码 surface 改动)
+
+Slice 5+ (Step 2+) — Q-PR1 PyReason adapter rewrite + INV-9 strict enforce
+  └ Q4 剩余决策(INV-9 strict)
+  └ PyReason _edge_rest_terms 重写为 unary Relationship Claim lowering
+  └ 跟其他 Step 2+ items(InternalIdentity / 唯一性 / 备用键)分批
+  └ 跟 Step 1 完全分离 — 不阻塞
+```
+
+### 10.2 Slice 依赖图
+
+```text
+Slice 1 (Form I) ──┬─→ Slice 2 (Identity Claim)
+                   │        ↓
+                   └─→ Slice 3a (API namespace) ←─→ Slice 3b (Ledger migration)
+                                ↓                        ↓
+                                └────→ Slice 4 (Docs sync) ←──┘
+                                                ↓
+                                        [Step 1 完成]
+                                                ↓
+                                     Slice 5+ (Step 2+,independent)
+```
+
+### 10.3 Recommended sequencing rationale
+
+- **Slice 1 first** — Form I 是 foundational 重构,所有后续 slice 都需要 `_DataMember` + Identity/Field 稳定 descriptors;独立 ship 友好
+- **Slice 2 after Slice 1** — Identity Claim emission 依赖 Form I descriptor 完成;但**不依赖** API namespace 重组(Identity Claim emission 在 application 层,SDK shell namespace 是 different concern)
+- **Slice 3a after Slice 1+2** — `fg.entities.create` 需要 Identity Claim emission 路径就位;AssertionView 统一可独立做但与 namespace 同步最经济
+- **Slice 3b parallel-eligible with 3a** — ledger migration 改 backend,不动 SDK surface;Slice 3a 改 SDK 不动 ledger backend;两者可并行
+- **Slice 4 last** — docs sync 必须 follow stable 代码,否则永远追;docs-only slice 无代码风险 + 一次性同步效率最高
+- **Slice 5+ separated** — 严格阻止 Step 1 被 adapter rewrite 阻塞(per user 关键 guidance);Q-PR1 单独 slice 落地
+
+### 10.4 Stage 3 synthesis 输入
+
+本 §10 + §7.3 Q list + §6.3 total triage 是 Stage 3 synthesis 的 audit 端 input。synthesis doc 会重分桶:
+- blueprint-eligible(可直接进 Stage 4):Slice 1 / Slice 2 (Identity Claim emission part)
+- gated by Q decisions(等 Stage 2 ADR):Slice 2 (INV-7c cache) / Slice 3a / Slice 3b 多数项
+- cross-doc blocked:Slice 4(等所有代码 slice 完成)
+- deferred(Step 2+):Slice 5+
+
+## 11. Cross-doc seams catalog
+
+合 §5.3 D1-D9 + §10 Slice 4 docs sync 范围:
+
+| Doc file | Section | Step 1 sync 内容 | Slice |
+|---|---|---|---|
+| `src/factgraph/sdk/docs/04_api_surface.en.md` | §0 Namespace Map + §2.3-§2.5+ namespace tables + §4 type rows | 全面 rewrite — 三层 namespace + AssertionView + _meta + 招纳原则 + 三分 schema | Slice 4 |
+| `src/factgraph/sdk/docs/04_api_surface.en.md` | §2.14 (FrozenAssertionView) + (fg.views) | rename(Step 2+ per A18 + A19) | Step 2+ |
+| `docs/official/kernel/quickstart/assertions.md` | lines 145(at) / 307-308(at/version shortcuts) / 348(.where signature) / 380-387(where no-args) | 删 `.version(v)` 文档化 + `_meta` 统一 signature + at(t) 保留 | Slice 4 |
+| `docs/official/kernel/quickstart/assertions.md` | lines 599-602("fg.assertions.where intentionally NOT supported") | **关键 rewrite** — 改为 "fg.assertions.where shipped after Step 1;at/version 仅在 view scope" | Slice 4 |
+| `docs/official/kernel/quickstart/` 其他 quickstart pages | Identity-as-Claim 概念引入 + create/edit/delete flow | 新章节 / 添加示例 | Slice 4 |
+| `docs/references/working/design-points/readme.md`(dirty baseline) | 旧 design-points 引用更新 | 单独 unrelated dirty 不动 | (per CADENCE — 跨 session preserved dirty,不入本 audit) |
+
+## 12. Audit completeness checklist
+
+- [x] 所有 in-scope rows triaged(I-series 16 + A-series 21 + D-series 11 = 48 finding)
+- [x] 所有 open Qs surfaced(17 Qs ready for Stage 2)
+- [x] 所有 frictions enumerated(per §8 reviewer focus + §10 sequencing rationale)
+- [x] Out-of-scope explicitly listed(§2 in/out + Q-PR1 + Rule/Inference/Semantics/Evidence/Persistence Step 2+)
+- [x] Recommendations provided(§10 slice order + §11 cross-doc seams catalog)
+- [x] Status transition `skeleton` → `complete`(本 commit)
+
+**Status: complete**(Phase 4 收尾;ready for Stage 2 Q-decisions + Stage 3 synthesis)。
 
 ## 8. Reviewer Focus(Phase 4 填入)
 
