@@ -40,7 +40,7 @@ audit Q4 question framing:
 
 - **§4.2 grouping**:Q4 跨 System namespace + adapter cluster;**单 Q ADR**(per meta-ADR §4.2 — Q4 自身一个 sub-decision)
 - **§4.4 Step 1 zero-Q-PR1 dependency hard rule**:Step 1 / Slice 3b implementation **不**得 depend on PyReason adapter rewrite — 本 ADR §4.2 显式实施
-- **§4.4 4-layer enforcement**:本 ADR §4.3 Slice 5 strict enforce 在 write path(Ledger.append_assertion entry);**不**触 protocol delayed 层(per ADR-SYS-B §4.2 / 本 ADR §4.2)
+- **§4.4 4-layer enforcement**:本 ADR §4.3 Slice 5 strict enforce 在 **write_protocol layer ingress**(`set_field` 入口,**before** typed Claim DTO construction;per §4.1.1);Ledger 层走 type-system + SQL schema enforce(DTO drop rest_terms field + 表 drop rest_terms 列);**不**触 protocol delayed 层(per ADR-SYS-B §4.2 / 本 ADR §4.2)
 
 ### 1.3 ADR-SYS-B §4.7.2 三项绑定 contract — 本 ADR 必须关闭
 
@@ -51,7 +51,7 @@ ADR-SYS-B adopted `6b0ac349` §4.7.2 Slice 5 三项绑定 carve-out:
 > | 精简 4 真正 drop `rest_terms` 列(+ Q-PR1 adapter rewrite + ADR-INV9 strict enforce)| ALTER TABLE drop rest_terms;adapter rewrite 改写 Pyreason 2-position;ADR-INV9 锁的 strict / weak enforce 落地 | **三项绑定:任一项缺失则 Slice 5 不可 mark `implemented`** |
 
 本 ADR **必须**:
-- §4.3 锁定第 3 项 — INV-9 strict enforce 形态(write-path runtime check on Ledger.append_assertion entry)
+- §4.3 锁定第 3 项 — INV-9 strict enforce 形态(write_protocol layer ingress runtime check per §4.1.1 + Slice 5 后 DTO/SQL type-level enforce 主防御 per §4.1.2)
 - §4.4 锁定第 2 项 contract — PyReason adapter rewrite 走 identity §11.2 option (A) Relationship Claim lowering
 - §4.5 显式 confirm 三项绑定 — 任一项缺失则 Slice 5 不可 mark implemented
 
@@ -72,7 +72,7 @@ ADR-SYS-B adopted `6b0ac349` §4.7.2 Slice 5 三项绑定 carve-out:
 
 **Slice 3b vs Slice 5 enforce 形态**:
 - Slice 3b(per ADR-SYS-B §4.2 选 (c)):`claims` 表加 `value` + `value_tag` 双列;NEW write paths 用 value+value_tag;legacy adapter 继续写 rest_terms;**不**加 blanket runtime weak enforce — Slice 3b 后 ledger 仍接受 n-ary writes
-- Slice 5(本 ADR 锁定):drop `rest_terms` 列 + adapter rewrite(per §4.4)+ Ledger.append_assertion entry 加 `len(rest_terms) <= 1` runtime strict enforce(per §4.3)— **三项同时落地**
+- Slice 5(本 ADR 锁定):drop `rest_terms` 列(SQL schema + Claim DTO 同步 drop)+ adapter rewrite(per §4.4)+ write_protocol layer ingress 加 `len(rest_terms) > 1` runtime strict check + DTO/SQL type-level enforce 主防御(per §4.1 + §4.3)— **三项同时落地**
 
 ## 2. Scope
 
@@ -80,10 +80,10 @@ ADR-SYS-B adopted `6b0ac349` §4.7.2 Slice 5 三项绑定 carve-out:
 
 | Sub-decision | 锁的内容 |
 |---|---|
-| **§4.1 Q4-1** | INV-9 strict enforce **形态** — write-path runtime check at Ledger.append_assertion entry;`if len(rest_terms) > 1: raise WriteProtocolError`(per ledger-spec §4.6 + 本 ADR §4.3.2);**不**加 read-path strict assertion(per §3 Non-scope)|
+| **§4.1 Q4-1** | INV-9 strict enforce **形态** — **write_protocol layer ingress runtime check**(`set_field` 入口,before typed Claim DTO construction;per §4.1.1)+ Slice 5 后 Claim DTO drop rest_terms field + SQL schema drop 列 type-level enforce 主防御(per §4.1.2);**不**加 Ledger.append_assertion 层 length check(DTO 无 attribute 可 check;per §4.1.5);**不**加 read-path strict assertion(per §3 Non-scope)|
 | **§4.2 Q4-2** | INV-9 enforce **Step 1 / Slice 3b 时机** — Slice 3b 期间 **完全不加** runtime enforce(实施 ADR-SYS-B §4.2 选 (c) dual-coexistence;legacy adapter 继续写 2-position rest_terms);跟 meta-ADR §4.4 zero-Q-PR1 hard rule 一致 |
 | **§4.3 Q4-3** | INV-9 enforce **Step 2+ / Slice 5 时机** — Slice 5 strict enforce 落地 + 三项绑定其一(per ADR-SYS-B §4.7.2)|
-| **§4.4 Q-PR1** | PyReason adapter rewrite path — 走 identity §11.2 option (A) Relationship Claim lowering;edge facts reify 为 ledger 已有的 unary Relationship Claim 形态(`Claim(pred_id=<rel_type>, e_ref=<source>, value=<target_e_ref>, value_tag="entity_ref")`);**不**改 ledger schema、**不**为 adapter 开 INV-9 例外、**不**做 edge 拆 2 Claim |
+| **§4.4 Q-PR1** | PyReason adapter rewrite path — 走 identity §11.2 option (A) Relationship Claim lowering;edge facts reify 为 **multiple first-class unary Claims**(anchor Claim source-target + edge value as Relationship Field Claim;per §4.4.2);edge value 是 **semantic payload**(不进 claim_meta);**不**改 ledger schema、**不**为 adapter 开 INV-9 例外、**不**做 (C) synthetic-keyed 拆分 |
 | **§4.5** | 三项绑定 closure — §4.3 INV-9 strict + §4.4 adapter rewrite + ADR-SYS-B §4.7.2 第 1 项 drop rest_terms 列 = Slice 5 acceptance 必备 3 项;任一项缺失 → Slice 5 不可 mark implemented |
 
 ## 3. Non-scope
@@ -190,7 +190,7 @@ def set_field(
 
 #### 4.2.2 实施 implication
 
-- Slice 3b implementation `Ledger.append_assertion` entry **不**加 `len(rest_terms) > 1` check
+- Slice 3b implementation `write_protocol.set_field` 入口 + `Ledger.append_assertion` 全程 **不**加 `len(rest_terms) > 1` check;legacy adapter 路径继续 work
 - Slice 3b blueprint 起草时 **不需要**包含 PyReason adapter 改动(adapter 继续 work — 因 schema 加 value+value_tag 双列但 rest_terms 列 retained per ADR-SYS-B §4.2 选 (c))
 - Slice 3b implementation 仍可在 NEW path 的实施细节中 hardcode `rest_terms=[]`(`append_revocation_claim` / SDK fields.set 等)— **不**是 enforce,是 schema contract per §4.3.2
 
@@ -198,8 +198,8 @@ def set_field(
 
 **锁定**:Step 2+ Slice 5 PyReason adapter rewrite slice **必须**同时:
 1. ALTER TABLE drop `rest_terms` 列(ADR-SYS-B §4.7.2 第 1 项)
-2. PyReason adapter rewrite — `_edge_rest_terms` 走 identity §11.2 option (A) Relationship Claim lowering(本 ADR §4.4)
-3. **`Ledger.append_assertion` entry 加 §4.1.1 INV-9 strict enforce**(本 ADR §4.3)
+2. PyReason adapter rewrite — `_edge_rest_terms` 走 identity §11.2 option (A) multi-Claim Relationship lowering(anchor + value Field Claims;本 ADR §4.4)
+3. **`write_protocol` layer ingress 加 §4.1.1 INV-9 strict runtime check + Claim DTO drop rest_terms field + SQL schema drop 列 type-level enforce 主防御**(本 ADR §4.1 + §4.3.2)
 
 **三项绑定**:任一项缺失则 Slice 5 不可 mark `implemented`。
 
@@ -286,7 +286,7 @@ Slice 5 后:
   edge fact: (source, target, value)
   → reify 为 multiple first-class unary Claims:
 
-    [1] Source-target anchor Claim (relationship 锚点 — INV-7b mirrored):
+    [1] Source-target anchor Claim (first-class schema-declared relationship anchor):
         Claim(
           pred_id=<rel_type>,           # 或 <rel_type>:<endpoint_marker> 形态;具体 schema 决定
           e_ref=<source_e_ref>,
@@ -361,10 +361,10 @@ per identity §11.2 table:
 
 | Sub-decision | Decision | Implementation surface | Slice |
 |---|---|---|---|
-| Q4-1 | INV-9 strict enforce form = write-path runtime check at `Ledger.append_assertion` entry;`len(rest_terms) > 1` raise WriteProtocolError | Slice 5 加 5 行 check;Slice 3b 不动 | Slice 5 |
-| Q4-2 | Slice 3b 完全不加 runtime enforce(per ADR-SYS-B §4.2 选 (c) 一致;legacy adapter 继续写 2-position)| 跟 ADR-SYS-B 同 — `Ledger.append_assertion` Slice 3b entry 不加 INV-9 check;legacy adapter 不动 | Slice 3b(零 enforce 改动)|
-| Q4-3 | Slice 5 strict enforce 落地 + 三项绑定其一(per ADR-SYS-B §4.7.2)| Slice 5 加 §4.1.1 check + 三项绑定 acceptance criteria 落地 | Slice 5 |
-| Q-PR1 | PyReason adapter rewrite 走 identity §11.2 option (A) Relationship Claim lowering | Slice 5 adapter `_edge_rest_terms` → `_edge_to_relationship_claim`;reify n-ary edge → unary Relationship Claim | Slice 5 |
+| Q4-1 | INV-9 strict enforce form = **write_protocol layer ingress runtime check**(`set_field` 入口,before typed Claim DTO construction;per §4.1.1)+ Slice 5 后 DTO/SQL type-level enforce 主防御 | Slice 5 加 5 行 check at write_protocol;Slice 3b 不动 | Slice 5 |
+| Q4-2 | Slice 3b 完全不加 runtime enforce(per ADR-SYS-B §4.2 选 (c) 一致;legacy adapter 继续写 2-position)| 跟 ADR-SYS-B 同 — `write_protocol.set_field` + `Ledger.append_assertion` Slice 3b 全程不加 INV-9 check;legacy adapter 不动 | Slice 3b(零 enforce 改动)|
+| Q4-3 | Slice 5 strict enforce 落地 + 三项绑定其一(per ADR-SYS-B §4.7.2)| Slice 5 加 §4.1.1 write_protocol ingress check + §4.1.2 DTO/SQL drop rest_terms + 三项绑定 acceptance criteria 落地 | Slice 5 |
+| Q-PR1 | PyReason adapter rewrite 走 identity §11.2 option (A) **multi-Claim Relationship lowering**(anchor Claim + value Field Claim)| Slice 5 adapter `_edge_rest_terms` → `_edge_to_relationship_claims`(plural);reify n-ary edge → multiple first-class unary Claims(anchor + value Field;edge value 不进 claim_meta)| Slice 5 |
 
 **三项绑定 closure**(per §1.3 ADR-SYS-B §4.7.2 contract requirement):
 
@@ -380,8 +380,9 @@ per identity §11.2 table:
 ```
 
 **整体**:Slice 5 实施范围 ≈ 200-400 行代码改动:
-- `core/store/ledger.py` Ledger.append_assertion entry 加 §4.1.1 INV-9 check + ALTER TABLE drop rest_terms 列 + Claim DTO drop rest_terms 字段
-- `adapters/pyreason/accept.py` _edge_rest_terms rewrite 为 _edge_to_relationship_claim(per §4.4)
+- `core/evidence/write_protocol.py` `set_field` 入口加 §4.1.1 INV-9 runtime check(before typed Claim DTO construction)
+- `core/store/ledger.py` ALTER TABLE drop rest_terms 列 + `Claim` DTO drop rest_terms 字段(SQL/DTO type-level enforce per §4.1.2)
+- `adapters/pyreason/accept.py` `_edge_rest_terms` rewrite 为 `_edge_to_relationship_claims`(plural;返回 anchor + value Field Claims;per §4.4)
 - `find_claim_args` wrapper LEGACY path 清理(per ADR-SYS-B §4.3.5 Slice 5 cleanup)
 - migrate `projector.py:96` + `chosen.py:148` 直读 `Claim.value/value_tag`
 - contract test(per §4.3.2 7 项)
@@ -467,12 +468,13 @@ per identity §11.2 table:
 **INV-9 baseline**(Slice 5 enforce target):
 - `src/factgraph/core/store/ledger.py:82-88` `claims` 表当前 5 列(`seq, asrt_id, pred_id, e_ref, rest_terms`);`rest_terms TEXT NOT NULL` n-ary
 - `src/factgraph/core/store/ledger.py:22-26` `Claim` dataclass `rest_terms: list[tuple[str, Any]]` n-ary
-- `src/factgraph/core/store/ledger.py:363-378` `Ledger.append_assertion` entry(Slice 5 加 §4.1.1 INV-9 check;ADR-SYS-B §4.1.4 signature 演化已经 drop 3 参数后,此处加 length check)
+- `src/factgraph/core/store/ledger.py:363-378` `Ledger.append_assertion` entry — Slice 5 时 Claim DTO 已 drop rest_terms field(per ADR-SYS-B §4.1.4 signature 演化 + 本 ADR §4.1.2 type-level enforce);**不**在此层加 length check(per §4.1.5)— check 在上游 `write_protocol.set_field` ingress
+- `src/factgraph/core/evidence/write_protocol.py:128-157` `set_field` entry(Slice 5 加 §4.1.1 INV-9 runtime check before typed Claim DTO construction)
 - `src/factgraph/core/protocol/tup_v1.py:156-168` `canonical_bytes_tup_v1(rest_terms)` 协议 list 包装(Slice 5 drop 列后 dead)
 - `src/factgraph/core/protocol/tup_v1.py:196-208` `claim_args_from_rest_terms` 路径(Slice 5 drop 列后 dead — 同步 ADR-SYS-B §4.3.5 wrapper Slice 5 cleanup)
 
 **Q-PR1 baseline**(Slice 5 adapter rewrite target):
-- `src/factgraph/adapters/pyreason/accept.py:187-205` `_edge_rest_terms(fact, pred_spec)` — **当前返回 2-element rest_terms**;Slice 5 rewrite 为 `_edge_to_relationship_claim`
+- `src/factgraph/adapters/pyreason/accept.py:187-205` `_edge_rest_terms(fact, pred_spec)` — **当前返回 2-element rest_terms**;Slice 5 rewrite 为 `_edge_to_relationship_claims`(plural;返回 typed `Claim` list — anchor + value Field Claims per §4.4.2)
 - `src/factgraph/adapters/pyreason/accept.py:94-160` `accept_pyreason_session` — node unary + edge n-ary;Slice 5 edge 路径走 Relationship Claim lowering
 - `src/factgraph/adapters/pyreason/accept.py:165-184` `_node_rest_terms`(unary,Slice 5 不动 — node 路径已经 unary)
 - `src/factgraph/adapters/pyreason/accept.py:208-213` `_node_e_ref` / `_edge_from_e_ref`(e_ref materialization,Slice 5 不动)
@@ -551,7 +553,7 @@ per identity §11.2 table:
 | Slice 5(Step 2+)blueprint draft(`workflow/blueprints/active/2026-05-29_slice-5-adapter-rewrite.md`)| TBD(per CADENCE drafter/reviewer role assignment)| ADR-INV9 adopt 后 |
 | Slice 5 pre-impl grep:扫所有 shipped 代码 / tests / docs 用 `_edge_rest_terms` / `rest_terms` 列 / `claim_args_from_rest_terms` / `canonical_bytes_tup_v1(rest_terms)` — 全 migrate 或 dead code 清理 | Slice 5 blueprint preflight(Step 4.6.5)| Slice 5 blueprint scoped 后 |
 | Slice 5 implementation:`Ledger.append_assertion` entry 加 §4.1.1 INV-9 check + ALTER TABLE drop `rest_terms` 列 + `Claim` DTO drop `rest_terms` 字段 | Slice 5 implementation | Slice 5 Step 4.7 |
-| Slice 5 implementation:PyReason adapter rewrite — `_edge_rest_terms` → `_edge_to_relationship_claim`(per §4.4)| Slice 5 implementation | Slice 5 Step 4.7 |
+| Slice 5 implementation:PyReason adapter rewrite — `_edge_rest_terms` → `_edge_to_relationship_claims`(plural;returns typed Claim list — anchor + value Field per §4.4.2)| Slice 5 implementation | Slice 5 Step 4.7 |
 | Slice 5 implementation:`find_claim_args` wrapper LEGACY path cleanup + migrate `projector.py:96` + `chosen.py:148` 直读(per ADR-SYS-B §4.3.5 Slice 5 cleanup follow-up)| Slice 5 implementation | Slice 5 Step 4.7 |
 | Slice 5 implementation:contract test 覆盖三项绑定 acceptance(per §4.3.2 7 项 + §4.4.4 PyReason roundtrip)| Slice 5 implementation | Slice 5 Step 4.7 |
 | docs sync(Slice 4 或 ADR-DOCS)— `ledger-schema-specification §9.4` + `identity-mechanism-redesign §11` 跟 ADR-INV9 对齐;`04_api_surface.en.md` 加 Slice 5 后 Claim DTO 终态说明 | Slice 4 docs sync 或 ADR-DOCS | Slice 5 完成后 |
@@ -565,7 +567,7 @@ per identity §11.2 table:
 ### 7.4 No-retroactive boundary
 
 - 本 ADR §4 Decision adopted 后,Slice 5 blueprint 不可单方面 override Q4 / Q-PR1 决策;若需要 override,走 "本 ADR superseded by 新 ADR-INV9-v2" 路径
-- §4.1 write-path strict enforce 位置:carry-forward — 永远在 `Ledger.append_assertion` entry;不可改为 read-path strict 或 SQL CHECK 形态
+- §4.1 write-path strict enforce 位置:carry-forward — 永远在 `write_protocol` layer ingress(`set_field` 入口,before typed Claim DTO construction;per §4.1.1);**不可**移到 `Ledger.append_assertion` 层(per §4.1.5 — DTO drop rest_terms field 后无 attribute 可 check);**不可**改为 read-path strict 或 SQL CHECK 形态
 - §4.2 Slice 3b 完全不加 enforce:carry-forward — 不可后续在 Slice 3b implementation 加 enforce(违反 zero-Q-PR1 + 跟 ADR-SYS-B §4.2 (c) 冲突)
 - §4.3 三项绑定 + Slice 5 落地:carry-forward — 三项 atomicity 不可拆;不可在 Slice 5 之前 / 之后 / 单独落地任一项
 - §4.4 PyReason adapter rewrite 走 option (A) Relationship Claim lowering:carry-forward — 不可改走 option (B) INV-9 例外 / option (C) Edge 拆 2 Claim;若 future 需要 (B) / (C),走 supersede 本 ADR 路径
@@ -595,11 +597,12 @@ Post-adoption verification(implementation 阶段验证 — Slice 5):
 **Slice 5 三项绑定 acceptance**:
 - [ ] Slice 5 blueprint `Status: scoped` 时,blueprint §1 Related Docs 引用本 ADR + Stage 4 §10 Outcome acceptance criteria 含 §4.3.2 + §4.5 三项绑定 closure
 - [ ] Slice 5 implementation **项 1**:`claims` 表 ALTER TABLE drop `rest_terms` 列 verified;`Claim` DTO drop `rest_terms` 字段;所有 `claim_args_from_rest_terms` / `canonical_bytes_tup_v1(rest_terms)` 路径 dead code 清理
-- [ ] Slice 5 implementation **项 2**:PyReason adapter `_edge_rest_terms` rewrite 为 `_edge_to_relationship_claim`(or similar);edge facts → Relationship Claim lowering(`pred_id=<rel_type>, e_ref=<source>, value=<target>, value_tag="entity_ref"`;per §4.4.1)
-- [ ] Slice 5 implementation **项 3**:`Ledger.append_assertion` entry 加 `len(rest_terms) > 1 → raise WriteProtocolError` strict enforce(per §4.1.1;Slice 5 drop 列后此 check 可能转 defense-in-depth 形态 — `assert claim.rest_terms == []` 或类似)
-- [ ] Slice 5 implementation:contract test — PyReason edge fact roundtrip:edge fact in → adapter lowering → ledger Relationship Claim(unary)→ query back via ledger reader → reconstruct edge fact
-- [ ] Slice 5 implementation:contract test — `Ledger.append_assertion` rejects length > 1 rest_terms with WriteProtocolError(含 ADR-INV9 §4.1 reference + Relationship migration hint);**不同于 Slice 3b 行为**(Slice 3b 接受 n-ary)
-- [ ] Slice 5 implementation:Slice 3b 期间已 shipped `__system__.revokes` Claim + Identity Claim + Field Claim 路径(per ADR-SYS-B + ADR-IC)在 Slice 5 strict enforce 后 **仍正常工作**(rest_terms=[] trivially 满足 `len <= 1`)
+- [ ] Slice 5 implementation **项 2**:PyReason adapter `_edge_rest_terms` rewrite 为 `_edge_to_relationship_claims`(**plural** — 返回 typed `Claim` list);edge facts → **multi-Claim** Relationship lowering(per §4.4.2):**[1]** anchor Claim(`pred_id=<rel_type>, e_ref=<source>, value=<target>, value_tag="entity_ref"`)+ **[2]** edge value Field Claim(`pred_id=<rel_type>:<value_field_name>, e_ref=<relationship_instance_e_ref>, value=<edge_value>, value_tag=<value_tag>`);两条 atomic 同 transaction
+- [ ] Slice 5 implementation **项 3**:`write_protocol.set_field` 入口加 §4.1.1 INV-9 runtime check(before typed Claim DTO construction);**`Ledger.append_assertion` 入口不加 length check**(per §4.1.5 — Claim DTO 已 drop rest_terms field,无 attribute 可 check;type-level enforce 通过 DTO/SQL schema 实现)
+- [ ] Slice 5 implementation:contract test — PyReason edge fact roundtrip:edge fact in → adapter lowering → ledger **两条 Claims(anchor + value Field)**→ query back via ledger reader → reconstruct edge fact with semantic value
+- [ ] Slice 5 implementation:contract test — `write_protocol.set_field` rejects length > 1 rest_terms with WriteProtocolError(含 ADR-INV9 §4.1 reference + Relationship migration hint);**不同于 Slice 3b 行为**(Slice 3b 接受 n-ary)
+- [ ] Slice 5 implementation:contract test — `Ledger.append_assertion` 入口接受 typed `Claim` without rest_terms attribute(type-level enforce + SQL schema 无列);任何尝试 construct multi-arg Claim DTO 在静态 / runtime fail
+- [ ] Slice 5 implementation:Slice 3b 期间已 shipped `__system__.revokes` Claim + Identity Claim + Field Claim 路径(per ADR-SYS-B + ADR-IC)在 Slice 5 strict enforce 后 **仍正常工作**(value/value_tag 已是 unary 形态;trivially 满足)
 
 **ADR-SYS-B §4.3.5 follow-up**(per Slice 5 cleanup):
 - [ ] Slice 5 implementation:`find_claim_args` wrapper LEGACY path dead code 清理(rest_terms 列已 drop,LEGACY path 不可达)
@@ -607,10 +610,11 @@ Post-adoption verification(implementation 阶段验证 — Slice 5):
 - [ ] Slice 5 implementation:`SDKStore.find_claim_args`(`sdk/store.py:182`)deprecate / 评估 remove(per ADR-SYS-B §4.3.5 Slice 5 cleanup follow-up)
 
 **Cross-ADR contract verification**:
-- [ ] Slice 5 implementation:Relationship Claim 形态(`value_tag="entity_ref"`)跟 ledger-spec §3.1 "Entity-ref field" row 一致
-- [ ] Slice 5 implementation:PyReason adapter 用的 relationship types 已通过 `fg.schema.register/extend/apply` 路径注册(per ADR-API §4.5.1)— **若未注册,adapter 必须先 register**;Slice 5 blueprint 加 explicit registration step
-- [ ] Slice 5 implementation:Relationship Claim 的 pred_id 不以 `__system__` 开头(per ADR-SYS-A G1/G2);adapter 输出 pred_id 经 schema declared,自然安全
-- [ ] Slice 5 implementation:Relationship Claim 写入路径不污染 ADR-IC `_protected_anchor_pred_ids` cache(Relationship pred_id 不属 `is_identity_field` / `is_entity_exists`)
+- [ ] Slice 5 implementation:anchor Claim 形态(`value_tag="entity_ref"`)跟 ledger-spec §3.1 "Entity-ref field" row 一致;value Field Claim 走 "普通 value field" row 一致(per §4.4.4)
+- [ ] Slice 5 implementation:PyReason adapter 用的 relationship types 全部已通过 `fg.schema.register/extend/apply` 路径注册(per ADR-API §4.5.1)— **若未注册,adapter 必须先 register**;Slice 5 blueprint 加 explicit registration step;value Field 也必须 schema-declared on Relationship type
+- [ ] Slice 5 implementation:anchor + value Field Claims 的 pred_id 都不以 `__system__` 开头(per ADR-SYS-A G1/G2);adapter 输出 pred_id 经 schema declared,自然安全
+- [ ] Slice 5 implementation:anchor + value Field Claims 写入路径不污染 ADR-IC `_protected_anchor_pred_ids` cache(Relationship pred_id 不属 `is_identity_field` / `is_entity_exists`)
+- [ ] Slice 5 implementation:contract test — **edge value 不进 claim_meta**(per §4.4.1 边界);query Relationship anchor Claim 的 claim_meta 返回不含 `edge_fact_value` / 类似 key
 
 **docs sync**:
 - [ ] Slice 4 docs sync 或 ADR-DOCS:`ledger-schema-specification §9.4` 跟 ADR-INV9 对齐;`identity-mechanism-redesign §11.3` 跟 ADR-INV9 §4.4 对齐(Slice 5 实施完成 mark);`04_api_surface.en.md` 加 Slice 5 后 Claim DTO 终态说明
@@ -620,4 +624,5 @@ Post-adoption verification(implementation 阶段验证 — Slice 5):
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-29 | proposed | ADR-INV9 drafted | Q4 + Q-PR1 + 三项绑定 closure(关闭 ADR-SYS-B §4.7.2 carve-out)。Q4-1 strict enforce form = write-path runtime check at `Ledger.append_assertion` entry;Q4-2 Slice 3b 完全不加 enforce(跟 ADR-SYS-B §4.2 选 (c) + meta-ADR §4.4 zero-Q-PR1 一致);Q4-3 Slice 5 strict enforce + 三项绑定其一(per ADR-SYS-B §4.7.2);Q-PR1 走 identity §11.2 option (A) Relationship Claim lowering(reify n-ary edge → unary `Claim(pred=<rel_type>, e_ref=<source>, value=<target>, value_tag="entity_ref")`)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-SYS-B adopted @ `6b0ac349` + identity §11 design-point + ledger-spec §4.6 INV-9 + 5 cross-ADR(SYS-A/SYS-B/IC/API/FI)兼容性 confirm。Branch: `v0.2.0-q-inv9-adapter-enforcement-decision-2026-05-29`。Commit: `8fd22243` |
-| 2026-05-29 | proposed | ADR-INV9 amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 2 findings — 1 P1 + 1 P2 都是 substantive contract issues。**(P1)** §4.1 strict enforce 锁在 `Ledger.append_assertion` entry 的 `len(claim.rest_terms) > 1` check,但 §4.3.2 同时要求 Slice 5 drop `rest_terms` 字段 from Claim DTO + drop 列 from claims 表;两项不能同时是 Slice 5 终态 contract — 若 DTO 无 rest_terms field,runtime check 在 Ledger 入口不可成立。**重构 §4.1**:check 位置改为 **write_protocol layer ingress**(`write_protocol.set_field` 入口,**before** typed Claim DTO construction)— rest_terms list 仍 alive 的最后一层 + 跟 meta-ADR §4.4 4-layer enforcement application/write 层 strict 一致;Ledger.append_assertion 看到的 typed Claim 已是 unary 形态(type-level enforce)+ SQL schema drop 列 strict 实施;runtime check 在 Slice 5 后是 defense-in-depth 防 legacy caller / future regression。新增 §4.1.2 Slice 5 type-level enforce + §4.1.5 显式 reject Ledger 层 check rationale;§4.3.2 acceptance 重写分 4 类(schema/DTO 演化 + strict enforce 位置 + adapter rewrite + cross-ADR cleanup + contract test);§5.1 新增 2 项 reject(Ledger 层 check + transitional DTO field 两阶段)。**(P2)** §4.4.1 lowering contract 把 edge `fact["value"]` 直接放进 `claim_meta` — 这是 shadow fact channel 风险(claim_meta 是 non-truth provenance 边界,不应承载 semantic payload)。**重构 §4.4**:加 §4.4.1 PyReason edge value 的 truth status 显式锁 — semantic payload(典型 confidence / weight / truth degree),**不**是 provenance;§4.4.2 重写 lowering contract 为 **multi-Claim** 形态 — anchor Claim(source-target,INV-7b mirrored)+ edge value Field Claim(schema-declared Relationship attribute);两条 Claims atomic per INV-3 + ADR-IC §4.2 emission;§4.4.3 Relationship instance addressing model 留 Slice 5 blueprint(显式约束 — 跟 ADR-IC cache / ADR-SYS-A G1/G2 / unique per (source, target) 正交);§4.4.4 兼容性 cross-ADR confirm 4 项;§4.4.5 reject (B)/(C) 同前 + 加注 §4.4.2 multi-Claim 不是 (C) 的 synthetic-keyed 变种;§4.4.6 Slice 5 implementation surface 加 schema register verification 前置;§5.1 新增 Q-PR1 alternative reject `edge value → claim_meta shadow channel` 含 4 项 invariant 违反 rationale;§8 acceptance criteria 重写分 4 类含 edge value 不进 claim_meta verification + multi-Claim atomic write verification。同步 cascade:§8 proposed-stage check 加 6 项 P1/P2-amend star check;post-adoption verify 重写 4 类 15+ 项。 |
+| 2026-05-29 | proposed | ADR-INV9 2nd-round amended(P1/P2 sync cleanup,still proposed)| User reviewer 第 2 轮 review 返回 3 findings — 2 P1 + 1 P2 都是上轮 amendment 漏 sync 残留;binding sections + acceptance criteria 自相矛盾。**(P1 sync — Ledger.append_assertion entry 残留 9 处)** 上轮 §4.1 重构 check 位置为 write_protocol layer ingress,但 §1.2 / §1.3 / §1.4 / §2 Scope §4.1 Q4-1 row / §4.2.2 Slice 3b note / §4.5 三项绑定 ASCII diagram 项 3 / §4.5 Cross-Q summary Q4-1 row / §4.5 implementation surface estimate / §6.2 shipped citation / §7.2 follow-up / §7.4 no-retroactive 仍写 "Ledger.append_assertion entry 加 strict enforce" — 跟 §4.1 + §4.3.2 自相矛盾(DTO drop field 后 Ledger 入口无 attribute 可 check)。**修复**:全量 sync 11 处 wording 为 "write_protocol layer ingress runtime check + Slice 5 后 DTO/SQL type-level enforce 主防御"(per §4.1.1 + §4.1.2 + §4.1.5)。**(P1 sync — single Relationship Claim 残留 3 处)** 上轮 §4.4 重构 lowering 为 multi-Claim,但 §2 Scope §4.4 Q-PR1 row / §4.5 Cross-Q summary Q-PR1 row / §4.5 implementation surface estimate / §6.2 shipped citation / §7.2 follow-up / §8 post-adoption 项 2 + Cross-ADR contract verify 仍写 "单条 Relationship Claim" + 函数名 `_edge_to_relationship_claim`(单数)。**修复**:全量 sync 7 处 wording 为 "multi-Claim Relationship lowering(anchor + value Field Claims)" + 函数名 `_edge_to_relationship_claims`(plural)+ post-adoption 项 2 改 2 条 Claims atomic 形态。**(P2 sync — INV-7b mirrored 误扩张)** §4.4.2 lowering ASCII diagram 把 source-target anchor Claim 标 "INV-7b mirrored",但 INV-7b 锁的是 Identity-as-Claim mirrored(per identity §5.2),不应扩张到 Relationship anchor 语义。**修复**:改 "first-class schema-declared relationship anchor"(语义清晰 + 跟 identity invariant 解耦)。同步 cascade:§8 post-adoption 项 2 + 项 3 重写 reflect multi-Claim + write_protocol ingress check;Cross-ADR contract verify 加 anchor + value Field Claims 区分 + claim_meta 不含 edge value 验证。 |
+| 2026-05-29 | proposed | ADR-INV9 amended(1st-round P1/P2 fixes,proposed)| User reviewer post-draft review(同日)返回 2 findings — 1 P1 + 1 P2 都是 substantive contract issues。**(P1)** §4.1 strict enforce 锁在 `Ledger.append_assertion` entry 的 `len(claim.rest_terms) > 1` check,但 §4.3.2 同时要求 Slice 5 drop `rest_terms` 字段 from Claim DTO + drop 列 from claims 表;两项不能同时是 Slice 5 终态 contract — 若 DTO 无 rest_terms field,runtime check 在 Ledger 入口不可成立。**重构 §4.1**:check 位置改为 **write_protocol layer ingress**(`write_protocol.set_field` 入口,**before** typed Claim DTO construction)— rest_terms list 仍 alive 的最后一层 + 跟 meta-ADR §4.4 4-layer enforcement application/write 层 strict 一致;Ledger.append_assertion 看到的 typed Claim 已是 unary 形态(type-level enforce)+ SQL schema drop 列 strict 实施;runtime check 在 Slice 5 后是 defense-in-depth 防 legacy caller / future regression。新增 §4.1.2 Slice 5 type-level enforce + §4.1.5 显式 reject Ledger 层 check rationale;§4.3.2 acceptance 重写分 4 类(schema/DTO 演化 + strict enforce 位置 + adapter rewrite + cross-ADR cleanup + contract test);§5.1 新增 2 项 reject(Ledger 层 check + transitional DTO field 两阶段)。**(P2)** §4.4.1 lowering contract 把 edge `fact["value"]` 直接放进 `claim_meta` — 这是 shadow fact channel 风险(claim_meta 是 non-truth provenance 边界,不应承载 semantic payload)。**重构 §4.4**:加 §4.4.1 PyReason edge value 的 truth status 显式锁 — semantic payload(典型 confidence / weight / truth degree),**不**是 provenance;§4.4.2 重写 lowering contract 为 **multi-Claim** 形态 — anchor Claim(source-target,INV-7b mirrored)+ edge value Field Claim(schema-declared Relationship attribute);两条 Claims atomic per INV-3 + ADR-IC §4.2 emission;§4.4.3 Relationship instance addressing model 留 Slice 5 blueprint(显式约束 — 跟 ADR-IC cache / ADR-SYS-A G1/G2 / unique per (source, target) 正交);§4.4.4 兼容性 cross-ADR confirm 4 项;§4.4.5 reject (B)/(C) 同前 + 加注 §4.4.2 multi-Claim 不是 (C) 的 synthetic-keyed 变种;§4.4.6 Slice 5 implementation surface 加 schema register verification 前置;§5.1 新增 Q-PR1 alternative reject `edge value → claim_meta shadow channel` 含 4 项 invariant 违反 rationale;§8 acceptance criteria 重写分 4 类含 edge value 不进 claim_meta verification + multi-Claim atomic write verification。同步 cascade:§8 proposed-stage check 加 6 项 P1/P2-amend star check;post-adoption verify 重写 4 类 15+ 项。 |
