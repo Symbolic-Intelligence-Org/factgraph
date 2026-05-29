@@ -688,74 +688,16 @@ Slice 1 (Form I) ──┬─→ Slice 2 (Identity Claim)
 
 **Status: complete**(Phase 4 收尾;ready for Stage 2 Q-decisions + Stage 3 synthesis)。
 
-## 8. Reviewer Focus(Phase 4 填入)
-
-> ⏳ Phase 4 待填:reviewer 应特别关注的 finding 集 + cross-doc seams + cross-slice contract preservation。
-
-## 9. Acceptance Criteria(Phase 4 填入)
-
-> ⏳ Phase 4 待填:本 audit 完成的判定标准(覆盖率 / Q 数 / 5-bucket 分布 / cross-doc seams 完整性)。
-
 ---
 
-## Phase 1 完成状态
+## 13. Audit changelog(per-phase commit summary)
 
-- [x] Header(Status / Date / Branch / Base commit / Reviewer handoff)
-- [x] §1 Purpose(本 audit 目的 + 重要 framing:design 描述目标态而非当前态)
-- [x] §2 Audit Scope(in scope / out of scope)
-- [x] §3 Canonical Sources Read(design-points + workflow / cadence sources)
-- [x] §4 Shipped Source Read(SDK / facade / ledger / protocol / write / authoring / adapter / published docs)
-- [x] §4.10 Coverage check(标识 Phase 2 row-drafting time re-read 需要补的文件)
-- [ ] §5-§9 留 Phase 2-4(I-series → A-series → D-series + cross-doc + Q surface)
+| Phase | Commit | Content | Insertions |
+|---|---|---|---:|
+| Phase 1 | `770e15c4` | Shipped inventory baseline(§1-§4 + §4.10 coverage check)| +290 |
+| Phase 2 | `59d84284` | I-series invariant triage(§5.1 + §6.1 + §7.1 — 16 INVs + 5 Q-I)| +108 |
+| Phase 3 | `9959b5a4` | A-series architecture triage(§2.0 5+1 taxonomy 提升 + §5.2 21 commitments + §6.2 + §7.2 — 12 Q-A + Q-I↔Q-A 关联)| +152 |
+| Phase 4 | `bf650ac3` | D-series + N-series + Q finalize + slice order(§5.3 + §5.4 + §6.3 + §7.3 — 17 Qs + §8 reviewer focus + §9 acceptance + §10 slice order + §11 cross-doc + §12 completeness)| +244 |
+| Cleanup | (current) | Remove stale Phase 1/2/3 完成状态 sections + stale §8/§9 placeholders that duplicated filled-in content(per user reviewer P1 2026-05-29) | — |
 
-## Phase 3 完成状态
-
-- [x] 5+1 state taxonomy 提升到 §2.0(canonical reference,A/D-series 沿用)
-- [x] §5.2 A-series triage(21 条 architecture commitment,4 batches × 5-6 项)
-  - [x] Batch 1:e_ref + Identity 模型(A1-A5)
-  - [x] Batch 2:Form I schema 声明(A6-A10)
-  - [x] Batch 3:API 三层 + AssertionView + `_meta`(A11-A15)
-  - [x] Batch 4:Identity boundary + schema 管理 + ledger 同步(A16-A21)
-- [x] §5.2 总结(分类分布 + 新增 2 cluster:Form I cluster + API namespace 三层重组 cluster)
-- [x] §5.2 浮出 12 Q candidates(Q-A1 → Q-A12)+ Q-I 跟 Q-A 关联清单(per user reviewer Phase 4 guidance)
-- [x] §6.2 A-series triage summary(指向 §5.2)
-- [x] §7.2 Q candidates 占位
-- [x] Phase 3 row-drafting time 完整 re-read:`schema_compile.py`(530 lines)
-- [x] Phase 3 spot-check:`:exists` emission 路径(`application/entity_write.py:389`)+ `is_identity_field` flag 使用点 + `encode_idref_v1` 调用点
-- [x] INV-3 transaction boundary verification(per user reviewer Phase 2 deferred 项):shipped `set_field`(`evidence/write_protocol.py:128-156`)调用 `ledger.append_assertion` 单一 call,内部 SQLite cursor + commit boundary 跨表(claims+claim_args+meta+annotations);`retract_by_asrt` 跨 revokes+meta_rows(可选 + annotations);**单 transaction 假设合理**,但 Phase 4 时 spot-check `ledger.py` 的 `_conn.execute` + `commit()` 排布最终确认
-- [ ] §5.3 D-series 留 Phase 4
-- [ ] §5.4 N-series 留 Phase 4(if needed)
-- [ ] §7 全部 Q finalize(Q-I + Q-A + Q-D 统一编号 + ADR structure)留 Phase 4
-- [ ] §6.3 / §8 / §9 留 Phase 4
-
-**等 user review + "可以推进" 才进入 Phase 4 D-series + cross-doc seams + Q finalize + recommendations**。
-
-Phase 3 → Phase 4 转换前,user review 应确认:
-1. **A-series 21 条 commitment 分类**是否准确(尤其 (c) shape conflict vs (f) target-gap 区分 — A11/A12/A13/A14/A17 都标为 (c) shape conflict 因为 shipped 有 active 不同 surface,跟 (f) target-gap "shipped 没有这个概念"区分)
-2. **2 个新 cluster 识别**(Form I + descriptor 扩展 cluster + API namespace 三层重组 cluster)是否对路;是否在 Step 1 内同 slice 落地的判断合理
-3. **12 个 Q candidates(Q-A1 → Q-A12)**议题表述是否准确;Phase 4 finalize 时是否需要拆分 / 合并
-4. **Q-I 跟 Q-A 关联清单**是否覆盖全部关联;Phase 4 时是否同时 finalize 几个合并 Q
-5. **INV-3 transaction boundary** Phase 3 初步确认 + Phase 4 ledger.py `_conn` 排布最终 spot-check 同意吗
-
-## Phase 2 完成状态
-
-- [x] §5.1 I-series triage(16 条 invariant — INV-1..INV-15 + INV-6 + INV-7a/b/c;INV-8 已消解)
-- [x] 5+1 state 分类约定(加 `(f) target-gap / pending migration` 桶,per user reviewer 2026-05-29 校准)
-- [x] §5.1 总结(分类分布 + 关键观察 + migration cluster 识别)
-- [x] §5.1 浮出 5 个 Q candidates(Q-I1 → Q-I5,Phase 4 时 finalize)
-- [x] §6.1 commitment triage summary(指向 §5.1)
-- [x] §7.1 Q candidates 占位
-- [x] Phase 2 row-drafting 时完整 re-read `write_protocol.py`(per Rule 1)
-- [x] Phase 2 spot-check:`__system__` namespace shipped 零命中(grep) — 确认 INV-10/11/15 是 target-gap 不是 enforcement gap
-- [ ] §5.2-§5.4 留 Phase 3-4(A-series / D-series / N-series)
-- [ ] §6.2 留 Phase 3-4(A-series + D-series triage summary)
-- [ ] §7 全部 Q finalize 留 Phase 4
-
-**等 user review + "可以推进" 才进入 Phase 3 A-series triage**。
-
-Phase 2 → Phase 3 转换前,user review 应确认:
-1. **5+1 state 分类约定**(尤其 (f) target-gap 桶的引入)是否对路;后续 A/D-series triage 是否沿用
-2. **I-series 16 条分类**是否正确(尤其 INV-7c 的 "vacuously satisfied + Step 1 load-bearing" framing 是否对路)
-3. **5 个 Q candidates(Q-I1 → Q-I5)的议题表述**是否准确;Phase 4 finalize 时是否需要拆分 / 合并
-4. **3 个 migration cluster 识别**是否完整(Identity-as-Claim cluster + System namespace cluster + Editor immutability gap)
-5. **INV-3 Phase 3 verification 需要做的 SQLite transaction boundary 完整性 spot-check**(append_assertion 真的单 transaction 吗?)
+各 phase 之间 user reviewer 在 Stage 1 内做 "可以推进" review gate;现 Stage 1 complete,等 Stage 2 Q-decisions authorization。
