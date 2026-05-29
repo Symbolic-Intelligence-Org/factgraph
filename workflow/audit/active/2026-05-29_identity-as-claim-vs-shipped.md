@@ -244,22 +244,97 @@
 
 **Phase 1 完成判定**:已读+grep 覆盖**核心 shape**(SDK / schema / ledger / protocol / adapter);**剩余文件 row-drafting time re-read 在 Phase 2 时执行**,符合 Rule 1 "审计 row-drafting 时重读"原则。
 
-## 5. Findings(Phase 2-4 填入,本 commit 留空 placeholder)
+## 5. Findings
 
-> ⏳ Phase 2-4 待填:5-state 分类后的 finding 列表(F1, F2, ...),按 I-series(invariant)/ A-series(architecture)/ D-series(discrepancy)/ N-series(non-discrepancy)分桶。
+### 5.1 I-series — Invariant triage(Phase 2)
 
-## 6. Commitment Triage(Phase 2-4 填入)
+#### 5+1 state 分类约定(本 audit 采用)
 
-> ⏳ Phase 2-4 待填:design-points 各设计 commitment vs shipped 的 5-state 分类表;按以下 5 桶:
-> - (a) shipped covers — honors design intent
-> - (b) small gap — minor mv / rename / metadata sync
-> - (c) shape conflict — semantic or structural mismatch requires decision
-> - (d) genuinely new — no shipped equivalent
-> - (e) deferred-aligned — design defers + shipped honors
+标准 5-state 之外加一个 `(f) target-gap / pending migration` 桶,**专门处理 design 描述"目标态" + shipped 是"pre-migration coherent baseline"** 的情形(per user reviewer 校准 2026-05-29):
 
-## 7. Stage 2 Questions(Phase 4 浮 + 填入)
+| 状态 | 含义 | 处理路径 |
+|---|---|---|
+| **(a) shipped covers** | shipped 完整 honors design intent | 无 action |
+| **(b) small gap** | minor mv / rename / metadata sync | blueprint-eligible(small slice) |
+| **(c) shape conflict** | shipped EXISTS 且 actively conflicts 设计 — 必须 Q 决策才能继续 | 必须 Q-decision |
+| **(d) genuinely new** | shipped 无对应物;design 提议全新概念 | blueprint-eligible(implementation slice) |
+| **(e) deferred-aligned** | design 显式 defer + shipped honors 当前 state | 无 action(Step 2+ 时再评估) |
+| **(f) target-gap / pending migration** ★新增 | shipped 是 pre-migration coherent state,design 描述 post-migration 目标态;**不是 conflict**,是 migration prerequisite | migration slice;Step 1 实施时一并处理或独立 slice |
 
-> ⏳ Phase 4 待浮:每个 load-bearing Q 一条,blocking 具体 drift row;每个将成为 `workflow/design/decisions/active/2026-05-29_qN-<topic>-decision.md` 的 input。
+**关键 framing**(per user reviewer 2026-05-29):"未实现目标态 ≠ shipped 是 bug"。INV-7c / INV-9 / INV-10 / INV-11 / INV-15 等几条都是 (f) target-gap,因为 shipped 当前不存在它们 enforce 的概念前提(Identity Claim、unary fact、`__system__.*` namespace 等);**Step 1 实施时**这些 invariant 将成为新 write/retract path 的 load-bearing boundary check。
+
+#### I-series triage table
+
+每条 invariant 一行;design source / shipped evidence / 分类 / rationale / 浮出的 candidate Q(若有)。
+
+| # | Invariant | Design source | Shipped evidence | 分类 | Rationale + candidate Q |
+|---|---|---|---|---|---|
+| **INV-1** | Append-only ledger | `ledger-schema-specification.zh.md:218-228` | `core/store/ledger.py:363-510`(`append_assertion` / `append_revocation` 均 append 路径);`evidence/write_protocol.py:128-208`(`set_field` / `retract_by_asrt` 都不 in-place update) | **(a) shipped covers** | append-only 原则完整 honored。revokes via 独立表是 pre-migration 形态,但 append-only 行为本身 ✓。**无 Q**。 |
+| **INV-2** | asrt_id 全局唯一 | `:230-239` | `evidence/write_protocol.py:120-122` `new_assertion_id() = uuid4().hex`;`ledger.py:84` `asrt_id TEXT NOT NULL UNIQUE` constraint | **(a) shipped covers** | UUID4 hex 全局唯一 ✓;UNIQUE constraint enforces。**无 Q**。 |
+| **INV-3** | SQLite 单事务原子写 | `:241-249` | `ledger.py:363-510` `append_assertion` / `append_revocation` 都在 `_conn` cursor + commit boundary 内;**Phase 3 row-drafting 时 re-read 确认 transaction boundary**(留 §4.10 coverage check) | **(a) shipped covers**(pending Phase 3 verification) | append_assertion 看起来跨 claims+claim_args+meta+annotations 原子;Phase 3 时确认是否真的单 transaction。**无 Q**(若 Phase 3 verification 通过)。 |
+| **INV-4** | tup_v1 字节级 canonical 设计稳定(8 tags) | `:251-266` | `core/protocol/tup_v1.py:14-23` 恰好 8 tags:`entity_ref` / `string` / `int` / `float64` / `bool` / `bytes` / `time` / `uuid` | **(a) shipped covers** | 8 tag 集合稳定 ✓;`encode_value_bytes` per-tag canonical encoding 完整。**无 Q**。 |
+| **INV-5** | Ledger 是 source of truth | `:268-275` | `ledger.py` 是 SQLite 表;`_revoked_asrt_ids` 是 cache(可重建);无独立 active 表 | **(a) shipped covers** | ledger 是唯一 truth ✓;in-memory 全是 projection cache。**无 Q**。 |
+| **INV-6** | Application-first runtime authority | `identity-mechanism-redesign.zh.md:209-219` | `factgraph.application/` 模块层,SDK shells via `_SDKReadManager` / `_SDKWriteManager` 等(`sdk/store.py:529-603`)delegate 到 application 层 | **(a) shipped covers** | 分层 ✓;SDK layer 是 ergonomic shell,不携带 substrate logic。**无 Q**。 |
+| **INV-7a** | Identity Anchor immutable | `identity-mechanism-redesign.zh.md:248-261` | `sdk/facade.py:448-479` `IdentityEditor.set/add/retract` 全部 raise `SDKStoreError("identity field is immutable in editor")`;`schema.py:172-176` `EntityMeta` 要求至少一个 `Identity(primary_key=True)` | **(a) shipped covers** + **(b) small gap** | Editor-time immutability ✓ shipped;但 INV-7a 还要求 "改 Identity 字段值 = create 新 entity"(`delete + create` 显式语义)— SDK 当前没有这个 idiom 的明确文档/check。**Q-I1 候选**:Step 1 时是否要在 `fg.fields.set(IdentityField, ...)` 加 schema-aware 拒绝?(Layer 2 拒绝 Identity 写入) |
+| **INV-7b** | Identity-as-Claim mirrored | `identity-mechanism-redesign.zh.md:263-280` | shipped Identity 字段**仅参与 `idref_v1` hash 输入**(`core/protocol/idref_v1.py:67-73`);**不写 Claim 镜像**(`authoring/schema_compile.py` Identity 路径无 claim emission;§4.10 Phase 2 已标识 row-drafting time 需补 re-read 确认) | **(f) target-gap / pending migration** | Step 1 核心增量。shipped 是"identity 用完即扔"coherent baseline;design 加 mirror Claim。**Q-I2 候选**:Identity Claim 在哪个写入路径 emit?`fg.entities.create` 内部 emit(SDK 层),还是 ledger 写入路径自动 derive(application 层)? |
+| **INV-7c** | Identity Claim ↔ e_ref hash 一致性 | `identity-mechanism-redesign.zh.md:282-345` | **当前 shipped 没有 Identity Claim,所以 INV-7c 当前 vacuously 满足**(零 Identity Claim → 无 inconsistency 可能);零 enforcement code shipped。**Step 1 实施时,INV-7c 必须成为 write/retract path 的 load-bearing boundary invariant** | **(f) target-gap / not-applicable-yet** | per user reviewer:**不是 violation,而是 not applicable until Identity-as-Claim exists**。**关键 Q-I3 候选**:实施策略 C(application 层 in-memory Identity pred_id set)的 cache 加载 / invalidation / lookup 路径具体怎么实现?是 SDK init 时一次性建,还是 lazy 加载?schema evolution 触发 cache 重建的 hook 在哪? |
+| **INV-9** | Ledger Claim 是 unary fact(value+value_tag 双列) | `ledger-schema-specification.zh.md:277-288` | `ledger.py:82-88` `claims` 表当前是 `(seq, asrt_id, pred_id, e_ref, rest_terms)` 5 列,**`rest_terms TEXT NOT NULL` 是 multi-arg JSON list**;无 value / value_tag 双列;`Claim` dataclass(`:22-26`)`rest_terms: list[tuple[str, Any]]` n-ary | **(f) target-gap / pending migration** | 精简-4 migration 目标(rest_terms → value+value_tag inline)。shipped 多 arg 是 coherent baseline。**Q-I4 候选**:`set_field`(`evidence/write_protocol.py:128-156`)是否要在 INV-9 enforcement 阶段加 `len(rest_terms) <= 1` runtime check?当前 PyReason adapter 写 2-elem(Q-PR1 anchor)— 这跟 INV-9 enforce 时机直接耦合 |
+| **INV-10** | `__system__.*` pred_id 命名空间预留 | `ledger-schema-specification.zh.md:290-300` | **zero hits for `__system__` in shipped source** (`sdk/store.py` / `sdk/facade.py` / `authoring/` / `core/` 全部 grep 无命中);`set_field` 无 namespace check(`evidence/write_protocol.py:231-249` `_validate_write_inputs` 仅类型检查) | **(f) target-gap / pending migration** | 精简-3 migration 前 system namespace 尚不存在;Step 1+ enforce 必要。**Q-I5 候选**:`__system__.*` rejection 应该在 application 层(SDK write shell)还是 protocol 层(`set_field`)?后者更严格(防 internal API 误用),前者更灵活(audit / migration tool 可绕过) |
+| **INV-11** | Revoke claim payload shape 固定(`__system__.revokes` Claim) | `ledger-schema-specification.zh.md:302-309` | `ledger.py:106-110` `revokes` 是**独立表**(`revoker_asrt_id` / `revoked_asrt_id`);`retract_by_asrt`(`evidence/write_protocol.py:200-205`)写 `Revokes(revoker_asrt_id, revoked_asrt_id)` 行,**不**写 `__system__.revokes` Claim 到 `claims` 表 | **(f) target-gap / pending migration** | 精简-3 migration 目标;独立 revokes 表是 pre-migration coherent baseline。**与 INV-9 / INV-10 同 slice**:revokes 表删除 = system pred Claim 写入路径建立(链式 migration) |
+| **INV-12** | Revoke target 约束(v1 严格) | `ledger-schema-specification.zh.md:311-321` | `evidence/write_protocol.py:179-180` `ledger.get_claim(revoked_asrt_id) is None → raise WriteProtocolError("unknown revoked_asrt_id")`(part 1 ✓ existence check);**part 2 缺**:无 `pred_id NOT LIKE '__system__.%'` check(因为 INV-10 未 enforce,system claim 不存在 → part 2 vacuously 满足) | **(a) shipped covers**(existence check)+ **(f) target-gap**(system claim 拒绝) | Existence check 已 shipped;system claim 拒绝跟 INV-10/11 同 slice 一起加。**Q 候选与 Q-I5 同一**(__system__.* enforcement layer) |
+| **INV-13** | Active projection 单一公式(factual MINUS revokes) | `ledger-schema-specification.zh.md:323-336` | shipped 用 `revokes` 独立表 join 实现 active projection;无 soft flag 列、无独立 active 表(shipped 形态跟 design 公式语义等价,**只是 revokes 数据源不同**);Phase 3 row-drafting 时 re-read 具体 SQL | **(b) small gap** + **(f) target-gap**(公式定义跟随 INV-11) | **公式语义** shipped 等价 design ✓(只是数据源是 revokes 表 not __system__.revokes Claim);精简-3 migration 后公式形态自然对齐。**无独立 Q**;跟 INV-11 同 slice |
+| **INV-14** | Revoke 幂等性行为契约 | `ledger-schema-specification.zh.md:338-347` | `evidence/write_protocol.py:182-184` `existing_revoker = ledger.find_revoker(revoked_asrt_id); if existing_revoker is not None: return existing_revoker` ✓ 严格幂等;不创建第二条 revoke | **(a) shipped covers** | 幂等性完整 honored ✓。**无 Q**。 |
+| **INV-15** | 普通查询默认 filter system claims | `ledger-schema-specification.zh.md:349-355` | **zero hits for "NOT LIKE.*__system__" pattern in shipped source**;当前 shipped 没有 system claim 概念 → INV-15 filter 当前 vacuously 满足(没有 system claim 需要 filter) | **(f) target-gap / pending migration** | 跟 INV-10/11 同 slice。当 system pred Claim 写入路径建立时,read path 必须同步加 filter。**无独立 Q**(跟 INV-10 同 enforce 决策) |
+
+#### 5.1 I-series 总结
+
+**16 条 invariant 的分类分布**:
+
+| 分类 | INV 数 | 列表 |
+|---|---:|---|
+| (a) shipped covers | 7 | INV-1 / INV-2 / INV-3* / INV-4 / INV-5 / INV-6 / INV-14 |
+| (a)+(b) shipped covers + small gap | 1 | INV-7a(editor immutability + 缺 fg.fields.set Identity 拒绝) |
+| (a)+(f) shipped covers + target-gap | 1 | INV-12(existence check ✓ + system claim 拒绝 pending) |
+| (b)+(f) small gap + target-gap | 1 | INV-13(公式语义等价 + 数据源待迁移) |
+| (f) target-gap / pending migration | 6 | INV-7b / INV-7c / INV-9 / INV-10 / INV-11 / INV-15 |
+| (c) shape conflict | 0 | — |
+| (d) genuinely new | 0 | — |
+| (e) deferred-aligned | 0 | — |
+
+\* INV-3 待 Phase 3 row-drafting 时 re-read `append_assertion` 确认 transaction boundary
+
+**关键观察**:
+
+1. **零 shape conflict / 零 genuinely new**:invariant 层 design 没有跟 shipped "actively conflict",也没有引入全新 invariant 概念。所有差距都是 migration 性质。
+2. **6 条 pure (f) target-gap**(INV-7b / INV-7c / INV-9 / INV-10 / INV-11 / INV-15)都聚焦在 **3 个 migration cluster**:
+   - **Identity-as-Claim cluster**:INV-7b / INV-7c(Step 1 核心增量)
+   - **System namespace cluster**:INV-9 / INV-10 / INV-11 / INV-12-part2 / INV-13 / INV-15(精简-3 + 精简-4 链式 migration)
+3. **INV-7a (b)**:Step 1 时 `fg.fields.set` 应对 Identity 字段加 schema-aware 拒绝(目前只在 EntityEditor 内 enforce)
+4. INV-3 待 Phase 3 verification(SQLite transaction boundary 完整性)
+
+#### 5.1 浮出的 Q 候选(Phase 4 时 finalize)
+
+5 个 Q candidates 从 I-series triage 浮出,**当前仅记录候选**,Phase 4 时跟 A-series + D-series 浮出的 Q 一起编号 + 加 input/scope/non-scope:
+
+| 候选 | I-series 来源 | 议题 | 类别 |
+|---|---|---|---|
+| **Q-I1** | INV-7a (b) | Step 1 时 `fg.fields.set(IdentityField, ...)` 是否要 schema-aware 拒绝?Layer 2 是否承担 Identity 字段写入的拒绝(对应 INV-7c boundary)? | API surface enforcement layer |
+| **Q-I2** | INV-7b | Identity Claim 在哪个层 emit?`fg.entities.create` 内部 emit(SDK 层),还是 ledger 写入路径 derive(application 层)? | INV-7b 实施位置 |
+| **Q-I3** | INV-7c | INV-7c 策略 C 的 cache 加载 / invalidation / lookup 具体路径?SDK init 时建,还是 lazy?schema evolution hook? | INV-7c 实施细节 |
+| **Q-I4** | INV-9 | `set_field` 何时加 `len(rest_terms) <= 1` runtime check?跟 PyReason adapter rewrite(Q-PR1)关系 — 是同 slice 同步,还是先 INV-9 enforce 推动 adapter rewrite? | INV-9 enforcement 时机 |
+| **Q-I5** | INV-10 / INV-12-part2 | `__system__.*` rejection 在 application 层(SDK write shell)还是 protocol 层(`set_field`)?跟 INV-11 / INV-15 同 slice 链式 migration | INV-10/11/12/13/15 cluster 实施 |
+
+## 6. Commitment Triage
+
+### 6.1 I-series triage summary(Phase 2)
+
+详见 §5.1 表格;A-series + D-series 留 Phase 3-4。
+
+## 7. Stage 2 Questions
+
+### 7.1 I-series Q candidates(Phase 2 surfaced;Phase 4 finalize)
+
+详见 §5.1 表格末尾 5 个 Q-I1 → Q-I5 候选。**当前仅候选,Phase 4 时连同 A-series / D-series 浮出的 Q 一起 finalize + 编号 + 加 input/scope/non-scope/rejected alternatives 等 ADR structure 标记。**
 
 ## 8. Reviewer Focus(Phase 4 填入)
 
@@ -281,10 +356,25 @@
 - [x] §4.10 Coverage check(标识 Phase 2 row-drafting time re-read 需要补的文件)
 - [ ] §5-§9 留 Phase 2-4(I-series → A-series → D-series + cross-doc + Q surface)
 
-**等 user review + "可以推进" 才进入 Phase 2 I-series triage**。
+## Phase 2 完成状态
 
-Phase 1 → Phase 2 转换前,user review 应确认:
-1. §2 scope 边界对(in scope / out of scope 没漏关键设计点)
-2. §3 canonical sources 引用 line ranges 准确
-3. §4 shipped baseline 描述无事实错误(尤其 ledger 7-table + n-ary rest_terms framing)
-4. §4.10 coverage check 同意 Phase 2 时 re-read 的文件列表
+- [x] §5.1 I-series triage(16 条 invariant — INV-1..INV-15 + INV-6 + INV-7a/b/c;INV-8 已消解)
+- [x] 5+1 state 分类约定(加 `(f) target-gap / pending migration` 桶,per user reviewer 2026-05-29 校准)
+- [x] §5.1 总结(分类分布 + 关键观察 + migration cluster 识别)
+- [x] §5.1 浮出 5 个 Q candidates(Q-I1 → Q-I5,Phase 4 时 finalize)
+- [x] §6.1 commitment triage summary(指向 §5.1)
+- [x] §7.1 Q candidates 占位
+- [x] Phase 2 row-drafting 时完整 re-read `write_protocol.py`(per Rule 1)
+- [x] Phase 2 spot-check:`__system__` namespace shipped 零命中(grep) — 确认 INV-10/11/15 是 target-gap 不是 enforcement gap
+- [ ] §5.2-§5.4 留 Phase 3-4(A-series / D-series / N-series)
+- [ ] §6.2 留 Phase 3-4(A-series + D-series triage summary)
+- [ ] §7 全部 Q finalize 留 Phase 4
+
+**等 user review + "可以推进" 才进入 Phase 3 A-series triage**。
+
+Phase 2 → Phase 3 转换前,user review 应确认:
+1. **5+1 state 分类约定**(尤其 (f) target-gap 桶的引入)是否对路;后续 A/D-series triage 是否沿用
+2. **I-series 16 条分类**是否正确(尤其 INV-7c 的 "vacuously satisfied + Step 1 load-bearing" framing 是否对路)
+3. **5 个 Q candidates(Q-I1 → Q-I5)的议题表述**是否准确;Phase 4 finalize 时是否需要拆分 / 合并
+4. **3 个 migration cluster 识别**是否完整(Identity-as-Claim cluster + System namespace cluster + Editor immutability gap)
+5. **INV-3 Phase 3 verification 需要做的 SQLite transaction boundary 完整性 spot-check**(append_assertion 真的单 transaction 吗?)
