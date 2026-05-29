@@ -79,8 +79,8 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 
 | 新 Q | Title | Enforcement site | Slice 归属 |
 |---|---|---|---|
-| **Q5a** | `__system__.*` user-facing pred_id reservation check | application 层 SDK write shell(`fg.fields.set` / `fg.fields.add` / `fg.assertions.write` 拒绝 user-supplied `pred_id` 以 `__system__.` 开头) | Slice 3a(API surface) |
-| **Q5b** | Internal `__system__.revokes` emission exception 路径 | protocol 层 `set_field` 加 internal-only entry point;`retract_by_asrt` 通过该 entry 写 `__system__.revokes` Claim,绕过 Q5a 的 user-facing 拒绝 | Slice 3b(ledger revokes migration) |
+| **Q5a** | `__system__.*` user-facing pred_id reservation check | application 层 SDK write shell(`fg.fields.set` / `fg.fields.add` / `fg.assertions.write` 拒绝 user-supplied `pred_id` 以 `__system__.` 开头);**仅保留 namespace,不定义 `__system__.revokes` 的 payload shape / rest_terms / value+value_tag 编码方案**(后者属于 Q5b + Q15.2 工作面) | Slice 3a(API surface) |
+| **Q5b** | Internal `__system__.revokes` emission exception path | ADR-SYS-B 必须决定 internal-only emission path;可能通过 `retract_by_asrt` lowering、internal writer API、或 protocol-layer exception 等机制实现。**本 meta-ADR 不锁具体机制**;留 ADR-SYS-B §4 Decision 展开 | Slice 3b(ledger revokes migration) |
 
 **Q5a + Q5b 同 cluster**(System namespace cluster),但**独立 ADR** — 因为:
 - Q5a 决策跟 SDK shell API design 紧耦合(Q-Cluster-API)
@@ -135,14 +135,20 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 
 **锁定**:Step 1(Slice 1 + Slice 2 + Slice 3a + Slice 3b + Slice 4)**不**被 PyReason adapter rewrite(Q-PR1 / Slice 5+)阻塞。具体 separation contract:
 
-#### 4.4.1 Step 1 INV-9 enforcement scope:**weak enforcement**
+#### 4.4.1 Step 1 INV-9 enforcement scope:**layered weak enforcement**
 
-- Slice 3b 引入 claims 表的 value + value_tag 双列(Q15.2 决策决定时序)
-- Slice 3b **不** runtime-enforce `len(rest_terms) <= 1`(strict)
-- shipped 写入路径(`set_field` / `add_field`)允许 n-ary rest_terms 写入,**但**:
-  - 文档明确标记 n-ary 写入为 **known temporary exception**(adapter-only)
-  - 新增的 user-facing write path(`fg.fields.set` / `fg.entities.create` 等 Slice 3a 引入的)**必须**写 unary(SDK shell 层在 Slice 3a / Slice 3b 加 check)
-  - PyReason adapter 是 **唯一** authorized n-ary writer 直到 Slice 5+
+**关键 framing**:Step 1 unary 约束**由 SDK/application 层新入口保证**;ledger/protocol 层 strict assertion **延后到 Slice 5+**(adapter rewrite 后)。两层分工避免 ledger 层为现存 PyReason adapter n-ary 写入立即报错。
+
+| Layer | Step 1 内 INV-9 enforcement |
+|---|---|
+| **SDK shell layer** — `fg.fields.set` / `fg.fields.add` / `fg.entities.create` / `fg.assertions.write` 等 Slice 3a 引入的 user-facing write paths | **必须 enforce(strict at this layer)** — 写入前 check `len(rest_terms) <= 1` 或等价 value-single 形态约束;违反时 raise `SDKStoreError` |
+| **Application layer write protocol** — application 层调用 ledger 路径的中间层(若 Slice 3a/3b 引入)| **必须 enforce(strict at this layer)** — 跟 SDK shell 同步,防 internal mis-routing 写 n-ary |
+| **Ledger / protocol layer** — `set_field` / `add_field` / `ledger.append_assertion` | **不 enforce strict**(Step 1)— 接受 n-ary rest_terms 不报错;Slice 5+ adapter rewrite 完成后才加 strict `assert len(rest_terms) <= 1` |
+| **PyReason adapter** — `_edge_rest_terms` n-ary 输出 | **adapter-only known temporary exception** — 唯一 authorized n-ary writer 直到 Slice 5+ |
+
+**Slice 3b 同步引入**:claims 表的 value + value_tag 双列(Q15.2 决策决定时序);schema 形态上准备好接收 unary Claim,但**不**在 protocol 层加 strict assertion。
+
+**Step 1 内不存在 layer-conflict**:任何**新增**的 user-facing 路径(Slice 3a 引入)在 SDK shell 层强制 unary;**现存** PyReason adapter 的 n-ary 写入路径继续工作,因为 ledger/protocol 层不 strict。两层分工不冲突。
 
 #### 4.4.2 Slice 5+(Step 2+)PyReason adapter rewrite 触发的 strict enforcement
 
