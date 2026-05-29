@@ -1,8 +1,8 @@
 # Slice 2 — Identity-as-Claim Core(emission contract formalize + INV-7c reject + cache + `:exists` transitional guard)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-29
-- Last Updated: 2026-05-29
+- Last Updated: 2026-05-30
 - Slice: 2 of identity-as-claim Step 1 ladder(per synthesis `d0036e1f`)
 - Class: M(smaller than Slice 1 — more contract-formalization than semantic rewrite)
 - Related Modules:
@@ -692,19 +692,123 @@ Tests based on **shipped API paths only**(no `fg.entities.create/delete` depende
 
 ## 10. Outcome / Deviations
 
-任务完成后填写:
+**Status**:`implemented` 2026-05-30 on branch `v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29`(forks from Slice 1 close `9cef674b`)。
 
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- Step 0 pre-impl verification results:
-- Cache build correctness verification(SchemaIndex.identity_pred_ids + exists_pred_ids):
-- Retract guard 3-classification verification(SDKStore.retract + ingest_runtime + entity_write 3 paths):
-- Q-PR1 carve-out preservation confirmation(write_protocol + ledger + adapter + _builders + claims.rest_terms 0 diff):
-- Internal rollback classification confirmation(core/derivation/accept.py:401 0 diff per SF11):
-- Slice 2 load-bearing docs landed confirmation:
-- Carry-forward dependencies recorded:
-  - ADR-API Q14 schema-evolution hook(`fg.schema.register/extend/apply` 实施时 wire cache hook per ADR-IC §4.3.3)
-  - **ADR-API Q10 `fg.entities.create/delete` namespace migration**(Slice 3a)— Identity Claim emission user-facing API + full-entity revoke 路径;Slice 2 error message wording 引用该 future API path 作为 user migration guidance,但 Slice 2 implementation + acceptance 不依赖 unshipped API(per P1 #3 amend 2026-05-29)
-  - Step 2+ `:exists` removal(per ADR-IC §4.4.4 forward-pointer)— guard 同步退役不动 INV-7c
-  - Step 2+ shadow store removal(per ADR-IC §4.2.4 eager-emission 演化方向)
-- 归档说明:
+### 10.1 最终落地结果
+
+Slice 2 Identity-as-Claim Core 全部 10 Steps 落地 + 1 amend,commit lineage(每个 implementation step 配对 audit backfill commit):
+
+| Step | Implementation commit | Audit backfill |
+|---|---|---|
+| Step 1 — SchemaIndex cache extension | `73993ebd` | — |
+| Step 2 — Application retract guard helper | `187a2918` | — |
+| Step 3 — SDK shell retract wrap | `12475859` | — |
+| Step 4 — Application ingest path wrap | `16aeff69` | (Step 4/5 audit reorder + SHA backfill 合并入 Step 6 commit `c2d659c1`)|
+| Step 5 — Application entity_write path wrap | `a4853a0a` | (同上)|
+| Step 6 — Identity reject wording update | `c2d659c1` | `975b8a9a` |
+| Step 7 — Shadow store legacy documentation | `d46b9fe7` | `6d68e48e` |
+| Step 8 — Contract tests(emission atomic + dedup) | `ab168063` | `05c9bb55` |
+| Step 9 — Load-bearing docs sync | `200987f1` | `44d153af` |
+| Step 9 amend — Docs precision(P1 + P2×2)| `ebb03348` | `5ee6cbb1` |
+| **Step 10 — Final acceptance + §10 + Status implemented** | (本 commit) | — |
+
+**Test suite**:cumulative Slice 2 suite 59 tests passing in ~0.3s 跨 7 NEW test files(6 cache + 11 retract guard + 7 SDK shell + 8 ingest + 8 entity_write + 8 wording + 11 emission contract)。
+
+### 10.2 与 blueprint 不同的地方
+
+无方向 deviation。所有 amend 都是文档 precision / scope clarity / docs-only:
+
+- **§5.2 Q3 row**(Step 9 amend P1)— 把 col2 / col3 重写为 ADR lock 描述 + shipped vs carry-forward split,col2 原来引 ADR-IC §4.5 sketch 的 `application/state` impl-site 用词易误读为 shipped(实际 Slice 2 implementation site = `application/schema_runtime.py:SchemaIndex`)
+- **§13.4.1 Slice 1 branch direction**(Step 9 amend P2 #1)— branch 名修正(无 `-refactor` 后缀)+ 删 `→ master`(sacred master 明确未动)
+- **§13.4.2 carry-forward 列**(Step 9 amend P2 #2)— `_DataMember.pattern` 已在 Slice 1 Form I 落地,从 carry-forward 移除
+- **§13.4 Slice 1 + Slice 2 status split** — 原 §13 框架是 "Step 1"(pre-ADR-IC 单批次),Step 9 加 §13.4 显式记录 Step 1 split 成 Slice 1(Form I)+ Slice 2(Identity-as-Claim)的实际历史
+- **Pred ID 命名实证**(Step 8)— blueprint §7.9 line 543 lowercase `user:exists` 示例跟 shipped 不一致(实际 `User:exists` Capitalized);test file 顶部 docstring + 常量声明 align with shipped 行为,blueprint 例文留作 historical(未追改 — close 前 reviewer 视情评估)
+
+### 10.3 Step 0 pre-impl verification results
+
+Pre-impl grep gate(Step 0,read-only no commit)matches preflight:
+- 0.1 5 retract_by_asrt call sites verified 跟 blueprint 一致(entity_write:412 + ingest_runtime:169 + sdk/store.py:2125 wrap targets;write_protocol:170/226 + derivation/accept.py:401 0-diff targets)
+- 0.1 `_apply_item(..., index=index)` chain verified(P1 #2 implementation path 有效)
+- 0.2 baseline shipped confirmed(`_materialization_ops` / `record_exists` / `PlannedOpDTO` per ADR-IC §6.2)
+- 0.3 no additional unguarded retract_by_asrt application paths found
+- 0.4 docs-only mention noted(`core/docs/01_architecture.en.md`)
+- Verdict:matches preflight,no blueprint amend needed,推进 Step 1
+
+### 10.4 Cache build correctness verification(SchemaIndex.identity_pred_ids + exists_pred_ids)
+
+Per §7.1 + Step 1 6 tests:
+- `SchemaIndex.identity_pred_ids: frozenset[str]` field ✓
+- `SchemaIndex.exists_pred_ids: frozenset[str]` field ✓
+- `SchemaIndex.protected_anchor_pred_ids` property returns union ✓
+- `build_schema_index` populates both frozensets from `PredicateInfo.is_identity_field` / `.is_entity_exists` ✓
+- Two independent frozensets — `identity_pred_ids ∩ exists_pred_ids = ∅`(SF9 disjoint contract)✓
+- O(1) membership lookup verified(hit/miss 6 cases)✓
+- Pred ID conventions confirmed via Step 8 probe:`<snake_owner_prefix>:<field_name>` for Identity/Field + `<EntityType>:exists` for `:exists`(Capitalized)
+
+### 10.5 Retract guard 3-classification verification(SDKStore.retract + ingest_runtime + entity_write 3 paths)
+
+Per §7.2-§7.5:
+
+- **Application source-of-truth**(`application/retract_guard.py` Step 2 @ `187a2918`)— 11 tests 验证 identity / exists / unprotected / unknown 4 classification cases × `classify_retract_target` + `check_retract_allowed` 两 functions;`RetractGuardError(Exception)` NOT 继承 SDK MRO(SF2 three-layer model);stub Ledger 只暴露 `get_claim` enforce helper 不调任何其他 Ledger API(P1 #1 + Q-PR1 carve-out)
+- **SDK shell fail-fast**(`sdk/store.py:SDKStore.retract` Step 3 @ `12475859`)— 7 integration tests 验证 Form I `RetractGuardUser` 完整 SDK shell path Identity/exists/Field/unknown asrt 全分类 + 文案 markers + tenant_id 也 protected + guard runs BEFORE retract_by_asrt
+- **Application ingest path**(`application/ingest_runtime.py:_apply_retract` Step 4 @ `16aeff69`)— 8 tests 验证完整 ingest path Identity → `ErrorDTO(INV_7C_IDENTITY_PROTECTED)` code 直接 propagate(NOT wrap as `INGEST_RETRACT_FAILED`)+ exists → `ErrorDTO(EXISTENCE_CLAIM_TRANSITIONAL_GUARD)` + Field/unknown pass-through + collect mode 不 abort batch
+- **Application entity_write path**(`application/entity_write.py:_apply_op` retract branch Step 5 @ `a4853a0a`)— 8 tests 验证 `PlannedOpDTO(op="retract")` 直接 invocation Identity → `EntityWriteError(INV_7C_IDENTITY_PROTECTED)` code direct(NOT wrap as `ENTITY_WRITE_FAILED`)+ exists → `EntityWriteError(EXISTENCE_CLAIM_TRANSITIONAL_GUARD)` + Field / unknown pass-through(unknown surfaces `WriteProtocolError` directly per shipped behavior)+ guard runs BEFORE retract_by_asrt
+- **Layer 2 Identity field write reject**(`IdentityEditor.set/add/retract` + `plan_write_command:is_identity_field` Step 6 @ `c2d659c1`)— 8 tests 验证 INV-7c / INV-7a / `fg.entities.delete` + `fg.entities.create` / ADR-IC §4.1 markers + `code="INV_7C_IDENTITY_PROTECTED"`(Layer 2 + Layer 3 共享同 code)+ stale `IDENTITY_FIELD_MUTATION_NOT_SUPPORTED` code 已替换
+
+**SF3 三层 enforcement 完整满足**:application source-of-truth + SDK shell fail-fast + 2 application 写入路径 — bulk ingest 不可绕过 guard,entity_write path 不可绕过 guard。
+
+### 10.6 Q-PR1 carve-out preservation confirmation
+
+Final grep against Slice 1 close `9cef674b..HEAD`:
+
+```
+git diff --name-only 9cef674b..HEAD -- \
+    src/factgraph/core/evidence/write_protocol.py \
+    src/factgraph/core/store/ledger.py \
+    src/factgraph/core/store/_builders.py \
+    src/factgraph/adapters/pyreason/ \
+    src/factgraph/core/derivation/accept.py
+→ (empty)
+```
+
+**0 diff confirmed** for all 5 sacred paths(per SF5)。`claims.rest_terms` 也 0 diff(verified via `git diff 9cef674b..HEAD -- src/factgraph/core/store/ledger.py | grep -i rest_terms` returns empty)。No INV-9 runtime strict assertion added。
+
+### 10.7 Internal rollback classification confirmation(SF11)
+
+`core/derivation/accept.py:401` `retract_by_asrt` direct call — **0 diff** confirmed via above grep(included in Q-PR1 sweep — `accept.py` 在 5 sacred path 列表中)。
+
+SF11 classification preserved:internal derivation rollback 是 derivation 失败时撤销 derived Claims 的内部路径,不 touch Identity Claims(by definition of derivation output);intentionally unguarded per Q-PR1 carve-out;若 derivation engine 错误产生 Identity Claim 那是 derivation engine bug,需要 Step 2+ ADR fix engine,not Slice 2 retract guard 范围。
+
+### 10.8 Slice 2 load-bearing docs landed confirmation
+
+Per §6.4 + §7.10 + ADR-DOCS §4.2.2:
+
+- ✓ `src/factgraph/sdk/docs/04_api_surface.en.md` §1.5 + 新 §7 Identity Claim Emission and Reject Semantics(landed Step 9 @ `200987f1`):
+  - §7.1 Identity Claim emission contract(per ADR-IC §4.2 + §4.2.1 emission input contract + atomic emission table + pred ID conventions + 三 materialization paths table + dedup + `fg.entities.create` Slice 3a carry-forward 标注)
+  - §7.2 INV-7c reject 行为表(6 行 Layer 2 + Layer 3 全 raise sites + `code="INV_7C_IDENTITY_PROTECTED"` single source + ADR-IC §4.1 markers + Q-PR1 carve-out 边界)
+  - §7.3 `<EntityType>:exists` transitional guard(NON INV-7c per ADR-IC §4.4.2 + lifecycle decoupled + `code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD"`)
+  - §7.4 Shadow store legacy positioning(3 行 behavior table + forward direction Slice 3a carry-forward)
+- ✓ `identity-mechanism-redesign.zh.md §5.2 + §13`(landed Step 9 @ `200987f1` + Step 9 amend @ `ebb03348`):
+  - §5.2 "Slice 2 ADR-IC 锁定 + 落地状态" 子段(4 列 ADR-IC sub-decision 映射 + 三层 enforcement landed status with commit SHAs + Q-PR1 carve-out 文件清单 + error code 统一锁定 + shadow store legacy cross-ref)— Step 9 amend Q3 row 修复 SchemaIndex frozensets shipped vs schema-evolution hook ADR-API Q14 carry-forward 精确 split
+  - §13.4 "Slice 1 + Slice 2 落地状态"(§13.4.1 Slice 1 Form I @ `9cef674b` + §13.4.2 Slice 2 7 行 commit map + carry-forward 列 — Step 9 amend `_DataMember.pattern` 从 carry-forward 移除,branch direction 修正)
+  - §13.4.3 Slice 2 Q-PR1 carve-out preservation 边界说明
+
+§9.3 out-of-slice docs(wider quickstart polish + module-wide migration note consolidation)留 Slice 4 — Slice 2 显式 NOT in scope per SF6。
+
+### 10.9 Carry-forward dependencies recorded
+
+- **ADR-API Q14 schema-evolution hook** — `fg.schema.register / extend / apply` 实施时 wire cache rebuild hook(per ADR-IC §4.3.3);Slice 2 SF4 锁定 NO empty stub created,hook-ready contract documented but no API created;§5.2 Q3 row 显式 split shipped(SchemaIndex frozensets)vs carry-forward(hook 延后);**当前 schema 已禁 Identity / Field 互转 + Identity 新增 → immediate hook 暂不需要,延后安全**
+- **ADR-API Q10 `fg.entities.create / delete` namespace migration**(Slice 3a)— Identity Claim emission user-facing API + full-entity revoke path;Slice 2 error message wording 引用 `fg.entities.delete` + `fg.entities.create` 作为 user migration guidance(per ADR-IC §4.1 adopted wording),但 implementation + acceptance 不依赖 unshipped API(per P1 #3 amend 2026-05-29);`fg.entities.delete(e_ref)` 全实体 revoke acceptance test 显式 NOT in Slice 2 Step 8 scope(留 tests/test_emission_contract.py 尾部 comment block 记录)
+- **Step 2+ `:exists` removal**(per ADR-IC §4.4.4 forward-pointer)— Rule layer 学会用 Identity Claims 推断 entity existence 后,`:exists` co-emission 移除时 existence-claim transitional guard 同步退役;**INV-7c 范围不收窄**(per SF9 两个独立 frozenset);ADR-IC §4.4.5 transitional contract clarity 锁定本 ADR 不承诺移除时机
+- **Step 2+ shadow store removal**(per ADR-IC §4.2.4 eager-emission 演化方向)— `fg.entities.create(...)` 实施后 eager emit Identity Claims at create time,shadow store `_identity_values_by_e_ref` 退役;Slice 2 显式 NOT remove(compatibility preservation per Step 7 comment;Slice 3a Q10 ADR-API namespace migration 一起处理)
+
+### 10.10 归档说明
+
+Slice 2 close 后进 archive cadence:
+
+1. Blueprint + audit log 移到 `workflow/blueprints/archive/2026-05-29_slice-2-identity-claim-emission.md` + `.audit.md`
+2. 归档 index `workflow/blueprints/INVENTORY.md` 加 Slice 2 entry
+3. Active design-point `identity-mechanism-redesign.zh.md` 留在 active(Slice 2 + 后续 slice 持续引用)
+4. ADR-IC + ADR-DOCS active(active decisions 跟 slice 解耦)
+5. Master 推送决策留用户(per `feedback_push_master_gate` — 非自动推送)— Slice 2 branch 已 close,push 时机待用户授权
+6. Branch `v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29` close 后保留为 immutable reference;next slice(Slice 3a 或其他)fork from Slice 2 close commit
