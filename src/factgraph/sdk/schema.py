@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import ast
+from dataclasses import dataclass
 from datetime import datetime
 import inspect
+import re
 import reprlib
-from typing import Any
+from types import UnionType
+from typing import Any, Literal, get_args, get_origin
 from uuid import UUID
 
 from .errors import SDKSchemaError
@@ -47,78 +51,127 @@ class _DeclaredMember:
         instance.__dict__[self.sdk_attr_name] = value
 
 
-class Identity(_DeclaredMember):
+@dataclass(frozen=True)
+class _AnnotationPlan:
+    type_domain: str
+    cardinality: str = "single"
+    enum_values: tuple[Any, ...] | None = None
+
+
+class _DataMember(_DeclaredMember):
+    def __init__(self, *, description: str | None = None, pattern: str | None = None) -> None:
+        super().__init__()
+        if description is not None and (not isinstance(description, str) or not description):
+            raise SDKSchemaError("description must be a non-empty string when provided")
+        if pattern is not None:
+            if not isinstance(pattern, str) or not pattern:
+                raise SDKSchemaError("pattern must be a non-empty string when provided")
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise SDKSchemaError(f"pattern must be a valid regular expression: {exc}") from exc
+        self.description = description
+        self.pattern = pattern
+
+    def _add_common_authoring(self, out: dict[str, Any], *, plan: _AnnotationPlan) -> None:
+        if self.description is not None:
+            out["description"] = self.description
+        if self.pattern is not None:
+            if plan.type_domain != "string":
+                raise SDKSchemaError("pattern= is only supported for string-typed Identity/Field members")
+            out["pattern"] = self.pattern
+
+
+class Identity(_DataMember):
     """Declare an identity field on an `Entity`.
 
     Identity fields are part of an entity's stable identity and are used to
-    build `idref_v1` references. Every `Entity` must declare at least one
-    `Identity(primary_key=True)`.
+    build `idref_v1` references. Every `Identity()` field participates in the
+    complete immutable identity bundle.
 
     Args:
-        default: Optional default value used when a reference omits this
-            identity value.
-        default_factory: Optional built-in factory name; currently used for
-            generated identity values such as `"uuid4"`.
-        primary_key: Marks this identity field as part of the primary key.
+        description: Optional human-readable field description for schema IR.
+        pattern: Optional regular-expression constraint for string identity
+            values.
     """
 
     def __init__(
         self,
         *,
-        default: Any = None,
-        default_factory: str | None = None,
-        primary_key: bool = False,
+        description: str | None = None,
+        pattern: str | None = None,
+        **legacy_kwargs: Any,
     ) -> None:
-        super().__init__()
-        self.default = default
-        self.default_factory = default_factory
-        self.primary_key = bool(primary_key)
+        if legacy_kwargs:
+            legacy = ", ".join(sorted(legacy_kwargs))
+            raise SDKSchemaError(
+                "Identity() only accepts description= and pattern= in Form I; "
+                f"unsupported argument(s): {legacy}. "
+                "Remove primary_key/default/default_factory. All Identity fields are immutable "
+                "anchor members, and callers must provide the complete identity bundle explicitly."
+            )
+        super().__init__(description=description, pattern=pattern)
 
-    def to_authoring(self, *, type_domain: str) -> dict[str, Any]:
+    def to_authoring(self, *, plan: _AnnotationPlan) -> dict[str, Any]:
+        if plan.cardinality != "single":
+            raise SDKSchemaError("Identity fields must use a single-value annotation")
         out: dict[str, Any] = {
             "name": self.sdk_attr_name,
-            "type_domain": type_domain,
+            "type_domain": plan.type_domain,
         }
-        if self.default is not None:
-            out["default"] = self.default
-        if self.default_factory is not None:
-            out["default_factory"] = self.default_factory
-        if self.primary_key:
-            out["primary_key"] = True
+        self._add_common_authoring(out, plan=plan)
         return out
 
 
-class Field(_DeclaredMember):
+class Field(_DataMember):
     """Declare a non-identity field on an `Entity`.
 
-    Use `Field(cardinality="single")` for a replaceable current value and
-    `Field(cardinality="multi")` for accumulated values. Fields do not support
-    defaults or backfill; missing added fields read as `None` for single fields
-    and `()` for multi fields.
+    Cardinality is inferred from the type annotation: scalar annotations create
+    single-value fields, while list/set/frozenset and variadic tuple
+    annotations create multi-value fields. Fields do not support defaults or
+    backfill; missing added fields read as `None` for single fields and `()` for
+    multi fields.
 
     Args:
-        cardinality: Either `"single"` or `"multi"`.
         description: Optional human-readable field description for schema IR.
+        pattern: Optional regular-expression constraint for string fields.
     """
 
     def __init__(
         self,
         *,
-        cardinality: str,
         description: str | None = None,
+        pattern: str | None = None,
+        **legacy_kwargs: Any,
     ) -> None:
-        super().__init__()
-        self.cardinality = cardinality
-        self.description = description
+        if legacy_kwargs:
+            legacy = ", ".join(sorted(legacy_kwargs))
+            raise SDKSchemaError(
+                "Field() only accepts description= and pattern= in Form I; "
+                f"unsupported argument(s): {legacy}. "
+                "Replace Field(cardinality='single') with a scalar annotation and Field(), "
+                "or Field(cardinality='multi') with list[T]/set[T]/frozenset[T]/tuple[T, ...] "
+                "and Field()."
+            )
+        super().__init__(description=description, pattern=pattern)
+        self._inferred_cardinality: str | None = None
 
-    def to_authoring(self, *, type_domain: str) -> dict[str, Any]:
+    @property
+    def cardinality(self) -> str:
+        if self._inferred_cardinality is None:
+            raise SDKSchemaError("Field cardinality is unavailable until the descriptor is bound to a schema class")
+        return self._inferred_cardinality
+
+    def to_authoring(self, *, plan: _AnnotationPlan) -> dict[str, Any]:
+        self._inferred_cardinality = plan.cardinality
         out: dict[str, Any] = {
             "py_name": self.sdk_attr_name,
-            "type_domain": type_domain,
-            "cardinality": self.cardinality,
+            "type_domain": plan.type_domain,
+            "cardinality": plan.cardinality,
         }
-        if self.description is not None:
-            out["description"] = self.description
+        if plan.enum_values is not None:
+            out["enum_values"] = list(plan.enum_values)
+        self._add_common_authoring(out, plan=plan)
         return out
 
     def __get__(self, instance: Any, owner: type | None = None) -> Any:
@@ -170,10 +223,6 @@ class EntityMeta(type):
 
         if not identity_fields:
             raise SDKSchemaError(f"Entity '{name}' must declare at least one Identity field")
-        if not any(member.primary_key for _, member, _ in identity_fields):
-            raise SDKSchemaError(
-                f"Entity '{name}' must declare at least one Identity(primary_key=True) field"
-            )
 
         declaration_fields = _extract_entity_declaration_fields(getattr(cls, "Meta", None))
         description = declaration_fields.pop("description", None)
@@ -182,11 +231,11 @@ class EntityMeta(type):
         spec = {
             "entity_type": name,
             "identity_fields": [
-                member.to_authoring(type_domain=_annotation_to_type_domain_runtime(annotation))
+                member.to_authoring(plan=_annotation_plan_runtime(annotation))
                 for _, member, annotation in identity_fields
             ],
             "fields": [
-                member.to_authoring(type_domain=_annotation_to_type_domain_runtime(annotation))
+                member.to_authoring(plan=_annotation_plan_runtime(annotation))
                 for _, member, annotation in fields
             ],
         }
@@ -288,7 +337,7 @@ class RelationshipMeta(type):
             "from_entity_type": from_entity_type,
             "to_entity_type": to_entity_type,
             "fields": [
-                member.to_authoring(type_domain=_annotation_to_type_domain_runtime(annotation))
+                member.to_authoring(plan=_annotation_plan_runtime(annotation))
                 for _, member, annotation in fields
             ],
         }
@@ -429,32 +478,183 @@ def _relationship_endpoint_type_name(annotation: Any, *, relationship_name: str,
 
 
 def _annotation_to_type_domain_runtime(annotation: Any) -> str:
-    if annotation in _BUILTIN_TAG_MAP:
-        return _BUILTIN_TAG_MAP[annotation]
-    if annotation is UUID:
-        return "uuid"
-    if annotation is datetime:
-        return "time"
+    return _annotation_plan_runtime(annotation).type_domain
+
+
+def _annotation_plan_runtime(annotation: Any) -> _AnnotationPlan:
     if isinstance(annotation, str):
-        builtin_name_map = {
-            "str": "string",
-            "int": "int",
-            "bool": "bool",
-            "bytes": "bytes",
-            "float": "float64",
-            "UUID": "uuid",
-            "datetime": "time",
-        }
-        if annotation in builtin_name_map:
-            return builtin_name_map[annotation]
-        if annotation in {"entity_ref", "string", "int", "float64", "bool", "bytes", "time", "uuid"}:
-            return annotation
-        return "entity_ref"
+        return _annotation_plan_from_string(annotation)
+    return _annotation_plan_from_object(annotation)
+
+
+def _annotation_plan_from_object(annotation: Any) -> _AnnotationPlan:
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    if origin in {list, set, frozenset}:
+        return _multi_annotation_plan(args, annotation=annotation)
+    if origin is tuple:
+        if len(args) == 2 and args[1] is Ellipsis:
+            return _multi_annotation_plan((args[0],), annotation=annotation)
+        raise SDKSchemaError("tuple fields must use tuple[T, ...] for multi-cardinality Form I fields")
+    if origin is Literal:
+        return _literal_annotation_plan(args)
+    if origin in {UnionType} or origin is _typing_union_origin():
+        raise SDKSchemaError("Optional/Union annotations are not supported in Form I schema declarations")
+    if origin is dict:
+        raise SDKSchemaError("dict annotations are not supported in Form I schema declarations")
+
+    return _scalar_annotation_plan(annotation)
+
+
+def _multi_annotation_plan(args: tuple[Any, ...], *, annotation: Any) -> _AnnotationPlan:
+    if len(args) != 1:
+        raise SDKSchemaError(f"multi-cardinality field annotation must specify exactly one element type: {annotation!r}")
+    inner = _annotation_plan_from_object(args[0])
+    if inner.cardinality != "single" or inner.enum_values is not None:
+        raise SDKSchemaError("multi-cardinality fields must use a scalar element annotation")
+    return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi")
+
+
+def _literal_annotation_plan(values: tuple[Any, ...]) -> _AnnotationPlan:
+    if not values:
+        raise SDKSchemaError("Literal[...] enum fields must declare at least one value")
+    type_domains = {_literal_value_type_domain(value) for value in values}
+    if len(type_domains) != 1:
+        raise SDKSchemaError("Literal[...] enum values must all use the same canonical type")
+    type_domain = next(iter(type_domains))
+    if type_domain == "float64":
+        raise SDKSchemaError("Literal[...] float enum values are not supported; use an unconstrained float field")
+    return _AnnotationPlan(type_domain=type_domain, enum_values=tuple(values))
+
+
+def _literal_value_type_domain(value: Any) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float64"
+    if isinstance(value, bytes):
+        return "bytes"
+    if isinstance(value, UUID):
+        return "uuid"
+    if isinstance(value, datetime):
+        return "time"
+    raise SDKSchemaError(f"Literal[...] enum value has unsupported type: {type(value).__name__}")
+
+
+def _scalar_annotation_plan(annotation: Any) -> _AnnotationPlan:
+    if annotation in _BUILTIN_TAG_MAP:
+        return _AnnotationPlan(_BUILTIN_TAG_MAP[annotation])
+    if annotation is UUID:
+        return _AnnotationPlan("uuid")
+    if annotation is datetime:
+        return _AnnotationPlan("time")
     if isinstance(annotation, type):
         if issubclass(annotation, Entity):
-            return "entity_ref"
+            return _AnnotationPlan("entity_ref")
         if annotation.__name__ in {"UUID"}:
-            return "uuid"
+            return _AnnotationPlan("uuid")
         if annotation.__name__ in {"datetime"}:
-            return "time"
-    return "entity_ref"
+            return _AnnotationPlan("time")
+    return _AnnotationPlan("entity_ref")
+
+
+def _annotation_plan_from_string(annotation: str) -> _AnnotationPlan:
+    if not annotation:
+        raise SDKSchemaError("empty annotation strings are not supported")
+    try:
+        expr = ast.parse(annotation, mode="eval").body
+    except SyntaxError:
+        return _scalar_annotation_plan_from_name(annotation)
+    return _annotation_plan_from_ast(expr)
+
+
+def _annotation_plan_from_ast(node: ast.AST) -> _AnnotationPlan:
+    if isinstance(node, ast.Name):
+        return _scalar_annotation_plan_from_name(node.id)
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return _scalar_annotation_plan_from_name(node.value)
+    if isinstance(node, ast.Attribute):
+        name = _ast_dotted_name(node)
+        if name in {"uuid.UUID", "UUID"}:
+            return _AnnotationPlan("uuid")
+        if name in {"datetime.datetime", "datetime"}:
+            return _AnnotationPlan("time")
+        return _AnnotationPlan("entity_ref")
+    if isinstance(node, ast.Subscript):
+        name = _ast_dotted_name(node.value)
+        args = _ast_subscript_args(node.slice)
+        if name in {"list", "List", "set", "Set", "frozenset", "FrozenSet"}:
+            if len(args) != 1:
+                raise SDKSchemaError(f"{name}[...] must specify exactly one element type")
+            inner = _annotation_plan_from_ast(args[0])
+            if inner.cardinality != "single" or inner.enum_values is not None:
+                raise SDKSchemaError("multi-cardinality fields must use a scalar element annotation")
+            return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi")
+        if name in {"tuple", "Tuple"}:
+            if len(args) == 2 and isinstance(args[1], ast.Constant) and args[1].value is Ellipsis:
+                inner = _annotation_plan_from_ast(args[0])
+                if inner.cardinality != "single" or inner.enum_values is not None:
+                    raise SDKSchemaError("multi-cardinality fields must use a scalar element annotation")
+                return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi")
+            raise SDKSchemaError("tuple fields must use tuple[T, ...] for multi-cardinality Form I fields")
+        if name in {"Literal", "typing.Literal"}:
+            return _literal_annotation_plan(tuple(_ast_literal_value(arg) for arg in args))
+        if name in {"Optional", "typing.Optional", "Union", "typing.Union"}:
+            raise SDKSchemaError("Optional/Union annotations are not supported in Form I schema declarations")
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        raise SDKSchemaError("Optional/Union annotations are not supported in Form I schema declarations")
+    return _AnnotationPlan("entity_ref")
+
+
+def _scalar_annotation_plan_from_name(name: str) -> _AnnotationPlan:
+    builtin_name_map = {
+        "str": "string",
+        "int": "int",
+        "bool": "bool",
+        "bytes": "bytes",
+        "float": "float64",
+        "UUID": "uuid",
+        "uuid.UUID": "uuid",
+        "datetime": "time",
+        "datetime.datetime": "time",
+    }
+    if name in builtin_name_map:
+        return _AnnotationPlan(builtin_name_map[name])
+    if name in {"entity_ref", "string", "int", "float64", "bool", "bytes", "time", "uuid"}:
+        return _AnnotationPlan(name)
+    return _AnnotationPlan("entity_ref")
+
+
+def _ast_dotted_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = _ast_dotted_name(node.value)
+        return f"{prefix}.{node.attr}" if prefix else node.attr
+    return ""
+
+
+def _ast_subscript_args(node: ast.AST) -> tuple[ast.AST, ...]:
+    if isinstance(node, ast.Tuple):
+        return tuple(node.elts)
+    return (node,)
+
+
+def _ast_literal_value(node: ast.AST) -> Any:
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, SyntaxError) as exc:
+        raise SDKSchemaError("Literal[...] values must be literal constants") from exc
+
+
+def _typing_union_origin() -> Any:
+    try:
+        from typing import Union
+    except Exception:
+        return None
+    return Union

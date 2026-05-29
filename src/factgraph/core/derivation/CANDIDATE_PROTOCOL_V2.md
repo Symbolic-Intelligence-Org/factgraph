@@ -202,14 +202,14 @@ Authoring/user syntax:
 - no-head derivations (`target_pred_id + head_vars`) remain fact-only compatibility path
 - primary_key fields in `head` are compile-time hard errors
 - `temporal_view` entry points are removed and fail explicitly
-- cross-coordinate attribute compare is restricted to same-entity `primary_key` fields
+- cross-coordinate attribute compare is restricted to same identity field comparisons
 
 Schema/protocol breakings relevant to migration:
 
 - `Field.dims` removed
 - `Field.fact_key` removed
 - `Field.cardinality` enum changed from `functional|multi|temporal` to `single|multi`
-- `Identity(primary_key=...)` is required for cross-coordinate joins
+- `Identity()` fields form the immutable anchor bundle for cross-coordinate joins
 - `sdk_batch_plan_v1` wire payload no longer carries `dims` / `fact_key`
 - write idempotency (`ingest_key`) includes business-temporal meta (`valid_from`/`valid_to`/`version`) in addition to source/trace material
 

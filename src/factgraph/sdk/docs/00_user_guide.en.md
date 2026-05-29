@@ -51,9 +51,9 @@ python -m pip install -e .
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tags: list[str] = Field()
 
 fg = FactGraph.create(schema_classes=[User])
 
@@ -85,21 +85,22 @@ for the full map.
 ## 2. Schema
 
 Schema is declared as Python classes. Every entity must declare at
-least one `Identity(primary_key=True)`; `Field` declares non-identity
-fields with `cardinality="single"` or `"multi"`.
+least one `Identity()`; all identity fields form the immutable anchor bundle.
+`Field()` declares non-identity fields, with cardinality inferred from the
+type annotation.
 
 ```python
 from factgraph.sdk import Entity, Field, Identity
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 class Document(Entity):
-    doc_id: str = Identity(primary_key=True)
-    title: str = Field(cardinality="single")
-    keywords: str = Field(cardinality="multi")
-    author: User = Field(cardinality="single")  # entity_ref to User
+    doc_id: str = Identity()
+    title: str = Field()
+    keywords: list[str] = Field()
+    author: User = Field()  # entity_ref to User
 ```
 
 ### Compile and instantiate
@@ -299,12 +300,9 @@ The context manager **does not** auto-commit on success or rollback on
 exception — call them explicitly. This is intentional so that batch
 preview/review patterns work naturally.
 
-Batch entity handles are primary-first. The initial `tx.entity(...)` call
-must provide every `Identity(primary_key=True)` value, unless that
-primary identity has a literal `default` or `default_factory="uuid4"` that
-can be materialized immediately. Use `bind(...)` only to complete
-non-primary identity dimensions before the first field operation,
-preview, or commit; writes always target one complete identity
+Batch entity handles require a complete identity bundle. The initial
+`tx.entity(...)` call must provide every `Identity()` value. Identity defaults
+are not materialized implicitly; writes always target one complete identity
 coordinate.
 
 ### Bulk ingest
@@ -853,9 +851,9 @@ on `SDKStoreError`.
 
 ```python
 class Account(Entity):
-    account_id: str = Identity(primary_key=True)
-    risk_seed: str = Field(cardinality="single")
-    risk: str = Field(cardinality="single")
+    account_id: str = Identity()
+    risk_seed: str = Field()
+    risk: str = Field()
 
 result = fg.schema.add(Account)
 assert result.added_entities == ["Account"]
@@ -871,16 +869,16 @@ the same Python class name and the added field declarations:
 
 ```python
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 fg = FactGraph.create(schema_classes=[User])
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    nickname: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    nickname: str = Field()
+    tags: list[str] = Field()
 
 result = fg.schema.add(User)
 assert result.added_entities == []

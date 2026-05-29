@@ -11,8 +11,8 @@ public error hierarchy. The canonical runtime authority lives in
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 fg = FactGraph.create(schema_classes=[User])
 

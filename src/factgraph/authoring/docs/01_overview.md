@@ -114,8 +114,8 @@ class EmploymentEvent(Entity):
         description = "Employment event"
         tags = ["employment", "event"]
 
-    event_id: str = Identity(primary_key=True)
-    company: str = Field(cardinality="single")
+    event_id: str = Identity()
+    company: str = Field()
 ```
 
 ### 3.2 Rule / inference compiler payload examples

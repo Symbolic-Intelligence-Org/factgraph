@@ -23,8 +23,8 @@ identity yet — they describe shapes and patterns.
 
 ```python
 class User(Entity):                   # entity declaration
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 with vars("u",) as (u,):              # rule declaration
     r = build_application_rule(

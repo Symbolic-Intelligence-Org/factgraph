@@ -255,8 +255,12 @@ def _compile_identity_predicate(
         "py_field_name": field_name,
         "is_identity_field": True,
     }
-    if identity_field.get("primary_key") is True:
-        predicate["primary_key"] = True
+    _copy_description_pattern_enum(
+        source=identity_field,
+        predicate=predicate,
+        type_domain=type_domain,
+        path="$.entities[].identity_fields[]",
+    )
     return predicate
 
 
@@ -279,12 +283,12 @@ def _compile_identity_field(field_raw: Any, entity_index: int, id_index: int) ->
             path=f"$.entities[{entity_index}].identity_fields[{id_index}].type_domain",
         )
     out = {"name": name, "type_domain": type_domain}
-    if "default" in field_raw:
-        out["default"] = field_raw["default"]
-    if "default_factory" in field_raw:
-        out["default_factory"] = field_raw["default_factory"]
-    if field_raw.get("primary_key") is True:
-        out["primary_key"] = True
+    _copy_description_pattern_enum(
+        source=field_raw,
+        predicate=out,
+        type_domain=type_domain,
+        path=f"$.entities[{entity_index}].identity_fields[{id_index}]",
+    )
     return out
 
 
@@ -352,14 +356,12 @@ def _compile_field(
     }
 
     predicate["py_field_name"] = py_name
-    description = field_raw.get("description")
-    if description is not None:
-        if not isinstance(description, str) or not description:
-            raise _compile_error(
-                f"entities[{entity_index}].fields[{field_index}].description must be non-empty string",
-                path=f"$.entities[{entity_index}].fields[{field_index}].description",
-            )
-        predicate["description"] = description
+    _copy_description_pattern_enum(
+        source=field_raw,
+        predicate=predicate,
+        type_domain=value_type,
+        path=f"$.entities[{entity_index}].fields[{field_index}]",
+    )
     return predicate
 
 
@@ -425,15 +427,73 @@ def _compile_relationship_field(
         "to_entity_type": to_entity_type,
         "py_field_name": py_name,
     }
-    description = field_raw.get("description")
+    _copy_description_pattern_enum(
+        source=field_raw,
+        predicate=predicate,
+        type_domain=value_type,
+        path=f"$.relationships[{rel_index}].fields[{field_index}]",
+    )
+    return predicate
+
+
+def _copy_description_pattern_enum(
+    *,
+    source: dict[str, Any],
+    predicate: dict[str, Any],
+    type_domain: Any,
+    path: str,
+) -> None:
+    description = source.get("description")
     if description is not None:
         if not isinstance(description, str) or not description:
-            raise _compile_error(
-                f"relationships[{rel_index}].fields[{field_index}].description must be non-empty string",
-                path=f"$.relationships[{rel_index}].fields[{field_index}].description",
-            )
+            raise _compile_error(f"{path}.description must be non-empty string", path=f"{path}.description")
         predicate["description"] = description
-    return predicate
+
+    pattern = source.get("pattern")
+    if pattern is not None:
+        if type_domain != "string":
+            raise _compile_error(f"{path}.pattern is only supported for string fields", path=f"{path}.pattern")
+        if not isinstance(pattern, str) or not pattern:
+            raise _compile_error(f"{path}.pattern must be non-empty string", path=f"{path}.pattern")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise _compile_error(f"{path}.pattern must be valid regex: {exc}", path=f"{path}.pattern")
+        predicate["pattern"] = pattern
+
+    enum_values = source.get("enum_values")
+    if enum_values is not None:
+        if not isinstance(enum_values, list) or not enum_values:
+            raise _compile_error(f"{path}.enum_values must be non-empty list", path=f"{path}.enum_values")
+        domains = {_literal_value_type_domain(value) for value in enum_values}
+        if len(domains) != 1:
+            raise _compile_error(f"{path}.enum_values must be homogeneous", path=f"{path}.enum_values")
+        enum_type_domain = next(iter(domains))
+        if enum_type_domain == "float64":
+            raise _compile_error(f"{path}.enum_values does not support float Literal values", path=f"{path}.enum_values")
+        if enum_type_domain != type_domain:
+            raise _compile_error(
+                f"{path}.enum_values type {enum_type_domain} does not match field type_domain {type_domain}",
+                path=f"{path}.enum_values",
+            )
+        predicate["enum_values"] = list(enum_values)
+
+
+def _literal_value_type_domain(value: Any) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float64"
+    if isinstance(value, bytes):
+        return "bytes"
+    raise _compile_error(
+        f"enum_values contains unsupported literal type: {type(value).__name__}",
+        path="$.entities[].fields[].enum_values",
+    )
 
 
 def _compile_pred_id(
