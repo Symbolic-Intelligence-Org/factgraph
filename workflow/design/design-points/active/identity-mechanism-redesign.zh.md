@@ -344,7 +344,7 @@ fg.assertions.retract(asrt_id)
 |---|---|---|
 | **§4.1 Q1** — Layer 2 schema-aware rejection 双路径硬拒绝 | Layer 2 fields(Identity descriptor)+ Layer 3 asrt 两入口都 reject;Identity → INV-7c;`<EntityType>:exists` → existence-claim transitional guard(**非** INV-7c) | INV-7c 强制点 1-4(已实施 — 三层 enforcement)|
 | **§4.2 Q2** — Identity Claim emission 在 application 层 derive | `_materialization_ops`(已 shipped 基线);emission input contract = 完整 identity bundle;Layer 2 fields API 不作为 emission path | INV-7b mirrored Claim(已实施 — 通过 `_materialization_ops`)|
-| **§4.3 Q3** — INV-7c 策略 C cache lifecycle = hybrid init + schema-evolution hook;**两个独立 frozenset** `identity_pred_ids` ∪ `exists_pred_ids` = `protected_anchor_pred_ids` | `application/state` 2 个 frozenset fields + `Store.__init__` build + `fg.schema.extend/register` hook | 策略 C 表格(已实施 — schema_runtime.py)|
+| **§4.3 Q3** — INV-7c 策略 C cache lifecycle = hybrid init + schema-evolution hook;**两个独立 frozenset** `identity_pred_ids` ∪ `exists_pred_ids` = `protected_anchor_pred_ids` | hybrid init = `SchemaIndex` 构造期 build frozensets;schema-evolution hook = `fg.schema.extend / register` 触发 cache rebuild(ADR 双层锁) | `SchemaIndex.identity_pred_ids` + `exists_pred_ids` + `protected_anchor_pred_ids` property 已实施(`application/schema_runtime.py` Slice 2 Step 1 @ `73993ebd`);schema-evolution hook **carry-forward 到 ADR-API Q14**(per Slice 2 SF4 + N1 — 当前 schema 已禁 Identity / Field 互转 + Identity 新增,immediate hook 暂不需要)|
 | **§4.4 Q16** — `:exists` Step 1 保留 co-emission + existence-claim transitional guard(**非** INV-7c) | Rule layer 继续依赖 `<EntityType>:exists`;Step 2+ 评估移除时 guard 同步退役 | 本 §5.2 新增"existence-claim transitional guard" 概念(独立于 INV-7c lifecycle)|
 
 **Slice 2 三层 enforcement landed**(2026-05-30 on `v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29`):
@@ -1537,7 +1537,7 @@ Step 1 落地的设计扩展点不会反过来推翻 Step 1 决策:
 
 #### §13.4.1 Slice 1 — Form I schema refactor(landed 2026-05-29 @ `9cef674b`)
 
-Branch:`v0.2.0-blueprint-slice-1-form-i-schema-refactor-2026-05-29` → master
+Branch:`v0.2.0-blueprint-slice-1-form-i-schema-2026-05-29` @ `9cef674b`(branch close + pushed to origin;sacred master `562c7419` 未动)
 
 落地的 §13.1 in-scope 项(Form I 范畴):
 
@@ -1569,7 +1569,7 @@ Blueprint:[`workflow/blueprints/active/2026-05-29_slice-2-identity-claim-emissio
 
 - `fg.entities.create / fg.entities.delete / fg.entities.exists` 三个 entities namespace 入口 — Slice 3a ADR-API Q10 namespace migration scope(Slice 2 error wording 引用 `fg.entities.delete + fg.entities.create` 作为 user migration guidance,implementation 不依赖 unshipped API)
 - `fg.fields.* / fg.assertions.*` namespace 重组 — Slice 3a ADR-API Q10
-- `AssertionView` 统一 / `_meta` 统一输入 / `_DataMember.pattern` / `fg.schema.register / extend / apply` 三分 — 留待后续 slice
+- `AssertionView` 统一 / `_meta` 统一输入 / `fg.schema.register / extend / apply` 三分 — 留待后续 slice(注:`_DataMember.pattern` 已在 Slice 1 Form I 随 `Identity(..., pattern=)` / `Field(..., pattern=)` 落地,不属 carry-forward)
 - 内部 rollback `core/derivation/accept.py:401` retract_by_asrt — 跟 Q-PR1 carve-out 一致 intentionally unguarded(Slice 2 SF11 锁定 — internal classification preserved,不走 retract guard)
 
 #### §13.4.3 Slice 2 Q-PR1 carve-out preservation
