@@ -258,7 +258,6 @@ def _predicate_stable_projection(predicate: dict[str, Any]) -> dict[str, Any]:
         "is_identity_field",
         "owner_type",
         "pred_id",
-        "primary_key",
         "py_field_name",
         "relationship_type",
         "to_entity_type",

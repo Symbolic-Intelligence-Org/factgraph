@@ -790,10 +790,9 @@ def _entity_identity_closure_atoms(
         raise RuleExprError(f"cannot close entity-ref port for {entity_type}: incomplete schema identity metadata")
 
     atoms: list[PredAtom] = []
-    primary_fields = tuple(field for field in identity_fields if getattr(field, "primary_key", False))
-    if not primary_fields:
-        raise RuleExprError(f"cannot close entity-ref port for {entity_type}: no primary identity fields")
-    for field_info in primary_fields:
+    if not identity_fields:
+        raise RuleExprError(f"cannot close entity-ref port for {entity_type}: no identity fields")
+    for field_info in identity_fields:
         field_name = getattr(field_info, "name", None)
         if not isinstance(field_name, str) or not field_name:
             raise RuleExprError(f"cannot close entity-ref port for {entity_type}: invalid identity field metadata")

@@ -268,6 +268,9 @@ Replace each `getattr(field, "primary_key", False)` with anchor-bundle membershi
 - `application/protocol/evaluate_result.py:793`
 - `application/protocol/rule_expr_inspect.py:232`
 
+Remove remaining non-runtime zombie `primary_key` projection keys:
+- `application/schema_mutation_runtime.py:261` stable projection allowlist
+
 ### 5.11 Rule lowering rewrite(`authoring/where_schema_lowering.py`)
 
 Per Scope Freeze #3(L7 lock — same-Identity-field-match only):
@@ -487,6 +490,7 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] `sdk/store.py:2807` primary_key check replaced with anchor-bundle membership
 - [ ] `application/protocol/evaluate_result.py:793` primary_key check replaced
 - [ ] `application/protocol/rule_expr_inspect.py:232` primary_key check replaced
+- [ ] `application/schema_mutation_runtime.py:261` `primary_key` stable projection key removed
 
 ### 7.8 Rule lowering + derivation semantics(SF3 + SF4)
 
@@ -674,7 +678,8 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
 
 - 8.1 `application/protocol/evaluate_result.py:793` replace check
 - 8.2 `application/protocol/rule_expr_inspect.py:232` replace check
-- 8.3 Tests — commit boundary
+- 8.3 `application/schema_mutation_runtime.py:261` remove stable-projection zombie `primary_key` key(discovered by Step 7 reviewer grep)
+- 8.4 Tests — commit boundary
 
 ### Step 9 — Rule lowering rewrite(`authoring/where_schema_lowering.py`)— **SF3 enforced**
 

@@ -229,10 +229,9 @@ def _entity_ref_port_is_closed(
     if not isinstance(identity_fields, tuple) or not isinstance(identity_predicates, Mapping):
         return False
 
-    primary_fields = tuple(field for field in identity_fields if getattr(field, "primary_key", False))
-    if not primary_fields:
+    if not identity_fields:
         return False
-    for field_info in primary_fields:
+    for field_info in identity_fields:
         field_name = getattr(field_info, "name", None)
         if not isinstance(field_name, str) or not field_name:
             return False
