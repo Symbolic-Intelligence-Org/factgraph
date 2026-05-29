@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Literal
-from uuid import uuid4
 
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.schema.schema_ir import ensure_schema_ir, schema_digest
@@ -14,10 +13,6 @@ from .protocol import EntityRef, EntitySelector, ErrorDTO
 class IdentityFieldInfo:
     name: str
     type_domain: str
-    has_default: bool = False
-    default_value: Any = None
-    default_factory: str | None = None
-    primary_key: bool = False
 
 
 @dataclass(frozen=True)
@@ -29,6 +24,9 @@ class PredicateInfo:
     value_type_domain: str | None
     is_entity_exists: bool = False
     is_identity_field: bool = False
+    description: str | None = None
+    enum_values: tuple[Any, ...] | None = None
+    pattern: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,10 +95,6 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
                 IdentityFieldInfo(
                     name=str(row["name"]),
                     type_domain=str(row["type_domain"]),
-                    has_default="default" in row,
-                    default_value=row.get("default"),
-                    default_factory=row.get("default_factory") if isinstance(row.get("default_factory"), str) else None,
-                    primary_key=bool(row.get("primary_key", False)),
                 )
             )
         entity_infos[entity_type] = EntityTypeInfo(
@@ -151,6 +145,9 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
             value_type_domain=value_type_domain,
             is_entity_exists=bool(pred.get("is_entity_exists", False)),
             is_identity_field=bool(pred.get("is_identity_field", False)),
+            description=pred.get("description") if isinstance(pred.get("description"), str) else None,
+            enum_values=tuple(pred["enum_values"]) if isinstance(pred.get("enum_values"), list) else None,
+            pattern=pred.get("pattern") if isinstance(pred.get("pattern"), str) else None,
         )
         if not info.is_entity_exists and info.py_field_name is not None and info.value_type_domain is None:
             raise SchemaResolutionError(
@@ -280,7 +277,6 @@ def materialize_identity(
     partial_identity: dict[str, Any],
     *,
     index: SchemaIndex,
-    allow_identity_defaults: bool = False,
 ) -> dict[str, Any]:
     info = entity_info(index, entity_type)
     if not isinstance(partial_identity, dict):
@@ -301,34 +297,11 @@ def materialize_identity(
 
     materialized: dict[str, Any] = {}
     missing_required: list[str] = []
-    missing_defaulted: list[str] = []
     for field in info.identity_fields:
         if field.name in partial_identity:
             materialized[field.name] = _normalize_identity_value(
                 field.type_domain,
                 partial_identity[field.name],
-                entity_type=entity_type,
-                field_name=field.name,
-            )
-            continue
-        if field.has_default:
-            if not allow_identity_defaults:
-                missing_defaulted.append(field.name)
-                continue
-            materialized[field.name] = _normalize_identity_value(
-                field.type_domain,
-                field.default_value,
-                entity_type=entity_type,
-                field_name=field.name,
-            )
-            continue
-        if field.default_factory is not None:
-            if not allow_identity_defaults:
-                missing_defaulted.append(field.name)
-                continue
-            materialized[field.name] = _materialize_default_factory(
-                field.default_factory,
-                type_domain=field.type_domain,
                 entity_type=entity_type,
                 field_name=field.name,
             )
@@ -341,13 +314,6 @@ def materialize_identity(
             code="IDENTITY_INCOMPLETE",
             path=("identity",),
             details={"entity_type": entity_type, "missing_fields": missing_required},
-        )
-    if missing_defaulted:
-        raise SchemaResolutionError(
-            f"identity requires defaults for {entity_type}, but allow_identity_defaults is False: {missing_defaulted}",
-            code="IDENTITY_DEFAULTS_NOT_ALLOWED",
-            path=("identity",),
-            details={"entity_type": entity_type, "defaulted_fields": missing_defaulted},
         )
     return materialized
 
@@ -378,37 +344,10 @@ def resolve_selector(selector: EntitySelector, *, index: SchemaIndex) -> EntityR
         selector.entity_type,
         selector.identity,
         index=index,
-        allow_identity_defaults=selector.allow_identity_defaults,
     )
     ref = EntityRef(entity_type=selector.entity_type, identity=identity)
     encoded = encode_entity_ref(ref, index=index)
     return EntityRef(entity_type=ref.entity_type, identity=ref.identity, encoded_ref=encoded)
-
-
-def _materialize_default_factory(
-    default_factory: str,
-    *,
-    type_domain: str,
-    entity_type: str,
-    field_name: str,
-) -> str:
-    if default_factory != "uuid4":
-        raise SchemaResolutionError(
-            f"unsupported default_factory for {entity_type}.{field_name}: {default_factory}",
-            code="UNSUPPORTED_DEFAULT_FACTORY",
-            path=("identity", field_name),
-            details={"default_factory": default_factory, "type_domain": type_domain},
-        )
-    if type_domain == "uuid":
-        return str(uuid4()).lower()
-    if type_domain == "string":
-        return uuid4().hex
-    raise SchemaResolutionError(
-        f"default_factory='uuid4' is not supported for {entity_type}.{field_name} type_domain={type_domain}",
-        code="UNSUPPORTED_DEFAULT_FACTORY_DOMAIN",
-        path=("identity", field_name),
-        details={"default_factory": default_factory, "type_domain": type_domain},
-    )
 
 
 def _normalize_identity_value(
