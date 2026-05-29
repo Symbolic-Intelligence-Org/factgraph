@@ -469,8 +469,15 @@ class IdentityEditor:
     def set(self, *args: Any, **kwargs: Any) -> None:
         del args, kwargs
         raise SDKStoreError(
-            f"identity field '{self._field_name}' is immutable in editor; "
-            "open a new editor with different identity instead"
+            f"Identity field '{self._field_name}' is immutable per INV-7c. "
+            "Identity is the immutable entity anchor (INV-7a) — "
+            "identity values cannot be modified on an existing entity. "
+            "To change the identity bundle, delete the entity and create a new one "
+            "with the new identity values "
+            "(future API: fg.entities.delete(e_ref) + "
+            "fg.entities.create(EntityCls, **new_identity_kwargs)). "
+            "See ADR-IC §4.1.",
+            code="INV_7C_IDENTITY_PROTECTED",
         )
 
     def add(self, *args: Any, **kwargs: Any) -> None:

@@ -186,8 +186,16 @@ def _plan_dependencies_and_mutations(
         pred_info = field_predicate(index, mutation.field.entity_type, mutation.field.field_name)
         if pred_info.is_identity_field:
             raise EntityWriteError(
-                f"identity field mutation is not supported: {mutation.field.entity_type}.{mutation.field.field_name}",
-                code="IDENTITY_FIELD_MUTATION_NOT_SUPPORTED",
+                f"Identity field mutation is not supported per INV-7c: "
+                f"{mutation.field.entity_type}.{mutation.field.field_name}. "
+                "Identity is the immutable entity anchor (INV-7a) — "
+                "identity values cannot be modified on an existing entity. "
+                "To change the identity bundle, delete the entity and create a new one "
+                "with the new identity values "
+                "(future API: fg.entities.delete(e_ref) + "
+                "fg.entities.create(EntityCls, **new_identity_kwargs)). "
+                "See ADR-IC §4.1.",
+                code="INV_7C_IDENTITY_PROTECTED",
                 path=("mutations", str(idx), "field"),
                 details={"entity_type": mutation.field.entity_type, "field_name": mutation.field.field_name},
             )
