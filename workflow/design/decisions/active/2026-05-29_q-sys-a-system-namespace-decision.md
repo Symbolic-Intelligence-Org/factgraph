@@ -64,9 +64,13 @@ ADR-SYS-A draft 启动前 user reviewer 给出 4 项 directional guidance:
 - INV-10 `__system__.*` namespace reservation 是 **(f) target-gap / pending migration** — shipped 当前不存在该概念前提;Step 1 实施时建立 load-bearing boundary
 
 **已 shipped 但本 ADR enforcement 路径必须 wire in 的入口**:
-- `authoring/schema_compile.py:79-83` `entity_type` 字符串校验(当前仅 non-empty;将加 `__system__` prefix reject per §4.2 Layer A)
-- `authoring/schema_compile.py:142` `f"{entity_type}:exists"` 拼接路径(将加 prefix reject defense in depth per §4.2 Layer B)
-- ADR-API §4.5 `register/extend/apply` 三分 hook(将集成 §4.2 Layer A reject)
+- `authoring/schema_compile.py:79-83` `entity_type` 字符串校验(当前仅 non-empty;将加 G2 prefix reject per §4.2 Layer B.1)
+- `authoring/schema_compile.py:142` `f"{entity_type}:exists"` 拼接路径(将加 prefix reject defense in depth per §4.2 Layer B.1)
+- `authoring/schema_compile.py:175-182` `_compile_relationship` `relationship_type` 校验(当前仅 non-empty;将加 G2 prefix reject per §4.2 Layer B.2 — P1 amendment new coverage)
+- `authoring/schema_compile.py:460-478` `_compile_relationship_pred_id` 产 `f"{relationship_prefix}:{local}"`(G2 上游 reject 后自然安全)
+- `sdk/schema.py:248-...` `Relationship` / `RelationshipMeta` descriptor public surface(将集成 §4.2 Layer A.2 G2 reject hook)
+- ADR-API §4.5 `register/extend/apply` 三分 hook(将集成 §4.2 Layer A.1 + A.2 G2 reject 双路径)
+- `sdk/batch.py:540-...` `_parse_wire_write_op` + `:877-...` `_resolve_wire_field_for_write_op`(§4.2 Layer E transitive G2 covered — 不动)
 
 ## 2. Scope
 
@@ -74,8 +78,8 @@ ADR-SYS-A draft 启动前 user reviewer 给出 4 项 directional guidance:
 
 | Sub-decision | 锁的内容 |
 |---|---|
-| **§4.1 Q5a-1** | `__system__.` prefix 是 ledger reserved namespace;**user-facing** API 入口任何路径 不允许声明 / 创建 / 写入 pred_id 以 `__system__.` 开头 |
-| **§4.2 Q5a-2** | Reject 路径 enumeration — 覆盖 4 layer:Layer A(`fg.schema.register/extend/apply`)+ Layer B(`schema_compile.py` defense in depth)+ Layer C(未来 `fg.assertions.write` 若 Step 2+ 引入)+ Layer D(`fg.fields.*` 自动安全 derive)|
+| **§4.1 Q5a-1** | `__system__` prefix 是 ledger reserved namespace;**两个独立命名 guard**:**G1 raw pred_id guard**(精确 `__system__.` 含点)+ **G2 schema owner guard**(精确 `__system__` 不含点,覆盖 entity_type / relationship_type 等 owner_type)|
+| **§4.2 Q5a-2** | Reject 路径 enumeration — 覆盖 5 layer:Layer A(`fg.schema.register/extend/apply` × entity+relationship 双路径,G2)+ Layer B(`schema_compile.py:_compile_entity` + `_compile_relationship` defense in depth × 2,G2)+ Layer C(未来 raw pred_id 入口若 Step 2+ 引入,G1)+ Layer D(`fg.fields.*` 自动安全 derive)+ Layer E(`WireBatchPlan` schema-bound replay,G2 transitively covered)|
 
 ## 3. Non-scope
 
@@ -95,103 +99,188 @@ ADR-SYS-A draft 启动前 user reviewer 给出 4 项 directional guidance:
 
 ## 4. Decision
 
-### 4.1 Q5a-1 — `__system__.` 命名空间预留:**ledger reserved**
+### 4.1 Q5a-1 — `__system__` 命名空间预留:**ledger reserved**;**两个命名清晰的 guard**
 
-**锁定**:`__system__.` prefix(注意:**双下划线** + `system` + **双下划线** + 点)在 ledger 中是 **reserved system namespace**。user-facing API 入口任何路径**不允许**:
-- 注册 / 扩展 entity_type 以 `__system__` 开头(如 `class MySchema(Entity): entity_type = "__system__"`)
-- 经 schema 编译产生的 pred_id 以 `__system__.` 开头(如 `<EntityType>:<field_name>` 等价 `__system__:<field>`,被 §4.2 Layer B defense in depth 捕获)
-- 未来若引入 `fg.assertions.write(pred_id=...)` 接受 user-supplied raw pred_id 路径,reject 以 `__system__.` 开头(per §4.2 Layer C forward-looking)
+**锁定**:`__system__` prefix(注意:**双下划线** + `system` + **双下划线**)在 ledger 中是 **reserved system namespace**。两类 user-facing surface 各自由**独立命名的 guard** 把守 — 它们防的是**不同 attack surface**,不可合并:
 
-**Pattern 精确性**(per design-point ledger-spec §4.7 INV-10):
-- 拒绝 pattern:`pred_id.startswith("__system__.")`(精确双下划线 + system + 双下划线 + 点)
-- **不**拒绝近似变种(如 `__sys__` / `__system_` 单下划线 / `_system_` 单下划线)— 用户若刻意命名近似形式自行承担歧义;本 ADR 不做 fuzzy match(per §5.1 alt rejected)
-- entity_type 启用 `__system__` 自身(无点跟在 `__system__` 后)也被拒绝 — schema_compile 会产生 `__system__:exists` 等形态,§4.2 Layer A 入口侧 reject 即可
+#### 4.1.1 G1 — `raw pred_id guard`
 
-### 4.2 Q5a-2 — Reject 路径 enumeration:**4 layer enforcement**
+> `pred_id.startswith("__system__.")`(**精确**双下划线 + system + 双下划线 + **点**)
 
-**锁定**:4 个 layer 各自的 reject 责任(per meta-ADR §4.4 4-layer enforcement 模式):
+**适用面**:user **直接供给 raw pred_id** 的入口。Step 1 内 **不存在** 这类入口(per design-point §12.2 line 974 — "Step 1 不引入 `fg.assertions.write` 这类绕开 schema 的写入路径");forward-looking 规约 covering:
+- 未来 `fg.assertions.write(pred_id=...)`(若 Step 2+ 引入)— 详 §4.2 Layer C
+- 未来 schema-free wire 接口(若 Step 2+ 引入)— 同 §4.2 Layer C 规约
 
-#### 4.2.1 Layer A — `fg.schema.register/extend/apply(EntityClass)` 入口侧 reject(strict)
+#### 4.1.2 G2 — `schema owner guard`
+
+> `owner_type.startswith("__system__")`(**精确**双下划线 + system + 双下划线;**不要求**末尾点)
+
+**适用面**:user 通过 **schema declaration** 间接产生 pred_id 的入口。owner_type 是 schema 编译路径上 pred_id 拼接的左半:`<owner_type>:<field_name>`(对 entity)或 `<relationship_type>:<field_name>`(对 relationship)。
+
+这类入口下,user 不直接写 `__system__.X`,而是写 `entity_type = "__system__X"` 或 `relationship_type = "__system__Y"`,schema_compile 会产生:
+- `__system__x:exists` predicate(entity)
+- `__system__x:field_name` predicate(entity field)
+- `__system__y:field_name` predicate(relationship field)
+
+这些 pred_id 是 **冒号 separator** 不是 dot,**不**被 G1 catch — 必须用 G2(`owner_type` prefix check)在 schema declaration 层 reject。
+
+**G2 覆盖的所有 owner_type 源**:
+- `EntityClass.entity_type`(per `sdk/schema.py` Entity descriptor;`authoring/schema_compile.py:79-83`)
+- `RelationshipClass.relationship_type`(per `sdk/schema.py:248-...` Relationship descriptor;`authoring/schema_compile.py:175-182`)
+- 任何**未来**新增的 schema declaration 可产生 owner-prefixed pred_id 的 surface(应继承 G2)
+
+#### 4.1.3 为什么不合并成单 guard
+
+| 角度 | G1 单独 | G2 单独 | G1 + G2 双 guard |
+|---|---|---|---|
+| `entity_type = "__system__X"` → `__system__x:exists` | ✗ catch 不到(no dot)| ✓ | ✓ |
+| `relationship_type = "__system__Y"` → `__system__y:field` | ✗ catch 不到(no dot)| ✓ | ✓ |
+| 未来 raw `fg.assertions.write(pred_id="__system__.revokes")` | ✓ | ✗ catch 不到(无 owner)| ✓ |
+| Implementation 复杂度 | low | low | low(两 helper funcs)|
+
+→ **必须双 guard**,各管 1 类 attack surface;单 guard 任一选择都漏一类。
+
+#### 4.1.4 Pattern 精确性(两 guard 同适用,per design-point ledger-spec §4.7 INV-10)
+
+- G1 / G2 都是 **精确 prefix match**(`str.startswith`)
+- **不**拒绝近似变种(如 `__sys__` / `__system_` 单下划线 / `_system_` 单下划线 / `___system___` 三下划线)— 用户若刻意命名近似形式自行承担歧义;本 ADR 不做 fuzzy match(per §5.1 alt rejected)
+- 跟 ledger-spec §4.7 INV-10 statement 一致(reserved namespace 是 `__system__.*`,本 ADR 把它解析为 G1(`__system__.` 严格)+ G2(`__system__` 宽口径覆盖 schema-derived 冒号 predicates))
+
+### 4.2 Q5a-2 — Reject 路径 enumeration:**5 layer × 2 guard enforcement**
+
+**锁定**:5 个 layer 各自的 reject 责任,每个 layer 显式标注 **G1**(raw pred_id guard)或 **G2**(schema owner guard)per §4.1:
+
+#### 4.2.1 Layer A — `fg.schema.register/extend/apply(SchemaClass)` 入口侧 reject(**G2** strict)
 
 **位置**:ADR-API §4.5.1 锁的 `register/extend/apply` 三分 method 入口。
 
-**实施**:每个 method 在 dispatch 前 check `EntityClass.entity_type` 是否以 `__system__` 开头;若是,raise `SDKStoreError`:
+**Schema declaration 双路径**:本 layer 覆盖 **entity + relationship** 两类 schema declaration(per shipped SDK public surface):
+
+##### 4.2.1.1 Entity 路径(`EntityClass.entity_type`)
 
 ```python
 def _check_user_facing_entity_type(entity_class: type[Entity]) -> None:
     entity_type = getattr(entity_class, "entity_type", None) or entity_class.__name__
-    if entity_type.startswith("__system__"):
+    if entity_type.startswith("__system__"):   # G2 schema owner guard
         raise SDKStoreError(
             f"entity_type {entity_type!r} uses reserved system namespace.\n"
-            f"  `__system__.*` is reserved for ledger internal mechanisms\n"
-            f"  (see ADR-SYS-A §4.1). User-facing schema registration cannot\n"
-            f"  declare entity_type starting with '__system__'.\n"
+            f"  `__system__` is reserved for ledger internal mechanisms\n"
+            f"  (see ADR-SYS-A §4.1 G2 schema owner guard). User-facing schema\n"
+            f"  registration cannot declare entity_type starting with '__system__'.\n"
             f"  Choose a different entity_type (e.g., 'MyEntity' instead of\n"
             f"  '__system__MyEntity')."
         )
 ```
 
-**为什么 strict 在 SDK shell**:fail-fast — 在 schema 声明早期 catch,user 立刻收到 error;不浪费 schema_compile 路径资源。
-
-#### 4.2.2 Layer B — `authoring/schema_compile.py` defense in depth(strict)
-
-**位置**:`authoring/schema_compile.py:79-83` `entity_type` 字符串校验路径 + `_compile_field` / `_compile_identity_predicate` 路径(每个产 pred_id 的位置)。
-
-**实施**:`_compile_entity` 入口加 prefix check;此外 `_owner_prefix(entity_type)` 路径产生的 pred_id 在拼接时 sanity check(若 entity_type 已通过 Layer A,本 layer 应 never raise — defense in depth):
+##### 4.2.1.2 Relationship 路径(`RelationshipClass.relationship_type`)
 
 ```python
+def _check_user_facing_relationship_type(relationship_class: type[Relationship]) -> None:
+    relationship_type = getattr(relationship_class, "relationship_type", None) or relationship_class.__name__
+    if relationship_type.startswith("__system__"):   # G2 schema owner guard
+        raise SDKStoreError(
+            f"relationship_type {relationship_type!r} uses reserved system namespace.\n"
+            f"  `__system__` is reserved for ledger internal mechanisms\n"
+            f"  (see ADR-SYS-A §4.1 G2 schema owner guard). User-facing schema\n"
+            f"  registration cannot declare relationship_type starting with '__system__'.\n"
+            f"  Choose a different relationship_type."
+        )
+```
+
+**为什么覆盖 relationship 路径**:`sdk/schema.py:248-...` `Relationship` descriptor 是 shipped public surface;`authoring/schema_compile.py:175-182` `_compile_relationship` 接受 `relationship_type` 并 `_owner_prefix(relationship_type)` 产生 relationship predicate prefix(`authoring/schema_compile.py:460-478` `_compile_relationship_pred_id`)。**不**加 reject = user 可 `class MyRel(Relationship): relationship_type = "__system__X"` 产 `__system__x:field` 落地 ledger,违反 INV-10。
+
+**为什么 strict 在 SDK shell**:fail-fast — 在 schema 声明早期 catch,user 立刻收到 error;不浪费 schema_compile 路径资源。
+
+#### 4.2.2 Layer B — `authoring/schema_compile.py` defense in depth(**G2** strict)
+
+**位置**:两个对称 entry point:
+- `authoring/schema_compile.py:79-83` `_compile_entity` `entity_type` 校验
+- `authoring/schema_compile.py:175-182` `_compile_relationship` `relationship_type` 校验
+
+**实施**:两个 entry point 都加 G2 prefix check(defense in depth — bypass-SDK-shell path catch):
+
+```python
+# _compile_entity:
 def _compile_entity(entity_raw, entity_index, ...):
     entity_type = entity_raw.get("entity_type")
     if not isinstance(entity_type, str) or not entity_type:
         raise _compile_error(...)
-    # 新增 — defense in depth (Layer A 通常已 catch):
-    if entity_type.startswith("__system__"):
+    if entity_type.startswith("__system__"):   # G2
         raise _compile_error(
-            f"entity_type {entity_type!r} uses reserved system namespace `__system__.*` "
-            f"per ADR-SYS-A §4.1. Should have been rejected at SDK shell layer (Layer A) — "
+            f"entity_type {entity_type!r} uses reserved system namespace `__system__` "
+            f"per ADR-SYS-A §4.1 G2. Should have been rejected at SDK shell layer (Layer A) — "
             f"reaching schema_compile suggests internal API bypass; check caller path.",
             path=f"$.entities[{entity_index}].entity_type",
         )
     # ... rest of _compile_entity
+
+# _compile_relationship (对称 — 同 G2 check):
+def _compile_relationship(rel_raw, rel_index, ...):
+    relationship_type = rel_raw.get("relationship_type")
+    if not isinstance(relationship_type, str) or not relationship_type:
+        raise _compile_error(...)
+    if relationship_type.startswith("__system__"):   # G2
+        raise _compile_error(
+            f"relationship_type {relationship_type!r} uses reserved system namespace `__system__` "
+            f"per ADR-SYS-A §4.1 G2. Should have been rejected at SDK shell layer (Layer A) — "
+            f"reaching schema_compile suggests internal API bypass; check caller path.",
+            path=f"$.relationships[{rel_index}].relationship_type",
+        )
+    # ... rest of _compile_relationship
 ```
 
-**为什么 defense in depth**:caller 直接调 `compile_schema(spec_dict)` 路径(bypass SDK shell `fg.schema.register/extend/apply`)— 如 internal migration tool / test fixture — 仍然 enforce;跟 ADR-FI §4.4 4-layer enforcement 一致(SDK shell + application 双层 strict)。
+**为什么 defense in depth**:caller 直接调 `compile_schema(spec_dict)` 路径(bypass SDK shell `fg.schema.register/extend/apply`)— 如 internal migration tool / test fixture / Step 2+ programmatic schema construction — 仍然 enforce;两个 schema entry point 对称 covered;跟 ADR-FI §4.4 4-layer enforcement 一致(SDK shell + application 双层 strict)。
 
-#### 4.2.3 Layer C — 未来 `fg.assertions.write(pred_id=...)` 入口 reject(forward-looking 规约,本 ADR **不**锁该 API 是否引入)
+#### 4.2.3 Layer C — 未来 raw pred_id 入口 reject(**G1** forward-looking 规约,本 ADR **不**锁该 API 是否引入)
 
 **位置**:per design-point §12.2 line 974,**Step 1 不引入** `fg.assertions.write(pred_id, e_ref, value)` 这类绕开 schema 的写入路径。
 
-**Forward-looking 规约**:若 Step 2+ 引入该 API,**必须** reject user-supplied `pred_id.startswith("__system__.")`:
+**Forward-looking 规约**:若 Step 2+ 引入任何接受 user-supplied raw pred_id 的入口(`fg.assertions.write` / 新增 schema-free wire 接口 / 等),**必须** reject 以 G1 pattern:
 
 ```python
 # Step 2+ 假设引入时:
 def write(self, *, pred_id: str, e_ref: str, value: Any, ...) -> str:
-    if pred_id.startswith("__system__."):
+    if pred_id.startswith("__system__."):   # G1 raw pred_id guard
         raise SDKStoreError(
-            f"pred_id {pred_id!r} uses reserved system namespace per ADR-SYS-A §4.1. "
+            f"pred_id {pred_id!r} uses reserved system namespace per ADR-SYS-A §4.1 G1. "
             f"User-facing assertions.write cannot supply system pred_ids. "
             f"System claims are emitted by internal mechanisms only (see ADR-SYS-B)."
         )
 ```
 
-**本 ADR 不锁是否引入该 API**;只锁 **若**引入 **必须**包含此 reject。该 forward-looking 规约 carry-forward(per §7.4)。
+**本 ADR 不锁是否引入该 API**;只锁 **若**引入 **必须**包含 G1 reject。该 forward-looking 规约 carry-forward(per §7.4)。
 
 #### 4.2.4 Layer D — `fg.fields.*` 自动安全 derive(no independent enforcement needed)
 
 **位置**:ADR-API §4.1 Layer 2 `fg.fields.set/add/retract/delete(Field, e_ref, value)`。
 
-**Derive 安全**:Layer 2 fields API 输入是 `Field` descriptor(来自 schema-declared)+ encoded e_ref string + value;**不接受** raw pred_id。Field descriptor 的 `pred_id` 在 `_compile_field` 路径产生(per `authoring/schema_compile.py:227-260`)— 已经过 Layer A + Layer B reject。
+**Derive 安全**:Layer 2 fields API 输入是 `Field` descriptor(来自 schema-declared)+ encoded e_ref string + value;**不接受** raw pred_id。Field descriptor 的 `pred_id` 在 `_compile_field` / `_compile_relationship_field` 路径产生(per `authoring/schema_compile.py:227-260` + `authoring/schema_compile.py:460-478`)— 已经过 Layer A + Layer B G2 reject。
 
 **结论**:Layer 2 入口**无独立 reject 路径**;reject 责任全部 dispatch 到 Layer A + B。这跟 ADR-API §4.1 排他原则(Layer 2 不接 `asrt_id` 或 raw pred_id)一致。
 
-#### 4.2.5 Enforcement 层级总结
+#### 4.2.5 Layer E — Schema-bound wire-replay paths(**transitive G2** covered;no independent reject)
 
-| Layer | 入口 | Reject 路径 | enforcement 模式 |
-|---|---|---|---|
-| **A** | `fg.schema.register/extend/apply` | 检查 `EntityClass.entity_type.startswith("__system__")` raise `SDKStoreError` | SDK shell strict |
-| **B** | `authoring/schema_compile.py:_compile_entity` | defense in depth — 同样 reject `entity_type.startswith("__system__")` raise `_compile_error` | application strict |
-| **C** | 未来 `fg.assertions.write`(若 Step 2+ 引入)| reject user-supplied `pred_id.startswith("__system__.")` raise `SDKStoreError` | SDK shell strict(forward-looking)|
-| **D** | `fg.fields.*` | **N/A** — derive 安全;Field descriptor 来自 schema(已 Layer A+B reject)| 自动安全 |
+**位置**:shipped `sdk/batch.py:540-...` `_parse_wire_write_op` 路径 — `WireBatchPlan` 从 JSON 解析 raw `pred_id` 字段(看似 raw pred_id 入口);`sdk/batch.py:877-...` `_resolve_wire_field_for_write_op` 应用时通过 `pred_index: dict[str, dict[str, Any]]`(schema pred index)校验 + reject ambiguous / unknown / mismatch entries。
+
+**分类**:**schema-bound wire-replay path** — 虽然 wire JSON 中 raw `pred_id` 字段看似是 user-supplied,但 apply 路径**强制要求**该 pred_id **必须存在于 schema pred_index**(`pred_index.get(op.pred_id) is None → raise SDKStoreError`),且 owner_type / field_name 跟 schema 严格匹配。
+
+**Transitively covered by G2**:Layer A + B G2 reject 后,schema pred_index **不可能**包含 `__system__:*` predicates;wire-replay path 试图 apply `pred_id="__system__:X"` 会被 `pred_index.get(...) is None` reject(binding validation failure),**不需要**本 ADR 在 wire 解析层独立加 reject。
+
+**为什么不算 G1 raw pred_id 入口**:G1 适用于 "user supply raw pred_id 直接写 ledger"(不绑定 schema);Layer E wire-replay 是 "user supply 已经存在 schema 中的 pred_id 用于 replay"(绑定 schema)。后者 attack surface 由 G2 + schema binding validation 双重覆盖,概念上不同。
+
+**ADR docs sync**(per §7.2 follow-up):classification 写进 `04_api_surface.en.md` 防 reviewer 误以为漏 raw pred_id surface。
+
+#### 4.2.6 Enforcement 层级总结
+
+| Layer | 入口 | Reject 路径 | Guard | Enforcement 模式 |
+|---|---|---|---|---|
+| **A.1** | `fg.schema.register/extend/apply(EntityClass)` | `EntityClass.entity_type.startswith("__system__")` raise `SDKStoreError` | G2 | SDK shell strict |
+| **A.2** | `fg.schema.register/extend/apply(RelationshipClass)` | `RelationshipClass.relationship_type.startswith("__system__")` raise `SDKStoreError` | G2 | SDK shell strict |
+| **B.1** | `authoring/schema_compile.py:_compile_entity` | defense in depth `entity_type.startswith("__system__")` raise `_compile_error` | G2 | application strict |
+| **B.2** | `authoring/schema_compile.py:_compile_relationship` | defense in depth `relationship_type.startswith("__system__")` raise `_compile_error` | G2 | application strict |
+| **C** | 未来 raw pred_id 入口(若 Step 2+ 引入)| `pred_id.startswith("__system__.")` raise `SDKStoreError` | G1 | SDK shell strict(forward-looking)|
+| **D** | `fg.fields.*` | **N/A** — derive 安全;Field descriptor 来自 schema(已 Layer A+B G2 reject)| — | 自动安全 |
+| **E** | `WireBatchPlan` apply 路径(`sdk/batch.py`)| **transitively** — wire raw pred_id 通过 schema pred_index 校验,Layer A+B G2 reject 后 pred_index 不含 `__system__:*` → binding validation 自然 reject | G2(transitive)| schema-bound;无独立 reject |
 
 **跟 meta-ADR §4.4 4-layer enforcement 一致**:SDK shell + application 层 strict;protocol / ledger 层 delayed(per §3 Non-scope — internal emission path 走 ADR-SYS-B 决策)。
 
@@ -199,13 +288,13 @@ def write(self, *, pred_id: str, e_ref: str, value: Any, ...) -> str:
 
 | Sub-decision | Decision | Implementation surface | Step 1 Slice |
 |---|---|---|---|
-| Q5a-1 | `__system__.` prefix reserved namespace;exact pattern(双下划线 + system + 双下划线 + 点)| 文档化 + Layer A/B error messages | Slice 3a + Slice 4 docs |
-| Q5a-2 | 4 layer reject — Layer A(SDK shell schema 三分入口)+ Layer B(schema_compile defense)+ Layer C(forward-looking 假设)+ Layer D(自动安全)| `sdk/store.py:_SDKSchemaManager`(ADR-API §4.5 新 manager)+ `authoring/schema_compile.py:_compile_entity` | Slice 3a |
+| Q5a-1 | **G1** raw pred_id guard(精确 `__system__.`)+ **G2** schema owner guard(精确 `__system__`)— 两 guard 独立 named 防不同 attack surface | 文档化 + Layer A/B 各 G2 error messages + Layer C G1 forward-looking 规约 docs | Slice 3a + Slice 4 docs |
+| Q5a-2 | 5 layer reject:Layer A(SDK shell × entity+relationship 双路径,G2)+ Layer B(schema_compile × `_compile_entity`+`_compile_relationship` 双 defense,G2)+ Layer C(forward-looking raw pred_id 规约,G1)+ Layer D(自动安全)+ Layer E(WireBatchPlan transitively covered)| `sdk/store.py:_SDKSchemaManager`(ADR-API §4.5 新 manager)+ `authoring/schema_compile.py:_compile_entity` + `_compile_relationship` 对称 G2 check;`sdk/batch.py` 不动(transitive)| Slice 3a |
 
-**整体**:Slice 3a 实施增量 ≈ 30-60 行代码:
-- Layer A:3 个 method(`register/extend/apply`)各 + 5 行 prefix check(可抽 `_check_user_facing_entity_type` helper)
-- Layer B:`_compile_entity` + 5 行 prefix check(defense in depth)
-- error message + docs(Slice 4)
+**整体**:Slice 3a 实施增量 ≈ 50-80 行代码(原 30-60 + relationship 路径):
+- Layer A:3 个 method × 2 类 schema declaration = 抽 `_check_user_facing_owner_type` 通用 helper(同 G2 pattern apply 给 entity_type / relationship_type);3 个 method 各调用 helper × 2(entity + relationship)
+- Layer B:`_compile_entity` + `_compile_relationship` 各 + 5 行 G2 prefix check(defense in depth)
+- error message × 2(entity / relationship)+ docs(Slice 4 含 Layer E classification 防 reviewer 误解)
 
 ### 4.4 Cross-ADR 不冲突 confirmation(per user reviewer §1.3 第 4 项)
 
@@ -243,7 +332,23 @@ def write(self, *, pred_id: str, e_ref: str, value: Any, ...) -> str:
 
 #### Q5a alternative — Fuzzy match(reject `__sys__` / `__system_` / `_system_` 等近似变种)
 
-- **Why rejected**:fuzzy match 边界永远画不清(`__sys_v2__`?`system__`?`__sys__system__`?);用户若刻意命名近似形式自行承担歧义责任;**精确 pattern**(`__system__.` exact prefix)语义清晰,Layer A error message 给出明确推荐(用 `MyEntity` 代替 `__system__MyEntity`);跟 design-point ledger-spec §4.7 INV-10 一致
+- **Why rejected**:fuzzy match 边界永远画不清(`__sys_v2__`?`system__`?`__sys__system__`?);用户若刻意命名近似形式自行承担歧义责任;**精确 pattern**(G1 `__system__.` exact + G2 `__system__` exact prefix)语义清晰,Layer A error message 给出明确推荐(用 `MyEntity` 代替 `__system__MyEntity`);跟 design-point ledger-spec §4.7 INV-10 一致
+
+#### Q5a alternative — 单 guard(只 G1 raw pred_id guard,不要 G2 schema owner guard)
+
+- **Why rejected**:G1 是 `pred_id.startswith("__system__.")` 精确含点;但 schema-derived predicates 用 **冒号** separator(`__system__x:exists`)— **catch 不到**;user 可 `entity_type = "__system__X"` 走 schema 路径产 `__system__x:*` predicates 污染 ledger,完全绕过 G1。**必须**双 guard,各管 1 类 attack surface(per §4.1.3 表格)。
+
+#### Q5a alternative — 单 guard(只 G2 schema owner guard,不要 G1 raw pred_id guard)
+
+- **Why rejected**:G2 是 `owner_type.startswith("__system__")` schema 路径校验;但未来若引入 `fg.assertions.write(pred_id="__system__.X", ...)` raw pred_id 入口(per §4.2.3 Layer C),pred_id 没有 owner_type 可校验,G2 **覆盖不到** → user 直接写 `__system__.X` 进 ledger。必须双 guard 覆盖两类 surface(per §4.1.3 表格)。
+
+#### Q5a alternative — Skip relationship schema 路径(只 cover entity_type,不 cover relationship_type)
+
+- **Why rejected**:shipped `sdk/schema.py:248-...` `Relationship` descriptor 是 public surface;`authoring/schema_compile.py:175-182` `_compile_relationship` 接受 `relationship_type` 并 `_owner_prefix(...)` 产 relationship-prefixed pred_id;**不**加 reject = user 可 `class MyRel(Relationship): relationship_type = "__system__X"` 产 `__system__x:field` 落地 ledger,违反 INV-10;违反 §1.3 user reviewer 第 2 项("拒绝点覆盖 ... schema/register/extend/apply 中能声明 pred_id 的路径")。entity + relationship 是 schema declaration 的对称双路径,必须对称 covered。
+
+#### Q5a alternative — `WireBatchPlan` raw pred_id 入口加独立 reject 路径
+
+- **Why rejected**:Layer E `WireBatchPlan` 是 **schema-bound wire-replay path**(per §4.2.5)— apply 时 `_resolve_wire_field_for_write_op`(`sdk/batch.py:877-...`)强制要求 raw pred_id 在 `pred_index`(schema pred index)存在 + owner_type/field_name 跟 schema 严格匹配;Layer A + B G2 reject 后 pred_index 不含 `__system__:*` → wire-replay 自然 reject(binding validation failure)。独立加 reject 是 redundant work;**transitive coverage 已充分**;ADR §4.2.5 显式 classify 防 reviewer 误判遗漏。
 
 #### Q5a alternative — 锁 `__system__.revokes` payload shape 在 SYS-A 同 ADR
 
@@ -272,12 +377,27 @@ N/A — 本 ADR 仅 Q5a 单 Q;cross-Q 组合不适用。**注**:跟 Q5b / Q15(AD
 
 ### 6.2 Shipped code citations
 
-- `src/factgraph/authoring/schema_compile.py:79-83` `entity_type` 字符串校验当前(将加 §4.2 Layer B prefix check)
+**Entity 路径**(§4.2 Layer A.1 + Layer B.1):
+- `src/factgraph/authoring/schema_compile.py:79-83` `entity_type` 字符串校验当前(将加 §4.2 Layer B.1 G2 prefix check)
 - `src/factgraph/authoring/schema_compile.py:142` `f"{entity_type}:exists"` 拼接路径
 - `src/factgraph/authoring/schema_compile.py:227-260` `_compile_identity_predicate` 产 pred_id 路径
+- `src/factgraph/sdk/schema.py` Entity descriptor public surface
+
+**Relationship 路径**(§4.2 Layer A.2 + Layer B.2 — P1 amendment new coverage):
+- `src/factgraph/authoring/schema_compile.py:175-182` `_compile_relationship` 接受 `relationship_type` 当前(将加 §4.2 Layer B.2 G2 prefix check)
+- `src/factgraph/authoring/schema_compile.py:210` `_owner_prefix(relationship_type)` 产生 relationship_prefix
+- `src/factgraph/authoring/schema_compile.py:460-478` `_compile_relationship_pred_id` 产 `f"{relationship_prefix}:{local}"` pred_id
+- `src/factgraph/sdk/schema.py:248-...` `Relationship` / `RelationshipMeta` descriptor public surface
+
+**Wire-replay 路径**(§4.2 Layer E — transitive G2 coverage):
+- `src/factgraph/sdk/batch.py:540-...` `_parse_wire_write_op` 从 JSON 解析 raw pred_id
+- `src/factgraph/sdk/batch.py:877-...` `_resolve_wire_field_for_write_op` 通过 `pred_index` schema 校验 + reject ambiguous/unknown/mismatch
+
+**Protocol 层 + manager**(meta-ADR §4.4 delayed;本 ADR 不动):
 - `src/factgraph/core/evidence/write_protocol.py:231-249` `_validate_write_inputs` 当前仅类型 check(不含 namespace check — per meta-ADR §4.4 protocol 层 delayed)
-- `src/factgraph/sdk/store.py:518` `_SDKSchemaManager.add(*classes)` 当前混杂 register/extend(将被 ADR-API §4.5 拆三 + §4.2 Layer A hook 集成)
-- shipped zero hits for `__system__` confirmed per audit §6 row 284
+- `src/factgraph/sdk/store.py:518` `_SDKSchemaManager.add(*classes)` 当前混杂 register/extend(将被 ADR-API §4.5 拆三 + §4.2 Layer A.1/A.2 hook 集成)
+
+**Greenfield confirmation**:shipped **zero hits** for `__system__` confirmed per audit §6 row 284(`sdk/store.py` / `sdk/facade.py` / `sdk/schema.py` / `sdk/batch.py` / `authoring/` / `core/` 全部 grep 无命中)
 
 ### 6.3 Meta-ADR cross-references
 
@@ -324,10 +444,10 @@ N/A — 本 ADR 仅 Q5a 单 Q;cross-Q 组合不适用。**注**:跟 Q5b / Q15(AD
 | Action | Owner | When |
 |---|---|---|
 | ADR-SYS-B draft(`__system__.revokes` emission + ledger migration Q5b/Q15)| TBD | ADR-SYS-A adopt 后 |
-| Slice 3a implementation:Layer A reject 集成(`_SDKSchemaManager.register/extend/apply` per ADR-API §4.5)| Slice 3a implementation | Slice 3a Step 4.7 |
-| Slice 3a implementation:Layer B reject 集成(`schema_compile.py:_compile_entity` defense in depth)| Slice 3a implementation | Slice 3a Step 4.7 |
-| Slice 3a pre-impl grep:扫所有 shipped 代码 / tests / docs 用 `__system__` 字符串 — confirm zero hits(per audit §6 baseline)+ 加 contract test | Slice 3a blueprint preflight(Step 4.6.5)| Slice 3a blueprint scoped 后 |
-| docs sync(Slice 4)— `04_api_surface.en.md` 加 `__system__.*` reserved namespace 说明 + Layer A/B error message + Layer C forward-looking 规约 docs;`identity-mechanism-redesign §10` 跟 ADR-SYS-A 对齐 | Slice 4 docs sync | Slice 3a 完成后 |
+| Slice 3a implementation:Layer A.1 + A.2 reject 集成(`_SDKSchemaManager.register/extend/apply` per ADR-API §4.5;`_check_user_facing_owner_type` helper apply 给 entity_type + relationship_type)| Slice 3a implementation | Slice 3a Step 4.7 |
+| Slice 3a implementation:Layer B.1 + B.2 reject 集成(`schema_compile.py:_compile_entity` + `_compile_relationship` 对称 G2 defense in depth)| Slice 3a implementation | Slice 3a Step 4.7 |
+| Slice 3a pre-impl grep:扫所有 shipped 代码 / tests / docs 用 `__system__` 字符串 — confirm zero hits(per audit §6 baseline)+ 加 contract test 覆盖 entity / relationship 两路径 + Layer E transitive coverage | Slice 3a blueprint preflight(Step 4.6.5)| Slice 3a blueprint scoped 后 |
+| docs sync(Slice 4)— `04_api_surface.en.md` 加 G1 + G2 两 guard 说明 + Layer A/B/C 各自 reject 描述 + Layer E `WireBatchPlan` "schema-bound binding-validated" classification(防 reviewer 误以为漏 raw pred_id surface);`identity-mechanism-redesign §10` 跟 ADR-SYS-A 对齐 | Slice 4 docs sync | Slice 3a 完成后 |
 
 ### 7.3 Cross-pillar interaction
 
@@ -338,41 +458,47 @@ N/A — 本 ADR 仅 Q5a 单 Q;cross-Q 组合不适用。**注**:跟 Q5b / Q15(AD
 ### 7.4 No-retroactive boundary
 
 - 本 ADR §4 Decision adopted 后,Slice 3a blueprint 不可单方面 override Q5a 决策;若需要 override,走"本 ADR superseded by 新 ADR-SYS-A-v2"路径
-- §4.1 `__system__.` exact prefix:carry-forward — 不可改 pattern 形态(双下划线 + system + 双下划线 + 点 永久 fixed);近似变种 reject 模式不可加(per §5.1 fuzzy match 已 reject)
-- §4.2 4 layer reject 路径:carry-forward — Layer A + B strict 不可降级;Layer C forward-looking 规约 carry-forward 到任何未来引入 `fg.assertions.write` 的 ADR(必须含 reject);Layer D 自动安全 derive 不可改成 independent enforcement(违反 ADR-API §4.1 排他原则)
-- 跟 ADR-SYS-B 的 explicit contract:**本 ADR §3 Non-scope 列出的 emission exception / payload / INV-11/13/15 / migration 全由 ADR-SYS-B 锁**;ADR-SYS-B 不可在本 ADR `__system__.*` namespace 之外引入新 system prefix(若需要新 prefix,走本 ADR superseded 路径)
+- §4.1 G1 + G2 双 guard:carry-forward — 两 guard pattern 不可改(G1 `__system__.` 精确含点 / G2 `__system__` 精确不含点);**不可合并成单 guard**(per §5.1 alt rejected 两次,G1-only / G2-only 都漏一类 attack surface);近似变种 reject 不可加(per §5.1 fuzzy match alt rejected)
+- §4.2 5 layer reject 路径:carry-forward — Layer A.1+A.2(entity + relationship 对称)/ B.1+B.2(schema_compile entity + relationship 对称 defense)strict 不可降级;Layer C forward-looking 规约 carry-forward 到任何未来引入 raw pred_id 入口的 ADR(必须含 G1 reject);Layer D 自动安全 derive 不可改成 independent enforcement(违反 ADR-API §4.1 排他原则);Layer E `WireBatchPlan` transitive coverage 依赖 schema pred_index 绑定校验,**ADR-SYS-B 或 Step 2+ 不可弱化 wire-replay 路径的 binding validation**(否则 Layer E transitive coverage 失效,需补 wire 层 reject)
+- 跟 ADR-SYS-B 的 explicit contract:**本 ADR §3 Non-scope 列出的 emission exception / payload / INV-11/13/15 / migration 全由 ADR-SYS-B 锁**;ADR-SYS-B 不可在本 ADR `__system__` namespace 之外引入新 system prefix(若需要新 prefix,走本 ADR superseded 路径)
+- 跟未来 schema declaration 扩展的 explicit contract:任何**未来**新增的 schema declaration surface(若 Step 2+ 引入新 owner-type 概念如 view-type / aggregate-type / etc.)**必须**继承 G2 enforcement,在 Layer A + B 加对称 prefix check
 
 ## 8. Acceptance Criteria
 
 ADR adoption(本 ADR commit Status: proposed → adopted)前:
 
 - [x] §4.1-§4.2 Q5a 全部含 Decision + rationale
-- [x] §5 含 per-Q rejected alternatives(≥4 项)+ cross-Q N/A 说明
+- [x] §4.1 显式拆 G1 raw pred_id guard + G2 schema owner guard 两 named guard + §4.1.3 表格论证不可合并成单 guard
+- [x] §5 含 per-Q rejected alternatives(≥8 项 含 G1-only / G2-only / Skip-relationship / Wire-replay 等)+ cross-Q N/A 说明
 - [x] §6 含 audit / shipped code / meta-ADR / design-point / no-Q-PR1 confirmation / ADR-API+ADR-IC+ADR-FI 兼容性 6 类 evidence
+- [x] §6.2 shipped citation 含 entity 路径 + relationship 路径(`_compile_relationship` + `Relationship` descriptor)+ wire-replay 路径(`sdk/batch.py` `_parse_wire_write_op` + `_resolve_wire_field_for_write_op`)
 - [x] §7 含 downstream unblocking + follow-up actions + cross-pillar + no-retroactive boundary
 - [x] Header `Depends on:` 引用 meta-ADR + ADR-FI + ADR-IC + ADR-API adopted commits
 - [x] §1.4 含 shipped baseline pointer + greenfield(zero `__system__` hits)confirmation
 - [x] §3 显式 enumerate 不锁的 7 项(per user reviewer §1.3 第 1+3 项 directional guidance)
 - [x] §4.4 显式 confirm 跟 ADR-API 三层入口 / ADR-IC `protected_anchor_pred_ids` cache / ADR-FI descriptor 三项正交不冲突(per user reviewer §1.3 第 4 项)
+- [x] §4.2.5 Layer E `WireBatchPlan` 显式 classify 为 schema-bound binding-validated(transitive G2 covered)防 reviewer 误以为漏 raw pred_id surface
 - [x] §1.3 含 user reviewer 4 项 directional guidance 每项落点
 
 Post-adoption verification(implementation 阶段验证):
 
 - [ ] Slice 3a blueprint `Status: scoped` 时,blueprint §1 Related Docs 引用本 ADR
-- [ ] Slice 3a implementation:`fg.schema.register(SomeCls with entity_type="__system__X")` raise `SDKStoreError` 含 migration hint(per §4.2.1 Layer A)
-- [ ] Slice 3a implementation:`fg.schema.extend(SomeCls with entity_type="__system__X")` raise `SDKStoreError`(per §4.2.1 Layer A)
-- [ ] Slice 3a implementation:`fg.schema.apply(SomeCls with entity_type="__system__X")` raise `SDKStoreError`(per §4.2.1 Layer A)
-- [ ] Slice 3a implementation:bypass SDK shell 直接调 `compile_schema(spec_dict_with_system_entity_type)` raise `_compile_error`(per §4.2.2 Layer B defense in depth)
-- [ ] Slice 3a implementation:`entity_type="__system__"` 自身(无点跟在后)同样被 Layer A + B reject — schema_compile 会产 `__system__:exists` 形态,被 Layer A 入口侧 catch
-- [ ] Slice 3a implementation:`entity_type="__sys__"` / `"__system_"` / `"_system_"` 等**近似变种** **不**被 reject(per §4.1 精确 pattern 不做 fuzzy);user 若使用承担歧义责任
+- [ ] Slice 3a implementation **entity 路径**:`fg.schema.register/extend/apply(SomeEntityCls with entity_type="__system__X")` 三 method 各 raise `SDKStoreError`(G2)含 migration hint(per §4.2.1.1 Layer A.1)
+- [ ] Slice 3a implementation **relationship 路径**:`fg.schema.register/extend/apply(SomeRelCls with relationship_type="__system__Y")` 三 method 各 raise `SDKStoreError`(G2)含 migration hint(per §4.2.1.2 Layer A.2)
+- [ ] Slice 3a implementation:bypass SDK shell 直接调 `compile_schema(spec_dict_with_system_entity_type)` raise `_compile_error`(per §4.2.2 Layer B.1 defense in depth)
+- [ ] Slice 3a implementation:bypass SDK shell 直接调 `compile_schema(spec_dict_with_system_relationship_type)` raise `_compile_error`(per §4.2.2 Layer B.2 defense in depth)
+- [ ] Slice 3a implementation:`entity_type="__system__"` / `relationship_type="__system__"` 自身(无后缀)同样被 G2 reject — Layer A 入口侧 catch
+- [ ] Slice 3a implementation:`entity_type="__sys__"` / `"__system_"` / `"_system_"` 等**近似变种** **不**被 reject(per §4.1.4 精确 pattern 不做 fuzzy);user 若使用承担歧义责任
 - [ ] Slice 3a implementation:`fg.entities.create(EntityWithSystemName, **id)` 不会执行到 — schema 阶段已 reject(per §4.4.1 cross-ADR 不冲突)
 - [ ] Slice 3a implementation:`fg.fields.set/add/retract/delete(Field, e_ref, value)` 无独立 namespace reject 路径(per §4.2.4 Layer D 自动安全)
-- [ ] Slice 3a implementation:ADR-IC `_identity_pred_ids` / `_exists_pred_ids` cache 不含 `__system__.*` entries(自然分离 per §4.4.2)
-- [ ] Slice 3a implementation:contract test 覆盖 Layer A + B reject 路径的 error message 含 ADR-SYS-A §4.1 reference 跟 user-facing recommendation
-- [ ] Slice 4 docs sync:`04_api_surface.en.md` 加 `__system__.*` reserved namespace 说明 + Layer C forward-looking 规约;`identity-mechanism-redesign §10 / §13` 跟 ADR-SYS-A 对齐;`ledger-schema-specification §4.7` 不需改(本 ADR 直接 cite design-point 形态)
+- [ ] Slice 3a implementation:`WireBatchPlan` 解析阶段 **不**对 raw pred_id 加独立 namespace reject;apply 时 `_resolve_wire_field_for_write_op` 通过 schema pred_index `pred_index.get(...) is None` reject(per §4.2.5 Layer E transitive coverage — schema pred_index 不含 `__system__:*` 后自然 reject)
+- [ ] Slice 3a implementation:ADR-IC `_identity_pred_ids` / `_exists_pred_ids` cache 不含 `__system__:*` entries(自然分离 per §4.4.2)
+- [ ] Slice 3a implementation:contract test 覆盖 Layer A.1+A.2 + B.1+B.2 reject 路径的 error message 含 ADR-SYS-A §4.1 reference + G1/G2 guard 名 + user-facing recommendation
+- [ ] Slice 4 docs sync:`04_api_surface.en.md` 加 G1 + G2 两 guard 说明 + Layer C forward-looking 规约 + Layer E classification;`identity-mechanism-redesign §10 / §13` 跟 ADR-SYS-A 对齐;`ledger-schema-specification §4.7` 不需改(本 ADR 直接 cite design-point 形态)
 
 ## 9. Decision Record
 
 | Date | Stage | Event | Notes |
 |---|---|---|---|
-| 2026-05-29 | proposed | ADR-SYS-A drafted | 1 Q(Q5a `__system__.*` user-facing namespace reservation;**仅锁 reservation**,不锁 emission / payload / INV-11/13/15 / migration — 全留 ADR-SYS-B per user reviewer §1.3 directional guidance)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-FI adopted @ `b288ea9e` + ADR-IC adopted @ `2d0866ed` + ADR-API adopted @ `66434490` + user reviewer 2026-05-29 ADR-SYS-A 4 项 directional review focus + ledger-spec §4.7 INV-10 design-point。Branch: `v0.2.0-q-sys-a-system-namespace-decision-2026-05-29`。Commit: TBD post-stage |
+| 2026-05-29 | proposed | ADR-SYS-A drafted | 1 Q(Q5a `__system__.*` user-facing namespace reservation;**仅锁 reservation**,不锁 emission / payload / INV-11/13/15 / migration — 全留 ADR-SYS-B per user reviewer §1.3 directional guidance)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-FI adopted @ `b288ea9e` + ADR-IC adopted @ `2d0866ed` + ADR-API adopted @ `66434490` + user reviewer 2026-05-29 ADR-SYS-A 4 项 directional review focus + ledger-spec §4.7 INV-10 design-point。Branch: `v0.2.0-q-sys-a-system-namespace-decision-2026-05-29`。Commit: `def20c74` |
+| 2026-05-29 | proposed | ADR-SYS-A amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 3 findings:**(P1)** Relationship schema path 未覆盖 coverage gap — shipped `_compile_relationship` 接受 `relationship_type` + public `Relationship` descriptor + 产 `f"{relationship_prefix}:{local}"` pred_id;原 §4.2 只 cover `EntityClass.entity_type` → user 可 `class MyRel(Relationship): relationship_type = "__system__X"` 走 schema 路径产 `__system__x:field` 污染 ledger。**(P2)** "exact `__system__.` prefix" 跟 "`entity_type.startswith("__system__")`(无点)" 是两个不同 rule 但 §4.1 混在一起 — 应拆成两条命名清楚的 guard。**(Non-blocking)** `WireBatchPlan` raw pred_id 入口分类。**重构方案**:§4.1 完整重写引入 **G1 raw pred_id guard**(精确 `__system__.` 含点)+ **G2 schema owner guard**(精确 `__system__` 不含点,覆盖 entity_type / relationship_type / 任何未来 owner-type 概念);§4.1.3 加 G1-only / G2-only / G1+G2 对比表论证不可合并;§4.1.4 pattern 精确性 rules。§4.2 layer 从 4 扩到 5:Layer A.1+A.2(entity + relationship 对称 G2)/ B.1+B.2(schema_compile entity + relationship 对称 G2 defense)/ C(forward-looking G1)/ D(自动安全)/ E(新增 — `WireBatchPlan` schema-bound binding-validated transitive G2 covered;`sdk/batch.py` 不动)。同步 cascade:§2 Scope 表 reflect 5 layer / §4.3 cross-Q summary 重写 / §5.1 加 4 项 alternative reject(单 guard × 2 + Skip relationship + Wire-replay 独立 reject)/ §6.2 shipped citation 扩 relationship 路径 + wire-replay 路径 / §7.2 follow-up 加 relationship + Layer E grep 任务 / §7.4 no-retroactive boundary 扩 双 guard + 5 layer + 未来 owner-type 概念 G2 inherit / §8 Acceptance Criteria 重写(11 项 proposed-stage ✓ + 12 项 post-adoption ☐ 含 entity+relationship 对称 verify + Layer E transitive verify)。 |
