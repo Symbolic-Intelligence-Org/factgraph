@@ -515,7 +515,8 @@ per user reviewer 2026-05-29 Phase 4 guidance:**保留粒度,不急合并**。�
 | **Q2** | Identity Claim emission layer(SDK `create` 内 vs application 层 derive) | Q-I2 + A4 + N2 + N3 | 复用现有 `is_identity_field` flag,Identity Claim emission 路径具体在哪层?`fg.entities.create` SDK shell 内 emit 还是 application 层(类似 `record_exists` op)自动 derive? | Identity-as-Claim cluster | Slice 2 |
 | **Q3** | INV-7c 策略 C cache lifecycle(init/lazy/schema-evolution hook) | Q-I3 + A16 + A18 | Identity pred_id set 何时建?启动时一次扫 schema_ir;lazy 第一次 retract 时建;schema.extend/register 触发重建。3 选 1 + invalidation/concurrency 行为 | Identity-as-Claim cluster | Slice 2 |
 | **Q4** | INV-9 enforcement timing vs Q-PR1 adapter rewrite 解耦 | Q-I4 + A19 + A21 | per user reviewer Phase 3 guidance:**不让 Step 1 被 adapter rewrite 阻塞**。INV-9 strict enforcement(set_field len<=1 check)能否独立于 PyReason adapter rewrite?option (a) Step 1 INV-9 strict + adapter 同步 rewrite;(b) Step 1 不 enforce INV-9,留 Step 2+ adapter rewrite slice 一起 lock | System namespace cluster + adapter | Slice 3b + 5(Step 2+) |
-| **Q5** | `__system__.*` rejection enforcement layer | Q-I5 + A19 | rejection 在 application 层(SDK shell)还是 protocol 层(`set_field`)?protocol 层更严(防 internal API 误用)但跟 internal `retract_by_asrt` 路径(本身写 `__system__.revokes`)冲突 — 需 internal/external API 分离 | System namespace cluster | Slice 3a |
+| **Q5a** | `__system__.*` user-facing pred_id reservation check | Q-I5 + A19 | application 层 SDK write shell(`fg.fields.set` / `fg.fields.add` / `fg.assertions.write`)拒绝 user-supplied `pred_id` 以 `__system__.` 开头。**仅保留 namespace,不定义 `__system__.revokes` payload shape**(后者属于 Q5b + Q15.2)。归 ADR-SYS-A | System namespace cluster | Slice 3a |
+| **Q5b** | Internal `__system__.revokes` emission exception path | Q-I5 + A19 + A21 | ADR-SYS-B 必须决定 internal-only emission path;可能通过 `retract_by_asrt` lowering、internal writer API、或 protocol-layer exception 等机制实现。**meta-ADR 不锁具体机制**(留 ADR-SYS-B §4)。跟 Q15 在同一 ADR-SYS-B | System namespace cluster + Ledger migration cluster | Slice 3b |
 | **Q6** | Boundary rule: mutable Field 设计 contract — `volatile=False` 显式 vs 文档化 | Q-A1 | 是否在 descriptor 上加 `volatile: bool = False` 显式 contract(违反时 schema validation 提示);还是仅作为 schema 设计 best-practice 文档(没有机械 enforce) | Form I cluster | Slice 1 + 4(docs) |
 | **Q7** | `_DataMember` 共通基类 public API exposure | Q-A2 + A10 | `_DataMember` 是否暴露为 public API(`from factgraph.sdk import _DataMember`)— 影响 user-defined descriptor extension 能力;还是 internal? | Form I cluster | Slice 1 |
 | **Q8** | Cardinality 推断 backward-compat strategy | Q-A3 + A7 | alpha 阶段直接 breaking(`Field()` 必须无 cardinality kwarg,从类型推断)还是 backward-compat(同时支持 explicit + 推断)?user §17 lock-in "no alias",audit 期 confirm | Form I cluster | Slice 1 |
@@ -525,7 +526,7 @@ per user reviewer 2026-05-29 Phase 4 guidance:**保留粒度,不急合并**。�
 | **Q12** | `version(v)` 招纳原则 enforcement strategy | Q-A8 + A13 + D5 | hard remove(breaking;cleanest)还是 `DeprecationWarning` 一周期(softer)?docs `assertions.md` 同步删 | API namespace cluster | Slice 3a + 4(docs) |
 | **Q13** | `_meta` 统一 — flat kwargs 删除策略 | Q-A9 + A14 + D6 | shipped `where(source=, trace_id=, version=, meta=)` flat kwargs 直接 breaking 删?还是双向接受(both `source=` flat 和 `_meta={"source": ...}`)一周期? | API namespace cluster | Slice 3a + 4(docs) |
 | **Q14** | `fg.schema.add` 3-way split + schema evolution constraint slice grouping | Q-A10 + A17 + A18 | `register/extend/apply` 三分跟 schema evolution `extend` 拒绝 Identity↔Field swap 是同 slice 还是分?三分本身 vs evolution enforcement 的 dependency | API namespace cluster | Slice 3a |
-| **Q15** | 7 数据精简 migration slice strategy | Q-A11 + A19 + A21 + D10 | 7 步精简 → 几个 implementation slice?Step 1 跟随哪些?哪些独立 slice?跟 Q4(INV-9 adapter coupling)关联 | Ledger migration cluster + System namespace cluster | Slice 3a + 3b |
+| **Q15** | 7 数据精简 migration slice strategy | Q-A11 + A19 + A21 + D10 | 7 步精简 → 几个 implementation slice?Step 1 跟随哪些?哪些独立 slice?跟 Q4(INV-9 adapter coupling)关联。**meta-ADR §4.3 锁定 Q15.1-Q15.5 acceptance boundary questions**(claims.rest_terms / `__system__.revokes` encoding / claim_meta 替代范围 / ingest_keys 删除 / 完成判定)— ADR-SYS-B 必须答这 5 个。跟 Q5b 同 ADR-SYS-B | Ledger migration cluster + System namespace cluster | Slice 3b |
 | **Q16** | `:exists` Claim emission removal timing | Q-A12 + A20 + D11 | Step 1 Identity Claim emission 后,`:exists` 同步移除(breaking;clean)?vs 双写一段时间然后剔除(read path 兼容性)?vs 永久保留为 legacy emission(无强制) | Identity-as-Claim cluster | Slice 2 |
 | **Q17** | Cross-doc + public quickstart sync timing | D1-D9 cumulative | docs `04_api_surface.en.md` + `assertions.md` 是 Step 1 各 slice 完成后立即同步,还是合并到一个 docs sync slice 最后一起做?后者干净,前者 step-by-step shippable | Docs cluster | Slice 4 |
 
@@ -541,7 +542,7 @@ Identity-as-Claim cluster (Q1 / Q2 / Q3 / Q16)
 API namespace cluster (Q10 / Q11 / Q12 / Q13 / Q14)
    │ slice 3a 完成提供 entities/fields/assertions 三层 + AssertionView
    ↓
-System namespace cluster (Q4 / Q5 / Q15) ⇆ adapter rewrite slice 5 (Step 2+)
+System namespace cluster (Q4 / Q5a / Q5b / Q15) ⇆ adapter rewrite slice 5 (Step 2+)
    │ slice 3b 部分 — INV-9 strict + revokes → __system__ 取决于 Q4 decision
    ↓
 Docs cluster (Q17)
@@ -599,23 +600,24 @@ Slice 2 — Identity Claim emission + INV-7c implementation       [Step 1, depen
   └ 必须 Slice 1 (_DataMember + Identity descriptor 稳定) 后做
 
 Slice 3a — API surface 三层重组 + AssertionView 统一            [Step 1, depends on Slice 1+2]
-  └ Q5 / Q10 / Q11 / Q12 / Q13 / Q14
+  └ Q5a / Q10 / Q11 / Q12 / Q13 / Q14
   └ fg.read/write → fg.entities/fields(rename + 重组)
   └ fg.entities 新方法:create / where / exists / delete(create 依赖 Slice 2 Identity emission)
   └ AssertionView 统一(合并 FieldAssertions + AssertionNamespace)
   └ _meta 统一 meta 入口(flat → dict)
   └ version() 招纳原则 enforce
   └ fg.schema 三分(register/extend/apply)+ evolution 约束 enforce
-  └ __system__.* rejection(per Q5 decision)
+  └ __system__.* user-facing pred_id reservation(per Q5a decision / ADR-SYS-A)
   └ 最大工作量 slice;Step 1 收尾
 
 Slice 3b — Ledger schema partial migration(NOT 同步 INV-9 strict)[Step 1, parallel-eligible with 3a]
-  └ Q4(部分 — Step 1 INV-9 weak enforce,strict 留 Step 2+)/ Q15
+  └ Q4(部分 — Step 1 INV-9 weak enforce per meta-ADR §4.4,strict 留 Step 2+)/ Q5b / Q15
   └ 3-table consolidation 部分:meta_rows → claim_meta 改名 + 复合 PK
-  └ revokes 表 → __system__.revokes Claim(per Q5 decision 配合)
-  └ ingest_keys 删除(per 精简 6)
-  └ 暂时 NOT enforce INV-9 strict(`len(rest_terms) <= 1`)— 留 Q-PR1 adapter rewrite slice
+  └ revokes 表 → __system__.revokes Claim(per Q5b + Q15 decisions / ADR-SYS-B)
+  └ ingest_keys 删除(per 精简 6 + Q15.4 decision)
+  └ INV-9 strict 不在 ledger/protocol 层 enforce;SDK + application 层新入口 unary check(per meta-ADR §4.4 4-layer enforcement)
   └ 可跟 Slice 3a 并行(不同模块,无 schema 依赖)
+  └ Q15.1-Q15.5 acceptance boundary questions 必须在 ADR-SYS-B 决议(per meta-ADR §4.3)
 
 Slice 4 — Docs / public quickstart sync                         [Step 1, depends on Slice 1-3]
   └ Q17 + D1-D9 cumulative
@@ -698,6 +700,7 @@ Slice 1 (Form I) ──┬─→ Slice 2 (Identity Claim)
 | Phase 2 | `59d84284` | I-series invariant triage(§5.1 + §6.1 + §7.1 — 16 INVs + 5 Q-I)| +108 |
 | Phase 3 | `9959b5a4` | A-series architecture triage(§2.0 5+1 taxonomy 提升 + §5.2 21 commitments + §6.2 + §7.2 — 12 Q-A + Q-I↔Q-A 关联)| +152 |
 | Phase 4 | `bf650ac3` | D-series + N-series + Q finalize + slice order(§5.3 + §5.4 + §6.3 + §7.3 — 17 Qs + §8 reviewer focus + §9 acceptance + §10 slice order + §11 cross-doc + §12 completeness)| +244 |
-| Cleanup | (current) | Remove stale Phase 1/2/3 完成状态 sections + stale §8/§9 placeholders that duplicated filled-in content(per user reviewer P1 2026-05-29) | — |
+| Cleanup | `aa50332d` | Remove stale Phase 1/2/3 完成状态 sections + stale §8/§9 placeholders that duplicated filled-in content(per user reviewer P1 2026-05-29) | — |
+| Post-Stage-1 sync | (current) | Q5 split into Q5a + Q5b at §7.3 + §10 references — driven by `workflow/design/decisions/active/2026-05-29_qm-meta-grouping-and-slice-boundaries-decision.md` adopted @ `ebafdb0c`(per meta-ADR §7.2 follow-up action #1)。Audit Status remains: complete | — |
 
-各 phase 之间 user reviewer 在 Stage 1 内做 "可以推进" review gate;现 Stage 1 complete,等 Stage 2 Q-decisions authorization。
+各 phase 之间 user reviewer 在 Stage 1 内做 "可以推进" review gate;现 Stage 1 complete,Stage 2 进行中(meta-ADR adopted;ADR-FI 启动 pending)。
