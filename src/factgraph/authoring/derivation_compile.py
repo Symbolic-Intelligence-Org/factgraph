@@ -200,19 +200,12 @@ def _lower_fact_head_with_schema(
             path="$.head",
         )
 
-    primary_keys, non_primary_identity = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
-    forbidden_primary = sorted([name for name in kwargs.keys() if name in set(primary_keys)])
-    if forbidden_primary:
+    identity_fields = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
+    forbidden_identity = sorted([name for name in kwargs.keys() if name in set(identity_fields)])
+    if forbidden_identity:
         raise _compile_error(
-            "head must not include primary_key identity fields; they are implicit from where entity binding: "
-            + ", ".join(forbidden_primary),
-            path="$.head.kwargs",
-        )
-
-    missing_non_primary = [name for name in non_primary_identity if name not in kwargs]
-    if missing_non_primary:
-        raise _compile_error(
-            "head kwargs missing non-primary identity fields: " + ", ".join(missing_non_primary),
+            "head must not include Identity fields; they are the immutable entity anchor and must be bound in where: "
+            + ", ".join(forbidden_identity),
             path="$.head.kwargs",
         )
 
@@ -232,7 +225,7 @@ def _lower_fact_head_with_schema(
                     f"head value is ambiguous across keys: {', '.join(sorted(set(present_value_keys)))}",
                     path="$.head.kwargs",
                 )
-    allowed = set(non_primary_identity) | set(value_keys)
+    allowed = set(value_keys)
     extra = sorted([key for key in kwargs.keys() if key not in allowed])
     if extra:
         raise _compile_error(
@@ -244,10 +237,6 @@ def _lower_fact_head_with_schema(
         schema_ir=schema_ir,
         where=where,
         entity_type=entity_type,
-        required_field_terms={
-            **{name: kwargs[name] for name in non_primary_identity},
-            field: kwargs[chosen_value_key],
-        },
     )
     head_vars = [entity_var, kwargs[chosen_value_key]]
     return pred_id, head_vars
@@ -273,19 +262,18 @@ def _lower_entity_head_with_schema(
     if not isinstance(kwargs, dict) or not kwargs:
         raise _compile_error("head.kwargs must be non-empty object", path="$.head.kwargs")
 
-    primary_keys, _ = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
-    forbidden_primary = sorted([name for name in kwargs.keys() if name in set(primary_keys)])
-    if forbidden_primary:
+    identity_fields = _identity_field_names(schema_ir=schema_ir, entity_type=entity_type)
+    forbidden_identity = sorted([name for name in kwargs.keys() if name in set(identity_fields)])
+    if forbidden_identity:
         raise _compile_error(
-            "head must not include primary_key identity fields; they are implicit from where entity binding: "
-            + ", ".join(forbidden_primary),
+            "head must not include Identity fields; they are the immutable entity anchor and must be bound in where: "
+            + ", ".join(forbidden_identity),
             path="$.head.kwargs",
         )
     _infer_unique_entity_binding_var(
         schema_ir=schema_ir,
         where=where,
         entity_type=entity_type,
-        required_field_terms=dict(kwargs),
     )
 
     role_specs = _find_entity_field_specs(schema_ir=schema_ir, entity_type=entity_type)
@@ -552,7 +540,7 @@ def _compile_mode(payload: dict[str, Any]) -> str:
     return "native"
 
 
-def _identity_field_names(*, schema_ir: dict[str, Any], entity_type: str) -> tuple[list[str], list[str]]:
+def _identity_field_names(*, schema_ir: dict[str, Any], entity_type: str) -> list[str]:
     entities = schema_ir.get("entities", [])
     if not isinstance(entities, list):
         raise _compile_error("schema_ir.entities must be list for head compile", path="$.head")
@@ -569,19 +557,15 @@ def _identity_field_names(*, schema_ir: dict[str, Any], entity_type: str) -> tup
     identity_fields = entity.get("identity_fields")
     if not isinstance(identity_fields, list) or not identity_fields:
         raise _compile_error(f"entity identity_fields missing for {entity_type}", path="$.head.entity_type")
-    primary: list[str] = []
-    non_primary: list[str] = []
+    names: list[str] = []
     for idx, row in enumerate(identity_fields):
         if not isinstance(row, dict):
             raise _compile_error("identity field entry must be object", path=f"$.head.identity_fields[{idx}]")
         name = row.get("name")
         if not isinstance(name, str) or not name:
             raise _compile_error("identity field name must be non-empty string", path=f"$.head.identity_fields[{idx}].name")
-        if row.get("primary_key") is True:
-            primary.append(name)
-        else:
-            non_primary.append(name)
-    return primary, non_primary
+        names.append(name)
+    return sorted(set(names))
 
 
 def _infer_unique_entity_binding_var(
@@ -589,7 +573,6 @@ def _infer_unique_entity_binding_var(
     schema_ir: dict[str, Any],
     where: list[Any],
     entity_type: str,
-    required_field_terms: dict[str, Any] | None = None,
 ) -> str:
     predicates = schema_ir.get("predicates", [])
     if not isinstance(predicates, list):
@@ -629,91 +612,16 @@ def _infer_unique_entity_binding_var(
     walk(where)
     if not seen_vars:
         raise _compile_error(
-            f"where must bind one {entity_type} entity variable for head primary_key implicit carry",
+            f"where must bind one {entity_type} entity variable for head anchor carry",
             path="$.where",
         )
-    if len(seen_vars) > 1 and isinstance(required_field_terms, dict) and required_field_terms:
-        disambiguated = _disambiguate_entity_binding_with_head_terms(
-            schema_ir=schema_ir,
-            where=where,
-            entity_type=entity_type,
-            candidate_vars=seen_vars,
-            required_field_terms=required_field_terms,
-        )
-        if isinstance(disambiguated, str):
-            return disambiguated
     if len(seen_vars) > 1:
         raise _compile_error(
-            f"where binds multiple {entity_type} entity variables (ambiguous): {', '.join(sorted(seen_vars))}",
+            f"where binds multiple {entity_type} entity variables (ambiguous): {', '.join(sorted(seen_vars))}. "
+            "Cross-coordinate disambiguation must occur within body via Identity field constraints.",
             path="$.where",
         )
     return next(iter(seen_vars))
-
-
-def _disambiguate_entity_binding_with_head_terms(
-    *,
-    schema_ir: dict[str, Any],
-    where: list[Any],
-    entity_type: str,
-    candidate_vars: set[str],
-    required_field_terms: dict[str, Any],
-) -> str | None:
-    predicates = schema_ir.get("predicates", [])
-    if not isinstance(predicates, list):
-        return None
-    pred_by_field: dict[str, str] = {}
-    for pred in predicates:
-        if not isinstance(pred, dict):
-            continue
-        if pred.get("owner_type") != entity_type:
-            continue
-        field_name = pred.get("py_field_name")
-        pred_id = pred.get("pred_id")
-        if isinstance(field_name, str) and field_name and isinstance(pred_id, str) and pred_id:
-            pred_by_field[field_name] = pred_id
-
-    field_requirements: list[tuple[str, Any]] = []
-    for field_name, term in required_field_terms.items():
-        pred_id = pred_by_field.get(field_name)
-        if isinstance(pred_id, str) and pred_id:
-            field_requirements.append((pred_id, term))
-    if not field_requirements:
-        return None
-
-    requirement_matches: list[set[str]] = []
-    for expected_pred_id, expected_term in field_requirements:
-        requirement_vars: set[str] = set()
-
-        def walk_requirement(node: Any) -> None:
-            if isinstance(node, list):
-                for item in node:
-                    walk_requirement(item)
-                return
-            if not isinstance(node, tuple) or len(node) != 3 or node[0] != "pred":
-                return
-            pred_id, terms = node[1], node[2]
-            if pred_id != expected_pred_id:
-                return
-            if not isinstance(terms, list) or len(terms) < 2:
-                return
-            first = terms[0]
-            if not (isinstance(first, str) and first in candidate_vars):
-                return
-            if terms[1] == expected_term:
-                requirement_vars.add(first)
-
-        walk_requirement(where)
-        if requirement_vars:
-            requirement_matches.append(requirement_vars)
-
-    if not requirement_matches:
-        return None
-    intersection = set(candidate_vars)
-    for row in requirement_matches:
-        intersection &= row
-    if len(intersection) == 1:
-        return next(iter(intersection))
-    return None
 
 
 def _compile_error(message: str, *, path: str) -> AuthoringDerivationCompileError:
