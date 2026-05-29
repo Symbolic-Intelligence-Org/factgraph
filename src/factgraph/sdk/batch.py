@@ -4,7 +4,6 @@ import json
 import math
 from dataclasses import dataclass, field as dc_field
 from typing import Any, TYPE_CHECKING, Literal
-from uuid import uuid4
 
 from factgraph.application import apply_write_plan, plan_write_command
 from factgraph.application.protocol import (
@@ -1158,8 +1157,11 @@ class SDKBatchTx:
             raise SDKStoreError("tx.entity(...) requires Entity subclass")
         self._validate_identity_keys(entity_cls, identity_values, path="tx.entity(...)")
         materialized_identity, missing = self._materialize_identity_values(entity_cls, identity_values)
-        self._validate_primary_identity_present(entity_cls, materialized_identity, path="tx.entity(...)")
-        e_ref = self._sdk.ref(entity_cls, **materialized_identity) if not missing else None
+        if missing:
+            raise SDKStoreError(
+                f"tx.entity(...): identity is incomplete for {entity_cls.__name__}; missing: {sorted(missing)}"
+            )
+        e_ref = self._sdk.ref(entity_cls, **materialized_identity)
 
         existing = self._handles_by_e_ref.get(e_ref) if isinstance(e_ref, str) else None
         if existing is not None:
@@ -1725,15 +1727,13 @@ class SDKBatchTx:
         if not isinstance(identity_values, dict) or not identity_values:
             raise SDKStoreError(f"{handle.path}.bind(...): identity kwargs must be non-empty")
         self._validate_identity_keys(handle.entity_cls, identity_values, path=f"{handle.path}.bind(...)")
-        self._reject_primary_identity_bind(handle.entity_cls, identity_values, path=f"{handle.path}.bind(...)")
         for key, value in identity_values.items():
             if key in handle.identity_values and handle.identity_values[key] != value:
                 raise SDKStoreError(
                     f"{handle.path}.bind(...): identity field '{key}' is immutable once bound "
                     f"({handle.identity_values[key]!r} != {value!r})"
-                )
+            )
             handle.identity_values[key] = value
-        # Materialize defaults/default_factory values on bind to keep identity stable.
         materialized, _ = self._materialize_identity_values(handle.entity_cls, handle.identity_values)
         handle.identity_values = materialized
         if handle.e_ref is not None:
@@ -1767,46 +1767,6 @@ class SDKBatchTx:
         if unknown:
             raise SDKStoreError(f"{path}: unknown identity fields for {entity_cls.__name__}: {unknown}")
 
-    def _primary_identity_names(self, entity_cls: type[Entity]) -> list[str]:
-        names: list[str] = []
-        for row in self._identity_spec_rows(entity_cls):
-            name = row.get("name")
-            if isinstance(name, str) and name and bool(row.get("primary_key")):
-                names.append(name)
-        if not names:
-            raise SDKStoreError(f"{entity_cls.__name__} must declare at least one primary identity field")
-        return names
-
-    def _validate_primary_identity_present(
-        self,
-        entity_cls: type[Entity],
-        identity_values: dict[str, Any],
-        *,
-        path: str,
-    ) -> None:
-        missing_primary = sorted(name for name in self._primary_identity_names(entity_cls) if name not in identity_values)
-        if missing_primary:
-            raise SDKStoreError(
-                f"{path}: primary identity is incomplete for {entity_cls.__name__}; "
-                f"missing primary identity fields: {missing_primary}. "
-                "Provide primary identity at tx.entity(...) time; bind(...) only completes non-primary identity."
-            )
-
-    def _reject_primary_identity_bind(
-        self,
-        entity_cls: type[Entity],
-        identity_values: dict[str, Any],
-        *,
-        path: str,
-    ) -> None:
-        primary = set(self._primary_identity_names(entity_cls))
-        supplied_primary = sorted(name for name in identity_values if name in primary)
-        if supplied_primary:
-            raise SDKStoreError(
-                f"{path}: bind(...) cannot add or alter primary identity fields for {entity_cls.__name__}: "
-                f"{supplied_primary}. Provide primary identity at tx.entity(...) time."
-            )
-
     def _materialize_identity_values(
         self,
         entity_cls: type[Entity],
@@ -1819,15 +1779,6 @@ class SDKBatchTx:
             if not isinstance(name, str) or not name:
                 continue
             if name in materialized:
-                continue
-            if "default" in row:
-                materialized[name] = row["default"]
-                continue
-            if row.get("default_factory") == "uuid4":
-                type_domain = row.get("type_domain")
-                if not isinstance(type_domain, str) or not type_domain:
-                    raise SDKStoreError(f"{entity_cls.__name__}.{name}: type_domain required for default_factory='uuid4'")
-                materialized[name] = self._default_uuid4_for_tag(type_domain)
                 continue
             missing.append(name)
         return materialized, missing
@@ -1842,7 +1793,7 @@ class SDKBatchTx:
             missing_sorted = sorted(missing)
             raise SDKStoreError(
                 f"{path}: identity is incomplete for {handle.entity_cls.__name__}; missing: {missing_sorted}. "
-                "Bind missing identity via handle.bind(...)."
+                "Provide the complete identity bundle at tx.entity(...) time."
             )
         e_ref = self._sdk.ref(handle.entity_cls, **materialized)
         existing = self._handles_by_e_ref.get(e_ref)
@@ -1854,15 +1805,6 @@ class SDKBatchTx:
         handle.e_ref = e_ref
         self._handles_by_e_ref[e_ref] = handle
         return e_ref
-
-    @staticmethod
-    def _default_uuid4_for_tag(tag: str) -> str:
-        if tag == "uuid":
-            return str(uuid4()).lower()
-        if tag == "string":
-            return uuid4().hex
-        raise SDKStoreError(f"default_factory='uuid4' not supported for type_domain={tag}")
-
 
 def _copy_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
     if meta is None:
