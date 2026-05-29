@@ -511,9 +511,9 @@ def _multi_annotation_plan(args: tuple[Any, ...], *, annotation: Any) -> _Annota
     if len(args) != 1:
         raise SDKSchemaError(f"multi-cardinality field annotation must specify exactly one element type: {annotation!r}")
     inner = _annotation_plan_from_object(args[0])
-    if inner.cardinality != "single" or inner.enum_values is not None:
+    if inner.cardinality != "single":
         raise SDKSchemaError("multi-cardinality fields must use a scalar element annotation")
-    return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi")
+    return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi", enum_values=inner.enum_values)
 
 
 def _literal_annotation_plan(values: tuple[Any, ...]) -> _AnnotationPlan:
@@ -592,18 +592,20 @@ def _annotation_plan_from_ast(node: ast.AST) -> _AnnotationPlan:
             if len(args) != 1:
                 raise SDKSchemaError(f"{name}[...] must specify exactly one element type")
             inner = _annotation_plan_from_ast(args[0])
-            if inner.cardinality != "single" or inner.enum_values is not None:
+            if inner.cardinality != "single":
                 raise SDKSchemaError("multi-cardinality fields must use a scalar element annotation")
-            return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi")
+            return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi", enum_values=inner.enum_values)
         if name in {"tuple", "Tuple"}:
             if len(args) == 2 and isinstance(args[1], ast.Constant) and args[1].value is Ellipsis:
                 inner = _annotation_plan_from_ast(args[0])
-                if inner.cardinality != "single" or inner.enum_values is not None:
+                if inner.cardinality != "single":
                     raise SDKSchemaError("multi-cardinality fields must use a scalar element annotation")
-                return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi")
+                return _AnnotationPlan(type_domain=inner.type_domain, cardinality="multi", enum_values=inner.enum_values)
             raise SDKSchemaError("tuple fields must use tuple[T, ...] for multi-cardinality Form I fields")
         if name in {"Literal", "typing.Literal"}:
             return _literal_annotation_plan(tuple(_ast_literal_value(arg) for arg in args))
+        if name in {"dict", "Dict", "typing.Dict"}:
+            raise SDKSchemaError("dict annotations are not supported in Form I schema declarations")
         if name in {"Optional", "typing.Optional", "Union", "typing.Union"}:
             raise SDKSchemaError("Optional/Union annotations are not supported in Form I schema declarations")
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):

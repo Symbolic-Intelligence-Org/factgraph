@@ -410,9 +410,9 @@ e_ref = idref_v1(EntityType, complete Identity bundle)
 
 ```python
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tenant_id: str = Identity()                    # 非 primary identity
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    tenant_id: str = Identity()
+    name: str = Field()
 ```
 
 当前三层（`src/factgraph/sdk/schema.py`）:
