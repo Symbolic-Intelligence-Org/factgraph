@@ -924,6 +924,22 @@ class SDKStore:
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._entity_spec_by_class: dict[type[Entity], dict[str, Any]] = {}
+        # _identity_values_by_e_ref: LEGACY / INTERNAL COMPATIBILITY only.
+        # Per ADR-IC §4.2.3, the SDK shell shadow store is NOT part of the
+        # Layer 2 fields API contract; it exists as a compatibility detail to
+        # let `fg.set(Field, e_ref_string, value)` succeed when the shadow store
+        # has previously seen this e_ref (via a prior `sdk.ref()` call).
+        # - e_ref NOT in shadow store → fail-fast UNRESOLVABLE_E_REF
+        #   (per ADR-IC §4.2.1 emission input contract; raised at
+        #   `_apply_field_mutation` target check + `_build_application_write_value`
+        #   entity_ref value check).
+        # - e_ref in shadow store → lazy materialization through
+        #   `_materialization_ops` (legacy compat path that auto-emits Identity
+        #   Claims + `:exists` on first Field write).
+        # Step 2+ direction (per ADR-IC §4.2.4): eager emission at
+        # `fg.entities.create(...)` + shadow store removal. Slice 2 does NOT
+        # remove the shadow store (Slice 3a ADR-API Q10 namespace migration
+        # carry-forward; compatibility preservation in Slice 2).
         self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
         self._views_manager = _SDKViewsManager(self)
         self._assertions_manager = _SDKAssertionsManager(self)
