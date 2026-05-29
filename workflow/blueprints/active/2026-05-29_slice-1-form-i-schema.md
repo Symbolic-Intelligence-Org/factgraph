@@ -302,11 +302,11 @@ Per Scope Freeze #4(L8 lock — head may not include any Identity field + Step 0
   - 632 error message rewritten:"where body must uniquely bind the {entity_type} entity anchor bundle"
 - **Ambiguity reject path explicit**:per Option C "不能唯一确定就 reject" — `_disambiguate_entity_binding_with_head_terms`(line 636)不再 fallback 到 head 的 Identity terms(它们都被 forbid 了);ambiguity case 直接 reject
 
-**ECSS test migration**(per Step 0 verdict 2026-05-29):
-- `src/domains/ecss/tests/test_phase3_contracts_v1.py:177-221` `test_head_primary_key_implicit_and_strict_compile_errors`:rewrite — primary_key concept gone;test 改 verify "head forbids any Identity"
-- `src/domains/ecss/tests/test_phase3_contracts_v1.py:268-288` `test_cross_coordinate_requires_explicit_non_primary_identity`:**delete or replace** — Form I 下"head must include non-primary Identity" 语义不存在;replace with Form I body-anchor binding test
-- 其他可能 derivation test sites:Step 0.1 grep 已 catalog;Step 10 implementation 时再 sweep 一次最新 codebase
-- **不**改 `locale: str = Identity()` 为 Field(per Option C 不变 domain model)— ECSS schema 保持 `locale` 在 Identity bundle,只改 rule 表达把 locale 放 body
+**Out-of-scope ECSS note**(scope correction 2026-05-29):
+- Step 0 found ECSS tests in `src/domains/` that exercise the shipped non-primary-Identity-in-head pattern.
+- User scope correction after Step 0:Slice 1 implementation **does not touch `src/domains/`**;therefore ECSS rule-bearing tests are **not** migrated in this slice.
+- The compiler semantics above still lock the Form I target for `src/factgraph/authoring/derivation_compile.py`;ECSS/domain migration,if needed,belongs to a separate downstream domain migration slice.
+- **不**改 `locale: str = Identity()` 为 Field in this slice(per Option C 不变 domain model).
 
 ### 5.13 Write-time validation(`application/value_validation.py` NEW)+ **central path integration**(P1 #1 lock)
 
@@ -376,27 +376,24 @@ Per ADR-FI §4.4.2 explicit isinstance str-guard before `re.fullmatch` — type-
 | **SF1** | **Form I removes primary/default/default_factory semantics completely** — no zombie surface,no no-op stubs,no alias compatibility | ADR-FI §4.3 + §4.3-bis + reviewer lock 2026-05-29 |
 | **SF2** | **All Identity fields are immutable anchor-bundle members** — no primary vs non-primary distinction;identity bundle = all `Identity()` fields on Entity subclass | ADR-FI §4.3-bis + identity §8.1 |
 | **SF3** | **Cross-coordinate attribute equality may compare the same Identity field on the same entity type only** — no implicit full-bundle expansion;Field-to-Field / Identity-to-Field / different-Identity-field / **cross-entity-type same-name(`User.id == Order.id`)rejected**;full anchor-bundle equivalence is a future separate primitive | L7 reviewer lock 2026-05-29(含 P2 review 补充 cross-entity-type case)|
-| **SF4** | **Derivation heads may not include any Identity field — Option C migration**:Step 0 grep confirmed shipped non-zero non-primary-Identity-in-head pattern(`derivation_compile.py:203-217` + ECSS `test_cross_coordinate_requires_explicit_non_primary_identity`)。L8 reviewer post-Step-0 verdict:**不放松 SF2/SF4**;cross-coordinate disambiguation **migrate to body / entity binding side**。Derivation compiler 必须 uniquely determine target anchor bundle from body;不能唯一确定 → reject(ambiguous binding error)。**Not** Option B(`Identity → Field` 改 domain model — 会改 idref_v1 anchor encoding)。ECSS test 重写为 Form I body-anchor binding;原 "head must include non-primary Identity" 测试 delete/replace。| L8 reviewer lock 2026-05-29 + Step 0 verdict 2026-05-29 |
+| **SF4** | **Derivation heads may not include any Identity field — Option C migration**:Step 0 grep confirmed shipped non-zero non-primary-Identity-in-head pattern(`derivation_compile.py:203-217` + ECSS `test_cross_coordinate_requires_explicit_non_primary_identity`)。L8 reviewer post-Step-0 verdict:**不放松 SF2/SF4**;cross-coordinate disambiguation **migrate to body / entity binding side**。Derivation compiler 必须 uniquely determine target anchor bundle from body;不能唯一确定 → reject(ambiguous binding error)。**Not** Option B(`Identity → Field` 改 domain model — 会改 idref_v1 anchor encoding)。After later user scope correction,ECSS/domain tests are not migrated in Slice 1;only `src/factgraph` compiler semantics are changed here. | L8 reviewer lock 2026-05-29 + Step 0 verdict + user scope correction 2026-05-29 |
 | **SF5** | **Identity defaults removed end-to-end** — `EntitySelector.allow_identity_defaults` field + `materialize_identity` kwarg + `SDKStore.ref` default path + `SDKBatchTx` default fallback + facade bind logic + **`application/entity_view.py:332 allow_identity_defaults=False`**(Step 0.3 finding,query-mode pattern)+ `_materialize_default_factory` helper all deleted | L9 reviewer lock 2026-05-29 + Step 0 finding 2026-05-29 |
-| **SF6** | **Historical/reference docs excluded from migration grep** — **migration scope**(per Step 0 reviewer verdict 2026-05-29 expansion):`tests/`,`src/factgraph/`(incl `sdk/docs/`),`src/service/`,`src/agent/`,`src/domains/`(**active runtime/source surface — descriptor breaking 后 import 阶段崩,必须 Step 1 breaking-atomic 迁移**),`docs/official/kernel/`,`tutorials/`(user-facing tutorial surface),`examples/`(non-archive subset only — **targeted migration,不得覆盖用户已有 dirty notebook 变更**;见 §6.2 dirty baseline guard),active design/decision/blueprint load-bearing references。**Excluded**:`workflow/heritage/`,`workflow/blueprints/archive/`,`workflow/design/design-points/archive/`,`docs/references/working/`,`docs/references/bridges/`(Step 0.4 verified non-load-bearing),`workflow/audit/active/`(默认不迁移),`examples/archive/`,`archive/`(repo root),`.claude/worktrees/`,`workflow/memory/`,根 `.ipynb` / `temp.md` / `demo.ipynb`,`tools/`(纯文本/注释引用,Step 0 verified 0 factgraph runtime imports — Step 1 breaking-atomic 不迁移;留 Slice 4 consolidated docs cleanup,**除非** future Step 0 discovery 发现 executable/runtime import path)| L10 reviewer lock 2026-05-29 + Step 0 verdict 2026-05-29 expansion |
+| **SF6** | **Slice 1 implementation scope is factgraph-only** — migration scope after user correction 2026-05-29:`src/factgraph/` plus the load-bearing workflow/design docs for this blueprint. **Explicitly out of scope** for this slice:`src/service/`,`src/agent/`,`src/domains/`,`examples/`,`tutorials/`,`tools/`,archive/reference/scratch trees,and unrelated notebooks. Stale callsites outside `src/factgraph/` are recorded as known downstream drift,not Step 1 blockers. Verification therefore uses targeted `src/factgraph` imports/tests/docs checks,not full-repo import-green as an acceptance condition. | User scope correction 2026-05-29 |
 
-### 6.2 Compatibility constraints + dirty baseline guard
+### 6.2 Compatibility constraints + out-of-scope dirty baseline guard
 
 - Sacred `master` `562c74195df43e933bed92a3ff25de94dd8ce666` 不动
 - Sacred `v0.1-oss-prep` 不动
 - Dirty baseline(4 M + 1 D + 2 untracked,unrelated to identity-as-claim)preserved through all commits
 - Branch lineage:每次 commit verify HEAD ancestor includes ADR-FI adopt `b288ea9e` + ADR-DOCS adopt `bb6a2c90` + synthesis `d0036e1f` + cross-check `7fc11e81`
-- **Dirty notebook guard**(Step 0 reviewer 2026-05-29 verdict round 1 + round 2 clarification):`examples/` 下当前有 4 个 unrelated dirty notebook 状态:
+- **Dirty notebook guard(scope correction 2026-05-29)**:`examples/` 下当前有 unrelated dirty notebook 状态,但 `examples/` is **out of Slice 1 implementation scope**:
   - `examples/01_sdk_check_diagnose.ipynb`(**non-archive**,modified)
   - `examples/02_overlay_why_not_frontier.ipynb`(**non-archive**,modified)
-  - `examples/archive/01_sdk_basics.ipynb`(**archive**,modified)— **SF6 excluded;不属于 Slice 1 migration scope;Step 1 必须显式不动**
+  - `examples/archive/01_sdk_basics.ipynb`(**archive**,modified)
   - `docs/references/working/change-requests-2026-05-27/`(untracked dir)— SF6 excluded
-- **Migration disposition per file**:
-  - **`examples/`(non-archive)+ dirty**(2 files above)→ targeted stash/migrate/pop:`git stash push -- <file>` → apply migration → `git stash pop` → manual reconcile if conflict
-  - **`examples/`(non-archive)+ clean** → 正常 migrate
-  - **`examples/archive/`(any state)**→ **绝对不动**(per SF6 + L10 reviewer 2026-05-29 verdict);**即使 dirty 也不触碰**,Step 1 commit 后这些 archive dirty 状态保持在 dirty baseline 内
+- **Disposition**:`examples/` / `examples/archive/` / `docs/references/working/` are all out of scope;Step 1 must leave their diffs exactly as dirty baseline. No stash/migrate/pop workflow is needed because no examples files are touched.
 - **绝对禁止** 覆盖 user 已有 notebook output / metadata 变更
-- Step 1.12 verify green branch **前**做最终一次 grep:确认 `examples/archive/*` 任何 `Field(cardinality=)` / `Identity(primary_key=)` callsite 状态未变(diff 验证)
+- Step verification must include `git diff --name-only` check confirming no new changes under `examples/`,`src/service/`,`src/agent/`,`src/domains/`,`tutorials/`,or `tools/`.
 
 ### 6.3 Q-PR1 / Slice 5 carve-out invariant
 
@@ -505,11 +502,8 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] `derivation_compile.py:_identity_field_names` returns single list
 - [ ] `derivation_compile.py` head-body validation rejects any Identity field in head(both field head form `_lower_field_head_with_schema` + entity head form `_lower_entity_head_with_schema`)
 - [ ] **`derivation_compile.py:_infer_unique_entity_binding_var` rejects ambiguous body binding with explicit error**(Option C — "cross-coordinate disambiguation must occur within body via Identity field constraints")
-- [ ] **ECSS test migration verified**:
-  - [ ] `src/domains/ecss/tests/test_phase3_contracts_v1.py:177-221` rewritten — primary_key concept gone;verify Form I "head forbids any Identity"
-  - [ ] `src/domains/ecss/tests/test_phase3_contracts_v1.py:268-288` deleted or replaced with Form I body-anchor binding test
-  - [ ] `locale: str = Identity()` **NOT** converted to Field(per Option C domain model preservation)
-- [ ] Step 0.1 grep migration items(beyond ECSS,if any)— each rewritten per Option C body-binding(no rule semantics drift)
+- [ ] ECSS/domain tests under `src/domains/` are **not touched** in this slice(scope correction);if full-repo tests are run and fail there,record as downstream domain drift,not Slice 1 failure
+- [ ] `src/factgraph` Option C compiler tests cover Identity-in-head reject + ambiguous body binding reject + single body binding success
 
 ### 7.9 Write-time validation(G3)— central path coverage(P1 #1 lock)
 
@@ -589,23 +583,21 @@ Pause 形式:audit log 加 "blocker" 行 → 退回 Stage 4 blueprint amend → 
 
 **Step 0 — executed 2026-05-29 @ `53745c02`**(audit log "Step 0 pre-impl grep findings" row 详)。
 - Trigger 0.1 **fired** — shipped `derivation_compile.py:203-217` + ECSS `test_phase3_contracts_v1.py:268-288` 强制 non-primary-Identity-in-head;Form I 下 illegal
-- Trigger 0.2 **partial fire** — `Identity(default=)` 在 expected scope 内(tests 6,blueprints active 3,decisions 1,official 1,EXCL 范围 4),无非预期 directory;但 **SF6 scope 必须扩展**:sibling packages `src/service/`(3F+3I), `src/agent/`(1F+1I), `src/domains/`(0F+1I) 使用 factgraph imports,Step 1 descriptor breaking 后 import 阶段崩 → 已纳入 SF6 migrate scope
+- Trigger 0.2 **partial fire** — `Identity(default=)` 在 expected scope 内(tests 6,blueprints active 3,decisions 1,official 1,EXCL 范围 4),无非预期 directory;Step 0 also found stale callsites in sibling packages `src/service/`(3F+3I),`src/agent/`(1F+1I),`src/domains/`(0F+1I),but later user scope correction explicitly excludes those packages from Slice 1.
 - Trigger 0.3 **minor fire** — `application/entity_view.py:332 allow_identity_defaults=False` 未在 preflight 列出 → 已纳入 §5.7 + §7.5 + SF5
 - Trigger 0.4 **not fired** — `docs/references/bridges/` 2 files,6 active workflow 引用全为 historical context(per `q1-docs-workflow-split.md` "parked deferred subtrees");verified non-load-bearing → SF6 conditional exclude 适用
 
-**Step 0 reviewer verdict 2026-05-29**(post-finding amend):
+**Step 0 reviewer verdict 2026-05-29**(post-finding amend + subsequent scope correction):
 - L8/SF4 → **Option C**(head 不可含任何 Identity;cross-coordinate disambiguation migrate to body / entity binding;ambiguous binding → reject)。详 §5.12 + §6.1 SF4
-- SF6 expansion → sibling packages + tutorials + examples non-archive。详 §6.1 SF6
 - SF5 → 含 entity_view.py。详 §5.7 + §6.1 SF5
 - bridges/ → SF6 conditional exclude 确认
-- examples/archive/ exclude;tools/ exclude(无 runtime imports;留 Slice 4)
-- examples/(non-archive)dirty notebook guard:targeted migration,stash dirty change → migrate → restore stash(详 §6.2 dirty baseline guard)
+- **Scope correction**:do **not** migrate `src/service/`,`src/agent/`,`src/domains/`,`examples/`,`tutorials/`,or `tools/` in Slice 1;implementation scope is `src/factgraph/` + load-bearing workflow/design docs only. These out-of-scope stale callsites are known downstream drift,not Slice 1 blockers.
 
 Step 0 amendment commit landed before Step 1 implementation 启动。
 
-### Step 1 — Descriptor surface + annotation plan + atomic test/example fixture migration(`sdk/schema.py` + tests/ + Entity-using docs)— **breaking-atomic commit**
+### Step 1 — Descriptor surface + annotation plan + factgraph-only callsite migration(`sdk/schema.py` + `src/factgraph/` docs)— **breaking-atomic within factgraph scope**
 
-**重要框架**(P2 review 锁定):Step 1 是 **breaking-atomic** commit — descriptor signature change 必须跟所有使用旧 API 的 fixture / example 在同一 commit 落地,否则 Step 1 commit 后 Step 2-13 期间 Python import 阶段 tests 大量崩,无法做 per-commit verification。具体范围 = Step 0.2 grep 结果 catalog 内所有 callsite,**排除** SF6 excluded directories。
+**重要框架**(P2 review + user scope correction):Step 1 remains breaking-atomic **within `src/factgraph/` scope** — descriptor signature change must land with all `src/factgraph/` callsite updates in the same commit. This slice no longer attempts full-repo import-green;out-of-scope packages/examples/tutorials/tools are not touched.
 
 - 1.1 Add `_DataMember(_DeclaredMember)` internal base(`sdk/schema.py`)
 - 1.2 Add `_AnnotationPlan` frozen dataclass(`sdk/schema.py`)
@@ -614,38 +606,15 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
 - 1.5 Rewrite `Field.__init__` to `(*, description, pattern, **legacy_kwargs)` + `_inferred_cardinality` storage + read-only `cardinality` property
 - 1.6 Update `Identity.to_authoring` + `Field.to_authoring` to take `_AnnotationPlan`
 - 1.7 Update `EntityMeta.__new__` + `RelationshipMeta.__new__` to write back `_inferred_cardinality` before `to_authoring`
-- **1.8 Atomic test + sibling-package + ECSS rule-bearing test fixture migration**(per Step 0.2 catalog + Step 0 SF6 expansion + Step 0 verdict round 2 ECSS fusion):
-  - `tests/`:全部 `Field(cardinality="single")` → `Field()` + annotation;`Field(cardinality="multi")` → `Field()` + `: list[T]` annotation;`Identity(primary_key=True)` → `Identity()`;`Identity(default=...)` → callers supply explicit identity values
-  - **`src/service/`**(3F+3I per Step 0):`_certainty_service.py`,`runtime_v1.py`,`rules_v1.py`,`static_ui.py`,`tests/test_runtime_query_policy.py`,`tests/test_problog_semantic_annotation_l4.py`,`tests/test_problog_candidate_evidence_tree.py` 等同 migrate
-  - **`src/agent/`**(1F+1I per Step 0):`session.py`,`tools/_entity_ref.py`,`tests/test_agent_*.py` 等同 migrate
-  - **`src/domains/ecss/tests/test_phase3_contracts_v1.py` — ECSS rule-bearing tests**(per Step 0 verdict round 2 — **整体迁移**,**single-touch**,不分两步):
-    - Schema fixture migration:`Identity(primary_key=True)` → `Identity()`(保持 `locale: str = Identity()` 不变 — Option C 不改 domain model)
-    - **Rule head Form I final rewrite**:`test_head_primary_key_implicit_and_strict_compile_errors`(177-221)改 verify "head forbids any Identity"(primary_key concept removed);`test_cross_coordinate_requires_explicit_non_primary_identity`(268-288)**delete or replace** with Form I body-anchor binding test
-    - 新增 test:`test_ambiguous_body_binding_rejected_under_form_i` 验证 Option C ambiguity reject path
-    - **Single-touch lock** per reviewer no-double-touch(同 file 不分两次 commit 改)
-  - **`tutorials/`**(1F+1I per Step 0):tutorial files
-  - **`examples/`(non-archive only)**:per §6.2 dirty notebook guard — `git stash push -- <file>` → migrate → `git stash pop` → manual reconcile 模式
-  - 排除:`workflow/heritage/`,`workflow/blueprints/archive/`,`workflow/design/design-points/archive/`,`docs/references/working/`,`docs/references/bridges/`(per Step 0.4 verdict),`workflow/audit/active/`,**`examples/archive/`(即使 dirty 也不动 — §6.2 显式)**,`archive/` repo root,`.claude/worktrees/`,`workflow/memory/`,`tools/`(per Step 0 verdict — 留 Slice 4),根 `.ipynb` / `temp.md` / `demo.ipynb`
-
-- **1.8.bis Derivation compiler Option C rewrite — fused into Step 1**(per Step 0 verdict round 2 + technical green-branch fusion):
-
-  **Why fused**:Step 1.8 ECSS rule head Form I rewrite(`head` 不含 Identity)在 shipped `derivation_compile.py:212-217` 下会**直接 reject**(required non-primary identity missing)。若不同时 land Option C compiler 改动,Step 1 commit 后 branch 立即红 → 违反 CADENCE per-commit verification 与 reviewer "Step 1 breaking-atomic 仍要 green" 锁。Reviewer 同时锁 "no double-touch ECSS file" → 唯一可行解 = bundle derivation_compile.py Option C rewrite 进 Step 1。Step 10 主体 rewrite 移到此处。
-
-  **Sub-steps**(原 Step 10.1-10.7 内容移到此处):
-  - 1.8.bis.1 `_identity_field_names:555-584` 改 return single `identity_fields: list[str]`(drop primary/non-primary tuple)
-  - 1.8.bis.2 `_lower_field_head_with_schema:203-253`:drop non-primary required check(lines 212-217);drop `set(non_primary_identity)` from `allowed`(line 235);drop non-primary terms from `required_field_terms`(lines 247-249);forbid any identity_field in head kwargs(lines 204-210 扩展)
-  - 1.8.bis.3 `_lower_entity_head_with_schema:276-289`:drop primary_key 检查 → forbid any identity_field in head kwargs;`role_specs` 不变
-  - 1.8.bis.4 `_infer_unique_entity_binding_var:587+`:**Option C ambiguity reject** — multiple bindings without disambiguation path → reject with explicit error "ambiguous entity binding: body contains multiple {entity_type} bindings;cross-coordinate disambiguation must occur within body via Identity field constraints"
-  - 1.8.bis.5 `_disambiguate_entity_binding_with_head_terms`(line 636)removed(no head Identity terms to disambiguate with)
-  - 1.8.bis.6 Error message at line 632 rewritten:"where body must uniquely bind the {entity_type} entity anchor bundle"
-
-  **Step 10 reframe**:Step 10 不再承担 derivation_compile.py 主体 rewrite(已 fused 进 Step 1.8.bis);Step 10 现 scope = "beyond-Step-1 additional Option C tests + edge case verification + beyond-ECSS rule migration sweep"(详 §8 Step 10)
-- **1.9 Atomic Entity-using load-bearing doc example migration**:
+- **1.8 Atomic `src/factgraph/` callsite migration**:
+  - `src/factgraph/` runtime/docs callsites using `Field(cardinality=...)`,`Identity(primary_key=...)`,`Identity(default=...)`,`Identity(default_factory=...)`
+  - `src/factgraph`-owned tests only if they live under `src/factgraph/`;external `tests/`,sibling packages,and examples are not part of this slice after scope correction
+  - Explicitly **do not touch**:`src/service/`,`src/agent/`,`src/domains/`,`examples/`,`tutorials/`,`tools/`
+- **1.9 Atomic Entity-using load-bearing docs in `src/factgraph/` + workflow design docs**:
   - `src/factgraph/sdk/docs/04_api_surface.en.md` Entity class examples that use old API
-  - `docs/official/kernel/quickstart/*.md` Entity class examples that use old API
   - `workflow/design/design-points/active/identity-mechanism-redesign.zh.md` Entity class examples that use old API
   - **不**包括 NEW Form I overview content(那是 Step 12)— 仅迁移现有 example code
-- **1.10 Atomic active design/decision/blueprint Entity example migration**(若 Step 0.2 grep 发现非零 callsite — 4 blueprints active + 3 decisions per Step 0;通常 historical context 只 cite,无需迁移;每 file 独立 verify 是 load-bearing 还是 historical reference)
+- **1.10 Active design/decision/blueprint Entity example migration**(only if explicitly load-bearing for this slice;historical context stays unchanged)
 - 1.11 Tests for new Form I descriptor surface(positive + 全部 negative cases — `Field(cardinality=)` reject / `Identity(primary_key=)` reject / `Identity(default=)` reject / `Identity(default_factory=)` reject / `Field(pattern=...)` syntax check / float Literal enum reject / Optional reject / Union reject / dict reject)
 - 1.12 **Verify green branch**: `pytest` 全 pass 在 commit 前 — 任何 import-time failure / fixture failure 必须解决后才能 commit
 - 1.13 — commit boundary(breaking-atomic Step 1 close)
@@ -715,21 +684,25 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
 - 9.4 Rewrite cross-coordinate comparison validation at 247-282 per SF3:same-Identity-field-match only;reject Identity-to-Field / Field-to-Field / different-Identity-field with explicit error pointing to future entity-equality primitive
 - 9.5 Tests covering all reject cases — commit boundary
 
-### Step 10 — Beyond-Step-1 Option C additional tests + beyond-ECSS sweep(reframed per Step 0 verdict round 2)
+### Step 10 — Derivation compile Option C rewrite(`authoring/derivation_compile.py`)
 
-注:Step 10 主体 derivation_compile.py rewrite **已 fused 进 Step 1.8.bis**(per §8 Step 1 + Step 0 verdict round 2 "no double-touch ECSS + green branch")。Step 10 现专注 additional verification + beyond-ECSS sweep。
+注:After the 2026-05-29 scope correction,Step 10 owns the `src/factgraph/authoring/derivation_compile.py` semantic rewrite and targeted factgraph-level tests. It does **not** migrate ECSS/domain tests under `src/domains/`.
 
-- 10.1 **Additional Option C unit tests for `derivation_compile.py`**(targeted edge cases — beyond Step 1 ECSS migration):
+- 10.1 **Option C implementation in `derivation_compile.py`**:
+  - `_identity_field_names:555-584` 改 return single `identity_fields: list[str]`(drop primary/non-primary tuple)
+  - `_lower_field_head_with_schema:203-253`:drop non-primary required check(lines 212-217);drop `set(non_primary_identity)` from `allowed`(line 235);drop non-primary terms from `required_field_terms`(lines 247-249);forbid any identity_field in head kwargs(lines 204-210 扩展)
+  - `_lower_entity_head_with_schema:276-289`:drop primary_key 检查 → forbid any identity_field in head kwargs;`role_specs` 不变
+  - `_infer_unique_entity_binding_var:587+`:**Option C ambiguity reject** — multiple bindings without disambiguation path → reject with explicit error
+  - `_disambiguate_entity_binding_with_head_terms`(line 636)removed(no head Identity terms to disambiguate with)
+  - Error message at line 632 rewritten:"where body must uniquely bind the {entity_type} entity anchor bundle"
+- 10.2 **Additional Option C unit tests for `derivation_compile.py`**(targeted factgraph/authoring tests):
   - ambiguity reject path:multiple entity bindings in body with no disambiguation primitive → reject with explicit error
   - single body binding + Form I head success path
   - Form I + relationship head form coverage(`_lower_entity_head_with_schema` path)
-  - any compile-time Identity-in-head reject case Step 1.8.bis 未直接覆盖的 forms
-- 10.2 **Beyond-ECSS derivation rule sweep**(per Step 0.1 catalog re-confirmation):re-sweep all `Rule(head=...)` definitions in `tests/` + `src/service/tests/` + `src/agent/tests/`(per SF6 expansion);any rule that survived Step 1 import but has previous non-primary Identity in head pattern → migrate body 表达
-- 10.3 Verify Step 1.8.bis Option C compiler rewrite passes 全 derivation test suite(no regression)
-- 10.4 Cleanup verification:`_disambiguate_entity_binding_with_head_terms` 已删除(Step 1.8.bis.5)— grep verify zero remaining call
+  - any compile-time Identity-in-head reject case not otherwise covered
+- 10.3 **Out-of-scope domain note**:do not sweep or migrate `src/domains/ecss/tests/test_phase3_contracts_v1.py` in this slice;record as known downstream domain drift if full-repo tests are run.
+- 10.4 Cleanup verification:`_disambiguate_entity_binding_with_head_terms` 已删除— grep verify zero remaining call
 - 10.5 — commit boundary
-
-**Why Step 10 不空** — Step 1.8.bis 是 minimum-viable green for Option C(让 ECSS 测试 + 所有当前 derivation tests 通过);Step 10 加 robustness(更多 edge cases + cross-package rule sweep)+ post-fusion verification(确认 Step 1 fusion 留下无 regression)。
 
 ### Step 11 — Write-time validation module(`application/value_validation.py` NEW)+ **central path integration**(P1 #1 lock)
 
@@ -757,10 +730,8 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
   - §8 Form I aligned with ADR-FI §4.3 + §4.3-bis adopted wording
   - §8.4 类型推断 rules synced with implementation
   - §8.5 `_DataMember` internal base documented as Slice 1 landed
-- 12.3 `docs/official/kernel/quickstart/schema.md`:
-  - NEW Form I 类型推断 cardinality 形态 section
-  - NEW dual-layer enum / pattern validation usage example
-- 12.4 Final `tests/` + load-bearing docs grep:zero stale uses across migration scope(per SF6)
+- 12.3 No `docs/official/kernel/`, `examples/`, or `tutorials/` edits in this slice(scope correction)
+- 12.4 Final `src/factgraph/` + load-bearing workflow/design docs grep:zero stale uses across migration scope(per SF6)
 - 12.5 Confirm SF6 excluded directories untouched(grep diff verified)
 - 12.6 — commit boundary
 
@@ -785,35 +756,36 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
   - §8 Form I aligned with ADR-FI adopted wording
   - §8.4 类型推断 rules synced with implementation
   - §8.5 `_DataMember` internal base documented as Slice 1 landed
-- `docs/official/kernel/quickstart/schema.md`:
-  - Form I 类型推断 cardinality 形态 section
-  - dual-layer enum / pattern validation usage example
-
 ### 9.2 Module docs(per `workflow/foundations/module_docs_convention.md` — inherent to each touched module)
 
 - `src/factgraph/sdk/docs/README.md` — Form I changes summary
 - `src/factgraph/authoring/docs/README.md`(if exists)— compile / parse / rule lowering changes
 - `src/factgraph/application/docs/README.md`(if exists)— schema_runtime + value_validation changes
 
-### 9.3 Out-of-slice docs(Slice 4 Phase 2)
+### 9.3 Out-of-slice docs(Slice 4 Phase 2 or downstream migration)
 
+- Public quickstarts outside `src/factgraph/`(`docs/official/kernel/*`,tutorials,examples)unless explicitly pulled into a later docs slice
 - Other quickstarts(`read-write.md` / `assertions.md` / etc.)cross-doc terminology consistency,5-pass polish per ADR-DOCS §4.3
 - Module-wide migration note placement consolidation
 
-### 9.4 Excluded(per SF6 — 必须迁移之外 = 排除范围;Step 0 verdict 2026-05-29 expansion)
+### 9.4 Excluded(per SF6 — outside Slice 1 factgraph-only implementation scope)
 
-**Unconditional exclude**(historical / scratch / transient / non-runtime):
+**Unconditional exclude**(outside current implementation boundary):
+- `src/service/` — downstream sibling package,not part of factgraph-only Slice 1
+- `src/agent/` — downstream sibling package,not part of factgraph-only Slice 1
+- `src/domains/` — downstream domain package,not part of factgraph-only Slice 1
+- `examples/` and `examples/archive/` — no notebook/source edits in this slice
+- `tutorials/` — user-facing docs deferred
+- `tools/` — Step 0 verified no factgraph runtime imports;deferred to Slice 4/docs cleanup if needed
 - `workflow/heritage/` — legacy 历史材料
 - `workflow/blueprints/archive/` — 归档蓝图
 - `workflow/design/design-points/archive/` — 归档 design-points
 - `workflow/audit/active/` — 默认不迁移,除非本 blueprint 显式列为 load-bearing(本 Slice 1 无此项)
 - `workflow/memory/` — memory 历史
 - `docs/references/working/` — working scratch
-- `examples/archive/` — archived examples
 - `archive/`(repo root)— legacy archived code
 - `.claude/worktrees/` — transient worktree copies
 - 根 `.ipynb` / `temp.md` / `demo.ipynb` / `test.ipynb` — 临时工作文件
-- `tools/`(Step 0 verified 0 factgraph runtime imports — 纯文本/注释 callsites,留 Slice 4 consolidated docs cleanup;除非 future Step 0 discovery 发现 executable/runtime import path)
 
 **Conditional exclude — `docs/references/bridges/`**(per Step 0.4 verdict — 已 verified non-load-bearing):
 - 2 files in bridges/:`factpy-kernel-report-audit-2026-04-20.md`,`symir-blueprint-extraction.md`
