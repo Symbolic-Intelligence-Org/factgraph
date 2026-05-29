@@ -129,18 +129,33 @@ audit Q17 question framing:
 
 **选 (c)**。
 
-#### 4.1.2 "Load-bearing" 定义
+#### 4.1.2 "Load-bearing" 定义(★ P2-amend — 含 user-facing + authoritative reference 两 dimensions)
 
-某 doc change 在 slice X 是 **load-bearing** 若:
+某 doc change 在 slice X 是 **load-bearing** 若满足以下 **两 dimensions** 之一:
+
+**Dimension A — user-facing consistency**(SDK 内部文档 + 公开 quickstart):
 - 该 doc 描述的 API / 行为在 slice X 完成时实际被 shipped 改变
 - 该 doc 不更新会让 user 看 docs 学到 wrong API / behavior
 - 该 doc 在 slice X 后变成 "shape conflict"(per audit 5+1 state 分类 row D 标的 (c) shape conflict)
+- 范围:`src/factgraph/sdk/docs/*.md` + `docs/official/kernel/quickstart/*.md`
 
-**Non-load-bearing** docs change(留 Slice 4):
-- terminology consistency across docs(slice X 不直接 touch 的 doc 用 slice X 引入的术语)
-- example unification(slice X examples 跟其他 doc examples 风格统一)
-- migration note placement / cross-reference 完整性
-- minor wording polish
+**Dimension B — authoritative design / reference consistency**(design-points + specs):
+- 该 doc 是 design-point / spec(authoritative source of truth that ADRs / blueprints reference)
+- 该 doc 描述的 design 在 slice X 完成时实际跟 adopted ADR 形成 drift
+- 该 doc 不更新会让 后续 blueprint / ADR reviewer 读到 stale design statement(从而引入 design drift)
+- 范围:`workflow/design/design-points/active/identity-mechanism-redesign.zh.md` + `ledger-schema-specification.zh.md`(本 ADR scope 内的两份 active design-points)
+
+**为什么 design-points 也算 load-bearing**:
+- ADR adopt 后,design-point 中的对应 §section 是 authoritative "已锁" 状态;留到 Slice 4 才同步 → 期间 reviewer 读 design-point 会看到 pre-ADR 形态
+- per `workflow/design/design-points/README.md` 权威边界:design-point 仅当被 adopted ADR / implemented blueprint / module docs 引用时才成为约束;ADR-x adopt 后 design-point §section 跟 ADR 衔接即是 "authoritative 锚点"
+- design-point sync 跟 user-facing docs sync 在 **per-slice consistency** 维度上等同重要,虽然 user-visible 影响不同(authoritative drift 是 downstream blueprint / ADR risk;user-facing drift 是 immediate user-visible risk)
+
+**Non-load-bearing** docs change(留 Slice 4 consolidated polish — 跟两 dimensions 都不直接相关):
+- terminology consistency across docs(slice X 不直接 touch 的 doc 用 slice X 引入的术语)— Slice 4 §4.5 pass 1
+- example unification(slice X examples 跟其他 doc examples 风格统一)— Slice 4 §4.5 pass 3
+- migration note placement / cross-reference 完整性 — Slice 4 §4.5 pass 4
+- minor wording polish — Slice 4 §4.5 pass 5
+- stale references cleanup — Slice 4 §4.5 pass 5
 
 #### 4.1.3 决策 rationale 三条
 
@@ -254,11 +269,33 @@ per §1.2 表已展示,本节系统化锁定:
 
 **锁定**:Slice 4 doc-sync blueprint 必须完成:
 
-- **Terminology pass**:全 docs grep + verify 用统一术语(per §4.3.1 list)
-- **Cross-ref pass**:全 docs cross-link verify;所有 §reference / ADR reference / Sliced naming 跟实际 anchors 对齐
-- **Examples pass**:examples 风格 + canonical names + 形态全统一
-- **Migration note placement pass**:per §4.3.2 锁定的 placement 检查
-- **Stale reference cleanup pass**:per §4.3.5 grep + 删除残留
+- **Terminology pass**(pass 1):全 docs grep + verify 用统一术语(per §4.3.1 list)
+- **Cross-ref pass**(pass 2):全 docs cross-link verify;所有 §reference / ADR reference / Sliced naming 跟实际 anchors 对齐
+- **Examples pass**(pass 3):examples 风格 + canonical names + 形态全统一
+- **Migration note placement pass**(pass 4):per §4.3.2 锁定的 placement 检查
+- **Stale reference cleanup pass**(pass 5):per §4.3.5 grep + 删除残留
+
+#### 4.5.bis Slice 4 implementation sequencing dependency(★ P2-amend)
+
+**锁定**:Slice 4 blueprint **lifecycle 分两阶段**,跟 Slice 1-3b 落地状态绑定:
+
+| 阶段 | Slice 4 blueprint state | 前置条件 | scope |
+|---|---|---|---|
+| **Phase 1 — skeleton/scoping** | `draft` → `scoped` | ADR-DOCS adopted | 起 skeleton blueprint(§0 Inputs + §4 Decision points + §10 Outcome 5 passes outline);引用本 ADR §4.3 + §4.5 锁定的 5 passes;**不**执行 implementation work |
+| **Phase 2 — implementation + acceptance** | `scoped` → `implementing` → `implemented` | **必须**等 Slice 1 + Slice 2 + Slice 3a + Slice 3b 各自的 load-bearing docs sync **全部 landed**(per `implemented` blueprints + 各自 Stage 4 §10 Outcome 显式 confirm load-bearing docs sync done)| 执行 5 passes(per §4.5);最终 Stage 4 acceptance |
+
+**为什么 sequencing 必要**:
+- Slice 4 5 passes 是 **polish / consistency pass over the final landed docs**;若 Slice 1/2/3a/3b load-bearing docs 还在 in-flight,Slice 4 polish 会追逐 moving target
+- terminology pass 需要看到所有 slice 引入的 final wording 才能 verify consistency
+- cross-ref pass 需要 anchors 已 stable(否则 cross-link 可能 reference 未 finalized 的 section)
+- examples pass 需要 final API shape(否则 examples 会用 stale form)
+
+**Slice 4 blueprint Stage 4 acceptance preflight check**:Slice 4 implementing 之前必须 verify:
+- [ ] Slice 1 blueprint `implemented` + Stage 4 §10 Outcome confirm load-bearing docs(per §4.2.1)landed
+- [ ] Slice 2 blueprint `implemented` + Stage 4 §10 Outcome confirm load-bearing docs(per §4.2.2)landed
+- [ ] Slice 3a blueprint `implemented` + Stage 4 §10 Outcome confirm load-bearing docs(per §4.2.3)landed
+- [ ] Slice 3b blueprint `implemented` + Stage 4 §10 Outcome confirm load-bearing docs(per §4.2.4)landed
+- **Slice 5(Step 2+)** 不阻 Slice 4 — Slice 5 docs(per §4.2.5)是 Step 2+ scope,Slice 4 polish 仅 cover Step 1 范围;Slice 5 完成后独立 polish slice(per §7.2 follow-up)
 
 ### 4.6 Cross-Q decision summary(单 Q,纯 lock)
 
@@ -405,7 +442,8 @@ per §1.2 表已展示,本节系统化锁定:
 
 | Action | Owner | When |
 |---|---|---|
-| Slice 4 docs sync blueprint draft(`workflow/blueprints/active/2026-05-29_slice-4-docs-sync.md`)| TBD(per CADENCE drafter/reviewer role assignment)| ADR-DOCS adopt 后,Slice 3b 完成前后 |
+| Slice 4 docs sync blueprint **skeleton/scoping draft**(`workflow/blueprints/active/2026-05-29_slice-4-docs-sync.md` 框架 + §0 Inputs + §4 Decision points + §10 Outcome 5 passes outline)| TBD(per CADENCE drafter/reviewer role assignment)| ADR-DOCS adopt 后 — 可即时起 skeleton |
+| Slice 4 docs sync blueprint **final implementation + Stage 4 acceptance**(5 passes 实际执行 — terminology / cross-ref / examples / migration note placement / stale cleanup)| Slice 4 implementation | **必须**等 Slice 1 + Slice 2 + Slice 3a + Slice 3b 各自的 load-bearing docs sync **全部 landed**(per §4.5.bis)— polish pass 不可追逐 moving target |
 | Slice 1/2/3a/3b 各 blueprint scoped 阶段:确认 Stage 4 §10 含本 ADR §4.2 锁定的 load-bearing docs sync acceptance | Per-slice blueprint preflight(Step 4.6.5)| 各 Slice blueprint scoped 后 |
 | Slice 4 implementation:5 passes(terminology / cross-ref / examples / migration note placement / stale cleanup)per §4.5 | Slice 4 implementation | Slice 4 Step 4.7 |
 | Slice 5(Step 2+)blueprint:取得 §4.2.5 docs scope(`ledger-spec §9.4` + `identity §11.3` + `04_api_surface §X` Slice 5 终态说明)| Slice 5 blueprint preflight | Step 2+ |
@@ -431,7 +469,9 @@ per §1.2 表已展示,本节系统化锁定:
 
 ADR adoption(本 ADR commit Status: proposed → adopted)前:
 
-- [x] §4.1-§4.5 Q17 + per-slice load-bearing + Slice 4 consolidated + D1-D11 落点 + 5 passes 全部含 Decision + rationale
+- [x] §4.1-§4.5 + §4.5.bis Q17 + per-slice load-bearing + Slice 4 consolidated + D1-D11 落点 + 5 passes + Slice 4 sequencing dependency 全部含 Decision + rationale
+- [x] §4.1.2 load-bearing 定义 显式包含 **两 dimensions**(user-facing + authoritative design/reference)— 跟 §4.2 per-slice acceptance(含 design-points)scope 一致 ★ P2-amend
+- [x] §4.5.bis Slice 4 blueprint lifecycle 分 Phase 1 skeleton / Phase 2 implementation;Phase 2 必须等 Slice 1/2/3a/3b load-bearing docs all landed — 避免 polish pass 追逐 moving target ★ P2-amend
 - [x] §5 含 per-Q rejected alternatives(≥7 项)+ cross-Q rejected combinations(≥3)
 - [x] §6 含 audit / shipped docs structure / meta-ADR / 8 cross-ADR docs commitments / design-point / no-Q-PR1 confirmation / 跨 ADR docs commitments closure 7 类 evidence
 - [x] §6.3 8 个 prior ADR 的 docs sync follow-up commitments 全部 enumerate
@@ -472,4 +512,5 @@ Post-adoption verification(implementation 阶段验证 — Slice 1/2/3a/3b/4/5):
 
 | Date | Stage | Event | Notes |
 |---|---|---|---|
-| 2026-05-29 | proposed | ADR-DOCS drafted | Q17 docs sync timing — hybrid (c) per-slice load-bearing + Slice 4 consolidated;§4.2 锁 Slice 1/2/3a/3b/5 各 load-bearing docs items;§4.3 锁 Slice 4 consolidated 5 passes(terminology / cross-ref / examples / migration note placement / stale cleanup);§4.4 D1-D11 落点分配(D1-D3+D5-D7 → Slice 3a;D4 → Slice 4 minor + Step 2+;D8/D9 → Step 2+;D10 → Slice 3b;D11 → Slice 2);§4.5 Slice 4 unification 5 passes lock。基于 meta-ADR adopted @ `ebafdb0c` + 8 个 prior ADRs adopted commits(cumulative);8 个 ADR docs sync follow-up commitments 全部 closure。**Stage 2 收尾 ADR** — adopted 后 Stage 2 全部 closed(9/9 含 meta)。Branch: `v0.2.0-q-docs-sync-decision-2026-05-29`。Commit: TBD post-stage |
+| 2026-05-29 | proposed | ADR-DOCS drafted | Q17 docs sync timing — hybrid (c) per-slice load-bearing + Slice 4 consolidated;§4.2 锁 Slice 1/2/3a/3b/5 各 load-bearing docs items;§4.3 锁 Slice 4 consolidated 5 passes(terminology / cross-ref / examples / migration note placement / stale cleanup);§4.4 D1-D11 落点分配(D1-D3+D5-D7 → Slice 3a;D4 → Slice 4 minor + Step 2+;D8/D9 → Step 2+;D10 → Slice 3b;D11 → Slice 2);§4.5 Slice 4 unification 5 passes lock。基于 meta-ADR adopted @ `ebafdb0c` + 8 个 prior ADRs adopted commits(cumulative);8 个 ADR docs sync follow-up commitments 全部 closure。**Stage 2 收尾 ADR** — adopted 后 Stage 2 全部 closed(9/9 含 meta)。Branch: `v0.2.0-q-docs-sync-decision-2026-05-29`。Commit: `3a6491ff` |
+| 2026-05-29 | proposed | ADR-DOCS amended(P2 wording/boundary cleanup,still proposed)| User reviewer post-draft review(同日)返回 2 findings — 都是 wording / boundary cleanup,不改变决策方向。**(P2.1)** §4.1.2 load-bearing 定义说"user-facing consistency"但 §4.2 per-slice acceptance 含 `identity-mechanism-redesign.zh.md` / `ledger-schema-specification.zh.md`(design-point/spec);两者不一致(design-points 不是 user-facing 但被锁入 per-slice gate)。**修复 §4.1.2 重写为 2 dimensions**:Dimension A user-facing consistency(SDK docs + quickstart;原范围);Dimension B authoritative design / reference consistency(design-points + specs;扩展范围)。Dimension B rationale:design-point 在 ADR adopt 后是 authoritative "已锁" 状态;留到 Slice 4 才同步 → 期间 reviewer 读 design-point 看到 pre-ADR 形态 → 引入 downstream blueprint / ADR drift;per design-points/README.md 权威边界 — design-point 跟 adopted ADR 衔接即是 authoritative 锚点;design-point sync 跟 user-facing docs sync 在 per-slice consistency 维度等同重要。**(P2.2)** §7.2 follow-up 表 "Slice 4 blueprint 在 ADR-DOCS adopted 后可起草" 没区分 skeleton vs implementation timing;但 Slice 4 5 passes(polish / consistency)依赖 Slice 1/2/3a/3b 的 final landed docs — 若 implementation 之前那些 in-flight,polish pass 会追逐 moving target。**修复**:§7.2 splits Slice 4 blueprint 为 **Phase 1 skeleton/scoping(ADR-DOCS adopt 后即可起)** + **Phase 2 implementation/acceptance(必须等 Slice 1-3b load-bearing docs all landed)**;新增 §4.5.bis Slice 4 blueprint lifecycle 表 + sequencing rationale + Phase 2 implementing preflight check 4 项;Slice 5 不阻 Slice 4(Slice 5 docs is Step 2+ scope,Slice 4 仅 cover Step 1)。同步 cascade:§8 proposed-stage check 加 2 项 P2-amend star check。 |
