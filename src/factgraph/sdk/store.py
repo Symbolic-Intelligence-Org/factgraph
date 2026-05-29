@@ -1877,8 +1877,7 @@ class SDKStore:
             entity_cls: An ``Entity`` subclass passed to this SDKStore in
                 the ``classes=[...]`` constructor arg.
             **identity_values: Identity field values. All declared identity
-                fields must be supplied unless they have ``default=`` or
-                ``default_factory=``.
+                fields must be supplied explicitly.
 
         Returns:
             A canonical ``idref_v1:<entity_type>:<digest>`` token. The same
@@ -1888,7 +1887,7 @@ class SDKStore:
         Raises:
             SDKStoreError: if ``entity_cls`` was not registered with this
                 SDKStore, if extra identity kwargs are passed, or if a
-                required identity field has no value and no default.
+                required identity field has no value.
         """
         spec = self._entity_spec_by_class.get(entity_cls)
         if spec is None:
@@ -1906,10 +1905,6 @@ class SDKStore:
             tag = field["type_domain"]
             if name in identity_values:
                 raw_value = identity_values[name]
-            elif "default" in field:
-                raw_value = field["default"]
-            elif field.get("default_factory") == "uuid4":
-                raw_value = _default_uuid4_for_tag(tag)
             else:
                 raise SDKStoreError(f"missing identity field: {entity_cls.__name__}.{name}")
             tuples.append((name, tag, _coerce_sdk_value_to_tag(tag, raw_value)))
@@ -2804,8 +2799,7 @@ class SDKStore:
         if entity is None:
             raise RuleExprError(f"cannot close entity-ref port for {entity_type}: unknown entity type")
         identity: dict[str, Any] = {}
-        primary_fields = tuple(field for field in entity.identity_fields if getattr(field, "primary_key", False))
-        for field_info in primary_fields:
+        for field_info in entity.identity_fields:
             field_name = field_info.name
             predicate = entity.identity_predicates.get(field_name)
             pred_id = getattr(predicate, "pred_id", None)
@@ -3256,14 +3250,6 @@ def _schema_pred_by_pred_id(sdk: SDKStore, pred_id: str) -> dict[str, Any]:
         if isinstance(pred, dict) and pred.get("pred_id") == pred_id:
             return pred
     raise SDKStoreError(f"schema predicate not found for assertion predicate: {pred_id}")
-
-
-def _default_uuid4_for_tag(tag: str) -> str:
-    if tag == "uuid":
-        return str(uuid4()).lower()
-    if tag == "string":
-        return uuid4().hex
-    raise SDKStoreError(f"default_factory='uuid4' not supported for type_domain={tag}")
 
 
 def _coerce_sdk_value_to_tag(tag: str, value: Any) -> Any:
