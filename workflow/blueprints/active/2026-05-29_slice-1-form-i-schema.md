@@ -183,6 +183,7 @@ Extend `_annotation_to_type_domain_runtime` → `_resolve_annotation_plan(annota
 - `list[T] / tuple[T, ...] / set[T] / frozenset[T]` → multi + element domain
 - `Literal[v1, v2, ...]` homogeneous → single + enum_values (mixed-type reject)
 - `list[Literal[...]]` etc → multi + enum_values
+- **`Literal[1.0, 2.0]` or any Literal with float member → reject(P1 #3 lock)**:`schema_ir.canonicalize_schema_ir_jcs` rejects all floats via `_reject_floats`(`core/schema/schema_ir.py:217-229`);若 enum_values 含 float,schema digest 会失败。Form I 在 Slice 1 scope 内**拒绝 float Literal enum**;`float64` 普通字段(无 Literal)仍允许。**Step 2+** 若需要 float enum 走单独 canonical encoding ADR。
 - `Optional[T] / T | None` → reject(SDKSchemaError "Form I rejects Optional;unset = None already expresses absence")
 - `Union[A, B]` non-Literal → reject
 - `dict[K, V]` → reject(Step 2+)
@@ -209,10 +210,16 @@ Extend `_annotation_to_type_domain_runtime` → `_resolve_annotation_plan(annota
 
 ### 5.4 Schema compile drops + extends(`authoring/schema_compile.py`)
 
-`_compile_identity_predicate`:drop `primary_key` read(line 258-259)。
-`_compile_identity_field`:drop `default / default_factory / primary_key` reads(lines 282-287);reject unknown sub-keys。
-`_compile_field`:keep cardinality validation(arrives from upstream inference);add enum_values + pattern reads + Literal-mixed-type / invalid-regex(via `re.compile`)/ pattern-on-non-str-domain checks per ADR-FI §4.4.1。
-`_compile_relationship_field`:**symmetric extension** mirroring `_compile_field`(D6 lock — same enum + pattern + validation paths)。
+`_compile_identity_predicate`:drop `primary_key` read(line 258-259);**add `description` + `pattern` propagation from identity_field input dict to compiled predicate**(P1 #2 lock — Identity descriptor accepts `description/pattern` per §5.1 but schema-truth must carry them;否则 Identity(pattern=...) 变成半死参数)。
+`_compile_identity_field`:drop `default / default_factory / primary_key` reads(lines 282-287);**propagate `description` + `pattern` from input** (P1 #2 lock);reject unknown sub-keys。
+`_compile_field`:keep cardinality validation(arrives from upstream inference);add enum_values + pattern reads + Literal-mixed-type / **float-Literal-enum reject(P1 #3)** / invalid-regex(via `re.compile`)/ pattern-on-non-str-domain checks per ADR-FI §4.4.1。
+`_compile_relationship_field`:**symmetric extension** mirroring `_compile_field`(D6 lock — same enum + pattern + validation paths;same float-Literal-enum reject)。
+
+**Identity pattern compile-time validation**(P1 #2 lock):同 Field 的 compile-time check 也适用 Identity:
+- regex syntax via `re.compile(pattern)` (raise on invalid)
+- pattern-on-non-string-type_domain reject(raise on non-`string`/non-`uuid` domain;Identity 主要 type_domain 都属于受 pattern 的 string 类)
+
+**Identity pattern write-time enforcement**:Slice 1 scope 仅产出 schema truth(compile-time);Identity Claim 写入路径的 pattern enforcement **延后到 Slice 2**(ADR-IC §4.2 Identity Claim emission 路径成型后才有 pattern 写入 hook 点)。Slice 1 acceptance:Identity pattern in schema_ir 可被 `SchemaIndex.PredicateInfo` 携带。
 
 ### 5.5 Schema IR validation(`core/schema/schema_ir.py`)
 
@@ -278,7 +285,7 @@ Per Scope Freeze #4(L8 lock — head may not include any Identity field):
 - `632` error message rewritten to anchor-bundle terms
 - **Pre-impl grep**(Step 0):find all shipped derivation rules where head body includes any Identity field;catalog as migration items(if 0 → Option A is free lunch)
 
-### 5.13 Write-time validation(`application/value_validation.py` NEW)
+### 5.13 Write-time validation(`application/value_validation.py` NEW)+ **central path integration**(P1 #1 lock)
 
 ```python
 def validate_field_value(value: Any, *, pred_info: PredicateInfo) -> None:
@@ -290,6 +297,8 @@ def validate_field_value(value: Any, *, pred_info: PredicateInfo) -> None:
     Per ADR-FI §4.4.2 caller contract:
     - Not called from evidence/write_protocol.set_field direct path
     - Not called from adapter / migration tool / test fixture direct path
+    - Not called from sdk/ingest.py direct ledger path (bulk ingest is
+      a trusted internal path)
     """
     if pred_info.enum_values is not None and value not in pred_info.enum_values:
         raise SDKValueError(
@@ -309,7 +318,29 @@ def validate_field_value(value: Any, *, pred_info: PredicateInfo) -> None:
             )
 ```
 
-Integration:`FieldEditor.set/add`(facade.py:398-435)inserts call **before** `getattr(handle, field).set/add(...)`;reuses `SchemaIndex.field_predicates` for `PredicateInfo` lookup(L4 lock)。
+**Integration point**(P1 #1 lock — reviewer correction 2026-05-29):验证挂在**应用层集中写入路径**而非 `FieldEditor.set/add` 单点。Shipped 主要写入路径全部 funnel 通过 `application/entity_write.py:_apply_op`(line 382-400):
+
+| 上游入口 | 路径 | 是否经 `_apply_op` |
+|---|---|---|
+| `fg.set` / `fg.add`(`SDKStore.set`/`add` `sdk/store.py:1920`/`1963`)| → `_apply_field_mutation`(`store.py:2002`)→ `plan_write_command` → `apply_write_plan` → `_apply_op` | ✓ 自动覆盖 |
+| `fg.write.set` / `fg.write.add`(`_SDKWriteManager` `sdk/store.py:568-585`)| → `SDKStore.set`/`add` 同上 | ✓ 自动覆盖 |
+| `SDKBatchTx.commit` → `WireBatchPlan.apply`(`sdk/batch.py:418`)WireWriteOp 分支 | → 行 430-433 `sdk.set` / `sdk.add` 同上 | ✓ 自动覆盖 |
+| `FieldEditor.set` / `add`(`sdk/facade.py:398-434`)| → handle delegate → 最终落 SDK set/add 同上 | ✓ 自动覆盖 |
+
+**集成实施**:在 `application/entity_write.py:_apply_op` 的 "set" / "add" 分支(行 398-400)**之前**插入:
+```python
+# Before set_field/add_field dispatch, validate per-mutation value
+pred_info = lookup_pred_info(schema_index, op.field_pred_id)  # uses L4 SchemaIndex
+validate_field_value(op.value, pred_info=pred_info)
+```
+
+**显式不覆盖**(per ADR-FI §4.4.2 caller contract):
+- `sdk/ingest.py:343-344` direct `set_field` 调用(bulk-ingest 是 trusted internal path)
+- `sdk/batch.py:226, 468, 869` materialization direct ledger 调用(identity/exists 自动 materialization 不走 application write plan)
+- `core/derivation/accept.py:567, 719` derivation acceptance(internal trust)
+- `adapters/pyreason/accept.py:109, 122` PyReason acceptance(adapter trust;Q-PR1 carve-out)
+
+**`FieldEditor.set/add` 不再是 integration point** — 验证集中在 `_apply_op`,FieldEditor 经过 SDKStore.set/add 自动受益;不需要在 facade.py 加重复 validation 调用。这避免了 reviewer 指出的"FieldEditor 单点覆盖会被 fg.set/fg.write.set/batch.apply 绕过"问题。
 
 Per ADR-FI §4.4.2 explicit isinstance str-guard before `re.fullmatch` — type-bypass defense lock-in。
 
@@ -321,10 +352,10 @@ Per ADR-FI §4.4.2 explicit isinstance str-guard before `re.fullmatch` — type-
 |---|---|---|
 | **SF1** | **Form I removes primary/default/default_factory semantics completely** — no zombie surface,no no-op stubs,no alias compatibility | ADR-FI §4.3 + §4.3-bis + reviewer lock 2026-05-29 |
 | **SF2** | **All Identity fields are immutable anchor-bundle members** — no primary vs non-primary distinction;identity bundle = all `Identity()` fields on Entity subclass | ADR-FI §4.3-bis + identity §8.1 |
-| **SF3** | **Cross-coordinate attribute equality may compare the same Identity field only** — no implicit full-bundle expansion;Field-to-Field / Identity-to-Field / different-Identity-field rejected;full anchor-bundle equivalence is a future separate primitive | L7 reviewer lock 2026-05-29 |
+| **SF3** | **Cross-coordinate attribute equality may compare the same Identity field on the same entity type only** — no implicit full-bundle expansion;Field-to-Field / Identity-to-Field / different-Identity-field / **cross-entity-type same-name(`User.id == Order.id`)rejected**;full anchor-bundle equivalence is a future separate primitive | L7 reviewer lock 2026-05-29(含 P2 review 补充 cross-entity-type case)|
 | **SF4** | **Derivation heads may not include any Identity field** — Option A;pre-impl grep produces migration list if any shipped rule violates;rule semantics unchanged otherwise | L8 reviewer lock 2026-05-29 |
 | **SF5** | **Identity defaults removed end-to-end** — `EntitySelector.allow_identity_defaults` field + `materialize_identity` kwarg + `SDKStore.ref` default path + `SDKBatchTx` default fallback + facade bind logic + `_materialize_default_factory` helper all deleted | L9 reviewer lock 2026-05-29 |
-| **SF6** | **Historical/reference docs excluded from migration grep** — must migrate:`tests/`,`src/factgraph/sdk/docs/`,`docs/official/kernel/`,active design/decision/blueprint load-bearing references。Excluded:`workflow/heritage/`,`workflow/blueprints/archive/`,`docs/references/working/`,`docs/references/bridges/`(if not current implementation truth) | L10 reviewer lock 2026-05-29 |
+| **SF6** | **Historical/reference docs excluded from migration grep** — must migrate:`tests/`,`src/factgraph/sdk/docs/`,`docs/official/kernel/`,active design/decision/blueprint load-bearing references。Excluded:`workflow/heritage/`,`workflow/blueprints/archive/`,`docs/references/working/`,`docs/references/bridges/`(if not current implementation truth),**`workflow/audit/active/`**(默认不迁移,除非本 blueprint 显式列为 load-bearing)| L10 reviewer lock 2026-05-29 + P2 review 补充 |
 
 ### 6.2 Compatibility constraints
 
@@ -367,6 +398,8 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] `tags: list[str] = Field()` → `_inferred_cardinality == "multi"`
 - [ ] `status: Literal["a", "b"] = Field()` → single + `enum_values=("a","b")` in schema_ir
 - [ ] `tags: list[Literal["a","b"]] = Field()` → multi + enum_values
+- [ ] `price: Literal[1.0, 2.0] = Field()` raises `SDKSchemaError`(float Literal enum reject per P1 #3 — schema canonicalization 拒绝 float)
+- [ ] `price: float = Field()` accepted(普通 `float64` 字段不受限,只是不允许 Literal[float] enum)
 - [ ] `name: Optional[str] = Field()` raises `SDKSchemaError`
 - [ ] `name: str | None = Field()` raises `SDKSchemaError`
 - [ ] `name: Union[str, int] = Field()` raises `SDKSchemaError`
@@ -386,7 +419,11 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 
 - [ ] `_compile_field` + `_compile_relationship_field` emit `enum_values` / `pattern` when present
 - [ ] `_compile_identity_field` + `_compile_identity_predicate` no longer emit `primary_key` / `default` / `default_factory`
+- [ ] **`_compile_identity_field` + `_compile_identity_predicate` emit `description` + `pattern` when present**(P1 #2 lock — Identity schema truth carries pattern)
+- [ ] **Identity compile-time pattern validation**:`Identity(pattern=r"invalid[")` raises `SDKSchemaError`(regex syntax);Identity on non-string type_domain with pattern raises `SDKSchemaError`(P1 #2 lock)
+- [ ] **Float Literal enum reject**:`_compile_field` / `_compile_relationship_field` raise `SDKSchemaError` if `enum_values` 含 float member(P1 #3 lock — 防止 `_reject_floats` in `canonicalize_schema_ir_jcs` 在 digest 时崩)
 - [ ] `core/schema/schema_ir.py` validation unchanged but accepts new optional keys
+- [ ] `SchemaIndex.PredicateInfo` carries `description / pattern` for identity predicates as well as field predicates(P1 #2 lock — Slice 2 ADR-IC 写入路径才会消费,但 Slice 1 schema truth 必须先到位)
 
 ### 7.4 Application schema runtime simplification(G4)
 
@@ -422,21 +459,39 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 
 - [ ] `where_schema_lowering.py:36` renamed `identity_fields_by_type`
 - [ ] `where_schema_lowering.py:46-57` primary_key filter removed;all Identity fields collected
-- [ ] `where_schema_lowering.py:247-282` cross-coordinate comparison validation enforces same-field same-type only;rejects all other shapes with explicit error message
+- [ ] `where_schema_lowering.py:247-282` cross-coordinate comparison validation enforces same-Identity-field same-entity-type only;rejects all other shapes with explicit error message:
+  - [ ] Accept:`attr_eq(User.tenant_id, User.tenant_id)` same-entity same-Identity-field
+  - [ ] Reject:`attr_eq(User.tenant_id, User.name)` Identity-to-Field
+  - [ ] Reject:`attr_eq(User.tenant_id, User.org_id)` different-Identity-field
+  - [ ] Reject:`attr_eq(User.id, Order.id)` **cross-entity-type same-name**(P2 review 补充)
+  - [ ] Reject:`attr_eq(User.name, Order.name)` cross-entity-type Field-to-Field
+  - [ ] Error message points to future entity-equality primitive(out of Slice 1 scope)
 - [ ] `derivation_compile.py:_identity_field_names` returns single list
 - [ ] `derivation_compile.py` head-body validation rejects any Identity field in head
 - [ ] Pre-impl grep migration list for shipped Identity-headed derivation rules(0 expected;flag for review if > 0)
 
-### 7.9 Write-time validation(G3)
+### 7.9 Write-time validation(G3)— central path coverage(P1 #1 lock)
 
 - [ ] `application/value_validation.py` module shipped with `validate_field_value(value, *, pred_info)` signature
 - [ ] enum miss raises `SDKValueError`
 - [ ] pattern path executes `isinstance(value, str)` guard BEFORE `re.fullmatch`(ADR-FI §4.4.2 explicit lock)
 - [ ] non-str value with pattern raises `SDKValueError`
 - [ ] pattern mismatch raises `SDKValueError`
-- [ ] `FieldEditor.set(field, value, ...)` invokes validate BEFORE delegating to handle
-- [ ] `FieldEditor.add(field, value, ...)` invokes validate BEFORE delegating to handle
-- [ ] `evidence/write_protocol.set_field` direct call path NOT touched(caller contract per ADR-FI §4.4.2)
+- [ ] **Integration in `application/entity_write.py:_apply_op`(line 398-400)set/add branches** — validate BEFORE `set_field` / `add_field` dispatch(P1 #1 central path lock)
+- [ ] **Coverage validation**(via integration test fixtures — each upstream entry triggers validation through central path):
+  - [ ] `fg.set(field, e_ref, invalid_value)` → `SDKValueError`(SDKStore.set path)
+  - [ ] `fg.add(field, e_ref, invalid_value)` → `SDKValueError`(SDKStore.add path)
+  - [ ] `fg.write.set(field, e_ref, invalid_value)` → `SDKValueError`(`_SDKWriteManager` delegate path)
+  - [ ] `fg.write.add(field, e_ref, invalid_value)` → `SDKValueError`(同上)
+  - [ ] `SDKBatchTx` commit with invalid value → `SDKValueError`(`WireBatchPlan.apply` path)
+  - [ ] `FieldEditor.set/add` invalid value → `SDKValueError`(facade → SDKStore 路径)
+- [ ] **NOT covered**(caller contract per ADR-FI §4.4.2 + Q-PR1 carve-out):
+  - [ ] `evidence/write_protocol.set_field` direct call path
+  - [ ] `sdk/ingest.py:343-344` bulk-ingest direct ledger path
+  - [ ] `sdk/batch.py:226, 468, 869` materialization direct ledger paths
+  - [ ] `core/derivation/accept.py:567, 719` derivation acceptance(internal trust)
+  - [ ] `adapters/pyreason/accept.py:109, 122` PyReason acceptance(Q-PR1 carve-out)
+- [ ] **`FieldEditor.set/add` 不加冗余 validation call** — 验证集中在 `_apply_op`,FieldEditor 经 SDKStore.set/add 自动覆盖(避免 reviewer 指出的"单点覆盖被 fg.set/fg.write.set/batch.apply 绕过"问题)
 
 ### 7.10 Load-bearing docs(G6 + ADR-DOCS §4.2.1)
 
@@ -473,20 +528,49 @@ Implementation should land in **smaller batches per `feedback_smaller_batch_desi
 ### Step 0 — Pre-impl grep + migration catalog(no code change)
 
 - 0.1 Grep all derivation rules where head body includes any Identity field;produce migration list(SF4 / Option A free-lunch verification)
-- 0.2 Grep `Identity(default=`,`Identity(primary_key=`,`Field(cardinality=`,`Identity(default_factory=` in migration scope per SF6;produce per-pattern count
+- 0.2 Grep `Identity(default=`,`Identity(primary_key=`,`Field(cardinality=`,`Identity(default_factory=` in migration scope per SF6;produce per-pattern count per directory
 - 0.3 Catalog SDK callers of `EntitySelector(allow_identity_defaults=...)` outside core paths(if any)
-- 0.4 Record findings in audit log under "Pre-impl preflight findings"
+- 0.4 **Explicit `docs/references/bridges/` status verification checklist**(per SF6 conditional exclusion + P2 review):
+  - [ ] List all `docs/references/bridges/*` files
+  - [ ] For each:check if referenced from `src/factgraph/`, `workflow/design/decisions/active/`,`workflow/blueprints/active/` `Implementing/Implemented` state docs
+  - [ ] If 0 references → mark `historical/reference, not load-bearing` → SF6 excluded
+  - [ ] If ≥1 reference → flag as load-bearing → SF6 migration required
+  - [ ] Record per-file disposition in audit log
+- 0.5 Record findings in audit log under "Pre-impl preflight findings"
 
-### Step 1 — Descriptor surface + annotation plan(`sdk/schema.py`)
+**Step 0 pause-and-amend trigger**(P2 review 补充 / 反应 review 点 #3):若 Step 0 发现以下任一情况,**必须停下 amend blueprint,不可继续 Step 1**:
+- 0.1 derivation Identity-headed rules **非零**(SF4 Option A 不再是 free lunch — 需 amend §5.12 + §8 Step 10 加 migration scope)
+- 0.3 发现 `EntitySelector(allow_identity_defaults=...)` exotic caller(blueprint 应 §5.7 显式列出)
+- 0.4 `docs/references/bridges/` 发现 load-bearing 引用(SF6 范围需调整)
+- 0.2 `Identity(default=` 或 `Identity(default_factory=` 出现在 SF6 excluded 之外的非预期 directory(可能 callsite 数量超估)
 
-- 1.1 Add `_DataMember(_DeclaredMember)` internal base
-- 1.2 Add `_AnnotationPlan` frozen dataclass
-- 1.3 Extend `_annotation_to_type_domain_runtime` → `_resolve_annotation_plan` with full Form I rules
-- 1.4 Rewrite `Identity.__init__` to `(*, description, pattern, **legacy_kwargs)` with migration-hint error
+Pause 形式:audit log 加 "blocker" 行 → 退回 Stage 4 blueprint amend → reviewer 确认后再继续 Step 1。
+
+### Step 1 — Descriptor surface + annotation plan + atomic test/example fixture migration(`sdk/schema.py` + tests/ + Entity-using docs)— **breaking-atomic commit**
+
+**重要框架**(P2 review 锁定):Step 1 是 **breaking-atomic** commit — descriptor signature change 必须跟所有使用旧 API 的 fixture / example 在同一 commit 落地,否则 Step 1 commit 后 Step 2-13 期间 Python import 阶段 tests 大量崩,无法做 per-commit verification。具体范围 = Step 0.2 grep 结果 catalog 内所有 callsite,**排除** SF6 excluded directories。
+
+- 1.1 Add `_DataMember(_DeclaredMember)` internal base(`sdk/schema.py`)
+- 1.2 Add `_AnnotationPlan` frozen dataclass(`sdk/schema.py`)
+- 1.3 Extend `_annotation_to_type_domain_runtime` → `_resolve_annotation_plan` with full Form I rules + **float Literal enum reject**(P1 #3)
+- 1.4 Rewrite `Identity.__init__` to `(*, description, pattern, **legacy_kwargs)` with migration-hint error(reject `primary_key`/`default`/`default_factory`)
 - 1.5 Rewrite `Field.__init__` to `(*, description, pattern, **legacy_kwargs)` + `_inferred_cardinality` storage + read-only `cardinality` property
 - 1.6 Update `Identity.to_authoring` + `Field.to_authoring` to take `_AnnotationPlan`
 - 1.7 Update `EntityMeta.__new__` + `RelationshipMeta.__new__` to write back `_inferred_cardinality` before `to_authoring`
-- 1.8 Tests for descriptor surface(positive + negative + annotation rejects)— commit boundary
+- **1.8 Atomic test fixture migration**(per Step 0.2 catalog,排除 SF6 excluded directories):
+  - `tests/`:全部 `Field(cardinality="single")` → `Field()` + annotation;`Field(cardinality="multi")` → `Field()` + `: list[T]` annotation;`Identity(primary_key=True)` → `Identity()`;`Identity(default=...)` → callers supply explicit identity values
+  - 排除:`workflow/heritage/`,`workflow/blueprints/archive/`,`docs/references/working/`,`docs/references/bridges/`(per Step 0.4 verdict),`workflow/audit/active/`(默认)
+- **1.9 Atomic Entity-using load-bearing doc example migration**:
+  - `src/factgraph/sdk/docs/04_api_surface.en.md` Entity class examples that use old API
+  - `docs/official/kernel/quickstart/*.md` Entity class examples that use old API
+  - `workflow/design/design-points/active/identity-mechanism-redesign.zh.md` Entity class examples that use old API
+  - **不**包括 NEW Form I overview content(那是 Step 12)— 仅迁移现有 example code
+- **1.10 Atomic active design/decision/blueprint Entity example migration**(若 Step 0.2 grep 发现非零 callsite — 通常 0 或个位数)
+- 1.11 Tests for new Form I descriptor surface(positive + 全部 negative cases — `Field(cardinality=)` reject / `Identity(primary_key=)` reject / `Identity(default=)` reject / `Identity(default_factory=)` reject / `Field(pattern=...)` syntax check / float Literal enum reject / Optional reject / Union reject / dict reject)
+- 1.12 **Verify green branch**: `pytest` 全 pass 在 commit 前 — 任何 import-time failure / fixture failure 必须解决后才能 commit
+- 1.13 — commit boundary(breaking-atomic Step 1 close)
+
+**为什么 Step 1 大** — 这是 Form I 的"硬切换"commit,跟 alpha-stage no-alias 立场一致。后续 Step 2-13 每个都是 incremental 添加,branch 始终绿。
 
 ### Step 2 — Parser symmetric extension(`authoring/schema_dsl_parse.py`)
 
@@ -497,11 +581,12 @@ Implementation should land in **smaller batches per `feedback_smaller_batch_desi
 
 ### Step 3 — Schema compile drops + extends(`authoring/schema_compile.py`)
 
-- 3.1 `_compile_identity_predicate` drop `primary_key` read
-- 3.2 `_compile_identity_field` drop `default/default_factory/primary_key` reads
-- 3.3 `_compile_field` add `enum_values` + `pattern` + Literal mixed-type / invalid regex / pattern-on-non-str checks
-- 3.4 `_compile_relationship_field` symmetric extension(D6 lock)
-- 3.5 Tests — commit boundary
+- 3.1 `_compile_identity_predicate` drop `primary_key` read;**add `description` + `pattern` propagation**(P1 #2 lock)
+- 3.2 `_compile_identity_field` drop `default/default_factory/primary_key` reads;**add `description` + `pattern` propagation**(P1 #2 lock)
+- 3.3 `_compile_field` add `enum_values` + `pattern` + Literal mixed-type / **float-Literal-enum reject**(P1 #3 lock) / invalid regex / pattern-on-non-str checks
+- 3.4 `_compile_relationship_field` symmetric extension(D6 lock + float-Literal-enum reject)
+- 3.5 **Identity compile-time pattern validation**:`re.compile(pattern)` invalid → raise;pattern on non-string type_domain → raise(P1 #2 lock)
+- 3.6 Tests covering Identity pattern compile checks + float Literal enum reject — commit boundary
 
 ### Step 4 — Application schema runtime simplification(`application/schema_runtime.py`)
 
@@ -559,27 +644,38 @@ Implementation should land in **smaller batches per `feedback_smaller_batch_desi
 - 10.5 If pre-impl grep(Step 0.1)found migration items,land migrations in same commit
 - 10.6 Tests — commit boundary
 
-### Step 11 — Write-time validation module(`application/value_validation.py` NEW)+ integration
+### Step 11 — Write-time validation module(`application/value_validation.py` NEW)+ **central path integration**(P1 #1 lock)
 
 - 11.1 New module with `validate_field_value(value, *, pred_info)` per §5.13(ADR-FI §4.4.2 explicit isinstance str-guard)
-- 11.2 `FieldEditor.set/add` integration in `facade.py:398-435`
+- 11.2 **Integration in `application/entity_write.py:_apply_op`(line 398-400)set/add branches** — validate BEFORE `set_field` / `add_field` dispatch(P1 #1 central path lock — NOT at `FieldEditor.set/add`)
 - 11.3 Tests covering enum miss / pattern miss / non-str pattern / isinstance guard / valid-paths-pass-through
-- 11.4 Confirm `evidence/write_protocol.set_field` direct path NOT touched(grep zero diff)
-- 11.5 — commit boundary
+- 11.4 **Coverage integration tests**(through each upstream entry — verify validation triggers via central path):
+  - `fg.set` + `fg.add`(SDKStore path)
+  - `fg.write.set` + `fg.write.add`(`_SDKWriteManager` delegate path)
+  - `SDKBatchTx` commit through `WireBatchPlan.apply`
+  - `FieldEditor.set/add`(facade path,自动经 SDKStore)
+- 11.5 Confirm `evidence/write_protocol.set_field` direct path NOT touched(grep zero diff)
+- 11.6 Confirm `sdk/ingest.py` + `sdk/batch.py` materialization paths + `core/derivation/accept.py` + `adapters/pyreason/accept.py` NOT touched(caller contract per ADR-FI §4.4.2 + Q-PR1 carve-out)
+- 11.7 — commit boundary
 
-### Step 12 — Migration callsite cleanup(tests + load-bearing docs)
+### Step 12 — NEW Form I docs content(load-bearing per ADR-DOCS §4.2.1)
 
-- 12.1 `tests/` migration(per Step 0.2 catalog;mechanical regex-assisted):
-  - `Field(cardinality="single")` → `Field()` + annotation
-  - `Field(cardinality="multi")` → `Field()` + `: list[T]` annotation
-  - `Identity(primary_key=True)` → `Identity()`
-  - `Identity(default=...)` → callers supply explicit identity values
-- 12.2 `src/factgraph/sdk/docs/04_api_surface.en.md` Form I overview + migration guide
-- 12.3 `workflow/design/design-points/active/identity-mechanism-redesign.zh.md §8` alignment
-- 12.4 `docs/official/kernel/quickstart/schema.md` Form I 类型推断 + dual-layer validation usage
+注:Step 12 仅添加 NEW Form I content;existing Entity examples 已在 Step 1.9 完成迁移。
+
+- 12.1 `src/factgraph/sdk/docs/04_api_surface.en.md`:
+  - NEW Form I overview section(Field 推断 cardinality 表 / Identity 无 default 描述 / `_DataMember` 内部基类说明)
+  - NEW Migration guide(Old → New examples per ADR-FI §4.3 + §4.3-bis)
+  - NEW dual-layer validation usage(`pattern=` / `Literal[...]` enum)
+- 12.2 `workflow/design/design-points/active/identity-mechanism-redesign.zh.md §8`:
+  - §8 Form I aligned with ADR-FI §4.3 + §4.3-bis adopted wording
+  - §8.4 类型推断 rules synced with implementation
+  - §8.5 `_DataMember` internal base documented as Slice 1 landed
+- 12.3 `docs/official/kernel/quickstart/schema.md`:
+  - NEW Form I 类型推断 cardinality 形态 section
+  - NEW dual-layer enum / pattern validation usage example
+- 12.4 Final `tests/` + load-bearing docs grep:zero stale uses across migration scope(per SF6)
 - 12.5 Confirm SF6 excluded directories untouched(grep diff verified)
-- 12.6 Final `tests/` + load-bearing docs grep:zero stale uses
-- 12.7 — commit boundary
+- 12.6 — commit boundary
 
 ### Step 13 — Final acceptance + §10 Outcome
 
@@ -617,12 +713,22 @@ Implementation should land in **smaller batches per `feedback_smaller_batch_desi
 - Other quickstarts(`read-write.md` / `assertions.md` / etc.)cross-doc terminology consistency,5-pass polish per ADR-DOCS §4.3
 - Module-wide migration note placement consolidation
 
-### 9.4 Excluded(per SF6)
+### 9.4 Excluded(per SF6 — 必须迁移之外 = 排除范围)
 
-- `workflow/heritage/`
-- `workflow/blueprints/archive/`
-- `docs/references/working/`
-- `docs/references/bridges/`(verify non-load-bearing at Step 0)
+**Unconditional exclude**:
+- `workflow/heritage/` — legacy 历史材料
+- `workflow/blueprints/archive/` — 归档蓝图
+- `docs/references/working/` — working scratch
+- `workflow/audit/active/`(P2 review 补充)— 默认不迁移,除非本 blueprint 显式列为 load-bearing(本 Slice 1 无此项)
+
+**Conditional exclude — `docs/references/bridges/`**(per Step 0.4 explicit checklist):
+- [ ] Step 0.4 列出所有 `docs/references/bridges/*` files
+- [ ] 对每个 file:check 是否被 `src/factgraph/` 或 `workflow/design/decisions/active/` 或 `workflow/blueprints/active/`(`Implementing/Implemented` state)引用
+- [ ] 0 references → mark `historical/reference, not load-bearing` → SF6 excluded(本 blueprint 默认假设)
+- [ ] ≥1 reference → flag as load-bearing → SF6 migration required(amend §9.1 + Step 1.9)
+- [ ] 决策记录在 audit log Step 0 outcome
+
+**禁止 grep acceptance 被历史材料绑架** — Step 12.4 final grep 只在 migration scope 内 verify(per SF6 inclusion)。
 
 ## 10. Outcome / Deviations
 
