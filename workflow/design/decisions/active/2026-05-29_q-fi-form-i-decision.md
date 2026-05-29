@@ -1,6 +1,6 @@
 # Q-FI Decision: Form I cluster — `_DataMember` exposure + cardinality inference + Layer 4 validation + mutable Field contract
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
 - Authority: design constraint;locks Slice 1 Form I schema refactor 的 5 个 sub-decisions(Q6/Q7/Q8/Q9 per meta-ADR §4.2 grouping + §4.3-bis Identity descriptor surface alignment per 2026-05-29 reviewer P2)before Slice 1 blueprint 起草。
@@ -46,7 +46,7 @@ ADR-FI draft 启动前 user reviewer 给出 4 条方向:
 | Q6 | "不要引入 `volatile=False` 这类额外 surface,除非它确实有 runtime 行为;否则只作为 Field mutable contract 文档化" | §4.1 Decision = documentation-only |
 | Q7 | "`_DataMember` 更适合作为 internal/shared base,不建议变成用户显式导入的 public descriptor" | §4.2 Decision = internal-only |
 | Q8 | "alpha 阶段可以 breaking,但 ADR 里要明确迁移提示和旧 `cardinality=` 的处置" | §4.3 Decision = alpha breaking + migration notes |
-| Q9 | "pattern/Literal 最好 compile-time + write-time 都覆盖:schema 声明早失败,写入值再校验,避免绕过 SDK 时产生脏 Claim" | §4.4 Decision = dual-layer validation |
+| Q9 | "pattern/Literal 最好 compile-time + write-time 都覆盖:schema 声明早失败,写入值再校验,避免绕过 SDK 时产生脏 Claim"(最终 scope 经 §4.4.2 caller contract 收窄为 application / SDK write path;protocol / ledger direct path 不覆盖 — 详见 §4.4.3 + 第 2 轮 reviewer 2026-05-29 P1 调整) | §4.4 Decision = dual-layer validation |
 
 ### 1.4 Shipped baseline(audit §5.4 N2)
 
@@ -515,4 +515,5 @@ Post-adoption verification(implementation 阶段验证):
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-29 | proposed | ADR-FI drafted | 4 Qs(Q6 docs-only / Q7 internal `_DataMember` / Q8 alpha breaking + migration / Q9 dual-layer)。基于 meta-ADR adopted @ `ebafdb0c` + user reviewer 2026-05-29 directional guidance(4 条)。Branch: `v0.2.0-q-fi-form-i-decision-2026-05-29`。Commit: `67d9359d` |
-| 2026-05-29 | proposed | ADR-FI amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 3 findings:(P1)Q9 §4.4.3 anti-bypass framing 与 §4.4.2 调用边界冲突 — 改为 dual-layer 仅覆盖 schema 声明错误 + application/SDK write path caller 错误;protocol / ledger direct path 列为 caller contract 外。(P2-1)`Identity(primary_key=...)` 缺正式锁 — 新增 §4.3-bis Identity descriptor surface alignment(alpha breaking 同 §4.3 pattern;`primary_key` / `default` / `default_factory` 全去)。(P2-2)`re.fullmatch(pattern, str(value))` 类型绕过风险 — 改为先 `isinstance(value, str)` guard。同步 cascade: §1.2 grouping note / §2 Scope table(4→5 sub-decisions) / §4.5 cross-Q summary / §5 rejected alternatives(+2 §4.3-bis-specific 项 + Q9 alternative wording 修正) / §6.2 shipped code citations(扩 Identity descriptor 行范围) / §6.4 design-point citations(+§8.1 / §5.2 INV-7a + 修正所有行号) / §7.2 follow-up(grep 4 类 kwarg) / §7.4 no-retroactive boundary(+§4.3-bis + Slice 5+ caller-contract supersede note) / §8 Acceptance Criteria(+§4.3-bis post-adoption check + §4.4.2 type-bypass check + 两条 proposed-stage check)。 |
+| 2026-05-29 | proposed | ADR-FI amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 3 findings:(P1)Q9 §4.4.3 anti-bypass framing 与 §4.4.2 调用边界冲突 — 改为 dual-layer 仅覆盖 schema 声明错误 + application/SDK write path caller 错误;protocol / ledger direct path 列为 caller contract 外。(P2-1)`Identity(primary_key=...)` 缺正式锁 — 新增 §4.3-bis Identity descriptor surface alignment(alpha breaking 同 §4.3 pattern;`primary_key` / `default` / `default_factory` 全去)。(P2-2)`re.fullmatch(pattern, str(value))` 类型绕过风险 — 改为先 `isinstance(value, str)` guard。同步 cascade: §1.2 grouping note / §2 Scope table(4→5 sub-decisions) / §4.5 cross-Q summary / §5 rejected alternatives(+2 §4.3-bis-specific 项 + Q9 alternative wording 修正) / §6.2 shipped code citations(扩 Identity descriptor 行范围) / §6.4 design-point citations(+§8.1 / §5.2 INV-7a + 修正所有行号) / §7.2 follow-up(grep 4 类 kwarg) / §7.4 no-retroactive boundary(+§4.3-bis + Slice 5+ caller-contract supersede note) / §8 Acceptance Criteria(+§4.3-bis post-adoption check + §4.4.2 type-bypass check + 两条 proposed-stage check)。Commit: `d5033a53` |
+| 2026-05-29 | **adopted** | User reviewer 第 2 轮 review 通过 → adopt | 第 2 轮 review 结论:P1 / P2 全部 resolved。可选 polish 已采纳:§1.3 Q9 user-guidance 行加括号 clarification(原措辞"避免绕过 SDK 时产生脏 Claim"经 §4.4.2 caller contract 收窄到 application / SDK write path 范围,protocol / ledger direct path 不覆盖)— 让 input record 与 final decision scope 严格对齐。本 ADR 现 binding constraint;Slice 1 Form I blueprint 可起草;ADR-IC 起草需 Header `Depends on:` 引用本 ADR adopt commit;blueprints / 后续 ADR 不可单方面 override §4.1-§4.4 + §4.3-bis,override 需走"superseded by ADR-FI-v2"路径。Commit: TBD post-stage |
