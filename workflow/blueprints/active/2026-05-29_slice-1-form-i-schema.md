@@ -1,6 +1,6 @@
 # Slice 1 — Form I Schema Refactor
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
 - Slice: 1 of identity-as-claim Step 1 ladder (per synthesis `d0036e1f`)
@@ -806,12 +806,82 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
 
 ## 10. Outcome / Deviations
 
-任务完成后填写:
+Implemented on branch `v0.2.0-blueprint-slice-1-form-i-schema-2026-05-29` through commit `83059bcf` plus final status close commit.
 
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- Pre-impl grep results(Step 0.1 / 0.2 / 0.3):
-- Final callsite counts(`Field(cardinality=` / `Identity(primary_key=` / `Identity(default=` / `Identity(default_factory=` before vs after):
-- Q-PR1 carve-out preservation confirmation:
-- Slice 1 load-bearing docs landed confirmation:
-- 归档说明:
+### Final landing
+
+- Form I descriptor surface is live in `src/factgraph/sdk/schema.py`:
+  - `_DataMember(_DeclaredMember)` internal base exists and is not exported.
+  - `Identity()` accepts only `description=` / `pattern=`.
+  - `Field()` accepts only `description=` / `pattern=`.
+  - `primary_key`, `default`, `default_factory`, and `cardinality` kwargs raise `SDKSchemaError` with migration hints.
+- Annotation-driven schema inference is live:
+  - scalar annotations infer single cardinality.
+  - `list[T]` / `tuple[T, ...]` / `set[T]` / `frozenset[T]` infer multi cardinality.
+  - `Literal[...]` and collection-of-`Literal[...]` produce `enum_values`.
+  - Optional / general Union / dict / mixed-type Literal / float Literal enum reject.
+  - Unknown generic annotations reject consistently across class and text-DSL paths.
+- Parser and compile paths are aligned:
+  - `authoring/schema_dsl_parse.py` accepts the same Form I descriptor kwargs and annotation shapes as Python classes.
+  - `authoring/schema_compile.py` propagates `description`, `pattern`, and `enum_values` for Identity, Field, and Relationship field predicates.
+- Runtime schema and SDK identity materialization were simplified:
+  - `IdentityFieldInfo` carries only `name` + `type_domain`.
+  - `PredicateInfo` carries `description`, `enum_values`, and `pattern`.
+  - `materialize_identity`, `EntitySelector`, `SDKStore.ref`, and `SDKBatchTx` require complete Identity bundles and no longer materialize defaults.
+- Primary/non-primary Identity semantics were removed from factgraph runtime consumers:
+  - `evaluate_result.py`, `rule_expr_inspect.py`, `schema_mutation_runtime.py`, `where_schema_lowering.py`, and `derivation_compile.py` no longer depend on `primary_key`.
+  - SF3 attr-eq lowering accepts only same entity type + same Identity field.
+  - SF4 derivation heads reject any Identity field and require body-side unique entity binding.
+- Write-time enum/pattern validation is live:
+  - `application/value_validation.py` validates enum and pattern constraints.
+  - Integration is centralized in `application/entity_write.py:_apply_op` before `set_field` / `add_field`.
+  - SDK entry points map validation failures to `SDKValueError`.
+- Load-bearing docs landed:
+  - `src/factgraph/sdk/docs/04_api_surface.en.md`
+  - `workflow/design/design-points/active/identity-mechanism-redesign.zh.md` §8
+  - `docs/official/kernel/quickstart/schema.md`
+
+### Deviations / scope corrections
+
+- **Scope narrowed to factgraph-only** after user correction. `src/service/`, `src/agent/`, `src/domains/`, examples, tutorials, and tools are not migrated in this slice.
+- **Step 1 + Step 3 fused** in implementation commit `e720b641` because descriptor inference and schema compile propagation needed to land atomically for green Form I examples.
+- **Step 12 public quickstart scope narrowed**:only `docs/official/kernel/quickstart/schema.md` was pulled into Slice 1. Other public quickstarts remain Slice 4 / downstream docs cleanup.
+- **SDKValueError added** as a public SDK error subclass of `SDKStoreError` to satisfy the ADR-FI / blueprint write-time validation contract.
+- **Residual core/store legacy default_factory read is intentionally not touched**:`src/factgraph/core/store/_builders.py` still mentions `default_factory`, but Q-PR1 / core store paths were explicit no-diff carve-outs for this slice. Form I SDK descriptors and application/SDK materialization no longer emit or consume identity defaults.
+
+### Step 0 results
+
+- 0.1 found shipped non-primary-Identity-in-head derivation behavior; user selected Option C(body-side disambiguation) and later narrowed `src/domains/` out of scope.
+- 0.2 found stale callsites in sibling packages and public docs; user narrowed Slice 1 to `src/factgraph` plus load-bearing docs.
+- 0.3 found `application/entity_view.py` as an additional `allow_identity_defaults=False` callsite; Step 5 removed the protocol field and all `src/factgraph` callsites.
+- 0.4 verified `docs/references/bridges/` is historical / non-load-bearing and excluded.
+
+### Final scoped grep results
+
+Within `src/factgraph` runtime code, excluding intentional migration-hint strings and docs:
+
+| Pattern | Before(Step 0 scoped findings) | After |
+|---|---:|---:|
+| `Field(cardinality=` | present in Form I callsites + many docs/tests before scope correction | 0 runtime callsites;remaining only migration hint / migration guide text |
+| `Identity(primary_key=` | present in descriptor consumers + rule/derivation consumers + docs/tests before scope correction | 0 runtime callsites;remaining only migration/historical docs |
+| `Identity(default=` | present in SDK materialization paths + docs/tests before scope correction | 0 runtime callsites;remaining only negative/migration docs |
+| `Identity(default_factory=` | present in SDK materialization paths before implementation | 0 SDK/application runtime callsites;residual core-store builder read is out-of-slice no-diff carve-out |
+| `allow_identity_defaults` | protocol + application/SDK callsites | 0 hits in `src/factgraph` |
+| `primary_keys_by_type` / `non_primary` / `__pk_` / `_disambiguate_entity_binding_with_head_terms` | present in rule/derivation lowering | 0 hits in scoped implementation code |
+
+### Verification summary
+
+- `PYTHONPATH=src python -m compileall -q src/factgraph`
+- Form I final smoke:
+  - legacy descriptor kwargs reject;
+  - Optional / dict / float Literal enum reject;
+  - Identity pattern + Field enum/pattern propagate to schema truth;
+  - valid writes pass;
+  - enum and pattern misses raise `SDKValueError`.
+- `git diff --check`
+- Q-PR1 carve-out preserved:no committed diffs in `core/evidence/write_protocol.py`, `core/store/ledger.py`, `core/store/_builders.py`, `adapters/pyreason/*`, `sdk/ingest.py`, or `core/derivation/accept.py`.
+- Out-of-scope user dirty baseline preserved:examples notebooks and working docs were not staged or committed.
+
+### Archive note
+
+Blueprint is marked `implemented` but remains under `workflow/blueprints/active/`. Archival is a separate lifecycle step after reviewer acceptance of this close commit.
