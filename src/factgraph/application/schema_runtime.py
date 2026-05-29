@@ -52,6 +52,26 @@ class SchemaIndex:
     entities: dict[str, EntityTypeInfo]
     field_predicates: dict[tuple[str, str], PredicateInfo]
     predicates_by_id: dict[str, PredicateInfo]
+    identity_pred_ids: frozenset[str]
+    """Identity Claim pred_ids — INV-7c protected per ADR-IC §4.3.1."""
+    exists_pred_ids: frozenset[str]
+    """<EntityType>:exists Claim pred_ids — existence-claim transitional guard per ADR-IC §4.4.2.
+
+    NOT part of INV-7c (per ADR-IC §4.4.2: :exists is not in idref_v1 hash
+    inputs and is not part of Identity bundle); guard lifecycle is tied to
+    :exists co-emission and may retire when Step 2+ removes :exists per
+    ADR-IC §4.4.4 forward-pointer.
+    """
+
+    @property
+    def protected_anchor_pred_ids(self) -> frozenset[str]:
+        """Union of identity_pred_ids and exists_pred_ids.
+
+        Read-only helper for callers that need a single membership check.
+        Per ADR-IC §4.3.1 SF9: two independent frozensets are the storage
+        of truth; this property is a derived view, NOT a single set.
+        """
+        return self.identity_pred_ids | self.exists_pred_ids
 
 
 class SchemaResolutionError(ValueError):
@@ -210,12 +230,24 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
             identity_predicates=identity_predicates,
         )
 
+    # Per ADR-IC §4.3.1 + Slice 2 SF1/SF9:
+    # Build the two independent frozensets from PredicateInfo flags.
+    # Single pass over predicates_by_id values keeps build cost low.
+    identity_pred_ids = frozenset(
+        info.pred_id for info in predicates_by_id.values() if info.is_identity_field
+    )
+    exists_pred_ids = frozenset(
+        info.pred_id for info in predicates_by_id.values() if info.is_entity_exists
+    )
+
     return SchemaIndex(
         schema_ir=validated,
         schema_digest=schema_digest(validated),
         entities=normalized_entities,
         field_predicates=field_predicates,
         predicates_by_id=predicates_by_id,
+        identity_pred_ids=identity_pred_ids,
+        exists_pred_ids=exists_pred_ids,
     )
 
 
