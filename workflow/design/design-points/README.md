@@ -32,14 +32,9 @@
 | Design-point | Status | Role |
 |---|---|---|
 | `explanation-completion-roadmap.zh.md` | active strategic synthesis (2026-05-28 draft) | User-facing explainability completion stack inheriting evidence-tree §14 deferred items (D1/D5/D6/D7/D11/D15/D18/D20). Also carries §10/§11/§12 legacy backlog from 6 superseded design-points (RuleExpr v1 / Database-View / Post-T5 roadmap residuals). |
-
-### 当前 untracked design-points (不在版本控制内, 战略 backlog)
-
-| Design-point | Status | Note |
-|---|---|---|
-| `append-only-ledger-evaluation.zh.md` | untracked exploration | Claim-first append-only ledger 设计探索; 未 intake 决策 |
-| `identity-mechanism-redesign.zh.md` | untracked exploration | Identity 机制重设计探索; 未 intake 决策 |
-| `ledger-schema-specification.zh.md` | untracked exploration | Ledger schema 规范探索; 未 intake 决策 |
+| `identity-mechanism-redesign.zh.md` | active design exploration (2026-05-29 intake) | Identity 机制重设计:Form I schema(Identity/Field + `_DataMember`)+ 3-layer API(entities/fields/assertions)+ AssertionView 统一 + INV-7a/b/c(Identity-as-Claim mirrored anchor)+ Q1 idref_v1 typed content-derived hash locked. Stage 1 audit pending. |
+| `ledger-schema-specification.zh.md` | active design exploration (2026-05-29 intake) | Claim-first 3-table ledger schema(claims / claim_meta / ledger_meta)+ INV-1..INV-15 + 7-条数据精简 migration + INV-7c strategy C 实施同步(Identity pred_id set,拒 claim_meta tag). |
+| `append-only-ledger-evaluation.zh.md` | active design exploration (2026-05-29 intake) | Append-only 范式 10 维度评估 + future gap 识别(GDPR / bitemporal / compaction);G1 措辞需后续按 identity §14.2 更新。 |
 
 ## 2026-05-29 archive batch
 
@@ -53,5 +48,13 @@
 | `database-view-fg-layered-architecture.zh.md` | inherited as `explanation-completion-roadmap.zh.md` §11 legacy + Inputs 引用; A1-A20 shipped via module docs |
 | `rule-expression-and-proof-track-plan.zh.md` | 自标 superseded by `post-t5-completion-roadmap.zh.md` (后者亦在本批 archive) |
 | `post-t5-completion-roadmap.zh.md` | inherited as `explanation-completion-roadmap.zh.md` §12 legacy + Inputs 引用 |
+
+### 2026-05-29 evening intake batch
+
+1 design-point 通过 supersede 规则归档,作为 `identity-as-claim` 3-doc set intake 的伴随归档:
+
+| 文件 | 主要 supersede 路径 |
+|---|---|
+| `identity-and-data-model-redesign.zh.md` | 拆分为 3 份继承 doc:`identity-mechanism-redesign.zh.md`(Identity 半边)+ `ledger-schema-specification.zh.md`(ledger schema 半边)+ `append-only-ledger-evaluation.zh.md`(append-only 范式评估)。归档版顶部含取代关系映射表。 |
 
 完整状态机 + 权威语义见 [`workflow/design/README.md`](../README.md)。模板:`workflow/templates/design/design-point.md`。
