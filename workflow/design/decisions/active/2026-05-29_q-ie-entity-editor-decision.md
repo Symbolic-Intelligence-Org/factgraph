@@ -91,7 +91,7 @@
 | **§4.4** | Identity 字段 Layer 1 reject — IdentityEditor `set/add/retract` raise `SDKStoreError("identity field is immutable in editor")` — 跟 ADR-IC §4.1 INV-7c application/write_protocol 层 reject 形成 defense in depth |
 | **§4.5** | Field 字段 cardinality enforcement at FieldEditor 层 — `set` requires single + `add` requires multi;违反 raise `CardinalityError(operation, field_name, actual_cardinality)`;**不依赖**下游 layer 重 check |
 | **§4.6** | `__getattr__` descriptor 分发契约 — Field descriptor → FieldEditor;Identity descriptor → IdentityEditor;identity value lookup fallback;未知 name → `AttributeError`(per Python convention);per ADR-FI §4.3 / §4.3-bis descriptor signature |
-| **§4.7** | `EditorClosedError` contract — 任何已 closed editor 的 attribute access / method call(除 `__exit__` no-op)raise EditorClosedError;**不可重用**(no `reopen()` semantics);user 必须开新 editor |
+| **§4.7** | `EditorClosedError` contract — closed editor 的 **dynamic 操作**(`commit/rollback/preview/__enter__` + `__getattr__` descriptor lookup)raise EditorClosedError;**stable instance attributes `ref` / `entity_type`**(`__init__` 时 `object.__setattr__` 设)closed 后仍可读;`__exit__` no-op(special-case);**不可重用**(no `reopen()` semantics);user 必须开新 editor |
 | **§4.8** | `sdk_edit` factory edit-existing-only contract — 先 `sdk_get` check;若 entity 不存在 raise `EntityNotFoundError`(含 entity_type + identity_kwargs);若 entity exists 但 user identity_kwargs 形态错(per ADR-FI §4.3-bis Identity 形态)走 `sdk_get` raise 链 |
 
 ## 3. Non-scope
@@ -244,12 +244,43 @@ per ADR-IC §4.1 reject table:
 
 **结论**:Layer 1(EntityEditor IdentityEditor)+ application/protocol 层 reject 互补 — defense in depth;Layer 1 是 fast path(user-facing entry,Python type system 友好 raise),其他 layer 是 catch path(bypass / programmatic access)。
 
-#### 4.4.2 Error message contract
+#### 4.4.2 Error message contract(target wording;Slice 3a 实施 — shipped 仍 partial)
 
-- 必须含 INV-7a reference(per ADR-IC + identity §5.2)— 解释 Identity 为什么 immutable
-- 必须含 migration hint:delete + create-new 路径
-- 必须含 ADR-IC §4.1 reference(让 user 了解整套 reject 防御)
-- shipped error message wording 跟以上 contract 一致(per `facade.py:448-479` "identity field is immutable in editor");本 ADR formalize
+**目标 wording**(本 ADR 锁;Slice 3a 实施时落地):
+- 必须含 **INV-7a reference**(per ADR-IC + identity §5.2)— 解释 Identity 为什么 immutable
+- 必须含 **delete + create-new migration hint**(跟 §4.8 edit-existing-only 一致)
+- 必须含 **ADR-IC §4.1 reference**(让 user 了解整套 reject 防御)
+
+**Shipped wording 跟目标 contract 的 gap**(★ P2-amend — 显式承认):
+
+shipped error message(`facade.py:470-472`):
+```
+"identity field '{field_name}' is immutable in editor; "
+"open a new editor with different identity instead"
+```
+
+**Gaps**:
+- ✗ 缺 INV-7a reference
+- ✗ 缺 delete + create-new migration hint
+- ✗ 缺 ADR-IC §4.1 reference
+- ✗ **"open a new editor with different identity instead" wording 在本 ADR §4.8 edit-existing-only model 下是 misleading** — 该 hint 暗示 user 可以 `fg.entities.edit(Cls, **different_identity)` 走另一个 entity,但 if that entity 不存在 会 raise `EntityNotFoundError`;正确 migration 是 `fg.entities.delete(old_e_ref)` + `fg.entities.create(new_identity)`(per ADR-IC §4.2)
+
+**Slice 3a 实施时 target wording**(non-load-bearing improvement):
+
+```python
+raise SDKStoreError(
+    f"identity field '{field_name}' is immutable in editor — "
+    f"per INV-7a (Identity is immutable anchor; see ADR-IC §4.1).\n"
+    f"To change identity values: delete the current entity and create "
+    f"a new one with the desired identity:\n"
+    f"  fg.entities.delete(<old_e_ref>)\n"
+    f"  fg.entities.create({entity_type}, <new_identity>)\n"
+    f"Note: old entity's Field history is NOT auto-migrated to new entity "
+    f"(per INV-7a; manual migration required if preserve needed)."
+)
+```
+
+**Migration plan**:Slice 3a implementation **必须** update shipped error message 走 target wording;tracked as Slice 3a acceptance criterion(per §8 post-adoption verify)。
 
 #### 4.4.3 `value` property 仍可读
 
@@ -323,24 +354,41 @@ def __getattr__(self, name: str) -> Any:
 
 ### 4.7 `EditorClosedError` contract
 
-**锁定**:`EditorClosedError`(`facade.py:_ensure_open` 中 raise)是 **`SDKStoreError` 的子类**(per shipped `EditorClosedError` 继承链);任何已 closed 状态(committed / rolled-back / aborted)调用任何 method(except `__exit__`)raise。
+**锁定**:`EditorClosedError`(`facade.py:_ensure_open` 中 raise)是 **`SDKStoreError` 的子类**(per shipped `EditorClosedError` 继承链);**closed editor 的 dynamic 操作 raise**;**stable instance attributes 仍可读**(per §4.7.1 表)。
 
-#### 4.7.1 触发条件 enumeration
+#### 4.7.1 触发条件 enumeration(★ P1-amend — 区分 dynamic ops vs stable attributes)
 
-| Method | `_closed=True` 时行为 |
-|---|---|
-| `commit(meta)` | raise EditorClosedError |
-| `rollback()` | raise EditorClosedError |
-| `preview()` | raise EditorClosedError |
-| `__getattr__(name)` | raise EditorClosedError(_ensure_open before descriptor dispatch)|
-| `__enter__()` | raise EditorClosedError |
-| `__exit__(...)` | **no-op**(special-case — closed editor exit OK)|
+**Raise EditorClosedError when `_closed=True`**:
+
+| Surface | `_closed=True` 时行为 | shipped 路径 |
+|---|---|---|
+| `commit(meta)` | raise EditorClosedError | `_ensure_open()` first in method body |
+| `rollback()` | raise EditorClosedError | `_ensure_open()` first |
+| `preview()` | raise EditorClosedError | `_ensure_open()` first |
+| `__enter__()` | raise EditorClosedError | `_ensure_open()` first |
+| `__getattr__(name)` — 任何 descriptor lookup / identity value lookup / unknown name | raise EditorClosedError | `_ensure_open()` first(`facade.py:496`)— Field/Identity descriptor 分发 + identity_values fallback 都不可达 |
+| `editor.<field_name>.<method>()` — FieldEditor 操作 | raise EditorClosedError | FieldEditor methods 调 `self._editor._ensure_open()`(`facade.py:404, 423, 442`)|
+| `__exit__(...)` | **no-op**(special-case — closed editor exit OK)| `facade.py:539-546` early return |
+
+**仍可读 when `_closed=True`(no `_ensure_open` check)**:
+
+| Surface | 行为 | shipped 路径 |
+|---|---|---|
+| `editor.ref` | return e_ref string(stable instance attribute) | `__init__` 时 `object.__setattr__(self, "ref", self._handle.e_ref)`(`facade.py:492`)— 不走 `__getattr__` |
+| `editor.entity_type` | return entity class name string | `__init__` 时 `object.__setattr__(self, "entity_type", entity_cls.__name__)`(`facade.py:493`)— 不走 `__getattr__` |
+| `editor._closed` | return True(internal flag,通常不应被 user 直接读) | 普通 instance attribute |
+
+**为什么 `ref` / `entity_type` 保留可读 after close**:
+- 这两个值在 `__init__` 时锁定(per 已知 identity bundle + EntityClass);跟 editor lifecycle 正交 — closed editor 不影响这些值的"事实性"
+- user 可能在 `with` block 内 commit 后仍需读 e_ref(e.g., 把 e_ref 传给下游 query);若 closed 后 raise 会强制 user 显式预存 `e_ref = editor.ref` 在 commit 前 — 不必要的 ergonomic cost
+- shipped 通过 `object.__setattr__` 设置这两个 attribute 已是 stable pattern;本 ADR formalize
 
 #### 4.7.2 No reopen / reuse semantics
 
-- EntityEditor 终态后**不可重用**:无 `reopen()` method;无 state reset
-- user 想再次编辑必须 `fg.entities.edit(EntityCls, **identity)` 开新 editor
-- 跟 Python 资源关闭模式一致
+- EntityEditor 终态后**不可重用 for new mutations**:无 `reopen()` method;无 state reset;dynamic 操作 raise
+- stable attributes(`ref` / `entity_type`)仍可读(per §4.7.1)— 这是"事实查询",不是 reuse for mutations
+- user 想再次编辑(mutations)必须 `fg.entities.edit(EntityCls, **identity)` 开新 editor
+- 跟 Python 资源关闭模式一致(closed file 仍可 read filename / mode 等元数据,但不可 read/write 内容)
 
 #### 4.7.3 Error message + class
 
@@ -559,6 +607,8 @@ ADR adoption(本 ADR commit Status: proposed → adopted)前:
 - [x] Header `Depends on:` 引用 meta-ADR + ADR-FI + ADR-IC + ADR-API adopted commits
 - [x] §1.4 含 shipped baseline pointer + 关键 method line ranges
 - [x] §4.4 Identity Layer 1 reject 跟 ADR-IC §4.1 defense in depth 显式 confirm
+- [x] §4.4.2 error message contract 显式区分 target wording vs shipped wording gap(★ P2-amend);标 Slice 3a 实施 follow-up;含 delete+create migration hint(不是 misleading 的 "different identity")
+- [x] §4.7 closed editor 行为 显式区分 dynamic ops raise vs stable attrs (`ref`/`entity_type`) 可读(★ P1-amend);跟 shipped `object.__setattr__` 模式一致
 - [x] §4.8 sdk_edit edit-existing-only 跟 ADR-IC §4.2 emission separation 显式 confirm
 - [x] §7.4 显式 no-retroactive carry-forward 8 项
 
@@ -581,10 +631,11 @@ Post-adoption verification(implementation 阶段验证 — Slice 1 / Slice 3a):
 - [ ] Slice 3a implementation:`__exit__` 不 suppress exception(return False)
 
 **Identity Layer 1 reject**(§4.4):
-- [ ] Slice 3a implementation:`editor.<identity_field>.set(value)` raise SDKStoreError(含 INV-7a reference + migration hint);contract test
-- [ ] Slice 3a implementation:`editor.<identity_field>.add(value)` 同 raise
-- [ ] Slice 3a implementation:`editor.<identity_field>.retract(asrt_id)` 同 raise
+- [ ] Slice 3a implementation:`editor.<identity_field>.set(value)` raise SDKStoreError(含 INV-7a reference + delete+create migration hint + ADR-IC §4.1 reference per §4.4.2 target wording — **shipped wording 跟 target 有 gap**);contract test
+- [ ] Slice 3a implementation:`editor.<identity_field>.add(value)` 同 raise + 同 target wording
+- [ ] Slice 3a implementation:`editor.<identity_field>.retract(asrt_id)` 同 raise + 同 target wording
 - [ ] Slice 3a implementation:`editor.<identity_field>.value` read 正常返回(per §4.4.3)
+- [ ] Slice 3a implementation **★ P2-amend** :update shipped error message at `facade.py:470-472` 走 §4.4.2 target wording(去掉 "open a new editor with different identity instead" misleading hint;改为 delete+create migration hint;含 INV-7a + ADR-IC §4.1 reference);contract test verify error message 含全部 3 个 reference
 
 **cardinality enforcement**(§4.5):
 - [ ] Slice 3a implementation:`editor.<single_field>.add(value)` raise CardinalityError(operation="add", actual_cardinality="single")
@@ -600,7 +651,9 @@ Post-adoption verification(implementation 阶段验证 — Slice 1 / Slice 3a):
 
 **EditorClosedError**(§4.7):
 - [ ] Slice 3a implementation:EditorClosedError 是 SDKStoreError 子类(`issubclass(EditorClosedError, SDKStoreError) is True`)
-- [ ] Slice 3a implementation:closed editor 的所有 method 调用 raise EditorClosedError(except `__exit__` no-op)
+- [ ] Slice 3a implementation:closed editor 的 **dynamic 操作**(commit/rollback/preview/`__enter__`/`__getattr__` lookup/FieldEditor methods)raise EditorClosedError(per §4.7.1 触发条件表)
+- [ ] Slice 3a implementation **★ P1-amend** :closed editor 的 **stable instance attributes** `editor.ref` 和 `editor.entity_type`(`__init__` 时 `object.__setattr__` 设)**仍可读**;contract test verify closed 后 `editor.ref` / `editor.entity_type` 不 raise
+- [ ] Slice 3a implementation:closed editor `__exit__` 是 no-op(不 raise);contract test verify 已 commit/rollback then `with` block exit OK
 - [ ] Slice 3a implementation:无 `reopen()` / `reset()` method(确认 method 不存在)
 
 **sdk_edit factory**(§4.8):
@@ -616,4 +669,5 @@ Post-adoption verification(implementation 阶段验证 — Slice 1 / Slice 3a):
 
 | Date | Stage | Event | Notes |
 |---|---|---|---|
-| 2026-05-29 | proposed | ADR-IE drafted | 8 sub-decisions(lifecycle / commit/rollback / __enter__/__exit__ / Identity Layer 1 reject / cardinality / __getattr__ 分发 / EditorClosedError / sdk_edit factory)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-FI adopted @ `b288ea9e` + ADR-IC adopted @ `2d0866ed` + ADR-API adopted @ `66434490` + shipped `sdk/facade.py:389-547, 672-680` baseline。本 ADR 主要 formalize shipped + 锁 cross-ADR 衔接;Slice 3a 实施增量小。Branch: `v0.2.0-q-ie-entity-editor-decision-2026-05-29`。Commit: TBD post-stage |
+| 2026-05-29 | proposed | ADR-IE drafted | 8 sub-decisions(lifecycle / commit/rollback / __enter__/__exit__ / Identity Layer 1 reject / cardinality / __getattr__ 分发 / EditorClosedError / sdk_edit factory)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-FI adopted @ `b288ea9e` + ADR-IC adopted @ `2d0866ed` + ADR-API adopted @ `66434490` + shipped `sdk/facade.py:389-547, 672-680` baseline。本 ADR 主要 formalize shipped + 锁 cross-ADR 衔接;Slice 3a 实施增量小。Branch: `v0.2.0-q-ie-entity-editor-decision-2026-05-29`。Commit: `9d4cc9cd` |
+| 2026-05-29 | proposed | ADR-IE amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 2 findings — 都是 contract precision issues。**(P1)** §2 Scope §4.7 row + §4.7.1 enumeration 说 "closed editor 的 attribute access / method call 都 raise EditorClosedError" 过宽 — shipped `EntityEditor.__init__` 在 `facade.py:492-493` 通过 `object.__setattr__` 设置 `ref` 和 `entity_type` 是 **stable instance attributes**(不走 `__getattr__`/`_ensure_open`),closed 后仍可读。**修复**:§2 Scope §4.7 row 改 "dynamic 操作 raise + stable attributes 仍可读";§4.7.1 重写为 2 表(Raise EditorClosedError 表 / 仍可读 表)显式 enumerate;加 rationale("跟 Python 资源关闭模式一致 — closed file 仍可 read filename/mode 等元数据,但不可 read/write 内容")。**(P2)** §4.4.2 error message contract 说 "shipped error message wording 跟以上 contract 一致" — 错。shipped at `facade.py:470-472` 是 `"identity field ... is immutable in editor; open a new editor with different identity instead"`,缺 INV-7a reference + 缺 delete+create migration hint + 缺 ADR-IC §4.1 reference。**额外**:"open a new editor with different identity instead" wording 在本 ADR §4.8 edit-existing-only model 下是 misleading — 该 hint 暗示 user 可以 edit 不同 identity 的另一个 entity,但 if 不存在会 raise EntityNotFoundError;正确 migration 是 delete + create。**修复**:§4.4.2 重写显式承认 shipped wording 跟目标 contract gap;标 4 项 gaps(3 项 reference 缺 + 1 项 misleading wording);加完整 target wording Python pseudo-code;**标 Slice 3a 实施 follow-up**(non-load-bearing improvement)。同步 cascade:§8 proposed-stage check 加 2 项 P1/P2-amend star check;post-adoption verify 加 P2-amend star item(update shipped error message 走 target wording)+ P1-amend star item(closed editor stable attrs 可读 verify);post-adoption verify dynamic ops raise 项 wording 改 reflect 6 个 surface(commit/rollback/preview/`__enter__`/`__getattr__`/FieldEditor methods)。 |
