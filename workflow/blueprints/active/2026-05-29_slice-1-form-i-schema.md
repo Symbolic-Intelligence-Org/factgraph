@@ -283,6 +283,7 @@ Per Scope Freeze #3(L7 lock — same-Identity-field-match only):
   - Reject Identity-to-Field、Field-to-Field-via-identity-path、different Identity field
   - **NO** implicit single-field → full-bundle expansion
   - Reject ambiguity → explicit error message points to future entity-equality primitive(out of Slice 1 scope)
+- `core/rules/where_eval.py` system temporary signal updated from primary-key temp naming to identity temp naming so attr_eq lowering keeps the existing Python evaluator planning optimization without carrying stale `__pk` terminology
 
 ### 5.12 Derivation compile rewrite(`authoring/derivation_compile.py`)— **SF4 Option C**(post-Step-0 lock)
 
@@ -503,6 +504,7 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
   - [ ] Reject:`attr_eq(User.id, Order.id)` **cross-entity-type same-name**(P2 review 补充)
   - [ ] Reject:`attr_eq(User.name, Order.name)` cross-entity-type Field-to-Field
   - [ ] Error message points to future entity-equality primitive(out of Slice 1 scope)
+- [ ] `core/rules/where_eval.py` recognizes `$__identity_N` system temporaries for attr_eq-generated join planning and has no `__pk` / system-pk naming remnants
 - [ ] `derivation_compile.py:_identity_field_names` returns single list
 - [ ] `derivation_compile.py` head-body validation rejects any Identity field in head(both field head form `_lower_field_head_with_schema` + entity head form `_lower_entity_head_with_schema`)
 - [ ] **`derivation_compile.py:_infer_unique_entity_binding_var` rejects ambiguous body binding with explicit error**(Option C — "cross-coordinate disambiguation must occur within body via Identity field constraints")
@@ -687,7 +689,8 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
 - 9.2 Remove primary_key filter at 46-57;collect all Identity fields
 - 9.3 Rename metadata key at line 90
 - 9.4 Rewrite cross-coordinate comparison validation at 247-282 per SF3:same-Identity-field-match only;reject Identity-to-Field / Field-to-Field / different-Identity-field with explicit error pointing to future entity-equality primitive
-- 9.5 Tests covering all reject cases — commit boundary
+- 9.5 Update `core/rules/where_eval.py` system temporary signal from `__pk` to `__identity` so evaluator planning remains aligned with attr_eq lowering output
+- 9.6 Tests covering all reject cases — commit boundary
 
 ### Step 10 — Derivation compile Option C rewrite(`authoring/derivation_compile.py`)
 

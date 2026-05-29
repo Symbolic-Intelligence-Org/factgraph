@@ -492,9 +492,9 @@ def _eval_pred_atom(
             )
     out: list[dict[str, Any]] = []
 
-    # NOTE: Current join optimization only guarantees that primary_key shared-variable
-    # joins produced by attr_eq lowering use lookup paths in python evaluator.
-    # Non-primary cross-coordinate equality is rejected at compile time upstream.
+    # NOTE: Current join optimization guarantees that identity shared-variable
+    # joins produced by attr_eq lowering use lookup paths in the Python evaluator.
+    # Non-identity cross-coordinate equality is rejected at compile time upstream.
     for env in envs:
         candidates = _pred_candidates_for_env(
             facts=facts,
@@ -951,9 +951,9 @@ def _plan_body_atoms(
     if len(body) <= 1:
         return list(body)
     # Boundary for phase-3 execution optimization:
-    # only enable atom reordering when system primary-key temporaries are present.
-    # This keeps generic where evaluation semantics/order stable for non-pk bodies.
-    if not _body_has_system_pk_signal(body):
+    # only enable atom reordering when system identity temporaries are present.
+    # This keeps generic where evaluation semantics/order stable for non-identity bodies.
+    if not _body_has_system_identity_signal(body):
         return list(body)
     remaining = list(body)
     planned: list[tuple[Any, ...]] = []
@@ -1085,7 +1085,7 @@ def _term_known_for_plan(term: Any, bound_vars: set[str]) -> bool:
     return True
 
 
-def _body_has_system_pk_signal(body: list[tuple[Any, ...]]) -> bool:
+def _body_has_system_identity_signal(body: list[tuple[Any, ...]]) -> bool:
     for atom in body:
         if not isinstance(atom, tuple) or len(atom) < 1:
             continue
@@ -1095,13 +1095,13 @@ def _body_has_system_pk_signal(body: list[tuple[Any, ...]]) -> bool:
         if not isinstance(terms, list):
             continue
         for term in terms:
-            if _is_system_pk_var(term):
+            if _is_system_identity_var(term):
                 return True
     return False
 
 
-def _is_system_pk_var(term: Any) -> bool:
-    return isinstance(term, str) and term.startswith("$__pk_")
+def _is_system_identity_var(term: Any) -> bool:
+    return isinstance(term, str) and term.startswith("$__identity_")
 
 
 def _pred_candidates_for_env(

@@ -303,7 +303,7 @@ prefers to add wrappers after seeing real usage patterns.
 | Wire export restriction | `BatchPlan.export()` / `to_json()` forbids raw `idref_v1` token values |
 | `single` field semantics | `single` is a read-side scalar view; writes do not auto-prune older assertions |
 | Inference `head` semantics | Primary-key fields in `head` are compile-time hard errors |
-| Cross-coordinate attr comparison | Only `==` on the same entity type and same `primary_key` field is allowed |
+| Cross-coordinate attr comparison | Only `==` on the same entity type and same Identity field is allowed |
 | `RuleRef` constraints | Target must be `expose=True`; `RuleRef` is forbidden inside `Not(...)` body |
 | Query head constraints | Only `Entity(var)` or `Entity.field(...)`; field projection supports only `single` fields |
 | Branch identity | `Branch([...], id="name")` adds optional structural SDK metadata for `fg.rules.inspect(...)`. Unnamed branches inspect as `b0`, `b1`, ... fallback ids. Branch ids are not serialized into authoring payloads, compiled plans, registries, or adapters. |

@@ -145,7 +145,7 @@ Both `single` and `multi` fields support this field-to-value form. For `multi` f
 - temporal / uncertainty / adapter-specific predicates
 - migrations or debugging where spelling the predicate id directly matters
 
-Do not confuse field-to-value sugar with attr-vs-attr comparison. `u1.user_id == u2.user_id` follows cross-coordinate `attr_eq` lowering and currently only allows the same entity type, the same field, and a `primary_key` field.
+Do not confuse field-to-value sugar with attr-vs-attr comparison. `u1.user_id == u2.user_id` follows cross-coordinate `attr_eq` lowering and only allows the same entity type and the same Identity field.
 
 ### 3.2 Aggregate Helpers for Application Rules
 
@@ -519,17 +519,17 @@ Stable contract:
 `u1.user_id == u2.user_id` is legal only when:
 - both sides are the same entity type
 - both sides use the same field
-- that field is declared as `primary_key`
+- that field is an Identity field
 
 Otherwise, compilation fails (no implicit guessing).
 
 ### 7.3 Lowering shape
 
-Valid cross-coordinate primary-key comparison is lowered to shared system vars (`$__pk_N`):
+Valid cross-coordinate Identity comparison is lowered to shared system vars (`$__identity_N`):
 
 ```python
-("pred", "user:user_id", ["$u1", "$__pk_0"])
-("pred", "user:user_id", ["$u2", "$__pk_0"])
+("pred", "user:user_id", ["$u1", "$__identity_0"])
+("pred", "user:user_id", ["$u2", "$__identity_0"])
 ```
 
 System-prefixed temporary names are reserved.

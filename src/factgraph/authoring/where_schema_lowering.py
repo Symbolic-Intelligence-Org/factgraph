@@ -33,7 +33,7 @@ def _build_record_meta(schema_ir: dict[str, Any]) -> dict[str, Any]:
     predicates = schema_ir.get("predicates", [])
     entity_types: set[str] = set()
     record_types: set[str] = set()
-    primary_keys_by_type: dict[str, list[str]] = {}
+    identity_fields_by_type: dict[str, list[str]] = {}
     if isinstance(entities, list):
         for entity in entities:
             if not isinstance(entity, dict):
@@ -43,18 +43,16 @@ def _build_record_meta(schema_ir: dict[str, Any]) -> dict[str, Any]:
                 continue
             entity_types.add(entity_type)
             record_types.add(entity_type)
-            primary_keys: list[str] = []
+            identity_names: list[str] = []
             identity_fields = entity.get("identity_fields")
             if isinstance(identity_fields, list):
                 for field in identity_fields:
                     if not isinstance(field, dict):
                         continue
-                    if field.get("primary_key") is not True:
-                        continue
                     name = field.get("name")
                     if isinstance(name, str) and name:
-                        primary_keys.append(name)
-            primary_keys_by_type[entity_type] = sorted(set(primary_keys))
+                        identity_names.append(name)
+            identity_fields_by_type[entity_type] = sorted(set(identity_names))
 
     exists_pred_by_type: dict[str, str] = {}
     role_pred_by_type_field: dict[str, dict[str, str]] = {}
@@ -87,7 +85,7 @@ def _build_record_meta(schema_ir: dict[str, Any]) -> dict[str, Any]:
     return {
         "entity_types": entity_types,
         "record_types": record_types,
-        "primary_keys_by_type": primary_keys_by_type,
+        "identity_fields_by_type": identity_fields_by_type,
         "exists_pred_by_type": exists_pred_by_type,
         "role_pred_by_type_field": role_pred_by_type_field,
         "type_by_exists_pred": type_by_exists_pred,
@@ -120,7 +118,7 @@ def _rewrite_body(body: list[Any], *, meta: dict[str, Any], path: str) -> list[A
     record_var_types: dict[str, str] = {}
     rewrite_ctx: dict[str, Any] = {
         "used_vars": _collect_body_vars(body),
-        "pk_tmp_seq": 0,
+        "identity_tmp_seq": 0,
     }
     for idx, atom in enumerate(body):
         rewritten = _rewrite_atom(
@@ -244,34 +242,36 @@ def _rewrite_attr_eq_atom(
         )
 
     entity_type = left_type
-    primary_keys_by_type: dict[str, list[str]] = meta["primary_keys_by_type"]
-    primary_fields = primary_keys_by_type.get(entity_type, [])
-    if not primary_fields:
+    identity_fields_by_type: dict[str, list[str]] = meta["identity_fields_by_type"]
+    identity_fields = identity_fields_by_type.get(entity_type, [])
+    if not identity_fields:
         raise WhereSchemaLoweringError(
-            f"{entity_type} does not declare any primary_key identity field; cross-coordinate comparison is undefined",
+            f"{entity_type} does not declare any Identity fields; cross-coordinate comparison is undefined",
             path=path,
         )
 
-    primary_set = set(primary_fields)
+    identity_set = set(identity_fields)
 
-    def _raise_non_primary(field_name: str) -> None:
-        if len(primary_fields) == 1:
-            expected_msg = f"Cross-coordinate comparison requires primary_key field '{primary_fields[0]}'."
+    def _raise_non_identity(field_name: str) -> None:
+        if len(identity_fields) == 1:
+            expected_msg = f"Cross-coordinate comparison requires Identity field '{identity_fields[0]}'."
         else:
-            expected_msg = "Cross-coordinate comparison requires one of primary_key fields: " + ", ".join(
-                f"'{name}'" for name in primary_fields
+            expected_msg = "Cross-coordinate comparison requires one of Identity fields: " + ", ".join(
+                f"'{name}'" for name in identity_fields
             )
         raise WhereSchemaLoweringError(
-            f"'{field_name}' is not a primary_key field of {entity_type}. {expected_msg}",
+            f"'{field_name}' is not an Identity field of {entity_type}. {expected_msg} "
+            "Full entity equality is a future entity-equality primitive, not implicit attr_eq expansion.",
             path=path,
         )
-    if left_field not in primary_set:
-        _raise_non_primary(left_field)
-    if right_field not in primary_set:
-        _raise_non_primary(right_field)
+    if left_field not in identity_set:
+        _raise_non_identity(left_field)
+    if right_field not in identity_set:
+        _raise_non_identity(right_field)
     if left_field != right_field:
         raise WhereSchemaLoweringError(
-            f"cross-coordinate comparison must use the same primary_key field on both sides: {left_field} != {right_field}",
+            f"cross-coordinate comparison must use the same Identity field on both sides: {left_field} != {right_field}. "
+            "Full entity equality is a future entity-equality primitive, not implicit attr_eq expansion.",
             path=path,
         )
 
@@ -279,11 +279,11 @@ def _rewrite_attr_eq_atom(
     canonical_pred = role_pred_by_type_field.get(entity_type, {}).get(left_field)
     if canonical_pred is None:
         raise WhereSchemaLoweringError(
-            f"primary_key field predicate not found in schema for {entity_type}.{left_field}",
+            f"Identity field predicate not found in schema for {entity_type}.{left_field}",
             path=path,
         )
 
-    temp_name = _allocate_system_pk_var(rewrite_ctx)
+    temp_name = _allocate_system_identity_var(rewrite_ctx)
     temp_token = f"${temp_name}"
     return [
         ("pred", canonical_pred, [left_var_token, temp_token]),
@@ -302,18 +302,18 @@ def _parse_attr_eq_side(side: Any, *, path: str) -> tuple[str, str, str]:
     return var_token, field_name, _var_name(var_token)
 
 
-def _allocate_system_pk_var(rewrite_ctx: dict[str, Any]) -> str:
+def _allocate_system_identity_var(rewrite_ctx: dict[str, Any]) -> str:
     used_vars = rewrite_ctx.get("used_vars")
     if not isinstance(used_vars, set):
         used_vars = set()
         rewrite_ctx["used_vars"] = used_vars
-    seq = rewrite_ctx.get("pk_tmp_seq", 0)
+    seq = rewrite_ctx.get("identity_tmp_seq", 0)
     while True:
-        candidate = f"__pk_{seq}"
+        candidate = f"__identity_{seq}"
         seq += 1
         if candidate not in used_vars:
             used_vars.add(candidate)
-            rewrite_ctx["pk_tmp_seq"] = seq
+            rewrite_ctx["identity_tmp_seq"] = seq
             return candidate
 
 
