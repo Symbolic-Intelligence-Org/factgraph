@@ -8,6 +8,7 @@ from factgraph._sdk_errors import (
     SDKError,
     SDKSchemaError,
     SDKStoreError,
+    SDKValueError,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "SDKError",
     "SDKSchemaError",
     "SDKStoreError",
+    "SDKValueError",
 ]

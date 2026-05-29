@@ -96,7 +96,7 @@ from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
 )
-from .errors import CardinalityError, EntityNotFoundError, FrozenSnapshotError, SDKStoreError
+from .errors import CardinalityError, EntityNotFoundError, FrozenSnapshotError, SDKStoreError, SDKValueError
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
@@ -2096,6 +2096,9 @@ class SDKStore:
                 entity_type=err.details.get("entity_type"),
                 code=err.code,
             )
+        if err.code == "FIELD_VALUE_VALIDATION_FAILED":
+            path = ".".join(err.path) if err.path else None
+            raise SDKValueError(err.message, code=err.code, path=path)
         raise SDKStoreError(err.message, code=err.code)
 
     def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | None:

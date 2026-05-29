@@ -25,6 +25,7 @@ from .errors import (
     FrozenSnapshotError,
     SDKSchemaError,
     SDKStoreError,
+    SDKValueError,
 )
 
 if TYPE_CHECKING:
@@ -933,6 +934,8 @@ def _sdk_store_error_from_dto(error: Any) -> SDKStoreError:
     path = None
     if isinstance(getattr(error, "path", None), tuple) and error.path:
         path = ".".join(error.path)
+    if getattr(error, "code", None) == "FIELD_VALUE_VALIDATION_FAILED":
+        return SDKValueError(str(error.message), code=getattr(error, "code", None), path=path)
     return SDKStoreError(str(error.message), code=getattr(error, "code", None), path=path)
 
 

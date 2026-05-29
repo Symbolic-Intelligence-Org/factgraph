@@ -18,7 +18,7 @@ from factgraph.application.protocol import (
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.protocol.digests import sha256_token
 
-from .errors import SDKStoreError
+from .errors import SDKStoreError, SDKValueError
 from .schema import Entity, Field, Identity
 
 if TYPE_CHECKING:
@@ -503,6 +503,8 @@ def _apply_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchAppl
             error = result.errors[0]
             path = ".".join(error.path) if error.path else ""
             prefix = f"{path}: " if path else ""
+            if error.code == "FIELD_VALUE_VALIDATION_FAILED":
+                raise SDKValueError(f"{prefix}{error.message}", code=error.code, path=(path or None))
             raise SDKStoreError(f"{prefix}{error.message}")
         if app_plan.resolved_target is None:
             raise SDKStoreError(f"delegated batch plan missing resolved target for handle_id={handle_id}")

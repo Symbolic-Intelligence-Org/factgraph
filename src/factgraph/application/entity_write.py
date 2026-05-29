@@ -29,6 +29,7 @@ from .schema_runtime import (
     field_value_type,
     resolve_selector,
 )
+from .value_validation import FieldValueValidationError, validate_field_value
 
 
 class EntityWriteError(ValueError):
@@ -394,6 +395,15 @@ def _apply_op(
         pred_info = field_predicate(index, op.field.entity_type, op.field.field_name)
         field_type = field_value_type(index, op.field.entity_type, op.field.field_name)
         assert op.value is not None
+        try:
+            validate_field_value(op.value, pred_info=pred_info)
+        except FieldValueValidationError as exc:
+            raise EntityWriteError(
+                str(exc),
+                code=exc.code,
+                path=exc.path,
+                details=exc.details,
+            ) from exc
         rest_terms = [_rest_term_for_value(op.value, field_type=field_type, index=index)]
         if op.op == "set":
             return set_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)

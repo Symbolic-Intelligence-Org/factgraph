@@ -12,6 +12,7 @@ from .errors import (
     FrozenSnapshotError,
     SDKSchemaError,
     SDKStoreError,
+    SDKValueError,
 )
 from .error_codes import (
     INVALID_ROW_FORMAT,
@@ -64,6 +65,7 @@ ApplicationRule = Rule
 __all__ = [
     "SDKSchemaError",
     "SDKStoreError",
+    "SDKValueError",
     "EntityNotFoundError",
     "FrozenSnapshotError",
     "CardinalityError",

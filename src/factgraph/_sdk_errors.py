@@ -16,6 +16,10 @@ class SDKStoreError(SDKError):
     pass
 
 
+class SDKValueError(SDKStoreError):
+    pass
+
+
 class SDKDSLError(SDKError):
     pass
 
@@ -67,4 +71,5 @@ __all__ = [
     "SDKError",
     "SDKSchemaError",
     "SDKStoreError",
+    "SDKValueError",
 ]
