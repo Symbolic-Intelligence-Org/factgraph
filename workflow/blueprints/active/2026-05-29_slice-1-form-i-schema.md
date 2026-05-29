@@ -1,6 +1,6 @@
 # Slice 1 — Form I Schema Refactor
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
 - Slice: 1 of identity-as-claim Step 1 ladder (per synthesis `d0036e1f`)
