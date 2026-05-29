@@ -557,7 +557,6 @@ def sdk_get(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> E
         selector=AppEntitySelector(
             entity_type=entity_cls.__name__,
             identity=dict(identity_kwargs),
-            allow_identity_defaults=any(name not in identity_kwargs for name in identity_names),
         ),
         include_assertions=True,
         include_history=True,
@@ -614,7 +613,6 @@ def sdk_find(
                 selector=AppEntitySelector(
                     entity_type=entity_cls.__name__,
                     identity=dict(identity_filters),
-                    allow_identity_defaults=False,
                 ),
                 include_assertions=True,
                 include_history=True,
@@ -693,24 +691,7 @@ def _validate_identity_kwargs_for_get(spec: dict[str, Any], entity_cls: type[Any
     extra = sorted(set(identity_kwargs.keys()) - set(identity_names))
     if extra:
         raise SDKSchemaError(f"get() accepts only identity fields for {entity_cls.__name__}: {extra}")
-    by_name = _identity_spec_by_name(spec)
-    # Allow uuid4/default identity fields to be omitted for `get`, but note this can point to a different random ref.
-    # For v1, require callers to pass all identity fields except explicit literal defaults.
-    uuid_missing = [
-        name
-        for name in identity_names
-        if name not in identity_kwargs
-        and by_name.get(name, {}).get("default_factory") == "uuid4"
-    ]
-    if uuid_missing:
-        raise SDKSchemaError(
-            f"get() requires explicit identity value(s) for uuid4 identity fields on {entity_cls.__name__}: {uuid_missing}"
-        )
-    missing = [
-        name
-        for name in identity_names
-        if name not in identity_kwargs and name not in uuid_missing and "default" not in by_name.get(name, {})
-    ]
+    missing = [name for name in identity_names if name not in identity_kwargs]
     if missing:
         raise SDKSchemaError(f"missing identity fields for get({entity_cls.__name__}): {missing}")
 

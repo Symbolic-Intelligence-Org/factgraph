@@ -6,7 +6,6 @@ from typing import TypeAlias
 from .common import (
     JSONValue,
     ProtocolShapeError,
-    _require_bool,
     _require_non_empty_str,
     _require_optional_non_empty_str,
     _validate_json_mapping,
@@ -20,13 +19,11 @@ class EntitySelector:
     entity_type: str
     identity: IdentityValue = field(default_factory=dict)
     encoded_ref: str | None = field(default=None, compare=False)
-    allow_identity_defaults: bool = False
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.entity_type, field_name="entity_type")
         object.__setattr__(self, "identity", _validate_json_mapping(self.identity, field_name="identity"))
         _require_optional_non_empty_str(self.encoded_ref, field_name="encoded_ref")
-        _require_bool(self.allow_identity_defaults, field_name="allow_identity_defaults")
 
 
 @dataclass(frozen=True)
@@ -73,4 +70,3 @@ __all__ = [
     "IdentityValue",
     "SchemaCapability",
 ]
-

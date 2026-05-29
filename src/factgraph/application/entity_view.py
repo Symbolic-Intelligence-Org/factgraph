@@ -329,7 +329,6 @@ def _recover_identity_from_predicates(
         entity_type,
         identity_values,
         index=index,
-        allow_identity_defaults=False,
     )
 
 
