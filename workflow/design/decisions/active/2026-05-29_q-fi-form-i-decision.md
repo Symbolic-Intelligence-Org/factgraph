@@ -3,7 +3,7 @@
 - Status: proposed
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
-- Authority: design constraint;locks Slice 1 Form I schema refactor 的 4 个 sub-decisions(Q6/Q7/Q8/Q9 per meta-ADR §4.2 grouping)before Slice 1 blueprint 起草。
+- Authority: design constraint;locks Slice 1 Form I schema refactor 的 5 个 sub-decisions(Q6/Q7/Q8/Q9 per meta-ADR §4.2 grouping + §4.3-bis Identity descriptor surface alignment per 2026-05-29 reviewer P2)before Slice 1 blueprint 起草。
 - Inputs:
   - `workflow/audit/active/2026-05-29_identity-as-claim-vs-shipped.md` §7.3 Q6/Q7/Q8/Q9 rows + §5.2.1 A5 + §5.2.2 A6-A10 + §5.4 N2(Identity field 已 declared in schema_ir)
   - User reviewer 2026-05-29 ADR-FI directional guidance(Q6 docs-only / Q7 internal `_DataMember` / Q8 alpha breaking + migration notes / Q9 dual-layer compile+write validation)
@@ -35,6 +35,7 @@
 
 - **§4.2 grouping**:Q6/Q7/Q8/Q9 必须**同一 ADR**(本 ADR);拆分会 force "_DataMember 暴露 + cardinality 推断 + Literal/pattern enforcement layer" 跨 4 个 ADR 反复协调
 - **§4.4 Step 1 zero-Q-PR1 dependency**:本 ADR §1 Inputs / §6 Supporting Evidence **不**引用 Q-PR1 / Slice 5+ adapter rewrite — confirmed,本 ADR 与 PyReason adapter 无关
+- **§7.1 ADR-IC carve-out**:Identity-as-Claim 的 emission / encoding(idref_v1 typed hash / emission layer / schema-evolution)归 ADR-IC;Identity descriptor 的 **public signature** 归本 ADR §4.3-bis(理由见 §4.3-bis 末段)
 
 ### 1.3 User reviewer 2026-05-29 directional guidance
 
@@ -56,14 +57,15 @@ ADR-FI draft 启动前 user reviewer 给出 4 条方向:
 
 ## 2. Scope
 
-本 ADR **锁**以下 4 sub-decisions:
+本 ADR **锁**以下 5 sub-decisions:
 
 | Sub-decision | 锁的内容 |
 |---|---|
 | **§4.1 Q6** | Mutable Field contract 形态(documentation-only,无新 kwarg / 无 runtime enforce) |
 | **§4.2 Q7** | `_DataMember` 共通基类 exposure level(internal/shared base,not public API) |
-| **§4.3 Q8** | Cardinality 推断 migration strategy(alpha breaking,kwarg 删除,migration hints + error messaging) |
-| **§4.4 Q9** | Layer 4 enum + pattern validation layer 分布(dual-layer:compile-time + write-time) |
+| **§4.3 Q8** | Field cardinality 推断 migration strategy(alpha breaking,kwarg 删除,migration hints + error messaging) |
+| **§4.3-bis** | Identity descriptor surface alignment(`primary_key` / `default` / `default_factory` 三 kwarg 删除,migration hints;同 §4.3 alpha breaking pattern) |
+| **§4.4 Q9** | Layer 4 enum + pattern validation layer 分布(dual-layer:compile-time + write-time;protocol/ledger direct path 不覆盖 — caller contract) |
 
 ## 3. Non-scope
 
@@ -190,11 +192,55 @@ class Field(_DataMember):
 - 双支持需要 if-branch 处理 + 类型推断结果 vs explicit kwarg 一致性 verification — 实施复杂度跟纯 breaking 不成比例
 - user §17 lock-in "no alias" 立场
 
+### 4.3-bis Identity descriptor surface alignment(companion to §4.3)
+
+**锁定**:`Identity` public signature 在 Form I 下变成 `Identity(*, description=None, pattern=None)` — 跟 `Field` 共享 `_DataMember` 基类的两个 kwargs;**不再**接受 `primary_key=...` / `default=...` / `default_factory=...`。旧调用 raise `SDKSchemaError` 含 migration hint。
+
+**为什么连带去 `primary_key`**:
+- Form I 下 Identity bundle = Entity subclass 中**所有** `Identity()` declared fields(per identity-mechanism-redesign §8.1)— `Identity` descriptor 类本身即是 primary-key 标志;`primary_key=True` kwarg 与 descriptor 类型冗余
+- 单字段 Identity 跟 multi-field composite Identity 在 Form I 下用 declaration 数量区分(1 个 `Identity()` field vs N 个),不需要 kwarg
+
+**为什么去 `default` / `default_factory`**:
+- Identity 是 immutable anchor(per INV-7a — content-derived `idref_v1` hash 锁 Identity 终身不变)— default value 概念 ill-defined:有 default 的 Identity 应该 → 同一 anchor?不同 anchor 看 default 值?均无意义
+- Field 端是否保留 `default` 留给 Step 2+(per §3 Non-scope,本 ADR 不锁)
+
+**Migration error path**:
+
+```python
+# Form I error path (sdk/schema.py:Identity.__init__):
+class Identity(_DataMember):
+    def __init__(self, *, description: str | None = None,
+                 pattern: str | None = None, **legacy_kwargs: Any) -> None:
+        if legacy_kwargs:
+            removed = sorted(legacy_kwargs.keys())
+            raise SDKSchemaError(
+                f"Form I removed Identity kwargs: {removed}.\n"
+                f"  - Identity bundle = all Identity() fields on Entity subclass\n"
+                f"    (no primary_key flag needed).\n"
+                f"  - Identity fields cannot have defaults (immutable anchor).\n"
+                f"Migration:\n"
+                f"  Old: id: UUID = Identity(primary_key=True)\n"
+                f"  New: id: UUID = Identity()"
+            )
+        super().__init__(description=description, pattern=pattern)
+```
+
+**Slice 1 blueprint 必须做的**(跟 §4.3 同 Slice):
+- Pre-impl grep:扫所有 shipped 代码 / tests / docs 用 `Identity(primary_key=` / `Identity(default=` / `Identity(default_factory=` 的位置 — 全部 migrate 到 `Identity()` 形态
+- shipped `sdk/schema.py:50-89` Identity `__init__` 改 signature(从当前 `Identity(primary_key, default, default_factory, description, ...)` → `Identity(description, pattern)`)
+- shipped `sdk/docs/04_api_surface.en.md` / `docs/official/kernel/quickstart/` 含 `Identity(primary_key=)` 示例的 docs 全 sync(在 Slice 4 docs sync 时一并落)
+- migration guide(Stage 4 blueprint §10 Outcome)记录 Identity grep 结果(独立计数,跟 Field cardinality 分别报告)
+
+**为什么放在本 ADR 而不延后到 ADR-IC**:
+- Identity descriptor 的 signature 是 Form I schema declaration 表面层 —— 跟 Q7 `_DataMember` 共通基类 + Q8 Field signature breaking 同 codebase area(`sdk/schema.py`),同 Slice 1 落地
+- ADR-IC 关注 Identity-as-Claim 的 emission / encoding(Q1 idref_v1 typed hash / Q2 emission layer / Q3 schema-evolution),那些是 Identity 的**运行时行为**,跟 descriptor signature **正交**
+- 避免 ADR-IC 起草时 retroactively 改 ADR-FI 的 Identity descriptor 形态(违反 §7.4 no-retroactive boundary)
+
 ### 4.4 Q9 — Layer 4 enum + pattern validation:**dual-layer**
 
 **锁定**:`Literal[...]` 枚举约束 + `pattern=r"..."` 正则约束**两层都做**:
 - **Compile-time(`schema_compile.py`)**:schema 声明 declares-with-static-validation 阶段
-- **Write-time(application layer + ledger write path)**:每次 `fg.fields.set` / `fg.fields.add` / `fg.entities.create` / `fg.assertions.write`(后者由 ADR-SYS-A 决策)在写 Claim 前 validate value
+- **Write-time(application write path before ledger append)**:每次 `fg.fields.set` / `fg.fields.add` / `fg.entities.create` / `fg.assertions.write`(后者由 ADR-SYS-A 决策)在 application 层调 `evidence/write_protocol` → `ledger.append_assertion` 之前 validate value
 
 #### 4.4.1 Layer 1 — Compile-time validation(`schema_compile.py`)
 
@@ -245,7 +291,15 @@ def validate_field_value(
 
     pattern = pred_spec.get("pattern")
     if pattern is not None:
-        if not re.fullmatch(pattern, str(value)):
+        # pattern 仅 allowed on str type_domain(per §4.4.1 schema_compile 校验);
+        # write-time 显式 isinstance 守卫 — 避免错类型被 str() 字符串化后误通过 regex。
+        # 不依赖前置 type-domain 检查的隐式假设,做显式 isinstance 失败更易诊断。
+        if not isinstance(value, str):
+            raise SDKValueError(
+                f"pattern validation expects str value for {pred_id}; "
+                f"got {type(value).__name__}"
+            )
+        if not re.fullmatch(pattern, value):
             raise SDKValueError(
                 f"value {value!r} does not match pattern {pattern!r} "
                 f"for {pred_id}"
@@ -259,24 +313,33 @@ def validate_field_value(
 
 **调用边界**:**不**调用于 `evidence/write_protocol.py:set_field` 直接(那是 protocol 层,per meta-ADR §4.4 不加 strict 约束);**只**调用于 application 层 / SDK shell 层 write paths。这样跟 meta-ADR §4.4 INV-9 layered weak enforcement 模式一致。
 
-#### 4.4.3 为什么 dual-layer 防"绕过 SDK 产生脏 Claim"
+**caller contract**(明确不保证范围):绕过 application 层直接调 `evidence/write_protocol` 或 `core/store/ledger.append_assertion` 的 caller(adapter / migration tool / internal writer / 测试 fixture)是 **trusted internal path**,必须自行 maintain value 与 schema 约束的一致性 — 本 ADR §4.4.2 **不** validate 这些路径,**不** 保证这些路径写入的 Claim 满足 enum / pattern。详见 §4.4.3。
 
-- 仅 compile-time:adapter / migration tool / 直接调 `evidence/write_protocol.set_field` 的路径绕开 SDK shell — value 不被 validate,可写入违反 enum / pattern 的 Claim
-- 仅 write-time:schema 作者笔误(Literal 混类型 / pattern 不合法 regex)不在 declare 时被 catch,要写一次 Claim 后才报错 — 反馈环慢
-- dual-layer:declare-time catch schema author errors;write-time catch caller errors;不重复(覆盖不同失败模式)
+#### 4.4.3 为什么 dual-layer 覆盖"schema 声明错误 + application/SDK write path caller 错误"
+
+- **仅 compile-time 不够**:application / SDK shell write path 的 caller 运行时错误(如 `fg.fields.set(User.status, ref, "invalid_enum")` — schema 声明正确但 caller 传入违反 enum 的 value)在 declare 阶段无法 catch,运行时若无 write-time enforcement 会写入脏 Claim
+- **仅 write-time 不够**:schema 作者笔误(`Literal[1, "a"]` 混类型 / `pattern=r"["` 不合法 regex)不在 declare 时被 catch,要等第一次写 Claim 才报错 — 反馈环慢、debug 困难
+- **dual-layer**:declare-time catch schema author errors;write-time catch **application / SDK shell write path** caller errors;两层覆盖不同失败模式,不重复
+
+**dual-layer 不覆盖的路径**(per §4.4.2 caller contract):
+- `evidence/write_protocol.set_field` direct call(non-application internal path)
+- adapter / migration tool / 测试 fixture 直接写 ledger 层
+- 这些是 **trusted internal paths**;per meta-ADR §4.4 4-layer enforcement table 锁 protocol / ledger 层 schema-aware enforcement delayed(Step 1 范围外)
+- 若 future 需要把 enum / pattern enforcement 下沉到 ledger / protocol 层 强制覆盖所有 caller,需另一个 ADR 显式 supersede 本 §4.4.2 调用边界 — 不在本 ADR 范围内
 
 **性能权衡**:write-time validation 是 O(1) hash lookup(enum) + O(value length) regex match;Form I 范围内可接受。enum_values 适合用 `frozenset[str]` 优化 in-check;pattern 适合 cache `re.compile(pattern)` per pred_id。
 
 ### 4.5 Cross-Q decision summary
 
-| Q | Decision | Implementation surface | Step 1 Slice |
+| Sub-decision | Decision | Implementation surface | Step 1 Slice |
 |---|---|---|---|
 | Q6 | docs-only | 0 code change(docs only at Slice 4)| Slice 1 + Slice 4 |
 | Q7 | internal `_DataMember` | `sdk/schema.py` add `_DataMember` class;NOT in `__all__` | Slice 1 |
 | Q8 | alpha breaking + migration hint | `sdk/schema.py` Field signature change;`schema_compile.py` cardinality 推断;error message migration hint | Slice 1 |
-| Q9 | dual-layer compile + write | `schema_ir` extend(enum_values + pattern);`schema_compile.py` static validation;`application/value_validation.py` new helper;SDK shell / application write paths integration | Slice 1 |
+| §4.3-bis | alpha breaking + migration hint | `sdk/schema.py` Identity signature change(去 `primary_key` / `default` / `default_factory`);error message migration hint | Slice 1 |
+| Q9 | dual-layer compile + write | `schema_ir` extend(enum_values + pattern);`schema_compile.py` static validation;`application/value_validation.py` new helper(含 isinstance str-guard for pattern);SDK shell / application write paths integration;**caller contract**:protocol / ledger direct path 不覆盖 | Slice 1 |
 
-**整体**:Slice 1 Form I 实施范围 ≈ 200-400 行代码改动(`sdk/schema.py` + `schema_compile.py` + `application/value_validation.py` + integration calls)+ 几处 error message + docs(Slice 4)。
+**整体**:Slice 1 Form I 实施范围 ≈ 250-450 行代码改动(`sdk/schema.py` Identity + Field signature 重写 + `_DataMember` 共通基类 + `schema_compile.py` extend + `application/value_validation.py` 新模块 + integration calls)+ Identity 和 Field 各一处 error message + docs(Slice 4)。
 
 ## 5. Rejected Alternatives
 
@@ -312,7 +375,7 @@ def validate_field_value(
 
 #### Q9 alternative — Compile-time only validation
 
-- **Why rejected**:adapter / migration tool / 任何直接调 protocol 层 `set_field` 的路径绕开 compile validation,可写入违反 enum / pattern 的 Claim — INV-5(ledger 是 source of truth)被破坏。
+- **Why rejected**:schema 作者笔误能在 declare 时 catch,但 application / SDK shell write path caller 运行时错误(如 `fg.fields.set(User.status, ref, "invalid_enum")` — schema 声明合法但 caller 传错 value)无 enforcement,会被写入违反 enum / pattern 的 Claim。Layer 2(write-time)是必要的 caller-side guard。**注意**:dual-layer 同样不覆盖 protocol / ledger direct path(per §4.4.2 caller contract);"防绕过 SDK shell 的 internal writer"不是本 ADR 的目标,留 Slice 5+ ADR。
 
 #### Q9 alternative — Write-time only validation
 
@@ -336,6 +399,14 @@ def validate_field_value(
 
 - **Why rejected**:pattern 是 PDF Change Request 2026-05-28 已 user-accepted 项(详见 identity §15 决策日志);Step 1 同 slice 落地 marginal cost 小(共通基类已设计了 pattern 槽位),没有 deferring 收益。
 
+#### Option `Defer-identity-surface-to-adr-ic`:`Identity(primary_key=...)` etc. 留 ADR-IC 处理
+
+- **Why rejected**:ADR-IC 关注 Identity-as-Claim 的 emission / encoding(运行时行为),Identity descriptor signature 是 schema declaration 表面层 — 跟 §4.3 Field signature breaking 是相同 codebase area(`sdk/schema.py`)+ 相同 Slice 1 + 相同 migration pattern。延后会:(i)迫使 Slice 1 blueprint 在 ADR-IC adopt 之前以 stale Identity surface 形态起草,然后被 ADR-IC retroactively 改;(ii)违反 §7.4 no-retroactive boundary 原则(后续 ADR 不应改前序 ADR 的 decision)。
+
+#### Option `Identity-surface-keep-primary-key-as-alias`:`Identity(primary_key=True)` silently ignored,推断为单 Identity field
+
+- **Why rejected**:跟 §4.3 silent ignore alternative 同问题(silent failure 与 audit-first 哲学冲突)+ 用户读旧代码会以为 `primary_key=True` 还在做什么,但实际 Form I 下"primary"概念已变成 "Identity bundle = all Identity() fields";误导胜于无 alias。
+
 ## 6. Supporting Evidence
 
 ### 6.1 Audit row citations
@@ -349,12 +420,13 @@ def validate_field_value(
 
 ### 6.2 Shipped code citations
 
-- `src/factgraph/sdk/schema.py:50-141` Identity / Field descriptor 当前形态
-- `src/factgraph/sdk/schema.py:20-47` `_DeclaredMember` 协议层基类(已存在)
-- `src/factgraph/sdk/__init__.py:62-123` 当前 `__all__` list(不含 `_DataMember`,本 ADR 维持)
+- `src/factgraph/sdk/schema.py:50-89` Identity descriptor 当前 signature(含 `primary_key` / `default` / `default_factory` — 将被 §4.3-bis 删除)
+- `src/factgraph/sdk/schema.py:91-122` Field descriptor 当前 signature(含 `cardinality` — 将被 §4.3 删除)
+- `src/factgraph/sdk/schema.py:20-47` `_DeclaredMember` 协议层基类(已存在 — §4.2 `_DataMember` extends 此基类)
+- `src/factgraph/sdk/__init__.py:62-123` 当前 `__all__` list(含 `Identity` / `Field`,**不含 `_DataMember`** — 本 ADR §4.2 维持)
 - `src/factgraph/authoring/schema_compile.py:291-363` `_compile_field` 当前路径(将被 Q9 extend)
 - `src/factgraph/authoring/schema_compile.py:227-260` `_compile_identity_predicate` 当前路径(Q9 同 extend)
-- `src/factgraph/core/evidence/write_protocol.py:128-156` `set_field` 当前 — Q9 write-time validation 在 application 层 wrapper,不动 protocol 层(per meta-ADR §4.4)
+- `src/factgraph/core/evidence/write_protocol.py:128-156` `set_field` 当前 — Q9 write-time validation 在 application 层 wrapper,**不**动 protocol 层(per meta-ADR §4.4 + 本 ADR §4.4.2 caller contract)
 
 ### 6.3 Meta-ADR cross-references
 
@@ -363,14 +435,18 @@ def validate_field_value(
 
 ### 6.4 Design-point citations
 
-- `workflow/design/design-points/active/identity-mechanism-redesign.zh.md` §4.1 边界规则(`:166-176`)— Q6 docs guideline source
-- identity §8.5 `_DataMember` 共通基类(`:467-510`)— Q7 internal base 设计 source
-- identity §8.4 类型推断规则(`:451-465`)— Q8 推断规则 source
-- identity §8.4 enum 约束的层位(`:464-470`)— Q9 dual-layer source
+- `workflow/design/design-points/active/identity-mechanism-redesign.zh.md` §4.1 边界规则(`:185-198`)— Q6 docs guideline source
+- identity §8.1 当前形态 baseline(`:409-441`)— §4.3-bis `Identity()` bundle 语义 source
+- identity §8.3 Form I 最终设计 + §8.4 类型推断规则(`:442-510`)— Q8 推断规则 source
+- identity §8.4 enum 约束的层位(`:505-510`)— Q9 dual-layer source
+- identity §8.5 `_DataMember` 共通基类(`:511-571`)— Q7 internal base 设计 source
+- identity §5.2 INV-7a Identity Anchor immutable(`:244-260`)— §4.3-bis Identity 不接受 `default` 的依据
 
 ### 6.5 No-Q-PR1 dependency confirmation(per meta-ADR §4.4 hard rule)
 
-本 ADR §1-§9 全文 grep 检查:无引用 Q-PR1 / PyReason adapter / Slice 5+ — confirmed Step 1 zero-blocker 合规。
+本 ADR §1-§9 全文 grep 检查:无引用 Q-PR1 / PyReason adapter — confirmed Step 1 zero-blocker 合规。
+
+**澄清**:§4.4.3 / §7.4 出现 "Slice 5+" 标识 — 那是**前向 carve-out**(本 ADR 不锁的范围交给未来哪个 Slice),**不是 dependency**。Slice 1 实施可在 Slice 5+ ADR 起草前完成,不会被 block。
 
 ## 7. Consequences
 
@@ -388,10 +464,10 @@ def validate_field_value(
 | Action | Owner | When |
 |---|---|---|
 | Slice 1 blueprint draft(`workflow/blueprints/active/2026-05-29_slice-1-form-i.md`)| TBD(per CADENCE drafter/reviewer role assignment)| ADR-FI adopt 后 |
-| Slice 1 pre-impl grep:扫所有 `Field(cardinality=` 用法 + `Identity(primary_key=` 用法(后者跟 §4.3 协同 — Form I Identity 也去 `primary_key`)| Slice 1 blueprint preflight(Step 4.6.5)| Slice 1 blueprint scoped 后 |
+| Slice 1 pre-impl grep(per §4.3 + §4.3-bis):分别扫 `Field(cardinality=` / `Identity(primary_key=` / `Identity(default=` / `Identity(default_factory=` 四类用法 — 每类独立计数 + 全部 migrate | Slice 1 blueprint preflight(Step 4.6.5)| Slice 1 blueprint scoped 后 |
 | `schema_ir` 文档更新 — 加 `enum_values` / `pattern` 字段(per Q9)| Slice 1 implementation | Slice 1 Step 4.7 |
-| `application/value_validation.py` 新模块 + integration calls(per Q9.2)| Slice 1 implementation | Slice 1 Step 4.7 |
-| docs sync(Slice 4)— `04_api_surface.en.md` 加 Form I overview + migration guide;`identity-mechanism-redesign.zh.md` §8 update如 ADR-FI 改了 wording | Slice 4 docs sync | Slice 1 完成后 |
+| `application/value_validation.py` 新模块 + integration calls(含 isinstance str-guard per §4.4.2)| Slice 1 implementation | Slice 1 Step 4.7 |
+| docs sync(Slice 4)— `04_api_surface.en.md` 加 Form I overview + Field 和 Identity 两类 migration guide;`identity-mechanism-redesign.zh.md` §8 update如 ADR-FI 改了 wording | Slice 4 docs sync | Slice 1 完成后 |
 
 ### 7.3 Cross-pillar interaction
 
@@ -401,36 +477,42 @@ def validate_field_value(
 
 ### 7.4 No-retroactive boundary
 
-- 本 ADR §4 Decision adopted 后,Slice 1 blueprint 不可单方面 override Q6-Q9 决策;若需要 override,走"本 ADR superseded by 新 ADR-FI-v2"路径
-- §4.3 Q8 alpha breaking 决策 carry-forward 到任何 future Form I 修订 — 不可重新引入 cardinality kwarg 作为 deprecated alias
-- §4.4 Q9 dual-layer validation 是 Form I 内的最低 enforcement floor — 后续 Layer 4 扩展(`validators` / `constraints`)沿用 dual-layer 路径(compile-time syntactic + write-time value)
+- 本 ADR §4 Decision adopted 后,Slice 1 blueprint 不可单方面 override Q6-Q9 / §4.3-bis 决策;若需要 override,走"本 ADR superseded by 新 ADR-FI-v2"路径
+- §4.3 Q8 alpha breaking 决策 carry-forward 到任何 future Form I 修订 — 不可重新引入 `cardinality` kwarg 作为 deprecated alias
+- §4.3-bis Identity surface alpha breaking 同 carry-forward — 不可重新引入 `primary_key` / `default` / `default_factory` 作为 alias;ADR-IC 起草时只能在 §4.3-bis 之上建,不能改 Identity public signature
+- §4.4 Q9 dual-layer validation 是 Form I 内的最低 enforcement floor — 后续 Layer 4 扩展(`validators` / `constraints`)沿用 dual-layer 路径(compile-time syntactic + write-time value);**ledger / protocol direct path enforcement 留 Slice 5+ ADR 显式 supersede §4.4.2 caller contract**
 
 ## 8. Acceptance Criteria
 
 ADR adoption(本 ADR commit Status: proposed → adopted)前:
 
-- [x] §4.1-§4.4 4 Qs 全部含 Decision + rationale
-- [x] §5 含 per-Q rejected alternatives(≥1 per Q)+ cross-Q rejected combinations(≥2)
+- [x] §4.1-§4.4 + §4.3-bis 5 sub-decisions 全部含 Decision + rationale
+- [x] §5 含 per-Q rejected alternatives(≥1 per Q)+ §4.3-bis 专项 rejected alternatives(≥2)+ cross-Q rejected combinations(≥2)
 - [x] §6 含 audit / shipped code / meta-ADR / design-point / no-Q-PR1 confirmation 5 类 evidence
 - [x] §7 含 downstream unblocking + follow-up actions + cross-pillar + no-retroactive boundary
 - [x] Header `Depends on:` 引用 meta-ADR adopted commit
 - [x] §1.4 含 shipped baseline pointer(audit N2)
+- [x] §4.4.2 含明确 caller contract(protocol / ledger direct path 不覆盖)
+- [x] §4.4.3 不声称 dual-layer 防"绕过 SDK 产生脏 Claim"(framing 限于 schema 声明错误 + application/SDK write path caller 错误)
 
 Post-adoption verification(implementation 阶段验证):
 
 - [ ] Slice 1 blueprint `Status: scoped` 时,blueprint §1 Related Docs 引用本 ADR
 - [ ] Slice 1 implementation:`sdk/schema.py` 新增 `_DataMember` class **不**在 `__all__` 中
 - [ ] Slice 1 implementation:`Field(cardinality="single")` 类调用 raise `SDKSchemaError` 含 migration hint
+- [ ] Slice 1 implementation:`Identity(primary_key=True)` / `Identity(default=...)` / `Identity(default_factory=...)` raise `SDKSchemaError` 含 migration hint(per §4.3-bis)
 - [ ] Slice 1 implementation:`Field(): str` 推断 cardinality="single";`Field(): list[str]` 推断 cardinality="multi"
 - [ ] Slice 1 implementation:`Literal[...]` 注解写 `enum_values` 到 schema_ir
 - [ ] Slice 1 implementation:`Field(pattern=r"invalid[")` raise `SDKSchemaError`(regex syntax invalid)
 - [ ] Slice 1 implementation:`Field(pattern=r"^[a-z]+$")` on non-`str` type_domain raise `SDKSchemaError`
 - [ ] Slice 1 implementation:`application/value_validation.py` write-time validation:enum miss raise `SDKValueError`;pattern miss raise `SDKValueError`
+- [ ] Slice 1 implementation:`application/value_validation.py` pattern path 在 `re.fullmatch` **之前**做 `isinstance(value, str)` guard,non-str value raise `SDKValueError`(per §4.4.2 type-bypass 防御)
 - [ ] Slice 1 implementation:`fg.fields.set(User.email, ref, "not-an-email")` with `email: str = Field(pattern=r"...")` raise `SDKValueError`(write-time enforcement)
-- [ ] Slice 4 docs sync:`04_api_surface.en.md` 加 Form I overview;`identity-mechanism-redesign §8 Form I` 跟 ADR-FI 对齐;`docs/official/kernel/quickstart/` schema 示例改 类型推断 形态
+- [ ] Slice 4 docs sync:`04_api_surface.en.md` 加 Form I overview + Field 和 Identity 两类 migration guide;`identity-mechanism-redesign §8 Form I` 跟 ADR-FI 对齐;`docs/official/kernel/quickstart/` schema 示例改 类型推断 形态
 
 ## 9. Decision Record
 
 | Date | Stage | Event | Notes |
 |---|---|---|---|
-| 2026-05-29 | proposed | ADR-FI drafted | 4 Qs(Q6 docs-only / Q7 internal `_DataMember` / Q8 alpha breaking + migration / Q9 dual-layer)。基于 meta-ADR adopted @ `ebafdb0c` + user reviewer 2026-05-29 directional guidance(4 条)。Branch: `v0.2.0-q-fi-form-i-decision-2026-05-29`。Commit: TBD post-stage |
+| 2026-05-29 | proposed | ADR-FI drafted | 4 Qs(Q6 docs-only / Q7 internal `_DataMember` / Q8 alpha breaking + migration / Q9 dual-layer)。基于 meta-ADR adopted @ `ebafdb0c` + user reviewer 2026-05-29 directional guidance(4 条)。Branch: `v0.2.0-q-fi-form-i-decision-2026-05-29`。Commit: `67d9359d` |
+| 2026-05-29 | proposed | ADR-FI amended(P1/P2 fixes,still proposed)| User reviewer post-draft review(同日)返回 3 findings:(P1)Q9 §4.4.3 anti-bypass framing 与 §4.4.2 调用边界冲突 — 改为 dual-layer 仅覆盖 schema 声明错误 + application/SDK write path caller 错误;protocol / ledger direct path 列为 caller contract 外。(P2-1)`Identity(primary_key=...)` 缺正式锁 — 新增 §4.3-bis Identity descriptor surface alignment(alpha breaking 同 §4.3 pattern;`primary_key` / `default` / `default_factory` 全去)。(P2-2)`re.fullmatch(pattern, str(value))` 类型绕过风险 — 改为先 `isinstance(value, str)` guard。同步 cascade: §1.2 grouping note / §2 Scope table(4→5 sub-decisions) / §4.5 cross-Q summary / §5 rejected alternatives(+2 §4.3-bis-specific 项 + Q9 alternative wording 修正) / §6.2 shipped code citations(扩 Identity descriptor 行范围) / §6.4 design-point citations(+§8.1 / §5.2 INV-7a + 修正所有行号) / §7.2 follow-up(grep 4 类 kwarg) / §7.4 no-retroactive boundary(+§4.3-bis + Slice 5+ caller-contract supersede note) / §8 Acceptance Criteria(+§4.3-bis post-adoption check + §4.4.2 type-bypass check + 两条 proposed-stage check)。 |
