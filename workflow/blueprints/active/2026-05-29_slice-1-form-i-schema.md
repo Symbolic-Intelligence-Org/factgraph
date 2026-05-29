@@ -234,10 +234,16 @@ No structural change required — `_validate_predicates` does not reject unknown
 - `build_schema_index`:drop default-field reads;construct simplified `IdentityFieldInfo`;populate `PredicateInfo.enum_values / pattern` from compiled schema_ir
 - `resolve_selector`:drop `allow_identity_defaults` propagation
 
-### 5.7 Protocol layer cleanup(`application/protocol/schema_runtime.py`)
+### 5.7 Protocol layer cleanup(`application/protocol/schema_runtime.py`)+ entity_view.py
 
 - `EntitySelector.allow_identity_defaults` frozen field(line 23)+ validation(line 29):**remove**
 - All `EntitySelector(...)` construction sites that pass `allow_identity_defaults=True/False` updated to drop kwarg
+- **All shipped `allow_identity_defaults=...` call sites**(Step 0.3 exhaustive grep):
+  - `sdk/facade.py:560` bind mode `True`(per §5.9)
+  - `sdk/facade.py:617` query mode `False`(per §5.9)
+  - **`application/entity_view.py:332` `allow_identity_defaults=False`**(Step 0 finding — query-mode pattern,preflight 漏掉一处)
+  - `application/schema_runtime.py:283,315,326,347,381` `materialize_identity` 系列(per §5.6)
+- All 5 callsites同步 drop;Tests:`test_application_schema_runtime.py` + `test_application_entity_write.py` + `test_application_entity_view.py` 三 file 含 `allow_identity_defaults` 引用,Step 1 fixture migration 覆盖
 
 ### 5.8 SDKStore.ref parallel default path(`sdk/store.py:1868-1918`)
 
@@ -275,15 +281,32 @@ Per Scope Freeze #3(L7 lock — same-Identity-field-match only):
   - **NO** implicit single-field → full-bundle expansion
   - Reject ambiguity → explicit error message points to future entity-equality primitive(out of Slice 1 scope)
 
-### 5.12 Derivation compile rewrite(`authoring/derivation_compile.py`)
+### 5.12 Derivation compile rewrite(`authoring/derivation_compile.py`)— **SF4 Option C**(post-Step-0 lock)
 
-Per Scope Freeze #4(L8 lock — head may not include any Identity field):
+Per Scope Freeze #4(L8 lock — head may not include any Identity field + Step 0 verdict Option C):
 
-- `_identity_field_names:555-590+` rewrite:return single `identity_fields: list[str]` not `(primary_keys, non_primary)` tuple
-- `203, 276` consumers updated to single-list shape
-- `204-207, 580` head-body validation:"head must not include any Identity field"(Option A)
-- `632` error message rewritten to anchor-bundle terms
-- **Pre-impl grep**(Step 0):find all shipped derivation rules where head body includes any Identity field;catalog as migration items(if 0 → Option A is free lunch)
+**Semantic shift**:shipped `(primary_keys, non_primary_identity)` 二分 → Form I 单一 `identity_fields: list[str]`;all-Identity = anchor-bundle = body-binding-only;head **forbids all Identity fields**;**cross-coordinate disambiguation moves to body**(Option C)。Derivation compiler 必须从 body uniquely determine target entity anchor bundle;**ambiguous binding → reject**。
+
+- `_identity_field_names:555-584` rewrite:return single `identity_fields: list[str]` not `(primary_keys, non_primary)` tuple
+- `_lower_field_head_with_schema:203-253`(field head form):
+  - Drop `non_primary_identity` required check(lines 212-217 deleted — under Form I 没有 non-primary 区分)
+  - Forbid any identity_field in head kwargs(lines 204-210 extended)
+  - `allowed = set(value_keys)` only(drop `set(non_primary_identity)` from line 235)
+  - `_infer_unique_entity_binding_var` call 不再传 `non_primary_identity` 字典(line 247-249)
+- `_lower_entity_head_with_schema:276-289`(entity head form):
+  - Drop primary_key 检查(line 276-283)→ forbid any identity_field in head kwargs
+  - `role_specs` 不变(Field positions still required)
+- `_infer_unique_entity_binding_var:587+` rewrite:
+  - 必须 uniquely determine entity binding from body
+  - 当 multiple bindings 出现且无法 disambiguate(原 via head non-primary terms;现 head 无 Identity 可用)→ **reject with explicit error** "ambiguous entity binding: body contains multiple {entity_type} bindings;cross-coordinate disambiguation must occur within body via Identity field constraints"(per Option C)
+  - 632 error message rewritten:"where body must uniquely bind the {entity_type} entity anchor bundle"
+- **Ambiguity reject path explicit**:per Option C "不能唯一确定就 reject" — `_disambiguate_entity_binding_with_head_terms`(line 636)不再 fallback 到 head 的 Identity terms(它们都被 forbid 了);ambiguity case 直接 reject
+
+**ECSS test migration**(per Step 0 verdict 2026-05-29):
+- `src/domains/ecss/tests/test_phase3_contracts_v1.py:177-221` `test_head_primary_key_implicit_and_strict_compile_errors`:rewrite — primary_key concept gone;test 改 verify "head forbids any Identity"
+- `src/domains/ecss/tests/test_phase3_contracts_v1.py:268-288` `test_cross_coordinate_requires_explicit_non_primary_identity`:**delete or replace** — Form I 下"head must include non-primary Identity" 语义不存在;replace with Form I body-anchor binding test
+- 其他可能 derivation test sites:Step 0.1 grep 已 catalog;Step 10 implementation 时再 sweep 一次最新 codebase
+- **不**改 `locale: str = Identity()` 为 Field(per Option C 不变 domain model)— ECSS schema 保持 `locale` 在 Identity bundle,只改 rule 表达把 locale 放 body
 
 ### 5.13 Write-time validation(`application/value_validation.py` NEW)+ **central path integration**(P1 #1 lock)
 
@@ -353,16 +376,21 @@ Per ADR-FI §4.4.2 explicit isinstance str-guard before `re.fullmatch` — type-
 | **SF1** | **Form I removes primary/default/default_factory semantics completely** — no zombie surface,no no-op stubs,no alias compatibility | ADR-FI §4.3 + §4.3-bis + reviewer lock 2026-05-29 |
 | **SF2** | **All Identity fields are immutable anchor-bundle members** — no primary vs non-primary distinction;identity bundle = all `Identity()` fields on Entity subclass | ADR-FI §4.3-bis + identity §8.1 |
 | **SF3** | **Cross-coordinate attribute equality may compare the same Identity field on the same entity type only** — no implicit full-bundle expansion;Field-to-Field / Identity-to-Field / different-Identity-field / **cross-entity-type same-name(`User.id == Order.id`)rejected**;full anchor-bundle equivalence is a future separate primitive | L7 reviewer lock 2026-05-29(含 P2 review 补充 cross-entity-type case)|
-| **SF4** | **Derivation heads may not include any Identity field** — Option A;pre-impl grep produces migration list if any shipped rule violates;rule semantics unchanged otherwise | L8 reviewer lock 2026-05-29 |
-| **SF5** | **Identity defaults removed end-to-end** — `EntitySelector.allow_identity_defaults` field + `materialize_identity` kwarg + `SDKStore.ref` default path + `SDKBatchTx` default fallback + facade bind logic + `_materialize_default_factory` helper all deleted | L9 reviewer lock 2026-05-29 |
-| **SF6** | **Historical/reference docs excluded from migration grep** — must migrate:`tests/`,`src/factgraph/sdk/docs/`,`docs/official/kernel/`,active design/decision/blueprint load-bearing references。Excluded:`workflow/heritage/`,`workflow/blueprints/archive/`,`docs/references/working/`,`docs/references/bridges/`(if not current implementation truth),**`workflow/audit/active/`**(默认不迁移,除非本 blueprint 显式列为 load-bearing)| L10 reviewer lock 2026-05-29 + P2 review 补充 |
+| **SF4** | **Derivation heads may not include any Identity field — Option C migration**:Step 0 grep confirmed shipped non-zero non-primary-Identity-in-head pattern(`derivation_compile.py:203-217` + ECSS `test_cross_coordinate_requires_explicit_non_primary_identity`)。L8 reviewer post-Step-0 verdict:**不放松 SF2/SF4**;cross-coordinate disambiguation **migrate to body / entity binding side**。Derivation compiler 必须 uniquely determine target anchor bundle from body;不能唯一确定 → reject(ambiguous binding error)。**Not** Option B(`Identity → Field` 改 domain model — 会改 idref_v1 anchor encoding)。ECSS test 重写为 Form I body-anchor binding;原 "head must include non-primary Identity" 测试 delete/replace。| L8 reviewer lock 2026-05-29 + Step 0 verdict 2026-05-29 |
+| **SF5** | **Identity defaults removed end-to-end** — `EntitySelector.allow_identity_defaults` field + `materialize_identity` kwarg + `SDKStore.ref` default path + `SDKBatchTx` default fallback + facade bind logic + **`application/entity_view.py:332 allow_identity_defaults=False`**(Step 0.3 finding,query-mode pattern)+ `_materialize_default_factory` helper all deleted | L9 reviewer lock 2026-05-29 + Step 0 finding 2026-05-29 |
+| **SF6** | **Historical/reference docs excluded from migration grep** — **migration scope**(per Step 0 reviewer verdict 2026-05-29 expansion):`tests/`,`src/factgraph/`(incl `sdk/docs/`),`src/service/`,`src/agent/`,`src/domains/`(**active runtime/source surface — descriptor breaking 后 import 阶段崩,必须 Step 1 breaking-atomic 迁移**),`docs/official/kernel/`,`tutorials/`(user-facing tutorial surface),`examples/`(non-archive subset only — **targeted migration,不得覆盖用户已有 dirty notebook 变更**;见 §6.2 dirty baseline guard),active design/decision/blueprint load-bearing references。**Excluded**:`workflow/heritage/`,`workflow/blueprints/archive/`,`workflow/design/design-points/archive/`,`docs/references/working/`,`docs/references/bridges/`(Step 0.4 verified non-load-bearing),`workflow/audit/active/`(默认不迁移),`examples/archive/`,`archive/`(repo root),`.claude/worktrees/`,`workflow/memory/`,根 `.ipynb` / `temp.md` / `demo.ipynb`,`tools/`(纯文本/注释引用,Step 0 verified 0 factgraph runtime imports — Step 1 breaking-atomic 不迁移;留 Slice 4 consolidated docs cleanup,**除非** future Step 0 discovery 发现 executable/runtime import path)| L10 reviewer lock 2026-05-29 + Step 0 verdict 2026-05-29 expansion |
 
-### 6.2 Compatibility constraints
+### 6.2 Compatibility constraints + dirty baseline guard
 
 - Sacred `master` `562c74195df43e933bed92a3ff25de94dd8ce666` 不动
 - Sacred `v0.1-oss-prep` 不动
 - Dirty baseline(4 M + 1 D + 2 untracked,unrelated to identity-as-claim)preserved through all commits
 - Branch lineage:每次 commit verify HEAD ancestor includes ADR-FI adopt `b288ea9e` + ADR-DOCS adopt `bb6a2c90` + synthesis `d0036e1f` + cross-check `7fc11e81`
+- **Dirty notebook guard**(Step 0 reviewer 2026-05-29 verdict):`examples/` 下当前有 unrelated dirty notebooks(`examples/01_sdk_check_diagnose.ipynb`,`examples/02_overlay_why_not_frontier.ipynb`,`examples/archive/01_sdk_basics.ipynb`)— 已 modified 状态属于 dirty baseline。Step 1 examples migration **必须 targeted**:对每个含 `Field(cardinality=)` / `Identity(primary_key=)` 的 examples/ file:
+  - 若 file 在 dirty baseline 中(已 modified)→ **NOT** 直接覆盖;先 stash dirty change → 迁移 → 恢复 stash → manual reconcile
+  - 若 file 不在 dirty baseline 中 → 正常 migrate
+  - **绝对禁止** 覆盖 user 已有 notebook output / metadata 变更
+  - 实施时 use `git stash push -- <file>` + apply migration + `git stash pop` 模式
 
 ### 6.3 Q-PR1 / Slice 5 carve-out invariant
 
@@ -437,6 +465,8 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 
 - [ ] `EntitySelector.allow_identity_defaults` field removed from frozen dataclass
 - [ ] All `EntitySelector(...)` construction sites updated(grep verified zero remaining references)
+- [ ] **`application/entity_view.py:332` `allow_identity_defaults=False` removed**(Step 0.3 finding)
+- [ ] Final grep `allow_identity_defaults` across `src/`:returns 0 hits
 
 ### 7.6 SDKStore.ref second default path(L9 reviewer addition)
 
@@ -467,8 +497,13 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
   - [ ] Reject:`attr_eq(User.name, Order.name)` cross-entity-type Field-to-Field
   - [ ] Error message points to future entity-equality primitive(out of Slice 1 scope)
 - [ ] `derivation_compile.py:_identity_field_names` returns single list
-- [ ] `derivation_compile.py` head-body validation rejects any Identity field in head
-- [ ] Pre-impl grep migration list for shipped Identity-headed derivation rules(0 expected;flag for review if > 0)
+- [ ] `derivation_compile.py` head-body validation rejects any Identity field in head(both field head form `_lower_field_head_with_schema` + entity head form `_lower_entity_head_with_schema`)
+- [ ] **`derivation_compile.py:_infer_unique_entity_binding_var` rejects ambiguous body binding with explicit error**(Option C — "cross-coordinate disambiguation must occur within body via Identity field constraints")
+- [ ] **ECSS test migration verified**:
+  - [ ] `src/domains/ecss/tests/test_phase3_contracts_v1.py:177-221` rewritten — primary_key concept gone;verify Form I "head forbids any Identity"
+  - [ ] `src/domains/ecss/tests/test_phase3_contracts_v1.py:268-288` deleted or replaced with Form I body-anchor binding test
+  - [ ] `locale: str = Identity()` **NOT** converted to Field(per Option C domain model preservation)
+- [ ] Step 0.1 grep migration items(beyond ECSS,if any)— each rewritten per Option C body-binding(no rule semantics drift)
 
 ### 7.9 Write-time validation(G3)— central path coverage(P1 #1 lock)
 
@@ -546,6 +581,22 @@ Implementation should land in **smaller batches per `feedback_smaller_batch_desi
 
 Pause 形式:audit log 加 "blocker" 行 → 退回 Stage 4 blueprint amend → reviewer 确认后再继续 Step 1。
 
+**Step 0 — executed 2026-05-29 @ `53745c02`**(audit log "Step 0 pre-impl grep findings" row 详)。
+- Trigger 0.1 **fired** — shipped `derivation_compile.py:203-217` + ECSS `test_phase3_contracts_v1.py:268-288` 强制 non-primary-Identity-in-head;Form I 下 illegal
+- Trigger 0.2 **partial fire** — `Identity(default=)` 在 expected scope 内(tests 6,blueprints active 3,decisions 1,official 1,EXCL 范围 4),无非预期 directory;但 **SF6 scope 必须扩展**:sibling packages `src/service/`(3F+3I), `src/agent/`(1F+1I), `src/domains/`(0F+1I) 使用 factgraph imports,Step 1 descriptor breaking 后 import 阶段崩 → 已纳入 SF6 migrate scope
+- Trigger 0.3 **minor fire** — `application/entity_view.py:332 allow_identity_defaults=False` 未在 preflight 列出 → 已纳入 §5.7 + §7.5 + SF5
+- Trigger 0.4 **not fired** — `docs/references/bridges/` 2 files,6 active workflow 引用全为 historical context(per `q1-docs-workflow-split.md` "parked deferred subtrees");verified non-load-bearing → SF6 conditional exclude 适用
+
+**Step 0 reviewer verdict 2026-05-29**(post-finding amend):
+- L8/SF4 → **Option C**(head 不可含任何 Identity;cross-coordinate disambiguation migrate to body / entity binding;ambiguous binding → reject)。详 §5.12 + §6.1 SF4
+- SF6 expansion → sibling packages + tutorials + examples non-archive。详 §6.1 SF6
+- SF5 → 含 entity_view.py。详 §5.7 + §6.1 SF5
+- bridges/ → SF6 conditional exclude 确认
+- examples/archive/ exclude;tools/ exclude(无 runtime imports;留 Slice 4)
+- examples/(non-archive)dirty notebook guard:targeted migration,stash dirty change → migrate → restore stash(详 §6.2 dirty baseline guard)
+
+Step 0 amendment commit landed before Step 1 implementation 启动。
+
 ### Step 1 — Descriptor surface + annotation plan + atomic test/example fixture migration(`sdk/schema.py` + tests/ + Entity-using docs)— **breaking-atomic commit**
 
 **重要框架**(P2 review 锁定):Step 1 是 **breaking-atomic** commit — descriptor signature change 必须跟所有使用旧 API 的 fixture / example 在同一 commit 落地,否则 Step 1 commit 后 Step 2-13 期间 Python import 阶段 tests 大量崩,无法做 per-commit verification。具体范围 = Step 0.2 grep 结果 catalog 内所有 callsite,**排除** SF6 excluded directories。
@@ -557,15 +608,20 @@ Pause 形式:audit log 加 "blocker" 行 → 退回 Stage 4 blueprint amend → 
 - 1.5 Rewrite `Field.__init__` to `(*, description, pattern, **legacy_kwargs)` + `_inferred_cardinality` storage + read-only `cardinality` property
 - 1.6 Update `Identity.to_authoring` + `Field.to_authoring` to take `_AnnotationPlan`
 - 1.7 Update `EntityMeta.__new__` + `RelationshipMeta.__new__` to write back `_inferred_cardinality` before `to_authoring`
-- **1.8 Atomic test fixture migration**(per Step 0.2 catalog,排除 SF6 excluded directories):
+- **1.8 Atomic test + sibling-package fixture migration**(per Step 0.2 catalog + Step 0 SF6 expansion):
   - `tests/`:全部 `Field(cardinality="single")` → `Field()` + annotation;`Field(cardinality="multi")` → `Field()` + `: list[T]` annotation;`Identity(primary_key=True)` → `Identity()`;`Identity(default=...)` → callers supply explicit identity values
-  - 排除:`workflow/heritage/`,`workflow/blueprints/archive/`,`docs/references/working/`,`docs/references/bridges/`(per Step 0.4 verdict),`workflow/audit/active/`(默认)
+  - **`src/service/`**(3F+3I per Step 0):`_certainty_service.py`,`runtime_v1.py`,`rules_v1.py`,`static_ui.py`,`tests/test_runtime_query_policy.py`,`tests/test_problog_semantic_annotation_l4.py`,`tests/test_problog_candidate_evidence_tree.py` 等同 migrate
+  - **`src/agent/`**(1F+1I per Step 0):`session.py`,`tools/_entity_ref.py`,`tests/test_agent_*.py` 等同 migrate
+  - **`src/domains/`**(0F+1I per Step 0):`ecss/tests/test_phase3_contracts_v1.py` 等同 migrate(本步只改 schema fixture;rule head 重写 belong to Step 10 ECSS migration)
+  - **`tutorials/`**(1F+1I per Step 0):tutorial files
+  - **`examples/`(non-archive only)**:per §6.2 dirty notebook guard — `git stash push -- <file>` → migrate → `git stash pop` → manual reconcile 模式
+  - 排除:`workflow/heritage/`,`workflow/blueprints/archive/`,`workflow/design/design-points/archive/`,`docs/references/working/`,`docs/references/bridges/`(per Step 0.4 verdict),`workflow/audit/active/`,`examples/archive/`,`archive/` repo root,`.claude/worktrees/`,`workflow/memory/`,`tools/`(per Step 0 verdict — 留 Slice 4),根 `.ipynb` / `temp.md` / `demo.ipynb`
 - **1.9 Atomic Entity-using load-bearing doc example migration**:
   - `src/factgraph/sdk/docs/04_api_surface.en.md` Entity class examples that use old API
   - `docs/official/kernel/quickstart/*.md` Entity class examples that use old API
   - `workflow/design/design-points/active/identity-mechanism-redesign.zh.md` Entity class examples that use old API
   - **不**包括 NEW Form I overview content(那是 Step 12)— 仅迁移现有 example code
-- **1.10 Atomic active design/decision/blueprint Entity example migration**(若 Step 0.2 grep 发现非零 callsite — 通常 0 或个位数)
+- **1.10 Atomic active design/decision/blueprint Entity example migration**(若 Step 0.2 grep 发现非零 callsite — 4 blueprints active + 3 decisions per Step 0;通常 historical context 只 cite,无需迁移;每 file 独立 verify 是 load-bearing 还是 historical reference)
 - 1.11 Tests for new Form I descriptor surface(positive + 全部 negative cases — `Field(cardinality=)` reject / `Identity(primary_key=)` reject / `Identity(default=)` reject / `Identity(default_factory=)` reject / `Field(pattern=...)` syntax check / float Literal enum reject / Optional reject / Union reject / dict reject)
 - 1.12 **Verify green branch**: `pytest` 全 pass 在 commit 前 — 任何 import-time failure / fixture failure 必须解决后才能 commit
 - 1.13 — commit boundary(breaking-atomic Step 1 close)
@@ -635,14 +691,21 @@ Pause 形式:audit log 加 "blocker" 行 → 退回 Stage 4 blueprint amend → 
 - 9.4 Rewrite cross-coordinate comparison validation at 247-282 per SF3:same-Identity-field-match only;reject Identity-to-Field / Field-to-Field / different-Identity-field with explicit error pointing to future entity-equality primitive
 - 9.5 Tests covering all reject cases — commit boundary
 
-### Step 10 — Derivation compile rewrite(`authoring/derivation_compile.py`)— **SF4 enforced**
+### Step 10 — Derivation compile rewrite(`authoring/derivation_compile.py`)— **SF4 Option C enforced**
 
-- 10.1 Rewrite `_identity_field_names` to single-list shape
-- 10.2 Update consumers at 203, 276 to single-list
-- 10.3 Head-body validation rejects any Identity field in head(Option A)
-- 10.4 Error message rewritten to anchor-bundle terms at 632
-- 10.5 If pre-impl grep(Step 0.1)found migration items,land migrations in same commit
-- 10.6 Tests — commit boundary
+- 10.1 Rewrite `_identity_field_names:555-584` to return single `identity_fields: list[str]`(drop primary/non-primary tuple)
+- 10.2 Update consumers at lines 203, 276 to single-list shape
+- 10.3 Head-body validation:**both** `_lower_field_head_with_schema` + `_lower_entity_head_with_schema` reject any Identity field in head(Option C — strict)
+- 10.4 `_lower_field_head_with_schema`:drop non-primary-required check(lines 212-217);drop `set(non_primary_identity)` from `allowed`(line 235);drop non-primary terms from `required_field_terms`(lines 247-249)
+- 10.5 `_infer_unique_entity_binding_var:587+`:**Option C ambiguity reject** — multiple bindings without disambiguation path → reject with explicit error "ambiguous entity binding: body contains multiple {entity_type} bindings;cross-coordinate disambiguation must occur within body via Identity field constraints"
+- 10.6 `_disambiguate_entity_binding_with_head_terms`(line 636)removed or unused(no head Identity terms to disambiguate with)
+- 10.7 Error message at line 632 rewritten:"where body must uniquely bind the {entity_type} entity anchor bundle"
+- **10.8 ECSS test migration**(Step 0 pre-impl grep + Step 0 reviewer verdict):
+  - `src/domains/ecss/tests/test_phase3_contracts_v1.py:177-221` `test_head_primary_key_implicit_and_strict_compile_errors`:rewrite to "head forbids any Identity"(primary_key concept removed)
+  - `src/domains/ecss/tests/test_phase3_contracts_v1.py:268-288` `test_cross_coordinate_requires_explicit_non_primary_identity`:**delete or replace** with Form I body-anchor binding test;同时 add a new test `test_ambiguous_body_binding_rejected_under_form_i` verifying Option C ambiguity reject path
+  - **NOT** convert `locale: str = Identity()` to Field(per Option C domain model preservation;ECSS schema 保持 locale 在 anchor bundle)
+- **10.9 Beyond-ECSS derivation migration**(Step 0.1 catalog confirmation):re-sweep all `Rule(head=...)` definitions in `tests/` + `src/service/tests/` + `src/agent/tests/`(per SF6 expansion):any rule with previous non-primary Identity in head 转 body 表达 + 验证 reject ambiguous path
+- 10.10 Tests covering Option C semantics — commit boundary
 
 ### Step 11 — Write-time validation module(`application/value_validation.py` NEW)+ **central path integration**(P1 #1 lock)
 
@@ -713,22 +776,29 @@ Pause 形式:audit log 加 "blocker" 行 → 退回 Stage 4 blueprint amend → 
 - Other quickstarts(`read-write.md` / `assertions.md` / etc.)cross-doc terminology consistency,5-pass polish per ADR-DOCS §4.3
 - Module-wide migration note placement consolidation
 
-### 9.4 Excluded(per SF6 — 必须迁移之外 = 排除范围)
+### 9.4 Excluded(per SF6 — 必须迁移之外 = 排除范围;Step 0 verdict 2026-05-29 expansion)
 
-**Unconditional exclude**:
+**Unconditional exclude**(historical / scratch / transient / non-runtime):
 - `workflow/heritage/` — legacy 历史材料
 - `workflow/blueprints/archive/` — 归档蓝图
+- `workflow/design/design-points/archive/` — 归档 design-points
+- `workflow/audit/active/` — 默认不迁移,除非本 blueprint 显式列为 load-bearing(本 Slice 1 无此项)
+- `workflow/memory/` — memory 历史
 - `docs/references/working/` — working scratch
-- `workflow/audit/active/`(P2 review 补充)— 默认不迁移,除非本 blueprint 显式列为 load-bearing(本 Slice 1 无此项)
+- `examples/archive/` — archived examples
+- `archive/`(repo root)— legacy archived code
+- `.claude/worktrees/` — transient worktree copies
+- 根 `.ipynb` / `temp.md` / `demo.ipynb` / `test.ipynb` — 临时工作文件
+- `tools/`(Step 0 verified 0 factgraph runtime imports — 纯文本/注释 callsites,留 Slice 4 consolidated docs cleanup;除非 future Step 0 discovery 发现 executable/runtime import path)
 
-**Conditional exclude — `docs/references/bridges/`**(per Step 0.4 explicit checklist):
-- [ ] Step 0.4 列出所有 `docs/references/bridges/*` files
-- [ ] 对每个 file:check 是否被 `src/factgraph/` 或 `workflow/design/decisions/active/` 或 `workflow/blueprints/active/`(`Implementing/Implemented` state)引用
-- [ ] 0 references → mark `historical/reference, not load-bearing` → SF6 excluded(本 blueprint 默认假设)
-- [ ] ≥1 reference → flag as load-bearing → SF6 migration required(amend §9.1 + Step 1.9)
-- [ ] 决策记录在 audit log Step 0 outcome
+**Conditional exclude — `docs/references/bridges/`**(per Step 0.4 verdict — 已 verified non-load-bearing):
+- 2 files in bridges/:`factpy-kernel-report-audit-2026-04-20.md`,`symir-blueprint-extraction.md`
+- 6 active workflow 引用(`q1-docs-workflow-split.md` + `oss-prep-v0.1.md`/`.audit.md` + `runtime-authority-cleanup.md` + this blueprint + audit log)全部 historical context
+- `q1-docs-workflow-split.md` 显式 "parked deferred subtrees until future obsidian-integration slice"
+- Verdict:**non-load-bearing**,SF6 conditional exclude 适用,无 migration 需求
+- Step 0 evidence recorded in audit log @ `53745c02`
 
-**禁止 grep acceptance 被历史材料绑架** — Step 12.4 final grep 只在 migration scope 内 verify(per SF6 inclusion)。
+**禁止 grep acceptance 被历史材料绑架** — Step 12.4 final grep 只在 migration scope 内 verify(per SF6 inclusion 表)。
 
 ## 10. Outcome / Deviations
 
