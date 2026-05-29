@@ -67,7 +67,7 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 | Q5a 的具体 enforcement layer 选择(application 层 SDK shell vs protocol 层 set_field)| Q5a ADR 本体 |
 | Q5b 的具体 emission exception 路径设计(internal-only API vs special pred_id whitelist 等) | Q5b ADR 本体 |
 | Slice 3b 各 Q 的具体技术答案(claims.rest_terms 是否保留;revoke-as-claim 编码;claim_meta 替代深度)| Q15 ADR 本体(per user reviewer P2 收紧) |
-| Q4 在 Step 1 内 INV-9 "weak" enforcement 的具体实施(set_field 是否加 warning?是否记录 known-exception list?)| Q4 ADR 本体 |
+| Q4 在 Step 1 / Slice 5 的 INV-9 enforcement timing 具体实施(Slice 3b 是否加 runtime check?Slice 5 strict check 放在哪一层?)| Q4 ADR 本体 |
 | Q1-Q17 任何 Q 的具体技术决策 | 各 Q 的 ADR 本体 |
 | Stage 3 synthesis 内容 + Stage 4 blueprint slice design | Stage 3 / Stage 4 |
 
@@ -99,7 +99,7 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 |---|---|---|---|
 | **ADR-FI**(Form I)| Q6 / Q7 / Q8 / Q9 | Form I cluster | 4 Qs 都改 `_DataMember` + descriptor 形态;acceptance criteria 紧耦合(`_DataMember` public exposure 决策 + cardinality 推断 + Literal 枚举 + pattern 规约 4 项必须协同) |
 | **ADR-IC**(Identity-as-Claim core)| Q1 / Q2 / Q3 | Identity-as-Claim cluster | 3 Qs 形成 implementation chain:Q2(emission layer)→ Q3(pred_id set cache)→ Q1(Layer 2 boundary check);分离会让 INV-7c 实施 split-brain |
-| **ADR-INV9**(Q4 — INV-9 weak enforcement)| Q4 | System namespace cluster(part)| 独立 — INV-9 enforcement scope 跟 PyReason adapter rewrite 时机绑定(per §4.4),独立 ADR 锁 Step 1 wood line |
+| **ADR-INV9**(Q4 — INV-9 enforcement timing)| Q4 | System namespace cluster(part)| 独立 — INV-9 enforcement scope 跟 PyReason adapter rewrite 时机绑定(per §4.4),独立 ADR 锁 Step 1 / Slice 5 boundary |
 | **ADR-SYS-A**(Q5a — user-facing reservation)| Q5a(新拆)| System namespace cluster | 独立 — Q5a 跟 ADR-API 的 namespace migration 深度耦合,但 acceptance criteria 独立(rejection check 是 protocol concern not namespace concern) |
 | **ADR-SYS-B**(Q5b + Q15 — internal revokes + ledger migration)| Q5b(新拆)+ Q15 | System namespace cluster + Ledger migration cluster | **合并** — Q5b 的 internal `__system__.revokes` emission 是 Q15 ledger migration 不可分割的一部分;`__system__.revokes` 编码在 n-ary vs unary rest_terms 上的选择就是 Q15 核心议题 |
 | **ADR-API**(API surface migration)| Q10 / Q11 / Q12 / Q13 / Q14 | API namespace cluster | 5 Qs 都是 API surface 重组;acceptance criteria 集中在 backward-compat strategy 和 breaking timing,同 slice + 同 ADR 高效 |
@@ -119,7 +119,7 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 | Q15-sub | Acceptance boundary 问题 | 决策落在 |
 |---|---|---|
 | **Q15.1** | claims 表 `rest_terms` 列是否在 Slice 3b 内删除?vs 留到 Step 2+ adapter rewrite slice(per §4.4 Q4 隔离)| ADR-SYS-B §4 |
-| **Q15.2** | `__system__.revokes` Claim 在当前 n-ary `rest_terms` schema 上如何编码?(临时 1-elem rest_terms 包装 vs Slice 3b 同步引入 value+value_tag 双列 + INV-9 weak enforce)| ADR-SYS-B §4 |
+| **Q15.2** | `__system__.revokes` Claim 在当前 n-ary `rest_terms` schema 上如何编码?(临时 1-elem rest_terms 包装 vs Slice 3b 同步引入 value+value_tag 双列;INV-9 enforcement timing 由 ADR-INV9 决定)| ADR-SYS-B §4 |
 | **Q15.3** | `claim_meta` 跟 shipped `meta_rows` / `annotation_rows` 关系?(纯重命名;合并 annotation_rows 进 claim_meta + 加 namespace/category 字段;完全替代 + annotation_rows 删)| ADR-SYS-B §4 |
 | **Q15.4** | `ingest_keys` 表在 Slice 3b 内是否删除?vs 留到 cleanup slice | ADR-SYS-B §4 |
 | **Q15.5** | Slice 3b 的 Stage 4 blueprint acceptance criteria 的"完成"定义:(a)所有 Q15.1-Q15.4 落地;(b)子集落地 + 剩余明确 Step 2+ 转;(c)其他形态 | ADR-SYS-B §4 + Slice 3b blueprint |
@@ -135,25 +135,25 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 
 **锁定**:Step 1(Slice 1 + Slice 2 + Slice 3a + Slice 3b + Slice 4)**不**被 PyReason adapter rewrite(Q-PR1 / Slice 5+)阻塞。具体 separation contract:
 
-#### 4.4.1 Step 1 INV-9 enforcement scope:**layered weak enforcement**
+#### 4.4.1 Step 1 INV-9 boundary:**structural unary for new paths;no protocol runtime check**
 
-**关键 framing**:Step 1 unary 约束**由 SDK/application 层新入口保证**;ledger/protocol 层 strict assertion **延后到 Slice 5+**(adapter rewrite 后)。两层分工避免 ledger 层为现存 PyReason adapter n-ary 写入立即报错。
+**关键 framing**:Step 1 unary 约束对**新增 user-facing write paths**通过 API shape / value+value_tag construction 保证;`write_protocol` / ledger 层 runtime strict check **延后到 Slice 5+**(adapter rewrite 后)。两层分工避免 protocol/ledger 层为现存 PyReason adapter n-ary 写入立即报错。
 
 | Layer | Step 1 内 INV-9 enforcement |
 |---|---|
-| **SDK shell layer** — `fg.fields.set` / `fg.fields.add` / `fg.entities.create` / `fg.assertions.write` 等 Slice 3a 引入的 user-facing write paths | **必须 enforce(strict at this layer)** — 写入前 check `len(rest_terms) <= 1` 或等价 value-single 形态约束;违反时 raise `SDKStoreError` |
-| **Application layer write protocol** — application 层调用 ledger 路径的中间层(若 Slice 3a/3b 引入)| **必须 enforce(strict at this layer)** — 跟 SDK shell 同步,防 internal mis-routing 写 n-ary |
-| **Ledger / protocol layer** — `set_field` / `add_field` / `ledger.append_assertion` | **不 enforce strict**(Step 1)— 接受 n-ary rest_terms 不报错;Slice 5+ adapter rewrite 完成后才加 strict `assert len(rest_terms) <= 1` |
+| **SDK shell layer** — `fg.fields.set` / `fg.fields.add` / `fg.entities.create` / future user-facing write paths | **必须 expose only unary/value-oriented input shapes** — user 不可 supply n-ary `rest_terms`;违反跨层调用 contract 时 raise `SDKStoreError` |
+| **Application layer NEW write paths** — Identity Claim emission / `__system__.revokes` emission / new field writes | **construct unary value+value_tag rows by construction** — NEW paths hardcode `rest_terms=[]` or do not expose `rest_terms`;不加 blanket `len(rest_terms)` runtime check |
+| **Protocol / Ledger legacy layer** — `set_field` / `add_field` / `ledger.append_assertion` | **不加 runtime strict check**(Step 1/Slice 3b)— 接受 legacy n-ary `rest_terms`;Slice 5 adapter rewrite 完成后才在 write_protocol ingress 加 strict check + DTO/SQL type-level enforce(per ADR-INV9) |
 | **PyReason adapter** — `_edge_rest_terms` n-ary 输出 | **adapter-only known temporary exception** — 唯一 authorized n-ary writer 直到 Slice 5+ |
 
 **Slice 3b 同步引入**:claims 表的 value + value_tag 双列(Q15.2 决策决定时序);schema 形态上准备好接收 unary Claim,但**不**在 protocol 层加 strict assertion。
 
-**Step 1 内不存在 layer-conflict**:任何**新增**的 user-facing 路径(Slice 3a 引入)在 SDK shell 层强制 unary;**现存** PyReason adapter 的 n-ary 写入路径继续工作,因为 ledger/protocol 层不 strict。两层分工不冲突。
+**Step 1 内不存在 layer-conflict**:任何**新增**的 user-facing 路径(Slice 3a 引入)不暴露 n-ary input;**现存** PyReason adapter 的 n-ary 写入路径继续工作,因为 protocol/ledger 层不加 runtime strict check。两层分工不冲突。
 
 #### 4.4.2 Slice 5+(Step 2+)PyReason adapter rewrite 触发的 strict enforcement
 
 - Q-PR1 PyReason adapter rewrite 完成(`_edge_rest_terms` 重写为 unary Relationship Claim lowering)
-- 完成后:`set_field` / `add_field` 加 strict enforcement `assert len(rest_terms) <= 1`
+- 完成后:`write_protocol` ingress 加 strict enforcement `assert len(rest_terms) <= 1`,并同步 drop `Claim.rest_terms` DTO field + SQL `claims.rest_terms` column(per ADR-INV9 + ADR-SYS-B)
 - 同步:删除"adapter-only known exception"标记
 
 #### 4.4.3 隔离硬约定
@@ -161,7 +161,7 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 | 项 | Step 1 内允许 | Step 2+ 必须 |
 |---|---|---|
 | n-ary rest_terms 写入 | ✅ PyReason adapter only;documented exception | ✗ 删除 exception |
-| INV-9 strict enforcement | ✗ weak only | ✅ strict assert |
+| INV-9 runtime strict enforcement | ✗ 不加 protocol/runtime strict check;NEW user-facing paths 结构性 unary | ✅ write_protocol ingress strict + DTO/SQL type-level enforce |
 | user-facing n-ary write paths | ✗ 禁止 | — |
 | Q-PR1 adapter rewrite | ✗ Step 1 不做 | ✅ Slice 5+ 主体 |
 | Step 1 任何 ADR 等 Q-PR1 | ✗ **零 ADR 等 Q-PR1**(本约定保证) | — |
@@ -210,7 +210,7 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 - **Why rejected**(per user critical guidance):
   - 让 Step 1 被 PyReason adapter rewrite 阻塞 — adapter rewrite 是 multi-week 的复杂工作,会让整个 Step 1 拖延
   - PyReason adapter rewrite 涉及 PyReason native model → ledger Claim 的 lowering 路径设计,跟 Step 1 identity-as-claim 实质无关
-  - 用 §4.4 weak enforcement + adapter-only exception 是 well-defined 妥协,既保护 Step 1 进度又锁定 Step 2+ strict 目标
+  - 用 §4.4 "NEW paths structurally unary + legacy protocol no runtime strict + adapter-only exception" 是 well-defined 妥协,既保护 Step 1 进度又锁定 Step 2+ strict 目标
 
 ## 6. Supporting Evidence
 
@@ -281,7 +281,7 @@ User Phase 4 review 明确:**不急合并 Qs**。本 ADR 沿用此原则 — gro
 - [x] §4.1 Q5 → Q5a + Q5b split 表清晰描述
 - [x] §4.2 8 个 ADR docs grouping table 完整(每行有 涵盖 Qs / Cluster / Rationale)
 - [x] §4.3 Slice 3b 5 个 Q15.1-Q15.5 acceptance boundary 问题列出,且明确不锁具体答案
-- [x] §4.4 Q4 + Q-PR1 separation contract 含 weak/strict enforcement + adapter-only exception + Step 1 zero-blocker hard rule
+- [x] §4.4 Q4 + Q-PR1 separation contract 含 NEW paths structurally unary / protocol runtime strict delayed / adapter-only exception / Step 1 zero-blocker hard rule
 - [x] §5 至少 4 个 Rejected alternatives 含 Option A / Option C / Option B-prime / Option 3-tech-detail / Option 4-no-separation(实际 5 个)
 - [x] §6 audit + shipped code + CADENCE precedent + user reviewer feedback citations 完整
 
@@ -299,3 +299,4 @@ post-adoption verification:
 | 2026-05-29 | proposed | Meta-ADR drafted | Sub-issues 1-4 锁定;基于 audit Status: complete @ `aa50332d` + user reviewer P2 findings;Q grouping = Option B Moderate(8 ADRs);Slice 3b boundary granularity 不锁技术细节(留 Q15 ADR);Q4 + Q-PR1 separation contract Step 1 zero-blocker hard rule。Commit: `278c9d3e` |
 | 2026-05-29 | proposed | Amended P1+P2 wording per user reviewer | P1:§4.1 Q5b row 去除 implementation 锁定,改为 "可能机制" 列举不锁;P2-1:§4.4.1 重写为 4-layer enforcement table,明确 SDK/application strict + ledger/protocol delayed to Slice 5+;P2-2:§4.1 Q5a row 加 "仅保留 namespace 不定义 revokes payload" 显式 disclaim。No structural changes. Commit: `54c3c87d` |
 | 2026-05-29 | **adopted** | Meta-ADR adopted | User reviewer "先做 P1 wording fix,然后可以 adopt" — wording fixes landed at `54c3c87d`;direction unchanged;ready as binding constraint for Stage 2 normal ADR work。§7.2 follow-up actions 开始(audit doc Q list Q5 split 同步先做)|
+| 2026-05-29 | adopted | Stage 2 cross-check consistency amendment | Cross-check after all 9 ADRs adopted found §4.4 still used "weak enforcement" wording while ADR-SYS-B + ADR-INV9 had refined the boundary to:NEW user-facing paths are structurally unary, protocol/ledger runtime strict check stays delayed, and Slice 5 adds write_protocol ingress strict check + DTO/SQL type-level enforce. Updated §4.2 / §4.3 / §4.4 / §8 wording only;no grouping, dependency, or slice-boundary decision changed. Commit:TBD post-stage |
