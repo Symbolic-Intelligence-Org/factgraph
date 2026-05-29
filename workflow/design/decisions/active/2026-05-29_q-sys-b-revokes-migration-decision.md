@@ -143,12 +143,14 @@ fg.assertions.retract(asrt_id)
 write_protocol.append_revocation_claim(ledger, revoked_asrt_id, meta) → str:
   - 已通过 §4.1.1 Layer 应用 上三步前置 check
   - 生成 revoker_asrt_id;normalize meta → typed MetaRow list
-  - 构造 typed Claim(pred_id="__system__.revokes",hardcoded;无 user-supplied 路径)
-  - 调用 Ledger.append_assertion(claim=..., claim_args=[], meta_rows=...)
+  - 构造 typed Claim(pred_id="__system__.revokes",hardcoded;无 user-supplied 路径;含 value/value_tag per §4.3.2)
+  - 调用 Ledger.append_assertion(claim=..., meta_rows=..., asrt_id=...)
+    (signature 演化后 — claim_args / annotation_rows / idempotency 三参数 drop per §4.1.4 表)
 
 [Layer ledger — typed-rows append]
-Ledger.append_assertion(claim, claim_args=[], meta_rows, ...) → AppendResult
-  (existing shipped typed API,无需新方法;revoke claim 仅是 pred_id 特殊的 Claim)
+Ledger.append_assertion(claim, meta_rows, asrt_id) → AppendResult
+  (existing shipped method,signature 随 Slice 3b schema 演化;无需新方法;
+   revoke claim 仅是 pred_id 特殊的 Claim)
 ```
 
 #### 4.1.2 为什么 internal exception path 不走 G1/G2
@@ -179,7 +181,7 @@ ADR-SYS-A 锁的 G1 / G2 guard 防的是 **user-facing pred_id supply**:
 |---|---|---|---|
 | application | `fg.assertions.retract(asrt_id)` lowering | asrt_id + meta | ADR-IC reject + INV-12 part 2 check + INV-14 find_revoker + dispatch |
 | write_protocol | `append_revocation_claim(ledger, revoked_asrt_id, meta)` | revoked_asrt_id + meta dict | normalize meta → typed rows;生成 revoker_asrt_id;构造 typed Claim(pred_id hardcoded);调用 Ledger typed API |
-| ledger | `Ledger.append_assertion(claim, claim_args=[], meta_rows, ...)` 保留作 **唯一 ledger append 边界** | typed Claim / MetaRow / etc.(DTO/signature 随 Slice 3b schema 改造)| 持久化 typed rows |
+| ledger | `Ledger.append_assertion(claim=..., meta_rows=..., asrt_id=...)` 保留作 **唯一 ledger append 边界**(参数列表演化 — drop 3 个参数 per 演化表)| typed Claim / MetaRow(DTO/signature 随 Slice 3b schema 改造)| 持久化 typed rows |
 
 **为什么 write_protocol 层而非 ledger 层**:
 - shipped `Ledger.append_assertion`(`ledger.py:363`)接受 typed `Claim` / `ClaimArg` / `MetaRow` rows;normalization 在 write_protocol 做(per `write_protocol.py:128` `set_field` 模式)
@@ -389,7 +391,7 @@ shipped `claim_args` 表有 4 处 reader / consumer,Slice 3b drop 表必须同�
 
 | Consumer | shipped 位置 | Slice 3b migration contract |
 |---|---|---|
-| `Ledger.find_claim_args(asrt_id, ...)` | `core/store/ledger.py:634` | **保留 method signature 不变**;reimpl as **compatibility wrapper synthesize from Claim**:read `Claim` row;若 `claim.value` 非 NULL(NEW path)→ return `[ClaimArg(asrt_id, idx=0, val_atom=claim.value, tag=claim.value_tag)]`;若 NULL 但 `claim.rest_terms` 非空(legacy path)→ parse JSON `rest_terms` 列产 ClaimArg rows(per shipped tup_v1 解码)|
+| `Ledger.find_claim_args(asrt_id, ...)` | `core/store/ledger.py:634` | **保留 method signature 不变**;reimpl as **compatibility wrapper synthesize from Claim** — semantic equivalence guaranteed via shipped helpers:**NEW path**(claim.value 非 NULL)→ `val_atom = _decode_sql_canonical_to_val_atom(claim.value, claim.value_tag)`(canonical encoder 反函数);**LEGACY path**(claim.value NULL,claim.rest_terms 非空)→ **复用 shipped `claim_args_from_rest_terms(claim.rest_terms)`**(`tup_v1.py:196-208`)产 (idx, val_atom, canonical_tag) 三元组 — 自然走 `_val_atom_for_claim_arg` 规范化(float64→hex / bytes→base64url / entity_ref/string 规范化);**不**直接用 `rt_value`(否则破坏 shipped ClaimArg.val_atom 语义,会让 projector/policy 返回值类型变化)|
 | `SDKStore.find_claim_args(asrt_id, ...)` | `sdk/store.py:182-190` | 内部 delegate 到 `Ledger.find_claim_args`(无需改 SDK 公开 surface)— 透明 migration |
 | `core/view/projector.py:96` `ledger.find_claim_args(asrt_id=claim.asrt_id)` | view 投影路径 | **不动 call site**;走 §4.3.5 compatibility wrapper(透明)|
 | `core/policy/chosen.py:148` `ledger.find_claim_args(asrt_id=asrt_id)` | chosen policy fallback | **不动 call site**;走 §4.3.5 compatibility wrapper(透明)|
@@ -427,10 +429,13 @@ def find_claim_args(
 
     Synthesizes ClaimArg rows from:
       - NEW path (claim.value/value_tag 非 NULL): single ClaimArg at idx=0;
-        val_atom 通过 decoder 还原(SQL canonical TEXT → typed Python value)
-      - LEGACY path (claim.value NULL, claim.rest_terms 非空): 解 rest_terms
-        list[tuple[tag, value]] — value 已是 typed Python value (per shipped
-        claim_args_from_rest_terms 路径产 val_atom == value 形态)
+        val_atom 通过 `_decode_sql_canonical_to_val_atom` decoder 还原
+        (SQL canonical TEXT → typed Python val_atom per value_tag)
+      - LEGACY path (claim.value NULL, claim.rest_terms 非空): **复用 shipped
+        `claim_args_from_rest_terms(claim.rest_terms)`** (`tup_v1.py:196-208`)
+        — 自然走 `_val_atom_for_claim_arg` 规范化(float64→hex string /
+        bytes→base64url / entity_ref / string 规范化);**不**直接用 rest_terms
+        value(否则 ClaimArg.val_atom 类型跟 shipped 行为不一致,破坏 caller)
 
     Slice 5 (after adapter rewrite + drop rest_terms): LEGACY path 自然 dead;
     method 可 deprecated;call sites 改直读 Claim.value/value_tag(经
@@ -459,16 +464,17 @@ def find_claim_args(
                 tag=claim.value_tag,
             ))
         elif claim.rest_terms:
-            # LEGACY path: rest_terms 元素是 (tag, value) per shipped 协议;
-            # value 已是 typed Python value (claim_args_from_rest_terms 的
-            # val_atom == value 形态)
-            for i, item in enumerate(claim.rest_terms):
-                rt_tag, rt_value = item  # ★ 顺序 (tag, value) per shipped
+            # LEGACY path: **复用 shipped `claim_args_from_rest_terms`** 走 shipped
+            # `_val_atom_for_claim_arg` 规范化(float64→hex string / bytes→base64url
+            # / entity_ref / string 规范化)— 保证 val_atom 跟 shipped ClaimArg
+            # 完全等价;**不**直接用 rest_terms 元素的 raw value(否则破坏
+            # projector/chosen 等 caller 期待的 val_atom 类型契约)
+            for idx_i, val_atom_i, canonical_tag in claim_args_from_rest_terms(claim.rest_terms):
                 rows.append(ClaimArg(
                     asrt_id=claim.asrt_id,
-                    idx=i,
-                    val_atom=rt_value,
-                    tag=rt_tag,
+                    idx=idx_i,
+                    val_atom=val_atom_i,
+                    tag=canonical_tag,
                 ))
         # else: 0-arity claim (existence) — 无 claim_args 行,跳过(等价 shipped)
 
@@ -482,8 +488,9 @@ def find_claim_args(
 
 **关键 contract assertions**(Slice 3b implementation 必须 verify):
 - 任意 shipped caller(`projector.py:96` / `chosen.py:148` / `sdk/store.py:182`)调用 wrapper 后 — 返回 `list[ClaimArg]` 跟 shipped 行为等价(val_atom 类型 / idx 序号 / tag 字符串值 全 match)
+- **LEGACY path val_atom 语义等价**:wrapper 复用 shipped `claim_args_from_rest_terms` → 自然走 `_val_atom_for_claim_arg` 规范化路径;**不**自行解 rest_terms tuple 用 raw value(per pseudo-code 注释 — 避免破坏 float64→hex / bytes→base64url / entity_ref/string 规范化语义)
+- **NEW path val_atom 语义等价**:`_decode_sql_canonical_to_val_atom(text, tag)` helper 必须是 shipped `canonical_bytes_tup_v1` encoder 的精确反函数(Slice 3b blueprint Step 4.6 必须 verify symmetric round-trip — encoder(decoder(value, tag)) == value)
 - `asrt_id=None` full-scan 路径行为同 shipped(可能 perf 退化,因 NEW 路径需 decode;但语义不变)
-- `_decode_sql_canonical_to_val_atom(text, tag)` helper 必须是 shipped `canonical_bytes_tup_v1` encoder 的精确反函数(Slice 3b blueprint Step 4.6 必须 verify symmetric round-trip)
 
 **Slice 5 deferred follow-up**(per §4.7.2 三项绑定之外的 cleanup):
 - Migrate `projector.py:96` + `chosen.py:148` 直读 `Claim.value/value_tag` + decoder(不再调 `find_claim_args`)
@@ -1013,7 +1020,7 @@ ADR adoption(本 ADR commit Status: proposed → adopted)前:
 - [x] §4.5.2 set 保留 preflight dedup(via `_find_active_claim_by_value`)+ add 改 multiset semantics ★ P2-amend
 - [x] §4.6 INV-15 read-path default filter sub-decision(close ADR-SYS-A §4.4.2 carve-out)★ P1.4-amend
 - [x] §4.6.2 read API 矩阵显式分类 — read-ledger paths(filter)vs deterministic constructor(`fg.entities.ref` 不读 ledger,无 filter 必要)★ P3-amend
-- [x] §4.3.5 `claim_args` drop 的 consumer migration contract — `Ledger.find_claim_args` reimpl as compatibility wrapper synthesize from `Claim.value/value_tag` (NEW) + `Claim.rest_terms` (LEGACY);4 处 shipped call site 透明 migration;Slice 5 cleanup deferred ★ P1.2-amend
+- [x] §4.3.5 `claim_args` drop 的 consumer migration contract — `Ledger.find_claim_args` reimpl as compatibility wrapper:**signature 严格 preserve shipped**(三参数全 optional,asrt_id=None full-scan);**NEW path** 通过 `_decode_sql_canonical_to_val_atom` 还原 typed val_atom(canonical encoder 反函数);**LEGACY path 复用 shipped `claim_args_from_rest_terms`**(走 `_val_atom_for_claim_arg` 规范化路径 — float64→hex / bytes→base64url / 等);4 处 shipped call site 透明 migration;Slice 5 cleanup deferred ★ P1.2-amend + P1-amend-4th-round legacy val_atom 语义
 - [x] §4.1.4 Ledger API 演化 wording 精确化 — "保留 `append_assertion` 作为唯一 ledger append 边界,DTO/signature 随 Slice 3b schema 改造"(Claim 加 value/value_tag;annotation_rows / idempotency 参数 drop;MetaRow drop kind);**不是** "API 不动" ★ P2-amend
 - [x] §4.5.2.bis `_find_active_claim_by_value` 显式 active 公式(INV-13 anti-pattern join against `__system__.revokes`)+ §4.5.2.ter dual-coexistence 期间 legacy fallback 不加 + documented risk ★ P2-amend
 - [x] 全文清理 stale "weak enforce" 残留 wording(§1.3 / §2 Scope / §3 Non-scope / §4.7.1 / §4.8 / §4.9 / §5.1 / §6.3 / §7.1)★ P1.1-amend
@@ -1072,7 +1079,9 @@ Post-adoption verification(implementation 阶段验证):
 - [ ] ADR-SYS-A G1 / G2 guard 跟 `append_revocation_claim` 互不干扰 verified — `__system__.revokes` 不进 schema_ir;G1 catch 不到;G2 不适用
 
 **claim_args drop + consumer migration**(★ P1.2-amend):
-- [ ] Slice 3b implementation:`Ledger.find_claim_args(asrt_id, idx?, tag?)` reimpl as compatibility wrapper synthesize from Claim.value/value_tag (NEW) + Claim.rest_terms JSON parse (LEGACY)(per §4.3.5)
+- [ ] Slice 3b implementation:`Ledger.find_claim_args(asrt_id=None, idx=None, tag=None)` reimpl as compatibility wrapper — signature 严格 preserve shipped(三参数全 optional,asrt_id=None full-scan)+ NEW path 走 `_decode_sql_canonical_to_val_atom(claim.value, claim.value_tag)` + LEGACY path **复用 shipped `claim_args_from_rest_terms(claim.rest_terms)`**(走 `_val_atom_for_claim_arg` 规范化;不直接用 rest_terms raw value)(per §4.3.5)
+- [ ] Slice 3b implementation:contract test 覆盖 LEGACY path val_atom 语义等价 — float64 input → ClaimArg.val_atom 是 hex string(per shipped 规范化);bytes input → base64url;entity_ref/string → 规范化;verified via direct call to wrapper + shipped `claim_args_from_rest_terms` 结果 diff
+- [ ] Slice 3b implementation:contract test 覆盖 NEW path val_atom 语义等价 — `_decode_sql_canonical_to_val_atom` 是 `canonical_bytes_tup_v1` encoder 的精确反函数;round-trip property:`encode(decode(value, tag)) == value` 对所有 8 tags 满足
 - [ ] Slice 3b implementation:`sdk/store.py:182` `SDKStore.find_claim_args` 透明 delegate(call site 不动)
 - [ ] Slice 3b implementation:`core/view/projector.py:96` `ledger.find_claim_args(asrt_id=claim.asrt_id)` 不动(走 wrapper)
 - [ ] Slice 3b implementation:`core/policy/chosen.py:148` `ledger.find_claim_args(asrt_id=asrt_id)` 不动(走 wrapper)
@@ -1093,6 +1102,7 @@ Post-adoption verification(implementation 阶段验证):
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-29 | proposed | ADR-SYS-B drafted | Q5b + Q15.1-Q15.5(meta-ADR §4.3 acceptance boundary 5 项必答 全覆盖)+ 时序。Q5b internal emission 走专用 `append_revocation_claim` function(不走 G1/G2);Q15.1 Slice 3b 保留 rest_terms 列 + weak enforce(Step 2+ Slice 5 真正 drop 同 adapter rewrite);Q15.2 同步引入 value + value_tag 双列;Q15.3 完全替代 claim_meta + drop 4 列;Q15.4 Slice 3b 删除 ingest_keys;Q15.5 option (b) 子集落地 + Step 2+ 转(5 项必做 + 1 项延后)。基于 meta-ADR adopted @ `ebafdb0c` + ADR-IC adopted @ `2d0866ed` + ADR-API adopted @ `66434490` + ADR-SYS-A adopted @ `75f1c8bc` + user reviewer 2026-05-29 ADR-SYS-B 4 项 directional review focus + ledger-spec §2-§9 design-point。Branch: `v0.2.0-q-sys-b-revokes-migration-decision-2026-05-29`。Commit: `40174986` |
-| 2026-05-29 | proposed | ADR-SYS-B re-re-amended(3rd-round P1/P2 fixes,still proposed)| User reviewer 第 3 轮 review 返回 3 findings — 1 P1 + 2 P2 都是残留 / equivalence gap。**(P1)** `Ledger.find_claim_args` compatibility wrapper 不等价 shipped API,会破坏现有 consumers — pseudo-code 把 `asrt_id` 改成必填 keyword(`*, asrt_id: str`),但 shipped 是 `asrt_id: str \| None = None` 全 positional+keyword optional,`asrt_id=None` 返回 ledger 全量;legacy path tuple 解包顺序写反了(`(val_atom, t)` vs shipped `(tag, value)` per `tup_v1.py:201`);NEW path 把 `claim.value`(SQL canonical TEXT)直接塞进 `val_atom` 也错,shipped `ClaimArg.val_atom` 是 typed Python value(per `_val_atom_for_claim_arg`)。**重写 §4.3.5**:wrapper signature 严格 preserve shipped(`asrt_id/idx/tag` 全 optional,`asrt_id=None` 走 `find_claims()` full scan + synthesize across);LEGACY path tuple unpack 改 `(rt_tag, rt_value)` 正确顺序;NEW path 加 `_decode_sql_canonical_to_val_atom(claim.value, claim.value_tag)` helper 还原 typed val_atom(canonical encoder 反函数);锁 contract assertion — wrapper 调用后 ClaimArg.val_atom 类型等价 shipped(projector/policy 等 caller 不破坏);Slice 3b blueprint 必须 verify symmetric round-trip decoder。**(P2.1)** "Ledger typed API 不动" wording 已修 §4.1.4 表 + 结论,但 pseudo-code 仍传 `claim_args=[]` + `idempotency=None`,post-adoption check 仍写 "typed-rows API 不动" — wording 不一致。**修复**:§4.1.4 演化表 `claim_args` 行从 "保留参数;NEW writes 传 []" 改为 "**drop 参数** — claim_args 表 dropped per 精简 4;NEW writes 不传;LEGACY adapter 走 write_protocol 高层 entry 不直接调 Ledger";`meta_rows` 行改 "**保留参数;DTO 字段演化** — MetaRow drop kind";结论改 "drop 3 个参数(claim_args / annotation_rows / idempotency)";§4.1.4 pseudo-code 移除 `claim_args=[]` + `idempotency=None`(注释说明 dropped 参数不在 pseudo-code 展示);§8 post-adoption check 改 "Ledger.append_assertion 是唯一 ledger append 边界(无新 Ledger 方法);signature drop 3 参数 + Claim DTO 加 value/value_tag + MetaRow DTO drop kind"。**(P2.2)** summary/metadata 残留旧 section / "weak" 简写 — Header line 16-17 "§4.6 Q15.5" 改 §4.7;§1.3 第 4 项 "§4.6 Q15.5" + "§4.7 migration 时序表" 改 §4.7 + §4.8;§2 Scope `Migration 时序` row "§4.7" 改 §4.8(避免双 §4.7 行);§4.9 Cross-Q summary Q15.5 row "5 项必做(精简 1+5/3/4 weak/6/7)" 改 "精简 4 partial — value+value_tag 双列 + dual-coexistence","12 项(per §4.6.3)" 改 "6 类(per §4.7.3)";§4.9 implementation surface estimate "contract test 覆盖(per §4.6.3 12 项 acceptance)" 改 §4.7.3 6 类。 |
+| 2026-05-29 | proposed | ADR-SYS-B 4th-round amended(P1/P2 fixes,still proposed)| User reviewer 第 4 轮 review 返回 3 findings — 1 P1 + 2 P2 都是 wrapper 语义等价性 + wording consistency。**(P1 substantive)** §4.3.5 pseudo-code LEGACY path 直接把 `rt_value` 放进 `ClaimArg.val_atom` — 但 shipped `claim_args_from_rest_terms`(`tup_v1.py:196-208`)走 `_val_atom_for_claim_arg` 规范化:float64 → hex string / bytes → base64url / entity_ref/string → 规范化等;直接用 `rt_value` 会让 `ClaimArg.val_atom` 类型跟 shipped 不一致,projector/policy 等 caller 返回值类型变化破坏 contract。**修复 §4.3.5**:pseudo-code LEGACY path 改为 **复用 shipped `claim_args_from_rest_terms(claim.rest_terms)`** 直接产 (idx, val_atom, canonical_tag) 三元组;详注释 — 自然走 `_val_atom_for_claim_arg` 规范化路径,保证 val_atom 类型语义跟 shipped 完全等价;**不**自行解 rest_terms tuple 用 raw value。**(P2.1)** §4.3.5 summary row 仍写 NEW path return `val_atom=claim.value` 直接 — 跟后文 pseudo-code 加 `_decode_sql_canonical_to_val_atom` 不一致。**修复**:summary row 改 "NEW path → `val_atom = _decode_sql_canonical_to_val_atom(claim.value, claim.value_tag)`(canonical encoder 反函数)";同步 row 加 LEGACY 复用 shipped helper 描述;加显式 "**不**直接用 raw value" 防回归 note。**(P2.2)** §4.1.1 path diagram + §4.1.4 layer table 仍残留 `claim_args=[]` 旧 form。**修复**:§4.1.1 path diagram 改 `Ledger.append_assertion(claim=..., meta_rows=..., asrt_id=...)`(signature 演化后 — drop 3 参数 per §4.1.4 表);§4.1.4 layer table ledger 行同改;消除残留旧 form。同步 cascade:contract assertions 加 LEGACY/NEW path val_atom 等价显式 verify(round-trip property);§8 post-adoption verify 加 2 项 contract test(LEGACY 复用 shipped helper diff + NEW round-trip property);§8 proposed-stage check `claim_args drop migration contract` 项 wording 显式提 "复用 shipped helper" 防回归。 |
+| 2026-05-29 | proposed | ADR-SYS-B re-re-amended(3rd-round P1/P2 fixes,proposed)| User reviewer 第 3 轮 review 返回 3 findings — 1 P1 + 2 P2 都是残留 / equivalence gap。**(P1)** `Ledger.find_claim_args` compatibility wrapper 不等价 shipped API,会破坏现有 consumers — pseudo-code 把 `asrt_id` 改成必填 keyword(`*, asrt_id: str`),但 shipped 是 `asrt_id: str \| None = None` 全 positional+keyword optional,`asrt_id=None` 返回 ledger 全量;legacy path tuple 解包顺序写反了(`(val_atom, t)` vs shipped `(tag, value)` per `tup_v1.py:201`);NEW path 把 `claim.value`(SQL canonical TEXT)直接塞进 `val_atom` 也错,shipped `ClaimArg.val_atom` 是 typed Python value(per `_val_atom_for_claim_arg`)。**重写 §4.3.5**:wrapper signature 严格 preserve shipped(`asrt_id/idx/tag` 全 optional,`asrt_id=None` 走 `find_claims()` full scan + synthesize across);LEGACY path tuple unpack 改 `(rt_tag, rt_value)` 正确顺序;NEW path 加 `_decode_sql_canonical_to_val_atom(claim.value, claim.value_tag)` helper 还原 typed val_atom(canonical encoder 反函数);锁 contract assertion — wrapper 调用后 ClaimArg.val_atom 类型等价 shipped(projector/policy 等 caller 不破坏);Slice 3b blueprint 必须 verify symmetric round-trip decoder。**(P2.1)** "Ledger typed API 不动" wording 已修 §4.1.4 表 + 结论,但 pseudo-code 仍传 `claim_args=[]` + `idempotency=None`,post-adoption check 仍写 "typed-rows API 不动" — wording 不一致。**修复**:§4.1.4 演化表 `claim_args` 行从 "保留参数;NEW writes 传 []" 改为 "**drop 参数** — claim_args 表 dropped per 精简 4;NEW writes 不传;LEGACY adapter 走 write_protocol 高层 entry 不直接调 Ledger";`meta_rows` 行改 "**保留参数;DTO 字段演化** — MetaRow drop kind";结论改 "drop 3 个参数(claim_args / annotation_rows / idempotency)";§4.1.4 pseudo-code 移除 `claim_args=[]` + `idempotency=None`(注释说明 dropped 参数不在 pseudo-code 展示);§8 post-adoption check 改 "Ledger.append_assertion 是唯一 ledger append 边界(无新 Ledger 方法);signature drop 3 参数 + Claim DTO 加 value/value_tag + MetaRow DTO drop kind"。**(P2.2)** summary/metadata 残留旧 section / "weak" 简写 — Header line 16-17 "§4.6 Q15.5" 改 §4.7;§1.3 第 4 项 "§4.6 Q15.5" + "§4.7 migration 时序表" 改 §4.7 + §4.8;§2 Scope `Migration 时序` row "§4.7" 改 §4.8(避免双 §4.7 行);§4.9 Cross-Q summary Q15.5 row "5 项必做(精简 1+5/3/4 weak/6/7)" 改 "精简 4 partial — value+value_tag 双列 + dual-coexistence","12 项(per §4.6.3)" 改 "6 类(per §4.7.3)";§4.9 implementation surface estimate "contract test 覆盖(per §4.6.3 12 项 acceptance)" 改 §4.7.3 6 类。 |
 | 2026-05-29 | proposed | ADR-SYS-B re-amended(2nd-round P1/P2/P3 fixes,proposed)| User reviewer 第 2 轮 review 返回 5 findings — **2 P1 + 2 P2 + 1 P3** 都是残留 / coverage gap。**(P1.1)** 清理 stale "weak enforce" wording 残留在权威摘要区(§1.3 / §2 Scope / §3 Non-scope / §4.7.1 / §4.8 / §4.9 cross-Q summary / §5.1 alt reject / §6.3 meta-ADR ref / §7.1 unblocking)— 全部改 reflect §4.2 选 (c) dual-coexistence 不加 blanket weak enforce。**(P1.2)** `claim_args` drop 缺 consumer migration contract — 新增 §4.3.5:`Ledger.find_claim_args(asrt_id, idx?, tag?)` reimpl as **compatibility wrapper** synthesize from `Claim.value/value_tag`(NEW)+ `Claim.rest_terms` JSON parse(LEGACY);4 处 shipped call site(`sdk/store.py:182` / `core/view/projector.py:96` / `core/policy/chosen.py:148` / shipped `Ledger.find_claim_args:634`)透明 migration(call sites 不动);wrapper signature + Python pseudo-code + Slice 5 cleanup defer。**(P2.1)** "Ledger typed API 不动" wording 不准 — §4.1.4 加 "Ledger.append_assertion 是唯一 ledger append 边界,DTO/signature 演化" 7 维度对比表(Claim 加 value/value_tag;annotation_rows 参数 drop;idempotency 参数 drop;MetaRow drop kind);结论改 "不是 'API 不动',是 '唯一边界 + 演化 signature'"。**(P2.2)** `_find_active_claim_by_value` 未锁 active 公式 + legacy fallback — 新增 §4.5.2.bis 显式 SQL with `NOT EXISTS` anti-pattern join against `__system__.revokes`(INV-13 active projection 同公式);新增 §4.5.2.ter Legacy fallback note — Slice 3b dual-coexistence 期间 helper **只匹配 NEW path claims**(value/value_tag 非 NULL);**不匹配** LEGACY rest_terms-only claims;rationale:adapter rule-head pred_ids 跟 user field pred_ids 实践上正交;collision risk 低;Slice 5 自然 close;documented dual-coexistence limitation 进 Slice 4 docs。**(P3)** §4.6.2 INV-15 read API 矩阵 `fg.entities.ref` 误归 SQL filter — 拆为单独行明确 N/A(deterministic typed constructor,不读 ledger,无 filter 必要,per ADR-API §4.1 + identity §12.2 ref 语义)。同步 cascade:§8 proposed-stage check 加 6 项(覆盖 P1.1 全文清理 / P1.2 §4.3.5 contract / P2 wording 精确化 / P3 矩阵分类);post-adoption verify 加 4 项 §4.3.5 wrapper verify + 4 项 §4.5.2 active 公式 + dual-coexistence limitation contract test。 |
 | 2026-05-29 | proposed | ADR-SYS-B amended(1st-round P1/P2 fixes,proposed)| User reviewer post-draft review(同日)返回 5 findings:**(P1.1)** INV-12 part 2(no revoke-of-revoke)未在原 draft 落地 + find_revoker SQL 暗示允许 revoke-of-revoke。重构 §4.1 加 §4.1.5 INV-12 part 2 显式锁(application layer + write_protocol layer defense-in-depth);§4.5.4 简化 find_revoker SQL(去 dead "exclude revoked revokers" subquery);加 cross-Q rejected option `SYS-B-no-INV-12-defense`。**(P1.2)** value/value_tag 只定义了 revoke claim,普通 claim 的 canonical 映射缺失。重构 §4.3 加 §4.3.2 general canonical value/value_tag mapping 表(覆盖 existence / unary value / entity_ref / multi / revoke / legacy adapter 全 Claim form)+ §4.3.4 read path 优先级;§4.2 重新选 (c) dual-coexistence(NEW writes 用 value+value_tag rest_terms=[];legacy 路径不动);**移除原 blanket weak enforce**(会 break adapter 违反 zero-Q-PR1)— INV-9 enforce 整套留 ADR-INV9;加 Q15.1 alternative reject `Slice 3b 加 blanket weak enforce`。**(P1.3)** `append_revocation_claim` 层级签名混乱(放 ledger.py 收 raw meta vs §4.8 写 write_protocol)。重构 §4.1.4:函数位置锁 `evidence/write_protocol.py`(跟 shipped `set_field` 模式一致);**Ledger 层无新方法**,使用现有 `Ledger.append_assertion(claim, claim_args=[], meta_rows, ...)` typed-rows API;write_protocol 负责 raw meta normalization + asrt_id generation + 构造 typed Claim with hardcoded pred_id;加 Q5b alternative reject `append_revocation_claim 放 ledger.py`。**(P1.4)** INV-15 read-path default filter 被 SYS-A carve out 给 SYS-B 但 SYS-B 未锁。新增 §4.6 INV-15 read-path default filter sub-decision(default exclude `__system__.*`;asrt_id 直查路径 bypass per Rule 5);§4.6.2 Read API 矩阵(`fg.entities.*` / `fg.fields.*` / `fg.assertions.where/active/all/field` filter;by_id/by_ids bypass);§4.6.3 SQL 实施约定;§4.6.4 by_id bypass rationale;§4.6.5 跟 ADR-API §4.2 AssertionView 类型契约不冲突 confirm;原 §4.6/§4.7/§4.8 renumber → §4.7/§4.8/§4.9。加 INV-15 alternative reject(留 Step 2+)。**(P2)** 删除 ingest_keys 后普通重复写入语义未定。重构 §4.5 加 §4.5.2 普通 set/add write dedup 语义显式锁:`fg.fields.set` preserve preflight dedup via `_find_active_claim_by_value(pred_id, e_ref, value, value_tag)` SQL(替代 ingest_keys lookup);`fg.fields.add` 改 multiset semantics(每次 append 新 asrt_id;**行为变化** 跟 shipped `add_field` aliased to `set_field` 不同 — Slice 4 docs sync 显式说明);加 Q15.4 alternative reject `set/add 都走 multiset`。同步 cascade:§4.7.3 acceptance criteria 重写(分 schema migration / emission path / canonical mapping / write dedup / INV-15 / cross-ADR 6 类);§4.7.2 deferred 改三项绑定(drop rest_terms 列 + Q-PR1 + ADR-INV9 strict enforce);§6.2 shipped citations 加 5 项 P1/P2-amend 锚点;§6.6.4 meta-ADR coverage 加 §4.6/§4.1.5 在"允许额外 sub-decisions"范围内 confirm;§7.2 follow-up + §7.4 no-retroactive boundary 扩 10 项;§8 acceptance 重写(13 项 proposed ✓ + 35 项 post-adoption ☐ 分 7 类:schema/emission/INV-12/canonical/dedup/INV-15/cross-ADR/Slice 5)。 |
