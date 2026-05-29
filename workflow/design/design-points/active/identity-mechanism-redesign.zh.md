@@ -560,6 +560,16 @@ class Field(_DataMember):
 | `pattern: str \| None` | ✅ | regex 字段值校验,Layer 4;仅 `str` 字段;来源:PDF Change Request 2026-05-28 |
 | `validators` / `constraints` / `alias` / `deprecated` / `examples` | ✗ 延后 | `_DataMember` 上预留扩展位,Step 2+ 统一加,自动同时作用于 Identity 与 Field |
 
+#### 2026-05-29 implementation sync
+
+Slice 1 已落地 Form I 的描述符与校验骨架:
+
+- `Identity()` 仅接受 `description=` / `pattern=`,旧 `primary_key=` / `default=` / `default_factory=` 均在 SDK 层报迁移错误。
+- `Field()` 仅接受 `description=` / `pattern=`,`cardinality=` 删除;`T` 推断 single,`list[T]` / `tuple[T, ...]` / `set[T]` / `frozenset[T]` 推断 multi。
+- `Literal[...]` 写入 `enum_values`;`list[Literal[...]]` 等 multi enum 形态同样保留 enum 约束。
+- `pattern=` 进入 schema truth,并在应用层写入集中路径执行 enum / pattern 校验;`evidence/write_protocol` / ingest / adapter direct paths 仍按 caller contract 不加此层校验。
+- `Optional` / general `Union` / `dict[...]` / mixed-type `Literal` / float Literal enum 均拒绝;普通 `float64` 字段仍允许。
+
 #### `default` 为什么不放入共通基类
 
 | 字段类型 | `default` 的潜在语义 | 与 Step 1 契约的冲突 |
@@ -583,7 +593,7 @@ class Field(_DataMember):
 | `InternalIdentity` 具体类型 | ✗ | ✅ — Fingerprint / ULID / ContentHash |
 | 多 Identity 联合 Fingerprint | ✗ | ✅ — 如 `Fingerprint(of=("tenant_id", "email"))` |
 | 备用自然键 / `alternative_key` | ✗ | ✅ — 视 Claim 反向索引 UX 是否足够再定 |
-| `default` / `default_factory` | ✗ | ✅ — 配合 InternalIdentity 演化 |
+| `default` / `default_factory` | ✗ | ⏳ 仅作为未来 `InternalIdentity` / 系统派生 identity 设计点重新评估;不回到普通 `Identity` / `Field` 共通参数 |
 
 → 完整延后清单见 §13。
 
@@ -1479,7 +1489,7 @@ fg.schema.validate_provenance(obj)    # 保持
 | **as-of / bitemporal 历史查询** | §10.2 | Q6 视用户需求再定 |
 | **PyReason adapter rewrite** | §11 | Q-PR1 |
 | **`fg.tx()` 跨调用事务 context manager** | §12 隐含 | 当前每个调用天然事务,跨调用事务延后 |
-| **`default` / `default_factory` 共通参数** | §8.5 | 配合 InternalIdentity 演化 |
+| **`default` / `default_factory` 重新评估** | §8.5 | 仅配合 InternalIdentity / 系统派生 identity 重新设计;不作为普通 `_DataMember` 共通参数 |
 | **`validators` / `constraints` / `alias` / `deprecated` / `examples` 共通参数** | §8.5 | `_DataMember` 扩展位 |
 | **`dict[K, V]` 容器类型推断** | §8.4 | 可能映射为 multi pair 或独立 KV entity |
 | **Schema-free escape hatch** | §12.2 Layer 3 | 当前不提供;视有无 migration / debug 场景需求再定 |
@@ -1490,7 +1500,7 @@ fg.schema.validate_provenance(obj)    # 保持
 Step 1 落地的设计扩展点不会反过来推翻 Step 1 决策:
 
 - `Identity(internal=True)` 是新增 kwarg,不改 Identity 默认语义
-- `default_factory` 等 `_DataMember` 扩展位是新增 kwarg,Step 1 描述符调用方不受影响
+- `InternalIdentity` / 系统派生 identity 若需要 `default_factory` 语义,会以独立 descriptor 或派生类型新增,不回到普通 `Identity` / `Field` 的共通参数
 - 唯一性强制是在 `create` / `set` 路径上加 validation,API 表面不变
 - 专用 Lookup 索引是底层 SQLite 优化,API 表面不变
 - bitemporal 历史查询是 `where` 的 `at=` / `as_of=` 扩展 kwarg,不冲突 Step 1 `where` 签名

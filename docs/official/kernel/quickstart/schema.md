@@ -11,9 +11,9 @@ The most important distinction is between `Identity` and `Field`:
 
 This is not a database table model where a primary key is the only identifier
 and every other column is mutable content. In FactGraph, all `Identity` fields
-participate in the generated entity reference. `primary_key=True` marks the
-logical anchor used by authoring and cross-coordinate joins; it does not exclude
-non-primary identities from the coordinate.
+participate in the generated entity reference. There is no primary/non-primary
+split in the public schema surface: the complete Identity bundle is the
+immutable coordinate.
 
 This page stays with ordinary entity classes. Relationship classes are covered
 later because they are a more advanced schema declaration.
@@ -21,23 +21,25 @@ later because they are a more advanced schema declaration.
 ## Entity classes
 
 Every entity class subclasses `Entity`. Each entity must declare at least one
-`Identity(primary_key=True)`.
+`Identity()`.
 
 ```python
+from typing import Literal
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class Team(Entity):
-    team_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    team_id: str = Identity()
+    name: str = Field()
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    locale: str = Identity(default="en")
-    display_name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
-    team: Team = Field(cardinality="single")
+    user_id: str = Identity(pattern=r"^u-[0-9]+$")
+    locale: str = Identity()
+    display_name: str = Field()
+    status: Literal["active", "inactive"] = Field()
+    tags: list[str] = Field()
+    team: Team = Field()
 ```
 
 `FactGraph.create(...)` compiles these classes into the active graph schema:
@@ -53,8 +55,8 @@ classes. When you work directly with the lower-level `Database` boundary
 (see [Database and durable views](database.md)), you compile once with
 `compile_schema_from_classes(...)` and pass the IR as `schema_ir=` instead.
 
-`User.user_id` is the logical anchor. `User.locale` is a coordinate dimension.
-Both are identity fields, so both participate in the entity reference.
+`User.user_id` and `User.locale` are both identity fields, so both participate
+in the entity reference.
 
 ```python
 user_en = fg.read.ref(User, user_id="u-1", locale="en")
@@ -63,16 +65,9 @@ user_zh = fg.read.ref(User, user_id="u-1", locale="zh")
 assert user_en != user_zh
 ```
 
-Those two references point to different complete coordinates. They share the
-same primary anchor (`user_id="u-1"`), but they are not the same entity
-coordinate.
-
-`Identity(default="en")` applies the default only when the dimension is
-**omitted** from a ref-construction call (e.g. `fg.read.ref(User,
-user_id="u-1")` resolves to the same coordinate as `... locale="en"`).
-Once written, the default is not retroactively re-applied — the assertion
-records the actual `locale` value used at write time, so changing the
-schema default later does not silently rewrite existing coordinates.
+Those two references point to different complete coordinates. Every identity
+value must be supplied explicitly; `Identity(default=...)` and
+`Identity(default_factory=...)` are not part of Form I.
 
 ## Identity vs Field
 
@@ -81,18 +76,17 @@ is itself a fact stored at that coordinate.
 
 | Need | Use | Example |
 | --- | --- | --- |
-| Locate the logical thing | `Identity(primary_key=True)` | `user_id` |
-| Separate domains under the same anchor | `Identity()` | `locale`, `work_id`, `tenant_id` |
-| Store current mutable content | `Field(cardinality="single")` | `display_name`, `status` |
-| Store multiple active facts | `Field(cardinality="multi")` | `tags`, `roles` |
+| Locate the coordinate | `Identity()` | `tenant_id`, `user_id`, `locale` |
+| Store current mutable content | `Field()` with scalar annotation | `display_name`, `status` |
+| Store multiple active facts | `Field()` with collection annotation | `tags`, `roles` |
 
 So this model:
 
 ```text
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    locale: str = Identity(default="en")
-    display_name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    locale: str = Identity()
+    display_name: str = Field()
 ```
 
 means:
@@ -136,8 +130,15 @@ GNF. The user-facing rule is simpler: declare `Entity`, `Identity`, and
 
 ## Single, multi, and entity references
 
-Use `cardinality="single"` when the field should read as one current value.
-Use `cardinality="multi"` when the field should read as a collection.
+Cardinality is inferred from type annotations. A scalar annotation such as
+`str`, `int`, `bool`, `UUID`, `datetime`, or another `Entity` subclass is a
+single field. Collection annotations `list[T]`, `tuple[T, ...]`, `set[T]`,
+and `frozenset[T]` are multi fields.
+
+`Literal[...]` adds an enum constraint, and `pattern=` adds a regex constraint
+for string-valued `Identity` or `Field` descriptors. These constraints are
+stored in schema truth and enforced by the application write path before ledger
+append.
 
 ```python
 team_ref = fg.read.ref(Team, team_id="t-1")
@@ -145,6 +146,7 @@ user_ref = fg.read.ref(User, user_id="u-1", locale="en")
 
 fg.write.set(Team.name, team_ref, "Research")
 fg.write.set(User.display_name, user_ref, "Alice")
+fg.write.set(User.status, user_ref, "active")
 fg.write.add(User.tags, user_ref, "engineer")
 fg.write.set(User.team, user_ref, team_ref)
 ```
@@ -158,12 +160,13 @@ user = fg.read.get(User, user_id="u-1", locale="en")
 
 assert user is not None
 assert user.display_name == "Alice"
+assert user.status == "active"
 assert tuple(user.tags) == ("engineer",)
 assert user.team == team_ref
 ```
 
-`fg.read.get(...)` reads one complete coordinate. When you want all coordinates
-under a primary anchor, use `fg.read.find(...)`.
+`fg.read.get(...)` reads one complete coordinate. When you want matching
+coordinates under a partial filter, use `fg.read.find(...)`.
 
 ```python
 zh_ref = fg.read.ref(User, user_id="u-1", locale="zh")
@@ -176,34 +179,8 @@ assert {row.display_name for row in rows} == {"Alice", "Alice ZH"}
 ```
 
 Each row returned by `find` is still a full-coordinate snapshot. There is no
-separate primary-only entity reference.
-
-## Why the primary anchor matters
-
-For ordinary `fg.write.*` calls, you pass the full identity directly to
-`fg.read.ref(...)`. The special role of `primary_key=True` becomes visible in
-batch writes, where an entity handle can be built in two steps.
-
-The first step must provide the primary identity anchor. The later `bind(...)`
-step may complete non-primary coordinate dimensions.
-
-```python
-with fg.batch() as tx:
-    batch_user = tx.entity(User, user_id="u-2")
-    batch_user.bind(locale="en")
-    batch_user.display_name.set("Bob")
-    tx.commit(objects=[batch_user])
-
-batch_snap = fg.read.get(User, user_id="u-2", locale="en")
-
-assert batch_snap is not None
-assert batch_snap.display_name == "Bob"
-```
-
-This does not create a primary-only `idref_v1`. It creates an SDK handle that
-is anchored by `user_id`, then completes the coordinate with `locale` before
-writing. You cannot start from `locale` alone, and `bind(...)` is not the place
-to add or change primary identity fields.
+separate primary-only entity reference, and batch writes also require the full
+Identity bundle when constructing a handle.
 
 ## Adding fields later
 
@@ -219,13 +196,13 @@ represent an earlier schema declaration.
 
 ```python
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    locale: str = Identity(default="en")
-    display_name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
-    team: Team = Field(cardinality="single")
-    nickname: str = Field(cardinality="single")
-    skills: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    locale: str = Identity()
+    display_name: str = Field()
+    tags: list[str] = Field()
+    team: Team = Field()
+    nickname: str = Field()
+    skills: list[str] = Field()
 
 
 result = fg.schema.add(User)
@@ -261,20 +238,22 @@ an accident of incomplete coverage.
 ## Complete example
 
 ```python
+from typing import Literal
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class Team(Entity):
-    team_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    team_id: str = Identity()
+    name: str = Field()
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    locale: str = Identity(default="en")
-    display_name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
-    team: Team = Field(cardinality="single")
+    user_id: str = Identity(pattern=r"^u-[0-9]+$")
+    locale: str = Identity()
+    display_name: str = Field()
+    status: Literal["active", "inactive"] = Field()
+    tags: list[str] = Field()
+    team: Team = Field()
 
 
 fg = FactGraph.create(schema_classes=[Team, User])
@@ -287,6 +266,7 @@ assert user_en != user_zh
 
 fg.write.set(Team.name, team_ref, "Research")
 fg.write.set(User.display_name, user_en, "Alice")
+fg.write.set(User.status, user_en, "active")
 fg.write.add(User.tags, user_en, "engineer")
 fg.write.set(User.team, user_en, team_ref)
 fg.write.set(User.display_name, user_zh, "Alice ZH")
@@ -296,19 +276,21 @@ rows = fg.read.find(User, user_id="u-1")
 
 assert user is not None
 assert user.display_name == "Alice"
+assert user.status == "active"
 assert tuple(user.tags) == ("engineer",)
 assert user.team == team_ref
 assert {row.identity["locale"] for row in rows} == {"en", "zh"}
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    locale: str = Identity(default="en")
-    display_name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
-    team: Team = Field(cardinality="single")
-    nickname: str = Field(cardinality="single")
-    skills: str = Field(cardinality="multi")
+    user_id: str = Identity(pattern=r"^u-[0-9]+$")
+    locale: str = Identity()
+    display_name: str = Field()
+    status: Literal["active", "inactive"] = Field()
+    tags: list[str] = Field()
+    team: Team = Field()
+    nickname: str = Field()
+    skills: list[str] = Field()
 
 
 result = fg.schema.add(User)
@@ -323,16 +305,16 @@ assert tuple(updated.skills) == ()
 ## Syntax checklist
 
 - Define graph vocabulary with `class User(Entity): ...`.
-- Use `Identity(primary_key=True)` for the logical primary anchor.
-- Use non-primary `Identity(...)` for domain dimensions under that anchor.
+- Use `Identity()` for immutable coordinate values.
 - Every `Identity` field participates in the complete `idref_v1` coordinate.
-- Use `Field(cardinality="single")` for one active value at a coordinate.
-- Use `Field(cardinality="multi")` for multiple active values at a coordinate.
+- Supply every identity value explicitly; Identity defaults are not part of Form I.
+- Use `Field()` with a scalar annotation for one active value at a coordinate.
+- Use `Field()` with a collection annotation for multiple active values at a coordinate.
+- Use `Literal[...]` for enum-constrained fields and `pattern=` for string regex validation.
 - Use managed refs from `fg.read.ref(...)`; do not hand-build `idref_v1`.
 - Use `fg.read.get(Entity, **full_identity)` for one full coordinate.
 - Use `fg.read.find(Entity, **partial_filters)` for matching snapshots.
-- In batches, start from primary identity with `tx.entity(...)` and complete
-  non-primary dimensions with `bind(...)` before writing.
+- In batches, construct handles with the complete Identity bundle.
 - Add schema with `fg.schema.add(NewEntity)` or same-name replacement classes.
 - Field-add can only add non-identity fields; old class descriptors are
   superseded by the replacement class.

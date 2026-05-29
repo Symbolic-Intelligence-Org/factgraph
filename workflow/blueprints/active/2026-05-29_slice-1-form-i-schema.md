@@ -544,7 +544,7 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 ### 7.11 Migration callsite cleanup(L10 + L11 + P)
 
 - [ ] `tests/` directory:0 remaining `Field(cardinality=` / `Identity(primary_key=` / `Identity(default=` / `Identity(default_factory=` after migration(grep verified)
-- [ ] `src/factgraph/sdk/docs/` + `docs/official/kernel/`:0 remaining stale uses after migration
+- [ ] `src/factgraph/sdk/docs/` + `docs/official/kernel/quickstart/schema.md`:0 remaining stale non-historical uses after migration
 - [ ] Excluded directories(`workflow/heritage/`,`workflow/blueprints/archive/`,`docs/references/working/`,`docs/references/bridges/`(verified non-load-bearing))NOT migrated
 - [ ] `Identity(default=...)` 6+6 = 12 callsites migrated to explicit identity supply
 - [ ] §10 Outcome reports grep counts:`Field(cardinality=` before / after,`Identity(primary_key=` before / after,`Identity(default=` before / after
@@ -738,7 +738,7 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
   - §8 Form I aligned with ADR-FI §4.3 + §4.3-bis adopted wording
   - §8.4 类型推断 rules synced with implementation
   - §8.5 `_DataMember` internal base documented as Slice 1 landed
-- 12.3 No `docs/official/kernel/`, `examples/`, or `tutorials/` edits in this slice(scope correction)
+- 12.3 `docs/official/kernel/quickstart/schema.md` is the only public quickstart file pulled into this slice;no other `docs/official/kernel/`, `examples/`, or `tutorials/` edits
 - 12.4 Final `src/factgraph/` + load-bearing workflow/design docs grep:zero stale uses across migration scope(per SF6)
 - 12.5 Confirm SF6 excluded directories untouched(grep diff verified)
 - 12.6 — commit boundary
@@ -772,7 +772,7 @@ Step 0 amendment commit landed before Step 1 implementation 启动。
 
 ### 9.3 Out-of-slice docs(Slice 4 Phase 2 or downstream migration)
 
-- Public quickstarts outside `src/factgraph/`(`docs/official/kernel/*`,tutorials,examples)unless explicitly pulled into a later docs slice
+- Public quickstarts outside `src/factgraph/` except `docs/official/kernel/quickstart/schema.md`, plus tutorials and examples, unless explicitly pulled into a later docs slice
 - Other quickstarts(`read-write.md` / `assertions.md` / etc.)cross-doc terminology consistency,5-pass polish per ADR-DOCS §4.3
 - Module-wide migration note placement consolidation
 

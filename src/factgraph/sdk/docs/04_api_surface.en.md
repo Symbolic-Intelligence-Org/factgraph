@@ -53,15 +53,15 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from factgraph.sdk import <name>`.
-The export list currently has 53 names.
+The export list currently has 59 names.
 
 ### 1.1 Schema and store
 
 | Symbol | Purpose |
 |---|---|
 | `Entity` | Base class for entity declarations |
-| `Field` | Descriptor for a field with cardinality |
-| `Identity` | Descriptor for an identity (primary-key) field |
+| `Field` | Descriptor for mutable field content; cardinality is inferred from the Python annotation |
+| `Identity` | Descriptor for an immutable identity coordinate field |
 | `Relationship` | Base class for relationship type declarations |
 | `FactGraph` | Canonical entry point (alias of `SDKStore`) |
 | `SDKStore` | Foundational entry point (same class as `FactGraph`) |
@@ -73,6 +73,55 @@ values in declaration order; unset `Field` values render as `None`.
 `FactGraph.load(path, schema_classes=[...])` restores a saved workspace.
 `FactGraph.from_schema_classes([...])` remains available as the lower-level
 class-first constructor name and does not accept workspace `path=`.
+
+#### Form I schema descriptors
+
+Entity schemas use Form I descriptors:
+
+```python
+from typing import Literal
+from factgraph.sdk import Entity, Field, Identity
+
+
+class User(Entity):
+    tenant_id: str = Identity(description="tenant")
+    user_id: str = Identity(pattern=r"^u-[0-9]+$")
+    display_name: str = Field()
+    status: Literal["active", "inactive"] = Field()
+    tags: list[Literal["staff", "admin"]] = Field()
+```
+
+`Identity()` has no `primary_key`, `default`, or `default_factory` keyword.
+Every Identity field is part of the immutable entity coordinate and must be
+provided explicitly when constructing a ref. `Field()` has no `cardinality`
+keyword. Cardinality is inferred from the annotation: scalar `T` is single,
+`list[T]`, `tuple[T, ...]`, `set[T]`, and `frozenset[T]` are multi.
+
+`Literal[...]` annotations become schema enum constraints. `pattern=` is a
+regular-expression constraint available on both `Identity` and `Field`, but
+only for string-valued declarations. Compile-time validation rejects invalid
+regex syntax, non-string pattern targets, mixed-type `Literal[...]`, float
+literal enums, `Optional` / general `Union`, and `dict[...]` annotations.
+
+At write time, enum and pattern constraints are enforced by the application
+write path before ledger append. Invalid values raise `SDKValueError`.
+
+Migration examples:
+
+```python
+# Old
+user_id: str = Identity(primary_key=True)
+locale: str = Identity(default="en")
+tags: str = Field(cardinality="multi")
+
+# New
+user_id: str = Identity()
+locale: str = Identity()
+tags: list[str] = Field()
+```
+
+`_DataMember` is the internal shared base for `Identity` and `Field`. It is not
+exported from `factgraph.sdk`.
 
 ### 1.2 DSL
 
@@ -137,6 +186,7 @@ Use `from factgraph.sdk import build_application_rule` and
 |---|---|
 | `SDKSchemaError` | Schema compilation, descriptor binding, preflight |
 | `SDKStoreError` | Store operations (write, view, batch, query, eval shells) |
+| `SDKValueError` (← `SDKStoreError`) | Enum or pattern value validation during application-layer writes |
 | `EntityNotFoundError` (← `SDKStoreError`) | `read.get(...)` / `write.edit(...)` on missing identity |
 | `FrozenSnapshotError` (← `SDKStoreError`) | Assigning to read-only attribute (snapshot or namespace) |
 | `CardinalityError` (← `SDKStoreError`) | `set` on multi-field, `add` on single-field |
@@ -268,6 +318,12 @@ public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
 
 `fg.batch(meta=None)` opens an `SDKBatchTx` for grouping multiple writes
 into one transaction.
+
+Writes enforce Form I value constraints before ledger append. `Literal[...]`
+enum misses and `pattern=` mismatches raise `SDKValueError` through `fg.set`,
+`fg.add`, `fg.write.set`, `fg.write.add`, batch commits, wire batch apply, and
+`EntityEditor` field operations. Direct internal ledger/protocol paths are
+trusted internal paths and do not run this SDK-layer validation.
 
 ### 2.5 Assertions namespace (`fg.assertions.*`)
 
