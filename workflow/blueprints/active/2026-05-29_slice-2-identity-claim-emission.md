@@ -1,6 +1,6 @@
 # Slice 2 — Identity-as-Claim Core(emission contract formalize + INV-7c reject + cache + `:exists` transitional guard)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-29
 - Last Updated: 2026-05-29
 - Slice: 2 of identity-as-claim Step 1 ladder(per synthesis `d0036e1f`)
