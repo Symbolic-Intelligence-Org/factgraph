@@ -36,6 +36,21 @@
 
 ## 2. Audit Scope
 
+### 2.0 5+1 state 分类约定(canonical taxonomy,贯穿 §5-§7)
+
+per user reviewer 2026-05-29 校准:标准 5-state 之外加一个 `(f) target-gap / pending migration` 桶,**专门处理 design 描述"目标态" + shipped 是"pre-migration coherent baseline"** 的情形。
+
+| 状态 | 含义 | 处理路径 |
+|---|---|---|
+| **(a) shipped covers** | shipped 完整 honors design intent | 无 action |
+| **(b) small gap** | minor mv / rename / metadata sync | blueprint-eligible(small slice) |
+| **(c) shape conflict** | shipped EXISTS 且 actively conflicts design — 必须 Q 决策才能继续 | 必须 Q-decision |
+| **(d) genuinely new** | shipped 无对应物;design 提议全新概念 | blueprint-eligible(implementation slice) |
+| **(e) deferred-aligned** | design 显式 defer + shipped honors 当前 state | 无 action(Step 2+ 时再评估) |
+| **(f) target-gap / pending migration** ★ | shipped 是 pre-migration coherent state,design 描述 post-migration 目标态;**不是 conflict**,是 migration prerequisite | migration slice;Step 1 实施时一并处理或独立 slice |
+
+**关键 framing**:"未实现目标态 ≠ shipped 是 bug"。本 audit §5-§7 所有 triage 表沿用此 taxonomy。
+
 ### In scope(本次审计目标)
 
 **Design 文档维度**:
@@ -248,20 +263,7 @@
 
 ### 5.1 I-series — Invariant triage(Phase 2)
 
-#### 5+1 state 分类约定(本 audit 采用)
-
-标准 5-state 之外加一个 `(f) target-gap / pending migration` 桶,**专门处理 design 描述"目标态" + shipped 是"pre-migration coherent baseline"** 的情形(per user reviewer 校准 2026-05-29):
-
-| 状态 | 含义 | 处理路径 |
-|---|---|---|
-| **(a) shipped covers** | shipped 完整 honors design intent | 无 action |
-| **(b) small gap** | minor mv / rename / metadata sync | blueprint-eligible(small slice) |
-| **(c) shape conflict** | shipped EXISTS 且 actively conflicts 设计 — 必须 Q 决策才能继续 | 必须 Q-decision |
-| **(d) genuinely new** | shipped 无对应物;design 提议全新概念 | blueprint-eligible(implementation slice) |
-| **(e) deferred-aligned** | design 显式 defer + shipped honors 当前 state | 无 action(Step 2+ 时再评估) |
-| **(f) target-gap / pending migration** ★新增 | shipped 是 pre-migration coherent state,design 描述 post-migration 目标态;**不是 conflict**,是 migration prerequisite | migration slice;Step 1 实施时一并处理或独立 slice |
-
-**关键 framing**(per user reviewer 2026-05-29):"未实现目标态 ≠ shipped 是 bug"。INV-7c / INV-9 / INV-10 / INV-11 / INV-15 等几条都是 (f) target-gap,因为 shipped 当前不存在它们 enforce 的概念前提(Identity Claim、unary fact、`__system__.*` namespace 等);**Step 1 实施时**这些 invariant 将成为新 write/retract path 的 load-bearing boundary check。
+**5+1 state 分类约定见 §2.0(canonical taxonomy)**。INV-7c / INV-9 / INV-10 / INV-11 / INV-15 等几条都是 (f) target-gap,因为 shipped 当前不存在它们 enforce 的概念前提(Identity Claim、unary fact、`__system__.*` namespace 等);**Step 1 实施时**这些 invariant 将成为新 write/retract path 的 load-bearing boundary check。
 
 #### I-series triage table
 
@@ -336,6 +338,113 @@
 
 详见 §5.1 表格末尾 5 个 Q-I1 → Q-I5 候选。**当前仅候选,Phase 4 时连同 A-series / D-series 浮出的 Q 一起 finalize + 编号 + 加 input/scope/non-scope/rejected alternatives 等 ADR structure 标记。**
 
+### 5.2 A-series — Architecture commitment triage(Phase 3)
+
+按 CADENCE Phase 3 "batches of 5" 组织:4 个 batch × 5-6 项。沿用 §2.0 5+1 state。
+
+#### 5.2.1 Batch 1 — e_ref + Identity 模型(A1-A5)
+
+| # | Architecture commitment | Design source | Shipped evidence | 分类 | Rationale + candidate Q |
+|---|---|---|---|---|---|
+| **A1** | **e_ref = typed content-derived constructor**(`idref_v1(EntityType, identity)`,X-style) | `identity-mechanism-redesign.zh.md:143-147` def 1 + `:327-365` Q1 idref_v1 lock | `core/protocol/idref_v1.py:67-73` `encode_idref_v1` 已 shipped 完整;`sdk/store.py:1916` 调用路径;`application/schema_runtime.py:367` 调用路径 | **(a) shipped covers** | typed Thing 完整 shipped(typed constructor 应用在 identity bundle 上,SHA-256+base32 输出 `idref_v1:<EntityType>:<digest>`)。**无 Q**。 |
+| **A2** | **Identity = immutable anchor**(create 时 atomic 必填、single、参与 e_ref hash、不可修改) | `identity-mechanism-redesign.zh.md:149-152` def 2 + INV-7a `:248-261` | `sdk/schema.py:172-176` Entity 必须至少一个 `Identity(primary_key=True)` 否则 raise;`sdk/facade.py:448-479` `IdentityEditor` 三个 mutation 方法全 raise SDKStoreError | **(a) shipped covers** + **(b) small gap** | EntityEditor 内 immutable ✓ shipped;但 design §12.8 要求 **Layer 2 `fg.fields.set(IdentityField, ...)` 也拒绝**,目前 shipped `set_field`(`evidence/write_protocol.py:128-156`)不做 schema-aware 检查(它接受任何 pred_id)。**已浮 Q-I1**(Phase 2)— Phase 4 时跟 A2 关联。 |
+| **A3** | **Field = mutable attribute**(revoke + append 走 ledger 生命周期,e_ref 跨 Field 变更稳定) | `identity-mechanism-redesign.zh.md:154-156` def 3 | `evidence/write_protocol.py:128-208` `set_field` / `add_field` / `retract_by_asrt` 完整 shipped;`sdk/facade.py:389-445` `FieldEditor` 完整;e_ref 不依赖 Field 值(idref_v1 只 hash identity) | **(a) shipped covers** | Field mutable 完整 ✓ shipped;append-only 通过 revoke+append 实现;e_ref 跨 Field 稳定(因为 e_ref hash 输入只含 identity,不含 Field)。**无 Q**。 |
+| **A4** | **Identity-as-Claim = mirrored anchor facts**(Identity 值除了进 hash,还存为 Claim;Step 1 核心增量) | `identity-mechanism-redesign.zh.md:158-162` def 4 + INV-7b `:263-280` | `authoring/schema_compile.py:152-159` Identity predicate **declared** in schema_ir(`is_identity_field: True` flag,pred_id=`{owner_prefix}:{field_name}`);**但 Identity field Claim 本身 NOT emitted** — `application/entity_write.py:389` 处理 `record_exists`(emit `:exists` Claim)但 grep 无 Identity field Claim emission 路径;`sdk/facade.py:358-365` snapshot dot-access 走 `_identity_values` echo(从 caller kwargs)not from ledger | **(f) target-gap / pending migration** | **Step 1 核心增量**。infrastructure 已就绪(schema_ir 含 `is_identity_field` flag + pred_id 已 declare),只欠 emission 路径。**Q-I2 已浮**(Phase 2)— Q-I2 议题"Identity Claim 在哪层 emit",跟 A4 同一 implementation site。 |
+| **A5** | **边界规则:未来可能变的值不要建模为 Identity** | `identity-mechanism-redesign.zh.md:166-176` 边界规则 | shipped 无强制 — `Identity` descriptor 接受任何字段(只要类型在 `CANONICAL_TAGS`);**当前 SDK 文档没有这条 schema 设计指南** | **(d) genuinely new**(documentation gap) | 这是 schema 设计**指导原则**而非可机械化的 invariant。**Q-A1 候选**:是否在 `Entity.Meta` 或 `_DataMember` 上加一个 `volatile=False` 显式 contract 让用户声明"我承诺这个字段不会变",还是仅文档化?(Phase 4 finalize) |
+
+#### 5.2.2 Batch 2 — Form I schema 声明(A6-A10)
+
+| # | Architecture commitment | Design source | Shipped evidence | 分类 | Rationale + candidate Q |
+|---|---|---|---|---|---|
+| **A6** | **Form I:Identity / Field 二分 + `_DataMember` 共通基类** | `identity-mechanism-redesign.zh.md:391-510` §8 Form I | `sdk/schema.py:50-141` `Identity` 与 `Field` 已分两类 descriptor ✓;但**无 `_DataMember` 中间基类**;两类各自继承 `_DeclaredMember`(`:20-47`)— 后者仅承载 descriptor 协议(`__set_name__` / `__get__` / `__set__`)不承载数据语义参数 | **(a) shipped covers**(二分 part)+ **(b) small gap**(无共通基类) | 二分 ✓ shipped;`_DataMember` 是小重构,把 `description` / `pattern` 等共通参数从 Identity/Field 各自定义提升到共通基类。**Q-A2 候选**:`_DataMember` 是否要暴露为 public API(`from factgraph.sdk import _DataMember`)还是 internal?(影响 user defined descriptor 扩展能力) |
+| **A7** | **Cardinality 从类型注解推断**(`T` → single;`list[T]` → multi) | `identity-mechanism-redesign.zh.md:448-462` §8.4 | `sdk/schema.py:104-122` `Field(*, cardinality: str, ...)` cardinality 是**必填 kwarg**;**无类型注解推断逻辑**;`schema_compile.py:312-317` cardinality 验证只接受 `{"single","multi"}` 字符串 | **(b) small gap** + **(d) genuinely new**(推断 logic) | 现状 explicit kwarg 跟 design 推断不冲突,只是 ergonomic 差距。**Q-A3 候选**:是否 backward-compat 同时支持 explicit kwarg + 类型推断?还是 deprecate explicit kwarg(alpha 阶段直接 breaking)? |
+| **A8** | **`Literal[...]` 枚举类型支持**(含 Layer 4 enum 约束 + `list[Literal[...]]` multi 形态) | `identity-mechanism-redesign.zh.md:451-462` §8.4 表 + `:464-470` enum 约束 | `core/schema/schema_ir.py` `CANONICAL_TAGS` shipped 8 tags 不含 enum;`schema_compile.py:240-244` 只校验 type_domain ∈ CANONICAL_TAGS;**无 enum_values 字段在 schema_ir 中** | **(d) genuinely new** | 全新 schema feature,需要 schema_ir 扩展(加 `enum_values: list[str]` 可选字段)+ schema_compile 路径接受 Literal 注解 + Layer 4 校验 `value ∈ enum_values`。**Q-A4 候选**:enum 约束在哪层校验?compile time(schema_compile.py 静态)还是 write time(`set_field` runtime)? |
+| **A9** | **`_DataMember.pattern`**(regex 字段值校验,Layer 4) | `identity-mechanism-redesign.zh.md:472-488` §8.5 pattern | `sdk/schema.py:50-88` Identity / Field 都**无 pattern= 参数**;`schema_compile.py` 无 regex 字段;`evidence/write_protocol.py:128-156` `set_field` 无值 regex 校验 | **(d) genuinely new** | 全新 Layer 4 约束。infrastructure 几乎为零,Step 1 引入需要:descriptor 层加 `pattern=` + schema_ir 加 `pattern` 字段 + write path 加 regex 校验。**Q-A5 候选**:pattern 校验 compile time 还是 write time?是否同 A8 enum 一起设计(都是 Layer 4 value 约束)? |
+| **A10** | **`description=` / `pattern=` 提升到 `_DataMember` 共通基类**;扩展位 `validators` / `constraints` / `alias` / `deprecated` / `examples` | `identity-mechanism-redesign.zh.md:497-510` §8.5 共通字段 + 扩展位 | `sdk/schema.py:104-112` `Field` 已有 `description: str \| None = None` 参数 ✓;`Identity` 无 `description` 参数;**两者都无 `pattern=`**;其他扩展位(validators/constraints/alias/deprecated/examples)都不存在 | **(b) small gap**(description part)+ **(d) genuinely new**(pattern + 扩展位) | `description` 从 Field 上移到共通基类是 small refactor。扩展位 Step 1 仅占位,Step 2+ 实现。**已 Q-A2 候选关联**(`_DataMember` public 性)。 |
+
+#### 5.2.3 Batch 3 — API 三层 + AssertionView + `_meta`(A11-A15)
+
+| # | Architecture commitment | Design source | Shipped evidence | 分类 | Rationale + candidate Q |
+|---|---|---|---|---|---|
+| **A11** | **API 三层分层**(`fg.entities.*` / `fg.fields.*` / `fg.assertions.*`,navigation key 即层边界) | `identity-mechanism-redesign.zh.md:790-960` §12.2 | `sdk/store.py` 当前 namespace map:**`fg.entities` 不存在**;**`fg.fields` 不存在**;`fg.assertions` shipped(`:436-485`)5 methods read-only(by_id/by_ids/active/all/field);`fg.read`(`:529-565`)/ `fg.write`(`:568-603`)是当前 read/write 入口 | **(c) shape conflict** + **(d) genuinely new** | shipped `fg.read` / `fg.write` 跟 design `fg.entities` / `fg.fields` namespace **结构 conflict**(同一功能不同分层);design 提议的 `fg.entities.create/where/exists/delete/edit` 和 `fg.fields.set/add/retract/delete/get` 大部分对应 shipped `fg.read.*` / `fg.write.*` 方法,但**重新分组**。**Q-A6 候选**:三层 migration 策略 — alpha 阶段直接 breaking rename(`fg.read.*` → `fg.entities.*` / `fg.write.*` → `fg.fields.*`)+ 加新方法?还是 namespace 并行(`fg.entities` 新加,`fg.read` 留做 deprecation alias)?(后者 user 在 §17 已 lock-in "完全删除 no alias"立场;但 audit 期需明确确认) |
+| **A12** | **AssertionView 统一类型**(替代 shipped `AssertionNamespace` + `FieldAssertions`) | `identity-mechanism-redesign.zh.md:961-1050` §12.3 | `sdk/facade.py:204-330` `FieldAssertions`(per-field per-entity)+ `AssertionNamespace`(per-entity)是**独立 class**;无 `AssertionView` 统一概念;两者都接受 scope-bound 数据但不共享 method signature | **(c) shape conflict** + **(d) genuinely new** | 类型合并是 source-breaking 变更。design 把它们合并成 scope-aware 单一 `AssertionView` 类型。**Q-A7 候选**:合并时机 — Step 1 直接合并(breaking)还是 alpha 阶段引入新 `AssertionView` + 暂保留 `FieldAssertions` / `AssertionNamespace` deprecated alias?(同 A11,user §17 lock-in "no alias",audit 期确认) |
+| **A13** | **AssertionView 招纳原则**(一等方法只授有特殊行为的能力:revoke 跟踪 / 时间维度 / asrt_id 索引 / scope 窄化;普通 meta equality 走 `where(_meta={...})`)| `identity-mechanism-redesign.zh.md:1027-1044` §12.3 招纳原则 | `sdk/facade.py:132-201` `AssertionRecordSet.where(value=, source=, trace_id=, version=, meta=)` shipped 半 flat 半 dict;`.at(t)` / `.version(v)` 一等 method shipped;`.history` 是 `.all` alias shipped;**`version` 没被剔除(违反招纳原则)** | **(c) shape conflict** | shipped `version(v)` 是一等方法但无特殊行为(等价于 `where(_meta={"version":v})`),跟设计的招纳原则冲突。removal 会 break 现有 caller。**Q-A8 候选**:招纳原则 enforcement — version 是 hard remove(breaking)还是先 `DeprecationWarning` 一个版本周期?(user §17 lock-in "no alias / breaking"立场) |
+| **A14** | **`_meta` 统一 meta 输入**(所有 meta 过滤走 `_meta={...}` dict,折叠 shipped `source=/trace_id=/version=` flat kwargs) | `identity-mechanism-redesign.zh.md:1097-1170` §12.4 | `sdk/facade.py:132-160` `AssertionRecordSet.where(value=, source=, trace_id=, version=, meta=)` 是 half-flat half-dict shipped 形态 | **(c) shape conflict** | flat kwargs 跟 dict 同时存在,**接口形态不统一**。design 提议折叠。**Q-A9 候选**:折叠时机和兼容期 — Step 1 直接 breaking(flat kwargs raise)还是 alpha 阶段双向接受?(`_meta` 反义性:shipped `meta=` 跟 design `_meta=` 命名都改) |
+| **A15** | **6 条硬定义**(Rule 1-6:sentinel / at-version 默认 active / by_id 走 all / history 弃用 / retract 不在 view / ledger scope 拒字符串)| `identity-mechanism-redesign.zh.md:1180-1260` §12.5 | `sdk/facade.py:135-160` `_ASSERTION_FILTER_MISSING` sentinel **已 shipped**(Rule 3 ✓);`.history` shipped 是 `.all` alias(Rule 4 半 covered);`.at(t)` / `.version(v)` shipped 隐含基于 `.active`(Rule 4 ✓);`by_id` 走 history(Rule 5 ✓);**retract 在 AssertionView 上 N/A(没有 retract 方法)**(Rule 5 vacuously satisfied);**`fg.assertions.field(F)` 接受 Field descriptor**(Rule 6 ✓);**但 ledger scope vs entity scope 边界 shipped 还是用同一 Field descriptor 处理,Rule 6 字符串拒绝逻辑未实施** | **(a) shipped covers**(Rules 1,3,4 part,5,6 part)+ **(b) small gap**(Rule 4 history 应弃用 warning + Rule 6 ledger scope 字符串拒绝) | 多数 Rule 已 implicitly 满足;少数需要小 gap 修补。**Q 不浮**,作为 implementation detail 进 Step 1 blueprint |
+
+#### 5.2.4 Batch 4 — Identity boundary + schema 管理 + ledger 同步(A16-A21)
+
+| # | Architecture commitment | Design source | Shipped evidence | 分类 | Rationale + candidate Q |
+|---|---|---|---|---|---|
+| **A16** | **Identity 三层 immutable boundary**(Layer 1 entities.edit / Layer 2 fields.set / Layer 3 assertions.retract 全部拒绝改 Identity) | `identity-mechanism-redesign.zh.md:1289-1320` §12.8 | Layer 1:`sdk/facade.py:448-479` `IdentityEditor` 拒 ✓;Layer 2:`evidence/write_protocol.py:128-156` `set_field` **不区分** Identity/Field(只看 pred_id 字符串);Layer 3:`evidence/write_protocol.py:170-208` `retract_by_asrt` **不区分** Identity Claim/Field Claim(只看 asrt_id 存在性) | **(a) shipped covers**(Layer 1)+ **(f) target-gap**(Layer 2 + Layer 3 — 当前没有 Identity Claim 所以 vacuously 满足,但 Step 1 必须 enforce) | Layer 1 ✓;Layer 2+3 跟 INV-7c 同 implementation site。**已 Q-I1**(fields.set 拒绝)+ **已 Q-I3**(INV-7c 策略 C cache 实施) |
+| **A17** | **`fg.schema.register / extend / apply` 三分**(替代混杂 `fg.schema.add`)| `identity-mechanism-redesign.zh.md:1322-1410` §12.9 | `sdk/store.py:518` `_SDKSchemaManager.add(*classes, **kwargs)` 单一入口;无 `register` / `extend` / `apply` 区分;**未实施 additive-only 检查** | **(c) shape conflict** + **(d) genuinely new** | `add` 当前混杂"register 新类型"和"extend 已有类型",per PDF Change Request triage 已 user-accepted 三分(详见 identity §15 决策日志)。**Q-A10 候选**:三分后 `add` deprecation 策略?(user §17 立场 "no alias",audit 期 confirm) |
+| **A18** | **Schema evolution 约束:不允许 Identity↔Field 互转 / 新增 Identity / 删除字段**(配套 INV-7c 实施策略 C) | `identity-mechanism-redesign.zh.md:1392-1410` §12.9 schema evolution 约束 | shipped `fg.schema.add` 无 diff 检查;无 additive-only enforce;Identity↔Field 互转技术上当前 evolves 时不被禁止;**这是 design 新增 invariant,不在 shipped enforcement 里** | **(d) genuinely new** | Schema evolution 约束 Step 1 必须随 INV-7c 实施。**Q 不独立**,跟 Q-I3(INV-7c cache lifecycle)+ Q-A10(schema 三分)同 implementation slice |
+| **A19** | **3-table ledger schema 终态**(claims + claim_meta + ledger_meta) | `ledger-schema-specification.zh.md:105-160` §3 | `core/store/ledger.py:81-159` shipped **7 张表**:claims + claim_args + meta_rows + revokes + ingest_keys + ledger_meta + annotation_rows | **(f) target-gap / pending migration** | 7 数据精简 migration 目标;Step 1 / Step 1+ 分批落地。**已浮 cluster level Q**(Phase 2 system namespace cluster Q-I5 涉及);新增 **Q-A11 候选**:7 步精简 migration 是单 slice 还是分阶段?哪些精简跟 Step 1 Identity-as-Claim 同步落地,哪些可独立? |
+| **A20** | **`:exists` Claim 标记为 legacy/transitional**(Step 1 后实质冗余,Identity 镜像 Claim 已是 entity 存在性证据) | `ledger-schema-specification.zh.md:142-155` §3.1 :exists 注 + `:296-300` §4.7 boundary | `authoring/schema_compile.py:140-150` `<EntityType>:exists` 已 declared in schema_ir;`application/entity_write.py:389` `record_exists` op 已 shipped → emit `:exists` Claim;**当前 shipped 是"实质 truth"形态,不是 legacy**(因为 Identity Claim 未 emit) | **(a) shipped covers** + **(f) target-gap**(legacy 降级需 Identity Claim emit 后) | 跟 INV-7b / A4 (Identity-as-Claim) 同 cluster — Identity Claim emit 后 `:exists` 才能 transitional/legacy 降级。**Q-A12 候选**:Step 1 后 `:exists` Claim emission 是同步移除(breaking)还是双写一段时间然后剔除?(影响 read path 兼容性) |
+| **A21** | **7 数据精简 migration path**(meta+annotation 合并 / 删 namespace+category+derivation / revokes→__system__.revokes Claim / rest_terms→value+value_tag / fact_meta→claim_meta / ingest_keys 删 / 复合 PK) | `ledger-schema-specification.zh.md:710-790` §9 | `core/store/ledger.py:81-159` shipped 7 tables 是 migration 起点;**zero migration 实施 shipped** | **(f) target-gap / pending migration** | migration plan 是 design 主体;实施分阶段。**已 Q-A11 候选**(migration 切片策略) |
+
+### 5.2 A-series 总结
+
+**21 条 architecture commitment 的分类分布**:
+
+| 桶 | A 数 | 列表 |
+|---|---:|---|
+| (a) shipped covers | 3 | A1 / A3 / A15(多 Rule 已隐含满足) |
+| (a)+(b) | 3 | A2 / A6 / A10 |
+| (a)+(f) | 2 | A16 / A20 |
+| (b)+(d) | 1 | A7 |
+| (c) shape conflict | 0 pure | — |
+| (c) + (d) | 4 | A11 / A12 / A17 / [A14 部分] |
+| (c) 单独 | 2 | A13 / A14 |
+| (d) genuinely new | 3 | A5 / A8 / A9 / A18(纯新增) |
+| (f) pure target-gap / pending migration | 3 | A4 / A19 / A21 |
+
+(分类总和 > 21 因有 split 项)
+
+**关键观察**(per user reviewer 2026-05-29 提示的 cluster 识别):
+
+#### 新增 migration clusters(per user Phase 3 预测)
+
+Phase 2 已识别 3 cluster;A-series 浮出 2 个新 cluster:
+
+| Cluster | 涉及 commitments / invariants | 说明 |
+|---|---|---|
+| 4. **Form I + descriptor 扩展 cluster** | A6 / A9 / A10 + A8(Literal)| `_DataMember` 共通基类 + pattern + Literal 枚举 + Identity description 提升,**作为 schema descriptor 一次性重构**;Step 1 同 slice 落地最高效 |
+| 5. **API namespace 三层重组 cluster** | A11 / A12 / A13 / A14 / A15(部分)+ A17 | `fg.read` / `fg.write` / `fg.assertions` → `fg.entities` / `fg.fields` / `fg.assertions` + AssertionView 统一 + `_meta` 统一 + `fg.schema` 三分 + 招纳原则 enforcement,**作为 API surface 一次性重组**;Step 1 同 slice 落地最高效但工作量最大 |
+
+#### 浮出的 A-series Q candidates(Q-A1 → Q-A12,Phase 4 finalize)
+
+| 候选 | A 来源 | 议题 | 类别 |
+|---|---|---|---|
+| **Q-A1** | A5 | `volatile=False` 显式 contract 还是文档化边界规则? | Schema 设计指导 |
+| **Q-A2** | A6 + A10 | `_DataMember` 是否暴露为 public API? | descriptor 扩展性 |
+| **Q-A3** | A7 | Cardinality 推断 backward-compat 还是 alpha breaking? | schema syntax migration |
+| **Q-A4** | A8 | enum 约束在 compile time 还是 write time 校验? | Layer 4 enforcement layer |
+| **Q-A5** | A9 | pattern 校验 compile time 还是 write time?跟 A8 enum 一起设计? | Layer 4 enforcement layer |
+| **Q-A6** | A11 | 三层 namespace migration 策略 — alpha breaking rename 还是并行 alias? | API namespace 重组 |
+| **Q-A7** | A12 | AssertionView 类型合并时机 — Step 1 breaking 还是 deprecated alias 一周期? | 类型 surface 重组 |
+| **Q-A8** | A13 | `version(v)` 招纳原则 enforcement — hard remove 还是 DeprecationWarning 周期? | 招纳原则迁移 |
+| **Q-A9** | A14 | `_meta` 统一 — 直接 breaking 还是双向接受期? | meta surface 迁移 |
+| **Q-A10** | A17 + A18 | `fg.schema.add` 三分后 deprecation;schema evolution 约束跟 INV-7c 同 slice 还是独立 | schema 三分 + evolution |
+| **Q-A11** | A19 + A21 | 7 数据精简 migration 切片策略 — 哪些跟 Step 1 同步,哪些独立 | ledger migration 切片 |
+| **Q-A12** | A20 | `:exists` Claim emission 移除时机 — Step 1 后同步移除 vs 双写过渡 | `:exists` legacy 降级 |
+
+#### Q-A 跟 Q-I 关联 / 合并候选(per user reviewer Phase 4 guidance)
+
+- **Q-I1 + A2**:都是 Layer 2 `fields.set` 拒绝 Identity 写入;Phase 4 可合并
+- **Q-I2 + A4**:都是 Identity Claim emission 路径;Phase 4 同 Q
+- **Q-I3 + A16 + A18**:都是 INV-7c cache lifecycle / Layer 2-3 boundary + schema evolution;Phase 4 同 cluster 评估
+- **Q-I4 + Q-A11**:INV-9 enforcement timing 嵌在 ledger migration 切片策略里;Phase 4 评估是否合并
+- **Q-I5 + A19 (system namespace cluster)**:`__system__.*` rejection 跟 revokes 表迁移 + INV-15 default filter 链式;Phase 4 同 cluster
+
+### 6.2 A-series triage summary(Phase 3)
+
+详见 §5.2 各 batch 表 + §5.2 总结。
+
+### 7.2 A-series Q candidates(Phase 3 surfaced;Phase 4 finalize)
+
+详见 §5.2 末尾 12 个 Q-A1 → Q-A12 候选 + Q-I 跟 Q-A 关联清单。Phase 4 时统一编号 + 加 ADR structure。
+
 ## 8. Reviewer Focus(Phase 4 填入)
 
 > ⏳ Phase 4 待填:reviewer 应特别关注的 finding 集 + cross-doc seams + cross-slice contract preservation。
@@ -355,6 +464,35 @@
 - [x] §4 Shipped Source Read(SDK / facade / ledger / protocol / write / authoring / adapter / published docs)
 - [x] §4.10 Coverage check(标识 Phase 2 row-drafting time re-read 需要补的文件)
 - [ ] §5-§9 留 Phase 2-4(I-series → A-series → D-series + cross-doc + Q surface)
+
+## Phase 3 完成状态
+
+- [x] 5+1 state taxonomy 提升到 §2.0(canonical reference,A/D-series 沿用)
+- [x] §5.2 A-series triage(21 条 architecture commitment,4 batches × 5-6 项)
+  - [x] Batch 1:e_ref + Identity 模型(A1-A5)
+  - [x] Batch 2:Form I schema 声明(A6-A10)
+  - [x] Batch 3:API 三层 + AssertionView + `_meta`(A11-A15)
+  - [x] Batch 4:Identity boundary + schema 管理 + ledger 同步(A16-A21)
+- [x] §5.2 总结(分类分布 + 新增 2 cluster:Form I cluster + API namespace 三层重组 cluster)
+- [x] §5.2 浮出 12 Q candidates(Q-A1 → Q-A12)+ Q-I 跟 Q-A 关联清单(per user reviewer Phase 4 guidance)
+- [x] §6.2 A-series triage summary(指向 §5.2)
+- [x] §7.2 Q candidates 占位
+- [x] Phase 3 row-drafting time 完整 re-read:`schema_compile.py`(530 lines)
+- [x] Phase 3 spot-check:`:exists` emission 路径(`application/entity_write.py:389`)+ `is_identity_field` flag 使用点 + `encode_idref_v1` 调用点
+- [x] INV-3 transaction boundary verification(per user reviewer Phase 2 deferred 项):shipped `set_field`(`evidence/write_protocol.py:128-156`)调用 `ledger.append_assertion` 单一 call,内部 SQLite cursor + commit boundary 跨表(claims+claim_args+meta+annotations);`retract_by_asrt` 跨 revokes+meta_rows(可选 + annotations);**单 transaction 假设合理**,但 Phase 4 时 spot-check `ledger.py` 的 `_conn.execute` + `commit()` 排布最终确认
+- [ ] §5.3 D-series 留 Phase 4
+- [ ] §5.4 N-series 留 Phase 4(if needed)
+- [ ] §7 全部 Q finalize(Q-I + Q-A + Q-D 统一编号 + ADR structure)留 Phase 4
+- [ ] §6.3 / §8 / §9 留 Phase 4
+
+**等 user review + "可以推进" 才进入 Phase 4 D-series + cross-doc seams + Q finalize + recommendations**。
+
+Phase 3 → Phase 4 转换前,user review 应确认:
+1. **A-series 21 条 commitment 分类**是否准确(尤其 (c) shape conflict vs (f) target-gap 区分 — A11/A12/A13/A14/A17 都标为 (c) shape conflict 因为 shipped 有 active 不同 surface,跟 (f) target-gap "shipped 没有这个概念"区分)
+2. **2 个新 cluster 识别**(Form I + descriptor 扩展 cluster + API namespace 三层重组 cluster)是否对路;是否在 Step 1 内同 slice 落地的判断合理
+3. **12 个 Q candidates(Q-A1 → Q-A12)**议题表述是否准确;Phase 4 finalize 时是否需要拆分 / 合并
+4. **Q-I 跟 Q-A 关联清单**是否覆盖全部关联;Phase 4 时是否同时 finalize 几个合并 Q
+5. **INV-3 transaction boundary** Phase 3 初步确认 + Phase 4 ledger.py `_conn` 排布最终 spot-check 同意吗
 
 ## Phase 2 完成状态
 
