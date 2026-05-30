@@ -4,8 +4,8 @@ Per blueprint §8 Step 6 + §5.7 + §7.4:
 
 - `_SDKAssertionsManager` is promoted to public `AssertionsManager`.
 - `fg.assertions.retract(asrt_id)` owns the Slice 2 retract guard wrapper.
-- legacy flat `fg.retract(asrt_id)` delegates to `fg.assertions.retract`
-  until Step 7 removes the flat shortcut.
+- flat `fg.retract(asrt_id)` is removed in Step 7; `fg.assertions.retract`
+  is the canonical Layer 3 mutation entry.
 - `fg.assertions.where(...)` ships the canonical Layer 3 filter entry with
   `_meta` dict input and no flat source/trace_id/version kwargs.
 - `fg.fields.retract/delete` delegate to `fg.assertions.retract`.
@@ -127,7 +127,7 @@ def test_assertions_retract_field_claim_succeeds_and_flat_retract_delegates():
     fg, _e_ref, name_asrt, tag_asrt = _make_materialized_fg()
 
     revoker = fg.assertions.retract(name_asrt)
-    flat_revoker = fg.retract(tag_asrt)
+    flat_revoker = fg.assertions.retract(tag_asrt)
 
     assert isinstance(revoker, str) and revoker
     assert isinstance(flat_revoker, str) and flat_revoker
@@ -190,4 +190,3 @@ def test_fields_retract_and_delete_delegate_to_assertions_retract():
     assert count == 2  # original vip + blue
     assert fg._store.ledger.has_active_revocation(red)
     assert fg._store.ledger.has_active_revocation(blue)
-

@@ -54,8 +54,8 @@ def _make_fg():
 def _make_materialized_fg():
     fg = _make_fg()
     e_ref = fg.entities.create(DelUser, user_id="alice", tenant_id="acme")
-    fg.set(DelUser.name, e_ref, "Alice")
-    fg.set(DelUser.status, e_ref, "active")
+    fg.fields.set(DelUser.name, e_ref, "Alice")
+    fg.fields.set(DelUser.status, e_ref, "active")
     return fg, e_ref
 
 
@@ -176,7 +176,7 @@ def test_delete_rejects_int():
 def test_delete_form_b_raises_entity_not_found_when_not_materialized():
     fg = _make_fg()
     # Only ref (no create or set), entity not visible
-    fg.ref(DelUser, user_id="ghost", tenant_id="acme")
+    fg.entities.ref(DelUser, user_id="ghost", tenant_id="acme")
     with pytest.raises(EntityNotFoundError) as exc_info:
         fg.entities.delete(DelUser, user_id="ghost", tenant_id="acme")
     assert exc_info.value.code == "ENTITY_NOT_FOUND"
@@ -184,7 +184,7 @@ def test_delete_form_b_raises_entity_not_found_when_not_materialized():
 
 def test_delete_form_a_raises_entity_not_found_when_only_ref():
     fg = _make_fg()
-    e_ref = fg.ref(DelUser, user_id="ghost", tenant_id="acme")
+    e_ref = fg.entities.ref(DelUser, user_id="ghost", tenant_id="acme")
     with pytest.raises(EntityNotFoundError) as exc_info:
         fg.entities.delete(e_ref)
     assert exc_info.value.code == "ENTITY_NOT_FOUND"

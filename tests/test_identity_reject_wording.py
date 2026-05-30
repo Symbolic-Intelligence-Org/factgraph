@@ -43,9 +43,9 @@ def _make_materialized_fg():
     Returns (fg, e_ref).
     """
     fg = FactGraph.create(schema_classes=[IdentityRejectUser])
-    e_ref = fg.ref(IdentityRejectUser, user_id="alice", tenant_id="acme")
+    e_ref = fg.entities.ref(IdentityRejectUser, user_id="alice", tenant_id="acme")
     # Materialize entity by writing a Field — triggers Identity + :exists Claim emission.
-    fg.set(IdentityRejectUser.name, e_ref, "Alice")
+    fg.fields.set(IdentityRejectUser.name, e_ref, "Alice")
     return fg, e_ref
 
 
@@ -55,7 +55,7 @@ def _make_fg_with_editor():
     Returns (fg, editor).
     """
     fg, _ = _make_materialized_fg()
-    editor = fg.edit(IdentityRejectUser, user_id="alice", tenant_id="acme")
+    editor = fg.entities.edit(IdentityRejectUser, user_id="alice", tenant_id="acme")
     return fg, editor
 
 
@@ -221,7 +221,7 @@ def test_layer_2_and_layer_3_share_inv_7c_code():
     assert claims, "Identity Claim should exist after materialization"
     identity_asrt_id = claims[0].asrt_id
     with pytest.raises(SDKStoreError) as l3_exc:
-        fg.retract(identity_asrt_id)
+        fg.assertions.retract(identity_asrt_id)
 
     # Same code propagates through both layers
     assert l2_code == l3_exc.value.code == "INV_7C_IDENTITY_PROTECTED"

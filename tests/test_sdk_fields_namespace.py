@@ -2,15 +2,15 @@
 
 Per blueprint §8 Step 5 + §5.6 + §7.3 + ADR-API §4.1.1:
 
-- `fg.fields.set/add` delegate to shipped `SDKStore.set/add`.
+- `fg.fields.set/add` are the canonical Layer 2 write entries.
 - `fg.fields.retract(Field, e_ref, value)` is value-oriented and delegates the
-  selected assertion id to shipped `SDKStore.retract`.
+  selected assertion id to `fg.assertions.retract`.
 - `fg.fields.delete(Field, e_ref)` clears all active claims for a field/e_ref
   pair with fail-fast first-error semantics.
 - `fg.fields.get(Field, e_ref)` materializes current values from active claims.
 - Layer 2 rejects assertion-id and Entity-class navigation keys.
 - Identity fields routed through `retract/delete` still hit Slice 2 INV-7c
-  guard because Step 5 delegates to shipped `SDKStore.retract`.
+  guard through `fg.assertions.retract`.
 """
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def test_fields_set_delegates_to_shipped_set_and_get_single_value():
 
     assert isinstance(asrt_id, str) and asrt_id
     assert fg.fields.get(FieldsUser.name, e_ref) == "Alice"
-    assert fg.get(FieldsUser, user_id="alice", tenant_id="acme").name == "Alice"
+    assert fg.entities.get(FieldsUser, user_id="alice", tenant_id="acme").name == "Alice"
 
 
 def test_fields_set_latest_single_value_wins_for_get():
@@ -122,7 +122,7 @@ def test_fields_add_delegates_to_shipped_add_and_get_multi_values():
 
     assert isinstance(first, str) and isinstance(second, str)
     assert fg.fields.get(FieldsUser.tags, e_ref) == ("red", "blue")
-    assert set(fg.get(FieldsUser, user_id="alice", tenant_id="acme").tags) == {"red", "blue"}
+    assert set(fg.entities.get(FieldsUser, user_id="alice", tenant_id="acme").tags) == {"red", "blue"}
 
 
 def test_fields_get_returns_empty_shapes_when_no_active_field_claims():

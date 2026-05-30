@@ -30,8 +30,8 @@ def _make_user_fg_with_one_user():
     Returns (fg, e_ref, name_asrt_id).
     """
     fg = FactGraph.create(schema_classes=[RetractGuardUser])
-    e_ref = fg.ref(RetractGuardUser, user_id="alice", tenant_id="acme")
-    name_asrt_id = fg.set(RetractGuardUser.name, e_ref, "Alice")
+    e_ref = fg.entities.ref(RetractGuardUser, user_id="alice", tenant_id="acme")
+    name_asrt_id = fg.fields.set(RetractGuardUser.name, e_ref, "Alice")
     return fg, e_ref, name_asrt_id
 
 
@@ -45,7 +45,7 @@ def _find_identity_asrt_id(fg, pred_id: str, e_ref: str) -> str:
 def test_field_claim_retract_succeeds():
     """Field Claim retract → succeeds (unprotected pass-through)."""
     fg, e_ref, name_asrt_id = _make_user_fg_with_one_user()
-    revoker_id = fg.retract(name_asrt_id)
+    revoker_id = fg.assertions.retract(name_asrt_id)
     # retract_by_asrt returns the revoker assertion id (str) on success
     assert isinstance(revoker_id, str)
     assert revoker_id != name_asrt_id  # revoker is a NEW assertion
@@ -57,7 +57,7 @@ def test_identity_claim_retract_raises_inv_7c():
     identity_asrt_id = _find_identity_asrt_id(fg, "retract_guard_user:user_id", e_ref)
 
     with pytest.raises(SDKStoreError) as exc_info:
-        fg.retract(identity_asrt_id)
+        fg.assertions.retract(identity_asrt_id)
 
     err = exc_info.value
     assert err.code == "INV_7C_IDENTITY_PROTECTED"
@@ -76,7 +76,7 @@ def test_exists_claim_retract_raises_transitional_guard():
     exists_asrt_id = _find_identity_asrt_id(fg, "RetractGuardUser:exists", e_ref)
 
     with pytest.raises(SDKStoreError) as exc_info:
-        fg.retract(exists_asrt_id)
+        fg.assertions.retract(exists_asrt_id)
 
     err = exc_info.value
     assert err.code == "EXISTENCE_CLAIM_TRANSITIONAL_GUARD"
@@ -94,7 +94,7 @@ def test_unknown_asrt_passes_through():
     fg, _, _ = _make_user_fg_with_one_user()
 
     with pytest.raises(SDKStoreError) as exc_info:
-        fg.retract("asrt-unknown-id")
+        fg.assertions.retract("asrt-unknown-id")
 
     err = exc_info.value
     # Code from downstream retract_by_asrt WriteProtocolError mapping, NOT the guard
@@ -114,9 +114,9 @@ def test_identity_and_exists_produce_distinguishable_sdk_errors():
     exists_asrt_id = _find_identity_asrt_id(fg, "RetractGuardUser:exists", e_ref)
 
     with pytest.raises(SDKStoreError) as id_exc:
-        fg.retract(identity_asrt_id)
+        fg.assertions.retract(identity_asrt_id)
     with pytest.raises(SDKStoreError) as ex_exc:
-        fg.retract(exists_asrt_id)
+        fg.assertions.retract(exists_asrt_id)
 
     # Distinct codes
     assert id_exc.value.code == "INV_7C_IDENTITY_PROTECTED"
@@ -141,7 +141,7 @@ def test_tenant_id_identity_also_protected():
     tenant_asrt_id = _find_identity_asrt_id(fg, "retract_guard_user:tenant_id", e_ref)
 
     with pytest.raises(SDKStoreError) as exc_info:
-        fg.retract(tenant_asrt_id)
+        fg.assertions.retract(tenant_asrt_id)
     assert exc_info.value.code == "INV_7C_IDENTITY_PROTECTED"
 
 
@@ -163,7 +163,7 @@ def test_retract_guard_runs_before_retract_by_asrt():
     assert len(claims_before) == 1
 
     with pytest.raises(SDKStoreError):
-        fg.retract(identity_asrt_id)
+        fg.assertions.retract(identity_asrt_id)
 
     # After failed retract, the original Identity Claim must still be in the
     # ledger AND no revoker assertion was emitted.

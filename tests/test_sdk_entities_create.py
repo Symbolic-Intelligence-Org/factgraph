@@ -94,7 +94,7 @@ def test_create_eager_emits_n_identity_plus_exists_atomic():
     fg = _make_fg()
 
     # Before create: 0 claims for this e_ref
-    e_ref_pre = fg.ref(CreateUser, user_id="probe", tenant_id="acme")
+    e_ref_pre = fg.entities.ref(CreateUser, user_id="probe", tenant_id="acme")
     assert _claim_counts(fg, e_ref_pre) == Counter()
 
     # Create eager — should immediately emit Identity + :exists
@@ -119,8 +119,8 @@ def test_create_returns_deterministic_e_ref():
     assert e_ref_create == e_ref_ref
 
     fg3 = _make_fg()
-    e_ref_flat = fg3.ref(CreateUser, user_id="alice", tenant_id="acme")
-    assert e_ref_create == e_ref_flat
+    e_ref_ref_again = fg3.entities.ref(CreateUser, user_id="alice", tenant_id="acme")
+    assert e_ref_create == e_ref_ref_again
 
 
 def test_create_identity_bundle_carries_correct_values():
@@ -181,7 +181,7 @@ def test_create_then_shipped_fg_set_works():
     (per SF4 + ADR-IC §4.2.4 Step 2+ direction)。"""
     fg = _make_fg()
     e_ref = fg.entities.create(CreateUser, user_id="alice", tenant_id="acme")
-    asrt_id = fg.set(CreateUser.name, e_ref, "Alice")
+    asrt_id = fg.fields.set(CreateUser.name, e_ref, "Alice")
     assert isinstance(asrt_id, str)
 
     counts = _claim_counts(fg, e_ref)
@@ -229,8 +229,8 @@ def test_create_duplicate_after_lazy_materialization_also_rejects():
     """If entity materialized via lazy path(`fg.ref + fg.set`),subsequent
     `fg.entities.create` should still reject — entity exists per ledger view。"""
     fg = _make_fg()
-    e_ref = fg.ref(CreateUser, user_id="alice", tenant_id="acme")
-    fg.set(CreateUser.name, e_ref, "Alice")  # lazy materialization
+    e_ref = fg.entities.ref(CreateUser, user_id="alice", tenant_id="acme")
+    fg.fields.set(CreateUser.name, e_ref, "Alice")  # lazy materialization
 
     with pytest.raises(EntityAlreadyExistsError) as exc_info:
         fg.entities.create(CreateUser, user_id="alice", tenant_id="acme")
@@ -266,8 +266,8 @@ def test_lazy_path_still_works_after_create_of_different_entity():
     # Entity A: eager create
     e_a = fg.entities.create(CreateUser, user_id="alice", tenant_id="acme")
     # Entity B: lazy ref + set
-    e_b = fg.ref(CreateUser, user_id="bob", tenant_id="acme")
-    fg.set(CreateUser.name, e_b, "Bob")
+    e_b = fg.entities.ref(CreateUser, user_id="bob", tenant_id="acme")
+    fg.fields.set(CreateUser.name, e_b, "Bob")
 
     counts_a = _claim_counts(fg, e_a)
     counts_b = _claim_counts(fg, e_b)

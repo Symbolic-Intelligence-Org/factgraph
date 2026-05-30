@@ -2,8 +2,8 @@
 
 Per blueprint §8 Step 1 + ADR-API §4.1(Q10 三层 namespace rename + 排他 navigation key):
 
-- 4 base methods(`get` / `where` / `match` / `ref`)behavior equivalent to shipped
-  `fg.read.*` / flat shortcuts(Step 1 coexists,no shipped deletion until Step 7)
+- Layer 1 base methods(`get` / `where` / `match` / `ref`)remain the
+  canonical replacements after Step 7 removes `fg.read.*` and flat shortcuts
 - Layer 1 排他 enforcement(per ADR-API §4.1.1):non-Entity-subclass first arg
   raises `SDKStoreError` with layer-specific error message含 ADR-API §4.1.1 pointer
 - `where` canonical signature(per ADR-API §4.4):flat `source=` / `trace_id=` /
@@ -33,13 +33,13 @@ def _make_fg():
 def _make_materialized_fg():
     """Create FactGraph + materialize one entity for read-side tests."""
     fg = _make_fg()
-    e_ref = fg.ref(EntitiesNsUser, user_id="alice", tenant_id="acme")
-    fg.set(EntitiesNsUser.name, e_ref, "Alice")
-    fg.set(EntitiesNsUser.status, e_ref, "active")
+    e_ref = fg.entities.ref(EntitiesNsUser, user_id="alice", tenant_id="acme")
+    fg.fields.set(EntitiesNsUser.name, e_ref, "Alice")
+    fg.fields.set(EntitiesNsUser.status, e_ref, "active")
     return fg, e_ref
 
 
-# ---------- property accessor + coexistence ----------
+# ---------- property accessor + removal boundary ----------
 
 
 def test_fg_entities_returns_entities_manager():
@@ -56,22 +56,16 @@ def test_fg_entities_namespace_is_read_only():
         fg.entities.spam = 42
 
 
-def test_fg_entities_coexists_with_shipped_fg_read():
-    """Step 1 does NOT delete fg.read.* — namespace coexistence verified."""
+def test_fg_read_namespace_removed_after_step7():
     fg = _make_fg()
-    assert type(fg.read).__name__ == "_SDKReadManager"
-    assert type(fg.entities).__name__ == "_SDKEntitiesManager"
+    with pytest.raises(AttributeError):
+        getattr(fg, "read")
 
 
-def test_fg_entities_coexists_with_shipped_flat_shortcuts():
-    """Step 1 does NOT delete flat fg.ref / fg.get / fg.set / etc."""
+def test_flat_ref_shortcut_removed_after_step7():
     fg = _make_fg()
-    # flat fg.ref still works
-    e_ref_flat = fg.ref(EntitiesNsUser, user_id="u1", tenant_id="t1")
-    assert isinstance(e_ref_flat, str) and e_ref_flat.startswith("idref_v1:")
-    # fg.entities.ref also works
-    e_ref_ns = fg.entities.ref(EntitiesNsUser, user_id="u2", tenant_id="t1")
-    assert isinstance(e_ref_ns, str) and e_ref_ns.startswith("idref_v1:")
+    with pytest.raises(AttributeError):
+        getattr(fg, "ref")
 
 
 # ---------- fg.entities.get ----------
@@ -91,13 +85,11 @@ def test_entities_get_returns_none_when_entity_not_visible():
     assert snap is None
 
 
-def test_entities_get_behavior_equivalent_to_fg_read_get():
+def test_entities_get_returns_identity_values_and_fields():
     fg, _ = _make_materialized_fg()
     via_entities = fg.entities.get(EntitiesNsUser, user_id="alice", tenant_id="acme")
-    via_read = fg.read.get(EntitiesNsUser, user_id="alice", tenant_id="acme")
-    via_flat = fg.get(EntitiesNsUser, user_id="alice", tenant_id="acme")
-    assert via_entities.user_id == via_read.user_id == via_flat.user_id
-    assert via_entities.name == via_read.name == via_flat.name
+    assert via_entities.user_id == "alice"
+    assert via_entities.name == "Alice"
 
 
 # ---------- fg.entities.where ----------
@@ -106,9 +98,9 @@ def test_entities_get_behavior_equivalent_to_fg_read_get():
 def test_entities_where_with_field_filters():
     fg, _ = _make_materialized_fg()
     # Add a second entity to test filtering
-    e2 = fg.ref(EntitiesNsUser, user_id="bob", tenant_id="acme")
-    fg.set(EntitiesNsUser.name, e2, "Bob")
-    fg.set(EntitiesNsUser.status, e2, "active")
+    e2 = fg.entities.ref(EntitiesNsUser, user_id="bob", tenant_id="acme")
+    fg.fields.set(EntitiesNsUser.name, e2, "Bob")
+    fg.fields.set(EntitiesNsUser.status, e2, "active")
 
     # Filter by name="Alice" — only alice should match(Field filtering shipped path)
     results_alice = list(fg.entities.where(EntitiesNsUser, name="Alice"))
@@ -120,11 +112,12 @@ def test_entities_where_with_field_filters():
     assert len(results_active) == 2
 
 
-def test_entities_where_behavior_equivalent_to_fg_read_find():
+def test_entities_where_replaces_fg_read_find():
     fg, _ = _make_materialized_fg()
     via_entities = list(fg.entities.where(EntitiesNsUser, status="active"))
-    via_read_find = list(fg.read.find(EntitiesNsUser, status="active"))
-    assert len(via_entities) == len(via_read_find)
+    assert len(via_entities) == 1
+    with pytest.raises(AttributeError):
+        getattr(fg, "read")
 
 
 def test_entities_where_rejects_flat_source_kwarg():
@@ -197,25 +190,16 @@ def test_entities_where_meta_must_be_dict():
 # ---------- fg.entities.match ----------
 
 
-def test_entities_match_behavior_equivalent_to_fg_read_match_on_invalid_template():
-    """When template is None, fg.entities.match and fg.read.match should
-    both produce the same error path(delegation-equivalence)。Full template
-    matching is exercised by shipped Slice 1+2 tests — Step 1 verifies the
-    namespace delegation,not the underlying matcher。"""
+def test_entities_match_rejects_invalid_template_through_match_runtime():
+    """Full template matching is exercised elsewhere;this verifies manager
+    delegation still reaches the shipped matcher after flat/read deletion."""
     fg = _make_fg()
     error_entities = None
-    error_read = None
     try:
         list(fg.entities.match(EntitiesNsUser, None))
     except Exception as e:
         error_entities = type(e).__name__
-    try:
-        list(fg.read.match(EntitiesNsUser, None))
-    except Exception as e:
-        error_read = type(e).__name__
-    # Both paths raise the same kind of error(delegation equivalence)。
-    assert error_entities == error_read
-    assert error_entities is not None  # both paths reject None
+    assert error_entities is not None
 
 
 # ---------- fg.entities.ref ----------
@@ -238,19 +222,19 @@ def test_entities_ref_populates_shadow_store():
     assert fg._identity_values_by_e_ref[e_ref] == {"user_id": "alice", "tenant_id": "acme"}
 
 
-def test_entities_ref_equivalent_to_flat_fg_ref():
+def test_entities_ref_deterministic_across_stores():
     fg = _make_fg()
     e_ref_ns = fg.entities.ref(EntitiesNsUser, user_id="alice", tenant_id="acme")
     fg2 = _make_fg()
-    e_ref_flat = fg2.ref(EntitiesNsUser, user_id="alice", tenant_id="acme")
-    assert e_ref_ns == e_ref_flat
+    e_ref_ns_2 = fg2.entities.ref(EntitiesNsUser, user_id="alice", tenant_id="acme")
+    assert e_ref_ns == e_ref_ns_2
 
 
 def test_entities_ref_then_fg_fields_set_via_shipped_path():
-    """fg.entities.ref + shipped fg.set works(Step 5 will ship fg.fields.set)."""
+    """fg.entities.ref + fg.fields.set exercises lazy shadow-store compat."""
     fg = _make_fg()
     e_ref = fg.entities.ref(EntitiesNsUser, user_id="alice", tenant_id="acme")
-    asrt_id = fg.set(EntitiesNsUser.name, e_ref, "Alice")
+    asrt_id = fg.fields.set(EntitiesNsUser.name, e_ref, "Alice")
     assert isinstance(asrt_id, str)
 
 

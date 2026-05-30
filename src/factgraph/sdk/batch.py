@@ -183,7 +183,7 @@ class BatchPlan:
         for op in self.ops:
             if isinstance(op, RefOp):
                 identity_values = dict(op.identity_values)
-                e_ref = sdk.ref(op.entity_cls, **identity_values)
+                e_ref = sdk.entities.ref(op.entity_cls, **identity_values)
                 refs_by_handle_id[op.handle_id] = e_ref
                 _write_identity_predicates_for_ref(
                     sdk=sdk,
@@ -400,7 +400,7 @@ class WireBatchPlan:
                 if entity_cls is None:
                     raise SDKStoreError(f"{op.path}: unknown entity_type for sdk schema: {op.entity_type}")
                 identity_values = dict(op.identity)
-                e_ref = sdk.ref(entity_cls, **identity_values)
+                e_ref = sdk.entities.ref(entity_cls, **identity_values)
                 refs_by_handle_id[op.handle_id] = e_ref
                 entity_type_by_handle_id[op.handle_id] = op.entity_type
                 _write_identity_predicates_for_ref(
@@ -684,7 +684,7 @@ def _resolve_wire_value_for_apply(value: dict[str, Any], *, sdk: "SDKStore", pat
         identity = value.get("identity")
         if not isinstance(identity, dict):
             raise SDKStoreError(f"{path}.identity must be object")
-        return sdk.ref(entity_cls, **dict(identity))
+        return sdk.entities.ref(entity_cls, **dict(identity))
     raise SDKStoreError(f"{path}.kind unsupported: {kind!r}")
 
 
@@ -1163,7 +1163,7 @@ class SDKBatchTx:
             raise SDKStoreError(
                 f"tx.entity(...): identity is incomplete for {entity_cls.__name__}; missing: {sorted(missing)}"
             )
-        e_ref = self._sdk.ref(entity_cls, **materialized_identity)
+        e_ref = self._sdk.entities.ref(entity_cls, **materialized_identity)
 
         existing = self._handles_by_e_ref.get(e_ref) if isinstance(e_ref, str) else None
         if existing is not None:
@@ -1739,7 +1739,7 @@ class SDKBatchTx:
         materialized, _ = self._materialize_identity_values(handle.entity_cls, handle.identity_values)
         handle.identity_values = materialized
         if handle.e_ref is not None:
-            expected_ref = self._sdk.ref(handle.entity_cls, **materialized)
+            expected_ref = self._sdk.entities.ref(handle.entity_cls, **materialized)
             if expected_ref != handle.e_ref:
                 raise SDKStoreError(
                     f"{handle.path}.bind(...): bound identity no longer matches existing ref; "
@@ -1797,7 +1797,7 @@ class SDKBatchTx:
                 f"{path}: identity is incomplete for {handle.entity_cls.__name__}; missing: {missing_sorted}. "
                 "Provide the complete identity bundle at tx.entity(...) time."
             )
-        e_ref = self._sdk.ref(handle.entity_cls, **materialized)
+        e_ref = self._sdk.entities.ref(handle.entity_cls, **materialized)
         existing = self._handles_by_e_ref.get(e_ref)
         if existing is not None and existing is not handle:
             raise SDKStoreError(

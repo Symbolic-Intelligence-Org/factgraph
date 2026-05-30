@@ -9,7 +9,7 @@ Per blueprint §8 Step 8 + §7.9 + ADR-IC §4.2(emission contract):
 - 8.4 Two field writes to same e_ref — Identity Claims emit ONLY ONCE
       (dedup per `_materialization_ops:materialized_refs`).
 - 8.5 Lazy materialization through `_identity_values_by_e_ref` shadow store
-      — shadow store has e_ref (via prior `fg.ref(...)`) → first Field write
+      — shadow store has e_ref (via prior `fg.entities.ref(...)`) → first Field write
       auto-emits Identity + :exists Claims (shipped legacy compat path per
       ADR-IC §4.2.3).
 - 8.6 e_ref NOT in shadow store (externally-constructed string) → fail-fast
@@ -71,13 +71,13 @@ def _rest_value(rest_terms: list) -> object:
 def test_emission_8_1_fg_ref_plus_fg_set_atomic_emits_n_identity_exists_field():
     """fg.ref + first fg.set → 4 Claims atomic (2 Identity + 1 :exists + 1 Field)."""
     fg = FactGraph.create(schema_classes=[EmissionUser])
-    e_ref = fg.ref(EmissionUser, user_id="u1", tenant_id="t1")
+    e_ref = fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")
 
     # Before first Field write: shadow store has e_ref, ledger has NO claims.
     assert _claim_counts(fg, e_ref) == Counter()
     assert e_ref in fg._identity_values_by_e_ref  # shadow store seen
 
-    fg.set(EmissionUser.name, e_ref, "Alice")
+    fg.fields.set(EmissionUser.name, e_ref, "Alice")
 
     # 4 Claims atomically emitted per ADR-IC §4.2.1 + §4.2.2:
     # 2 Identity Claims (user_id + tenant_id) + 1 :exists + 1 Field (name).
@@ -93,8 +93,8 @@ def test_emission_8_1_fg_ref_plus_fg_set_atomic_emits_n_identity_exists_field():
 def test_emission_8_1_identity_bundle_carries_complete_values():
     """Each Identity Claim carries the correct value from identity_kwargs (per SF8 bundle)."""
     fg = FactGraph.create(schema_classes=[EmissionUser])
-    e_ref = fg.ref(EmissionUser, user_id="u1", tenant_id="t1")
-    fg.set(EmissionUser.name, e_ref, "Alice")
+    e_ref = fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")
+    fg.fields.set(EmissionUser.name, e_ref, "Alice")
 
     user_id_claim = fg._store.ledger.find_claims(pred_id=PRED_USER_ID, e_ref=e_ref)
     tenant_id_claim = fg._store.ledger.find_claims(pred_id=PRED_TENANT_ID, e_ref=e_ref)
@@ -113,16 +113,16 @@ def test_emission_8_1_identity_bundle_carries_complete_values():
 def test_emission_8_2_entity_editor_commit_routes_field_write_through_planner():
     """fg.edit + editor.field.set + editor.commit() goes through plan_write_command.
 
-    NOTE: fg.edit() requires entity already materialized (pre-validates :exists
+    NOTE: fg.entities.edit() requires entity already materialized (pre-validates :exists
     via sdk_get). So EntityEditor is NOT a materialization path; it's the
     edit-existing-entity path that shares the same plan_write_command write
     plumbing. Test verifies: after editor.commit(), a new Field Claim was
     appended (no extra Identity / :exists re-emission since target visible).
     """
     fg = FactGraph.create(schema_classes=[EmissionUser])
-    e_ref = fg.ref(EmissionUser, user_id="u1", tenant_id="t1")
+    e_ref = fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")
     # Materialize via first fg.set.
-    fg.set(EmissionUser.name, e_ref, "Alice")
+    fg.fields.set(EmissionUser.name, e_ref, "Alice")
     counts_after_first = _claim_counts(fg, e_ref)
     assert counts_after_first[PRED_USER_ID] == 1
     assert counts_after_first[PRED_TENANT_ID] == 1
@@ -130,7 +130,7 @@ def test_emission_8_2_entity_editor_commit_routes_field_write_through_planner():
     assert counts_after_first[PRED_NAME] == 1
 
     # Edit existing entity, set a new Field value.
-    editor = fg.edit(EmissionUser, user_id="u1", tenant_id="t1")
+    editor = fg.entities.edit(EmissionUser, user_id="u1", tenant_id="t1")
     editor.name.set("Bob")
     editor.commit()
 
@@ -152,9 +152,9 @@ def test_emission_8_2_entity_editor_rejects_unmaterialized_entity():
     from factgraph._sdk_errors import EntityNotFoundError
 
     fg = FactGraph.create(schema_classes=[EmissionUser])
-    fg.ref(EmissionUser, user_id="u1", tenant_id="t1")  # shadow store, no ledger emit
+    fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")  # shadow store, no ledger emit
     with pytest.raises(EntityNotFoundError):
-        fg.edit(EmissionUser, user_id="u1", tenant_id="t1")
+        fg.entities.edit(EmissionUser, user_id="u1", tenant_id="t1")
 
 
 # ---------- 8.3 SDKBatchTx.commit() atomic emission ----------
@@ -216,16 +216,16 @@ def test_emission_8_4_two_field_writes_identity_emits_only_once():
     on the second call (entity now visible in active view → no re-materialization).
     """
     fg = FactGraph.create(schema_classes=[EmissionUser])
-    e_ref = fg.ref(EmissionUser, user_id="u1", tenant_id="t1")
+    e_ref = fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")
 
-    fg.set(EmissionUser.name, e_ref, "Alice")
+    fg.fields.set(EmissionUser.name, e_ref, "Alice")
     counts_after_first = _claim_counts(fg, e_ref)
     assert counts_after_first[PRED_USER_ID] == 1
     assert counts_after_first[PRED_TENANT_ID] == 1
     assert counts_after_first[PRED_EXISTS] == 1
     assert counts_after_first[PRED_NAME] == 1
 
-    fg.add(EmissionUser.tags, e_ref, "active")
+    fg.fields.add(EmissionUser.tags, e_ref, "active")
 
     counts_after_second = _claim_counts(fg, e_ref)
     # Identity + :exists counts UNCHANGED.
@@ -269,14 +269,14 @@ def test_emission_8_5_lazy_materialization_through_shadow_store():
     fg = FactGraph.create(schema_classes=[EmissionUser])
 
     # fg.ref populates shadow store only (no ledger emission).
-    e_ref = fg.ref(EmissionUser, user_id="u1", tenant_id="t1")
+    e_ref = fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")
     assert e_ref in fg._identity_values_by_e_ref
     assert fg._identity_values_by_e_ref[e_ref] == {"user_id": "u1", "tenant_id": "t1"}
     # Ledger empty: shadow store DOES NOT emit Identity Claims at ref() time.
     assert len(fg._store.ledger.find_claims(e_ref=e_ref)) == 0
 
     # First Field write triggers lazy materialization (per _materialization_ops).
-    fg.set(EmissionUser.name, e_ref, "Alice")
+    fg.fields.set(EmissionUser.name, e_ref, "Alice")
     counts = _claim_counts(fg, e_ref)
     assert counts[PRED_USER_ID] == 1
     assert counts[PRED_TENANT_ID] == 1
@@ -297,12 +297,12 @@ def test_emission_8_6_unseen_e_ref_target_fails_fast_with_unresolvable_code():
     fake_e_ref = "idref_v1:EmissionUser:fakehash00000000"
 
     with pytest.raises(SDKStoreError) as exc_info:
-        fg.set(EmissionUser.name, fake_e_ref, "Alice")
+        fg.fields.set(EmissionUser.name, fake_e_ref, "Alice")
     err = exc_info.value
     assert err.code == "UNRESOLVABLE_E_REF"
     assert fake_e_ref in str(err)
-    # Migration hint must mention sdk.ref to obtain managed e_ref.
-    assert "sdk.ref" in str(err)
+    # Migration hint must mention the namespace ref entry to obtain managed e_ref.
+    assert "fg.entities.ref" in str(err)
 
 
 def test_emission_8_6_unseen_entity_ref_value_fails_fast():
@@ -316,11 +316,11 @@ def test_emission_8_6_unseen_entity_ref_value_fails_fast():
         author: EmissionUser = Field()  # entity_ref field
 
     fg = FactGraph.create(schema_classes=[EmissionUser, EmissionPost])
-    post_ref = fg.ref(EmissionPost, post_id="p1")
+    post_ref = fg.entities.ref(EmissionPost, post_id="p1")
     fake_author_ref = "idref_v1:EmissionUser:fakehash00000000"
 
     with pytest.raises(SDKStoreError) as exc_info:
-        fg.set(EmissionPost.author, post_ref, fake_author_ref)
+        fg.fields.set(EmissionPost.author, post_ref, fake_author_ref)
     err = exc_info.value
     assert err.code == "UNRESOLVABLE_E_REF"
     assert fake_author_ref in str(err)

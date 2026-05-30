@@ -34,8 +34,8 @@ def _make_fg_with_one_user():
     """
     fg = FactGraph.create(schema_classes=[EntityWriteGuardUser])
     identity_kwargs = {"user_id": "alice", "tenant_id": "acme"}
-    e_ref = fg.ref(EntityWriteGuardUser, **identity_kwargs)
-    name_asrt_id = fg.set(EntityWriteGuardUser.name, e_ref, "Alice")
+    e_ref = fg.entities.ref(EntityWriteGuardUser, **identity_kwargs)
+    name_asrt_id = fg.fields.set(EntityWriteGuardUser.name, e_ref, "Alice")
     return fg, e_ref, name_asrt_id, identity_kwargs
 
 

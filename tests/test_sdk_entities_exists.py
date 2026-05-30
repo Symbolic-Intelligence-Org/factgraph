@@ -49,11 +49,11 @@ def test_entities_exists_true_after_create():
 
 def test_entities_exists_true_after_lazy_first_write():
     fg = _make_fg()
-    e_ref = fg.ref(ExistsUser, user_id="alice", tenant_id="acme")
+    e_ref = fg.entities.ref(ExistsUser, user_id="alice", tenant_id="acme")
     assert fg.entities.exists(ExistsUser, user_id="alice", tenant_id="acme") is False
 
     # Legacy lazy materialization path: first field write emits Identity + :exists.
-    fg.set(ExistsUser.name, e_ref, "Alice")
+    fg.fields.set(ExistsUser.name, e_ref, "Alice")
 
     assert fg.entities.exists(ExistsUser, user_id="alice", tenant_id="acme") is True
     assert _active_exists_claim_count(fg, e_ref) == 1

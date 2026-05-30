@@ -36,8 +36,8 @@ def _make_fg_with_one_user():
     Returns (fg, e_ref, name_asrt_id).
     """
     fg = FactGraph.create(schema_classes=[IngestGuardUser])
-    e_ref = fg.ref(IngestGuardUser, user_id="alice", tenant_id="acme")
-    name_asrt_id = fg.set(IngestGuardUser.name, e_ref, "Alice")
+    e_ref = fg.entities.ref(IngestGuardUser, user_id="alice", tenant_id="acme")
+    name_asrt_id = fg.fields.set(IngestGuardUser.name, e_ref, "Alice")
     return fg, e_ref, name_asrt_id
 
 

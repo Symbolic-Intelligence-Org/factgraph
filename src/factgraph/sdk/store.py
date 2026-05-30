@@ -658,83 +658,6 @@ class _SDKSchemaManager:
         return self._sdk.add_schema_classes(*schema_classes, **kwargs)
 
 
-class _SDKReadManager:
-    """Read-only namespace manager for the `read` taxonomy group."""
-
-    def __init__(self, sdk: "SDKStore") -> None:
-        object.__setattr__(self, "_sdk", sdk)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenSnapshotError("FactGraph.read namespace is read-only")
-
-    def get(self, *args: Any, **kwargs: Any) -> Any:
-        """Read one entity snapshot by identity values.
-
-        Delegates to `FactGraph.get(EntityCls, **identity)` and returns the
-        current snapshot, or `None` when the entity is not visible.
-        """
-        return self._sdk.get(*args, **kwargs)
-
-    def find(self, *args: Any, **kwargs: Any) -> Any:
-        """Find entity snapshots by exact field filters.
-
-        Delegates to `FactGraph.find(EntityCls, **filters)`. Single fields use
-        exact-value matching; multi fields use containment matching. Optional
-        `policy=` and `limit=` arguments are forwarded to the read facade.
-        """
-        return self._sdk.find(*args, **kwargs)
-
-    def match(self, *args: Any, **kwargs: Any) -> Any:
-        """Match visible snapshots against an application Rule or AND RuleExpr."""
-        return self._sdk.match(*args, **kwargs)
-
-    def ref(self, *args: Any, **kwargs: Any) -> Any:
-        """Build an entity reference from identity values without writing.
-
-        Use the returned `idref_v1` token as the entity handle for
-        `fg.write.set(...)` and `fg.write.add(...)`.
-        """
-        return self._sdk.ref(*args, **kwargs)
-
-
-class _SDKWriteManager:
-    """Read-only namespace manager for the `write` taxonomy group."""
-
-    def __init__(self, sdk: "SDKStore") -> None:
-        object.__setattr__(self, "_sdk", sdk)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenSnapshotError("FactGraph.write namespace is read-only")
-
-    def set(self, *args: Any, **kwargs: Any) -> Any:
-        """Write a single-cardinality field value.
-
-        Delegates to `FactGraph.set(field, e_ref, value, meta=None)` and
-        returns the assertion id for the appended write.
-        """
-        return self._sdk.set(*args, **kwargs)
-
-    def add(self, *args: Any, **kwargs: Any) -> Any:
-        """Append a value to a multi-cardinality field.
-
-        Delegates to `FactGraph.add(field, e_ref, value, meta=None)` and
-        returns the assertion id for the appended write.
-        """
-        return self._sdk.add(*args, **kwargs)
-
-    def retract(self, *args: Any, **kwargs: Any) -> Any:
-        """Retract a previously written assertion by assertion id.
-
-        Pass an `asrt_id` returned by `fg.write.set(...)` or
-        `fg.write.add(...)`. Retraction is append-only: the original assertion
-        remains in the ledger and the retraction changes read-time visibility.
-        """
-        return self._sdk.assertions.retract(*args, **kwargs)
-
-    def edit(self, *args: Any, **kwargs: Any) -> Any:
-        return self._sdk.edit(*args, **kwargs)
-
-
 class _SDKFieldsManager:
     """Layer 2 namespace manager for field-cell operations(per ADR-API §4.1).
 
@@ -742,10 +665,8 @@ class _SDKFieldsManager:
     Assertion ids belong to Layer 3(``fg.assertions.*``);entity macros belong
     to Layer 1(``fg.entities.*``).
 
-    Slice 3a Step 5 ships the namespace while preserving shipped write/retract
-    internals. ``retract`` / ``delete`` delegate to the current flat
-    ``SDKStore.retract`` path, so Slice 2 INV-7c / `:exists` guards remain the
-    source of truth through ``fg.assertions.retract``.
+    Slice 3a Step 7 removes the historical flat write shortcuts. This manager
+    now owns all Field + e_ref user-facing cell operations.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -843,9 +764,10 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        """Write a single-cardinality Field value via shipped SDKStore.set."""
+        """Write a single-cardinality Field value."""
         self._reject_non_field_descriptor(field, method="set")
-        return self._sdk.set(field, e_ref, value, meta=meta)
+        self._sdk._reject_attached_write("fg.fields.set")
+        return self._sdk._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def add(
         self,
@@ -855,9 +777,10 @@ class _SDKFieldsManager:
         *,
         meta: dict[str, Any] | None = None,
     ) -> str:
-        """Append a multi-cardinality Field value via shipped SDKStore.add."""
+        """Append a multi-cardinality Field value."""
         self._reject_non_field_descriptor(field, method="add")
-        return self._sdk.add(field, e_ref, value, meta=meta)
+        self._sdk._reject_attached_write("fg.fields.add")
+        return self._sdk._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def retract(
         self,
@@ -936,11 +859,9 @@ class _SDKEntitiesManager:
     ``fg.assertions.retract(asrt_id)`` instead)nor ``(Field, e_ref)`` value
     writes(use ``fg.fields.*`` for per-cell mutations).
 
-    Slice 3a Step 1 ships 4 base methods(get/where/match/ref)that delegate
-    to shipped read-path internals;``create`` / ``delete`` / ``exists`` land
-    in Step 2-4;``edit`` lands in Step 7 with the Layer 1 ownership move per
-    ADR-API §4.1.2。 Until Step 7,Layer 1 entry coexists with shipped
-    ``fg.read.*`` / flat top-level shortcuts —**no shipped behavior change**。
+    Slice 3a Step 7 removes the historical ``fg.read.*`` namespace and flat
+    top-level shortcuts. This manager now owns all Layer 1 user-facing entity
+    operations.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -979,15 +900,11 @@ class _SDKEntitiesManager:
         )
 
     def get(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
-        """Read one entity snapshot by identity values。
-
-        Delegates to ``SDKStore.get(EntityCls, **identity)`` and returns the
-        current snapshot,or ``None`` when the entity is not visible。Behavior
-        equivalent to shipped ``fg.read.get`` / ``fg.get`` until Step 7 ships
-        the ``fg.read.*`` deletion。
-        """
+        """Read one entity snapshot by identity values."""
         self._reject_non_entity_class(entity_cls, method="get")
-        return self._sdk.get(entity_cls, **identity_kwargs)
+        from .facade import sdk_get
+
+        return sdk_get(self._sdk, entity_cls, **identity_kwargs)
 
     def where(
         self,
@@ -1005,9 +922,9 @@ class _SDKEntitiesManager:
         ``trace_id=`` / ``version=`` / ``meta=`` kwargs are rejected;canonical
         meta filtering accepted via ``_meta`` dict。
 
-        **Slice 3a Step 1 scope**:field-filter delegation to shipped
-        ``sdk_find`` works equivalently to ``fg.read.find`` / ``fg.find``;
-        flat meta kwargs are rejected with ADR-API §4.4 pointer。 ``_meta``
+        **Slice 3a Step 7 scope**:field-filter delegation to shipped
+        ``sdk_find`` remains the underlying read implementation;flat meta
+        kwargs are rejected with ADR-API §4.4 pointer。 ``_meta``
         parameter is accepted in the canonical signature but **meta filtering
         itself is deferred** to the AssertionView unification step(Step 8)—
         Step 1 raises ``SDKStoreError`` if ``_meta`` is non-empty, so the
@@ -1042,12 +959,10 @@ class _SDKEntitiesManager:
                     "AssertionView unification. Use field filters for now."
                 )
 
-        return self._sdk.find(
-            entity_cls,
-            policy=policy,
-            limit=limit,
-            **field_filters,
-        )
+        from .facade import sdk_find
+
+        self._sdk._reject_removed_read_policy(policy, api_path="fg.entities.where")
+        return sdk_find(self._sdk, entity_cls, limit=limit, **field_filters)
 
     def match(
         self,
@@ -1059,26 +974,23 @@ class _SDKEntitiesManager:
     ) -> Any:
         """Match visible snapshots against an application Rule or AND RuleExpr.
 
-        Delegates to shipped ``SDKStore.match(EntityCls, template, ...)`` —
-        behavior equivalent to ``fg.read.match`` / ``fg.match`` until Step 7。
+        Delegates to the shipped match runtime implementation.
         """
         self._reject_non_entity_class(entity_cls, method="match")
-        return self._sdk.match(entity_cls, template, limit=limit, **port_constraints)
+        from .match_runtime import sdk_match
+
+        return sdk_match(self._sdk, entity_cls, template, limit=limit, **port_constraints)
 
     def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         """Return a managed e_ref for the entity identified by kwargs。
 
         Records the supplied identity into the SDKStore shadow store so that
-        downstream ``fg.fields.set`` / ``fg.fields.add``(Step 5)or shipped
-        ``fg.set`` / ``fg.add`` can resolve the e_ref。Does NOT write to the
+        downstream ``fg.fields.set`` / ``fg.fields.add`` can resolve the e_ref。Does NOT write to the
         ledger — per ADR-IC §4.2.3 + Slice 2 Step 7,shadow store is the
         legacy lazy-materialization compatibility path,not a Layer 2 contract。
-
-        Behavior equivalent to shipped ``fg.read.ref`` / ``fg.ref`` until
-        Step 7。
         """
         self._reject_non_entity_class(entity_cls, method="ref")
-        return self._sdk.ref(entity_cls, **identity_values)
+        return self._sdk._ref(entity_cls, **identity_values)
 
     def create(
         self,
@@ -1110,19 +1022,19 @@ class _SDKEntitiesManager:
             identity field。
 
         Notes:
-            Coexists with the shipped lazy ``fg.ref + fg.fields.set``(or
-            ``fg.set``)materialization path per SF4 — shadow store is the
+            Coexists with the lazy ``fg.entities.ref + fg.fields.set``
+            materialization path per SF4 — shadow store is the
             legacy compat surface;Step 2+ ``fg.entities.create`` is the eager
             path. Slice 3a does NOT remove the shadow store。
         """
         self._reject_non_entity_class(entity_cls, method="create")
 
         # Step 1+2: identity bundle completeness + shadow store populate via
-        # shipped fg.ref path. SDKStore.ref raises SDKStoreError for missing
+        # shipped _ref path. SDKStore._ref raises SDKStoreError for missing
         # identity fields("missing identity field: <EC>.<name>")— the
         # canonical "complete identity bundle" check per ADR-IC §4.2.1。
         try:
-            e_ref = self._sdk.ref(entity_cls, **identity)
+            e_ref = self._sdk._ref(entity_cls, **identity)
         except SDKStoreError:
             raise
 
@@ -1198,7 +1110,7 @@ class _SDKEntitiesManager:
         **PF-S2 discriminated signature**(per blueprint §6.1 SF2 lock):
 
         - Form A:``fg.entities.delete(e_ref: str, *, meta=None)`` — pass a
-          managed e_ref string produced by ``sdk.ref(EC, **id)`` or
+          managed e_ref string produced by ``fg.entities.ref(EC, **id)`` or
           ``fg.entities.create(EC, **id)``。
         - Form B:``fg.entities.delete(EntityCls, *, meta=None, **identity)`` —
           pass the EntityClass + full identity_kwargs。
@@ -1237,7 +1149,7 @@ class _SDKEntitiesManager:
             if not isinstance(shadow_identity, dict) or not shadow_identity:
                 raise SDKStoreError(
                     f"fg.entities.delete: e_ref is not managed by this SDKStore: "
-                    f"{e_ref!r};call sdk.ref(...) or fg.entities.create(...) "
+                    f"{e_ref!r};call fg.entities.ref(...) or fg.entities.create(...) "
                     "first.",
                     code="UNRESOLVABLE_E_REF",
                 )
@@ -1254,9 +1166,9 @@ class _SDKEntitiesManager:
         elif isinstance(e_ref_or_cls, type) and issubclass(e_ref_or_cls, Entity):
             # Form B: EntityClass + identity kwargs。
             normalized_entity_type = e_ref_or_cls.__name__
-            # self._sdk.ref(...) validates identity bundle completeness + computes
+            # self._sdk._ref(...) validates identity bundle completeness + computes
             # deterministic e_ref + populates shadow store(legacy compat)。
-            normalized_e_ref = self._sdk.ref(e_ref_or_cls, **identity)
+            normalized_e_ref = self._sdk._ref(e_ref_or_cls, **identity)
             normalized_identity = dict(identity)
         else:
             # Forbidden:tuple selector or any other shape per PF-S2 lock。
@@ -1303,12 +1215,12 @@ class _SDKEntitiesManager:
 
         Per Slice 3a Step 4, this is a cheap existence check over the shipped
         ``:exists`` substrate rather than a snapshot materialization path.
-        ``self._sdk.ref`` supplies the Form I complete-identity validation and
+        ``self._sdk._ref`` supplies the Form I complete-identity validation and
         deterministic e_ref encoding. It also preserves the Slice 2 shadow-store
         compatibility behavior until the future eager-create-only migration.
         """
         self._reject_non_entity_class(entity_cls, method="exists")
-        e_ref = self._sdk.ref(entity_cls, **identity)
+        e_ref = self._sdk._ref(entity_cls, **identity)
         info = entity_info(self._sdk._application_schema_index, entity_cls.__name__)
         claims = self._sdk._store.ledger.find_claims(
             pred_id=info.exists_predicate_id,
@@ -1318,6 +1230,14 @@ class _SDKEntitiesManager:
             not self._sdk._store.ledger.has_active_revocation(claim.asrt_id)
             for claim in claims
         )
+
+    def edit(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
+        """Open an EntityEditor for an existing entity."""
+        self._reject_non_entity_class(entity_cls, method="edit")
+        self._sdk._reject_attached_write("fg.entities.edit")
+        from .facade import sdk_edit
+
+        return sdk_edit(self._sdk, entity_cls, **identity_kwargs)
 
 
 class _SDKRulesManager:
@@ -1640,8 +1560,8 @@ class SDKStore:
         # _identity_values_by_e_ref: LEGACY / INTERNAL COMPATIBILITY only.
         # Per ADR-IC §4.2.3, the SDK shell shadow store is NOT part of the
         # Layer 2 fields API contract; it exists as a compatibility detail to
-        # let `fg.set(Field, e_ref_string, value)` succeed when the shadow store
-        # has previously seen this e_ref (via a prior `sdk.ref()` call).
+        # let `fg.fields.set(Field, e_ref_string, value)` succeed when the shadow store
+        # has previously seen this e_ref (via a prior `fg.entities.ref()` call).
         # - e_ref NOT in shadow store → fail-fast UNRESOLVABLE_E_REF
         #   (per ADR-IC §4.2.1 emission input contract; raised at
         #   `_apply_field_mutation` target check + `_build_application_write_value`
@@ -1657,8 +1577,6 @@ class SDKStore:
         self._views_manager = _SDKViewsManager(self)
         self._assertions_manager = AssertionsManager(self)
         self._schema_manager = _SDKSchemaManager(self)
-        self._read_manager = _SDKReadManager(self)
-        self._write_manager = _SDKWriteManager(self)
         self._entities_manager = _SDKEntitiesManager(self)
         self._fields_manager = _SDKFieldsManager(self)
         self._rules_manager = _SDKRulesManager(self)
@@ -1925,23 +1843,11 @@ class SDKStore:
         return self._schema_manager
 
     @property
-    def read(self) -> _SDKReadManager:
-        """`read` taxonomy namespace exposing ``get`` / ``find`` / ``ref``."""
-        return self._read_manager
-
-    @property
-    def write(self) -> _SDKWriteManager:
-        """`write` taxonomy namespace exposing ``set`` / ``add`` / ``retract`` / ``edit``."""
-        return self._write_manager
-
-    @property
     def entities(self) -> _SDKEntitiesManager:
         """`entities` Layer 1 namespace per ADR-API §4.1。
 
-        Slice 3a Step 1 ships 4 base methods(``get`` / ``where`` / ``match`` /
-        ``ref``)alongside shipped ``fg.read.*`` / flat shortcuts。``create`` /
-        ``delete`` / ``exists`` land in Step 2-4;``edit`` lands in Step 7;
-        ``fg.read.*`` namespace deletion happens at Step 7。
+        Slice 3a Step 7 owns Layer 1 user-facing entity operations after
+        removing the historical ``fg.read.*`` namespace and flat shortcuts。
         """
         return self._entities_manager
 
@@ -1949,9 +1855,8 @@ class SDKStore:
     def fields(self) -> _SDKFieldsManager:
         """`fields` Layer 2 namespace per ADR-API §4.1。
 
-        Slice 3a Step 5 exposes Field + e_ref cell operations while preserving
-        shipped flat `fg.set` / `fg.add` / `fg.retract` until Step 7 removes
-        the flat shortcuts.
+        Slice 3a Step 7 owns Layer 2 user-facing field-cell operations after
+        removing the historical ``fg.write.*`` namespace and flat shortcuts。
         """
         return self._fields_manager
 
@@ -1984,7 +1889,7 @@ class SDKStore:
         if self._database is None:
             raise SDKStoreError(
                 "fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; "
-                "use shipped fg.set / fg.add / fg.write.* for non-attached SDKStores"
+                "use fg.fields.set / fg.fields.add for non-attached SDKStores"
             )
         if not self._attached_writable:
             raise SDKStoreError(
@@ -1998,78 +1903,6 @@ class SDKStore:
         from .batch import SDKBatchTx
 
         return SDKBatchTx(self, meta=meta)
-
-    def get(self, entity_cls: type[Entity], **identity_kwargs: Any):
-        """Return an ``EntitySnapshot`` for the entity identified by kwargs.
-
-        Reads the active (chosen) view of the entity. The snapshot is
-        read-only; attribute assignment raises ``FrozenSnapshotError``.
-
-        Args:
-            entity_cls: An ``Entity`` subclass registered with this
-                SDKStore.
-            **identity_kwargs: Identity field values identifying the
-                entity.
-
-        Returns:
-            An ``EntitySnapshot`` exposing each declared field as an
-            attribute, or ``None`` if the entity is not visible (no
-            ``<T>:exists`` assertion in the active view).
-
-        Raises:
-            SDKStoreError: if ``entity_cls`` was not registered with this
-                SDKStore, or if identity kwargs are malformed.
-        """
-        from .facade import sdk_get
-
-        return sdk_get(self, entity_cls, **identity_kwargs)
-
-    def find(
-        self,
-        entity_cls: type[Entity],
-        *,
-        policy: Any = _POLICY_TOMBSTONE,
-        limit: int | None = None,
-        **filter_kwargs: Any,
-    ):
-        from .facade import sdk_find
-
-        if "view" in filter_kwargs:
-            raise SDKStoreError(
-                "method-level view= is not supported by fg.read.find(); use FactGraph.attach(db, view=view) instead",
-                path="$.find.view",
-            )
-        self._reject_removed_read_policy(policy, api_path="fg.read.find")
-        return sdk_find(
-            self,
-            entity_cls,
-            limit=limit,
-            **filter_kwargs,
-        )
-
-    def match(
-        self,
-        entity_cls: type[Entity],
-        template: ApplicationRule | _RuleExpr,
-        *,
-        limit: int | None = None,
-        **port_constraints: Any,
-    ):
-        from .match_runtime import sdk_match
-
-        return sdk_match(
-            self,
-            entity_cls,
-            template,
-            limit=limit,
-            **port_constraints,
-        )
-
-    def edit(self, entity_cls: type[Entity], **identity_kwargs: Any):
-        self._reject_attached_write("fg.edit")
-        from .facade import sdk_edit
-
-        return sdk_edit(self, entity_cls, **identity_kwargs)
 
     def ingest(
         self,
@@ -2621,11 +2454,11 @@ class SDKStore:
             include_unchanged=include_unchanged,
         )
 
-    def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
+    def _ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
         """Return a managed e_ref string for the entity identified by kwargs.
 
         Records the supplied identity into this SDKStore's local cache so
-        that ``sdk.set`` / ``sdk.add`` can later resolve the e_ref into a
+        that ``fg.fields.set`` / ``fg.fields.add`` can later resolve the e_ref into a
         full ``EntitySelector`` for the application write-plan. Does NOT
         write to the ledger; ``ref`` is only an in-memory registration.
 
@@ -2668,88 +2501,6 @@ class SDKStore:
         self._identity_values_by_e_ref[e_ref] = {name: value for name, _, value in tuples}
         return e_ref
 
-    def set(
-        self,
-        field: Field,
-        e_ref: str,
-        value: Any,
-        *,
-        meta: dict[str, Any] | None = None,
-    ) -> str:
-        """Append a ``set`` assertion writing ``value`` to a single-cardinality field.
-
-        The write is routed through ``factgraph.application``'s write-plan adapter:
-        the first time an entity is written, identity predicates and
-        ``<T>:exists`` are auto-materialized so that subsequent ``sdk.get`` /
-        ``sdk.run`` / inference calls see the entity. ``set`` produces a new
-        assertion (the ledger is append-only); the chosen view reflects the
-        latest assertion.
-
-        Args:
-            field: A ``Field`` descriptor obtained from an Entity class
-                (e.g. ``User.name``). Must reference a ``cardinality="single"``
-                field.
-            e_ref: A managed e_ref string returned by ``sdk.ref(EntityCls, ...)``.
-                Externally-constructed strings are rejected.
-            value: The value to write. Type is constrained by the field's
-                declared ``type_domain`` (str / int / bool / entity_ref / ...).
-                For ``entity_ref`` fields, pass another managed e_ref string.
-            meta: Optional metadata dict attached to the assertion.
-
-        Returns:
-            The assertion id (str) of the field-mutation write. Auto-materialized
-            identity / exists assertion ids are not returned.
-
-        Raises:
-            SDKStoreError: ``code="UNRESOLVABLE_E_REF"`` if ``e_ref`` (or an
-                entity_ref ``value``) was not produced by ``sdk.ref``.
-            CardinalityError: ``code="FIELD_CARDINALITY_MISMATCH"`` if ``field``
-                is multi-cardinality (use ``sdk.add`` instead).
-            SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
-                does not match the field's declared type domain.
-        """
-        self._reject_attached_write("fg.set")
-        return self._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
-
-    def add(
-        self,
-        field: Field,
-        e_ref: str,
-        value: Any,
-        *,
-        meta: dict[str, Any] | None = None,
-    ) -> str:
-        """Append an ``add`` assertion adding ``value`` to a multi-cardinality field.
-
-        Unlike ``set``, ``add`` is the multi-set accumulator: each call appends
-        a new value to the field's value set without replacing prior writes.
-        The entity is auto-materialized on first write (see ``set`` docstring
-        for materialization details).
-
-        Args:
-            field: A ``Field`` descriptor obtained from an Entity class
-                (e.g. ``User.tag``). Must reference a ``cardinality="multi"``
-                field.
-            e_ref: A managed e_ref string returned by ``sdk.ref(EntityCls, ...)``.
-            value: The value to add. Type is constrained by the field's
-                declared ``type_domain``. For ``entity_ref`` fields, pass
-                another managed e_ref string.
-            meta: Optional metadata dict attached to the assertion.
-
-        Returns:
-            The assertion id (str) of the field-mutation write.
-
-        Raises:
-            SDKStoreError: ``code="UNRESOLVABLE_E_REF"`` if ``e_ref`` (or an
-                entity_ref ``value``) was not produced by ``sdk.ref``.
-            CardinalityError: ``code="FIELD_CARDINALITY_MISMATCH"`` if ``field``
-                is single-cardinality (use ``sdk.set`` instead).
-            SDKStoreError: ``code="FIELD_VALUE_TYPE_MISMATCH"`` if ``value``
-                does not match the field's declared type domain.
-        """
-        self._reject_attached_write("fg.add")
-        return self._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
-
     def _apply_field_mutation(
         self,
         *,
@@ -2771,7 +2522,7 @@ class SDKStore:
         if not isinstance(target_identity, dict) or not target_identity:
             raise SDKStoreError(
                 f"e_ref is not managed by this SDKStore: {e_ref!r}; "
-                f"call sdk.ref({owner_type}, **identity_kwargs) to obtain a managed e_ref",
+                f"call fg.entities.ref({owner_type}, **identity_kwargs) to obtain a managed e_ref",
                 code="UNRESOLVABLE_E_REF",
             )
 
@@ -2826,7 +2577,7 @@ class SDKStore:
             if not isinstance(value_identity, dict) or not value_identity:
                 raise SDKStoreError(
                     f"value e_ref is not managed by this SDKStore: {value!r}; "
-                    f"call sdk.ref({value_entity_type}, **identity_kwargs) for the value entity first",
+                    f"call fg.entities.ref({value_entity_type}, **identity_kwargs) for the value entity first",
                     code="UNRESOLVABLE_E_REF",
                 )
             return AppEntityRef(
@@ -2856,28 +2607,6 @@ class SDKStore:
             path = ".".join(err.path) if err.path else None
             raise SDKValueError(err.message, code=err.code, path=path)
         raise SDKStoreError(err.message, code=err.code)
-
-    def retract(self, asrt_id: str, *, meta: dict[str, Any] | None = None) -> str | None:
-        """Append a retraction assertion that supersedes a prior assertion.
-
-        ``retract`` is append-only: the original assertion is preserved in
-        the ledger; the retraction marks it as no longer authoritative for
-        the chosen view. The retraction itself is recorded as a new
-        assertion.
-
-        Args:
-            asrt_id: The assertion id to retract (e.g. a value previously
-                returned by ``sdk.set`` / ``sdk.add``).
-            meta: Optional metadata dict attached to the retraction
-                assertion.
-
-        Returns:
-            The assertion id (str) of the retraction record, or ``None`` if
-            no retraction was emitted (e.g. the target assertion is already
-            retracted).
-        """
-        self._reject_attached_write("fg.retract")
-        return self._assertions_manager.retract(asrt_id, meta=meta)
 
     def run(
         self,
