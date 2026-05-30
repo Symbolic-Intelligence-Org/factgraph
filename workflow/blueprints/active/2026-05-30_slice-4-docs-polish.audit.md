@@ -20,6 +20,7 @@
 | 2026-05-30 | implementing-step-5 | Dirty notebook decision point | Defaulted to untouched per SF3: active dirty notebooks `01_sdk_check_diagnose.ipynb` and `02_overlay_why_not_frontier.ipynb` were not edited; archive dirty notebook remains out of scope per SF4. |
 | 2026-05-30 | implementing-step-6 | Non-load-bearing SDK docs migration | Updated `sdk/docs/README.md`, `01_concepts.en.md`, `03_rules_and_inferences.en.md`, and `07_walker_and_advanced.en.md` to canonical namespaces, AssertionView `.all` / `_meta`, and current schema/entity wording. |
 | 2026-05-30 | implementing-step-7 | Module docs migration | Updated application, authoring, and core module docs to `fg.schema.register/extend/apply`, canonical `fg.entities.*`, and `AssertionRecordSet.where(_meta=...)`; preserved shipped `SchemaAddResult` type name. |
+| 2026-05-30 | implementing-step-8 | Active design-points migration | Updated current-status design-point text for ledger/appended-ledger docs, `explanation-completion-roadmap.zh.md`, and Slice 4 landed-status notes in `identity-mechanism-redesign.zh.md`; preserved historical/problem-statement sections per SF2. |
 
 ## Decision Notes
 

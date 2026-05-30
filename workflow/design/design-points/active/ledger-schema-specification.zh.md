@@ -148,7 +148,7 @@ ledger 中 pred_id 有 **两类预留约定**,作用范围不同:
 
 | 预留 | 形态 | INV-10 拒绝? | INV-15 默认 filter? |
 |---|---|---|---|
-| `__system__.*`(顶级 system namespace)| `__system__.revokes`, `__system__.*` future | ✅ user 写入路径拒绝 | ✅ `fg.read.*` 默认 filter |
+| `__system__.*`(顶级 system namespace)| `__system__.revokes`, `__system__.*` future | ✅ user 写入路径拒绝 | ✅ 普通 SDK 读取表面默认 filter |
 | `<EntityType>:exists`(**legacy / transitional** per-entity-type 存在性)| `User:exists` 等 | ✅ user 不能直接构造;Step 1 后 `fg.entities.create` **optional transitional emission**(可继续 emit 兼容旧 reader,也可不 emit — Identity Claim 已替代) | ❌ 不 filter |
 | `<EntityType>:<field_name>`(普通 field,**含 Identity 镜像 Claim**)| `User:name` / `User:tenant_id` 等 | 用户正常 path(Identity 字段写入受 [identity §5.2 INV-7c](identity-mechanism-redesign.zh.md) 限制 — 仅 entities.create 写、entities.delete 整批 retract,不允许单独修改) | ❌ 不 filter |
 
@@ -240,7 +240,7 @@ CREATE TABLE ledger_meta (
 
 ### §4.3 INV-3:SQLite 单事务原子写
 
-> 一个 user-level 写入(如 `fg.write.set`)= 一个 SQLite transaction,原子跨表写入 claims + claim_meta。
+> 一个 user-level 写入(如 `fg.fields.set`)= 一个 SQLite transaction,原子跨表写入 claims + claim_meta。
 
 **含义**:
 - 不能出现"claims 写了但 claim_meta 没写"的部分态
@@ -291,7 +291,7 @@ CREATE TABLE ledger_meta (
 
 > 任何 user-facing 写入路径必须拒绝 `pred_id` 以 `__system__.` 开头的写入。该命名空间仅 ledger 内部机制可使用。
 
-**适用范围**:`fg.write.set` / `fg.write.add` / `fg.schema.ingest` / application 层写入门面。internal API(如 `retract_by_asrt`)走分离路径绕开 namespace check。
+**适用范围**:`fg.fields.set` / `fg.fields.add` / `fg.schema.ingest` / application 层写入门面。internal API(如 `retract_by_asrt`)走分离路径绕开 namespace check。
 
 **与 `<EntityType>:exists` 的边界区分**:
 - `__system__.*` 是**顶级 system namespace**(如 `__system__.revokes`),ledger 内部机制专用,INV-15 默认 filter
@@ -348,7 +348,7 @@ CREATE TABLE ledger_meta (
 
 ### §4.12 INV-15:普通查询默认 filter system claims
 
-> `fg.read.*` 系列 API 默认查询结果不包含 system claims(`pred_id LIKE '__system__.%'` 者)。需要看 system claim 走 `fg.audit.*` 专用 API。
+> 普通 SDK 读取 API 默认查询结果不包含 system claims(`pred_id LIKE '__system__.%'` 者)。需要看 system claim 走 `fg.audit.*` 专用 API。
 
 **SQL 实现**:`WHERE pred_id NOT LIKE '__system__.%'` 作为默认 filter(与 INV-13 公式左半边一致)。
 
@@ -566,10 +566,10 @@ ledger 原语只有 **append claim** 和 **append revoke claim** 两个。SDK �
 
 | SDK 操作 | Ledger 原语序列 | 原子性 |
 |---|---|---|
-| `fg.write.set(field, ref, value, meta)`(single cardinality)| 1. 查找既存 active claim(同 pred_id, e_ref);若有,append revoke claim<br>2. append new claim with value + meta | 同事务 |
-| `fg.write.add(field, ref, value, meta)`(multi cardinality)| append new claim with value + meta | 同事务 |
-| `fg.write.update(asrt_id, value=..., meta_updates=...)` | 1. append revoke claim targeting old asrt_id<br>2. append new claim with merged meta + 新 value | 同事务 |
-| `fg.write.retract(asrt_id, meta)` / `fg.write.delete(asrt_id)` | append revoke claim targeting asrt_id | 同事务 |
+| `fg.fields.set(field, ref, value, meta)`(single cardinality)| 1. 查找既存 active claim(同 pred_id, e_ref);若有,append revoke claim<br>2. append new claim with value + meta | 同事务 |
+| `fg.fields.add(field, ref, value, meta)`(multi cardinality)| append new claim with value + meta | 同事务 |
+| future assertion-level update(asrt_id, value=..., meta_updates=...) | 1. append revoke claim targeting old asrt_id<br>2. append new claim with merged meta + 新 value | 同事务 |
+| `fg.assertions.retract(asrt_id, meta)` | append revoke claim targeting asrt_id | 同事务 |
 
 ledger 视角看不到 "update" 概念;只看到 revoke + append 流。
 
@@ -580,7 +580,7 @@ ledger 视角看不到 "update" 概念;只看到 revoke + append 流。
 ### §8.1 普通写入(append claim 原语)
 
 ```text
-fg.write.set(User.name, alice, "Alice", meta={"source": "import", "trace_id": "seed-001"})
+fg.fields.set(User.name, alice, "Alice", meta={"source": "import", "trace_id": "seed-001"})
     ↓
 application/entity_write 层:
   - 解析 EntityRef alice → e_ref="idref_v1:User:abc..."
@@ -605,7 +605,7 @@ ledger.append_claim(单 SQLite transaction,INV-3):
 ### §8.2 撤销(append revoke claim 原语)
 
 ```text
-fg.write.retract(asrt_id, meta={"source": "manual-fix"})
+fg.assertions.retract(asrt_id, meta={"source": "manual-fix"})
     ↓
 core/evidence/write_protocol.retract_by_asrt(ledger, revoked_asrt_id, meta):
   - 检查 revoked_asrt_id 存在 + 非 system claim(INV-12)
@@ -666,7 +666,7 @@ record = snap.field("display_name").active.where(_meta={"source": "import"}).one
 ### §8.5 SDK update 流(revoke + append 组合糖)
 
 ```text
-fg.write.update(asrt_id, value="Alice'", meta_updates={"trace_id": "v2", "note": "renamed"})
+future assertion-level update(asrt_id, value="Alice'", meta_updates={"trace_id": "v2", "note": "renamed"})
     ↓
 application 层:
   - 查询 asrt_id 对应 claim(必须存在 + active)
@@ -690,18 +690,14 @@ core/evidence/write_protocol 内部(**单一 SQLite transaction**):
 - 历史 audit 显示:在 T1 时间点 old asrt_id 的 (value, meta) 是某个状态;在 T2 时间点 revoke + new asrt_id 是另一个状态
 - ledger 视角只看到 2 个原子操作(revoke + append),没有 "update" 概念
 
-### §8.6 SDK delete 流
-
-`delete` 是 `retract` 的 SDK-level alias,语义完全相同:
+### §8.6 SDK delete / retract 流
 
 ```text
-fg.write.delete(asrt_id)
-  等价于
-fg.write.retract(asrt_id)
+fg.assertions.retract(asrt_id)
   = append revoke claim(详见 §8.2)
 ```
 
-"delete" 命名向用户传递"删除"语义;ledger 层依然是 append-only。
+Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level 删除语义统一表现为 append revoke claim。ledger 层依然是 append-only。
 
 ---
 
@@ -719,7 +715,7 @@ fg.write.retract(asrt_id)
 
 - **delta**:删除 `meta_rows` 和 `annotation_rows` 两张表;合并为 `claim_meta`(同时 rename 为 claim_meta)
 - **dual-write 机制退场**:当前白名单 7 个 meta key 双写两表的逻辑全部删除;所有 user meta key 同等对待
-- **影响**:SDK `AssertionRecordSet.where(meta=...)` query path 改造 — 走 claim_meta 索引
+- **影响**:SDK `AssertionRecordSet.where(_meta=...)` query path 改造 — 走 claim_meta 索引
 
 ### §9.2 数据精简 2:`namespace` / `category` / `derivation` / `origin` 列删除
 

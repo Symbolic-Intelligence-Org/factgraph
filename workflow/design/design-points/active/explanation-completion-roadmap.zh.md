@@ -51,7 +51,7 @@
 |---|---|---|
 | **PyReason row evidence** | safe single-conclusion fallback | rich timeline (timestep / bound update) 未 ship |
 | **Why-not** | failed `Explanation` envelope only | 无 path-level reasoning / 无 counterfactual |
-| **Match witness** | `fg.read.match(...)` returns snapshot only | 无 assertion ids / witness ids / view 创建 |
+| **Match witness** | `fg.entities.match(...)` returns snapshot only | 无 assertion ids / witness ids / view 创建 |
 | **Attribution** | 无 | salience / impact decomposition 全缺 |
 | **Aggregate visibility** | aggregate 只给 `count`, kinds 锁定 | 无 contributors 展开 / `any` / `all` / `isSubset` / `join` / 等扩展 |
 
@@ -69,7 +69,7 @@
 |---|---|---|
 | **D11 PyReason Form 2 evidence** | 已被多次明示为上游 blocker; timeline 基底 (`pyreason_trace_to_evidence_graph`) 已 ship; LAYOUT_TIMELINE 已定义 | T8-C-2 PyReason runtime evidence bridge |
 | **D5 Why-not / counterfactual** | 用户最高频解释诉求 "为什么没推出"; 当前 v1 用户面感知最弱 | D1 公开后的实际语义价值 |
-| **D20 Match witness output** | 用户 demand 多次; `fg.read.match(...).as_assertions() / .witnesses() / .to_view()`; T11.2.7 明示 deferred | match → evidence/database/view 桥 |
+| **D20 Match witness output** | 用户 demand 多次; `fg.entities.match(...).as_assertions() / .witnesses() / .to_view()`; T11.2.7 明示 deferred | match → evidence/database/view 桥 |
 
 ### 🥈 Tier A — 高价值 / 自然伴随 Tier S
 
@@ -270,7 +270,7 @@
 
 ### 6.5 Match witness seam — D20
 
-**Scope**: `fg.read.match(...).as_assertions() / .witnesses() / .to_view()` API family
+**Scope**: `fg.entities.match(...).as_assertions() / .witnesses() / .to_view()` API family
 
 **v1 boundary** (T11.2.7 已明示):
 - 当前 match 仅返 snapshot; 无 witness ids; 无 view 创建

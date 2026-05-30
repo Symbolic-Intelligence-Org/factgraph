@@ -111,7 +111,7 @@ ledger 层时态信息：
 
 SDK 层有：
 - `AssertionRecordSet.history.at(time)` — per-field 历史时点查询
-- `AssertionRecordSet.history.version(version)` — version meta 过滤
+- `AssertionRecordSet.all.where(_meta={"version": version})` — version meta 过滤
 - `AssertionRecordSet.history.by_id(asrt_id)` — exact assertion lookup
 
 **没有的**：
@@ -137,8 +137,8 @@ $ grep -rnE "purge|hard_delete|hard_purge|GDPR|forget|compact" src/factgraph/ \
 
 ### §2.6 Schema 演化
 
-- ✅ `fg.schema.add(EntityCls)` 支持 entity-add（schema 加新 Entity 类型）— 详见 [`src/factgraph/sdk/docs/04_api_surface.en.md §2.2`](../../../../src/factgraph/sdk/docs/04_api_surface.en.md)
-- ✅ `fg.schema.add(SameNameReplacementCls)` 支持 non-identity field-add（同名类替换 + 新增字段）— 同上
+- ✅ `fg.schema.register(EntityCls)` 支持 entity-add（schema 加新 Entity 类型）— 详见 [`src/factgraph/sdk/docs/04_api_surface.en.md §2.2`](../../../../src/factgraph/sdk/docs/04_api_surface.en.md)
+- ✅ `fg.schema.extend(SameNameReplacementCls)` 支持 non-identity field-add（同名类替换 + 新增字段）— 同上
 - ✅ Schema digest lock 防止漂移（ledger 记 schema 数字签名）
 - ❌ 非 additive 变更（删字段、改字段类型、identity 字段变更）显式 reject — **无 upcaster 链**；同 SDK doc 注明 "Destructive schema operations are not public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, `fg.schema.deprecate` are deferred to future migration-planning work"
 

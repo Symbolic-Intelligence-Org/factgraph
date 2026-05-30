@@ -1619,7 +1619,7 @@ Slice 3a close 后仍留的 carry-forward:
 - Step 2+ `:exists` removal(per ADR-IC §4.4.4)— transitional guard 跟 `:exists` co-emission lifecycle 同步退役。
 - Step 2+ shadow store removal(per ADR-IC §4.2.4)— `fg.entities.create` eager emission 已 shipped,legacy `fg.entities.ref + fg.fields.set` lazy compat 仍保留。
 - Slice 3b ledger schema migration(`__system__.revokes` + claims `value`/`value_tag` 双列)。
-- Slice 4 wider docs polish(public quickstarts / non-load-bearing SDK docs / examples notebooks)。
+- Slice 4 wider docs polish(public quickstarts / non-load-bearing SDK docs / examples notebooks / active design-points)— in progress on `v0.2.0-impl-slice-4-docs-polish-2026-05-30`。
 - Slice 5+ Q-PR1 PyReason adapter rewrite + INV-9 runtime strict enforcement。
 
 ---
@@ -1829,7 +1829,7 @@ Rule 之前的 Schema / Read-write / Assertions 三章 PDF 建议逐项 triage �
 - [x] **Q7** INV-7c 实施策略 C(application 层 Identity pred_id set)+ schema evolution 不允许 Identity/Field 互转;§5.2 + §12.9 同步
 
 **应用文档同步**(Step 2+ 时):
-- [ ] `docs/official/kernel/quickstart/assertions.md` `.version(v)` 一等方法删除,改 `.where(_meta={"version": v})`
+- [x] Slice 4 Step 2: `docs/official/kernel/quickstart/assertions.md` `.version(v)` 一等方法删除,改 `.where(_meta={"version": v})`
 - [ ] `docs/official/kernel/quickstart/assertions.md` 时间维度章节加 `during` future preview
 
 ### 进入 blueprint 前的最后待决点(2026-05-29)
