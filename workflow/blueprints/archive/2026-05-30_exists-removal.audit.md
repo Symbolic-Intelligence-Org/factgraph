@@ -3,7 +3,7 @@
 - Blueprint: [2026-05-30_exists-removal.md](./2026-05-30_exists-removal.md)
 - Branch: `v0.2.0-blueprint-exists-removal-2026-05-30`
 - Fork point: `870e1f1f` (Q-EXISTS adopted decision head)
-- Status: implemented audit log
+- Status: archived audit log
 
 ## Event Log
 
@@ -22,6 +22,7 @@
 | 2026-05-30 | implementing-step-6 | Runtime regression sweep | Target migration/regression sweep passed 167 direct test invocations; rule/query `Entity:exists` virtual-syntax smoke passed 26 unittest cases. Sweep found one remaining user-path-emission assumption in `test_sdk_assertions_namespace.py`, fixed by converting that assertion-retract guard case to an explicit legacy `:exists` fixture. |
 | 2026-05-30 | implementing-step-7 | Current docs and ADRs updated | Updated ADR-IC current status, Q-EXISTS implementation record, and current SDK docs to state that user-facing `:exists` co-emission is retired while legacy Claims, rule virtual syntax, Q-PR1 derivation markers, wire compatibility, and shadow store remain carry-forward/protected surfaces. |
 | 2026-05-30 | implemented | Final gate and outcome complete | Final target regression sweep passed 167 direct invocations plus 26 rule/query unittest cases; compileall and diff-check clean; Q-PR1/sacred/dirty locks preserved; blueprint status flipped to `implemented` and §10 Outcome filled. |
+| 2026-05-30 | archived | Blueprint and audit moved to archive | Moved Slice 5 blueprint + audit from `active/` to `archive/` and updated archive `INVENTORY.md`; branch remains unpushed pending user authorization. |
 
 ## Decision Notes
 
