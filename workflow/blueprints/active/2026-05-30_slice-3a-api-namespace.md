@@ -520,6 +520,22 @@ Step 6:`_SDKReadManager`(`sdk/store.py:533-555`)+ `_SDKWriteManager`(`sdk/store.
 - `fg.find(EC, **filter)` → `fg.entities.where(EC, **filter)`
 - `fg.match(EC, t)` → `fg.entities.match(EC, t)`
 
+#### 5.11.1 Step 4.6.5 deletion-grep inventory(amended 2026-05-30)
+
+Post-Step-3 process audit required a scoped deletion-grep pass before continuing
+the subtractive half of Slice 3a. The following findings are binding input to
+Step 11/12; examples and wider public quickstarts remain Slice 4 per SF7.
+
+| ID | Target | Current consumer surface(file:line anchors from grep) | Responsibility |
+|---|---|---|---|
+| N-1 | Flat top-level `fg.ref` / `fg.set` / `fg.add` / `fg.edit` / `fg.get` / `fg.find` / `fg.retract` | Slice 2/3a contract tests:`tests/test_emission_contract.py:74,80,123,133,155,219,228,272,300,319,323`;`tests/test_sdk_entities_create.py:97,184,232,269,270`;`tests/test_sdk_entities_namespace.py:36-38,69-70,98,109-111,253`;`tests/test_sdk_entities_delete.py:57-58,179,187`;guard/wording tests:`tests/test_identity_reject_wording.py:46,48,58,224`;`tests/test_sdk_retract_guard_integration.py:33,34,48,60,79,97,117,119,144,166`;`tests/test_application_*_guard.py:37-40`;workspace / attach tests:`tests/test_factgraph_workspace_lifecycle.py:73,364,410,427`;`tests/test_db_attach_lifecycle.py:155-158,207-208`;legacy alias tests:`tests/test_sdk_redesign_alias_parity.py:151-171`;`tests/test_sdk_redesign_invariants.py:153-165` | Step 11 tests-only migration. Positive usage migrates to `fg.entities.*` / `fg.fields.*` / `fg.assertions.retract`; alias-parity tests are deleted or rewritten as hard-removal tests in `tests/test_sdk_namespace_removal.py`. |
+| N-2 | `fg.read.*` / `fg.write.*` | Tests:`tests/test_schema_field_add_lifecycle.py:261,271,280,281,293,302,311,312,518`;`tests/test_schema_mutation_lifecycle.py:226,227,254,446,447,498`;`tests/test_db_attach_lifecycle.py:187-190,208,318,320`;`tests/test_sdk_entities_namespace.py:97,126,201,213`;`tests/test_sdk_redesign_alias_parity.py:152,161,171` | Step 11 tests-only migration or hard-removal tests, matching Step 7 deletion. |
+| N-3 | `fg.schema.add` | Tests:`tests/test_schema_field_add_lifecycle.py:217,228,243,246,258,268,279,292,301,310,331,339,347,378,387,394,405,417,430,444,454,470,479,491,502,517,526,534,547`;`tests/test_schema_mutation_lifecycle.py:179,186,224,241,251,336,352,363,377,388,395,404,417,474,489,501`;`tests/test_db_attach_lifecycle.py:192` | Step 10 implements `register/extend/apply`; Step 11 migrates legacy tests to the new three-way API and hard-removal assertions. |
+| N-4 | `.version(` first-class assertion-view method | Tests:`tests/test_sdk_assertion_record_set.py:85`;`tests/test_sdk_assertion_record_set_view_filters.py:93,110,130,131` | Step 9 removes method; Step 11 migrates tests to `.where(_meta={"version": ...})` or hard-removal checks. |
+| N-5 | `where(source=...)` / `where(meta=...)` flat meta kwargs | Legacy positive tests:`tests/test_sdk_assertion_record_set.py:128,162,163,210,211,212`;`tests/test_sdk_assertion_record_set_view_filters.py:108`。Negative/canonical tests already present:`tests/test_sdk_entities_namespace.py:134,143,150,157,165,174,184,192` | Step 9 removes flat kwargs; Step 11 migrates legacy positive tests to `_meta={...}`. Existing `fg.entities.where(...)` negative tests remain as removal coverage. |
+| N-6 | Load-bearing docs stale examples | Same-slice docs:`src/factgraph/sdk/docs/04_api_surface.en.md:23,24,31,32,135,283,304,313,326,327,415,421,459,475,476,479,499,539,594,609,616,620,646,648,666,706`;`src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md:8,13-15,26,28,202,224,226,235,237,323,330`;`src/factgraph/sdk/docs/00_user_guide.en.md:60-75,166,168,175,178,181,187,191,192,199,207,213,216,232,233,237,261,263-265,276,314,315,376,381-383,389,390,397,398,412,447,454,574,686,738,794,850,858,883,895`;`workflow/design/design-points/active/identity-mechanism-redesign.zh.md:790-797,892,910-924,941,1060,1072,1075,1115-1117,1133,1193,1201,1204,1234-1247,1291,1329-1342,1358-1364,1411,1416,1418,1461,1492,1496,1499,1560,1623,1719,1744,1763,1764,1769,1786` | Step 12 load-bearing docs migration, not Step 11. Preserve historical rationale where explicitly historical; migrate current examples/tables. |
+| N-7 | Wider docs / examples | Out-of-slice files from grep include `examples/05_sdk_assertion_views.ipynb`, `examples/archive/01_sdk_basics.ipynb`, public quickstarts under `docs/official/kernel/quickstart/*`, and non-load-bearing SDK docs `01_concepts.en.md`, `03_rules_and_inferences.en.md`, `07_walker_and_advanced.en.md` | Explicit Slice 4 / archive carry-forward. Slice 3a must keep `examples/` 0 diff against `c927d41f`; archived examples remain untouched even if dirty. |
+
 ### 5.12 Load-bearing docs scope(per PF-S7 lock)
 
 Same-slice migration(4 docs):
@@ -544,7 +560,7 @@ Same-slice migration(4 docs):
 | **SF5** | **`AssertionView.history` deprecated alias**(PF-S5 verdict per ADR-API §4.2.4):保留 alias of `.all`;**默认不发** `DeprecationWarning`(防测试失败);env var **固定** `FACTGRAPH_WARN_DEPRECATED=1` 触发 warning;blueprint §5.7 显式 model `os.environ.get(...)` check | PF-S5 verdict |
 | **SF6** | **`_ASSERTION_FILTER_MISSING` sentinel reuse**(PF-S6 verdict):shipped sentinel `sdk/facade.py:18`;不引入新 sentinel for 新的 `AssertionView.where` / `AssertionsManager.where` / `AssertionRecordSet.where`(post-Q13 删 flat) | PF-S6 verdict |
 | **SF7** | **Slice 3a load-bearing docs scope**(PF-S7 verdict):**4 docs same-slice landing** — `src/factgraph/sdk/docs/04_api_surface.en.md` + `src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md` + `src/factgraph/sdk/docs/00_user_guide.en.md` + `workflow/design/design-points/active/identity-mechanism-redesign.zh.md §12/§13`。**Slice 4 留**:`01_concepts.en.md` / `03_rules_and_inferences.en.md` / `07_walker_and_advanced.en.md` / public quickstarts / examples deep polish。**Exception**:若 Slice 3a 实施期发现 test 或 current docs hard-reference 新 API 造成断裂,可加 narrow patch(Slice 3a §10 Outcome 记录) | PF-S7 verdict + ADR-DOCS §4.2.2 |
-| **SF8** | **12-step plan + docs as standalone close-time step**(PF-S8 verdict):Step 0(pre-impl grep,uncounted)+ Step 1-12(numbered);Step 0 必须**先 grep actual callsites** 再进入 manager/code changes;**docs migration(Step 11)显式独立于 tests/examples migration(Step 10)**,不混合 | PF-S8 verdict |
+| **SF8** | **12-step plan + docs as standalone close-time step**(PF-S8 verdict):Step 0(pre-impl grep,uncounted)+ Step 1-12(numbered);Step 0 必须**先 grep actual callsites** 再进入 manager/code changes;**docs migration(Step 12)显式独立于 tests-only migration(Step 11)**,不混合 | PF-S8 verdict |
 | **SF9** | **Q-PR1 carve-out + SF11-style internal-rollback 继承**(Slice 1+2 lineage):0 diff against Slice 2 close `c927d41f..HEAD` 在 `core/evidence/write_protocol.py` / `core/store/ledger.py` / `core/store/_builders.py` / `adapters/pyreason/*` / `core/derivation/accept.py`(含 `:401` 内部 rollback path,SF11 classification 继承)| meta-ADR §4.4 + Slice 2 SF5 + SF11 + N11 |
 | **SF10** | **Sacred branches + dirty baseline preservation**:`master` `562c74195df43e933bed92a3ff25de94dd8ce666` 不动;`v0.1-oss-prep` 不动;dirty baseline(4 M + 1 D + 2 untracked)preserved through all commits | Slice 2 SF (sustained) |
 | **SF11** | **ADR-IE EntityEditor compatibility**:`sdk_edit` factory edit-existing-only contract(per ADR-IE §4.8)+ EntityEditor lifecycle(per ADR-IE §4.1-§4.7)+ IdentityEditor Layer 1 reject 文案(Slice 2 Step 6 已 ship — 不动)+ FieldEditor cardinality enforcement(per ADR-IE §4.5)— **全 contract 不改**;Slice 3a 只动 `fg.write.edit` → `fg.entities.edit` 入口名(per ADR-API §4.1.2 + ADR-IE §4.8)| ADR-IE §4.8 |
@@ -688,14 +704,16 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 
 ### 7.11 Tests migration only(Step 11 — code-side only,**examples 留 Slice 4** per P1 amend 2026-05-30)
 
-- [ ] All Slice 1+2 cumulative test files(59 tests baseline + Slice 2 carry-forward usage of `fg.ref + fg.set` etc.)migrated to `fg.entities.* / fg.fields.* / fg.assertions.*` namespace
-- [ ] Pre-existing `fg.read.*` test files(4 files)+ `fg.write.*` test files(3 files)+ `fg.assertions.*` test files(1 file)+ `fg.schema.add` test files(3 files)+ `version(v)` test files(2 files)全 migrate
+- [ ] All Step 4.6.5 deletion-grep in-scope test findings N-1..N-5 from §5.11.1 migrated or converted to hard-removal tests
+- [ ] Slice 1+2 cumulative test files using legacy flat / read-write paths(`tests/test_emission_contract.py`,guard tests,workspace/attach tests,Slice 3a Step 1-3 tests)migrated to `fg.entities.* / fg.fields.* / fg.assertions.*` namespace
+- [ ] Pre-existing `fg.read.*` / `fg.write.*` tests,`fg.schema.add` tests,`.version(v)` tests,and `where(source=.../meta=...)` positive tests migrate per §5.11.1 N-2..N-5
+- [ ] Existing negative tests for removed surfaces remain or are consolidated in `tests/test_sdk_namespace_removal.py` / `tests/test_sdk_where_version_hard_remove.py`
 - [ ] **`examples/` directory** — **NOT migrated in Slice 3a**(per P1 amend 2026-05-30 — dirty baseline contains multiple `examples/*.ipynb`,user explicit constraint 不扩大到 examples);examples deep migration 留 Slice 4 wider polish,与 `01_concepts.en.md` / `03_rules_and_inferences.en.md` 等一起处理
 - [ ] **No** wider docs polish(`01_concepts.en.md` / `03_rules_and_inferences.en.md` / `07_walker_and_advanced.en.md` / public quickstarts)— 留 Slice 4(per SF7)
 - [ ] Cumulative Slice 1+2+3a test suite full green
 - [ ] **Examples dirty-notebook guard**:Slice 3a per-commit verification ritual 加 examples baseline check — `examples/*.ipynb` 跟 Slice 2 close baseline 0 diff(防 accidental migration during Slice 3a)
 
-### 7.12 Load-bearing docs migration(Step 11 — SF7)
+### 7.12 Load-bearing docs migration(Step 12 — SF7)
 
 - [ ] `src/factgraph/sdk/docs/04_api_surface.en.md`:
   - Namespace Map 改 4 个 namespaces(entities / fields / assertions / schema)
@@ -722,7 +740,7 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 
 ## 8. Implementation Plan
 
-Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close 前 step**(Step 11)— **不** 混在 tests/examples sweep(Step 10)。
+Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close 前 step**(Step 12)— **不** 混在 tests-only sweep(Step 11)。
 
 ### Step 0 — Pre-impl grep gate(read-only,uncounted)
 
@@ -846,18 +864,31 @@ Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close
 
 **Code-side migration only — tests only;examples 留 Slice 4**(docs 显式独立 Step 12 per SF8):
 
-- 11.1 grep `fg\.read\.` / `fg\.write\.` / `fg\.set\|fg\.add\|fg\.retract\|fg\.edit\|fg\.get\|fg\.ref\|fg\.find\|fg\.match` / `fg\.schema\.add` / `\.version\(` / `where\(source=\|trace_id=\|version=` 全 callsites in `tests/` only(per preflight §6 blast radius)
-- 11.2 Test files migrate:
-  - `tests/test_schema_field_add_lifecycle.py` 5 occurrences `fg.read.get` + 3 occurrences `fg.write.set/add`
-  - `tests/test_schema_mutation_lifecycle.py` 2 occurrences `fg.write.set`
-  - `tests/test_sdk_assertion_record_set_view_filters.py` 4 occurrences `snap.field(...).version(...)` / `set.version(...)`
-  - `tests/test_sdk_assertion_record_set.py` 1 occurrence `snap.field(...).version(...)`
-  - `tests/test_schema_*.py` 3 occurrences `fg.schema.add`
-  - Slice 2 emission tests `tests/test_emission_contract.py` + 其他 Slice 2 test files — 大量 `fg.ref + fg.set` 改 `fg.entities.ref + fg.fields.set`(或者用 `fg.entities.create` shortcut)
-  - 4 个 `fg.read.*` test files + 3 个 `fg.write.*` test files + 1 个 `fg.assertions.*` test file + 2 个 `version(v)` test files + 3 个 where flat kwargs test files 全 migrate
-- 11.3 **`examples/` directory NOT migrated**(per P1 amend 2026-05-30 — dirty baseline 已含 `examples/01_sdk_check_diagnose.ipynb` / `examples/02_overlay_why_not_frontier.ipynb` / `examples/archive/01_sdk_basics.ipynb` 跟 Slice 3a 无关 dirty 修改;user explicit constraint 不扩大 examples scope)。Examples deep migration carry-forward 到 Slice 4 wider polish。**Dirty-notebook guard**:Step 11 per-commit verification ritual 加 `examples/*.ipynb` 跟 Slice 2 close baseline 0 diff check
-- 11.4 Cumulative Slice 1+2+3a test suite full green(tests-only;examples 不在 acceptance scope)
-- 11.5 — commit boundary
+- 11.1 Re-run deletion grep command set from §5.11.1 and confirm no new in-scope consumer files beyond N-1..N-5 before editing tests
+- 11.2 Migrate N-1 flat shortcut positive tests:
+  - Slice 2 emission/guard/create/delete/namespace tests using `fg.ref + fg.set/add/edit/retract/get/find`
+  - workspace / attach / redesign alias-parity tests that currently assert flat/read-write alias behavior
+- 11.3 Migrate N-2 read/write namespace tests:
+  - `tests/test_schema_field_add_lifecycle.py`
+  - `tests/test_schema_mutation_lifecycle.py`
+  - `tests/test_db_attach_lifecycle.py`
+  - `tests/test_sdk_entities_namespace.py`
+  - `tests/test_sdk_redesign_alias_parity.py`
+- 11.4 Migrate N-3 `fg.schema.add` tests:
+  - `tests/test_schema_field_add_lifecycle.py`
+  - `tests/test_schema_mutation_lifecycle.py`
+  - `tests/test_db_attach_lifecycle.py`
+- 11.5 Migrate N-4 / N-5 assertion-view tests:
+  - `tests/test_sdk_assertion_record_set.py`
+  - `tests/test_sdk_assertion_record_set_view_filters.py`
+  - Preserve or rewrite `tests/test_sdk_entities_namespace.py` flat-meta negative tests as hard-removal coverage
+- 11.6 Consolidate hard-removal tests:
+  - `tests/test_sdk_namespace_removal.py`
+  - `tests/test_sdk_where_version_hard_remove.py`
+  - `tests/test_sdk_schema_three_split.py`
+- 11.7 **`examples/` directory NOT migrated**(per P1 amend 2026-05-30 — dirty baseline 已含 `examples/01_sdk_check_diagnose.ipynb` / `examples/02_overlay_why_not_frontier.ipynb` / `examples/archive/01_sdk_basics.ipynb` 跟 Slice 3a 无关 dirty 修改;user explicit constraint 不扩大 examples scope)。Examples deep migration carry-forward 到 Slice 4 wider polish。**Dirty-notebook guard**:Step 11 per-commit verification ritual 加 `examples/*.ipynb` 跟 Slice 2 close baseline 0 diff check
+- 11.8 Cumulative Slice 1+2+3a test suite full green(tests-only;examples 不在 acceptance scope)
+- 11.9 — commit boundary
 
 ### Step 12 — Load-bearing docs migration + final acceptance + §10 Outcome + Status implemented
 
