@@ -18,21 +18,21 @@ from factgraph.sdk.schema import Entity, Field, Identity, Relationship
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="single")
-    popular: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    tag: str = Field()
+    popular: str = Field()
 
 
 class Pet(Entity):
-    pet_id: str = Identity(primary_key=True)
-    species: str = Field(cardinality="single")
+    pet_id: str = Identity()
+    species: str = Field()
 
 
 class Friends(Relationship):
     from_entity = User
     to_entity = User
-    strength: str = Field(cardinality="single")
+    strength: str = Field()
 
 
 def _test_schema_ir() -> dict[str, object]:

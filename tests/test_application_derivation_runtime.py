@@ -46,8 +46,8 @@ def _make_candidate(*, run_id: str, target: str = "t:p") -> CandidateSet:
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    nickname: str = Field(cardinality="single")
+    name: str = Identity()
+    nickname: str = Field()
 
 
 def _build_store() -> tuple[Store, object]:

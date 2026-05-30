@@ -36,24 +36,24 @@ from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    age: int = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    age: int = Field()
+    region: str = Field()
 
 
 class Team(Entity):
-    name: str = Identity(primary_key=True)
-    score: int = Field(cardinality="single")
+    name: str = Identity()
+    score: int = Field()
 
 
 class Reading(Entity):
-    name: str = Identity(primary_key=True)
-    value: float = Field(cardinality="single")
+    name: str = Identity()
+    value: float = Field()
 
 
 class Profile(Entity):
-    name: str = Identity(primary_key=True)
-    tag: str = Field(cardinality="multi")
+    name: str = Identity()
+    tag: list[str] = Field()
 
 
 @dataclass(frozen=True)

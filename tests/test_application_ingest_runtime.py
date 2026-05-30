@@ -22,13 +22,13 @@ from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Tag(Entity):
-    label: str = Identity(primary_key=True)
+    label: str = Identity()
 
 
 class Post(Entity):
-    slug: str = Identity(primary_key=True)
-    title: str = Field(cardinality="single")
-    tag: Tag = Field(cardinality="multi")
+    slug: str = Identity()
+    title: str = Field()
+    tag: list[Tag] = Field()
 
 
 def _build_store() -> tuple[Store, object]:

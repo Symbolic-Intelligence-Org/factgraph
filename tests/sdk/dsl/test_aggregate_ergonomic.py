@@ -22,14 +22,14 @@ from factgraph.sdk.dsl.expr import lower_where
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    status: str = Field(cardinality="single")
+    user_id: str = Identity()
+    status: str = Field()
 
 
 class Order(Entity):
-    order_id: str = Identity(primary_key=True)
-    buyer: str = Field(cardinality="single")
-    amount: int = Field(cardinality="single")
+    order_id: str = Identity()
+    buyer: str = Field()
+    amount: int = Field()
 
 
 def _count_pred(raw_filter: list[object], pred_id: str, first_term: str) -> int:

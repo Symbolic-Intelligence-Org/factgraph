@@ -9,21 +9,21 @@ from factgraph.sdk.schema import SDKSchemaError
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
+    user_id: str = Identity()
     locale: str = Identity()
-    name: str = Field(cardinality="single")
+    name: str = Field()
 
 
 class Friends(Relationship):
     from_entity = User
     to_entity = User
-    strength: str = Field(cardinality="single")
+    strength: str = Field()
 
 
 class Owns(Relationship):
     from_entity = User
     to_entity: str = "Pet"  # string reference (entity not defined)
-    affection: str = Field(cardinality="single")
+    affection: str = Field()
 
 
 class RelationshipSchemaTests(unittest.TestCase):
@@ -118,14 +118,14 @@ class RelationshipSchemaTests(unittest.TestCase):
         with self.assertRaises(SDKSchemaError):
             class BadRel(Relationship):
                 to_entity = User
-                value: str = Field(cardinality="single")
+                value: str = Field()
 
     def test_relationship_missing_to_entity_raises(self) -> None:
         """Relationship without to_entity raises SDKSchemaError."""
         with self.assertRaises(SDKSchemaError):
             class BadRel(Relationship):
                 from_entity = User
-                value: str = Field(cardinality="single")
+                value: str = Field()
 
     def test_multiple_relationships_compiled(self) -> None:
         """Multiple Relationship types compile correctly."""

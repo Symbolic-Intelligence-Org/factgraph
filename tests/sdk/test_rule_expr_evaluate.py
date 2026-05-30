@@ -27,8 +27,8 @@ from factgraph.sdk.store import SDKStoreError
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    region: str = Field()
 
 
 def _store() -> sdk.SDKStore:

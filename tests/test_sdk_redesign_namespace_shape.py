@@ -1,9 +1,9 @@
-"""Namespace-shape tests for the post-T5 SDK surface.
+"""Namespace-shape tests for the shipped SDK namespace surface.
 
 Asserts:
 - Each top-level taxonomy namespace exists as a property on `FactGraph`
   returning the correct private manager type.
-- Legacy `what_if` namespaces are removed by the T5 hard-cut.
+- Legacy `read` / `write` namespaces are removed by the Slice 3a hard-cut.
 - Manager classes are private (underscore-prefixed) and not exported
   in `factgraph.sdk.__all__`.
 - Read-only enforcement via `__setattr__` raising `FrozenSnapshotError`
@@ -18,19 +18,22 @@ import unittest
 import factgraph.sdk as factgraph_sdk
 from factgraph.sdk import Entity, FactGraph, Field, FrozenSnapshotError, Identity
 from factgraph.sdk.store import (
+    AssertionsManager,
     _SDKAuditManager,
+    _SDKEntitiesManager,
     _SDKEvalManager,
+    _SDKFieldsManager,
+    _SDKInferencesManager,
     _SDKPackageManager,
-    _SDKReadManager,
+    _SDKRulesManager,
     _SDKSchemaManager,
     _SDKViewsManager,
-    _SDKWriteManager,
 )
 
 
 class Person(Entity):
-    pid: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    pid: str = Identity()
+    name: str = Field()
 
 
 def _new_fg() -> FactGraph:
@@ -38,27 +41,43 @@ def _new_fg() -> FactGraph:
 
 
 class TopLevelNamespacePresenceTests(unittest.TestCase):
-    """T5 top-level taxonomy namespaces present on `FactGraph`."""
+    """Current top-level taxonomy namespaces present on `FactGraph`."""
 
     def test_schema_namespace_present(self) -> None:
         fg = _new_fg()
         self.assertIsInstance(fg.schema, _SDKSchemaManager)
 
-    def test_read_namespace_present(self) -> None:
+    def test_entities_namespace_present(self) -> None:
         fg = _new_fg()
-        self.assertIsInstance(fg.read, _SDKReadManager)
+        self.assertIsInstance(fg.entities, _SDKEntitiesManager)
 
-    def test_write_namespace_present(self) -> None:
+    def test_fields_namespace_present(self) -> None:
         fg = _new_fg()
-        self.assertIsInstance(fg.write, _SDKWriteManager)
+        self.assertIsInstance(fg.fields, _SDKFieldsManager)
+
+    def test_assertions_namespace_present(self) -> None:
+        fg = _new_fg()
+        self.assertIsInstance(fg.assertions, AssertionsManager)
+
+    def test_rules_namespace_present(self) -> None:
+        fg = _new_fg()
+        self.assertIsInstance(fg.rules, _SDKRulesManager)
+
+    def test_inferences_namespace_present(self) -> None:
+        fg = _new_fg()
+        self.assertIsInstance(fg.inferences, _SDKInferencesManager)
 
     def test_eval_namespace_present(self) -> None:
         fg = _new_fg()
         self.assertIsInstance(fg.eval, _SDKEvalManager)
 
-    def test_what_if_namespace_removed(self) -> None:
+    def test_read_namespace_removed(self) -> None:
         fg = _new_fg()
-        self.assertFalse(hasattr(fg, "what_if"))
+        self.assertFalse(hasattr(fg, "read"))
+
+    def test_write_namespace_removed(self) -> None:
+        fg = _new_fg()
+        self.assertFalse(hasattr(fg, "write"))
 
     def test_audit_namespace_present(self) -> None:
         fg = _new_fg()
@@ -78,12 +97,14 @@ class ManagerPrivacyTests(unittest.TestCase):
 
     MANAGER_CLASS_NAMES = (
         "_SDKSchemaManager",
-        "_SDKReadManager",
-        "_SDKWriteManager",
+        "_SDKEntitiesManager",
+        "_SDKFieldsManager",
         "_SDKEvalManager",
         "_SDKAuditManager",
         "_SDKPackageManager",
         "_SDKViewsManager",
+        "_SDKRulesManager",
+        "_SDKInferencesManager",
     )
 
     def test_manager_class_names_start_with_underscore(self) -> None:
@@ -118,11 +139,20 @@ class ReadOnlyEnforcementTests(unittest.TestCase):
     def test_schema_manager_read_only(self) -> None:
         self._assert_read_only(_new_fg().schema, "schema")
 
-    def test_read_manager_read_only(self) -> None:
-        self._assert_read_only(_new_fg().read, "read")
+    def test_entities_manager_read_only(self) -> None:
+        self._assert_read_only(_new_fg().entities, "entities")
 
-    def test_write_manager_read_only(self) -> None:
-        self._assert_read_only(_new_fg().write, "write")
+    def test_fields_manager_read_only(self) -> None:
+        self._assert_read_only(_new_fg().fields, "fields")
+
+    def test_assertions_manager_read_only(self) -> None:
+        self._assert_read_only(_new_fg().assertions, "assertions")
+
+    def test_rules_manager_read_only(self) -> None:
+        self._assert_read_only(_new_fg().rules, "rules")
+
+    def test_inferences_manager_read_only(self) -> None:
+        self._assert_read_only(_new_fg().inferences, "inferences")
 
     def test_eval_manager_read_only(self) -> None:
         self._assert_read_only(_new_fg().eval, "eval")

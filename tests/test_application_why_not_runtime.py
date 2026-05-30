@@ -40,9 +40,9 @@ from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    age: int = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    age: int = Field()
+    region: str = Field()
 
 
 def _build_store() -> tuple[Store, Any]:

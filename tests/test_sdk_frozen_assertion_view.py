@@ -6,9 +6,9 @@ from factgraph.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tag: list[str] = Field()
 
 
 class _AsrtLike:

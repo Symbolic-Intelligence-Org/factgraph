@@ -48,8 +48,8 @@ from factgraph.sdk.shells._validation import (
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    age: int = Field(cardinality="single")
+    name: str = Identity()
+    age: int = Field()
 
 
 def _age_derivation() -> Inference:

@@ -8,8 +8,8 @@ from factgraph.sdk.dsl.expr import AttrRef, lower_where
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    status: str = Field(cardinality="single")
+    user_id: str = Identity()
+    status: str = Field()
 
 
 class ExistsAtomGetattrTests(unittest.TestCase):

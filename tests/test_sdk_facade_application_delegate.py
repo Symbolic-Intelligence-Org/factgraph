@@ -6,15 +6,15 @@ from factgraph.sdk import Entity, Field, Identity, SDKStore
 
 
 class Country(Entity):
-    code: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    code: str = Identity()
+    name: str = Field()
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    locale: str = Identity(default="zh")
-    lives_in: Country = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    locale: str = Identity()
+    lives_in: Country = Field()
+    tag: list[str] = Field()
 
 
 class SDKFacadeApplicationDelegateTests(unittest.TestCase):

@@ -26,10 +26,10 @@ from factgraph.sdk.store import SDKStore, _lower_public_semantics, _preview_publ
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    risk_score: float = Field(cardinality="single")
-    popular: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    risk_score: float = Field()
+    popular: str = Field()
 
 
 def _resolve_pyreason_engine_ext():

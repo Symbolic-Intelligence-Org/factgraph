@@ -10,8 +10,8 @@ from factgraph.sdk import Entity, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    status: str = Field(cardinality="single")
+    user_id: str = Identity()
+    status: str = Field()
 
 
 class SDKRuleNamingTests(unittest.TestCase):

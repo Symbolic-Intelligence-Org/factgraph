@@ -14,8 +14,8 @@ from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 class ProbLogExportTests(unittest.TestCase):
@@ -314,8 +314,8 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
         from factgraph.adapters.problog.problog_export import _claim_probability
 
         class Item(Entity):
-            item_id: str = Identity(primary_key=True)
-            label: str = Field(cardinality="single")
+            item_id: str = Identity()
+            label: str = Field()
 
         sdk = SDKStore([Item])
         ref = sdk.ref(Item, item_id="x")
@@ -350,8 +350,8 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
         from factgraph.adapters.problog.problog_export import _claim_probability
 
         class Item(Entity):
-            item_id: str = Identity(primary_key=True)
-            label: str = Field(cardinality="single")
+            item_id: str = Identity()
+            label: str = Field()
 
         sdk = SDKStore([Item])
         ref = sdk.ref(Item, item_id="x")

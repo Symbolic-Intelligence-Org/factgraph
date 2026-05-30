@@ -17,8 +17,8 @@ from factgraph.sdk.store import _SDKEvalManager
 
 
 class QuarantinePerson(Entity):
-    name: str = Identity(primary_key=True)
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    region: str = Field()
 
 
 def _store() -> SDKStore:

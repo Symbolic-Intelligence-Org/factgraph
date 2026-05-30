@@ -22,15 +22,15 @@ from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    popular: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    popular: str = Field()
 
 
 class Friends(Relationship):
     from_entity = User
     to_entity = User
-    strength: str = Field(cardinality="single")
+    strength: str = Field()
 
 
 def _mock_run_pyreason(session, *, rules=None, rule_defs=None, facts=None, fact_defs=None, config=None):

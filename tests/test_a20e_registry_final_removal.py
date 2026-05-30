@@ -28,8 +28,8 @@ from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
 class _UserForA20E(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 class SDKConstructorRejectionTests(unittest.TestCase):

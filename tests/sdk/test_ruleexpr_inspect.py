@@ -19,15 +19,15 @@ from factgraph.sdk.store import SDKStoreError
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    status: str = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    user_id: str = Identity()
+    status: str = Field()
+    region: str = Field()
 
 
 class Account(Entity):
-    account_id: str = Identity(primary_key=True)
-    tenant_id: str = Identity(primary_key=True)
-    region: str = Field(cardinality="single")
+    account_id: str = Identity()
+    tenant_id: str = Identity()
+    region: str = Field()
 
 
 def _application_rule(rule_id: str = "active_user", *, var_name: str = "u") -> ApplicationRule:

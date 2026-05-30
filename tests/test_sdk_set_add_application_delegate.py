@@ -8,16 +8,16 @@ from factgraph.sdk.errors import CardinalityError, SDKStoreError
 
 
 class Country(Entity):
-    code: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    code: str = Identity()
+    name: str = Field()
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    locale: str = Identity(default="zh")
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
-    home: Country = Field(cardinality="single")
+    user_id: str = Identity()
+    locale: str = Identity()
+    name: str = Field()
+    tag: list[str] = Field()
+    home: Country = Field()
 
 
 def _build_sdk() -> SDKStore:

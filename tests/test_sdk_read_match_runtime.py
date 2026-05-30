@@ -13,14 +13,14 @@ from factgraph.sdk.store import SDKStoreError
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    region: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    name: str = Identity()
+    region: str = Field()
+    tag: list[str] = Field()
 
 
 class Account(Entity):
-    account_id: str = Identity(primary_key=True)
-    label: str = Field(cardinality="single")
+    account_id: str = Identity()
+    label: str = Field()
 
 
 def _store() -> sdk.SDKStore:

@@ -42,8 +42,8 @@ def _schema_ir() -> dict[str, object]:
 
 
 class PersonEntity(Entity):
-    name: str = Identity(primary_key=True)
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    region: str = Field()
 
 
 def _person_exists_rule(rule_id: str = "person_exists") -> Rule:

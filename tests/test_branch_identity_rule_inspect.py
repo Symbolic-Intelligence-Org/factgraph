@@ -13,12 +13,12 @@ from factgraph.sdk.store import SDKStoreError
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag_seed: str = Field(cardinality="single")
-    tag_hint: str = Field(cardinality="single")
-    tag: str = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    tag_seed: str = Field()
+    tag_hint: str = Field()
+    tag: str = Field()
+    region: str = Field()
 
 
 def _rule_with_branches() -> Rule:

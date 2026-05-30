@@ -21,10 +21,10 @@ from factgraph.sdk import (
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
+    user_id: str = Identity()
     locale: str = Identity()
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    name: str = Field()
+    tag: list[str] = Field()
 
 
 def _register_exposed_user_tag_rule(

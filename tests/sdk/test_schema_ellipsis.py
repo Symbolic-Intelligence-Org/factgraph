@@ -8,8 +8,8 @@ from factgraph.sdk.schema import _is_sdk_dsl_value, _looks_like_sdk_dsl_entity_c
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 class SchemaEllipsisTests(unittest.TestCase):

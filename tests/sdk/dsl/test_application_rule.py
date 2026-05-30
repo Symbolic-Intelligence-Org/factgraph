@@ -10,15 +10,15 @@ from factgraph.sdk.dsl.expr import RuleRefAtom
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    status: str = Field(cardinality="single")
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    status: str = Field()
+    name: str = Field()
 
 
 class LivesIn(Entity):
-    edge_id: str = Identity(primary_key=True)
-    user: str = Field(cardinality="single")
-    country: str = Field(cardinality="single")
+    edge_id: str = Identity()
+    user: str = Field()
+    country: str = Field()
 
 
 def _pred_ids(rule: Rule) -> list[str]:

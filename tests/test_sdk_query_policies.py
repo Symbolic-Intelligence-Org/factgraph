@@ -10,13 +10,13 @@ from factgraph.sdk.facade import EntitySnapshot
 
 
 class User(Entity):
-    name: str = Identity(primary_key=True)
-    nickname: str = Field(cardinality="single")
+    name: str = Identity()
+    nickname: str = Field()
 
 
 class Country(Entity):
-    code: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    code: str = Identity()
+    name: str = Field()
 
 
 def _build_sdk() -> SDKStore:

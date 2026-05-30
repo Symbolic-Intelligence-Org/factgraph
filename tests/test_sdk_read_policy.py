@@ -34,9 +34,9 @@ from factgraph.sdk.store import FrozenAssertionView
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tag: list[str] = Field()
 
 
 def _seed_store() -> tuple[SDKStore, dict[str, str]]:

@@ -15,11 +15,11 @@ from factgraph.sdk.schema import Entity, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag_seed: str = Field(cardinality="single")
-    tag_hint: str = Field(cardinality="single")
-    tag: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    tag_seed: str = Field()
+    tag_hint: str = Field()
+    tag: str = Field()
 
 
 def _sdk_module():

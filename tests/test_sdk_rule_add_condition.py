@@ -41,9 +41,9 @@ from factgraph.sdk import (
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    age: int = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    age: int = Field()
+    region: str = Field()
 
 
 def _build_sdk() -> SDKStore:

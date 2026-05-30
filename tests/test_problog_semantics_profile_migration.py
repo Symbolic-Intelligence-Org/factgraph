@@ -21,10 +21,10 @@ from factgraph.sdk.store import SDKStore, _lower_public_semantics
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    tag_seed: str = Field()
+    tag: str = Field()
 
 
 def _two_branch_where() -> list[list[tuple[str, str, list[str]]]]:

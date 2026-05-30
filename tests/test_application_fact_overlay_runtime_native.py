@@ -39,9 +39,9 @@ from factgraph.application.fact_overlay_runtime import (
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    age: int = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    age: int = Field()
+    region: str = Field()
 
 
 @dataclass(frozen=True)

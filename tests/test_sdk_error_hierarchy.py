@@ -21,8 +21,8 @@ class SDKErrorHierarchyTests(unittest.TestCase):
 
 
 class _ReprUser(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 class SDKStoreReprTests(unittest.TestCase):

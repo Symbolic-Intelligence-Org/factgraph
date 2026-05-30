@@ -9,10 +9,10 @@ from factgraph.sdk import Entity, Field, Identity, SDKSchemaError, SDKStore
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
+    user_id: str = Identity()
     locale: str = Identity()
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    name: str = Field()
+    tag: list[str] = Field()
 
 
 def _seed_store() -> SDKStore:

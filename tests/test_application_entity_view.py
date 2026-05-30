@@ -17,15 +17,15 @@ from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Country(Entity):
-    code: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    code: str = Identity()
+    name: str = Field()
 
 
 class User(Entity):
-    name: str = Identity(primary_key=True)
-    locale: str = Identity(default="en")
-    lives_in: Country = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    name: str = Identity()
+    locale: str = Identity()
+    lives_in: Country = Field()
+    tag: list[str] = Field()
 
 
 def _build_store() -> tuple[Store, object]:

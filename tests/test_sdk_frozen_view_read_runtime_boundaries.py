@@ -7,8 +7,8 @@ from factgraph.sdk import Entity, Field, Identity, Rule, SDKSchemaError, SDKStor
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 def _seed_store() -> tuple[SDKStore, dict[str, str]]:

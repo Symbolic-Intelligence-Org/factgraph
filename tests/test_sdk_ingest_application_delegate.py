@@ -7,16 +7,16 @@ from factgraph.sdk import Entity, Field, Identity, SDKStore
 
 
 class Country(Entity):
-    code: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    code: str = Identity()
+    name: str = Field()
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    age: int = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
-    lives_in: Country = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    age: int = Field()
+    tag: list[str] = Field()
+    lives_in: Country = Field()
 
 
 def _build_sdk() -> SDKStore:
