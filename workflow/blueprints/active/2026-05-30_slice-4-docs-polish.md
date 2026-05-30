@@ -1,8 +1,8 @@
 # Slice 4 — Docs Polish for Form I / Identity-as-Claim / API Namespace
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-30
-- Last Updated: 2026-05-30
+- Last Updated: 2026-05-30(scoped after Step 4.3 preflight + PF-R1/PF-R2 amendments)
 - Slice: 4 of identity/API alignment ladder
 - Class: M(docs-only, broad surface; no runtime changes)
 - Related Modules:

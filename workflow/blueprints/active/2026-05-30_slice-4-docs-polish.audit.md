@@ -12,6 +12,7 @@
 | 2026-05-30 | draft | Blueprint created | Drafted from Stage 1 audit `1012c6e4`; OQ1-OQ5 locked; D1-D10 in scope; D11-D12 represented as scope-freeze rules; strict cadence branch separation restored after Slice 3a V1 deviation. |
 | 2026-05-30 | draft-amend | Step 4.2 reviewer findings applied | Added `src/factgraph/sdk/docs/README.md` and `explanation-completion-roadmap.zh.md` to scope; broadened final grep carve-out wording; clarified dirty-notebook default and per-commit ritual. |
 | 2026-05-30 | preflight-amend | Step 4.3 preflight findings applied | Applied PF-R1 broad `Identity(...primary_key...)` gate and PF-R2 Step 0 added-target checks before scoped transition. |
+| 2026-05-30 | scoped | Preflight amendments and self-check passed | PF-R1 and PF-R2 covered by `16907310`; self-check found no remaining blockers; Status flipped to `scoped`. |
 
 ## Decision Notes
 
