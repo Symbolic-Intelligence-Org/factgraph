@@ -1,8 +1,8 @@
 # Slice 6 — Form I Legacy Debt Cleanup
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-30
-- Last Updated: 2026-05-31(preflight amend for PF-R1/PF-REC1-4)
+- Last Updated: 2026-05-31(scoped after Step 4.3 preflight + PF-R1/PF-REC1-4 amendments)
 - Slice: Post-Slice 5 housekeeping for Slice 1 Form I hard-removal debt
 - Class: S-M(test/docs/example cleanup; no runtime semantics)
 - Related Modules:
@@ -256,7 +256,6 @@ Each implementation commit must verify:
 
 ### 7.2 Current Docs / Tools
 
-- [ ] Root `README.md` quickstart uses Form I and current canonical namespaces.
 - [ ] Root `README.md` quickstart uses Form I and current namespace calls (`fg.entities.*` / `fg.fields.*`).
 - [ ] `tutorials/evidence-pipeline.cn.md` and `src/agent/extraction/docs/USAGE.md` no longer present deprecated Form I as current truth.
 - [ ] The four in-scope benchmark scripts import successfully or have documented carry-forward blockers.
@@ -391,7 +390,7 @@ Task completion section. Fill during close.
 
 ### 10.1 Final Landing Result
 
-TBD. Should summarize acceptance totals: live tests/imports, docs/tools, dirty/archive/historical discipline, and final checks (per §7: 8 + 6 + 6 + 6 = 26 checkboxes).
+TBD. Should summarize acceptance totals: live tests/imports, docs/tools, dirty/archive/historical discipline, and final checks (per §7: 8 + 5 + 6 + 6 = 25 checkboxes).
 
 ### 10.2 Deviations And Amendments
 

@@ -3,7 +3,7 @@
 - Blueprint: [2026-05-30_form-i-debt-cleanup.md](./2026-05-30_form-i-debt-cleanup.md)
 - Branch: `v0.2.0-blueprint-form-i-debt-2026-05-30`
 - Fork point: `fb744d95` (Slice 6 Stage 1 audit head)
-- Status: draft audit log
+- Status: scoped audit log
 
 ## Event Log
 
@@ -11,6 +11,7 @@
 |---|---|---|---|
 | 2026-05-30 | draft | Blueprint created | Drafted from Stage 1 audit `fb744d95`; Stage 2 Q-decision skipped per reviewer verdict because no new design decision is required. Scope is Form I legacy callsite cleanup for live tests, sibling package tests/docs, current docs/tools/tutorials, with dirty/archive/historical carve-outs inherited from Slice 4/5. |
 | 2026-05-31 | preflight-amend | Step 4.3 preflight findings applied | Locked the four benchmark scripts plus `tutorials/evidence-pipeline.cn.md` in scope, added explicit sibling package and negative-test file lists, clarified root README Form I + namespace cleanup, and corrected the §7 acceptance total to 26 checkboxes. |
+| 2026-05-31 | scoped | Scope freeze accepted | Self-check complete: Stage 1 FI-R1-R5 plus FI-REC1-4 are represented; PF-R1/PF-REC1-4 amendments landed; SF1-SF10 and Non-goals N1-N10 are complete; Step 0-8 has commit-boundary deliverables; duplicate Root README acceptance was removed per reviewer Option A, leaving 25 acceptance checkboxes. |
 
 ## Decision Notes
 
