@@ -158,11 +158,12 @@ Dirty notebook targets are governed by SF3 and may not be edited automatically:
 
 Update isolated stale references in:
 
+- `src/factgraph/sdk/docs/README.md`
 - `src/factgraph/sdk/docs/01_concepts.en.md`
 - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
 - `src/factgraph/sdk/docs/07_walker_and_advanced.en.md`
 
-Avoid broad rewrites of load-bearing docs already updated in Slice 3a unless a local cross-reference is plainly stale.
+`src/factgraph/sdk/docs/README.md` was added by Step 4.2 review after the Stage 1 audit missed live `fg.read.*` / `fg.write.*` examples there. Avoid broad rewrites of load-bearing docs already updated in Slice 3a unless a local cross-reference is plainly stale.
 
 ### 5.4 Module Docs
 
@@ -180,8 +181,9 @@ Update only current-status / cross-reference / landed-status text in:
 - `workflow/design/design-points/active/ledger-schema-specification.zh.md`
 - `workflow/design/design-points/active/append-only-ledger-evaluation.zh.md`
 - `workflow/design/design-points/active/identity-mechanism-redesign.zh.md`
+- `workflow/design/design-points/active/explanation-completion-roadmap.zh.md`
 
-Historical problem statements, source-grep baselines, and rationale sections are not rewritten unless they explicitly claim to be current implementation truth.
+Historical problem statements, source-grep baselines, and rationale sections are not rewritten unless they explicitly claim to be current implementation truth. For `explanation-completion-roadmap.zh.md`, the scope is limited to current API surface references such as `fg.read.match(...)` -> `fg.entities.match(...)`; the deferred-roadmap intent remains unchanged.
 
 ### 5.6 Final Grep Gate
 
@@ -196,7 +198,7 @@ For in-scope current docs/examples, final grep should not show current-API uses 
 - flat assertion `where(source=..., trace_id=..., version=..., meta=...)`
 - `fg.schema.add(...)`
 
-Historical quoted migration tables may keep old names only if clearly marked as historical or removed-surface mapping.
+Historical quoted migration tables, removed-surface narrative notes, and explicit "removed in Slice X" deprecation markers may keep old names only if clearly marked as historical or removed-surface mapping.
 
 ## 6. Boundaries And Invariants
 
@@ -238,6 +240,10 @@ This slice is docs-only. It must not touch:
 - `v0.1-oss-prep` remains untouched.
 - Push, PR creation, master merge, reset, or destructive git remain user-authorized operations.
 
+### 6.5 Per-Commit Ritual
+
+Each implementation commit must verify branch, sacred master, Q-PR1 0 diff, dirty baseline preservation, and `git diff --check`.
+
 ## 7. Acceptance
 
 ### 7.1 Public Quickstarts
@@ -256,12 +262,13 @@ This slice is docs-only. It must not touch:
 
 ### 7.3 SDK / Module Docs
 
-- [ ] `01_concepts.en.md`, `03_rules_and_inferences.en.md`, and `07_walker_and_advanced.en.md` no longer present removed APIs as current truth.
+- [ ] `README.md`, `01_concepts.en.md`, `03_rules_and_inferences.en.md`, and `07_walker_and_advanced.en.md` no longer present removed APIs as current truth.
 - [ ] Application / authoring / core docs no longer refer to `fg.schema.add` or flat meta filters as current truth.
 
 ### 7.4 Active Design-Points
 
 - [ ] Current-status / landed-status text is aligned with Slice 1/2/3a.
+- [ ] `explanation-completion-roadmap.zh.md` current API references use `fg.entities.match` where they describe the shipped namespace surface.
 - [ ] Historical rationale sections are preserved unless explicitly marked current and stale.
 
 ### 7.5 Final Checks
@@ -271,6 +278,7 @@ This slice is docs-only. It must not touch:
 - [ ] examples committed diff respects dirty-notebook guard.
 - [ ] sacred master unchanged.
 - [ ] dirty baseline preserved.
+- [ ] `git diff --check` clean.
 - [ ] `compileall` clean if any executable docs helper was touched; otherwise not required.
 
 ## 8. Implementation Plan
@@ -308,10 +316,11 @@ This slice is docs-only. It must not touch:
 **Step 5 — Dirty notebook decision point**
 
 - Inspect `examples/01_sdk_check_diagnose.ipynb` and `examples/02_overlay_why_not_frontier.ipynb`.
-- Either request per-notebook user authorization for edits or record as intentionally untouched in §10.
+- Default: record as intentionally untouched in §10 unless the user explicitly authorizes per-file edits during Step 5.
 
 **Step 6 — Non-load-bearing SDK docs**
 
+- Update `src/factgraph/sdk/docs/README.md`.
 - Update `src/factgraph/sdk/docs/01_concepts.en.md`.
 - Update `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`.
 - Update `src/factgraph/sdk/docs/07_walker_and_advanced.en.md`.
@@ -327,6 +336,7 @@ This slice is docs-only. It must not touch:
 
 - Update `ledger-schema-specification.zh.md`.
 - Update `append-only-ledger-evaluation.zh.md`.
+- Update current API references in `explanation-completion-roadmap.zh.md`.
 - Update current-status / cross-ref rows in `identity-mechanism-redesign.zh.md` only if needed.
 
 **Step 9 — Final grep gate + close**
