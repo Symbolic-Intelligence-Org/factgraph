@@ -8,6 +8,9 @@ from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
     AppliedOpResultDTO,
+    EntityCreateCommand,
+    EntityCreatePlan,
+    EntityCreateResult,
     EntityRef,
     EntitySelector,
     EntityWriteCommand,
@@ -162,6 +165,122 @@ def apply_write_plan(
             )
 
     return EntityWriteResult(
+        resolved_target=plan.resolved_target,
+        applied=tuple(applied),
+        warnings=plan.warnings,
+    )
+
+
+# ---------- Slice 3a Step 2: fg.entities.create eager emission planner + executor ----------
+
+
+def plan_create_command(
+    command: EntityCreateCommand,
+    *,
+    store: Store,
+    index: SchemaIndex,
+) -> EntityCreatePlan:
+    """Plan eager Identity Claim + ``:exists`` emission for ``fg.entities.create``.
+
+    Per ADR-IC §4.2(application 层 derive)+ §4.2.1(complete identity bundle
+    contract)+ Slice 3a SF4(eager emission + shadow store coexist)。
+
+    Resolves the EntitySelector → EntityRef,checks the target is **not yet
+    visible**(raises ``ENTITY_ALREADY_EXISTS`` if it is — per blueprint §13.1
+    + Slice 3a §5.3 + SF2 duplicate-create rejection),and builds materializa-
+    tion ops via the shipped ``_materialization_ops`` path(reused from
+    ``plan_write_command``)so emission semantics are byte-identical to the
+    lazy ``fg.ref + fg.set`` path Slice 2 contract-tested at ``ab168063``。
+    """
+    resolved_target: EntityRef | None = None
+    try:
+        resolved_target = resolve_selector(command.target, index=index)
+        view_facts = project_view_facts(store.ledger, store.schema_ir)
+
+        if _entity_visible(resolved_target, view_facts=view_facts, index=index):
+            target_e_ref = _encoded_ref(resolved_target, index=index)
+            raise EntityWriteError(
+                f"entity already exists: {resolved_target.entity_type} with identity "
+                f"{dict(resolved_target.identity)}. Per ADR-IC §4.1, Identity Claims "
+                f"are immutable anchors — to change the identity bundle, delete the "
+                f"existing entity (fg.entities.delete) and create a new one. "
+                f"To update non-identity Fields, use fg.fields.set / fg.fields.add.",
+                code="ENTITY_ALREADY_EXISTS",
+                path=("target",),
+                details={
+                    "entity_type": resolved_target.entity_type,
+                    "identity": dict(resolved_target.identity),
+                    "e_ref": target_e_ref,
+                },
+            )
+
+        materialized_refs: set[str] = set()
+        planned_ops = _materialization_ops(
+            resolved_target,
+            index=index,
+            meta=dict(command.command_meta),
+            materialized_refs=materialized_refs,
+        )
+
+        return EntityCreatePlan(
+            command=command,
+            resolved_target=resolved_target,
+            planned_ops=tuple(planned_ops),
+            can_apply=True,
+        )
+    except (SchemaResolutionError, EntityWriteError) as exc:
+        error = _to_error_dto(exc)
+        return EntityCreatePlan(
+            command=command,
+            resolved_target=resolved_target,
+            can_apply=False,
+            errors=(error,),
+        )
+
+
+def apply_create_plan(
+    plan: EntityCreatePlan,
+    *,
+    store: Store,
+    index: SchemaIndex,
+) -> EntityCreateResult:
+    """Execute the planned materialization ops atomically per ADR-IC §4.2。
+
+    Reuses the same ``_apply_op`` dispatcher as ``apply_write_plan`` so emission
+    semantics are byte-identical to the shipped lazy materialization path。If
+    any planned op fails the whole result surfaces the error(no partial writes
+    are leaked through the result DTO,though ledger atomicity is governed by
+    the write_protocol layer per Q-PR1 carve-out boundary)。
+    """
+    if not plan.can_apply:
+        return EntityCreateResult(
+            resolved_target=plan.resolved_target,
+            errors=plan.errors,
+            warnings=plan.warnings,
+        )
+
+    applied: list[AppliedOpResultDTO] = []
+    for op_index, op in enumerate(plan.planned_ops):
+        try:
+            assertion_id = _apply_op(op, store=store, index=index)
+            applied.append(
+                AppliedOpResultDTO(
+                    op_index=op_index,
+                    status="applied",
+                    assertion_id=assertion_id,
+                )
+            )
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+            error = _to_error_dto(exc)
+            applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
+            return EntityCreateResult(
+                resolved_target=plan.resolved_target,
+                applied=tuple(applied),
+                errors=(error,),
+                warnings=plan.warnings,
+            )
+
+    return EntityCreateResult(
         resolved_target=plan.resolved_target,
         applied=tuple(applied),
         warnings=plan.warnings,
@@ -596,6 +715,8 @@ def _to_error_dto(exc: Exception) -> ErrorDTO:
 
 __all__ = [
     "EntityWriteError",
+    "apply_create_plan",
     "apply_write_plan",
+    "plan_create_command",
     "plan_write_command",
 ]

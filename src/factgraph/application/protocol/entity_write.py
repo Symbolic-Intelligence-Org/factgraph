@@ -169,8 +169,98 @@ class EntityWriteResult:
         _validate_tuple_items(self.warnings, field_name="warnings", item_type=WarningDTO)
 
 
+# ---------- Slice 3a Step 2: fg.entities.create application protocol DTOs ----------
+
+
+@dataclass(frozen=True)
+class EntityCreateCommand:
+    """Entity-create command — eager emission entry point per ADR-IC §4.2.
+
+    Carries the **complete identity bundle**(per ADR-IC §4.2.1 emission input
+    contract;Layer 2 fields API is NEVER an emission path)。 The SDK shell
+    normalizes user-facing kwargs into this DTO and the application layer
+    derives Identity Claims + ``:exists`` Claim via the shipped
+    ``_materialization_ops`` path。
+    """
+
+    target: EntitySelector
+    command_meta: dict[str, JSONValue] = dc_field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, EntitySelector):
+            raise ProtocolShapeError("target must be EntitySelector")
+        if not self.target.identity:
+            raise ProtocolShapeError(
+                "EntityCreateCommand.target.identity must be non-empty "
+                "(complete identity bundle required per ADR-IC §4.2.1)"
+            )
+        object.__setattr__(
+            self,
+            "command_meta",
+            _validate_json_mapping(self.command_meta, field_name="command_meta"),
+        )
+
+
+@dataclass(frozen=True)
+class EntityCreatePlan:
+    """Planned eager-emission ops for ``fg.entities.create``."""
+
+    command: EntityCreateCommand
+    resolved_target: EntityRef | None = None
+    planned_ops: tuple[PlannedOpDTO, ...] = ()
+    can_apply: bool = False
+    errors: tuple[ErrorDTO, ...] = ()
+    warnings: tuple[WarningDTO, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.command, EntityCreateCommand):
+            raise ProtocolShapeError("command must be EntityCreateCommand")
+        if self.resolved_target is not None:
+            if not isinstance(self.resolved_target, EntityRef):
+                raise ProtocolShapeError(
+                    "resolved_target must be EntityRef when provided"
+                )
+            if self.resolved_target.entity_type != self.command.target.entity_type:
+                raise ProtocolShapeError(
+                    "resolved_target.entity_type must match "
+                    f"command.target.entity_type={self.command.target.entity_type!r}"
+                )
+        _validate_tuple_items(
+            self.planned_ops, field_name="planned_ops", item_type=PlannedOpDTO
+        )
+        _require_bool(self.can_apply, field_name="can_apply")
+        _validate_tuple_items(self.errors, field_name="errors", item_type=ErrorDTO)
+        _validate_tuple_items(self.warnings, field_name="warnings", item_type=WarningDTO)
+        if self.can_apply and self.errors:
+            raise ProtocolShapeError("errors must be empty when can_apply=True")
+
+
+@dataclass(frozen=True)
+class EntityCreateResult:
+    """Result of applying an ``EntityCreatePlan`` —  atomic emission outcome."""
+
+    resolved_target: EntityRef | None = None
+    applied: tuple[AppliedOpResultDTO, ...] = ()
+    errors: tuple[ErrorDTO, ...] = ()
+    warnings: tuple[WarningDTO, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.resolved_target is not None and not isinstance(self.resolved_target, EntityRef):
+            raise ProtocolShapeError(
+                "resolved_target must be EntityRef when provided"
+            )
+        _validate_tuple_items(
+            self.applied, field_name="applied", item_type=AppliedOpResultDTO
+        )
+        _validate_tuple_items(self.errors, field_name="errors", item_type=ErrorDTO)
+        _validate_tuple_items(self.warnings, field_name="warnings", item_type=WarningDTO)
+
+
 __all__ = [
     "AppliedOpResultDTO",
+    "EntityCreateCommand",
+    "EntityCreatePlan",
+    "EntityCreateResult",
     "EntityWriteCommand",
     "EntityWritePlan",
     "EntityWriteResult",

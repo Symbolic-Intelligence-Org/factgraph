@@ -38,6 +38,35 @@ class EntityNotFoundError(SDKStoreError):
         self.identity_kwargs = dict(identity_kwargs or {})
 
 
+class EntityAlreadyExistsError(SDKStoreError):
+    """Raised by ``fg.entities.create`` when an entity with the supplied
+    identity bundle is already visible in the ledger.
+
+    Per ADR-IC §4.2.1 + ADR-API §4.1 — ``fg.entities.create`` is the eager
+    emission entry point for Identity Claims;duplicate create is a contract
+    violation because the underlying ``_materialization_ops`` path is dedup-
+    aware but the user-facing ``create`` semantics demand explicit rejection
+    on second attempt(per Slice 3a §13.1 design-point + blueprint §5.3)。
+
+    Use ``fg.entities.get(EC, **identity)`` to check entity existence cheaply
+    or ``fg.entities.exists(EC, **identity)``(Step 4)to query directly。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        entity_type: str | None = None,
+        identity_kwargs: dict | None = None,
+        e_ref: str | None = None,
+        code: str | None = None,
+        path: str | None = None,
+    ) -> None:
+        super().__init__(message, code=code, path=path)
+        self.entity_type = entity_type
+        self.identity_kwargs = dict(identity_kwargs or {})
+        self.e_ref = e_ref
+
+
 class FrozenSnapshotError(SDKStoreError):
     pass
 
@@ -65,6 +94,7 @@ class EditorClosedError(SDKStoreError):
 __all__ = [
     "CardinalityError",
     "EditorClosedError",
+    "EntityAlreadyExistsError",
     "EntityNotFoundError",
     "FrozenSnapshotError",
     "SDKDSLError",

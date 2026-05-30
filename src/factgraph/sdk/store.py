@@ -100,7 +100,14 @@ from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
 )
-from .errors import CardinalityError, EntityNotFoundError, FrozenSnapshotError, SDKStoreError, SDKValueError
+from .errors import (
+    CardinalityError,
+    EntityAlreadyExistsError,
+    EntityNotFoundError,
+    FrozenSnapshotError,
+    SDKStoreError,
+    SDKValueError,
+)
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
 from .schema import Entity, Field
@@ -759,6 +766,107 @@ class _SDKEntitiesManager:
         """
         self._reject_non_entity_class(entity_cls, method="ref")
         return self._sdk.ref(entity_cls, **identity_values)
+
+    def create(
+        self,
+        entity_cls: type[Entity],
+        *,
+        meta: dict[str, Any] | None = None,
+        **identity: Any,
+    ) -> str:
+        """Eager-emit Identity Claims + ``<EntityType>:exists`` Claim atomically。
+
+        Per ADR-IC §4.2(application 层 derive)+ ADR-API §4.1.2(entities
+        namespace)+ Slice 3a SF4(eager emission + populate shadow store)。
+
+        Flow:
+        1. Layer 1 排他 enforcement(non-Entity-class reject per ADR-API §4.1.1)。
+        2. Identity bundle completeness validation + shadow store populate via
+           shipped ``SDKStore.ref(EC, **identity)`` path(per Slice 2 Step 7
+           shadow store legacy documentation)。
+        3. Build ``EntityCreateCommand`` DTO + delegate to application-layer
+           ``plan_create_command`` + ``apply_create_plan``(per PF-S3 INV-6
+           application-first;SDK manager NEVER does inline planner logic)。
+        4. Return the deterministic e_ref。
+
+        Raises:
+            ``EntityAlreadyExistsError``(code=``ENTITY_ALREADY_EXISTS``)when
+            an entity with the supplied identity is already visible in the
+            ledger Active set(per blueprint §13.1 duplicate-create rejection)。
+            ``SDKStoreError``(layer-specific)on bad Entity class or missing
+            identity field。
+
+        Notes:
+            Coexists with the shipped lazy ``fg.ref + fg.fields.set``(or
+            ``fg.set``)materialization path per SF4 — shadow store is the
+            legacy compat surface;Step 2+ ``fg.entities.create`` is the eager
+            path. Slice 3a does NOT remove the shadow store。
+        """
+        self._reject_non_entity_class(entity_cls, method="create")
+
+        # Step 1+2: identity bundle completeness + shadow store populate via
+        # shipped fg.ref path. SDKStore.ref raises SDKStoreError for missing
+        # identity fields("missing identity field: <EC>.<name>")— the
+        # canonical "complete identity bundle" check per ADR-IC §4.2.1。
+        try:
+            e_ref = self._sdk.ref(entity_cls, **identity)
+        except SDKStoreError:
+            raise
+
+        # Step 3: application layer call(per PF-S3 INV-6 application-first)。
+        from factgraph.application import apply_create_plan, plan_create_command
+        from factgraph.application.protocol import EntityCreateCommand
+        from factgraph.application.protocol import EntitySelector as AppEntitySelector
+
+        command = EntityCreateCommand(
+            target=AppEntitySelector(
+                entity_type=entity_cls.__name__,
+                identity=dict(identity),
+                encoded_ref=e_ref,
+            ),
+            command_meta=dict(meta) if meta else {},
+        )
+        plan = plan_create_command(
+            command,
+            store=self._sdk._store,
+            index=self._sdk._application_schema_index,
+        )
+        if not plan.can_apply:
+            self._raise_create_error(plan.errors[0], entity_cls=entity_cls, identity=identity)
+
+        result = apply_create_plan(
+            plan,
+            store=self._sdk._store,
+            index=self._sdk._application_schema_index,
+        )
+        if result.errors:
+            self._raise_create_error(result.errors[0], entity_cls=entity_cls, identity=identity)
+
+        # Step 4: return deterministic e_ref。
+        return e_ref
+
+    def _raise_create_error(
+        self,
+        err: Any,  # ErrorDTO
+        *,
+        entity_cls: type[Entity],
+        identity: dict[str, Any],
+    ) -> None:
+        """Map ErrorDTO from create planner/executor to SDK-layer error types。
+
+        ``ENTITY_ALREADY_EXISTS`` → ``EntityAlreadyExistsError``(typed,
+        carries entity_type/identity_kwargs/e_ref attrs);other codes →
+        generic ``SDKStoreError`` with the code preserved。
+        """
+        if err.code == "ENTITY_ALREADY_EXISTS":
+            raise EntityAlreadyExistsError(
+                err.message,
+                entity_type=entity_cls.__name__,
+                identity_kwargs=dict(identity),
+                e_ref=err.details.get("e_ref"),
+                code=err.code,
+            )
+        raise SDKStoreError(err.message, code=err.code)
 
 
 class _SDKRulesManager:

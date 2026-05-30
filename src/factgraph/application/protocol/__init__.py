@@ -87,6 +87,9 @@ from .entity_read import (
 )
 from .entity_write import (
     AppliedOpResultDTO,
+    EntityCreateCommand,
+    EntityCreatePlan,
+    EntityCreateResult,
     EntityWriteCommand,
     EntityWritePlan,
     EntityWriteResult,
@@ -133,6 +136,9 @@ __all__ = [
     "EntityReadResponse",
     "EntityRef",
     "EntitySelector",
+    "EntityCreateCommand",
+    "EntityCreatePlan",
+    "EntityCreateResult",
     "EntitySnapshotDTO",
     "EntityWriteCommand",
     "EntityWritePlan",
