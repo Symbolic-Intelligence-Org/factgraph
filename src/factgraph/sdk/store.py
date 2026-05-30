@@ -494,14 +494,15 @@ class AssertionsManager:
         if not isinstance(pred_id, str) or not pred_id:
             raise SDKStoreError("schema predicate missing pred_id for field")
 
-        from .facade import FieldAssertions, _assertion_record_from_claim, _claim_sort_key
+        from .facade import AssertionView, _assertion_record_from_claim, _claim_sort_key
 
         claims = self._sdk.ledger.find_claims(pred_id=pred_id)
         history_records = tuple(
             _assertion_record_from_claim(self._sdk, claim, schema_pred=schema_pred)
             for claim in sorted(claims, key=lambda claim: _claim_sort_key(self._sdk, claim))
         )
-        return FieldAssertions(
+        return AssertionView(
+            entity_type=str(schema_pred.get("owner_type", "")),
             field_name=str(getattr(field, "sdk_attr_name", schema_pred.get("py_field_name", ""))),
             cardinality=str(schema_pred.get("cardinality", getattr(field, "cardinality", "single"))),
             active_records=tuple(record for record in history_records if record.is_active),
@@ -922,15 +923,12 @@ class _SDKEntitiesManager:
         ``trace_id=`` / ``version=`` / ``meta=`` kwargs are rejected;canonical
         meta filtering accepted via ``_meta`` dict。
 
-        **Slice 3a Step 7 scope**:field-filter delegation to shipped
+        **Slice 3a scope**:field-filter delegation to shipped
         ``sdk_find`` remains the underlying read implementation;flat meta
         kwargs are rejected with ADR-API §4.4 pointer。 ``_meta``
-        parameter is accepted in the canonical signature but **meta filtering
-        itself is deferred** to the AssertionView unification step(Step 8)—
-        Step 1 raises ``SDKStoreError`` if ``_meta`` is non-empty, so the
-        canonical signature is wired up but meta-filter semantics don't yet
-        diverge from the shipped behavior of ``fg.find``。Non-empty ``_meta``
-        will become accepted once meta-projection lands。
+        parameter is accepted in the canonical signature but entity-query
+        metadata projection is not yet implemented; assertion-level metadata
+        filtering lives on ``fg.assertions.where`` and ``AssertionView.where``。
         """
         self._reject_non_entity_class(entity_cls, method="where")
 
@@ -942,21 +940,21 @@ class _SDKEntitiesManager:
                     f"use _meta={{'{forbidden}': ...}} per ADR-API §4.4."
                 )
 
-        # Validate _meta shape; defer meta-filter semantics to Step 8.
+        # Validate _meta shape; entity-query meta projection is not implemented.
         if _meta is not None:
             if not isinstance(_meta, dict):
                 raise SDKStoreError(
                     "fg.entities.where(_meta=...) expects a dict when provided"
                 )
             if _meta:
-                # Step 1 ships the canonical signature without the meta-filter
-                # projection; surfacing this explicitly is safer than silently
-                # ignoring user input。 Meta filtering lands with AssertionView
-                # unification at Step 8 per blueprint §5.7 + §8。
+                # The entity query path cannot yet project assertion metadata
+                # into entity rows; surfacing this explicitly is safer than
+                # silently ignoring user input.
                 raise SDKStoreError(
-                    "fg.entities.where(_meta=...) meta filtering not yet "
-                    "implemented in Slice 3a Step 1; coming in Step 8 "
-                    "AssertionView unification. Use field filters for now."
+                    "fg.entities.where(_meta=...) entity metadata filtering is "
+                    "not implemented; use fg.assertions.where(_meta=...) or "
+                    "snapshot.assertions.where(_meta=...) for assertion metadata "
+                    "filters."
                 )
 
         from .facade import sdk_find

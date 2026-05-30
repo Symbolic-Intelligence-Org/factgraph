@@ -18,7 +18,7 @@ from factgraph.core.rules.where_eval import WhereValidationError
 from .dsl import ReturnContractEntry
 from .error_codes import QUERY_INVALID_ROW_FORMAT, QUERY_MISSING_REF, QUERY_TYPE_MISMATCH
 from .errors import SDKStoreError
-from .facade import EntitySnapshot, FieldAssertions, _dto_to_sdk_snapshot
+from .facade import AssertionView, EntitySnapshot, _dto_to_sdk_snapshot
 from .query_lower import QueryPlan
 
 if TYPE_CHECKING:
@@ -176,7 +176,8 @@ def _ensure_query_field_assertions(
         return snapshot
     _, field_specs = _entity_field_specs_for_type(sdk, entity_type)
     field_assertions = {
-        spec.field_name: FieldAssertions(
+        spec.field_name: AssertionView(
+            entity_type=entity_type,
             field_name=spec.field_name,
             cardinality=spec.cardinality,
             active_records=tuple(),

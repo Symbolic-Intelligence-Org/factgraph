@@ -168,15 +168,14 @@ def test_entities_where_accepts_none_meta():
     assert isinstance(results, list)
 
 
-def test_entities_where_meta_filtering_deferred_to_step8():
-    """Per blueprint Step 1 scope:non-empty _meta raises until Step 8 lands
-    AssertionView meta-filter projection。Surfacing explicitly is safer than
-    silently ignoring user input。"""
+def test_entities_where_meta_filtering_remains_assertion_view_scope():
+    """Entity queries do not yet project assertion metadata into entity rows."""
     fg = _make_fg()
     with pytest.raises(SDKStoreError) as exc_info:
         fg.entities.where(EntitiesNsUser, _meta={"source": "seed"})
-    assert "meta filtering not yet implemented" in str(exc_info.value)
-    assert "Step 8" in str(exc_info.value)
+    assert "entity metadata filtering is not implemented" in str(exc_info.value)
+    assert "fg.assertions.where" in str(exc_info.value)
+    assert "snapshot.assertions.where" in str(exc_info.value)
 
 
 def test_entities_where_meta_must_be_dict():
