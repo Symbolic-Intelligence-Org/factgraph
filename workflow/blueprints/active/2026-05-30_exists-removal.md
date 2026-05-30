@@ -10,6 +10,7 @@
   - `src/factgraph/application/retract_guard.py`
   - `src/factgraph/application/schema_runtime.py`
   - `src/factgraph/sdk/store.py`
+  - `src/factgraph/sdk/batch.py`
   - `src/factgraph/sdk/docs/`
   - `tests/`
 - Related Docs:
@@ -61,6 +62,7 @@ The adopted Q-EXISTS decision `870e1f1f` narrows the next slice: remove **user-f
 - N8 Change SQLite ledger schema or run destructive data migrations.
 - N9 Push, PR creation, or master merge.
 - N10 Memory consolidation.
+- N11 Remove `PlannedOpDTO(op="record_exists")`, `WireRecordExistsOp`, or wire parsing capability; those may remain as legacy/protocol compatibility surfaces unless a later decision supersedes this scope.
 
 ## 4. Current Context
 
@@ -91,6 +93,7 @@ This blueprint treats Q-EXISTS §4.1-§4.10 as binding:
 | Entity delete | SDK documents whole-entity revoke as Identity + `:exists` + Field. | `src/factgraph/sdk/store.py:1117-1232` |
 | Guard | `check_retract_allowed(...)` classifies `exists_pred_ids` and raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`. | `src/factgraph/application/retract_guard.py:75-140` |
 | Schema index | `SchemaIndex.exists_pred_ids` is populated independently from `identity_pred_ids`. | `src/factgraph/application/schema_runtime.py:40-74`, `:206-250` |
+| SDK batch user-facing emission | Batch staging appends `RecordExistsOp`; wire apply directly writes `:exists` via `set_field`. | `src/factgraph/sdk/batch.py:1413-1424`; `:1458-1462`; `:1560-1604`; `:453-470` |
 | Rule DSL | SDK DSL emits `Entity:exists`; protocol/rule planner special-cases it. | `src/factgraph/sdk/dsl/expr.py:397-400`, `:521-548`; `src/factgraph/application/protocol/rule.py:519-535`; `src/factgraph/core/rules/where_eval.py:1024-1030` |
 | Q-PR1 | Derivation accept writes `exists_pred_id` and is sacred out of scope. | `src/factgraph/core/derivation/accept.py:667-725`, `:1006-1015` |
 
@@ -113,6 +116,12 @@ Known dirty baseline must remain untouched:
 Remove new user-facing `record_exists` emission from materialization paths that do not require Q-PR1 scope expansion.
 
 The implementation should not delete schema `:exists` predicate declarations and should not delete `record_exists` handling until the codebase proves no legacy or non-user path still needs that DTO shape. If `record_exists` remains for compatibility, the user-facing planners should stop producing it.
+
+### 5.1.1 SDK Batch User-Path Migration
+
+`fg.batch().commit()` is a user-facing emission path. Stop new `RecordExistsOp` emission from batch user planners, mirroring the §5.1 user-path stop.
+
+Wire/protocol compatibility (`WireRecordExistsOp`, `_validate_wire_record_exists_binding`, `PlannedOpDTO(op="record_exists")`) may remain as legacy parsing surface so existing wire clients are not broken by this slice.
 
 ### 5.2 Identity-Bundle Visibility
 
@@ -204,6 +213,7 @@ Each implementation commit must verify:
 - [ ] `tests/test_sdk_entities_create.py` is migrated to no user-path `:exists` emission.
 - [ ] `tests/test_sdk_entities_delete.py` is migrated to no active `:exists` requirement/count for user path.
 - [ ] `tests/test_sdk_entities_exists.py` covers complete-bundle semantics and composite identities.
+- [ ] SDK batch tests verify batch user paths no longer emit new `:exists` Claims; wire legacy compatibility tests pass.
 - [ ] Retract-guard tests preserve legacy `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` coverage through explicit legacy fixtures.
 - [ ] Schema cache tests preserve `exists_pred_ids` where required.
 
@@ -229,6 +239,7 @@ Each implementation commit must verify:
 
 - Re-run Stage 1 grep inventory against implementation branch head.
 - Build complete affected-test inventory for `:exists`, `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`, `exists_pred_ids`, `record_exists`, and `fg.entities.exists`.
+- Inventory entity visibility helpers (`entity_write._entity_visible`, `entity_view._entity_visible/_enumerate_entity_refs`, SDK facade visibility helpers, and `sdk/batch.py:_handle_requires_record_exists_op`).
 - Confirm no new surfaces require Q-PR1 edits, rule DSL deletion, shadow-store removal, or ledger migration.
 - If a blocker appears, pause for blueprint amendment.
 
@@ -249,6 +260,7 @@ Each implementation commit must verify:
 ### Step 3 — Stop User-Path `:exists` Co-Emission
 
 - Stop user-facing create/lazy materialization planners from producing `record_exists` where permitted by scope.
+- Stop `src/factgraph/sdk/batch.py` user-path staging from emitting `RecordExistsOp`; preserve `WireRecordExistsOp` parsing and wire compatibility per PF-REC2.
 - Preserve schema `:exists` predicate declaration and `exists_pred_ids`.
 - Do not edit Q-PR1 derivation accept.
 - Update create/emission tests.
