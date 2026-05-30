@@ -1,8 +1,8 @@
 # Slice 5 — Narrow `:exists` Co-Emission Removal
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-30
-- Last Updated: 2026-05-30
+- Last Updated: 2026-05-30(scoped after Step 4.3 preflight + PF-R1/PF-REC1/PF-REC2 amendments)
 - Slice: Step 2+ cleanup after Identity-as-Claim / API namespace / docs polish
 - Class: S-M(runtime cleanup with tests/docs; Q-PR1 no-touch)
 - Related Modules:
@@ -318,7 +318,7 @@ To be filled after implementation:
 
 ### 10.1 Final Landing Result
 
-TBD. Should summarize acceptance totals: runtime behavior, tests, docs/decisions, and final checks (per §7: 8 + 7 + 4 + 6 = 25 checkboxes).
+TBD. Should summarize acceptance totals: runtime behavior, tests, docs/decisions, and final checks (per §7: 8 + 8 + 4 + 6 = 26 checkboxes).
 
 ### 10.2 Deviations And Amendments
 
