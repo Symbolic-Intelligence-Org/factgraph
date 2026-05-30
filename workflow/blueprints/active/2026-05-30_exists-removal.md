@@ -83,16 +83,16 @@ This blueprint treats Q-EXISTS §4.1-§4.10 as binding:
 
 ### 4.2 Shipped Code Surface
 
-| Surface | Current state |
-|---|---|
-| User create emission | `application/entity_write.py:_apply_op(record_exists)` writes `info.exists_predicate_id`. |
-| Entity visibility | `_entity_visible(...)` checks `:exists` first, then field facts. |
-| `fg.entities.exists` | `sdk/store.py` scans active `info.exists_predicate_id` claims. |
-| Entity delete | `sdk/store.py` documents whole-entity revoke as Identity + `:exists` + Field. |
-| Guard | `application/retract_guard.py` classifies `exists_pred_ids` and raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`. |
-| Schema index | `SchemaIndex.exists_pred_ids` is populated independently from `identity_pred_ids`. |
-| Rule DSL | `sdk/dsl/expr.py` emits `Entity:exists`; protocol/rule planner special-cases it. |
-| Q-PR1 | `core/derivation/accept.py` writes `exists_pred_id` and is sacred out of scope. |
+| Surface | Current state | Evidence |
+|---|---|---|
+| User create emission | `_apply_op(record_exists)` writes `info.exists_predicate_id`. | `src/factgraph/application/entity_write.py:698-708` |
+| Entity visibility | `_entity_visible(...)` checks `:exists` first, then field facts. | `src/factgraph/application/entity_write.py:860-875` |
+| `fg.entities.exists` | SDK scans active `info.exists_predicate_id` claims. | `src/factgraph/sdk/store.py:1234-1253` |
+| Entity delete | SDK documents whole-entity revoke as Identity + `:exists` + Field. | `src/factgraph/sdk/store.py:1117-1232` |
+| Guard | `check_retract_allowed(...)` classifies `exists_pred_ids` and raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`. | `src/factgraph/application/retract_guard.py:75-140` |
+| Schema index | `SchemaIndex.exists_pred_ids` is populated independently from `identity_pred_ids`. | `src/factgraph/application/schema_runtime.py:40-74`, `:206-250` |
+| Rule DSL | SDK DSL emits `Entity:exists`; protocol/rule planner special-cases it. | `src/factgraph/sdk/dsl/expr.py:397-400`, `:521-548`; `src/factgraph/application/protocol/rule.py:519-535`; `src/factgraph/core/rules/where_eval.py:1024-1030` |
+| Q-PR1 | Derivation accept writes `exists_pred_id` and is sacred out of scope. | `src/factgraph/core/derivation/accept.py:667-725`, `:1006-1015` |
 
 ### 4.3 Dirty Baseline
 
@@ -121,7 +121,7 @@ The implementation should not delete schema `:exists` predicate declarations and
 1. Validate the Entity class and complete Form I identity bundle using existing `_ref` / schema helpers.
 2. Compute deterministic e_ref.
 3. Resolve all Identity predicates for the entity type.
-4. For each Identity field, find active Identity Claims for the e_ref with the expected value.
+4. For each Identity field, find an active Identity Claim where `(e_ref, pred_id, value)` matches `(computed e_ref, identity_pred_id_for_field, user-supplied identity value from identity kwargs)`.
 5. Return true only when the complete bundle is active.
 
 Composite identity entities require all Identity Claims. "Any identity claim active" is explicitly rejected.
@@ -168,7 +168,7 @@ Any implementation step that needs those surfaces must stop and trigger blueprin
 | SF4 | Rule DSL / protocol / where-planner `Entity:exists` virtual syntax remains in scope only for read/verification, not deletion. | Q-EXISTS §4.2 |
 | SF5 | Legacy `:exists` Claims are preserved and protected; no ledger migration, bulk revoke, or rewrite. | Q-EXISTS §4.5 |
 | SF6 | `fg.entities.exists(...)` uses complete Identity Claim bundle semantics, not any-identity semantics. | Q-EXISTS §4.3 |
-| SF7 | `exists_pred_ids` remains populated for legacy guard classification and schema compatibility. | Q-EXISTS §4.6 / §4.10 |
+| SF7 | `exists_pred_ids` remains populated for legacy guard classification and schema compatibility. | Q-EXISTS §4.6 option (1), per §4.10 taxonomy reasoning |
 | SF8 | `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` name remains unchanged. | Q-EXISTS §4.5 |
 | SF9 | No destructive ledger migration or SQLite schema migration. | Q-EXISTS §3 / §4.5 |
 | SF10 | Dirty baseline, sacred branches, and Q-PR1 carve-out remain preserved throughout. | Slice 1/2/3a/4 inheritance |
@@ -231,6 +231,8 @@ Each implementation commit must verify:
 - Build complete affected-test inventory for `:exists`, `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`, `exists_pred_ids`, `record_exists`, and `fg.entities.exists`.
 - Confirm no new surfaces require Q-PR1 edits, rule DSL deletion, shadow-store removal, or ledger migration.
 - If a blocker appears, pause for blueprint amendment.
+
+**Output**: append affected-test inventory rows to the paired audit log Decision Notes (for example, "Step 0 inventory found N affected test files: ..."), or fold inventory results into the Step 1 implementation commit's audit row if the inventory is trivial. Step 0 modifies no runtime or test files.
 
 ### Step 1 — Identity-Bundle Existence Helper
 
@@ -295,6 +297,7 @@ Candidate close-time docs:
 - `src/factgraph/sdk/docs/04_api_surface.en.md`
 - `docs/official/kernel/quickstart/read-write.md`
 - `docs/official/kernel/quickstart/schema.md`
+- `workflow/audit/active/2026-05-30_exists-removal-vs-shipped.md` (optional close-time event/disposition row if useful)
 - Any current docs surfaced by Step 0 grep
 
 ## 10. Outcome / Deviations
@@ -303,7 +306,7 @@ To be filled after implementation:
 
 ### 10.1 Final Landing Result
 
-TBD.
+TBD. Should summarize acceptance totals: runtime behavior, tests, docs/decisions, and final checks (per §7: 8 + 7 + 4 + 6 = 25 checkboxes).
 
 ### 10.2 Deviations And Amendments
 

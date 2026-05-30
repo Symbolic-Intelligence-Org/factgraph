@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-30 | draft | Blueprint created | Drafted from adopted Q-EXISTS decision `870e1f1f`; scope is narrow user-path `:exists` co-emission removal + Identity-bundle `fg.entities.exists`; Q-PR1, shadow store, rule DSL virtual syntax, legacy data migration, and guard-code rename are explicitly out of scope. |
+| 2026-05-30 | draft-amend | Step 4.2 reviewer findings applied | Added file:line Evidence column to shipped-surface table, clarified Step 0 inventory output format, tightened Identity-bundle value matching wording, added optional audit close-time update, added §10.1 acceptance-count hint, and simplified SF7 cite wording. |
 
 ## Decision Notes
 
