@@ -3,7 +3,7 @@
 - Status: draft
 - Created: 2026-05-30
 - Last Updated: 2026-05-30
-- Branch: `v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30` @ `b17750c8`(preflight + amend);fork from Slice 2 close `c927d41f`
+- Branch: `v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30`;fork point Slice 2 close `c927d41f`(blueprint draft lineage at audit log HEAD,not pinned in header to avoid post-amend drift)
 - Related Modules:
   - `src/factgraph/sdk/store.py`(4 namespace manager classes + 8 flat top-level methods)
   - `src/factgraph/sdk/facade.py`(`AssertionRecordSet` + `FieldAssertions` + `AssertionNamespace` + `EntityEditor` + `IdentityEditor` + `FieldEditor` + `sdk_edit`)
@@ -194,7 +194,7 @@ def fg.entities.delete(self, entity_cls: type[Entity], *, meta=None, **identity)
 
 Runtime overload selection:第一个 positional 参数 `isinstance(arg, str)` → Form A;`isinstance(arg, type) and issubclass(arg, Entity)` → Form B;其他 raise `"fg.entities.delete requires e_ref string OR EntityClass + full identity bundle; see ADR-API §4.1.2"`(per PF-S2 explicit error wording lock)。**Tuple selector 显式 forbidden**。
 
-走 application layer **NEW DTO + planner + executor**(per PF-S3 — SDK manager 只归一化):
+走 application layer **NEW DTO + planner + executor + private internal-only retract helper**(per PF-S3 + P1 amend 2026-05-30 — SDK manager 只归一化;**guard-bypass 不走 `meta` marker,改走 private function path**):
 
 ```python
 # Application layer DTOs (NEW in application/entity_write.py)
@@ -215,16 +215,44 @@ def plan_delete_command(command, *, store, index) -> EntityDeletePlan:
     # 1. resolve target(check :exists Active);若不存在 → ErrorDTO(ENTITY_NOT_FOUND)
     # 2. enumerate Active Claims under target.e_ref via ledger.find_claims(e_ref=)
     # 3. build retract PlannedOpDTOs for each(全 Active Claim — Identity + :exists + Field)
-    # 4. **关键**:plan_delete 内部直接 build retract PlannedOpDTO,**绕过** Slice 2 retract guard
-    #    (because 整批 delete 是 ADR-IC §4.1 唯一合法整批撤销路径 — guard 设计就允许 delete-path 整批 retract Identity Claims)
-    # 5. 返回 plan
+    #    NOTE: PlannedOpDTO shape 不动 — `meta` 不带 bypass signal;只是 plan shape 而已
+    # 4. 返回 plan
 
 def apply_delete_plan(plan, *, store, index) -> EntityDeleteResult:
+    """Entity-delete executor — atomic 整批 revoke via private path.
+
+    Per ADR-IC §4.1 强制点 3: delete 是唯一合法整批撤销 Identity Claim 路径。
+    本 executor 是该路径的唯一 caller 入口(私有,application-internal only)。
+    """
     # atomic execute — 全 retracts 在同 _write_session 内 commit
     # 任一 retract 失败 → rollback session + EntityDeleteResult with errors
+    for op in plan.planned_retracts:
+        try:
+            _apply_entity_delete_retract(op, store=store, index=index)
+        except Exception as exc:
+            # rollback + return EntityDeleteResult with errors
+            ...
+
+def _apply_entity_delete_retract(op: PlannedOpDTO, *, store: Store, index: SchemaIndex) -> str | None:
+    """Application-internal private helper — entity-delete-only retract executor.
+
+    **NOT callable** from generic `_apply_op` path nor any other entry point.
+    Skips Slice 2 retract guard because entity-delete is the unique legal
+    Identity Claim 整批 retract path per ADR-IC §4.1 强制点 3. The path
+    binding(this private function called only by `apply_delete_plan`)is
+    the structural guarantee — no metadata signal can spoof bypass.
+    """
+    assert op.op == "retract" and op.assertion_id is not None
+    # 不调 check_retract_allowed — entity-delete path 是 ADR-IC §4.1 唯一合法整批 retract
+    return store.ledger.retract_by_asrt(op.assertion_id, meta=op.meta)
 ```
 
-**关键 enforcement**:`plan_delete_command` 内部 build retract PlannedOpDTOs 时设特殊 marker(e.g. `meta["__delete_via_entities_delete__"] = True`)— `_apply_op` retract branch 见到该 marker 时**跳过** `check_retract_allowed` guard,直接 `retract_by_asrt`(全实体 delete 是合法整批 retract Identity Claim 唯一路径)。Slice 2 retract guard 不动逻辑,但 Slice 3a 在 `_apply_op` 加 marker check 跳过 guard for entity-delete-internal ops。
+**关键 enforcement(P1 amend 2026-05-30 — guard-bypass 改 path-binding,不走 `meta` marker)**:
+- generic `_apply_op` retract branch **永远** 调 `check_retract_allowed` — guard 不可绕过 from any path that builds a `PlannedOpDTO` 经过 generic dispatch
+- entity-delete 整批 revoke 走 `apply_delete_plan` → `_apply_entity_delete_retract` 私有 helper — **该 helper 不出现在 `_apply_op` retract branch 内**,**不接受 generic caller**;只由 `apply_delete_plan` 直接 call
+- ADR-IC §4.1 强制点 3 "整批撤销只能作为 `fg.entities.delete` 的一部分" 通过 **path-binding 结构性保证**,**不**依赖 metadata signal
+- 任何 application-level caller(无论 plan_create / plan_write / ingest / entity_write generic path)调 `_apply_op` 都仍走 guard — 不可伪造 bypass
+- PlannedOpDTO shape 不动(`meta` 不引入 bypass field)— Q-PR1 carve-out + DTO contract 友好
 
 **SDK manager 只做参数归一化**(per PF-S3 INV-6 application-first):
 
@@ -440,6 +468,33 @@ class _SDKSchemaManager:
             raise  # apply 不掩盖 non-additive 错;user 必须显式 migrate
 ```
 
+#### 5.10.1 Implementation surface table(per P2 amend 2026-05-30 — shipped state touch points + rollback rules)
+
+Shipped baseline:`_SDKSchemaManager.add` 路径 internally calls `SDKStore.add_schema_classes` 跟 `schema_compile` → 同步更新多个 shipped state surfaces。Slice 3a `register / extend / apply` 必须显式覆盖所有这些 + ADR-IC §4.3.6 reject points + reject-时无副作用保证:
+
+| Surface | `register(EC)` | `extend(EC)` | `apply(EC)` |
+|---|---|---|---|
+| **Input validation** | EC 是 Entity subclass + has `sdk_entity_spec`;entity_type 未注册(否则 `SchemaConflictError`)| EC 是 Entity subclass;entity_type 已注册(否则 `SchemaNotFoundError`);diff 全 additive Field(否则 `SchemaNonAdditiveError` per ADR-IC §4.3.6 part 1+2)| EC 是 Entity subclass;auto-route 到 register(若未注册)or extend(若已注册);non-additive 不 fallback,raise propagate |
+| **`schema_ir` update** | append entity entry + predicate entries(Identity preds + Field preds + `<EntityType>:exists`)to `self._schema_ir["entities"]` / `["predicates"]` | append only the additive Field predicate entry to existing entity;**no** Identity / `:exists` change | route to register OR extend per above |
+| **`schema_digest` update** | recompute + write to `self._schema_digest`(re-derive from new `schema_ir`)| recompute + write — Identity bundle 未变(per part 1),但 Field predicates set 变 → digest 变 | per route |
+| **`SchemaIndex` rebuild**(per Slice 2 §10.9 carry-forward)| call `build_schema_index(new schema_ir)` → write to `self._application_schema_index`;`identity_pred_ids` / `exists_pred_ids` / `protected_anchor_pred_ids` union update 立即 reflect 新 entity | call `build_schema_index(new schema_ir)` → write to `self._application_schema_index`;**Identity / exists frozensets 不增加**(part 1 + part 2 已 reject Identity 新增 + `:exists` touch);Field predicates 加新条目但不进 protected_anchor | per route |
+| **`_classes` + `_field_pred_by_descriptor` + `_field_decl_by_descriptor` + `_entity_spec_by_class`** | append new EC + populate descriptor maps from EC declarations(per shipped `_register_classes` 内部逻辑)| append new Field descriptor only(已 register 的 EC 已在 `_classes`)| per route |
+| **`_identity_values_by_e_ref` shadow store** | **不动**(shadow store 跟 schema 独立 — per Slice 2 Step 7 注释 + ADR-IC §4.2.3 LEGACY / INTERNAL COMPATIBILITY 定位)| **不动** | **不动** |
+| **Workspace schema persistence**(if `workspace_path is not None`)| `write_schema_object_for_workspace(new schema_ir)` + `validate_schema_object_for_workspace`;失败 raise `SDKStoreError("workspace schema object update failed: ...")` | 同上 | per route |
+| **`schema_digest` ledger meta anchor**(if `workspace_path is not None`)| `self.ledger.replace_ledger_meta("schema_digest", new_digest_value)` after workspace write | 同上 | per route |
+| **Cache rebuild atomicity** | full schema_ir build + index rebuild + class registry update **同 Python call**;若 input validation 失败 raise **before** any mutation(input validation step 1) | 同;diff compute 失败或 reject 在 schema_ir mutation **前** raise(per ADR-IC §4.3.6 reject 必须 zero-side-effect)| per route |
+| **Rollback / no-op on reject** | input validation raise → 0 state mutation(零副作用)| ADR-IC §4.3.6 part 1+2 reject 必须 **before** any of schema_ir / digest / SchemaIndex / class_registry / workspace 更新 — verified by raise placement;reject 后 caller 重试或 fix EC 不需 manual cleanup | per route — reject case 同 register/extend 各自 |
+| **Existing ledger Claims**(已 active 的 Identity / `:exists` / Field Claims)| **不动** — register 是新 entity_type,旧 Claims 不影响 | **不动** — extend 是 additive,旧 Field Claims 跟新 Field predicates 不冲突;Identity / `:exists` frozensets 不收窄 → 旧 Identity Claims INV-7c 保护不变 | **不动** |
+| **`Store.write_session`** | **不开** — register 不写 Claim,只更 schema state | **不开** — extend 不写 Claim,只更 schema state | 同 |
+| **ADR-IC §4.3.6 part 1 reject points** | N/A(register 是新 entity,无 diff)| 5 reject(`identity_to_field` / `field_to_identity` / `identity_added` / `identity_removed` 或 `field_removed` / `cardinality_changed` 或 `type_changed`)— 每条独立 raise `SchemaNonAdditiveError` 含 INV-7c 解释 | per route(extend path) |
+| **ADR-IC §4.3.6 part 2 reject points** | N/A | 3 reject(`exists_removed` / `exists_owner_changed` / `exists_arity_changed`)— 每条独立 raise `SchemaNonAdditiveError` 含 `:exists` transitional guard 解释 | per route(extend path) |
+
+**关键 invariants**(per P2 amend):
+- **Zero side-effect on reject** — input validation + ADR-IC §4.3.6 reject 必须在 schema_ir / digest / SchemaIndex / class_registry / workspace 5 个 state 任一变化 **之前** raise。Slice 3a Step 10 testing 需 verify reject case 之后 state 全部跟 reject 前 byte-identical。
+- **Cache rebuild atomicity** — `SchemaIndex` rebuild 跟 `schema_ir` update 在同 transaction(Python 函数 call)内;不存在 schema_ir 已新但 SchemaIndex 仍旧的 inconsistent 中间状态。
+- **Workspace persistence sequencing** — register/extend 内部顺序:(1)input validation + ADR reject;(2)schema_ir mutation;(3)schema_digest recompute;(4)SchemaIndex rebuild;(5)class registry + descriptor maps update;(6)workspace persistence(若 attached)+ ledger meta anchor update。Step 6 失败 raise `SDKStoreError("workspace schema object update failed")` — 此时前 5 步已 commit 但 workspace 持久化失败 → consistency issue。**保留 shipped semantics**(Slice 3a 不 change shipped `_update_schema_digest_anchors` 行为)— 但 Step 10 acceptance test 需 cover workspace failure case rollback 边界(若 Slice 3a 实施期发现 shipped semantics 有问题,Slice 3a §10 Outcome 记录 + 留 Step 2+ 处理)。
+- **Cache hook trigger**(per Slice 2 §10.9 ADR-API Q14 carry-forward)— register/extend 的 SchemaIndex rebuild 步骤就是该 carry-forward 锁定的 hook trigger,Slice 3a Step 10 完成 = Slice 2 carry-forward closure。
+
 ### 5.11 `_SDKReadManager` + `_SDKWriteManager` 整删 + flat shortcuts 全删
 
 Step 6:`_SDKReadManager`(`sdk/store.py:533-555`)+ `_SDKWriteManager`(`sdk/store.py:572-613`)整删;`fg.read` + `fg.write` property accessors(lines 1213/1218)删;同 step 删 8 个 flat top-level shortcuts(per PF-S1 + G7):
@@ -484,7 +539,7 @@ Same-slice migration(4 docs):
 |---|---|---|
 | **SF1** | **flat top-level shortcuts 全删**(PF-S1 verdict — Option B):`fg.set` / `fg.add` / `fg.retract` / `fg.edit` / `fg.get` / `fg.ref` / `fg.find` / `fg.match` 8 个 SDKStore 顶层方法完全删除;**无 alias 无双轨期**;Slice 2 emission contract tests + 其他 shipped tests 全 migrate 到 namespace 入口 | PF-S1 verdict + ADR-API §4.1.3 |
 | **SF2** | **`fg.entities.delete` discriminated signature**(PF-S2 verdict):`fg.entities.delete(e_ref: str, *, meta=None)` 跟 `fg.entities.delete(EntityCls, **identity_kwargs)` 两入口;tuple selector **显式 forbidden**;参数类型错 raise `"fg.entities.delete requires e_ref string OR EntityClass + full identity bundle; see ADR-API §4.1.2"` | PF-S2 verdict |
-| **SF3** | **`fg.entities.delete` implementation site at application layer**(PF-S3 verdict — INV-6 application-first):NEW `EntityDeleteCommand` DTO + `plan_delete_command` + `apply_delete_plan` in `application/entity_write.py`;SDK manager 只做参数归一化 + 调 application path;`_apply_op` retract branch 见 `meta["__delete_via_entities_delete__"]` marker 跳过 Slice 2 retract guard(整批 delete 是 ADR-IC §4.1 唯一合法 Identity Claim 整批 retract 路径)| PF-S3 verdict + ADR-IC §4.1 + INV-6 |
+| **SF3** | **`fg.entities.delete` implementation site at application layer + path-bound guard-bypass**(PF-S3 verdict — INV-6 application-first;**P1 amend 2026-05-30**):NEW `EntityDeleteCommand` DTO + `plan_delete_command` + `apply_delete_plan` in `application/entity_write.py`;SDK manager 只做参数归一化 + 调 application path。**Guard-bypass 通过 path-binding 结构保证,不走 metadata marker**:NEW private helper `_apply_entity_delete_retract(...)` 只由 `apply_delete_plan` 直接调用,**不**出现在 `_apply_op` retract branch 内,**不接受** generic caller;generic `_apply_op` retract branch **永远** 调 `check_retract_allowed`,任何 application-level caller 不可伪造 bypass。ADR-IC §4.1 强制点 3 "整批撤销只能作为 `fg.entities.delete` 的一部分" 由 path-binding 实施,不依赖 PlannedOpDTO metadata signal。PlannedOpDTO shape 不动(Q-PR1 + DTO contract 友好)| PF-S3 verdict + ADR-IC §4.1 + INV-6 + P1 amend 2026-05-30 |
 | **SF4** | **`fg.entities.create` eager emission + populate shadow store**(PF-S4 verdict — Option (a)):`fg.entities.create(EC, **id)` 直接 emit Identity Claims + `:exists` 到 ledger via `_materialization_ops` shipped path + populate shadow store for compatibility;`fg.ref + fg.set` lazy path 继续保留 co-existing;**Slice 3a 显式 NOT remove shadow store**(per ADR-IC §4.2.4 Step 2+ direction)| PF-S4 verdict + ADR-IC §4.2 + §4.2.4 |
 | **SF5** | **`AssertionView.history` deprecated alias**(PF-S5 verdict per ADR-API §4.2.4):保留 alias of `.all`;**默认不发** `DeprecationWarning`(防测试失败);env var **固定** `FACTGRAPH_WARN_DEPRECATED=1` 触发 warning;blueprint §5.7 显式 model `os.environ.get(...)` check | PF-S5 verdict |
 | **SF6** | **`_ASSERTION_FILTER_MISSING` sentinel reuse**(PF-S6 verdict):shipped sentinel `sdk/facade.py:18`;不引入新 sentinel for 新的 `AssertionView.where` / `AssertionsManager.where` / `AssertionRecordSet.where`(post-Q13 删 flat) | PF-S6 verdict |
@@ -493,7 +548,7 @@ Same-slice migration(4 docs):
 | **SF9** | **Q-PR1 carve-out + SF11-style internal-rollback 继承**(Slice 1+2 lineage):0 diff against Slice 2 close `c927d41f..HEAD` 在 `core/evidence/write_protocol.py` / `core/store/ledger.py` / `core/store/_builders.py` / `adapters/pyreason/*` / `core/derivation/accept.py`(含 `:401` 内部 rollback path,SF11 classification 继承)| meta-ADR §4.4 + Slice 2 SF5 + SF11 + N11 |
 | **SF10** | **Sacred branches + dirty baseline preservation**:`master` `562c74195df43e933bed92a3ff25de94dd8ce666` 不动;`v0.1-oss-prep` 不动;dirty baseline(4 M + 1 D + 2 untracked)preserved through all commits | Slice 2 SF (sustained) |
 | **SF11** | **ADR-IE EntityEditor compatibility**:`sdk_edit` factory edit-existing-only contract(per ADR-IE §4.8)+ EntityEditor lifecycle(per ADR-IE §4.1-§4.7)+ IdentityEditor Layer 1 reject 文案(Slice 2 Step 6 已 ship — 不动)+ FieldEditor cardinality enforcement(per ADR-IE §4.5)— **全 contract 不改**;Slice 3a 只动 `fg.write.edit` → `fg.entities.edit` 入口名(per ADR-API §4.1.2 + ADR-IE §4.8)| ADR-IE §4.8 |
-| **SF12** | **ADR-IC §4.3.6 explicit contract part 1+2 enforce at `fg.schema.extend`**(per G6 + 4.5):part 1 — Identity↔Field swap reject(Identity→Field demote + Field→Identity upgrade)+ Identity field add reject + 删字段 reject + cardinality/type 改 reject;part 2 — `<EntityType>:exists` predicate immutability(删/owner_type 改/arity 改全 reject)| ADR-IC §4.3.6 + ADR-API §4.5.2 + §4.5.3 |
+| **SF12** | **ADR-IC §4.3.6 explicit contract part 1+2 enforce at `fg.schema.extend` + zero-side-effect on reject**(per G6 + §4.5 + **P2 amend 2026-05-30**):part 1 — Identity↔Field swap reject(Identity→Field demote + Field→Identity upgrade)+ Identity field add reject + 删字段 reject + cardinality/type 改 reject;part 2 — `<EntityType>:exists` predicate immutability(删/owner_type 改/arity 改全 reject)。**`register / extend / apply` 实施 surface 锁定 in §5.10.1**:7 state surfaces(schema_ir + schema_digest + SchemaIndex + class registry + descriptor maps + workspace persistence + ledger meta anchor)+ zero-side-effect on reject(input validation + ADR-IC §4.3.6 reject 在 mutation 之前)+ cache rebuild atomicity(SchemaIndex 跟 schema_ir 同 transaction)+ existing Claim invariance(extend 不动旧 Claims)| ADR-IC §4.3.6 + ADR-API §4.5.2 + §4.5.3 + §5.10.1 + P2 amend 2026-05-30 |
 | **SF13** | **No flat shortcut re-introduction rule**(corollary of SF1):Slice 3a close 后 future slice 不应在 SDKStore / FactGraph 顶层加 `fg.<verb>(...)` 直接 method(verb-on-fg 形态);所有 user-facing operations 必须走 namespace manager(`fg.entities.*` / `fg.fields.*` / `fg.assertions.*` / `fg.schema.*`)| SF1 corollary + ADR-API §4.1 排他原则 |
 
 ### 6.2 Compatibility constraints + dirty baseline guard
@@ -552,7 +607,9 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] `fg.entities.delete(EntityCls, **identity)` Form B:同 Form A but identity-based
 - [ ] Test:`fg.entities.delete(tuple_selector)` raises `SDKStoreError` 含 `"requires e_ref string OR EntityClass + full identity bundle"`(PF-S2)
 - [ ] Test:`fg.entities.delete(e_ref) + fg.entities.exists(...)` returns False after
-- [ ] Test:`fg.entities.delete(e_ref) + fg.assertions.by_id(identity_asrt_id).revoked == True`(Slice 2 retract guard 不阻止 delete-path 整批 revoke per SF3 marker)
+- [ ] Test:`fg.entities.delete(e_ref) + fg.assertions.by_id(identity_asrt_id).revoked == True`(`apply_delete_plan` → `_apply_entity_delete_retract` 私有 path 整批 revoke per SF3 P1 amend — path-bound bypass,不依赖 metadata marker)
+- [ ] **Structural test**:`_apply_op(PlannedOpDTO(op="retract", assertion_id=identity_asrt_id, ...))` 直接调 generic dispatcher 仍 raise `EntityWriteError(INV_7C_IDENTITY_PROTECTED)` — 证明 generic path 不 bypass guard(任何 application-level caller 不可伪造)
+- [ ] **Structural test**:`_apply_entity_delete_retract` 私有 helper 不出现在 `_apply_op` retract branch 任何 code path — grep + import check verified
 - [ ] `fg.entities.exists(EC, **identity)` returns bool(check `<EntityType>:exists` Active Claim presence + has_active_revocation)
 - [ ] Application layer:`EntityCreateCommand` + `plan_create_command` + `apply_create_plan` shipped in `application/entity_write.py`
 - [ ] Application layer:`EntityDeleteCommand` + `plan_delete_command` + `apply_delete_plan` shipped
@@ -587,19 +644,22 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] Test:`recordset.where(source="seed")` raises `TypeError`(`unexpected keyword argument 'source'`)
 - [ ] Test:`recordset.where(_meta={"version": "v1"})` returns filtered set(per Q12 替代路径)
 
-### 7.6 `fg.schema.*` 三分 + ADR-IC §4.3.6 enforce(G6 + SF12)
+### 7.6 `fg.schema.*` 三分 + ADR-IC §4.3.6 enforce + zero-side-effect on reject(G6 + SF12 + P2 amend 2026-05-30)
 
 - [ ] `fg.schema.add(*classes)` **删除** — `AttributeError` raise
-- [ ] `fg.schema.register(EC)` shipped — 新 entity_type 注册 + SchemaIndex frozensets cache union update
-- [ ] `fg.schema.extend(EC)` shipped — additive Field 扩展 + **ADR-IC §4.3.6 part 1 + part 2 enforce**
-- [ ] `fg.schema.apply(EC)` shipped — safe diff convenience
+- [ ] `fg.schema.register(EC)` shipped — 新 entity_type 注册 + SchemaIndex frozensets cache union update + 全 state surfaces touched per §5.10.1 implementation surface table(schema_ir + schema_digest + SchemaIndex + class registry + descriptor maps + workspace persistence + ledger meta anchor)
+- [ ] `fg.schema.extend(EC)` shipped — additive Field 扩展 + **ADR-IC §4.3.6 part 1 + part 2 enforce** + 同 5 state surfaces 但 Identity / exists frozensets 不收窄
+- [ ] `fg.schema.apply(EC)` shipped — safe diff convenience + 路由 register/extend + non-additive propagate(不 fallback)
 - [ ] Test:`fg.schema.extend` reject Identity field add → `SchemaNonAdditiveError` 含 "Identity bundle redesign requires entity-type migration"
 - [ ] Test:`fg.schema.extend` reject Identity→Field demote → `SchemaNonAdditiveError`
 - [ ] Test:`fg.schema.extend` reject Field→Identity upgrade → `SchemaNonAdditiveError`
 - [ ] Test:`fg.schema.extend` reject 删字段 → `SchemaNonAdditiveError`
 - [ ] Test:`fg.schema.extend` reject cardinality/type 改 → `SchemaNonAdditiveError`
 - [ ] Test:`fg.schema.extend` 模拟试图删 `<EntityType>:exists` predicate → `SchemaNonAdditiveError`(part 2)
-- [ ] Test:`fg.schema.register(EC)` + `SchemaIndex.identity_pred_ids` 立即包含新 entity 的 identity preds(cache rebuild hook 触发)
+- [ ] Test:`fg.schema.register(EC)` + `SchemaIndex.identity_pred_ids` 立即包含新 entity 的 identity preds(cache rebuild hook 触发 — Slice 2 §10.9 carry-forward closure)
+- [ ] **Zero-side-effect on reject test**(per P2 amend §5.10.1):`fg.schema.extend(EC_with_identity_demote)` raise `SchemaNonAdditiveError` 后,`schema_ir` + `schema_digest` + `SchemaIndex.identity_pred_ids` + `SchemaIndex.exists_pred_ids` + `_classes` + `_field_pred_by_descriptor` 全 byte-identical 跟 reject 之前;`_identity_values_by_e_ref` shadow store 也不动
+- [ ] **Cache rebuild atomicity test**:`fg.schema.register(EC)` raise input validation error → SchemaIndex 未 build / 未 write;`fg.schema.register(EC)` 成功 → schema_ir + SchemaIndex 同 transaction 完成,不存在中间 schema_ir 已新但 SchemaIndex 旧的窗口
+- [ ] **Existing Claim invariance test**:`fg.schema.extend(EC, add new Field)` 后既有 Active Identity / `:exists` / Field Claims 全 byte-identical(extend additive Field 不影响旧 Claims)
 
 ### 7.7 Q-PR1 carve-out preservation(SF9)
 
@@ -626,13 +686,14 @@ Per ADR-DOCS §4.1.2 Dimension B:design-point sync IS load-bearing in this slice
 - [ ] `src/factgraph/core/derivation/accept.py:401` 0 diff confirmed
 - [ ] Slice 3a §10 Outcome 显式 record SF11-style classification inheritance
 
-### 7.11 Tests + examples migration(Step 10)
+### 7.11 Tests migration only(Step 11 — code-side only,**examples 留 Slice 4** per P1 amend 2026-05-30)
 
 - [ ] All Slice 1+2 cumulative test files(59 tests baseline + Slice 2 carry-forward usage of `fg.ref + fg.set` etc.)migrated to `fg.entities.* / fg.fields.* / fg.assertions.*` namespace
 - [ ] Pre-existing `fg.read.*` test files(4 files)+ `fg.write.*` test files(3 files)+ `fg.assertions.*` test files(1 file)+ `fg.schema.add` test files(3 files)+ `version(v)` test files(2 files)全 migrate
-- [ ] Examples(`examples/` directory)— small surface migration per PF-S7 boundary
+- [ ] **`examples/` directory** — **NOT migrated in Slice 3a**(per P1 amend 2026-05-30 — dirty baseline contains multiple `examples/*.ipynb`,user explicit constraint 不扩大到 examples);examples deep migration 留 Slice 4 wider polish,与 `01_concepts.en.md` / `03_rules_and_inferences.en.md` 等一起处理
 - [ ] **No** wider docs polish(`01_concepts.en.md` / `03_rules_and_inferences.en.md` / `07_walker_and_advanced.en.md` / public quickstarts)— 留 Slice 4(per SF7)
 - [ ] Cumulative Slice 1+2+3a test suite full green
+- [ ] **Examples dirty-notebook guard**:Slice 3a per-commit verification ritual 加 examples baseline check — `examples/*.ipynb` 跟 Slice 2 close baseline 0 diff(防 accidental migration during Slice 3a)
 
 ### 7.12 Load-bearing docs migration(Step 11 — SF7)
 
@@ -692,14 +753,21 @@ Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close
 - 2.6 NEW tests `tests/test_sdk_entities_create.py`:eager emit N Identity + 1 `:exists` atomic + shadow store populate + 重复 raise EntityAlreadyExistsError + Identity bundle 完整性 check
 - 2.7 — commit boundary
 
-### Step 3 — `fg.entities.delete` application layer planner + executor + SDK normalize
+### Step 3 — `fg.entities.delete` application layer planner + executor + SDK normalize(**path-bound guard-bypass** per P1 amend 2026-05-30)
 
-- 3.1 NEW `EntityDeleteCommand`(frozen dataclass)+ `EntityDeletePlan` + `EntityDeleteResult`
-- 3.2 NEW `plan_delete_command` + `apply_delete_plan`
-- 3.3 `_apply_op` retract branch 加 marker check:`if op.meta.get("__delete_via_entities_delete__"): skip check_retract_allowed`(per SF3 — delete-internal retracts 绕过 guard)
-- 3.4 SDK `fg.entities.delete(e_ref_or_cls, *, meta=None, **identity)` 归一化两 form + 显式 reject tuple(per PF-S2)+ 调 application path
-- 3.5 NEW tests `tests/test_sdk_entities_delete.py`:Form A e_ref / Form B EC+identity / tuple reject / atomic revoke all Active Claims / Slice 2 retract guard 不 block delete-internal
-- 3.6 — commit boundary
+- 3.1 NEW `EntityDeleteCommand`(frozen dataclass)+ `EntityDeletePlan` + `EntityDeleteResult` in `application/protocol/entity_write.py`
+- 3.2 NEW `plan_delete_command` + `apply_delete_plan` in `application/entity_write.py`
+- 3.3 NEW **private helper** `_apply_entity_delete_retract(op, *, store, index)` in `application/entity_write.py` — **application-internal only**;调 `store.ledger.retract_by_asrt(...)` 直接,**不**调 `check_retract_allowed`(per SF3 P1 amend — entity-delete 是 ADR-IC §4.1 唯一合法整批 retract Identity Claim 路径);**只由** `apply_delete_plan` 直接 call,**不**出现在 `_apply_op` retract branch 内
+- 3.4 generic `_apply_op` retract branch **不动** — 继续 enforce `check_retract_allowed`(per SF3 P1 amend:guard-bypass 通过 path-binding 实施,**不**通过 `meta` marker / PlannedOpDTO shape 改动 / generic dispatcher 内 conditional bypass)
+- 3.5 SDK `fg.entities.delete(e_ref_or_cls, *, meta=None, **identity)` 归一化两 form + 显式 reject tuple(per PF-S2)+ 调 application `plan_delete_command` → `apply_delete_plan`
+- 3.6 NEW tests `tests/test_sdk_entities_delete.py`:
+  - Form A e_ref / Form B EC+identity 行为等价
+  - Tuple selector raise `SDKStoreError` 含 PF-S2 wording
+  - Atomic revoke all Active Claims under e_ref(Identity + `:exists` + Field 全 revoke)
+  - **Critical structural test**:`PlannedOpDTO(op="retract", ...)` 直接调 generic `_apply_op` 时,即使 op 指向 Identity Claim asrt 也 **仍 raise** `EntityWriteError(INV_7C_IDENTITY_PROTECTED)` — 证明 generic path 不 bypass guard
+  - **Critical structural test**:`_apply_entity_delete_retract(...)` 不可从 `_apply_op` 调用(no metadata signal causes _apply_op to call the private helper)— 防 future drift
+  - `fg.entities.delete(...)` 整批 revoke Identity Claim 成功 — 证明 path-bound bypass 工作
+- 3.7 — commit boundary
 
 ### Step 4 — `fg.entities.exists`
 
@@ -757,22 +825,28 @@ Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close
 - 9.5 NEW tests `tests/test_sdk_where_version_hard_remove.py`:`version(v)` 调用 `AttributeError` / `where(source=)` 调用 `TypeError` / `where(_meta={"version": "v1"})` 行为等价 shipped `version("v1")` 替代路径
 - 9.6 — commit boundary
 
-### Step 10 — `fg.schema.add` 删 + register/extend/apply 三分 + ADR-IC §4.3.6 enforce
+### Step 10 — `fg.schema.add` 删 + register/extend/apply 三分 + ADR-IC §4.3.6 enforce + zero-side-effect(per §5.10.1 implementation surface)
 
 - 10.1 **删除** `_SDKSchemaManager.add(*classes, **kwargs)`(`sdk/store.py:522`)
-- 10.2 NEW `_SDKSchemaManager.register(entity_cls)` + SchemaIndex cache union update hook
-- 10.3 NEW `_SDKSchemaManager.extend(entity_cls)` + ADR-IC §4.3.6 part 1 enforce(Identity↔Field swap reject / Identity field add reject / 删字段 reject / cardinality/type 改 reject)
-- 10.4 `extend` 加 part 2 enforce(`<EntityType>:exists` predicate immutability — 删/owner_type 改/arity 改 reject)
-- 10.5 NEW `_SDKSchemaManager.apply(entity_cls)` safe-diff convenience
+- 10.2 NEW `_SDKSchemaManager.register(entity_cls)` — 覆盖 §5.10.1 全 7 state surfaces(schema_ir + schema_digest + SchemaIndex + class registry + descriptor maps + workspace persistence + ledger meta anchor);**input validation in step 1 before any mutation**(zero-side-effect on reject)
+- 10.3 NEW `_SDKSchemaManager.extend(entity_cls)` + ADR-IC §4.3.6 part 1 enforce(Identity↔Field swap reject / Identity field add reject / 删字段 reject / cardinality/type 改 reject)— **5 reject points 全在 schema_ir mutation 之前** raise(per §5.10.1 zero-side-effect invariant)
+- 10.4 `extend` 加 part 2 enforce(`<EntityType>:exists` predicate immutability — 删/owner_type 改/arity 改 reject)— **3 reject points 同 part 1 全在 mutation 之前** raise
+- 10.5 NEW `_SDKSchemaManager.apply(entity_cls)` safe-diff convenience — route register OR extend;non-additive 不 fallback 直接 propagate
 - 10.6 NEW `SchemaConflictError` + `SchemaNotFoundError` + `SchemaNonAdditiveError` in `_sdk_errors.py`
-- 10.7 NEW tests `tests/test_sdk_schema_three_split.py`:6+ tests covering register / extend additive Field / extend reject Identity↔Field swap / extend reject Identity add / extend reject 删字段 / extend reject :exists touch / apply auto-route / SchemaIndex cache rebuild on register/extend
+- 10.7 NEW tests `tests/test_sdk_schema_three_split.py`(per §7.6 + §5.10.1):
+  - 3 happy path:register / extend additive / apply auto-route
+  - 5 part 1 reject tests:identity_to_field / field_to_identity / identity_added / 删字段 / cardinality_or_type 改
+  - 3 part 2 reject tests:exists_removed / exists_owner_changed / exists_arity_changed
+  - **8 zero-side-effect tests**:每条 reject 后 verify(schema_ir + schema_digest + SchemaIndex.identity_pred_ids + SchemaIndex.exists_pred_ids + `_classes` + `_field_pred_by_descriptor` + `_field_decl_by_descriptor` + `_identity_values_by_e_ref`)全 byte-identical
+  - 1 cache rebuild atomicity test:register 成功 → schema_ir + SchemaIndex 同 transaction
+  - 1 existing Claim invariance test:extend additive Field 后既有 Active Claims 全 byte-identical
 - 10.8 — commit boundary
 
-### Step 11 — Tests + examples migration grep + sed sweep
+### Step 11 — Tests migration grep + sed sweep(**examples 不动** per P1 amend 2026-05-30)
 
-**Code-side migration only**(docs 显式独立 Step 12 per SF8):
+**Code-side migration only — tests only;examples 留 Slice 4**(docs 显式独立 Step 12 per SF8):
 
-- 11.1 grep `fg\.read\.` / `fg\.write\.` / `fg\.set\|fg\.add\|fg\.retract\|fg\.edit\|fg\.get\|fg\.ref\|fg\.find\|fg\.match` / `fg\.schema\.add` / `\.version\(` / `where\(source=\|trace_id=\|version=` 全 callsites(per preflight §6 blast radius)
+- 11.1 grep `fg\.read\.` / `fg\.write\.` / `fg\.set\|fg\.add\|fg\.retract\|fg\.edit\|fg\.get\|fg\.ref\|fg\.find\|fg\.match` / `fg\.schema\.add` / `\.version\(` / `where\(source=\|trace_id=\|version=` 全 callsites in `tests/` only(per preflight §6 blast radius)
 - 11.2 Test files migrate:
   - `tests/test_schema_field_add_lifecycle.py` 5 occurrences `fg.read.get` + 3 occurrences `fg.write.set/add`
   - `tests/test_schema_mutation_lifecycle.py` 2 occurrences `fg.write.set`
@@ -781,8 +855,8 @@ Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close
   - `tests/test_schema_*.py` 3 occurrences `fg.schema.add`
   - Slice 2 emission tests `tests/test_emission_contract.py` + 其他 Slice 2 test files — 大量 `fg.ref + fg.set` 改 `fg.entities.ref + fg.fields.set`(或者用 `fg.entities.create` shortcut)
   - 4 个 `fg.read.*` test files + 3 个 `fg.write.*` test files + 1 个 `fg.assertions.*` test file + 2 个 `version(v)` test files + 3 个 where flat kwargs test files 全 migrate
-- 11.3 Examples migrate:`examples/` directory small surface(8 `fg.read.*` + 5 `fg.write.*` + 9 `fg.assertions.*` + 5 `.version(` + 5 `.find(` hits per preflight §6)
-- 11.4 Cumulative Slice 1+2+3a test suite full green
+- 11.3 **`examples/` directory NOT migrated**(per P1 amend 2026-05-30 — dirty baseline 已含 `examples/01_sdk_check_diagnose.ipynb` / `examples/02_overlay_why_not_frontier.ipynb` / `examples/archive/01_sdk_basics.ipynb` 跟 Slice 3a 无关 dirty 修改;user explicit constraint 不扩大 examples scope)。Examples deep migration carry-forward 到 Slice 4 wider polish。**Dirty-notebook guard**:Step 11 per-commit verification ritual 加 `examples/*.ipynb` 跟 Slice 2 close baseline 0 diff check
+- 11.4 Cumulative Slice 1+2+3a test suite full green(tests-only;examples 不在 acceptance scope)
 - 11.5 — commit boundary
 
 ### Step 12 — Load-bearing docs migration + final acceptance + §10 Outcome + Status implemented
@@ -822,7 +896,7 @@ Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close
 - `src/factgraph/sdk/docs/01_concepts.en.md` / `03_rules_and_inferences.en.md` / `07_walker_and_advanced.en.md` — namespace migration consistency
 - `docs/official/kernel/quickstart/*.md` public quickstart files
 - `docs/README.md`(若 Slice 4 加新 quickstart entry)
-- Examples deep polish(`examples/` directory broader migration)
+- **Examples deep migration `examples/` directory full sweep**(per P1 amend 2026-05-30 — Slice 3a 显式 NOT migrate examples;dirty baseline 已含多个 `examples/*.ipynb` 跟 Slice 3a 无关 dirty 修改;user explicit constraint;Slice 4 wider docs polish 一起处理)
 - Module-wide migration note placement consolidation
 
 ### 9.4 Excluded(per SF7 + SF9 — Q-PR1 carve-out)
