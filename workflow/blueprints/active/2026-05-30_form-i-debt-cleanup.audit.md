@@ -14,6 +14,7 @@
 | 2026-05-31 | scoped | Scope freeze accepted | Self-check complete: Stage 1 FI-R1-R5 plus FI-REC1-4 are represented; PF-R1/PF-REC1-4 amendments landed; SF1-SF10 and Non-goals N1-N10 are complete; Step 0-8 has commit-boundary deliverables; duplicate Root README acceptance was removed per reviewer Option A, leaving 25 acceptance checkboxes. |
 | 2026-05-31 | implementing-step-0 | Pre-implementation inventory complete | Re-ran tracked-HEAD Form I grep gates on implementation branch; counts match scoped preflight: 63 `tests/` files, 5 sibling package files, 5 tools/tutorial files, 9 example files split into dirty/archival handling, 3 current-doc candidates, and 13 workflow historical/audit files. No new Q-PR1, runtime descriptor, shadow-store, `:exists`, ledger, or adapter scope found. |
 | 2026-05-31 | implementing-step-1 | Live core test fixtures migrated | Migrated positive Form I fixtures across `tests/` to shipped descriptors (`Identity()`, `Field()`, and annotation-inferred multi fields). Residual deprecated Form I grep hits are confined to Step 3 semantic-rewrite targets; 62 changed test modules import successfully. |
+| 2026-05-31 | implementing-step-2 | Sibling package fixtures migrated | Migrated the five scoped sibling package files to shipped Form I descriptors and current import/namespace surfaces where needed; all four sibling Python modules import successfully, and selected non-legacy behavior tests pass. |
 
 ## Decision Notes
 
@@ -30,6 +31,7 @@
 | 2026-05-31 | Dirty/archive/historical carve-outs remain unchanged. | Dirty active notebooks are `examples/01_sdk_check_diagnose.ipynb` and `examples/02_overlay_why_not_frontier.ipynb`; archive example hits remain under `examples/archive/*`; 13 active workflow/audit/design hits are historical/audit/decision records for final-grep classification, not implementation edits. |
 | 2026-05-31 | Step 1 kept negative semantics deferred. | `tests/test_sdk_schema_primary_key_required.py` remains untouched for Step 3, while `tests/test_application_entity_view.py` and `tests/test_application_schema_runtime.py` only had import-blocking positive descriptors migrated; their `allow_identity_defaults=True` behavior remains deferred to the Step 3 semantic rewrite. |
 | 2026-05-31 | Step 1 included one live-test namespace collateral fix. | `tests/test_sdk_redesign_namespace_shape.py` had an import-time blocker from removed `_SDKReadManager` / `_SDKWriteManager` names after its Form I fixture migration; the test was minimally aligned to the current shipped `entities` / `fields` / `assertions` / `rules` / `inferences` namespaces without touching runtime. |
+| 2026-05-31 | Step 2 limited sibling cleanup to Form I/import viability. | `src/service/tests/test_problog_semantic_annotation_l4.py` still contains older candidate-envelope / `accept` behavior expectations that are not Form I debt; Step 2 verifies import viability and leaves broader semantic modernization out of this housekeeping slice. |
 
 ## Review Checklist
 

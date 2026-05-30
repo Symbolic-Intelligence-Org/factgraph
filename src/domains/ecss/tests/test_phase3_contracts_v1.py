@@ -103,14 +103,13 @@ from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.view.projector import project_view_facts
 from factgraph.sdk import (
     Branch,
-    Derivation,
     Entity,
     Field,
     Identity,
+    Inference,
     Not,
     Pred,
     Query,
-    ReadPolicy,
     Rule,
     RuleRef,
     SDKDSLError,
@@ -147,7 +146,7 @@ from service.runtime_v1 import (
     run_runtime_rule,
     write_runtime_fact,
 )
-from factgraph.tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
+from tests._test_helpers import User, _schema_ir, _seed_users_for_syntax_matrix
 
 
 class Phase3ContractsV1Tests(unittest.TestCase):
@@ -155,7 +154,7 @@ class Phase3ContractsV1Tests(unittest.TestCase):
         class Account(Entity):
             """Account record used by docs/LLM description."""
 
-            account_id: str = Identity(primary_key=True)
+            account_id: str = Identity()
 
         schema_ir = compile_schema_from_classes([Account])
         entity = schema_ir["entities"][0]
@@ -166,7 +165,7 @@ class Phase3ContractsV1Tests(unittest.TestCase):
             """
 class Account(Entity):
     \"\"\"Account record description from DSL.\"\"\"
-    account_id: str = Identity(primary_key=True)
+    account_id: str = Identity()
 """.strip()
         )
         self.assertEqual(parsed["entities"][0].get("description"), "Account record description from DSL.")
@@ -907,7 +906,7 @@ Derivation(
                 where=[Pred("user:tag", u, tag)],
                 expose=True,
             )
-            drv = Derivation(
+            drv = Inference(
                 id="drv.user_tag_copy",
                 version="1.0.0",
                 where=[
@@ -1010,7 +1009,7 @@ Derivation(
         _seed_users_for_syntax_matrix(sdk)
 
         with sdk_vars("u", "loc", "nm", "tg") as (u, loc, nm, tg):
-            drv = Derivation(
+            drv = Inference(
                 id="drv.multi_head",
                 version="1.0.0",
                 where=[
@@ -1036,7 +1035,7 @@ Derivation(
         _seed_users_for_syntax_matrix(sdk)
 
         with sdk_vars("u", "nm") as (u, nm):
-            drv = Derivation(
+            drv = Inference(
                 id="drv.temporal.reject",
                 version="1.0.0",
                 where=[("pred", "user:name", [u.token, nm.token])],

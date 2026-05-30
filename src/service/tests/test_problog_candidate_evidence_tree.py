@@ -63,9 +63,9 @@ c(alice):\t0.12
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="single")
+    user_id: str = Identity()
+    tag_seed: str = Field()
+    tag: str = Field()
 
 
 class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
@@ -151,7 +151,7 @@ class ProbLogCandidateEvidenceTreeTests(unittest.TestCase):
     @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_runtime_evaluate_returns_result_envelope_and_accept_is_removed(self, mock_run) -> None:
         session_id, sdk = self._open_session()
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         mock_run.return_value = "\n".join(
             [
                 " call query(X1,X2) {0.00000} []",

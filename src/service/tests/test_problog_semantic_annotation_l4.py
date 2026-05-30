@@ -19,16 +19,16 @@ from factgraph.sdk.store import SDKStore
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
+    tag_seed: str = Field()
+    tag: str = Field()
 
 
 class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
     def _make_sdk(self) -> SDKStore:
         sdk = SDKStore([User])
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         set_field(
             sdk.ledger,
             pred_id="user:name",
@@ -58,14 +58,14 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
     def _mock_output(self, sdk: SDKStore) -> str:
         # ProbLog answer(...) follows extract_where_variables(), which sorts
         # query vars lexicographically: $tag before $u for this rule.
-        return f'answer("vip","{sdk.ref(User, user_id="Alice")}"): 0.42'
+        return f'answer("vip","{sdk.entities.ref(User, user_id="Alice")}"): 0.42'
 
     @patch("factgraph.adapters.problog.engine_eval.run_problog")
     def test_evaluate_caches_pending_probability_annotation(self, mock_run) -> None:
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
+        candidate = sdk.eval.evaluate(self._make_derivation(), engine="problog")[0]
 
         self.assertEqual(candidate.confidence, 0.42)
         self.assertEqual(candidate.confidence_kind, "probability")
@@ -82,7 +82,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
+        candidate = sdk.eval.evaluate(self._make_derivation(), engine="problog")[0]
         accept_result = sdk.accept(candidate)
 
         written = persist_problog_annotations(
@@ -107,7 +107,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
+        candidate = sdk.eval.evaluate(self._make_derivation(), engine="problog")[0]
         accept_result = sdk.accept(candidate, dry_run=True)
 
         written = persist_problog_annotations(
@@ -127,7 +127,7 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.evaluate(self._make_derivation(), engine="problog")[0]
+        candidate = sdk.eval.evaluate(self._make_derivation(), engine="problog")[0]
         accept_result = sdk.accept(candidate)
         asrt_id = accept_result.written_assertions[0]["asrt_id"]
         persist_problog_annotations(

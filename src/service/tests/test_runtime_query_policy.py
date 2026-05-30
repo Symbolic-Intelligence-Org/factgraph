@@ -8,8 +8,8 @@ from factgraph.sdk import Entity, Field, Identity, SDKStore
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 def _open_session() -> str:

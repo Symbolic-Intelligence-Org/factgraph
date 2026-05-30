@@ -21,12 +21,12 @@ export OPENAI_API_KEY="..."
 ## 1. 最小示例
 
 ```python
-from kernel.sdk import Entity, Field, Identity
+from factgraph.sdk import Entity, Field, Identity
 from agent.extraction import extract_document
 
 class Module(Entity):
-    name: str = Identity(primary_key=True)
-    description: str = Field(cardinality="single")
+    name: str = Identity()
+    description: str = Field()
 
 with open("readme.md", "rb") as f:
     result = extract_document(
@@ -192,7 +192,7 @@ echo "MISTRAL=${#MISTRAL_API_KEY} OPENAI=${#OPENAI_API_KEY}"
 
 这些是当前 schema / prompt 设计的真实边界,调用方需要知道,但**不会在本轮修**:
 
-- **`title` 既是 Identity 又是 Field 时 LLM 会混淆**:Entity 子类用 `Identity(primary_key=True)` 标注 `title` 字段后,schema 会同时导出 `title` 为 identity 和为一个普通 predicate。英文里"Title III"(章节标题)会被 LLM 塞进 `.title` 条目,造成语义污染。DORA RTS PDF 实跑实测:27/109 facts 在 `.title` 上存在这种污染。**缓解**:避免用 `title` 作为 identity field 名;改用 `name` / `id` / `ref` 等不容易在 prose 里撞车的词。
+- **`title` 既是 Identity 又是 Field 时 LLM 会混淆**:Entity 子类用 `Identity()` 标注 `title` 字段后,schema 会同时导出 `title` 为 identity 和为一个普通 predicate。英文里"Title III"(章节标题)会被 LLM 塞进 `.title` 条目,造成语义污染。DORA RTS PDF 实跑实测:27/109 facts 在 `.title` 上存在这种污染。**缓解**:避免用 `title` 作为 identity field 名;改用 `name` / `id` / `ref` 等不容易在 prose 里撞车的词。
 - **`.exists` unary predicate 噪声较高**:schema compile 会为每个 entity 自动生成 unary `{entity_type}:exists`,LLM 会大量产出这种 fact(DORA 实测 26/109)。对下游有用度低,但**不是错**。如果要过滤:在读 `result.facts` 时 `if not spec.pred_id.endswith(":exists")`。
 - **staging 对规整 PDF 会切得过细**:DORA RTS PDF 22 页产生 801 个 segment,均值 158 字符。对 LLM 而言每段信息量过少;在脚本/notebook 层要按 `min_chars` 过滤后再送 extraction(参考 `examples/dora_pdf_extract.py`)。
 - **Mistral 免费 tier 有速率上限**:10+ 段的文档连续抽取可能触发 rate limit;表现为 `instructor_retry_exhausted`。短期规避:加 sleep、减段数、或切 OpenAI。
