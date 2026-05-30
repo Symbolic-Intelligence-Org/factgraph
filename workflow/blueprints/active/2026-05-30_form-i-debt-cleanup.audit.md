@@ -12,6 +12,7 @@
 | 2026-05-30 | draft | Blueprint created | Drafted from Stage 1 audit `fb744d95`; Stage 2 Q-decision skipped per reviewer verdict because no new design decision is required. Scope is Form I legacy callsite cleanup for live tests, sibling package tests/docs, current docs/tools/tutorials, with dirty/archive/historical carve-outs inherited from Slice 4/5. |
 | 2026-05-31 | preflight-amend | Step 4.3 preflight findings applied | Locked the four benchmark scripts plus `tutorials/evidence-pipeline.cn.md` in scope, added explicit sibling package and negative-test file lists, clarified root README Form I + namespace cleanup, and corrected the §7 acceptance total to 26 checkboxes. |
 | 2026-05-31 | scoped | Scope freeze accepted | Self-check complete: Stage 1 FI-R1-R5 plus FI-REC1-4 are represented; PF-R1/PF-REC1-4 amendments landed; SF1-SF10 and Non-goals N1-N10 are complete; Step 0-8 has commit-boundary deliverables; duplicate Root README acceptance was removed per reviewer Option A, leaving 25 acceptance checkboxes. |
+| 2026-05-31 | implementing-step-0 | Pre-implementation inventory complete | Re-ran tracked-HEAD Form I grep gates on implementation branch; counts match scoped preflight: 63 `tests/` files, 5 sibling package files, 5 tools/tutorial files, 9 example files split into dirty/archival handling, 3 current-doc candidates, and 13 workflow historical/audit files. No new Q-PR1, runtime descriptor, shadow-store, `:exists`, ledger, or adapter scope found. |
 
 ## Decision Notes
 
@@ -23,6 +24,9 @@
 | 2026-05-30 | Negative tests require semantic rewrite. | Stage 1 FI-R5 showed primary-key/default/cardinality tests can become meaningless if mechanically substituted. |
 | 2026-05-30 | Dirty notebooks remain protected. | Active dirty notebooks contain stale Form I but must not be overwritten without per-file user authorization. |
 | 2026-05-30 | Historical/archive references remain classified carve-outs. | Global zero grep across historical material would erase useful decision/audit context and violate Slice 4/5 precedent. |
+| 2026-05-31 | Step 0 inventory matches scoped preflight. | Exact implementation-branch inventory remains: 63 live `tests/` files; sibling files `src/service/tests/test_problog_candidate_evidence_tree.py`, `src/service/tests/test_problog_semantic_annotation_l4.py`, `src/service/tests/test_runtime_query_policy.py`, `src/domains/ecss/tests/test_phase3_contracts_v1.py`, `src/agent/extraction/docs/USAGE.md`; tools/tutorial files `tools/benchmarks/bench_scenario_a_audit_delivery_shape.py`, `tools/benchmarks/extraction/run_cross_provider_benchmark.py`, `tools/benchmarks/extraction/run_multi_model_entity_benchmark.py`, `tools/benchmarks/extraction/run_re_docred.py`, and `tutorials/evidence-pipeline.cn.md`. |
+| 2026-05-31 | Step 0 negative-test inventory is explicit. | Semantic rewrite targets remain `tests/test_sdk_schema_primary_key_required.py`, `tests/test_application_entity_view.py`, and `tests/test_application_schema_runtime.py`; eight `allow_identity_defaults=True` callsites are confined to the latter two files. |
+| 2026-05-31 | Dirty/archive/historical carve-outs remain unchanged. | Dirty active notebooks are `examples/01_sdk_check_diagnose.ipynb` and `examples/02_overlay_why_not_frontier.ipynb`; archive example hits remain under `examples/archive/*`; 13 active workflow/audit/design hits are historical/audit/decision records for final-grep classification, not implementation edits. |
 
 ## Review Checklist
 
