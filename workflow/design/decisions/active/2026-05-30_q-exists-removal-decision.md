@@ -1,8 +1,8 @@
 # Q-EXISTS Decision: Step 2+ `:exists` removal scope + legacy handling + Q-PR1 boundary
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-30
-- Last Updated: 2026-05-30
+- Last Updated: 2026-05-30(adopted after reviewer Stage 2 pass + amend)
 - Authority: design constraint;locks the next Step 2+ `:exists` cleanup slice scope before blueprint drafting.
 - Inputs:
   - `workflow/audit/active/2026-05-30_exists-removal-vs-shipped.md` (`bd3ab5c3`) §4 answers, §5 five-bucket triage, §6 OQ list.
@@ -313,3 +313,4 @@ At implementation close, current docs must state:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-30 | proposed | Decision drafted | Drafted from Stage 1 audit `bd3ab5c3`; incorporates reviewer P2-1 user-vs-derived split and P2-2 legacy ledger data handling as §§4.5/4.8. |
+| 2026-05-30 | adopted | Decision adopted | User authorized Option 1 (adopt with amend) after reviewer Stage 2 review; P2 (taxonomy §4.10) + P3-1 (§4.6 option lock) + P3-2 (§4.5 guard naming) + P3-3 (§4.4 wording) amends landed; binding constraint for next blueprint. |
