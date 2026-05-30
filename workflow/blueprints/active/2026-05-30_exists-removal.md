@@ -1,8 +1,8 @@
 # Slice 5 — Narrow `:exists` Co-Emission Removal
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-30
-- Last Updated: 2026-05-30(scoped after Step 4.3 preflight + PF-R1/PF-REC1/PF-REC2 amendments)
+- Last Updated: 2026-05-30(implemented after Step 8 final gate + §10 Outcome)
 - Slice: Step 2+ cleanup after Identity-as-Claim / API namespace / docs polish
 - Class: S-M(runtime cleanup with tests/docs; Q-PR1 no-touch)
 - Related Modules:
@@ -197,41 +197,41 @@ Each implementation commit must verify:
 
 ### 7.1 Runtime Behavior
 
-- [ ] User-facing create/materialization paths no longer emit new `:exists` Claims.
-- [ ] `fg.entities.exists(...)` returns true for complete active Identity Claim bundle.
-- [ ] `fg.entities.exists(...)` returns false for incomplete/no active Identity Claim bundle.
-- [ ] Composite Identity entities require all Identity Claims to be active.
-- [ ] `fg.entities.delete(...)` succeeds and returns correct counts when no active `:exists` Claim exists.
-- [ ] Legacy `:exists` direct retract still raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
-- [ ] `exists_pred_ids` remains populated.
-- [ ] Rule DSL / Q-PR1 surfaces remain behaviorally unchanged.
+- [x] User-facing create/materialization paths no longer emit new `:exists` Claims.
+- [x] `fg.entities.exists(...)` returns true for complete active Identity Claim bundle.
+- [x] `fg.entities.exists(...)` returns false for incomplete/no active Identity Claim bundle.
+- [x] Composite Identity entities require all Identity Claims to be active.
+- [x] `fg.entities.delete(...)` succeeds and returns correct counts when no active `:exists` Claim exists.
+- [x] Legacy `:exists` direct retract still raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
+- [x] `exists_pred_ids` remains populated.
+- [x] Rule DSL / Q-PR1 surfaces remain behaviorally unchanged.
 
 ### 7.2 Tests
 
-- [ ] Complete test inventory identifies all user-path count expectations before implementation.
-- [ ] `tests/test_emission_contract.py` is migrated away from user-path `+1 :exists` expectations.
-- [ ] `tests/test_sdk_entities_create.py` is migrated to no user-path `:exists` emission.
-- [ ] `tests/test_sdk_entities_delete.py` is migrated to no active `:exists` requirement/count for user path.
-- [ ] `tests/test_sdk_entities_exists.py` covers complete-bundle semantics and composite identities.
-- [ ] SDK batch tests verify batch user paths no longer emit new `:exists` Claims; wire legacy compatibility tests pass.
-- [ ] Retract-guard tests preserve legacy `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` coverage through explicit legacy fixtures.
-- [ ] Schema cache tests preserve `exists_pred_ids` where required.
+- [x] Complete test inventory identifies all user-path count expectations before implementation.
+- [x] `tests/test_emission_contract.py` is migrated away from user-path `+1 :exists` expectations.
+- [x] `tests/test_sdk_entities_create.py` is migrated to no user-path `:exists` emission.
+- [x] `tests/test_sdk_entities_delete.py` is migrated to no active `:exists` requirement/count for user path.
+- [x] `tests/test_sdk_entities_exists.py` covers complete-bundle semantics and composite identities.
+- [x] SDK batch tests verify batch user paths no longer emit new `:exists` Claims; wire legacy compatibility tests pass.
+- [x] Retract-guard tests preserve legacy `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` coverage through explicit legacy fixtures.
+- [x] Schema cache tests preserve `exists_pred_ids` where required.
 
 ### 7.3 Docs / Decisions
 
-- [ ] ADR-IC §4.4 or equivalent active decision text is updated at close to reflect retired user-path co-emission.
-- [ ] Current SDK docs no longer describe user-path `:exists` co-emission as current truth.
-- [ ] Docs distinguish legacy Claims, derivation-path Claims, and rule DSL virtual references.
-- [ ] Shadow store and Q-PR1 carry-forward remain documented.
+- [x] ADR-IC §4.4 or equivalent active decision text is updated at close to reflect retired user-path co-emission.
+- [x] Current SDK docs no longer describe user-path `:exists` co-emission as current truth.
+- [x] Docs distinguish legacy Claims, derivation-path Claims, and rule DSL virtual references.
+- [x] Shadow store and Q-PR1 carry-forward remain documented.
 
 ### 7.4 Final Checks
 
-- [ ] `python -m compileall -q src` clean.
-- [ ] Target runtime tests green.
-- [ ] Q-PR1 sacred paths 0 diff.
-- [ ] Dirty baseline preserved.
-- [ ] Sacred branches preserved.
-- [ ] `git diff --check` clean.
+- [x] `python -m compileall -q src` clean.
+- [x] Target runtime tests green.
+- [x] Q-PR1 sacred paths 0 diff.
+- [x] Dirty baseline preserved.
+- [x] Sacred branches preserved.
+- [x] `git diff --check` clean.
 
 ## 8. Implementation Plan
 
@@ -314,40 +314,119 @@ Candidate close-time docs:
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation:
-
 ### 10.1 Final Landing Result
 
-TBD. Should summarize acceptance totals: runtime behavior, tests, docs/decisions, and final checks (per §7: 8 + 8 + 4 + 6 = 26 checkboxes).
+Slice 5 landed as a narrow runtime cleanup from scoped anchor `3d158dac` through implementation head `dab38a97`, then this implemented close commit.
+
+| Step | Commit | Result |
+|---|---|---|
+| Step 0 | `2e8c5cd7` | Pre-implementation inventory recorded runtime/test surfaces and batch `RecordExistsOp` double-duty caveat. |
+| Step 1 | `bc161151` | Added application-layer complete Identity-bundle visibility helper and helper tests. |
+| Step 2 | `7fdb5b09` | Rewired `fg.entities.exists(...)` from `:exists` scan to complete Identity Claim bundle visibility. |
+| Step 3 | `6061f908` | Stopped user-facing `:exists` co-emission in application materialization and SDK batch user paths while preserving wire/protocol compatibility. |
+| Step 4 | `c6ad146a` | Aligned delete semantics/counts to Identity + Field, with legacy `:exists` path-bound delete coverage. |
+| Step 5 | `41600d3c` | Formalized explicit legacy `:exists` retract-guard fixtures across SDK / entity_write / ingest surfaces. |
+| Step 6 | `656eb011` | Ran regression sweep and fixed one remaining assertion-namespace legacy-fixture assumption. |
+| Step 7 | `dab38a97` | Updated current SDK docs, ADR-IC, Q-EXISTS decision record, and audit log. |
+| Step 8 | this close commit | Final gate passed; status flips to `implemented`; §10 Outcome filled. |
+
+Implementation delta from scoped anchor before this close commit: 22 files, +610 / -312. Acceptance status: §7.1 runtime 8/8, §7.2 tests 8/8, §7.3 docs/decisions 4/4, §7.4 final checks 6/6.
 
 ### 10.2 Deviations And Amendments
 
-TBD.
+- Step 4.3 preflight found `src/factgraph/sdk/batch.py` as a missing user-facing emission surface. The blueprint was amended before scope freeze; implementation preserved `WireRecordExistsOp`, `_validate_wire_record_exists_binding`, and `PlannedOpDTO(op="record_exists")` compatibility per N11.
+- Step 3 discovered and handled `RecordExistsOp` double-duty in batch: user-path `:exists` emission stopped, while batch new-entity Identity-bundle creation continued through a non-wire `create_if_missing` signal.
+- Step 3 also performed a small in-scope internal namespace cleanup in `sdk/batch.py` (`sdk.set/add/retract` to `sdk.fields.*` / `sdk.assertions.retract`) while editing the same in-scope file.
+- Step 6 regression sweep found one remaining user-path emission assumption in `tests/test_sdk_assertions_namespace.py`; it was converted to an explicit legacy `:exists` fixture.
+- Step 6 also detected unrelated Form I legacy debt in `tests/test_application_rule_disable_runtime_native.py` (`Identity(primary_key=True)`). It was intentionally left out of scope per SF1/Q-EXISTS narrow-slice lock.
 
 ### 10.3 Scope Freeze Verification
 
-TBD.
+| SF | Close verification |
+|---|---|
+| SF1 | Q-EXISTS §4.1-§4.10 represented in implementation and docs close. |
+| SF2 | Q-PR1 sacred paths remain 0 diff; `core/derivation/accept.py` untouched. |
+| SF3 | Shadow store remains present; `_identity_values_by_e_ref` compatibility preserved. |
+| SF4 | Rule DSL / protocol / where-planner `Entity:exists` syntax not deleted; 26 rule/query unittest cases passed. |
+| SF5 | Legacy `:exists` Claims are preserved/protected; no migration, bulk revoke, or rewrite. |
+| SF6 | `fg.entities.exists(...)` uses complete Identity Claim bundle semantics. |
+| SF7 | `exists_pred_ids` remains populated for legacy guard/schema compatibility. |
+| SF8 | `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` name unchanged. |
+| SF9 | No ledger schema or SQLite migration performed. |
+| SF10 | Dirty baseline, sacred branches, and Q-PR1 carve-out preserved. |
 
 ### 10.4 Runtime Behavior Verification
 
-TBD.
+Final target regression sweep passed 167 direct test invocations across the Step 0 inventory target files plus the Step 1 helper tests. Rule/query `Entity:exists` virtual-syntax smoke passed 26 unittest cases.
+
+Runtime behavior verified:
+
+- user-facing `fg.entities.create`, lazy field materialization, and SDK batch user paths no longer emit new `:exists` Claims;
+- `fg.entities.exists(...)` returns from complete active Identity Claim bundle visibility and ignores `:exists`-only legacy rows for user-facing truth;
+- composite Identity entities require every Identity Claim to be active;
+- `fg.entities.delete(...)` succeeds without active `:exists` and still path-bound revokes legacy `:exists` when present;
+- direct legacy `:exists` retract remains guarded by `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`;
+- `exists_pred_ids` remains populated and independent from `identity_pred_ids`;
+- rule virtual syntax and Q-PR1 surfaces remain behaviorally out of scope.
 
 ### 10.5 Test Migration Result
 
-TBD.
+Migrated/verified target tests:
+
+- `tests/test_application_entity_visibility.py`
+- `tests/test_application_entity_write.py`
+- `tests/test_emission_contract.py`
+- `tests/test_sdk_entities_create.py`
+- `tests/test_sdk_entities_delete.py`
+- `tests/test_sdk_entities_exists.py`
+- `tests/test_sdk_batch_application_delegate.py`
+- `tests/test_sdk_batch_primary_identity.py`
+- `tests/test_application_retract_guard.py`
+- `tests/test_application_entity_write_retract_guard.py`
+- `tests/test_application_ingest_retract_guard.py`
+- `tests/test_sdk_retract_guard_integration.py`
+- `tests/test_application_schema_runtime_cache.py`
+- `tests/test_sdk_schema_three_split.py`
+- `tests/test_sdk_assertions_namespace.py`
+
+`pytest` remains unsuitable in this local environment due the known capture/readline segfault path, so Step 6/8 used direct Python and `unittest` smoke runners.
 
 ### 10.6 Docs Landed
 
-TBD.
+Step 7 updated current docs/decisions:
+
+- `src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md`
+- `src/factgraph/sdk/docs/04_api_surface.en.md`
+- `workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md`
+- `workflow/design/decisions/active/2026-05-30_q-exists-removal-decision.md`
+- `workflow/blueprints/active/2026-05-30_exists-removal.audit.md`
+
+`docs/official/kernel/quickstart/read-write.md` had no `:exists` hits after Slice 4. `docs/official/kernel/quickstart/schema.md` only references generated `<EntityType>:exists` in schema-mutation rejection context, so it did not need Slice 5 edits.
 
 ### 10.7 Q-PR1 / Sacred / Dirty Preservation
 
-TBD.
+Verified at close:
+
+- Q-PR1 sacred paths diff from `4cc577dc..HEAD`: 0 lines.
+- Local `master`: `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved: 4 modified files, 1 deleted file, 2 untracked paths; no dirty baseline files staged or committed by Slice 5.
+- No push, PR creation, or master merge performed.
 
 ### 10.8 Carry-Forward Dependencies
 
-TBD.
+- Q-PR1 derivation accept `:exists` emission remains untouched and needs explicit future authorization if changed.
+- Rule DSL `Entity:exists` remains virtual/internal syntax; lowering it through Identity Claims or active field evidence is a future rule/query slice.
+- Shadow-store removal remains a separate cleanup; Slice 5 intentionally preserves `_identity_values_by_e_ref`.
+- Legacy `:exists` data migration policy remains future work; this slice preserves/protects existing rows.
+- Form I legacy debt in `tests/test_application_rule_disable_runtime_native.py` remains an unrelated cleanup candidate.
+- Wire/protocol `record_exists` compatibility remains until a later decision supersedes N11.
 
 ### 10.9 Archive Cadence
 
-TBD.
+After reviewer implemented-anchor pass:
+
+1. Move `workflow/blueprints/active/2026-05-30_exists-removal.md` to `workflow/blueprints/archive/`.
+2. Move `workflow/blueprints/active/2026-05-30_exists-removal.audit.md` to `workflow/blueprints/archive/`.
+3. Update `workflow/blueprints/archive/INVENTORY.md` with Slice 5 summary.
+4. Add an `archived` event row in the audit log.
+5. Commit archive cadence separately and keep push gated on explicit user authorization.

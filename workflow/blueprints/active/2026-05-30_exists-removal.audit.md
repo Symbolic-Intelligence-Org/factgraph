@@ -3,7 +3,7 @@
 - Blueprint: [2026-05-30_exists-removal.md](./2026-05-30_exists-removal.md)
 - Branch: `v0.2.0-blueprint-exists-removal-2026-05-30`
 - Fork point: `870e1f1f` (Q-EXISTS adopted decision head)
-- Status: scoped audit log
+- Status: implemented audit log
 
 ## Event Log
 
@@ -21,6 +21,7 @@
 | 2026-05-30 | implementing-step-5 | Legacy guard fixtures formalized | Updated SDK, ingest, and entity_write retract-guard integration tests to inject legacy `:exists` Claims explicitly after user-path co-emission removal; schema-cache and pure retract-guard tests continue to verify `exists_pred_ids` population and `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` classification. |
 | 2026-05-30 | implementing-step-6 | Runtime regression sweep | Target migration/regression sweep passed 167 direct test invocations; rule/query `Entity:exists` virtual-syntax smoke passed 26 unittest cases. Sweep found one remaining user-path-emission assumption in `test_sdk_assertions_namespace.py`, fixed by converting that assertion-retract guard case to an explicit legacy `:exists` fixture. |
 | 2026-05-30 | implementing-step-7 | Current docs and ADRs updated | Updated ADR-IC current status, Q-EXISTS implementation record, and current SDK docs to state that user-facing `:exists` co-emission is retired while legacy Claims, rule virtual syntax, Q-PR1 derivation markers, wire compatibility, and shadow store remain carry-forward/protected surfaces. |
+| 2026-05-30 | implemented | Final gate and outcome complete | Final target regression sweep passed 167 direct invocations plus 26 rule/query unittest cases; compileall and diff-check clean; Q-PR1/sacred/dirty locks preserved; blueprint status flipped to `implemented` and §10 Outcome filled. |
 
 ## Decision Notes
 
@@ -39,9 +40,9 @@
 
 Reviewer should verify before scope flip:
 
-- [ ] Q-EXISTS §4.1-§4.10 are represented in Scope Freeze.
-- [ ] Q-PR1 sacred paths remain no-touch.
-- [ ] Shadow store removal is not accidentally included.
-- [ ] Rule DSL `Entity:exists` virtual syntax is not accidentally included for deletion.
-- [ ] Legacy `:exists` Claims are preserved/protected and no destructive migration is planned.
-- [ ] Implementation steps are commit-boundary sized and include a Stage 4 test inventory before runtime edits.
+- [x] Q-EXISTS §4.1-§4.10 are represented in Scope Freeze.
+- [x] Q-PR1 sacred paths remain no-touch.
+- [x] Shadow store removal is not accidentally included.
+- [x] Rule DSL `Entity:exists` virtual syntax is not accidentally included for deletion.
+- [x] Legacy `:exists` Claims are preserved/protected and no destructive migration is planned.
+- [x] Implementation steps are commit-boundary sized and include a Stage 4 test inventory before runtime edits.
