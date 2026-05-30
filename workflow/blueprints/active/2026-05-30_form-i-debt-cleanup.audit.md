@@ -16,6 +16,7 @@
 | 2026-05-31 | implementing-step-1 | Live core test fixtures migrated | Migrated positive Form I fixtures across `tests/` to shipped descriptors (`Identity()`, `Field()`, and annotation-inferred multi fields). Residual deprecated Form I grep hits are confined to Step 3 semantic-rewrite targets; 62 changed test modules import successfully. |
 | 2026-05-31 | implementing-step-2 | Sibling package fixtures migrated | Migrated the five scoped sibling package files to shipped Form I descriptors and current import/namespace surfaces where needed; all four sibling Python modules import successfully, and selected non-legacy behavior tests pass. |
 | 2026-05-31 | implementing-step-3 | Negative test semantics rewritten | Rewrote the three semantic targets: `test_sdk_schema_primary_key_required.py` now asserts Form I acceptance plus explicit legacy-kwarg rejection, while `test_application_entity_view.py` and `test_application_schema_runtime.py` use explicit complete identity bundles instead of deleted identity-default behavior. |
+| 2026-05-31 | implementing-step-5 | Dirty notebook decision point | Defaulted to untouched per SF6: active dirty notebooks `examples/01_sdk_check_diagnose.ipynb` and `examples/02_overlay_why_not_frontier.ipynb` were not edited; archive dirty notebook `examples/archive/01_sdk_basics.ipynb` remains out of scope per SF7. |
 
 ## Decision Notes
 
