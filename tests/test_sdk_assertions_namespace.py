@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
@@ -48,6 +49,11 @@ def _active_claims(fg: FactGraph, *, pred_id: str, e_ref: str):
         for claim in fg._store.ledger.find_claims(pred_id=pred_id, e_ref=e_ref)
         if not fg._store.ledger.has_active_revocation(claim.asrt_id)
     ]
+
+
+def _write_legacy_exists_claim(fg: FactGraph, e_ref: str) -> str:
+    """Write a legacy `<EntityType>:exists` Claim fixture explicitly."""
+    return set_field(fg._store.ledger, PRED_EXISTS, e_ref, [])
 
 
 # ---------- namespace shape + read shortcuts ----------
@@ -157,14 +163,14 @@ def test_assertions_retract_identity_claim_preserves_inv7c_guard():
 
 def test_assertions_retract_exists_claim_preserves_transitional_guard():
     fg, e_ref, _name_asrt, _tag_asrt = _make_materialized_fg()
-    exists_claim = _active_claims(fg, pred_id=PRED_EXISTS, e_ref=e_ref)[0]
+    exists_asrt_id = _write_legacy_exists_claim(fg, e_ref)
 
     with pytest.raises(SDKStoreError) as exc_info:
-        fg.assertions.retract(exists_claim.asrt_id)
+        fg.assertions.retract(exists_asrt_id)
 
     assert exc_info.value.code == "EXISTENCE_CLAIM_TRANSITIONAL_GUARD"
     assert "INV-7c" not in str(exc_info.value)
-    assert not fg._store.ledger.has_active_revocation(exists_claim.asrt_id)
+    assert not fg._store.ledger.has_active_revocation(exists_asrt_id)
 
 
 def test_assertions_retract_rejects_entity_navigation_key():
