@@ -100,6 +100,7 @@ from .error_codes import (
     INVALID_ROW_FORMAT,
     QUERY_INVALID_ROW_FORMAT,
 )
+from .facade import _ASSERTION_FILTER_MISSING
 from .errors import (
     CardinalityError,
     EntityAlreadyExistsError,
@@ -435,8 +436,8 @@ class _SDKViewsManager:
         return {name: spec for name, spec in self._views.items()}
 
 
-class _SDKAssertionsManager:
-    """Read-only namespace manager for graph-scoped assertion records."""
+class AssertionsManager:
+    """Layer 3 namespace manager for assertion records and asrt_id retraction."""
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
@@ -469,11 +470,13 @@ class _SDKAssertionsManager:
                 records.append(record)
         return AssertionRecordSet(records)
 
+    @property
     def active(self) -> Any:
         from .facade import AssertionRecordSet
 
-        return AssertionRecordSet(record for record in self.all() if record.is_active)
+        return AssertionRecordSet(record for record in self.all if record.is_active)
 
+    @property
     def all(self) -> Any:
         from .facade import AssertionRecordSet, _assertion_record_from_claim, _claim_sort_key
 
@@ -504,6 +507,124 @@ class _SDKAssertionsManager:
             active_records=tuple(record for record in history_records if record.is_active),
             history_records=history_records,
         )
+
+    def where(
+        self,
+        *,
+        field: Any = _ASSERTION_FILTER_MISSING,
+        e_ref: Any = _ASSERTION_FILTER_MISSING,
+        value: Any = _ASSERTION_FILTER_MISSING,
+        value_tag: Any = _ASSERTION_FILTER_MISSING,
+        _meta: Any = _ASSERTION_FILTER_MISSING,
+    ) -> Any:
+        """Filter active assertion records by canonical Layer 3 criteria.
+
+        Step 6 intentionally scopes manager-level `where` to active assertions.
+        Historical filtering remains available by chaining from `all()` until
+        Step 8/9 unify AssertionView and hard-remove flat meta kwargs.
+        """
+        from .facade import AssertionRecordSet, _assertion_record_from_claim, _claim_sort_key
+
+        pred_id_filter: str | None = None
+        if field is not _ASSERTION_FILTER_MISSING:
+            if not isinstance(field, Field):
+                raise SDKStoreError(
+                    "fg.assertions.where(field=...) expects sdk.Field descriptor; "
+                    "pass assertion ids to by_id/by_ids or use fg.entities/fg.fields "
+                    "for other navigation keys. See ADR-API §4.1.1."
+                )
+            schema_pred = self._sdk._schema_pred_for_field(field)
+            pred_id = schema_pred.get("pred_id")
+            if not isinstance(pred_id, str) or not pred_id:
+                raise SDKStoreError("schema predicate missing pred_id for field")
+            pred_id_filter = pred_id
+
+        if e_ref is not _ASSERTION_FILTER_MISSING and not isinstance(e_ref, str):
+            raise SDKStoreError("fg.assertions.where(e_ref=...) expects e_ref string")
+        if value_tag is not _ASSERTION_FILTER_MISSING and not isinstance(value_tag, str):
+            raise SDKStoreError("fg.assertions.where(value_tag=...) expects string tag")
+        if _meta is not _ASSERTION_FILTER_MISSING and not isinstance(_meta, dict):
+            raise SDKStoreError("fg.assertions.where(_meta=...) expects dict when provided")
+
+        records = []
+        claims = self._sdk.ledger.find_claims(
+            pred_id=pred_id_filter,
+            e_ref=e_ref if e_ref is not _ASSERTION_FILTER_MISSING else None,
+        )
+        for claim in sorted(claims, key=lambda claim: _claim_sort_key(self._sdk, claim)):
+            if self._sdk.ledger.has_active_revocation(claim.asrt_id):
+                continue
+            schema_pred = _schema_pred_by_pred_id(self._sdk, claim.pred_id)
+            record = _assertion_record_from_claim(self._sdk, claim, schema_pred=schema_pred)
+            if value is not _ASSERTION_FILTER_MISSING and record.value != value:
+                continue
+            if value_tag is not _ASSERTION_FILTER_MISSING:
+                claim_tag = claim.rest_terms[-1][0] if claim.rest_terms else None
+                if claim_tag != value_tag:
+                    continue
+            if _meta is not _ASSERTION_FILTER_MISSING:
+                if any(record.meta.raw.get(key) != expected for key, expected in _meta.items()):
+                    continue
+            records.append(record)
+        return AssertionRecordSet(records)
+
+    def retract(
+        self,
+        asrt_id: Any,
+        *,
+        meta: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> str | None:
+        """Retract one assertion by id with Slice 2 guard semantics preserved."""
+        self._sdk._reject_attached_write("fg.assertions.retract")
+        if kwargs:
+            raise SDKStoreError(
+                "fg.assertions.retract requires asrt_id (Layer 3); pass "
+                "EntityClass + identity to fg.entities.delete(...). "
+                "See ADR-API §4.1.1."
+            )
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise SDKStoreError(
+                "fg.assertions.retract(asrt_id) expects non-empty string "
+                "(Layer 3); use fg.entities.delete(...) for entity-level "
+                "delete. See ADR-API §4.1.1."
+            )
+
+        try:
+            check_retract_allowed(
+                asrt_id,
+                ledger=self._sdk._store.ledger,
+                schema_index=self._sdk._application_schema_index,
+            )
+        except RetractGuardError as guard_exc:
+            if guard_exc.classification == "identity":
+                raise SDKStoreError(
+                    f"Identity Claim {guard_exc.asrt_id} "
+                    f"(pred_id={guard_exc.pred_id}) is immutable per INV-7c. "
+                    "Identity Claims can only be: "
+                    "(a) created via fg.entities.create(EntityCls, **identity_kwargs); "
+                    "(b) removed as part of fg.entities.delete(e_ref) "
+                    "(atomic full-entity revoke). "
+                    "To modify the identity bundle of an entity, delete the old entity "
+                    "and create a new one with the new identity values "
+                    "(Identity is immutable per INV-7a). See ADR-IC §4.1.",
+                    code=guard_exc.code,
+                ) from guard_exc
+            raise SDKStoreError(
+                f"<EntityType>:exists Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted independently. "
+                "The :exists Claim is co-emitted atomically with Identity Claims "
+                "and can only be removed via fg.entities.delete(e_ref) "
+                "(atomic full-entity revoke). "
+                "This guard is transitional — Step 2+ may remove :exists emission "
+                "entirely (see ADR-IC §4.4).",
+                code=guard_exc.code,
+            ) from guard_exc
+        try:
+            return retract_by_asrt(self._sdk._store.ledger, asrt_id, meta)
+        except WriteProtocolError as exc:
+            code = "ASSERTION_NOT_FOUND" if "unknown revoked_asrt_id" in str(exc) else None
+            raise SDKStoreError(str(exc), code=code) from exc
 
 
 class _SDKSchemaManager:
@@ -608,7 +729,7 @@ class _SDKWriteManager:
         `fg.write.add(...)`. Retraction is append-only: the original assertion
         remains in the ledger and the retraction changes read-time visibility.
         """
-        return self._sdk.retract(*args, **kwargs)
+        return self._sdk.assertions.retract(*args, **kwargs)
 
     def edit(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.edit(*args, **kwargs)
@@ -624,7 +745,7 @@ class _SDKFieldsManager:
     Slice 3a Step 5 ships the namespace while preserving shipped write/retract
     internals. ``retract`` / ``delete`` delegate to the current flat
     ``SDKStore.retract`` path, so Slice 2 INV-7c / `:exists` guards remain the
-    source of truth until Step 6 exposes ``fg.assertions.retract``.
+    source of truth through ``fg.assertions.retract``.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -750,7 +871,7 @@ class _SDKFieldsManager:
 
         Step 5 delegates the chosen assertion id to shipped ``SDKStore.retract``.
         That preserves Slice 2 INV-7c / `:exists` guard behavior without
-        exposing ``fg.assertions.retract`` before Step 6.
+        duplicating the Layer 3 retract guard in Layer 2.
         """
         schema_pred = self._schema_pred_for_descriptor(field, method="retract", allow_identity=True)
         expected_terms = self._sdk._rest_terms_for_field(schema_pred, value=value)
@@ -769,9 +890,9 @@ class _SDKFieldsManager:
             raise SDKStoreError(
                 f"ambiguous active assertions matching field={field_label}, "
                 f"e_ref={e_ref!r}, value={value!r};pass asrt_id to "
-                "fg.assertions.retract(asrt_id) once Step 6 lands"
+                "fg.assertions.retract(asrt_id)"
             )
-        return self._sdk.retract(matches[0].asrt_id, meta=meta)
+        return self._sdk.assertions.retract(matches[0].asrt_id, meta=meta)
 
     def delete(
         self,
@@ -790,7 +911,7 @@ class _SDKFieldsManager:
         schema_pred = self._schema_pred_for_descriptor(field, method="delete", allow_identity=True)
         count = 0
         for claim in self._active_claims_for_field(schema_pred, e_ref):
-            self._sdk.retract(claim.asrt_id, meta=meta)
+            self._sdk.assertions.retract(claim.asrt_id, meta=meta)
             count += 1
         return count
 
@@ -1534,7 +1655,7 @@ class SDKStore:
         # carry-forward; compatibility preservation in Slice 2).
         self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
         self._views_manager = _SDKViewsManager(self)
-        self._assertions_manager = _SDKAssertionsManager(self)
+        self._assertions_manager = AssertionsManager(self)
         self._schema_manager = _SDKSchemaManager(self)
         self._read_manager = _SDKReadManager(self)
         self._write_manager = _SDKWriteManager(self)
@@ -1791,7 +1912,7 @@ class SDKStore:
         return self._views_manager
 
     @property
-    def assertions(self) -> _SDKAssertionsManager:
+    def assertions(self) -> AssertionsManager:
         return self._assertions_manager
 
     @property
@@ -2756,46 +2877,7 @@ class SDKStore:
             retracted).
         """
         self._reject_attached_write("fg.retract")
-        # Slice 2 Step 3: SDK shell fail-fast layer of three-layer retract guard.
-        # check_retract_allowed raises RetractGuardError for INV-7c-protected
-        # Identity Claims or :exists Claims (existence-claim transitional guard).
-        # Field Claims and unknown asrt pass-through to retract_by_asrt unchanged.
-        try:
-            check_retract_allowed(
-                asrt_id,
-                ledger=self._store.ledger,
-                schema_index=self._application_schema_index,
-            )
-        except RetractGuardError as guard_exc:
-            if guard_exc.classification == "identity":
-                raise SDKStoreError(
-                    f"Identity Claim {guard_exc.asrt_id} "
-                    f"(pred_id={guard_exc.pred_id}) is immutable per INV-7c. "
-                    "Identity Claims can only be: "
-                    "(a) created via fg.entities.create(EntityCls, **identity_kwargs); "
-                    "(b) removed as part of fg.entities.delete(e_ref) "
-                    "(atomic full-entity revoke). "
-                    "To modify the identity bundle of an entity, delete the old entity "
-                    "and create a new one with the new identity values "
-                    "(Identity is immutable per INV-7a). See ADR-IC §4.1.",
-                    code=guard_exc.code,
-                ) from guard_exc
-            # classification == "exists"
-            raise SDKStoreError(
-                f"<EntityType>:exists Claim {guard_exc.asrt_id} "
-                f"(pred_id={guard_exc.pred_id}) cannot be retracted independently. "
-                "The :exists Claim is co-emitted atomically with Identity Claims "
-                "and can only be removed via fg.entities.delete(e_ref) "
-                "(atomic full-entity revoke). "
-                "This guard is transitional — Step 2+ may remove :exists emission "
-                "entirely (see ADR-IC §4.4).",
-                code=guard_exc.code,
-            ) from guard_exc
-        try:
-            return retract_by_asrt(self._store.ledger, asrt_id, meta)
-        except WriteProtocolError as exc:
-            code = "ASSERTION_NOT_FOUND" if "unknown revoked_asrt_id" in str(exc) else None
-            raise SDKStoreError(str(exc), code=code) from exc
+        return self._assertions_manager.retract(asrt_id, meta=meta)
 
     def run(
         self,
