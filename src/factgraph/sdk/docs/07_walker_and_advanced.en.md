@@ -171,7 +171,7 @@ from factgraph.application.protocol import (
 
 # Fact-overlay: replace one fact's value with another
 fr_lang_asrt_id = (
-    fg.read.get(Country, code="FR")
+    fg.entities.get(Country, code="FR")
     .field("official_language")
     .active
     .where(value="French")

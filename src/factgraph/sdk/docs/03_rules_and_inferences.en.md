@@ -10,7 +10,7 @@ All flat methods are also reachable through namespaces:
 
 | Public entrypoint | Namespace |
 |---|---|
-| `fg.read.match(EntityCls, rule_or_expr, **ports)` | Return snapshots selected by a `Rule` or `RuleExpr` |
+| `fg.entities.match(EntityCls, rule_or_expr, **ports)` | Return snapshots selected by a `Rule` or `RuleExpr` |
 | `fg.eval.evaluate(...)` | Evaluate an `Inference`, `Rule`, or `RuleExpr` and return `EvaluateResult` |
 | `fg.eval.explain(expr, head=closed_head, ...)` | Replay a closed-head explanation and return `Explanation` |
 | `fg.eval.inspect_semantics(...)` | Inspect semantics configuration without running an engine |
@@ -379,12 +379,12 @@ known alternative engines.
 
 ### Rule and RuleExpr snapshot matching
 
-`fg.read.match(EntityCls, template, **port_constraints)` is the read-side
+`fg.entities.match(EntityCls, template, **port_constraints)` is the read-side
 runtime for application rules. It returns distinct snapshots of `EntityCls`
 selected by a `Rule` or `RuleExpr`.
 
 ```python
-users = fg.read.match(User, user_region, region="US")
+users = fg.entities.match(User, user_region, region="US")
 ```
 
 The runtime resolves the projected entity from exactly one entity-ref port of
@@ -393,13 +393,13 @@ or an `EntitySnapshot`; value constraints use ordinary Python values. A value
 constraint may also reference a field descriptor on the projected entity class:
 
 ```python
-same_region = fg.read.match(User, user_region, region=User.region)
+same_region = fg.entities.match(User, user_region, region=User.region)
 ```
 
 OR `RuleExpr` works when each branch exposes the same constrained ports:
 
 ```python
-users = fg.read.match(User, tagged_users | regional_users, marker="US")
+users = fg.entities.match(User, tagged_users | regional_users, marker="US")
 ```
 
 The runtime distributes constraints into each OR branch, unions branch results,
@@ -412,7 +412,7 @@ Runtime limits:
 - Ports constrained by kwargs must be declared in every OR branch.
 - Result rows are snapshots, not witness assertions or `EvaluateResult` rows.
 - Method-level `view=` is rejected; attach a durable Database view and call
-  `fg.read.match(...)` on the attached runtime.
+  `fg.entities.match(...)` on the attached runtime.
 
 ## 4. RuleRef and Dependency Registration
 
@@ -578,8 +578,8 @@ failure_class enum values, and runnable passed / failed examples), see
 
 Implemented:
 - Read-side temporal filtering via `snapshot.assertions.<field>.at(t)` and
-  `.version(v)` active shortcuts, plus `AssertionRecordSet` filters such as
-  `snapshot.assertions.field(...).history.at(t)`.
+  canonical `_meta={"version": v}` metadata filters, plus `AssertionRecordSet`
+  filters such as `snapshot.assertions.field(...).all.at(t)`.
 - `T1` temporal checks can be expressed via explicit temporal predicates plus the existing comparison syntax:
   - deadline: temporal anchor predicate + `<=` / `<`
   - window membership: temporal anchor predicate + `>=` / `<=`

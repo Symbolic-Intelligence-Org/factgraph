@@ -18,6 +18,7 @@
 | 2026-05-30 | implementing-step-3 | Step 3 mechanical quickstart migration | Migrated `namespace-map.md`, `evidence.md`, `database.md`, `persistence.md`, `rules-and-inferences.md`, and `semantics.md`; stale API/Form-I grep is clean and 4 complete examples pass. |
 | 2026-05-30 | implementing-step-4 | Active examples migration(non-dirty) | Migrated `05_sdk_assertion_views.ipynb`, `03_proofframe_rule_overlays.ipynb`, `04_round_persistence_diff.ipynb`, and `round_story_full_demo.py` to Form I + `factgraph.*` imports + canonical assertion/entity APIs; dirty notebooks intentionally untouched. |
 | 2026-05-30 | implementing-step-5 | Dirty notebook decision point | Defaulted to untouched per SF3: active dirty notebooks `01_sdk_check_diagnose.ipynb` and `02_overlay_why_not_frontier.ipynb` were not edited; archive dirty notebook remains out of scope per SF4. |
+| 2026-05-30 | implementing-step-6 | Non-load-bearing SDK docs migration | Updated `sdk/docs/README.md`, `01_concepts.en.md`, `03_rules_and_inferences.en.md`, and `07_walker_and_advanced.en.md` to canonical namespaces, AssertionView `.all` / `_meta`, and current schema/entity wording. |
 
 ## Decision Notes
 

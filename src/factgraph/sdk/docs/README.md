@@ -16,10 +16,10 @@ class User(Entity):
 
 fg = FactGraph.create(schema_classes=[User])
 
-ref_alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.name, ref_alice, "Alice")
+ref_alice = fg.entities.create(User, user_id="u-1")
+fg.fields.set(User.name, ref_alice, "Alice")
 
-snap = fg.read.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")
 print(snap.name)            # → Alice
 ```
 
@@ -55,11 +55,12 @@ advanced users.
 
 - `factgraph.sdk.__all__` is the product surface. Removing or renaming an
   exported name requires a major version bump.
-- The `FactGraph` namespaced form (`fg.read.get`, `fg.write.set`,
-  `fg.eval.evaluate`, etc.) is the recommended shape for new code.
-- Flat read/write aliases such as `fg.get` remain foundational. Legacy evidence
-  shells such as direct `fg.check` / `fg.why_not` are not part of the T5 public
-  evidence path.
+- The `FactGraph` namespaced form (`fg.entities.get`, `fg.fields.set`,
+  `fg.assertions.where`, `fg.eval.evaluate`, etc.) is the recommended shape for
+  new code.
+- Historical flat read/write aliases such as `fg.get` / `fg.set` were removed
+  in the namespace migration. Legacy evidence shells such as direct `fg.check`
+  / `fg.why_not` are not part of the T5 public evidence path.
 - Behaviors in the docs are labeled **stable contract** (safe to assert
   against), **current behavior** (subject to evolution), or **current
   boundary** (a deliberate non-feature). See

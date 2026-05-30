@@ -64,10 +64,10 @@ provenance (source, trace_id, ingested_at, etc.).
 
 ```python
 snap.field("name").active             # AssertionRecordSet of current records
-snap.field("name").history            # AssertionRecordSet of active + revoked records
-snap.field("name").history.at("2026-05-01T00:00:00Z")  # valid at business time t
-snap.field("name").history.version("v1")               # version metadata filter
-snap.field("name").history.by_id(asrt_id)              # exact assertion-id filter
+snap.field("name").all                # AssertionRecordSet of active + revoked records
+snap.field("name").all.at("2026-05-01T00:00:00Z")      # valid at business time t
+snap.field("name").all.where(_meta={"version": "v1"})  # version metadata filter
+snap.field("name").all.by_id(asrt_id)                  # exact assertion-id filter
 [r.value for r in snap.field("name").active]           # the underlying values
 ```
 
@@ -125,7 +125,7 @@ There is no built-in `default` view. The name `"default"` is not
 reserved: if users create `fg.views.create("default", asrt_ids=[...])`,
 it is just another frozen assertion-id selection and has no special read
 behavior. Frozen views are read back through `fg.assertions.by_ids(...)`;
-they are not accepted as `fg.read.find(...)` or
+they are not accepted as `fg.entities.where(...)` or
 `fg.eval.evaluate(...)` inputs.
 
 ---
@@ -174,7 +174,7 @@ The split exists so that:
 - **Test boundaries** are clear: SDK tests verify the facade; application
   tests verify the runtime authority.
 
-For most users this split is invisible — `fg.write.add(...)` Just
+For most users this split is invisible — `fg.fields.add(...)` Just
 Works. The split matters when you're building tooling on top of
 factgraph.
 
