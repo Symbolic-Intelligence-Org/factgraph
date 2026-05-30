@@ -1,8 +1,8 @@
 # Slice 3a — API namespace refactor(Q10-Q14 cluster:三层 namespace rename + AssertionView 统一 + `version(v)` / flat kwargs 删 + `fg.schema.add` 三分)
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-05-30
-- Last Updated: 2026-05-30(scoped after P1×2 + P2 + P3 amend pass)
+- Last Updated: 2026-05-30(implementing — Step 1-3 landed, retroactive Status transition per V3 fix)
 - Branch: `v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30`;fork point Slice 2 close `c927d41f`(blueprint draft lineage at audit log HEAD,not pinned in header to avoid post-amend drift)
 - Related Modules:
   - `src/factgraph/sdk/store.py`(4 namespace manager classes + 8 flat top-level methods)
