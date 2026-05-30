@@ -137,25 +137,21 @@ class AssertionRecordSet(tuple):
         self,
         *,
         value: Any = _ASSERTION_FILTER_MISSING,
-        source: Any = _ASSERTION_FILTER_MISSING,
-        trace_id: Any = _ASSERTION_FILTER_MISSING,
-        version: Any = _ASSERTION_FILTER_MISSING,
-        meta: dict[str, Any] | None = None,
+        value_tag: Any = _ASSERTION_FILTER_MISSING,
+        _meta: Any = _ASSERTION_FILTER_MISSING,
     ) -> "AssertionRecordSet":
-        if meta is not None and not isinstance(meta, dict):
-            raise SDKStoreError("where(meta=...) expects a dict when provided")
+        if value_tag is not _ASSERTION_FILTER_MISSING and not isinstance(value_tag, str):
+            raise SDKStoreError("AssertionRecordSet.where(value_tag=...) expects string tag")
+        if _meta is not _ASSERTION_FILTER_MISSING and not isinstance(_meta, dict):
+            raise SDKStoreError("AssertionRecordSet.where(_meta=...) expects dict when provided")
 
         def matches(record: AssertionRecord) -> bool:
             if value is not _ASSERTION_FILTER_MISSING and record.value != value:
                 return False
-            if source is not _ASSERTION_FILTER_MISSING and record.meta.source != source:
+            if value_tag is not _ASSERTION_FILTER_MISSING and record.value_tag != value_tag:
                 return False
-            if trace_id is not _ASSERTION_FILTER_MISSING and record.meta.trace_id != trace_id:
-                return False
-            if version is not _ASSERTION_FILTER_MISSING and record.meta.raw.get("version") != version:
-                return False
-            if meta is not None:
-                for key, expected in meta.items():
+            if _meta is not _ASSERTION_FILTER_MISSING:
+                for key, expected in _meta.items():
                     if key not in record.meta.raw or record.meta.raw[key] != expected:
                         return False
             return True
@@ -172,17 +168,6 @@ class AssertionRecordSet(tuple):
                 at_time=at_time,
                 field_name="AssertionRecordSet",
             )
-        )
-
-    def version(self, v: str | int) -> "AssertionRecordSet":
-        expected_version = _validate_version_selector(
-            v,
-            context="AssertionRecordSet.version(v)",
-        )
-        return type(self)(
-            record
-            for record in self
-            if _read_assertion_version(record, field_name="AssertionRecordSet") == expected_version
         )
 
     def by_id(self, asrt_id: str) -> "AssertionRecordSet":
@@ -336,18 +321,6 @@ class AssertionView:
                 at_time=at_time,
                 field_name=field_name,
             )
-        )
-
-    def version(self, v: str | int) -> AssertionRecordSet:
-        field_name = object.__getattribute__(self, "_field_name") or "AssertionView"
-        expected_version = _validate_version_selector(
-            v,
-            context=f"{field_name}.version(v)",
-        )
-        return AssertionRecordSet(
-            record
-            for record in self.active
-            if _read_assertion_version(record, field_name=field_name) == expected_version
         )
 
     def __getattr__(self, name: str) -> "AssertionView":
@@ -1144,12 +1117,6 @@ def _is_valid_iso8601_text(value: str) -> bool:
     return True
 
 
-def _validate_version_selector(value: Any, *, context: str) -> str | int:
-    if isinstance(value, bool) or not isinstance(value, (str, int)):
-        raise SDKStoreError(f"{context} expects string|int version selector")
-    return value
-
-
 def _is_assertion_visible_at(
     record: AssertionRecord,
     *,
@@ -1187,18 +1154,6 @@ def _read_assertion_time_meta(
             f"{field_name}.at(t) encountered invalid meta.{key} for assertion {record.asrt_id!r}; "
             f"got {value!r}"
         ) from exc
-
-
-def _read_assertion_version(record: AssertionRecord, *, field_name: str) -> str | int | None:
-    value = record.meta.raw.get("version")
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, (str, int)):
-        raise SDKStoreError(
-            f"{field_name}.version(v) encountered invalid meta.version for assertion {record.asrt_id!r}; "
-            "expected string|int"
-        )
-    return value
 
 
 def _snapshot_matches_filters(
