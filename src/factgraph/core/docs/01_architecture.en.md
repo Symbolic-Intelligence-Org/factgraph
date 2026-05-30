@@ -151,7 +151,7 @@ Raw uncertainty notes:
   `meta={"raw_kind": "probabilistic"|"possibilistic", "bound": [lower, upper]}`
 - `raw_kind` and `bound` must be provided together
 - `bound` is normalized to a two-element float list and mirrored in
-  `meta_rows` for exact `AssertionRecordSet.where(meta=...)` selection
+  `meta_rows` for exact `AssertionRecordSet.where(_meta=...)` selection
 - user-authored `probability`, `bound_lower`, and `bound_upper` meta are
   rejected; those names are reserved for adapter projection / output lanes
 - for ProbLog fact export, the current adapter read priority is:

@@ -265,9 +265,10 @@ no runtime, SDK, service, or authoring path reads or migrates them.
 
 ### 7.2 Registry publishing retired
 
-Publishing to a filesystem registry is retired. Use `fg.schema.add(...)` /
-`fg.save()` for schema evolution, in-memory `Rule(...)` / `Inference(...)`
-values for execution, and the migration CLI for legacy workspaces.
+Publishing to a filesystem registry is retired. Use `fg.schema.register(...)`,
+`fg.schema.extend(...)`, or `fg.schema.apply(...)` with `fg.save()` for schema
+evolution, in-memory `Rule(...)` / `Inference(...)` values for execution, and
+the migration CLI for legacy workspaces.
 
 ### 7.3 Consumption by SDK / service
 

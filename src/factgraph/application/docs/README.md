@@ -32,8 +32,9 @@ compatibility.
     module.
 - `src/factgraph/application/schema_mutation_runtime.py`
   - Additive entity and non-identity field extension validation and transition
-    planning used by `fg.schema.add(...)`; application-first runtime module,
-    documented in the application overview.
+    planning used by `fg.schema.register(...)`, `fg.schema.extend(...)`, and
+    `fg.schema.apply(...)`; application-first runtime module, documented in the
+    application overview.
 
 ## Conventions
 

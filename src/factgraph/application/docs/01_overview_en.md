@@ -83,7 +83,8 @@ It is not responsible for:
     Database schema-object location. A20(E) / Q6-A removed the old registry-copy
     helper entirely.
 - `schema_mutation_runtime.py`
-  - additive schema-extension authority for `fg.schema.add(...)`: validates
+  - additive schema-extension authority for `fg.schema.register(...)`,
+    `fg.schema.extend(...)`, and `fg.schema.apply(...)`: validates
     that existing entities and predicates are preserved, plans the next schema
     IR from additional `Entity` classes or same-entity replacement classes that
     add non-identity fields, and returns `SchemaAddResult` /
@@ -194,7 +195,7 @@ The current walker entry points are:
 
 Current SDK runtime delegation:
 
-> **post-L SDK ergonomics redesign cross-ref (§5.5 Tier 2 SDK-presentation note):** the flat `sdk.<method>(...)` enumeration below describes the SDK shell delegation contract — application runtime is the canonical authority. From the post-L redesign these flat methods are also reachable through the `FactGraph` taxonomy (`fg.read.get(...)` / `fg.what_if.check(...)` / `fg.what_if.fact_overlay.check(...)` / `fg.what_if.rule.disable(...)` / `fg.audit.diff_proof_frames(...)` etc.); the underlying delegation chain to application runtime is unchanged. Flat `SDKStore.<method>` form is retained below as the foundational contract anchor. Detailed design is captured in the post-L SDK ergonomics redesign blueprint (internal design record; §5.2 / §5.4).
+> **post-L SDK ergonomics redesign cross-ref (§5.5 Tier 2 SDK-presentation note):** the flat `sdk.<method>(...)` enumeration below describes the SDK shell delegation contract — application runtime is the canonical authority. From the post-L redesign these methods are also reachable through the `FactGraph` taxonomy (`fg.entities.get(...)` / `fg.eval.evaluate(...)` / `fg.audit.diff_proof_frames(...)` etc.); the underlying delegation chain to application runtime is unchanged. Flat `SDKStore.<method>` form is retained below as the foundational contract anchor for this implementation overview. Detailed design is captured in the post-L SDK ergonomics redesign blueprint (internal design record; §5.2 / §5.4).
 
 - `sdk.get(...)` / `sdk.find(...)` use application read/hydration DTOs.
 - `SDKBatchTx.preview()` and `BatchPlan.apply()` delegate to application write planning/apply when staged operations can be represented by application protocol.
