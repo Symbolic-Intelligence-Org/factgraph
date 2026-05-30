@@ -3,7 +3,7 @@
 - Blueprint: [2026-05-30_form-i-debt-cleanup.md](./2026-05-30_form-i-debt-cleanup.md)
 - Branch: `v0.2.0-blueprint-form-i-debt-2026-05-30`
 - Fork point: `fb744d95` (Slice 6 Stage 1 audit head)
-- Status: implemented audit log
+- Status: archived audit log
 
 ## Event Log
 
@@ -19,6 +19,7 @@
 | 2026-05-31 | implementing-step-5 | Dirty notebook decision point | Defaulted to untouched per SF6: active dirty notebooks `examples/01_sdk_check_diagnose.ipynb` and `examples/02_overlay_why_not_frontier.ipynb` were not edited; archive dirty notebook `examples/archive/01_sdk_basics.ipynb` remains out of scope per SF7. |
 | 2026-05-31 | implementing-step-6 | Regression sweep and final grep gate complete | Imported 67 migrated Python modules, ran 49 representative unittest cases, and completed compileall/diff-check gates; final Form I grep hits are classified as Step 3 negative-test inputs, Step 4 deferred README/tools/tutorials, SF6 dirty notebooks, SF7 archive/historical references, or intentional migration-hint/docs examples. No unclassified live runtime/test hit found. |
 | 2026-05-31 | implemented | Outcome complete | Filled §10 Outcome, flipped blueprint/audit status to implemented, and recorded Step 4 docs/tools deferral as carry-forward rather than false-green acceptance; implementation remains unpushed pending user authorization. |
+| 2026-05-31 | archived | Blueprint and audit moved to archive | Moved Slice 6 blueprint + audit from `active/` to `archive/` and updated archive `INVENTORY.md`; branch remains unpushed pending user authorization. |
 
 ## Decision Notes
 
