@@ -36,6 +36,9 @@ from .entity_view import (
     hydrate_entities,
     hydrate_entity,
 )
+from .entity_visibility import (
+    is_entity_identity_bundle_active,
+)
 from .entity_write import (
     EntityWriteError,
     apply_create_plan,
@@ -180,6 +183,7 @@ __all__ = [
     "frozen_collection",
     "hydrate_entities",
     "hydrate_entity",
+    "is_entity_identity_bundle_active",
     "load_workspace",
     "materialize_identity",
     "parse_atom_key",

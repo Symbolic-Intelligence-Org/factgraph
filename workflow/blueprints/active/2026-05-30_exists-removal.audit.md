@@ -14,6 +14,7 @@
 | 2026-05-30 | preflight-amend | Step 4.3 preflight findings applied | Added `src/factgraph/sdk/batch.py` to scope as a user-facing `record_exists` emission path; preserved wire/protocol `record_exists` compatibility; added Step 0 visibility-helper inventory and SDK batch tests per PF-R1/PF-REC1/PF-REC2. |
 | 2026-05-30 | scoped | Scope freeze accepted | Self-check complete: Q-EXISTS §4.1-§4.10 represented, SF1-SF10 locked, Non-goals N1-N11 complete, Step 0-8 implementation plan has commit-boundary deliverables, and §7 acceptance count updated to 26 checkboxes. |
 | 2026-05-30 | implementing-step-0 | Pre-implementation inventory complete | Grep inventory found no new Q-PR1, rule-DSL deletion, shadow-store removal, or ledger-migration requirement; implementation can proceed under scoped constraints. |
+| 2026-05-30 | implementing-step-1 | Identity-bundle visibility helper added | Added application-layer `is_entity_identity_bundle_active(...)` helper plus helper-level tests for complete bundle, no bundle, partial bundle, mismatched value, revoked Identity Claim, and ignored `:exists`-only visibility; no caller rewiring yet. |
 
 ## Decision Notes
 
