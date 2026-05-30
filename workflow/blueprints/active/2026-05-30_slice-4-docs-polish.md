@@ -34,7 +34,7 @@ Slice 1, Slice 2, and Slice 3a changed the user-facing SDK surface substantially
 
 Slice 3a Step 12 updated the load-bearing docs, but the wider docs corpus still contains stale public examples:
 
-- public quickstarts still show `fg.read.*` / `fg.write.*`, `Identity(primary_key=True)`, `FieldAssertions`, `.version(v)`, flat assertion `where(source=...)`, and `fg.schema.add(...)`;
+- public quickstarts still show `fg.read.*` / `fg.write.*`, `Identity(primary_key=...)`, `FieldAssertions`, `.version(v)`, flat assertion `where(source=...)`, and `fg.schema.add(...)`;
 - active examples, especially `examples/05_sdk_assertion_views.ipynb`, still demonstrate removed APIs;
 - non-load-bearing SDK docs and module docs have isolated legacy references;
 - active design-points contain both intentional historical text and current-status text that now need careful separation.
@@ -191,7 +191,7 @@ For in-scope current docs/examples, final grep should not show current-API uses 
 
 - `fg.read.*`
 - `fg.write.*`
-- `Identity(primary_key=True)`
+- `Identity(...primary_key...)`
 - `FieldAssertions`
 - `AssertionNamespace`
 - `.version(v)`
@@ -249,7 +249,7 @@ Each implementation commit must verify branch, sacred master, Q-PR1 0 diff, dirt
 ### 7.1 Public Quickstarts
 
 - [ ] Heavy rewrite quickstarts use canonical namespace APIs.
-- [ ] Mechanical migration quickstarts have no current stale `fg.read.*` / `fg.write.*` / `fg.schema.add` / `Identity(primary_key=True)` references.
+- [ ] Mechanical migration quickstarts have no current stale `fg.read.*` / `fg.write.*` / `fg.schema.add` / `Identity(...primary_key...)` references.
 - [ ] Assertion quickstart documents `AssertionView`, canonical `_meta`, no `.version(v)`, and no `FieldAssertions`.
 - [ ] Schema quickstart documents `register/extend/apply` and Form I Identity semantics.
 
@@ -286,6 +286,8 @@ Each implementation commit must verify branch, sacred master, Q-PR1 0 diff, dirt
 **Step 0 — Pre-implementation grep gate**
 
 - Re-run Stage 1 audit grep commands from the implementation branch.
+- Also run Step 4.2 added-target checks for `src/factgraph/sdk/docs/README.md` and `workflow/design/design-points/active/explanation-completion-roadmap.zh.md`.
+- Use the broad Form I removed-argument pattern `Identity\([^)]*primary_key`, not only the historical `Identity(primary_key=True)` spelling.
 - Verify no new in-scope drift since audit `1012c6e4`.
 - Confirm dirty notebook baseline before any docs edits.
 
@@ -342,6 +344,7 @@ Each implementation commit must verify branch, sacred master, Q-PR1 0 diff, dirt
 **Step 9 — Final grep gate + close**
 
 - Run final grep gate.
+- Use `Identity\([^)]*primary_key` for Form I legacy detection.
 - Fill §10 Outcome / Deviations.
 - Flip status `implementing` -> `implemented`.
 - Prepare archive cadence after reviewer pass.
