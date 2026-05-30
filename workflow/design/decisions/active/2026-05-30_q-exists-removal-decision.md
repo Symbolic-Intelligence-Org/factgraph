@@ -10,7 +10,7 @@
   - ADR-IC `workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md` §4.4 Step 2+ forward pointer.
   - ADR-API `workflow/design/decisions/active/2026-05-29_q-api-namespace-decision.md` §4.1/§4.5 namespace and schema-extension locks.
 - Outputs / Downstream:
-  - Next blueprint candidate for a narrow `:exists` co-emission + guard-retirement slice.
+  - Next blueprint candidate for a narrow `:exists` co-emission + legacy guard-compat cleanup slice.
   - Carry-forward entries for rule-level virtual existence, shadow-store removal, and Q-PR1 derivation accept alignment.
 - Related:
   - Slice 2 Identity-as-Claim implementation and shipped-alignment audit.
@@ -84,7 +84,7 @@ Blueprint-eligible work:
 
 - Stop user-facing entity materialization paths from emitting new `<EntityType>:exists` Claims where those paths can be changed without Q-PR1 scope expansion.
 - Replace `fg.entities.exists(...)` with Identity-Claim-bundle visibility semantics.
-- Remove or narrow `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` only after legacy and Q-PR1 behavior are explicitly handled by §§4.5-4.8.
+- Keep `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` under its current name for legacy direct-retract protection, while narrowing new user-path behavior after §§4.5-4.8 are explicitly handled.
 - Update tests and current docs for the chosen narrow semantics.
 
 Not blueprint-eligible in the next narrow slice:
@@ -128,7 +128,7 @@ For legacy `:exists` Claims, see §4.5.
 
 Blueprint consequence:
 
-- Count assertions in `tests/test_sdk_entities_delete.py` and emission contract tests must be updated from "N Identity + 1 `:exists` + Field" to "N Identity + Field" for user-facing materialization paths.
+- Existing emission-contract test files (e.g. `tests/test_sdk_entities_delete.py`, `tests/test_emission_contract.py`) currently encode "N Identity + 1 `:exists` + Field" count semantics for user-facing materialization paths. The next blueprint must identify the complete set during Stage 4 audit and update them to "N Identity + Field" semantics.
 - Delete implementation must avoid failing if no active `:exists` Claim exists.
 
 ### 4.5 OQ5 / P2-2 — Legacy `:exists` Claims in existing ledger data
@@ -144,22 +144,21 @@ Rules:
 
 Consequence:
 
-- `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` may not disappear entirely if legacy direct-retract protection remains necessary. The narrow slice may either keep a legacy guard path or rename/reword it as legacy protection.
+- `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` is **kept under its current name** by the narrow slice. Legacy direct-retract protection still uses this code; renaming to e.g. `EXISTENCE_CLAIM_LEGACY_GUARD` is deferred to a future legacy-data migration slice to keep blueprint diff narrow and avoid touching every raise/test site.
 - No destructive ledger migration is in scope.
 
 ### 4.6 OQ6 — `exists_pred_ids` lifecycle
 
-**Decision**: Do not blindly delete `exists_pred_ids` in the next slice.
-
-Allowed next-slice options:
-
-1. Keep `exists_pred_ids` only for legacy guard classification and schema compatibility.
-2. Empty it only if the implementation proves no legacy/schema guard path needs it.
-3. Replace it with an explicitly named legacy/virtual predicate registry if that improves clarity.
+**Decision**: Lock **option (1)** for the narrow slice: keep `exists_pred_ids` only for legacy guard classification and schema compatibility, since taxonomy sources (a) and (b) in §4.10 both depend on it.
 
 Required invariant:
 
 - `identity_pred_ids` remains independent and continues to be the INV-7c source of truth.
+
+Future carry-forward options (not in narrow slice):
+
+2. Empty `exists_pred_ids` once no legacy Claim or derivation-path emission needs it (requires Q-PR1 scope expansion + legacy data migration policy).
+3. Replace with a named legacy/virtual predicate registry if it improves clarity (requires a separate registry-design slice).
 
 ### 4.7 OQ7 — Shadow store removal
 
@@ -206,6 +205,18 @@ Minimum doc update at close:
 - Record rule-level `Entity:exists` as retained virtual syntax.
 - Record Q-PR1 derivation accept as carry-forward, not accidentally aligned.
 
+### 4.10 Post-narrow-slice `:exists` Claim Taxonomy
+
+After the narrow slice lands, three distinct sources of `:exists` Claims (or references) will coexist in the system. Blueprint design must treat them as three separate concerns:
+
+| Source | Origin | Handling |
+|---|---|---|
+| (a) Legacy user-path Claims | Emitted by Slice 2 / Slice 3a user-create paths before this slice | Read-only legacy data; preserved and protected per §4.5; not migrated. |
+| (b) Derivation-path Claims | Emitted by Q-PR1 sacred `core/derivation/accept.py` for derived entity materialization; not user-facing | Out-of-scope legacy/derived markers per §4.8; user-facing `fg.entities.exists` ignores them. |
+| (c) Rule DSL virtual references | `Entity:exists` syntax in rule bodies; does not emit ledger Claims | Retained as virtual rule syntax per §4.2; lowered/evaluated through Identity Claims or active field evidence in a future rule/query slice. |
+
+**Implication for `exists_pred_ids`**: the schema-index frozenset must remain populated because both (a) and (b) require schema-level identification for guard classification and predicate dispatch. See §4.6 option (1) above.
+
 ## 5. Rejected Alternatives
 
 ### Option A: Full repo-wide `:exists` deletion in one slice
@@ -251,7 +262,7 @@ This decision unblocks a narrow blueprint for:
 
 - User-facing `:exists` co-emission removal.
 - `fg.entities.exists(...)` Identity-bundle rewrite.
-- Guard behavior rewording/retirement for non-legacy paths.
+- Guard behavior narrowing for non-legacy paths while preserving the legacy guard code name.
 - Test migration away from "N Identity + one `:exists`" user-path expectations.
 
 ### 7.2 Required blueprint scope locks
@@ -290,7 +301,7 @@ At implementation close, current docs must state:
 ## 8. Acceptance Criteria
 
 - [ ] Decision is adopted before any `:exists` removal blueprint is scoped.
-- [ ] Blueprint cites this decision §4.1-§4.9.
+- [ ] Blueprint cites this decision §4.1-§4.10.
 - [ ] Blueprint explicitly records Q-PR1 no-touch unless user authorizes an exception.
 - [ ] Blueprint explicitly records legacy `:exists` handling.
 - [ ] Blueprint does not combine shadow-store removal unless this decision is superseded.
