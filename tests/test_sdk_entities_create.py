@@ -34,6 +34,37 @@ from factgraph._sdk_errors import EntityAlreadyExistsError
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
+# ---------- public SDK surface export check(P2 amend 2026-05-30)----------
+
+
+def test_entity_already_exists_error_exported_from_sdk_top_level():
+    """`EntityAlreadyExistsError` must be importable from `factgraph.sdk`
+    top-level alongside other public SDK errors(`SDKStoreError` /
+    `EntityNotFoundError` / `CardinalityError` etc.)。
+
+    `fg.entities.create` is a public API,so the typed duplicate-create
+    error must be on the same public export surface for user code to
+    catch it without reaching into `factgraph._sdk_errors` internal module。
+    """
+    from factgraph.sdk import (  # type: ignore[attr-defined]
+        EntityAlreadyExistsError as PublicEntityAlreadyExistsError,
+    )
+    from factgraph.sdk import SDKStoreError as PublicSDKStoreError
+
+    # Same class object across import paths(no shadowing duplication)
+    assert PublicEntityAlreadyExistsError is EntityAlreadyExistsError
+    # Subclass relationship preserved on the public re-export path
+    assert issubclass(PublicEntityAlreadyExistsError, PublicSDKStoreError)
+
+
+def test_entity_already_exists_error_listed_in_sdk_all():
+    """`__all__` of `factgraph.sdk` must list `EntityAlreadyExistsError`
+    so wildcard imports + IDE / type-checker tooling pick it up。"""
+    import factgraph.sdk as sdk_pkg
+
+    assert "EntityAlreadyExistsError" in sdk_pkg.__all__
+
+
 class CreateUser(Entity):
     user_id: str = Identity()
     tenant_id: str = Identity()

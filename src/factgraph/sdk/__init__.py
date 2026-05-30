@@ -8,6 +8,7 @@ from .compile import (
 from .errors import (
     CardinalityError,
     EditorClosedError,
+    EntityAlreadyExistsError,
     EntityNotFoundError,
     FrozenSnapshotError,
     SDKSchemaError,
@@ -66,6 +67,7 @@ __all__ = [
     "SDKSchemaError",
     "SDKStoreError",
     "SDKValueError",
+    "EntityAlreadyExistsError",
     "EntityNotFoundError",
     "FrozenSnapshotError",
     "CardinalityError",
