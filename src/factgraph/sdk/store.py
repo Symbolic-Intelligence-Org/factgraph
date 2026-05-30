@@ -868,6 +868,123 @@ class _SDKEntitiesManager:
             )
         raise SDKStoreError(err.message, code=err.code)
 
+    def delete(
+        self,
+        e_ref_or_cls: Any,
+        *,
+        meta: dict[str, Any] | None = None,
+        **identity: Any,
+    ) -> int:
+        """Whole-entity revoke per ADR-IC §4.1 强制点 3 + Slice 3a §5.4。
+
+        ``fg.entities.delete`` is the **唯一合法整批撤销 path** for Identity
+        Claims and ``<EntityType>:exists`` Claims(per ADR-IC §4.1 + §4.4)。
+        Field Claims under the e_ref are also retracted as part of the atomic
+        whole-entity revoke。
+
+        **PF-S2 discriminated signature**(per blueprint §6.1 SF2 lock):
+
+        - Form A:``fg.entities.delete(e_ref: str, *, meta=None)`` — pass a
+          managed e_ref string produced by ``sdk.ref(EC, **id)`` or
+          ``fg.entities.create(EC, **id)``。
+        - Form B:``fg.entities.delete(EntityCls, *, meta=None, **identity)`` —
+          pass the EntityClass + full identity_kwargs。
+
+        Tuple selectors are **explicitly forbidden**(per PF-S2 lock)。
+
+        Implementation:per SF3 P1 amend,the SDK shell is a thin normalizer
+        — it builds an ``EntityDeleteCommand`` and delegates to the application-
+        layer planner/executor。 The retract guard bypass for Identity /
+        ``:exists`` Claims is implemented as a **path-bound** structural
+        guarantee in the application layer(``_apply_entity_delete_retract``
+        private helper),NOT a metadata signal on ``PlannedOpDTO``。
+
+        Returns:
+            The number of Active Claims atomically retracted。
+
+        Raises:
+            ``SDKStoreError`` if the input shape does not match Form A or B,
+            if Form A's e_ref is not managed(``UNRESOLVABLE_E_REF``),or if
+            Form B's identity bundle is incomplete(``missing identity field``)。
+            ``EntityNotFoundError``(``ENTITY_NOT_FOUND``)if the target
+            entity is not visible in the active view。
+        """
+        # Form A vs Form B vs forbidden tuple — discriminate per PF-S2。
+        if isinstance(e_ref_or_cls, str):
+            # Form A: e_ref-based。 Reject extra identity kwargs(Form A 不
+            # accepts identity since e_ref already encodes the bundle)。
+            if identity:
+                raise SDKStoreError(
+                    "fg.entities.delete(e_ref: str) Form A does not accept "
+                    "identity kwargs; pass either an e_ref string OR an "
+                    "EntityClass + full identity bundle. See ADR-API §4.1.2."
+                )
+            e_ref = e_ref_or_cls
+            shadow_identity = self._sdk._identity_values_by_e_ref.get(e_ref)
+            if not isinstance(shadow_identity, dict) or not shadow_identity:
+                raise SDKStoreError(
+                    f"fg.entities.delete: e_ref is not managed by this SDKStore: "
+                    f"{e_ref!r};call sdk.ref(...) or fg.entities.create(...) "
+                    "first.",
+                    code="UNRESOLVABLE_E_REF",
+                )
+            entity_type = entity_type_from_ref(e_ref)
+            if not isinstance(entity_type, str) or not entity_type:
+                raise SDKStoreError(
+                    f"fg.entities.delete: e_ref is not a canonical idref_v1 "
+                    f"token: {e_ref!r}.",
+                    code="UNRESOLVABLE_E_REF",
+                )
+            normalized_entity_type = entity_type
+            normalized_identity = dict(shadow_identity)
+            normalized_e_ref = e_ref
+        elif isinstance(e_ref_or_cls, type) and issubclass(e_ref_or_cls, Entity):
+            # Form B: EntityClass + identity kwargs。
+            normalized_entity_type = e_ref_or_cls.__name__
+            # self._sdk.ref(...) validates identity bundle completeness + computes
+            # deterministic e_ref + populates shadow store(legacy compat)。
+            normalized_e_ref = self._sdk.ref(e_ref_or_cls, **identity)
+            normalized_identity = dict(identity)
+        else:
+            # Forbidden:tuple selector or any other shape per PF-S2 lock。
+            raise SDKStoreError(
+                "fg.entities.delete requires e_ref string OR EntityClass + full "
+                "identity bundle; see ADR-API §4.1.2. "
+                f"got first positional arg of type {type(e_ref_or_cls).__name__}。"
+            )
+
+        # Build application command + delegate to planner/executor(per SF3
+        # INV-6 — SDK is a thin shell,application layer is source of truth)。
+        from factgraph.application import apply_delete_plan, plan_delete_command
+        from factgraph.application.protocol import EntityDeleteCommand
+        from factgraph.application.protocol import EntitySelector as AppEntitySelector
+
+        command = EntityDeleteCommand(
+            target=AppEntitySelector(
+                entity_type=normalized_entity_type,
+                identity=normalized_identity,
+                encoded_ref=normalized_e_ref,
+            ),
+            command_meta=dict(meta) if meta else {},
+        )
+        plan = plan_delete_command(
+            command,
+            store=self._sdk._store,
+            index=self._sdk._application_schema_index,
+        )
+        if not plan.can_apply:
+            self._sdk._raise_from_application_error(plan.errors[0], op="delete")
+
+        result = apply_delete_plan(
+            plan,
+            store=self._sdk._store,
+            index=self._sdk._application_schema_index,
+        )
+        if result.errors:
+            self._sdk._raise_from_application_error(result.errors[0], op="delete")
+
+        return len(result.applied)
+
 
 class _SDKRulesManager:
     """Read-only namespace manager for rule structure inspection and persistence."""

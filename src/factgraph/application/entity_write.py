@@ -11,6 +11,9 @@ from .protocol import (
     EntityCreateCommand,
     EntityCreatePlan,
     EntityCreateResult,
+    EntityDeleteCommand,
+    EntityDeletePlan,
+    EntityDeleteResult,
     EntityRef,
     EntitySelector,
     EntityWriteCommand,
@@ -285,6 +288,190 @@ def apply_create_plan(
         applied=tuple(applied),
         warnings=plan.warnings,
     )
+
+
+# ---------- Slice 3a Step 3: fg.entities.delete whole-entity revoke ----------
+#
+# Per blueprint SF3 P1 amend(2026-05-30):the bypass of Slice 2's three-layer
+# retract guard for `fg.entities.delete` is implemented as a **path-bound**
+# structural guarantee,NOT a metadata signal on ``PlannedOpDTO``。
+#
+# - ``_apply_entity_delete_retract`` is application-internal only。
+# - It is called ONLY by ``apply_delete_plan``。
+# - It is intentionally NEVER referenced inside ``_apply_op`` retract branch。
+# - generic ``_apply_op`` retract branch always calls ``check_retract_allowed``
+#   — any application-level caller that builds a ``PlannedOpDTO(op="retract")``
+#   and routes through ``_apply_op`` still gets Slice 2 INV-7c protection。
+#
+# This means:any caller wishing to bypass the retract guard must explicitly
+# import the private helper symbol from this module — which is auditable via
+# grep + import-graph analysis(Step 3 tests include such a structural test
+# guarding the invariant against future drift)。
+#
+# See also:audit Decision Note #3(SF3 P1 amend rationale)。
+
+
+def plan_delete_command(
+    command: EntityDeleteCommand,
+    *,
+    store: Store,
+    index: SchemaIndex,
+) -> EntityDeletePlan:
+    """Plan a whole-entity revoke per ADR-IC §4.1 强制点 3。
+
+    Resolves the target,verifies the entity is visible,enumerates all Active
+    Claims under the e_ref(Identity + ``:exists`` + Field Claims),and builds
+    a tuple of retract ``PlannedOpDTO``s。 The execution path is the path-bound
+    private helper(``_apply_entity_delete_retract`` via ``apply_delete_plan``)
+    — see module-level docstring for the SF3 P1 amend rationale。
+    """
+    resolved_target: EntityRef | None = None
+    try:
+        resolved_target = resolve_selector(command.target, index=index)
+        view_facts = project_view_facts(store.ledger, store.schema_ir)
+
+        if not _entity_visible(resolved_target, view_facts=view_facts, index=index):
+            raise EntityWriteError(
+                f"target entity does not exist: {resolved_target.entity_type} with "
+                f"identity {dict(resolved_target.identity)}",
+                code="ENTITY_NOT_FOUND",
+                path=("target",),
+                details={
+                    "entity_type": resolved_target.entity_type,
+                    "identity": dict(resolved_target.identity),
+                    "e_ref": _encoded_ref(resolved_target, index=index),
+                },
+            )
+
+        target_e_ref = _encoded_ref(resolved_target, index=index)
+        merged_meta = dict(command.command_meta)
+
+        planned_retracts: list[PlannedOpDTO] = []
+        for claim in store.ledger.find_claims(e_ref=target_e_ref):
+            if store.ledger.has_active_revocation(claim.asrt_id):
+                continue
+            field_name = _field_name_for_pred(claim.pred_id, index=index)
+            planned_retracts.append(
+                PlannedOpDTO(
+                    op="retract",
+                    target=resolved_target,
+                    field=FieldPath(
+                        entity_type=resolved_target.entity_type,
+                        field_name=field_name,
+                    ),
+                    assertion_id=claim.asrt_id,
+                    meta=merged_meta,
+                )
+            )
+
+        return EntityDeletePlan(
+            command=command,
+            resolved_target=resolved_target,
+            planned_retracts=tuple(planned_retracts),
+            can_apply=True,
+        )
+    except (SchemaResolutionError, EntityWriteError) as exc:
+        error = _to_error_dto(exc)
+        return EntityDeletePlan(
+            command=command,
+            resolved_target=resolved_target,
+            can_apply=False,
+            errors=(error,),
+        )
+
+
+def apply_delete_plan(
+    plan: EntityDeletePlan,
+    *,
+    store: Store,
+    index: SchemaIndex,
+) -> EntityDeleteResult:
+    """Execute a whole-entity retract plan via the path-bound private helper。
+
+    Per SF3 P1 amend:this executor calls ``_apply_entity_delete_retract``
+    **directly** on each planned retract op,NOT through generic ``_apply_op``。
+    ``_apply_op`` continues to enforce Slice 2 ``check_retract_allowed`` on
+    every retract — any application-level caller routing through the generic
+    dispatcher hits the guard。 ``apply_delete_plan`` is the **only** entry
+    point into ``_apply_entity_delete_retract`` from within this module。
+    """
+    if not plan.can_apply:
+        return EntityDeleteResult(
+            resolved_target=plan.resolved_target,
+            errors=plan.errors,
+            warnings=plan.warnings,
+        )
+
+    applied: list[AppliedOpResultDTO] = []
+    for op_index, op in enumerate(plan.planned_retracts):
+        try:
+            assertion_id = _apply_entity_delete_retract(op, store=store, index=index)
+            applied.append(
+                AppliedOpResultDTO(
+                    op_index=op_index,
+                    status="applied",
+                    assertion_id=assertion_id,
+                )
+            )
+        except (SchemaResolutionError, EntityWriteError, Exception) as exc:
+            error = _to_error_dto(exc)
+            applied.append(AppliedOpResultDTO(op_index=op_index, status="failed"))
+            return EntityDeleteResult(
+                resolved_target=plan.resolved_target,
+                applied=tuple(applied),
+                errors=(error,),
+                warnings=plan.warnings,
+            )
+
+    return EntityDeleteResult(
+        resolved_target=plan.resolved_target,
+        applied=tuple(applied),
+        warnings=plan.warnings,
+    )
+
+
+def _apply_entity_delete_retract(
+    op: PlannedOpDTO,
+    *,
+    store: Store,
+    index: SchemaIndex,
+) -> str | None:
+    """Application-internal **private** path-bound retract executor。
+
+    This helper is the **only** application-layer code path that calls
+    ``retract_by_asrt`` without first invoking ``check_retract_allowed``。
+    It is reachable from **exactly one** call site:``apply_delete_plan``
+    (see module-level docstring + audit Decision Note #3)。
+
+    Per ADR-IC §4.1 强制点 3,whole-entity revoke via ``fg.entities.delete``
+    is the唯一合法整批 retract path for Identity Claims and ``:exists``
+    Claims。 Path-binding(rather than a metadata signal on ``PlannedOpDTO``)
+    is the SF3 P1 amend structural guarantee:no caller can forge bypass by
+    constructing a ``PlannedOpDTO`` and routing it through generic
+    ``_apply_op``(which always enforces ``check_retract_allowed``)。
+    """
+    assert op.op == "retract" and op.assertion_id is not None
+    # Intentionally NOT calling check_retract_allowed — see docstring。
+    return retract_by_asrt(
+        store.ledger,
+        op.assertion_id,
+        dict(op.meta) if op.meta else None,
+    )
+
+
+def _field_name_for_pred(pred_id: str, *, index: SchemaIndex) -> str:
+    """Return a non-empty ``field_name`` for a ``PlannedOpDTO`` shape requirement。
+
+    Identity / Field Claims have ``py_field_name`` populated;``:exists`` Claims
+    do not(``py_field_name`` is None on the ``PredicateInfo``)— for the
+    ``:exists`` case we return the literal ``"exists"`` placeholder。 The
+    ``field`` is required by ``PlannedOpDTO`` protocol shape but is **not**
+    consumed by ``_apply_entity_delete_retract``。
+    """
+    info = index.predicates_by_id.get(pred_id)
+    if info is None or info.py_field_name is None:
+        return "exists"
+    return info.py_field_name
 
 
 def _plan_dependencies_and_mutations(
@@ -716,7 +903,13 @@ def _to_error_dto(exc: Exception) -> ErrorDTO:
 __all__ = [
     "EntityWriteError",
     "apply_create_plan",
+    "apply_delete_plan",
     "apply_write_plan",
     "plan_create_command",
+    "plan_delete_command",
     "plan_write_command",
 ]
+# Note:``_apply_entity_delete_retract`` is intentionally **NOT** in __all__。
+# It is the path-bound private helper per SF3 P1 amend(see module docstring
+# near the helper definition);importing it from outside this module is an
+# explicit bypass of Slice 2's retract guard and must be auditable via grep。

@@ -39,8 +39,10 @@ from .entity_view import (
 from .entity_write import (
     EntityWriteError,
     apply_create_plan,
+    apply_delete_plan,
     apply_write_plan,
     plan_create_command,
+    plan_delete_command,
     plan_write_command,
 )
 from .fact_overlay_runtime import check_fact_overlay_binding
@@ -144,6 +146,7 @@ __all__ = [
     "accept_derivation_candidate_sets",
     "apply_ingest_request",
     "apply_create_plan",
+    "apply_delete_plan",
     "apply_write_plan",
     "build_check_request",
     "build_diagnose_request",
@@ -181,6 +184,7 @@ __all__ = [
     "materialize_identity",
     "parse_atom_key",
     "plan_create_command",
+    "plan_delete_command",
     "plan_write_command",
     "recheck_proof_frame",
     "render_proof_frame_narrative",
