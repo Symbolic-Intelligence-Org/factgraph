@@ -15,6 +15,7 @@
 | 2026-05-31 | implementing-step-0 | Pre-implementation inventory complete | Re-ran tracked-HEAD Form I grep gates on implementation branch; counts match scoped preflight: 63 `tests/` files, 5 sibling package files, 5 tools/tutorial files, 9 example files split into dirty/archival handling, 3 current-doc candidates, and 13 workflow historical/audit files. No new Q-PR1, runtime descriptor, shadow-store, `:exists`, ledger, or adapter scope found. |
 | 2026-05-31 | implementing-step-1 | Live core test fixtures migrated | Migrated positive Form I fixtures across `tests/` to shipped descriptors (`Identity()`, `Field()`, and annotation-inferred multi fields). Residual deprecated Form I grep hits are confined to Step 3 semantic-rewrite targets; 62 changed test modules import successfully. |
 | 2026-05-31 | implementing-step-2 | Sibling package fixtures migrated | Migrated the five scoped sibling package files to shipped Form I descriptors and current import/namespace surfaces where needed; all four sibling Python modules import successfully, and selected non-legacy behavior tests pass. |
+| 2026-05-31 | implementing-step-3 | Negative test semantics rewritten | Rewrote the three semantic targets: `test_sdk_schema_primary_key_required.py` now asserts Form I acceptance plus explicit legacy-kwarg rejection, while `test_application_entity_view.py` and `test_application_schema_runtime.py` use explicit complete identity bundles instead of deleted identity-default behavior. |
 
 ## Decision Notes
 
@@ -32,6 +33,7 @@
 | 2026-05-31 | Step 1 kept negative semantics deferred. | `tests/test_sdk_schema_primary_key_required.py` remains untouched for Step 3, while `tests/test_application_entity_view.py` and `tests/test_application_schema_runtime.py` only had import-blocking positive descriptors migrated; their `allow_identity_defaults=True` behavior remains deferred to the Step 3 semantic rewrite. |
 | 2026-05-31 | Step 1 included one live-test namespace collateral fix. | `tests/test_sdk_redesign_namespace_shape.py` had an import-time blocker from removed `_SDKReadManager` / `_SDKWriteManager` names after its Form I fixture migration; the test was minimally aligned to the current shipped `entities` / `fields` / `assertions` / `rules` / `inferences` namespaces without touching runtime. |
 | 2026-05-31 | Step 2 limited sibling cleanup to Form I/import viability. | `src/service/tests/test_problog_semantic_annotation_l4.py` still contains older candidate-envelope / `accept` behavior expectations that are not Form I debt; Step 2 verifies import viability and leaves broader semantic modernization out of this housekeeping slice. |
+| 2026-05-31 | Step 3 residual grep is intentional negative coverage. | Remaining deprecated Form I strings in live tests are only the rejection inputs inside `tests/test_sdk_schema_primary_key_required.py`; all `allow_identity_defaults=True` callsites were removed from live tests. |
 
 ## Review Checklist
 

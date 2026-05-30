@@ -58,8 +58,7 @@ def _seed_user_graph() -> tuple[Store, object, EntityRef, EntityRef]:
     user_ref = resolve_selector(
         EntitySelector(
             entity_type="User",
-            identity={"name": "alice"},
-            allow_identity_defaults=True,
+            identity={"name": "alice", "locale": "en"},
         ),
         index=index,
     )
@@ -128,8 +127,7 @@ class ApplicationEntityViewTests(unittest.TestCase):
                 entity_type="User",
                 selector=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
             ),
             store=store,
@@ -149,8 +147,7 @@ class ApplicationEntityViewTests(unittest.TestCase):
                 entity_type="User",
                 selector=EntitySelector(
                     entity_type="User",
-                    identity={"name": "missing"},
-                    allow_identity_defaults=True,
+                    identity={"name": "missing", "locale": "en"},
                 ),
             ),
             store=store,
@@ -167,8 +164,7 @@ class ApplicationEntityViewTests(unittest.TestCase):
         other_ref = resolve_selector(
             EntitySelector(
                 entity_type="User",
-                identity={"name": "bob"},
-                allow_identity_defaults=True,
+                identity={"name": "bob", "locale": "en"},
             ),
             index=index,
         )

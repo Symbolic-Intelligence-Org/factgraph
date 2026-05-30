@@ -64,14 +64,13 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
         self.assertIsNone(field_type.scalar_domain)
         self.assertIsNone(field_type.ref_target_type)
 
-    def test_resolve_selector_materializes_default_when_allowed(self) -> None:
+    def test_resolve_selector_accepts_complete_identity(self) -> None:
         index = _schema_index()
 
         ref = resolve_selector(
             EntitySelector(
                 entity_type="User",
-                identity={"name": "alice"},
-                allow_identity_defaults=True,
+                identity={"name": "alice", "locale": "en"},
             ),
             index=index,
         )
@@ -81,7 +80,7 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(ref.encoded_ref)
         self.assertTrue(str(ref.encoded_ref).startswith("idref_v1:User:"))
 
-    def test_resolve_selector_rejects_defaults_when_not_allowed(self) -> None:
+    def test_resolve_selector_rejects_incomplete_identity(self) -> None:
         index = _schema_index()
 
         with self.assertRaises(SchemaResolutionError) as ctx:
@@ -90,7 +89,8 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
                 index=index,
             )
 
-        self.assertEqual(ctx.exception.code, "IDENTITY_DEFAULTS_NOT_ALLOWED")
+        self.assertEqual(ctx.exception.code, "IDENTITY_INCOMPLETE")
+        self.assertEqual(ctx.exception.details["missing_fields"], ["locale"])
 
     def test_resolve_selector_rejects_unknown_identity_field(self) -> None:
         index = _schema_index()
@@ -100,7 +100,6 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
                 EntitySelector(
                     entity_type="User",
                     identity={"name": "alice", "unknown": "x"},
-                    allow_identity_defaults=True,
                 ),
                 index=index,
             )
@@ -126,29 +125,26 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
                 EntitySelector(
                     entity_type="User",
                     identity={"name": 123, "locale": "en"},
-                    allow_identity_defaults=True,
                 ),
                 index=index,
             )
 
         self.assertEqual(ctx.exception.code, "IDENTITY_TYPE_MISMATCH")
 
-    def test_resolve_selector_materializes_uuid4_default_factory(self) -> None:
+    def test_resolve_selector_accepts_explicit_session_identity(self) -> None:
         index = _schema_index()
 
         ref = resolve_selector(
             EntitySelector(
                 entity_type="Session",
-                identity={},
-                allow_identity_defaults=True,
+                identity={"session_id": "session-1"},
             ),
             index=index,
         )
 
         self.assertEqual(ref.entity_type, "Session")
-        self.assertIn("session_id", ref.identity)
-        self.assertIsInstance(ref.identity["session_id"], str)
-        self.assertTrue(ref.identity["session_id"])
+        self.assertEqual(ref.identity, {"session_id": "session-1"})
+        self.assertTrue(str(ref.encoded_ref).startswith("idref_v1:Session:"))
 
 
 if __name__ == "__main__":
