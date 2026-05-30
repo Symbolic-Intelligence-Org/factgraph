@@ -110,7 +110,7 @@ from .errors import (
 )
 from .query_lower import QueryPlan, lower_query
 from .query_runtime import execute_query_plan
-from .schema import Entity, Field
+from .schema import Entity, Field, Identity
 from .semantics import ProbLogSemantics, PyReasonSemantics
 
 if TYPE_CHECKING:
@@ -612,6 +612,198 @@ class _SDKWriteManager:
 
     def edit(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.edit(*args, **kwargs)
+
+
+class _SDKFieldsManager:
+    """Layer 2 namespace manager for field-cell operations(per ADR-API §4.1).
+
+    Layer 2 navigation key:`Field descriptor + e_ref (+ optional value)`.
+    Assertion ids belong to Layer 3(``fg.assertions.*``);entity macros belong
+    to Layer 1(``fg.entities.*``).
+
+    Slice 3a Step 5 ships the namespace while preserving shipped write/retract
+    internals. ``retract`` / ``delete`` delegate to the current flat
+    ``SDKStore.retract`` path, so Slice 2 INV-7c / `:exists` guards remain the
+    source of truth until Step 6 exposes ``fg.assertions.retract``.
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.fields namespace is read-only")
+
+    def _reject_non_field_descriptor(
+        self,
+        field: Any,
+        *,
+        method: str,
+        allow_identity: bool = False,
+    ) -> None:
+        if isinstance(field, Field):
+            return
+        if allow_identity and isinstance(field, Identity):
+            return
+        if isinstance(field, str):
+            raise SDKStoreError(
+                f"fg.fields.{method}() requires a Field descriptor (Layer 2 "
+                "navigation key); got str/asrt_id — pass assertion ids to "
+                "fg.assertions.* (Layer 3) instead. See ADR-API §4.1.1."
+            )
+        if isinstance(field, type) and issubclass(field, Entity):
+            raise SDKStoreError(
+                f"fg.fields.{method}() requires a Field descriptor (Layer 2 "
+                "navigation key); got Entity class — use fg.entities.* "
+                "(Layer 1) instead. See ADR-API §4.1.1."
+            )
+        if isinstance(field, Identity):
+            raise SDKStoreError(
+                f"fg.fields.{method}() does not accept Identity descriptors for "
+                "value writes; Identity Claims are immutable anchors per INV-7c. "
+                "Use fg.entities.delete + fg.entities.create for identity-bundle "
+                "changes. See ADR-API §4.1.1."
+            )
+        raise SDKStoreError(
+            f"fg.fields.{method}() requires a Field descriptor (Layer 2 "
+            f"navigation key); got {type(field).__name__}. See ADR-API §4.1.1."
+        )
+
+    def _schema_pred_for_descriptor(
+        self,
+        field: Field | Identity,
+        *,
+        method: str,
+        allow_identity: bool = False,
+    ) -> dict[str, Any]:
+        self._reject_non_field_descriptor(field, method=method, allow_identity=allow_identity)
+        if isinstance(field, Field):
+            return self._sdk._schema_pred_for_field(field)
+
+        owner_cls = getattr(field, "sdk_owner_cls", None)
+        owner_type = getattr(owner_cls, "__name__", None)
+        field_name = getattr(field, "sdk_attr_name", None)
+        if not isinstance(owner_type, str) or not isinstance(field_name, str):
+            raise SDKStoreError("Identity descriptor is not bound in this SDKStore schema")
+        pred_info = self._sdk._application_schema_index.field_predicates.get((owner_type, field_name))
+        if pred_info is None:
+            self._sdk._raise_if_superseded_entity_class(owner_cls)
+            raise SDKStoreError(f"schema predicate not found for {owner_type}.{field_name}")
+        return {
+            "pred_id": pred_info.pred_id,
+            "owner_type": pred_info.owner_type,
+            "py_field_name": pred_info.py_field_name,
+            "cardinality": pred_info.cardinality,
+            "arg_specs": [
+                {"type_domain": "entity_ref"},
+                {"type_domain": pred_info.value_type_domain},
+            ],
+        }
+
+    def _active_claims_for_field(self, schema_pred: dict[str, Any], e_ref: str) -> list[Claim]:
+        pred_id = schema_pred.get("pred_id")
+        if not isinstance(pred_id, str) or not pred_id:
+            raise SDKStoreError("schema predicate missing pred_id for field")
+        return [
+            claim
+            for claim in self._sdk.ledger.find_claims(pred_id=pred_id, e_ref=e_ref)
+            if not self._sdk.ledger.has_active_revocation(claim.asrt_id)
+        ]
+
+    def _decode_claim_value(self, claim: Claim) -> Any:
+        if not claim.rest_terms:
+            return None
+        return claim.rest_terms[-1][1]
+
+    def set(
+        self,
+        field: Field,
+        e_ref: str,
+        value: Any,
+        *,
+        meta: dict[str, Any] | None = None,
+    ) -> str:
+        """Write a single-cardinality Field value via shipped SDKStore.set."""
+        self._reject_non_field_descriptor(field, method="set")
+        return self._sdk.set(field, e_ref, value, meta=meta)
+
+    def add(
+        self,
+        field: Field,
+        e_ref: str,
+        value: Any,
+        *,
+        meta: dict[str, Any] | None = None,
+    ) -> str:
+        """Append a multi-cardinality Field value via shipped SDKStore.add."""
+        self._reject_non_field_descriptor(field, method="add")
+        return self._sdk.add(field, e_ref, value, meta=meta)
+
+    def retract(
+        self,
+        field: Field | Identity,
+        e_ref: str,
+        value: Any,
+        *,
+        meta: dict[str, Any] | None = None,
+    ) -> str | None:
+        """Retract the unique active assertion matching ``(field, e_ref, value)``.
+
+        Step 5 delegates the chosen assertion id to shipped ``SDKStore.retract``.
+        That preserves Slice 2 INV-7c / `:exists` guard behavior without
+        exposing ``fg.assertions.retract`` before Step 6.
+        """
+        schema_pred = self._schema_pred_for_descriptor(field, method="retract", allow_identity=True)
+        expected_terms = self._sdk._rest_terms_for_field(schema_pred, value=value)
+        matches = [
+            claim
+            for claim in self._active_claims_for_field(schema_pred, e_ref)
+            if claim.rest_terms == expected_terms
+        ]
+        field_label = _field_label_for_pred(schema_pred)
+        if not matches:
+            raise SDKStoreError(
+                f"no active assertion matching field={field_label}, "
+                f"e_ref={e_ref!r}, value={value!r}"
+            )
+        if len(matches) > 1:
+            raise SDKStoreError(
+                f"ambiguous active assertions matching field={field_label}, "
+                f"e_ref={e_ref!r}, value={value!r};pass asrt_id to "
+                "fg.assertions.retract(asrt_id) once Step 6 lands"
+            )
+        return self._sdk.retract(matches[0].asrt_id, meta=meta)
+
+    def delete(
+        self,
+        field: Field | Identity,
+        e_ref: str,
+        *,
+        meta: dict[str, Any] | None = None,
+    ) -> int:
+        """Retract all active assertions for ``(field, e_ref)``.
+
+        Partial-failure semantics are **fail-fast first-error**:claims are
+        retracted sequentially through shipped ``SDKStore.retract`` and the
+        first error is raised immediately. No rollback or best-effort behavior
+        is introduced in Step 5.
+        """
+        schema_pred = self._schema_pred_for_descriptor(field, method="delete", allow_identity=True)
+        count = 0
+        for claim in self._active_claims_for_field(schema_pred, e_ref):
+            self._sdk.retract(claim.asrt_id, meta=meta)
+            count += 1
+        return count
+
+    def get(self, field: Field, e_ref: str) -> Any:
+        """Return the current value for ``(field, e_ref)`` from active claims."""
+        schema_pred = self._schema_pred_for_descriptor(field, method="get")
+        claims = self._active_claims_for_field(schema_pred, e_ref)
+        values = [self._decode_claim_value(claim) for claim in claims]
+        if str(schema_pred.get("cardinality", "single")) == "multi":
+            return tuple(values)
+        if not values:
+            return None
+        return values[-1]
 
 
 class _SDKEntitiesManager:
@@ -1347,6 +1539,7 @@ class SDKStore:
         self._read_manager = _SDKReadManager(self)
         self._write_manager = _SDKWriteManager(self)
         self._entities_manager = _SDKEntitiesManager(self)
+        self._fields_manager = _SDKFieldsManager(self)
         self._rules_manager = _SDKRulesManager(self)
         self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
@@ -1630,6 +1823,16 @@ class SDKStore:
         ``fg.read.*`` namespace deletion happens at Step 7。
         """
         return self._entities_manager
+
+    @property
+    def fields(self) -> _SDKFieldsManager:
+        """`fields` Layer 2 namespace per ADR-API §4.1。
+
+        Slice 3a Step 5 exposes Field + e_ref cell operations while preserving
+        shipped flat `fg.set` / `fg.add` / `fg.retract` until Step 7 removes
+        the flat shortcuts.
+        """
+        return self._fields_manager
 
     @property
     def rules(self) -> _SDKRulesManager:
@@ -3652,6 +3855,15 @@ def _normalize_view_name(name: Any) -> str:
     if not isinstance(name, str) or not name.strip():
         raise SDKStoreError("view name must be non-empty string")
     return name.strip()
+
+
+def _field_label_for_pred(schema_pred: dict[str, Any]) -> str:
+    owner = schema_pred.get("owner_type")
+    name = schema_pred.get("py_field_name")
+    if isinstance(owner, str) and owner and isinstance(name, str) and name:
+        return f"{owner}.{name}"
+    pred_id = schema_pred.get("pred_id")
+    return str(pred_id) if pred_id is not None else "<unknown>"
 
 
 def _build_view_entry(
