@@ -1,8 +1,8 @@
 # Slice 3a — API namespace refactor(Q10-Q14 cluster:三层 namespace rename + AssertionView 统一 + `version(v)` / flat kwargs 删 + `fg.schema.add` 三分)
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-05-30
-- Last Updated: 2026-05-30(implementing — Step 1-3 landed, retroactive Status transition per V3 fix)
+- Last Updated: 2026-05-30(implemented — Step 12 final acceptance + load-bearing docs landed)
 - Branch: `v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30`;fork point Slice 2 close `c927d41f`(blueprint draft lineage at audit log HEAD,not pinned in header to avoid post-amend drift)
 - Related Modules:
   - `src/factgraph/sdk/store.py`(4 namespace manager classes + 8 flat top-level methods)
@@ -939,20 +939,158 @@ Per PF-S8 lock:**12 numbered steps + Step 0 grep**;docs migration **独立 close
 
 ## 10. Outcome / Deviations
 
-任务完成后填写(per Slice 2 §10 precedent — 10 subsections):
+### 10.1 Final Landing Result
 
-- **§10.1 最终落地结果**:Step lineage table(Step 0 + Step 1-12 + audit backfills)+ commit SHAs
-- **§10.2 与 blueprint 不同地方**:direction deviations(应为 0)+ amend records(if any)+ historical discrepancies acknowledged
-- **§10.3 Step 0 pre-impl verification results**
-- **§10.4 三层 namespace topology verification**(SF1 全删 + 3 个 NEW manager + 排他 enforcement)
-- **§10.5 fg.entities.create/delete/exists verification**(SF2 + SF3 + SF4 application layer planner + eager emission + discriminated signature)
-- **§10.6 Q-PR1 carve-out preservation confirmation**(`git diff --name-only c927d41f..HEAD --` 5 sacred paths returns empty)
-- **§10.7 Internal-rollback classification confirmation**(SF11-style 继承)
-- **§10.8 Slice 3a load-bearing docs landed confirmation**(4 docs per SF7)
-- **§10.9 Carry-forward dependencies recorded**:
-  - Step 2+ `:exists` removal(per ADR-IC §4.4.4)— existence-claim transitional guard 同步退役
-  - Step 2+ shadow store removal(per ADR-IC §4.2.4)— eager-emission `fg.entities.create` 已 ship,shadow store 可 Step 2+ retire
-  - Slice 3b ledger migration(`__system__.revokes` + claims `value+value_tag` 双列)— 独立 ADR-SYS-B + Slice 3b
-  - Slice 4 wider docs polish + cross-doc consistency(per SF7 boundary)
-  - Slice 5+ Q-PR1 PyReason adapter rewrite + INV-9 runtime strict enforcement
-- **§10.10 归档说明**:6-step archive cadence(blueprint + audit → `workflow/blueprints/archive/` + INVENTORY.md update + push branch to origin + 等用户授权)
+Slice 3a landed the ADR-API Q10-Q14 cluster on branch
+`v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30`, forked from Slice 2
+close `c927d41f`.
+
+| Stage | Commit | Result |
+|---|---|---|
+| Preflight | `70aee8a5` + `b17750c8` | Full Q10-Q14 shipped-surface audit + 2 precision amendments |
+| Draft / amend / scoped | `fb9ec2e2` → `68784556` → `10ad8615` | Blueprint drafted, P1/P2/P3 review fixes applied, scoped |
+| V3 / V2 / N-S31a-1 process fixes | `f14e6016` / `b7eb4d10` / `2db3b32e` | Status transition corrected; deletion-grep inventory made exhaustive |
+| Step 1 | `f63609ab` | `fg.entities` base manager |
+| Step 2 | `c5c0e74d` + `691b766b` | `fg.entities.create` + public error export |
+| Step 3 | `e0e992da` | `fg.entities.delete` path-bound whole-entity revoke |
+| Step 4 | `4db4d6de` | `fg.entities.exists` |
+| Step 5 | `d24ddad1` | `fg.fields.*` manager |
+| Step 6 | `985495f8` | `AssertionsManager` + Layer 3 retract ownership |
+| Step 7 | `6136f257` | `fg.read` / `fg.write` + 8 flat shortcuts removed; `fg.entities.edit` added |
+| Step 8 | `9e35685a` | `AssertionView` unified; `.history` env-var warning alias |
+| Step 9 | `5fb93a18` | `version(v)` + flat `where(...)` kwargs removed |
+| Step 10 | `6954bb96` | `fg.schema.register/extend/apply` + ADR-IC §4.3.6 enforcement |
+| Step 11 | `0d27dc85` | In-scope tests migrated to canonical namespaces |
+| Step 12 | this close commit | Load-bearing docs landed; §10 Outcome filled; `Status: implemented` |
+
+### 10.2 Deviations And Amendments
+
+No direction deviation from the scoped blueprint landed in implementation.
+
+Process deviations were intentionally accepted under the user-selected hybrid
+lock:Slice 3a used one branch for preflight / blueprint / implementation
+(V1 deviation) rather than separate preflight, blueprint, and implementation
+branches. V3 status drift was fixed by the retroactive `scoped → implementing`
+commit `f14e6016`. V2 deletion-grep inventory was added by `b7eb4d10`, and
+N-S31a-1 was resolved by `2db3b32e`.
+
+Substantive draft amendments before scoped:
+
+- P1:metadata marker guard-bypass design was replaced by path-bound
+  `_apply_entity_delete_retract(...)` private helper ownership.
+- P1:examples migration was removed from Slice 3a; `examples/` is a Slice 4
+  carry-forward with a dirty-notebook guard.
+- P2:`fg.schema.register/extend/apply` implementation surface was expanded to
+  7 state surfaces plus zero-side-effect / cache-atomicity requirements.
+- P3:branch header wording no longer pins a drifting draft HEAD.
+
+Step 11 intentionally did not make full `tests/` green. Legacy pre-Slice-1
+tests outside §5.11.1 N-1..N-5 remain out of scope per Slice 2 SF7 inheritance
+and Slice 3a SF7.
+
+### 10.3 Step 0 Pre-Implementation Verification
+
+Step 0 was read-only and matched the preflight:
+
+- Shipped-surface inventory matched `_SDKReadManager`, `_SDKWriteManager`,
+  `_SDKAssertionsManager`, `_SDKSchemaManager.add`, the 8 flat shortcuts,
+  `FieldAssertions`, `AssertionNamespace`, and `version(v)` callsites.
+- Required ancestors were present:ADR-API `66434490`, meta-ADR `ebafdb0c`,
+  ADR-IE `9fd0ffb5`, ADR-IC `2d0866ed`, ADR-DOCS `bb6a2c90`, Slice 1 close
+  `9cef674b`, and Slice 2 close `c927d41f`.
+- Q-PR1 sacred paths were 0 diff before implementation.
+- Slice 2 baseline suite passed before implementation.
+
+### 10.4 Namespace Topology Verification
+
+SF1 and SF13 are implemented:
+
+- `fg.entities.*` owns entity navigation and lifecycle.
+- `fg.fields.*` owns field-level writes and current field reads.
+- `fg.assertions.*` owns assertion-id reads and retractions.
+- `fg.schema.*` owns schema registration / extension / safe apply.
+- `fg.read`, `fg.write`, `_SDKReadManager`, `_SDKWriteManager`, and
+  `fg.set/add/retract/edit/get/ref/find/match` are removed.
+- Layer exclusivity errors point users to the correct namespace and ADR-API
+  §4.1.1.
+
+### 10.5 Entity Lifecycle Verification
+
+SF2, SF3, and SF4 are implemented:
+
+- `fg.entities.create(EntityCls, **identity)` eagerly emits Identity Claims and
+  `<EntityType>:exists` through the application materialization path and
+  populates the legacy shadow store.
+- `fg.entities.delete(e_ref, *, meta=None)` and
+  `fg.entities.delete(EntityCls, *, meta=None, **identity)` implement the
+  discriminated signature; tuple selectors are forbidden.
+- Whole-entity delete is path-bound through `plan_delete_command` /
+  `apply_delete_plan` and private `_apply_entity_delete_retract(...)`; generic
+  `_apply_op` retract still enforces the Slice 2 guard.
+- `fg.entities.exists(EntityCls, **identity)` reads the active `:exists` Claim
+  and checks revocation state.
+
+### 10.6 Q-PR1 Carve-Out Preservation
+
+Q-PR1 remained untouched across Slice 3a. The final check:
+
+```bash
+git diff --name-only c927d41f..HEAD -- \
+  src/factgraph/core/evidence/write_protocol.py \
+  src/factgraph/core/store/ledger.py \
+  src/factgraph/core/store/_builders.py \
+  src/factgraph/adapters/pyreason/ \
+  src/factgraph/core/derivation/accept.py
+```
+
+returns empty.
+
+### 10.7 Internal-Rollback Classification
+
+The Slice 2 SF11 classification is preserved. `core/derivation/accept.py:401`
+remains an internal rollback path, intentionally unguarded by Slice 2 / Slice
+3a SDK-layer retract guards, and is 0 diff against `c927d41f`.
+
+### 10.8 Load-Bearing Docs Landed
+
+SF7 is satisfied by this close step:
+
+- `src/factgraph/sdk/docs/04_api_surface.en.md` now documents the canonical
+  namespace map, entities / fields / assertions / schema methods, hard
+  removals, `AssertionView`, `_meta`, `version(v)` migration, and ADR-IC
+  §4.3.6 schema guards.
+- `src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md` now uses the
+  namespace split for direct writes, reads, assertion retraction, provenance
+  validation, and assertion filtering.
+- `src/factgraph/sdk/docs/00_user_guide.en.md` now uses canonical namespaces,
+  `AssertionView`, `_meta`, and schema register/extend/apply migration notes.
+- `workflow/design/design-points/active/identity-mechanism-redesign.zh.md`
+  includes §13.5 Slice 3a landed status and updates §12-aligned load-bearing
+  wording.
+
+### 10.9 Carry-Forward Dependencies
+
+Remaining work is explicitly outside Slice 3a:
+
+- Step 2+ `:exists` removal per ADR-IC §4.4.4; the existence-claim
+  transitional guard retires with co-emission.
+- Step 2+ shadow store removal per ADR-IC §4.2.4; `fg.entities.create` eager
+  emission is shipped, but legacy lazy materialization remains for now.
+- Slice 3b ledger migration:internal `__system__.revokes` and claims
+  `value` / `value_tag` schema evolution.
+- Slice 4 wider docs polish:non-load-bearing SDK docs, public quickstarts,
+  examples notebooks, and archived/tutorial material.
+- Slice 5+ Q-PR1 PyReason adapter rewrite + INV-9 runtime strict enforcement.
+- Slice 2 shipped-alignment audit remains a standalone audit branch task.
+
+### 10.10 Archive Cadence
+
+Per blueprint lifecycle, this implemented blueprint remains in
+`workflow/blueprints/active/` until a separate archive cadence:
+
+1. `git mv` blueprint + audit log to `workflow/blueprints/archive/`.
+2. Update `workflow/blueprints/archive/INVENTORY.md`.
+3. Add archive audit row.
+4. Verify tests / compileall / Q-PR1 / examples guard.
+5. Commit archive movement.
+6. Push branch only after explicit user authorization.

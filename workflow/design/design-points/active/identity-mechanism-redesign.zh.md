@@ -1576,6 +1576,52 @@ Blueprint:[`workflow/blueprints/active/2026-05-29_slice-2-identity-claim-emissio
 
 Per Slice 2 SF5 + N11:`core/evidence/write_protocol.py` / `core/store/ledger.py` / `core/store/_builders.py` / `adapters/pyreason/*` / `core/derivation/accept.py:401`(internal rollback)— 全 0 diff,不被 Slice 2 三层 enforcement 触达;协议 / 核心 / pyreason 直接路径继续走原 shipped 行为。Slice 2 enforcement 边界严格落在 application(source-of-truth)+ SDK shell(fail-fast)— defense-in-depth 但不下沉到协议层。
 
+### §13.5 Slice 3a — API namespace refactor landed status(2026-05-30)
+
+Blueprint:`workflow/blueprints/active/2026-05-30_slice-3a-api-namespace.md`
+(`v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30`,forked from Slice 2 close `c927d41f`)。
+
+Slice 3a 落地 ADR-API Q10-Q14 cluster,把 §12 的 API 表面从设计锁定推进到 shipped implementation:
+
+| §12 / ADR-API 项 | Slice 3a status |
+|---|---|
+| **Q10 三层 namespace** | ✅ shipped:`fg.entities.*` / `fg.fields.*` / `fg.assertions.*`;old `fg.read.*` / `fg.write.*` + 8 个 flat shortcut(`fg.set/add/retract/edit/get/ref/find/match`)hard removed |
+| **Layer 1 entities** | ✅ shipped:`get` / `where` / `match` / `ref` / `create` / `delete` / `exists` / `edit`;`create` eager emits Identity Claims + `:exists`;`delete` 是 Identity Claim 唯一合法整批 revoke path;`exists` 读 active `:exists` Claim |
+| **Layer 2 fields** | ✅ shipped:`set` / `add` / `retract` / `delete` / `get`;Identity fields 仍受 INV-7c guard 保护;`delete` fail-fast first-error |
+| **Layer 3 assertions** | ✅ shipped:`where` / `by_id` / `by_ids` / `retract` / `active` / `all`;`retract` owns Slice 2 guard wrapper;Identity Claims raise `INV_7C_IDENTITY_PROTECTED`;`:exists` raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` |
+| **Q11 AssertionView 统一** | ✅ shipped:`AssertionView` replaces `AssertionNamespace` + `FieldAssertions`;views are pure-read(no retract/set/add/delete methods);`.history` is deprecated alias of `.all`,warning only under `FACTGRAPH_WARN_DEPRECATED=1` |
+| **Q12 `version(v)` hard remove** | ✅ shipped:`AssertionRecordSet.version` / `AssertionView.version` removed;use `.where(_meta={"version": v})` |
+| **Q13 `_meta` canonical filter** | ✅ shipped:record sets, assertion views, and assertions manager all use `_meta={...}` + shared `_ASSERTION_FILTER_MISSING`;flat `source=` / `trace_id=` / `version=` / `meta=` kwargs removed |
+| **Q14 schema namespace split** | ✅ shipped:`fg.schema.register` / `extend` / `apply`;`fg.schema.add` removed;ADR-IC §4.3.6 part 1+2 enforced with zero side effects on reject |
+| **Slice 2 ADR-API Q14 carry-forward** | ✅ closed:SchemaIndex cache rebuild happens in `register` / `extend` / `apply`;Identity↔Field swaps, Identity additions, destructive field changes, and generated `:exists` predicate mutations reject before mutation |
+
+Implementation lineage highlights:
+
+| Step | Commit | Surface |
+|---|---|---|
+| Step 1 | `f63609ab` | `fg.entities` base manager |
+| Step 2 | `c5c0e74d` + `691b766b` | `fg.entities.create` + public `EntityAlreadyExistsError` export |
+| Step 3 | `e0e992da` | `fg.entities.delete` path-bound whole-entity revoke |
+| Step 4 | `4db4d6de` | `fg.entities.exists` |
+| Step 5 | `d24ddad1` | `fg.fields.*` |
+| Step 6 | `985495f8` | `AssertionsManager` + Layer 3 retract ownership |
+| Step 7 | `6136f257` | read/write namespace + flat shortcut deletion |
+| Step 8 | `9e35685a` | `AssertionView` unification |
+| Step 9 | `5fb93a18` | `version(v)` + flat `where` kwargs hard remove |
+| Step 10 | `6954bb96` | `fg.schema.register/extend/apply` + ADR-IC §4.3.6 guard |
+| Step 11 | `0d27dc85` | In-scope tests migrated to canonical namespaces |
+| Step 12 | close commit | Load-bearing docs + §10 Outcome + `Status: implemented` |
+
+Q-PR1 carve-out 继续继承:Slice 3a 不修改 `core/evidence/write_protocol.py` / `core/store/ledger.py` / `core/store/_builders.py` / `adapters/pyreason/*` / `core/derivation/accept.py`。`core/derivation/accept.py:401` internal rollback path 保持 Slice 2 SF11 classification,intentionally unguarded。
+
+Slice 3a close 后仍留的 carry-forward:
+
+- Step 2+ `:exists` removal(per ADR-IC §4.4.4)— transitional guard 跟 `:exists` co-emission lifecycle 同步退役。
+- Step 2+ shadow store removal(per ADR-IC §4.2.4)— `fg.entities.create` eager emission 已 shipped,legacy `fg.entities.ref + fg.fields.set` lazy compat 仍保留。
+- Slice 3b ledger schema migration(`__system__.revokes` + claims `value`/`value_tag` 双列)。
+- Slice 4 wider docs polish(public quickstarts / non-load-bearing SDK docs / examples notebooks)。
+- Slice 5+ Q-PR1 PyReason adapter rewrite + INV-9 runtime strict enforcement。
+
 ---
 
 ## §14 与姊妹 doc 的关系

@@ -57,27 +57,27 @@ class User(Entity):
 
 fg = FactGraph.create(schema_classes=[User])
 
-ref_alice = fg.read.ref(User, user_id="u-1")
-ref_bob   = fg.read.ref(User, user_id="u-2")
+ref_alice = fg.entities.ref(User, user_id="u-1")
+ref_bob   = fg.entities.ref(User, user_id="u-2")
 
-fg.write.set(User.name, ref_alice, "Alice")
-fg.write.set(User.name, ref_bob,   "Bob")
-fg.write.add(User.tags, ref_alice, "engineer")
+fg.fields.set(User.name, ref_alice, "Alice")
+fg.fields.set(User.name, ref_bob,   "Bob")
+fg.fields.add(User.tags, ref_alice, "engineer")
 
-snap = fg.read.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")
 print(snap.name, [r.value for r in snap.field("tags").active])
 # → Alice ['engineer']
 ```
 
 `FactGraph` is the canonical entry point. It is a literal alias of
-`SDKStore` — both names refer to the same class. Operations are
-available both as flat methods (`fg.get(...)`, `fg.add(...)`) and as
-namespaced methods (`fg.read.get(...)`, `fg.write.add(...)`); both
-forms are permanent and equivalent.
+`SDKStore` — both names refer to the same class. Operations are grouped by
+navigation key: `fg.entities.*` for entity reads and lifecycle,
+`fg.fields.*` for field writes, `fg.assertions.*` for assertion-id reads and
+retracts, and `fg.schema.*` for schema operations.
 
-The eight namespaces:
-`schema`, `read`, `write`, `eval`, `audit`, `package`,
-`views`. See [§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
+The public namespaces:
+`entities`, `fields`, `assertions`, `schema`, `eval`, `audit`, `package`,
+`views`, `rules`, and `inferences`. See [§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
 for the full map.
 
 ---
@@ -147,7 +147,7 @@ relationship schema IR directly.
 ### Provenance validation
 
 ```python
-report = fg.schema.validate_provenance(provenance_payload)  # also: fg.validate_provenance
+report = fg.schema.validate_provenance(provenance_payload)
 report.ok                # True if everything passes
 report.warnings          # list[dict] — non-fatal advisories
 report.errors            # list[dict], each: {code, severity, path, message, data}
@@ -163,40 +163,38 @@ This inspects provenance/meta payloads **without** writing. Returns a
 ### Get one entity by identity
 
 ```python
-snap = fg.read.get(User, user_id="u-1")          # → EntitySnapshot | None
-# Or flat:
-snap = fg.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")          # → EntitySnapshot | None
 ```
 
 ### Find entities
 
 ```python
 # By exact value on a single-cardinality field
-admins = fg.read.find(User, name="Alice")
+admins = fg.entities.where(User, name="Alice")
 
 # Multi-cardinality field uses containment match
-engineers = fg.read.find(User, tags="engineer")
+engineers = fg.entities.where(User, tags="engineer")
 
 # Limit result count
-recent = fg.read.find(Document, limit=20)
+recent = fg.entities.where(Document, limit=20)
 ```
 
 ### Reference encoding
 
 ```python
-ref = fg.read.ref(User, user_id="u-1")
+ref = fg.entities.ref(User, user_id="u-1")
 # → "idref_v1:User:<base32-sha256-digest>"  (opaque, content-derived)
 ```
 
-`ref` is required as the second argument to `fg.write.set(...)` and
-`fg.write.add(...)`. `fg.write.retract(...)` takes an assertion id
+`ref` is required as the second argument to `fg.fields.set(...)` and
+`fg.fields.add(...)`. `fg.assertions.retract(...)` takes an assertion id
 (`asrt_id`), not an entity ref. The ref string is opaque — never parse or
 compare it as a textual identity; treat it as a stable handle.
 
 ### `EntitySnapshot` cheat-sheet
 
 ```python
-snap = fg.read.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")
 
 snap.name                         # current single-field value
 snap.field("tags").active         # → AssertionRecordSet (tuple-compatible)
@@ -204,16 +202,16 @@ snap.field("tags").active         # → AssertionRecordSet (tuple-compatible)
 
 snap.field("name").history      # → AssertionRecordSet (active + revoked)
 snap.field("name").at("2026-05-01T00:00:00Z")  # active shortcut visible at t
-snap.field("name").version("v3")  # active shortcut at version v3
+snap.field("name").where(_meta={"version": "v3"})  # active records at version v3
 snap.field("name").history.at("2026-05-01T00:00:00Z")  # history-level time filter
 snap.field("name").history.by_id(asrt_id)      # exact assertion-id filter
 
 target = (
     snap.field("name")
-    .history.where(value="Alice", source="seed")
+    .history.where(value="Alice", _meta={"source": "seed"})
     .one()
 )
-fg.write.retract(target.asrt_id)
+fg.assertions.retract(target.asrt_id)
 
 snap.assertions.field("name")     # equivalent field-scoped assertion manager
 snap.assertions.name              # shorthand when no manager method collides
@@ -224,17 +222,18 @@ snap.ref                          # encoded idref_v1 ref
 ```
 
 Notes:
-- `.active` and `.history` are properties. `active` returns currently
-  non-revoked records; `history` returns active plus revoked records.
-  `.all` is a compatibility alias for `.history`.
+- `.active`, `.all`, and `.history` are properties. `active` returns currently
+  non-revoked records; `all` returns active plus revoked records.
+  `.history` is a deprecated compatibility alias for `.all` and warns only
+  when `FACTGRAPH_WARN_DEPRECATED=1`.
 - Legacy call forms such as `.active()` and `.all()` remain accepted:
   assertion record sets are callable and return themselves.
-- `FieldAssertions.at(t)` and `.version(v)` are active-only shortcuts for
-  `.active.at(t)` and `.active.version(v)`.
+- `AssertionView.at(t)` is an active-only shortcut for `.active.at(t)`.
+  Version filtering uses `.where(_meta={"version": ...})`.
 - `.active`, `.history`, `.all`, and record-set filters return `AssertionRecordSet`,
   a tuple-compatible collection of `AssertionRecord` values. Existing
   tuple-style iteration, indexing, and `len(...)` still work.
-- `AssertionRecordSet` supports `.where(...)`, `.at(t)`, `.version(v)`,
+- `AssertionRecordSet` supports `.where(...)`, `.at(t)`,
   `.by_id(asrt_id)`, `.one()`, `.first()`, and `.all()`. Use chained
   filters plus `.one()` for exactly-one selection before retracting an
   assertion.
@@ -258,11 +257,11 @@ grouping multiple operations into one transaction.
 ### Single writes
 
 ```python
-ref = fg.read.ref(User, user_id="u-1")
+ref = fg.entities.ref(User, user_id="u-1")
 
-name_asrt_id = fg.write.set(User.name, ref, "Alice Liddell")
-tag_asrt_id = fg.write.add(User.tags, ref, "manager")
-fg.write.retract(tag_asrt_id)                    # by assertion id
+name_asrt_id = fg.fields.set(User.name, ref, "Alice Liddell")
+tag_asrt_id = fg.fields.add(User.tags, ref, "manager")
+fg.assertions.retract(tag_asrt_id)                    # by assertion id
 ```
 
 `set` on a multi-field raises `CardinalityError`. `add` on a
@@ -273,7 +272,7 @@ return the persisted `asrt_id`; later reads expose the same id through
 ### Transactional editor
 
 ```python
-with fg.write.edit(User, user_id="u-1") as ed:
+with fg.entities.edit(User, user_id="u-1") as ed:
     ed.field("name").set("Alice in Wonderland")
     ed.field("tags").add("storyteller")
     ed.commit(meta={"source": "manual_review", "approved_by": "u-admin"})
@@ -307,14 +306,14 @@ coordinate.
 
 ### Bulk ingest
 
-`fg.ingest(items, *, meta=None)` is the external-batch import path. Each
+`fg.schema.ingest(items, *, meta=None)` is the external-batch import path. Each
 item is one normalized fact write:
 
 ```python
-ref_carol = fg.read.ref(User, user_id="u-3")
-ref_dave  = fg.read.ref(User, user_id="u-4")
+ref_carol = fg.entities.ref(User, user_id="u-3")
+ref_dave  = fg.entities.ref(User, user_id="u-4")
 
-result = fg.ingest(
+result = fg.schema.ingest(
     [
         {"kind": "set", "field": User.name, "e_ref": ref_carol, "value": "Carol"},
         {"kind": "set", "field": User.name, "e_ref": ref_dave,  "value": "Dave"},
@@ -373,31 +372,31 @@ Use `raw_kind` and `bound` for uncertainty inputs.
 Raw uncertainty validation:
 
 ```python
-fg.write.set(User.name, ref, "Alice", meta={
+fg.fields.set(User.name, ref, "Alice", meta={
     "raw_kind": "probabilistic",
     "bound": [0.2, 0.8],
 })  # ✅
 
-fg.write.set(User.name, ref, "Alice", meta={"raw_kind": "probabilistic"})  # ❌ bound missing
-fg.write.set(User.name, ref, "Alice", meta={"bound": [0.2, 0.8]})          # ❌ raw_kind missing
-fg.write.set(User.name, ref, "Alice", meta={"probability": 0.8})           # ❌ removed write key
+fg.fields.set(User.name, ref, "Alice", meta={"raw_kind": "probabilistic"})  # ❌ bound missing
+fg.fields.set(User.name, ref, "Alice", meta={"bound": [0.2, 0.8]})          # ❌ raw_kind missing
+fg.fields.set(User.name, ref, "Alice", meta={"probability": 0.8})           # ❌ removed write key
 ```
 
 Removed uncertainty write keys:
 
 ```python
-fg.write.set(User.name, ref, "Alice", meta={"confidence": 0.85})          # ❌ removed write key
-fg.write.set(User.name, ref, "Alice", meta={"confidence_source": "ml"})   # ❌ removed write key
+fg.fields.set(User.name, ref, "Alice", meta={"confidence": 0.85})          # ❌ removed write key
+fg.fields.set(User.name, ref, "Alice", meta={"confidence_source": "ml"})   # ❌ removed write key
 ```
 
 ### Which write entry point?
 
 | If you need to ... | Use |
 |---|---|
-| Insert one fact | `fg.write.set` / `fg.write.add` |
-| Update multiple fields atomically on one entity | `fg.write.edit(...)` context manager |
+| Insert one fact | `fg.fields.set` / `fg.fields.add` |
+| Update multiple fields atomically on one entity | `fg.entities.edit(...)` context manager |
 | Group writes across multiple entities | `fg.batch(...)` context manager |
-| Bulk-insert from external data | `fg.ingest(...)` |
+| Bulk-insert from external data | `fg.schema.ingest(...)` |
 | Explain derived rows | `row.explain()` or `fg.eval.explain(expr, head=row.close())` |
 
 ---
@@ -409,7 +408,7 @@ Three primitives:
 | | Purpose | Returned by |
 |---|---|---|
 | `Rule` | Application protocol Rule used as an evaluation head or closed replay head | `from factgraph.sdk import Rule` |
-| `Query` | Read-side projection over the current store | `fg.read.*` and query helpers |
+| `Query` | Read-side projection over the current store | `fg.entities.*` and query helpers |
 | `Inference` | A single inference (one head); produces evaluation rows | `fg.eval.evaluate(inf, engine=...)` → `EvaluateResult` |
 | `RuleExpr` | Application-rule composition; evaluates with an inline, external, or projection `head=` | `fg.eval.evaluate(expr, head=rule, engine=...)` → `EvaluateResult` |
 
@@ -444,14 +443,14 @@ with vars("u", "nm") as (u, nm):
         where=[User(u), u.name == nm],
     )
 
-rows = fg.read.find(User)
+rows = fg.entities.where(User)
 # → [<EntitySnapshot User Alice>, ...]
 
 # Single-projection head — pass the item directly OR wrap it in a list
 with vars("u",) as (u,):
     q_one = Query(head=User(u), where=[User(u)])           # single item
     q_one_list = Query(head=[User(u)], where=[User(u)])    # equivalent
-    snaps = fg.read.find(User)
+    snaps = fg.entities.where(User)
     # → [<EntitySnapshot for Alice>, ...]
 ```
 
@@ -571,7 +570,8 @@ manual = fg.eval.explain(inf, head=closed_head)
 ```
 
 Evaluation is read-only. Candidate accept shells are not part of the T5 public
-SDK; persist new facts with explicit `fg.write.*` or `fg.batch(...)` writes.
+SDK; persist new facts with explicit `fg.fields.*`, `fg.entities.*`, or
+`fg.batch(...)` writes.
 
 ### Engine runtime options
 
@@ -683,7 +683,7 @@ and boundaries are documented in the official
 ## 7. Audit
 
 ```python
-ref = fg.read.ref(User, user_id="u-1")
+ref = fg.entities.ref(User, user_id="u-1")
 
 # explain_fact(pred_id, e_ref, *val_atoms) — narrow by value atoms when needed
 explanation = fg.audit.explain_fact("user:name", ref)
@@ -735,7 +735,7 @@ Create a frozen assertion view from exact assertion ids or from objects
 that expose `.asrt_id`:
 
 ```python
-target = snap.field("name").history.where(source="seed").one()
+target = snap.field("name").history.where(_meta={"source": "seed"}).one()
 
 review = fg.views.create("review_set", asrt_ids=[target.asrt_id])
 review = fg.views.update("review_set", asrts=[target])
@@ -791,7 +791,7 @@ All SDK errors derive from `SDKError` and expose:
 
 ```python
 try:
-    fg.write.set(User.tags, ref, "engineer")  # multi-field; should be add
+    fg.fields.set(User.tags, ref, "engineer")  # multi-field; should be add
 except CardinalityError as e:
     print(e.field_name, e.actual_cardinality, e.operation)
     # → tags multi set
@@ -801,7 +801,7 @@ except CardinalityError as e:
 |---|---|
 | `SDKSchemaError` | Schema preflight or compilation issue |
 | `SDKStoreError` | Most write/read/eval/what-if/audit failures |
-| `EntityNotFoundError` | `read.get` / `write.edit` on missing identity |
+| `EntityNotFoundError` | `fg.entities.get` / `fg.entities.edit` on missing identity |
 | `CardinalityError` | `set` on multi-field, or `add` on single-field |
 | `FrozenSnapshotError` | Assigning to a snapshot or namespace attribute |
 | `EditorClosedError` | Operating on a committed/rolled-back editor |
@@ -847,7 +847,7 @@ on `SDKStoreError`.
 
 ## 10. Additive Schema Changes
 
-`fg.schema.add(...)` adds new `Entity` classes to the active graph:
+`fg.schema.apply(...)` adds new `Entity` classes to the active graph:
 
 ```python
 class Account(Entity):
@@ -855,7 +855,7 @@ class Account(Entity):
     risk_seed: str = Field()
     risk: str = Field()
 
-result = fg.schema.add(Account)
+result = fg.schema.apply(Account)
 assert result.added_entities == ["Account"]
 ```
 
@@ -880,7 +880,7 @@ class User(Entity):
     nickname: str = Field()
     tags: list[str] = Field()
 
-result = fg.schema.add(User)
+result = fg.schema.apply(User)
 assert result.added_entities == []
 assert result.added_fields == ["User.nickname", "User.tags"]
 ```
@@ -892,10 +892,10 @@ reads or writes through superseded entity classes or descriptors raise
 `SDKStoreError`.
 
 The operation is immediate for the active graph: new classes can be used for
-`fg.ref`, `fg.write`, `fg.read`, in-memory `Rule(...)`, and in-memory
-`Inference(...)` right away. If the graph is workspace-backed, call `fg.save()`
-to persist the new workspace manifest digest; the manifest is not rewritten
-implicitly.
+`fg.entities.*`, `fg.fields.*`, `fg.assertions.*`, in-memory `Rule(...)`, and
+in-memory `Inference(...)` right away. If the graph is workspace-backed, call
+`fg.save()` to persist the new workspace manifest digest; the manifest is not
+rewritten implicitly.
 
 Only additive entity-class extension and additive non-identity field extension
 are implemented here. Identity-field changes, field rewrites, destructive
@@ -1006,7 +1006,7 @@ for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 
 ## 13. Appendix: migration notes (v2 → v3)
 
-The v3 SDK is API-compatible with v2 for the flat method surface.
+The v3 SDK removed the v2 flat method surface in favor of namespace managers.
 Notable changes:
 
 ### Removed / renamed APIs
@@ -1016,6 +1016,11 @@ Notable changes:
 | `functional` field on `Field` | (removed) | Use `cardinality="single"` |
 | `temporal` field on `Field` | (removed) | Temporal semantics moved to `meta` |
 | `dims` field on `Field` | (removed) | Multi-dimensional fields not supported |
+| `fg.get/find/ref/match` | `fg.entities.get/where/ref/match` | Layer 1 entity navigation |
+| `fg.set/add` | `fg.fields.set/add` | Layer 2 field writes |
+| `fg.retract` | `fg.assertions.retract` | Layer 3 assertion-id mutation |
+| `fg.edit` | `fg.entities.edit` | EntityEditor entry point |
+| `fg.schema.add` | `fg.schema.register/extend/apply` | Explicit schema operation intent |
 | `fact_key` / `pred_id` on `Pred` | (removed) | Use field accessors instead |
 | `.chosen` on assertion view | (removed) | Use `snapshot.field("X").active` |
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |

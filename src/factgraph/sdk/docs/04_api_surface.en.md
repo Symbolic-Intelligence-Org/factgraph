@@ -19,25 +19,22 @@ from factgraph.sdk import FactGraph
 
 fg = FactGraph.create(schema_classes=[User])
 
-# Namespaced (preferred for new code)
-fg.read.get(User, user_id="u-1")
-fg.write.add(User.tag, alice, "engineer")
+# Canonical namespaces
+alice = fg.entities.ref(User, user_id="u-1")
+fg.fields.add(User.tag, alice, "engineer")
+fg.entities.get(User, user_id="u-1")
 result = fg.eval.evaluate(inference)
 row = result.first()
 explanation = row.explain() if row is not None else None
 fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
-
-# Flat read/write aliases remain available where documented
-fg.get(User, user_id="u-1")
-fg.add(User.tag, alice, "engineer")
-fg.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events)
 ```
 
 | Namespace | Methods |
 |---|---|
-| `schema` | `ingest`, `validate_provenance` |
-| `read` | `get`, `find`, `match`, `ref` |
-| `write` | `set`, `add`, `retract`, `edit` |
+| `entities` | `get`, `where`, `match`, `ref`, `create`, `delete`, `exists`, `edit` |
+| `fields` | `set`, `add`, `retract`, `delete`, `get` |
+| `assertions` | `by_id`, `by_ids`, `where`, `retract`, `active`, `all` |
+| `schema` | `register`, `extend`, `apply`, `ingest`, `validate_provenance` |
 | `eval` | `evaluate`, `explain`, `inspect_semantics` |
 | `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` |
 | `package` | `export_package`, `run_package` |
@@ -132,7 +129,7 @@ exported from `factgraph.sdk`.
 | `ApplicationRule` | Transitional alias for `Rule` |
 | `RuleRef` | Where-clause reference to an exposed rule |
 | `Inference` | Multi-rule inference envelope |
-| `SchemaAddResult` | Result returned by additive `fg.schema.add(...)`; fields are `old_digest`, `new_digest`, `added_entities`, `added_fields` |
+| `SchemaAddResult` | Result returned by `fg.schema.register(...)`, `extend(...)`, or `apply(...)`; fields are `old_digest`, `new_digest`, `added_entities`, `added_fields` |
 | `Query` | Query over the current store |
 | `Pred` | Predicate literal (fact reference) |
 | `Not` | Negation operator for body literals |
@@ -177,7 +174,7 @@ Use `from factgraph.sdk import build_application_rule` and
 
 | Symbol | Purpose |
 |---|---|
-| `IngestResult` | Result of `fg.ingest(...)`: counts, ids, validation report |
+| `IngestResult` | Result of `fg.schema.ingest(...)`: counts, ids, validation report |
 | `ValidationReport` | Per-row provenance/shape validation outcome |
 
 ### 1.5 Errors and error codes
@@ -187,7 +184,7 @@ Use `from factgraph.sdk import build_application_rule` and
 | `SDKSchemaError` | Schema compilation, descriptor binding, preflight |
 | `SDKStoreError` | Store operations (write, view, batch, query, eval shells) |
 | `SDKValueError` (← `SDKStoreError`) | Enum or pattern value validation during application-layer writes |
-| `EntityNotFoundError` (← `SDKStoreError`) | `read.get(...)` / `write.edit(...)` on missing identity |
+| `EntityNotFoundError` (← `SDKStoreError`) | `fg.entities.get(...)` / `fg.entities.edit(...)` on missing identity |
 | `FrozenSnapshotError` (← `SDKStoreError`) | Assigning to read-only attribute (snapshot or namespace) |
 | `CardinalityError` (← `SDKStoreError`) | `set` on multi-field, `add` on single-field |
 | `EditorClosedError` (← `SDKStoreError`) | Operating on a committed/rolled-back `EntityEditor` |
@@ -203,15 +200,16 @@ Use `from factgraph.sdk import build_application_rule` and
 | `QUERY_NOT_IMPLEMENTED` | Query feature not yet implemented |
 | `INV_7C_IDENTITY_PROTECTED` | Identity field write or Identity Claim retract attempt (per ADR-IC §4.1 / INV-7c); see §7 |
 | `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` | `<EntityType>:exists` Claim independent retract attempt (per ADR-IC §4.4 transitional guard); see §7 |
-| `UNRESOLVABLE_E_REF` | `e_ref` string was not produced by `sdk.ref(...)` (shadow store fail-fast per ADR-IC §4.2.1); see §7 |
+| `UNRESOLVABLE_E_REF` | `e_ref` string was not produced by `fg.entities.ref(...)` (shadow store fail-fast per ADR-IC §4.2.1); see §7 |
 
 ---
 
 ## 2. `FactGraph` / `SDKStore` Methods
 
-Methods are listed once per logical operation. All have flat (`fg.X(...)`)
-and namespaced (`fg.<ns>.X(...)`) call sites; both delegate to the same
-implementation.
+Methods are listed once per logical operation. Operations are grouped under
+namespace managers (`fg.entities.*`, `fg.fields.*`, `fg.assertions.*`,
+`fg.schema.*`, ...). The legacy flat top-level shortcuts and `fg.read.*` /
+`fg.write.*` managers were removed in Slice 3a.
 
 ### 2.1 Constructor
 
@@ -276,18 +274,24 @@ new registry content.
 
 | Method | One-liner |
 |---|---|
-| `add(EntityCls, ...)` / `add(schema_classes=[...])` | Add new Entity classes or non-identity fields on existing Entity declarations; returns `SchemaAddResult` |
+| `register(EntityCls)` | Register a new entity type; rejects an existing entity type with `SchemaConflictError` |
+| `extend(EntityCls)` | Add non-identity fields to an existing entity declaration; rejects non-additive schema changes with `SchemaNonAdditiveError` |
+| `apply(EntityCls)` | Safe-diff helper: routes to `register` for new entity types and `extend` for existing entity types |
 | `ingest(items, *, meta=None, allow_sensitive_meta=False)` | Bulk-insert assertions; `meta` merges into every item's meta. Returns `IngestResult` |
 | `validate_provenance(obj, *, standard="derivation_v1")` | Inspect provenance shape without writing; returns `ValidationReport` |
 
-`fg.schema.add(...)` is intentionally additive-only in this slice. It accepts
-new `Entity` classes and replacement declarations with the same Python class
-name when they add only non-identity fields. It validates that every existing
-entity, identity field, and predicate remains compatible, then updates the
-in-memory graph schema, core store schema, ledger schema digest, and
-graph-bound registry schema entry if one was explicitly configured. If the graph
-is bound to a workspace, the Database schema object is updated immediately, but
-the workspace manifest is not rewritten until a later explicit `fg.save(...)`.
+`fg.schema.add(...)` was removed. Use `register`, `extend`, or `apply`.
+Schema extension is additive-only. It validates that every existing entity,
+identity field, ordinary field predicate, and generated `<EntityType>:exists`
+predicate remains compatible before mutating any schema state. ADR-IC §4.3.6
+is enforced here: Identity↔Field swaps, adding Identity fields, removing
+fields, changing field type/cardinality, and changing the generated `:exists`
+predicate are rejected with zero side effects.
+
+On success, the in-memory schema, compiled SchemaIndex, class registry,
+descriptor maps, ledger schema digest, and Database schema object are updated
+as one schema transaction. If the graph is bound to a workspace, the manifest is
+not rewritten until a later explicit `fg.save(...)`.
 
 Field-add uses a replacement class object. After a field-add succeeds, reads
 or writes through superseded entity classes or their descriptors raise
@@ -301,30 +305,35 @@ Re-adding an equivalent existing class is an idempotent no-op:
 public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
 `fg.schema.deprecate` are deferred to future migration-planning work.
 
-### 2.3 Read namespace (`fg.read.*`)
+### 2.3 Entities namespace (`fg.entities.*`)
 
 | Method | One-liner |
 |---|---|
 | `get(entity_cls, **identity)` | Fetch single entity by identity or `None` |
-| `find(entity_cls, *, limit=None, **filters)` | Filter entities |
+| `where(entity_cls, *, limit=None, _meta=None, **filters)` | Filter entities by identity/field values |
 | `match(entity_cls, template, *, limit=None, **port_constraints)` | Return distinct snapshots selected by a `Rule` or AND-only `RuleExpr` |
 | `ref(entity_cls, **identity)` | Encode an entity reference string |
+| `create(entity_cls, *, meta=None, **identity)` | Eagerly materialize Identity Claims and `<EntityType>:exists`; returns e_ref |
+| `delete(e_ref, *, meta=None)` / `delete(entity_cls, *, meta=None, **identity)` | Revoke the whole entity bundle and visible field claims |
+| `exists(entity_cls, **identity)` | Return whether the entity's active `:exists` claim is visible |
+| `edit(entity_cls, **identity)` | Open an `EntityEditor` for an existing entity |
 
-### 2.4 Write namespace (`fg.write.*`)
+### 2.4 Fields namespace (`fg.fields.*`)
 
 | Method | One-liner |
 |---|---|
 | `set(field, ref, value, *, meta=None)` | Set a single-cardinality field |
 | `add(field, ref, value, *, meta=None)` | Append to a multi-cardinality field |
-| `retract(asrt_id, *, meta=None)` | Retract a specific assertion |
-| `edit(entity_cls, **identity)` | Open an `EntityEditor` transaction |
+| `retract(field, ref, value, *, meta=None)` | Retract the unique active field assertion matching `(field, ref, value)` |
+| `delete(field, ref, *, meta=None)` | Retract all active assertions for `(field, ref)`; fail-fast on the first error |
+| `get(field, ref)` | Materialize the current field value for one entity ref |
 
 `fg.batch(meta=None)` opens an `SDKBatchTx` for grouping multiple writes
 into one transaction.
 
 Writes enforce Form I value constraints before ledger append. `Literal[...]`
-enum misses and `pattern=` mismatches raise `SDKValueError` through `fg.set`,
-`fg.add`, `fg.write.set`, `fg.write.add`, batch commits, wire batch apply, and
+enum misses and `pattern=` mismatches raise `SDKValueError` through `fg.fields.set`,
+`fg.fields.add`, batch commits, wire batch apply, and
 `EntityEditor` field operations. Direct internal ledger/protocol paths are
 trusted internal paths and do not run this SDK-layer validation.
 
@@ -334,9 +343,13 @@ trusted internal paths and do not run this SDK-layer validation.
 |---|---|
 | `by_id(asrt_id)` | Return `AssertionRecord | None` for one assertion id |
 | `by_ids(asrt_ids)` | Return `AssertionRecordSet` for an iterable of assertion ids; unknown ids are skipped |
+| `where(*, field=None, e_ref=None, value=None, value_tag=None, _meta=None)` | Filter active assertions by canonical Layer 3 criteria |
+| `retract(asrt_id, *, meta=None)` | Retract a specific assertion id; Identity and `:exists` claims are protected |
+| `active` / `all` | Active or all assertion records |
 
-This namespace is read-only and by-id only. It does not ship graph-wide
-`active`, `history`, `where`, `at`, or `version` enumeration.
+`fg.assertions.retract(...)` is the only public assertion-id mutation entry.
+Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; generated
+`<EntityType>:exists` retracts raise `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
 
 ### 2.6 Eval namespace (`fg.eval.*`)
 
@@ -412,13 +425,13 @@ via `factgraph.audit.load_audit_package` or hold them from a recorder.
 `asrt_ids: frozenset[str]`; it is not exported from `factgraph.sdk.__all__`.
 `fg.views` has no built-in `default` entry; `"default"` is just another
 user-defined frozen assertion view name when created explicitly. Frozen
-assertion views are not accepted as snapshot input to `fg.read.find(...)`
+assertion views are not accepted as snapshot input to `fg.entities.where(...)`
 or evaluation input to `fg.eval.evaluate(...)`; use
 `fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
 readback.
 
 Read-time confidence/display aggregation is not a public SDK surface.
-`fg.read.find(...)` and `fg.eval.evaluate(...)` do
+`fg.entities.where(...)` and `fg.eval.evaluate(...)` do
 not accept frozen views or read policies as input.
 
 ### 2.15 Result-type non-export
@@ -448,15 +461,15 @@ Read-only view of an entity. Attributes:
 - `entity_type` — entity class name
 - `identity_available` — whether the identity is usable for `.edit()`
 - `identity` — dict of identity field values
-- `assertions` — namespace exposing per-field assertion records
+- `assertions` — `AssertionView` exposing entity-scoped assertion records
 
-Method: `field(name)` returns a `FieldAssertions` for the given field.
+Method: `field(name)` returns a field-scoped `AssertionView`.
 
 Assigning to a snapshot attribute raises `FrozenSnapshotError`.
 
 ### `EntityEditor`
 
-Transactional editor obtained from `fg.write.edit(...)`. Methods:
+Transactional editor obtained from `fg.entities.edit(...)`. Methods:
 `preview()`, `commit(meta=...)`, `rollback()`. Attributes: `ref`,
 `entity_type`. Operating on a committed/rolled-back editor raises
 `EditorClosedError`.
@@ -466,17 +479,22 @@ Transactional editor obtained from `fg.write.edit(...)`. Methods:
 Per-field editor on an `EntityEditor`: `set(value, *, meta=None)`,
 `add(value, *, meta=None)`, `retract(*, asrt_id, meta=None)` (keyword-only).
 
-### `FieldAssertions`, `AssertionRecordSet`, `AssertionRecord`, `AssertionMeta`
+### `AssertionView`, `AssertionRecordSet`, `AssertionRecord`, `AssertionMeta`
 
-`FieldAssertions` exposes a field's active assertions plus history.
+`AssertionView` is the unified read-only assertion view type. `snapshot.assertions`
+is entity-scoped; `snapshot.field("name")` and
+`snapshot.assertions.field("name")` are field-scoped. `FieldAssertions` and
+`AssertionNamespace` were removed.
+
 `.active` returns currently non-revoked records as `AssertionRecordSet`;
-`.history` returns active plus revoked records, and `.all` is a compatibility
-alias for `.history`. Legacy call forms such as `.active()` and `.all()` remain
-accepted. `FieldAssertions.at(iso8601_time)` and `.version(v)` are active-only
-shortcuts for `.active.at(...)` and `.active.version(...)`.
+`.all` returns active plus revoked records. `.history` is a deprecated alias of
+`.all`; it emits no warning by default and emits `DeprecationWarning` only when
+`FACTGRAPH_WARN_DEPRECATED=1` is set. Legacy call forms such as `.active()` and
+`.all()` remain accepted because `AssertionRecordSet` is callable and returns
+itself.
 
 `AssertionRecordSet` is a tuple-compatible returned object with
-`.where(...)`, `.at(...)`, `.version(...)`, `.by_id(...)`, `.one()`,
+`.where(value=..., value_tag=..., _meta={...})`, `.at(...)`, `.by_id(...)`, `.one()`,
 `.all()`, and `.first()` helpers. Non-terminal filters return
 `AssertionRecordSet`, so chained selection remains available. It is not a
 top-level `factgraph.sdk.__all__` export.
@@ -496,11 +514,11 @@ Example:
 ```python
 target = (
     snapshot.field("name")
-    .history.where(value="Alice", source="seed")
+    .all.where(value="Alice", _meta={"source": "seed"})
     .one()
 )
 same = snapshot.field("name").history.by_id(target.asrt_id).one()
-sdk.retract(target.asrt_id)
+fg.assertions.retract(target.asrt_id)
 ```
 
 ---
@@ -536,7 +554,7 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 ### 6.1 Query
 
 - Public `fg.run(Query(...))` was removed by the T5 hard-cut.
-- Use `fg.read.find(...)` for simple snapshot reads and `fg.read.match(...)`
+- Use `fg.entities.where(...)` for simple snapshot reads and `fg.entities.match(...)`
   for application-rule snapshot reads.
 - `on_missing` and `on_type_mismatch` accept `error | skip | null`
 - Query head supports only schema `single` fields
@@ -591,8 +609,8 @@ cached. `row_format="tuple"` still works but emits `DeprecationWarning`.
 ### 6.4 Candidate accept removal
 
 `accept(CandidateSet, ...)` and `accept_many(...)` are removed from the public
-SDK path. Evaluation is read-only; explicit writes go through `fg.write.*` or
-`fg.batch(...)`.
+SDK path. Evaluation is read-only; explicit writes go through `fg.fields.*`,
+`fg.assertions.retract(...)`, `fg.entities.edit(...)`, or `fg.batch(...)`.
 
 ---
 
@@ -606,18 +624,18 @@ implementation (landed 2026-05-30 on
 
 Per ADR-IC §4.2: Identity Claim emission is owned by the **application
 layer** (`factgraph.application.entity_write._materialization_ops`), not the
-SDK shell. The SDK shell routes `fg.set` / `fg.add` / `EntityEditor.commit()`
+SDK shell. The SDK shell routes `fg.fields.set` / `fg.fields.add` / `EntityEditor.commit()`
 / `SDKBatchTx.commit()` through `plan_write_command`, which delegates
 materialization to `_materialization_ops` when the target entity is not yet
 visible.
 
 **Emission input contract** (per ADR-IC §4.2.1) — emission only accepts an
 `EntityRef` that **carries the complete identity bundle**. The SDK shell
-shadow store (see §7.4) is a compatibility detail that lets `fg.set(Field,
-e_ref_string, value)` succeed by recovering the bundle from a prior
-`sdk.ref(...)` call.
+shadow store (see §7.4) is a compatibility detail that lets
+`fg.fields.set(Field, e_ref_string, value)` succeed by recovering the bundle
+from a prior `fg.entities.ref(...)` call.
 
-**What gets emitted on the first Field write to a freshly `fg.ref`-ed
+**What gets emitted on the first Field write to a freshly `fg.entities.ref`-ed
 entity** (atomic, single `_write_session`):
 
 | Claim | Count | Pred ID example (class `User`) |
@@ -643,15 +661,13 @@ that gates materialization.
 
 | Path | Materialization trigger |
 |---|---|
-| `fg.set(Field, e_ref, value)` / `fg.add(Field, e_ref, value)` | Auto on first Field write when target not visible |
+| `fg.entities.create(EntityCls, **identity)` | Eagerly emits Identity Claims + `:exists`; no Field write required |
+| `fg.fields.set(Field, e_ref, value)` / `fg.fields.add(Field, e_ref, value)` | Lazy compatibility path: auto on first Field write when target not visible |
 | `tx = fg.batch(); h = tx.entity(...); h.field.set(...); tx.commit()` | Auto via `RecordExistsOp` injected when any `set`/`add` is staged |
-| `editor = fg.edit(...); editor.field.set(...); editor.commit()` | **NOT a materialization path** — `fg.edit` pre-validates `:exists` (raises `EntityNotFoundError` if entity not materialized) |
+| `editor = fg.entities.edit(...); editor.field.set(...); editor.commit()` | **NOT a materialization path** — `fg.entities.edit` pre-validates `:exists` (raises `EntityNotFoundError` if entity not materialized) |
 
-The full-entity API path `fg.entities.create(EntityCls, **identity_kwargs)`
-is the **target** of the ADR-IC §4.2 emission contract but is not shipped in
-Slice 2; it is carried forward to Slice 3a (ADR-API Q10 namespace
-migration). Slice 2 error messages reference `fg.entities.create` /
-`fg.entities.delete` as user-migration guidance only.
+`fg.entities.delete(...)` is the only public path that can revoke an entity's
+Identity Claims as part of whole-entity deletion.
 
 ### 7.2 INV-7c Identity reject behavior
 
@@ -663,7 +679,7 @@ following paths all raise with `code="INV_7C_IDENTITY_PROTECTED"`:
 | `editor.<identity_field>.set(value)` | Layer 2 (SDK shell) | Reject — `IdentityEditor.set/add/retract` is a write guard | `SDKStoreError` |
 | `editor.<identity_field>.add(value)` / `.retract(value)` | Layer 2 (SDK shell) | Reject (delegate to `.set` wording) | `SDKStoreError` |
 | `plan_write_command` with `FieldMutation` targeting an Identity field | Layer 2 (application source-of-truth) | Reject via `is_identity_field` check | `EntityWriteError` → `SDKStoreError` |
-| `fg.retract(asrt_id)` where `asrt_id` is an Identity Claim | Layer 3 (SDK shell + application retract guard) | Reject via `check_retract_allowed` (Identity classification) | `SDKStoreError` |
+| `fg.assertions.retract(asrt_id)` where `asrt_id` is an Identity Claim | Layer 3 (SDK shell + application retract guard) | Reject via `check_retract_allowed` (Identity classification) | `SDKStoreError` |
 | Application ingest path retract op on Identity Claim asrt | Layer 3 (application ingest) | Reject — code propagated directly (not wrapped as `INGEST_RETRACT_FAILED`) | `ErrorDTO(code=INV_7C_IDENTITY_PROTECTED)` |
 | Application `_apply_op` retract branch on Identity Claim asrt | Layer 3 (application entity_write) | Reject — code propagated directly (not wrapped as `ENTITY_WRITE_FAILED`) | `EntityWriteError(code=INV_7C_IDENTITY_PROTECTED)` |
 
@@ -675,7 +691,7 @@ source of truth for caller branching.
 - Cites `INV-7c` (the protected anchor invariant)
 - Cites `INV-7a` (the underlying Identity immutable anchor)
 - References `fg.entities.delete` + `fg.entities.create` as the future
-  migration path (Slice 3a)
+  migration path
 - References `ADR-IC §4.1` as the authoritative source
 
 The protocol/core direct paths (`core/evidence/write_protocol.py` /
@@ -703,9 +719,9 @@ references `ADR-IC §4.4` and explicitly does **not** mention `INV-7c`
 
 `SDKStore._identity_values_by_e_ref` is a **legacy / internal compatibility
 detail**, NOT part of the Layer 2 fields API contract (per ADR-IC §4.2.3).
-It exists so that `fg.set(Field, e_ref_string, value)` can succeed when the
-shadow store has previously seen that `e_ref` via a prior `sdk.ref(...)`
-call.
+It exists so that `fg.fields.set(Field, e_ref_string, value)` can succeed when
+the shadow store has previously seen that `e_ref` via a prior
+`fg.entities.ref(...)` call.
 
 | Input | Behavior |
 |---|---|

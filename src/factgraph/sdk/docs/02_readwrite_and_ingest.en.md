@@ -5,27 +5,29 @@ introductory walkthrough see [`00_user_guide.en.md`](00_user_guide.en.md);
 for the API index see [`04_api_surface.en.md`](04_api_surface.en.md).
 
 In the snippets below, `fg = FactGraph.create(schema_classes=[...])`.
-All flat methods (`fg.set(...)`, `fg.get(...)`, etc.) are also reachable
-through the namespaced form:
+The public API is split by navigation key. Flat top-level shortcuts and the
+old `fg.read.*` / `fg.write.*` managers were removed in Slice 3a.
 
-| Flat | Namespaced | Namespace |
+| Layer | Namespace | Methods |
 |---|---|---|
-| `fg.set / add / retract / edit` | `fg.write.set / add / retract / edit` | `write` |
-| `fg.batch(...)` | (flat-only — there is no `fg.write.batch`) | — |
-| `fg.get / find / ref` | `fg.read.get / find / ref` | `read` |
-| `fg.ingest / validate_provenance` | `fg.schema.ingest / validate_provenance` | `schema` |
+| Entity | `fg.entities.*` | `get`, `where`, `match`, `ref`, `create`, `delete`, `exists`, `edit` |
+| Field | `fg.fields.*` | `set`, `add`, `retract`, `delete`, `get` |
+| Assertion | `fg.assertions.*` | `where`, `by_id`, `by_ids`, `retract`, `active`, `all` |
+| Schema / ingest | `fg.schema.*` | `register`, `extend`, `apply`, `ingest`, `validate_provenance` |
 
-Both forms have identical semantics. The flat form is permanently
-supported.
+`fg.batch(...)` remains a top-level transaction builder rather than a write
+manager method.
 
 ## 1. Choosing a Write Entry
 
 | Scenario | Recommended API | Notes |
 | --- | --- | --- |
 | Build object graph, preview, replay/export | `fg.batch()` | Supports `preview()`, `commit()`, wire plan |
-| Edit an existing entity with known identity | `fg.write.edit(...)` | Clear write intent |
-| External batch import with diagnostics | `fg.ingest(...)` | Item-level validation, collect-and-stop |
-| Lowest-level direct assertion writes | `fg.write.ref / set / add / retract` | Most flexible, least opinionated |
+| Materialize an entity anchor bundle | `fg.entities.create(...)` | Eagerly emits Identity Claims + `<EntityType>:exists` |
+| Edit an existing entity with known identity | `fg.entities.edit(...)` | Clear write intent |
+| External batch import with diagnostics | `fg.schema.ingest(...)` | Item-level validation, collect-and-stop |
+| Write or clear one field | `fg.fields.set / add / retract / delete` | Schema-aware Layer 2 writes |
+| Retract a specific assertion id | `fg.assertions.retract(...)` | Layer 3; Identity and `:exists` Claims are protected |
 
 ## 2. Building `FactGraph`
 
@@ -61,19 +63,19 @@ Stable contract:
   settings. T5 public evaluation uses `fg.eval.evaluate(...)` and returns
   `EvaluateResult`.
 
-## 3. Low-Level Writes (`ref/set/add/retract`)
+## 3. Direct Namespace Writes
 
-### 3.1 `sdk.ref(...)`
+### 3.1 `fg.entities.ref(...)`
 
 - Builds canonical `idref_v1` from identity values.
-- Supports `Identity.default` and `default_factory="uuid4"`.
+- Requires the complete Form I `Identity()` bundle.
 - Missing/unknown identity keys fail with `SDKStoreError`.
 
-### 3.2 `sdk.set(...)` / `sdk.add(...)`
+### 3.2 `fg.fields.set(...)` / `fg.fields.add(...)`
 
 ```python
-age_asrt_id = sdk.set(User.age, user_ref, 31, meta={"source": "hr"})
-name_asrt_id = sdk.add(User.name, user_ref, "Alicia", meta={"source": "hr"})
+age_asrt_id = fg.fields.set(User.age, user_ref, 31, meta={"source": "hr"})
+name_asrt_id = fg.fields.add(User.name, user_ref, "Alicia", meta={"source": "hr"})
 ```
 
 Stable contract:
@@ -82,18 +84,21 @@ Stable contract:
 - If the current `SDKStore` already knows the identity values for `e_ref`, matching identity predicates are materialized before the field write; arbitrary external canonical `idref_v1` values are not enough to guarantee this backfill.
 - Low-level `set/add` do not strongly enforce cardinality; cardinality guards are mainly provided by batch/edit/ingest facades.
 
-### 3.3 `sdk.retract(...)`
+### 3.3 `fg.fields.retract(...)` / `fg.assertions.retract(...)`
 
 ```python
-sdk.retract(asrt_id, meta={"trace_id": "fix-1"})
+fg.fields.retract(User.name, user_ref, "Alice", meta={"trace_id": "fix-1"})
+fg.assertions.retract(asrt_id, meta={"trace_id": "fix-1"})
 ```
 
 - Append-only revoke (no physical delete of claim rows).
-- Returns the revoker assertion id; re-retracting an already revoked
+- `fg.assertions.retract(...)` returns the revoker assertion id; re-retracting an already revoked
   assertion returns the existing revoker id.
 - Unknown or invalid assertion ids raise `SDKStoreError`; unknown
   assertion ids use `code="ASSERTION_NOT_FOUND"`. The underlying core
   `WriteProtocolError` is preserved as `__cause__` for debugging.
+- Identity Claims raise `INV_7C_IDENTITY_PROTECTED`. Generated
+  `<EntityType>:exists` Claims raise `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
 
 ## 4. Batch Writes (`sdk.batch()`)
 
@@ -115,9 +120,9 @@ Additional semantics:
 
 ### 4.2 Cardinality and identity constraints
 
-- `single` fields only allow `.set(...)` (wrong op raises `SDKStoreError` in `sdk.batch()`, and `CardinalityError` in `sdk.edit()`).
-- `multi` fields only allow `.add(...)` (wrong op raises `SDKStoreError` in `sdk.batch()`, and `CardinalityError` in `sdk.edit()`).
-- Batch managed-handle retract is by assertion id: `.retract(assertion_id=...)` (positional argument is also supported); `sdk.edit()` `FieldEditor` uses `.retract(asrt_id=...)`.
+- `single` fields only allow `.set(...)` (wrong op raises `SDKStoreError` in `fg.batch()`, and `CardinalityError` in `fg.entities.edit()`).
+- `multi` fields only allow `.add(...)` (wrong op raises `SDKStoreError` in `fg.batch()`, and `CardinalityError` in `fg.entities.edit()`).
+- Batch managed-handle retract is by assertion id: `.retract(assertion_id=...)` (positional argument is also supported); `fg.entities.edit()` `FieldEditor` uses `.retract(asrt_id=...)`.
 - Identity fields expose read-only guards; `set/add/retract` fail.
 - `tx.entity(...)` requires the complete identity bundle: every `Identity()` value must be supplied at handle creation.
 - `bind(...)` does not add or alter identity fields.
@@ -134,22 +139,22 @@ Additional semantics:
 - `cardinality` uses `single|multi`.
 - Wire export (`to_json`/`export`) rejects raw `idref_v1` token values; use same-tx handles for entity references.
 
-## 5. Read and Edit (`get/find/edit`)
+## 5. Entities Read and Edit
 
-### 5.1 `sdk.get(...)`
+### 5.1 `fg.entities.get(...)`
 
 ```python
-snap = sdk.get(User, user_id="u1", locale="zh")
+snap = fg.entities.get(User, user_id="u1", locale="zh")
 ```
 
 - Identity kwargs only.
 - Returns `EntitySnapshot | None`.
 - Snapshot from `get` has `identity_available=True`.
 
-### 5.2 `sdk.find(...)`
+### 5.2 `fg.entities.where(...)`
 
 ```python
-rows = sdk.find(User, age=30, limit=20)
+rows = fg.entities.where(User, age=30, limit=20)
 ```
 
 Stable contract:
@@ -169,10 +174,10 @@ Filter semantics:
 - `multi`: containment (`expected in tuple_value`).
 - Entity-ref fields accept either canonical `ref` or `EntitySnapshot` (`.ref` is used).
 
-### 5.3 `sdk.edit(...)`
+### 5.3 `fg.entities.edit(...)`
 
 ```python
-with sdk.edit(User, user_id="u1", locale="zh") as user:
+with fg.entities.edit(User, user_id="u1", locale="zh") as user:
     user.age.set(31)
     user.name.add("Alicia")
 ```
@@ -194,13 +199,12 @@ Stable contract:
 ### 6.2 `snapshot.assertions.field(...)`
 
 - `.active`: currently non-revoked assertions as an `AssertionRecordSet`
-- `.history`: active plus revoked assertions as an `AssertionRecordSet`
-- `.all`: compatibility alias for `.history`
+- `.all`: active plus revoked assertions as an `AssertionRecordSet`
+- `.history`: deprecated compatibility alias for `.all`; it warns only when
+  `FACTGRAPH_WARN_DEPRECATED=1`
 - `.at(t)`: shortcut for `.active.at(t)`, filtering active
   assertions by business valid time
   `valid_from <= t` and (`valid_to` missing or `valid_to > t`)
-- `.version(v)`: shortcut for `.active.version(v)`, filtering
-  active assertions by version metadata (`version == v`)
 
 Legacy call forms such as `.active()` and `.all()` remain accepted; the returned
 `AssertionRecordSet` is callable and returns itself.
@@ -211,9 +215,9 @@ iteration still work) and adds read-side selection helpers:
 ```python
 target = snapshot.assertions.field("name").history.where(
     value="Alice",
-    source="seed",
+    _meta={"source": "seed"},
 ).one()
-sdk.retract(target.asrt_id)
+fg.assertions.retract(target.asrt_id)
 
 same = snapshot.assertions.field("name").history.by_id(target.asrt_id).one()
 ```
@@ -221,9 +225,9 @@ same = snapshot.assertions.field("name").history.by_id(target.asrt_id).one()
 The same helpers work on whatever assertion set you start from:
 
 ```python
-snapshot.assertions.name.active.where(source="seed")
+snapshot.assertions.name.active.where(_meta={"source": "seed"})
 snapshot.assertions.name.history.at("2026-05-01T00:00:00Z")
-snapshot.assertions.name.history.version("v1")
+snapshot.assertions.name.history.where(_meta={"version": "v1"})
 snapshot.assertions.name.history.by_id(asrt_id)
 ```
 
@@ -232,12 +236,12 @@ Boundaries:
 - `valid_to` is exclusive when present: `[valid_from, valid_to)`.
 - `.at(t)` filters business valid time from `valid_from` / `valid_to`,
   not `ingested_at`.
-- Missing `version` is excluded from `.version(v)`.
 - `.at(t)` validates ISO 8601 for both input and assertion meta fields.
-- `.version(v)` accepts only `str|int` (`bool` is invalid).
+- Version filtering is ordinary metadata filtering:
+  `.where(_meta={"version": "v1"})`.
 - `snapshot.assertions` covers only `Field` attributes, not `Identity` attributes.
 
-## 7. Ingest (`sdk.ingest(...)`)
+## 7. Ingest (`fg.schema.ingest(...)`)
 
 ### 7.1 Supported item shapes
 
@@ -271,10 +275,10 @@ Boundaries:
 - `diagnostics`
 - `diagnostics_contract_version`
 
-## 8. Provenance Validation (`sdk.validate_provenance`)
+## 8. Provenance Validation (`fg.schema.validate_provenance`)
 
 ```python
-report = sdk.validate_provenance(obj, standard="derivation_v1")
+report = fg.schema.validate_provenance(obj, standard="derivation_v1")
 ```
 
 Inputs:
@@ -320,14 +324,14 @@ The Annotation Store is the canonical semantic annotation layer for facts. `meta
 
 ### Relationship to meta_rows
 
-`meta_rows` is a selection / review mirror. Canonical semantic consumers should read the Annotation Store, while `AssertionRecordSet.where(meta=...)` and `AssertionRecord.meta.raw` continue to use `meta_rows`.
+`meta_rows` is a selection / review mirror. Canonical semantic consumers should read the Annotation Store, while `AssertionRecordSet.where(_meta=...)` and `AssertionRecord.meta.raw` continue to use `meta_rows`.
 
 Raw uncertainty note:
 
 - user-authored raw uncertainty uses paired meta:
 
   ```python
-  fg.write.set(
+  fg.fields.set(
       Risk.level,
       ref,
       "elevated",
