@@ -7,14 +7,14 @@
 - Inputs:
   - ADR-API(`workflow/design/decisions/active/2026-05-29_q-api-namespace-decision.md` adopted `66434490`)— §4.1 Q10 / §4.2 Q11 / §4.3 Q12 / §4.4 Q13 / §4.5 Q14 + §4.6 cross-Q summary
   - meta-ADR(`workflow/design/decisions/active/2026-05-29_qm-meta-grouping-and-slice-boundaries-decision.md` adopted `ebafdb0c`)§4.2 grouping(Q10-Q14 同 ADR 锁)+ §4.4 Q-PR1 separation contract(Step 1 zero Q-PR1 dependency)
-  - ADR-IE(`workflow/design/decisions/active/2026-05-29_q-ie-entity-editor-decision.md`)— EntityEditor 公开 contract 跟 ADR-API §4.1 `fg.entities.edit` 衔接
+  - ADR-IE(`workflow/design/decisions/active/2026-05-29_q-ie-entity-editor-decision.md` adopted `9fd0ffb5`)— EntityEditor 公开 contract 跟 ADR-API §4.1 `fg.entities.edit` 衔接
   - ADR-IC(`workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md` adopted `2d0866ed`)— §4.3.6 explicit contract(`fg.schema.extend` Identity↔Field swap reject + `<EntityType>:exists` predicate protect)
   - 现有 Stage 1 audit `workflow/audit/active/2026-05-29_identity-as-claim-vs-shipped.md` §7.3 Q10-Q14 rows(`audit:524-528`)
   - Slice 1 close `9cef674b`(`v0.2.0-blueprint-slice-1-form-i-schema-2026-05-29` pushed)+ Slice 2 close `c927d41f`(`v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29` pushed,fork from Slice 1 close)
   - Shipped SDK 源码(`src/factgraph/sdk/store.py` + `src/factgraph/sdk/facade.py` + `src/factgraph/sdk/batch.py`)read at preflight-row-drafting time
 - Outputs / Downstream:
   - Slice 3a blueprint draft(NEW `workflow/blueprints/active/2026-05-30_slice-3a-api-namespace.md` + paired audit log)
-- Branch:暂未起 Slice 3a branch — preflight 在 Slice 2 close 后的 HEAD(`c927d41f` push tip)上 read-only,fork point 待 Slice 3a blueprint scope 锁后 from `c927d41f`
+- Branch:`v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30` @ `70aee8a5`(preflight commit)— fork from Slice 2 close `c927d41f`(post-amend at preflight review pass);blueprint draft + audit log 直接落本 branch。
 
 > 触发 preflight 必要性:Slice 3a 满足 CADENCE Q3 §4.4 触发条件 — **subtractive removal**(`fg.read.*` / `fg.write.*` namespace 整删,无 alias)+ **cross-module protocol change**(SDK shell ↔ application + ledger ↔ tests + docs + examples 跨多 module 改 surface)+ **namespace migration**(Q10 主体)。
 
