@@ -10,7 +10,7 @@ import warnings
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from factgraph.application import apply_write_plan, plan_write_command
+from factgraph.application import apply_write_plan, is_entity_identity_bundle_active, plan_write_command
 from factgraph.application.schema_mutation_runtime import (
     SchemaAddResult,
     add_schema_classes as app_add_schema_classes,
@@ -1232,24 +1232,21 @@ class _SDKEntitiesManager:
         return len(result.applied)
 
     def exists(self, entity_cls: type[Entity], **identity: Any) -> bool:
-        """Return whether the entity is visible via active ``<EntityType>:exists``.
+        """Return whether the entity is visible via active Identity Claims.
 
-        Per Slice 3a Step 4, this is a cheap existence check over the shipped
-        ``:exists`` substrate rather than a snapshot materialization path.
         ``self._sdk._ref`` supplies the Form I complete-identity validation and
-        deterministic e_ref encoding. It also preserves the Slice 2 shadow-store
+        deterministic e_ref encoding while preserving the Slice 2 shadow-store
         compatibility behavior until the future eager-create-only migration.
         """
         self._reject_non_entity_class(entity_cls, method="exists")
         e_ref = self._sdk._ref(entity_cls, **identity)
-        info = entity_info(self._sdk._application_schema_index, entity_cls.__name__)
-        claims = self._sdk._store.ledger.find_claims(
-            pred_id=info.exists_predicate_id,
+        identity_values = self._sdk._identity_values_by_e_ref.get(e_ref, identity)
+        return is_entity_identity_bundle_active(
+            store=self._sdk._store,
+            schema_index=self._sdk._application_schema_index,
+            entity_type=entity_cls.__name__,
             e_ref=e_ref,
-        )
-        return any(
-            not self._sdk._store.ledger.has_active_revocation(claim.asrt_id)
-            for claim in claims
+            identity_values=dict(identity_values),
         )
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:

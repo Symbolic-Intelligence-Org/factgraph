@@ -15,6 +15,7 @@
 | 2026-05-30 | scoped | Scope freeze accepted | Self-check complete: Q-EXISTS §4.1-§4.10 represented, SF1-SF10 locked, Non-goals N1-N11 complete, Step 0-8 implementation plan has commit-boundary deliverables, and §7 acceptance count updated to 26 checkboxes. |
 | 2026-05-30 | implementing-step-0 | Pre-implementation inventory complete | Grep inventory found no new Q-PR1, rule-DSL deletion, shadow-store removal, or ledger-migration requirement; implementation can proceed under scoped constraints. |
 | 2026-05-30 | implementing-step-1 | Identity-bundle visibility helper added | Added application-layer `is_entity_identity_bundle_active(...)` helper plus helper-level tests for complete bundle, no bundle, partial bundle, mismatched value, revoked Identity Claim, and ignored `:exists`-only visibility; no caller rewiring yet. |
+| 2026-05-30 | implementing-step-2 | `fg.entities.exists` rewired | Replaced the SDK `:exists` scan with the application Identity-bundle helper; updated SDK existence tests for complete bundle, incomplete bundle, composite identity, post-delete, and `:exists`-only ignored semantics. Batch/co-emission paths remain unchanged for Step 3. |
 
 ## Decision Notes
 
