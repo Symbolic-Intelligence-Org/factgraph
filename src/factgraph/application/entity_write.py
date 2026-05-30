@@ -320,8 +320,8 @@ def plan_delete_command(
     """Plan a whole-entity revoke per ADR-IC §4.1 强制点 3。
 
     Resolves the target,verifies the entity is visible,enumerates all Active
-    Claims under the e_ref(Identity + ``:exists`` + Field Claims),and builds
-    a tuple of retract ``PlannedOpDTO``s。 The execution path is the path-bound
+    Claims under the e_ref(Identity + Field Claims,plus any legacy ``:exists``
+    Claim when present),and builds a tuple of retract ``PlannedOpDTO``s。 The execution path is the path-bound
     private helper(``_apply_entity_delete_retract`` via ``apply_delete_plan``)
     — see module-level docstring for the SF3 P1 amend rationale。
     """
@@ -444,8 +444,8 @@ def _apply_entity_delete_retract(
     (see module-level docstring + audit Decision Note #3)。
 
     Per ADR-IC §4.1 强制点 3,whole-entity revoke via ``fg.entities.delete``
-    is the唯一合法整批 retract path for Identity Claims and ``:exists``
-    Claims。 Path-binding(rather than a metadata signal on ``PlannedOpDTO``)
+    is the唯一合法整批 retract path for Identity Claims and any legacy
+    ``:exists`` Claim under the target e_ref。 Path-binding(rather than a metadata signal on ``PlannedOpDTO``)
     is the SF3 P1 amend structural guarantee:no caller can forge bypass by
     constructing a ``PlannedOpDTO`` and routing it through generic
     ``_apply_op``(which always enforces ``check_retract_allowed``)。

@@ -1124,9 +1124,9 @@ class _SDKEntitiesManager:
         """Whole-entity revoke per ADR-IC §4.1 强制点 3 + Slice 3a §5.4。
 
         ``fg.entities.delete`` is the **唯一合法整批撤销 path** for Identity
-        Claims and ``<EntityType>:exists`` Claims(per ADR-IC §4.1 + §4.4)。
-        Field Claims under the e_ref are also retracted as part of the atomic
-        whole-entity revoke。
+        Claims and Field Claims under the e_ref。 Legacy ``<EntityType>:exists``
+        Claims,when present,are retracted through the same path-bound whole-
+        entity revoke path。
 
         **PF-S2 discriminated signature**(per blueprint §6.1 SF2 lock):
 

@@ -8,7 +8,7 @@ Test scope:
 - **PF-S2 discriminated signature**:Form A `delete(e_ref: str)` + Form B
   `delete(EntityCls, **identity)`;tuple selector rejected with PF-S2 wording。
 - **Atomic whole-entity revoke**:all Active Claims under e_ref(Identity +
-  `:exists` + Field)revoked atomically;Active count → 0。
+  Field,and legacy `:exists` when present)revoked atomically;Active count → 0。
 - **Path-bound guard-bypass(SF3 P1 amend — STRUCTURAL invariants)**:
   - generic `_apply_op(PlannedOpDTO(op="retract", asrt=identity))` still
     raises `INV_7C_IDENTITY_PROTECTED` — generic dispatcher 不可 bypass
@@ -30,6 +30,7 @@ from collections import Counter
 import pytest
 
 from factgraph._sdk_errors import EntityNotFoundError
+from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
@@ -67,24 +68,39 @@ def _active_claim_counts(fg: FactGraph, e_ref: str) -> Counter:
     )
 
 
+def _write_legacy_exists_claim(fg: FactGraph, e_ref: str) -> str:
+    return set_field(fg._store.ledger, PRED_EXISTS, e_ref, [])
+
+
 # ---------- Form A: delete(e_ref: str)----------
 
 
 def test_delete_form_a_revokes_all_active_claims():
     """`delete(e_ref: str)` revokes all Active Claims under that e_ref atomically。"""
     fg, e_ref = _make_materialized_fg()
-    # Pre: 5 Active Claims (2 Identity + 1 :exists + 2 Field)
+    # Pre: 4 Active Claims (2 Identity + 2 Field); no new user-path :exists.
     assert _active_claim_counts(fg, e_ref) == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
-        PRED_EXISTS: 1,
         PRED_NAME: 1,
         PRED_STATUS: 1,
     })
 
     revoked = fg.entities.delete(e_ref)
-    assert revoked == 5
+    assert revoked == 4
     # Post: 0 Active Claims
+    assert _active_claim_counts(fg, e_ref) == Counter()
+
+
+def test_delete_form_a_revokes_legacy_exists_claim_when_present():
+    fg, e_ref = _make_materialized_fg()
+    exists_asrt = _write_legacy_exists_claim(fg, e_ref)
+
+    assert _active_claim_counts(fg, e_ref)[PRED_EXISTS] == 1
+    revoked = fg.entities.delete(e_ref)
+
+    assert revoked == 5
+    assert fg._store.ledger.has_active_revocation(exists_asrt)
     assert _active_claim_counts(fg, e_ref) == Counter()
 
 
@@ -125,7 +141,7 @@ def test_delete_form_a_rejects_identity_kwargs():
 def test_delete_form_b_revokes_all_active_claims():
     fg, e_ref = _make_materialized_fg()
     revoked = fg.entities.delete(DelUser, user_id="alice", tenant_id="acme")
-    assert revoked == 5
+    assert revoked == 4
     assert _active_claim_counts(fg, e_ref) == Counter()
 
 
@@ -203,13 +219,11 @@ def test_recreate_with_same_identity_after_delete_succeeds():
     e_ref_recreated = fg.entities.create(DelUser, user_id="alice", tenant_id="acme")
     # Deterministic e_ref: idref_v1 is content-derived, so same identity → same e_ref
     assert e_ref_recreated == e_ref
-    # New Identity + :exists Claims emitted(in addition to old revoked ones in
-    # ledger history)
+    # New Identity Claims emitted(in addition to old revoked ones in ledger history)
     active_after = _active_claim_counts(fg, e_ref_recreated)
     assert active_after == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
-        PRED_EXISTS: 1,
     })
 
 
@@ -266,8 +280,7 @@ def test_generic_apply_op_still_blocks_exists_retract_per_transitional_guard():
     )
 
     fg, e_ref = _make_materialized_fg()
-    exists_claims = fg._store.ledger.find_claims(pred_id=PRED_EXISTS, e_ref=e_ref)
-    exists_asrt = exists_claims[0].asrt_id
+    exists_asrt = _write_legacy_exists_claim(fg, e_ref)
 
     target = EntityRef(
         entity_type="DelUser",
@@ -322,14 +335,19 @@ def test_path_bound_delete_actually_revokes_identity_claims():
     fg, e_ref = _make_materialized_fg()
     identity_claims = fg._store.ledger.find_claims(pred_id=PRED_USER_ID, e_ref=e_ref)
     identity_asrt = identity_claims[0].asrt_id
-    exists_claims = fg._store.ledger.find_claims(pred_id=PRED_EXISTS, e_ref=e_ref)
-    exists_asrt = exists_claims[0].asrt_id
 
     fg.entities.delete(e_ref)
 
     # Identity Claim revoked through path-bound path
     assert fg._store.ledger.has_active_revocation(identity_asrt)
-    # :exists Claim revoked through same path-bound path
+
+
+def test_path_bound_delete_revokes_legacy_exists_claims_when_present():
+    fg, e_ref = _make_materialized_fg()
+    exists_asrt = _write_legacy_exists_claim(fg, e_ref)
+
+    fg.entities.delete(e_ref)
+
     assert fg._store.ledger.has_active_revocation(exists_asrt)
 
 
@@ -361,8 +379,8 @@ def test_application_delete_planner_direct_invocation():
         index=fg._application_schema_index,
     )
     assert plan.can_apply
-    # 5 retract ops: 2 Identity + 1 :exists + 2 Field
-    assert len(plan.planned_retracts) == 5
+    # 4 retract ops: 2 Identity + 2 Field
+    assert len(plan.planned_retracts) == 4
 
     result = apply_delete_plan(
         plan,
@@ -370,7 +388,7 @@ def test_application_delete_planner_direct_invocation():
         index=fg._application_schema_index,
     )
     assert result.errors == ()
-    assert len(result.applied) == 5
+    assert len(result.applied) == 4
     assert all(applied.status == "applied" for applied in result.applied)
 
 
