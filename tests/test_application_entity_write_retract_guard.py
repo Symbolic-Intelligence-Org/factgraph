@@ -18,6 +18,7 @@ import pytest
 
 from factgraph.application.entity_write import EntityWriteError, _apply_op
 from factgraph.application.protocol import EntityRef, FieldPath, PlannedOpDTO
+from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
@@ -44,6 +45,11 @@ def _find_asrt_id(fg, pred_id: str, e_ref: str) -> str:
     claims = fg._store.ledger.find_claims(pred_id=pred_id, e_ref=e_ref)
     assert claims, f"no Claim found for pred_id={pred_id!r} e_ref={e_ref!r}"
     return claims[0].asrt_id
+
+
+def _write_legacy_exists_claim(fg, e_ref: str) -> str:
+    """Write a legacy `<EntityType>:exists` Claim fixture explicitly."""
+    return set_field(fg._store.ledger, "EntityWriteGuardUser:exists", e_ref, [])
 
 
 def _retract_op(asrt_id: str, *, identity_kwargs: dict, e_ref: str) -> PlannedOpDTO:
@@ -113,13 +119,13 @@ def test_entity_write_tenant_id_identity_also_protected():
 
 
 def test_entity_write_exists_retract_raises_transitional_guard():
-    """:exists Claim retract → EntityWriteError(code=EXISTENCE_CLAIM_TRANSITIONAL_GUARD).
+    """Legacy :exists Claim retract → EntityWriteError(code=EXISTENCE_CLAIM_TRANSITIONAL_GUARD).
 
     Code propagated directly per reviewer Step 5 lock.
     SF10: message must NOT contain "INV-7c".
     """
     fg, e_ref, _, identity_kwargs = _make_fg_with_one_user()
-    exists_asrt_id = _find_asrt_id(fg, "EntityWriteGuardUser:exists", e_ref)
+    exists_asrt_id = _write_legacy_exists_claim(fg, e_ref)
     op = _retract_op(exists_asrt_id, identity_kwargs=identity_kwargs, e_ref=e_ref)
 
     with pytest.raises(EntityWriteError) as exc_info:
@@ -177,10 +183,10 @@ def test_entity_write_unknown_asrt_surfaces_downstream_error():
 
 
 def test_entity_write_identity_and_exists_distinguishable_codes():
-    """Identity vs :exists produce DIFFERENT EntityWriteError codes."""
+    """Identity vs legacy :exists produce DIFFERENT EntityWriteError codes."""
     fg, e_ref, _, identity_kwargs = _make_fg_with_one_user()
     identity_asrt_id = _find_asrt_id(fg, "entity_write_guard_user:user_id", e_ref)
-    exists_asrt_id = _find_asrt_id(fg, "EntityWriteGuardUser:exists", e_ref)
+    exists_asrt_id = _write_legacy_exists_claim(fg, e_ref)
 
     identity_op = _retract_op(identity_asrt_id, identity_kwargs=identity_kwargs, e_ref=e_ref)
     exists_op = _retract_op(exists_asrt_id, identity_kwargs=identity_kwargs, e_ref=e_ref)

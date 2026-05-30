@@ -15,6 +15,7 @@ Uses Form I schema (Slice 1 baseline carries forward).
 """
 import pytest
 
+from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
@@ -40,6 +41,11 @@ def _find_identity_asrt_id(fg, pred_id: str, e_ref: str) -> str:
     claims = fg._store.ledger.find_claims(pred_id=pred_id, e_ref=e_ref)
     assert claims, f"no Claim found for pred_id={pred_id!r} e_ref={e_ref!r}"
     return claims[0].asrt_id
+
+
+def _write_legacy_exists_claim(fg, e_ref: str) -> str:
+    """Write a legacy `<EntityType>:exists` Claim fixture explicitly."""
+    return set_field(fg._store.ledger, "RetractGuardUser:exists", e_ref, [])
 
 
 def test_field_claim_retract_succeeds():
@@ -71,9 +77,9 @@ def test_identity_claim_retract_raises_inv_7c():
 
 
 def test_exists_claim_retract_raises_transitional_guard():
-    """`<EntityType>:exists` Claim retract → SDKStoreError with transitional guard wording + code."""
+    """Legacy `<EntityType>:exists` Claim retract → SDKStoreError with transitional guard wording + code."""
     fg, e_ref, _ = _make_user_fg_with_one_user()
-    exists_asrt_id = _find_identity_asrt_id(fg, "RetractGuardUser:exists", e_ref)
+    exists_asrt_id = _write_legacy_exists_claim(fg, e_ref)
 
     with pytest.raises(SDKStoreError) as exc_info:
         fg.assertions.retract(exists_asrt_id)
@@ -104,14 +110,14 @@ def test_unknown_asrt_passes_through():
 
 
 def test_identity_and_exists_produce_distinguishable_sdk_errors():
-    """Identity vs :exists raise SDKStoreError with DIFFERENT codes + messages.
+    """Identity vs legacy :exists raise SDKStoreError with DIFFERENT codes + messages.
 
     Per ADR-IC §8 acceptance: caller can distinguish between the two
     guard violations.
     """
     fg, e_ref, _ = _make_user_fg_with_one_user()
     identity_asrt_id = _find_identity_asrt_id(fg, "retract_guard_user:user_id", e_ref)
-    exists_asrt_id = _find_identity_asrt_id(fg, "RetractGuardUser:exists", e_ref)
+    exists_asrt_id = _write_legacy_exists_claim(fg, e_ref)
 
     with pytest.raises(SDKStoreError) as id_exc:
         fg.assertions.retract(identity_asrt_id)

@@ -21,6 +21,7 @@ from factgraph.application.protocol import (
     IngestRequest,
     IngestRetractItem,
 )
+from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
@@ -46,6 +47,11 @@ def _find_asrt_id(fg, pred_id: str, e_ref: str) -> str:
     claims = fg._store.ledger.find_claims(pred_id=pred_id, e_ref=e_ref)
     assert claims, f"no Claim found for pred_id={pred_id!r} e_ref={e_ref!r}"
     return claims[0].asrt_id
+
+
+def _write_legacy_exists_claim(fg, e_ref: str) -> str:
+    """Write a legacy `<EntityType>:exists` Claim fixture explicitly."""
+    return set_field(fg._store.ledger, "IngestGuardUser:exists", e_ref, [])
 
 
 def _retract_request(asrt_id: str, *, idx: int = 0) -> IngestRequest:
@@ -106,13 +112,13 @@ def test_ingest_tenant_id_identity_also_protected():
 
 
 def test_ingest_exists_claim_retract_emits_transitional_guard_error_dto():
-    """:exists Claim ingest retract → ErrorDTO(code=EXISTENCE_CLAIM_TRANSITIONAL_GUARD).
+    """Legacy :exists Claim ingest retract → ErrorDTO(code=EXISTENCE_CLAIM_TRANSITIONAL_GUARD).
 
     P1 #2 + reviewer Step 4 lock: code propagates directly, NOT wrapped.
     SF10: error message must NOT contain "INV-7c".
     """
     fg, e_ref, _ = _make_fg_with_one_user()
-    exists_asrt_id = _find_asrt_id(fg, "IngestGuardUser:exists", e_ref)
+    exists_asrt_id = _write_legacy_exists_claim(fg, e_ref)
 
     result = _run_ingest(fg, _retract_request(exists_asrt_id))
 
@@ -167,10 +173,10 @@ def test_ingest_unknown_asrt_uses_existing_ingest_retract_failed_code():
 
 
 def test_ingest_identity_and_exists_distinguishable_codes():
-    """Identity vs :exists produce distinct codes in same ingest batch."""
+    """Identity vs legacy :exists produce distinct codes in same ingest batch."""
     fg, e_ref, _ = _make_fg_with_one_user()
     identity_asrt_id = _find_asrt_id(fg, "ingest_guard_user:user_id", e_ref)
-    exists_asrt_id = _find_asrt_id(fg, "IngestGuardUser:exists", e_ref)
+    exists_asrt_id = _write_legacy_exists_claim(fg, e_ref)
 
     request = IngestRequest(
         items=(

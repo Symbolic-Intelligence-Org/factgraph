@@ -18,6 +18,7 @@
 | 2026-05-30 | implementing-step-2 | `fg.entities.exists` rewired | Replaced the SDK `:exists` scan with the application Identity-bundle helper; updated SDK existence tests for complete bundle, incomplete bundle, composite identity, post-delete, and `:exists`-only ignored semantics. Batch/co-emission paths remain unchanged for Step 3. |
 | 2026-05-30 | implementing-step-3 | User-path `:exists` co-emission stopped | Removed user-path `record_exists` planning from application materialization and SDK batch staging; preserved application `record_exists` apply handling plus `WireRecordExistsOp` / `PlannedOpDTO(op="record_exists")` compatibility; updated create/emission/batch tests to N Identity + Field semantics with wire legacy coverage. |
 | 2026-05-30 | implementing-step-4 | Delete semantics aligned | Confirmed delete succeeds without active `:exists` Claims by migrating delete counts to N Identity + Field; added legacy `:exists` fixtures verifying whole-entity delete can revoke legacy Claims while generic retract still raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`. |
+| 2026-05-30 | implementing-step-5 | Legacy guard fixtures formalized | Updated SDK, ingest, and entity_write retract-guard integration tests to inject legacy `:exists` Claims explicitly after user-path co-emission removal; schema-cache and pure retract-guard tests continue to verify `exists_pred_ids` population and `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` classification. |
 
 ## Decision Notes
 
