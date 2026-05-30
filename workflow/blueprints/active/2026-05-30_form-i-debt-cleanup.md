@@ -1,8 +1,8 @@
 # Slice 6 — Form I Legacy Debt Cleanup
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-30
-- Last Updated: 2026-05-31(scoped after Step 4.3 preflight + PF-R1/PF-REC1-4 amendments)
+- Last Updated: 2026-05-31(implemented after Step 6 regression sweep + §10 Outcome; Step 4 deferred per user wrap-up direction)
 - Slice: Post-Slice 5 housekeeping for Slice 1 Form I hard-removal debt
 - Class: S-M(test/docs/example cleanup; no runtime semantics)
 - Related Modules:
@@ -245,40 +245,40 @@ Each implementation commit must verify:
 
 ### 7.1 Live Tests / Imports
 
-- [ ] Step 0 records the exact tracked file list for deprecated Form I shapes.
-- [ ] Live positive fixtures in `tests/` import successfully after migration.
-- [ ] Sibling package tests under `src/service/tests/` and `src/domains/ecss/tests/` import successfully after migration.
-- [ ] Tests under `tests/application` and `tests/sdk` that rely on multi-value fields preserve their intended cardinality through annotations.
-- [ ] `allow_identity_defaults=True` live tests are rewritten to current explicit-identity behavior.
-- [ ] Negative tests assert current Form I rejection semantics and migration hints.
-- [ ] Representative migrated test modules run through direct smoke or unittest invocation.
-- [ ] No Q-PR1 path is touched by test migration.
+- [x] Step 0 records the exact tracked file list for deprecated Form I shapes.
+- [x] Live positive fixtures in `tests/` import successfully after migration.
+- [x] Sibling package tests under `src/service/tests/` and `src/domains/ecss/tests/` import successfully after migration.
+- [x] Tests under `tests/application` and `tests/sdk` that rely on multi-value fields preserve their intended cardinality through annotations.
+- [x] `allow_identity_defaults=True` live tests are rewritten to current explicit-identity behavior.
+- [x] Negative tests assert current Form I rejection semantics and migration hints.
+- [x] Representative migrated test modules run through direct smoke or unittest invocation.
+- [x] No Q-PR1 path is touched by test migration.
 
 ### 7.2 Current Docs / Tools
 
 - [ ] Root `README.md` quickstart uses Form I and current namespace calls (`fg.entities.*` / `fg.fields.*`).
 - [ ] `tutorials/evidence-pipeline.cn.md` and `src/agent/extraction/docs/USAGE.md` no longer present deprecated Form I as current truth.
 - [ ] The four in-scope benchmark scripts import successfully or have documented carry-forward blockers.
-- [ ] Valid migration examples / negative docs remain classified rather than rewritten blindly.
-- [ ] `src/factgraph/sdk/schema.py` migration-hint text remains intact unless a reviewer explicitly authorizes wording polish.
+- [x] Valid migration examples / negative docs remain classified rather than rewritten blindly.
+- [x] `src/factgraph/sdk/schema.py` migration-hint text remains intact unless a reviewer explicitly authorizes wording polish.
 
 ### 7.3 Dirty / Archive / Historical Discipline
 
-- [ ] Dirty active notebooks are untouched by default or edited only with explicit per-file authorization.
-- [ ] Archive examples remain untouched unless explicitly brought in scope.
-- [ ] Historical workflow/design/audit references remain preserved unless they claim current shipped truth.
-- [ ] Final grep gate lists remaining carve-out hits by category.
-- [ ] No shadow-store, `:exists`, Q-PR1, ledger schema, or adapter work lands.
-- [ ] Sacred branches and dirty baseline are preserved.
+- [x] Dirty active notebooks are untouched by default or edited only with explicit per-file authorization.
+- [x] Archive examples remain untouched unless explicitly brought in scope.
+- [x] Historical workflow/design/audit references remain preserved unless they claim current shipped truth.
+- [x] Final grep gate lists remaining carve-out hits by category.
+- [x] No shadow-store, `:exists`, Q-PR1, ledger schema, or adapter work lands.
+- [x] Sacred branches and dirty baseline are preserved.
 
 ### 7.4 Final Checks
 
-- [ ] Target migrated tests/import probes pass.
-- [ ] `python -m compileall -q src` clean.
-- [ ] `git diff --check` clean.
-- [ ] Q-PR1 sacred paths 0 diff against `00488a6e..HEAD`.
-- [ ] `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
-- [ ] §10 Outcome filled with final grep/carve-out counts and carry-forward list.
+- [x] Target migrated tests/import probes pass.
+- [x] `python -m compileall -q src` clean.
+- [x] `git diff --check` clean.
+- [x] Q-PR1 sacred paths 0 diff against `00488a6e..HEAD`.
+- [x] `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- [x] §10 Outcome filled with final grep/carve-out counts and carry-forward list.
 
 ## 8. Implementation Plan
 
@@ -390,40 +390,95 @@ Task completion section. Fill during close.
 
 ### 10.1 Final Landing Result
 
-TBD. Should summarize acceptance totals: live tests/imports, docs/tools, dirty/archive/historical discipline, and final checks (per §7: 8 + 5 + 6 + 6 = 25 checkboxes).
+| Step | Commit | Result |
+|---|---|---|
+| Step 0 inventory | `a09dc27d` | Audit-only inventory freeze; scoped counts still matched Stage 1/preflight. |
+| Step 1 live core tests | `3da2a56c` | Migrated 62 positive `tests/` fixtures to shipped Form I; one namespace-shape test received a minimal current-namespace collateral fix. |
+| Step 2 sibling files | `b9e5d402` | Migrated five scoped sibling/package files for Form I import viability. |
+| Step 3 negative semantics | `72f9f4cb` | Rewrote three semantic targets; live `allow_identity_defaults=True` callsites removed. |
+| Step 4 docs/tools | Deferred | Root README, tutorial, and benchmark-script cleanup deferred per user wrap-up direction; tracked as carry-forward, not false-green acceptance. |
+| Step 5 dirty notebooks | `f1cf0c88` | Audit-only SF6/SF7 decision; dirty active notebooks and archive notebook untouched. |
+| Step 6 final sweep | `0ee53b81` | 67 migrated modules imported, 49 representative unittest cases passed, final grep gate classified all residual hits. |
+| Step 7 close | This commit | Status flipped to `implemented`; §10 records delivery, deviations, deferred Step 4, and archive plan. |
+| Step 8 archive | Next | Move blueprint/audit to archive and update `INVENTORY.md`; no push without user authorization. |
+
+Implementation diff from scoped anchor `4705d2b1` to Step 6 head: 69 files, +367 / -335. Acceptance status: §7.1 8/8 complete; §7.2 2/5 complete with 3 deferred docs/tools checkboxes; §7.3 6/6 complete; §7.4 6/6 complete. Overall: 22/25 checked, 3 intentionally deferred.
 
 ### 10.2 Deviations And Amendments
 
-TBD.
+- Step 2 sibling/package surface was implemented within the scoped FI-R2/PF-REC1 file list. The user later confirmed this sibling/agent/domain cleanup was acceptable for Slice 6, but it is not precedent for broad sibling-package modernization in future slices.
+- Step 4 current docs/tools migration was deferred by user wrap-up direction after the core design/test intent was delivered. The deferred files remain explicit carry-forward: root `README.md`, `tutorials/evidence-pipeline.cn.md`, and four benchmark scripts.
+- Step 1 included one narrow namespace collateral fix in `tests/test_sdk_redesign_namespace_shape.py` because removed Slice 3a manager names blocked import after the Form I fixture migration.
+- Step 3 used semantic rewrites instead of mechanical substitution for `tests/test_sdk_schema_primary_key_required.py`, `tests/test_application_entity_view.py`, and `tests/test_application_schema_runtime.py`.
+- Step 6 found no bug-fix collateral; regression and grep results were recorded audit-only.
 
 ### 10.3 Scope Freeze Verification
 
-TBD.
+| SF | Close verification |
+|---|---|
+| SF1 runtime descriptor unchanged | `src/factgraph/sdk/schema.py` semantics untouched; runtime hit remains a valid migration hint. |
+| SF2 Q-PR1 sacred paths | 0 diff against `00488a6e..HEAD`. |
+| SF3 live/sibling tests migrate | `tests/` positive fixtures and five scoped sibling/package files migrated/imported. |
+| SF4 semantic negative tests | Three semantic targets rewritten; remaining deprecated strings are intentional rejection inputs. |
+| SF5 current docs/tools | Deferred per user direction; migration examples and negative docs classified, not blindly rewritten. |
+| SF6 dirty notebooks | Active dirty notebooks untouched. |
+| SF7 archive/historical | Archive examples and historical workflow/design/audit references preserved and classified. |
+| SF8 unrelated runtime work | No shadow-store, `:exists`, ledger, adapter, or Q-PR1 work landed. |
+| SF9 schema migration hints | `src/factgraph/sdk/schema.py` migration-hint text preserved. |
+| SF10 sacred/dirty/no-push gates | Sacred master unchanged, dirty baseline preserved, no push. |
 
 ### 10.4 Test Migration Result
 
-TBD.
+- Migrated 62 live positive `tests/` fixtures in Step 1.
+- Migrated five sibling/package files in Step 2.
+- Rewrote three negative semantic test files in Step 3.
+- Step 6 verification imported 67 migrated Python modules with 0 failures and ran 49 representative unittest cases with 0 failures.
+- `python -m compileall -q tests src/service/tests src/domains/ecss/tests` completed clean during Step 6.
 
 ### 10.5 Docs / Tools Landed
 
-TBD.
+- Landed: `src/agent/extraction/docs/USAGE.md` was migrated as part of the five sibling/package files in Step 2.
+- Deferred by user wrap-up direction: root `README.md`, `tutorials/evidence-pipeline.cn.md`, and the four scoped benchmark scripts.
+- Classified and preserved: `docs/official/kernel/quickstart/schema.md` negative current wording and `src/factgraph/sdk/docs/04_api_surface.en.md` Old/New migration examples.
 
 ### 10.6 Dirty Notebook Handling
 
-TBD.
+Step 5 selected the SF6 default path: active dirty notebooks `examples/01_sdk_check_diagnose.ipynb` and `examples/02_overlay_why_not_frontier.ipynb` were not edited. The dirty archive notebook `examples/archive/01_sdk_basics.ipynb` remained out of scope per SF7. Committed diff for `examples/` remains empty.
 
 ### 10.7 Final Grep Gate
 
-TBD.
+Step 6 reran the five Form I grep patterns and classified all residual hits:
+
+- live negative-test inputs: `tests/test_sdk_schema_primary_key_required.py`;
+- runtime migration hint: `src/factgraph/sdk/schema.py`;
+- Step 4 deferred current docs/tools: root `README.md`, `tools/benchmarks/*`, and `tutorials/evidence-pipeline.cn.md`;
+- SF6 dirty notebooks and SF7 archive examples;
+- historical workflow/audit/design records;
+- migration examples / negative docs in current documentation.
+
+There are 0 unclassified live runtime/test hits. `allow_identity_defaults=True` has 0 live runtime/test callsites; remaining hits are audit/blueprint/design historical references.
 
 ### 10.8 Q-PR1 / Sacred / Dirty Preservation
 
-TBD.
+- Q-PR1 sacred paths: 0 diff against `00488a6e..HEAD`.
+- `master`: remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline: preserved as 4 modified files, 1 deleted file, and 2 untracked paths.
+- Push count: 0.
 
 ### 10.9 Carry-Forward Dependencies
 
-TBD.
+- Step 4 deferred docs/tools cleanup: root `README.md`, `tutorials/evidence-pipeline.cn.md`, and four benchmark scripts.
+- `src/service/tests/test_problog_semantic_annotation_l4.py` still has older candidate-envelope / `accept` behavior expectations outside Form I debt.
+- Dirty active notebooks still contain stale Form I references and require explicit per-file authorization before editing.
+- Historical/archive Form I references remain intentional carve-outs.
+- Memory consolidation remains user-triggered only.
 
 ### 10.10 Archive Cadence
 
-TBD.
+Next commit:
+
+1. `git mv workflow/blueprints/active/2026-05-30_form-i-debt-cleanup.md workflow/blueprints/archive/`
+2. `git mv workflow/blueprints/active/2026-05-30_form-i-debt-cleanup.audit.md workflow/blueprints/archive/`
+3. Update `workflow/blueprints/archive/INVENTORY.md` with a dense Slice 6 row.
+4. Add an `archived` audit-log row before the move commit.
+5. Do not push unless the user explicitly authorizes it.
