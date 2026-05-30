@@ -319,6 +319,30 @@ def _check_retract_allowed(self, asrt_id: str) -> None:
   1. Step 1 内 `:exists` 是 Identity Claim co-emission 的一部分;不允许独立 retract `<EntityType>:exists` Claim(通过 §4.3.1 `_exists_pred_ids` cache + §4.1 existence-claim transitional guard 实施)
   2. existence-claim transitional guard 的 lifecycle 跟 `:exists` co-emission 绑定;Step 2+ 移除 `:exists` 时 guard 同步退役
 
+#### 4.4.6 Slice 5 implemented update — user-path co-emission retired, legacy/virtual surfaces retained
+
+Slice 5 (2026-05-30, Q-EXISTS `870e1f1f`) implemented the Step 2+ narrow
+cleanup path. Current status after Slice 5:
+
+- User-facing materialization paths (`fg.entities.create`, lazy
+  SDK-field materialization, and SDK batch user planners) no longer emit new
+  `<EntityType>:exists` Claims.
+- `fg.entities.exists(EntityCls, **identity)` now uses complete active Identity
+  Claim bundle visibility for the deterministic e_ref, not active `:exists`
+  Claims.
+- `fg.entities.delete(...)` revokes Identity + Field Claims for newly
+  materialized entities and tolerates the absence of active `:exists` Claims;
+  legacy `:exists` Claims, when present, are handled by the same path-bound
+  whole-entity delete path.
+- Existing legacy `:exists` Claims remain protected under the unchanged
+  `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` code. They are not migrated,
+  bulk-revoked, or rewritten by Slice 5.
+- `exists_pred_ids` remains populated for legacy guard classification and
+  schema compatibility.
+- Rule DSL `Entity:exists` remains virtual/internal syntax, Q-PR1 derivation
+  accept remains out of scope, and shadow-store removal remains a separate
+  carry-forward.
+
 ### 4.5 Cross-Q decision summary
 
 | Sub-decision | Decision | Implementation surface | Step 1 Slice |

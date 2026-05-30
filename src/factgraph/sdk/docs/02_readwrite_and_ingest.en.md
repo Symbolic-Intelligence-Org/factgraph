@@ -23,11 +23,11 @@ manager method.
 | Scenario | Recommended API | Notes |
 | --- | --- | --- |
 | Build object graph, preview, replay/export | `fg.batch()` | Supports `preview()`, `commit()`, wire plan |
-| Materialize an entity anchor bundle | `fg.entities.create(...)` | Eagerly emits Identity Claims + `<EntityType>:exists` |
+| Materialize an entity anchor bundle | `fg.entities.create(...)` | Eagerly emits the complete Identity Claim bundle; user-facing paths no longer emit new `<EntityType>:exists` Claims |
 | Edit an existing entity with known identity | `fg.entities.edit(...)` | Clear write intent |
 | External batch import with diagnostics | `fg.schema.ingest(...)` | Item-level validation, collect-and-stop |
 | Write or clear one field | `fg.fields.set / add / retract / delete` | Schema-aware Layer 2 writes |
-| Retract a specific assertion id | `fg.assertions.retract(...)` | Layer 3; Identity and `:exists` Claims are protected |
+| Retract a specific assertion id | `fg.assertions.retract(...)` | Layer 3; Identity Claims and legacy `:exists` Claims are protected |
 
 ## 2. Building `FactGraph`
 
@@ -97,8 +97,9 @@ fg.assertions.retract(asrt_id, meta={"trace_id": "fix-1"})
 - Unknown or invalid assertion ids raise `SDKStoreError`; unknown
   assertion ids use `code="ASSERTION_NOT_FOUND"`. The underlying core
   `WriteProtocolError` is preserved as `__cause__` for debugging.
-- Identity Claims raise `INV_7C_IDENTITY_PROTECTED`. Generated
-  `<EntityType>:exists` Claims raise `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
+- Identity Claims raise `INV_7C_IDENTITY_PROTECTED`. Legacy
+  `<EntityType>:exists` Claims, when present in older ledgers or
+  compatibility paths, raise `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
 
 ## 4. Batch Writes (`sdk.batch()`)
 

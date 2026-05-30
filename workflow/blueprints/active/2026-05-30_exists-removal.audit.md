@@ -20,6 +20,7 @@
 | 2026-05-30 | implementing-step-4 | Delete semantics aligned | Confirmed delete succeeds without active `:exists` Claims by migrating delete counts to N Identity + Field; added legacy `:exists` fixtures verifying whole-entity delete can revoke legacy Claims while generic retract still raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`. |
 | 2026-05-30 | implementing-step-5 | Legacy guard fixtures formalized | Updated SDK, ingest, and entity_write retract-guard integration tests to inject legacy `:exists` Claims explicitly after user-path co-emission removal; schema-cache and pure retract-guard tests continue to verify `exists_pred_ids` population and `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` classification. |
 | 2026-05-30 | implementing-step-6 | Runtime regression sweep | Target migration/regression sweep passed 167 direct test invocations; rule/query `Entity:exists` virtual-syntax smoke passed 26 unittest cases. Sweep found one remaining user-path-emission assumption in `test_sdk_assertions_namespace.py`, fixed by converting that assertion-retract guard case to an explicit legacy `:exists` fixture. |
+| 2026-05-30 | implementing-step-7 | Current docs and ADRs updated | Updated ADR-IC current status, Q-EXISTS implementation record, and current SDK docs to state that user-facing `:exists` co-emission is retired while legacy Claims, rule virtual syntax, Q-PR1 derivation markers, wire compatibility, and shadow store remain carry-forward/protected surfaces. |
 
 ## Decision Notes
 

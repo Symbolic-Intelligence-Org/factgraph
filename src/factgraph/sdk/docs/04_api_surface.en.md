@@ -313,9 +313,9 @@ public: `fg.schema.delete`, `fg.schema.update`, `fg.schema.migrate`, and
 | `where(entity_cls, *, limit=None, _meta=None, **filters)` | Filter entities by identity/field values |
 | `match(entity_cls, template, *, limit=None, **port_constraints)` | Return distinct snapshots selected by a `Rule` or AND-only `RuleExpr` |
 | `ref(entity_cls, **identity)` | Encode an entity reference string |
-| `create(entity_cls, *, meta=None, **identity)` | Eagerly materialize Identity Claims and `<EntityType>:exists`; returns e_ref |
+| `create(entity_cls, *, meta=None, **identity)` | Eagerly materialize the complete Identity Claim bundle; returns e_ref |
 | `delete(e_ref, *, meta=None)` / `delete(entity_cls, *, meta=None, **identity)` | Revoke the whole entity bundle and visible field claims |
-| `exists(entity_cls, **identity)` | Return whether the entity's active `:exists` claim is visible |
+| `exists(entity_cls, **identity)` | Return whether the complete active Identity Claim bundle is visible |
 | `edit(entity_cls, **identity)` | Open an `EntityEditor` for an existing entity |
 
 ### 2.4 Fields namespace (`fg.fields.*`)
@@ -344,11 +344,11 @@ trusted internal paths and do not run this SDK-layer validation.
 | `by_id(asrt_id)` | Return `AssertionRecord | None` for one assertion id |
 | `by_ids(asrt_ids)` | Return `AssertionRecordSet` for an iterable of assertion ids; unknown ids are skipped |
 | `where(*, field=None, e_ref=None, value=None, value_tag=None, _meta=None)` | Filter active assertions by canonical Layer 3 criteria |
-| `retract(asrt_id, *, meta=None)` | Retract a specific assertion id; Identity and `:exists` claims are protected |
+| `retract(asrt_id, *, meta=None)` | Retract a specific assertion id; Identity Claims and legacy `:exists` Claims are protected |
 | `active` / `all` | Active or all assertion records |
 
 `fg.assertions.retract(...)` is the only public assertion-id mutation entry.
-Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; generated
+Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 `<EntityType>:exists` retracts raise `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
 
 ### 2.6 Eval namespace (`fg.eval.*`)
@@ -641,7 +641,6 @@ entity** (atomic, single `_write_session`):
 | Claim | Count | Pred ID example (class `User`) |
 |---|---|---|
 | Identity Claim | N (one per `Identity` field) | `user:user_id`, `user:tenant_id`, ... |
-| `:exists` Claim | 1 | `User:exists` |
 | Field Claim | 1 (the triggering write) | `user:name` |
 
 Pred ID convention (Slice 1 shipped):
@@ -652,22 +651,24 @@ Pred ID convention (Slice 1 shipped):
   `EmissionUser:exists`)
 
 **Dedup**: subsequent Field writes on the **same** `e_ref` do NOT
-re-emit Identity Claims or `:exists`. Dedup happens at two levels — within a
+re-emit Identity Claims. Dedup happens at two levels — within a
 single `plan_write_command` call via `_materialization_ops`'s
 `materialized_refs` set, and across calls via the `entity_visible` check
 that gates materialization.
 
-**Materialization paths** (all atomic):
+**User-facing materialization paths** (all atomic):
 
 | Path | Materialization trigger |
 |---|---|
-| `fg.entities.create(EntityCls, **identity)` | Eagerly emits Identity Claims + `:exists`; no Field write required |
-| `fg.fields.set(Field, e_ref, value)` / `fg.fields.add(Field, e_ref, value)` | Lazy compatibility path: auto on first Field write when target not visible |
-| `tx = fg.batch(); h = tx.entity(...); h.field.set(...); tx.commit()` | Auto via `RecordExistsOp` injected when any `set`/`add` is staged |
-| `editor = fg.entities.edit(...); editor.field.set(...); editor.commit()` | **NOT a materialization path** — `fg.entities.edit` pre-validates `:exists` (raises `EntityNotFoundError` if entity not materialized) |
+| `fg.entities.create(EntityCls, **identity)` | Eagerly emits the complete Identity Claim bundle; no Field write required |
+| `fg.fields.set(Field, e_ref, value)` / `fg.fields.add(Field, e_ref, value)` | Lazy compatibility path: materializes the Identity Claim bundle on first Field write when target not visible and the shadow store can recover identity values |
+| `tx = fg.batch(); h = tx.entity(...); h.field.set(...); tx.commit()` | Materializes the Identity Claim bundle through the batch user-path planner |
+| `editor = fg.entities.edit(...); editor.field.set(...); editor.commit()` | **NOT a materialization path** — `fg.entities.edit` pre-validates entity visibility (raises `EntityNotFoundError` if entity not materialized) |
 
 `fg.entities.delete(...)` is the only public path that can revoke an entity's
-Identity Claims as part of whole-entity deletion.
+Identity Claims as part of whole-entity deletion. Legacy `:exists` Claims,
+when present, are handled by the same path-bound whole-entity delete path;
+new user-facing materialization paths no longer emit them.
 
 ### 7.2 INV-7c Identity reject behavior
 
@@ -700,20 +701,28 @@ are **intentionally unguarded** per the Q-PR1 carve-out — Slice 2 enforces
 INV-7c only at the application source-of-truth and SDK shell layers
 (defense-in-depth).
 
-### 7.3 `<EntityType>:exists` transitional guard
+### 7.3 `<EntityType>:exists` legacy/transitional guard
 
-Per ADR-IC §4.4: `:exists` Claims are protected by an **existence-claim
-transitional guard**, **NOT** by `INV-7c`. The two guard lifecycles are
-explicitly decoupled:
+Per ADR-IC §4.4 and Q-EXISTS §4.5: legacy `:exists` Claims are protected
+by an **existence-claim transitional guard**, **NOT** by `INV-7c`. The two
+guard lifecycles are explicitly decoupled:
 
 - INV-7c is the permanent Identity anchor invariant.
-- The existence-claim guard is bound to the `:exists` co-emission lifecycle
-  — when Step 2+ removes `:exists` emission, the guard retires in lockstep.
+- New user-facing materialization paths no longer emit `:exists` Claims.
+- Legacy `:exists` Claims may still exist in older ledgers, wire/protocol
+  compatibility paths, and out-of-scope derivation paths, and remain protected
+  under the current guard code name.
 
-Independent retract attempts on a `<EntityType>:exists` Claim asrt raise
+Independent retract attempts on a legacy `<EntityType>:exists` Claim asrt raise
 with `code="EXISTENCE_CLAIM_TRANSITIONAL_GUARD"`. The error message
 references `ADR-IC §4.4` and explicitly does **not** mention `INV-7c`
 (per ADR-IC §4.4.2 naming).
+
+`Entity:exists` in rule bodies remains virtual/internal syntax. Q-PR1
+derivation accept may still produce derived-path `:exists` markers until a
+future Q-PR1-authorized slice changes that surface. User-facing
+`fg.entities.exists(...)` uses complete active Identity Claim bundle
+visibility instead of reading `:exists` Claims.
 
 ### 7.4 Shadow store legacy positioning
 
@@ -726,13 +735,13 @@ the shadow store has previously seen that `e_ref` via a prior
 | Input | Behavior |
 |---|---|
 | `e_ref` **NOT** in shadow store (externally-constructed) | Fail-fast `SDKStoreError(code="UNRESOLVABLE_E_REF")` at `_apply_field_mutation` target check + at `_build_application_write_value` entity_ref value check |
-| `e_ref` in shadow store, target not yet visible | Lazy materialization through `_materialization_ops` — emits the Identity bundle + `:exists` atomically with the Field write |
+| `e_ref` in shadow store, target not yet visible | Lazy materialization through `_materialization_ops` — emits the Identity bundle atomically with the Field write |
 | `e_ref` in shadow store, target already visible | Field write only, no re-emission (dedup) |
 
-**Forward direction** (per ADR-IC §4.2.4): Step 2+ will introduce eager
-emission at `fg.entities.create(...)` and remove the shadow store. Slice 2
-explicitly does NOT remove the shadow store (Slice 3a ADR-API Q10 carry-
-forward; compatibility preservation in Slice 2).
+**Carry-forward direction** (per ADR-IC §4.2.4 and Q-EXISTS §4.7):
+shadow-store removal remains separate from `:exists` user-path cleanup.
+This slice retires new user-path `:exists` co-emission but does not remove
+`SDKStore._identity_values_by_e_ref`.
 
 ---
 

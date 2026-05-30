@@ -167,7 +167,7 @@ Future carry-forward options (not in narrow slice):
 Rationale:
 
 - Shadow store governs legacy e_ref-to-identity-bundle recovery and lazy materialization.
-- `:exists` governs current visibility and transitional guard semantics.
+- `:exists` historically governed current visibility and transitional guard semantics; this narrow slice changes user-facing visibility to complete Identity Claim bundle semantics while preserving legacy guard classification.
 - Combining both would make failures hard to attribute and would expand the slice from S-M to M-L.
 
 Carry-forward:
@@ -314,3 +314,4 @@ At implementation close, current docs must state:
 |---|---|---|---|
 | 2026-05-30 | proposed | Decision drafted | Drafted from Stage 1 audit `bd3ab5c3`; incorporates reviewer P2-1 user-vs-derived split and P2-2 legacy ledger data handling as §§4.5/4.8. |
 | 2026-05-30 | adopted | Decision adopted | User authorized Option 1 (adopt with amend) after reviewer Stage 2 review; P2 (taxonomy §4.10) + P3-1 (§4.6 option lock) + P3-2 (§4.5 guard naming) + P3-3 (§4.4 wording) amends landed; binding constraint for next blueprint. |
+| 2026-05-30 | implemented | Narrow cleanup implemented | Slice 5 implementation stopped user-facing `:exists` co-emission, rewired `fg.entities.exists` to complete Identity Claim bundle visibility, preserved legacy guard code/name and wire/protocol compatibility, left Q-PR1/rule/shadow-store surfaces as carry-forward, and updated current docs/ADR text. |
