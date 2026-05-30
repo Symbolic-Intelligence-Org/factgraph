@@ -1,71 +1,63 @@
 # Read and write facts
 
-The first two pages showed the shape of a graph. This page focuses on what
-happens when you write and read data.
+The first two pages showed the shape of a graph. This page focuses on the
+everyday data path: create an entity coordinate, write fields, read snapshots,
+filter entities, and retract by assertion id.
 
 A `FactGraph` is not a mutable table. A write appends an assertion to the
-ledger. A read asks the graph to resolve the active assertions for an entity
-and return a read-only snapshot. That distinction is why the API talks about
-references, assertion ids, and snapshots instead of object mutation.
+ledger. A read resolves active assertions into a read-only snapshot. That
+distinction is why the API is grouped by navigation key:
 
-This page covers the everyday read and write path. The next page,
-[Assertion records and views](assertions.md), goes deeper into assertion
-selection, frozen views, and the professional retract pattern. If you only
-need to write a few facts and read them back, this page is enough.
+- `fg.entities.*` for entity lifecycle and entity reads;
+- `fg.fields.*` for field writes and field-level reads;
+- `fg.assertions.*` for assertion-id reads and assertion-id retraction.
 
-## The write coordinate
+## The entity coordinate
 
-Writes need an entity reference. Build it from the entity identity with
-`fg.read.ref(...)`.
+Writes need an entity reference. Create one from the full identity bundle:
 
 ```python
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tags: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 
-alice = fg.read.ref(User, user_id="u-1")
+alice = fg.entities.create(User, user_id="u-1")
 ```
 
 The reference is the graph coordinate for "the `User` whose `user_id` is
-`u-1`". It is an opaque `idref_v1` token. Treat it as a handle returned by
-the SDK, not as a string you parse or construct yourself.
+`u-1`". It is an opaque `idref_v1` token. Treat it as a handle returned by the
+SDK, not as a string you parse or construct yourself.
 
-`idref_v1` is a versioned entity-reference scheme: the SDK is free to
-change its internal shape across releases as long as the same `(Entity,
-identity-field-values)` resolves to the same coordinate. Parsing the token
-substring (e.g. extracting `"u-1"` from inside it) is **not** a supported
-operation — use `fg.read.ref(...)` to obtain a token and the
-field-descriptor APIs (`User.name` etc.) to read facts.
-
-Calling `fg.read.ref(...)` does not write a fact by itself. It only gives
-later write calls a managed coordinate.
+`fg.entities.create(...)` emits the entity identity. `fg.entities.ref(...)`
+returns the deterministic reference for an identity coordinate and is useful
+when the graph has already seen that coordinate.
 
 ## Single and multi writes
 
-Use `fg.write.set(...)` for `single` fields and `fg.write.add(...)` for
-`multi` fields.
+Use `fg.fields.set(...)` for single-value fields and `fg.fields.add(...)` for
+multi-value fields.
 
 ```python
-name_id = fg.write.set(
+name_id = fg.fields.set(
     User.name,
     alice,
     "Alice",
     meta={"source": "import", "trace_id": "seed-001"},
 )
-tag_engineer = fg.write.add(
+tag_engineer = fg.fields.add(
     User.tags,
     alice,
     "engineer",
     meta={"source": "profile", "trace_id": "profile-001"},
 )
-tag_reviewer = fg.write.add(
+tag_reviewer = fg.fields.add(
     User.tags,
     alice,
     "reviewer",
@@ -73,21 +65,19 @@ tag_reviewer = fg.write.add(
 )
 ```
 
-Each call returns an `asrt_id`. The id identifies the exact ledger record
-that was written. Keep it whenever you may want to retract or audit that
-write later. The next page goes into the full assertion record model; this
-page treats `asrt_id` as an opaque handle.
+Each call returns an `asrt_id`. The id identifies the exact ledger record that
+was written. Keep it whenever you may want to audit or retract that assertion
+later.
 
-`set` does not delete the earlier `name` assertion if you call it again
-later. It appends a newer assertion, and the snapshot's scalar view chooses
-the latest active value for the single field.
+Calling `set` again appends a newer assertion. The snapshot's scalar view
+chooses the latest active value for a single-value field.
 
 ## Current snapshots
 
-Use `fg.read.get(...)` when you know the full identity.
+Use `fg.entities.get(...)` when you know the full identity.
 
 ```python
-snap = fg.read.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")
 
 assert snap is not None
 assert snap.name == "Alice"
@@ -97,79 +87,63 @@ assert set(snap.tags) == {"engineer", "reviewer"}
 The snapshot is read-only. It is the graph's current answer for that entity,
 not the ledger itself.
 
-For ordinary application code, `snap.name` and `snap.tags` are usually
-enough. When you need to know why the snapshot has that value -- which
-assertion supports it, who added it, when -- open the field assertion view
-described on [Assertion records and views](assertions.md).
+When you need to know why a snapshot has a value, open an assertion view:
+
+```python
+name_records = snap.field("name").active
+tag_records = snap.field("tags").all
+```
+
+The next page, [Assertion records and views](assertions.md), explains how to
+filter those records by value and metadata.
 
 ## Finding entities
 
-Use `fg.read.find(...)` when you want all matching snapshots. Filters are
-exact matches. For a `multi` field, the filter is a containment check.
+Use `fg.entities.where(...)` when you want all matching snapshots. Field filters
+are exact matches. For a multi-value field, the filter is a containment check.
 
 ```python
-bob = fg.read.ref(User, user_id="u-2")
-fg.write.set(User.name, bob, "Bob")
-fg.write.add(User.tags, bob, "reviewer")
+bob = fg.entities.create(User, user_id="u-2")
+fg.fields.set(User.name, bob, "Bob")
+fg.fields.add(User.tags, bob, "reviewer")
 
-reviewers = fg.read.find(User, tags="reviewer")
+reviewers = fg.entities.where(User, tags="reviewer")
 
 assert {row.name for row in reviewers} == {"Alice", "Bob"}
 ```
 
-`find(...)` is a read surface, not a rule engine or query language. It is
-for snapshot filtering over entity identities and field values. Rules,
-inferences, and saved query surfaces are separate topics.
-
-When your read pattern needs multiple predicates or a `RuleExpr` join, use
-`fg.read.match(EntityCls, rule_or_expr, **port_constraints)`. Match returns
-entity snapshots like `find(...)`, but the filter comes from an application
-`Rule` or an AND-only `RuleExpr`; see
+`where(...)` is for direct entity and field filters. When the read pattern needs
+a `Rule` or an AND-only `RuleExpr`, use `fg.entities.match(...)`; see
 [Rules and inferences](rules-and-inferences.md#reading-snapshots-with-match).
 
 ## Retracting an assertion
 
-Retraction is also append-only. It records that a specific assertion should
-no longer be authoritative in the current view.
+Retraction is append-only. It records that a specific assertion should no
+longer be active in current reads.
 
-`fg.write.retract(...)` takes an `asrt_id`, not an entity ref:
+`fg.assertions.retract(...)` takes an `asrt_id`, not an entity ref:
 
 ```python
-revoker_id = fg.write.retract(
+revoker_id = fg.assertions.retract(
     tag_reviewer,
     meta={"source": "manual-fix", "trace_id": "fix-001"},
 )
 
 assert isinstance(revoker_id, str)
 
-after = fg.read.get(User, user_id="u-1")
+after = fg.entities.get(User, user_id="u-1")
 
 assert after is not None
 assert tuple(after.tags) == ("engineer",)
 ```
 
-Here `tag_reviewer` is the `asrt_id` we kept from the original
-`fg.write.add(...)` call. That is the simplest retract pattern: save the id
-at write time, retract by id later.
+Here `tag_reviewer` is the `asrt_id` returned by the earlier
+`fg.fields.add(...)` call. The original assertion is not deleted; it moves out
+of the active set into history. The retract itself is a separate ledger record.
 
-When you do not have the id handy and have to find the assertion through a
-snapshot, use the selection-based retract pattern on
-[Assertion records and views](assertions.md). It walks through
-`snap.field(...).where(...).one().asrt_id` and explains why that step exists.
-
-The original assertion is not deleted. It moves out of the active set into
-history. The retract itself is a separate ledger record whose id is the
-return value.
-
-The append-only retract design is not just a storage convenience — it is
-the foundation of **evidence reproducibility**. Past evaluations,
-explanations, and audit records reference assertions by `asrt_id`; if a
-retract destroyed the original assertion, those references would dangle
-and the evidence chain would become unreproducible. By keeping the
-original record in history and adding a separate revocation record, every
-historical evidence trail can still be replayed exactly as it was —
-the "active vs historical" distinction is computed at read time from the
-two records, not stored as a mutable flag.
+Identity Claims are protected. Attempting to retract an identity assertion by
+id raises `INV_7C_IDENTITY_PROTECTED`; use `fg.entities.delete(...)` for whole
+entity lifecycle changes.
 
 ## Complete example
 
@@ -178,50 +152,50 @@ from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tags: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 
-alice = fg.read.ref(User, user_id="u-1")
-name_id = fg.write.set(
+alice = fg.entities.create(User, user_id="u-1")
+name_id = fg.fields.set(
     User.name,
     alice,
     "Alice",
     meta={"source": "import", "trace_id": "seed-001"},
 )
-tag_engineer = fg.write.add(
+tag_engineer = fg.fields.add(
     User.tags,
     alice,
     "engineer",
     meta={"source": "profile", "trace_id": "profile-001"},
 )
-tag_reviewer = fg.write.add(
+tag_reviewer = fg.fields.add(
     User.tags,
     alice,
     "reviewer",
     meta={"source": "import", "trace_id": "seed-002"},
 )
 
-snap = fg.read.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")
 
 assert snap is not None
 assert snap.name == "Alice"
 assert set(snap.tags) == {"engineer", "reviewer"}
 
-bob = fg.read.ref(User, user_id="u-2")
-fg.write.set(User.name, bob, "Bob")
-fg.write.add(User.tags, bob, "reviewer")
+bob = fg.entities.create(User, user_id="u-2")
+fg.fields.set(User.name, bob, "Bob")
+fg.fields.add(User.tags, bob, "reviewer")
 
-reviewers = fg.read.find(User, tags="reviewer")
+reviewers = fg.entities.where(User, tags="reviewer")
 
 assert {row.name for row in reviewers} == {"Alice", "Bob"}
 
-fg.write.retract(tag_reviewer, meta={"source": "manual-fix"})
+fg.assertions.retract(tag_reviewer, meta={"source": "manual-fix"})
 
-after = fg.read.get(User, user_id="u-1")
+after = fg.entities.get(User, user_id="u-1")
 
 assert after is not None
 assert tuple(after.tags) == ("engineer",)
@@ -229,18 +203,18 @@ assert tuple(after.tags) == ("engineer",)
 
 ## Syntax checklist
 
-- `fg.read.ref(...)` gives writes a managed entity coordinate.
-- `fg.write.set(...)` appends a single-field assertion.
-- `fg.write.add(...)` appends a multi-field assertion.
+- `fg.entities.create(...)` creates and materializes an entity coordinate.
+- `fg.entities.ref(...)` returns a deterministic entity reference for an
+  already-known coordinate.
+- `fg.fields.set(...)` appends a single-value field assertion.
+- `fg.fields.add(...)` appends a multi-value field assertion.
 - `meta={"source": ..., "trace_id": ...}` attaches audit-friendly metadata.
-- Writes return `asrt_id` strings for exact ledger records; keep them for
-  later inspection or retract.
-- `fg.read.get(...)` returns the current snapshot for a full identity.
-- `fg.read.find(...)` returns matching snapshots.
-- `fg.read.match(...)` returns snapshots selected by an application `Rule`
-  or AND-only `RuleExpr`.
-- `fg.write.retract(asrt_id)` records a retraction by id and returns the
+- Field writes return `asrt_id` strings for exact ledger records.
+- `fg.entities.get(...)` returns the current snapshot for a full identity.
+- `fg.entities.where(...)` returns snapshots matching entity/field filters.
+- `fg.entities.match(...)` returns snapshots selected by a `Rule` or
+  `RuleExpr`.
+- `fg.assertions.retract(asrt_id)` records a retraction by id and returns the
   revoker's `asrt_id`.
 - The ledger is append-only; snapshots are read-time views over assertions.
-- For deeper assertion mechanics, see
-  [Assertion records and views](assertions.md).
+- For deeper assertion mechanics, see [Assertion records and views](assertions.md).

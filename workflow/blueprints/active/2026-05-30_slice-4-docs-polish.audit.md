@@ -13,6 +13,7 @@
 | 2026-05-30 | draft-amend | Step 4.2 reviewer findings applied | Added `src/factgraph/sdk/docs/README.md` and `explanation-completion-roadmap.zh.md` to scope; broadened final grep carve-out wording; clarified dirty-notebook default and per-commit ritual. |
 | 2026-05-30 | preflight-amend | Step 4.3 preflight findings applied | Applied PF-R1 broad `Identity(...primary_key...)` gate and PF-R2 Step 0 added-target checks before scoped transition. |
 | 2026-05-30 | scoped | Preflight amendments and self-check passed | PF-R1 and PF-R2 covered by `16907310`; self-check found no remaining blockers; Status flipped to `scoped`. |
+| 2026-05-30 | implementing-step-1 | Step 0 grep gate + Step 1 quickstart rewrite | Step 0 found no new drift beyond scoped inventory; Step 1 rewrote `first-factgraph.md` and `read-write.md` to Form I + canonical `fg.entities.*` / `fg.fields.*` / `fg.assertions.*`. |
 
 ## Decision Notes
 

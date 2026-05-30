@@ -1,44 +1,33 @@
 # Your first FactGraph
 
-This page builds the smallest useful graph: a schema, two writes, and one read.
-It uses only the in-memory SDK path so you can see the core model before adding
-rules, inferences, workspaces, or persistence.
+This page builds the smallest useful graph: a schema, one entity coordinate,
+two field writes, and one read. It uses only the in-memory SDK path so you can
+see the core model before adding rules, workspaces, or persistence.
 
-A `FactGraph` is a place where typed facts live. The schema says what kinds of
-things the graph can talk about. Writes append assertions to the graph ledger.
-Reads resolve those assertions into the current snapshot of an entity.
-
-That is why the first example has three parts: declare the shape of a `User`,
-write a few facts about one user identity, then read back the current view of
-that user. You are not mutating a Python `User` object; you are adding facts to
-the graph.
+A `FactGraph` stores typed facts. The schema says what kinds of entities and
+fields exist. Writes append assertions to the ledger. Reads resolve active
+assertions into a read-only snapshot.
 
 ## Define a schema
 
 A FactGraph starts from Python classes. Each class represents an entity type.
-`Identity` fields identify an entity, and `Field` descriptors hold values about
-that entity.
+`Identity()` descriptors form the immutable identity bundle for an entity, and
+`Field()` descriptors hold non-identity values about that entity.
 
 ```python
 from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tags: list[str] = Field()
 ```
 
-`single` fields keep the current value. `multi` fields collect values. A field
-is not a Python storage slot by itself; it is a schema descriptor that tells the
-graph how to write and read assertions.
-
-`Identity(primary_key=True)` marks `user_id` as the **primary anchor** of
-the entity. An entity can have multiple `Identity` fields — every `Identity`
-participates in the entity reference and changes which coordinate is being
-described. The simple one-field case shown here uses only the primary anchor.
-See [Define a schema](schema.md#why-the-primary-anchor-matters) for the
-multi-field identity pattern.
+Every `Identity()` participates in the entity reference. Identity fields are not
+ordinary editable fields; changing identity means deleting the old entity
+coordinate and creating a new one. `Field()` descriptors are the values you
+write through `fg.fields.*`.
 
 ## Create a graph
 
@@ -51,48 +40,49 @@ fg = FactGraph.create(schema_classes=[User])
 This compiles the schema and creates an empty in-memory graph. Later tutorials
 add `path=...` for a workspace that can be saved and loaded.
 
-`FactGraph.create(schema_classes=[...])` is the **high-level constructor**
-— it calls `compile_schema_from_classes(schema_classes)` for you and stores
-the resulting compiled IR inside the runtime. When you work at the lower
-`Database` boundary directly, you compile once with
-`compile_schema_from_classes(...)` and pass the IR as `schema_ir=` instead
-(see [Database and durable views](database.md#define-a-schema-ir) for the
-surface comparison).
+## Create an entity coordinate
+
+Create the entity identity before writing fields:
+
+```python
+alice = fg.entities.create(User, user_id="u-1")
+```
+
+The returned value is an opaque `idref_v1` token for "the `User` whose
+`user_id` is `u-1`". Treat it as a handle returned by the SDK; do not parse or
+construct it yourself.
+
+If you only need the deterministic reference for a coordinate that was already
+seen by the graph, use `fg.entities.ref(...)`. For new application code,
+`fg.entities.create(...)` is the explicit entity-lifecycle entry point.
 
 ## Write facts
 
-Writes use an entity reference. Build one with `fg.read.ref(...)`, then write
-field values through `fg.write`.
+Write field values through `fg.fields.*`:
 
 ```python
-alice = fg.read.ref(User, user_id="u-1")
-
-fg.write.set(User.name, alice, "Alice")
-fg.write.add(User.tags, alice, "engineer")
+fg.fields.set(User.name, alice, "Alice")
+fg.fields.add(User.tags, alice, "engineer")
 ```
 
-The reference is an opaque handle for "the user whose `user_id` is `u-1`".
-`set` is for `single` fields. `add` is for `multi` fields. Both calls append
-assertions to the graph ledger; they do not mutate a Python `User` object.
+`set` is for single-value fields. `add` appends a value to a multi-value field.
+Both calls append assertions to the graph ledger; they do not mutate a Python
+`User` object.
 
 ## Read a snapshot
 
-Use `fg.read.get(...)` with the same identity values to read the current
+Use `fg.entities.get(...)` with the same identity values to read the current
 snapshot.
 
 ```python
-snap = fg.read.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")
 
 print(snap.name)        # Alice
 print(tuple(snap.tags)) # ('engineer',)
 ```
 
 The returned snapshot is read-only. If the entity is not visible in the current
-view, `fg.read.get(...)` returns `None`.
-
-Think of the snapshot as the graph's answer to "what is currently known about
-this identity?" It is not the source of truth itself; the append-only assertions
-in the graph ledger are.
+view, `fg.entities.get(...)` returns `None`.
 
 ## Complete example
 
@@ -101,18 +91,18 @@ from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tags: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tags: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.name, alice, "Alice")
-fg.write.add(User.tags, alice, "engineer")
+alice = fg.entities.create(User, user_id="u-1")
+fg.fields.set(User.name, alice, "Alice")
+fg.fields.add(User.tags, alice, "engineer")
 
-snap = fg.read.get(User, user_id="u-1")
+snap = fg.entities.get(User, user_id="u-1")
 
 assert snap is not None
 assert snap.name == "Alice"
@@ -122,10 +112,12 @@ assert tuple(snap.tags) == ("engineer",)
 ## Syntax checklist
 
 - A schema is made from `Entity` classes.
-- `Identity` fields locate entities.
-- `Field` descriptors define values you can write.
+- `Identity()` fields locate entities.
+- `Field()` descriptors define values you can write.
 - `FactGraph.create(...)` builds the graph.
-- `fg.read.ref(...)` creates an entity handle for writes.
-- `fg.write.set(...)` writes `single` fields.
-- `fg.write.add(...)` writes `multi` fields.
-- `fg.read.get(...)` reads the current snapshot.
+- `fg.entities.create(...)` creates an entity coordinate.
+- `fg.entities.ref(...)` returns a deterministic reference for an identity
+  coordinate already known to the graph.
+- `fg.fields.set(...)` writes a single-value field.
+- `fg.fields.add(...)` writes a multi-value field.
+- `fg.entities.get(...)` reads the current snapshot.
