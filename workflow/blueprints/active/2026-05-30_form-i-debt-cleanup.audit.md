@@ -17,6 +17,7 @@
 | 2026-05-31 | implementing-step-2 | Sibling package fixtures migrated | Migrated the five scoped sibling package files to shipped Form I descriptors and current import/namespace surfaces where needed; all four sibling Python modules import successfully, and selected non-legacy behavior tests pass. |
 | 2026-05-31 | implementing-step-3 | Negative test semantics rewritten | Rewrote the three semantic targets: `test_sdk_schema_primary_key_required.py` now asserts Form I acceptance plus explicit legacy-kwarg rejection, while `test_application_entity_view.py` and `test_application_schema_runtime.py` use explicit complete identity bundles instead of deleted identity-default behavior. |
 | 2026-05-31 | implementing-step-5 | Dirty notebook decision point | Defaulted to untouched per SF6: active dirty notebooks `examples/01_sdk_check_diagnose.ipynb` and `examples/02_overlay_why_not_frontier.ipynb` were not edited; archive dirty notebook `examples/archive/01_sdk_basics.ipynb` remains out of scope per SF7. |
+| 2026-05-31 | implementing-step-6 | Regression sweep and final grep gate complete | Imported 67 migrated Python modules, ran 49 representative unittest cases, and completed compileall/diff-check gates; final Form I grep hits are classified as Step 3 negative-test inputs, Step 4 deferred README/tools/tutorials, SF6 dirty notebooks, SF7 archive/historical references, or intentional migration-hint/docs examples. No unclassified live runtime/test hit found. |
 
 ## Decision Notes
 
@@ -35,6 +36,8 @@
 | 2026-05-31 | Step 1 included one live-test namespace collateral fix. | `tests/test_sdk_redesign_namespace_shape.py` had an import-time blocker from removed `_SDKReadManager` / `_SDKWriteManager` names after its Form I fixture migration; the test was minimally aligned to the current shipped `entities` / `fields` / `assertions` / `rules` / `inferences` namespaces without touching runtime. |
 | 2026-05-31 | Step 2 limited sibling cleanup to Form I/import viability. | `src/service/tests/test_problog_semantic_annotation_l4.py` still contains older candidate-envelope / `accept` behavior expectations that are not Form I debt; Step 2 verifies import viability and leaves broader semantic modernization out of this housekeeping slice. |
 | 2026-05-31 | Step 3 residual grep is intentional negative coverage. | Remaining deprecated Form I strings in live tests are only the rejection inputs inside `tests/test_sdk_schema_primary_key_required.py`; all `allow_identity_defaults=True` callsites were removed from live tests. |
+| 2026-05-31 | Step 6 final grep gate classified all residual hits. | Live migrated tests and sibling modules are clean except intentional `assertRaises` inputs in `tests/test_sdk_schema_primary_key_required.py`; Step 4-deferred current docs/tools/tutorials remain carry-forward; dirty notebooks and archive/historical material remain carve-outs per SF6/SF7; `src/factgraph/sdk/schema.py` and SDK docs hits are migration-hint/example text. |
+| 2026-05-31 | Step 6 confirms `allow_identity_defaults=True` live cleanup complete. | Remaining hits are only audit/blueprint/design historical records; there are no live test or runtime callsites. |
 
 ## Review Checklist
 
