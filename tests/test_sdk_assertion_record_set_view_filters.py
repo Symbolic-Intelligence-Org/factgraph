@@ -6,16 +6,16 @@ from factgraph.sdk import Entity, Field, Identity, SDKStore, SDKStoreError
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tag: list[str] = Field()
 
 
 def _seed_store() -> tuple[SDKStore, dict[str, str]]:
     sdk = SDKStore([User])
-    ref = sdk.ref(User, user_id="u-1")
+    ref = sdk.entities.ref(User, user_id="u-1")
     ids = {
-        "name_old": sdk.set(
+        "name_old": sdk.fields.set(
             User.name,
             ref,
             "Alice",
@@ -26,7 +26,7 @@ def _seed_store() -> tuple[SDKStore, dict[str, str]]:
                 "valid_to": "2026-02-01T00:00:00Z",
             },
         ),
-        "name_new": sdk.set(
+        "name_new": sdk.fields.set(
             User.name,
             ref,
             "Alicia",
@@ -36,7 +36,7 @@ def _seed_store() -> tuple[SDKStore, dict[str, str]]:
                 "valid_from": "2026-02-01T00:00:00Z",
             },
         ),
-        "tag_vip": sdk.add(
+        "tag_vip": sdk.fields.add(
             User.tag,
             ref,
             "vip",
@@ -47,7 +47,7 @@ def _seed_store() -> tuple[SDKStore, dict[str, str]]:
                 "valid_to": "2026-03-01T00:00:00Z",
             },
         ),
-        "tag_missing_valid_from": sdk.add(
+        "tag_missing_valid_from": sdk.fields.add(
             User.tag,
             ref,
             "unscoped",
@@ -63,7 +63,7 @@ def _seed_store() -> tuple[SDKStore, dict[str, str]]:
 class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
     def test_at_filters_current_set_by_business_validity_interval(self) -> None:
         sdk, ids = _seed_store()
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
 
@@ -77,20 +77,20 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
 
     def test_at_rejects_non_iso8601_timestamp(self) -> None:
         sdk, _ = _seed_store()
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
 
         with self.assertRaises(SDKStoreError):
             snap.field("tag").history.at("not-a-time")
 
-    def test_version_and_by_id_filter_current_set(self) -> None:
+    def test_meta_version_and_by_id_filter_current_set(self) -> None:
         sdk, ids = _seed_store()
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
 
-        versioned = snap.field("name").history.version("name-v1")
+        versioned = snap.field("name").history.where(_meta={"version": "name-v1"})
         by_id = snap.field("name").history.by_id(ids["name_old"])
 
         self.assertEqual(versioned.one().asrt_id, ids["name_old"])
@@ -99,24 +99,24 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
 
     def test_non_terminal_filters_preserve_type_and_chainability(self) -> None:
         sdk, ids = _seed_store()
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
 
         records = snap.field("tag").history
         chained = (
-            records.where(source="seed")
+            records.where(_meta={"source": "seed"})
             .at("2026-01-15T00:00:00Z")
-            .version("tag-v1")
+            .where(_meta={"version": "tag-v1"})
             .by_id(ids["tag_vip"])
         )
 
         self.assertIs(type(chained), type(records))
         self.assertEqual(chained.one().asrt_id, ids["tag_vip"])
 
-    def test_field_assertions_at_and_version_are_active_shortcuts(self) -> None:
+    def test_field_assertions_at_and_meta_version_are_active_shortcuts(self) -> None:
         sdk, ids = _seed_store()
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
 
@@ -127,14 +127,14 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
             [record.asrt_id for record in field.active.at("2026-02-15T00:00:00Z")],
         )
         self.assertEqual(
-            [record.asrt_id for record in field.version("name-v2")],
-            [record.asrt_id for record in field.active.version("name-v2")],
+            [record.asrt_id for record in field.active.where(_meta={"version": "name-v2"})],
+            [record.asrt_id for record in field.active.where(_meta={"version": "name-v2"})],
         )
         self.assertEqual(field.active.by_id(ids["name_new"]).one().value, "Alicia")
 
     def test_field_assertion_sets_accept_property_and_legacy_call_forms(self) -> None:
         sdk, _ = _seed_store()
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
 
@@ -149,7 +149,7 @@ class AssertionRecordSetTemporalFilterTests(unittest.TestCase):
 
     def test_assertion_namespace_proxy_respects_reserved_names(self) -> None:
         sdk, _ = _seed_store()
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
 

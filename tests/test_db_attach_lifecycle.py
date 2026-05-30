@@ -26,14 +26,14 @@ from factgraph.core.protocol.idref_v1 import encode_idref_v1
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tag: list[str] = Field()
 
 
 class Account(Entity):
-    account_id: str = Identity(primary_key=True)
-    label: str = Field(cardinality="single")
+    account_id: str = Identity()
+    label: str = Field()
 
 
 def _schema_ir(classes: list[type[Entity]] | None = None) -> dict:
@@ -144,25 +144,25 @@ class DBAttachLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "only available on FactGraph.attach"):
             fg.commit_assertions([_assertion(fg, "Ada")])
 
-    def test_attached_flat_write_paths_are_rejected(self) -> None:
+    def test_attached_canonical_write_paths_are_rejected(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
         fg = FactGraph.attach(db, schema_classes=[User])
 
         # Q8 Phase 2 (Slice 6): fg.save_rule / fg.save_inference were removed
         # entirely (no longer exist on SDKStore). Remaining flat write paths
         # are still rejected when attached.
-        flat_calls = {
-            "fg.set": lambda: fg.set(User.name, _user_ref(), "Ada"),
-            "fg.add": lambda: fg.add(User.tag, _user_ref(), "vip"),
-            "fg.retract": lambda: fg.retract("asrt:" + "0" * 64),
-            "fg.edit": lambda: fg.edit(User, user_id="u-1"),
+        write_calls = {
+            "fg.fields.set": lambda: fg.fields.set(User.name, _user_ref(), "Ada"),
+            "fg.fields.add": lambda: fg.fields.add(User.tag, _user_ref(), "vip"),
+            "fg.assertions.retract": lambda: fg.assertions.retract("asrt:" + "0" * 64),
+            "fg.entities.edit": lambda: fg.entities.edit(User, user_id="u-1"),
             "fg.ingest": lambda: fg.ingest({}),
             "fg.add_schema_classes": lambda: fg.add_schema_classes(Account),
             "fg.batch": lambda: fg.batch(),
             "fg.save": lambda: fg.save(),
         }
 
-        for method_name, call in flat_calls.items():
+        for method_name, call in write_calls.items():
             with self.subTest(method=method_name):
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", DeprecationWarning)
@@ -184,12 +184,12 @@ class DBAttachLifecycleTests(unittest.TestCase):
         # entirely (no longer exist on rules/inferences namespaces). Remaining
         # manager write paths are still rejected when attached.
         manager_calls = {
-            "fg.write.set": lambda: fg.write.set(User.name, _user_ref(), "Ada"),
-            "fg.write.add": lambda: fg.write.add(User.tag, _user_ref(), "vip"),
-            "fg.write.retract": lambda: fg.write.retract("asrt:" + "0" * 64),
-            "fg.write.edit": lambda: fg.write.edit(User, user_id="u-1"),
+            "fg.fields.set": lambda: fg.fields.set(User.name, _user_ref(), "Ada"),
+            "fg.fields.add": lambda: fg.fields.add(User.tag, _user_ref(), "vip"),
+            "fg.assertions.retract": lambda: fg.assertions.retract("asrt:" + "0" * 64),
+            "fg.entities.edit": lambda: fg.entities.edit(User, user_id="u-1"),
             "fg.schema.ingest": lambda: fg.schema.ingest({}),
-            "fg.schema.add": lambda: fg.schema.add(Account),
+            "fg.schema.apply": lambda: fg.schema.apply(Account),
             "fg.views.create": lambda: fg.views.create("review", asrt_ids=[]),
             "fg.views.update": lambda: fg.views.update("review", asrt_ids=[]),
             "fg.views.delete": lambda: fg.views.delete("review"),
@@ -204,8 +204,8 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
     def test_non_attached_views_and_batch_surface_still_work(self) -> None:
         fg = FactGraph.from_schema_classes([User])
-        ref = fg.ref(User, user_id="u-1")
-        asrt_id = fg.write.set(User.name, ref, "Ada")
+        ref = fg.entities.ref(User, user_id="u-1")
+        asrt_id = fg.fields.set(User.name, ref, "Ada")
 
         view = fg.views.create("review", asrt_ids=[asrt_id])
 
@@ -243,12 +243,12 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
             self.assertIs(scoped._database, db)
             self.assertFalse(scoped._attached_writable)
-            self.assertEqual([row.name for row in scoped.read.find(User)], ["Ada"])
-            self.assertEqual(scoped.read.get(User, user_id="u-1").name, "Ada")
-            self.assertIsNone(scoped.read.get(User, user_id="u-2"))
+            self.assertEqual([row.name for row in scoped.entities.where(User)], ["Ada"])
+            self.assertEqual(scoped.entities.get(User, user_id="u-1").name, "Ada")
+            self.assertIsNone(scoped.entities.get(User, user_id="u-2"))
 
             rule = _user_name_rule()
-            matched = scoped.read.match(User, rule)
+            matched = scoped.entities.match(User, rule)
             evaluated = scoped.eval.evaluate(rule, head=rule, engine="native")
 
             self.assertEqual([row.name for row in matched], ["Ada"])
@@ -268,7 +268,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
             scoped = FactGraph.attach(db, schema_classes=[User], view=view)
             evaluated = scoped.eval.evaluate(_user_name_rule(), head=_user_name_rule(), engine="native")
 
-            self.assertEqual([row.name for row in scoped.read.find(User)], ["Ada"])
+            self.assertEqual([row.name for row in scoped.entities.where(User)], ["Ada"])
             self.assertEqual(evaluated.count(), 1)
             self.assertIn("Ada", str(evaluated[0].bindings))
             self.assertEqual(scoped.ledger.get_ledger_meta("head_tx_id"), view.base_tx_id)
@@ -314,10 +314,10 @@ class DBAttachLifecycleTests(unittest.TestCase):
         fg = FactGraph.from_schema_classes([User])
         rule = _user_name_rule()
 
+        with self.assertRaisesRegex(Exception, "unknown filter fields"):
+            fg.entities.where(User, view=object())
         with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
-            fg.read.find(User, view=object())
-        with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
-            fg.read.match(User, rule, view=object())
+            fg.entities.match(User, rule, view=object())
         with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):
             fg.eval.evaluate(rule, head=rule, view=object())
         with self.assertRaisesRegex(SDKStoreError, "FactGraph\\.attach\\(db, view=view\\)"):

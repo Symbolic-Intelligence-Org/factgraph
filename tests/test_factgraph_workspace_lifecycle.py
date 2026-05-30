@@ -20,25 +20,25 @@ from factgraph.sdk import (
     FactGraph,
     Inference,
     Pred,
-    Rule,
     SDKStore,
     compile_schema_from_classes,
     vars as sdk_vars,
 )
+from factgraph.sdk.dsl import Rule
 from factgraph.sdk.store import SDKStoreError
 from factgraph.sdk.schema import Entity, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    name: str = Field()
+    tag_seed: str = Field()
+    tag: list[str] = Field()
 
 
 class Account(Entity):
-    account_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    account_id: str = Identity()
+    name: str = Field()
 
 
 def _rule(*, rule_id: str = "rule.workspace.tag_seed", version: str = "v1") -> Rule:
@@ -70,20 +70,20 @@ def _seed_fg(*, path: Path | None = None, registry_root: Path | None = None) -> 
     if registry_root is not None:
         kwargs["registry_root"] = registry_root
     fg = FactGraph.create(schema_classes=[User], **kwargs)
-    alice_ref = fg.ref(User, user_id="Alice")
+    alice_ref = fg.entities.ref(User, user_id="Alice")
     set_field(
         fg.ledger,
         pred_id="user:name",
         e_ref=alice_ref,
         rest_terms=[("string", "Alice")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         fg.ledger,
         pred_id="user:tag_seed",
         e_ref=alice_ref,
         rest_terms=[("string", "vip")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     return fg
 
@@ -146,6 +146,7 @@ class WorkspaceCreatePathTests(unittest.TestCase):
         self.assertIn("workspace", str(ctx.exception))
 
     def test_create_accepts_path_with_matching_explicit_paths(self) -> None:
+        self.skipTest("registry_root= was removed by A20(E) / Q6-A")
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             ledger_path = workspace / "ledger.db"
@@ -238,7 +239,7 @@ class WorkspaceSaveTests(unittest.TestCase):
 
         self.assertEqual(first["schema_digest"], second["schema_digest"])
         self.assertEqual(first["components"], second["components"])
-        self.assertIsNotNone(loaded.get(User, user_id="Alice"))
+        self.assertIsNotNone(loaded.entities.get(User, user_id="Alice"))
 
     def test_save_to_other_path_uses_ledger_backup_and_binds_new_path(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -253,7 +254,7 @@ class WorkspaceSaveTests(unittest.TestCase):
             self.assertTrue((second_workspace / "ledger.db").exists())
             self.assertFalse((second_workspace / "registry").exists())
             self.assertTrue(_schema_object_file(second_workspace, schema_digest(fg.schema_ir)).is_file())
-        self.assertIsNotNone(loaded.get(User, user_id="Alice"))
+        self.assertIsNotNone(loaded.entities.get(User, user_id="Alice"))
 
     # Q8 Phase 2 (Slice 6): test_save_syncs_separate_registry_root_into_workspace
     # was removed. SavedRule persistence is gone; registry sync only carries
@@ -300,6 +301,7 @@ class WorkspaceLoadTests(unittest.TestCase):
         self.assertIn("factgraph_workspace.json", str(ctx.exception))
 
     def test_factgraph_load_migrates_legacy_registry_schema_to_db_schema_object(self) -> None:
+        self.skipTest("FileAuthoringRegistry was removed by Q6-A")
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             registry_root = workspace / "registry"
@@ -315,6 +317,7 @@ class WorkspaceLoadTests(unittest.TestCase):
         self.assertIsNotNone(loaded)
 
     def test_factgraph_load_rejects_legacy_registry_conflicting_with_db_schema_object(self) -> None:
+        self.skipTest("FileAuthoringRegistry was removed by Q6-A")
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             registry_root = workspace / "registry"
@@ -361,7 +364,7 @@ class WorkspaceExclusionTests(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg()
-            asrt_id = fg.set(User.name, fg.ref(User, user_id="Bob"), "Bob")
+            asrt_id = fg.fields.set(User.name, fg.entities.ref(User, user_id="Bob"), "Bob")
             fg.views.create("review", asrt_ids=[asrt_id])
 
             fg.save(workspace)
@@ -407,7 +410,7 @@ class PreservationGuards(unittest.TestCase):
             user.name.set("Alice")
             result = tx.save(user)
 
-        snap = fg.get(User, user_id="Alice")
+        snap = fg.entities.get(User, user_id="Alice")
         self.assertTrue(result.apply_result.refs_by_handle_id)
         self.assertIsNotNone(snap)
         assert snap is not None
@@ -416,15 +419,15 @@ class PreservationGuards(unittest.TestCase):
     def test_direct_runtime_value_objects_do_not_need_registry(self) -> None:
         fg = _seed_fg()
 
-        rows = fg.eval.run(_rule())
+        rule_info = fg.rules.inspect(_rule())
         candidates = fg.eval.evaluate(_inference(), engine="native")
 
-        self.assertTrue(rows)
+        self.assertEqual(rule_info["kind"], "Rule")
         self.assertTrue(candidates)
 
     def test_views_remain_in_memory_manager(self) -> None:
         fg = _seed_fg()
-        asrt_id = fg.set(User.name, fg.ref(User, user_id="Bob"), "Bob")
+        asrt_id = fg.fields.set(User.name, fg.entities.ref(User, user_id="Bob"), "Bob")
         view = fg.views.create("review", asrt_ids=[asrt_id])
 
         self.assertEqual(fg.views.get("review"), view)
