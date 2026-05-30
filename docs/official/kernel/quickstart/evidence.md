@@ -233,7 +233,7 @@ row = result.first()
 closed_head = row.close()
 
 # Mutate the ledger so the closed head's facts no longer hold
-fg.write.set(User.name, alice, "Bob")
+fg.fields.set(User.name, alice, "Bob")
 
 e = fg.eval.explain(rule, head=closed_head)
 

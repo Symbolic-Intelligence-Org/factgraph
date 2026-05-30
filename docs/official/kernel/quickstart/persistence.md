@@ -44,15 +44,15 @@ workspace = Path(tmp.name) / "tutorial-workspace"
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    tag_seed: str = Field()
+    tag: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User], path=workspace)
 
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.tag_seed, alice, "engineer")
+alice = fg.entities.ref(User, user_id="u-1")
+fg.fields.set(User.tag_seed, alice, "engineer")
 ```
 
 Because `path=` is set, `fg.save()` can later write the workspace without
@@ -100,9 +100,9 @@ assert row.claim.name == "user:tag"
 Evaluation is read-only. Persist facts with explicit writes:
 
 ```python
-fg.write.add(User.tag, alice, "engineer")
+fg.fields.add(User.tag, alice, "engineer")
 
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
 ```
 
 The rule and inference definitions themselves are not stored in the workspace.
@@ -134,7 +134,7 @@ exports, rules, and inferences are not part of this workspace format.
 Durable Database views are a separate Database feature. Create them with
 `db.create_view(...)` on a `Database`, then consume them with
 `FactGraph.attach(db, schema_classes=[...], view=view)`. A view-attached runtime
-is read-only and automatically scopes `fg.read.*` and `fg.eval.evaluate(...)` to
+is read-only and automatically scopes `fg.entities.*` and `fg.eval.evaluate(...)` to
 the view's assertion ids. Session-local `fg.views.create(...)` entries do not
 carry Database anchors and cannot be passed to `FactGraph.attach(...)`.
 
@@ -159,7 +159,7 @@ current public surface.
 ```python
 loaded = FactGraph.load(workspace, schema_classes=[User])
 
-loaded_snap = loaded.read.get(User, user_id="u-1")
+loaded_snap = loaded.entities.get(User, user_id="u-1")
 
 assert loaded_snap is not None
 assert tuple(loaded_snap.tag) == ("engineer",)
@@ -235,9 +235,9 @@ from factgraph.sdk import Branch, Entity, FactGraph, Field, Identity, Inference,
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    tag_seed: str = Field()
+    tag: list[str] = Field()
 
 
 def make_rule() -> Rule:
@@ -265,8 +265,8 @@ with TemporaryDirectory() as tmp_dir:
     workspace = Path(tmp_dir) / "workspace"
     fg = FactGraph.create(schema_classes=[User], path=workspace)
 
-    alice = fg.read.ref(User, user_id="u-1")
-    fg.write.set(User.tag_seed, alice, "engineer")
+    alice = fg.entities.ref(User, user_id="u-1")
+    fg.fields.set(User.tag_seed, alice, "engineer")
 
     rule = make_rule()
     inference = make_inference()
@@ -278,9 +278,9 @@ with TemporaryDirectory() as tmp_dir:
     row = result.first()
     assert row is not None
     assert row.claim.name == "user:tag"
-    fg.write.add(User.tag, alice, "engineer")
+    fg.fields.add(User.tag, alice, "engineer")
 
-    assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
+    assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
 
     fg.save()
 
@@ -288,7 +288,7 @@ with TemporaryDirectory() as tmp_dir:
     restored_rule = make_rule()
     restored_result = restored.eval.evaluate(restored_rule, head=restored_rule)
 
-    assert tuple(restored.read.get(User, user_id="u-1").tag) == ("engineer",)
+    assert tuple(restored.entities.get(User, user_id="u-1").tag) == ("engineer",)
     assert restored_result.count() == 1
 ```
 

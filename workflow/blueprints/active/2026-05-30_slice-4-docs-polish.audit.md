@@ -15,6 +15,7 @@
 | 2026-05-30 | scoped | Preflight amendments and self-check passed | PF-R1 and PF-R2 covered by `16907310`; self-check found no remaining blockers; Status flipped to `scoped`. |
 | 2026-05-30 | implementing-step-1 | Step 0 grep gate + Step 1 quickstart rewrite | Step 0 found no new drift beyond scoped inventory; Step 1 rewrote `first-factgraph.md` and `read-write.md` to Form I + canonical `fg.entities.*` / `fg.fields.*` / `fg.assertions.*`. |
 | 2026-05-30 | implementing-step-2 | Step 2 quickstart rewrite | Rewrote `assertions.md` for `AssertionView`, canonical `_meta`, and `fg.assertions.retract`; rewrote `schema.md` for Form I and `fg.schema.register/extend/apply`. |
+| 2026-05-30 | implementing-step-3 | Step 3 mechanical quickstart migration | Migrated `namespace-map.md`, `evidence.md`, `database.md`, `persistence.md`, `rules-and-inferences.md`, and `semantics.md`; stale API/Form-I grep is clean and 4 complete examples pass. |
 
 ## Decision Notes
 

@@ -8,14 +8,14 @@ the current snapshot.
 
 `fg.eval.evaluate(...)` evaluates a `Rule` or `RuleExpr` and returns possible
 derived rows. It does not write by itself. Evaluation returns an
-`EvaluateResult`; explicit writes still go through `fg.write.*` or
+`EvaluateResult`; explicit writes still go through `fg.fields.*` or
 `fg.batch(...)`.
 
 The short version is:
 
 | Need | Use |
 | --- | --- |
-| Read matching snapshots | `Rule` / `RuleExpr` + `fg.read.match(...)` |
+| Read matching snapshots | `Rule` / `RuleExpr` + `fg.entities.match(...)` |
 | Propose new facts | `Rule` / `RuleExpr` + `fg.eval.evaluate(...)` |
 | Maintain v0.2 branch-id compatibility | `Inference` / `Branch` |
 | Explain evaluated rows | `row.explain()` / `fg.eval.explain(...)` |
@@ -39,15 +39,15 @@ from factgraph.sdk import (
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    tag_seed: str = Field()
+    tag: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.tag_seed, alice, "engineer")
+alice = fg.entities.ref(User, user_id="u-1")
+fg.fields.set(User.tag_seed, alice, "engineer")
 ```
 
 The predicate id for `User.tag_seed` is `user:tag_seed`. Rule bodies use these
@@ -116,7 +116,7 @@ rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
 assert rule_result.first().claim.name == "user:tag"
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 ```
 
 The second assertion matters. The rule found the `tag_seed` fact, but it did
@@ -124,12 +124,12 @@ not write a `tag` fact.
 
 ## Reading snapshots with match
 
-Use `fg.read.match(EntityCls, rule_or_expr, **port_constraints)` when you want
+Use `fg.entities.match(EntityCls, rule_or_expr, **port_constraints)` when you want
 snapshots selected by an application `Rule`. The first argument says which
 entity snapshot to return; the template's ports define the available filters.
 
 ```python
-matched = fg.read.match(User, seeded_tags, tag="engineer")
+matched = fg.entities.match(User, seeded_tags, tag="engineer")
 
 assert [row.user_id for row in matched] == ["u-1"]
 assert matched[0].tag_seed == "engineer"
@@ -140,7 +140,7 @@ Value ports accept ordinary Python values. A constraint may also use a field
 descriptor from the projected entity class:
 
 ```python
-same_tag = fg.read.match(User, seeded_tags, tag=User.tag_seed)
+same_tag = fg.entities.match(User, seeded_tags, tag=User.tag_seed)
 
 assert [row.user_id for row in same_tag] == ["u-1"]
 ```
@@ -149,7 +149,7 @@ RuleExpr OR works when the branches share the same public ports:
 
 ```python
 tag_or_region = tag_rule | region_rule
-matched = fg.read.match(User, tag_or_region, tag="engineer")
+matched = fg.entities.match(User, tag_or_region, tag="engineer")
 ```
 
 The match runtime distributes port constraints across OR branches, unions the
@@ -163,7 +163,7 @@ Runtime boundaries:
   assertion witnesses.
 - Ports constrained by kwargs must be present in every OR branch.
 - Method-level `view=` is not accepted; attach a durable Database view with
-  `FactGraph.attach(db, view=view)` and then call `fg.read.match(...)`.
+  `FactGraph.attach(db, view=view)` and then call `fg.entities.match(...)`.
 
 ## Understanding ports
 
@@ -258,14 +258,14 @@ attachments.
 
 ```python
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    region: str = Field(cardinality="single")
+    user_id: str = Identity()
+    region: str = Field()
 
 
 class Order(Entity):
-    order_id: str = Identity(primary_key=True)
-    buyer: str = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    order_id: str = Identity()
+    buyer: str = Field()
+    region: str = Field()
 
 
 with vars("u", "r") as (u, r):
@@ -380,12 +380,12 @@ boundary.
 ```python
 fg = FactGraph.create(schema_classes=[User, Order])
 
-alice = fg.read.ref(User, user_id="alice"); fg.write.set(User.region, alice, "US")
-bob   = fg.read.ref(User, user_id="bob");   fg.write.set(User.region, bob,   "DE")
+alice = fg.entities.ref(User, user_id="alice"); fg.fields.set(User.region, alice, "US")
+bob   = fg.entities.ref(User, user_id="bob");   fg.fields.set(User.region, bob,   "DE")
 
-o1 = fg.read.ref(Order, order_id="o1"); fg.write.set(Order.region, o1, "US")
-o2 = fg.read.ref(Order, order_id="o2"); fg.write.set(Order.region, o2, "DE")
-o3 = fg.read.ref(Order, order_id="o3"); fg.write.set(Order.region, o3, "DE")
+o1 = fg.entities.ref(Order, order_id="o1"); fg.fields.set(Order.region, o1, "US")
+o2 = fg.entities.ref(Order, order_id="o2"); fg.fields.set(Order.region, o2, "DE")
+o3 = fg.entities.ref(Order, order_id="o3"); fg.fields.set(Order.region, o3, "DE")
 
 u_ = user_region.as_("u_")
 o_ = order_region.as_("o_")
@@ -395,7 +395,7 @@ result = fg.eval.evaluate(expr, head=user_region)
 # 2 user rows: alice has matching o1 in US; bob has matching o2 and o3 in DE
 assert result.count() == 2
 
-matched_users = fg.read.match(User, expr)
+matched_users = fg.entities.match(User, expr)
 assert {row.user_id for row in matched_users} == {"alice", "bob"}
 ```
 
@@ -490,13 +490,13 @@ instead.
 For one-off snapshot reads, use read APIs directly:
 
 ```python
-snapshot = fg.read.get(User, user_id="u-1")
+snapshot = fg.entities.get(User, user_id="u-1")
 assert snapshot is not None
 assert snapshot.tag_seed == "engineer"
 ```
 
-Use `fg.read.find(...)` for simple snapshot filters,
-`fg.read.match(...)` for application-rule snapshot reads, or
+Use `fg.entities.where(...)` for simple snapshot filters,
+`fg.entities.match(...)` for application-rule snapshot reads, or
 `fg.eval.evaluate(...)` when you need replay anchors and evidence. `Query`
 still exists as an internal DSL value, but it is not the user-facing
 quickstart path.
@@ -540,7 +540,7 @@ assert result.count() == 1
 row = result.first()
 assert row is not None
 assert row.claim.name == "user:tag"
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 ```
 
 The row says "this inference can derive `user:tag` for this user with this
@@ -598,7 +598,7 @@ user-facing.
 In the quickstart, keep the model simple:
 
 - `Rule` and `RuleExpr` describe reusable patterns.
-- `fg.read.match(...)` reads matching snapshots.
+- `fg.entities.match(...)` reads matching snapshots.
 - `fg.eval.evaluate(...)` proposes evaluated rows.
 - `EvaluateResult` rows wait for review.
 - explicit writes persist changes.
@@ -647,15 +647,15 @@ from factgraph.sdk import (
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    tag_seed: str = Field()
+    tag: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.tag_seed, alice, "engineer")
+alice = fg.entities.ref(User, user_id="u-1")
+fg.fields.set(User.tag_seed, alice, "engineer")
 
 with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
@@ -669,17 +669,13 @@ rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
 
-snapshot = fg.read.get(User, user_id="u-1")
+snapshot = fg.entities.get(User, user_id="u-1")
 assert snapshot is not None
 assert snapshot.tag_seed == "engineer"
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 
-fg.write.add(User.tag, alice, "engineer")
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ("engineer",)
-
-inspected = fg.rules.inspect(seeded_tags)
-
-assert inspected["id"] == "user:tag"
+fg.fields.add(User.tag, alice, "engineer")
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
 ```
 
 ## Syntax checklist

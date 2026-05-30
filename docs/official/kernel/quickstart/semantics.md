@@ -68,19 +68,20 @@ from factgraph.sdk import (
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    tag_seed: str = Field()
+    tag: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.tag_seed, alice, "engineer")
+alice = fg.entities.ref(User, user_id="u-1")
+fg.fields.set(User.tag_seed, alice, "engineer")
 
 with vars("u", "tag") as (u, tag):
     tags_from_seed = build_application_rule(
-        id="rule.tags_from_seed",
+        id="user:tag",
+        version="v1",
         where=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
@@ -93,7 +94,7 @@ single-rule call:
 result = fg.eval.evaluate(tags_from_seed, head=tags_from_seed)
 
 assert result.count() == 1
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 ```
 
 Evaluation returns `EvaluateResult`; it does not write derived facts.
@@ -200,13 +201,13 @@ pyreason = PyReasonSemantics(
     timestep_delay=2,
     iteration_count=3,
     derived_bound=[0.7, 0.9],
-    atom_bounds={"rule.tags_from_seed:atom_1": [0.4, 0.8]},
+    atom_bounds={"user:tag:atom_1": [0.4, 0.8]},
 )
 
 assert pyreason.engine == "pyreason"
 assert pyreason.iteration_count == 3
 assert pyreason.derived_bound == (0.7, 0.9)
-assert pyreason.atom_bounds["rule.tags_from_seed:atom_1"] == (0.4, 0.8)
+assert pyreason.atom_bounds["user:tag:atom_1"] == (0.4, 0.8)
 
 preview = fg.eval.inspect_semantics(pyreason)
 entries = preview["lowered_profile"]["rule_projection"]["pyreason"]
@@ -218,9 +219,9 @@ assert {"target": "rule", "kind": "timestep_delay", "value": 2} in entries
 ```
 
 `atom_bounds` uses the application atom id, not the PyReason positional target
-and not an evidence witness key. For a rule with id `rule.tags_from_seed`, body
-atoms are addressed as `rule.tags_from_seed:atom_0`,
-`rule.tags_from_seed:atom_1`, and so on.
+and not an evidence witness key. For a rule with id `user:tag`, body
+atoms are addressed as `user:tag:atom_0`,
+`user:tag:atom_1`, and so on.
 
 Legacy names remain accepted for compatibility:
 
@@ -311,7 +312,7 @@ inspection directly.
 Semantics choose how rows are evaluated. Evaluation is still read-only.
 
 ```python
-before = fg.read.get(User, user_id="u-1")
+before = fg.entities.get(User, user_id="u-1")
 assert tuple(before.tag) == ()
 
 result = fg.eval.evaluate(tags_from_seed, head=tags_from_seed, semantics=ProbLogSemantics())
@@ -328,7 +329,7 @@ assert (row.raw_kind is None) == (row.bound is None)
 row.explain()
 row.close()
 
-after = fg.read.get(User, user_id="u-1")
+after = fg.entities.get(User, user_id="u-1")
 assert tuple(after.tag) == ()
 ```
 
@@ -396,18 +397,19 @@ from factgraph.sdk import (
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    tag_seed: str = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    user_id: str = Identity()
+    tag_seed: str = Field()
+    tag: list[str] = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.tag_seed, alice, "engineer")
+alice = fg.entities.ref(User, user_id="u-1")
+fg.fields.set(User.tag_seed, alice, "engineer")
 
 with vars("u", "tag") as (u, tag):
     tags_from_seed = build_application_rule(
-        id="rule.tags_from_seed",
+        id="user:tag",
+        version="v1",
         where=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
@@ -418,7 +420,7 @@ pyreason = PyReasonSemantics(
     timestep_delay=2,
     iteration_count=3,
     derived_bound=[0.7, 0.9],
-    atom_bounds={"rule.tags_from_seed:atom_1": [0.4, 0.8]},
+    atom_bounds={"user:tag:atom_1": [0.4, 0.8]},
 )
 
 assert fg.eval.inspect_semantics(problog)["engine"] == "problog"
@@ -432,12 +434,12 @@ else:
     raise AssertionError("mismatched engine should be rejected")
 
 result = fg.eval.evaluate(tags_from_seed, head=tags_from_seed)
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 
 row = result.first()
 assert row is not None
 assert row.explain().status == "passed"
-assert tuple(fg.read.get(User, user_id="u-1").tag) == ()
+assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 ```
 
 ## Syntax checklist

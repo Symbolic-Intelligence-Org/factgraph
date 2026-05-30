@@ -90,14 +90,14 @@ from factgraph.sdk import Entity, FactGraph, Field, Identity
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 fg = FactGraph.create(schema_classes=[User])
 ```
 
-## Schema, read, write, and assertions
+## Schema, entities, fields, and assertions
 
 The append-only side of the graph. These four namespaces are the invariant
 core: they decide how vocabulary, coordinates, assertions, and frozen
@@ -105,10 +105,10 @@ selections appear to the user.
 
 | Surface | Methods | Notes |
 | --- | --- | --- |
-| `fg.schema` | `add(*entity_classes)`, `ingest(...)`, `validate_provenance(obj, *, standard="derivation_v1")` | `add(...)` returns `SchemaAddResult`. It is additive only: new entities and new non-identity fields. Delete, rename, identity changes, and migrations are not part of the current surface. |
-| `fg.read` | `ref(EntityCls, **identity)`, `get(EntityCls, **identity)`, `find(EntityCls, **partial_filters)` | Returns managed refs, full-coordinate snapshots, and matching-snapshot collections. |
-| `fg.write` | `set(field, ref, value, meta=None)`, `add(field, ref, value, meta=None)`, `retract(asrt_id, meta=None)`, `edit(...)` | Appends ledger assertions or retractions. Returns assertion ids. `set` is for single-cardinality fields; `add` is for multi-cardinality fields. |
-| `fg.assertions` | `by_id(asrt_id)`, `by_ids(asrt_ids)`, `field(Field)`, `active()`, `all()` | Graph-scoped assertion-record readback and selection. See [Assertion records and views](assertions.md) for the full assertion model. |
+| `fg.schema` | `register(EntityCls)`, `extend(EntityCls)`, `apply(EntityCls)`, `ingest(...)`, `validate_provenance(obj, *, standard="derivation_v1")` | Schema mutation is explicit: register new entity types, extend existing entity types additively, or apply either safe path. Delete, rename, identity changes, and destructive migrations are not part of the current surface. |
+| `fg.entities` | `create(EntityCls, **identity)`, `delete(...)`, `exists(EntityCls, **identity)`, `edit(EntityCls, **identity)`, `ref(EntityCls, **identity)`, `get(EntityCls, **identity)`, `where(EntityCls, **partial_filters)`, `match(EntityCls, rule_or_expr, **ports)` | Owns entity lifecycle, deterministic refs, full-coordinate snapshots, matching-snapshot collections, and rule-backed snapshot reads. |
+| `fg.fields` | `set(field, ref, value, meta=None)`, `add(field, ref, value, meta=None)`, `retract(field, ref, value, meta=None)`, `delete(field, ref, meta=None)`, `get(field, ref)` | Appends or retracts field assertions. `set` is for single-cardinality fields; `add` is for multi-cardinality fields. |
+| `fg.assertions` | `by_id(asrt_id)`, `by_ids(asrt_ids)`, `field(Field)`, `where(...)`, `active`, `all`, `retract(asrt_id, meta=None)` | Graph-scoped assertion-record readback, selection, and assertion-id retract. See [Assertion records and views](assertions.md) for the full assertion model. |
 
 ```text
 schema declaration -> managed ref -> assertion write -> snapshot read
@@ -183,7 +183,7 @@ whole module.
 | Graph entry point | `FactGraph`, `SDKStore` | Create / load / save the graph. `FactGraph` is the alias used in docs; `SDKStore` is the same class for advanced use. |
 | Schema declaration | `Entity`, `Identity`, `Field`, `Relationship` | Define entity vocabulary and field coordinates. |
 | Rule DSL | `Rule`, `Inference`, `Query`, `Branch`, `Pred`, `Not`, `RuleRef`, `vars` | Author saved rules, inferences, ad-hoc queries, and rule-body atoms. |
-| Persistence handles | `SchemaAddResult` | Return type from `fg.schema.add`. Rule/inference persistence handles were removed. |
+| Persistence handles | `SchemaAddResult` | Return type from `fg.schema.register`, `extend`, or `apply`. Rule/inference persistence handles were removed. |
 | Ingest results | `IngestResult`, `ValidationReport` | Return types from `fg.schema.ingest(...)` and `fg.schema.validate_provenance(...)`. |
 | Semantics | `ProbLogSemantics`, `PyReasonSemantics`, `SemanticsProfile` | Configure inference evaluation. Wrappers are the teaching path; `SemanticsProfile` is the canonical lower form. |
 | Error types | `SDKSchemaError`, `SDKStoreError`, `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError`, `SDKDSLError` | Catch these for kernel-level failure modes. |
@@ -223,17 +223,17 @@ same project; some are out of scope for `factpy-kernel` entirely.
 - `fg.save(path=None)` persists ledger, schema IR, registry, and manifest.
 - `fg.batch(meta=...)` opens a batch transaction; batch `save(...)` is unrelated
   to graph save.
-- `fg.schema.add(...)` extends the schema additively and returns
-  `SchemaAddResult`.
-- `fg.read.ref(...)`, `fg.read.get(...)`, and `fg.read.find(...)` are the read
-  entry points.
-- `fg.write.set(...)`, `fg.write.add(...)`, and `fg.write.retract(...)` append
+- `fg.schema.register(...)`, `fg.schema.extend(...)`, and
+  `fg.schema.apply(...)` return `SchemaAddResult`.
+- `fg.entities.ref(...)`, `fg.entities.get(...)`, and
+  `fg.entities.where(...)` are the entity read entry points.
+- `fg.fields.set(...)`, `fg.fields.add(...)`, and `fg.assertions.retract(...)` append
   ledger assertions or retractions.
 - `fg.assertions.by_id(...)`, `fg.assertions.by_ids(...)`,
-  `fg.assertions.field(Field)`, `fg.assertions.active()`, and
-  `fg.assertions.all()` read assertion records. Chain `.where(...)`,
-  `.at(...)`, `.version(...)`, and `.by_id(...)` after a returned
-  `AssertionRecordSet`.
+  `fg.assertions.field(Field)`, `fg.assertions.active`, and
+  `fg.assertions.all` read assertion records. Chain `.where(...)`,
+  `.at(...)`, and `.by_id(...)` after a returned `AssertionRecordSet`;
+  use `.where(_meta={"version": v})` for version metadata filters.
 - `fg.views.create/update/delete/get/list` manages frozen assertion-id
   selections.
 - `fg.rules.inspect(...)` previews structure for rules, inferences, and

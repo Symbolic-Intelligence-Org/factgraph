@@ -22,7 +22,7 @@ intentionally unsupported.
 
 | Need | Use |
 | --- | --- |
-| Normal SDK application code | `FactGraph.create(...)`, `fg.write.*`, `fg.save()` |
+| Normal SDK application code | `FactGraph.create(...)`, `fg.fields.*`, `fg.save()` |
 | Low-level Database identity and head tracking | `Database.create(...)`, `Database.open(...)`, `db.head()` |
 | Database-owned assertion commits | `fg.commit_assertions(...)` on an attached runtime |
 | Durable frozen assertion-id objects | `db.create_view(...)` |
@@ -68,8 +68,8 @@ from factgraph.sdk import (
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 schema_ir = compile_schema_from_classes([User])
@@ -144,8 +144,8 @@ reconstruct the same compiled schema the Database was created with.
 Common SDK mutation shortcuts reject in attached mode:
 
 ```python
-# fg.write.set(...)    # rejected on attached runtimes
-# fg.write.add(...)    # rejected on attached runtimes
+# fg.fields.set(...)    # rejected on attached runtimes
+# fg.fields.add(...)    # rejected on attached runtimes
 # fg.save()            # rejected on attached runtimes
 # fg.views.create(...) # rejected on attached runtimes
 ```
@@ -202,7 +202,7 @@ assert record.asrt_id.startswith("asrt:")
 ```
 
 `ingested_at` is required for snapshot projection policies. The Database commit
-surface is lower-level than `fg.write.*`, so this example supplies it
+surface is lower-level than `fg.fields.*`, so this example supplies it
 explicitly.
 
 Attached SDK readback works at the assertion-record layer:
@@ -347,7 +347,7 @@ parameter. The next section shows the shipped attach pattern. These row-level
 forms are explicitly rejected:
 
 ```python
-# fg.read.find(User, view=view)          # not a parameter; use attach(db, view=view)
+# fg.entities.where(User, view=view)          # not a parameter; use attach(db, view=view)
 # fg.eval.evaluate(rule, view=view)      # not a parameter; use attach(db, view=view)
 ```
 
@@ -370,7 +370,7 @@ view_fg = FactGraph.attach(db, schema_classes=[User], view=view)
 
 The view-attached runtime:
 
-- scopes every `fg.read.*` call to the assertion-id set frozen by the view;
+- scopes every `fg.entities.*` call to the assertion-id set frozen by the view;
 - scopes `fg.eval.evaluate(...)` to the same assertion universe;
 - rejects mutation methods on the runtime, including
   `fg.commit_assertions(...)`, which raises:
@@ -436,8 +436,8 @@ from factgraph.sdk import (
 
 
 class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    user_id: str = Identity()
+    name: str = Field()
 
 
 def field_pred_id(schema_ir: dict, owner_type: str, field_name: str) -> str:
@@ -514,7 +514,7 @@ with TemporaryDirectory() as tmp_dir:
   `delete(...)`, but it is session-local and not written by `fg.save(...)`.
 - `view=` is an attach-time argument: `FactGraph.attach(db, schema_classes=[...], view=view)`
   produces a read-only, view-scoped runtime. It is not accepted as a row-level
-  parameter on `fg.read.find(...)` or `fg.eval.evaluate(...)`.
+  parameter on `fg.entities.where(...)` or `fg.eval.evaluate(...)`.
 - Attach enforces a **three-way schema strong correspondence**:
   `compiled(schema_classes) == db.schema_digest == view.schema_digest`
   (the third leg only on view-scoped attach). `schema_classes` is not a
