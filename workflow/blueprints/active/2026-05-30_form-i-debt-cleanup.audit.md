@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-30 | draft | Blueprint created | Drafted from Stage 1 audit `fb744d95`; Stage 2 Q-decision skipped per reviewer verdict because no new design decision is required. Scope is Form I legacy callsite cleanup for live tests, sibling package tests/docs, current docs/tools/tutorials, with dirty/archive/historical carve-outs inherited from Slice 4/5. |
+| 2026-05-31 | preflight-amend | Step 4.3 preflight findings applied | Locked the four benchmark scripts plus `tutorials/evidence-pipeline.cn.md` in scope, added explicit sibling package and negative-test file lists, clarified root README Form I + namespace cleanup, and corrected the §7 acceptance total to 26 checkboxes. |
 
 ## Decision Notes
 

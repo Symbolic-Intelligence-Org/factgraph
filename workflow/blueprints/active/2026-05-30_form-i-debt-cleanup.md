@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-05-30
-- Last Updated: 2026-05-30
+- Last Updated: 2026-05-31(preflight amend for PF-R1/PF-REC1-4)
 - Slice: Post-Slice 5 housekeeping for Slice 1 Form I hard-removal debt
 - Class: S-M(test/docs/example cleanup; no runtime semantics)
 - Related Modules:
@@ -151,9 +151,11 @@ For multi-value legacy fields, choose the annotation that preserves the test's a
 
 Include current sibling package tests/docs that import or document `factgraph.sdk`:
 
-- `src/service/tests/`
-- `src/domains/ecss/tests/`
-- `src/agent/extraction/docs/`
+- `src/service/tests/test_problog_candidate_evidence_tree.py`
+- `src/service/tests/test_problog_semantic_annotation_l4.py`
+- `src/service/tests/test_runtime_query_policy.py`
+- `src/domains/ecss/tests/test_phase3_contracts_v1.py`
+- `src/agent/extraction/docs/USAGE.md`
 
 These are not archive material; they can fail under the shipped descriptor behavior and should be brought current.
 
@@ -167,16 +169,25 @@ Examples:
 - tests that assert old error strings like `Identity(primary_key=True)` should assert current migration hints or Form I rejection messages;
 - `allow_identity_defaults=True` tests should be rewritten to current explicit-identity requirements or removed if they only tested deleted protocol fields.
 
+Known semantic-rewrite targets from preflight:
+
+- `tests/test_sdk_schema_primary_key_required.py`
+- `tests/test_application_entity_view.py`
+- `tests/test_application_schema_runtime.py`
+
 Mechanical substitution alone is not acceptable for this class.
 
 ### 5.4 Current Docs / Tutorials / Tools
 
 Migrate current truth surfaces:
 
-- root `README.md` quickstart;
+- root `README.md` quickstart, including both Form I declarations and current namespace calls (`fg.entities.*` / `fg.fields.*`);
 - `tutorials/evidence-pipeline.cn.md`;
-- selected tools/benchmark scripts if treated as current executable examples;
-- selected sibling docs such as `src/agent/extraction/docs/USAGE.md`.
+- `tools/benchmarks/bench_scenario_a_audit_delivery_shape.py`;
+- `tools/benchmarks/extraction/run_cross_provider_benchmark.py`;
+- `tools/benchmarks/extraction/run_multi_model_entity_benchmark.py`;
+- `tools/benchmarks/extraction/run_re_docred.py`;
+- `src/agent/extraction/docs/USAGE.md`.
 
 Preserve valid current negative wording and migration examples:
 
@@ -246,8 +257,9 @@ Each implementation commit must verify:
 ### 7.2 Current Docs / Tools
 
 - [ ] Root `README.md` quickstart uses Form I and current canonical namespaces.
-- [ ] Current tutorial/docs selected for scope no longer present deprecated Form I as current truth.
-- [ ] Current executable tools selected for scope import successfully or are documented as carry-forward.
+- [ ] Root `README.md` quickstart uses Form I and current namespace calls (`fg.entities.*` / `fg.fields.*`).
+- [ ] `tutorials/evidence-pipeline.cn.md` and `src/agent/extraction/docs/USAGE.md` no longer present deprecated Form I as current truth.
+- [ ] The four in-scope benchmark scripts import successfully or have documented carry-forward blockers.
 - [ ] Valid migration examples / negative docs remain classified rather than rewritten blindly.
 - [ ] `src/factgraph/sdk/schema.py` migration-hint text remains intact unless a reviewer explicitly authorizes wording polish.
 
@@ -294,9 +306,11 @@ Migrate positive fixtures in `tests/`, including root test files and `tests/appl
 
 Migrate in-scope sibling surfaces:
 
-- `src/service/tests/`
-- `src/domains/ecss/tests/`
-- selected `src/agent/extraction/docs/`
+- `src/service/tests/test_problog_candidate_evidence_tree.py`
+- `src/service/tests/test_problog_semantic_annotation_l4.py`
+- `src/service/tests/test_runtime_query_policy.py`
+- `src/domains/ecss/tests/test_phase3_contracts_v1.py`
+- `src/agent/extraction/docs/USAGE.md`
 
 ### Step 3 — Negative Test Semantic Rewrite
 
@@ -307,15 +321,24 @@ Rewrite tests that intentionally exercise deleted Form I behavior:
 - `Field(cardinality=...)` rejection tests;
 - `allow_identity_defaults=True` deleted-protocol tests.
 
+Known files:
+
+- `tests/test_sdk_schema_primary_key_required.py`
+- `tests/test_application_entity_view.py`
+- `tests/test_application_schema_runtime.py`
+
 This step should make assertions meaningful under shipped Form I rather than replacing old syntax mechanically.
 
 ### Step 4 — Current Docs / Tools / Tutorial Migration
 
-Migrate current truth docs and executable examples selected by Step 0:
+Migrate current truth docs and executable examples:
 
 - root `README.md`;
 - `tutorials/evidence-pipeline.cn.md`;
-- tools/benchmark scripts if in scope;
+- `tools/benchmarks/bench_scenario_a_audit_delivery_shape.py`;
+- `tools/benchmarks/extraction/run_cross_provider_benchmark.py`;
+- `tools/benchmarks/extraction/run_multi_model_entity_benchmark.py`;
+- `tools/benchmarks/extraction/run_re_docred.py`;
 - any current package docs surfaced by inventory.
 
 Do not rewrite valid migration examples or historical notes.
@@ -351,7 +374,10 @@ Expected:
 - `README.md`
 - `tutorials/evidence-pipeline.cn.md`
 - `src/agent/extraction/docs/USAGE.md` if in scope
-- selected tools/benchmark scripts if treated as current examples
+- `tools/benchmarks/bench_scenario_a_audit_delivery_shape.py`
+- `tools/benchmarks/extraction/run_cross_provider_benchmark.py`
+- `tools/benchmarks/extraction/run_multi_model_entity_benchmark.py`
+- `tools/benchmarks/extraction/run_re_docred.py`
 
 Likely no-change / classified:
 
@@ -365,7 +391,7 @@ Task completion section. Fill during close.
 
 ### 10.1 Final Landing Result
 
-TBD. Should summarize acceptance totals: live tests/imports, docs/tools, dirty/archive/historical discipline, and final checks.
+TBD. Should summarize acceptance totals: live tests/imports, docs/tools, dirty/archive/historical discipline, and final checks (per §7: 8 + 6 + 6 + 6 = 26 checkboxes).
 
 ### 10.2 Deviations And Amendments
 
