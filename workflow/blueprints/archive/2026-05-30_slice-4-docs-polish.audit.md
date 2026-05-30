@@ -3,7 +3,7 @@
 - Blueprint: [2026-05-30_slice-4-docs-polish.md](./2026-05-30_slice-4-docs-polish.md)
 - Branch: `v0.2.0-blueprint-slice-4-docs-polish-2026-05-30`
 - Fork point: `722595ba`(Slice 3a archive head plus N1 ingest docstring fix)
-- Status: implemented audit log
+- Status: archived audit log
 
 ## Event Log
 
@@ -22,6 +22,7 @@
 | 2026-05-30 | implementing-step-7 | Module docs migration | Updated application, authoring, and core module docs to `fg.schema.register/extend/apply`, canonical `fg.entities.*`, and `AssertionRecordSet.where(_meta=...)`; preserved shipped `SchemaAddResult` type name. |
 | 2026-05-30 | implementing-step-8 | Active design-points migration | Updated current-status design-point text for ledger/appended-ledger docs, `explanation-completion-roadmap.zh.md`, and Slice 4 landed-status notes in `identity-mechanism-redesign.zh.md`; preserved historical/problem-statement sections per SF2. |
 | 2026-05-30 | implemented | Final grep gate + §10 Outcome | Ran final grep gate, classified remaining historical / removed-surface carve-outs, filled §10 Outcome, and marked the blueprint `implemented`; Q-PR1, sacred master, and dirty baseline preserved. |
+| 2026-05-30 | archived | Blueprint and audit moved to archive | Moved Slice 4 blueprint + audit from `active/` to `archive/` and updated archive `INVENTORY.md`; branch remains unpushed pending user authorization. |
 
 ## Decision Notes
 
