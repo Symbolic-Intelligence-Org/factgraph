@@ -1,7 +1,8 @@
 """Application-layer helpers for additive schema mutation.
 
 This module owns schema-extension validation and transition planning. SDK
-facades adapt these pure helpers into ``fg.schema.add(...)``.
+facades adapt these pure helpers into ``fg.schema.register(...)`` /
+``fg.schema.extend(...)`` / ``fg.schema.apply(...)``.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from factgraph.sdk.schema import Entity
 
 @dataclass(frozen=True)
 class SchemaAddResult:
-    """Result returned by additive `fg.schema.add(...)` calls.
+    """Result returned by additive schema registration or extension calls.
 
     `old_digest` and `new_digest` identify the schema transition. New entity
     types appear in `added_entities`; new non-identity fields on existing

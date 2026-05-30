@@ -106,6 +106,9 @@ from .errors import (
     EntityAlreadyExistsError,
     EntityNotFoundError,
     FrozenSnapshotError,
+    SchemaConflictError,
+    SchemaNonAdditiveError,
+    SchemaNotFoundError,
     SDKStoreError,
     SDKValueError,
 )
@@ -629,12 +632,7 @@ class AssertionsManager:
 
 
 class _SDKSchemaManager:
-    """Read-only namespace manager for the `schema` taxonomy group.
-
-    Delegates to flat ``SDKStore`` methods per §5.2 teaching taxonomy +
-    §5.4 Option 2 (additive aliases) lock. Manager class is private;
-    `FactGraph.schema` property returns this manager.
-    """
+    """Namespace manager for schema registration and extension."""
 
     def __init__(self, sdk: "SDKStore") -> None:
         object.__setattr__(self, "_sdk", sdk)
@@ -648,15 +646,40 @@ class _SDKSchemaManager:
     def validate_provenance(self, *args: Any, **kwargs: Any) -> Any:
         return self._sdk.validate_provenance(*args, **kwargs)
 
-    def add(self, *schema_classes: type[Entity], **kwargs: Any) -> SchemaAddResult:
-        """Add entity classes or non-identity fields to the active schema.
+    def register(self, entity_cls: type[Entity]) -> SchemaAddResult:
+        """Register a new Entity type."""
+        entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
+        if entity_type in self._sdk._entity_types_by_class_registry():
+            raise SchemaConflictError(
+                f"entity_type already registered: {entity_type}",
+                code="SCHEMA_CONFLICT",
+            )
+        return self._sdk._apply_schema_class_update(
+            entity_cls,
+            operation="register",
+            non_additive_error_type=SchemaConflictError,
+        )
 
-        Accepts positional `Entity` classes or `schema_classes=[...]`.
-        Additions are immediate for the in-memory graph and return a
-        `SchemaAddResult` with the old digest, new digest, added entity names,
-        and added field names. Destructive schema changes are rejected.
-        """
-        return self._sdk.add_schema_classes(*schema_classes, **kwargs)
+    def extend(self, entity_cls: type[Entity]) -> SchemaAddResult:
+        """Add non-identity Fields to an existing Entity type."""
+        entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
+        if entity_type not in self._sdk._entity_types_by_class_registry():
+            raise SchemaNotFoundError(
+                f"entity_type not registered: {entity_type}",
+                code="SCHEMA_NOT_FOUND",
+            )
+        return self._sdk._apply_schema_class_update(
+            entity_cls,
+            operation="extend",
+            non_additive_error_type=SchemaNonAdditiveError,
+        )
+
+    def apply(self, entity_cls: type[Entity]) -> SchemaAddResult:
+        """Register a new Entity or extend an existing Entity."""
+        entity_type = _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
+        if entity_type in self._sdk._entity_types_by_class_registry():
+            return self.extend(entity_cls)
+        return self.register(entity_cls)
 
 
 class _SDKFieldsManager:
@@ -1486,6 +1509,25 @@ def _reject_legacy_registry_marker(workspace_path: str | Path) -> None:
         )
 
 
+def _entity_type_for_schema_class(value: Any, *, field_name: str) -> str:
+    if not isinstance(value, type) or not issubclass(value, Entity) or value is Entity:
+        raise SDKStoreError(f"{field_name} must be Entity subclass")
+    spec = value.sdk_entity_spec()
+    entity_type = spec.get("entity_type")
+    if not isinstance(entity_type, str) or not entity_type:
+        raise SDKStoreError(f"{field_name}.entity_type must be non-empty string")
+    return entity_type
+
+
+def _schema_non_additive_message(exc: SDKStoreError) -> str:
+    return (
+        f"schema mutation is non-additive: {exc}. "
+        "Identity bundle redesign requires entity-type migration for Identity "
+        "changes; <EntityType>:exists is structurally immutable while the "
+        "transitional existence guard is active. See ADR-IC §4.3.6."
+    )
+
+
 def _ensure_workspace_schema_object(path: str | Path, schema_ir: dict[str, Any]) -> None:
     expected_digest = schema_digest(schema_ir)
     if schema_object_exists_for_workspace(path, expected_digest):
@@ -1934,12 +1976,61 @@ class SDKStore:
                 additions = list(schema_class_args)
         else:
             additions = schema_classes
+        if len(additions) == 1:
+            entity_type = _entity_type_for_schema_class(additions[0], field_name="schema_classes[0]")
+            op = "extend" if entity_type in self._entity_types_by_class_registry() else "register"
+            error_type = SchemaNonAdditiveError if op == "extend" else SchemaConflictError
+            return self._apply_schema_class_update(
+                additions[0],
+                operation=op,
+                non_additive_error_type=error_type,
+            )
 
+        return self._apply_schema_class_batch(additions, operation="add_schema_classes")
+
+    def _apply_schema_class_update(
+        self,
+        entity_cls: type[Entity],
+        *,
+        operation: str,
+        non_additive_error_type: type[SDKStoreError],
+    ) -> SchemaAddResult:
+        _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
+        self._reject_attached_write(f"fg.schema.{operation}")
+        try:
+            return self._apply_schema_class_batch(
+                [entity_cls],
+                operation=operation,
+                non_additive_error_type=non_additive_error_type,
+            )
+        except non_additive_error_type:
+            raise
+        except SDKStoreError as exc:
+            raise non_additive_error_type(
+                _schema_non_additive_message(exc),
+                code="SCHEMA_NON_ADDITIVE" if non_additive_error_type is SchemaNonAdditiveError else "SCHEMA_CONFLICT",
+            ) from exc
+
+    def _apply_schema_class_batch(
+        self,
+        additions: list[type[Entity]],
+        *,
+        operation: str,
+        non_additive_error_type: type[SDKStoreError] = SDKStoreError,
+    ) -> SchemaAddResult:
         old_digest = self._schema_digest
-        result = app_add_schema_classes(
-            current_classes=self._classes,
-            schema_classes=additions,
-        )
+        try:
+            result = app_add_schema_classes(
+                current_classes=self._classes,
+                schema_classes=additions,
+            )
+        except SDKStoreError as exc:
+            if non_additive_error_type is SDKStoreError:
+                raise
+            raise non_additive_error_type(
+                _schema_non_additive_message(exc),
+                code="SCHEMA_NON_ADDITIVE" if non_additive_error_type is SchemaNonAdditiveError else "SCHEMA_CONFLICT",
+            ) from exc
         if (
             result.schema_digest == old_digest
             and not result.added_entities
@@ -1968,6 +2059,12 @@ class SDKStore:
             added_entities=list(result.added_entities),
             added_fields=list(result.added_fields),
         )
+
+    def _entity_types_by_class_registry(self) -> dict[str, type[Entity]]:
+        return {
+            _entity_type_for_schema_class(cls, field_name="classes[*]"): cls
+            for cls in self._classes
+        }
 
     def check(
         self,

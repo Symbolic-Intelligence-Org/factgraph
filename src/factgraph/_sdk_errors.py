@@ -67,6 +67,18 @@ class EntityAlreadyExistsError(SDKStoreError):
         self.e_ref = e_ref
 
 
+class SchemaConflictError(SDKStoreError):
+    pass
+
+
+class SchemaNotFoundError(SDKStoreError):
+    pass
+
+
+class SchemaNonAdditiveError(SDKStoreError):
+    pass
+
+
 class FrozenSnapshotError(SDKStoreError):
     pass
 
@@ -97,6 +109,9 @@ __all__ = [
     "EntityAlreadyExistsError",
     "EntityNotFoundError",
     "FrozenSnapshotError",
+    "SchemaConflictError",
+    "SchemaNonAdditiveError",
+    "SchemaNotFoundError",
     "SDKDSLError",
     "SDKError",
     "SDKSchemaError",
