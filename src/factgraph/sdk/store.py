@@ -64,7 +64,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_adapter_derivation_plan,
     _validate_rule_expr_head_foundation,
 )
-from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
+from factgraph.application.schema_runtime import build_schema_index, entity_info, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
 from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
@@ -984,6 +984,27 @@ class _SDKEntitiesManager:
             self._sdk._raise_from_application_error(result.errors[0], op="delete")
 
         return len(result.applied)
+
+    def exists(self, entity_cls: type[Entity], **identity: Any) -> bool:
+        """Return whether the entity is visible via active ``<EntityType>:exists``.
+
+        Per Slice 3a Step 4, this is a cheap existence check over the shipped
+        ``:exists`` substrate rather than a snapshot materialization path.
+        ``self._sdk.ref`` supplies the Form I complete-identity validation and
+        deterministic e_ref encoding. It also preserves the Slice 2 shadow-store
+        compatibility behavior until the future eager-create-only migration.
+        """
+        self._reject_non_entity_class(entity_cls, method="exists")
+        e_ref = self._sdk.ref(entity_cls, **identity)
+        info = entity_info(self._sdk._application_schema_index, entity_cls.__name__)
+        claims = self._sdk._store.ledger.find_claims(
+            pred_id=info.exists_predicate_id,
+            e_ref=e_ref,
+        )
+        return any(
+            not self._sdk._store.ledger.has_active_revocation(claim.asrt_id)
+            for claim in claims
+        )
 
 
 class _SDKRulesManager:
