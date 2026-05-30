@@ -5,8 +5,8 @@ contract — application 层 derive)+ ADR-IC §4.2.1(complete identity bundle)+
 ADR-API §4.1.2(entities namespace migration mapping)。
 
 Test scope:
-- **Eager emission**:`create` 立即 emit N Identity Claims + 1 `:exists`
-  Claim in ledger Active set(per SF4 — eager,not lazy)。
+- **Eager emission**:`create` 立即 emit N Identity Claims in ledger Active
+  set(per SF4 — eager,not lazy)。
 - **Shadow store populate**:`create` populates `_identity_values_by_e_ref`
   via shipped `SDKStore.ref` path(per SF4 legacy compat coexist)。
 - **Duplicate reject**:second `create` 同 identity 抛
@@ -74,7 +74,6 @@ class CreateUser(Entity):
 PRED_USER_ID = "create_user:user_id"
 PRED_TENANT_ID = "create_user:tenant_id"
 PRED_NAME = "create_user:name"
-PRED_EXISTS = "CreateUser:exists"
 
 
 def _make_fg():
@@ -88,8 +87,8 @@ def _claim_counts(fg: FactGraph, e_ref: str) -> Counter:
 # ---------- eager emission contract(SF4 + ADR-IC §4.2)----------
 
 
-def test_create_eager_emits_n_identity_plus_exists_atomic():
-    """`fg.entities.create` 立即 emit N Identity + 1 :exists Claims —
+def test_create_eager_emits_n_identity_atomic():
+    """`fg.entities.create` 立即 emit N Identity Claims —
     NOT lazy(对比 shipped `fg.ref + fg.set` first Field write 才 materialize)。"""
     fg = _make_fg()
 
@@ -97,14 +96,13 @@ def test_create_eager_emits_n_identity_plus_exists_atomic():
     e_ref_pre = fg.entities.ref(CreateUser, user_id="probe", tenant_id="acme")
     assert _claim_counts(fg, e_ref_pre) == Counter()
 
-    # Create eager — should immediately emit Identity + :exists
+    # Create eager — should immediately emit Identity Claims.
     e_ref = fg.entities.create(CreateUser, user_id="alice", tenant_id="acme")
     counts = _claim_counts(fg, e_ref)
-    # No Field Claim yet (create only emits Identity + :exists; Field requires fg.set)
+    # No Field Claim yet (create only emits Identity; Field requires fg.set)
     assert counts == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
-        PRED_EXISTS: 1,
     })
 
 
@@ -130,14 +128,11 @@ def test_create_identity_bundle_carries_correct_values():
 
     user_id_claims = fg._store.ledger.find_claims(pred_id=PRED_USER_ID, e_ref=e_ref)
     tenant_id_claims = fg._store.ledger.find_claims(pred_id=PRED_TENANT_ID, e_ref=e_ref)
-    exists_claims = fg._store.ledger.find_claims(pred_id=PRED_EXISTS, e_ref=e_ref)
 
     assert len(user_id_claims) == 1
     assert user_id_claims[0].rest_terms == [("string", "alice")]
     assert len(tenant_id_claims) == 1
     assert tenant_id_claims[0].rest_terms == [("string", "acme")]
-    assert len(exists_claims) == 1
-    assert exists_claims[0].rest_terms == []
 
 
 def test_create_meta_kwarg_propagates_to_claim_meta():
@@ -151,7 +146,7 @@ def test_create_meta_kwarg_propagates_to_claim_meta():
     )
     # All emitted claims should carry the source meta
     claims = fg._store.ledger.find_claims(e_ref=e_ref)
-    assert len(claims) == 3  # 2 Identity + 1 :exists
+    assert len(claims) == 2  # 2 Identity
     for claim in claims:
         meta_rows = fg._store.ledger.find_meta(asrt_id=claim.asrt_id)
         meta_map = {row.key: row.value for row in meta_rows}
@@ -185,11 +180,10 @@ def test_create_then_shipped_fg_set_works():
     assert isinstance(asrt_id, str)
 
     counts = _claim_counts(fg, e_ref)
-    # Identity (2) + :exists (1) unchanged + 1 Field Claim added
+    # Identity (2) unchanged + 1 Field Claim added
     assert counts == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
-        PRED_EXISTS: 1,
         PRED_NAME: 1,
     })
 
@@ -271,10 +265,10 @@ def test_lazy_path_still_works_after_create_of_different_entity():
 
     counts_a = _claim_counts(fg, e_a)
     counts_b = _claim_counts(fg, e_b)
-    # A: 2 Identity + 1 :exists (no Field)
-    assert counts_a == Counter({PRED_USER_ID: 1, PRED_TENANT_ID: 1, PRED_EXISTS: 1})
-    # B: 2 Identity + 1 :exists + 1 Field
-    assert counts_b == Counter({PRED_USER_ID: 1, PRED_TENANT_ID: 1, PRED_EXISTS: 1, PRED_NAME: 1})
+    # A: 2 Identity (no Field)
+    assert counts_a == Counter({PRED_USER_ID: 1, PRED_TENANT_ID: 1})
+    # B: 2 Identity + 1 Field
+    assert counts_b == Counter({PRED_USER_ID: 1, PRED_TENANT_ID: 1, PRED_NAME: 1})
 
 
 # ---------- application layer planner(SF3 INV-6)----------
@@ -302,8 +296,8 @@ def test_application_planner_can_be_invoked_directly():
     )
     assert plan.can_apply
     assert plan.errors == ()
-    # 2 Identity set ops + 1 record_exists op = 3 planned ops
-    assert len(plan.planned_ops) == 3
+    # 2 Identity set ops, no user-path record_exists op.
+    assert [op.op for op in plan.planned_ops] == ["set", "set"]
 
     result = apply_create_plan(
         plan,
@@ -311,7 +305,7 @@ def test_application_planner_can_be_invoked_directly():
         index=fg._application_schema_index,
     )
     assert result.errors == ()
-    assert len(result.applied) == 3
+    assert len(result.applied) == 2
     assert all(applied.status == "applied" for applied in result.applied)
 
 

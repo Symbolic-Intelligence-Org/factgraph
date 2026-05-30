@@ -2,15 +2,15 @@
 
 Per blueprint §8 Step 8 + §7.9 + ADR-IC §4.2(emission contract):
 
-- 8.1 fg.ref + first fg.set → atomic emit N Identity + 1 :exists + 1 Field Claim.
+- 8.1 fg.ref + first fg.set → atomic emit N Identity + 1 Field Claim.
 - 8.2 EntityEditor.commit() Field write goes through plan_write_command
-      (entity must already be materialized — fg.edit pre-validates :exists).
+      (entity must already be materialized — fg.edit pre-validates entity visibility).
 - 8.3 SDKBatchTx.commit() atomic emission contract (per ADR-IC §4.2).
 - 8.4 Two field writes to same e_ref — Identity Claims emit ONLY ONCE
       (dedup per `_materialization_ops:materialized_refs`).
 - 8.5 Lazy materialization through `_identity_values_by_e_ref` shadow store
       — shadow store has e_ref (via prior `fg.entities.ref(...)`) → first Field write
-      auto-emits Identity + :exists Claims (shipped legacy compat path per
+      auto-emits Identity Claims (shipped legacy compat path per
       ADR-IC §4.2.3).
 - 8.6 e_ref NOT in shadow store (externally-constructed string) → fail-fast
       `UNRESOLVABLE_E_REF` per ADR-IC §4.2.1 emission input contract.
@@ -22,8 +22,6 @@ carry-forward.
 Pred ID conventions (shipped, verified via probe):
 - Identity / Field predicates: `<snake_owner_prefix>:<field_name>` e.g.
   `emission_user:user_id` for class `EmissionUser`.
-- `:exists` predicate: `<EntityType>:exists` (Capitalized) e.g.
-  `EmissionUser:exists`.
 
 NEW test file per Slice 2 SF7.
 """
@@ -48,7 +46,6 @@ PRED_USER_ID = "emission_user:user_id"
 PRED_TENANT_ID = "emission_user:tenant_id"
 PRED_NAME = "emission_user:name"
 PRED_TAGS = "emission_user:tags"
-PRED_EXISTS = "EmissionUser:exists"
 
 
 def _claim_counts(fg: FactGraph, e_ref: str) -> Counter:
@@ -68,8 +65,8 @@ def _rest_value(rest_terms: list) -> object:
 # ---------- 8.1 fg.ref + first fg.set atomic emission ----------
 
 
-def test_emission_8_1_fg_ref_plus_fg_set_atomic_emits_n_identity_exists_field():
-    """fg.ref + first fg.set → 4 Claims atomic (2 Identity + 1 :exists + 1 Field)."""
+def test_emission_8_1_fg_ref_plus_fg_set_atomic_emits_n_identity_field():
+    """fg.ref + first fg.set → 3 Claims atomic (2 Identity + 1 Field)."""
     fg = FactGraph.create(schema_classes=[EmissionUser])
     e_ref = fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")
 
@@ -79,13 +76,12 @@ def test_emission_8_1_fg_ref_plus_fg_set_atomic_emits_n_identity_exists_field():
 
     fg.fields.set(EmissionUser.name, e_ref, "Alice")
 
-    # 4 Claims atomically emitted per ADR-IC §4.2.1 + §4.2.2:
-    # 2 Identity Claims (user_id + tenant_id) + 1 :exists + 1 Field (name).
+    # 3 Claims atomically emitted per Q-EXISTS §4.4:
+    # 2 Identity Claims (user_id + tenant_id) + 1 Field (name).
     counts = _claim_counts(fg, e_ref)
     assert counts == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
-        PRED_EXISTS: 1,
         PRED_NAME: 1,
     })
 
@@ -99,12 +95,10 @@ def test_emission_8_1_identity_bundle_carries_complete_values():
     user_id_claim = fg._store.ledger.find_claims(pred_id=PRED_USER_ID, e_ref=e_ref)
     tenant_id_claim = fg._store.ledger.find_claims(pred_id=PRED_TENANT_ID, e_ref=e_ref)
     name_claim = fg._store.ledger.find_claims(pred_id=PRED_NAME, e_ref=e_ref)
-    exists_claim = fg._store.ledger.find_claims(pred_id=PRED_EXISTS, e_ref=e_ref)
 
     assert len(user_id_claim) == 1 and _rest_value(user_id_claim[0].rest_terms) == "u1"
     assert len(tenant_id_claim) == 1 and _rest_value(tenant_id_claim[0].rest_terms) == "t1"
     assert len(name_claim) == 1 and _rest_value(name_claim[0].rest_terms) == "Alice"
-    assert len(exists_claim) == 1 and exists_claim[0].rest_terms == []
 
 
 # ---------- 8.2 EntityEditor.commit() Field write through plan_write_command ----------
@@ -113,11 +107,11 @@ def test_emission_8_1_identity_bundle_carries_complete_values():
 def test_emission_8_2_entity_editor_commit_routes_field_write_through_planner():
     """fg.edit + editor.field.set + editor.commit() goes through plan_write_command.
 
-    NOTE: fg.entities.edit() requires entity already materialized (pre-validates :exists
+    NOTE: fg.entities.edit() requires entity already materialized (pre-validates entity visibility
     via sdk_get). So EntityEditor is NOT a materialization path; it's the
     edit-existing-entity path that shares the same plan_write_command write
     plumbing. Test verifies: after editor.commit(), a new Field Claim was
-    appended (no extra Identity / :exists re-emission since target visible).
+    appended (no extra Identity re-emission since target visible).
     """
     fg = FactGraph.create(schema_classes=[EmissionUser])
     e_ref = fg.entities.ref(EmissionUser, user_id="u1", tenant_id="t1")
@@ -126,7 +120,6 @@ def test_emission_8_2_entity_editor_commit_routes_field_write_through_planner():
     counts_after_first = _claim_counts(fg, e_ref)
     assert counts_after_first[PRED_USER_ID] == 1
     assert counts_after_first[PRED_TENANT_ID] == 1
-    assert counts_after_first[PRED_EXISTS] == 1
     assert counts_after_first[PRED_NAME] == 1
 
     # Edit existing entity, set a new Field value.
@@ -135,16 +128,15 @@ def test_emission_8_2_entity_editor_commit_routes_field_write_through_planner():
     editor.commit()
 
     counts_after_edit = _claim_counts(fg, e_ref)
-    # Identity + :exists Claim counts UNCHANGED (no re-materialization).
+    # Identity Claim counts UNCHANGED (no re-materialization).
     assert counts_after_edit[PRED_USER_ID] == 1
     assert counts_after_edit[PRED_TENANT_ID] == 1
-    assert counts_after_edit[PRED_EXISTS] == 1
     # name has 2 Claims now (original + editor write).
     assert counts_after_edit[PRED_NAME] == 2
 
 
 def test_emission_8_2_entity_editor_rejects_unmaterialized_entity():
-    """fg.edit pre-validates :exists — unmaterialized entity raises EntityNotFoundError.
+    """fg.edit pre-validates entity visibility — unmaterialized entity raises EntityNotFoundError.
 
     Confirms editor is NOT a materialization path (per ADR-IC §4.2.3 — the
     materialization route is fg.ref + fg.set / SDKBatchTx).
@@ -164,7 +156,7 @@ def test_emission_8_3_sdk_batch_tx_commit_atomic_emits_full_bundle():
     """fg.batch + tx.entity + handle.field.set + tx.commit() → atomic emission.
 
     Verifies per ADR-IC §4.2 atomic guarantee:
-    full Identity bundle + :exists + Field Claims in single commit.
+    full Identity bundle + Field Claims in single commit.
     """
     fg = FactGraph.create(schema_classes=[EmissionUser])
     tx = fg.batch()
@@ -181,13 +173,12 @@ def test_emission_8_3_sdk_batch_tx_commit_atomic_emits_full_bundle():
     assert counts == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
-        PRED_EXISTS: 1,
         PRED_NAME: 1,
     })
 
 
 def test_emission_8_3_sdk_batch_tx_multi_entity_each_gets_full_bundle():
-    """Multi-entity batch — each entity gets its own complete Identity bundle + :exists."""
+    """Multi-entity batch — each entity gets its own complete Identity bundle."""
     fg = FactGraph.create(schema_classes=[EmissionUser])
     tx = fg.batch()
     h_alice = tx.entity(EmissionUser, user_id="u1", tenant_id="t1")
@@ -198,7 +189,7 @@ def test_emission_8_3_sdk_batch_tx_multi_entity_each_gets_full_bundle():
 
     counts_alice = _claim_counts(fg, h_alice.e_ref)
     counts_bob = _claim_counts(fg, h_bob.e_ref)
-    expected = Counter({PRED_USER_ID: 1, PRED_TENANT_ID: 1, PRED_EXISTS: 1, PRED_NAME: 1})
+    expected = Counter({PRED_USER_ID: 1, PRED_TENANT_ID: 1, PRED_NAME: 1})
     assert counts_alice == expected
     assert counts_bob == expected
     # Cross-entity: e_refs distinct, claims indexed separately.
@@ -209,7 +200,7 @@ def test_emission_8_3_sdk_batch_tx_multi_entity_each_gets_full_bundle():
 
 
 def test_emission_8_4_two_field_writes_identity_emits_only_once():
-    """fg.set + fg.add on same e_ref → Identity Claims + :exists emit only ONCE.
+    """fg.set + fg.add on same e_ref → Identity Claims emit only ONCE.
 
     Dedup verified at the materialized_refs level inside plan_write_command
     (per `_materialization_ops` shipped path) and at the target_visible check
@@ -222,16 +213,14 @@ def test_emission_8_4_two_field_writes_identity_emits_only_once():
     counts_after_first = _claim_counts(fg, e_ref)
     assert counts_after_first[PRED_USER_ID] == 1
     assert counts_after_first[PRED_TENANT_ID] == 1
-    assert counts_after_first[PRED_EXISTS] == 1
     assert counts_after_first[PRED_NAME] == 1
 
     fg.fields.add(EmissionUser.tags, e_ref, "active")
 
     counts_after_second = _claim_counts(fg, e_ref)
-    # Identity + :exists counts UNCHANGED.
+    # Identity counts UNCHANGED.
     assert counts_after_second[PRED_USER_ID] == 1
     assert counts_after_second[PRED_TENANT_ID] == 1
-    assert counts_after_second[PRED_EXISTS] == 1
     # name unchanged + tags +1.
     assert counts_after_second[PRED_NAME] == 1
     assert counts_after_second[PRED_TAGS] == 1
@@ -250,10 +239,9 @@ def test_emission_8_4_batch_dedup_within_single_commit():
     tx.commit()
 
     counts = _claim_counts(fg, h.e_ref)
-    # Identity + :exists exactly once despite 3 Field operations.
+    # Identity Claims exactly once despite 3 Field operations.
     assert counts[PRED_USER_ID] == 1
     assert counts[PRED_TENANT_ID] == 1
-    assert counts[PRED_EXISTS] == 1
     # name single-cardinality (1 Claim), tags multi-cardinality (2 Claims).
     assert counts[PRED_NAME] == 1
     assert counts[PRED_TAGS] == 2
@@ -264,7 +252,7 @@ def test_emission_8_4_batch_dedup_within_single_commit():
 
 def test_emission_8_5_lazy_materialization_through_shadow_store():
     """fg.ref populates shadow store; first Field write lazy-materializes
-    Identity + :exists through `_materialization_ops` (per ADR-IC §4.2.3).
+    Identity Claims through `_materialization_ops` (per ADR-IC §4.2.3).
     """
     fg = FactGraph.create(schema_classes=[EmissionUser])
 
@@ -280,7 +268,6 @@ def test_emission_8_5_lazy_materialization_through_shadow_store():
     counts = _claim_counts(fg, e_ref)
     assert counts[PRED_USER_ID] == 1
     assert counts[PRED_TENANT_ID] == 1
-    assert counts[PRED_EXISTS] == 1
     assert counts[PRED_NAME] == 1
 
 

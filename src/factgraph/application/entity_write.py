@@ -183,7 +183,7 @@ def plan_create_command(
     store: Store,
     index: SchemaIndex,
 ) -> EntityCreatePlan:
-    """Plan eager Identity Claim + ``:exists`` emission for ``fg.entities.create``.
+    """Plan eager Identity Claim emission for ``fg.entities.create``.
 
     Per ADR-IC §4.2(application 层 derive)+ §4.2.1(complete identity bundle
     contract)+ Slice 3a SF4(eager emission + shadow store coexist)。
@@ -660,7 +660,6 @@ def _materialization_ops(
                 meta=dict(meta),
             )
         )
-    ops.append(PlannedOpDTO(op="record_exists", target=ref, meta=dict(meta)))
     return ops
 
 

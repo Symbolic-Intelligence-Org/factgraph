@@ -202,15 +202,15 @@ class BatchPlan:
                 value = _resolve_planned_value(op, refs_by_handle_id)
                 meta = dict(op.meta) if op.meta else None
                 if isinstance(op, SetOp):
-                    asrt_id = sdk.set(op.field, e_ref, value, meta=meta)
+                    asrt_id = sdk.fields.set(op.field, e_ref, value, meta=meta)
                 else:
-                    asrt_id = sdk.add(op.field, e_ref, value, meta=meta)
+                    asrt_id = sdk.fields.add(op.field, e_ref, value, meta=meta)
                 assertion_ids.append(asrt_id)
                 continue
             if isinstance(op, RetractOp):
                 meta = dict(op.meta) if op.meta else None
                 try:
-                    revoker_id = sdk.retract(op.assertion_id, meta=meta)
+                    revoker_id = sdk.assertions.retract(op.assertion_id, meta=meta)
                 except Exception as exc:
                     raise SDKStoreError(f"{op.path}: retract failed: {exc}") from exc
                 if isinstance(revoker_id, str):
@@ -427,9 +427,9 @@ class WireBatchPlan:
                 value = _resolve_wire_value_for_apply(op.value, sdk=sdk, path=f"{op.path}.value")
                 meta = dict(op.meta) if op.meta else None
                 if op.kind == "set":
-                    asrt_id = sdk.set(field_desc, e_ref, value, meta=meta)
+                    asrt_id = sdk.fields.set(field_desc, e_ref, value, meta=meta)
                 else:
-                    asrt_id = sdk.add(field_desc, e_ref, value, meta=meta)
+                    asrt_id = sdk.fields.add(field_desc, e_ref, value, meta=meta)
                 assertion_ids.append(asrt_id)
                 continue
 
@@ -443,7 +443,7 @@ class WireBatchPlan:
                     )
                 _validate_wire_retract_binding(sdk=sdk, pred_index=pred_index, op=op)
                 try:
-                    revoker_id = sdk.retract(op.assertion_id, meta=(dict(op.meta) if op.meta else None))
+                    revoker_id = sdk.assertions.retract(op.assertion_id, meta=(dict(op.meta) if op.meta else None))
                 except Exception as exc:
                     raise SDKStoreError(f"{op.path}: retract failed: {exc}") from exc
                 if isinstance(revoker_id, str):
@@ -1410,18 +1410,6 @@ class SDKBatchTx:
                             path=op.path,
                         )
                     )
-        if self._handle_requires_record_exists_op(handle):
-            pred_id = self._record_exists_pred_id_for_entity_type(handle.entity_cls.__name__, path=handle.path)
-            effective_meta = _merge_meta(self._batch_meta, handle.entity_meta, commit_meta)
-            out.append(
-                RecordExistsOp(
-                    handle_id=handle.handle_id,
-                    entity_type=handle.entity_cls.__name__,
-                    pred_id=pred_id,
-                    meta=effective_meta,
-                    path=f"{handle.path}.__exists__",
-                )
-            )
         # Retract ops are always emitted after write ops for the same entity to avoid coupling
         # with staging-time set/add merge rules.
         for op in sorted(retract_ops, key=lambda row: row.op_index):
@@ -1453,7 +1441,7 @@ class SDKBatchTx:
         if target is None:
             return None
         mutations: list[FieldMutation] = []
-        create_if_missing = False
+        create_if_missing = self._handle_requires_create_if_missing(handle)
         for op in field_ops:
             if isinstance(op, RecordExistsOp):
                 if self._application_meta(op.meta, path=f"{op.path}.meta") is None:
@@ -1588,19 +1576,7 @@ class SDKBatchTx:
                 )
             )
 
-        record_exists_op: PlannedOpDTO | None = None
-        for legacy_op in field_ops:
-            if isinstance(legacy_op, RecordExistsOp):
-                record_exists_op = PlannedOpDTO(
-                    op="record_exists",
-                    target=plan.resolved_target,
-                    meta=self._application_meta(legacy_op.meta, path=f"{legacy_op.path}.meta") or {},
-                )
-                break
-
         planned_ops: list[PlannedOpDTO] = list(identity_ops)
-        if record_exists_op is not None:
-            planned_ops.append(record_exists_op)
         planned_ops.extend(retained_ops)
         return EntityWritePlan(
             command=plan.command,
@@ -1612,24 +1588,11 @@ class SDKBatchTx:
             warnings=plan.warnings,
         )
 
-    def _handle_requires_record_exists_op(self, handle: ManagedEntityHandle) -> bool:
+    def _handle_requires_create_if_missing(self, handle: ManagedEntityHandle) -> bool:
         spec = self._sdk._entity_spec_by_class.get(handle.entity_cls)
         if not isinstance(spec, dict):
             return False
         return any(op.kind in {"set", "add"} for op in handle._staged_ops)
-
-    def _record_exists_pred_id_for_entity_type(self, entity_type: str, *, path: str) -> str:
-        for pred in self._sdk.schema_ir.get("predicates", []):
-            if not isinstance(pred, dict):
-                continue
-            if pred.get("owner_type") != entity_type:
-                continue
-            if pred.get("is_entity_exists") is not True:
-                continue
-            pred_id = pred.get("pred_id")
-            if isinstance(pred_id, str) and pred_id:
-                return pred_id
-        raise SDKStoreError(f"{path}: entity exists predicate not found in schema for {entity_type}")
 
     def _plan_value(self, value: Any, *, path: str) -> tuple[_ValueKind, Any]:
         if isinstance(value, ManagedEntityHandle):

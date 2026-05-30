@@ -25,15 +25,15 @@ from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 class Country(Entity):
-    code: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+    code: str = Identity()
+    name: str = Field()
 
 
 class User(Entity):
-    name: str = Identity(primary_key=True)
-    locale: str = Identity(default="en")
-    lives_in: Country = Field(cardinality="single")
-    tag: str = Field(cardinality="multi")
+    name: str = Identity()
+    locale: str = Identity()
+    lives_in: Country = Field()
+    tag: list[str] = Field()
 
 
 def _build_store() -> tuple[Store, object]:
@@ -59,15 +59,14 @@ def _write_entity_exists(store: Store, index, ref) -> None:
 
 
 class ApplicationEntityWriteTests(unittest.TestCase):
-    def test_plan_write_command_creates_missing_target_with_identity_and_exists(self) -> None:
+    def test_plan_write_command_creates_missing_target_with_identity_bundle(self) -> None:
         store, index = _build_store()
 
         plan = plan_write_command(
             EntityWriteCommand(
                 target=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
                 mutations=(
                     FieldMutation(
@@ -84,15 +83,14 @@ class ApplicationEntityWriteTests(unittest.TestCase):
 
         self.assertTrue(plan.can_apply)
         self.assertIsNotNone(plan.resolved_target)
-        self.assertEqual([op.op for op in plan.planned_ops], ["set", "set", "record_exists", "add"])
+        self.assertEqual([op.op for op in plan.planned_ops], ["set", "set", "add"])
 
     def test_apply_write_plan_writes_target_and_field_values(self) -> None:
         store, index = _build_store()
         command = EntityWriteCommand(
             target=EntitySelector(
                 entity_type="User",
-                identity={"name": "alice"},
-                allow_identity_defaults=True,
+                identity={"name": "alice", "locale": "en"},
             ),
             mutations=(
                 FieldMutation(
@@ -109,7 +107,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
 
         self.assertIsInstance(result, EntityWriteResult)
         self.assertEqual(result.errors, ())
-        self.assertEqual(len(result.applied), 4)
+        self.assertEqual(len(result.applied), 3)
 
         snapshot = hydrate_entity(plan.resolved_target.encoded_ref or "", store=store, index=index)
         self.assertEqual(snapshot.ref, plan.resolved_target)
@@ -122,8 +120,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
             EntityWriteCommand(
                 target=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
                 create_if_missing=False,
             ),
@@ -140,8 +137,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
         command = EntityWriteCommand(
             target=EntitySelector(
                 entity_type="User",
-                identity={"name": "alice"},
-                allow_identity_defaults=True,
+                identity={"name": "alice", "locale": "en"},
             ),
             mutations=(
                 FieldMutation(
@@ -169,8 +165,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
                 entity_type="User",
                 selector=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
             ),
             store=store,
@@ -184,8 +179,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
         user_ref = resolve_selector(
             EntitySelector(
                 entity_type="User",
-                identity={"name": "alice"},
-                allow_identity_defaults=True,
+                identity={"name": "alice", "locale": "en"},
             ),
             index=index,
         )
@@ -201,8 +195,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
             EntityWriteCommand(
                 target=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
                 mutations=(
                     FieldMutation(
@@ -231,8 +224,7 @@ class ApplicationEntityWriteCardinalityTests(unittest.TestCase):
             EntityWriteCommand(
                 target=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
                 mutations=(
                     FieldMutation(
@@ -267,8 +259,7 @@ class ApplicationEntityWriteCardinalityTests(unittest.TestCase):
             EntityWriteCommand(
                 target=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
                 mutations=(
                     FieldMutation(
@@ -302,8 +293,7 @@ class ApplicationEntityWriteCardinalityTests(unittest.TestCase):
             EntityWriteCommand(
                 target=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
                 mutations=(
                     FieldMutation(
@@ -328,8 +318,7 @@ class ApplicationEntityWriteCardinalityTests(unittest.TestCase):
             EntityWriteCommand(
                 target=EntitySelector(
                     entity_type="User",
-                    identity={"name": "alice"},
-                    allow_identity_defaults=True,
+                    identity={"name": "alice", "locale": "en"},
                 ),
                 mutations=(
                     FieldMutation(
