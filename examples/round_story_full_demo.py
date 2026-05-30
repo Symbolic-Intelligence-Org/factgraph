@@ -1,4 +1,4 @@
-"""Canonical full round-story demo for the current v0.1 kernel surface.
+"""Canonical full round-story demo for the current v0.2 kernel surface.
 
 Run from the repository root:
 
@@ -12,8 +12,8 @@ default native engine only and demonstrates the current recommended journey:
 - ProofFrame recheck and the three rule overlay operations.
 - Durable round events and ProofFrame diff.
 - Batch 8 public-boundary note: latest advanced capabilities are importable
-  from ``kernel.application`` / ``kernel.audit``; SDK shells and service routes
-  for Batch 3-7 are intentionally not shipped in v0.1.
+  from ``factgraph.application`` / ``factgraph.audit``; SDK shells and service routes
+  for Batch 3-7 are intentionally not shipped in v0.2.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def _ensure_repo_src_on_path() -> None:
 
 _ensure_repo_src_on_path()
 
-from kernel.application import (  # noqa: E402
+from factgraph.application import (  # noqa: E402
     build_fact_value_override,
     build_frontier_view_facts,
     build_schema_index,
@@ -52,7 +52,7 @@ from kernel.application import (  # noqa: E402
     recheck_proof_frame,
     resolve_selector,
 )
-from kernel.application.protocol import (  # noqa: E402
+from factgraph.application.protocol import (  # noqa: E402
     CheckRequest,
     CompiledDerivationPlan,
     CompiledHeadCall,
@@ -72,8 +72,8 @@ from kernel.application.protocol import (  # noqa: E402
     RuleLiteralReplaceRequest,
     WhyNotUniverseRequest,
 )
-from kernel.audit import AuditQuery, load_audit_package  # noqa: E402
-from kernel.audit.round_events import (  # noqa: E402
+from factgraph.audit import AuditQuery, load_audit_package  # noqa: E402
+from factgraph.audit.round_events import (  # noqa: E402
     finalize_round,
     project_check_event_payload,
     project_diagnose_event_payload,
@@ -83,12 +83,12 @@ from kernel.audit.round_events import (  # noqa: E402
     record_round_event,
     start_round,
 )
-from kernel.core.evidence.write_protocol import set_field  # noqa: E402
-from kernel.core.rules.frontier import evaluate_native_where_frontier  # noqa: E402
-from kernel.core.rules.rule_ir import RuleSpec  # noqa: E402
-from kernel.core.store import Store  # noqa: E402
-from kernel.core.store._support import NonFactStep, PredWitness, SupportArtifact  # noqa: E402
-from kernel.sdk import Entity, Field, Identity, compile_schema_from_classes  # noqa: E402
+from factgraph.core.evidence.write_protocol import set_field  # noqa: E402
+from factgraph.core.rules.frontier import evaluate_native_where_frontier  # noqa: E402
+from factgraph.core.rules.rule_ir import RuleSpec  # noqa: E402
+from factgraph.core.store import Store  # noqa: E402
+from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact  # noqa: E402
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes  # noqa: E402
 
 
 EXPECTED_PHASE_SUMMARY = {
@@ -106,9 +106,9 @@ EXPECTED_PHASE_SUMMARY = {
 
 
 class Person(Entity):
-    name: str = Identity(primary_key=True)
-    age: int = Field(cardinality="single")
-    region: str = Field(cardinality="single")
+    name: str = Identity()
+    age: int = Field()
+    region: str = Field()
 
 
 @dataclass(frozen=True)
@@ -303,7 +303,7 @@ def _phase_check(
     _announce(verbose, "1. SDK setup + Q1 Check")
     _announce(
         verbose,
-        "   Schema uses kernel.sdk Entity/Field/Identity; Check passes for Alice.",
+        "   Schema uses factgraph.sdk Entity/Field/Identity; Check passes for Alice.",
     )
     return request, result, support
 
@@ -653,11 +653,11 @@ def run_demo(*, verbose: bool = True) -> dict[str, str]:
     )
 
     if verbose:
-        print("FactPy full round-story demo")
+        print("FactGraph full round-story demo")
         print("============================")
         print(
-            "Product setup uses kernel.sdk for schema authoring; advanced current "
-            "capabilities are imported from kernel.application and kernel.audit."
+            "Product setup uses factgraph.sdk for schema authoring; advanced current "
+            "capabilities are imported from factgraph.application and factgraph.audit."
         )
 
     check_request, check_result, support = _phase_check(fixture, verbose=verbose)
@@ -714,8 +714,8 @@ def run_demo(*, verbose: bool = True) -> dict[str, str]:
     if verbose:
         print("11. Public boundary")
         print(
-            "    v0.1 intentionally ships no SDK shells or service routes for "
-            "Batch 3-7 capabilities; use kernel.application/kernel.audit for "
+            "    v0.2 intentionally ships no SDK shells or service routes for "
+            "Batch 3-7 capabilities; use factgraph.application/factgraph.audit for "
             "advanced workflows."
         )
         print("============================")
