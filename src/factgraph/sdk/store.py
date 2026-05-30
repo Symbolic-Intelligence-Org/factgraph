@@ -607,6 +607,160 @@ class _SDKWriteManager:
         return self._sdk.edit(*args, **kwargs)
 
 
+class _SDKEntitiesManager:
+    """Layer 1 namespace manager for entity-macro operations(per ADR-API §4.1).
+
+    Layer 1 navigation key:`EntityClass + identity_kwargs` or managed `e_ref`.
+    Layer 1 排他 enforcement(per ADR-API §4.1.1):this namespace does NOT
+    accept ``asrt_id`` parameters(use ``fg.assertions.by_id(asrt_id)`` or
+    ``fg.assertions.retract(asrt_id)`` instead)nor ``(Field, e_ref)`` value
+    writes(use ``fg.fields.*`` for per-cell mutations).
+
+    Slice 3a Step 1 ships 4 base methods(get/where/match/ref)that delegate
+    to shipped read-path internals;``create`` / ``delete`` / ``exists`` land
+    in Step 2-4;``edit`` lands in Step 7 with the Layer 1 ownership move per
+    ADR-API §4.1.2。 Until Step 7,Layer 1 entry coexists with shipped
+    ``fg.read.*`` / flat top-level shortcuts —**no shipped behavior change**。
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.entities namespace is read-only")
+
+    def _reject_non_entity_class(self, entity_cls: Any, *, method: str) -> None:
+        """Layer 1 排他 enforcement per ADR-API §4.1.1.
+
+        Raises before delegating when the first positional arg is not an
+        ``Entity`` subclass — surfaces a layer-specific error before the
+        downstream ``_validate_entity_cls`` would raise the generic
+        ``"unknown Entity class"`` message。
+        """
+        if isinstance(entity_cls, type) and issubclass(entity_cls, Entity):
+            return
+        if isinstance(entity_cls, str):
+            raise SDKStoreError(
+                f"fg.entities.{method}() requires an Entity subclass + identity_kwargs "
+                f"(Layer 1 navigation key); got str — pass asrt_id to "
+                f"fg.assertions.by_id(asrt_id) or fg.assertions.retract(asrt_id) "
+                f"instead. See ADR-API §4.1.1."
+            )
+        if isinstance(entity_cls, Field):
+            raise SDKStoreError(
+                f"fg.entities.{method}() requires an Entity subclass (Layer 1 "
+                f"navigation key); got Field descriptor — pass Field + e_ref + value "
+                f"to fg.fields.* (Layer 2) instead. See ADR-API §4.1.1."
+            )
+        raise SDKStoreError(
+            f"fg.entities.{method}() requires an Entity subclass + identity_kwargs "
+            f"(Layer 1 navigation key); got {type(entity_cls).__name__}. "
+            f"See ADR-API §4.1.1."
+        )
+
+    def get(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
+        """Read one entity snapshot by identity values。
+
+        Delegates to ``SDKStore.get(EntityCls, **identity)`` and returns the
+        current snapshot,or ``None`` when the entity is not visible。Behavior
+        equivalent to shipped ``fg.read.get`` / ``fg.get`` until Step 7 ships
+        the ``fg.read.*`` deletion。
+        """
+        self._reject_non_entity_class(entity_cls, method="get")
+        return self._sdk.get(entity_cls, **identity_kwargs)
+
+    def where(
+        self,
+        entity_cls: type[Entity],
+        *,
+        policy: Any = _POLICY_TOMBSTONE,
+        limit: int | None = None,
+        _meta: dict[str, Any] | None = None,
+        **field_filters: Any,
+    ) -> Any:
+        """Find entity snapshots by exact field filters(canonical signature)。
+
+        Per ADR-API §4.1.2 + §4.4:``where`` is the canonical verb(rename of
+        shipped ``find``)with **unified meta input** — flat ``source=`` /
+        ``trace_id=`` / ``version=`` / ``meta=`` kwargs are rejected;canonical
+        meta filtering accepted via ``_meta`` dict。
+
+        **Slice 3a Step 1 scope**:field-filter delegation to shipped
+        ``sdk_find`` works equivalently to ``fg.read.find`` / ``fg.find``;
+        flat meta kwargs are rejected with ADR-API §4.4 pointer。 ``_meta``
+        parameter is accepted in the canonical signature but **meta filtering
+        itself is deferred** to the AssertionView unification step(Step 8)—
+        Step 1 raises ``SDKStoreError`` if ``_meta`` is non-empty, so the
+        canonical signature is wired up but meta-filter semantics don't yet
+        diverge from the shipped behavior of ``fg.find``。Non-empty ``_meta``
+        will become accepted once meta-projection lands。
+        """
+        self._reject_non_entity_class(entity_cls, method="where")
+
+        # Reject flat meta kwargs per ADR-API §4.4(no double-track)
+        for forbidden in ("source", "trace_id", "version", "meta"):
+            if forbidden in field_filters:
+                raise SDKStoreError(
+                    f"fg.entities.where() does not accept '{forbidden}=' flat kwarg; "
+                    f"use _meta={{'{forbidden}': ...}} per ADR-API §4.4."
+                )
+
+        # Validate _meta shape; defer meta-filter semantics to Step 8.
+        if _meta is not None:
+            if not isinstance(_meta, dict):
+                raise SDKStoreError(
+                    "fg.entities.where(_meta=...) expects a dict when provided"
+                )
+            if _meta:
+                # Step 1 ships the canonical signature without the meta-filter
+                # projection; surfacing this explicitly is safer than silently
+                # ignoring user input。 Meta filtering lands with AssertionView
+                # unification at Step 8 per blueprint §5.7 + §8。
+                raise SDKStoreError(
+                    "fg.entities.where(_meta=...) meta filtering not yet "
+                    "implemented in Slice 3a Step 1; coming in Step 8 "
+                    "AssertionView unification. Use field filters for now."
+                )
+
+        return self._sdk.find(
+            entity_cls,
+            policy=policy,
+            limit=limit,
+            **field_filters,
+        )
+
+    def match(
+        self,
+        entity_cls: type[Entity],
+        template: Any,
+        *,
+        limit: int | None = None,
+        **port_constraints: Any,
+    ) -> Any:
+        """Match visible snapshots against an application Rule or AND RuleExpr.
+
+        Delegates to shipped ``SDKStore.match(EntityCls, template, ...)`` —
+        behavior equivalent to ``fg.read.match`` / ``fg.match`` until Step 7。
+        """
+        self._reject_non_entity_class(entity_cls, method="match")
+        return self._sdk.match(entity_cls, template, limit=limit, **port_constraints)
+
+    def ref(self, entity_cls: type[Entity], **identity_values: Any) -> str:
+        """Return a managed e_ref for the entity identified by kwargs。
+
+        Records the supplied identity into the SDKStore shadow store so that
+        downstream ``fg.fields.set`` / ``fg.fields.add``(Step 5)or shipped
+        ``fg.set`` / ``fg.add`` can resolve the e_ref。Does NOT write to the
+        ledger — per ADR-IC §4.2.3 + Slice 2 Step 7,shadow store is the
+        legacy lazy-materialization compatibility path,not a Layer 2 contract。
+
+        Behavior equivalent to shipped ``fg.read.ref`` / ``fg.ref`` until
+        Step 7。
+        """
+        self._reject_non_entity_class(entity_cls, method="ref")
+        return self._sdk.ref(entity_cls, **identity_values)
+
+
 class _SDKRulesManager:
     """Read-only namespace manager for rule structure inspection and persistence."""
 
@@ -946,6 +1100,7 @@ class SDKStore:
         self._schema_manager = _SDKSchemaManager(self)
         self._read_manager = _SDKReadManager(self)
         self._write_manager = _SDKWriteManager(self)
+        self._entities_manager = _SDKEntitiesManager(self)
         self._rules_manager = _SDKRulesManager(self)
         self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
@@ -1218,6 +1373,17 @@ class SDKStore:
     def write(self) -> _SDKWriteManager:
         """`write` taxonomy namespace exposing ``set`` / ``add`` / ``retract`` / ``edit``."""
         return self._write_manager
+
+    @property
+    def entities(self) -> _SDKEntitiesManager:
+        """`entities` Layer 1 namespace per ADR-API §4.1。
+
+        Slice 3a Step 1 ships 4 base methods(``get`` / ``where`` / ``match`` /
+        ``ref``)alongside shipped ``fg.read.*`` / flat shortcuts。``create`` /
+        ``delete`` / ``exists`` land in Step 2-4;``edit`` lands in Step 7;
+        ``fg.read.*`` namespace deletion happens at Step 7。
+        """
+        return self._entities_manager
 
     @property
     def rules(self) -> _SDKRulesManager:
