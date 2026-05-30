@@ -1,8 +1,8 @@
 # Slice 3a — API namespace refactor(Q10-Q14 cluster:三层 namespace rename + AssertionView 统一 + `version(v)` / flat kwargs 删 + `fg.schema.add` 三分)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-30
-- Last Updated: 2026-05-30
+- Last Updated: 2026-05-30(scoped after P1×2 + P2 + P3 amend pass)
 - Branch: `v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30`;fork point Slice 2 close `c927d41f`(blueprint draft lineage at audit log HEAD,not pinned in header to avoid post-amend drift)
 - Related Modules:
   - `src/factgraph/sdk/store.py`(4 namespace manager classes + 8 flat top-level methods)
@@ -61,7 +61,7 @@ Slice 3a 完成后 Step 1 Slice 1 + 2 + 3a + 3b(后续)+ 4 链上 Slice 3a 部�
 
 ### 4.1 Branch + fork point
 
-- Branch:`v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30` @ `b17750c8`(preflight + amend)
+- Branch:`v0.2.0-blueprint-slice-3a-api-namespace-2026-05-30`;fork point Slice 2 close `c927d41f`;lineage in audit log
 - Fork from:Slice 2 close `c927d41f`(`v0.2.0-blueprint-slice-2-identity-claim-emission-2026-05-29` push tip + archive cadence complete)
 - Sacred master `562c74195df43e933bed92a3ff25de94dd8ce666` 不动;dirty baseline(4 M + 1 D + 2 untracked)preserved
 - 4 ADR + Slice 1+2 close 全是 HEAD ancestor
