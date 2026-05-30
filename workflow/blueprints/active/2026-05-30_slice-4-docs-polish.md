@@ -1,8 +1,8 @@
 # Slice 4 — Docs Polish for Form I / Identity-as-Claim / API Namespace
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-30
-- Last Updated: 2026-05-30(scoped after Step 4.3 preflight + PF-R1/PF-R2 amendments)
+- Last Updated: 2026-05-30(implemented after Step 9 final grep gate + §10 Outcome)
 - Slice: 4 of identity/API alignment ladder
 - Class: M(docs-only, broad surface; no runtime changes)
 - Related Modules:
@@ -248,38 +248,38 @@ Each implementation commit must verify branch, sacred master, Q-PR1 0 diff, dirt
 
 ### 7.1 Public Quickstarts
 
-- [ ] Heavy rewrite quickstarts use canonical namespace APIs.
-- [ ] Mechanical migration quickstarts have no current stale `fg.read.*` / `fg.write.*` / `fg.schema.add` / `Identity(...primary_key...)` references.
-- [ ] Assertion quickstart documents `AssertionView`, canonical `_meta`, no `.version(v)`, and no `FieldAssertions`.
-- [ ] Schema quickstart documents `register/extend/apply` and Form I Identity semantics.
+- [x] Heavy rewrite quickstarts use canonical namespace APIs.
+- [x] Mechanical migration quickstarts have no current stale `fg.read.*` / `fg.write.*` / `fg.schema.add` / `Identity(...primary_key...)` references.
+- [x] Assertion quickstart documents `AssertionView`, canonical `_meta`, no `.version(v)`, and no `FieldAssertions`.
+- [x] Schema quickstart documents `register/extend/apply` and Form I Identity semantics.
 
 ### 7.2 Examples
 
-- [ ] In-scope active examples use Form I and canonical namespace APIs.
-- [ ] `examples/05_sdk_assertion_views.ipynb` demonstrates `AssertionView` and `_meta`.
-- [ ] Dirty notebooks are either untouched or explicitly approved per-file before edit.
-- [ ] `examples/archive/*` is untouched unless blueprint amended.
+- [x] In-scope active examples use Form I and canonical namespace APIs.
+- [x] `examples/05_sdk_assertion_views.ipynb` demonstrates `AssertionView` and `_meta`.
+- [x] Dirty notebooks are either untouched or explicitly approved per-file before edit.
+- [x] `examples/archive/*` is untouched unless blueprint amended.
 
 ### 7.3 SDK / Module Docs
 
-- [ ] `README.md`, `01_concepts.en.md`, `03_rules_and_inferences.en.md`, and `07_walker_and_advanced.en.md` no longer present removed APIs as current truth.
-- [ ] Application / authoring / core docs no longer refer to `fg.schema.add` or flat meta filters as current truth.
+- [x] `README.md`, `01_concepts.en.md`, `03_rules_and_inferences.en.md`, and `07_walker_and_advanced.en.md` no longer present removed APIs as current truth.
+- [x] Application / authoring / core docs no longer refer to `fg.schema.add` or flat meta filters as current truth.
 
 ### 7.4 Active Design-Points
 
-- [ ] Current-status / landed-status text is aligned with Slice 1/2/3a.
-- [ ] `explanation-completion-roadmap.zh.md` current API references use `fg.entities.match` where they describe the shipped namespace surface.
-- [ ] Historical rationale sections are preserved unless explicitly marked current and stale.
+- [x] Current-status / landed-status text is aligned with Slice 1/2/3a.
+- [x] `explanation-completion-roadmap.zh.md` current API references use `fg.entities.match` where they describe the shipped namespace surface.
+- [x] Historical rationale sections are preserved unless explicitly marked current and stale.
 
 ### 7.5 Final Checks
 
-- [ ] Final grep gate in §5.6 passes for in-scope current docs/examples.
-- [ ] Q-PR1 sacred paths 0 diff.
-- [ ] examples committed diff respects dirty-notebook guard.
-- [ ] sacred master unchanged.
-- [ ] dirty baseline preserved.
-- [ ] `git diff --check` clean.
-- [ ] `compileall` clean if any executable docs helper was touched; otherwise not required.
+- [x] Final grep gate in §5.6 passes for in-scope current docs/examples.
+- [x] Q-PR1 sacred paths 0 diff.
+- [x] examples committed diff respects dirty-notebook guard.
+- [x] sacred master unchanged.
+- [x] dirty baseline preserved.
+- [x] `git diff --check` clean.
+- [x] `compileall` clean if any executable docs helper was touched; otherwise not required.
 
 ## 8. Implementation Plan
 
@@ -357,40 +357,117 @@ In-scope docs are listed in §5. New docs are not introduced.
 
 ## 10. Outcome / Deviations
 
-To be filled at close:
-
 ### 10.1 Final Landing Result
 
-TBD.
+Slice 4 landed as a docs-only implementation branch `v0.2.0-impl-slice-4-docs-polish-2026-05-30`, forked from scoped anchor `a62e9a2d`.
+
+Implementation lineage:
+
+| Step | Commit | Result |
+|---|---|---|
+| Step 1 | `3dc8d8aa` | Rewrote `first-factgraph.md` and `read-write.md`; both complete examples smoke-tested. |
+| Step 2 | `df4f605d` | Rewrote `assertions.md` and `schema.md`; both complete examples smoke-tested. |
+| Step 3 | `565ae6f1` | Migrated six remaining public quickstarts; four complete examples smoke-tested. |
+| Step 4 | `2ec2f51f` | Migrated four active non-dirty examples; three notebooks executed with `nbconvert`, and the Python example ran end-to-end. |
+| Step 5 | `f036734f` | Recorded dirty-notebook decision point; no notebook edits. |
+| Step 6 | `7b1ca24e` | Migrated non-load-bearing SDK docs, including the Step 4.2-added `sdk/docs/README.md`. |
+| Step 7 | `b3484472` | Migrated application / authoring / core module docs. |
+| Step 8 | `445a28c3` | Migrated current-status active design-point text while preserving historical sections. |
+| Step 9 | this commit | Ran final grep gate, filled §10, and marked the blueprint `implemented`. |
+
+Net implementation diff through Step 8: 26 docs/example/design files plus this blueprint/audit close record; runtime source and tests were untouched.
 
 ### 10.2 Deviations And Amendments
 
-TBD.
+- Step 4.2 reviewer amend added `src/factgraph/sdk/docs/README.md` and `workflow/design/design-points/active/explanation-completion-roadmap.zh.md` after the Stage 1 audit missed live current-surface references.
+- Step 4.3 preflight amend PF-R1 broadened Form I detection from exact `Identity(primary_key=True)` to `Identity\([^)]*primary_key`.
+- Step 7 performed one in-scope bonus cleanup in `application/docs/01_overview_en.md`: stale `fg.what_if.*` / `fg.read.get` examples were replaced with current `fg.entities.get`, `fg.eval.evaluate`, and `fg.audit.diff_proof_frames` wording.
+- Step 8 rewrote `ledger-schema-specification.zh.md` §8.6 from the old assertion-level `delete` alias framing to the shipped `fg.assertions.retract` framing plus a field-level delete note.
+- No runtime, test, Q-PR1, archive-example, or dirty-notebook scope deviation occurred.
 
 ### 10.3 Scope Freeze Verification
 
-TBD.
+| SF | Close verification |
+|---|---|
+| SF1 | D1-D10 landed: public quickstarts, active non-dirty examples, SDK docs, module docs, and current-status design-points. |
+| SF2 | `identity-mechanism-redesign.zh.md` historical/problem/source-grep sections were preserved; only current carry-forward/status checklist rows changed. |
+| SF3 | Dirty notebooks `01_sdk_check_diagnose.ipynb` and `02_overlay_why_not_frontier.ipynb` were not edited. |
+| SF4 | `examples/archive/*` and archived design-points were not edited. |
+| SF5 | No ADR / Q-resolution work was introduced. |
+| SF6 | Hybrid strategy was followed: four dense quickstarts were rewritten, lower-density files received local migrations. |
+| SF7 | Final grep gate completed; remaining hits are classified carve-outs in §10.4. |
+| SF8 | Q-PR1 sacred paths remain 0 diff against `722595ba..HEAD`. |
+| SF9 | Sacred master and dirty baseline preserved. |
+| SF10 | Implementation followed the audit phase order as Step 0-9. |
 
 ### 10.4 Final Grep Gate
 
-TBD.
+Final grep commands covered public quickstarts, active non-dirty examples, SDK docs, module docs, and active design-points:
+
+- `Identity\([^)]*primary_key`
+- `fg\.read\.|fg\.write\.|FieldAssertions|AssertionNamespace|\.version\(|fg\.schema\.add|Field\([^)]*cardinality`
+- `where\([^_)]*meta=|where\([^)]*(source=|trace_id=|version=)`
+- `ReadPolicy|kernel\.sdk|kernel\.application|from kernel\.`
+
+Current-surface docs/examples are clean. Remaining hits are explicit carve-outs:
+
+| Location | Classification |
+|---|---|
+| `src/factgraph/sdk/docs/04_api_surface.en.md` migration examples and removed-surface notes | Allowed historical / removed-surface narrative. |
+| `workflow/design/design-points/active/identity-mechanism-redesign.zh.md` | SF2-preserved historical problem statements, option tables, migration maps, and shipped-status rows naming removed surfaces as past state. |
+| `workflow/design/design-points/active/ledger-schema-specification.zh.md:916` | Historical 2026-05-29 consistency-pass changelog entry. |
+
+`ReadPolicy` / `kernel.*` bonus grep returned no hits.
 
 ### 10.5 Dirty Notebook Handling
 
-TBD.
+Step 5 used the SF3 default path: active dirty notebooks were intentionally untouched because no per-file user authorization was requested during Slice 4 implementation. `examples/archive/01_sdk_basics.ipynb` remained out of scope under SF4.
+
+Committed diff against `722595ba..HEAD` for:
+
+- `examples/01_sdk_check_diagnose.ipynb`
+- `examples/02_overlay_why_not_frontier.ipynb`
+- `examples/archive/01_sdk_basics.ipynb`
+- `examples/archive/`
+
+is empty.
 
 ### 10.6 Q-PR1 / Sacred Branch Preservation
 
-TBD.
+Q-PR1 sacred paths remain 0 diff against `722595ba..HEAD`:
+
+- `src/factgraph/core/evidence/write_protocol.py`
+- `src/factgraph/core/store/ledger.py`
+- `src/factgraph/core/store/_builders.py`
+- `src/factgraph/adapters/pyreason/`
+- `src/factgraph/core/derivation/accept.py`
+
+Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`. The existing dirty baseline remains unchanged.
 
 ### 10.7 Docs Landed
 
-TBD.
+| Area | Files |
+|---|---|
+| Public quickstarts | `assertions.md`, `database.md`, `evidence.md`, `first-factgraph.md`, `namespace-map.md`, `persistence.md`, `read-write.md`, `rules-and-inferences.md`, `schema.md`, `semantics.md` |
+| Active examples | `examples/03_proofframe_rule_overlays.ipynb`, `examples/04_round_persistence_diff.ipynb`, `examples/05_sdk_assertion_views.ipynb`, `examples/round_story_full_demo.py` |
+| Non-load-bearing SDK docs | `sdk/docs/README.md`, `01_concepts.en.md`, `03_rules_and_inferences.en.md`, `07_walker_and_advanced.en.md` |
+| Module docs | `application/docs/01_overview_en.md`, `application/docs/README.md`, `authoring/docs/01_overview.md`, `core/docs/01_architecture.en.md` |
+| Active design-points | `append-only-ledger-evaluation.zh.md`, `explanation-completion-roadmap.zh.md`, `identity-mechanism-redesign.zh.md`, `ledger-schema-specification.zh.md` |
 
 ### 10.8 Carry-Forward Dependencies
 
-TBD.
+- Step 2+ `:exists` removal remains a future lifecycle decision.
+- Step 2+ shadow-store removal remains future work after lazy compatibility is retired.
+- Slice 3b ledger schema migration remains the next runtime-heavy carry-forward candidate.
+- Slice 5+ Q-PR1 PyReason adapter rewrite + INV-9 runtime strict enforcement remains out of Slice 4.
+- Archived docs/examples and broader historical design-point cleanup remain out of scope unless a later slice explicitly selects them.
 
 ### 10.9 Archive Cadence
 
-TBD.
+After reviewer acceptance of this implemented state:
+
+1. `git mv` the blueprint and audit log from `workflow/blueprints/active/` to `workflow/blueprints/archive/`.
+2. Add / update the Slice 4 row in `workflow/blueprints/archive/INVENTORY.md`.
+3. Add a final archive row to this audit log.
+4. Commit archive cadence separately.
+5. Do not push unless the user explicitly authorizes it.

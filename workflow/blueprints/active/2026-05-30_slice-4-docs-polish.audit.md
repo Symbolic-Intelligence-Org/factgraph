@@ -3,7 +3,7 @@
 - Blueprint: [2026-05-30_slice-4-docs-polish.md](./2026-05-30_slice-4-docs-polish.md)
 - Branch: `v0.2.0-blueprint-slice-4-docs-polish-2026-05-30`
 - Fork point: `722595ba`(Slice 3a archive head plus N1 ingest docstring fix)
-- Status: draft audit log
+- Status: implemented audit log
 
 ## Event Log
 
@@ -21,6 +21,7 @@
 | 2026-05-30 | implementing-step-6 | Non-load-bearing SDK docs migration | Updated `sdk/docs/README.md`, `01_concepts.en.md`, `03_rules_and_inferences.en.md`, and `07_walker_and_advanced.en.md` to canonical namespaces, AssertionView `.all` / `_meta`, and current schema/entity wording. |
 | 2026-05-30 | implementing-step-7 | Module docs migration | Updated application, authoring, and core module docs to `fg.schema.register/extend/apply`, canonical `fg.entities.*`, and `AssertionRecordSet.where(_meta=...)`; preserved shipped `SchemaAddResult` type name. |
 | 2026-05-30 | implementing-step-8 | Active design-points migration | Updated current-status design-point text for ledger/appended-ledger docs, `explanation-completion-roadmap.zh.md`, and Slice 4 landed-status notes in `identity-mechanism-redesign.zh.md`; preserved historical/problem-statement sections per SF2. |
+| 2026-05-30 | implemented | Final grep gate + §10 Outcome | Ran final grep gate, classified remaining historical / removed-surface carve-outs, filled §10 Outcome, and marked the blueprint `implemented`; Q-PR1, sacred master, and dirty baseline preserved. |
 
 ## Decision Notes
 
@@ -40,8 +41,8 @@
 
 Reviewer should verify before scope flip:
 
-- [ ] OQ1-OQ5 are represented in Scope Freeze.
-- [ ] D1-D10 are in scope and D11-D12 are not accidentally converted into implementation work.
-- [ ] Dirty notebook guard is explicit enough to prevent accidental overwrite.
-- [ ] Implementation steps are commit-boundary sized and follow the Stage 1 audit phase order.
-- [ ] Q-PR1 sacred paths and sacred branches are explicitly preserved.
+- [x] OQ1-OQ5 are represented in Scope Freeze.
+- [x] D1-D10 are in scope and D11-D12 are not accidentally converted into implementation work.
+- [x] Dirty notebook guard is explicit enough to prevent accidental overwrite.
+- [x] Implementation steps are commit-boundary sized and follow the Stage 1 audit phase order.
+- [x] Q-PR1 sacred paths and sacred branches are explicitly preserved.
