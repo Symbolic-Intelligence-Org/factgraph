@@ -244,12 +244,12 @@ Per Q-NAMING precedent verification ritual:
 ## 7. Acceptance
 
 - [ ] SS1 Rule(where=) — 44 errors fixed; 6 test files migrated
-- [ ] SS2 engine_options= — 6 errors fixed (or auto-resolved by SS5)
+- [ ] SS2 engine_options= — classified after SS5; residual fixtures migrated if observable (per Step 4.2 P2-2 + Step 4.4 PF-s1 recensus-gated)
 - [ ] SS3 ReadPolicy import — 24 errors fixed
 - [ ] SS4 SDKStore shape — 92 observed error instances fixed (per Step 4.2 P3-1 + P2-4 LOCK); tests migrated to namespaced managers (`fg.entities.ref/get`, `fg.fields.set`, `fg.assertions.retract`, etc.); flat-shell restoration explicitly OUT of scope (requires separate Red blueprint per Q-NAMING-C precedent)
 - [ ] SS5 meta[confidence] — 68 errors fixed; tests migrated to Uncertainty Phase 1 DSL (raw_kind/bound)
 - [ ] SS6 _eval_*_atom signature — 24 errors fixed; evaluator audit complete
-- [ ] SS7 NoneType.proof — ~102 errors fixed (mostly via upstream SS5 propagation)
+- [ ] SS7 NoneType.proof — direct investigation completed; `evidence_envelope` None root cause fixed/migrated (per Step 4.4 PF-R1 LOCK chain disproven; ~95 of 102 expected to remain after SS5 — active investigation required, not auto-resolved)
 - [ ] SS8 misc — ~17 errors fixed
 - [ ] Cumulative: 189 → ~0 baseline failures in `tests/` cohort
 - [ ] Q-PR1 sacred 5 paths 0-diff vs `4c472b50` preserved across all sub-slices
@@ -261,7 +261,7 @@ Per Q-NAMING precedent verification ritual:
 
 ## 8. Implementation Plan
 
-1. **Step 4.2 review (Codex)**: surface 2-4 tightenings — particularly probe: (a) sub-slice ordering rationale (quick wins justification per category), (b) SS4 audit-first approach for SDKStore shape decision, (c) SS5 → SS7 chain propagation hypothesis (expected ~70-100 SS7 errors auto-resolve after SS5), (d) source touch policy in §6 (when is shipped source change required to unblock test fixture).
+1. **Step 4.2 review (Codex)** ✓ COMPLETED at `b3882411` + `aaac284f`: 4 Required (P2-1/P2-2/P2-3/P2-4) + 2 Recommended (P3-1/P3-2) + P2-FP1 cleanup applied. Historical probe questions included (a) sub-slice ordering rationale, (b) SS4 audit-first approach for SDKStore shape decision, (c) **SS5 → SS7 chain propagation hypothesis (initially predicted ~70-100 SS7 errors auto-resolve after SS5; SUPERSEDED at Step 4.4 PF-R1 LOCK — chain disproven, only ~5 of 102 = 5% auto-resolve)**, (d) source touch policy in §6.
 2. **Step 4.3 preflight (Claude)**: independent artifact branch `v0.2.0-baseline-drift-cleanup-preflight-2026-06-01`. Re-read all category-source citations at preflight-row drafting time per Rule 1. Build findings table. Mandatory preflight items:
    - 2.a Q-PR1 sacred verification (preserve discipline across all 8 SS)
    - 2.b Per-SS file enumeration (pin exact files per category)
@@ -269,7 +269,7 @@ Per Q-NAMING precedent verification ritual:
    - 2.d SS4 namespaced manager audit (which managers replace SDKStore.ref/.read/.retract/.set/.get)
    - 2.e SS5 Uncertainty Phase 1 DSL audit (raw_kind/bound API signature)
    - 2.f SS6 evaluator signature audit (where is `atom` arg added)
-   - 2.g SS7 chain hypothesis verification (run subset after SS5 simulation)
+   - 2.g SS7 chain hypothesis verification — **COMPLETED at Step 4.3 preflight `f8dd647f`**: PF-R1 LOCK disproved chain (5 of 102 = 5% chain-blocked, not 70-100%); SS7 active investigation locked at Step 4.4 PF-R1.
    - 2.h AD/C/E/B1/B2/F inherited contract preservation
 3. **Step 4.4 amendment**: apply Required + Recommended PFs.
 4. **Step 4.5 self-check (lightweight)**: PF coverage verification, no commit.
