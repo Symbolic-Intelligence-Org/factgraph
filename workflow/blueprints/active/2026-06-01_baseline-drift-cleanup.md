@@ -1,6 +1,6 @@
 # Baseline Drift Cleanup Meta-Blueprint: 189 pre-existing failures across 27 test files
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-01
 - Last Updated: 2026-06-01
 - Related Modules:
