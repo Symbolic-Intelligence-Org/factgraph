@@ -104,7 +104,7 @@ from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.view.projector import project_view_facts
 from factgraph.sdk import (
-    Branch,
+    Case,
     Derivation,
     Entity,
     Field,
@@ -112,7 +112,6 @@ from factgraph.sdk import (
     Not,
     Pred,
     Query,
-    Rule,
     RuleRef,
     SDKDSLError,
     SDKStore,
@@ -120,6 +119,7 @@ from factgraph.sdk import (
     compile_schema_from_classes,
     vars as sdk_vars,
 )
+from factgraph.sdk.dsl import Rule
 from domains.ecss.sdk_helpers import (
     apply_ecss_vcd_schema,
     make_ecss_requirement_ref,

@@ -32,12 +32,12 @@ from factgraph.sdk import (
     Field,
     Identity,
     Pred,
-    Rule,
     SDKDSLError,
     SDKStore,
     SDKStoreError,
     vars,
 )
+from factgraph.sdk.dsl import Rule
 from factgraph.sdk.shells.fact_overlay import sdk_fact_overlay_check
 from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
@@ -64,7 +64,7 @@ def _age_derivation() -> Inference:
         return Inference(
             id="sdk.check_fact_overlay.age",
             version="v1",
-            where=[Person(p), p.age == age],
+            when=[Person(p), p.age == age],
             head=Person.age(value=age),
         )
 
@@ -74,7 +74,7 @@ def _multi_head_derivation() -> Inference:
         return Inference(
             id="sdk.check_fact_overlay.multi_head",
             version="v1",
-            where=[Person(p), p.age == age, p.region == region],
+            when=[Person(p), p.age == age, p.region == region],
             head=[Person.age(value=age), Person.region(value=region)],
         )
 

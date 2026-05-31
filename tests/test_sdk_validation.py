@@ -32,10 +32,10 @@ from factgraph.sdk import (
     Field,
     Identity,
     Pred,
-    Rule,
     SDKStoreError,
     vars,
 )
+from factgraph.sdk.dsl import Rule
 from factgraph.sdk.shells._validation import (
     resolve_runtime_registry,
     validate_binding,
@@ -57,7 +57,7 @@ def _age_derivation() -> Inference:
         return Inference(
             id="sdk.validation.age",
             version="v1",
-            where=[Person(p), p.age == age],
+            when=[Person(p), p.age == age],
             head=Person.age(value=age),
         )
 

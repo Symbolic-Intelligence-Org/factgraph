@@ -13,11 +13,11 @@ from factgraph.sdk import (
     Field,
     Identity,
     Pred,
-    Rule,
     SDKStore,
     compile_schema_from_classes,
     vars as sdk_vars,
 )
+from factgraph.sdk.dsl import Rule
 
 
 class User(Entity):

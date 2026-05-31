@@ -106,7 +106,8 @@ from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.view.projector import project_view_facts
 from factgraph.sdk import (
-    Branch,
+    Case,
+    EmitSpec,
     Entity,
     Field,
     Identity,
@@ -114,7 +115,6 @@ from factgraph.sdk import (
     Not,
     Pred,
     Query,
-    Rule,
     RuleRef,
     SDKDSLError,
     SDKStore,
@@ -122,6 +122,7 @@ from factgraph.sdk import (
     compile_schema_from_classes,
     vars as sdk_vars,
 )
+from factgraph.sdk.dsl import Rule
 from domains.ecss.sdk_helpers import (
     apply_ecss_vcd_schema,
     make_ecss_requirement_ref,
@@ -913,12 +914,11 @@ Derivation(
             drv = Inference(
                 id="drv.user_tag_copy",
                 version="1.0.0",
-                where=[
+                when=[
                     RuleRef(tag_rows)(u, tag),
                     tag == "vip",
                 ],
-                target="user:tag",
-                head_vars=[u, tag],
+                emits=EmitSpec(target="user:tag", vars=[u, tag]),
             )
 
         candidates = sdk.eval.evaluate(drv, mode="native")
@@ -963,7 +963,7 @@ Derivation(
         with sdk_vars("u") as (u,):
             query = Query(
                 head=[User(u)],
-                where=[Branch([User(u)])],
+                where=[Case([User(u)])],
             )
         self.assertEqual(query.where_ir, [[("pred", "User:exists", ["$u"])]])
 
@@ -976,7 +976,7 @@ Derivation(
                 id="q.names",
                 version="1.0.0",
                 select=[u, nm],
-                where=[Branch([Pred("user:name", u, nm)])],
+                where=[Case([Pred("user:name", u, nm)])],
             )
 
         rows = _removed_sdk_run(rule, row_format="dict")
@@ -1016,7 +1016,7 @@ Derivation(
             drv = Inference(
                 id="drv.multi_head",
                 version="1.0.0",
-                where=[
+                when=[
                     User(u),
                     u.locale == loc,
                     u.name == nm,
@@ -1042,7 +1042,7 @@ Derivation(
             drv = Inference(
                 id="drv.temporal.reject",
                 version="1.0.0",
-                where=[("pred", "user:name", [u.token, nm.token])],
+                when=[("pred", "user:name", [u.token, nm.token])],
                 head=User.name(locale="zh", name=nm),
             )
 

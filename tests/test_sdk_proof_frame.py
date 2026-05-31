@@ -57,7 +57,7 @@ def _age_derivation() -> Inference:
         return Inference(
             id="sdk.recheck_proof_frame.age",
             version="v1",
-            where=[Person(p), p.age == age],
+            when=[Person(p), p.age == age],
             head=Person.age(value=age),
         )
 

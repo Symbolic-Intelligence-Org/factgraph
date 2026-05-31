@@ -17,7 +17,7 @@ from factgraph.audit.assertions import load_assertion_index
 from factgraph.audit.reader import load_audit_package
 from service.static_ui import _render_annotation_panel
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.sdk.dsl import Inference, Pred, vars as sdk_vars
+from factgraph.sdk.dsl import EmitSpec, Inference, Pred, vars as sdk_vars
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStore
 
@@ -54,9 +54,8 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
             return Inference(
                 id="drv.problog_tag",
                 version="v1",
-                where=[Pred("user:tag_seed", u, tag)],
-                target="user:tag",
-                head_vars=[u, tag],
+                when=[Pred("user:tag_seed", u, tag)],
+                emits=EmitSpec(target="user:tag", vars=[u, tag]),
             )
 
     def _mock_output(self, sdk: SDKStore) -> str:

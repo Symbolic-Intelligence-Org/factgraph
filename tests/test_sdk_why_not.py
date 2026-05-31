@@ -38,7 +38,7 @@ def _age_derivation() -> Inference:
         return Inference(
             id="sdk.why_not.age",
             version="v1",
-            where=[Person(p), p.age == age],
+            when=[Person(p), p.age == age],
             head=Person.age(value=age),
         )
 
@@ -48,7 +48,7 @@ def _region_filtered_age_derivation() -> Inference:
         return Inference(
             id="sdk.why_not.age_by_region",
             version="v1",
-            where=[Person(p), p.age == age, p.region == region],
+            when=[Person(p), p.age == age, p.region == region],
             head=Person.age(value=age),
         )
 
@@ -58,7 +58,7 @@ def _multi_head_derivation() -> Inference:
         return Inference(
             id="sdk.why_not.multi_head",
             version="v1",
-            where=[Person(p), p.age == age, p.region == region],
+            when=[Person(p), p.age == age, p.region == region],
             head=[Person.age(value=age), Person.region(value=region)],
         )
 

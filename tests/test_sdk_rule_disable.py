@@ -33,11 +33,11 @@ from factgraph.sdk import (
     Entity,
     Field,
     Identity,
-    Rule,
     SDKStore,
     SDKStoreError,
     vars,
 )
+from factgraph.sdk.dsl import Rule
 
 
 class Person(Entity):
@@ -62,7 +62,7 @@ def _age_derivation() -> Inference:
         return Inference(
             id="sdk.check_rule_disable.age",
             version="v1",
-            where=[Person(p), p.age == age],
+            when=[Person(p), p.age == age],
             head=Person.age(value=age),
         )
 

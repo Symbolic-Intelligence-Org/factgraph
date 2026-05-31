@@ -102,7 +102,7 @@ from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.view.projector import project_view_facts
 from factgraph.sdk import (
-    Branch,
+    Case,
     Derivation,
     Entity,
     Field,
