@@ -70,7 +70,7 @@ writes / query / views / packages 不在本文范围内。A20(E) / Q6-A 后
     "where": [["pred", "person:country", ["$E", "$C"]]],
     "description": "Country row helper",
     "tags": ["demo", "query"],
-    "condition_weights": {"b0.a0": 0.75},
+    "condition_weights": {"c0.c0": 0.75},
     "expose": true
   }
 }
@@ -94,7 +94,7 @@ writes / query / views / packages 不在本文范围内。A20(E) / Q6-A 后
 - `validate` 只做 request 规范化、AST 校验和 profile 约束校验，不返回编译产物。
 - `description`、`tags`、`condition_weights` 可随请求一起出现，但 `validate` 只校验 rule 逻辑 IR / profile 约束；这些字段不进入 core rule AST。
 - `condition_weights` 是 certainty/explain projection input，keyed
-  by `b{branch}.a{atom}`；它不是 engine adapter 参数，未来运行时配置归
+  by `c{case}.c{condition}`；它不是 engine adapter 参数，未来运行时配置归
   `SemanticsProfile.certainty_projection`。Track 3 / B 已提供 core
   `SemanticsProfile` validation / inspection scaffolding，但 rules
   registry 仍保留现有 `condition_weights` payload，不消费 profile。
@@ -126,7 +126,7 @@ writes / query / views / packages 不在本文范围内。A20(E) / Q6-A 后
     "where": [["pred", "person:country", ["$E", "$C"]]],
     "description": "Country row helper",
     "tags": ["demo", "query"],
-    "condition_weights": {"b0.a0": 0.75},
+    "condition_weights": {"c0.c0": 0.75},
     "expose": true
   }
 }
@@ -150,7 +150,7 @@ writes / query / views / packages 不在本文范围内。A20(E) / Q6-A 后
       "where": [["pred", "person:country", ["$E", "$C"]]],
       "description": "Country row helper",
       "tags": ["demo", "query"],
-      "condition_weights": {"b0.a0": 0.75},
+      "condition_weights": {"c0.c0": 0.75},
       "expose": true
     }
   }

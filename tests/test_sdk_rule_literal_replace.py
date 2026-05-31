@@ -81,7 +81,7 @@ def _adult_rule() -> Rule:
 def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> ProofReceipt:
     """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": e_ref, "$age": age})
-    payload = result.evidence_envelope.engine_payload
+    payload = result.evidence_envelope.proof
     assert isinstance(payload, ProofReceipt), (
         f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )
@@ -101,8 +101,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         result = sdk_rule_literal_replace(sdk,
             _adult_rule(),
             support,
-            branch_index=0,
-            atom_index=0,
+            case_index=0,
+            condition_index=0,
             literal_path=_literal_path(),
             old_literal="alice",
             new_literal="bob",
@@ -119,8 +119,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 {"not": "rule"},  # type: ignore[arg-type]
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path=_literal_path(),
                 old_literal="alice",
                 new_literal="bob",
@@ -140,8 +140,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 _age_derivation(),  # type: ignore[arg-type]
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path=_literal_path(),
                 old_literal="alice",
                 new_literal="bob",
@@ -156,8 +156,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 "not-a-support-artifact",  # type: ignore[arg-type]
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path=_literal_path(),
                 old_literal="alice",
                 new_literal="bob",
@@ -175,8 +175,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path=_literal_path(),
                 old_literal="alice",
                 new_literal="bob",
@@ -210,8 +210,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path=_literal_path(),
                 old_literal="alice",
                 new_literal="bob",
@@ -229,8 +229,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         result = sdk_rule_literal_replace(sdk,
             _adult_rule(),
             support,
-            branch_index=0,
-            atom_index=0,
+            case_index=0,
+            condition_index=0,
             literal_path=_literal_path(),
             old_literal="alice",
             new_literal="bob",
@@ -255,8 +255,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path="not-a-literal-path",  # type: ignore[arg-type]
                 old_literal="alice",
                 new_literal="bob",
@@ -279,8 +279,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
                 sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                     literal_path=_literal_path(),
                     old_literal="alice",
                     new_literal="bob",
@@ -303,8 +303,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
                 sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                     literal_path=_literal_path(),
                     old_literal="alice",
                     new_literal="bob",
@@ -333,8 +333,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
                 sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                     literal_path=_literal_path(),
                     old_literal="alice",
                     new_literal="bob",
@@ -359,8 +359,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
                 sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                     literal_path=_literal_path(),
                     old_literal="alice",
                     new_literal="bob",
@@ -382,8 +382,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
                 sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                     literal_path=_literal_path(),
                     old_literal="alice",
                     new_literal="bob",
@@ -405,8 +405,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
                 sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                     literal_path=_literal_path(),
                     old_literal="alice",
                     new_literal="bob",
@@ -454,8 +454,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path=_literal_path(),
                 old_literal="alice",
                 new_literal="bob",
@@ -466,8 +466,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         self.assertEqual(len(captured["request"].overlay.rule_actions), 1)
         action = captured["request"].overlay.rule_actions[0]
         self.assertIsInstance(action, RuleLiteralReplaceAction)
-        self.assertEqual(action.branch_index, 0)
-        self.assertEqual(action.atom_index, 0)
+        self.assertEqual(action.case_index, 0)
+        self.assertEqual(action.condition_index, 0)
         self.assertEqual(action.literal_path.kind, "pred_term")
         self.assertEqual(action.literal_path.index, 0)
         self.assertEqual(action.old_literal, "alice")
@@ -492,8 +492,8 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 literal_path=_literal_path(),
                 old_literal="alice",
                 new_literal="bob",

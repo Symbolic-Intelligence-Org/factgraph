@@ -82,7 +82,7 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
         self.assertEqual(
             [field.name for field in fields(NativeWhereFrontierRow)],
             [
-                "branch_index",
+                "case_index",
                 "failed_atom_index",
                 "atoms_satisfied",
                 "frontier_count",
@@ -92,19 +92,19 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
 
     def test_row_accepts_atom_filter_empty(self) -> None:
         row = NativeWhereFrontierRow(
-            branch_index=0,
+            case_index=0,
             failed_atom_index=2,
             atoms_satisfied=2,
             frontier_count=3,
             failure_kind="atom_filter_empty",
         )
 
-        self.assertEqual(row.branch_index, 0)
+        self.assertEqual(row.case_index, 0)
         self.assertEqual(row.frontier_count, 3)
 
     def test_row_accepts_defensive_empty_input(self) -> None:
         row = NativeWhereFrontierRow(
-            branch_index=0,
+            case_index=0,
             failed_atom_index=0,
             atoms_satisfied=0,
             frontier_count=0,
@@ -116,7 +116,7 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
     def test_row_rejects_unknown_failure_kind(self) -> None:
         with self.assertRaisesRegex(ValueError, "failure_kind"):
             NativeWhereFrontierRow(
-                branch_index=0,
+                case_index=0,
                 failed_atom_index=0,
                 atoms_satisfied=0,
                 frontier_count=1,
@@ -126,7 +126,7 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
     def test_row_rejects_atoms_satisfied_drift(self) -> None:
         with self.assertRaisesRegex(ValueError, "atoms_satisfied"):
             NativeWhereFrontierRow(
-                branch_index=0,
+                case_index=0,
                 failed_atom_index=2,
                 atoms_satisfied=1,
                 frontier_count=1,
@@ -136,7 +136,7 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
     def test_row_rejects_failure_kind_count_mismatch(self) -> None:
         with self.assertRaisesRegex(ValueError, "frontier_count=0"):
             NativeWhereFrontierRow(
-                branch_index=0,
+                case_index=0,
                 failed_atom_index=0,
                 atoms_satisfied=0,
                 frontier_count=1,
@@ -144,7 +144,7 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "frontier_count>0"):
             NativeWhereFrontierRow(
-                branch_index=0,
+                case_index=0,
                 failed_atom_index=0,
                 atoms_satisfied=0,
                 frontier_count=0,
@@ -152,9 +152,9 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
             )
 
     def test_row_rejects_bool_and_negative_ints(self) -> None:
-        with self.assertRaisesRegex(ValueError, "branch_index"):
+        with self.assertRaisesRegex(ValueError, "case_index"):
             NativeWhereFrontierRow(
-                branch_index=True,  # type: ignore[arg-type]
+                case_index=True,  # type: ignore[arg-type]
                 failed_atom_index=0,
                 atoms_satisfied=0,
                 frontier_count=0,
@@ -162,7 +162,7 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "failed_atom_index"):
             NativeWhereFrontierRow(
-                branch_index=0,
+                case_index=0,
                 failed_atom_index=-1,
                 atoms_satisfied=0,
                 frontier_count=0,
@@ -171,7 +171,7 @@ class NativeWhereFrontierDTOTests(unittest.TestCase):
 
     def test_row_is_frozen(self) -> None:
         row = NativeWhereFrontierRow(
-            branch_index=0,
+            case_index=0,
             failed_atom_index=0,
             atoms_satisfied=0,
             frontier_count=0,
@@ -330,7 +330,7 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             frontier.frontier_rows,
             (
                 NativeWhereFrontierRow(
-                    branch_index=0,
+                    case_index=0,
                     failed_atom_index=0,
                     atoms_satisfied=0,
                     frontier_count=1,
@@ -353,7 +353,7 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             frontier.frontier_rows,
             (
                 NativeWhereFrontierRow(
-                    branch_index=0,
+                    case_index=0,
                     failed_atom_index=1,
                     atoms_satisfied=1,
                     frontier_count=2,
@@ -379,7 +379,7 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             frontier.frontier_rows,
             (
                 NativeWhereFrontierRow(
-                    branch_index=0,
+                    case_index=0,
                     failed_atom_index=1,
                     atoms_satisfied=1,
                     frontier_count=1,
@@ -402,7 +402,7 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             frontier.frontier_rows,
             (
                 NativeWhereFrontierRow(
-                    branch_index=1,
+                    case_index=1,
                     failed_atom_index=1,
                     atoms_satisfied=1,
                     frontier_count=1,
@@ -433,14 +433,14 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             frontier.frontier_rows,
             (
                 NativeWhereFrontierRow(
-                    branch_index=0,
+                    case_index=0,
                     failed_atom_index=1,
                     atoms_satisfied=1,
                     frontier_count=1,
                     failure_kind="atom_filter_empty",
                 ),
                 NativeWhereFrontierRow(
-                    branch_index=1,
+                    case_index=1,
                     failed_atom_index=1,
                     atoms_satisfied=1,
                     frontier_count=1,
@@ -468,7 +468,7 @@ class NativeWhereFrontierEntrypointTests(unittest.TestCase):
             frontier.frontier_rows,
             (
                 NativeWhereFrontierRow(
-                    branch_index=0,
+                    case_index=0,
                     failed_atom_index=1,
                     atoms_satisfied=1,
                     frontier_count=1,

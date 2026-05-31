@@ -22,7 +22,7 @@ class Row:
 
 @dataclass(frozen=True)
 class PredWitnessLike:
-    pred_atom_key: str
+    pred_condition_key: str
     status: str
 
 
@@ -114,12 +114,12 @@ class FrozenTupleViewLookupTests(unittest.TestCase):
     def test_require_key_uses_default_key_attribute_fallback(self) -> None:
         view = FrozenTupleView(
             (
-                PredWitnessLike("b0.a0:Person:age", "active"),
+                PredWitnessLike("c0.c0:Person:age", "active"),
                 IdLike("row-2", 2),
             )
         )
 
-        self.assertEqual(view.require_key("b0.a0:Person:age").status, "active")
+        self.assertEqual(view.require_key("c0.c0:Person:age").status, "active")
         self.assertEqual(view.require_key("row-2").value, 2)
         with self.assertRaises(WalkerLookupError):
             view.require_key("missing")

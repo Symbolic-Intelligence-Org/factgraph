@@ -102,8 +102,8 @@ class WhereEvalLiteralReplacementTests(unittest.TestCase):
             literal_replacements=frozenset(
                 {
                     WhereLiteralReplacement(
-                        branch_index=0,
-                        atom_index=2,
+                        case_index=0,
+                        condition_index=2,
                         literal_path=("rhs", None),
                         old_literal="us",
                         new_literal="eu",
@@ -125,8 +125,8 @@ class WhereEvalLiteralReplacementTests(unittest.TestCase):
             literal_replacements=frozenset(
                 {
                     WhereLiteralReplacement(
-                        branch_index=0,
-                        atom_index=0,
+                        case_index=0,
+                        condition_index=0,
                         literal_path=("pred_term", 1),
                         old_literal="us",
                         new_literal="eu",
@@ -143,8 +143,8 @@ class WhereEvalLiteralReplacementTests(unittest.TestCase):
             literal_replacements=frozenset(
                 {
                     WhereLiteralReplacement(
-                        branch_index=0,
-                        atom_index=1,
+                        case_index=0,
+                        condition_index=1,
                         literal_path=("in_value", 0),
                         old_literal="us",
                         new_literal="eu",
@@ -167,8 +167,8 @@ class WhereEvalLiteralReplacementTests(unittest.TestCase):
             literal_replacements=frozenset(
                 {
                     WhereLiteralReplacement(
-                        branch_index=0,
-                        atom_index=1,
+                        case_index=0,
+                        condition_index=1,
                         literal_path=("const_operand", None),
                         old_literal=5,
                         new_literal=6,
@@ -188,8 +188,8 @@ class WhereEvalLiteralReplacementTests(unittest.TestCase):
                 literal_replacements=frozenset(
                     {
                         WhereLiteralReplacement(
-                            branch_index=0,
-                            atom_index=0,
+                            case_index=0,
+                            condition_index=0,
                             literal_path=("rhs", None),
                             old_literal="us",
                             new_literal="$other",
@@ -204,8 +204,8 @@ class WhereEvalLiteralReplacementTests(unittest.TestCase):
                 literal_replacements=frozenset(
                     {
                         WhereLiteralReplacement(
-                            branch_index=0,
-                            atom_index=0,
+                            case_index=0,
+                            condition_index=0,
                             literal_path=("rhs", None),
                             old_literal="eu",
                             new_literal="ca",
@@ -230,7 +230,7 @@ class WhereEvalAddedConditionTests(unittest.TestCase):
             view_facts,
             where,
             added_conditions=frozenset(
-                {WhereAddedCondition(branch_index=0, atom=("lt", "$age", 20))}
+                {WhereAddedCondition(case_index=0, atom=("lt", "$age", 20))}
             ),
         )
 
@@ -257,7 +257,7 @@ class WhereEvalAddedConditionTests(unittest.TestCase):
             view_facts,
             where,
             added_conditions=frozenset(
-                {WhereAddedCondition(branch_index=0, atom=("lt", "$age", 20))}
+                {WhereAddedCondition(case_index=0, atom=("lt", "$age", 20))}
             ),
         )
 
@@ -275,7 +275,7 @@ class WhereEvalAddedConditionTests(unittest.TestCase):
                 {"Person:exists": [("alice",)]},
                 [("pred", "Person:exists", ["$p"])],
                 added_conditions=frozenset(
-                    {WhereAddedCondition(branch_index=1, atom=("eq", "$p", "alice"))}
+                    {WhereAddedCondition(case_index=1, atom=("eq", "$p", "alice"))}
                 ),
             )
 

@@ -99,7 +99,7 @@ class ProbLogSemanticsProfileResolverTests(unittest.TestCase):
                 semantics_profile=_profile(entries=[{"target": "branch:2", "kind": "branch_probability", "value": 0.4}]),
             )
 
-        self.assertIn("branch index", str(ctx.exception))
+        self.assertIn("case index", str(ctx.exception))
 
     def test_profile_rule_projection_rejects_out_of_range_probability(self) -> None:
         with self.assertRaises(ValueError) as ctx:

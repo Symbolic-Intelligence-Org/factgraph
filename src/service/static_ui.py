@@ -1250,7 +1250,7 @@ def _render_rule_trace_detail_page(
             witness_rows.append(
                 "<tr>"
                 f"<td>{escape(str(witness.get('binding_index')))}</td>"
-                f"<td>{escape(str(witness.get('pred_atom_key')))}</td>"
+                f"<td>{escape(str(witness.get('pred_condition_key')))}</td>"
                 f"<td>{', '.join(asrt_links) if asrt_links else '-'}</td>"
                 "</tr>"
             )
@@ -1273,7 +1273,7 @@ def _render_rule_trace_detail_page(
                 continue
             ruleref_items.append(
                 "<li>"
-                f"{escape(str(link.get('ruleref_atom_key')))} -> {escape(str(link.get('child_invocation_id')))}"
+                f"{escape(str(link.get('ruleref_condition_key')))} -> {escape(str(link.get('child_invocation_id')))}"
                 "</li>"
             )
         invocation_blocks.append(
@@ -1288,7 +1288,7 @@ def _render_rule_trace_detail_page(
             f"<li>output_row_count={escape(str(len(invocation.get('output_rows', [])) if isinstance(invocation.get('output_rows'), list) else 0))}</li>"
             "</ul>"
             "<h4>Predicate Witnesses</h4>"
-            "<table><thead><tr><th>binding_index</th><th>pred_atom_key</th><th>assertions</th></tr></thead>"
+            "<table><thead><tr><th>binding_index</th><th>pred_condition_key</th><th>assertions</th></tr></thead>"
             f"<tbody>{''.join(witness_rows) if witness_rows else '<tr><td colspan=3>None</td></tr>'}</tbody></table>"
             "<h4>Non-fact Steps</h4>"
             "<table><thead><tr><th>binding_index</th><th>step_key</th><th>kind</th><th>status</th><th>details</th></tr></thead>"
@@ -1413,11 +1413,11 @@ def _render_certainty_visual(narrative: dict[str, Any]) -> str:
         )
         if not parts:
             continue
-        atom_key = parts.group(1)
+        condition_key = parts.group(1)
         _nk = parts.group(2)
         weight = parts.group(3)
         impact_str = parts.group(4)
-        is_bottleneck = atom_key in bottleneck_keys
+        is_bottleneck = condition_key in bottleneck_keys
         try:
             impact_num = float(impact_str)
             impact_pct = impact_num * 100
@@ -1431,7 +1431,7 @@ def _render_certainty_visual(narrative: dict[str, Any]) -> str:
         )
         bars_html += (
             "<div class=\'certainty-bar-row\'>"
-            f"<span class=\'certainty-bar-label\'>{escape(atom_key)}{badge}</span>"
+            f"<span class=\'certainty-bar-label\'>{escape(condition_key)}{badge}</span>"
             f"<div class=\'certainty-bar-track\'>"
             f"<div class=\'certainty-bar-fill {bar_class}\' style=\'width:{impact_pct:.1f}%\'></div>"
             "</div>"

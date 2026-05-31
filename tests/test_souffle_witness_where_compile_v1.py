@@ -25,8 +25,8 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
 
         self.assertEqual(layout.query_variables, ("$e", "$value"))
         self.assertEqual(
-            [row.pred_atom_key for row in layout.pred_witness_columns],
-            ["b0.a0:user:name", "b1.a0:user:status"],
+            [row.pred_condition_key for row in layout.pred_witness_columns],
+            ["c0.c0:user:name", "c1.c0:user:status"],
         )
 
     def test_compile_where_to_query_dl_with_witness_columns_uses_w_relations(self) -> None:

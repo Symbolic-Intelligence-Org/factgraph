@@ -37,7 +37,7 @@ Public surface contract per blueprint §5 locks:
                SDK shell (``sdk_check`` / ``sdk_diagnose`` /
                ``sdk_why_not`` / ``sdk_fact_overlay_check``). It owns
                its own dispatch; in particular it never extracts
-               ``ProofReceipt`` from a ``CheckResult.engine_payload``
+               ``ProofReceipt`` from a ``CheckResult.proof``
                (which is a ``ProofReceipt | ProvenanceEnvelope``
                union per G2 §5.2 falsifier F2).
 

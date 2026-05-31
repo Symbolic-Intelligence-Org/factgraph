@@ -229,8 +229,8 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
             result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(result.green, ())
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, ())
+        self.assertEqual(result.failed, ())
         mocked.assert_not_called()
 
     def test_empty_universe_with_ruleref_returns_completed_without_preflight(self) -> None:
@@ -250,8 +250,8 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
             result = check_why_not_universe(request, store=store, registry=None)
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(result.green, ())
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, ())
+        self.assertEqual(result.failed, ())
         self.assertEqual(result.errors, ())
         mocked.assert_not_called()
 
@@ -273,15 +273,15 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.requested_universe, request.candidate_universe)
-        self.assertEqual(result.green, (alice_binding, bob_binding))
-        self.assertEqual(tuple(row.binding for row in result.red), (missing_binding,))
-        self.assertEqual(result.red[0].diagnostic.status, "failed")
-        self.assertEqual(result.red[0].diagnostic.failure_kind, "atom_localized")
+        self.assertEqual(result.passed, (alice_binding, bob_binding))
+        self.assertEqual(tuple(row.binding for row in result.failed), (missing_binding,))
+        self.assertEqual(result.failed[0].diagnostic.status, "failed")
+        self.assertEqual(result.failed[0].diagnostic.failure_kind, "atom_localized")
         self.assertEqual(
-            result.red[0].diagnostic.diagnostic_granularity,
+            result.failed[0].diagnostic.diagnostic_granularity,
             "atom_localized",
         )
-        locator = result.red[0].diagnostic.atom_locator
+        locator = result.failed[0].diagnostic.atom_locator
         assert locator is not None
         self.assertEqual(locator.failed_atom_index, 0)
 
@@ -301,8 +301,8 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(result.green, (alice_binding, bob_binding))
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, (alice_binding, bob_binding))
+        self.assertEqual(result.failed, ())
 
     def test_native_all_red_partition(self) -> None:
         store, index = _build_store()
@@ -318,8 +318,8 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(result.green, ())
-        self.assertEqual(tuple(row.binding for row in result.red), (missing_a, missing_b))
+        self.assertEqual(result.passed, ())
+        self.assertEqual(tuple(row.binding for row in result.failed), (missing_a, missing_b))
 
     def test_native_preserves_interleaved_partition_order(self) -> None:
         store, index = _build_store()
@@ -339,8 +339,8 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(result.green, (alice_binding, bob_binding))
-        self.assertEqual(tuple(row.binding for row in result.red), (missing_a, missing_b))
+        self.assertEqual(result.passed, (alice_binding, bob_binding))
+        self.assertEqual(tuple(row.binding for row in result.failed), (missing_a, missing_b))
 
     def test_ruleref_without_registry_returns_invalid_request(self) -> None:
         store, index = _build_store()
@@ -358,8 +358,8 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         result = check_why_not_universe(request, store=store, registry=None)
 
         self.assertEqual(result.status, "invalid_request")
-        self.assertEqual(result.green, ())
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, ())
+        self.assertEqual(result.failed, ())
         self.assertEqual(result.errors[0].code, "REGISTRY_REQUIRED")
 
     def test_ruleref_unresolvable_returns_invalid_request(self) -> None:
@@ -395,8 +395,8 @@ class WhyNotRuntimeNativeBoardTests(unittest.TestCase):
         result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "unsupported")
-        self.assertEqual(result.green, ())
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, ())
+        self.assertEqual(result.failed, ())
         self.assertEqual(result.errors[0].code, "CANDIDATE_BINDING_NOT_REPRESENTABLE")
 
     def test_native_why_not_leaves_ledger_byte_identical_and_does_not_write(self) -> None:
@@ -448,15 +448,15 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
         result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(result.green, ())
-        self.assertEqual(tuple(row.binding for row in result.red), (red_binding,))
-        diagnostic = result.red[0].diagnostic
+        self.assertEqual(result.passed, ())
+        self.assertEqual(tuple(row.binding for row in result.failed), (red_binding,))
+        diagnostic = result.failed[0].diagnostic
         self.assertEqual(diagnostic.status, "failed")
         self.assertEqual(diagnostic.failure_kind, "atom_localized")
         self.assertEqual(diagnostic.diagnostic_granularity, "atom_localized")
         locator = diagnostic.atom_locator
         assert locator is not None
-        self.assertEqual(locator.branch_index, 0)
+        self.assertEqual(locator.case_index, 0)
         self.assertEqual(locator.failed_atom_index, 2)
         self.assertIn(("$age", 25), locator.attempted_binding)
 
@@ -489,7 +489,7 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
         ):
             result = check_why_not_universe(request, store=store, registry=registry)
 
-        self.assertEqual(tuple(row.binding for row in result.red), (first, second))
+        self.assertEqual(tuple(row.binding for row in result.failed), (first, second))
         self.assertEqual([entry[0].binding for entry in seen], [first, second])
         self.assertTrue(all(entry[0].plan is plan for entry in seen))
         self.assertEqual([entry[0].engine for entry in seen], ["native", "native"])
@@ -518,7 +518,7 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
         ):
             result = check_why_not_universe(request, store=store)
 
-        diagnostic = result.red[0].diagnostic
+        diagnostic = result.failed[0].diagnostic
         self.assertEqual(diagnostic.status, "failed")
         self.assertEqual(diagnostic.failure_kind, "no_candidate")
         self.assertEqual(diagnostic.diagnostic_granularity, "coarse")
@@ -548,7 +548,7 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
             result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
-        diagnostic = result.red[0].diagnostic
+        diagnostic = result.failed[0].diagnostic
         self.assertEqual(diagnostic.status, "unsupported")
         self.assertIsNone(diagnostic.failure_kind)
         self.assertEqual(diagnostic.diagnostic_granularity, "unavailable")
@@ -587,7 +587,7 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
         ):
             check_why_not_universe(request, store=store)
 
-        self.assertEqual(raised.exception.code, "WHY_NOT_DIAGNOSE_PASSED_RED_BINDING")
+        self.assertEqual(raised.exception.code, "WHY_NOT_DIAGNOSE_PASSED_FAILED_BINDING")
 
     def test_invalid_request_diagnose_result_raises_invariant_error(self) -> None:
         store, _index = _build_store()
@@ -639,7 +639,7 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
             matched_binding=None,
             failure_kind="atom_localized",
             diagnostic_payload=DiagnoseConditionLocator(
-                branch_index=3,
+                case_index=3,
                 failed_atom_index=4,
                 attempted_binding=attempted,
             ),
@@ -659,9 +659,9 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
         ):
             result = check_why_not_universe(request, store=store)
 
-        locator = result.red[0].diagnostic.atom_locator
+        locator = result.failed[0].diagnostic.atom_locator
         assert locator is not None
-        self.assertEqual(locator.branch_index, 3)
+        self.assertEqual(locator.case_index, 3)
         self.assertEqual(locator.failed_atom_index, 4)
         self.assertEqual(locator.attempted_binding, attempted)
         self.assertIsNot(locator, diagnose_result.diagnostic_payload)
@@ -697,15 +697,15 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
                     result = check_why_not_universe(request, store=store)
 
                 self.assertEqual(result.status, "completed")
-                self.assertEqual(result.green, (_binding(("$p", "person-1")),))
+                self.assertEqual(result.passed, (_binding(("$p", "person-1")),))
                 self.assertEqual(
-                    tuple(row.binding for row in result.red),
+                    tuple(row.binding for row in result.failed),
                     (_binding(("$p", "person-2")),),
                 )
-                self.assertEqual(result.red[0].diagnostic.status, "failed")
-                self.assertEqual(result.red[0].diagnostic.failure_kind, "no_candidate")
+                self.assertEqual(result.failed[0].diagnostic.status, "failed")
+                self.assertEqual(result.failed[0].diagnostic.failure_kind, "no_candidate")
                 self.assertEqual(
-                    result.red[0].diagnostic.diagnostic_granularity,
+                    result.failed[0].diagnostic.diagnostic_granularity,
                     "coarse",
                 )
 
@@ -796,15 +796,15 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.errors, ())
-        self.assertEqual(result.green, ())
-        self.assertEqual(tuple(row.binding for row in result.red), (red_binding,))
-        self.assertEqual(result.red[0].diagnostic.status, "unsupported")
-        self.assertIsNone(result.red[0].diagnostic.failure_kind)
+        self.assertEqual(result.passed, ())
+        self.assertEqual(tuple(row.binding for row in result.failed), (red_binding,))
+        self.assertEqual(result.failed[0].diagnostic.status, "unsupported")
+        self.assertIsNone(result.failed[0].diagnostic.failure_kind)
         self.assertEqual(
-            result.red[0].diagnostic.diagnostic_granularity,
+            result.failed[0].diagnostic.diagnostic_granularity,
             "unavailable",
         )
-        self.assertEqual(result.red[0].diagnostic.errors, (error,))
+        self.assertEqual(result.failed[0].diagnostic.errors, (error,))
 
     def test_souffle_uses_support_artifact_binding_items(self) -> None:
         store, index = _build_store()
@@ -845,13 +845,13 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
             result = check_why_not_universe(request, store=store)
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(result.green, (_binding(("$p", "person-1")),))
+        self.assertEqual(result.passed, (_binding(("$p", "person-1")),))
         self.assertEqual(
-            tuple(row.binding for row in result.red),
+            tuple(row.binding for row in result.failed),
             (_binding(("$p", "person-2")),),
         )
-        self.assertEqual(result.red[0].diagnostic.status, "failed")
-        self.assertEqual(result.red[0].diagnostic.failure_kind, "no_candidate")
+        self.assertEqual(result.failed[0].diagnostic.status, "failed")
+        self.assertEqual(result.failed[0].diagnostic.failure_kind, "no_candidate")
 
     def test_souffle_support_lookup_miss_returns_unsupported(self) -> None:
         store, index = _build_store()

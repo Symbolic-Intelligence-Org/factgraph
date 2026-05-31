@@ -353,13 +353,13 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
             "round-a",
             support_digest="digest-1",
             status="still_valid",
-            atom_verdicts=[{"atom_key": "atom-1", "verdict": "still_valid"}],
+            atom_verdicts=[{"condition_key": "atom-1", "verdict": "still_valid"}],
         )
         round_b = _round_with_one_frame(
             "round-b",
             support_digest="digest-1",
             status="invalidated",
-            atom_verdicts=[{"atom_key": "atom-1", "verdict": "invalidated"}],
+            atom_verdicts=[{"condition_key": "atom-1", "verdict": "invalidated"}],
         )
 
         result = sdk.audit.diff_proof_frames(

@@ -113,8 +113,8 @@ def check_rule_literal_replace_action(
         )
     target_atom = _atom_at(
         request.rule_spec.where,
-        branch_index=action.branch_index,
-        atom_index=action.atom_index,
+        case_index=action.case_index,
+        condition_index=action.condition_index,
     )
     if target_atom is None:
         return _invalid_request(
@@ -122,8 +122,8 @@ def check_rule_literal_replace_action(
             message="RuleLiteralReplaceAction target locator does not exist in rule_spec.where",
             path=("overlay", "rule_actions", "0"),
             details={
-                "branch_index": action.branch_index,
-                "atom_index": action.atom_index,
+                "case_index": action.case_index,
+                "condition_index": action.condition_index,
             },
         )
     target_error = _validate_action_target(action, target_atom)
@@ -180,8 +180,8 @@ def _where_literal_replacement(
     action: RuleLiteralReplaceAction,
 ) -> WhereLiteralReplacement:
     return WhereLiteralReplacement(
-        branch_index=action.branch_index,
-        atom_index=action.atom_index,
+        case_index=action.case_index,
+        condition_index=action.condition_index,
         literal_path=_core_literal_path(action.literal_path),
         old_literal=action.old_literal,
         new_literal=action.new_literal,
@@ -281,15 +281,15 @@ def _build_proof_frame_result(
         [
             *(
                 ProofFrameConditionVerdict(
-                    atom_key=witness.pred_atom_key,
+                    condition_key=witness.pred_condition_key,
                     verdict=(
                         "invalidated"
-                        if witness.pred_atom_key.startswith(target_prefix)
+                        if witness.pred_condition_key.startswith(target_prefix)
                         else "still_valid"
                     ),
                     affected_action_indices=(
                         (action_index,)
-                        if witness.pred_atom_key.startswith(target_prefix)
+                        if witness.pred_condition_key.startswith(target_prefix)
                         else ()
                     ),
                 )
@@ -297,7 +297,7 @@ def _build_proof_frame_result(
             ),
             *(
                 ProofFrameConditionVerdict(
-                    atom_key=step.step_key,
+                    condition_key=step.step_key,
                     verdict=(
                         "invalidated"
                         if step.step_key.startswith(target_prefix)
@@ -319,24 +319,24 @@ def _build_proof_frame_result(
 
 
 def _atom_key_prefix(action: RuleLiteralReplaceAction) -> str:
-    return f"b{action.branch_index}.a{action.atom_index}:"
+    return f"c{action.case_index}.c{action.condition_index}:"
 
 
 def _atom_at(
     where: list[Any],
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
 ) -> tuple[Any, ...] | None:
     branches = _where_branches(where)
     if branches is None:
         return None
-    if branch_index >= len(branches):
+    if case_index >= len(branches):
         return None
-    branch = branches[branch_index]
-    if atom_index >= len(branch):
+    branch = branches[case_index]
+    if condition_index >= len(branch):
         return None
-    atom = branch[atom_index]
+    atom = branch[condition_index]
     if not isinstance(atom, tuple) or not atom:
         return None
     return atom

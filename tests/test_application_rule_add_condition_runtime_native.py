@@ -119,20 +119,20 @@ def _artifact(seeded: SeededPerson, **kwargs: object) -> ProofReceipt:
         "binding_items": (("$p", seeded.e_ref),),
         "pred_witnesses": (
             PredWitness(
-                pred_atom_key=f"b0.a0:{seeded.exists_pred_id}",
+                pred_condition_key=f"c0.c0:{seeded.exists_pred_id}",
                 asrt_ids=(seeded.exists_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a1:{seeded.age_pred_id}",
+                pred_condition_key=f"c0.c1:{seeded.age_pred_id}",
                 asrt_ids=(seeded.age_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a2:{seeded.region_pred_id}",
+                pred_condition_key=f"c0.c2:{seeded.region_pred_id}",
                 asrt_ids=(seeded.region_asrt_id,),
             ),
         ),
         "non_fact_steps": (
-            NonFactStep(step_key="b0.a3:eq", kind="eq", status="satisfied"),
+            NonFactStep(step_key="c0.c3:eq", kind="eq", status="satisfied"),
         ),
     }
     fields.update(kwargs)
@@ -143,7 +143,7 @@ def _action(**kwargs: object) -> RuleAddConditionAction:
     fields = {
         "rule_id": "person.eligible",
         "version": "1.0",
-        "branch_index": 0,
+        "case_index": 0,
         "added_atom": AddedCondition(("lt", "$age", 20)),
     }
     fields.update(kwargs)
@@ -187,11 +187,11 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
         proof_frame = result.proof_frame
         assert proof_frame is not None
         self.assertEqual(proof_frame.status, "invalidated")
-        verdicts = {verdict.atom_key: verdict for verdict in proof_frame.atom_verdicts}
+        verdicts = {verdict.condition_key: verdict for verdict in proof_frame.atom_verdicts}
         self.assertEqual(verdicts["b0.add0:lt"].verdict, "invalidated")
         self.assertEqual(verdicts["b0.add0:lt"].affected_action_indices, (0,))
-        self.assertEqual(verdicts[f"b0.a0:{alice.exists_pred_id}"].verdict, "still_valid")
-        self.assertEqual(verdicts["b0.a3:eq"].verdict, "still_valid")
+        self.assertEqual(verdicts[f"c0.c0:{alice.exists_pred_id}"].verdict, "still_valid")
+        self.assertEqual(verdicts["c0.c3:eq"].verdict, "still_valid")
 
     def test_added_filter_preserves_old_frame_when_binding_remains(self) -> None:
         store, index = _build_store()
@@ -211,7 +211,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.variant_rows, ((("$p", alice.e_ref),),))
         assert result.proof_frame is not None
-        verdicts = {verdict.atom_key: verdict for verdict in result.proof_frame.atom_verdicts}
+        verdicts = {verdict.condition_key: verdict for verdict in result.proof_frame.atom_verdicts}
         self.assertEqual(verdicts["b0.add0:lt"].verdict, "still_valid")
         self.assertEqual(verdicts["b0.add0:lt"].affected_action_indices, ())
         self.assertEqual(result.proof_frame.status, "still_valid")
@@ -263,8 +263,8 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
                         RuleDisableAction(
                             rule_id="person.eligible",
                             version="1.0",
-                            branch_index=0,
-                            atom_index=3,
+                            case_index=0,
+                            condition_index=3,
                         ),
                     )
                 ),
@@ -288,7 +288,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             ((), "RULE_ADD_CONDITION_ACTION_COUNT"),
             ((_action(), _action(added_atom=AddedCondition(("lt", "$age", 65)))), "RULE_ADD_CONDITION_ACTION_COUNT"),
             ((_action(rule_id="other.rule"),), "RULE_ADD_CONDITION_RULE_MISMATCH"),
-            ((_action(branch_index=99),), "RULE_ADD_CONDITION_BRANCH_NOT_FOUND"),
+            ((_action(case_index=99),), "RULE_ADD_CONDITION_BRANCH_NOT_FOUND"),
         ]
         for actions, code in cases:
             with self.subTest(code=code):
@@ -333,7 +333,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
         edge = RuleRefEdge(
-            ruleref_atom_key="b0.a1:ruleref",
+            ruleref_condition_key="c0.c1:ruleref",
             rule_ref_id="child.rule",
             rule_ref_version="1.0",
             child_support_digest="sha256:" + ("0" * 64),

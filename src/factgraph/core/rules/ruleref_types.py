@@ -28,14 +28,14 @@ class NativeRuleRefRowSupport:
 
 @dataclass(frozen=True)
 class NativeRuleRefResolution:
-    ruleref_atom_key: str
+    ruleref_condition_key: str
     rule_ref_id: str
     rule_ref_version: str
     row_supports: tuple[NativeRuleRefRowSupport, ...]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.ruleref_atom_key, str) or not self.ruleref_atom_key:
-            raise ValueError("ruleref_atom_key must be non-empty string")
+        if not isinstance(self.ruleref_condition_key, str) or not self.ruleref_condition_key:
+            raise ValueError("ruleref_condition_key must be non-empty string")
         if not isinstance(self.rule_ref_id, str) or not self.rule_ref_id:
             raise ValueError("rule_ref_id must be non-empty string")
         if not isinstance(self.rule_ref_version, str) or not self.rule_ref_version:

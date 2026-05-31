@@ -1042,19 +1042,19 @@ def _build_form1_evidence_graph(
 
     edge_index = 0
     for witness in support_artifact.pred_witnesses:
-        premise_id = f"premise:{witness.pred_atom_key}"
-        pred_id = _pred_id_from_atom_key(witness.pred_atom_key)
+        premise_id = f"premise:{witness.pred_condition_key}"
+        pred_id = _pred_id_from_atom_key(witness.pred_condition_key)
         nodes.append(
             EvidenceNode(
                 node_id=premise_id,
                 node_kind=NODE_PREMISE,
-                component=witness.pred_atom_key,
+                component=witness.pred_condition_key,
                 label=f"Predicate witness {pred_id}",
                 value_summary="satisfied",
                 engine_meta={
-                    "atom_id": witness.pred_atom_key,
+                    "atom_id": witness.pred_condition_key,
                     "atom_kind": "pred",
-                    "atom_index": _atom_index_from_key(witness.pred_atom_key),
+                    "condition_index": _condition_index_from_key(witness.pred_condition_key),
                     "parent_rule_id": result.head.id,
                     "reason": {
                         "kind": "predicate_witness",
@@ -1097,7 +1097,7 @@ def _build_form1_evidence_graph(
                 engine_meta={
                     "atom_id": step.step_key,
                     "atom_kind": step.kind,
-                    "atom_index": _atom_index_from_key(step.step_key),
+                    "condition_index": _condition_index_from_key(step.step_key),
                     "parent_rule_id": result.head.id,
                     "reason": {
                         "kind": step.kind,
@@ -1135,12 +1135,12 @@ def _quantitative_explanation_for_row(row: EvaluateRow) -> Mapping[str, Any]:
     }
 
 
-def _pred_id_from_atom_key(atom_key: str) -> str:
-    return atom_key.split(":", 1)[1] if ":" in atom_key else atom_key
+def _pred_id_from_atom_key(condition_key: str) -> str:
+    return condition_key.split(":", 1)[1] if ":" in condition_key else condition_key
 
 
-def _atom_index_from_key(atom_key: str) -> int | None:
-    prefix = atom_key.split(":", 1)[0]
+def _condition_index_from_key(condition_key: str) -> int | None:
+    prefix = condition_key.split(":", 1)[0]
     for part in prefix.split("."):
         if part.startswith("a") and part[1:].isdigit():
             return int(part[1:])

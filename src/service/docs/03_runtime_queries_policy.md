@@ -136,7 +136,7 @@
     ],
     "pred_witnesses": [
       {
-        "pred_atom_key": "b0.a0:person:country",
+        "pred_condition_key": "c0.c0:person:country",
         "asrt_ids": ["A1"]
       }
     ],
@@ -158,7 +158,7 @@
   - legacy `rule_refs`
   - structured `rule_ref_edges`
 - `rule_ref_edges` 是 per-occurrence child-proof edges：
-  - `ruleref_atom_key`
+  - `ruleref_condition_key`
   - `rule_ref_id`
   - `rule_ref_version`
   - `child_support_digest | None`
@@ -214,7 +214,7 @@
         "pred_witnesses": [
           {
             "binding_index": 0,
-            "pred_atom_key": "b0.a0:person:country",
+            "pred_condition_key": "c0.c0:person:country",
             "asrt_ids": ["A1"]
           }
         ],
@@ -245,8 +245,8 @@
     - `invocations` 本身是 stable flat list shape
     - consumer 通过 `parent_invocation_id` 与 `ruleref_links.child_invocation_id` 重建 tree
     - stable 字段：`invocation_id`、`parent_invocation_id`、`rule`、`memo_hit`、`memo_source_invocation_id`、`bindings`、`output_rows`
-  - `pred_witnesses[]`：`binding_index`、`pred_atom_key`、`asrt_ids`
-  - `ruleref_links[]`：`ruleref_atom_key`、`child_invocation_id`
+  - `pred_witnesses[]`：`binding_index`、`pred_condition_key`、`asrt_ids`
+  - `ruleref_links[]`：`ruleref_condition_key`、`child_invocation_id`
   - `non_fact_steps[]`：`binding_index`、`step_key`、`kind`、`status`
 - `non_fact_steps.details` 采用部分稳定边界：
   - `details.binding` 属于稳定 contract
@@ -476,7 +476,7 @@
 - `support_section` 当前始终存在。
 - `rule_ref_section` 在 `ProofReceipt.rule_ref_edges` 非空时优先按 structured edge emit；若只有 legacy `rule_refs`，则回退到 minimal `rule_ref` 节点。
 - `rule_ref` 节点当前会显式暴露：
-  - `ruleref_atom_key`
+  - `ruleref_condition_key`
   - `rule_ref_id`
   - `rule_ref_version`
   - `child_support_digest`
@@ -518,7 +518,7 @@
 - native candidate proof 现在会在 support capture 时做 winning-branch narrowing：
   - `support_section` / `rule_ref_section` 只反映 adopted branch
   - 若多个 branch 都满足同一 final binding，则采用 `source-order wins`
-  - selected branch identity 继续通过现有 atom keys recoverable
+  - selected branch identity 继续通过现有 condition keys recoverable
 - `assertion_fact` leaf 只携带：
   - `asrt_id`
   - `pred_id`
@@ -550,7 +550,7 @@
   - `proof_goal` 暴露 goal-level predicate / args / child subgoal 数
   - `proof_leaf` 只表示 logical terminal，不携带 `asrt_id`，也不链接 assertion detail page
 - first-round 不新增 `source_kind` / `provenance_kind` 字段；`node_kind` 本身即为 provenance-role carrier
-- `rule_ref` node_kind 同时用于 legacy flat 和 structured edge；consumer 通过 `ruleref_atom_key` 字段有无区分
+- `rule_ref` node_kind 同时用于 legacy flat 和 structured edge；consumer 通过 `ruleref_condition_key` 字段有无区分
 - deeper assertion-origin taxonomy（direct write / inference accept / import）deferred
 
 错误 kinds：
@@ -661,7 +661,7 @@
   - `condition_count`
   - `weighted_condition_count`
   - `conditions[]`
-    - `atom_key`
+    - `condition_key`
     - `node_kind`
     - `weight`
     - `impact`（bottleneck: 绝对 `weight × condition_confidence`；additive: 归一化 contribution `(weight/Σweights) × condition_confidence`；缺少 certainty 输入时使用 `1.0`）
@@ -675,7 +675,7 @@
 - `problog_probability` 属于 summary dict 内的 engine-derived scalar，不走 response-level sibling。
 - `witness_assertion_ids` 是跨全部 invocations 的 `pred_witnesses.asrt_ids` flat 去重结果。
 - `predicate_witness_groups` 采用 flat semantic-key grouping：
-  - grouping key = 从 raw `pred_atom_key` 派生出的 `pred_id`
+  - grouping key = 从 raw `pred_condition_key` 派生出的 `pred_id`
   - group fields = `pred_id`、`asrt_ids`、`invocation_ids`
 - `non_fact_step_groups` 也采用 flat semantic-key grouping：
   - grouping key = raw `non_fact_steps.kind`

@@ -50,7 +50,7 @@ def _error(code: str = "EVIDENCE_LOOKUP_MISS") -> ErrorDTO:
 
 def _atom_locator() -> DiagnoseConditionLocator:
     return DiagnoseConditionLocator(
-        branch_index=0,
+        case_index=0,
         failed_atom_index=1,
         attempted_binding=_partial_binding(),
     )
@@ -59,14 +59,14 @@ def _atom_locator() -> DiagnoseConditionLocator:
 class DiagnoseAtomLocatorProtocolTests(unittest.TestCase):
     def test_atom_locator_construction(self) -> None:
         loc = _atom_locator()
-        self.assertEqual(loc.branch_index, 0)
+        self.assertEqual(loc.case_index, 0)
         self.assertEqual(loc.failed_atom_index, 1)
         self.assertEqual(loc.attempted_binding, _partial_binding())
 
     def test_atom_locator_negative_branch_rejected(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             DiagnoseConditionLocator(
-                branch_index=-1,
+                case_index=-1,
                 failed_atom_index=0,
                 attempted_binding=_partial_binding(),
             )
@@ -74,7 +74,7 @@ class DiagnoseAtomLocatorProtocolTests(unittest.TestCase):
     def test_atom_locator_negative_atom_index_rejected(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             DiagnoseConditionLocator(
-                branch_index=0,
+                case_index=0,
                 failed_atom_index=-1,
                 attempted_binding=_partial_binding(),
             )
@@ -82,21 +82,21 @@ class DiagnoseAtomLocatorProtocolTests(unittest.TestCase):
     def test_atom_locator_invalid_binding_rejected(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             DiagnoseConditionLocator(
-                branch_index=0,
+                case_index=0,
                 failed_atom_index=0,
                 attempted_binding=(("doc", "d-1"),),  # missing $-prefix
             )
 
     def test_atom_locator_is_capability_output_not_in_evidence_envelope(self) -> None:
         # §7-Diagnose-2: DiagnoseConditionLocator must NOT be accepted by
-        # EvidenceEnvelope.engine_payload (which is ProofReceipt | ProvenanceEnvelope only).
+        # EvidenceEnvelope.proof (which is ProofReceipt | ProvenanceEnvelope only).
         with self.assertRaises(ProtocolShapeError):
             EvidenceEnvelope(
                 engine="native",
                 support_kind="native_binding_v1",
                 support_digest="sha256:" + ("1" * 64),
-                branch_index=0,
-                engine_payload=_atom_locator(),  # type: ignore[arg-type]
+                case_index=0,
+                proof=_atom_locator(),  # type: ignore[arg-type]
             )
 
 
@@ -442,7 +442,7 @@ class DiagnoseStatusEnumInvarianceTests(unittest.TestCase):
 
 
 class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
-    """§7-Diagnose-2: Check's EvidenceEnvelope.engine_payload Union is unchanged.
+    """§7-Diagnose-2: Check's EvidenceEnvelope.proof Union is unchanged.
 
     Verifies that adding DiagnoseConditionLocator did not widen the Union; the
     Union members remain exactly {ProofReceipt, ProvenanceEnvelope}.
@@ -459,10 +459,10 @@ class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
             engine="native",
             support_kind="native_binding_v1",
             support_digest="sha256:" + ("1" * 64),
-            branch_index=0,
-            engine_payload=artifact,
+            case_index=0,
+            proof=artifact,
         )
-        self.assertIsInstance(env.engine_payload, ProofReceipt)
+        self.assertIsInstance(env.proof, ProofReceipt)
 
     def test_engine_payload_accepts_provenance_envelope(self) -> None:
         envelope = ProvenanceEnvelope(
@@ -475,10 +475,10 @@ class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
             engine="problog",
             support_kind="problog_provenance_v1",
             support_digest="sha256:" + ("2" * 64),
-            branch_index=None,
-            engine_payload=envelope,
+            case_index=None,
+            proof=envelope,
         )
-        self.assertIsInstance(env.engine_payload, ProvenanceEnvelope)
+        self.assertIsInstance(env.proof, ProvenanceEnvelope)
 
     def test_engine_payload_rejects_atom_locator(self) -> None:
         # Already covered by DiagnoseAtomLocatorProtocolTests but kept here
@@ -488,8 +488,8 @@ class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
                 engine="native",
                 support_kind="native_binding_v1",
                 support_digest="sha256:" + ("1" * 64),
-                branch_index=0,
-                engine_payload=_atom_locator(),  # type: ignore[arg-type]
+                case_index=0,
+                proof=_atom_locator(),  # type: ignore[arg-type]
             )
 
 

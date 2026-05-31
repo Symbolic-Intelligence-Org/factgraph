@@ -27,7 +27,7 @@ class WalkerLookupError(WalkerError):
 
 
 class WalkerParseError(WalkerError):
-    """Raised by parse_atom_key on malformed atom key."""
+    """Raised by parse_condition_key on malformed condition key."""
 
 
 class WalkerReferenceError(WalkerError):

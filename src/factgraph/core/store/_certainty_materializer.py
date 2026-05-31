@@ -67,7 +67,7 @@ def certainty_summary_to_dict(summary: CertaintySummary) -> dict[str, Any]:
         "weighted_condition_count": summary.weighted_condition_count,
         "conditions": [
             {
-                "atom_key": item.atom_key,
+                "condition_key": item.condition_key,
                 "node_kind": item.node_kind,
                 "weight": item.weight,
                 "impact": item.impact,

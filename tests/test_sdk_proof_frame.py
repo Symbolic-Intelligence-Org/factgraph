@@ -65,7 +65,7 @@ def _age_derivation() -> Inference:
 def _capture_support(sdk: SDKStore, alice: str, age: int) -> ProofReceipt:
     """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": alice, "$age": age})
-    payload = result.evidence_envelope.engine_payload
+    payload = result.evidence_envelope.proof
     assert isinstance(payload, ProofReceipt), (
         f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )

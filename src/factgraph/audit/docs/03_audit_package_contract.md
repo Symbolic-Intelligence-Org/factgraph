@@ -109,13 +109,13 @@ It does not add a new package file. It consumes only `proof_frame_result` events
 |---|---|
 | Frame identity | `payload.request.support_digest` + `payload.result.binding_items` |
 | Frame status | `payload.result.status` |
-| Atom identity | `payload.result.atom_verdicts[].atom_key` |
+| Atom identity | `payload.result.atom_verdicts[].condition_key` |
 | Atom verdict | `payload.result.atom_verdicts[].verdict` |
 
 Important boundaries:
 
 - `affected_action_indices` are intentionally not compared across rounds.
-- Only the same `support_digest` is compared at atom level; atom keys from different support artifacts are separate frames.
+- Only the same `support_digest` is compared at atom level; condition keys from different support artifacts are separate frames.
 - `future:proof_frame_result` rows are skipped with `DIFF_FUTURE_KIND_SKIPPED`.
 - partial rounds are rejected by default; `include_partial=True` emits `DIFF_INCLUDES_PARTIAL_ROUND`.
 - frames with empty `atom_verdicts` are marked `rule_refs_unsupported` and do not produce per-atom deltas.

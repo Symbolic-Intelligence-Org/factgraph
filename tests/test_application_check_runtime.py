@@ -4,12 +4,12 @@ Covers (per blueprint Step 2 plan + Step 0.B/0.C contract):
 
 - Native happy path: complete + partial + empty binding, single + multi match.
 - Semantic invalid_request: unknown variable, missing/unresolvable registry.
-- EvidenceEnvelope shape: engine field, support_kind, typed engine_payload,
+- EvidenceEnvelope shape: engine field, support_kind, typed proof,
   branch_atom_projection always None on passed.
-- Deterministic primary: stable across runs, OR-of-AND lowest branch_index.
+- Deterministic primary: stable across runs, OR-of-AND lowest case_index.
 - Anti-regression (per topic doc §7):
   * support build receives FULL binding (not user partial)
-  * passed + branch_atom_projection=None + engine_payload non-None is
+  * passed + branch_atom_projection=None + proof non-None is
     fully evidence-bearing (None != degraded)
   * unexpected runtime exception propagates loudly (does not collapse
     into status)
@@ -368,7 +368,7 @@ class SemanticInvalidRequestTests(unittest.TestCase):
         self.assertEqual(result.matched_count, 1)
         envelope = result.evidence_envelope
         assert envelope is not None
-        artifact = envelope.engine_payload
+        artifact = envelope.proof
         self.assertIsInstance(artifact, ProofReceipt)
         assert isinstance(artifact, ProofReceipt)
         self.assertEqual(artifact.rule_refs, ("person.exists",))
@@ -402,7 +402,7 @@ class EvidenceEnvelopeShapeTests(unittest.TestCase):
     def test_evidence_engine_payload_is_support_artifact_typed(self) -> None:
         envelope = self._passed_result().evidence_envelope
         assert envelope is not None
-        self.assertIsInstance(envelope.engine_payload, ProofReceipt)
+        self.assertIsInstance(envelope.proof, ProofReceipt)
 
     def test_evidence_branch_atom_projection_always_none_on_passed(self) -> None:
         envelope = self._passed_result().evidence_envelope
@@ -481,7 +481,7 @@ class DeterministicPrimaryTests(unittest.TestCase):
         age_pred = field_predicate(index, "Person", "age").pred_id
         region_pred = field_predicate(index, "Person", "region").pred_id
         # OR-of-AND: branch 0 = age==25; branch 1 = region=="us".
-        # alice satisfies BOTH. Primary must be branch_index=0.
+        # alice satisfies BOTH. Primary must be case_index=0.
         body: list[Any] = [
             [
                 ("pred", info.exists_predicate_id, ["$p"]),
@@ -505,7 +505,7 @@ class DeterministicPrimaryTests(unittest.TestCase):
         self.assertEqual(result.status, "passed")
         envelope = result.evidence_envelope
         assert envelope is not None
-        self.assertEqual(envelope.branch_index, 0)
+        self.assertEqual(envelope.case_index, 0)
 
 
 class AntiRegressionTests(unittest.TestCase):
@@ -558,9 +558,9 @@ class AntiRegressionTests(unittest.TestCase):
         self.assertEqual(result.status, "passed")
         envelope = result.evidence_envelope
         assert envelope is not None
-        # Both conditions hold: projection slot is None AND engine_payload is rich.
+        # Both conditions hold: projection slot is None AND proof is rich.
         self.assertIsNone(envelope.branch_atom_projection)
-        self.assertIsNotNone(envelope.engine_payload)
+        self.assertIsNotNone(envelope.proof)
         self.assertTrue(envelope.support_digest.startswith("sha256:"))
 
     def test_runtime_exception_propagates_loudly(self) -> None:
@@ -673,7 +673,7 @@ def _make_souffle_candidate(
 def _make_support_artifact(
     *,
     binding_items: tuple[tuple[str, Any], ...] = (),
-    pred_witness_keys: tuple[str, ...] = ("b0.a0:Person:exists",),
+    pred_witness_keys: tuple[str, ...] = ("c0.c0:Person:exists",),
     kind: str = "souffle_witness_v1",
 ) -> Any:
     """Step 4.2 fixture: minimal ProofReceipt for souffle path mocking."""
@@ -685,8 +685,8 @@ def _make_support_artifact(
         binding_items=binding_items,
         pred_witnesses=tuple(
             sorted(
-                (PredWitness(pred_atom_key=key, asrt_ids=()) for key in pred_witness_keys),
-                key=lambda row: row.pred_atom_key,
+                (PredWitness(pred_condition_key=key, asrt_ids=()) for key in pred_witness_keys),
+                key=lambda row: row.pred_condition_key,
             )
         ),
     )
@@ -714,7 +714,7 @@ class SouffleCheckTests(unittest.TestCase):
         candidate = _make_souffle_candidate()
         artifact = _make_support_artifact(
             binding_items=(("$p", "person-1"),),
-            pred_witness_keys=("b0.a0:Person:exists",),
+            pred_witness_keys=("c0.c0:Person:exists",),
         )
         with patch(
             "factgraph.application.derivation_check_runtime.evaluate_derivation_plans",
@@ -732,8 +732,8 @@ class SouffleCheckTests(unittest.TestCase):
         assert envelope is not None
         self.assertEqual(envelope.engine, "souffle")
         self.assertEqual(envelope.support_kind, "souffle_witness_v1")
-        self.assertEqual(envelope.branch_index, 0)
-        self.assertIs(envelope.engine_payload, artifact)
+        self.assertEqual(envelope.case_index, 0)
+        self.assertIs(envelope.proof, artifact)
         self.assertIsNone(envelope.branch_atom_projection)
 
     def test_souffle_fails_with_no_matching_candidate(self) -> None:
@@ -799,7 +799,7 @@ class SouffleCheckTests(unittest.TestCase):
         self.assertEqual(result.matched_count, 1)
 
     def test_souffle_multi_match_primary_by_lowest_branch_index(self) -> None:
-        """Per Step 0.C C4: souffle primary key = (branch_index, binding_items, candidate_key)."""
+        """Per Step 0.C C4: souffle primary key = (case_index, binding_items, candidate_key)."""
         request, store, _ = self._build_request(binding=(("$p", "person-1"),))
         higher_branch_cand = _make_souffle_candidate(
             candidate_key="candk_v2:higher",
@@ -811,11 +811,11 @@ class SouffleCheckTests(unittest.TestCase):
         )
         higher_artifact = _make_support_artifact(
             binding_items=(("$p", "person-1"),),
-            pred_witness_keys=("b3.a0:Person:exists",),
+            pred_witness_keys=("c3.c0:Person:exists",),
         )
         lower_artifact = _make_support_artifact(
             binding_items=(("$p", "person-1"),),
-            pred_witness_keys=("b1.a0:Person:exists",),
+            pred_witness_keys=("c1.c0:Person:exists",),
         )
 
         def _lookup(_store: Store, digest: str) -> Any:
@@ -835,53 +835,53 @@ class SouffleCheckTests(unittest.TestCase):
         self.assertEqual(result.matched_count, 2)
         envelope = result.evidence_envelope
         assert envelope is not None
-        # Lower branch_index wins primary.
-        self.assertEqual(envelope.branch_index, 1)
+        # Lower case_index wins primary.
+        self.assertEqual(envelope.case_index, 1)
 
 
 class SouffleHelperUnitTests(unittest.TestCase):
     """Unit-level tests for Step 4.2 souffle helpers."""
 
-    def test_parse_branch_index_basic(self) -> None:
-        from factgraph.application.derivation_check_runtime import _parse_branch_index
+    def test_parse_case_index_basic(self) -> None:
+        from factgraph.application.derivation_check_runtime import _parse_case_index
 
-        self.assertEqual(_parse_branch_index("b0.a1:Person:exists"), 0)
-        self.assertEqual(_parse_branch_index("b12.a3:eq"), 12)
+        self.assertEqual(_parse_case_index("c0.c1:Person:exists"), 0)
+        self.assertEqual(_parse_case_index("c12.c3:eq"), 12)
 
-    def test_parse_branch_index_returns_none_on_garbage(self) -> None:
-        from factgraph.application.derivation_check_runtime import _parse_branch_index
+    def test_parse_case_index_returns_none_on_garbage(self) -> None:
+        from factgraph.application.derivation_check_runtime import _parse_case_index
 
-        self.assertIsNone(_parse_branch_index(""))
-        self.assertIsNone(_parse_branch_index("not-a-key"))
-        self.assertIsNone(_parse_branch_index("a0.b1:..."))  # leading 'a' not 'b'
-        self.assertIsNone(_parse_branch_index("bX.a1:..."))  # non-int branch
-        self.assertIsNone(_parse_branch_index("b0"))  # no dot
-        self.assertIsNone(_parse_branch_index("b0.x1:..."))  # no atom marker
-        self.assertIsNone(_parse_branch_index("b0.aX:..."))  # non-int atom
-        self.assertIsNone(_parse_branch_index("b0.a1"))  # no suffix separator
+        self.assertIsNone(_parse_case_index(""))
+        self.assertIsNone(_parse_case_index("not-a-key"))
+        self.assertIsNone(_parse_case_index("a0.b1:..."))  # leading 'a' not 'b'
+        self.assertIsNone(_parse_case_index("bX.c1:..."))  # non-int branch
+        self.assertIsNone(_parse_case_index("b0"))  # no dot
+        self.assertIsNone(_parse_case_index("b0.x1:..."))  # no atom marker
+        self.assertIsNone(_parse_case_index("b0.aX:..."))  # non-int atom
+        self.assertIsNone(_parse_case_index("c0.c1"))  # no suffix separator
 
     def test_derive_branch_index_returns_none_when_inconsistent(self) -> None:
         """Defensive fallback: if pred_witnesses span multiple branches, return None."""
         from factgraph.application.derivation_check_runtime import (
-            _derive_branch_index_from_artifact,
+            _derive_case_index_from_artifact,
         )
 
         artifact = _make_support_artifact(
             binding_items=(("$p", "x"),),
-            pred_witness_keys=("b0.a0:p", "b1.a0:q"),  # two branches
+            pred_witness_keys=("c0.c0:p", "c1.c0:q"),  # two branches
         )
-        self.assertIsNone(_derive_branch_index_from_artifact(artifact))
+        self.assertIsNone(_derive_case_index_from_artifact(artifact))
 
-    def test_derive_branch_index_from_pred_atom_keys(self) -> None:
+    def test_derive_case_index_from_pred_condition_keys(self) -> None:
         from factgraph.application.derivation_check_runtime import (
-            _derive_branch_index_from_artifact,
+            _derive_case_index_from_artifact,
         )
 
         artifact = _make_support_artifact(
             binding_items=(("$p", "x"),),
-            pred_witness_keys=("b2.a0:p", "b2.a1:q"),  # both branch 2
+            pred_witness_keys=("c2.c0:p", "c2.c1:q"),  # both branch 2
         )
-        self.assertEqual(_derive_branch_index_from_artifact(artifact), 2)
+        self.assertEqual(_derive_case_index_from_artifact(artifact), 2)
 
 
 class PrecheckHeadVarNormalizationTests(unittest.TestCase):
@@ -1033,8 +1033,8 @@ class ProblogPyreasonCheckTests(unittest.TestCase):
                 self.assertEqual(env.engine, engine)
                 self.assertEqual(env.support_kind, f"{engine}_provenance_v1")
                 # Per C4: ProbLog/PyReason carry no per-branch concept.
-                self.assertIsNone(env.branch_index)
-                self.assertIs(env.engine_payload, envelope_payload)
+                self.assertIsNone(env.case_index)
+                self.assertIs(env.proof, envelope_payload)
                 self.assertIsNone(env.branch_atom_projection)
 
     def test_problog_fails_with_no_matching_candidate(self) -> None:

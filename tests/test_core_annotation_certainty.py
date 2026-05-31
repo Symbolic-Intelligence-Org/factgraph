@@ -40,12 +40,12 @@ def _make_tree(*condition_nodes: dict) -> dict:
     }
 
 
-def _pwg(pred_atom_key: str, *, confidence: float | None = None) -> dict:
+def _pwg(pred_condition_key: str, *, confidence: float | None = None) -> dict:
     node = {
-        "node_id": f"atom:{pred_atom_key}",
+        "node_id": f"atom:{pred_condition_key}",
         "node_kind": "predicate_witness_group",
-        "pred_atom_key": pred_atom_key,
-        "pred_id": pred_atom_key.split(":", 1)[1] if ":" in pred_atom_key else pred_atom_key,
+        "pred_condition_key": pred_condition_key,
+        "pred_id": pred_condition_key.split(":", 1)[1] if ":" in pred_condition_key else pred_condition_key,
         "assertion_count": 1,
         "children": [],
     }
@@ -71,24 +71,24 @@ def _nfc(step_key: str, *, confidence: float | None = None) -> dict:
 
 class CertaintyAnnotationfactgraphTests(unittest.TestCase):
     def test_certainty_lane_produces_summary(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"))
-        result = derive_certainty_summary(tree, {"b0.a0": 0.8}, "certainty")
+        tree = _make_tree(_pwg("c0.c0:user:name"))
+        result = derive_certainty_summary(tree, {"c0.c0": 0.8}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertIsInstance(result, CertaintySummary)
         self.assertEqual(result.confidence_kind, "certainty")
 
     def test_probability_lane_returns_none(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"))
-        self.assertIsNone(derive_certainty_summary(tree, {"b0.a0": 0.8}, "probability"))
+        tree = _make_tree(_pwg("c0.c0:user:name"))
+        self.assertIsNone(derive_certainty_summary(tree, {"c0.c0": 0.8}, "probability"))
 
     def test_none_lane_returns_none(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"))
-        self.assertIsNone(derive_certainty_summary(tree, {"b0.a0": 0.8}, "none"))
+        tree = _make_tree(_pwg("c0.c0:user:name"))
+        self.assertIsNone(derive_certainty_summary(tree, {"c0.c0": 0.8}, "none"))
 
     def test_weighted_predicate_witness_group_uses_condition_key_prefix(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"), _pwg("b0.a1:user:tag"))
-        result = derive_certainty_summary(tree, {"b0.a0": 0.8, "b0.a1": 0.5}, "certainty")
+        tree = _make_tree(_pwg("c0.c0:user:name"), _pwg("c0.c1:user:tag"))
+        result = derive_certainty_summary(tree, {"c0.c0": 0.8, "c0.c1": 0.5}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.condition_count, 2)
@@ -96,7 +96,7 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
         self.assertEqual(
             result.conditions[0],
             ConditionImpact(
-                atom_key="b0.a0",
+                condition_key="c0.c0",
                 node_kind="predicate_witness_group",
                 weight=0.8,
                 impact=0.8,
@@ -105,7 +105,7 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
         self.assertEqual(
             result.conditions[1],
             ConditionImpact(
-                atom_key="b0.a1",
+                condition_key="c0.c1",
                 node_kind="predicate_witness_group",
                 weight=0.5,
                 impact=0.5,
@@ -113,8 +113,8 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
         )
 
     def test_weighted_non_fact_check_uses_condition_key_prefix(self) -> None:
-        tree = _make_tree(_nfc("b0.a2:eq"))
-        result = derive_certainty_summary(tree, {"b0.a2": 0.6}, "certainty")
+        tree = _make_tree(_nfc("c0.c2:eq"))
+        result = derive_certainty_summary(tree, {"c0.c2": 0.6}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.condition_count, 1)
@@ -123,15 +123,15 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
         self.assertEqual(result.conditions[0].impact, 0.6)
 
     def test_weighted_condition_with_explicit_confidence_multiplies(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name", confidence=0.5))
-        result = derive_certainty_summary(tree, {"b0.a0": 0.8}, "certainty")
+        tree = _make_tree(_pwg("c0.c0:user:name", confidence=0.5))
+        result = derive_certainty_summary(tree, {"c0.c0": 0.8}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.conditions[0].impact, 0.4)
         self.assertEqual(result.aggregate_certainty, 0.4)
 
     def test_unweighted_condition_impact_is_none(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"))
+        tree = _make_tree(_pwg("c0.c0:user:name"))
         result = derive_certainty_summary(tree, {}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
@@ -142,11 +142,11 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
 
     def test_mixed_weighted_and_unweighted_conditions(self) -> None:
         tree = _make_tree(
-            _pwg("b0.a0:user:name"),
-            _pwg("b0.a1:user:tag"),
-            _nfc("b0.a2:eq"),
+            _pwg("c0.c0:user:name"),
+            _pwg("c0.c1:user:tag"),
+            _nfc("c0.c2:eq"),
         )
-        result = derive_certainty_summary(tree, {"b0.a0": 0.9}, "certainty")
+        result = derive_certainty_summary(tree, {"c0.c0": 0.9}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.condition_count, 3)
@@ -157,13 +157,13 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
 
     def test_bottleneck_is_minimum_weighted_impact(self) -> None:
         tree = _make_tree(
-            _pwg("b0.a0:user:name"),
-            _pwg("b0.a1:user:tag"),
-            _pwg("b0.a2:user:status"),
+            _pwg("c0.c0:user:name"),
+            _pwg("c0.c1:user:tag"),
+            _pwg("c0.c2:user:status"),
         )
         result = derive_certainty_summary(
             tree,
-            {"b0.a0": 0.9, "b0.a1": 0.3, "b0.a2": 0.7},
+            {"c0.c0": 0.9, "c0.c1": 0.3, "c0.c2": 0.7},
             "certainty",
         )
         self.assertIsNotNone(result)
@@ -171,7 +171,7 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
         self.assertEqual(result.aggregate_certainty, 0.3)
 
     def test_all_unweighted_aggregate_is_none(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"), _pwg("b0.a1:user:tag"))
+        tree = _make_tree(_pwg("c0.c0:user:name"), _pwg("c0.c1:user:tag"))
         result = derive_certainty_summary(tree, {}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
@@ -186,7 +186,7 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
                 "children": [],
             },
         }
-        result = derive_certainty_summary(tree, {"b0.a0": 1.0}, "certainty")
+        result = derive_certainty_summary(tree, {"c0.c0": 1.0}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.condition_count, 0)
@@ -220,7 +220,7 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
                                             {
                                                 "node_id": "support:nested",
                                                 "node_kind": "support_section",
-                                                "children": [_pwg("b0.a0:user:name")],
+                                                "children": [_pwg("c0.c0:user:name")],
                                             }
                                         ],
                                     }
@@ -231,7 +231,7 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
                 ],
             },
         }
-        result = derive_certainty_summary(tree, {"b0.a0": 0.4}, "certainty")
+        result = derive_certainty_summary(tree, {"c0.c0": 0.4}, "certainty")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result.condition_count, 1)
@@ -250,10 +250,10 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
             summary.condition_count = 5  # type: ignore[misc]
 
     def test_additive_single_condition(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name", confidence=0.8))
+        tree = _make_tree(_pwg("c0.c0:user:name", confidence=0.8))
         result = derive_certainty_summary(
             tree,
-            {"b0.a0": 0.9},
+            {"c0.c0": 0.9},
             "certainty",
             aggregation="additive",
         )
@@ -266,12 +266,12 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
 
     def test_additive_two_conditions_normalized(self) -> None:
         tree = _make_tree(
-            _pwg("b0.a0:user:name", confidence=0.9),
-            _pwg("b0.a1:user:tag", confidence=0.6),
+            _pwg("c0.c0:user:name", confidence=0.9),
+            _pwg("c0.c1:user:tag", confidence=0.6),
         )
         result = derive_certainty_summary(
             tree,
-            {"b0.a0": 0.9, "b0.a1": 0.4},
+            {"c0.c0": 0.9, "c0.c1": 0.4},
             "certainty",
             aggregation="additive",
         )
@@ -279,15 +279,15 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.aggregation, "additive")
         self.assertAlmostEqual(result.aggregate_certainty, 0.807692, places=4)
-        impacts = {condition.atom_key: condition.impact for condition in result.conditions}
-        self.assertAlmostEqual(impacts["b0.a0"], 0.623077, places=4)
-        self.assertAlmostEqual(impacts["b0.a1"], 0.184615, places=4)
+        impacts = {condition.condition_key: condition.impact for condition in result.conditions}
+        self.assertAlmostEqual(impacts["c0.c0"], 0.623077, places=4)
+        self.assertAlmostEqual(impacts["c0.c1"], 0.184615, places=4)
 
     def test_additive_no_confidence_defaults_to_one(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"))
+        tree = _make_tree(_pwg("c0.c0:user:name"))
         result = derive_certainty_summary(
             tree,
-            {"b0.a0": 0.5},
+            {"c0.c0": 0.5},
             "certainty",
             aggregation="additive",
         )
@@ -297,12 +297,12 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
 
     def test_additive_all_confidence_one_gives_aggregate_one(self) -> None:
         tree = _make_tree(
-            _pwg("b0.a0:user:name", confidence=1.0),
-            _pwg("b0.a1:user:tag", confidence=1.0),
+            _pwg("c0.c0:user:name", confidence=1.0),
+            _pwg("c0.c1:user:tag", confidence=1.0),
         )
         result = derive_certainty_summary(
             tree,
-            {"b0.a0": 0.7, "b0.a1": 0.3},
+            {"c0.c0": 0.7, "c0.c1": 0.3},
             "certainty",
             aggregation="additive",
         )
@@ -312,12 +312,12 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
 
     def test_additive_ranking_no_bottleneck(self) -> None:
         tree = _make_tree(
-            _pwg("b0.a0:user:name", confidence=0.9),
-            _pwg("b0.a1:user:tag", confidence=0.5),
+            _pwg("c0.c0:user:name", confidence=0.9),
+            _pwg("c0.c1:user:tag", confidence=0.5),
         )
         result = derive_certainty_summary(
             tree,
-            {"b0.a0": 0.6, "b0.a1": 0.4},
+            {"c0.c0": 0.6, "c0.c1": 0.4},
             "certainty",
             aggregation="additive",
         )
@@ -333,11 +333,11 @@ class CertaintyAnnotationfactgraphTests(unittest.TestCase):
         self.assertEqual(impacts, sorted(impacts))
 
     def test_invalid_aggregation_raises(self) -> None:
-        tree = _make_tree(_pwg("b0.a0:user:name"))
+        tree = _make_tree(_pwg("c0.c0:user:name"))
         with self.assertRaises(ValueError):
             derive_certainty_summary(
                 tree,
-                {"b0.a0": 0.5},
+                {"c0.c0": 0.5},
                 "certainty",
                 aggregation="unknown",
             )
@@ -347,54 +347,54 @@ class RankCertaintyConditionsTests(unittest.TestCase):
     def test_weighted_conditions_sorted_by_impact_ascending(self) -> None:
         conditions = (
             ConditionImpact(
-                atom_key="b0.a2",
+                condition_key="c0.c2",
                 node_kind="predicate_witness_group",
                 weight=0.7,
                 impact=0.56,
             ),
             ConditionImpact(
-                atom_key="b0.a0",
+                condition_key="c0.c0",
                 node_kind="predicate_witness_group",
                 weight=0.4,
                 impact=0.24,
             ),
             ConditionImpact(
-                atom_key="b0.a1",
+                condition_key="c0.c1",
                 node_kind="predicate_witness_group",
                 weight=0.6,
                 impact=0.54,
             ),
         )
         ranked = rank_certainty_conditions(conditions, aggregate_certainty=0.24)
-        self.assertEqual([item.atom_key for item in ranked], ["b0.a0", "b0.a1", "b0.a2"])
+        self.assertEqual([item.condition_key for item in ranked], ["c0.c0", "c0.c1", "c0.c2"])
         self.assertEqual([item.impact for item in ranked], [0.24, 0.54, 0.56])
 
     def test_unweighted_conditions_sorted_after_weighted_by_atom_key(self) -> None:
         conditions = (
-            ConditionImpact(atom_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
             ConditionImpact(
-                atom_key="b0.a0",
+                condition_key="c0.c0",
                 node_kind="predicate_witness_group",
                 weight=0.5,
                 impact=0.4,
             ),
-            ConditionImpact(atom_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
         )
         ranked = rank_certainty_conditions(conditions, aggregate_certainty=0.4)
-        self.assertEqual([item.atom_key for item in ranked], ["b0.a0", "b0.c0", "b0.c1"])
+        self.assertEqual([item.condition_key for item in ranked], ["c0.c0", "b0.c0", "b0.c1"])
         self.assertFalse(ranked[1].is_bottleneck)
         self.assertFalse(ranked[2].is_bottleneck)
 
     def test_bottleneck_marked_for_min_impact(self) -> None:
         conditions = (
             ConditionImpact(
-                atom_key="b0.a0",
+                condition_key="c0.c0",
                 node_kind="predicate_witness_group",
                 weight=0.4,
                 impact=0.24,
             ),
             ConditionImpact(
-                atom_key="b0.a1",
+                condition_key="c0.c1",
                 node_kind="predicate_witness_group",
                 weight=0.6,
                 impact=0.54,
@@ -407,19 +407,19 @@ class RankCertaintyConditionsTests(unittest.TestCase):
     def test_tie_all_bottlenecks_marked(self) -> None:
         conditions = (
             ConditionImpact(
-                atom_key="b0.a0",
+                condition_key="c0.c0",
                 node_kind="predicate_witness_group",
                 weight=0.3,
                 impact=0.3,
             ),
             ConditionImpact(
-                atom_key="b0.a1",
+                condition_key="c0.c1",
                 node_kind="predicate_witness_group",
                 weight=0.3,
                 impact=0.3,
             ),
             ConditionImpact(
-                atom_key="b0.a2",
+                condition_key="c0.c2",
                 node_kind="predicate_witness_group",
                 weight=0.9,
                 impact=0.9,
@@ -429,17 +429,17 @@ class RankCertaintyConditionsTests(unittest.TestCase):
         self.assertTrue(ranked[0].is_bottleneck)
         self.assertTrue(ranked[1].is_bottleneck)
         self.assertFalse(ranked[2].is_bottleneck)
-        self.assertEqual(ranked[0].atom_key, "b0.a0")
-        self.assertEqual(ranked[1].atom_key, "b0.a1")
+        self.assertEqual(ranked[0].condition_key, "c0.c0")
+        self.assertEqual(ranked[1].condition_key, "c0.c1")
 
     def test_unweighted_only_no_bottleneck(self) -> None:
         conditions = (
-            ConditionImpact(atom_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
-            ConditionImpact(atom_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
         )
         ranked = rank_certainty_conditions(conditions, aggregate_certainty=None)
         self.assertEqual(len(ranked), 2)
-        self.assertEqual([item.atom_key for item in ranked], ["b0.c0", "b0.c1"])
+        self.assertEqual([item.condition_key for item in ranked], ["b0.c0", "b0.c1"])
         self.assertFalse(any(item.is_bottleneck for item in ranked))
 
     def test_empty_conditions(self) -> None:
@@ -448,7 +448,7 @@ class RankCertaintyConditionsTests(unittest.TestCase):
 
     def test_ranked_condition_is_frozen(self) -> None:
         ranked_condition = RankedCondition(
-            atom_key="b0.a0",
+            condition_key="c0.c0",
             node_kind="predicate_witness_group",
             weight=0.5,
             impact=0.4,

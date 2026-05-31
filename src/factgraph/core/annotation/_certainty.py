@@ -24,7 +24,7 @@ AGGREGATION_STRATEGIES = ("bottleneck", "additive")
 
 @dataclass(frozen=True)
 class ConditionImpact:
-    atom_key: str
+    condition_key: str
     node_kind: str
     weight: float | None
     impact: float | None
@@ -72,13 +72,13 @@ def derive_certainty_summary(
 
     raw_conditions: list[tuple[str, str, float | None, float | None]] = []
     for node in _collect_condition_nodes(root):
-        atom_key = _condition_key_for_node(node)
-        if atom_key is None:
+        condition_key = _condition_key_for_node(node)
+        if condition_key is None:
             continue
         node_kind = str(node.get("node_kind") or "")
-        weight = _condition_weight(condition_weights, atom_key)
+        weight = _condition_weight(condition_weights, condition_key)
         confidence = _condition_confidence(node)
-        raw_conditions.append((atom_key, node_kind, weight, confidence))
+        raw_conditions.append((condition_key, node_kind, weight, confidence))
 
     if aggregation == "additive":
         conditions, aggregate = _compute_additive(raw_conditions)
@@ -101,14 +101,14 @@ def _compute_bottleneck(
 ) -> tuple[list[ConditionImpact], float | None]:
     conditions: list[ConditionImpact] = []
     weighted_impacts: list[float] = []
-    for atom_key, node_kind, weight, confidence in raw:
+    for condition_key, node_kind, weight, confidence in raw:
         impact: float | None = None
         if weight is not None:
             impact = round(weight * (confidence if confidence is not None else 1.0), 6)
             weighted_impacts.append(impact)
         conditions.append(
             ConditionImpact(
-                atom_key=atom_key,
+                condition_key=condition_key,
                 node_kind=node_kind,
                 weight=weight,
                 impact=impact,
@@ -123,33 +123,33 @@ def _compute_additive(
 ) -> tuple[list[ConditionImpact], float | None]:
     weighted_entries: list[tuple[str, str, float, float]] = []
     unweighted: list[tuple[str, str]] = []
-    for atom_key, node_kind, weight, confidence in raw:
+    for condition_key, node_kind, weight, confidence in raw:
         if weight is not None:
             resolved_confidence = confidence if confidence is not None else 1.0
-            weighted_entries.append((atom_key, node_kind, weight, resolved_confidence))
+            weighted_entries.append((condition_key, node_kind, weight, resolved_confidence))
         else:
-            unweighted.append((atom_key, node_kind))
+            unweighted.append((condition_key, node_kind))
 
     sum_weights = sum(weight for _, _, weight, _ in weighted_entries)
     conditions: list[ConditionImpact] = []
     contributions: list[float] = []
 
-    for atom_key, node_kind, weight, confidence in weighted_entries:
+    for condition_key, node_kind, weight, confidence in weighted_entries:
         normalized = round((weight / sum_weights) * confidence, 6) if sum_weights > 0 else 0.0
         contributions.append(normalized)
         conditions.append(
             ConditionImpact(
-                atom_key=atom_key,
+                condition_key=condition_key,
                 node_kind=node_kind,
                 weight=weight,
                 impact=normalized,
             )
         )
 
-    for atom_key, node_kind in unweighted:
+    for condition_key, node_kind in unweighted:
         conditions.append(
             ConditionImpact(
-                atom_key=atom_key,
+                condition_key=condition_key,
                 node_kind=node_kind,
                 weight=None,
                 impact=None,
@@ -175,7 +175,7 @@ def _collect_condition_nodes(node: Mapping[str, Any]) -> list[Mapping[str, Any]]
 def _condition_key_for_node(node: Mapping[str, Any]) -> str | None:
     node_kind = node.get("node_kind")
     if node_kind == "predicate_witness_group":
-        return _extract_condition_key(node.get("pred_atom_key"))
+        return _extract_condition_key(node.get("pred_condition_key"))
     if node_kind == "non_fact_check":
         return _extract_condition_key(node.get("step_key"))
     return None
@@ -187,15 +187,15 @@ def _extract_condition_key(value: Any) -> str | None:
     return value.split(":", 1)[0]
 
 
-def _condition_weight(condition_weights: Mapping[str, Any], atom_key: str) -> float | None:
-    raw = condition_weights.get(atom_key)
+def _condition_weight(condition_weights: Mapping[str, Any], condition_key: str) -> float | None:
+    raw = condition_weights.get(condition_key)
     if raw is None:
         return None
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        raise ValueError(f'condition_weights["{atom_key}"] must be numeric')
+        raise ValueError(f'condition_weights["{condition_key}"] must be numeric')
     weight = float(raw)
     if not math.isfinite(weight) or weight <= 0:
-        raise ValueError(f'condition_weights["{atom_key}"] must be positive finite number')
+        raise ValueError(f'condition_weights["{condition_key}"] must be positive finite number')
     return round(weight, 6)
 
 
@@ -211,7 +211,7 @@ def _condition_confidence(node: Mapping[str, Any]) -> float | None:
 
 @dataclass(frozen=True)
 class RankedCondition:
-    atom_key: str
+    condition_key: str
     node_kind: str
     weight: float | None
     impact: float | None
@@ -233,8 +233,8 @@ def rank_certainty_conditions(
         else:
             unweighted.append(condition)
 
-    weighted.sort(key=lambda condition: (condition.impact, condition.atom_key))
-    unweighted.sort(key=lambda condition: condition.atom_key)
+    weighted.sort(key=lambda condition: (condition.impact, condition.condition_key))
+    unweighted.sort(key=lambda condition: condition.condition_key)
 
     result: list[RankedCondition] = []
     for condition in weighted:
@@ -245,7 +245,7 @@ def rank_certainty_conditions(
         )
         result.append(
             RankedCondition(
-                atom_key=condition.atom_key,
+                condition_key=condition.condition_key,
                 node_kind=condition.node_kind,
                 weight=condition.weight,
                 impact=condition.impact,
@@ -255,7 +255,7 @@ def rank_certainty_conditions(
     for condition in unweighted:
         result.append(
             RankedCondition(
-                atom_key=condition.atom_key,
+                condition_key=condition.condition_key,
                 node_kind=condition.node_kind,
                 weight=condition.weight,
                 impact=condition.impact,

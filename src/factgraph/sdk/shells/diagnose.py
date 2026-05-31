@@ -16,7 +16,7 @@ Public surface contract per blueprint §5 locks:
                passthrough per §5.2 lock; not re-exported from
                ``factgraph.sdk.__all__``). Advanced callers that need locator
                parsing can opt into application-layer helpers such as
-               ``factgraph.application.walker.parse_atom_key`` when they have a
+               ``factgraph.application.walker.parse_condition_key`` when they have a
                compatible atom-key string.
 - Errors:      ``CapabilityHelperError`` and ``OriginPackageError`` from
                ``factgraph.application.capability_helpers`` are caught and

@@ -105,7 +105,7 @@ def _artifact(
         if pred_witnesses is not None
         else (
             PredWitness(
-                pred_atom_key=f"b0.a0:{seeded.age_pred_id}",
+                pred_condition_key=f"c0.c0:{seeded.age_pred_id}",
                 asrt_ids=(seeded.age_asrt_id,),
             ),
         ),
@@ -214,7 +214,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
             seeded,
             pred_witnesses=(
                 PredWitness(
-                    pred_atom_key=f"b0.a0:{seeded.age_pred_id}",
+                    pred_condition_key=f"c0.c0:{seeded.age_pred_id}",
                     asrt_ids=tuple(sorted(("alt-age", seeded.age_asrt_id))),
                 ),
             ),
@@ -235,7 +235,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
     def test_not_step_always_yields_unknown(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index)
-        step = NonFactStep(step_key="b0.a1:not", kind="not", status="no_match")
+        step = NonFactStep(step_key="c0.c1:not", kind="not", status="no_match")
 
         result = recheck_proof_frame(
             _request(
@@ -245,15 +245,15 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
             store=store,
         )
 
-        verdicts = {verdict.atom_key: verdict for verdict in result.atom_verdicts}
-        self.assertEqual(verdicts["b0.a1:not"].verdict, "unknown")
-        self.assertEqual(verdicts["b0.a1:not"].affected_action_indices, ())
+        verdicts = {verdict.condition_key: verdict for verdict in result.atom_verdicts}
+        self.assertEqual(verdicts["c0.c1:not"].verdict, "unknown")
+        self.assertEqual(verdicts["c0.c1:not"].affected_action_indices, ())
         self.assertEqual(result.status, "invalidated")
 
     def test_not_step_can_drive_frame_unknown_without_invalidated_atom(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index)
-        step = NonFactStep(step_key="b0.a1:not", kind="not", status="no_match")
+        step = NonFactStep(step_key="c0.c1:not", kind="not", status="no_match")
 
         result = recheck_proof_frame(
             _request(_artifact(seeded, non_fact_steps=(step,)), _overlay()),
@@ -266,7 +266,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
     def test_binding_driven_non_fact_step_stays_valid(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index)
-        step = NonFactStep(step_key="b0.a1:eq", kind="eq", status="satisfied")
+        step = NonFactStep(step_key="c0.c1:eq", kind="eq", status="satisfied")
 
         result = recheck_proof_frame(
             _request(_artifact(seeded, non_fact_steps=(step,)), _overlay()),
@@ -279,7 +279,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
     def test_unknown_future_non_fact_kind_with_overlay_is_unknown(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index)
-        step = NonFactStep(step_key="b0.a1:future", kind="future", status="satisfied")
+        step = NonFactStep(step_key="c0.c1:future", kind="future", status="satisfied")
 
         result = recheck_proof_frame(
             _request(
@@ -295,7 +295,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
     def test_unknown_future_non_fact_kind_with_unrelated_overlay_stays_valid(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index)
-        step = NonFactStep(step_key="b0.a1:future", kind="future", status="satisfied")
+        step = NonFactStep(step_key="c0.c1:future", kind="future", status="satisfied")
 
         result = recheck_proof_frame(
             _request(
@@ -325,7 +325,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
         store, index = _build_store()
         seeded = _seed_person(store, index)
         edge = RuleRefEdge(
-            ruleref_atom_key="b0.a1:ruleref",
+            ruleref_condition_key="c0.c1:ruleref",
             rule_ref_id="person.exists",
             rule_ref_version="1.0",
             child_support_digest="sha256:" + ("0" * 64),
@@ -351,8 +351,8 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
                         RuleDisableAction(
                             rule_id="person.eligible",
                             version="1.0",
-                            branch_index=0,
-                            atom_index=0,
+                            case_index=0,
+                            condition_index=0,
                         ),
                     )
                 ),
@@ -379,7 +379,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
     def test_result_status_matches_aggregate(self) -> None:
         store, index = _build_store()
         seeded = _seed_person(store, index)
-        step = NonFactStep(step_key="b0.a1:not", kind="not", status="no_match")
+        step = NonFactStep(step_key="c0.c1:not", kind="not", status="no_match")
 
         result = recheck_proof_frame(
             _request(_artifact(seeded, non_fact_steps=(step,)), _overlay()),

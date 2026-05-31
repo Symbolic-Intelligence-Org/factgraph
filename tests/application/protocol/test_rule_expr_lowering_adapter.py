@@ -111,7 +111,7 @@ class RuleExprSouffleMaterializationTests(unittest.TestCase):
         compiled, traces = _materialize_adapter_derivation_plan(plan, engine="souffle")
         dl = compile_where_to_query_dl(schema_ir=_schema_ir(), where=compiled.body_ir, query_rel="Q")
 
-        self.assertEqual(traces[0].join_materializations[0].materialized_atom_index, len(compiled.body_ir) - 1)
+        self.assertEqual(traces[0].join_materializations[0].materialized_condition_index, len(compiled.body_ir) - 1)
         self.assertIn(" = ", dl)
 
     def test_aggregate_rule_preserves_souffle_aggregate_support(self) -> None:
@@ -147,7 +147,7 @@ class RuleExprProbLogMaterializationTests(unittest.TestCase):
         compiled, traces = _materialize_adapter_derivation_plan(plan, engine="problog")
         program = _export_problog_program(compiled.body_ir)
 
-        self.assertEqual(traces[0].join_materializations[0].materialized_atom_index, len(compiled.body_ir) - 1)
+        self.assertEqual(traces[0].join_materializations[0].materialized_condition_index, len(compiled.body_ir) - 1)
         self.assertIn("V_LEFT__REGION = V_RIGHT__REGION", program)
 
     def test_aggregate_rule_exports_through_problog_aggregate_support(self) -> None:

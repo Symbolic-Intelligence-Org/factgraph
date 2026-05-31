@@ -75,7 +75,7 @@ class RuleExprInspectDispatchTests(unittest.TestCase):
 
         self.assertIsInstance(inspected, dict)
         self.assertEqual(inspected["kind"], "Rule")
-        self.assertEqual(inspected["branches"][0]["atom_ids"], ["b0.a0"])
+        self.assertEqual(inspected["branches"][0]["atom_ids"], ["c0.c0"])
 
     def test_legacy_sdk_inference_inspect_dict_shape_is_preserved(self) -> None:
         with sdk.vars("u") as (u,):

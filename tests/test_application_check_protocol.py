@@ -73,8 +73,8 @@ def _evidence_envelope(
         engine=engine,  # type: ignore[arg-type]
         support_kind="native_binding_v1" if payload is None or isinstance(payload, ProofReceipt) else "problog_provenance_v1",
         support_digest="sha256:" + ("1" * 64),
-        branch_index=0 if engine in {"native", "souffle"} else None,
-        engine_payload=payload or _support_artifact(),
+        case_index=0 if engine in {"native", "souffle"} else None,
+        proof=payload or _support_artifact(),
     )
 
 
@@ -149,15 +149,15 @@ class EvidenceEnvelopeProtocolTests(unittest.TestCase):
     def test_evidence_envelope_construction(self) -> None:
         env = _evidence_envelope(engine="problog", payload=_provenance_envelope())
         self.assertEqual(env.engine, "problog")
-        self.assertIsNone(env.branch_index)
+        self.assertIsNone(env.case_index)
 
     def test_evidence_envelope_accepts_support_artifact_payload(self) -> None:
         env = _evidence_envelope(payload=_support_artifact())
-        self.assertIsInstance(env.engine_payload, ProofReceipt)
+        self.assertIsInstance(env.proof, ProofReceipt)
 
     def test_evidence_envelope_accepts_provenance_payload(self) -> None:
         env = _evidence_envelope(engine="problog", payload=_provenance_envelope())
-        self.assertIsInstance(env.engine_payload, ProvenanceEnvelope)
+        self.assertIsInstance(env.proof, ProvenanceEnvelope)
 
     def test_evidence_envelope_branch_atom_projection_must_be_none(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -165,8 +165,8 @@ class EvidenceEnvelopeProtocolTests(unittest.TestCase):
                 engine="native",
                 support_kind="native_binding_v1",
                 support_digest="sha256:" + ("1" * 64),
-                branch_index=0,
-                engine_payload=_support_artifact(),
+                case_index=0,
+                proof=_support_artifact(),
                 branch_atom_projection=object(),  # type: ignore[arg-type]
             )
 

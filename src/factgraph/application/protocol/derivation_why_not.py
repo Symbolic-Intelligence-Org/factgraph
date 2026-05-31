@@ -1,7 +1,7 @@
 """Why-not Universe Diagnose protocol DTOs.
 
 Why-not is a Sibling-with-Diagnose application capability: its runtime may call
-Diagnose to fill red-row diagnostics, but this protocol owns its public row DTOs
+Diagnose to fill failed-row diagnostics, but this protocol owns its public row DTOs
 and does not expose nested Diagnose result types.
 
 T5 quarantine: these DTOs are legacy/internal relative to the T5 eval evidence
@@ -122,56 +122,56 @@ def _validate_unique_bindings(
 def _validate_ordered_partition(
     *,
     requested_universe: tuple[BindingItems, ...],
-    green: tuple[BindingItems, ...],
-    red: tuple["WhyNotRedRow", ...],
+    passed: tuple[BindingItems, ...],
+    failed: tuple["WhyNotFailedRow", ...],
 ) -> None:
     requested_universe = _validate_unique_bindings(
         requested_universe, field_name="requested_universe"
     )
-    green = _validate_unique_bindings(green, field_name="green")
-    red_bindings = tuple(row.binding for row in red)
-    red_bindings = _validate_unique_bindings(red_bindings, field_name="red")
+    passed = _validate_unique_bindings(passed, field_name="passed")
+    red_bindings = tuple(row.binding for row in failed)
+    red_bindings = _validate_unique_bindings(red_bindings, field_name="failed")
 
-    if any(_binding_in(binding, red_bindings) for binding in green):
-        raise ProtocolShapeError("completed WhyNotUniverseResult requires disjoint green/red")
-    if any(not _binding_in(binding, requested_universe) for binding in green):
+    if any(_binding_in(binding, red_bindings) for binding in passed):
+        raise ProtocolShapeError("completed WhyNotUniverseResult requires disjoint passed/failed")
+    if any(not _binding_in(binding, requested_universe) for binding in passed):
         raise ProtocolShapeError(
-            "completed WhyNotUniverseResult requires green/red to cover requested_universe"
+            "completed WhyNotUniverseResult requires passed/failed to cover requested_universe"
         )
     if any(not _binding_in(binding, requested_universe) for binding in red_bindings):
         raise ProtocolShapeError(
-            "completed WhyNotUniverseResult requires green/red to cover requested_universe"
+            "completed WhyNotUniverseResult requires passed/failed to cover requested_universe"
         )
     if any(
-        not _binding_in(binding, green) and not _binding_in(binding, red_bindings)
+        not _binding_in(binding, passed) and not _binding_in(binding, red_bindings)
         for binding in requested_universe
     ):
         raise ProtocolShapeError(
-            "completed WhyNotUniverseResult requires green/red to cover requested_universe"
+            "completed WhyNotUniverseResult requires passed/failed to cover requested_universe"
         )
 
-    ordered_green = tuple(binding for binding in requested_universe if _binding_in(binding, green))
+    ordered_green = tuple(binding for binding in requested_universe if _binding_in(binding, passed))
     ordered_red = tuple(
         binding for binding in requested_universe if _binding_in(binding, red_bindings)
     )
-    if green != ordered_green:
+    if passed != ordered_green:
         raise ProtocolShapeError(
-            "completed WhyNotUniverseResult requires green order to follow requested_universe"
+            "completed WhyNotUniverseResult requires passed order to follow requested_universe"
         )
     if red_bindings != ordered_red:
         raise ProtocolShapeError(
-            "completed WhyNotUniverseResult requires red order to follow requested_universe"
+            "completed WhyNotUniverseResult requires failed order to follow requested_universe"
         )
 
 
 @dataclass(frozen=True)
 class WhyNotConditionLocator:
-    branch_index: int
+    case_index: int
     failed_atom_index: int
     attempted_binding: BindingItems
 
     def __post_init__(self) -> None:
-        _validate_non_negative_int(self.branch_index, field_name="branch_index")
+        _validate_non_negative_int(self.case_index, field_name="case_index")
         _validate_non_negative_int(self.failed_atom_index, field_name="failed_atom_index")
         object.__setattr__(
             self,
@@ -281,7 +281,7 @@ class WhyNotRowDiagnostic:
 
 
 @dataclass(frozen=True)
-class WhyNotRedRow:
+class WhyNotFailedRow:
     binding: BindingItems
     diagnostic: WhyNotRowDiagnostic
 
@@ -299,8 +299,8 @@ class WhyNotRedRow:
 class WhyNotUniverseResult:
     status: WhyNotStatus
     requested_universe: tuple[BindingItems, ...]
-    green: tuple[BindingItems, ...]
-    red: tuple[WhyNotRedRow, ...]
+    passed: tuple[BindingItems, ...]
+    failed: tuple[WhyNotFailedRow, ...]
     errors: tuple[ErrorDTO, ...] = field(default_factory=tuple)
     warnings: tuple[WarningDTO, ...] = field(default_factory=tuple)
 
@@ -309,29 +309,29 @@ class WhyNotUniverseResult:
         requested_universe = _validate_binding_items_tuple(
             self.requested_universe, field_name="requested_universe"
         )
-        green = _validate_binding_items_tuple(self.green, field_name="green")
-        red = _validate_tuple_items(self.red, field_name="red", item_type=WhyNotRedRow)
+        passed = _validate_binding_items_tuple(self.passed, field_name="passed")
+        failed = _validate_tuple_items(self.failed, field_name="failed", item_type=WhyNotFailedRow)
         _validate_tuple_items(self.errors, field_name="errors", item_type=ErrorDTO)
         _validate_tuple_items(self.warnings, field_name="warnings", item_type=WarningDTO)
 
         object.__setattr__(self, "requested_universe", requested_universe)
-        object.__setattr__(self, "green", green)
-        object.__setattr__(self, "red", red)
+        object.__setattr__(self, "passed", passed)
+        object.__setattr__(self, "failed", failed)
 
         if status == "completed":
             if self.errors:
                 raise ProtocolShapeError("completed WhyNotUniverseResult requires no errors")
             _validate_ordered_partition(
                 requested_universe=requested_universe,
-                green=green,
-                red=red,
+                passed=passed,
+                failed=failed,
             )
             return
 
-        if self.green:
-            raise ProtocolShapeError(f"{status} WhyNotUniverseResult requires green=()")
-        if self.red:
-            raise ProtocolShapeError(f"{status} WhyNotUniverseResult requires red=()")
+        if self.passed:
+            raise ProtocolShapeError(f"{status} WhyNotUniverseResult requires passed=()")
+        if self.failed:
+            raise ProtocolShapeError(f"{status} WhyNotUniverseResult requires failed=()")
         if not self.errors:
             raise ProtocolShapeError(f"{status} WhyNotUniverseResult requires errors")
 
@@ -340,7 +340,7 @@ __all__ = [
     "WhyNotConditionLocator",
     "WhyNotEngine",
     "WhyNotFailureKind",
-    "WhyNotRedRow",
+    "WhyNotFailedRow",
     "WhyNotRowDiagnostic",
     "WhyNotRowGranularity",
     "WhyNotRowStatus",

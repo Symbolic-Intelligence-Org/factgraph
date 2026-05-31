@@ -28,22 +28,22 @@ def build_rule_disable_request(
     rule_spec: RuleSpec,
     support: ProofReceipt,
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     overlay: FactOverlay | None = None,
     note: str | None = None,
 ) -> RuleDisableRequest:
     """Build a RuleDisableRequest with exactly one RuleDisableAction."""
 
     _validate_rule_overlay_inputs(rule_spec, support, overlay)
-    _reject_sdk_origin(branch_index, path="branch_index")
-    _reject_sdk_origin(atom_index, path="atom_index")
+    _reject_sdk_origin(case_index, path="case_index")
+    _reject_sdk_origin(condition_index, path="condition_index")
     _reject_sdk_origin(note, path="note")
     action = RuleDisableAction(
         rule_id=rule_spec.rule_id,
         version=rule_spec.version,
-        branch_index=branch_index,
-        atom_index=atom_index,
+        case_index=case_index,
+        condition_index=condition_index,
         note=note,
     )
     overlay_value = _request_overlay(action, overlay=overlay)
@@ -58,8 +58,8 @@ def build_rule_literal_replace_request(
     rule_spec: RuleSpec,
     support: ProofReceipt,
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     literal_path: ConditionPath,
     old_literal: Any,
     new_literal: Any,
@@ -69,8 +69,8 @@ def build_rule_literal_replace_request(
     """Build a RuleLiteralReplaceRequest with exactly one RuleLiteralReplaceAction."""
 
     _validate_rule_overlay_inputs(rule_spec, support, overlay)
-    _reject_sdk_origin(branch_index, path="branch_index")
-    _reject_sdk_origin(atom_index, path="atom_index")
+    _reject_sdk_origin(case_index, path="case_index")
+    _reject_sdk_origin(condition_index, path="condition_index")
     _reject_sdk_origin(literal_path, path="literal_path")
     _reject_sdk_origin(old_literal, path="old_literal")
     _reject_sdk_origin(new_literal, path="new_literal")
@@ -78,8 +78,8 @@ def build_rule_literal_replace_request(
     action = RuleLiteralReplaceAction(
         rule_id=rule_spec.rule_id,
         version=rule_spec.version,
-        branch_index=branch_index,
-        atom_index=atom_index,
+        case_index=case_index,
+        condition_index=condition_index,
         literal_path=literal_path,
         old_literal=old_literal,
         new_literal=new_literal,
@@ -97,7 +97,7 @@ def build_rule_add_condition_request(
     rule_spec: RuleSpec,
     support: ProofReceipt,
     *,
-    branch_index: int,
+    case_index: int,
     added_atom: AddedCondition,
     overlay: FactOverlay | None = None,
     note: str | None = None,
@@ -105,13 +105,13 @@ def build_rule_add_condition_request(
     """Build a RuleAddConditionRequest with exactly one RuleAddConditionAction."""
 
     _validate_rule_overlay_inputs(rule_spec, support, overlay)
-    _reject_sdk_origin(branch_index, path="branch_index")
+    _reject_sdk_origin(case_index, path="case_index")
     _reject_sdk_origin(added_atom, path="added_atom")
     _reject_sdk_origin(note, path="note")
     action = RuleAddConditionAction(
         rule_id=rule_spec.rule_id,
         version=rule_spec.version,
-        branch_index=branch_index,
+        case_index=case_index,
         added_atom=added_atom,
         note=note,
     )

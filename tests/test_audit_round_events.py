@@ -193,7 +193,7 @@ class AuditRoundEventTests(unittest.TestCase):
                 matched_binding=None,
                 failure_kind="atom_localized",
                 diagnostic_payload=DiagnoseConditionLocator(
-                    branch_index=0,
+                    case_index=0,
                     failed_atom_index=1,
                     attempted_binding=binding,
                 ),
@@ -204,7 +204,7 @@ class AuditRoundEventTests(unittest.TestCase):
         self.assertEqual(
             diagnose_payload["result"]["diagnostic_payload"],
             {
-                "branch_index": 0,
+                "case_index": 0,
                 "failed_atom_index": 1,
                 "attempted_binding": [["$age", 30], ["$p", "alice"]],
             },
@@ -237,8 +237,8 @@ class AuditRoundEventTests(unittest.TestCase):
             SimpleNamespace(
                 status="completed",
                 requested_universe=(binding,),
-                green=(),
-                red=(
+                passed=(),
+                failed=(
                     SimpleNamespace(
                         binding=binding,
                         diagnostic=SimpleNamespace(
@@ -246,7 +246,7 @@ class AuditRoundEventTests(unittest.TestCase):
                             failure_kind="atom_localized",
                             diagnostic_granularity="atom_localized",
                             atom_locator=SimpleNamespace(
-                                branch_index=0,
+                                case_index=0,
                                 failed_atom_index=1,
                                 attempted_binding=binding,
                             ),
@@ -260,7 +260,7 @@ class AuditRoundEventTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            why_not_payload["result"]["red"][0]["diagnostic"]["atom_locator"]["failed_atom_index"],
+            why_not_payload["result"]["failed"][0]["diagnostic"]["atom_locator"]["failed_atom_index"],
             1,
         )
 
@@ -271,7 +271,7 @@ class AuditRoundEventTests(unittest.TestCase):
                 binding_items=binding,
                 atom_verdicts=(
                     SimpleNamespace(
-                        atom_key="b0.add0:gt",
+                        condition_key="b0.add0:gt",
                         verdict="invalidated",
                         affected_action_indices=(0,),
                     ),
@@ -282,7 +282,7 @@ class AuditRoundEventTests(unittest.TestCase):
             proof_frame_payload["result"]["atom_verdicts"],
             [
                 {
-                    "atom_key": "b0.add0:gt",
+                    "condition_key": "b0.add0:gt",
                     "verdict": "invalidated",
                     "affected_action_indices": [0],
                 }

@@ -139,13 +139,13 @@ class RuleInspectTests(unittest.TestCase):
         self.assertEqual(inspected["version"], "v1")
         self.assertEqual(len(inspected["branches"]), 2)
         self.assertEqual(inspected["branches"][0]["id"], "seed_path")
-        self.assertEqual(inspected["branches"][0]["fallback_id"], "b0")
+        self.assertEqual(inspected["branches"][0]["fallback_id"], "c0")
         self.assertTrue(inspected["branches"][0]["is_explicit_id"])
         self.assertEqual(inspected["branches"][0]["index"], 0)
         self.assertEqual(inspected["branches"][0]["atom_count"], 1)
-        self.assertEqual(inspected["branches"][0]["atom_ids"], ["b0.a0"])
-        self.assertEqual(inspected["branches"][1]["id"], "b1")
-        self.assertEqual(inspected["branches"][1]["fallback_id"], "b1")
+        self.assertEqual(inspected["branches"][0]["atom_ids"], ["c0.c0"])
+        self.assertEqual(inspected["branches"][1]["id"], "c1")
+        self.assertEqual(inspected["branches"][1]["fallback_id"], "c1")
         self.assertFalse(inspected["branches"][1]["is_explicit_id"])
 
     def test_inspect_derivation_uses_same_branch_shape(self) -> None:
@@ -156,7 +156,7 @@ class RuleInspectTests(unittest.TestCase):
         self.assertEqual(inspected["kind"], "Inference")
         self.assertEqual(inspected["id"], "drv.track1.user_tag")
         self.assertEqual(inspected["branches"][0]["id"], "seed_path")
-        self.assertEqual(inspected["branches"][1]["id"], "b1")
+        self.assertEqual(inspected["branches"][1]["id"], "c1")
         self.assertIn("heads", inspected)
 
     def test_inspect_rejects_duplicate_branch_ids(self) -> None:
@@ -227,12 +227,12 @@ class BranchIdentityGuardTests(unittest.TestCase):
             "version": "v1",
             "select": ["$u", "$tag"],
             "where": [[("pred", "user:tag_seed", ["$u", "$tag"])]],
-            "condition_weights": {"b0.a0": 1.0},
+            "condition_weights": {"c0.c0": 1.0},
         }
 
         compiled = compile_authoring_rule_v1(payload)
 
-        self.assertEqual(compiled["condition_weights"], {"b0.a0": 1.0})
+        self.assertEqual(compiled["condition_weights"], {"c0.c0": 1.0})
 
     def test_condition_weights_do_not_accept_branch_id_keys(self) -> None:
         payload = {
@@ -240,7 +240,7 @@ class BranchIdentityGuardTests(unittest.TestCase):
             "version": "v1",
             "select": ["$u", "$tag"],
             "where": [[("pred", "user:tag_seed", ["$u", "$tag"])]],
-            "condition_weights": {"seed_path.a0": 1.0},
+            "condition_weights": {"seed_path.c0": 1.0},
         }
 
         with self.assertRaises(AuthoringRuleCompileError) as ctx:

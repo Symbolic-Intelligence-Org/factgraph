@@ -105,15 +105,15 @@ def check_rule_add_condition_action(
         )
 
     branches = _where_branches(request.rule_spec.where)
-    if branches is None or action.branch_index >= len(branches):
+    if branches is None or action.case_index >= len(branches):
         return _invalid_request(
             code="RULE_ADD_CONDITION_BRANCH_NOT_FOUND",
             message="RuleAddConditionAction target branch does not exist in rule_spec.where",
             path=("overlay", "rule_actions", "0"),
-            details={"branch_index": action.branch_index},
+            details={"case_index": action.case_index},
         )
 
-    target_error = _validate_added_atom(action, branches[action.branch_index])
+    target_error = _validate_added_atom(action, branches[action.case_index])
     if target_error is not None:
         return _invalid_request(
             code=target_error.code,
@@ -241,7 +241,7 @@ def _evaluate_variant_rows(
         added_conditions=frozenset(
             {
                 WhereAddedCondition(
-                    branch_index=action.branch_index,
+                    case_index=action.case_index,
                     atom=action.added_atom.atom,
                 )
             }
@@ -267,7 +267,7 @@ def _build_proof_frame_result(
         [
             *(
                 ProofFrameConditionVerdict(
-                    atom_key=witness.pred_atom_key,
+                    condition_key=witness.pred_condition_key,
                     verdict="still_valid",
                     affected_action_indices=(),
                 )
@@ -275,14 +275,14 @@ def _build_proof_frame_result(
             ),
             *(
                 ProofFrameConditionVerdict(
-                    atom_key=step.step_key,
+                    condition_key=step.step_key,
                     verdict="still_valid",
                     affected_action_indices=(),
                 )
                 for step in artifact.non_fact_steps
             ),
             ProofFrameConditionVerdict(
-                atom_key=synthetic_key,
+                condition_key=synthetic_key,
                 verdict=synthetic_verdict,
                 affected_action_indices=(
                     (action_index,) if synthetic_verdict == "invalidated" else ()
@@ -298,7 +298,7 @@ def _build_proof_frame_result(
 
 
 def _synthetic_atom_key(action: RuleAddConditionAction, *, action_index: int) -> str:
-    return f"b{action.branch_index}.add{action_index}:{action.added_atom.atom[0]}"
+    return f"c{action.case_index}.add{action_index}:{action.added_atom.atom[0]}"
 
 
 def _where_branches(where: list[Any]) -> list[list[Any]] | None:

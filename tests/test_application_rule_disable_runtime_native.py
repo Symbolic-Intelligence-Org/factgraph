@@ -115,20 +115,20 @@ def _artifact(seeded: SeededPerson, **kwargs: object) -> ProofReceipt:
         "binding_items": (("$p", seeded.e_ref),),
         "pred_witnesses": (
             PredWitness(
-                pred_atom_key=f"b0.a0:{seeded.exists_pred_id}",
+                pred_condition_key=f"c0.c0:{seeded.exists_pred_id}",
                 asrt_ids=(seeded.exists_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a1:{seeded.age_pred_id}",
+                pred_condition_key=f"c0.c1:{seeded.age_pred_id}",
                 asrt_ids=(seeded.age_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a2:{seeded.region_pred_id}",
+                pred_condition_key=f"c0.c2:{seeded.region_pred_id}",
                 asrt_ids=(seeded.region_asrt_id,),
             ),
         ),
         "non_fact_steps": (
-            NonFactStep(step_key="b0.a3:eq", kind="eq", status="satisfied"),
+            NonFactStep(step_key="c0.c3:eq", kind="eq", status="satisfied"),
         ),
     }
     fields.update(kwargs)
@@ -139,8 +139,8 @@ def _action(**kwargs: object) -> RuleDisableAction:
     fields = {
         "rule_id": "person.eligible",
         "version": "1.0",
-        "branch_index": 0,
-        "atom_index": 3,
+        "case_index": 0,
+        "condition_index": 3,
     }
     fields.update(kwargs)
     return RuleDisableAction(**fields)  # type: ignore[arg-type]
@@ -176,10 +176,10 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         proof_frame = result.proof_frame
         assert proof_frame is not None
         self.assertEqual(proof_frame.status, "invalidated")
-        verdicts = {verdict.atom_key: verdict for verdict in proof_frame.atom_verdicts}
-        self.assertEqual(verdicts["b0.a3:eq"].verdict, "invalidated")
-        self.assertEqual(verdicts["b0.a3:eq"].affected_action_indices, (0,))
-        self.assertEqual(verdicts[f"b0.a2:{alice.region_pred_id}"].verdict, "still_valid")
+        verdicts = {verdict.condition_key: verdict for verdict in proof_frame.atom_verdicts}
+        self.assertEqual(verdicts["c0.c3:eq"].verdict, "invalidated")
+        self.assertEqual(verdicts["c0.c3:eq"].affected_action_indices, (0,))
+        self.assertEqual(verdicts[f"c0.c2:{alice.region_pred_id}"].verdict, "still_valid")
 
     def test_support_artifact_without_disabled_locator_stays_valid(self) -> None:
         store, index = _build_store()
@@ -197,11 +197,11 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         assert proof_frame is not None
         self.assertEqual(proof_frame.status, "still_valid")
         self.assertEqual(
-            [verdict.atom_key for verdict in proof_frame.atom_verdicts],
+            [verdict.condition_key for verdict in proof_frame.atom_verdicts],
             [
-                f"b0.a0:{alice.exists_pred_id}",
-                f"b0.a1:{alice.age_pred_id}",
-                f"b0.a2:{alice.region_pred_id}",
+                f"c0.c0:{alice.exists_pred_id}",
+                f"c0.c1:{alice.age_pred_id}",
+                f"c0.c2:{alice.region_pred_id}",
             ],
         )
 
@@ -232,7 +232,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
 
-        for actions in ((), (_action(), _action(atom_index=2))):
+        for actions in ((), (_action(), _action(condition_index=2))):
             with self.subTest(actions=len(actions)):
                 result = check_rule_disable_action(
                     _request(
@@ -251,8 +251,8 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         action = RuleLiteralReplaceAction(
             rule_id="person.eligible",
             version="1.0",
-            branch_index=0,
-            atom_index=3,
+            case_index=0,
+            condition_index=3,
             literal_path=ConditionPath(kind="rhs"),
             old_literal="us",
             new_literal="eu",
@@ -294,7 +294,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                FactOverlay(rule_actions=(_action(atom_index=99),)),
+                FactOverlay(rule_actions=(_action(condition_index=99),)),
             ),
             store=store,
         )
@@ -318,7 +318,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index, where=where),
                         _artifact(alice),
-                        FactOverlay(rule_actions=(_action(atom_index=0),)),
+                        FactOverlay(rule_actions=(_action(condition_index=0),)),
                     ),
                     store=store,
                 )
@@ -330,7 +330,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
         edge = RuleRefEdge(
-            ruleref_atom_key="b0.a1:ruleref",
+            ruleref_condition_key="c0.c1:ruleref",
             rule_ref_id="child.rule",
             rule_ref_version="1.0",
             child_support_digest="sha256:" + ("0" * 64),
@@ -371,7 +371,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice),
-                FactOverlay(rule_actions=(_action(atom_index=0),)),
+                FactOverlay(rule_actions=(_action(condition_index=0),)),
             ),
             store=store,
         )
@@ -398,7 +398,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice),
-                FactOverlay(rule_actions=(_action(atom_index=1),)),
+                FactOverlay(rule_actions=(_action(condition_index=1),)),
             ),
             store=store,
         )
@@ -450,7 +450,7 @@ class RuleDisableRuntimeBoundaryTests(unittest.TestCase):
         anywhere in SDK code (docstring references documenting the
         boundary contract are allowed; the application A helper
         ``build_rule_disable_request`` constructs the action internally,
-        so SDK passes only ``branch_index`` / ``atom_index`` / ``note``
+        so SDK passes only ``case_index`` / ``condition_index`` / ``note``
         primitives across the boundary).
         """
         shell_path = Path("src/factgraph/sdk/shells/rule_disable.py")

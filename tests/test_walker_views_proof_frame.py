@@ -24,12 +24,12 @@ def _proof_frame_result() -> ProofFrameRecheckResult:
         ),
         atom_verdicts=(
             ProofFrameConditionVerdict(
-                atom_key="b0.a0:Person:age",
+                condition_key="c0.c0:Person:age",
                 verdict="still_valid",
                 affected_action_indices=(),
             ),
             ProofFrameConditionVerdict(
-                atom_key="b0.a1:eq",
+                condition_key="c0.c1:eq",
                 verdict="invalidated",
                 affected_action_indices=(0,),
             ),
@@ -60,9 +60,9 @@ class ProofFrameViewTests(unittest.TestCase):
         invalidated = view.atom_verdicts.filter(verdict="invalidated")
 
         self.assertEqual(len(invalidated), 1)
-        self.assertEqual(invalidated.first().atom_key, "b0.a1:eq")
-        found = view.atom_verdicts.find(atom_key="b0.a0:Person:age")
-        required = view.atom_verdicts.require_key("b0.a1:eq")
+        self.assertEqual(invalidated.first().condition_key, "c0.c1:eq")
+        found = view.atom_verdicts.find(condition_key="c0.c0:Person:age")
+        required = view.atom_verdicts.require_key("c0.c1:eq")
 
         self.assertEqual(found.verdict, "still_valid")
         self.assertEqual(required.affected_action_indices, (0,))
@@ -99,7 +99,7 @@ class ProofFrameViewTests(unittest.TestCase):
                 binding_items=(("$p", "person:alice"),),
                 atom_verdicts=(
                     ProofFrameConditionVerdict(
-                        atom_key="b0.a0:Person:age",
+                        condition_key="c0.c0:Person:age",
                         verdict="still_valid",
                         affected_action_indices=(),
                     ),

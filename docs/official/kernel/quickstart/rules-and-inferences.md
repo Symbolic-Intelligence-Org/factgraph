@@ -569,13 +569,13 @@ inspected = fg.rules.inspect(tags_from_seed)
 assert inspected["kind"] == "Inference"
 assert inspected["id"] == "inf.tags_from_seed"
 assert inspected["branches"][0]["id"] == "seed_path"
-assert inspected["branches"][0]["fallback_id"] == "b0"
+assert inspected["branches"][0]["fallback_id"] == "c0"
 assert inspected["branches"][0]["atom_count"] == 1
 ```
 
 Case ids are structural names. Use explicit branch ids when a rule has
 meaningful pathways that you may want to inspect or configure later. If you do
-not provide an id, the SDK still exposes a fallback id such as `b0`.
+not provide an id, the SDK still exposes a fallback id such as `c0`.
 
 ## RuleRef composes in-memory rules
 

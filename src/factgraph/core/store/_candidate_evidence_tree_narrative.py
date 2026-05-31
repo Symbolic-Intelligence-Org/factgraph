@@ -192,9 +192,9 @@ def _build_certainty_section(value: Any) -> tuple[list[str], dict[str, Any] | No
     for index, item in enumerate(conditions):
         if not isinstance(item, Mapping):
             raise CandidateEvidenceTreeNarrativeError("certainty_summary.conditions must be list[object]")
-        atom_key = _require_non_empty_str(
-            item.get("atom_key"),
-            path=f"certainty_summary.conditions[{index}].atom_key",
+        condition_key = _require_non_empty_str(
+            item.get("condition_key"),
+            path=f"certainty_summary.conditions[{index}].condition_key",
         )
         node_kind = _require_non_empty_str(
             item.get("node_kind"),
@@ -210,7 +210,7 @@ def _build_certainty_section(value: Any) -> tuple[list[str], dict[str, Any] | No
         )
         condition_impacts.append(
             ConditionImpact(
-                atom_key=atom_key,
+                condition_key=condition_key,
                 node_kind=node_kind,
                 weight=weight,
                 impact=impact,
@@ -237,17 +237,17 @@ def _build_certainty_section(value: Any) -> tuple[list[str], dict[str, Any] | No
     for ranked_condition in ranked:
         if ranked_condition.weight is None:
             lines.append(
-                f"Condition {ranked_condition.atom_key} ({ranked_condition.node_kind}): unweighted."
+                f"Condition {ranked_condition.condition_key} ({ranked_condition.node_kind}): unweighted."
             )
             continue
         impact_text = ranked_condition.impact if ranked_condition.impact is not None else "-"
         suffix = " [bottleneck]" if ranked_condition.is_bottleneck else ""
         lines.append(
-            f"Condition {ranked_condition.atom_key} ({ranked_condition.node_kind}): "
+            f"Condition {ranked_condition.condition_key} ({ranked_condition.node_kind}): "
             f"weight={ranked_condition.weight}, impact={impact_text}.{suffix}"
         )
         if ranked_condition.is_bottleneck:
-            bottleneck_keys.append(ranked_condition.atom_key)
+            bottleneck_keys.append(ranked_condition.condition_key)
             bottleneck_impact = ranked_condition.impact
 
     bottleneck: dict[str, Any] | None = None

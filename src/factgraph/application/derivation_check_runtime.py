@@ -16,7 +16,7 @@ Algorithm (per audit log Step 0.C C1+C2 unified):
   RuleRef resolutions. Complete binding is the special case where subset-match
   equals exact match.
 - Subset-match each final binding against the requested binding.
-- Deterministic primary by ``(branch_index, binding_items)`` sort.
+- Deterministic primary by ``(case_index, binding_items)`` sort.
 - Build ``EvidenceEnvelope`` from primary FULL binding (never user partial,
   per topic doc §7.1 trap).
 
@@ -57,7 +57,7 @@ from factgraph.core.store._support import (
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import (
@@ -199,17 +199,17 @@ def _native_check(
         )
 
     # Deterministic primary selection (per Step 0.C C4):
-    # native sort key = (branch_index, binding_items).
+    # native sort key = (case_index, binding_items).
     matched_with_meta: list[tuple[int, BindingItems, dict[str, Any]]] = []
     for fb in matches:
-        branch_index = find_winning_branch_index(
+        case_index = find_winning_case_index(
             where=body,
             binding=fb,
             witness_facts=witness_facts,
             rule_ref_resolutions=evaluation.rule_ref_resolutions,
         )
         binding_items = normalize_binding_items(fb)
-        matched_with_meta.append((branch_index, binding_items, fb))
+        matched_with_meta.append((case_index, binding_items, fb))
     matched_with_meta.sort(key=lambda row: (row[0], row[1]))
     primary_branch_index, primary_binding_items, primary_fb = matched_with_meta[0]
 
@@ -219,7 +219,7 @@ def _native_check(
         where=body,
         binding=primary_fb,
         rule_ref_resolutions=evaluation.rule_ref_resolutions,
-        selected_branch_index=primary_branch_index,
+        selected_case_index=primary_branch_index,
     )
     root_result_kind = _determine_root_result_kind(request.plan)
     artifact = build_support_artifact_for_binding(
@@ -227,7 +227,7 @@ def _native_check(
         binding=primary_fb,
         witness_facts=witness_facts,
         root_result_kind=root_result_kind,
-        selected_branch_index=primary_branch_index,
+        selected_case_index=primary_branch_index,
         rule_ref_edges=rule_ref_edges,
     )
     support_digest = compute_support_digest(artifact)
@@ -236,8 +236,8 @@ def _native_check(
         engine="native",
         support_kind=artifact.kind,
         support_digest=support_digest,
-        branch_index=primary_branch_index,
-        engine_payload=artifact,
+        case_index=primary_branch_index,
+        proof=artifact,
         branch_atom_projection=None,
     )
 
@@ -298,9 +298,9 @@ def _souffle_check(
     - For each candidate, look up its ``ProofReceipt`` from store; the artifact's
       ``binding_items`` carries the full query binding.
     - Subset-match each candidate's full binding against the requested binding.
-    - Primary key = ``(branch_index, binding_items, candidate_key)`` (per C4).
+    - Primary key = ``(case_index, binding_items, candidate_key)`` (per C4).
     - EvidenceEnvelope reuses the candidate's ``support_kind`` + ``support_digest``
-      and embeds the typed ``ProofReceipt`` as ``engine_payload`` (per
+      and embeds the typed ``ProofReceipt`` as ``proof`` (per
       Step 0.B B9 + B10; ``branch_atom_projection`` stays None).
 
     Candidates without a retrievable artifact are skipped silently in MVP — they
@@ -337,23 +337,23 @@ def _souffle_check(
 
     def _sort_key(item: tuple[CandidateSet, ProofReceipt, dict[str, Any]]) -> tuple[Any, ...]:
         candidate, artifact, binding = item
-        branch_index = _derive_branch_index_from_artifact(artifact)
-        # Known branch_index participates in source-order sorting. If the artifact
-        # does not expose a parseable branch index, fall back to binding/candidate
+        case_index = _derive_case_index_from_artifact(artifact)
+        # Known case_index participates in source-order sorting. If the artifact
+        # does not expose a parseable case index, fall back to binding/candidate
         # ordering behind known-branch candidates.
-        branch_key = (0, branch_index) if branch_index is not None else (1, 0)
-        return (branch_key, normalize_binding_items(binding), candidate.candidate_key)
+        case_key = (0, case_index) if case_index is not None else (1, 0)
+        return (case_key, normalize_binding_items(binding), candidate.candidate_key)
 
     matches.sort(key=_sort_key)
     primary_candidate, primary_artifact, primary_binding = matches[0]
-    primary_branch_index = _derive_branch_index_from_artifact(primary_artifact)
+    primary_branch_index = _derive_case_index_from_artifact(primary_artifact)
 
     envelope = EvidenceEnvelope(
         engine="souffle",
         support_kind=primary_artifact.kind,
         support_digest=primary_candidate.support_digest,
-        branch_index=primary_branch_index,
-        engine_payload=primary_artifact,
+        case_index=primary_branch_index,
+        proof=primary_artifact,
         branch_atom_projection=None,
     )
 
@@ -379,31 +379,31 @@ def _lookup_support_artifact(store: Store, digest: str) -> ProofReceipt | None:
     return store._lookup_support_artifact(digest)
 
 
-def _derive_branch_index_from_artifact(artifact: ProofReceipt) -> int | None:
-    """Extract the branch_index from a ProofReceipt via b{n}.a{m}: prefix on atom keys.
+def _derive_case_index_from_artifact(artifact: ProofReceipt) -> int | None:
+    """Extract the case_index from a ProofReceipt via c{n}.c{m}: prefix on condition keys.
 
-    Per audit log Step 0.C C4: souffle ``branch_index`` is derived from the
-    artifact's atom keys (which encode ``b{branch}.a{atom}:...``). Returns the
-    integer if all keys agree on a branch number; returns None if there are no
+    Per audit log Step 0.C C4: souffle ``case_index`` is derived from the
+    artifact's condition keys (which encode ``c{case}.c{condition}:...``). Returns the
+    integer if all keys agree on a case number; returns None if there are no
     keys to parse or if keys disagree (defensive fallback for sort).
     """
-    branch_indices: set[int] = set()
+    case_indices: set[int] = set()
     for witness in artifact.pred_witnesses:
-        parsed = _parse_branch_index(witness.pred_atom_key)
+        parsed = _parse_case_index(witness.pred_condition_key)
         if parsed is not None:
-            branch_indices.add(parsed)
+            case_indices.add(parsed)
     for step in artifact.non_fact_steps:
-        parsed = _parse_branch_index(step.step_key)
+        parsed = _parse_case_index(step.step_key)
         if parsed is not None:
-            branch_indices.add(parsed)
-    if len(branch_indices) == 1:
-        return next(iter(branch_indices))
+            case_indices.add(parsed)
+    if len(case_indices) == 1:
+        return next(iter(case_indices))
     return None
 
 
-def _parse_branch_index(key: str) -> int | None:
-    """Parse 'b{n}.a{m}:...' into the {n} integer, or None if not parseable."""
-    if not isinstance(key, str) or not key.startswith("b"):
+def _parse_case_index(key: str) -> int | None:
+    """Parse 'c{n}.c{m}:...' into the {n} integer, or None if not parseable."""
+    if not isinstance(key, str) or not key.startswith("c"):
         return None
     try:
         dot_pos = key.index(".")
@@ -411,13 +411,13 @@ def _parse_branch_index(key: str) -> int | None:
         return None
     if dot_pos <= 1:
         return None
-    if dot_pos + 1 >= len(key) or key[dot_pos + 1] != "a":
+    if dot_pos + 1 >= len(key) or key[dot_pos + 1] != "c":
         return None
     colon_pos = key.find(":", dot_pos + 2)
     if colon_pos == -1:
         return None
-    atom_index_text = key[dot_pos + 2 : colon_pos]
-    if not atom_index_text.isdigit():
+    condition_index_text = key[dot_pos + 2 : colon_pos]
+    if not condition_index_text.isdigit():
         return None
     try:
         return int(key[1:dot_pos])
@@ -437,7 +437,7 @@ def _problog_pyreason_check(
 
     - Delegate evaluate to ``evaluate_derivation_plans`` in the requested engine mode.
     - For each candidate, look up its ``ProvenanceEnvelope`` from store; engine-native
-      provenance is preserved as-is in ``EvidenceEnvelope.engine_payload`` (per §6.5
+      provenance is preserved as-is in ``EvidenceEnvelope.proof`` (per §6.5
       engine-respectful evidence; not flattened into branch/atom view).
     - Extract the candidate's head-var binding via positional alignment between
       ``plan.heads[0].head_var_names`` and ``candidate.payload['terms']``. Bare
@@ -445,7 +445,7 @@ def _problog_pyreason_check(
       and contribute no binding entry.
     - Subset-match each extracted binding against the requested binding.
     - Primary key = ``(candidate_key, binding_items)`` (per C4; ProbLog/PyReason have
-      no per-branch concept so ``branch_index`` stays None).
+      no per-branch concept so ``case_index`` stays None).
 
     Representability has already been gated at the request level by
     ``_request_representability_precheck`` (only-head-var requests reach here).
@@ -490,7 +490,7 @@ def _problog_pyreason_check(
     ) -> tuple[Any, ...]:
         candidate, _envelope, binding = item
         # Per C4: ProbLog/PyReason primary key is (candidate_key, binding_items).
-        # No branch_index participation.
+        # No case_index participation.
         return (candidate.candidate_key, normalize_binding_items(binding))
 
     matches.sort(key=_sort_key)
@@ -500,8 +500,8 @@ def _problog_pyreason_check(
         engine=request.engine,
         support_kind=primary_candidate.support_kind,
         support_digest=primary_candidate.support_digest,
-        branch_index=None,  # ProbLog/PyReason: no per-branch concept
-        engine_payload=primary_envelope,
+        case_index=None,  # ProbLog/PyReason: no per-branch concept
+        proof=primary_envelope,
         branch_atom_projection=None,
     )
 

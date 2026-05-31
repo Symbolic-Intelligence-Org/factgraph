@@ -146,23 +146,23 @@ def _materialize_profile_branch_probabilities(
             raise ValueError(
                 f"rule_projection.problog[{idx}].kind must be branch_probability"
             )
-        branch_index = _parse_profile_branch_target(entry.get("target"), entry_index=idx)
-        if branch_index in seen_targets:
-            raise ValueError(f"duplicate rule_projection.problog target branch:{branch_index}")
-        if branch_index < 0 or branch_index >= branch_count:
+        case_index = _parse_profile_branch_target(entry.get("target"), entry_index=idx)
+        if case_index in seen_targets:
+            raise ValueError(f"duplicate rule_projection.problog target branch:{case_index}")
+        if case_index < 0 or case_index >= branch_count:
             raise ValueError(
-                f"rule_projection.problog[{idx}] branch index {branch_index} out of range for {branch_count} branches"
+                f"rule_projection.problog[{idx}] case index {case_index} out of range for {branch_count} branches"
             )
-        probabilities[branch_index] = _normalize_profile_probability(
+        probabilities[case_index] = _normalize_profile_probability(
             entry.get("value"),
             entry_index=idx,
         )
-        seen_targets.add(branch_index)
+        seen_targets.add(case_index)
     return tuple(probabilities)
 
 
 def _parse_profile_branch_target(raw: Any, *, entry_index: int) -> int:
-    if not isinstance(raw, str) or not raw.startswith("branch:"):
+    if not isinstance(raw, str) or not raw.startswith("cranch:"):
         raise ValueError(
             f"rule_projection.problog[{entry_index}].target must use branch:{{index}}"
         )

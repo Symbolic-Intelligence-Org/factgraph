@@ -115,20 +115,20 @@ def _artifact(seeded: SeededPerson, **kwargs: object) -> ProofReceipt:
         "binding_items": (("$p", seeded.e_ref),),
         "pred_witnesses": (
             PredWitness(
-                pred_atom_key=f"b0.a0:{seeded.exists_pred_id}",
+                pred_condition_key=f"c0.c0:{seeded.exists_pred_id}",
                 asrt_ids=(seeded.exists_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a1:{seeded.age_pred_id}",
+                pred_condition_key=f"c0.c1:{seeded.age_pred_id}",
                 asrt_ids=(seeded.age_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a2:{seeded.region_pred_id}",
+                pred_condition_key=f"c0.c2:{seeded.region_pred_id}",
                 asrt_ids=(seeded.region_asrt_id,),
             ),
         ),
         "non_fact_steps": (
-            NonFactStep(step_key="b0.a3:eq", kind="eq", status="satisfied"),
+            NonFactStep(step_key="c0.c3:eq", kind="eq", status="satisfied"),
         ),
     }
     fields.update(kwargs)
@@ -139,8 +139,8 @@ def _action(**kwargs: object) -> RuleLiteralReplaceAction:
     fields = {
         "rule_id": "person.eligible",
         "version": "1.0",
-        "branch_index": 0,
-        "atom_index": 3,
+        "case_index": 0,
+        "condition_index": 3,
         "literal_path": ConditionPath(kind="rhs"),
         "old_literal": "us",
         "new_literal": "eu",
@@ -183,10 +183,10 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
         proof_frame = result.proof_frame
         assert proof_frame is not None
         self.assertEqual(proof_frame.status, "invalidated")
-        verdicts = {verdict.atom_key: verdict for verdict in proof_frame.atom_verdicts}
-        self.assertEqual(verdicts["b0.a3:eq"].verdict, "invalidated")
-        self.assertEqual(verdicts["b0.a3:eq"].affected_action_indices, (0,))
-        self.assertEqual(verdicts[f"b0.a2:{alice.region_pred_id}"].verdict, "still_valid")
+        verdicts = {verdict.condition_key: verdict for verdict in proof_frame.atom_verdicts}
+        self.assertEqual(verdicts["c0.c3:eq"].verdict, "invalidated")
+        self.assertEqual(verdicts["c0.c3:eq"].affected_action_indices, (0,))
+        self.assertEqual(verdicts[f"c0.c2:{alice.region_pred_id}"].verdict, "still_valid")
 
     def test_replace_pred_constant_literal(self) -> None:
         store, index = _build_store()
@@ -203,11 +203,11 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             alice,
             pred_witnesses=(
                 PredWitness(
-                    pred_atom_key=f"b0.a0:{alice.exists_pred_id}",
+                    pred_condition_key=f"c0.c0:{alice.exists_pred_id}",
                     asrt_ids=(alice.exists_asrt_id,),
                 ),
                 PredWitness(
-                    pred_atom_key=f"b0.a1:{alice.region_pred_id}",
+                    pred_condition_key=f"c0.c1:{alice.region_pred_id}",
                     asrt_ids=(alice.region_asrt_id,),
                 ),
             ),
@@ -221,7 +221,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
                 FactOverlay(
                     rule_actions=(
                         _action(
-                            atom_index=1,
+                            condition_index=1,
                             literal_path=ConditionPath(kind="pred_term", index=1),
                             old_literal="us",
                             new_literal="eu",
@@ -235,8 +235,8 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.variant_rows, ((("$p", bob.e_ref),),))
         assert result.proof_frame is not None
-        verdicts = {verdict.atom_key: verdict for verdict in result.proof_frame.atom_verdicts}
-        self.assertEqual(verdicts[f"b0.a1:{alice.region_pred_id}"].verdict, "invalidated")
+        verdicts = {verdict.condition_key: verdict for verdict in result.proof_frame.atom_verdicts}
+        self.assertEqual(verdicts[f"c0.c1:{alice.region_pred_id}"].verdict, "invalidated")
 
     def test_fact_actions_and_wrong_rule_action_type_are_rejected(self) -> None:
         store, index = _build_store()
@@ -266,8 +266,8 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
                         RuleDisableAction(
                             rule_id="person.eligible",
                             version="1.0",
-                            branch_index=0,
-                            atom_index=3,
+                            case_index=0,
+                            condition_index=3,
                         ),
                     )
                 ),
@@ -292,9 +292,9 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
 
         cases = [
             ((), "RULE_LITERAL_REPLACE_ACTION_COUNT"),
-            ((_action(), _action(atom_index=2)), "RULE_LITERAL_REPLACE_ACTION_COUNT"),
+            ((_action(), _action(condition_index=2)), "RULE_LITERAL_REPLACE_ACTION_COUNT"),
             ((_action(rule_id="other.rule"),), "RULE_LITERAL_REPLACE_RULE_MISMATCH"),
-            ((_action(atom_index=99),), "RULE_LITERAL_REPLACE_TARGET_NOT_FOUND"),
+            ((_action(condition_index=99),), "RULE_LITERAL_REPLACE_TARGET_NOT_FOUND"),
         ]
         for actions, code in cases:
             with self.subTest(code=code):
@@ -322,7 +322,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
                     ],
                 ),
                 _action(
-                    atom_index=1,
+                    condition_index=1,
                     literal_path=ConditionPath(kind="const_operand"),
                     old_literal=1,
                     new_literal=2,
@@ -363,7 +363,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
         edge = RuleRefEdge(
-            ruleref_atom_key="b0.a1:ruleref",
+            ruleref_condition_key="c0.c1:ruleref",
             rule_ref_id="child.rule",
             rule_ref_version="1.0",
             child_support_digest="sha256:" + ("0" * 64),
@@ -381,12 +381,12 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice),
-                FactOverlay(rule_actions=(_action(atom_index=0),)),
+                FactOverlay(rule_actions=(_action(condition_index=0),)),
             ),
             _request(
                 nested_rule_spec,
                 _artifact(alice),
-                FactOverlay(rule_actions=(_action(atom_index=0),)),
+                FactOverlay(rule_actions=(_action(condition_index=0),)),
             ),
             _request(
                 _rule_spec(index),
@@ -437,11 +437,11 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
         result = check_rule_literal_replace_action(
             _request(
                 rule_spec,
-                _artifact(alice, non_fact_steps=(NonFactStep(step_key="b0.a1:gt", kind="gt", status="satisfied"),)),
+                _artifact(alice, non_fact_steps=(NonFactStep(step_key="c0.c1:gt", kind="gt", status="satisfied"),)),
                 FactOverlay(
                     rule_actions=(
                         _action(
-                            atom_index=1,
+                            condition_index=1,
                             literal_path=ConditionPath(kind="rhs"),
                             old_literal=20,
                             new_literal="not-an-int",

@@ -10,7 +10,7 @@ Public surface contract per blueprint §5 locks:
 - Method:      ``sdk_rule_literal_replace(...)`` (instance
                method; not a free function in ``factgraph.sdk.__all__``).
 - Signature:   ``check_rule_literal_replace(rule, support, *,
-               branch_index, atom_index, literal_path, old_literal,
+               case_index, condition_index, literal_path, old_literal,
                new_literal, overlay=None, note=None)`` per §5.1 / §5.2 /
                §5.4 locks. ``rule`` is an SDK ``Rule`` (lowered through
                ``SDKStore._compile_rule_input`` to a ``RuleSpec``);
@@ -43,7 +43,7 @@ Public surface contract per blueprint §5 locks:
                ``sdk_proof_frame_recheck`` / ``sdk_rule_disable`` /
                ``sdk_rule_add_condition``). It owns its own dispatch
                and never extracts a ``ProofReceipt`` from a
-               ``CheckResult.engine_payload``.
+               ``CheckResult.proof``.
 """
 
 from __future__ import annotations
@@ -72,8 +72,8 @@ def sdk_rule_literal_replace(
     rule: Any,
     support: Any,
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     literal_path: Any,
     old_literal: Any,
     new_literal: Any,
@@ -121,8 +121,8 @@ def sdk_rule_literal_replace(
         request = build_rule_literal_replace_request(
             rule_spec,
             support,
-            branch_index=branch_index,
-            atom_index=atom_index,
+            case_index=case_index,
+            condition_index=condition_index,
             literal_path=literal_path,
             old_literal=old_literal,
             new_literal=new_literal,

@@ -82,7 +82,7 @@ def _adult_rule() -> Rule:
 def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> ProofReceipt:
     """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": e_ref, "$age": age})
-    payload = result.evidence_envelope.engine_payload
+    payload = result.evidence_envelope.proof
     assert isinstance(payload, ProofReceipt), (
         f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )
@@ -109,7 +109,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         result = sdk_rule_add_condition(sdk,
             _adult_rule(),
             support,
-            branch_index=0,
+            case_index=0,
             added_atom=_added_atom(),
         )
 
@@ -124,7 +124,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 {"not": "rule"},  # type: ignore[arg-type]
                 support,
-                branch_index=0,
+                case_index=0,
                 added_atom=_added_atom(),
             )
 
@@ -142,7 +142,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 _age_derivation(),  # type: ignore[arg-type]
                 support,
-                branch_index=0,
+                case_index=0,
                 added_atom=_added_atom(),
             )
 
@@ -155,7 +155,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 _adult_rule(),
                 "not-a-support-artifact",  # type: ignore[arg-type]
-                branch_index=0,
+                case_index=0,
                 added_atom=_added_atom(),
             )
 
@@ -171,7 +171,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
+                case_index=0,
                 added_atom=_added_atom(),
                 overlay="not-an-overlay",  # type: ignore[arg-type]
             )
@@ -203,7 +203,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
+                case_index=0,
                 added_atom=_added_atom(),
                 overlay=non_empty_overlay,
             )
@@ -219,7 +219,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         result = sdk_rule_add_condition(sdk,
             _adult_rule(),
             support,
-            branch_index=0,
+            case_index=0,
             added_atom=_added_atom(),
             overlay=FactOverlay(),
         )
@@ -242,7 +242,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
+                case_index=0,
                 added_atom="not-a-rule-added-atom",  # type: ignore[arg-type]
             )
 
@@ -262,7 +262,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
                 sdk_rule_add_condition(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
+                    case_index=0,
                     added_atom=_added_atom(),
                 )
 
@@ -283,7 +283,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
                 sdk_rule_add_condition(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
+                    case_index=0,
                     added_atom=_added_atom(),
                 )
 
@@ -310,7 +310,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
                 sdk_rule_add_condition(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
+                    case_index=0,
                     added_atom=_added_atom(),
                 )
 
@@ -333,7 +333,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
                 sdk_rule_add_condition(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
+                    case_index=0,
                     added_atom=_added_atom(),
                 )
 
@@ -353,7 +353,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
                 sdk_rule_add_condition(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
+                    case_index=0,
                     added_atom=_added_atom(),
                 )
 
@@ -373,7 +373,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
                 sdk_rule_add_condition(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
+                    case_index=0,
                     added_atom=_added_atom(),
                 )
 
@@ -417,7 +417,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
+                case_index=0,
                 added_atom=_added_atom(),
             )
 
@@ -426,7 +426,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         self.assertEqual(len(captured["request"].overlay.rule_actions), 1)
         action = captured["request"].overlay.rule_actions[0]
         self.assertIsInstance(action, RuleAddConditionAction)
-        self.assertEqual(action.branch_index, 0)
+        self.assertEqual(action.case_index, 0)
         self.assertIsInstance(action.added_atom, AddedCondition)
         self.assertEqual(action.added_atom.atom, ("eq", "$age", 30))
 
@@ -451,7 +451,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             sdk_rule_add_condition(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
+                case_index=0,
                 added_atom=_added_atom(),
             )
 

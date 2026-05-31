@@ -221,7 +221,7 @@ class PyReasonBranchBoundsProfileTests(unittest.TestCase):
                 semantics_profile=profile,
             )
 
-        self.assertIn("rule_projection.pyreason[0] branch index out of range", str(ctx.exception))
+        self.assertIn("rule_projection.pyreason[0] case index out of range", str(ctx.exception))
 
     def test_profile_branch_bound_and_global_head_bound_coexist(self) -> None:
         profile = _profile_with_branch_entries(

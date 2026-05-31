@@ -93,7 +93,7 @@ from factgraph.core.store._candidate_evidence_tree_summary import summarize_cand
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -746,11 +746,11 @@ Derivation(
             root_invocation["ruleref_links"],
             [
                 {
-                    "ruleref_atom_key": "b0.a0:ruleref",
+                    "ruleref_condition_key": "c0.c0:ruleref",
                     "child_invocation_id": primary_invocation["invocation_id"],
                 },
                 {
-                    "ruleref_atom_key": "b0.a1:ruleref",
+                    "ruleref_condition_key": "c0.c1:ruleref",
                     "child_invocation_id": memo_invocation["invocation_id"],
                 },
             ],
@@ -932,7 +932,7 @@ Derivation(
             support["rule_ref_edges"],
             [
                 {
-                    "ruleref_atom_key": "b0.a0:ruleref",
+                    "ruleref_condition_key": "c0.c0:ruleref",
                     "rule_ref_id": "q.user_tag_rows",
                     "rule_ref_version": "1.0.0",
                     "child_support_digest": support["rule_ref_edges"][0]["child_support_digest"],
@@ -1145,8 +1145,8 @@ Derivation(
             self.assertTrue(explain_support_resp["ok"])
             self.assertEqual(explain_support_resp["explain"]["rule_refs"], ["q.user_tag_rows"])
             self.assertEqual(
-                explain_support_resp["explain"]["rule_ref_edges"][0]["ruleref_atom_key"],
-                "b0.a0:ruleref",
+                explain_support_resp["explain"]["rule_ref_edges"][0]["ruleref_condition_key"],
+                "c0.c0:ruleref",
             )
             self.assertEqual(
                 explain_support_resp["explain"]["rule_ref_edges"][0]["rule_ref_version"],
@@ -1160,7 +1160,7 @@ Derivation(
             rule_ref_section = explain_tree_resp["tree"]["root"]["children"][1]
             self.assertEqual(rule_ref_section["node_kind"], "rule_ref_section")
             rule_ref_node = rule_ref_section["children"][0]
-            self.assertEqual(rule_ref_node["ruleref_atom_key"], "b0.a0:ruleref")
+            self.assertEqual(rule_ref_node["ruleref_condition_key"], "c0.c0:ruleref")
             self.assertEqual(rule_ref_node["child_support_digest"], child_support_digest)
             referenced_support = rule_ref_node["children"][0]
             self.assertEqual(referenced_support["node_kind"], "referenced_support")

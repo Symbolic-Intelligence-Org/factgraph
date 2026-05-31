@@ -10,8 +10,8 @@ Public surface contract per blueprint §5 locks:
 - Method:      ``sdk_rule_disable(...)`` (instance method;
                not a free function in ``factgraph.sdk.__all__`` — see
                §5.7 lock and G1 + G4 + G2 precedent).
-- Signature:   ``check_rule_disable(rule, support, *, branch_index,
-               atom_index, overlay=None, note=None)`` per §5.1 / §5.2 /
+- Signature:   ``check_rule_disable(rule, support, *, case_index,
+               condition_index, overlay=None, note=None)`` per §5.1 / §5.2 /
                §5.4 locks. ``rule`` is an SDK ``Rule`` (lowered through
                ``SDKStore._compile_rule_input`` to a ``RuleSpec``);
                ``support`` is a raw ``ProofReceipt`` from a prior
@@ -41,7 +41,7 @@ Public surface contract per blueprint §5 locks:
                ``sdk_fact_overlay_check`` / ``sdk_proof_frame_recheck``
                / ``sdk_rule_literal_replace`` / ``sdk_rule_add_condition``).
                It owns its own dispatch and never extracts a
-               ``ProofReceipt`` from a ``CheckResult.engine_payload``
+               ``ProofReceipt`` from a ``CheckResult.proof``
                (a ``ProofReceipt | ProvenanceEnvelope`` union).
 """
 
@@ -69,8 +69,8 @@ def sdk_rule_disable(
     rule: Any,
     support: Any,
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     overlay: Any = None,
     note: str | None = None,
 ) -> RuleDisableResult:
@@ -113,8 +113,8 @@ def sdk_rule_disable(
         request = build_rule_disable_request(
             rule_spec,
             support,
-            branch_index=branch_index,
-            atom_index=atom_index,
+            case_index=case_index,
+            condition_index=condition_index,
             overlay=overlay,
             note=note,
         )

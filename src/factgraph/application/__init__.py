@@ -55,7 +55,7 @@ from .ingest_runtime import (
 )
 from .walker import (
     AssertionView,
-    AtomKeyView,
+    ConditionKeyView,
     FrozenTupleView,
     IRAtomView,
     IRBodyWalker,
@@ -63,7 +63,7 @@ from .walker import (
     ProofFrameView,
     SupportArtifactView,
     frozen_collection,
-    parse_atom_key,
+    parse_condition_key,
 )
 from .workspace_runtime import (
     WORKSPACE_LEDGER,
@@ -115,7 +115,7 @@ from .why_not_runtime import (
 
 __all__ = [
     "AssertionView",
-    "AtomKeyView",
+    "ConditionKeyView",
     "AuthoringRuntimeError",
     "CheckRuntimeError",
     "CapabilityHelperError",
@@ -186,7 +186,7 @@ __all__ = [
     "is_entity_identity_bundle_active",
     "load_workspace",
     "materialize_identity",
-    "parse_atom_key",
+    "parse_condition_key",
     "plan_create_command",
     "plan_delete_command",
     "plan_write_command",

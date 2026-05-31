@@ -13,7 +13,7 @@ from factgraph.core.store._support import (
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.rules.where_eval import WhereValidationError
@@ -223,7 +223,7 @@ def _evaluate_where_over_view_with_support(
 
     captures: list[BindingSupportCapture] = []
     for binding in bindings:
-        selected_branch_index = find_winning_branch_index(
+        selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
@@ -233,14 +233,14 @@ def _evaluate_where_over_view_with_support(
             where=where,
             binding=binding,
             rule_ref_resolutions=evaluation.rule_ref_resolutions,
-            selected_branch_index=selected_branch_index,
+            selected_case_index=selected_case_index,
         )
         artifact = build_support_artifact_for_binding(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             root_result_kind=root_result_kind,
-            selected_branch_index=selected_branch_index,
+            selected_case_index=selected_case_index,
             rule_ref_edges=rule_ref_edges,
         )
         support_digest = compute_support_digest(artifact)

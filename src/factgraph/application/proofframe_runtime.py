@@ -94,7 +94,7 @@ def render_proof_frame_narrative(
         if verdict.verdict == "still_valid":
             continue
         suffix = _action_suffix(verdict.affected_action_indices, overlay=overlay)
-        lines.append(f"- {verdict.atom_key}: {verdict.verdict}{suffix}.")
+        lines.append(f"- {verdict.condition_key}: {verdict.verdict}{suffix}.")
     return "\n".join(lines)
 
 
@@ -104,7 +104,7 @@ def _recheck_pred_witness(
     visible_rows: dict[tuple[str, str], ProjectedFact],
     action_index: dict[tuple[str, str], list[tuple[int, FactOverlayAction]]],
 ) -> ProofFrameConditionVerdict:
-    pred_id = _pred_id_from_atom_key(witness.pred_atom_key)
+    pred_id = _pred_id_from_atom_key(witness.pred_condition_key)
     affected: list[int] = []
     still_witnessed = False
 
@@ -122,7 +122,7 @@ def _recheck_pred_witness(
 
     verdict = "still_valid" if still_witnessed else "invalidated"
     return ProofFrameConditionVerdict(
-        atom_key=witness.pred_atom_key,
+        condition_key=witness.pred_condition_key,
         verdict=verdict,
         affected_action_indices=tuple(sorted(set(affected))),
     )
@@ -135,24 +135,24 @@ def _recheck_non_fact_step(
 ) -> ProofFrameConditionVerdict:
     if step.kind == "not":
         return ProofFrameConditionVerdict(
-            atom_key=step.step_key,
+            condition_key=step.step_key,
             verdict="unknown",
             affected_action_indices=(),
         )
     if step.kind in _BINDING_DRIVEN_NON_FACT_KINDS:
         return ProofFrameConditionVerdict(
-            atom_key=step.step_key,
+            condition_key=step.step_key,
             verdict="still_valid",
             affected_action_indices=(),
         )
     if not frame_relevant_action_indices:
         return ProofFrameConditionVerdict(
-            atom_key=step.step_key,
+            condition_key=step.step_key,
             verdict="still_valid",
             affected_action_indices=(),
         )
     return ProofFrameConditionVerdict(
-        atom_key=step.step_key,
+        condition_key=step.step_key,
         verdict="unknown",
         affected_action_indices=frame_relevant_action_indices,
     )
@@ -174,7 +174,7 @@ def _frame_relevant_action_indices(
 ) -> tuple[int, ...]:
     relevant: set[int] = set()
     for witness in pred_witnesses:
-        pred_id = _pred_id_from_atom_key(witness.pred_atom_key)
+        pred_id = _pred_id_from_atom_key(witness.pred_condition_key)
         for asrt_id in witness.asrt_ids:
             for index, _ in action_index.get((pred_id, asrt_id), ()):
                 relevant.add(index)
@@ -202,10 +202,10 @@ def _visible_projected_rows(
     }
 
 
-def _pred_id_from_atom_key(atom_key: str) -> str:
-    _, separator, pred_id = atom_key.partition(":")
+def _pred_id_from_atom_key(condition_key: str) -> str:
+    _, separator, pred_id = condition_key.partition(":")
     if not separator or not pred_id:
-        return atom_key
+        return condition_key
     return pred_id
 
 

@@ -324,7 +324,7 @@ def project_diagnose_event_payload(request: Any, result: Any) -> dict[str, JSONV
     diagnostic_payload: dict[str, JSONValue] | None = None
     if locator is not None:
         diagnostic_payload = {
-            "branch_index": int(getattr(locator, "branch_index", 0)),
+            "case_index": int(getattr(locator, "case_index", 0)),
             "failed_atom_index": int(getattr(locator, "failed_atom_index", 0)),
             "attempted_binding": project_binding_items(getattr(locator, "attempted_binding", ())),
         }
@@ -381,15 +381,15 @@ def project_why_not_event_payload(request: Any, result: Any) -> dict[str, JSONVa
             "requested_universe": project_binding_items_tuple(
                 getattr(result, "requested_universe", ())
             ),
-            "green": project_binding_items_tuple(getattr(result, "green", ())),
-            "red": [
+            "passed": project_binding_items_tuple(getattr(result, "passed", ())),
+            "failed": [
                 {
                     "binding": project_binding_items(getattr(row, "binding", ())),
                     "diagnostic": _project_why_not_diagnostic(
                         getattr(row, "diagnostic", None)
                     ),
                 }
-                for row in getattr(result, "red", ())
+                for row in getattr(result, "failed", ())
             ],
         },
         "errors": project_messages(getattr(result, "errors", ())),
@@ -410,7 +410,7 @@ def project_proof_frame_event_payload(request: Any, result: Any) -> dict[str, JS
             "binding_items": project_binding_items(getattr(result, "binding_items", ())),
             "atom_verdicts": [
                 {
-                    "atom_key": str(getattr(verdict, "atom_key", "")),
+                    "condition_key": str(getattr(verdict, "condition_key", "")),
                     "verdict": str(getattr(verdict, "verdict", "")),
                     "affected_action_indices": [
                         int(index)
@@ -570,7 +570,7 @@ def _project_why_not_atom_locator(locator: Any) -> dict[str, JSONValue] | None:
     if locator is None:
         return None
     return {
-        "branch_index": int(getattr(locator, "branch_index", 0)),
+        "case_index": int(getattr(locator, "case_index", 0)),
         "failed_atom_index": int(getattr(locator, "failed_atom_index", 0)),
         "attempted_binding": project_binding_items(getattr(locator, "attempted_binding", ())),
     }

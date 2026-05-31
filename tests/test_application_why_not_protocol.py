@@ -19,7 +19,7 @@ from factgraph.application.protocol import (
     WhyNotConditionLocator,
     WhyNotEngine,
     WhyNotFailureKind,
-    WhyNotRedRow,
+    WhyNotFailedRow,
     WhyNotRowDiagnostic,
     WhyNotRowGranularity,
     WhyNotRowStatus,
@@ -72,7 +72,7 @@ def _error(code: str = "WHY_NOT_UNSUPPORTED") -> ErrorDTO:
 
 def _atom_locator(**kwargs: object) -> WhyNotConditionLocator:
     fields = {
-        "branch_index": 0,
+        "case_index": 0,
         "failed_atom_index": 1,
         "attempted_binding": _attempted_binding(),
     }
@@ -94,14 +94,14 @@ def _diagnostic(**kwargs: object) -> WhyNotRowDiagnostic:
 def _red_row(
     binding: tuple[tuple[str, object], ...] = _binding("d-2"),
     diagnostic: WhyNotRowDiagnostic | None = None,
-) -> WhyNotRedRow:
-    return WhyNotRedRow(binding=binding, diagnostic=diagnostic or _diagnostic())
+) -> WhyNotFailedRow:
+    return WhyNotFailedRow(binding=binding, diagnostic=diagnostic or _diagnostic())
 
 
 class WhyNotAtomLocatorProtocolTests(unittest.TestCase):
     def test_atom_locator_construction(self) -> None:
         locator = _atom_locator()
-        self.assertEqual(locator.branch_index, 0)
+        self.assertEqual(locator.case_index, 0)
         self.assertEqual(locator.failed_atom_index, 1)
         self.assertEqual(locator.attempted_binding, _attempted_binding())
 
@@ -111,13 +111,13 @@ class WhyNotAtomLocatorProtocolTests(unittest.TestCase):
 
     def test_atom_locator_rejects_negative_indexes(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            _atom_locator(branch_index=-1)
+            _atom_locator(case_index=-1)
         with self.assertRaises(ProtocolShapeError):
             _atom_locator(failed_atom_index=-1)
 
     def test_atom_locator_rejects_bool_indexes(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            _atom_locator(branch_index=True)
+            _atom_locator(case_index=True)
         with self.assertRaises(ProtocolShapeError):
             _atom_locator(failed_atom_index=False)
 
@@ -128,7 +128,7 @@ class WhyNotAtomLocatorProtocolTests(unittest.TestCase):
     def test_atom_locator_is_frozen(self) -> None:
         locator = _atom_locator()
         with self.assertRaises(FrozenInstanceError):
-            locator.branch_index = 2  # type: ignore[misc]
+            locator.case_index = 2  # type: ignore[misc]
 
 
 class WhyNotUniverseRequestProtocolTests(unittest.TestCase):
@@ -266,7 +266,7 @@ class WhyNotUniverseRequestProtocolTests(unittest.TestCase):
             "diagnostic_mode",
             "engine_options",
             "run_id",
-            "green",
+            "passed",
         )
         for field_name in banned_fields:
             with self.subTest(field_name=field_name):
@@ -380,7 +380,7 @@ class WhyNotRowDiagnosticProtocolTests(unittest.TestCase):
             diagnostic.status = "unsupported"  # type: ignore[misc]
 
 
-class WhyNotRedRowProtocolTests(unittest.TestCase):
+class WhyNotFailedRowProtocolTests(unittest.TestCase):
     def test_red_row_construction(self) -> None:
         row = _red_row()
         self.assertEqual(row.binding, _binding("d-2"))
@@ -396,7 +396,7 @@ class WhyNotRedRowProtocolTests(unittest.TestCase):
 
     def test_red_row_requires_why_not_diagnostic(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            WhyNotRedRow(binding=_binding(), diagnostic=object())  # type: ignore[arg-type]
+            WhyNotFailedRow(binding=_binding(), diagnostic=object())  # type: ignore[arg-type]
 
     def test_red_row_is_frozen(self) -> None:
         row = _red_row()
@@ -411,38 +411,38 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
         result = WhyNotUniverseResult(
             status="completed",
             requested_universe=(_binding("d-1"), _binding("d-2")),
-            green=(_binding("d-1"),),
-            red=(_red_row(_binding("d-2")),),
+            passed=(_binding("d-1"),),
+            failed=(_red_row(_binding("d-2")),),
         )
-        self.assertEqual(result.green, (_binding("d-1"),))
-        self.assertEqual(result.red[0].binding, _binding("d-2"))
+        self.assertEqual(result.passed, (_binding("d-1"),))
+        self.assertEqual(result.failed[0].binding, _binding("d-2"))
 
     def test_completed_partition_accepts_unhashable_binding_values(self) -> None:
         result = WhyNotUniverseResult(
             status="completed",
             requested_universe=((("$doc", ["d-1"]),),),
-            green=((("$doc", ["d-1"]),),),
-            red=(),
+            passed=((("$doc", ["d-1"]),),),
+            failed=(),
         )
-        self.assertEqual(result.green, ((("$doc", ["d-1"]),),))
+        self.assertEqual(result.passed, ((("$doc", ["d-1"]),),))
 
     def test_completed_empty_universe_construction(self) -> None:
         result = WhyNotUniverseResult(
             status="completed",
             requested_universe=(),
-            green=(),
-            red=(),
+            passed=(),
+            failed=(),
         )
-        self.assertEqual(result.green, ())
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, ())
+        self.assertEqual(result.failed, ())
 
     def test_completed_rejects_errors(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=(),
-                green=(),
-                red=(),
+                passed=(),
+                failed=(),
                 errors=(_error(),),
             )
 
@@ -451,8 +451,8 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=(_binding("d-1"), _binding("d-2")),
-                green=(_binding("d-1"),),
-                red=(),
+                passed=(_binding("d-1"),),
+                failed=(),
             )
 
     def test_completed_rejects_overlap(self) -> None:
@@ -460,8 +460,8 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=(_binding("d-1"),),
-                green=(_binding("d-1"),),
-                red=(_red_row(_binding("d-1")),),
+                passed=(_binding("d-1"),),
+                failed=(_red_row(_binding("d-1")),),
             )
 
     def test_completed_rejects_order_drift(self) -> None:
@@ -469,8 +469,8 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=(_binding("d-1"), _binding("d-2")),
-                green=(_binding("d-2"), _binding("d-1")),
-                red=(),
+                passed=(_binding("d-2"), _binding("d-1")),
+                failed=(),
             )
 
     def test_completed_rejects_duplicate_green_or_red(self) -> None:
@@ -478,15 +478,15 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=(_binding("d-1"),),
-                green=(_binding("d-1"), _binding("d-1")),
-                red=(),
+                passed=(_binding("d-1"), _binding("d-1")),
+                failed=(),
             )
         with self.assertRaises(ProtocolShapeError):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=(_binding("d-1"),),
-                green=(),
-                red=(_red_row(_binding("d-1")), _red_row(_binding("d-1"))),
+                passed=(),
+                failed=(_red_row(_binding("d-1")), _red_row(_binding("d-1"))),
             )
 
     def test_completed_rejects_duplicate_unhashable_green_or_red(self) -> None:
@@ -494,15 +494,15 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=((("$doc", ["d-1"]),),),
-                green=((("$doc", ["d-1"]),), (("$doc", ["d-1"]),)),
-                red=(),
+                passed=((("$doc", ["d-1"]),), (("$doc", ["d-1"]),)),
+                failed=(),
             )
         with self.assertRaises(ProtocolShapeError):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=((("$doc", ["d-1"]),),),
-                green=(),
-                red=(
+                passed=(),
+                failed=(
                     _red_row((("$doc", ["d-1"]),)),
                     _red_row((("$doc", ["d-1"]),)),
                 ),
@@ -512,20 +512,20 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
         result = WhyNotUniverseResult(
             status="unsupported",
             requested_universe=(_binding("d-1"),),
-            green=(),
-            red=(),
+            passed=(),
+            failed=(),
             errors=(_error("BINDING_EXTRACTION_NOT_SUPPORTED"),),
         )
         self.assertEqual(result.status, "unsupported")
-        self.assertEqual(result.green, ())
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, ())
+        self.assertEqual(result.failed, ())
 
     def test_invalid_request_nullable_matrix(self) -> None:
         result = WhyNotUniverseResult(
             status="invalid_request",
             requested_universe=(),
-            green=(),
-            red=(),
+            passed=(),
+            failed=(),
             errors=(_error("DUPLICATE_CANDIDATE_UNIVERSE_BINDING"),),
         )
         self.assertEqual(result.status, "invalid_request")
@@ -535,24 +535,24 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="unsupported",
                 requested_universe=(_binding("d-1"),),
-                green=(_binding("d-1"),),
-                red=(),
+                passed=(_binding("d-1"),),
+                failed=(),
                 errors=(_error(),),
             )
         with self.assertRaises(ProtocolShapeError):
             WhyNotUniverseResult(
                 status="invalid_request",
                 requested_universe=(_binding("d-1"),),
-                green=(),
-                red=(_red_row(),),
+                passed=(),
+                failed=(_red_row(),),
                 errors=(_error(),),
             )
         with self.assertRaises(ProtocolShapeError):
             WhyNotUniverseResult(
                 status="unsupported",
                 requested_universe=(_binding("d-1"),),
-                green=(),
-                red=(),
+                passed=(),
+                failed=(),
             )
 
     def test_result_rejects_invalid_status(self) -> None:
@@ -560,8 +560,8 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="passed",  # type: ignore[arg-type]
                 requested_universe=(),
-                green=(),
-                red=(),
+                passed=(),
+                failed=(),
                 errors=(_error(),),
             )
 
@@ -570,16 +570,16 @@ class WhyNotUniverseResultProtocolTests(unittest.TestCase):
             WhyNotUniverseResult(
                 status="completed",
                 requested_universe=(_binding("d-1"),),
-                green=(),
-                red=(_binding("d-1"),),  # type: ignore[arg-type]
+                passed=(),
+                failed=(_binding("d-1"),),  # type: ignore[arg-type]
             )
 
     def test_result_is_frozen(self) -> None:
         result = WhyNotUniverseResult(
             status="completed",
             requested_universe=(),
-            green=(),
-            red=(),
+            passed=(),
+            failed=(),
         )
         with self.assertRaises(FrozenInstanceError):
             result.status = "unsupported"  # type: ignore[misc]
@@ -624,10 +624,10 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
     def test_result_dataclass_fields_match_frozen_contract(self) -> None:
         self.assertEqual(
             [field.name for field in dataclasses.fields(WhyNotUniverseResult)],
-            ["status", "requested_universe", "green", "red", "errors", "warnings"],
+            ["status", "requested_universe", "passed", "failed", "errors", "warnings"],
         )
         self.assertEqual(
-            [field.name for field in dataclasses.fields(WhyNotRedRow)],
+            [field.name for field in dataclasses.fields(WhyNotFailedRow)],
             ["binding", "diagnostic"],
         )
         self.assertEqual(
@@ -697,8 +697,8 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
                 engine="native",
                 support_kind="native_binding_v1",
                 support_digest="sha256:" + ("1" * 64),
-                branch_index=0,
-                engine_payload=_atom_locator(),  # type: ignore[arg-type]
+                case_index=0,
+                proof=_atom_locator(),  # type: ignore[arg-type]
             )
 
     def test_evidence_envelope_existing_payload_types_unchanged(self) -> None:
@@ -719,9 +719,9 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
                 engine="native",
                 support_kind="native_binding_v1",
                 support_digest="sha256:" + ("1" * 64),
-                branch_index=0,
-                engine_payload=support,
-            ).engine_payload,
+                case_index=0,
+                proof=support,
+            ).proof,
             ProofReceipt,
         )
         self.assertIsInstance(
@@ -729,16 +729,16 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
                 engine="problog",
                 support_kind="problog_provenance_v1",
                 support_digest="sha256:" + ("2" * 64),
-                branch_index=None,
-                engine_payload=provenance,
-            ).engine_payload,
+                case_index=None,
+                proof=provenance,
+            ).proof,
             ProvenanceEnvelope,
         )
 
     def test_protocol_package_exports_why_not_dtos(self) -> None:
         self.assertIs(protocol_pkg.WhyNotUniverseRequest, WhyNotUniverseRequest)
         self.assertIs(protocol_pkg.WhyNotUniverseResult, WhyNotUniverseResult)
-        self.assertIs(protocol_pkg.WhyNotRedRow, WhyNotRedRow)
+        self.assertIs(protocol_pkg.WhyNotFailedRow, WhyNotFailedRow)
         self.assertIs(protocol_pkg.WhyNotRowDiagnostic, WhyNotRowDiagnostic)
         self.assertIs(protocol_pkg.WhyNotConditionLocator, WhyNotConditionLocator)
         self.assertIs(protocol_pkg.WhyNotStatus, WhyNotStatus)

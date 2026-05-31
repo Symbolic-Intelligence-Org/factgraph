@@ -89,7 +89,7 @@ from factgraph.core.store._candidate_evidence_tree_summary import summarize_cand
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -277,18 +277,18 @@ class EcssComplianceContractsTests(unittest.TestCase):
         invocation = next(inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.temporal_deadline_window_ok")
 
         witness_map = {
-            witness["pred_atom_key"]: tuple(witness["asrt_ids"])
+            witness["pred_condition_key"]: tuple(witness["asrt_ids"])
             for witness in invocation["pred_witnesses"]
         }
-        self.assertEqual(witness_map["b0.a0:ecss:obligation_timestamp"], (obligation_asrt_id,))
-        self.assertEqual(witness_map["b0.a1:ecss:window_start"], (window_start_asrt_id,))
-        self.assertEqual(witness_map["b0.a2:ecss:window_end"], (window_end_asrt_id,))
+        self.assertEqual(witness_map["c0.c0:ecss:obligation_timestamp"], (obligation_asrt_id,))
+        self.assertEqual(witness_map["c0.c1:ecss:window_start"], (window_start_asrt_id,))
+        self.assertEqual(witness_map["c0.c2:ecss:window_end"], (window_end_asrt_id,))
 
         non_fact_by_key = {step["step_key"]: step for step in invocation["non_fact_steps"]}
-        self.assertEqual(non_fact_by_key["b0.a3:le"]["kind"], "le")
-        self.assertEqual(non_fact_by_key["b0.a4:le"]["kind"], "le")
+        self.assertEqual(non_fact_by_key["c0.c3:le"]["kind"], "le")
+        self.assertEqual(non_fact_by_key["c0.c4:le"]["kind"], "le")
 
-        step_details = dict(non_fact_by_key["b0.a4:le"]["details"])
+        step_details = dict(non_fact_by_key["c0.c4:le"]["details"])
         binding_rows = dict(step_details["binding"])
         self.assertEqual(binding_rows["$event_ts"], 100)
         self.assertEqual(binding_rows["$cutoff_ts"], 120)
@@ -442,33 +442,33 @@ class EcssComplianceContractsTests(unittest.TestCase):
         invocation = next(inv for inv in trace["invocations"] if inv["rule"]["rule_id"] == "q.uncertainty_threshold_ok")
 
         witness_map = {
-            witness["pred_atom_key"]: tuple(witness["asrt_ids"])
+            witness["pred_condition_key"]: tuple(witness["asrt_ids"])
             for witness in invocation["pred_witnesses"]
         }
-        self.assertEqual(witness_map["b0.a0:ecss:collision_probability_ppm"], (collision_prob_asrt_id,))
+        self.assertEqual(witness_map["c0.c0:ecss:collision_probability_ppm"], (collision_prob_asrt_id,))
         self.assertEqual(
-            witness_map["b0.a1:ecss:collision_probability_threshold_ppm"],
+            witness_map["c0.c1:ecss:collision_probability_threshold_ppm"],
             (collision_threshold_asrt_id,),
         )
         self.assertEqual(
-            witness_map["b0.a2:ecss:disposal_success_probability_ppm"],
+            witness_map["c0.c2:ecss:disposal_success_probability_ppm"],
             (success_prob_asrt_id,),
         )
         self.assertEqual(
-            witness_map["b0.a3:ecss:disposal_success_threshold_ppm"],
+            witness_map["c0.c3:ecss:disposal_success_threshold_ppm"],
             (success_threshold_asrt_id,),
         )
 
         non_fact_by_key = {step["step_key"]: step for step in invocation["non_fact_steps"]}
-        self.assertEqual(non_fact_by_key["b0.a4:le"]["kind"], "le")
-        self.assertEqual(non_fact_by_key["b0.a5:ge"]["kind"], "ge")
+        self.assertEqual(non_fact_by_key["c0.c4:le"]["kind"], "le")
+        self.assertEqual(non_fact_by_key["c0.c5:ge"]["kind"], "ge")
 
-        le_details = dict(non_fact_by_key["b0.a4:le"]["details"])
+        le_details = dict(non_fact_by_key["c0.c4:le"]["details"])
         le_binding = dict(le_details["binding"])
         self.assertEqual(le_binding["$pc_ppm"], 80)
         self.assertEqual(le_binding["$pc_threshold_ppm"], 100)
 
-        ge_details = dict(non_fact_by_key["b0.a5:ge"]["details"])
+        ge_details = dict(non_fact_by_key["c0.c5:ge"]["details"])
         ge_binding = dict(ge_details["binding"])
         self.assertEqual(ge_binding["$success_ppm"], 920000)
         self.assertEqual(ge_binding["$success_threshold_ppm"], 900000)
@@ -590,30 +590,30 @@ class EcssComplianceContractsTests(unittest.TestCase):
         self.assertEqual(len(live_invocation["non_fact_steps"]), 4)
 
         live_witness_map = {
-            witness["pred_atom_key"]: tuple(witness["asrt_ids"])
+            witness["pred_condition_key"]: tuple(witness["asrt_ids"])
             for witness in live_invocation["pred_witnesses"]
         }
-        self.assertEqual(live_witness_map["b0.a0:ecss:obligation_timestamp"], (event_asrt_id,))
-        self.assertEqual(live_witness_map["b0.a1:ecss:window_start"], (window_start_asrt_id,))
-        self.assertEqual(live_witness_map["b0.a2:ecss:window_end"], (window_end_asrt_id,))
-        self.assertEqual(live_witness_map["b0.a3:ecss:collision_probability_ppm"], (collision_prob_asrt_id,))
+        self.assertEqual(live_witness_map["c0.c0:ecss:obligation_timestamp"], (event_asrt_id,))
+        self.assertEqual(live_witness_map["c0.c1:ecss:window_start"], (window_start_asrt_id,))
+        self.assertEqual(live_witness_map["c0.c2:ecss:window_end"], (window_end_asrt_id,))
+        self.assertEqual(live_witness_map["c0.c3:ecss:collision_probability_ppm"], (collision_prob_asrt_id,))
         self.assertEqual(
-            live_witness_map["b0.a4:ecss:collision_probability_threshold_ppm"],
+            live_witness_map["c0.c4:ecss:collision_probability_threshold_ppm"],
             (collision_threshold_asrt_id,),
         )
         self.assertEqual(
-            live_witness_map["b0.a5:ecss:disposal_success_probability_ppm"],
+            live_witness_map["c0.c5:ecss:disposal_success_probability_ppm"],
             (success_prob_asrt_id,),
         )
         self.assertEqual(
-            live_witness_map["b0.a6:ecss:disposal_success_threshold_ppm"],
+            live_witness_map["c0.c6:ecss:disposal_success_threshold_ppm"],
             (success_threshold_asrt_id,),
         )
 
         live_non_fact_by_key = {step["step_key"]: step for step in live_invocation["non_fact_steps"]}
-        self.assertEqual(sorted(live_non_fact_by_key.keys()), ["b0.a10:ge", "b0.a7:le", "b0.a8:le", "b0.a9:le"])
+        self.assertEqual(sorted(live_non_fact_by_key.keys()), ["c0.c10:ge", "c0.c7:le", "c0.c8:le", "c0.c9:le"])
 
-        ge_binding = dict(dict(live_non_fact_by_key["b0.a10:ge"]["details"])["binding"])
+        ge_binding = dict(dict(live_non_fact_by_key["c0.c10:ge"]["details"])["binding"])
         self.assertEqual(ge_binding["$window_start_ts"], 80)
         self.assertEqual(ge_binding["$event_ts"], 100)
         self.assertEqual(ge_binding["$window_end_ts"], 120)

@@ -240,7 +240,7 @@ def _make_provenance_envelope(
 def _make_support_artifact(
     *,
     binding_items: tuple[tuple[str, Any], ...] = (),
-    pred_witness_keys: tuple[str, ...] = ("b0.a0:Person:exists",),
+    pred_witness_keys: tuple[str, ...] = ("c0.c0:Person:exists",),
     kind: str = "souffle_witness_v1",
 ) -> Any:
     """Step 5 fixture: minimal ProofReceipt for souffle path mocking."""
@@ -252,8 +252,8 @@ def _make_support_artifact(
         binding_items=binding_items,
         pred_witnesses=tuple(
             sorted(
-                (PredWitness(pred_atom_key=key, asrt_ids=()) for key in pred_witness_keys),
-                key=lambda row: row.pred_atom_key,
+                (PredWitness(pred_condition_key=key, asrt_ids=()) for key in pred_witness_keys),
+                key=lambda row: row.pred_condition_key,
             )
         ),
     )
@@ -282,7 +282,7 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
         candidate = _make_souffle_candidate()
         artifact = _make_support_artifact(
             binding_items=(("$p", "person-1"),),
-            pred_witness_keys=("b0.a0:Person:exists",),
+            pred_witness_keys=("c0.c0:Person:exists",),
         )
         with patch(
             "factgraph.application.diagnose_runtime.evaluate_derivation_plans",
@@ -434,7 +434,7 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
 
     def test_souffle_multi_match_primary_by_lowest_branch_index(self) -> None:
         # Per audit C4 + Check 0.C C4: souffle primary key =
-        # (branch_index, binding_items, candidate_key). Lower branch_index wins.
+        # (case_index, binding_items, candidate_key). Lower case_index wins.
         store, request = self._build_request(binding=(("$p", "person-1"),))
         higher_cand = _make_souffle_candidate(
             candidate_key="candk_v2:higher",
@@ -446,11 +446,11 @@ class SouffleDiagnoseDispatchTests(unittest.TestCase):
         )
         higher_artifact = _make_support_artifact(
             binding_items=(("$p", "person-1"),),
-            pred_witness_keys=("b3.a0:Person:exists",),
+            pred_witness_keys=("c3.c0:Person:exists",),
         )
         lower_artifact = _make_support_artifact(
             binding_items=(("$p", "person-1"),),
-            pred_witness_keys=("b1.a0:Person:exists",),
+            pred_witness_keys=("c1.c0:Person:exists",),
         )
 
         def _lookup(_store: Store, digest: str) -> Any:

@@ -34,12 +34,12 @@ class ProjectedFact:
 
 @dataclass(frozen=True)
 class PredWitness:
-    pred_atom_key: str
+    pred_condition_key: str
     asrt_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.pred_atom_key, str) or not self.pred_atom_key:
-            raise ValueError("PredWitness.pred_atom_key must be non-empty string")
+        if not isinstance(self.pred_condition_key, str) or not self.pred_condition_key:
+            raise ValueError("PredWitness.pred_condition_key must be non-empty string")
         if tuple(self.asrt_ids) != normalize_asrt_ids(self.asrt_ids):
             raise ValueError("PredWitness.asrt_ids must be sorted unique non-empty strings")
 
@@ -64,15 +64,15 @@ class NonFactStep:
 
 @dataclass(frozen=True)
 class RuleRefEdge:
-    ruleref_atom_key: str
+    ruleref_condition_key: str
     rule_ref_id: str
     rule_ref_version: str
     child_support_digest: str | None = None
     unresolved_reason: str | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.ruleref_atom_key, str) or not self.ruleref_atom_key:
-            raise ValueError("RuleRefEdge.ruleref_atom_key must be non-empty string")
+        if not isinstance(self.ruleref_condition_key, str) or not self.ruleref_condition_key:
+            raise ValueError("RuleRefEdge.ruleref_condition_key must be non-empty string")
         if not isinstance(self.rule_ref_id, str) or not self.rule_ref_id:
             raise ValueError("RuleRefEdge.rule_ref_id must be non-empty string")
         if not isinstance(self.rule_ref_version, str) or not self.rule_ref_version:
@@ -111,9 +111,9 @@ class ProofReceipt:
         if tuple(self.binding_items) != normalize_binding_items(self.binding_items):
             raise ValueError("ProofReceipt.binding_items must be sorted binding tuples")
         if tuple(self.pred_witnesses) != tuple(
-            sorted(self.pred_witnesses, key=lambda row: row.pred_atom_key)
+            sorted(self.pred_witnesses, key=lambda row: row.pred_condition_key)
         ):
-            raise ValueError("ProofReceipt.pred_witnesses must be sorted by pred_atom_key")
+            raise ValueError("ProofReceipt.pred_witnesses must be sorted by pred_condition_key")
         if tuple(self.non_fact_steps) != tuple(
             sorted(self.non_fact_steps, key=lambda row: (row.step_key, row.kind, row.status, row.details))
         ):
@@ -198,32 +198,32 @@ def normalize_asrt_ids(asrt_ids: Sequence[str]) -> tuple[str, ...]:
     return tuple(sorted(_normalize_non_empty_strings(asrt_ids)))
 
 
-def make_pred_atom_key(
-    branch_index: int,
-    atom_index: int,
+def make_pred_condition_key(
+    case_index: int,
+    condition_index: int,
     pred_id: str,
 ) -> str:
-    if isinstance(branch_index, bool) or not isinstance(branch_index, int) or branch_index < 0:
-        raise ValueError("branch_index must be non-negative int")
-    if isinstance(atom_index, bool) or not isinstance(atom_index, int) or atom_index < 0:
-        raise ValueError("atom_index must be non-negative int")
+    if isinstance(case_index, bool) or not isinstance(case_index, int) or case_index < 0:
+        raise ValueError("case_index must be non-negative int")
+    if isinstance(condition_index, bool) or not isinstance(condition_index, int) or condition_index < 0:
+        raise ValueError("condition_index must be non-negative int")
     if not isinstance(pred_id, str) or not pred_id:
         raise ValueError("pred_id must be non-empty string")
-    return f"b{branch_index}.a{atom_index}:{pred_id}"
+    return f"c{case_index}.c{condition_index}:{pred_id}"
 
 
 def make_non_fact_step_key(
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     kind: str,
 ) -> str:
-    if isinstance(branch_index, bool) or not isinstance(branch_index, int) or branch_index < 0:
-        raise ValueError("branch_index must be non-negative int")
-    if isinstance(atom_index, bool) or not isinstance(atom_index, int) or atom_index < 0:
-        raise ValueError("atom_index must be non-negative int")
+    if isinstance(case_index, bool) or not isinstance(case_index, int) or case_index < 0:
+        raise ValueError("case_index must be non-negative int")
+    if isinstance(condition_index, bool) or not isinstance(condition_index, int) or condition_index < 0:
+        raise ValueError("condition_index must be non-negative int")
     if not isinstance(kind, str) or not kind:
         raise ValueError("kind must be non-empty string")
-    return f"b{branch_index}.a{atom_index}:{kind}"
+    return f"c{case_index}.c{condition_index}:{kind}"
 
 
 def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
@@ -234,7 +234,7 @@ def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
         "binding": [[key, _to_jsonable(value)] for key, value in artifact.binding_items],
         "pred_witnesses": [
             {
-                "pred_atom_key": row.pred_atom_key,
+                "pred_condition_key": row.pred_condition_key,
                 "asrt_ids": list(row.asrt_ids),
             }
             for row in artifact.pred_witnesses
@@ -251,7 +251,7 @@ def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
         "rule_refs": list(artifact.rule_refs),
         "rule_ref_edges": [
             {
-                "ruleref_atom_key": row.ruleref_atom_key,
+                "ruleref_condition_key": row.ruleref_condition_key,
                 "rule_ref_id": row.rule_ref_id,
                 "rule_ref_version": row.rule_ref_version,
                 "child_support_digest": row.child_support_digest,
@@ -271,7 +271,7 @@ def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
         binding_items=tuple((key, _from_jsonable(value)) for key, value in row["binding"]),
         pred_witnesses=tuple(
             PredWitness(
-                pred_atom_key=item["pred_atom_key"],
+                pred_condition_key=item["pred_condition_key"],
                 asrt_ids=tuple(item["asrt_ids"]),
             )
             for item in row["pred_witnesses"]
@@ -288,7 +288,7 @@ def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
         rule_refs=tuple(row.get("rule_refs", ())),
         rule_ref_edges=tuple(
             RuleRefEdge(
-                ruleref_atom_key=item["ruleref_atom_key"],
+                ruleref_condition_key=item["ruleref_condition_key"],
                 rule_ref_id=item["rule_ref_id"],
                 rule_ref_version=item["rule_ref_version"],
                 child_support_digest=item.get("child_support_digest"),
@@ -359,7 +359,7 @@ def _normalize_non_empty_strings(values: Sequence[str]) -> set[str]:
 
 def _rule_ref_edge_sort_key(edge: RuleRefEdge) -> tuple[str, str, str, str]:
     return (
-        edge.ruleref_atom_key,
+        edge.ruleref_condition_key,
         edge.rule_ref_id,
         edge.rule_ref_version,
         edge.child_support_digest or "",
@@ -411,7 +411,7 @@ __all__ = [
     "compute_provenance_digest",
     "compute_support_digest",
     "make_non_fact_step_key",
-    "make_pred_atom_key",
+    "make_pred_condition_key",
     "normalize_asrt_ids",
     "normalize_binding_items",
     "normalize_detail_items",

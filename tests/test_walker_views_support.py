@@ -6,7 +6,7 @@ import unittest
 
 from factgraph.application.walker import (
     AssertionView,
-    AtomKeyView,
+    ConditionKeyView,
     FrozenTupleView,
     SupportArtifactView,
     WalkerFrozenError,
@@ -23,10 +23,10 @@ def _support_artifact() -> ProofReceipt:
         root_result_kind="row",
         binding_items=(("$p", "person:alice"),),
         pred_witnesses=(
-            PredWitness(pred_atom_key="b0.a0:Person:age", asrt_ids=("a1", "a2")),
+            PredWitness(pred_condition_key="c0.c0:Person:age", asrt_ids=("a1", "a2")),
         ),
         non_fact_steps=(
-            NonFactStep(step_key="b0.a1:eq", kind="eq", status="satisfied"),
+            NonFactStep(step_key="c0.c1:eq", kind="eq", status="satisfied"),
         ),
     )
 
@@ -150,30 +150,30 @@ class SupportArtifactViewTests(unittest.TestCase):
         self.assertEqual(view.source_id, "support-1")
         self.assertIsInstance(view.pred_witnesses, FrozenTupleView)
         self.assertIsInstance(view.non_fact_steps, FrozenTupleView)
-        self.assertEqual(view.pred_witnesses.first().pred_atom_key, "b0.a0:Person:age")
-        self.assertEqual(view.non_fact_steps.first().step_key, "b0.a1:eq")
+        self.assertEqual(view.pred_witnesses.first().pred_condition_key, "c0.c0:Person:age")
+        self.assertEqual(view.non_fact_steps.first().step_key, "c0.c1:eq")
         self.assertEqual(support.pred_witnesses[0].asrt_ids, ("a1", "a2"))
-        self.assertEqual(support.non_fact_steps[0].step_key, "b0.a1:eq")
+        self.assertEqual(support.non_fact_steps[0].step_key, "c0.c1:eq")
 
     def test_contextualizes_pred_and_step_atom_keys(self) -> None:
         view = SupportArtifactView(_support_artifact(), _claims())
 
-        pred_key = view.parse_pred_atom_key("b0.a0:Person:age")
-        step_key = view.parse_step_key("b0.a1:eq")
+        pred_key = view.parse_pred_condition_key("c0.c0:Person:age")
+        step_key = view.parse_step_key("c0.c1:eq")
 
-        self.assertIsInstance(pred_key, AtomKeyView)
-        self.assertEqual(pred_key.key, "b0.a0:Person:age")
-        self.assertEqual(pred_key.branch_index, 0)
-        self.assertEqual(pred_key.atom_index, 0)
+        self.assertIsInstance(pred_key, ConditionKeyView)
+        self.assertEqual(pred_key.key, "c0.c0:Person:age")
+        self.assertEqual(pred_key.case_index, 0)
+        self.assertEqual(pred_key.condition_index, 0)
         self.assertEqual(pred_key.payload, "Person:age")
-        self.assertEqual(pred_key.underlying, "b0.a0:Person:age")
+        self.assertEqual(pred_key.underlying, "c0.c0:Person:age")
         self.assertEqual(pred_key.kind, "pred")
         self.assertEqual(pred_key.pred_id, "Person:age")
-        self.assertEqual(step_key.key, "b0.a1:eq")
-        self.assertEqual(step_key.branch_index, 0)
-        self.assertEqual(step_key.atom_index, 1)
+        self.assertEqual(step_key.key, "c0.c1:eq")
+        self.assertEqual(step_key.case_index, 0)
+        self.assertEqual(step_key.condition_index, 1)
         self.assertEqual(step_key.payload, "eq")
-        self.assertEqual(step_key.underlying, "b0.a1:eq")
+        self.assertEqual(step_key.underlying, "c0.c1:eq")
         self.assertEqual(step_key.kind, "step")
         self.assertEqual(step_key.step_kind, "eq")
 

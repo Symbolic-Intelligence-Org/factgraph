@@ -95,7 +95,7 @@ from factgraph.core.store._candidate_evidence_tree_summary import summarize_cand
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -322,16 +322,16 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 if inv["rule"]["rule_id"] == "q.aml_case_review_walkthrough"
             )
             self.assertEqual(len(invocation["pred_witnesses"]), 6)
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:transaction_event",
-                    "b0.a1:aml:transaction_event",
-                    "b0.a2:aml:transaction_event",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:beneficiary_risk",
+                    "c0.c0:aml:transaction_event",
+                    "c0.c1:aml:transaction_event",
+                    "c0.c2:aml:transaction_event",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:beneficiary_risk",
                 },
             )
             self.assertEqual(len(invocation["non_fact_steps"]), 2)
@@ -532,27 +532,27 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 if inv["rule"]["rule_id"] == "q.aml_review_required_trigger_walkthrough"
             )
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
             self.assertEqual({step["kind"] for step in invocation["non_fact_steps"]}, {"le", "ge"})
 
             non_fact_by_key = {step["step_key"]: step for step in invocation["non_fact_steps"]}
-            self.assertEqual(sorted(non_fact_by_key.keys()), ["b0.a2:le", "b0.a3:le", "b0.a9:ge"])
-            lower_binding = dict(dict(non_fact_by_key["b0.a2:le"]["details"])["binding"])
-            upper_binding = dict(dict(non_fact_by_key["b0.a3:le"]["details"])["binding"])
-            threshold_binding = dict(dict(non_fact_by_key["b0.a9:ge"]["details"])["binding"])
+            self.assertEqual(sorted(non_fact_by_key.keys()), ["c0.c2:le", "c0.c3:le", "c0.c9:ge"])
+            lower_binding = dict(dict(non_fact_by_key["c0.c2:le"]["details"])["binding"])
+            upper_binding = dict(dict(non_fact_by_key["c0.c3:le"]["details"])["binding"])
+            threshold_binding = dict(dict(non_fact_by_key["c0.c9:ge"]["details"])["binding"])
             self.assertEqual(lower_binding["$window_start_ts"], 100)
             self.assertEqual(lower_binding["$eval_ts"], 200)
             self.assertEqual(upper_binding["$eval_ts"], 200)
@@ -832,21 +832,21 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.aml_aggregation_materialization_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
-            self.assertFalse(any(key.endswith(":aml:transaction_event") for key in pred_atom_keys))
-            self.assertFalse(any(key.endswith(":aml:transaction_timestamp") for key in pred_atom_keys))
+            self.assertFalse(any(key.endswith(":aml:transaction_event") for key in pred_condition_keys))
+            self.assertFalse(any(key.endswith(":aml:transaction_timestamp") for key in pred_condition_keys))
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
 
@@ -1186,22 +1186,22 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.aml_transaction_feed_materialization_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
-            self.assertFalse(any(key.endswith(":aml:transaction_event") for key in pred_atom_keys))
-            self.assertFalse(any(key.endswith(":aml:transaction_timestamp") for key in pred_atom_keys))
-            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_atom_keys))
+            self.assertFalse(any(key.endswith(":aml:transaction_event") for key in pred_condition_keys))
+            self.assertFalse(any(key.endswith(":aml:transaction_timestamp") for key in pred_condition_keys))
+            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_condition_keys))
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
 
@@ -1573,21 +1573,21 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.form_document_extraction_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
-            self.assertFalse(any(":form:" in key for key in pred_atom_keys))
-            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_atom_keys))
+            self.assertFalse(any(":form:" in key for key in pred_condition_keys))
+            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_condition_keys))
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
 
@@ -2028,21 +2028,21 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.single_note_narrative_extraction_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
-            self.assertFalse(any(":note:" in key for key in pred_atom_keys))
-            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_atom_keys))
+            self.assertFalse(any(":note:" in key for key in pred_condition_keys))
+            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_condition_keys))
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
 
@@ -2531,21 +2531,21 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.correlated_multi_note_review_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
-            self.assertFalse(any(":notes:" in key for key in pred_atom_keys))
-            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_atom_keys))
+            self.assertFalse(any(":notes:" in key for key in pred_condition_keys))
+            self.assertFalse(any(key.endswith(":aml:beneficiary_risk") for key in pred_condition_keys))
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
 
@@ -3024,22 +3024,22 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.conflicting_multi_note_evidence_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
-            self.assertFalse(any(":notes:" in key for key in pred_atom_keys))
+            self.assertFalse(any(":notes:" in key for key in pred_condition_keys))
 
             witness_groups = {row["pred_id"]: row for row in summary["predicate_witness_groups"]}
             self.assertNotIn(MULTI_NOTE_EXTRACTED_BENEFICIARY_RISK_PRED_ID, witness_groups)
@@ -3503,24 +3503,24 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.mixed_source_case_pack_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:aml:trigger_evaluation_time",
-                    "b0.a1:aml:windowed_structuring_signal",
-                    "b0.a4:aml:high_risk_outflow_signal",
-                    "b0.a5:aml:shared_device_signal",
-                    "b0.a6:aml:bo_mismatch_signal",
-                    "b0.a7:aml:trigger_score_ppm",
-                    "b0.a8:aml:trigger_score_threshold_ppm",
+                    "c0.c0:aml:trigger_evaluation_time",
+                    "c0.c1:aml:windowed_structuring_signal",
+                    "c0.c4:aml:high_risk_outflow_signal",
+                    "c0.c5:aml:shared_device_signal",
+                    "c0.c6:aml:bo_mismatch_signal",
+                    "c0.c7:aml:trigger_score_ppm",
+                    "c0.c8:aml:trigger_score_threshold_ppm",
                 },
             )
             self.assertEqual(len(invocation["pred_witnesses"]), 7)
             self.assertEqual(len(invocation["non_fact_steps"]), 3)
-            self.assertFalse(any(key.endswith(":aml:transaction_event") for key in pred_atom_keys))
-            self.assertFalse(any(":form:" in key for key in pred_atom_keys))
-            self.assertFalse(any(":note:" in key for key in pred_atom_keys))
+            self.assertFalse(any(key.endswith(":aml:transaction_event") for key in pred_condition_keys))
+            self.assertFalse(any(":form:" in key for key in pred_condition_keys))
+            self.assertFalse(any(":note:" in key for key in pred_condition_keys))
 
             witness_groups = {row["pred_id"]: row for row in summary["predicate_witness_groups"]}
             self.assertNotIn(AML_TRANSACTION_EVENT_PRED_ID, witness_groups)
@@ -3762,24 +3762,24 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
             self.assertEqual(len(invocation["non_fact_steps"]), 2)
             self.assertEqual({step["kind"] for step in invocation["non_fact_steps"]}, {"ge"})
 
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:process:high_high_temperature",
-                    "b0.a1:process:temperature_shutdown_threshold",
-                    "b0.a3:process:high_high_pressure",
-                    "b0.a4:process:pressure_shutdown_threshold",
-                    "b0.a6:process:shutdown_alarm_active",
-                    "b0.a7:process:shutdown_interlock_armed",
-                    "b0.a8:process:manual_override_cleared",
+                    "c0.c0:process:high_high_temperature",
+                    "c0.c1:process:temperature_shutdown_threshold",
+                    "c0.c3:process:high_high_pressure",
+                    "c0.c4:process:pressure_shutdown_threshold",
+                    "c0.c6:process:shutdown_alarm_active",
+                    "c0.c7:process:shutdown_interlock_armed",
+                    "c0.c8:process:manual_override_cleared",
                 },
             )
 
             non_fact_by_key = {step["step_key"]: step for step in invocation["non_fact_steps"]}
-            self.assertEqual(sorted(non_fact_by_key.keys()), ["b0.a2:ge", "b0.a5:ge"])
-            temp_binding = dict(dict(non_fact_by_key["b0.a2:ge"]["details"])["binding"])
-            pressure_binding = dict(dict(non_fact_by_key["b0.a5:ge"]["details"])["binding"])
+            self.assertEqual(sorted(non_fact_by_key.keys()), ["c0.c2:ge", "c0.c5:ge"])
+            temp_binding = dict(dict(non_fact_by_key["c0.c2:ge"]["details"])["binding"])
+            pressure_binding = dict(dict(non_fact_by_key["c0.c5:ge"]["details"])["binding"])
             self.assertEqual(temp_binding["$temperature_c"], 510)
             self.assertEqual(temp_binding["$temperature_threshold_c"], 500)
             self.assertEqual(pressure_binding["$pressure_kpa"], 245)
@@ -3999,20 +3999,20 @@ class DomainWalkthroughContractsTests(unittest.TestCase):
                 for inv in raw_explain["invocations"]
                 if inv["rule"]["rule_id"] == "q.clinical_weak_signal_walkthrough"
             )
-            pred_atom_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            pred_condition_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
-                pred_atom_keys,
+                pred_condition_keys,
                 {
-                    "b0.a0:clinical:mild_fever_signal",
-                    "b0.a1:clinical:mild_tachycardia_signal",
-                    "b0.a2:clinical:mild_tachypnea_signal",
-                    "b0.a3:clinical:mild_hypotension_signal",
-                    "b0.a4:clinical:abnormal_indicator_count",
-                    "b0.a5:clinical:deterioration_count_threshold",
+                    "c0.c0:clinical:mild_fever_signal",
+                    "c0.c1:clinical:mild_tachycardia_signal",
+                    "c0.c2:clinical:mild_tachypnea_signal",
+                    "c0.c3:clinical:mild_hypotension_signal",
+                    "c0.c4:clinical:abnormal_indicator_count",
+                    "c0.c5:clinical:deterioration_count_threshold",
                 },
             )
-            self.assertFalse(any(key.endswith(":clinical:normal_oxygen_saturation") for key in pred_atom_keys))
-            self.assertFalse(any(key.endswith(":clinical:normal_lactate") for key in pred_atom_keys))
+            self.assertFalse(any(key.endswith(":clinical:normal_oxygen_saturation") for key in pred_condition_keys))
+            self.assertFalse(any(key.endswith(":clinical:normal_lactate") for key in pred_condition_keys))
             self.assertEqual(len(invocation["pred_witnesses"]), 6)
             self.assertEqual(len(invocation["non_fact_steps"]), 1)
             self.assertEqual(invocation["non_fact_steps"][0]["kind"], "ge")

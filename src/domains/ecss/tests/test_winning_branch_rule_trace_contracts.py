@@ -89,7 +89,7 @@ from factgraph.core.store._candidate_evidence_tree_summary import summarize_cand
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -160,13 +160,13 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             ],
             "pred_witnesses": [
                 {
-                    "pred_atom_key": "b0.a0:user:tag",
+                    "pred_condition_key": "c0.c0:user:tag",
                     "asrt_ids": ["A1"],
                 }
             ],
             "non_fact_steps": [
                 {
-                    "step_key": "b0.a1:eq",
+                    "step_key": "c0.c1:eq",
                     "kind": "eq",
                     "status": "ok",
                     "details": [["payload", {"__bytes_hex__": "6162"}]],
@@ -181,7 +181,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
         self.assertEqual(artifact.kind, "native_binding_v1")
         self.assertEqual(artifact.root_result_kind, "fact")
         self.assertEqual(artifact.binding_items, (("$blob", b"\x00\xff"), ("$pair", [1, 2])))
-        self.assertEqual(artifact.pred_witnesses[0].pred_atom_key, "b0.a0:user:tag")
+        self.assertEqual(artifact.pred_witnesses[0].pred_condition_key, "c0.c0:user:tag")
         self.assertEqual(artifact.non_fact_steps[0].details, (("payload", b"ab"),))
         self.assertEqual(
             support_artifact_to_dict(artifact),
@@ -194,13 +194,13 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                 ],
                 "pred_witnesses": [
                     {
-                        "pred_atom_key": "b0.a0:user:tag",
+                        "pred_condition_key": "c0.c0:user:tag",
                         "asrt_ids": ["A1"],
                     }
                 ],
                 "non_fact_steps": [
                     {
-                        "step_key": "b0.a1:eq",
+                        "step_key": "c0.c1:eq",
                         "kind": "eq",
                         "status": "ok",
                         "details": [["payload", {"__bytes_hex__": "6162"}]],
@@ -242,13 +242,13 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                     "binding": [["$tag", "vip"], ["$u", refs["u1"]]],
                     "pred_witnesses": [
                         {
-                            "pred_atom_key": "b0.a0:user:tag",
+                            "pred_condition_key": "c0.c0:user:tag",
                             "asrt_ids": [asrt_id],
                         }
                     ],
                     "non_fact_steps": [
                         {
-                            "step_key": "b0.a1:ruleref",
+                            "step_key": "c0.c1:ruleref",
                             "kind": "ruleref",
                             "status": "satisfied",
                             "details": [],
@@ -257,7 +257,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                     "rule_refs": ["q.child_rule"],
                     "rule_ref_edges": [
                         {
-                            "ruleref_atom_key": "b0.a1:ruleref",
+                            "ruleref_condition_key": "c0.c1:ruleref",
                             "rule_ref_id": "q.child_rule",
                             "rule_ref_version": "1.0.0",
                             "child_support_digest": None,
@@ -274,7 +274,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             rule_ref_section = tree_resp["tree"]["root"]["children"][1]
             self.assertEqual(rule_ref_section["node_kind"], "rule_ref_section")
             rule_ref_node = rule_ref_section["children"][0]
-            self.assertEqual(rule_ref_node["ruleref_atom_key"], "b0.a1:ruleref")
+            self.assertEqual(rule_ref_node["ruleref_condition_key"], "c0.c1:ruleref")
             self.assertIsNone(rule_ref_node["child_support_digest"])
             self.assertEqual(rule_ref_node["unresolved_reason"], "child_support_unavailable")
             unresolved = rule_ref_node["children"][0]
@@ -293,25 +293,25 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
         binding = {"$u": "user-1"}
         where = [("pred", "user:tag", ["$u", "vip"])]
 
-        selected_branch_index = find_winning_branch_index(
+        selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             rule_ref_resolutions=(),
         )
-        self.assertEqual(selected_branch_index, 0)
+        self.assertEqual(selected_case_index, 0)
 
         artifact = build_support_artifact_for_binding(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             root_result_kind="fact",
-            selected_branch_index=selected_branch_index,
+            selected_case_index=selected_case_index,
             rule_ref_edges=(),
         )
         self.assertEqual(
-            [row.pred_atom_key for row in artifact.pred_witnesses],
-            ["b0.a0:user:tag"],
+            [row.pred_condition_key for row in artifact.pred_witnesses],
+            ["c0.c0:user:tag"],
         )
 
     def test_winning_branch_prefers_lowest_index_when_multiple_branches_satisfy(self) -> None:
@@ -326,25 +326,25 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             [("pred", "user:tag", ["$u", "vip"])],
         ]
 
-        selected_branch_index = find_winning_branch_index(
+        selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             rule_ref_resolutions=(),
         )
-        self.assertEqual(selected_branch_index, 0)
+        self.assertEqual(selected_case_index, 0)
 
         artifact = build_support_artifact_for_binding(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             root_result_kind="fact",
-            selected_branch_index=selected_branch_index,
+            selected_case_index=selected_case_index,
             rule_ref_edges=(),
         )
         self.assertEqual(
-            [row.pred_atom_key for row in artifact.pred_witnesses],
-            ["b0.a0:user:tag"],
+            [row.pred_condition_key for row in artifact.pred_witnesses],
+            ["c0.c0:user:tag"],
         )
 
     def test_winning_branch_excludes_non_satisfying_pred_branch(self) -> None:
@@ -359,13 +359,13 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             [("pred", "user:tag", ["$u", "vip"])],
         ]
 
-        selected_branch_index = find_winning_branch_index(
+        selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             rule_ref_resolutions=(),
         )
-        self.assertEqual(selected_branch_index, 1)
+        self.assertEqual(selected_case_index, 1)
 
     def test_winning_branch_not_atom_recheck_excludes_branch_with_negated_match(self) -> None:
         witness_facts = {
@@ -380,13 +380,13 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             [("pred", "user:tag", ["$u", "vip"])],
         ]
 
-        selected_branch_index = find_winning_branch_index(
+        selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             rule_ref_resolutions=(),
         )
-        self.assertEqual(selected_branch_index, 1)
+        self.assertEqual(selected_case_index, 1)
 
     def test_winning_branch_ruleref_that_cannot_ground_does_not_satisfy(self) -> None:
         witness_facts = {
@@ -400,13 +400,13 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             [("pred", "user:tag", ["$u", "vip"])],
         ]
 
-        selected_branch_index = find_winning_branch_index(
+        selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             rule_ref_resolutions=(
                 NativeRuleRefResolution(
-                    ruleref_atom_key="b0.a0:ruleref",
+                    ruleref_condition_key="c0.c0:ruleref",
                     rule_ref_id="q.child_rule",
                     rule_ref_version="1.0.0",
                     row_supports=(
@@ -418,7 +418,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                 ),
             ),
         )
-        self.assertEqual(selected_branch_index, 1)
+        self.assertEqual(selected_case_index, 1)
 
     def test_winning_branch_arith_mismatch_excludes_branch(self) -> None:
         witness_facts = {
@@ -432,13 +432,13 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             [("pred", "user:tag", ["$u", "vip"])],
         ]
 
-        selected_branch_index = find_winning_branch_index(
+        selected_case_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
             rule_ref_resolutions=(),
         )
-        self.assertEqual(selected_branch_index, 1)
+        self.assertEqual(selected_case_index, 1)
 
     def test_winning_branch_digest_is_stable_for_same_input(self) -> None:
         witness_facts = {
@@ -452,7 +452,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             [("pred", "user:tag", ["$u", "vip"])],
         ]
 
-        first_branch_index = find_winning_branch_index(
+        first_branch_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
@@ -463,10 +463,10 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             binding=binding,
             witness_facts=witness_facts,
             root_result_kind="fact",
-            selected_branch_index=first_branch_index,
+            selected_case_index=first_branch_index,
             rule_ref_edges=(),
         )
-        second_branch_index = find_winning_branch_index(
+        second_branch_index = find_winning_case_index(
             where=where,
             binding=binding,
             witness_facts=witness_facts,
@@ -477,7 +477,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
             binding=binding,
             witness_facts=witness_facts,
             root_result_kind="fact",
-            selected_branch_index=second_branch_index,
+            selected_case_index=second_branch_index,
             rule_ref_edges=(),
         )
 
@@ -493,7 +493,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
         }
 
         with self.assertRaises(WhereValidationError) as ctx:
-            find_winning_branch_index(
+            find_winning_case_index(
                 where=[("pred", "user:tag", ["$u", "blocked"])],
                 binding={"$u": "user-1"},
                 witness_facts=witness_facts,
@@ -508,7 +508,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                 binding={"$u": "user-1", "$tag": "vip"},
                 rule_ref_resolutions=(
                     NativeRuleRefResolution(
-                        ruleref_atom_key="b0.a0:ruleref",
+                        ruleref_condition_key="c0.c0:ruleref",
                         rule_ref_id="q.child_rule",
                         rule_ref_version="1.0.0",
                         row_supports=(
@@ -523,22 +523,22 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                         ),
                     ),
                 ),
-                selected_branch_index=0,
+                selected_case_index=0,
             )
 
         self.assertIn("multiple row_support matches", str(ctx.exception))
 
     def test_rule_trace_rule_ref_link_and_invocation_sorting_validation(self) -> None:
         with self.assertRaises(ValueError) as ctx_empty_key:
-            RuleTraceRuleRefLink(ruleref_atom_key="", child_invocation_id="rr_1:i1")
-        self.assertEqual(str(ctx_empty_key.exception), "ruleref_atom_key must be non-empty string")
+            RuleTraceRuleRefLink(ruleref_condition_key="", child_invocation_id="rr_1:i1")
+        self.assertEqual(str(ctx_empty_key.exception), "ruleref_condition_key must be non-empty string")
 
         with self.assertRaises(ValueError) as ctx_empty_invocation:
-            RuleTraceRuleRefLink(ruleref_atom_key="b0.a0:ruleref", child_invocation_id="")
+            RuleTraceRuleRefLink(ruleref_condition_key="c0.c0:ruleref", child_invocation_id="")
         self.assertEqual(str(ctx_empty_invocation.exception), "child_invocation_id must be non-empty string")
 
-        link_a = RuleTraceRuleRefLink(ruleref_atom_key="b0.a0:ruleref", child_invocation_id="rr_1:i1")
-        link_b = RuleTraceRuleRefLink(ruleref_atom_key="b0.a1:ruleref", child_invocation_id="rr_1:i2")
+        link_a = RuleTraceRuleRefLink(ruleref_condition_key="c0.c0:ruleref", child_invocation_id="rr_1:i1")
+        link_b = RuleTraceRuleRefLink(ruleref_condition_key="c0.c1:ruleref", child_invocation_id="rr_1:i2")
         with self.assertRaises(ValueError) as ctx_unsorted:
             RuleTraceInvocation(
                 invocation_id="rr_1:i0",
@@ -553,7 +553,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                 output_rows=(),
                 ruleref_links=(link_b, link_a),
             )
-        self.assertEqual(str(ctx_unsorted.exception), "ruleref_links must be sorted by ruleref_atom_key")
+        self.assertEqual(str(ctx_unsorted.exception), "ruleref_links must be sorted by ruleref_condition_key")
 
     def test_rule_trace_artifact_from_dict_round_trip_keeps_where_payload_opaque(self) -> None:
         row = {
@@ -579,21 +579,21 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                     "pred_witnesses": [
                         {
                             "binding_index": 0,
-                            "pred_atom_key": "b0.a0:user:tag",
+                            "pred_condition_key": "c0.c0:user:tag",
                             "asrt_ids": ["A1"],
                         }
                     ],
                     "non_fact_steps": [
                         {
                             "binding_index": 0,
-                            "step_key": "b0.a1:eq",
+                            "step_key": "c0.c1:eq",
                             "kind": "eq",
                             "status": "satisfied",
                             "details": [["payload", {"__bytes_hex__": "ff"}]],
                         },
                         {
                             "binding_index": 0,
-                            "step_key": "b0.a2:not",
+                            "step_key": "c0.c2:not",
                             "kind": "not",
                             "status": "no_match",
                             "details": [["payload", {"__bytes_hex__": "0f"}]],
@@ -644,21 +644,21 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                         "pred_witnesses": [
                             {
                                 "binding_index": 0,
-                                "pred_atom_key": "b0.a0:user:tag",
+                                "pred_condition_key": "c0.c0:user:tag",
                                 "asrt_ids": ["A1"],
                             }
                         ],
                         "non_fact_steps": [
                             {
                                 "binding_index": 0,
-                                "step_key": "b0.a1:eq",
+                                "step_key": "c0.c1:eq",
                                 "kind": "eq",
                                 "status": "evaluated",
                                 "details": [["payload", {"__bytes_hex__": "ff"}]],
                             },
                             {
                                 "binding_index": 0,
-                                "step_key": "b0.a2:not",
+                                "step_key": "c0.c2:not",
                                 "kind": "not",
                                 "status": "negated",
                                 "details": [["payload", {"__bytes_hex__": "0f"}]],
@@ -691,7 +691,7 @@ class WinningBranchRuleTraceContractsTests(unittest.TestCase):
                     output_rows=(("idref_v1:User:user_id=u1",),),
                     ruleref_links=(
                         RuleTraceRuleRefLink(
-                            ruleref_atom_key="b0.a0:ruleref",
+                            ruleref_condition_key="c0.c0:ruleref",
                             child_invocation_id="rr_linked:i2",
                         ),
                     ),

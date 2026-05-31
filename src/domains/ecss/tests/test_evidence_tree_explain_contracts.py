@@ -91,7 +91,7 @@ from factgraph.core.store._candidate_evidence_tree_summary import summarize_cand
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -666,7 +666,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                     "binding": [["$u", refs["u1"]]],
                     "pred_witnesses": [
                         {
-                            "pred_atom_key": "b0.a0:user:tag",
+                            "pred_condition_key": "c0.c0:user:tag",
                             "asrt_ids": [asrt_id],
                         }
                     ],
@@ -796,10 +796,10 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             self.assertEqual(invocation["ruleref_links"], [])
 
             self.assertEqual(len(invocation["pred_witnesses"]), 2)
-            witness_keys = {witness["pred_atom_key"] for witness in invocation["pred_witnesses"]}
+            witness_keys = {witness["pred_condition_key"] for witness in invocation["pred_witnesses"]}
             self.assertEqual(
                 witness_keys,
-                {"b0.a0:ecss:obligation_timestamp", "b0.a1:ecss:window_start"},
+                {"c0.c0:ecss:obligation_timestamp", "c0.c1:ecss:window_start"},
             )
 
             self.assertEqual(len(invocation["non_fact_steps"]), 1)
@@ -906,7 +906,7 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
             for invocation in raw["invocations"]:
                 invocation_id = invocation["invocation_id"]
                 for witness in invocation["pred_witnesses"]:
-                    pred_id = witness["pred_atom_key"].split(":", 1)[1]
+                    pred_id = witness["pred_condition_key"].split(":", 1)[1]
                     group = expected_predicate_group_map.setdefault(
                         pred_id,
                         {"asrt_ids": set(), "invocation_ids": set()},
@@ -1136,10 +1136,10 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                         "title": "Support",
                         "children": [
                             {
-                                "node_id": "atom:b0.a0:user:tag",
+                                "node_id": "atom:c0.c0:user:tag",
                                 "node_kind": "predicate_witness_group",
                                 "title": "Predicate witness user:tag",
-                                "pred_atom_key": "b0.a0:user:tag",
+                                "pred_condition_key": "c0.c0:user:tag",
                                 "pred_id": "user:tag",
                                 "assertion_count": 1,
                                 "children": [
@@ -1156,10 +1156,10 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                                 ],
                             },
                             {
-                                "node_id": "step:b0.a1:eq",
+                                "node_id": "step:c0.c1:eq",
                                 "node_kind": "non_fact_check",
-                                "title": "Non-fact check b0.a1:eq",
-                                "step_key": "b0.a1:eq",
+                                "title": "Non-fact check c0.c1:eq",
+                                "step_key": "c0.c1:eq",
                                 "check_kind": "eq",
                                 "status": "satisfied",
                                 "details": {"lhs": "$tag", "rhs": "vip"},
@@ -1173,10 +1173,10 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                         "title": "Rule References",
                         "children": [
                             {
-                                "node_id": "ruleref:b0.a2:ruleref",
+                                "node_id": "ruleref:c0.c2:ruleref",
                                 "node_kind": "rule_ref",
                                 "title": "Rule reference q.child.recursive",
-                                "ruleref_atom_key": "b0.a2:ruleref",
+                                "ruleref_condition_key": "c0.c2:ruleref",
                                 "rule_ref_id": "q.child.recursive",
                                 "rule_ref_version": "1.0.0",
                                 "child_support_digest": "sha256:child1",
@@ -1198,10 +1198,10 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                                                 "title": "Support",
                                                 "children": [
                                                     {
-                                                        "node_id": "atom:b0.a0:user:status",
+                                                        "node_id": "atom:c0.c0:user:status",
                                                         "node_kind": "predicate_witness_group",
                                                         "title": "Predicate witness user:status",
-                                                        "pred_atom_key": "b0.a0:user:status",
+                                                        "pred_condition_key": "c0.c0:user:status",
                                                         "pred_id": "user:status",
                                                         "assertion_count": 1,
                                                         "children": [
@@ -1224,17 +1224,17 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                                 ],
                             },
                             {
-                                "node_id": "ruleref:b0.a3:ruleref",
+                                "node_id": "ruleref:c0.c3:ruleref",
                                 "node_kind": "rule_ref",
                                 "title": "Rule reference q.child.unresolved",
-                                "ruleref_atom_key": "b0.a3:ruleref",
+                                "ruleref_condition_key": "c0.c3:ruleref",
                                 "rule_ref_id": "q.child.unresolved",
                                 "rule_ref_version": "1.0.0",
                                 "child_support_digest": None,
                                 "unresolved_reason": "child_support_unavailable",
                                 "children": [
                                     {
-                                        "node_id": "unresolved:b0.a3:ruleref",
+                                        "node_id": "unresolved:c0.c3:ruleref",
                                         "node_kind": "unresolved_support",
                                         "title": "Unresolved support",
                                         "reason": "child_support_unavailable",
@@ -1244,17 +1244,17 @@ class EvidenceTreeExplainContractsTests(unittest.TestCase):
                                 ],
                             },
                             {
-                                "node_id": "ruleref:b0.a4:ruleref",
+                                "node_id": "ruleref:c0.c4:ruleref",
                                 "node_kind": "rule_ref",
                                 "title": "Rule reference q.child.boundary",
-                                "ruleref_atom_key": "b0.a4:ruleref",
+                                "ruleref_condition_key": "c0.c4:ruleref",
                                 "rule_ref_id": "q.child.boundary",
                                 "rule_ref_version": "1.0.0",
                                 "child_support_digest": "sha256:cycle1",
                                 "unresolved_reason": None,
                                 "children": [
                                     {
-                                        "node_id": "boundary:b0.a4:ruleref",
+                                        "node_id": "boundary:c0.c4:ruleref",
                                         "node_kind": "recursion_boundary",
                                         "title": "Recursion boundary",
                                         "boundary_reason": "depth_limit",

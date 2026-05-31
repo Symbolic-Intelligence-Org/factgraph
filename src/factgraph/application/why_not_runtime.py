@@ -1,6 +1,6 @@
 """Application-layer Why-not Universe Diagnose runtime executor.
 
-Why-not evaluates one explicit finite candidate universe into a green/red board.
+Why-not evaluates one explicit finite candidate universe into a passed/failed board.
 Red rows are diagnosed through Sibling-with-Diagnose runtime composition, then
 mapped back into Why-not-owned row DTOs.
 
@@ -25,7 +25,7 @@ from .protocol import (
     DiagnoseRequest,
     ErrorDTO,
     WhyNotConditionLocator,
-    WhyNotRedRow,
+    WhyNotFailedRow,
     WhyNotRowDiagnostic,
     WhyNotUniverseRequest,
     WhyNotUniverseResult,
@@ -66,14 +66,14 @@ def check_why_not_universe(
     store: Store,
     registry: RuleRegistry | None = None,
 ) -> WhyNotUniverseResult:
-    """Assemble a red/green board for an explicit finite head-binding universe."""
+    """Assemble a failed/passed board for an explicit finite head-binding universe."""
 
     if not request.candidate_universe:
         return WhyNotUniverseResult(
             status="completed",
             requested_universe=request.candidate_universe,
-            green=(),
-            red=(),
+            passed=(),
+            failed=(),
             errors=(),
             warnings=(),
         )
@@ -107,14 +107,14 @@ def check_why_not_universe(
         return _unsupported(request, errors=extracted.errors)
 
     derived_bindings = _dedupe_bindings(extracted)
-    green: list[BindingItems] = []
-    red: list[WhyNotRedRow] = []
+    passed: list[BindingItems] = []
+    failed: list[WhyNotFailedRow] = []
     for binding in request.candidate_universe:
         if _binding_in(binding, derived_bindings):
-            green.append(binding)
+            passed.append(binding)
             continue
-        red.append(
-            WhyNotRedRow(
+        failed.append(
+            WhyNotFailedRow(
                 binding=binding,
                 diagnostic=_diagnose_red_binding(
                     request,
@@ -128,8 +128,8 @@ def check_why_not_universe(
     return WhyNotUniverseResult(
         status="completed",
         requested_universe=request.candidate_universe,
-        green=tuple(green),
-        red=tuple(red),
+        passed=tuple(passed),
+        failed=tuple(failed),
         errors=(),
         warnings=(),
     )
@@ -358,7 +358,7 @@ def _diagnose_red_binding(
                 failure_kind="atom_localized",
                 diagnostic_granularity="atom_localized",
                 atom_locator=WhyNotConditionLocator(
-                    branch_index=locator.branch_index,
+                    case_index=locator.case_index,
                     failed_atom_index=locator.failed_atom_index,
                     attempted_binding=locator.attempted_binding,
                 ),
@@ -387,8 +387,8 @@ def _diagnose_red_binding(
 
     if diagnose_result.status == "passed":
         raise WhyNotRuntimeError(
-            "Diagnose passed a binding that Why-not classified as red",
-            code="WHY_NOT_DIAGNOSE_PASSED_RED_BINDING",
+            "Diagnose passed a binding that Why-not classified as failed",
+            code="WHY_NOT_DIAGNOSE_PASSED_FAILED_BINDING",
             details={
                 "engine": request.engine,
                 "binding": _binding_debug_details(binding),
@@ -494,8 +494,8 @@ def _invalid_request(
     return WhyNotUniverseResult(
         status="invalid_request",
         requested_universe=request.candidate_universe,
-        green=(),
-        red=(),
+        passed=(),
+        failed=(),
         errors=errors,
         warnings=(),
     )
@@ -509,8 +509,8 @@ def _unsupported(
     return WhyNotUniverseResult(
         status="unsupported",
         requested_universe=request.candidate_universe,
-        green=(),
-        red=(),
+        passed=(),
+        failed=(),
         errors=errors,
         warnings=(),
     )

@@ -510,8 +510,8 @@ Inspect rule or inference structure before attaching runtime semantics:
 ```python
 shape = fg.rules.inspect(r)
 shape["branches"][0]["id"]          # "declared_pref"
-shape["branches"][0]["fallback_id"] # "b0"
-shape["branches"][0]["atom_ids"]    # ["b0.a0", "b0.a1", ...]
+shape["branches"][0]["fallback_id"] # "c0"
+shape["branches"][0]["atom_ids"]    # ["c0.c0", "c0.c1", ...]
 ```
 
 Rule `run` is a row dispatcher. Passing an `Inference` to `run`
@@ -615,7 +615,7 @@ fg.eval.evaluate(
         timestep_delay=2,
         iteration_count=3,
         derived_bound=[0.7, 0.9],
-        branch_bounds={"seed_path": [0.8, 1.0], "b1": [0.2, 0.8]},
+        branch_bounds={"seed_path": [0.8, 1.0], "c1": [0.2, 0.8]},
     ),
 )
 ```

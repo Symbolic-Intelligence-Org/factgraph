@@ -465,5 +465,5 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
   rejected.
 - Case-level semantics require RuleExpr branch ids or compatibility
   `Inference` branch ids.
-- Case ids are lowered to adapter branch indexes such as `branch:0`.
+- Case ids are lowered to adapter case indexes such as `branch:0`.
 - `evaluate(...)` returns `EvaluateResult` rows and does not write facts.

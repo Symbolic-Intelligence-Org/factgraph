@@ -19,7 +19,7 @@ from factgraph.core.store._support import (
     RuleRefEdge,
     ProofReceipt,
     make_non_fact_step_key,
-    make_pred_atom_key,
+    make_pred_condition_key,
     normalize_asrt_ids,
     normalize_binding_items,
     normalize_detail_items,
@@ -32,27 +32,27 @@ def build_support_artifact_for_binding(
     binding: dict[str, Any],
     witness_facts: dict[str, list[ProjectedFact]],
     root_result_kind: str,
-    selected_branch_index: int,
+    selected_case_index: int,
     rule_ref_edges: tuple[RuleRefEdge, ...] = (),
 ) -> ProofReceipt:
     pred_witnesses: list[PredWitness] = []
     non_fact_steps: list[NonFactStep] = []
 
     branches = _normalize_where_branches(where)
-    branch = _require_selected_branch(branches, selected_branch_index)
+    branch = _require_selected_branch(branches, selected_case_index)
     for edge in rule_ref_edges:
-        if not edge.ruleref_atom_key.startswith(f"b{selected_branch_index}."):
+        if not edge.ruleref_condition_key.startswith(f"c{selected_case_index}."):
             raise WhereValidationError("rule_ref_edges must belong to selected branch")
 
-    for atom_index, atom in enumerate(branch):
+    for condition_index, atom in enumerate(branch):
         if not isinstance(atom, tuple) or not atom:
             raise WhereValidationError("invalid atom structure")
         kind = atom[0]
         if kind == "pred":
             pred_witnesses.append(
                 _build_pred_witness(
-                    branch_index=selected_branch_index,
-                    atom_index=atom_index,
+                    case_index=selected_case_index,
+                    condition_index=condition_index,
                     atom=atom,
                     binding=binding,
                     witness_facts=witness_facts,
@@ -61,8 +61,8 @@ def build_support_artifact_for_binding(
             continue
         non_fact_steps.append(
             _build_non_fact_step(
-                branch_index=selected_branch_index,
-                atom_index=atom_index,
+                case_index=selected_case_index,
+                condition_index=condition_index,
                 atom=atom,
                 binding=binding,
             )
@@ -72,7 +72,7 @@ def build_support_artifact_for_binding(
         kind="native_binding_v1",
         root_result_kind=_validate_root_result_kind(root_result_kind),
         binding_items=normalize_binding_items(binding),
-        pred_witnesses=tuple(sorted(pred_witnesses, key=lambda row: row.pred_atom_key)),
+        pred_witnesses=tuple(sorted(pred_witnesses, key=lambda row: row.pred_condition_key)),
         non_fact_steps=tuple(
             sorted(non_fact_steps, key=lambda row: (row.step_key, row.kind, row.status, row.details))
         ),
@@ -81,7 +81,7 @@ def build_support_artifact_for_binding(
             sorted(
                 rule_ref_edges,
                 key=lambda edge: (
-                    edge.ruleref_atom_key,
+                    edge.ruleref_condition_key,
                     edge.rule_ref_id,
                     edge.rule_ref_version,
                     edge.child_support_digest or "",
@@ -96,32 +96,32 @@ def derive_rule_ref_edges_for_binding(
     where: list[Any],
     binding: dict[str, Any],
     rule_ref_resolutions: tuple[NativeRuleRefResolution, ...],
-    selected_branch_index: int,
+    selected_case_index: int,
 ) -> tuple[RuleRefEdge, ...]:
-    resolution_by_key = {row.ruleref_atom_key: row for row in rule_ref_resolutions}
+    resolution_by_key = {row.ruleref_condition_key: row for row in rule_ref_resolutions}
     edges: list[RuleRefEdge] = []
     branches = _normalize_where_branches(where)
-    branch = _require_selected_branch(branches, selected_branch_index)
+    branch = _require_selected_branch(branches, selected_case_index)
 
-    for atom_index, atom in enumerate(branch):
+    for condition_index, atom in enumerate(branch):
         if not isinstance(atom, tuple) or not atom or atom[0] != "ruleref":
             continue
-        ruleref_atom_key = make_non_fact_step_key(selected_branch_index, atom_index, "ruleref")
-        resolution = resolution_by_key.get(ruleref_atom_key)
+        ruleref_condition_key = make_non_fact_step_key(selected_case_index, condition_index, "ruleref")
+        resolution = resolution_by_key.get(ruleref_condition_key)
         if resolution is None:
-            raise WhereValidationError(f"missing rule_ref_resolution for {ruleref_atom_key}")
+            raise WhereValidationError(f"missing rule_ref_resolution for {ruleref_condition_key}")
         grounded = _ground_terms(atom[3], binding, error_message="ruleref atom terms must be list")
         if grounded is None:
-            raise WhereValidationError(f"selected branch contains ungroundable ruleref: {ruleref_atom_key}")
+            raise WhereValidationError(f"selected branch contains ungroundable ruleref: {ruleref_condition_key}")
         matches = [row for row in resolution.row_supports if row.row_terms == grounded]
         if not matches:
-            raise WhereValidationError(f"selected branch lacks row_support match for {ruleref_atom_key}")
+            raise WhereValidationError(f"selected branch lacks row_support match for {ruleref_condition_key}")
         if len(matches) > 1:
-            raise WhereValidationError(f"multiple row_support matches for {ruleref_atom_key}")
+            raise WhereValidationError(f"multiple row_support matches for {ruleref_condition_key}")
         row_support = matches[0]
         edges.append(
             RuleRefEdge(
-                ruleref_atom_key=ruleref_atom_key,
+                ruleref_condition_key=ruleref_condition_key,
                 rule_ref_id=resolution.rule_ref_id,
                 rule_ref_version=resolution.rule_ref_version,
                 child_support_digest=row_support.child_support_digest,
@@ -133,7 +133,7 @@ def derive_rule_ref_edges_for_binding(
         sorted(
             edges,
             key=lambda edge: (
-                edge.ruleref_atom_key,
+                edge.ruleref_condition_key,
                 edge.rule_ref_id,
                 edge.rule_ref_version,
                 edge.child_support_digest or "",
@@ -142,7 +142,7 @@ def derive_rule_ref_edges_for_binding(
     )
 
 
-def find_winning_branch_index(
+def find_winning_case_index(
     *,
     where: list[Any],
     binding: dict[str, Any],
@@ -150,27 +150,27 @@ def find_winning_branch_index(
     rule_ref_resolutions: tuple[NativeRuleRefResolution, ...],
 ) -> int:
     branches = _normalize_where_branches(where)
-    resolution_by_key = {row.ruleref_atom_key: row for row in rule_ref_resolutions}
+    resolution_by_key = {row.ruleref_condition_key: row for row in rule_ref_resolutions}
     view_facts = _view_facts_from_witness_facts(witness_facts)
 
-    for branch_index, branch in enumerate(branches):
+    for case_index, branch in enumerate(branches):
         if _branch_satisfies(
-            branch_index=branch_index,
+            case_index=case_index,
             branch=branch,
             binding=binding,
             witness_facts=witness_facts,
             view_facts=view_facts,
             resolution_by_key=resolution_by_key,
         ):
-            return branch_index
+            return case_index
 
     raise WhereValidationError("no satisfying branch for final binding")
 
 
 def _build_pred_witness(
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     atom: tuple[Any, ...],
     binding: dict[str, Any],
     witness_facts: dict[str, list[ProjectedFact]],
@@ -190,15 +190,15 @@ def _build_pred_witness(
         raise WhereValidationError(f"selected branch lacks predicate witness for {pred_id}")
 
     return PredWitness(
-        pred_atom_key=make_pred_atom_key(branch_index, atom_index, pred_id),
+        pred_condition_key=make_pred_condition_key(case_index, condition_index, pred_id),
         asrt_ids=normalize_asrt_ids(matches),
     )
 
 
 def _build_non_fact_step(
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     atom: tuple[Any, ...],
     binding: dict[str, Any],
 ) -> NonFactStep:
@@ -215,7 +215,7 @@ def _build_non_fact_step(
         status = "no_match"
 
     return NonFactStep(
-        step_key=make_non_fact_step_key(branch_index, atom_index, str(kind)),
+        step_key=make_non_fact_step_key(case_index, condition_index, str(kind)),
         kind=str(kind),
         status=status,
         details=details,
@@ -239,17 +239,17 @@ def _normalize_where_branches(where: list[Any]) -> list[list[tuple[Any, ...]]]:
 
 def _branch_satisfies(
     *,
-    branch_index: int,
+    case_index: int,
     branch: list[tuple[Any, ...]],
     binding: dict[str, Any],
     witness_facts: dict[str, list[ProjectedFact]],
     view_facts: dict[str, list[tuple[Any, ...]]],
     resolution_by_key: dict[str, NativeRuleRefResolution],
 ) -> bool:
-    for atom_index, atom in enumerate(branch):
+    for condition_index, atom in enumerate(branch):
         if not _atom_satisfies(
-            branch_index=branch_index,
-            atom_index=atom_index,
+            case_index=case_index,
+            condition_index=condition_index,
             atom=atom,
             binding=binding,
             witness_facts=witness_facts,
@@ -262,8 +262,8 @@ def _branch_satisfies(
 
 def _atom_satisfies(
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     atom: tuple[Any, ...],
     binding: dict[str, Any],
     witness_facts: dict[str, list[ProjectedFact]],
@@ -275,8 +275,8 @@ def _atom_satisfies(
         return _pred_atom_satisfies(atom=atom, binding=binding, witness_facts=witness_facts)
     if kind == "ruleref":
         return _ruleref_atom_satisfies(
-            branch_index=branch_index,
-            atom_index=atom_index,
+            case_index=case_index,
+            condition_index=condition_index,
             atom=atom,
             binding=binding,
             resolution_by_key=resolution_by_key,
@@ -313,24 +313,24 @@ def _pred_atom_satisfies(
 
 def _ruleref_atom_satisfies(
     *,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     atom: tuple[Any, ...],
     binding: dict[str, Any],
     resolution_by_key: dict[str, NativeRuleRefResolution],
 ) -> bool:
     if len(atom) != 4:
         raise WhereValidationError("ruleref atom must be ('ruleref', rule_id, version, [terms...])")
-    ruleref_atom_key = make_non_fact_step_key(branch_index, atom_index, "ruleref")
-    resolution = resolution_by_key.get(ruleref_atom_key)
+    ruleref_condition_key = make_non_fact_step_key(case_index, condition_index, "ruleref")
+    resolution = resolution_by_key.get(ruleref_condition_key)
     if resolution is None:
-        raise WhereValidationError(f"missing rule_ref_resolution for {ruleref_atom_key}")
+        raise WhereValidationError(f"missing rule_ref_resolution for {ruleref_condition_key}")
     grounded = _ground_terms(atom[3], binding, error_message="ruleref atom terms must be list")
     if grounded is None:
         return False
     matches = [row for row in resolution.row_supports if row.row_terms == grounded]
     if len(matches) > 1:
-        raise WhereValidationError(f"multiple row_support matches for {ruleref_atom_key}")
+        raise WhereValidationError(f"multiple row_support matches for {ruleref_condition_key}")
     return len(matches) == 1
 
 
@@ -463,13 +463,13 @@ def _view_facts_from_witness_facts(
 
 def _require_selected_branch(
     branches: list[list[tuple[Any, ...]]],
-    selected_branch_index: int,
+    selected_case_index: int,
 ) -> list[tuple[Any, ...]]:
-    if isinstance(selected_branch_index, bool) or not isinstance(selected_branch_index, int):
-        raise WhereValidationError("selected_branch_index must be int")
-    if selected_branch_index < 0 or selected_branch_index >= len(branches):
-        raise WhereValidationError("selected_branch_index out of range")
-    return branches[selected_branch_index]
+    if isinstance(selected_case_index, bool) or not isinstance(selected_case_index, int):
+        raise WhereValidationError("selected_case_index must be int")
+    if selected_case_index < 0 or selected_case_index >= len(branches):
+        raise WhereValidationError("selected_case_index out of range")
+    return branches[selected_case_index]
 
 
 def _validate_root_result_kind(value: str) -> str:
@@ -481,5 +481,5 @@ def _validate_root_result_kind(value: str) -> str:
 __all__ = [
     "build_support_artifact_for_binding",
     "derive_rule_ref_edges_for_binding",
-    "find_winning_branch_index",
+    "find_winning_case_index",
 ]

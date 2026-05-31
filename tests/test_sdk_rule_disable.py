@@ -6,8 +6,8 @@ ships full §5.1 / §5.2 / §5.4 / §5.7 / §5.8 contract coverage for
 ``sdk_rule_disable(...)``. Mirrors the G1 / G4 / G2
 per-method contract test structure with rule-overlay specifics
 (SDK ``Rule`` lowering through ``_compile_rule_input``, raw
-``ProofReceipt`` from a prior Check, ``branch_index`` /
-``atom_index`` action arguments mirroring the A helper).
+``ProofReceipt`` from a prior Check, ``case_index`` /
+``condition_index`` action arguments mirroring the A helper).
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def _adult_rule() -> Rule:
 def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> ProofReceipt:
     """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": e_ref, "$age": age})
-    payload = result.evidence_envelope.engine_payload
+    payload = result.evidence_envelope.proof
     assert isinstance(payload, ProofReceipt), (
         f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )
@@ -96,8 +96,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         result = sdk_rule_disable(sdk,
             _adult_rule(),
             support,
-            branch_index=0,
-            atom_index=0,
+            case_index=0,
+            condition_index=0,
         )
 
         self.assertIsInstance(result, RuleDisableResult)
@@ -111,8 +111,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             sdk_rule_disable(sdk,
                 {"not": "rule"},  # type: ignore[arg-type]
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.rule")
@@ -129,8 +129,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             sdk_rule_disable(sdk,
                 _age_derivation(),  # type: ignore[arg-type]
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.rule")
@@ -142,8 +142,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             sdk_rule_disable(sdk,
                 _adult_rule(),
                 "not-a-support-artifact",  # type: ignore[arg-type]
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.support")
@@ -158,8 +158,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             sdk_rule_disable(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 overlay="not-an-overlay",  # type: ignore[arg-type]
             )
 
@@ -190,8 +190,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             sdk_rule_disable(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
                 overlay=non_empty_overlay,
             )
 
@@ -206,8 +206,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         result = sdk_rule_disable(sdk,
             _adult_rule(),
             support,
-            branch_index=0,
-            atom_index=0,
+            case_index=0,
+            condition_index=0,
             overlay=FactOverlay(),
         )
 
@@ -229,8 +229,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
                 sdk_rule_disable(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                 )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.rule")
@@ -253,8 +253,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
                 sdk_rule_disable(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                 )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.dependencies")
@@ -284,8 +284,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
                 sdk_rule_disable(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                 )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.dependencies")
@@ -308,8 +308,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
                 sdk_rule_disable(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                 )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.request")
@@ -330,8 +330,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
                 sdk_rule_disable(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                 )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.request")
@@ -353,8 +353,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
                 sdk_rule_disable(sdk,
                     _adult_rule(),
                     support,
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                 )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable")
@@ -398,8 +398,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             sdk_rule_disable(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
             )
 
         self.assertIs(captured["store"], sdk._store)
@@ -407,8 +407,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
         self.assertEqual(len(captured["request"].overlay.rule_actions), 1)
         action = captured["request"].overlay.rule_actions[0]
         self.assertIsInstance(action, RuleDisableAction)
-        self.assertEqual(action.branch_index, 0)
-        self.assertEqual(action.atom_index, 0)
+        self.assertEqual(action.case_index, 0)
+        self.assertEqual(action.condition_index, 0)
 
     def test_sibling_rule_disable_does_not_call_other_sdk_shells_at_runtime(self) -> None:
         """§5.8 Sibling: ``sdk_rule_disable`` MUST NOT call any of the
@@ -433,8 +433,8 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             sdk_rule_disable(sdk,
                 _adult_rule(),
                 support,
-                branch_index=0,
-                atom_index=0,
+                case_index=0,
+                condition_index=0,
             )
 
         mock_check.assert_not_called()

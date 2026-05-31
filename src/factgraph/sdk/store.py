@@ -3304,7 +3304,7 @@ def _public_semantics_engine(value: Any) -> str | None:
 @dataclass(frozen=True)
 class _SemanticsLoweringContext:
     name: str
-    branch_indexes: Mapping[str, int]
+    case_indexes: Mapping[str, int]
     known_rule_ids: frozenset[str]
     atom_ids: tuple[str, ...] = ()
     branch_specific_allowed: bool = True
@@ -3323,8 +3323,8 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
     if isinstance(value, PyReasonSemantics):
         rule_entries: list[dict[str, Any]] = []
         rule_entries.extend(_preview_pyreason_bound_entries(value))
-        for branch_index, interval in _preview_branch_bounds(value.branch_bounds):
-            rule_entries.append({"target": f"branch:{branch_index}", "kind": "interval", "value": list(interval)})
+        for case_index, interval in _preview_branch_bounds(value.branch_bounds):
+            rule_entries.append({"target": f"branch:{case_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
             rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
         rule_projection: dict[str, list[dict[str, Any]]] = {}
@@ -3355,12 +3355,12 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
                 "single application Rule inputs only accept empty branch_probabilities"
             )
         for branch_id, probability in value.branch_probabilities.items():
-            branch_index = context.branch_indexes.get(branch_id)
-            if branch_index is None:
+            case_index = context.case_indexes.get(branch_id)
+            if case_index is None:
                 raise SDKStoreError(f"unknown branch id {branch_id!r} for ProbLogSemantics.branch_probabilities")
             entries.append(
                 {
-                    "target": f"branch:{branch_index}",
+                    "target": f"branch:{case_index}",
                     "kind": "branch_probability",
                     "value": probability,
                 }
@@ -3387,13 +3387,13 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
                 "single application Rule inputs only accept empty branch_bounds"
             )
         for branch_id, interval in value.branch_bounds.items():
-            branch_index = context.branch_indexes.get(branch_id)
-            if branch_index is None:
-                known = ", ".join(sorted(context.branch_indexes)) or "<none>"
+            case_index = context.case_indexes.get(branch_id)
+            if case_index is None:
+                known = ", ".join(sorted(context.case_indexes)) or "<none>"
                 raise SDKStoreError(
                     f"branch_bounds contains unknown branch id {branch_id!r}; known branch ids: {known}"
                 )
-            rule_entries.append({"target": f"branch:{branch_index}", "kind": "interval", "value": list(interval)})
+            rule_entries.append({"target": f"branch:{case_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
             rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
         rule_projection = {}
@@ -3429,13 +3429,13 @@ def _preview_pyreason_bound_entries(value: PyReasonSemantics) -> list[dict[str, 
     if head_interval is not None:
         entries.append({"target": "head:0", "kind": "interval", "value": list(head_interval)})
     for atom_id, interval in value.atom_bounds.items():
-        _rule_id, atom_index = _parse_pyreason_atom_bound_id(
+        _rule_id, condition_index = _parse_pyreason_atom_bound_id(
             atom_id,
             field_name="PyReasonSemantics.atom_bounds",
         )
         entries.append(
             {
-                "target": f"body_atom:0:{atom_index}",
+                "target": f"body_atom:0:{condition_index}",
                 "kind": "interval_threshold",
                 "value": list(interval),
             }
@@ -3463,14 +3463,14 @@ def _lower_pyreason_bound_entries(
     known = ", ".join(context.atom_ids)
     for atom_id, interval in value.atom_bounds.items():
         _parse_pyreason_atom_bound_id(atom_id, field_name="PyReasonSemantics.atom_bounds")
-        atom_index = atom_index_by_id.get(atom_id)
-        if atom_index is None:
+        condition_index = atom_index_by_id.get(atom_id)
+        if condition_index is None:
             raise SDKStoreError(
                 f"PyReasonSemantics.atom_bounds contains unknown atom id {atom_id!r}; known atom ids: {known}"
             )
         entries.append(
             {
-                "target": f"body_atom:0:{atom_index}",
+                "target": f"body_atom:0:{condition_index}",
                 "kind": "interval_threshold",
                 "value": list(interval),
             }
@@ -3483,7 +3483,7 @@ def _parse_pyreason_atom_bound_id(value: str, *, field_name: str) -> tuple[str, 
     if not rule_id or marker != ":atom_" or not atom_index_text:
         raise SDKStoreError(f"{field_name} keys must use <rule_id>:atom_<index>")
     if not atom_index_text.isdigit():
-        raise SDKStoreError(f"{field_name} keys must use non-negative atom indexes")
+        raise SDKStoreError(f"{field_name} keys must use non-negative condition indexes")
     return (rule_id, int(atom_index_text))
 
 
@@ -3530,17 +3530,17 @@ def _semantics_lowering_context(derivation: Any) -> _SemanticsLoweringContext:
     if isinstance(derivation, ApplicationRule):
         return _SemanticsLoweringContext(
             name=derivation.id,
-            branch_indexes={},
+            case_indexes={},
             known_rule_ids=frozenset({derivation.id}),
             atom_ids=tuple(derivation.atom_ids),
             branch_specific_allowed=False,
         )
-    branch_indexes = _branch_id_index_for_derivation(derivation)
+    case_indexes = _branch_id_index_for_derivation(derivation)
     derivation_id = getattr(derivation, "id", None)
     known_rule_ids = frozenset({derivation_id}) if isinstance(derivation_id, str) and derivation_id else frozenset()
     return _SemanticsLoweringContext(
         name=derivation_id if isinstance(derivation_id, str) and derivation_id else "semantics",
-        branch_indexes=branch_indexes,
+        case_indexes=case_indexes,
         known_rule_ids=known_rule_ids,
     )
 
@@ -3554,17 +3554,17 @@ def _semantics_context_for_ruleexpr_plan(
     if isinstance(source, ApplicationRule):
         return _SemanticsLoweringContext(
             name=source.id,
-            branch_indexes={},
+            case_indexes={},
             known_rule_ids=frozenset({source.id, head.id}),
             atom_ids=tuple(source.atom_ids),
             branch_specific_allowed=False,
         )
-    branch_indexes = {branch.branch_id: index for index, branch in enumerate(plan.branches)}
+    case_indexes = {branch.branch_id: index for index, branch in enumerate(plan.branches)}
     known_rule_ids = {head.id}
     known_rule_ids.update(binding.rule_id for binding in plan.occurrence_map)
     return _SemanticsLoweringContext(
         name=head.id,
-        branch_indexes=branch_indexes,
+        case_indexes=case_indexes,
         known_rule_ids=frozenset(rule_id for rule_id in known_rule_ids if rule_id),
     )
 
@@ -3636,7 +3636,7 @@ def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     seen_ids: dict[str, int] = {}
     for idx, (explicit_id, atoms) in enumerate(raw_branches):
-        fallback_id = f"b{idx}"
+        fallback_id = f"c{idx}"
         branch_id = explicit_id if explicit_id is not None else fallback_id
         if branch_id in seen_ids:
             raise SDKStoreError(f"duplicate Case.id {branch_id!r} in inspected when")
@@ -3649,7 +3649,10 @@ def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
                 "index": idx,
                 "atom_count": len(atoms),
                 "atoms": _lower_inspect_atoms(atoms),
-                "atom_ids": [f"{fallback_id}.a{atom_idx}" for atom_idx, _atom in enumerate(atoms)],
+                "atom_ids": [
+                    f"{fallback_id}.c{condition_idx}"
+                    for condition_idx, _condition in enumerate(atoms)
+                ],
             }
         )
     return out

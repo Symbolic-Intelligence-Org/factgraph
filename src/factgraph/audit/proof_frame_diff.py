@@ -61,13 +61,13 @@ class FrameStatusChange:
 
 @dataclass(frozen=True)
 class AtomDelta:
-    atom_key: str
+    condition_key: str
     kind: AtomDeltaKind
     before_verdict: ProofFrameStatus | None
     after_verdict: ProofFrameStatus | None
 
     def __post_init__(self) -> None:
-        _require_non_empty_str(self.atom_key, field_name="atom_key")
+        _require_non_empty_str(self.condition_key, field_name="condition_key")
         _validate_literal(self.kind, field_name="kind", allowed=_ATOM_DELTA_KINDS)
         if self.before_verdict is not None:
             _validate_proof_frame_status(self.before_verdict, field_name="before_verdict")
@@ -228,13 +228,13 @@ def _proof_frame_record_from_event(event: RoundEvent) -> _ProofFrameRecord:
     atoms: dict[str, ProofFrameStatus] = {}
     for idx, item in enumerate(atom_verdicts):
         row = _require_mapping(item, field_name=f"payload.result.atom_verdicts[{idx}]")
-        atom_key = _require_non_empty_str(
-            row.get("atom_key"),
-            field_name=f"payload.result.atom_verdicts[{idx}].atom_key",
+        condition_key = _require_non_empty_str(
+            row.get("condition_key"),
+            field_name=f"payload.result.atom_verdicts[{idx}].condition_key",
         )
-        if atom_key in atoms:
-            raise ProofFrameDiffError("payload.result.atom_verdicts must not duplicate atom_key")
-        atoms[atom_key] = _validate_proof_frame_status(
+        if condition_key in atoms:
+            raise ProofFrameDiffError("payload.result.atom_verdicts must not duplicate condition_key")
+        atoms[condition_key] = _validate_proof_frame_status(
             row.get("verdict"),
             field_name=f"payload.result.atom_verdicts[{idx}].verdict",
         )
@@ -304,13 +304,13 @@ def _diff_atoms(
     atoms_b: dict[str, ProofFrameStatus],
 ) -> tuple[AtomDelta, ...]:
     deltas: list[AtomDelta] = []
-    for atom_key in sorted(set(atoms_a) | set(atoms_b)):
-        before = atoms_a.get(atom_key)
-        after = atoms_b.get(atom_key)
+    for condition_key in sorted(set(atoms_a) | set(atoms_b)):
+        before = atoms_a.get(condition_key)
+        after = atoms_b.get(condition_key)
         if before is None:
             deltas.append(
                 AtomDelta(
-                    atom_key=atom_key,
+                    condition_key=condition_key,
                     kind="atom_added",
                     before_verdict=None,
                     after_verdict=after,
@@ -319,7 +319,7 @@ def _diff_atoms(
         elif after is None:
             deltas.append(
                 AtomDelta(
-                    atom_key=atom_key,
+                    condition_key=condition_key,
                     kind="atom_removed",
                     before_verdict=before,
                     after_verdict=None,
@@ -328,7 +328,7 @@ def _diff_atoms(
         elif before != after:
             deltas.append(
                 AtomDelta(
-                    atom_key=atom_key,
+                    condition_key=condition_key,
                     kind="atom_verdict_changed",
                     before_verdict=before,
                     after_verdict=after,

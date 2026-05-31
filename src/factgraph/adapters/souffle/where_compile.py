@@ -19,7 +19,7 @@ from factgraph.core.rules.where_ast_validate import (
     validate_where_ast,
 )
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store._support import make_pred_atom_key
+from factgraph.core.store._support import make_pred_condition_key
 
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
 # T2.3c: min/max/mean require `count : {same_body} > 0` guard prefix per
@@ -31,10 +31,10 @@ _AGGREGATE_FILTER_ATOM_KINDS = {"pred", "eq", "ne", "in", "gt", "ge", "lt", "le"
 
 @dataclass(frozen=True)
 class PredWitnessColumnSpec:
-    pred_atom_key: str
+    pred_condition_key: str
     pred_id: str
-    branch_index: int
-    atom_index: int
+    case_index: int
+    condition_index: int
 
 
 @dataclass(frozen=True)
@@ -227,17 +227,17 @@ def build_query_witness_layout(where: list[Any]) -> QueryWitnessLayout:
     variables = tuple(extract_where_variables(where))
     bodies = _normalize_where_subset(where)
     pred_witness_columns: list[PredWitnessColumnSpec] = []
-    for branch_index, body in enumerate(bodies):
-        for atom_index, atom in enumerate(body):
+    for case_index, body in enumerate(bodies):
+        for condition_index, atom in enumerate(body):
             if atom[0] != "pred":
                 continue
             _, pred_id, _terms = atom
             pred_witness_columns.append(
                 PredWitnessColumnSpec(
-                    pred_atom_key=make_pred_atom_key(branch_index, atom_index, pred_id),
+                    pred_condition_key=make_pred_condition_key(case_index, condition_index, pred_id),
                     pred_id=pred_id,
-                    branch_index=branch_index,
-                    atom_index=atom_index,
+                    case_index=case_index,
+                    condition_index=condition_index,
                 )
             )
     return QueryWitnessLayout(
@@ -283,17 +283,17 @@ def _compile_relation_to_dl_block(
     if witness_layout is not None:
         for index, spec in enumerate(witness_layout.pred_witness_columns):
             witness_symbol = f"W{index}"
-            pred_witness_symbols[(spec.branch_index, spec.atom_index)] = witness_symbol
+            pred_witness_symbols[(spec.case_index, spec.condition_index)] = witness_symbol
             head_vars.append(witness_symbol)
             relation_decl_cols.append(f"{witness_symbol}:symbol")
 
     rule_lines: list[str] = []
-    for branch_index, body in enumerate(bodies):
+    for case_index, body in enumerate(bodies):
         bound_vars: set[str] = set()
         var_type_domains = _infer_var_type_domains(body, pred_type_domains)
         body_terms: list[str] = []
         seen_pred_occurrences: set[tuple[int, int]] = set()
-        for atom_index, atom in enumerate(body):
+        for condition_index, atom in enumerate(body):
             body_terms.append(
                 _compile_atom(
                     atom=atom,
@@ -306,17 +306,17 @@ def _compile_relation_to_dl_block(
                     query_variables=head_relation_variables,
                     not_rel_defs=not_rel_defs,
                     ast_gate_on=ast_gate_on,
-                    branch_index=branch_index,
-                    atom_index=atom_index,
+                    case_index=case_index,
+                    condition_index=condition_index,
                     pred_witness_symbols=pred_witness_symbols,
                     not_rel_namespace=not_rel_namespace,
                 )
             )
             if atom[0] == "pred" and witness_layout is not None:
-                seen_pred_occurrences.add((branch_index, atom_index))
+                seen_pred_occurrences.add((case_index, condition_index))
         if witness_layout is not None:
             for spec in witness_layout.pred_witness_columns:
-                occurrence = (spec.branch_index, spec.atom_index)
+                occurrence = (spec.case_index, spec.condition_index)
                 if occurrence in seen_pred_occurrences:
                     continue
                 body_terms.append(f'{pred_witness_symbols[occurrence]} = ""')
@@ -452,8 +452,8 @@ def _compile_atom(
     query_variables: list[str],
     not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]],
     ast_gate_on: bool,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     pred_witness_symbols: dict[tuple[int, int], str],
     not_rel_namespace: str | None,
 ) -> str:
@@ -475,7 +475,7 @@ def _compile_atom(
                 bound_vars.add(term)
             else:
                 args.append(_literal_to_symbol(term))
-        occurrence = (branch_index, atom_index)
+        occurrence = (case_index, condition_index)
         witness_symbol = pred_witness_symbols.get(occurrence)
         rel_name = normalize_pred_id(pred_id)
         if witness_symbol is not None:

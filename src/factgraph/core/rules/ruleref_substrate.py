@@ -12,7 +12,7 @@ from factgraph.core.store._support import ProjectedFact, ProofReceipt, compute_s
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 
 
@@ -83,7 +83,7 @@ def _evaluate_native_where_internal(
         return NativeWhereEvaluation(
             bindings=bindings,
             rule_refs=tuple(sorted({row.rule_ref_id for row in resolutions})),
-            rule_ref_resolutions=tuple(sorted(resolutions, key=lambda row: row.ruleref_atom_key)),
+            rule_ref_resolutions=tuple(sorted(resolutions, key=lambda row: row.ruleref_condition_key)),
         )
 
     return NativeWhereEvaluation(bindings=evaluate_where(view_facts, where))
@@ -116,7 +116,7 @@ def _rewrite_where_rule_refs(
     overlay: dict[str, list[tuple[Any, ...]]] = {}
     resolutions: list[NativeRuleRefResolution] = []
 
-    def rewrite_atom(branch_index: int, atom_index: int, atom: Any) -> Any:
+    def rewrite_atom(case_index: int, condition_index: int, atom: Any) -> Any:
         if not isinstance(atom, tuple) or not atom:
             return atom
         if atom[0] != "ruleref":
@@ -146,7 +146,7 @@ def _rewrite_where_rule_refs(
         overlay[pred_id] = list(registered.rows)
         resolutions.append(
             NativeRuleRefResolution(
-                ruleref_atom_key=f"b{branch_index}.a{atom_index}:ruleref",
+                ruleref_condition_key=f"c{case_index}.c{condition_index}:ruleref",
                 rule_ref_id=ref_spec.rule_id,
                 rule_ref_version=ref_spec.version,
                 row_supports=registered.row_supports,
@@ -156,19 +156,19 @@ def _rewrite_where_rule_refs(
 
     if all(isinstance(item, tuple) for item in where):
         return (
-            [rewrite_atom(0, atom_index, atom) for atom_index, atom in enumerate(where)],
+            [rewrite_atom(0, condition_index, atom) for condition_index, atom in enumerate(where)],
             overlay,
-            tuple(sorted(resolutions, key=lambda row: row.ruleref_atom_key)),
+            tuple(sorted(resolutions, key=lambda row: row.ruleref_condition_key)),
         )
     if all(isinstance(item, list) for item in where):
         out_branches: list[list[Any]] = []
-        for branch_index, branch in enumerate(where):
+        for case_index, branch in enumerate(where):
             if not isinstance(branch, list):
                 raise WhereValidationError("invalid where branch")
             out_branches.append(
-                [rewrite_atom(branch_index, atom_index, atom) for atom_index, atom in enumerate(branch)]
+                [rewrite_atom(case_index, condition_index, atom) for condition_index, atom in enumerate(branch)]
             )
-        return out_branches, overlay, tuple(sorted(resolutions, key=lambda row: row.ruleref_atom_key))
+        return out_branches, overlay, tuple(sorted(resolutions, key=lambda row: row.ruleref_condition_key))
     return where, overlay, tuple()
 
 
@@ -239,7 +239,7 @@ def _build_rule_row_support(
             unresolved_reason="child_support_unavailable",
         )
 
-    selected_branch_index = find_winning_branch_index(
+    selected_case_index = find_winning_case_index(
         where=rule_spec_where,
         binding=binding,
         witness_facts=witness_facts,
@@ -249,14 +249,14 @@ def _build_rule_row_support(
         where=rule_spec_where,
         binding=binding,
         rule_ref_resolutions=child_rule_ref_resolutions,
-        selected_branch_index=selected_branch_index,
+        selected_case_index=selected_case_index,
     )
     artifact = build_support_artifact_for_binding(
         where=rule_spec_where,
         binding=binding,
         witness_facts=witness_facts,
         root_result_kind="row",
-        selected_branch_index=selected_branch_index,
+        selected_case_index=selected_case_index,
         rule_ref_edges=rule_ref_edges,
     )
     support_digest = compute_support_digest(artifact)

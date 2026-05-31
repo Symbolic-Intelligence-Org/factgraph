@@ -10,7 +10,7 @@ Public surface contract per blueprint §5 locks:
 - Method:      ``sdk_rule_add_condition(...)`` (instance
                method; not a free function in ``factgraph.sdk.__all__``).
 - Signature:   ``check_rule_add_condition(rule, support, *,
-               branch_index, added_atom, overlay=None, note=None)``
+               case_index, added_atom, overlay=None, note=None)``
                per §5.1 / §5.2 / §5.4 locks. ``rule`` is an SDK ``Rule``
                (lowered through ``SDKStore._compile_rule_input`` to a
                ``RuleSpec``); ``support`` is a raw ``ProofReceipt``
@@ -19,7 +19,7 @@ Public surface contract per blueprint §5 locks:
                frozen application-canonical, no SDK alternative);
                ``overlay`` is ``None`` or an empty ``FactOverlay``
                (the rule-action overlay is constructed internally by
-               the A helper). Note the absence of ``atom_index`` —
+               the A helper). Note the absence of ``condition_index`` —
                Add Condition appends a new atom rather than pointing at
                an existing locator.
 - Return:      ``RuleAddConditionResult`` (raw application protocol
@@ -40,7 +40,7 @@ Public surface contract per blueprint §5 locks:
                ``sdk_proof_frame_recheck`` / ``sdk_rule_disable`` /
                ``sdk_rule_literal_replace``). It owns its own dispatch
                and never extracts a ``ProofReceipt`` from a
-               ``CheckResult.engine_payload``.
+               ``CheckResult.proof``.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ def sdk_rule_add_condition(
     rule: Any,
     support: Any,
     *,
-    branch_index: int,
+    case_index: int,
     added_atom: Any,
     overlay: Any = None,
     note: str | None = None,
@@ -114,7 +114,7 @@ def sdk_rule_add_condition(
         request = build_rule_add_condition_request(
             rule_spec,
             support,
-            branch_index=branch_index,
+            case_index=case_index,
             added_atom=added_atom,
             overlay=overlay,
             note=note,

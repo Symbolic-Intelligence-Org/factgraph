@@ -25,7 +25,7 @@ def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> 
         root_result_kind="row",
         binding_items=binding_items if binding_items is not None else (("$p", "person:alice"),),
         pred_witnesses=(
-            PredWitness(pred_atom_key="b0.a0:Person.age", asrt_ids=("a1",)),
+            PredWitness(pred_condition_key="c0.c0:Person.age", asrt_ids=("a1",)),
         ),
     )
 

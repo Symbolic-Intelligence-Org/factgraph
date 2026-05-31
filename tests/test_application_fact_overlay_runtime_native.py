@@ -244,8 +244,8 @@ class FactOverlayRuntimePreflightTests(unittest.TestCase):
                     RuleDisableAction(
                         rule_id="person.eligible",
                         version="1.0",
-                        branch_index=0,
-                        atom_index=0,
+                        case_index=0,
+                        condition_index=0,
                     ),
                 )
             ),

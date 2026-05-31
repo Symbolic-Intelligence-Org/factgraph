@@ -36,8 +36,8 @@ from .ir import (
     IRBodyWalker,
 )
 from .keys import (
-    AtomKeyView,
-    parse_atom_key,
+    ConditionKeyView,
+    parse_condition_key,
 )
 from .views import (
     AssertionView,
@@ -50,7 +50,7 @@ from .views import (
 
 __all__ = [
     "AssertionView",
-    "AtomKeyView",
+    "ConditionKeyView",
     "FrozenTupleView",
     "IRAtomView",
     "IRBodyWalker",
@@ -65,5 +65,5 @@ __all__ = [
     "WalkerReferenceError",
     "WalkerSnapshotError",
     "frozen_collection",
-    "parse_atom_key",
+    "parse_condition_key",
 ]

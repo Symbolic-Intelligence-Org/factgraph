@@ -18,8 +18,8 @@ class WhereValidationError(Exception):
 
 @dataclass(frozen=True)
 class WhereLiteralReplacement:
-    branch_index: int
-    atom_index: int
+    case_index: int
+    condition_index: int
     literal_path: tuple[str, int | None]
     old_literal: Any
     new_literal: Any
@@ -27,11 +27,11 @@ class WhereLiteralReplacement:
 
 @dataclass(frozen=True)
 class WhereAddedCondition:
-    branch_index: int
+    case_index: int
     atom: tuple[Any, ...]
 
     def __hash__(self) -> int:
-        return hash((self.branch_index, repr(self.atom)))
+        return hash((self.case_index, repr(self.atom)))
 
 
 _DEC_INT_RE = re.compile(r"^-?\d+$")
@@ -150,18 +150,18 @@ def _apply_disabled_locators(
 ) -> list[list[tuple[Any, ...]]]:
     _validate_disabled_locators(disabled_locators)
     branch_count = len(bodies)
-    for branch_index, atom_index in disabled_locators:
-        if branch_index >= branch_count:
-            raise WhereValidationError("disabled locator branch_index out of range")
-        if atom_index >= len(bodies[branch_index]):
-            raise WhereValidationError("disabled locator atom_index out of range")
+    for case_index, condition_index in disabled_locators:
+        if case_index >= branch_count:
+            raise WhereValidationError("disabled locator case_index out of range")
+        if condition_index >= len(bodies[case_index]):
+            raise WhereValidationError("disabled locator condition_index out of range")
     return [
         [
             atom
-            for atom_index, atom in enumerate(body)
-            if (branch_index, atom_index) not in disabled_locators
+            for condition_index, atom in enumerate(body)
+            if (case_index, condition_index) not in disabled_locators
         ]
-        for branch_index, body in enumerate(bodies)
+        for case_index, body in enumerate(bodies)
     ]
 
 
@@ -174,13 +174,13 @@ def _apply_literal_replacements(
     branch_count = len(bodies)
     replacement_by_target: dict[tuple[int, int, tuple[str, int | None]], WhereLiteralReplacement] = {}
     for replacement in literal_replacements:
-        if replacement.branch_index >= branch_count:
-            raise WhereValidationError("literal replacement branch_index out of range")
-        if replacement.atom_index >= len(bodies[replacement.branch_index]):
-            raise WhereValidationError("literal replacement atom_index out of range")
+        if replacement.case_index >= branch_count:
+            raise WhereValidationError("literal replacement case_index out of range")
+        if replacement.condition_index >= len(bodies[replacement.case_index]):
+            raise WhereValidationError("literal replacement condition_index out of range")
         key = (
-            replacement.branch_index,
-            replacement.atom_index,
+            replacement.case_index,
+            replacement.condition_index,
             replacement.literal_path,
         )
         if key in replacement_by_target:
@@ -188,13 +188,13 @@ def _apply_literal_replacements(
         replacement_by_target[key] = replacement
 
     out: list[list[tuple[Any, ...]]] = []
-    for branch_index, body in enumerate(bodies):
+    for case_index, body in enumerate(bodies):
         next_body: list[tuple[Any, ...]] = []
-        for atom_index, atom in enumerate(body):
+        for condition_index, atom in enumerate(body):
             replacements = [
                 replacement
                 for (r_branch, r_atom, _), replacement in replacement_by_target.items()
-                if r_branch == branch_index and r_atom == atom_index
+                if r_branch == case_index and r_atom == condition_index
             ]
             next_atom = atom
             for replacement in replacements:
@@ -213,17 +213,17 @@ def _apply_added_conditions(
     branch_count = len(bodies)
     additions_by_branch: dict[int, list[tuple[Any, ...]]] = {}
     for condition in added_conditions:
-        if condition.branch_index >= branch_count:
-            raise WhereValidationError("added condition branch_index out of range")
-        additions_by_branch.setdefault(condition.branch_index, []).append(
+        if condition.case_index >= branch_count:
+            raise WhereValidationError("added condition case_index out of range")
+        additions_by_branch.setdefault(condition.case_index, []).append(
             _validate_atom(condition.atom)
         )
     return [
         [
             *body,
-            *sorted(additions_by_branch.get(branch_index, ()), key=repr),
+            *sorted(additions_by_branch.get(case_index, ()), key=repr),
         ]
-        for branch_index, body in enumerate(bodies)
+        for case_index, body in enumerate(bodies)
     ]
 
 
@@ -233,14 +233,14 @@ def _validate_disabled_locators(disabled_locators: object) -> None:
     for locator in disabled_locators:
         if not isinstance(locator, tuple) or len(locator) != 2:
             raise WhereValidationError("disabled_locators entries must be tuple[int, int]")
-        branch_index, atom_index = locator
+        case_index, condition_index = locator
         if (
-            isinstance(branch_index, bool)
-            or not isinstance(branch_index, int)
-            or branch_index < 0
-            or isinstance(atom_index, bool)
-            or not isinstance(atom_index, int)
-            or atom_index < 0
+            isinstance(case_index, bool)
+            or not isinstance(case_index, int)
+            or case_index < 0
+            or isinstance(condition_index, bool)
+            or not isinstance(condition_index, int)
+            or condition_index < 0
         ):
             raise WhereValidationError("disabled_locators entries must be non-negative ints")
 
@@ -256,12 +256,12 @@ def _validate_literal_replacements(literal_replacements: object) -> None:
                 "literal_replacements entries must be WhereLiteralReplacement"
             )
         if (
-            isinstance(replacement.branch_index, bool)
-            or not isinstance(replacement.branch_index, int)
-            or replacement.branch_index < 0
-            or isinstance(replacement.atom_index, bool)
-            or not isinstance(replacement.atom_index, int)
-            or replacement.atom_index < 0
+            isinstance(replacement.case_index, bool)
+            or not isinstance(replacement.case_index, int)
+            or replacement.case_index < 0
+            or isinstance(replacement.condition_index, bool)
+            or not isinstance(replacement.condition_index, int)
+            or replacement.condition_index < 0
         ):
             raise WhereValidationError(
                 "literal replacement coordinates must be non-negative ints"
@@ -285,12 +285,12 @@ def _validate_added_conditions(added_conditions: object) -> None:
                 "added_conditions entries must be WhereAddedCondition"
             )
         if (
-            isinstance(condition.branch_index, bool)
-            or not isinstance(condition.branch_index, int)
-            or condition.branch_index < 0
+            isinstance(condition.case_index, bool)
+            or not isinstance(condition.case_index, int)
+            or condition.case_index < 0
         ):
             raise WhereValidationError(
-                "added condition branch_index must be non-negative int"
+                "added condition case_index must be non-negative int"
             )
         if not _is_atom(condition.atom):
             raise WhereValidationError("added condition atom must be atom tuple")

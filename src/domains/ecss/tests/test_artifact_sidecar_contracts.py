@@ -89,7 +89,7 @@ from factgraph.core.store._candidate_evidence_tree_summary import summarize_cand
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
-    find_winning_branch_index,
+    find_winning_case_index,
 )
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -359,7 +359,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                 ],
                 "pred_witnesses": [
                     {
-                        "pred_atom_key": "b0.a0:user:tag",
+                        "pred_condition_key": "c0.c0:user:tag",
                         "asrt_ids": ["A1"],
                     }
                 ],
@@ -394,7 +394,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                             "binding": [["$blob", {"__bytes_hex__": "ff"}]],
                             "pred_witnesses": [
                                 {
-                                    "pred_atom_key": "b0.a0:user:tag",
+                                    "pred_condition_key": "c0.c0:user:tag",
                                     "asrt_ids": ["A1"],
                                 }
                             ],
@@ -433,7 +433,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                         "pred_witnesses": [
                             {
                                 "binding_index": 0,
-                                "pred_atom_key": "b0.a0:user:tag",
+                                "pred_condition_key": "c0.c0:user:tag",
                                 "asrt_ids": ["A1"],
                             }
                         ],
@@ -624,7 +624,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                 "binding": [["$blob", {"__bytes_hex__": "00ff"}]],
                 "pred_witnesses": [
                     {
-                        "pred_atom_key": "b0.a0:user:tag",
+                        "pred_condition_key": "c0.c0:user:tag",
                         "asrt_ids": ["A1"],
                     }
                 ],
@@ -669,7 +669,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                 "binding": [["$blob", {"__bytes_hex__": "00ff"}]],
                 "pred_witnesses": [
                     {
-                        "pred_atom_key": "b0.a0:user:tag",
+                        "pred_condition_key": "c0.c0:user:tag",
                         "asrt_ids": ["A1"],
                     }
                 ],

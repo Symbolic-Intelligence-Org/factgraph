@@ -284,7 +284,7 @@ assert result.matched_binding == binding
 **Result:** `DiagnoseResult(status, matched_count, matched_binding, failure_kind, diagnostic_payload, errors, warnings)`
 **Status:** 同 Check 4 值
 **`failure_kind`:** `Literal["no_candidate", "atom_localized"] | None`(仅 failed 时填)
-**`diagnostic_payload`:** `DiagnoseConditionLocator(branch_index, failed_atom_index, attempted_binding) | None`(failed.atom_localized 时填,**仅 native engine 支持**;非 native 返回 `failed.no_candidate`)
+**`diagnostic_payload`:** `DiagnoseConditionLocator(case_index, failed_atom_index, attempted_binding) | None`(failed.atom_localized 时填,**仅 native engine 支持**;非 native 返回 `failed.no_candidate`)
 
 ```python
 from kernel.application import diagnose_derivation_binding
@@ -299,7 +299,7 @@ assert result.status == "failed"
 assert result.failure_kind == "atom_localized"
 locator = result.diagnostic_payload
 assert locator.failed_atom_index == 1   # age atom
-assert locator.branch_index == 0
+assert locator.case_index == 0
 ```
 
 ### 7.3 Fact Overlay Check —— Q3: What if this fact were different?
@@ -345,12 +345,12 @@ assert result.diff.status_changed
 
 ### 7.4 Why-not Universe Diagnose —— Q4: Given a finite candidate universe, who passes / who fails / why?
 
-**何时用:** 对显式有限的候选 binding 集合,一次性算 green/red partition + 失败行的 Diagnose 映射。
+**何时用:** 对显式有限的候选 binding 集合,一次性算 passed/failed partition + 失败行的 Diagnose 映射。
 
-**Request:** `WhyNotUniverseRequest(plan, candidate_universe, engine)`,`candidate_universe: tuple[BindingItems, ...]`(必须覆盖所有 head 变量,无重复;**空 tuple 合法**,返 `completed` + 空 green/red)
-**Result:** `WhyNotUniverseResult(status, requested_universe, green, red, errors, warnings)`
+**Request:** `WhyNotUniverseRequest(plan, candidate_universe, engine)`,`candidate_universe: tuple[BindingItems, ...]`(必须覆盖所有 head 变量,无重复;**空 tuple 合法**,返 `completed` + 空 passed/failed)
+**Result:** `WhyNotUniverseResult(status, requested_universe, passed, failed, errors, warnings)`
 **Status:** `Literal["completed", "unsupported", "invalid_request"]` —— **注意不是 passed/failed**(set 计算语义,不是 binding 判断)
-**`red: tuple[WhyNotRedRow, ...]`,`WhyNotRedRow(binding, diagnostic)`,`diagnostic: WhyNotRowDiagnostic(status, failure_kind, diagnostic_granularity, atom_locator, errors, warnings)`**
+**`failed: tuple[WhyNotFailedRow, ...]`,`WhyNotFailedRow(binding, diagnostic)`,`diagnostic: WhyNotRowDiagnostic(status, failure_kind, diagnostic_granularity, atom_locator, errors, warnings)`**
 - `diagnostic.status`:仅 `failed | unsupported`
 - `diagnostic.diagnostic_granularity`:`atom_localized`(native 失败 + 可定位)/ `coarse`(非 native failed)/ `unavailable`(Diagnose 返 unsupported)
 - `diagnostic.atom_locator: WhyNotConditionLocator | None`(Why-not 自有类型,**不嵌套 `DiagnoseConditionLocator`**)
@@ -369,8 +369,8 @@ result = check_why_not_universe(
     store=store,
 )
 assert result.status == "completed"
-# bob 真有 age=30 region=eu → green;alice/carol 都 fail at age atom → red
-for row in result.red:
+# bob 真有 age=30 region=eu → passed;alice/carol 都 fail at age atom → failed
+for row in result.failed:
     assert row.diagnostic.status == "failed"
     assert row.diagnostic.failure_kind == "atom_localized"
     assert row.diagnostic.atom_locator.failed_atom_index == 1
@@ -398,9 +398,9 @@ def evaluate_native_where_frontier(
 - `bindings`:与 `evaluate_native_where(...)` success-side parity
 - `frontier_rows: tuple[NativeWhereFrontierRow, ...]`:per failed branch 至多 1 行
 
-**`NativeWhereFrontierRow(branch_index, failed_atom_index, atoms_satisfied, frontier_count, failure_kind)`**:
-- `branch_index`:OR 分支号
-- `failed_atom_index`:第一个 filter 空的 atom index;DTO 强制 `atoms_satisfied == failed_atom_index`
+**`NativeWhereFrontierRow(case_index, failed_atom_index, atoms_satisfied, frontier_count, failure_kind)`**:
+- `case_index`:OR 分支号
+- `failed_atom_index`:第一个 filter 空的 condition index;DTO 强制 `atoms_satisfied == failed_atom_index`
 - `frontier_count`:**该 atom 之前** 的 envs 数量(input env count,非 filtered 后的 0)
 - `failure_kind`:`Literal["empty_input", "atom_filter_empty"]`
   - `empty_input`:branch 入口 envs 已空(防御性,正常算法不可达 —— 算法初始 `envs = [{}]`)
@@ -450,7 +450,7 @@ jupyter notebook examples/11_capabilities_e2e_demo.ipynb
 1. **Q1 Check — Does this binding pass?** alice 真实 binding `($age=25, $region=us)` → `passed`
 2. **Q2 Diagnose — Where does this failing binding fail?** alice 假 binding `($age=99, $region=us)` → `failed.atom_localized` at age atom
 3. **Q3 Fact Overlay — What if this fact were different?** alice 假设 age=30 → `before.failed → after.passed`,ledger byte-identical
-4. **Q4 Why-not — Given a finite candidate universe, who passes / who fails / why?** universe `[(alice,30,us), (bob,30,eu), (carol,30,us)]` → green=[bob],red=[alice 原子定位, carol 原子定位]
+4. **Q4 Why-not — Given a finite candidate universe, who passes / who fails / why?** universe `[(alice,30,us), (bob,30,eu), (carol,30,us)]` → passed=[bob],failed=[alice 原子定位, carol 原子定位]
 5. **Q5 Frontier — In native evaluation, where does the where-body collapse?** where 含 `age($p, 99)` → 1 frontier row,frontier_count=3,failure_kind=atom_filter_empty
 
 每 phase 内嵌 assertion,跑过表示 5 capability composition 在你环境上正常。
@@ -842,7 +842,7 @@ class ProofFrameRecheckRequest:
 
 @dataclass(frozen=True)
 class ProofFrameConditionVerdict:
-    atom_key: str
+    condition_key: str
     verdict: ProofFrameStatus  # 共享同 enum,无 second status set
     affected_action_indices: tuple[int, ...]
 
@@ -874,8 +874,8 @@ DTO:
 class RuleDisableAction:
     rule_id: str
     version: str
-    branch_index: int
-    atom_index: int
+    case_index: int
+    condition_index: int
     note: str | None = None
 ```
 
@@ -886,7 +886,7 @@ class RuleDisableAction:
 输出:`variant_rows: tuple[BindingItems, ...]` + `proof_frame: ProofFrameRecheckResult | None`(原 frame 解释)
 
 要点:
-- **Locator stability**:disable 后旧 `b{branch}.a{atom}:{kind}` 不漂移(`enumerate + skip` 模式)
+- **Locator stability**:disable 后旧 `c{case}.c{condition}:{kind}` 不漂移(`enumerate + skip` 模式)
 - **Single-action MVP**:runtime 仅接受 1 个 `RuleDisableAction`(`tuple[..., ...]` container forward-compat)
 - **RuleRef reject/defer**:`rule_refs / rule_ref_edges / rule_spec.where 含 ruleref` 全 unsupported
 - Core primitive:`evaluate_where(..., disabled_locators=frozenset())` —— `evaluate_native_where` 不动(frontier drift gate 防 hardcoded `062ba88`)
@@ -907,8 +907,8 @@ class ConditionPath:
 class RuleLiteralReplaceAction:
     rule_id: str
     version: str
-    branch_index: int
-    atom_index: int
+    case_index: int
+    condition_index: int
     literal_path: ConditionPath
     old_literal: Any  # stale-target guard
     new_literal: Any
@@ -939,7 +939,7 @@ class AddedCondition:
 class RuleAddConditionAction:
     rule_id: str
     version: str
-    branch_index: int  # 注:无 atom_index(因为是 append)
+    case_index: int  # 注:无 condition_index(因为是 append)
     added_atom: AddedCondition
     note: str | None = None
 ```
@@ -950,7 +950,7 @@ class RuleAddConditionAction:
 - **Filter-only**:7 atom kinds(`ne/gt/ge/lt/le/in/eq with both sides resolved`)—— 真正的"binding planner"(新变量绑定)deferred
 - **不引入新变量**:`where_ast_validate.atom_binds_new_variables(atom_ir, *, bound_vars)` 守门
 - **Synthetic ProofFrame verdict** —— absent-atom mapping 的 minimal-blast-radius 解决:
-  - synthetic key:`b{branch_index}.add{action_index}:{atom_kind}`(命名空间不与现 `b{br}.a{at}:{kind}` 冲突)
+  - synthetic key:`c{case_index}.add{action_index}:{atom_kind}`(命名空间不与现 `c{case}.c{condition}:{kind}` 冲突)
   - 现有 atoms 全 `still_valid`(filter 不 add fact,`not` 的 absence-check 不被打破 —— honest under filter-only scope)
   - synthetic verdict:`invalidated` iff 原 `binding_items` 不在 `variant_rows`,否则 `still_valid`
   - **不改 Batch 4 ProofFrame protocol**;3-status enum 不动

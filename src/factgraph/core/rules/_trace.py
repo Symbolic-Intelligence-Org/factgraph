@@ -39,14 +39,14 @@ def _normalize_detail_items(details: dict[str, Any] | list[tuple[str, Any]]) -> 
 @dataclass(frozen=True)
 class RuleTracePredWitness:
     binding_index: int
-    pred_atom_key: str
+    pred_condition_key: str
     asrt_ids: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if not isinstance(self.binding_index, int) or self.binding_index < 0:
             raise ValueError("binding_index must be non-negative int")
-        if not isinstance(self.pred_atom_key, str) or not self.pred_atom_key:
-            raise ValueError("pred_atom_key must be non-empty string")
+        if not isinstance(self.pred_condition_key, str) or not self.pred_condition_key:
+            raise ValueError("pred_condition_key must be non-empty string")
         if self.asrt_ids != _normalize_asrt_ids(list(self.asrt_ids)):
             raise ValueError("asrt_ids must be sorted unique non-empty strings")
 
@@ -74,12 +74,12 @@ class RuleTraceNonFactStep:
 
 @dataclass(frozen=True)
 class RuleTraceRuleRefLink:
-    ruleref_atom_key: str
+    ruleref_condition_key: str
     child_invocation_id: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.ruleref_atom_key, str) or not self.ruleref_atom_key:
-            raise ValueError("ruleref_atom_key must be non-empty string")
+        if not isinstance(self.ruleref_condition_key, str) or not self.ruleref_condition_key:
+            raise ValueError("ruleref_condition_key must be non-empty string")
         if not isinstance(self.child_invocation_id, str) or not self.child_invocation_id:
             raise ValueError("child_invocation_id must be non-empty string")
 
@@ -120,17 +120,17 @@ class RuleTraceInvocation:
         if self.bindings != tuple(_normalize_binding_items(dict(binding)) for binding in self.bindings):
             raise ValueError("bindings must be sorted binding tuples")
         if self.pred_witnesses != tuple(
-            sorted(self.pred_witnesses, key=lambda item: (item.binding_index, item.pred_atom_key))
+            sorted(self.pred_witnesses, key=lambda item: (item.binding_index, item.pred_condition_key))
         ):
-            raise ValueError("pred_witnesses must be sorted by binding_index and pred_atom_key")
+            raise ValueError("pred_witnesses must be sorted by binding_index and pred_condition_key")
         if self.non_fact_steps != tuple(
             sorted(self.non_fact_steps, key=lambda item: (item.binding_index, item.step_key))
         ):
             raise ValueError("non_fact_steps must be sorted by binding_index and step_key")
         if self.ruleref_links != tuple(
-            sorted(self.ruleref_links, key=lambda item: item.ruleref_atom_key)
+            sorted(self.ruleref_links, key=lambda item: item.ruleref_condition_key)
         ):
-            raise ValueError("ruleref_links must be sorted by ruleref_atom_key")
+            raise ValueError("ruleref_links must be sorted by ruleref_condition_key")
 
 
 @dataclass(frozen=True)
@@ -264,7 +264,7 @@ def rule_trace_artifact_to_dict(artifact: RuleTraceArtifact) -> dict[str, Any]:
                 "pred_witnesses": [
                     {
                         "binding_index": witness.binding_index,
-                        "pred_atom_key": witness.pred_atom_key,
+                        "pred_condition_key": witness.pred_condition_key,
                         "asrt_ids": list(witness.asrt_ids),
                     }
                     for witness in invocation.pred_witnesses
@@ -281,7 +281,7 @@ def rule_trace_artifact_to_dict(artifact: RuleTraceArtifact) -> dict[str, Any]:
                 ],
                 "ruleref_links": [
                     {
-                        "ruleref_atom_key": link.ruleref_atom_key,
+                        "ruleref_condition_key": link.ruleref_condition_key,
                         "child_invocation_id": link.child_invocation_id,
                     }
                     for link in invocation.ruleref_links
@@ -338,7 +338,7 @@ def _rule_trace_invocation_from_dict(row: Mapping[str, Any]) -> RuleTraceInvocat
         pred_witnesses=tuple(
             RuleTracePredWitness(
                 binding_index=item["binding_index"],
-                pred_atom_key=item["pred_atom_key"],
+                pred_condition_key=item["pred_condition_key"],
                 asrt_ids=tuple(item["asrt_ids"]),
             )
             for item in row.get("pred_witnesses", ())
@@ -355,7 +355,7 @@ def _rule_trace_invocation_from_dict(row: Mapping[str, Any]) -> RuleTraceInvocat
         ),
         ruleref_links=tuple(
             RuleTraceRuleRefLink(
-                ruleref_atom_key=link["ruleref_atom_key"],
+                ruleref_condition_key=link["ruleref_condition_key"],
                 child_invocation_id=link["child_invocation_id"],
             )
             for link in row.get("ruleref_links", ())
@@ -397,11 +397,11 @@ def summarize_rule_trace_artifact_dict(explain: Mapping[str, Any]) -> dict[str, 
                         "pred_witness row must be object",
                         path="$.explain.invocations[].pred_witnesses[]",
                     )
-                pred_atom_key = _require_summary_non_empty_str(
-                    witness.get("pred_atom_key"),
-                    path="$.explain.invocations[].pred_witnesses[].pred_atom_key",
+                pred_condition_key = _require_summary_non_empty_str(
+                    witness.get("pred_condition_key"),
+                    path="$.explain.invocations[].pred_witnesses[].pred_condition_key",
                 )
-                pred_id = _pred_id_from_pred_atom_key(pred_atom_key)
+                pred_id = _pred_id_from_pred_condition_key(pred_condition_key)
                 group = predicate_witness_groups.setdefault(
                     pred_id,
                     {"pred_id": pred_id, "asrt_ids": set(), "invocation_ids": set()},
@@ -461,10 +461,10 @@ def summarize_rule_trace_artifact_dict(explain: Mapping[str, Any]) -> dict[str, 
     }
 
 
-def _pred_id_from_pred_atom_key(pred_atom_key: str) -> str:
-    if ":" not in pred_atom_key:
-        return pred_atom_key
-    return pred_atom_key.split(":", 1)[1]
+def _pred_id_from_pred_condition_key(pred_condition_key: str) -> str:
+    if ":" not in pred_condition_key:
+        return pred_condition_key
+    return pred_condition_key.split(":", 1)[1]
 
 
 __all__ = [

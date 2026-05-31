@@ -42,15 +42,15 @@ from factgraph.core.store.ledger import Claim, MetaRow
 
 from ._freeze import freeze_value
 from .errors import WalkerFrozenError, WalkerLookupError, WalkerReferenceError, WalkerSnapshotError
-from .keys import AtomKeyView, parse_atom_key
+from .keys import ConditionKeyView, parse_condition_key
 
 ViewT = TypeVar("ViewT")
 
 _KEY_ATTRS = (
     "key",
-    "pred_atom_key",
+    "pred_condition_key",
     "step_key",
-    "atom_key",
+    "condition_key",
     "asrt_id",
     "id",
 )
@@ -543,11 +543,11 @@ class SupportArtifactView:
     def non_fact_steps(self) -> FrozenTupleView[Any]:
         return self._non_fact_steps
 
-    def parse_pred_atom_key(self, key: str) -> AtomKeyView:
-        return parse_atom_key(key).as_pred()
+    def parse_pred_condition_key(self, key: str) -> ConditionKeyView:
+        return parse_condition_key(key).as_pred()
 
-    def parse_step_key(self, key: str) -> AtomKeyView:
-        return parse_atom_key(key).as_step()
+    def parse_step_key(self, key: str) -> ConditionKeyView:
+        return parse_condition_key(key).as_step()
 
     def lookup_assertion(self, asrt_id: str) -> AssertionView:
         if not isinstance(asrt_id, str) or not asrt_id:

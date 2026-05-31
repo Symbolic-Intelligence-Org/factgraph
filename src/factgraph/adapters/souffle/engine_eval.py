@@ -24,7 +24,7 @@ from factgraph.core.store._support import (
     ProofReceipt,
     binding_dict_from_items,
     compute_support_digest,
-    make_pred_atom_key,
+    make_pred_condition_key,
     normalize_binding_items,
 )
 from factgraph.core.store._support_capture import build_support_artifact_for_binding
@@ -33,7 +33,7 @@ from factgraph.core.store._support_capture import build_support_artifact_for_bin
 @dataclass(frozen=True)
 class _ParsedWitnessRow:
     binding_items: BindingItems
-    selected_branch_index: int
+    selected_case_index: int
     witness_atoms: tuple[tuple[str, str], ...]
 
     def binding_dict(self) -> dict[str, Any]:
@@ -317,28 +317,28 @@ def _read_query_witness_rows(
                 )
             binding_items = normalize_binding_items({var: value for var, value in zip(variables, cells)})
             witness_atoms: list[tuple[str, str]] = []
-            branch_indexes: set[int] = set()
+            case_indexes: set[int] = set()
             for spec, value in zip(pred_columns, cells[len(variables) :]):
                 if value == "":
                     continue
                 if not isinstance(value, str):
-                    raise WhereValidationError(f"witness column must decode to string for {spec.pred_atom_key}")
-                witness_atoms.append((spec.pred_atom_key, value))
-                branch_indexes.add(spec.branch_index)
-            if not branch_indexes:
+                    raise WhereValidationError(f"witness column must decode to string for {spec.pred_condition_key}")
+                witness_atoms.append((spec.pred_condition_key, value))
+                case_indexes.add(spec.case_index)
+            if not case_indexes:
                 raise WhereValidationError("witness row does not identify a satisfying branch")
-            if len(branch_indexes) != 1:
+            if len(case_indexes) != 1:
                 raise WhereValidationError("witness row spans multiple OR branches")
-            selected_branch_index = min(branch_indexes)
+            selected_case_index = min(case_indexes)
             witness_atoms_tuple = tuple(sorted(witness_atoms))
-            key = (binding_items, selected_branch_index, witness_atoms_tuple)
+            key = (binding_items, selected_case_index, witness_atoms_tuple)
             if key in seen:
                 continue
             seen.add(key)
             rows.append(
                 _ParsedWitnessRow(
                     binding_items=binding_items,
-                    selected_branch_index=selected_branch_index,
+                    selected_case_index=selected_case_index,
                     witness_atoms=witness_atoms_tuple,
                 )
             )
@@ -346,7 +346,7 @@ def _read_query_witness_rows(
     rows.sort(
         key=lambda row: (
             row.binding_items,
-            row.selected_branch_index,
+            row.selected_case_index,
             row.witness_atoms,
         )
     )
@@ -362,18 +362,18 @@ def _build_support_rows_from_witness_rows(
 ) -> list[BindingSupportCapture]:
     grouped: dict[tuple[BindingItems, int], dict[str, set[str]]] = {}
     for row in parsed_rows:
-        group = grouped.setdefault((row.binding_items, row.selected_branch_index), {})
-        for pred_atom_key, asrt_id in row.witness_atoms:
-            group.setdefault(pred_atom_key, set()).add(asrt_id)
+        group = grouped.setdefault((row.binding_items, row.selected_case_index), {})
+        for pred_condition_key, asrt_id in row.witness_atoms:
+            group.setdefault(pred_condition_key, set()).add(asrt_id)
 
     selected_by_binding: dict[BindingItems, tuple[int, dict[str, set[str]]]] = {}
-    for (binding_items, branch_index), witness_ids in grouped.items():
+    for (binding_items, case_index), witness_ids in grouped.items():
         existing = selected_by_binding.get(binding_items)
-        if existing is None or branch_index < existing[0]:
-            selected_by_binding[binding_items] = (branch_index, witness_ids)
+        if existing is None or case_index < existing[0]:
+            selected_by_binding[binding_items] = (case_index, witness_ids)
 
     captures: list[BindingSupportCapture] = []
-    for binding_items, (selected_branch_index, witness_ids) in sorted(
+    for binding_items, (selected_case_index, witness_ids) in sorted(
         selected_by_binding.items(),
         key=lambda row: row[0],
     ):
@@ -381,7 +381,7 @@ def _build_support_rows_from_witness_rows(
             where=where,
             binding_items=binding_items,
             root_result_kind=root_result_kind,
-            selected_branch_index=selected_branch_index,
+            selected_case_index=selected_case_index,
             witness_ids_by_atom_key=witness_ids,
         )
         support_digest = compute_support_digest(artifact)
@@ -402,14 +402,14 @@ def _build_souffle_support_artifact(
     where: list[Any],
     binding_items: BindingItems,
     root_result_kind: str,
-    selected_branch_index: int,
+    selected_case_index: int,
     witness_ids_by_atom_key: dict[str, set[str]],
 ) -> ProofReceipt:
     binding = binding_dict_from_items(binding_items)
     witness_facts = _build_synthetic_witness_facts(
         where=where,
         binding=binding,
-        selected_branch_index=selected_branch_index,
+        selected_case_index=selected_case_index,
         witness_ids_by_atom_key=witness_ids_by_atom_key,
     )
     native_like = build_support_artifact_for_binding(
@@ -417,7 +417,7 @@ def _build_souffle_support_artifact(
         binding=binding,
         witness_facts=witness_facts,
         root_result_kind=root_result_kind,
-        selected_branch_index=selected_branch_index,
+        selected_case_index=selected_case_index,
         rule_ref_edges=(),
     )
     return ProofReceipt(
@@ -435,24 +435,24 @@ def _build_synthetic_witness_facts(
     *,
     where: list[Any],
     binding: dict[str, Any],
-    selected_branch_index: int,
+    selected_case_index: int,
     witness_ids_by_atom_key: dict[str, set[str]],
 ) -> dict[str, list[ProjectedFact]]:
     branches = _normalize_where_branches(where)
     try:
-        branch = branches[selected_branch_index]
+        branch = branches[selected_case_index]
     except IndexError as exc:
-        raise WhereValidationError(f"selected witness branch out of range: {selected_branch_index}") from exc
+        raise WhereValidationError(f"selected witness branch out of range: {selected_case_index}") from exc
 
     witness_facts: dict[str, list[ProjectedFact]] = {}
-    for atom_index, atom in enumerate(branch):
+    for condition_index, atom in enumerate(branch):
         if not isinstance(atom, tuple) or not atom or atom[0] != "pred":
             continue
         _, pred_id, terms = atom
-        pred_atom_key = make_pred_atom_key(selected_branch_index, atom_index, pred_id)
-        asrt_ids = witness_ids_by_atom_key.get(pred_atom_key)
+        pred_condition_key = make_pred_condition_key(selected_case_index, condition_index, pred_id)
+        asrt_ids = witness_ids_by_atom_key.get(pred_condition_key)
         if not asrt_ids:
-            raise WhereValidationError(f"missing witness ids for selected predicate atom: {pred_atom_key}")
+            raise WhereValidationError(f"missing witness ids for selected predicate atom: {pred_condition_key}")
         grounded_terms = _ground_terms(terms, binding)
         for asrt_id in sorted(asrt_ids):
             witness_facts.setdefault(pred_id, []).append(

@@ -26,7 +26,7 @@ def _artifact(**kwargs: object) -> ProofReceipt:
         "root_result_kind": "row",
         "binding_items": (("$p", "person:alice"),),
         "pred_witnesses": (
-            PredWitness(pred_atom_key="b0.a0:Person.age", asrt_ids=("a1",)),
+            PredWitness(pred_condition_key="c0.c0:Person.age", asrt_ids=("a1",)),
         ),
     }
     fields.update(kwargs)
@@ -49,12 +49,12 @@ def _overlay() -> FactOverlay:
 
 def _verdict(
     *,
-    atom_key: str = "b0.a0:Person.age",
+    condition_key: str = "c0.c0:Person.age",
     verdict: str = "still_valid",
     affected_action_indices: tuple[int, ...] = (),
 ) -> ProofFrameConditionVerdict:
     return ProofFrameConditionVerdict(
-        atom_key=atom_key,
+        condition_key=condition_key,
         verdict=verdict,  # type: ignore[arg-type]
         affected_action_indices=affected_action_indices,
     )
@@ -86,18 +86,18 @@ class ProofFrameAtomVerdictProtocolTests(unittest.TestCase):
     def test_atom_verdict_construction(self) -> None:
         verdict = _verdict(verdict="invalidated", affected_action_indices=(0, 2))
 
-        self.assertEqual(verdict.atom_key, "b0.a0:Person.age")
+        self.assertEqual(verdict.condition_key, "c0.c0:Person.age")
         self.assertEqual(verdict.verdict, "invalidated")
         self.assertEqual(verdict.affected_action_indices, (0, 2))
 
     def test_atom_verdict_is_frozen(self) -> None:
         verdict = _verdict()
         with self.assertRaises(FrozenInstanceError):
-            verdict.atom_key = "other"  # type: ignore[misc]
+            verdict.condition_key = "other"  # type: ignore[misc]
 
     def test_atom_verdict_rejects_bad_shape(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            _verdict(atom_key="")
+            _verdict(condition_key="")
         with self.assertRaises(ProtocolShapeError):
             _verdict(verdict="unsupported")
         with self.assertRaises(ProtocolShapeError):
@@ -132,8 +132,8 @@ class ProofFrameRecheckResultProtocolTests(unittest.TestCase):
 
     def test_result_enforces_aggregation_invariant(self) -> None:
         atom_verdicts = (
-            _verdict(atom_key="b0.a0:Person.age", verdict="still_valid"),
-            _verdict(atom_key="b0.a1:not", verdict="unknown"),
+            _verdict(condition_key="c0.c0:Person.age", verdict="still_valid"),
+            _verdict(condition_key="c0.c1:not", verdict="unknown"),
         )
 
         with self.assertRaises(ProtocolShapeError):
@@ -157,8 +157,8 @@ class ProofFrameRecheckResultProtocolTests(unittest.TestCase):
         self.assertEqual(
             aggregate_proof_frame_status(
                 (
-                    _verdict(atom_key="b0.a0:Person.age"),
-                    _verdict(atom_key="b0.a1:not", verdict="unknown"),
+                    _verdict(condition_key="c0.c0:Person.age"),
+                    _verdict(condition_key="c0.c1:not", verdict="unknown"),
                 )
             ),
             "unknown",
@@ -166,8 +166,8 @@ class ProofFrameRecheckResultProtocolTests(unittest.TestCase):
         self.assertEqual(
             aggregate_proof_frame_status(
                 (
-                    _verdict(atom_key="b0.a0:Person.age", verdict="invalidated"),
-                    _verdict(atom_key="b0.a1:not", verdict="unknown"),
+                    _verdict(condition_key="c0.c0:Person.age", verdict="invalidated"),
+                    _verdict(condition_key="c0.c1:not", verdict="unknown"),
                 )
             ),
             "invalidated",
@@ -207,7 +207,7 @@ class ProofFrameProtocolExportTests(unittest.TestCase):
         )
         self.assertEqual(
             [field.name for field in dataclasses.fields(ProofFrameConditionVerdict)],
-            ["atom_key", "verdict", "affected_action_indices"],
+            ["condition_key", "verdict", "affected_action_indices"],
         )
         self.assertEqual(
             [field.name for field in dataclasses.fields(ProofFrameRecheckResult)],

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from factgraph.core.store._support import make_non_fact_step_key, make_pred_atom_key
+from factgraph.core.store._support import make_non_fact_step_key, make_pred_condition_key
 
 from ._freeze import freeze_value
 from .errors import WalkerFrozenError, WalkerLookupError, WalkerSnapshotError
@@ -20,8 +20,8 @@ class IRAtomView:
 
     __slots__ = (
         "_args",
-        "_atom_index",
-        "_branch_index",
+        "_condition_index",
+        "_case_index",
         "_frozen",
         "_key",
         "_kind",
@@ -35,8 +35,8 @@ class IRAtomView:
         kind: str,
         pred_id: str | None,
         args: tuple[Any, ...],
-        branch_index: int,
-        atom_index: int,
+        case_index: int,
+        condition_index: int,
         key: str,
         underlying: tuple[Any, ...],
     ) -> None:
@@ -44,8 +44,8 @@ class IRAtomView:
         object.__setattr__(self, "_kind", kind)
         object.__setattr__(self, "_pred_id", pred_id)
         object.__setattr__(self, "_args", args)
-        object.__setattr__(self, "_branch_index", branch_index)
-        object.__setattr__(self, "_atom_index", atom_index)
+        object.__setattr__(self, "_case_index", case_index)
+        object.__setattr__(self, "_condition_index", condition_index)
         object.__setattr__(self, "_key", key)
         object.__setattr__(self, "_underlying", underlying)
         object.__setattr__(self, "_frozen", True)
@@ -73,12 +73,12 @@ class IRAtomView:
         return self._args
 
     @property
-    def branch_index(self) -> int:
-        return self._branch_index
+    def case_index(self) -> int:
+        return self._case_index
 
     @property
-    def atom_index(self) -> int:
-        return self._atom_index
+    def condition_index(self) -> int:
+        return self._condition_index
 
     @property
     def key(self) -> str:
@@ -93,8 +93,8 @@ class IRAtomView:
             self.kind,
             self.pred_id,
             self.args,
-            self.branch_index,
-            self.atom_index,
+            self.case_index,
+            self.condition_index,
             self.key,
         )
 
@@ -110,7 +110,7 @@ class IRAtomView:
         return (
             "IRAtomView("
             f"kind={self.kind!r}, key={self.key!r}, "
-            f"branch_index={self.branch_index}, atom_index={self.atom_index})"
+            f"case_index={self.case_index}, condition_index={self.condition_index})"
         )
 
 
@@ -144,9 +144,9 @@ class IRBodyWalker:
         return self._source_id
 
     def __iter__(self):
-        for branch_index, branch in enumerate(self._branches):
-            for atom_index, atom in enumerate(branch):
-                yield _build_atom_view(atom, branch_index=branch_index, atom_index=atom_index)
+        for case_index, branch in enumerate(self._branches):
+            for condition_index, atom in enumerate(branch):
+                yield _build_atom_view(atom, case_index=case_index, condition_index=condition_index)
 
     def __len__(self) -> int:
         return sum(len(branch) for branch in self._branches)
@@ -157,8 +157,8 @@ class IRBodyWalker:
         key: str | None = None,
         kind: str | None = None,
         pred_id: str | None = None,
-        branch_index: int | None = None,
-        atom_index: int | None = None,
+        case_index: int | None = None,
+        condition_index: int | None = None,
     ) -> IRAtomView | None:
         for atom in self:
             if key is not None and atom.key != key:
@@ -167,9 +167,9 @@ class IRBodyWalker:
                 continue
             if pred_id is not None and atom.pred_id != pred_id:
                 continue
-            if branch_index is not None and atom.branch_index != branch_index:
+            if case_index is not None and atom.case_index != case_index:
                 continue
-            if atom_index is not None and atom.atom_index != atom_index:
+            if condition_index is not None and atom.condition_index != condition_index:
                 continue
             return atom
         return None
@@ -180,11 +180,11 @@ class IRBodyWalker:
             raise WalkerLookupError(f"IR atom not found for key: {key}")
         return found
 
-    def require_position(self, *, branch_index: int, atom_index: int) -> IRAtomView:
-        found = self.find(branch_index=branch_index, atom_index=atom_index)
+    def require_position(self, *, case_index: int, condition_index: int) -> IRAtomView:
+        found = self.find(case_index=case_index, condition_index=condition_index)
         if found is None:
             raise WalkerLookupError(
-                f"IR atom not found at branch_index={branch_index}, atom_index={atom_index}"
+                f"IR atom not found at case_index={case_index}, condition_index={condition_index}"
             )
         return found
 
@@ -255,22 +255,22 @@ def _snapshot_atom(atom: object) -> tuple[Any, ...]:
     return frozen
 
 
-def _build_atom_view(atom: tuple[Any, ...], *, branch_index: int, atom_index: int) -> IRAtomView:
+def _build_atom_view(atom: tuple[Any, ...], *, case_index: int, condition_index: int) -> IRAtomView:
     kind = atom[0]
     if kind == "pred":
         pred_id = atom[1]
         args = _as_tuple(atom[2])
-        key = make_pred_atom_key(branch_index, atom_index, pred_id)
+        key = make_pred_condition_key(case_index, condition_index, pred_id)
     else:
         pred_id = None
         args = tuple(atom[1:])
-        key = make_non_fact_step_key(branch_index, atom_index, kind)
+        key = make_non_fact_step_key(case_index, condition_index, kind)
     return IRAtomView(
         kind=kind,
         pred_id=pred_id,
         args=args,
-        branch_index=branch_index,
-        atom_index=atom_index,
+        case_index=case_index,
+        condition_index=condition_index,
         key=key,
         underlying=atom,
     )

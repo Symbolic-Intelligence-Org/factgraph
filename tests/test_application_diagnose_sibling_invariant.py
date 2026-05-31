@@ -9,8 +9,8 @@ Mechanism: AST walk over ``diagnose_runtime.py`` source. The audit deliberately
 left the mechanism unspecified at altitude; this implementation parses the
 runtime file via ``ast.parse`` and inspects ``Import`` / ``ImportFrom`` nodes
 without executing the module. Same-named local helpers (e.g.,
-``_lookup_support_artifact``, ``_derive_branch_index_from_artifact``,
-``_parse_branch_index``, ``_extract_head_var_binding``) are permitted because
+``_lookup_support_artifact``, ``_derive_case_index_from_artifact``,
+``_parse_case_index``, ``_extract_head_var_binding``) are permitted because
 Diagnose owns its own copies per D11 — the scan only flags IMPORT statements,
 not local definitions.
 """
@@ -52,8 +52,8 @@ _BANNED_SYMBOLS = frozenset(
         "_invalid_request",
         "_extract_head_var_binding",
         "_extract_term_value",
-        "_derive_branch_index_from_artifact",
-        "_parse_branch_index",
+        "_derive_case_index_from_artifact",
+        "_parse_case_index",
         "_lookup_support_artifact",
         "_lookup_provenance_envelope",
         # Check protocol DTOs (Diagnose redeclares its Status / Engine

@@ -27,9 +27,9 @@ It is responsible for:
 - native Rule Disable (`completed` / `unsupported` / `invalid_request`) over one temporary rule-condition disable action,returning variant rows plus original-frame ProofFrame output
 - native Rule Literal Replace (`completed` / `unsupported` / `invalid_request`) over one temporary Const-to-Const native where literal replacement,returning variant rows plus original-frame ProofFrame output
 - native Rule Add Condition (`completed` / `unsupported` / `invalid_request`) over one temporary filter-only native where atom insertion,returning variant rows plus original-frame ProofFrame output with a synthetic added-atom verdict
-- explicit-universe Why-not Diagnose (`green` / `red` partition with row-level Diagnose summaries)
+- explicit-universe Why-not Diagnose (`passed` / `failed` partition with row-level Diagnose summaries)
 - capability ergonomics helpers for Check / Diagnose / ProofFrame request construction, rule-overlay request construction, round-event payload projection, Fact Overlay replace/remove construction, `FactOverlay` assembly, Why-not candidate-universe normalization, and Store-to-frontier `view_facts` projection
-- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker`, `FrozenTupleView`, `AtomKeyView`, `SupportArtifactView`, `AssertionView`, `ProofFrameView`, and `ProofFrameDiffView` in the current slice)
+- application-layer walker views for SDK-independent traversal over selected DTO / IR structures (`IRBodyWalker`, `FrozenTupleView`, `ConditionKeyView`, `SupportArtifactView`, `AssertionView`, `ProofFrameView`, and `ProofFrameDiffView` in the current slice)
 
 It is not responsible for:
 
@@ -56,13 +56,13 @@ It is not responsible for:
   - `rule_disable.py`: Rule Disable protocol DTOs (`RuleDisableRequest` / `RuleDisableResult` / `RuleDisableStatus`)
   - `rule_literal_replace.py`: Rule Literal Replace protocol DTOs (`RuleLiteralReplaceRequest` / `RuleLiteralReplaceResult` / `RuleLiteralReplaceStatus`)
   - `rule_add_condition.py`: Rule Add Condition protocol DTOs (`RuleAddConditionRequest` / `RuleAddConditionResult` / `RuleAddConditionStatus`)
-  - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotRedRow` / `WhyNotRowDiagnostic` / `WhyNotConditionLocator`)
+  - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotFailedRow` / `WhyNotRowDiagnostic` / `WhyNotConditionLocator`)
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `capability_helpers/`
   - application-layer ergonomic helper package: `build_check_request(...)`, `build_diagnose_request(...)`, `build_proof_frame_recheck_request(...)`, `build_rule_disable_request(...)`, `build_rule_literal_replace_request(...)`, `build_rule_add_condition_request(...)`, `build_round_event_payload(...)`, `build_fact_value_override(...)`, `build_fact_remove_action(...)`, `build_evaluation_overlay(...)`, `build_why_not_candidate_universe(...)`, `build_frontier_view_facts(...)`
 - `walker/`
-  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `AtomKeyView` / `parse_atom_key(...)`, `SupportArtifactView` / `AssertionView` for `ProofReceipt` assertion cross-references, `ProofFrameView` for `ProofFrameRecheckResult`, and `ProofFrameDiffView` for `ProofFrameDiff`. B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
+  - application-layer traversal views. Current implementation: `IRBodyWalker` / `IRAtomView` over `RuleSpec.where` and `CompiledDerivationPlan.body_ir`, `FrozenTupleView` / `frozen_collection(...)` for already-frozen tuple collections, `ConditionKeyView` / `parse_condition_key(...)`, `SupportArtifactView` / `AssertionView` for `ProofReceipt` assertion cross-references, `ProofFrameView` for `ProofFrameRecheckResult`, and `ProofFrameDiffView` for `ProofFrameDiff`. B3 stream walkers are not implemented yet. See `walker/docs/README.md`.
 - `entity_view.py`
   - `hydrate_entity(...)`, `hydrate_entities(...)`, `execute_read_request(...)`
 - `entity_write.py`
@@ -107,9 +107,9 @@ It is not responsible for:
 - `rule_literal_replace_runtime.py`
   - `check_rule_literal_replace_action(...)`: evaluates one native `RuleSpec` under exactly one temporary `RuleLiteralReplaceAction`; supports existing Const leaves in predicate terms,comparison/filter sides,`in` members,and `addc` / `mulc` constants. RuleRef-bearing inputs are unsupported,variant support capture is deferred,and no ledger or registry mutation occurs.
 - `rule_add_condition_runtime.py`
-  - `check_rule_add_condition_action(...)`: evaluates one native `RuleSpec` under exactly one temporary `RuleAddConditionAction`; supports adding one filter-only atom over variables already bound in the selected branch. The runtime returns normalized variant rows plus an original-frame `ProofFrameRecheckResult` with a synthetic `b{branch}.add{action}:{kind}` atom verdict. RuleRef-bearing inputs,new-variable binding planner behavior,`not`,variant support capture,and multi-action ordering are deferred;no ledger or registry mutation occurs.
+  - `check_rule_add_condition_action(...)`: evaluates one native `RuleSpec` under exactly one temporary `RuleAddConditionAction`; supports adding one filter-only atom over variables already bound in the selected branch. The runtime returns normalized variant rows plus an original-frame `ProofFrameRecheckResult` with a synthetic `c{case}.add{action}:{kind}` atom verdict. RuleRef-bearing inputs,new-variable binding planner behavior,`not`,variant support capture,and multi-action ordering are deferred;no ledger or registry mutation occurs.
 - `why_not_runtime.py`
-  - `check_why_not_universe(...)`: assembles a red/green board for an explicit finite head-binding universe, then diagnoses each red row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
+  - `check_why_not_universe(...)`: assembles a failed/passed board for an explicit finite head-binding universe, then diagnoses each failed row through `diagnose_derivation_binding(...)` while returning Why-not-owned row diagnostics.
 
 ## 3. Public Runtime Surface
 
@@ -167,7 +167,7 @@ The main schema/runtime helpers are:
 The current walker entry points are:
 
 - `AssertionView`
-- `AtomKeyView`
+- `ConditionKeyView`
 - `FrozenTupleView`
 - `IRBodyWalker`
 - `IRAtomView`
@@ -175,7 +175,7 @@ The current walker entry points are:
 - `ProofFrameView`
 - `SupportArtifactView`
 - `frozen_collection(...)`
-- `parse_atom_key(...)`
+- `parse_condition_key(...)`
 
 ## 4. Relationship with Other Layers
 

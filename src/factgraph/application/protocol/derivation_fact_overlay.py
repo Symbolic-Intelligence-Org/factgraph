@@ -143,15 +143,15 @@ FactOverlayAction: TypeAlias = ReplaceFact | RemoveFact
 class RuleDisableAction:
     rule_id: str
     version: str
-    branch_index: int
-    atom_index: int
+    case_index: int
+    condition_index: int
     note: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.rule_id, field_name="rule_id")
         _require_non_empty_str(self.version, field_name="version")
-        _validate_non_negative_int(self.branch_index, field_name="branch_index")
-        _validate_non_negative_int(self.atom_index, field_name="atom_index")
+        _validate_non_negative_int(self.case_index, field_name="case_index")
+        _validate_non_negative_int(self.condition_index, field_name="condition_index")
         if self.note is not None and not isinstance(self.note, str):
             raise ProtocolShapeError("note must be str or None")
 
@@ -180,8 +180,8 @@ class ConditionPath:
 class RuleLiteralReplaceAction:
     rule_id: str
     version: str
-    branch_index: int
-    atom_index: int
+    case_index: int
+    condition_index: int
     literal_path: ConditionPath
     old_literal: Any
     new_literal: Any
@@ -190,8 +190,8 @@ class RuleLiteralReplaceAction:
     def __post_init__(self) -> None:
         _require_non_empty_str(self.rule_id, field_name="rule_id")
         _require_non_empty_str(self.version, field_name="version")
-        _validate_non_negative_int(self.branch_index, field_name="branch_index")
-        _validate_non_negative_int(self.atom_index, field_name="atom_index")
+        _validate_non_negative_int(self.case_index, field_name="case_index")
+        _validate_non_negative_int(self.condition_index, field_name="condition_index")
         if not isinstance(self.literal_path, ConditionPath):
             raise ProtocolShapeError("literal_path must be ConditionPath")
         if self.note is not None and not isinstance(self.note, str):
@@ -213,14 +213,14 @@ class AddedCondition:
 class RuleAddConditionAction:
     rule_id: str
     version: str
-    branch_index: int
+    case_index: int
     added_atom: AddedCondition
     note: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.rule_id, field_name="rule_id")
         _require_non_empty_str(self.version, field_name="version")
-        _validate_non_negative_int(self.branch_index, field_name="branch_index")
+        _validate_non_negative_int(self.case_index, field_name="case_index")
         if not isinstance(self.added_atom, AddedCondition):
             raise ProtocolShapeError("added_atom must be AddedCondition")
         if self.note is not None and not isinstance(self.note, str):

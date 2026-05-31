@@ -37,14 +37,14 @@ _FRONTIER_FAILURE_KINDS = frozenset({"empty_input", "atom_filter_empty"})
 
 @dataclass(frozen=True)
 class NativeWhereFrontierRow:
-    branch_index: int
+    case_index: int
     failed_atom_index: int
     atoms_satisfied: int
     frontier_count: int
     failure_kind: NativeWhereFrontierFailureKind
 
     def __post_init__(self) -> None:
-        _validate_nonnegative_int("branch_index", self.branch_index)
+        _validate_nonnegative_int("case_index", self.case_index)
         _validate_nonnegative_int("failed_atom_index", self.failed_atom_index)
         _validate_nonnegative_int("atoms_satisfied", self.atoms_satisfied)
         _validate_nonnegative_int("frontier_count", self.frontier_count)
@@ -140,7 +140,7 @@ def _evaluate_native_where_frontier_internal(
         return NativeWhereFrontierEvaluation(
             bindings=bindings,
             rule_refs=tuple(sorted({row.rule_ref_id for row in resolutions})),
-            rule_ref_resolutions=tuple(sorted(resolutions, key=lambda row: row.ruleref_atom_key)),
+            rule_ref_resolutions=tuple(sorted(resolutions, key=lambda row: row.ruleref_condition_key)),
             frontier_rows=frontier_rows,
         )
 
@@ -170,11 +170,11 @@ def _evaluate_where_frontier(
     frontier_rows: list[NativeWhereFrontierRow] = []
     seen: set[tuple[tuple[str, Any], ...]] = set()
 
-    for branch_index, body in enumerate(bodies):
+    for case_index, body in enumerate(bodies):
         body_bindings, frontier_row = _eval_body_frontier(
             view_facts,
             body,
-            branch_index=branch_index,
+            case_index=case_index,
             ast_gate_on=ast_gate_on,
         )
         if frontier_row is not None:
@@ -194,7 +194,7 @@ def _eval_body_frontier(
     view_facts: dict[str, list[tuple[Any, ...]]],
     body: list[tuple[Any, ...]],
     *,
-    branch_index: int,
+    case_index: int,
     ast_gate_on: bool,
 ) -> tuple[list[dict[str, Any]], NativeWhereFrontierRow | None]:
     planned_body = _plan_body_atoms(body, ast_gate_on=ast_gate_on)
@@ -203,7 +203,7 @@ def _eval_body_frontier(
         dict[tuple[int, ...], dict[tuple[Any, ...], list[tuple[Any, ...]]]],
     ] = {}
     envs: list[dict[str, Any]] = [{}]
-    for atom_index, atom in enumerate(planned_body):
+    for condition_index, atom in enumerate(planned_body):
         frontier_count = len(envs)
         kind = atom[0]
         if kind == "pred":
@@ -232,9 +232,9 @@ def _eval_body_frontier(
                 "empty_input" if frontier_count == 0 else "atom_filter_empty"
             )
             return [], NativeWhereFrontierRow(
-                branch_index=branch_index,
-                failed_atom_index=atom_index,
-                atoms_satisfied=atom_index,
+                case_index=case_index,
+                failed_atom_index=condition_index,
+                atoms_satisfied=condition_index,
                 frontier_count=frontier_count,
                 failure_kind=failure_kind,
             )

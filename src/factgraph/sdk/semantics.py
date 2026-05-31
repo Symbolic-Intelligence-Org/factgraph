@@ -75,11 +75,11 @@ def _normalize_atom_interval_map(value: Any, *, field_name: str) -> dict[str, tu
 
 
 def _require_canonical_atom_id(value: str, *, field_name: str) -> None:
-    rule_id, marker, atom_index = value.rpartition(":atom_")
-    if not rule_id or marker != ":atom_" or not atom_index:
+    rule_id, marker, condition_index = value.rpartition(":atom_")
+    if not rule_id or marker != ":atom_" or not condition_index:
         raise SDKStoreError(f"{field_name} keys must use <rule_id>:atom_<index>")
-    if not atom_index.isdigit():
-        raise SDKStoreError(f"{field_name} keys must use non-negative atom indexes")
+    if not condition_index.isdigit():
+        raise SDKStoreError(f"{field_name} keys must use non-negative condition indexes")
 
 
 def _normalize_rule_params_map(value: Any, *, field_name: str) -> dict[str, dict[str, Any]]:

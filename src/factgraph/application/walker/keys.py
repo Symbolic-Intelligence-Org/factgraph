@@ -1,4 +1,4 @@
-"""Atom key parsing for evidence cross-referencing (B2)."""
+"""Condition key parsing for evidence cross-referencing (B2)."""
 
 from __future__ import annotations
 
@@ -7,17 +7,17 @@ from typing import Any, Literal
 
 from .errors import WalkerFrozenError, WalkerParseError
 
-AtomKeyKind = Literal["unknown", "pred", "step"]
+ConditionKeyKind = Literal["unknown", "pred", "step"]
 
-_ATOM_KEY_RE = re.compile(r"^b(?P<branch>\d+)\.a(?P<atom>\d+):(?P<payload>.+)$")
+_CONDITION_KEY_RE = re.compile(r"^c(?P<case>\d+)\.c(?P<condition>\d+):(?P<payload>.+)$")
 
 
-class AtomKeyView:
-    """Frozen parsed view over a `b{branch}.a{atom}:{payload}` atom key."""
+class ConditionKeyView:
+    """Frozen parsed view over a `c{case}.c{condition}:{payload}` condition key."""
 
     __slots__ = (
-        "_atom_index",
-        "_branch_index",
+        "_condition_index",
+        "_case_index",
         "_frozen",
         "_key",
         "_kind",
@@ -31,18 +31,18 @@ class AtomKeyView:
         self,
         *,
         key: str,
-        branch_index: int,
-        atom_index: int,
+        case_index: int,
+        condition_index: int,
         payload: str,
-        kind: AtomKeyKind = "unknown",
+        kind: ConditionKeyKind = "unknown",
         pred_id: str | None = None,
         step_kind: str | None = None,
         underlying: str | None = None,
     ) -> None:
-        _validate_atom_key_view_args(
+        _validate_condition_key_view_args(
             key=key,
-            branch_index=branch_index,
-            atom_index=atom_index,
+            case_index=case_index,
+            condition_index=condition_index,
             payload=payload,
             kind=kind,
             pred_id=pred_id,
@@ -51,8 +51,8 @@ class AtomKeyView:
         )
         object.__setattr__(self, "_frozen", False)
         object.__setattr__(self, "_key", key)
-        object.__setattr__(self, "_branch_index", branch_index)
-        object.__setattr__(self, "_atom_index", atom_index)
+        object.__setattr__(self, "_case_index", case_index)
+        object.__setattr__(self, "_condition_index", condition_index)
         object.__setattr__(self, "_payload", payload)
         object.__setattr__(self, "_kind", kind)
         object.__setattr__(self, "_pred_id", pred_id)
@@ -62,12 +62,12 @@ class AtomKeyView:
 
     def __setattr__(self, name: str, value: Any) -> None:
         if getattr(self, "_frozen", False):
-            raise WalkerFrozenError("AtomKeyView is frozen")
+            raise WalkerFrozenError("ConditionKeyView is frozen")
         object.__setattr__(self, name, value)
 
     def __delattr__(self, name: str) -> None:
         if getattr(self, "_frozen", False):
-            raise WalkerFrozenError("AtomKeyView is frozen")
+            raise WalkerFrozenError("ConditionKeyView is frozen")
         object.__delattr__(self, name)
 
     @property
@@ -75,19 +75,19 @@ class AtomKeyView:
         return self._key
 
     @property
-    def branch_index(self) -> int:
-        return self._branch_index
+    def case_index(self) -> int:
+        return self._case_index
 
     @property
-    def atom_index(self) -> int:
-        return self._atom_index
+    def condition_index(self) -> int:
+        return self._condition_index
 
     @property
     def payload(self) -> str:
         return self._payload
 
     @property
-    def kind(self) -> AtomKeyKind:
+    def kind(self) -> ConditionKeyKind:
         return self._kind
 
     @property
@@ -102,11 +102,11 @@ class AtomKeyView:
     def underlying(self) -> str:
         return self._underlying
 
-    def as_pred(self) -> "AtomKeyView":
-        return AtomKeyView(
+    def as_pred(self) -> "ConditionKeyView":
+        return ConditionKeyView(
             key=self.key,
-            branch_index=self.branch_index,
-            atom_index=self.atom_index,
+            case_index=self.case_index,
+            condition_index=self.condition_index,
             payload=self.payload,
             kind="pred",
             pred_id=self.payload,
@@ -114,11 +114,11 @@ class AtomKeyView:
             underlying=self.underlying,
         )
 
-    def as_step(self) -> "AtomKeyView":
-        return AtomKeyView(
+    def as_step(self) -> "ConditionKeyView":
+        return ConditionKeyView(
             key=self.key,
-            branch_index=self.branch_index,
-            atom_index=self.atom_index,
+            case_index=self.case_index,
+            condition_index=self.condition_index,
             payload=self.payload,
             kind="step",
             pred_id=None,
@@ -129,8 +129,8 @@ class AtomKeyView:
     def _surface(self) -> tuple[Any, ...]:
         return (
             self.key,
-            self.branch_index,
-            self.atom_index,
+            self.case_index,
+            self.condition_index,
             self.payload,
             self.kind,
             self.pred_id,
@@ -138,7 +138,7 @@ class AtomKeyView:
         )
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, AtomKeyView):
+        if not isinstance(other, ConditionKeyView):
             return NotImplemented
         return self._surface() == other._surface()
 
@@ -147,28 +147,28 @@ class AtomKeyView:
 
     def __repr__(self) -> str:
         return (
-            "AtomKeyView("
+            "ConditionKeyView("
             f"key={self.key!r}, kind={self.kind!r}, "
-            f"branch_index={self.branch_index}, atom_index={self.atom_index})"
+            f"case_index={self.case_index}, condition_index={self.condition_index})"
         )
 
 
-def parse_atom_key(key: str) -> AtomKeyView:
-    """Parse `b{branch}.a{atom}:{payload}` into an `AtomKeyView`.
+def parse_condition_key(key: str) -> ConditionKeyView:
+    """Parse `c{case}.c{condition}:{payload}` into a `ConditionKeyView`.
 
     The payload is intentionally syntactic here; context-specific callers
     promote it to pred or step semantics with `as_pred()` / `as_step()`.
     """
 
     if not isinstance(key, str):
-        raise WalkerParseError("atom key must be string")
-    match = _ATOM_KEY_RE.match(key)
+        raise WalkerParseError("condition key must be string")
+    match = _CONDITION_KEY_RE.match(key)
     if match is None:
-        raise WalkerParseError(f"invalid atom key: {key!r}")
-    return AtomKeyView(
+        raise WalkerParseError(f"invalid condition key: {key!r}")
+    return ConditionKeyView(
         key=key,
-        branch_index=int(match.group("branch")),
-        atom_index=int(match.group("atom")),
+        case_index=int(match.group("case")),
+        condition_index=int(match.group("condition")),
         payload=match.group("payload"),
         kind="unknown",
         pred_id=None,
@@ -177,39 +177,39 @@ def parse_atom_key(key: str) -> AtomKeyView:
     )
 
 
-def _validate_atom_key_view_args(
+def _validate_condition_key_view_args(
     *,
     key: str,
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     payload: str,
-    kind: AtomKeyKind,
+    kind: ConditionKeyKind,
     pred_id: str | None,
     step_kind: str | None,
     underlying: str | None,
 ) -> None:
     if not isinstance(key, str) or not key:
-        raise WalkerParseError("atom key must be non-empty string")
-    if isinstance(branch_index, bool) or not isinstance(branch_index, int) or branch_index < 0:
-        raise WalkerParseError("branch_index must be non-negative int")
-    if isinstance(atom_index, bool) or not isinstance(atom_index, int) or atom_index < 0:
-        raise WalkerParseError("atom_index must be non-negative int")
+        raise WalkerParseError("condition key must be non-empty string")
+    if isinstance(case_index, bool) or not isinstance(case_index, int) or case_index < 0:
+        raise WalkerParseError("case_index must be non-negative int")
+    if isinstance(condition_index, bool) or not isinstance(condition_index, int) or condition_index < 0:
+        raise WalkerParseError("condition_index must be non-negative int")
     if not isinstance(payload, str) or not payload:
         raise WalkerParseError("payload must be non-empty string")
     if kind not in {"unknown", "pred", "step"}:
         raise WalkerParseError("kind must be 'unknown', 'pred', or 'step'")
     if kind == "unknown" and (pred_id is not None or step_kind is not None):
-        raise WalkerParseError("unknown atom key must not carry pred_id or step_kind")
+        raise WalkerParseError("unknown condition key must not carry pred_id or step_kind")
     if kind == "pred" and (not isinstance(pred_id, str) or not pred_id or step_kind is not None):
-        raise WalkerParseError("pred atom key must carry pred_id only")
+        raise WalkerParseError("pred condition key must carry pred_id only")
     if kind == "step" and (not isinstance(step_kind, str) or not step_kind or pred_id is not None):
-        raise WalkerParseError("step atom key must carry step_kind only")
+        raise WalkerParseError("step condition key must carry step_kind only")
     if underlying is not None and not isinstance(underlying, str):
-        raise WalkerParseError("underlying atom key must be string")
+        raise WalkerParseError("underlying condition key must be string")
 
 
 __all__ = [
-    "AtomKeyKind",
-    "AtomKeyView",
-    "parse_atom_key",
+    "ConditionKeyKind",
+    "ConditionKeyView",
+    "parse_condition_key",
 ]

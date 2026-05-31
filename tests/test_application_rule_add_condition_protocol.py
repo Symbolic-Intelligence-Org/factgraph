@@ -40,7 +40,7 @@ def _artifact(**kwargs: object) -> ProofReceipt:
         "root_result_kind": "row",
         "binding_items": (("$p", "person:alice"),),
         "pred_witnesses": (
-            PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("a1",)),
+            PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("a1",)),
         ),
     }
     fields.update(kwargs)
@@ -51,7 +51,7 @@ def _action() -> RuleAddConditionAction:
     return RuleAddConditionAction(
         rule_id="person.eligible",
         version="1.0",
-        branch_index=0,
+        case_index=0,
         added_atom=AddedCondition(("lt", "$age", 65)),
     )
 
@@ -62,7 +62,7 @@ def _overlay() -> FactOverlay:
 
 def _proof_frame() -> ProofFrameRecheckResult:
     verdict = ProofFrameConditionVerdict(
-        atom_key="b0.add0:lt",
+        condition_key="b0.add0:lt",
         verdict="invalidated",
         affected_action_indices=(0,),
     )
@@ -83,13 +83,13 @@ class RuleAddConditionActionProtocolTests(unittest.TestCase):
 
         self.assertEqual(action.rule_id, "person.eligible")
         self.assertEqual(action.version, "1.0")
-        self.assertEqual(action.branch_index, 0)
+        self.assertEqual(action.case_index, 0)
         self.assertEqual(action.added_atom.atom, ("lt", "$age", 65))
 
     def test_action_is_frozen(self) -> None:
         action = _action()
         with self.assertRaises(FrozenInstanceError):
-            action.branch_index = 1  # type: ignore[misc]
+            action.case_index = 1  # type: ignore[misc]
 
     def test_action_rejects_bad_shape(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -100,14 +100,14 @@ class RuleAddConditionActionProtocolTests(unittest.TestCase):
             RuleAddConditionAction(
                 rule_id="person.eligible",
                 version="1.0",
-                branch_index=-1,
+                case_index=-1,
                 added_atom=AddedCondition(("lt", "$age", 65)),
             )
         with self.assertRaises(ProtocolShapeError):
             RuleAddConditionAction(
                 rule_id="person.eligible",
                 version="1.0",
-                branch_index=0,
+                case_index=0,
                 added_atom=object(),  # type: ignore[arg-type]
             )
 

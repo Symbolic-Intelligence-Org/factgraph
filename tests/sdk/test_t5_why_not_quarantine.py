@@ -78,8 +78,8 @@ class T5WhyNotQuarantineTests(unittest.TestCase):
         self.assertEqual(explanation.errors, ())
         for legacy_field in (
             "requested_universe",
-            "green",
-            "red",
+            "passed",
+            "failed",
             "diagnostic",
             "atom_locator",
         ):
@@ -112,12 +112,12 @@ class T5WhyNotQuarantineTests(unittest.TestCase):
         )
         forbidden = (
             "WhyNotUniverseResult",
-            "WhyNotRedRow",
+            "WhyNotFailedRow",
             "WhyNotRowDiagnostic",
             "WhyNotConditionLocator",
             "DiagnoseResult",
             "atom_locator",
-            "red[0]",
+            "failed[0]",
         )
 
         for source in sources:

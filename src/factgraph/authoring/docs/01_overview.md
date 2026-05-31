@@ -85,7 +85,7 @@ Boundary constraints:
     `Rule(...)` top-level parameters or through top-level keys of
     the authoring payload
   - `condition_weights` is version-scoped certainty/explain projection
-    input, keyed by atom-position: `b{branch}.a{atom}`
+    input, keyed by atom-position: `c{case}.c{condition}`
   - `condition_weights` is preserved by the compiler / registry but
     does not enter `RuleSpec` or the where-evaluator execution
     surface
@@ -126,7 +126,7 @@ rule_payload = {
     "version": "v1",
     "description": "Matches employment-related facts",
     "tags": ["employment", "query"],
-    "condition_weights": {"b0.a0": 0.75},
+    "condition_weights": {"c0.c0": 0.75},
     "select": ["$u"],
     "where": [("pred", "user:name", ["$u", "$name"])],
 }

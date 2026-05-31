@@ -17,7 +17,7 @@ Anti-regression invariants enforced here (per blueprint §7.2):
   therefore contains only ``no_candidate`` and ``atom_localized``.
 - §7-Diagnose-2: ``DiagnoseConditionLocator`` lives only on
   ``DiagnoseResult.diagnostic_payload``; never joins
-  ``EvidenceEnvelope.engine_payload`` Union (per D8.note §6.5 scope clarification —
+  ``EvidenceEnvelope.proof`` Union (per D8.note §6.5 scope clarification —
   DiagnoseConditionLocator is capability-output, not engine-native).
 """
 from __future__ import annotations
@@ -82,7 +82,7 @@ class DiagnoseConditionLocator:
     """Native atom-localizer payload (Step 0.B D8).
 
     Capability-output (Diagnose-runtime-computed), NOT engine-native — does NOT
-    join ``EvidenceEnvelope.engine_payload`` Union per §6.5 scope clarification
+    join ``EvidenceEnvelope.proof`` Union per §6.5 scope clarification
     (D8.note). Lives only on ``DiagnoseResult.diagnostic_payload``.
 
     Top-level atom only in MVP. When the failing atom is ``not(...)`` or
@@ -90,12 +90,12 @@ class DiagnoseConditionLocator:
     ``branch[i]``; nested-atom path tracking is deferred to v1+.
     """
 
-    branch_index: int
+    case_index: int
     failed_atom_index: int
     attempted_binding: BindingItems
 
     def __post_init__(self) -> None:
-        _validate_non_negative_int(self.branch_index, field_name="branch_index")
+        _validate_non_negative_int(self.case_index, field_name="case_index")
         _validate_non_negative_int(self.failed_atom_index, field_name="failed_atom_index")
         object.__setattr__(
             self,

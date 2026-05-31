@@ -23,7 +23,7 @@ from factgraph.application.walker import (
     SupportArtifactView,
     WalkerFrozenError,
 )
-from factgraph.application.walker.keys import parse_atom_key
+from factgraph.application.walker.keys import parse_condition_key
 from factgraph.audit.proof_frame_diff import (
     AtomDelta,
     EventReference,
@@ -46,10 +46,10 @@ def _support_artifact() -> ProofReceipt:
         root_result_kind="row",
         binding_items=(("$p", "person:alice"),),
         pred_witnesses=(
-            PredWitness(pred_atom_key="b0.a0:Person:age", asrt_ids=("a1",)),
+            PredWitness(pred_condition_key="c0.c0:Person:age", asrt_ids=("a1",)),
         ),
         non_fact_steps=(
-            NonFactStep(step_key="b0.a1:eq", kind="eq", status="satisfied"),
+            NonFactStep(step_key="c0.c1:eq", kind="eq", status="satisfied"),
         ),
     )
 
@@ -60,7 +60,7 @@ def _proof_frame_result() -> ProofFrameRecheckResult:
         binding_items=(("$p", "person:alice"),),
         atom_verdicts=(
             ProofFrameConditionVerdict(
-                atom_key="b0.a0:Person:age",
+                condition_key="c0.c0:Person:age",
                 verdict="invalidated",
                 affected_action_indices=(0,),
             ),
@@ -83,7 +83,7 @@ def _proof_frame_diff() -> ProofFrameDiff:
                 frame_status_change=FrameStatusChange(before="still_valid", after="invalidated"),
                 atom_deltas=(
                     AtomDelta(
-                        atom_key="b0.a0:Person:age",
+                        condition_key="c0.c0:Person:age",
                         kind="atom_verdict_changed",
                         before_verdict="still_valid",
                         after_verdict="invalidated",
@@ -113,7 +113,7 @@ def _view_fixtures() -> tuple[tuple[str, object], ...]:
         ("IRBodyWalker", walker),
         ("IRAtomView", atom),
         ("FrozenTupleView", FrozenTupleView((atom,))),
-        ("AtomKeyView", parse_atom_key("b0.a0:Person:age")),
+        ("ConditionKeyView", parse_condition_key("c0.c0:Person:age")),
         ("SupportArtifactView", SupportArtifactView(support, {"a1": claim})),
         ("AssertionView", AssertionView("a1", {"a1": claim})),
         ("ProofFrameView", ProofFrameView(proof_frame)),

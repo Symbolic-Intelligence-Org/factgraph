@@ -227,7 +227,7 @@ Current native evaluator frontier trace boundary:
 
 - `rules.frontier.evaluate_native_where_frontier(...)` is a separate entrypoint with a signature that mirrors `evaluate_native_where(...)`, but returns `NativeWhereFrontierEvaluation`
 - `bindings` / `rule_refs` / `rule_ref_resolutions` keep success parity with `evaluate_native_where(...)`
-- `frontier_rows` are sparse aggregate rows: at most one row per failed normalized OR branch, carrying `branch_index`, `failed_atom_index`, `atoms_satisfied`, `frontier_count`, and `failure_kind`
+- `frontier_rows` are sparse aggregate rows: at most one row per failed normalized OR branch, carrying `case_index`, `failed_atom_index`, `atoms_satisfied`, `frontier_count`, and `failure_kind`
 - frontier rows do not expose env dicts, candidate payloads, support artifacts, provenance envelopes, or arbitrary `details`
 - RuleRef preflight/rewrite/overlay still uses the existing substrate first; frontier is computed on the rewritten parent native body, and failed child-rule internals are not exposed by the current contract
 - this entrypoint is native-only core rules substrate; Souffle / ProbLog / PyReason adapters and application capabilities do not automatically opt in
@@ -293,7 +293,7 @@ Evaluate now also records a lightweight candidate explain backref after candidat
   - native `ProofReceipt` now retains both:
     - legacy `rule_refs` summary
     - structured `rule_ref_edges`
-  - `rule_ref_edges` records per-occurrence child proof edges by `ruleref_atom_key`, carrying:
+  - `rule_ref_edges` records per-occurrence child proof edges by `ruleref_condition_key`, carrying:
     - `rule_ref_id`
     - `rule_ref_version`
     - `child_support_digest | unresolved_reason`
@@ -304,7 +304,7 @@ Evaluate now also records a lightweight candidate explain backref after candidat
     - `rule_ref_edges`
     only retain the adopted branch's proof body
   - when multiple branches satisfy the same final binding, `source-order wins` is applied
-  - selected branch identity remains recoverable through the existing `b{branch}.a{atom}:...` key namespace; no new top-level branch field is added
+  - selected branch identity remains recoverable through the existing `c{case}.c{condition}:...` key namespace; no new top-level branch field is added
   - SDK Track 1 adds public structural branch ids and `fg.rules.inspect(...)`; those ids are inspect-only SDK metadata and are not persisted into core rule specs, compiled plans, registry state, or adapter payloads
   - native candidate proof tree unresolved / boundary taxonomy is now frozen as an official contract:
     - `unresolved_support`

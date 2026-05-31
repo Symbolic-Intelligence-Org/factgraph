@@ -41,8 +41,8 @@ _BANNED_SYMBOLS = frozenset(
         "_extract_head_var_binding",
         "_extract_term_value",
         "_determine_root_result_kind",
-        "_derive_branch_index_from_artifact",
-        "_parse_branch_index",
+        "_derive_case_index_from_artifact",
+        "_parse_case_index",
         "_lookup_support_artifact",
         "_lookup_provenance_envelope",
         # Check protocol DTOs and engine-native payload channel

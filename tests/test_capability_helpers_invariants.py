@@ -93,7 +93,7 @@ def _support(
         root_result_kind="row",
         binding_items=binding_items if binding_items is not None else _binding(),
         pred_witnesses=(
-            PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("a1",)),
+            PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("a1",)),
         ),
     )
 
@@ -163,8 +163,8 @@ def _why_not_result() -> WhyNotUniverseResult:
     return WhyNotUniverseResult(
         status="completed",
         requested_universe=(binding,),
-        green=(binding,),
-        red=(),
+        passed=(binding,),
+        failed=(),
     )
 
 
@@ -174,7 +174,7 @@ def _proof_frame_result() -> ProofFrameRecheckResult:
         binding_items=_binding(),
         atom_verdicts=(
             ProofFrameConditionVerdict(
-                atom_key="b0.a0:Person:exists",
+                condition_key="c0.c0:Person:exists",
                 verdict="invalidated",
                 affected_action_indices=(0,),
             ),
@@ -209,15 +209,15 @@ def _builder_cases() -> tuple[tuple[str, Any, tuple[Any, ...], dict[str, Any]], 
             "build_rule_disable_request",
             capability_helpers.build_rule_disable_request,
             (rule_spec, support),
-            {"branch_index": 0, "atom_index": 0},
+            {"case_index": 0, "condition_index": 0},
         ),
         (
             "build_rule_literal_replace_request",
             capability_helpers.build_rule_literal_replace_request,
             (rule_spec, support),
             {
-                "branch_index": 0,
-                "atom_index": 0,
+                "case_index": 0,
+                "condition_index": 0,
                 "literal_path": ConditionPath(kind="rhs"),
                 "old_literal": "us",
                 "new_literal": "eu",
@@ -228,7 +228,7 @@ def _builder_cases() -> tuple[tuple[str, Any, tuple[Any, ...], dict[str, Any]], 
             capability_helpers.build_rule_add_condition_request,
             (rule_spec, support),
             {
-                "branch_index": 0,
+                "case_index": 0,
                 "added_atom": AddedCondition(atom=("eq", "$p", "person:alice")),
             },
         ),
@@ -321,15 +321,15 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
                 "rule_disable",
                 capability_helpers.build_rule_disable_request,
                 (sdk_rule, _support()),
-                {"branch_index": 0, "atom_index": 0},
+                {"case_index": 0, "condition_index": 0},
             ),
             (
                 "rule_literal_replace",
                 capability_helpers.build_rule_literal_replace_request,
                 (sdk_rule, _support()),
                 {
-                    "branch_index": 0,
-                    "atom_index": 0,
+                    "case_index": 0,
+                    "condition_index": 0,
                     "literal_path": ConditionPath(kind="rhs"),
                     "old_literal": "us",
                     "new_literal": "eu",
@@ -340,7 +340,7 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
                 capability_helpers.build_rule_add_condition_request,
                 (sdk_rule, _support()),
                 {
-                    "branch_index": 0,
+                    "case_index": 0,
                     "added_atom": AddedCondition(atom=("eq", "$p", "person:alice")),
                 },
             ),
@@ -386,7 +386,7 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
                 "rule_disable",
                 capability_helpers.build_rule_disable_request,
                 (_rule_spec(where=[sdk_rule]), _support()),
-                {"branch_index": 0, "atom_index": 0},
+                {"case_index": 0, "condition_index": 0},
             ),
             (
                 "round_event",

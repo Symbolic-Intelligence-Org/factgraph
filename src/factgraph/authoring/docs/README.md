@@ -25,7 +25,7 @@ authoring preflight, publish, and registry workflows.
   - rule / derivation DSL goes through top-level constructor
     parameters
   - `condition_weights` is certainty/explain projection input keyed by
-    `b{branch}.a{atom}`. It is not an engine adapter parameter and
+    `c{case}.c{condition}`. It is not an engine adapter parameter and
     does not enter `where` execution semantics. Future runtime
     configuration for this lane belongs in
     `SemanticsProfile.certainty_projection`.

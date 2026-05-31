@@ -205,7 +205,7 @@ types**. Other internal types stay inside their layer.
 |---|---|
 | `FactOverlay`, `FactOverlayAction`, `RuleOverlayAction` | `fact_overlay.check`, rule overlays |
 | `ConditionPath`, `AddedCondition` | `rule.literal_replace`, `rule.add_condition` |
-| `ProofReceipt` | Returned inside `CheckResult.evidence_envelope.engine_payload`; consumed by `recheck_proof_frame` |
+| `ProofReceipt` | Returned inside `CheckResult.evidence_envelope.proof`; consumed by `recheck_proof_frame` |
 | `ProofFrameRecheckResult` | Returned by `recheck_proof_frame` |
 | `RoundEvent`, `WarningDTO` | `audit.diff_proof_frames` |
 | `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference` | Returned by `audit.diff_proof_frames` |
@@ -218,7 +218,7 @@ constructing one with bad shape raises `ProtocolShapeError`.
 > Footnote on `ProofReceipt`: defined in
 > `factgraph.core.store._support` (substrate-private module) but referenced
 > as a frozen DTO at the protocol boundary
-> (`factgraph.application.protocol.derivation_check.EvidenceEnvelope.engine_payload`).
+> (`factgraph.application.protocol.derivation_check.EvidenceEnvelope.proof`).
 > The `_support` location reflects that it's also produced by the
 > native evaluator inside `factgraph.core`.
 

@@ -169,15 +169,15 @@ def _build_predicate_witness_group(
     *,
     assertion_lookup: AssertionDetailLookup,
 ) -> dict[str, Any]:
-    pred_atom_key = _require_non_empty_str(row.get("pred_atom_key"), label="pred_witness.pred_atom_key")
-    asrt_ids = _normalize_strings(row.get("asrt_ids"), label=f"{pred_atom_key}.asrt_ids")
-    pred_id = pred_atom_key.split(":", 1)[1] if ":" in pred_atom_key else pred_atom_key
+    pred_condition_key = _require_non_empty_str(row.get("pred_condition_key"), label="pred_witness.pred_condition_key")
+    asrt_ids = _normalize_strings(row.get("asrt_ids"), label=f"{pred_condition_key}.asrt_ids")
+    pred_id = pred_condition_key.split(":", 1)[1] if ":" in pred_condition_key else pred_condition_key
     leaves = [_build_assertion_leaf(asrt_id, assertion_lookup=assertion_lookup) for asrt_id in asrt_ids]
     node: dict[str, Any] = {
-        "node_id": f"atom:{pred_atom_key}",
+        "node_id": f"atom:{pred_condition_key}",
         "node_kind": "predicate_witness_group",
         "title": f"Predicate witness {pred_id}",
-        "pred_atom_key": pred_atom_key,
+        "pred_condition_key": pred_condition_key,
         "pred_id": pred_id,
         "assertion_count": len(leaves),
         "children": leaves,
@@ -298,28 +298,28 @@ def _build_rule_ref_edge_node(
     depth_remaining: int,
     ancestry: set[str],
 ) -> dict[str, Any]:
-    ruleref_atom_key = _require_non_empty_str(edge.get("ruleref_atom_key"), label="rule_ref_edge.ruleref_atom_key")
+    ruleref_condition_key = _require_non_empty_str(edge.get("ruleref_condition_key"), label="rule_ref_edge.ruleref_condition_key")
     rule_ref_id = _require_non_empty_str(edge.get("rule_ref_id"), label="rule_ref_edge.rule_ref_id")
     rule_ref_version = _require_non_empty_str(
         edge.get("rule_ref_version"),
-        label=f"{ruleref_atom_key}.rule_ref_version",
+        label=f"{ruleref_condition_key}.rule_ref_version",
     )
     child_support_digest = edge.get("child_support_digest")
     unresolved_reason = edge.get("unresolved_reason")
     if child_support_digest is not None and (
         not isinstance(child_support_digest, str) or not child_support_digest
     ):
-        raise ValueError(f"{ruleref_atom_key}.child_support_digest must be non-empty string when present")
+        raise ValueError(f"{ruleref_condition_key}.child_support_digest must be non-empty string when present")
     if unresolved_reason is not None and (
         not isinstance(unresolved_reason, str) or not unresolved_reason
     ):
-        raise ValueError(f"{ruleref_atom_key}.unresolved_reason must be non-empty string when present")
+        raise ValueError(f"{ruleref_condition_key}.unresolved_reason must be non-empty string when present")
 
     children: list[dict[str, Any]] = []
     if child_support_digest is None:
         children.append(
             _build_unresolved_support_node(
-                node_key=ruleref_atom_key,
+                node_key=ruleref_condition_key,
                 reason=unresolved_reason or "child_support_unavailable",
                 child_support_digest=None,
             )
@@ -327,7 +327,7 @@ def _build_rule_ref_edge_node(
     else:
         children.append(
             _build_referenced_support_child(
-                ruleref_atom_key=ruleref_atom_key,
+                ruleref_condition_key=ruleref_condition_key,
                 child_support_digest=child_support_digest,
                 assertion_lookup=assertion_lookup,
                 support_lookup=support_lookup,
@@ -337,10 +337,10 @@ def _build_rule_ref_edge_node(
         )
 
     return {
-        "node_id": f"ruleref:{ruleref_atom_key}",
+        "node_id": f"ruleref:{ruleref_condition_key}",
         "node_kind": "rule_ref",
         "title": f"Rule reference {rule_ref_id}",
-        "ruleref_atom_key": ruleref_atom_key,
+        "ruleref_condition_key": ruleref_condition_key,
         "rule_ref_id": rule_ref_id,
         "rule_ref_version": rule_ref_version,
         "child_support_digest": child_support_digest,
@@ -351,7 +351,7 @@ def _build_rule_ref_edge_node(
 
 def _build_referenced_support_child(
     *,
-    ruleref_atom_key: str,
+    ruleref_condition_key: str,
     child_support_digest: str,
     assertion_lookup: AssertionDetailLookup,
     support_lookup: SupportLookup,
@@ -359,14 +359,14 @@ def _build_referenced_support_child(
     ancestry: set[str],
 ) -> dict[str, Any]:
     if depth_remaining <= 0:
-        return _build_recursion_boundary_node(node_key=ruleref_atom_key, reason="depth_limit")
+        return _build_recursion_boundary_node(node_key=ruleref_condition_key, reason="depth_limit")
     if child_support_digest in ancestry:
-        return _build_recursion_boundary_node(node_key=ruleref_atom_key, reason="cycle")
+        return _build_recursion_boundary_node(node_key=ruleref_condition_key, reason="cycle")
 
     support = support_lookup(child_support_digest)
     if not isinstance(support, Mapping):
         return _build_unresolved_support_node(
-            node_key=ruleref_atom_key,
+            node_key=ruleref_condition_key,
             reason="artifact_missing",
             child_support_digest=child_support_digest,
         )
@@ -448,9 +448,9 @@ def _normalize_rule_ref_edges(value: Any, *, label: str) -> list[dict[str, Any]]
             raise ValueError(f"{label}[{idx}] must be mapping")
         out.append(
             {
-                "ruleref_atom_key": _require_non_empty_str(
-                    row.get("ruleref_atom_key"),
-                    label=f"{label}[{idx}].ruleref_atom_key",
+                "ruleref_condition_key": _require_non_empty_str(
+                    row.get("ruleref_condition_key"),
+                    label=f"{label}[{idx}].ruleref_condition_key",
                 ),
                 "rule_ref_id": _require_non_empty_str(row.get("rule_ref_id"), label=f"{label}[{idx}].rule_ref_id"),
                 "rule_ref_version": _require_non_empty_str(
@@ -463,7 +463,7 @@ def _normalize_rule_ref_edges(value: Any, *, label: str) -> list[dict[str, Any]]
         )
     out.sort(
         key=lambda row: (
-            row["ruleref_atom_key"],
+            row["ruleref_condition_key"],
             row["rule_ref_id"],
             row["rule_ref_version"],
             row["child_support_digest"] or "",

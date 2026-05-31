@@ -64,8 +64,8 @@ class EvidenceEnvelope:
     engine: CheckEngine
     support_kind: str
     support_digest: str
-    branch_index: int | None
-    engine_payload: ProofReceipt | ProvenanceEnvelope
+    case_index: int | None
+    proof: ProofReceipt | ProvenanceEnvelope
     branch_atom_projection: None = None
 
     def __post_init__(self) -> None:
@@ -74,9 +74,9 @@ class EvidenceEnvelope:
         support_digest = _require_non_empty_str(self.support_digest, field_name="support_digest")
         if not support_digest.startswith("sha256:"):
             raise ProtocolShapeError("support_digest must be sha256 token")
-        _validate_non_negative_int_or_none(self.branch_index, field_name="branch_index")
-        if not isinstance(self.engine_payload, (ProofReceipt, ProvenanceEnvelope)):
-            raise ProtocolShapeError("engine_payload must be ProofReceipt or ProvenanceEnvelope")
+        _validate_non_negative_int_or_none(self.case_index, field_name="case_index")
+        if not isinstance(self.proof, (ProofReceipt, ProvenanceEnvelope)):
+            raise ProtocolShapeError("proof must be ProofReceipt or ProvenanceEnvelope")
         if self.branch_atom_projection is not None:
             raise ProtocolShapeError("branch_atom_projection must be None in MVP")
 

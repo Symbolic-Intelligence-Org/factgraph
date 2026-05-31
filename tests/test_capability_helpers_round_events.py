@@ -82,7 +82,7 @@ def _support() -> ProofReceipt:
         root_result_kind="row",
         binding_items=_binding(),
         pred_witnesses=(
-            PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("a1",)),
+            PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("a1",)),
         ),
     )
 
@@ -165,8 +165,8 @@ def _why_not_pair() -> tuple[WhyNotUniverseRequest, WhyNotUniverseResult]:
     result = WhyNotUniverseResult(
         status="completed",
         requested_universe=(binding,),
-        green=(binding,),
-        red=(),
+        passed=(binding,),
+        failed=(),
     )
     return request, result
 
@@ -179,7 +179,7 @@ def _proof_frame_pair() -> tuple[ProofFrameRecheckRequest, ProofFrameRecheckResu
         binding_items=binding,
         atom_verdicts=(
             ProofFrameConditionVerdict(
-                atom_key="b0.a0:Person:exists",
+                condition_key="c0.c0:Person:exists",
                 verdict="invalidated",
                 affected_action_indices=(0,),
             ),

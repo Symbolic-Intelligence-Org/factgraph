@@ -501,10 +501,10 @@ class EvaluateResultDTOTests(unittest.TestCase):
     def test_live_row_explain_uses_native_form1_support_topology(self) -> None:
         support = _native_support_artifact(
             (
-                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("asrt-1",)),
+                PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("asrt-1",)),
             ),
             non_fact_steps=(
-                NonFactStep(step_key="b0.a1:eq", kind="eq", status="satisfied", details=(("atom_repr", "eq"),)),
+                NonFactStep(step_key="c0.c1:eq", kind="eq", status="satisfied", details=(("atom_repr", "eq"),)),
             ),
         )
         result = _single_row_result(support_artifact=support)
@@ -525,20 +525,20 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
         seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:b0.a0:Person:exists", "premise:b0.a1:eq"})
+        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:c0.c0:Person:exists", "premise:c0.c1:eq"})
         self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:asrt-1"})
         self.assertTrue(all(edge.edge_kind == EDGE_SUPPORTS for edge in graph.edges))
-        self.assertIn(("premise:b0.a0:Person:exists", result[0].row_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
+        self.assertIn(("premise:c0.c0:Person:exists", result[0].row_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
         self.assertIn(
-            ("seed:assertion:asrt-1", "premise:b0.a0:Person:exists"),
+            ("seed:assertion:asrt-1", "premise:c0.c0:Person:exists"),
             {(e.from_node_id, e.to_node_id) for e in graph.edges},
         )
 
     def test_native_form1_support_reuses_seed_node_with_multiple_edges(self) -> None:
         support = _native_support_artifact(
             (
-                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("asrt-1",)),
-                PredWitness(pred_atom_key="b0.a1:Person:active", asrt_ids=("asrt-1",)),
+                PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("asrt-1",)),
+                PredWitness(pred_condition_key="c0.c1:Person:active", asrt_ids=("asrt-1",)),
             )
         )
         result = _single_row_result(support_artifact=support)
@@ -551,17 +551,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
         seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:asrt-1"]
         self.assertEqual(
             {edge.to_node_id for edge in seed_edges},
-            {"premise:b0.a0:Person:exists", "premise:b0.a1:Person:active"},
+            {"premise:c0.c0:Person:exists", "premise:c0.c1:Person:active"},
         )
 
     def test_live_row_explain_uses_souffle_form1_support_topology(self) -> None:
         support = _native_support_artifact(
             (
-                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("souffle-asrt-1",)),
+                PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("souffle-asrt-1",)),
             ),
             kind=SOUFFLE_WITNESS_KIND,
             non_fact_steps=(
-                NonFactStep(step_key="b0.a1:eq", kind="eq", status="satisfied", details=(("source", "souffle"),)),
+                NonFactStep(step_key="c0.c1:eq", kind="eq", status="satisfied", details=(("source", "souffle"),)),
             ),
         )
         result = _single_row_result(support_artifact=support)
@@ -601,22 +601,22 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
         seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:b0.a0:Person:exists", "premise:b0.a1:eq"})
+        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:c0.c0:Person:exists", "premise:c0.c1:eq"})
         self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:souffle-asrt-1"})
         self.assertIn(
-            ("premise:b0.a0:Person:exists", result[0].row_id),
+            ("premise:c0.c0:Person:exists", result[0].row_id),
             {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
         )
         self.assertIn(
-            ("seed:assertion:souffle-asrt-1", "premise:b0.a0:Person:exists"),
+            ("seed:assertion:souffle-asrt-1", "premise:c0.c0:Person:exists"),
             {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
         )
 
     def test_souffle_form1_support_reuses_seed_node_with_multiple_edges(self) -> None:
         support = _native_support_artifact(
             (
-                PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("souffle-asrt-1",)),
-                PredWitness(pred_atom_key="b0.a1:Person:active", asrt_ids=("souffle-asrt-1",)),
+                PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("souffle-asrt-1",)),
+                PredWitness(pred_condition_key="c0.c1:Person:active", asrt_ids=("souffle-asrt-1",)),
             ),
             kind=SOUFFLE_WITNESS_KIND,
         )
@@ -630,7 +630,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:souffle-asrt-1"]
         self.assertEqual(
             {edge.to_node_id for edge in seed_edges},
-            {"premise:b0.a0:Person:exists", "premise:b0.a1:Person:active"},
+            {"premise:c0.c0:Person:exists", "premise:c0.c1:Person:active"},
         )
 
     def test_explanation_status_matrix_is_enforced(self) -> None:

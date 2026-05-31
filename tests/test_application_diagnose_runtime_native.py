@@ -181,7 +181,7 @@ class NativeAtomLocalizationTests(unittest.TestCase):
         self.assertEqual(result.failure_kind, "atom_localized")
         locator = result.diagnostic_payload
         assert locator is not None
-        self.assertEqual(locator.branch_index, 0)
+        self.assertEqual(locator.case_index, 0)
         self.assertEqual(locator.failed_atom_index, 2)
         self.assertIn(("$age", 25), locator.attempted_binding)
 
@@ -209,7 +209,7 @@ class NativeAtomLocalizationTests(unittest.TestCase):
 
         locator = result.diagnostic_payload
         assert locator is not None
-        self.assertEqual(locator.branch_index, 1)
+        self.assertEqual(locator.case_index, 1)
         self.assertEqual(locator.failed_atom_index, 2)
 
     def test_localizer_keeps_candidate_frontier_instead_of_single_primary_path(self) -> None:

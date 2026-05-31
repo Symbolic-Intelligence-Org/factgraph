@@ -95,12 +95,12 @@ class ProofFrameRecheckRequest:
 
 @dataclass(frozen=True)
 class ProofFrameConditionVerdict:
-    atom_key: str
+    condition_key: str
     verdict: ProofFrameStatus
     affected_action_indices: tuple[int, ...]
 
     def __post_init__(self) -> None:
-        _require_non_empty_str(self.atom_key, field_name="atom_key")
+        _require_non_empty_str(self.condition_key, field_name="condition_key")
         _require_literal(
             self.verdict,
             field_name="verdict",

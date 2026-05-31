@@ -39,7 +39,7 @@ def _artifact(**kwargs: object) -> ProofReceipt:
         "root_result_kind": "row",
         "binding_items": (("$p", "person:alice"),),
         "pred_witnesses": (
-            PredWitness(pred_atom_key="b0.a0:Person:exists", asrt_ids=("a1",)),
+            PredWitness(pred_condition_key="c0.c0:Person:exists", asrt_ids=("a1",)),
         ),
     }
     fields.update(kwargs)
@@ -50,8 +50,8 @@ def _action() -> RuleDisableAction:
     return RuleDisableAction(
         rule_id="person.eligible",
         version="1.0",
-        branch_index=0,
-        atom_index=0,
+        case_index=0,
+        condition_index=0,
     )
 
 
@@ -61,7 +61,7 @@ def _overlay() -> FactOverlay:
 
 def _proof_frame() -> ProofFrameRecheckResult:
     verdict = ProofFrameConditionVerdict(
-        atom_key="b0.a0:Person:exists",
+        condition_key="c0.c0:Person:exists",
         verdict="invalidated",
         affected_action_indices=(0,),
     )

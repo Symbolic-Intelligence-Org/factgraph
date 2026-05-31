@@ -78,8 +78,8 @@ def _disable(**kwargs: object) -> RuleDisableAction:
     fields = {
         "rule_id": "person.eligible",
         "version": "1.0",
-        "branch_index": 0,
-        "atom_index": 1,
+        "case_index": 0,
+        "condition_index": 1,
     }
     fields.update(kwargs)
     return RuleDisableAction(**fields)  # type: ignore[arg-type]
@@ -89,8 +89,8 @@ def _replace_rule_literal(**kwargs: object) -> RuleLiteralReplaceAction:
     fields = {
         "rule_id": "person.eligible",
         "version": "1.0",
-        "branch_index": 0,
-        "atom_index": 3,
+        "case_index": 0,
+        "condition_index": 3,
         "literal_path": ConditionPath(kind="rhs"),
         "old_literal": "us",
         "new_literal": "eu",
@@ -203,8 +203,8 @@ class RuleDisableActionProtocolTests(unittest.TestCase):
         action = _disable()
         self.assertEqual(action.rule_id, "person.eligible")
         self.assertEqual(action.version, "1.0")
-        self.assertEqual(action.branch_index, 0)
-        self.assertEqual(action.atom_index, 1)
+        self.assertEqual(action.case_index, 0)
+        self.assertEqual(action.condition_index, 1)
         self.assertIsNone(action.note)
 
     def test_disable_accepts_note(self) -> None:
@@ -221,11 +221,11 @@ class RuleDisableActionProtocolTests(unittest.TestCase):
         with self.assertRaises(ProtocolShapeError):
             _disable(version="")
         with self.assertRaises(ProtocolShapeError):
-            _disable(branch_index=-1)
+            _disable(case_index=-1)
         with self.assertRaises(ProtocolShapeError):
-            _disable(branch_index=True)
+            _disable(case_index=True)
         with self.assertRaises(ProtocolShapeError):
-            _disable(atom_index=-1)
+            _disable(condition_index=-1)
         with self.assertRaises(ProtocolShapeError):
             _disable(note=123)
 
@@ -262,9 +262,9 @@ class RuleLiteralReplaceActionProtocolTests(unittest.TestCase):
         with self.assertRaises(ProtocolShapeError):
             _replace_rule_literal(version="")
         with self.assertRaises(ProtocolShapeError):
-            _replace_rule_literal(branch_index=-1)
+            _replace_rule_literal(case_index=-1)
         with self.assertRaises(ProtocolShapeError):
-            _replace_rule_literal(atom_index=True)
+            _replace_rule_literal(condition_index=True)
         with self.assertRaises(ProtocolShapeError):
             _replace_rule_literal(literal_path=("rhs", None))
         with self.assertRaises(ProtocolShapeError):
@@ -601,7 +601,7 @@ class FactOverlayProtocolStaticInvariantTests(unittest.TestCase):
     def test_result_has_no_engine_payload_or_evidence_fields(self) -> None:
         result_fields = {field.name for field in dataclasses.fields(FactOverlayCheckResult)}
         self.assertNotIn("evidence_envelope", result_fields)
-        self.assertNotIn("engine_payload", result_fields)
+        self.assertNotIn("proof", result_fields)
         self.assertNotIn("support_artifact", result_fields)
         self.assertNotIn("provenance_envelope", result_fields)
 

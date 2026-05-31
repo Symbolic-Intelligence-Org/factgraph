@@ -35,7 +35,7 @@ from factgraph.core.store._support import (
     ProofReceipt,
     normalize_binding_items,
 )
-from factgraph.core.store._support_capture import find_winning_branch_index
+from factgraph.core.store._support_capture import find_winning_case_index
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import (
     project_view_facts,
@@ -79,7 +79,7 @@ class DiagnoseRuntimeError(ValueError):
 
 @dataclass(frozen=True)
 class _FailedAtomCandidate:
-    branch_index: int
+    case_index: int
     failed_atom_index: int
     atoms_satisfied: int
     attempted_env: dict[str, Any]
@@ -165,13 +165,13 @@ def _diagnose_native(
     if matches:
         matched_with_meta: list[tuple[int, BindingItems]] = []
         for match in matches:
-            branch_index = find_winning_branch_index(
+            case_index = find_winning_case_index(
                 where=body,
                 binding=match,
                 witness_facts=witness_facts,
                 rule_ref_resolutions=evaluation.rule_ref_resolutions,
             )
-            matched_with_meta.append((branch_index, normalize_binding_items(match)))
+            matched_with_meta.append((case_index, normalize_binding_items(match)))
         matched_with_meta.sort(key=lambda row: (row[0], row[1]))
         return DiagnoseResult(
             status="passed",
@@ -208,7 +208,7 @@ def _diagnose_native(
         matched_binding=None,
         failure_kind="atom_localized",
         diagnostic_payload=DiagnoseConditionLocator(
-            branch_index=localized.branch_index,
+            case_index=localized.case_index,
             failed_atom_index=localized.failed_atom_index,
             attempted_binding=normalize_binding_items(localized.attempted_env),
         ),
@@ -228,21 +228,21 @@ def _localize_failed_atom(
     requested_vars = set(requested_env)
     candidates: list[_FailedAtomCandidate] = []
 
-    for branch_index, branch in enumerate(branches):
+    for case_index, branch in enumerate(branches):
         branch_vars = set(_vars_in_atoms(branch))
         if requested_vars and branch_vars.isdisjoint(requested_vars):
             continue
         envs = [dict(requested_env)]
         atoms_satisfied = 0
-        for atom_index, atom in enumerate(branch):
+        for condition_index, atom in enumerate(branch):
             next_envs: list[dict[str, Any]] = []
             for env in envs:
                 next_envs.extend(_extend_env_with_atom(view_facts, env, atom))
             if not next_envs:
                 candidates.append(
                     _FailedAtomCandidate(
-                        branch_index=branch_index,
-                        failed_atom_index=atom_index,
+                        case_index=case_index,
+                        failed_atom_index=condition_index,
                         atoms_satisfied=atoms_satisfied,
                         attempted_env=_primary_env(envs),
                     )
@@ -253,7 +253,7 @@ def _localize_failed_atom(
 
     if not candidates:
         return None
-    candidates.sort(key=lambda item: (-item.atoms_satisfied, item.branch_index))
+    candidates.sort(key=lambda item: (-item.atoms_satisfied, item.case_index))
     return candidates[0]
 
 
@@ -266,7 +266,7 @@ def _extend_env_with_atom(
 
     This deliberately enumerates possible extensions instead of grounding and
     checking a single atom. Ground-and-check would silently false on unbound vars
-    and can corrupt Diagnose's reported failed atom index.
+    and can corrupt Diagnose's reported failed condition index.
     """
     ast_gate_on = _where_ast_gate_enabled()
     kind = atom[0]
@@ -519,7 +519,7 @@ def _diagnose_souffle(
       - **no-match**: artifact present but binding does not subset-match.
     - Result classification (precedence-ordered):
       - match bucket non-empty → ``status="passed"`` (primary by Check 0.C C4
-        sort: ``(branch_index, binding_items, candidate_key)``)
+        sort: ``(case_index, binding_items, candidate_key)``)
       - match empty AND lookup-miss bucket non-empty → ``status="unsupported"``
         with ``EVIDENCE_LOOKUP_MISS`` errors (one per missing candidate)
       - all buckets accounted, no match, no lookup-miss → ``status="failed"``
@@ -531,7 +531,7 @@ def _diagnose_souffle(
     supersede note).
 
     Diagnose-side helpers (``_lookup_support_artifact``,
-    ``_derive_branch_index_from_artifact``, ``_parse_branch_index``) are local
+    ``_derive_case_index_from_artifact``, ``_parse_case_index``) are local
     copies of Check's per Q1 Sibling D11 invariant; deferred refactor per
     topic §1.3 + §6.2 wave-ordering second-consumer rule.
     """
@@ -559,12 +559,12 @@ def _diagnose_souffle(
             item: tuple[CandidateSet, ProofReceipt, dict[str, Any]],
         ) -> tuple[Any, ...]:
             candidate, artifact, binding = item
-            branch_index = _derive_branch_index_from_artifact(artifact)
-            branch_key = (
-                (0, branch_index) if branch_index is not None else (1, 0)
+            case_index = _derive_case_index_from_artifact(artifact)
+            case_key = (
+                (0, case_index) if case_index is not None else (1, 0)
             )
             return (
-                branch_key,
+                case_key,
                 normalize_binding_items(binding),
                 candidate.candidate_key,
             )
@@ -761,30 +761,30 @@ def _extract_term_value(term: Any) -> Any:
     return None
 
 
-def _derive_branch_index_from_artifact(artifact: ProofReceipt) -> int | None:
-    """Extract branch_index from a ProofReceipt's atom-key prefixes.
+def _derive_case_index_from_artifact(artifact: ProofReceipt) -> int | None:
+    """Extract case_index from a ProofReceipt's condition-key prefixes.
 
     Mirror of Check's helper per Q1 Sibling. Souffle artifacts encode branch
-    indices via ``b{n}.a{m}:...`` on ``pred_witnesses`` and ``non_fact_steps``;
+    indices via ``c{n}.c{m}:...`` on ``pred_witnesses`` and ``non_fact_steps``;
     return the integer if all keys agree, ``None`` otherwise.
     """
-    branch_indices: set[int] = set()
+    case_indices: set[int] = set()
     for witness in artifact.pred_witnesses:
-        parsed = _parse_branch_index(witness.pred_atom_key)
+        parsed = _parse_case_index(witness.pred_condition_key)
         if parsed is not None:
-            branch_indices.add(parsed)
+            case_indices.add(parsed)
     for step in artifact.non_fact_steps:
-        parsed = _parse_branch_index(step.step_key)
+        parsed = _parse_case_index(step.step_key)
         if parsed is not None:
-            branch_indices.add(parsed)
-    if len(branch_indices) == 1:
-        return next(iter(branch_indices))
+            case_indices.add(parsed)
+    if len(case_indices) == 1:
+        return next(iter(case_indices))
     return None
 
 
-def _parse_branch_index(key: str) -> int | None:
-    """Parse ``b{n}.a{m}:...`` into the ``{n}`` integer (Diagnose's local copy)."""
-    if not isinstance(key, str) or not key.startswith("b"):
+def _parse_case_index(key: str) -> int | None:
+    """Parse ``c{n}.c{m}:...`` into the ``{n}`` integer (Diagnose's local copy)."""
+    if not isinstance(key, str) or not key.startswith("c"):
         return None
     try:
         dot_pos = key.index(".")
@@ -792,13 +792,13 @@ def _parse_branch_index(key: str) -> int | None:
         return None
     if dot_pos <= 1:
         return None
-    if dot_pos + 1 >= len(key) or key[dot_pos + 1] != "a":
+    if dot_pos + 1 >= len(key) or key[dot_pos + 1] != "c":
         return None
     colon_pos = key.find(":", dot_pos + 2)
     if colon_pos == -1:
         return None
-    atom_index_text = key[dot_pos + 2 : colon_pos]
-    if not atom_index_text.isdigit():
+    condition_index_text = key[dot_pos + 2 : colon_pos]
+    if not condition_index_text.isdigit():
         return None
     try:
         return int(key[1:dot_pos])

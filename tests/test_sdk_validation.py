@@ -257,8 +257,8 @@ class ValidateOptionalEvaluationOverlayTests(unittest.TestCase):
                 RuleDisableAction(
                     rule_id="sdk.validation.adult",
                     version="v1",
-                    branch_index=0,
-                    atom_index=0,
+                    case_index=0,
+                    condition_index=0,
                 ),
             )
         )

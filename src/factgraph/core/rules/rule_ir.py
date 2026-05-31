@@ -14,7 +14,7 @@ from factgraph.core.rules._trace import (
     RuleTraceRuleRefLink,
 )
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id, resolve_exposed_rule_ref
-from factgraph.core.store._support import ProjectedFact, make_non_fact_step_key, make_pred_atom_key
+from factgraph.core.store._support import ProjectedFact, make_non_fact_step_key, make_pred_condition_key
 from factgraph.core.rules.where_eval import WhereValidationError, evaluate_where
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts, project_view_facts_with_witness
@@ -213,12 +213,12 @@ def _evaluate_rule(
                 sorted(
                     [
                         RuleTraceRuleRefLink(
-                            ruleref_atom_key=make_non_fact_step_key(branch_index, atom_index, "ruleref"),
+                            ruleref_condition_key=make_non_fact_step_key(case_index, condition_index, "ruleref"),
                             child_invocation_id=child_invocation_id,
                         )
-                        for (branch_index, atom_index), child_invocation_id in ruleref_atom_map.items()
+                        for (case_index, condition_index), child_invocation_id in ruleref_atom_map.items()
                     ],
-                    key=lambda link: link.ruleref_atom_key,
+                    key=lambda link: link.ruleref_condition_key,
                 )
             )
             invocation = RuleTraceInvocation(
@@ -256,7 +256,7 @@ def _rewrite_where_rule_refs(
     overlay: dict[str, list[tuple[Any, ...]]] = {}
     ruleref_atom_map: dict[tuple[int, int], str] = {}
 
-    def rewrite_atom(atom: Any, *, branch_index: int, atom_index: int) -> Any:
+    def rewrite_atom(atom: Any, *, case_index: int, condition_index: int) -> Any:
         if not isinstance(atom, tuple) or not atom:
             return atom
         if atom[0] != "ruleref":
@@ -286,24 +286,24 @@ def _rewrite_where_rule_refs(
         # Explicit implementation constraint: capture the child invocation immediately
         # after _evaluate_rule returns, while we still know this call-site triggered it.
         if trace_ctx is not None:
-            ruleref_atom_map[(branch_index, atom_index)] = trace_ctx.invocations[-1].invocation_id
+            ruleref_atom_map[(case_index, condition_index)] = trace_ctx.invocations[-1].invocation_id
         pred_id = internal_rule_pred_id(rule_id, version)
         overlay[pred_id] = rows
         return ("pred", pred_id, terms)
 
     if all(isinstance(item, tuple) for item in where):
         rewritten: list[Any] = []
-        for atom_index, atom in enumerate(where):
-            rewritten.append(rewrite_atom(atom, branch_index=0, atom_index=atom_index))
+        for condition_index, atom in enumerate(where):
+            rewritten.append(rewrite_atom(atom, case_index=0, condition_index=condition_index))
         return rewritten, overlay, ruleref_atom_map
     if all(isinstance(item, list) for item in where):
         out_branches: list[list[Any]] = []
-        for branch_index, branch in enumerate(where):
+        for case_index, branch in enumerate(where):
             if not isinstance(branch, list):
                 raise RuleCompileError("invalid where branch")
             branch_out: list[Any] = []
-            for atom_index, atom in enumerate(branch):
-                branch_out.append(rewrite_atom(atom, branch_index=branch_index, atom_index=atom_index))
+            for condition_index, atom in enumerate(branch):
+                branch_out.append(rewrite_atom(atom, case_index=case_index, condition_index=condition_index))
             out_branches.append(branch_out)
         return out_branches, overlay, ruleref_atom_map
     return where, overlay, ruleref_atom_map
@@ -366,16 +366,16 @@ def _build_rule_trace_witnesses(
     pred_witnesses: list[RuleTracePredWitness] = []
     non_fact_steps: list[RuleTraceNonFactStep] = []
     for binding_index, binding in enumerate(bindings):
-        for branch_index, branch in enumerate(branches):
-            for atom_index, atom in enumerate(branch):
+        for case_index, branch in enumerate(branches):
+            for condition_index, atom in enumerate(branch):
                 if not isinstance(atom, tuple) or not atom:
                     continue
                 tag = atom[0]
                 if tag == "pred":
                     witness = _build_rule_trace_pred_witness(
                         atom=atom,
-                        branch_index=branch_index,
-                        atom_index=atom_index,
+                        case_index=case_index,
+                        condition_index=condition_index,
                         binding_index=binding_index,
                         binding=binding,
                         base_witness_facts=base_witness_facts,
@@ -387,15 +387,15 @@ def _build_rule_trace_witnesses(
                     continue
                 step = _build_rule_trace_non_fact_step(
                     atom=atom,
-                    branch_index=branch_index,
-                    atom_index=atom_index,
+                    case_index=case_index,
+                    condition_index=condition_index,
                     binding_index=binding_index,
                     binding=binding,
                 )
                 if step is not None:
                     non_fact_steps.append(step)
     return (
-        tuple(sorted(pred_witnesses, key=lambda item: (item.binding_index, item.pred_atom_key))),
+        tuple(sorted(pred_witnesses, key=lambda item: (item.binding_index, item.pred_condition_key))),
         tuple(sorted(non_fact_steps, key=lambda item: (item.binding_index, item.step_key))),
     )
 
@@ -403,8 +403,8 @@ def _build_rule_trace_witnesses(
 def _build_rule_trace_pred_witness(
     *,
     atom: tuple[Any, ...],
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     binding_index: int,
     binding: dict[str, Any],
     base_witness_facts: dict[str, list[ProjectedFact]],
@@ -423,7 +423,7 @@ def _build_rule_trace_pred_witness(
             matches.append(projected.asrt_id)
     return RuleTracePredWitness(
         binding_index=binding_index,
-        pred_atom_key=make_pred_atom_key(branch_index, atom_index, pred_id),
+        pred_condition_key=make_pred_condition_key(case_index, condition_index, pred_id),
         asrt_ids=tuple(sorted(set(matches))),
     )
 
@@ -431,8 +431,8 @@ def _build_rule_trace_pred_witness(
 def _build_rule_trace_non_fact_step(
     *,
     atom: tuple[Any, ...],
-    branch_index: int,
-    atom_index: int,
+    case_index: int,
+    condition_index: int,
     binding_index: int,
     binding: dict[str, Any],
 ) -> RuleTraceNonFactStep | None:
@@ -444,7 +444,7 @@ def _build_rule_trace_non_fact_step(
     status = "negated" if tag == "not" else "evaluated"
     return RuleTraceNonFactStep(
         binding_index=binding_index,
-        step_key=make_non_fact_step_key(branch_index, atom_index, tag),
+        step_key=make_non_fact_step_key(case_index, condition_index, tag),
         kind=tag,
         status=status,
         details=tuple(

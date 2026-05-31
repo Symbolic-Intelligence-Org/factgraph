@@ -58,7 +58,7 @@ class AuditProofFrameDiffTests(unittest.TestCase):
                     [
                         _proof_payload(
                             status="still_valid",
-                            atoms={"b0.a0:pred": "still_valid"},
+                            atoms={"c0.c0:pred": "still_valid"},
                         )
                     ],
                 ),
@@ -67,7 +67,7 @@ class AuditProofFrameDiffTests(unittest.TestCase):
                     [
                         _proof_payload(
                             status="invalidated",
-                            atoms={"b0.a0:pred": "invalidated"},
+                            atoms={"c0.c0:pred": "invalidated"},
                         )
                     ],
                 ),
@@ -88,8 +88,8 @@ class AuditProofFrameDiffTests(unittest.TestCase):
     def test_atom_set_diff_reports_added_and_removed(self) -> None:
         package = _package(
             [
-                *_round("round-a", [_proof_payload(atoms={"b0.a0:pred": "still_valid"})]),
-                *_round("round-b", [_proof_payload(atoms={"b0.a1:gt": "still_valid"})]),
+                *_round("round-a", [_proof_payload(atoms={"c0.c0:pred": "still_valid"})]),
+                *_round("round-b", [_proof_payload(atoms={"c0.c1:gt": "still_valid"})]),
             ]
         )
         diff = AuditQuery(package).diff_proof_frames("round-a", "round-b")
@@ -97,8 +97,8 @@ class AuditProofFrameDiffTests(unittest.TestCase):
         kinds = {delta.kind for delta in diff.frame_deltas[0].atom_deltas}
         self.assertEqual(kinds, {"atom_added", "atom_removed"})
         by_kind = {delta.kind: delta for delta in diff.frame_deltas[0].atom_deltas}
-        self.assertEqual(by_kind["atom_removed"].atom_key, "b0.a0:pred")
-        self.assertEqual(by_kind["atom_added"].atom_key, "b0.a1:gt")
+        self.assertEqual(by_kind["atom_removed"].condition_key, "c0.c0:pred")
+        self.assertEqual(by_kind["atom_added"].condition_key, "c0.c1:gt")
 
     def test_rule_ref_degenerate_frames_are_marked_without_atom_deltas(self) -> None:
         for payloads, expected_status_change in (
@@ -112,7 +112,7 @@ class AuditProofFrameDiffTests(unittest.TestCase):
             (
                 (
                     _proof_payload(status="unknown", atoms={}),
-                    _proof_payload(status="still_valid", atoms={"b0.a0:pred": "still_valid"}),
+                    _proof_payload(status="still_valid", atoms={"c0.c0:pred": "still_valid"}),
                 ),
                 ("unknown", "still_valid"),
             ),
@@ -247,7 +247,7 @@ class AuditProofFrameDiffTests(unittest.TestCase):
                         _proof_payload(
                             binding=[["$x", ["nested", "list"]]],
                             status="invalidated",
-                            atoms={"b0.a0:pred": "invalidated"},
+                            atoms={"c0.c0:pred": "invalidated"},
                         )
                     ],
                 ),
@@ -274,7 +274,7 @@ class AuditProofFrameDiffTests(unittest.TestCase):
                         _proof_payload(status="still_valid"),
                         _proof_payload(
                             status="invalidated",
-                            atoms={"b0.a0:pred": "invalidated"},
+                            atoms={"c0.c0:pred": "invalidated"},
                         ),
                     ],
                 ),
@@ -371,7 +371,7 @@ def _proof_payload(
     if binding is None:
         binding = [["$p", "alice"]]
     if atoms is None:
-        atoms = {"b0.a0:pred": "still_valid"}
+        atoms = {"c0.c0:pred": "still_valid"}
     return {
         "request": {
             "support_digest": support_digest,
@@ -382,11 +382,11 @@ def _proof_payload(
             "binding_items": binding,
             "atom_verdicts": [
                 {
-                    "atom_key": atom_key,
+                    "condition_key": condition_key,
                     "verdict": verdict,
                     "affected_action_indices": [0],
                 }
-                for atom_key, verdict in atoms.items()
+                for condition_key, verdict in atoms.items()
             ],
         },
     }

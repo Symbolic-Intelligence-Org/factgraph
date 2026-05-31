@@ -60,11 +60,11 @@ for frame in view.frames_with_status_change():
     print(frame.frame_identity.support_digest, frame.frame_status_change)
     for delta in frame.atom_deltas:
         # delta.kind ∈ {"atom_added", "atom_removed", "atom_verdict_changed"}
-        print("  ", delta.kind, delta.atom_key)
+        print("  ", delta.kind, delta.condition_key)
 
 # Or filter at the atom level across all frames
 for delta in view.iter_atom_deltas(kind="atom_verdict_changed"):
-    print(delta.atom_key, delta.before_verdict, "→", delta.after_verdict)
+    print(delta.condition_key, delta.before_verdict, "→", delta.after_verdict)
 
 # Or look up only frames whose atom verdicts changed
 for frame in view.frames_with_atom_verdict_changes():

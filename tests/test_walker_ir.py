@@ -29,12 +29,12 @@ class IRBodyWalkerTraversalTests(unittest.TestCase):
         self.assertEqual([atom.kind for atom in atoms], ["pred", "eq"])
         self.assertEqual(atoms[0].pred_id, "Person:age")
         self.assertEqual(atoms[0].args, ("$p", "$age"))
-        self.assertEqual(atoms[0].branch_index, 0)
-        self.assertEqual(atoms[0].atom_index, 0)
-        self.assertEqual(atoms[0].key, "b0.a0:Person:age")
+        self.assertEqual(atoms[0].case_index, 0)
+        self.assertEqual(atoms[0].condition_index, 0)
+        self.assertEqual(atoms[0].key, "c0.c0:Person:age")
         self.assertEqual(atoms[1].pred_id, None)
         self.assertEqual(atoms[1].args, ("$age", 40))
-        self.assertEqual(atoms[1].key, "b0.a1:eq")
+        self.assertEqual(atoms[1].key, "c0.c1:eq")
         self.assertEqual(walker.source_id, "rule-1")
 
     def test_iterates_or_of_and_with_branch_positions(self) -> None:
@@ -48,15 +48,15 @@ class IRBodyWalkerTraversalTests(unittest.TestCase):
         atoms = list(walker)
 
         self.assertEqual(
-            [(atom.kind, atom.branch_index, atom.atom_index) for atom in atoms],
+            [(atom.kind, atom.case_index, atom.condition_index) for atom in atoms],
             [("pred", 0, 0), ("pred", 1, 0), ("eq", 1, 1)],
         )
-        self.assertEqual(atoms[2].key, "b1.a1:eq")
+        self.assertEqual(atoms[2].key, "c1.c1:eq")
 
     def test_constructs_from_tuple_source(self) -> None:
         walker = IRBodyWalker((("pred", "Person:exists", ["$p"]),))
 
-        self.assertEqual([atom.key for atom in walker], ["b0.a0:Person:exists"])
+        self.assertEqual([atom.key for atom in walker], ["c0.c0:Person:exists"])
 
     def test_traverse_twice_yields_equal_but_new_view_sequence(self) -> None:
         walker = IRBodyWalker(
@@ -76,9 +76,9 @@ class IRBodyWalkerTraversalTests(unittest.TestCase):
         calls: list[tuple[int, int]] = []
         original = ir_module._build_atom_view
 
-        def counting_build(atom, *, branch_index, atom_index):
-            calls.append((branch_index, atom_index))
-            return original(atom, branch_index=branch_index, atom_index=atom_index)
+        def counting_build(atom, *, case_index, condition_index):
+            calls.append((case_index, condition_index))
+            return original(atom, case_index=case_index, condition_index=condition_index)
 
         ir_module._build_atom_view = counting_build
         try:
@@ -89,7 +89,7 @@ class IRBodyWalkerTraversalTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(calls, [])
-            self.assertEqual(next(iter(walker)).key, "b0.a0:Person:age")
+            self.assertEqual(next(iter(walker)).key, "c0.c0:Person:age")
             self.assertEqual(calls, [(0, 0)])
         finally:
             ir_module._build_atom_view = original
@@ -166,28 +166,28 @@ class IRBodyWalkerLookupTests(unittest.TestCase):
     def test_find_returns_match_or_none(self) -> None:
         found = self.walker.find(kind="pred", pred_id="Person:age")
         self.assertIsInstance(found, IRAtomView)
-        self.assertEqual(found.key, "b0.a0:Person:age")
+        self.assertEqual(found.key, "c0.c0:Person:age")
 
         self.assertIsNone(self.walker.find(kind="pred", pred_id="Missing"))
-        self.assertIsNone(self.walker.find(branch_index=9, atom_index=0))
+        self.assertIsNone(self.walker.find(case_index=9, condition_index=0))
 
     def test_require_position_raises_on_miss(self) -> None:
         self.assertEqual(
-            self.walker.require_position(branch_index=0, atom_index=1).key,
-            "b0.a1:eq",
+            self.walker.require_position(case_index=0, condition_index=1).key,
+            "c0.c1:eq",
         )
 
         with self.assertRaises(WalkerLookupError):
-            self.walker.require_position(branch_index=9, atom_index=0)
+            self.walker.require_position(case_index=9, condition_index=0)
 
     def test_require_key_raises_on_miss(self) -> None:
         self.assertEqual(
-            self.walker.require_key("b0.a2:ruleref").args,
+            self.walker.require_key("c0.c2:ruleref").args,
             ("adult.rule", "1.0", ("$p",)),
         )
 
         with self.assertRaises(WalkerLookupError):
-            self.walker.require_key("b0.a9:eq")
+            self.walker.require_key("c0.c9:eq")
 
 
 class IRAtomViewContractTests(unittest.TestCase):
@@ -221,18 +221,18 @@ class IRAtomViewContractTests(unittest.TestCase):
             kind="pred",
             pred_id="Person:exists",
             args=("$p",),
-            branch_index=0,
-            atom_index=0,
-            key="b0.a0:Person:exists",
+            case_index=0,
+            condition_index=0,
+            key="c0.c0:Person:exists",
             underlying=("pred", "Person:exists", ("$p",)),
         )
         b = IRAtomView(
             kind="pred",
             pred_id="Person:exists",
             args=("$p",),
-            branch_index=0,
-            atom_index=0,
-            key="b0.a0:Person:exists",
+            case_index=0,
+            condition_index=0,
+            key="c0.c0:Person:exists",
             underlying=("different", "raw"),
         )
 

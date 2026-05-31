@@ -145,7 +145,7 @@ class RuleExprJoinMaterialization:
     left_port_name: str
     right_occurrence_alias: str
     right_port_name: str
-    materialized_atom_index: int
+    materialized_condition_index: int
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.branch_id, field_name="branch_id")
@@ -155,7 +155,7 @@ class RuleExprJoinMaterialization:
         _require_non_empty_str(self.left_port_name, field_name="left_port_name")
         _require_non_empty_str(self.right_occurrence_alias, field_name="right_occurrence_alias")
         _require_non_empty_str(self.right_port_name, field_name="right_port_name")
-        _require_non_negative_int(self.materialized_atom_index, field_name="materialized_atom_index")
+        _require_non_negative_int(self.materialized_condition_index, field_name="materialized_condition_index")
 
 
 @dataclass(frozen=True)
@@ -164,14 +164,14 @@ class RuleExprHeadPortLinkMaterialization:
     head_port_name: str
     source_occurrence_alias: str
     source_port_name: str
-    materialized_atom_index: int
+    materialized_condition_index: int
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.branch_id, field_name="branch_id")
         _require_non_empty_str(self.head_port_name, field_name="head_port_name")
         _require_non_empty_str(self.source_occurrence_alias, field_name="source_occurrence_alias")
         _require_non_empty_str(self.source_port_name, field_name="source_port_name")
-        _require_non_negative_int(self.materialized_atom_index, field_name="materialized_atom_index")
+        _require_non_negative_int(self.materialized_condition_index, field_name="materialized_condition_index")
 
 
 @dataclass(frozen=True)
@@ -179,7 +179,7 @@ class RuleExprEvaluationTrace:
     canonical_key: tuple[object, ...]
     engine: RuleExprAdapterEngine
     branch_id: str
-    runtime_branch_index: int
+    runtime_case_index: int
     occurrence_aliases: tuple[str, ...]
     occurrence_map: tuple[RuleExprOccurrenceBinding, ...]
     join_materializations: tuple[RuleExprJoinMaterialization, ...]
@@ -194,7 +194,7 @@ class RuleExprEvaluationTrace:
         if self.engine not in {"native", "souffle", "problog"}:
             raise RuleExprError("RuleExprEvaluationTrace.engine must be native, souffle, or problog")
         _require_non_empty_str(self.branch_id, field_name="branch_id")
-        _require_non_negative_int(self.runtime_branch_index, field_name="runtime_branch_index")
+        _require_non_negative_int(self.runtime_case_index, field_name="runtime_case_index")
         _require_tuple(self.occurrence_aliases, field_name="occurrence_aliases", item_type=str)
         _require_tuple(self.occurrence_map, field_name="occurrence_map", item_type=RuleExprOccurrenceBinding)
         _require_tuple(
@@ -331,7 +331,7 @@ def _materialize_adapter_derivation_plan(
     materialized_branches: list[list[object]] = []
     traces: list[RuleExprEvaluationTrace] = []
     head_vars = _head_var_names(plan)
-    for runtime_branch_index, branch in enumerate(plan.branches):
+    for runtime_case_index, branch in enumerate(plan.branches):
         body, joins, head_links = _materialize_branch(branch, plan)
         materialized_branches.append(body)
         traces.append(
@@ -339,7 +339,7 @@ def _materialize_adapter_derivation_plan(
                 canonical_key=plan.canonical_key,
                 engine=engine,
                 branch_id=branch.branch_id,
-                runtime_branch_index=runtime_branch_index,
+                runtime_case_index=runtime_case_index,
                 occurrence_aliases=branch.occurrence_aliases,
                 occurrence_map=plan.occurrence_map,
                 join_materializations=joins,
@@ -367,17 +367,17 @@ def _classify_pyreason_rule_expr_support(plan: RuleExprLoweringPlan) -> RuleExpr
     """Classify PyReason support for materialized RuleExpr plans."""
     compiled, traces = _materialize_adapter_derivation_plan(plan, engine="native")
     branch_join_indexes = {
-        trace.runtime_branch_index: {join.materialized_atom_index for join in trace.join_materializations}
+        trace.runtime_case_index: {join.materialized_condition_index for join in trace.join_materializations}
         for trace in traces
     }
     branches = _where_ir_branches(compiled.body_ir)
     if not branches:
         return _unsupported_pyreason("branch-shape", "branch-shape")
-    for branch_index, branch in enumerate(branches):
-        for atom_index, atom in enumerate(branch):
+    for case_index, branch in enumerate(branches):
+        for condition_index, atom in enumerate(branch):
             unsupported = _pyreason_unsupported_atom(
                 atom,
-                is_join_atom=atom_index in branch_join_indexes.get(branch_index, set()),
+                is_join_atom=condition_index in branch_join_indexes.get(case_index, set()),
             )
             if unsupported is not None:
                 source, feature = unsupported
@@ -720,7 +720,7 @@ def _concat_branches(
 def _assign_branch_ids(branches: tuple[RuleExprLoweringBranch, ...]) -> tuple[RuleExprLoweringBranch, ...]:
     if not branches:
         raise RuleExprError("RuleExpr lowering produced no branches")
-    return tuple(replace(branch, branch_id=f"b{idx}") for idx, branch in enumerate(branches))
+    return tuple(replace(branch, branch_id=f"c{idx}") for idx, branch in enumerate(branches))
 
 
 def _materialize_branch(
@@ -758,7 +758,7 @@ def _materialize_branch(
                 left_port_name=join.left.port_name,
                 right_occurrence_alias=join.right.occurrence_alias,
                 right_port_name=join.right.port_name,
-                materialized_atom_index=materialized_index,
+                materialized_condition_index=materialized_index,
             )
         )
 
@@ -786,7 +786,7 @@ def _materialize_branch(
                     head_port_name=port_name,
                     source_occurrence_alias=source.occurrence_alias,
                     source_port_name=source.port_name,
-                    materialized_atom_index=materialized_index,
+                    materialized_condition_index=materialized_index,
                 )
             )
 

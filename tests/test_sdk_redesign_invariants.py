@@ -226,7 +226,7 @@ class DocsTaxonomyFirstLintInvariants(unittest.TestCase):
         Flat signatures (per `src/factgraph/sdk/store.py`):
         - ``check(inference, binding, ...)``
         - ``check_fact_overlay(inference, binding, overlay, ...)``
-        - ``check_rule_disable(rule, support_artifact, *, branch_index, atom_index, ...)``
+        - ``check_rule_disable(rule, support_artifact, *, case_index, condition_index, ...)``
 
         The taxonomy examples MUST keep the same positional argument
         names so users copy-pasting from docs get a valid call shape.

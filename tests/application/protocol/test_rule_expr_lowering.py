@@ -170,7 +170,7 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
 
         self.assertEqual(compiled.body_ir[-1][0], "eq")
         self.assertEqual(compiled.body_ir[-1][1:], ("$left__region", "$right__region"))
-        self.assertEqual(traces[0].join_materializations[0].materialized_atom_index, len(compiled.body_ir) - 1)
+        self.assertEqual(traces[0].join_materializations[0].materialized_condition_index, len(compiled.body_ir) - 1)
         self.assertEqual(traces[0].join_materializations[0].left_occurrence_alias, "left")
 
     def test_join_rejects_incompatible_port_types(self) -> None:
@@ -313,7 +313,7 @@ class RuleExprNativeExecutionTests(unittest.TestCase):
         compiled, traces = _materialize_native_derivation_plan(plan)
 
         self.assertEqual(len(traces), 2)
-        self.assertEqual(tuple(trace.runtime_branch_index for trace in traces), (0, 1))
+        self.assertEqual(tuple(trace.runtime_case_index for trace in traces), (0, 1))
         self.assertEqual(tuple(trace.branch_id for trace in traces), ("b0", "b1"))
         self.assertEqual(compiled.body_ir[0][0][0], "pred")
         self.assertIsInstance(traces[0], RuleExprEvaluationTrace)

@@ -33,7 +33,7 @@ path.
   from the semantics object.
 - Track 3-post lets `PyReasonSemantics.branch_bounds` reference branch
   ids from `Case([...], id="...")` or fallback positional ids such as
-  `b0` / `b1`. Case-specific bounds override the wrapper's global
+  `c0` / `c1`. Case-specific bounds override the wrapper's global
   `head_bound` for that branch only.
 
 ## 1. `vars(...)`
@@ -76,7 +76,7 @@ Stable contract:
 - `Rule` is engine-independent public syntax. Adapter-specific rule
   projection is not carried by public `engine_ext` fields.
 - `Rule.condition_weights` remains public as certainty/explain
-  projection input keyed by `b{branch}.a{atom}`. It is not an engine
+  projection input keyed by `c{case}.c{condition}`. It is not an engine
   adapter parameter and does not enter `where` execution semantics.
   Future runtime configuration for this lane belongs in
   `SemanticsProfile.certainty_projection`.
@@ -119,7 +119,7 @@ Limits:
 - `where` cannot mix `Case(...)` with bare branches (for example `[Case([...]), [...]]`).
 - `Case(...)` accepts the branch atom list plus optional keyword-only structural `id=`.
   Probability, confidence, and engine-specific kwargs are rejected.
-- `fg.rules.inspect(rule_or_inference)` exposes explicit branch ids, positional fallback ids (`b0`, `b1`, ...), and atom ids such as `b0.a0`.
+- `fg.rules.inspect(rule_or_inference)` exposes explicit branch ids, positional fallback ids (`c0`, `c1`, ...), and atom ids such as `c0.c0`.
 - string DSL is unsupported (`sdk.run("...")`, `sdk.eval.evaluate("...")`).
 
 ### 3.1 Field Sugar vs `Pred(...)`

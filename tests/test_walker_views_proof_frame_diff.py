@@ -46,7 +46,7 @@ def _status_changed_frame() -> FrameDelta:
         frame_status_change=FrameStatusChange(before="still_valid", after="invalidated"),
         atom_deltas=(
             AtomDelta(
-                atom_key="b0.a0:Person:age",
+                condition_key="c0.c0:Person:age",
                 kind="atom_verdict_changed",
                 before_verdict="still_valid",
                 after_verdict="invalidated",
@@ -63,7 +63,7 @@ def _atom_added_frame() -> FrameDelta:
         frame_status_change=None,
         atom_deltas=(
             AtomDelta(
-                atom_key="b0.a1:Person:status",
+                condition_key="c0.c1:Person:status",
                 kind="atom_added",
                 before_verdict=None,
                 after_verdict="still_valid",
@@ -138,8 +138,8 @@ class ProofFrameDiffViewTests(unittest.TestCase):
         added = tuple(view.iter_atom_deltas(kind="atom_added"))
 
         self.assertEqual([delta.kind for delta in all_deltas], ["atom_verdict_changed", "atom_added"])
-        self.assertEqual([delta.atom_key for delta in changed], ["b0.a0:Person:age"])
-        self.assertEqual([delta.atom_key for delta in added], ["b0.a1:Person:status"])
+        self.assertEqual([delta.condition_key for delta in changed], ["c0.c0:Person:age"])
+        self.assertEqual([delta.condition_key for delta in added], ["c0.c1:Person:status"])
 
     def test_frames_with_atom_verdict_changes_returns_changed_atom_frames(self) -> None:
         view = ProofFrameDiffView(_proof_frame_diff())

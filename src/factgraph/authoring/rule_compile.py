@@ -198,9 +198,9 @@ def _compile_condition_weights(
 def _collect_condition_keys(where: list[Any]) -> set[str]:
     branches = _where_branches(where)
     out: set[str] = set()
-    for branch_index, branch in enumerate(branches):
-        for atom_index, _atom in enumerate(branch):
-            out.add(f"b{branch_index}.a{atom_index}")
+    for case_index, branch in enumerate(branches):
+        for condition_index, _atom in enumerate(branch):
+            out.add(f"c{case_index}.c{condition_index}")
     return out
 
 

@@ -14,7 +14,7 @@ Current implementation status:
   for `RuleSpec.where` / `CompiledDerivationPlan.body_ir` style IR bodies.
 - **Implementation Phase 2:** `FrozenTupleView` and `frozen_collection(...)`
   are implemented for already-frozen tuple collections.
-- **Implementation Phase 3:** `AtomKeyView`, `parse_atom_key(...)`,
+- **Implementation Phase 3:** `ConditionKeyView`, `parse_condition_key(...)`,
   `SupportArtifactView`, and `AssertionView` are implemented for
   `ProofReceipt` / ledger-claim cross-referencing.
 - **Implementation Phase 4:** `ProofFrameView` is implemented for
@@ -58,8 +58,8 @@ invalidated = rows.filter(verdict="invalidated")
 first = invalidated.first()  # item | None
 ```
 
-`parse_atom_key(key)` parses canonical `b{branch}.a{atom}:{payload}` strings.
-The parser is syntactic and returns `AtomKeyView(kind="unknown")`; contextual
+`parse_condition_key(key)` parses canonical `c{case}.c{condition}:{payload}` strings.
+The parser is syntactic and returns `ConditionKeyView(kind="unknown")`; contextual
 callers promote with `.as_pred()` or `.as_step()`.
 
 `SupportArtifactView` wraps a frozen `ProofReceipt` plus caller-provided
@@ -82,7 +82,7 @@ The view exposes:
 
 - `pred_witnesses` as `FrozenTupleView[PredWitness]`
 - `non_fact_steps` as `FrozenTupleView[NonFactStep]`
-- `parse_pred_atom_key(...)` / `parse_step_key(...)`
+- `parse_pred_condition_key(...)` / `parse_step_key(...)`
 - `lookup_assertion(asrt_id) -> AssertionView`
 - `underlying`, the original `ProofReceipt` escape hatch
 

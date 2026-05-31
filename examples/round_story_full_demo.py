@@ -262,20 +262,20 @@ def _rule_support_artifact(person: SeededPerson) -> ProofReceipt:
         binding_items=(("$p", person.e_ref),),
         pred_witnesses=(
             PredWitness(
-                pred_atom_key=f"b0.a0:{person.exists_pred_id}",
+                pred_condition_key=f"c0.c0:{person.exists_pred_id}",
                 asrt_ids=(person.exists_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a1:{person.age_pred_id}",
+                pred_condition_key=f"c0.c1:{person.age_pred_id}",
                 asrt_ids=(person.age_asrt_id,),
             ),
             PredWitness(
-                pred_atom_key=f"b0.a2:{person.region_pred_id}",
+                pred_condition_key=f"c0.c2:{person.region_pred_id}",
                 asrt_ids=(person.region_asrt_id,),
             ),
         ),
         non_fact_steps=(
-            NonFactStep(step_key="b0.a3:eq", kind="eq", status="satisfied"),
+            NonFactStep(step_key="c0.c3:eq", kind="eq", status="satisfied"),
         ),
     )
 
@@ -297,7 +297,7 @@ def _phase_check(
     assert result.matched_count == 1, result
     assert result.matched_binding == request.binding, result
     assert result.evidence_envelope is not None, result
-    support = result.evidence_envelope.engine_payload
+    support = result.evidence_envelope.proof
     assert isinstance(support, ProofReceipt), result.evidence_envelope
 
     _announce(verbose, "1. SDK setup + Q1 Check")
@@ -321,7 +321,7 @@ def _phase_diagnose(fixture: DemoFixture, *, verbose: bool) -> tuple[DiagnoseReq
     assert result.failure_kind == "atom_localized", result
     locator = result.diagnostic_payload
     assert locator is not None, result
-    assert locator.branch_index == 0, locator
+    assert locator.case_index == 0, locator
     assert locator.failed_atom_index == 1, locator
 
     _announce(verbose, "2. Q2 Diagnose")
@@ -390,9 +390,9 @@ def _phase_why_not(
     result = check_why_not_universe(request, store=fixture.store)
 
     assert result.status == "completed", result
-    assert result.green == (_binding(("$p", bob.e_ref), ("$age", 30), ("$region", "eu")),)
-    assert len(result.red) == 2, result
-    for row in result.red:
+    assert result.passed == (_binding(("$p", bob.e_ref), ("$age", 30), ("$region", "eu")),)
+    assert len(result.failed) == 2, result
+    for row in result.failed:
         assert row.diagnostic.status == "failed", row
         assert row.diagnostic.failure_kind == "atom_localized", row
         assert row.diagnostic.diagnostic_granularity == "atom_localized", row
@@ -401,7 +401,7 @@ def _phase_why_not(
         assert locator.failed_atom_index == 1, locator
 
     _announce(verbose, "4. Q4 Why-not Universe Diagnose")
-    _announce(verbose, "   Bob is green; Alice and Carol are localized red rows.")
+    _announce(verbose, "   Bob is passed; Alice and Carol are localized failed rows.")
     return request, result
 
 
@@ -417,7 +417,7 @@ def _phase_frontier(fixture: DemoFixture, *, verbose: bool) -> str:
     assert result.bindings == [], result
     assert len(result.frontier_rows) == 1, result
     row = result.frontier_rows[0]
-    assert row.branch_index == 0, row
+    assert row.case_index == 0, row
     assert row.failed_atom_index == 1, row
     assert row.failure_kind == "atom_filter_empty", row
 
@@ -459,8 +459,8 @@ def _phase_rule_disable(
     action = RuleDisableAction(
         rule_id="person.eligible",
         version="1.0",
-        branch_index=0,
-        atom_index=3,
+        case_index=0,
+        condition_index=3,
     )
     result = check_rule_disable_action(
         RuleDisableRequest(
@@ -489,8 +489,8 @@ def _phase_rule_literal_replace(
     action = RuleLiteralReplaceAction(
         rule_id="person.eligible",
         version="1.0",
-        branch_index=0,
-        atom_index=3,
+        case_index=0,
+        condition_index=3,
         literal_path=ConditionPath(kind="rhs"),
         old_literal="us",
         new_literal="eu",
@@ -522,7 +522,7 @@ def _phase_rule_add_condition(
     action = RuleAddConditionAction(
         rule_id="person.eligible",
         version="1.0",
-        branch_index=0,
+        case_index=0,
         added_atom=AddedCondition(("lt", "$age", 20)),
     )
     result = check_rule_add_condition_action(

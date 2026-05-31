@@ -146,7 +146,7 @@ Batch 7 added a read-only `ProofFrame` diff at the audit query layer:
 - Input: two explicit round ids
 - Source data: Batch 6 `proof_frame_result` rows
 - Frame identity: `request.support_digest + result.binding_items`
-- Atom identity: `atom_key` within the same `support_digest`
+- Atom identity: `condition_key` within the same `support_digest`
 - Output: `ProofFrameDiff` / `FrameDelta` / `AtomDelta` dataclasses
 
 Default behavior:

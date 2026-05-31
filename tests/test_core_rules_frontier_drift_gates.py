@@ -301,7 +301,7 @@ class EvaluatorFrontierRuntimeGateTests(unittest.TestCase):
         frontier = self.assert_success_parity(view_facts, where)
 
         self.assertLessEqual(len(frontier.frontier_rows), 3)
-        self.assertEqual([row.branch_index for row in frontier.frontier_rows], [0, 1])
+        self.assertEqual([row.case_index for row in frontier.frontier_rows], [0, 1])
 
     def test_6_deterministic_counts_are_pre_atom_input_counts(self) -> None:
         view_facts = {"person": [("alice",), ("bob",)]}
@@ -316,7 +316,7 @@ class EvaluatorFrontierRuntimeGateTests(unittest.TestCase):
             frontier.frontier_rows,
             (
                 NativeWhereFrontierRow(
-                    branch_index=0,
+                    case_index=0,
                     failed_atom_index=1,
                     atoms_satisfied=1,
                     frontier_count=2,
