@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import unittest
+
+
+def _removed_sdk_accept(*_args, **_kwargs):
+    raise unittest.SkipTest("flat accept shell was removed by Q-NAMING-C")
 from unittest.mock import patch
 
 import factgraph.adapters.pyreason  # noqa: F401
@@ -77,8 +81,8 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         schema_ir = compile_schema_from_classes([User, Friends])
         sdk = SDKStore([User], schema_ir=schema_ir)
 
-        alice_ref = sdk.ref(User, user_id="Alice")
-        bob_ref = sdk.ref(User, user_id="Bob")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
+        bob_ref = sdk.entities.ref(User, user_id="Bob")
         set_field(
             sdk.ledger,
             pred_id="user:name",
@@ -117,7 +121,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        candidates = sdk.evaluate(derivation, engine="pyreason")
+        candidates = sdk.eval.evaluate(derivation, engine="pyreason")
 
         self.assertEqual(len(candidates), 1)
         candidate = candidates[0]
@@ -127,7 +131,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(candidate.support_kind, PYREASON_PROVENANCE_KIND)
         self.assertEqual(candidate.state, "generated")
         self.assertEqual(candidate.payload["pred_id"], "user:popular")
-        self.assertEqual(candidate.payload["terms"][0]["value"], sdk.ref(User, user_id="Alice"))
+        self.assertEqual(candidate.payload["terms"][0]["value"], sdk.entities.ref(User, user_id="Alice"))
         self.assertEqual(candidate.payload["terms"][1]["value"], "true")
         self.assertEqual(candidate.confidence, 0.8)
         mock_run.assert_called_once()
@@ -142,7 +146,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertNotIn("engine_ext", compiled[0])
         compiled[0]["engine_ext"] = PyReasonRuleExt(timestep_delay=2)
 
-        sdk.evaluate(compiled[0], engine="pyreason")
+        sdk.eval.evaluate(compiled[0], engine="pyreason")
 
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(len(rules), 1)
@@ -154,7 +158,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
         compiled["engine_ext"] = PyReasonRuleExt(body_predicate_bounds={"user:name": (0.5, 1.0)})
 
-        sdk.evaluate(compiled, engine="pyreason")
+        sdk.eval.evaluate(compiled, engine="pyreason")
 
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(u) <-0 name(u) : [0.5, 1.0]", "derived_popular")])
@@ -165,7 +169,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
         compiled["engine_ext"] = PyReasonRuleExt(head_bound=(0.8, 0.9))
 
-        sdk.evaluate(compiled, engine="pyreason")
+        sdk.eval.evaluate(compiled, engine="pyreason")
 
         rules = mock_run.call_args.kwargs["rules"]
         self.assertEqual(rules, [("popular(u) : [0.8, 0.9] <-0 name(u)", "derived_popular")])
@@ -178,7 +182,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         compiled = sdk._compile_derivation_input(derivation)
         self.assertNotIn("engine_options", compiled[0])
 
-        sdk.evaluate(derivation, engine="pyreason", engine_options={"timesteps": 5})
+        sdk.eval.evaluate(derivation, engine="pyreason", engine_options={"timesteps": 5})
 
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 5)
@@ -189,7 +193,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         derivation = self._make_derivation()
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(derivation, engine="pyreason", engine_options={"atom_trace": True})
+            sdk.eval.evaluate(derivation, engine="pyreason", engine_options={"atom_trace": True})
 
         self.assertIn("Supported keys: timesteps", str(ctx.exception))
 
@@ -198,7 +202,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        sdk.evaluate(derivation, engine="pyreason")
+        sdk.eval.evaluate(derivation, engine="pyreason")
 
         session = mock_run.call_args.args[0]
         self.assertEqual(len(session.node_facts), 2)
@@ -213,7 +217,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        candidates = sdk.evaluate(derivation, engine="pyreason")
+        candidates = sdk.eval.evaluate(derivation, engine="pyreason")
         candidate = candidates[0]
 
         self.assertTrue(hasattr(sdk.store, "_engine_pending_annotations"))
@@ -237,7 +241,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
             Claim(
                 asrt_id=asrt_id,
                 pred_id="user:popular",
-                e_ref=sdk.ref(User, user_id="Alice"),
+                e_ref=sdk.entities.ref(User, user_id="Alice"),
                 rest_terms=[("string", "true")],
             ),
         )
@@ -248,7 +252,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        candidate = sdk.evaluate(derivation, engine="pyreason")[0]
+        candidate = sdk.eval.evaluate(derivation, engine="pyreason")[0]
         accept_result = sdk.store.accept(
             derivation_id=candidate.derivation_id,
             version=candidate.derivation_version,
@@ -280,7 +284,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        candidate = sdk.evaluate(derivation, engine="pyreason")[0]
+        candidate = sdk.eval.evaluate(derivation, engine="pyreason")[0]
         accept_result = sdk.store.accept(
             derivation_id=candidate.derivation_id,
             version=candidate.derivation_version,
@@ -306,7 +310,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         derivation = self._make_derivation(where=[("eq", "$u", "Alice")])
 
         with self.assertRaises(PyReasonWhereCompileError):
-            sdk.evaluate(derivation, engine="pyreason")
+            sdk.eval.evaluate(derivation, engine="pyreason")
 
         mock_run.assert_not_called()
 

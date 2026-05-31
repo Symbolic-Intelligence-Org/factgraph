@@ -515,7 +515,7 @@ shape["branches"][0]["atom_ids"]    # ["b0.a0", "b0.a1", ...]
 ```
 
 Rule `run` is a row dispatcher. Passing an `Inference` to `run`
-explicitly raises (`use sdk.evaluate() instead`).
+explicitly raises (`use sdk.eval.evaluate() instead`).
 
 ### Inference + evaluate
 

@@ -291,13 +291,13 @@ prefers to add wrappers after seeing real usage patterns.
 | service / agent imports | **Convention** (not enforced in code today): production runtime code does not add `factgraph.sdk` runtime imports beyond `compile_schema_from_classes`. Authoring tools and tests are exempt. |
 | Legacy field semantics | `functional`, `temporal`, `dims`, `fact_key` are removed |
 | `vars()` runtime unpack | `with vars() as (a, b)` is unsupported; use named or factory forms |
-| String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |
+| String DSL | `sdk.run("...")` / `sdk.eval.evaluate("...")` are unsupported |
 | `find(...)` | No `temporal_view`; identity filters may be partial, including primary-only filters |
 | Assertion view surface | `.chosen` is removed; field assertion collections expose `active`, `history`, `at`, `version`; `AssertionRecordSet` also supports `where`, `at`, `version`, `by_id`, `one`, `first`, `all` |
 | Frozen assertion views | `fg.assertion_views` supports named frozen assertion-id selections only; no built-in `default` view and no read-policy registry |
 | Snapshot history | `active` returns currently non-revoked assertions; `history` returns the append-only field assertion history |
 | `sdk.run(...)` dispatch | Removed by the T5 hard-cut; use `fg.eval.evaluate(...)` for Rule/Inference evidence paths |
-| `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |
+| `sdk.eval.evaluate(...)` params | `temporal_view` is removed and fails explicitly |
 | Rule `row_format` detail | `"tuple"` still works but emits `DeprecationWarning`; prefer `"dict"` |
 | `SDKBatchTx` context | `__exit__` does not auto-commit or auto-rollback; call explicitly |
 | Wire export restriction | `BatchPlan.export()` / `to_json()` forbids raw `idref_v1` token values |

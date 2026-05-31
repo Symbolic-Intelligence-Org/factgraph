@@ -36,9 +36,9 @@ def _active_claim_count(sdk: SDKStore, *, pred_id: str, e_ref: str) -> int:
 class IngestCacheHitPathTests(unittest.TestCase):
     def test_set_cache_hit_delegates_to_application_and_returns_field_assertion_id(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.ref(User, user_id="u-1")
+        user_ref = sdk.entities.ref(User, user_id="u-1")
 
-        result = sdk.ingest(
+        result = sdk.schema.ingest(
             [
                 {
                     "kind": "set",
@@ -57,9 +57,9 @@ class IngestCacheHitPathTests(unittest.TestCase):
 
     def test_add_cache_hit_delegates_to_application(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.ref(User, user_id="u-1")
+        user_ref = sdk.entities.ref(User, user_id="u-1")
 
-        result = sdk.ingest(
+        result = sdk.schema.ingest(
             [
                 {
                     "kind": "add",
@@ -80,10 +80,10 @@ class IngestCacheHitPathTests(unittest.TestCase):
 
     def test_entity_ref_value_cache_hit_delegates_to_application_dependencies(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.ref(User, user_id="u-1")
-        country_ref = sdk.ref(Country, code="DE")
+        user_ref = sdk.entities.ref(User, user_id="u-1")
+        country_ref = sdk.entities.ref(Country, code="DE")
 
-        result = sdk.ingest(
+        result = sdk.schema.ingest(
             [
                 {
                     "kind": "set",
@@ -106,7 +106,7 @@ class IngestCacheMissFallbackTests(unittest.TestCase):
         sdk = _build_sdk()
         raw_user_ref = "idref_v1:User:raw-user"
 
-        result = sdk.ingest(
+        result = sdk.schema.ingest(
             [
                 {
                     "kind": "set",
@@ -127,10 +127,10 @@ class IngestCacheMissFallbackTests(unittest.TestCase):
 
     def test_entity_ref_value_cache_miss_uses_legacy_path(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.ref(User, user_id="u-1")
+        user_ref = sdk.entities.ref(User, user_id="u-1")
         raw_country_ref = "idref_v1:Country:raw-country"
 
-        result = sdk.ingest(
+        result = sdk.schema.ingest(
             [
                 {
                     "kind": "set",
@@ -153,10 +153,10 @@ class IngestCacheMissFallbackTests(unittest.TestCase):
 class IngestRetractDelegateTests(unittest.TestCase):
     def test_retract_delegates_to_application_ingest(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.ref(User, user_id="u-1")
-        asrt_id = sdk.set(User.name, user_ref, "Alice")
+        user_ref = sdk.entities.ref(User, user_id="u-1")
+        asrt_id = sdk.fields.set(User.name, user_ref, "Alice")
 
-        result = sdk.ingest([{"kind": "retract", "asrt_id": asrt_id}])
+        result = sdk.schema.ingest([{"kind": "retract", "asrt_id": asrt_id}])
 
         self.assertEqual(len(result.written_assertion_ids), 1)
         self.assertEqual(sdk.ledger.find_revoker(asrt_id), result.written_assertion_ids[0])
@@ -165,9 +165,9 @@ class IngestRetractDelegateTests(unittest.TestCase):
 class IngestCompatibilityTests(unittest.TestCase):
     def test_duplicate_detection_remains_sdk_level_for_application_path(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.ref(User, user_id="u-1")
+        user_ref = sdk.entities.ref(User, user_id="u-1")
 
-        result = sdk.ingest(
+        result = sdk.schema.ingest(
             [
                 {"kind": "set", "field": User.name, "e_ref": user_ref, "value": "Alice"},
                 {"kind": "set", "field": User.name, "e_ref": user_ref, "value": "Alice"},
@@ -180,9 +180,9 @@ class IngestCompatibilityTests(unittest.TestCase):
 
     def test_precheck_diagnostics_still_collect_and_stop_before_application_runtime(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.ref(User, user_id="u-1")
+        user_ref = sdk.entities.ref(User, user_id="u-1")
 
-        result = sdk.ingest(
+        result = sdk.schema.ingest(
             [
                 {
                     "kind": "set",

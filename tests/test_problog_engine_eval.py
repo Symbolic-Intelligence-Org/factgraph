@@ -34,7 +34,7 @@ class DummyProbLogExt(EngineExtBase):
 class ProbLogEngineEvalTests(unittest.TestCase):
     def _make_sdk(self) -> SDKStore:
         sdk = SDKStore([User])
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         set_field(
             sdk.ledger,
             pred_id="user:name",
@@ -62,7 +62,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
             )
 
     def _mock_output(self, sdk: SDKStore) -> str:
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         return "\n".join(
             [
                 " call query(X1,X2) {0.00000} []",
@@ -85,7 +85,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidates = sdk.evaluate(self._make_derivation(), engine="problog")
+        candidates = sdk.eval.evaluate(self._make_derivation(), engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertEqual(mock_run.call_args.kwargs["timeout"], 30)
@@ -101,7 +101,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         compiled = sdk._compile_derivation_input(self._make_derivation())
         self.assertNotIn("engine_options", compiled[0])
 
-        candidates = sdk.evaluate(
+        candidates = sdk.eval.evaluate(
             self._make_derivation(),
             engine="problog",
             engine_options={"timeout": 7},
@@ -115,7 +115,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(self._make_derivation(), engine="problog", engine_options={"timesteps": 5})
+            sdk.eval.evaluate(self._make_derivation(), engine="problog", engine_options={"timesteps": 5})
 
         self.assertIn("Supported keys: timeout", str(ctx.exception))
 
@@ -123,7 +123,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(self._make_derivation(), engine="problog", engine_options={"timeout": "slow"})
+            sdk.eval.evaluate(self._make_derivation(), engine="problog", engine_options={"timeout": "slow"})
 
         self.assertIn("positive int", str(ctx.exception))
 
@@ -133,7 +133,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         compiled["engine_ext"] = DummyProbLogExt()
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(compiled, engine="problog")
+            sdk.eval.evaluate(compiled, engine="problog")
 
         self.assertIn("ProbLog engine_ext must be ProbLogRuleExt", str(ctx.exception))
 
@@ -151,7 +151,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
         compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.5,))
 
-        candidates = sdk.evaluate(compiled, engine="problog")
+        candidates = sdk.eval.evaluate(compiled, engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.5::rule_body_0", seen["program"])
@@ -169,7 +169,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         mock_run.side_effect = _fake_run
 
-        candidates = sdk.evaluate(compiled, engine="problog")
+        candidates = sdk.eval.evaluate(compiled, engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.25::rule_body_0", seen["program"])
@@ -181,7 +181,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.5,))
 
         with self.assertRaises(ValueError) as ctx:
-            sdk.evaluate(compiled, engine="problog")
+            sdk.eval.evaluate(compiled, engine="problog")
 
         self.assertIn("Conflicting ProbLog branch probabilities", str(ctx.exception))
 
@@ -199,7 +199,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
 
         mock_run.side_effect = _fake_run
 
-        candidates = sdk.evaluate(compiled, engine="problog")
+        candidates = sdk.eval.evaluate(compiled, engine="problog")
 
         self.assertEqual(len(candidates), 1)
         self.assertIn("0.25::rule_body_0", seen["program"])

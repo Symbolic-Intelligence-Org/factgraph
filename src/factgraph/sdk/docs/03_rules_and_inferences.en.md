@@ -120,7 +120,7 @@ Limits:
 - `Branch(...)` accepts the branch atom list plus optional keyword-only structural `id=`.
   Probability, confidence, and engine-specific kwargs are rejected.
 - `fg.rules.inspect(rule_or_inference)` exposes explicit branch ids, positional fallback ids (`b0`, `b1`, ...), and atom ids such as `b0.a0`.
-- string DSL is unsupported (`sdk.run("...")`, `sdk.evaluate("...")`).
+- string DSL is unsupported (`sdk.run("...")`, `sdk.eval.evaluate("...")`).
 
 ### 3.1 Field Sugar vs `Pred(...)`
 
@@ -536,21 +536,21 @@ System-prefixed temporary names are reserved.
 
 ## 8. `evaluate` Runtime Semantics
 
-### 8.1 `sdk.evaluate(...)`
+### 8.1 `sdk.eval.evaluate(...)`
 
 ```python
-result = sdk.evaluate(inf, engine="native")
+result = sdk.eval.evaluate(inf, engine="native")
 ```
 
 - `engine`: `native` (default) / `souffle` / `problog` / `pyreason`.
 - SDK lowers `Inference` DSL objects into compiled plans, then delegates orchestration to application `evaluate_derivation_plans(...)`; SDK returns the T5 `EvaluateResult` envelope.
 - Legacy `mode='python'` / `mode='engine'` **values** fail with explicit rename hints (use `mode='native'` / `mode='souffle'` respectively); enforced at `factgraph/core/store/_evaluate.py:50,52`.
 - `souffle` / `problog` / `pyreason` require registered adapters (for example `import factgraph.adapters.souffle`, `import factgraph.adapters.problog`, `import factgraph.adapters.pyreason`).
-- `sdk.evaluate(..., view=...)` and `sdk.evaluate(..., policy=...)` are
+- `sdk.eval.evaluate(..., view=...)` and `sdk.eval.evaluate(..., policy=...)` are
   not supported; inference always uses the full active assertion set.
 - `engine_options=` and `registry=` are rejected at the public boundary.
 - RuleExpr execution uses the same public entrypoint as inference evaluation:
-  `sdk.evaluate(expr, head=application_rule, engine=...)` returns
+  `sdk.eval.evaluate(expr, head=application_rule, engine=...)` returns
   `EvaluateResult`. `head=` is required and must be an application `Rule`;
   legacy SDK `Rule` / `Inference` objects are rejected as heads.
 
@@ -594,7 +594,7 @@ Not open yet:
 
 Explicit behavior:
 - Authoring inference payload with `temporal_view` fails compile.
-- `sdk.evaluate(..., temporal_view=...)` raises `SDKStoreError`.
+- `sdk.eval.evaluate(..., temporal_view=...)` raises `SDKStoreError`.
 
 ## 10. Minimal End-to-End Examples
 
@@ -609,7 +609,7 @@ with vars("u", "loc", "nm") as (u, loc, nm):
         head=User.name(locale=loc, name=nm),
     )
 
-result = sdk.evaluate(inf)
+result = sdk.eval.evaluate(inf)
 row = result.first()
 assert row is not None
 explanation = row.explain()
@@ -626,7 +626,7 @@ with vars("u", "lang") as (u, lang):
         head=Speaks(user=u, language=lang),
     )
 
-result = sdk.evaluate(inf)
+result = sdk.eval.evaluate(inf)
 for row in result:
     closed = row.close()
     replay = sdk.eval.explain(inf, head=closed)

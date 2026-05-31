@@ -1,4 +1,4 @@
-"""SDKStore.why_not contract tests."""
+"""sdk_why_not contract tests."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from factgraph.application.why_not_runtime import WhyNotRuntimeError
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.sdk import Inference, Entity, Field, Identity, Pred, SDKDSLError, SDKStore, SDKStoreError, vars
 from factgraph.sdk.dsl import Rule
+from factgraph.sdk.shells.why_not import sdk_why_not
 from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
 
@@ -26,9 +27,9 @@ def _build_sdk() -> SDKStore:
 
 
 def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
-    ref = sdk.ref(Person, name=name)
-    sdk.set(Person.age, ref, age)
-    sdk.set(Person.region, ref, region)
+    ref = sdk.entities.ref(Person, name=name)
+    sdk.fields.set(Person.age, ref, age)
+    sdk.fields.set(Person.region, ref, region)
     return ref
 
 
@@ -78,7 +79,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         bob = _seed_person(sdk, name="bob", age=40, region="eu")
         missing = "idref_v1:Person:name:missing"
 
-        result = sdk.why_not(
+        result = sdk_why_not(sdk,
             _age_derivation(),
             [
                 {"$p": missing, "$age": 30},
@@ -97,14 +98,14 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=30, region="us")
 
-        result = sdk.why_not(_age_derivation(), [(alice, 30)])
+        result = sdk_why_not(sdk, _age_derivation(), [(alice, 30)])
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(tuple(dict(row) for row in result.green), ({"$p": alice, "$age": 30},))
         self.assertEqual(result.red, ())
 
     def test_empty_candidate_universe_returns_completed_without_runtime_errors(self) -> None:
-        result = _build_sdk().why_not(_age_derivation(), [])
+        result = sdk_why_not(_build_sdk(), _age_derivation(), [])
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.requested_universe, ())
@@ -121,7 +122,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            _build_sdk().why_not(rule, [])  # type: ignore[arg-type]
+            sdk_why_not(_build_sdk(), rule, [])  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.why_not.inference")
         self.assertIn("Inference", str(ctx.exception))
@@ -136,7 +137,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.why_not(app_plan, [])  # type: ignore[arg-type]
+            sdk_why_not(sdk, app_plan, [])  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.why_not.inference")
 
@@ -151,7 +152,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.why_not(_age_derivation(), [{"$p": "person:alice"}])
+            sdk_why_not(sdk, _age_derivation(), [{"$p": "person:alice"}])
 
         self.assertEqual(ctx.exception.path, "$.why_not.candidates")
         self.assertIsInstance(ctx.exception.__cause__, CapabilityHelperError)
@@ -161,7 +162,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         alice = _seed_person(sdk, name="alice", age=30, region="us")
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.why_not(_age_derivation(), [(alice,)])
+            sdk_why_not(sdk, _age_derivation(), [(alice,)])
 
         self.assertEqual(ctx.exception.path, "$.why_not.candidates")
         self.assertIsInstance(ctx.exception.__cause__, CapabilityHelperError)
@@ -172,7 +173,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         with patch("factgraph.sdk.shells.why_not.build_why_not_candidate_universe") as mock_builder:
             mock_builder.side_effect = CapabilityHelperError("bad candidate input")
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.why_not(_age_derivation(), [])
+                sdk_why_not(sdk, _age_derivation(), [])
 
         self.assertEqual(ctx.exception.path, "$.why_not.candidates")
         self.assertIsInstance(ctx.exception.__cause__, CapabilityHelperError)
@@ -181,7 +182,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch("factgraph.sdk.shells.why_not.check_why_not_universe", return_value=_empty_result()) as mock_runtime:
-            result = sdk.why_not(_age_derivation(), [], engine="souffle")
+            result = sdk_why_not(sdk, _age_derivation(), [], engine="souffle")
 
         self.assertEqual(result.status, "completed")
         request = mock_runtime.call_args.args[0]
@@ -197,7 +198,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             "factgraph.sdk.shells.why_not.check_why_not_universe",
             return_value=_empty_result(),
         ) as mock_runtime:
-            result = sdk.why_not(derivation, [], registry=registry)
+            result = sdk_why_not(sdk, derivation, [], registry=registry)
 
         self.assertEqual(result.status, "completed")
         mock_resolve.assert_called_once_with(derivation, explicit_registry=registry)
@@ -213,7 +214,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             ),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.why_not(_age_derivation(), [])
+                sdk_why_not(sdk, _age_derivation(), [])
 
         self.assertEqual(ctx.exception.path, "$.why_not.inference")
         self.assertIsInstance(ctx.exception.__cause__, ValueError)
@@ -228,7 +229,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             side_effect=RuleCompileError("duplicate rule registration"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.why_not(_age_derivation(), [])
+                sdk_why_not(sdk, _age_derivation(), [])
 
         self.assertEqual(ctx.exception.path, "$.why_not.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
@@ -247,7 +248,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.why_not(_age_derivation(), [])
+                sdk_why_not(sdk, _age_derivation(), [])
 
         self.assertEqual(ctx.exception.path, "$.why_not.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
@@ -261,7 +262,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             side_effect=ProtocolShapeError("engine must be one of"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.why_not(_age_derivation(), [])
+                sdk_why_not(sdk, _age_derivation(), [])
 
         self.assertEqual(ctx.exception.path, "$.why_not.request")
         self.assertIsInstance(ctx.exception.__cause__, ProtocolShapeError)
@@ -277,7 +278,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             ),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.why_not(_age_derivation(), [])
+                sdk_why_not(sdk, _age_derivation(), [])
 
         self.assertEqual(ctx.exception.path, "$.why_not")
         self.assertIsInstance(ctx.exception.__cause__, WhyNotRuntimeError)
@@ -297,7 +298,7 @@ class SDKWhyNotContractTests(unittest.TestCase):
             "factgraph.sdk.shells.why_not.check_why_not_universe",
             return_value=_empty_result(),
         ):
-            sdk.why_not(_age_derivation(), [])
+            sdk_why_not(sdk, _age_derivation(), [])
 
         mock_check.assert_not_called()
         mock_diagnose.assert_not_called()

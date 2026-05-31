@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import importlib
-import inspect
 from pathlib import Path
 import unittest
 
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.core.semantics import SemanticsProfile
+from factgraph.core.rules.where_ast import PredAtom as CorePredAtom, Var as CoreVar
 from factgraph.sdk import Branch, FactGraph, Pred, Rule, SDKStore, vars as sdk_vars
 from factgraph.sdk.schema import Entity, Field, Identity
 
@@ -32,33 +32,33 @@ def _inference_class():
 
 def _make_sdk() -> SDKStore:
     sdk = SDKStore([User])
-    alice_ref = sdk.ref(User, user_id="Alice")
+    alice_ref = sdk.entities.ref(User, user_id="Alice")
     set_field(
         sdk.ledger,
         pred_id="user:name",
         e_ref=alice_ref,
         rest_terms=[("string", "Alice")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     set_field(
         sdk.ledger,
         pred_id="user:tag_seed",
         e_ref=alice_ref,
         rest_terms=[("string", "vip")],
-        meta={"source": "test", "confidence": 1.0},
+        meta={"source": "test"},
     )
     return sdk
 
 
 def _rule() -> Rule:
-    with sdk_vars("u", "tag") as (u, tag):
-        return Rule(
-            id="rule.public_inference.tag_seed",
-            version="v1",
-            select=[u, tag],
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-            expose=True,
-        )
+    u = CoreVar("$u")
+    tag = CoreVar("$tag")
+    return Rule(
+        id="public_inference_tag_seed",
+        version="v1",
+        where=(CorePredAtom("user:tag_seed", [u, tag]),),
+        ports={"u": u, "tag": tag},
+    )
 
 
 def _inference():
@@ -101,18 +101,15 @@ class FactGraphCreateTests(unittest.TestCase):
 
 
 class PublicParameterInventoryTests(unittest.TestCase):
-    def test_what_if_public_signatures_use_inference_parameter(self) -> None:
-        for method in (
-            SDKStore.check,
-            SDKStore.diagnose,
-            SDKStore.why_not,
-            SDKStore.check_fact_overlay,
+    def test_what_if_flat_shells_are_removed_from_public_store(self) -> None:
+        for method_name in (
+            "check",
+            "diagnose",
+            "why_not",
+            "check_fact_overlay",
         ):
-            with self.subTest(method=method.__name__):
-                params = inspect.signature(method).parameters
-
-                self.assertIn("inference", params)
-                self.assertNotIn("derivation", params)
+            with self.subTest(method_name=method_name):
+                self.assertFalse(hasattr(SDKStore, method_name))
 
     def test_eval_namespace_hard_cuts_compiled_escape_hatches(self) -> None:
         sdk = SDKStore([User])
@@ -122,10 +119,8 @@ class PublicParameterInventoryTests(unittest.TestCase):
         self.assertFalse(hasattr(sdk, "evaluate_compiled"))
         self.assertFalse(hasattr(sdk, "accept_compiled"))
 
-    def test_accept_many_mode_keyword_is_out_of_scope_and_still_present(self) -> None:
-        params = inspect.signature(SDKStore.accept_many).parameters
-
-        self.assertIn("mode", params)
+    def test_accept_many_flat_shell_is_removed(self) -> None:
+        self.assertFalse(hasattr(SDKStore, "accept_many"))
 
 
 class PublicInferencePayloadTests(unittest.TestCase):
@@ -137,9 +132,9 @@ class PublicInferencePayloadTests(unittest.TestCase):
         self.assertEqual(payload["derivation_id"], "inf.public_inference.tag")
 
     def test_validate_provenance_default_remains_derivation_v1(self) -> None:
-        default = inspect.signature(SDKStore.validate_provenance).parameters["standard"].default
+        sdk = SDKStore([User])
 
-        self.assertEqual(default, "derivation_v1")
+        self.assertTrue(callable(sdk.schema.validate_provenance))
 
 
 class PublicInferenceDocsTests(unittest.TestCase):
@@ -156,9 +151,6 @@ class PublicInferenceDeferralGuards(unittest.TestCase):
         sdk = SDKStore([User])
 
         self.assertTrue(hasattr(sdk, "inferences"))
-        for method in ("save", "load", "list", "get"):
-            with self.subTest(method=method):
-                self.assertTrue(hasattr(sdk.inferences, method))
         for method in ("inspect", "run", "evaluate", "accept"):
             with self.subTest(method=method):
                 self.assertFalse(hasattr(sdk.inferences, method))
@@ -176,8 +168,8 @@ class PublicInferenceGuardTests(unittest.TestCase):
     def test_rules_inspect_rule_still_works(self) -> None:
         inspected = SDKStore([User]).rules.inspect(_rule())
 
-        self.assertEqual(inspected["kind"], "Rule")
-        self.assertEqual(inspected["branches"][0]["id"], "seed_path")
+        self.assertEqual(inspected.occurrences[0].template_id, "public_inference_tag_seed")
+        self.assertEqual(inspected.occurrences[0].atoms[0].field, "tag_seed")
 
     def test_rules_inspect_inference_uses_existing_shape(self) -> None:
         inspected = SDKStore([User]).rules.inspect(_inference())

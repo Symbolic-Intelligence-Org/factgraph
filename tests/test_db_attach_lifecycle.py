@@ -156,7 +156,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.fields.add": lambda: fg.fields.add(User.tag, _user_ref(), "vip"),
             "fg.assertions.retract": lambda: fg.assertions.retract("asrt:" + "0" * 64),
             "fg.entities.edit": lambda: fg.entities.edit(User, user_id="u-1"),
-            "fg.ingest": lambda: fg.ingest({}),
+            "fg.ingest": lambda: fg.schema.ingest({}),
             "fg.add_schema_classes": lambda: fg.add_schema_classes(Account),
             "fg.batch": lambda: fg.batch(),
             "fg.save_workspace": lambda: fg.save_workspace(),

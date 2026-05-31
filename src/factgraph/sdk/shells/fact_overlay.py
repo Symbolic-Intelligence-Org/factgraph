@@ -1,6 +1,6 @@
 """SDK shell for Q3 Fact Overlay Check capability.
 
-Implements the ``SDKStore.check_fact_overlay`` facade method per the
+Implements the ``sdk_fact_overlay_check`` facade method per the
 archived G2 blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md``
 §5.
@@ -8,7 +8,7 @@ archived G2 blueprint
 Public surface contract per blueprint §5 locks (with post-publish
 verification round polish landed 2026-05-08):
 
-- Method:      ``SDKStore.check_fact_overlay(...)`` (instance method; not
+- Method:      ``sdk_fact_overlay_check(...)`` (instance method; not
                a free function in ``factgraph.sdk.__all__`` — see §5.7 lock
                and G1 + G4 precedent).
 - Signature:   ``check_fact_overlay(inference, binding, overlay, *,

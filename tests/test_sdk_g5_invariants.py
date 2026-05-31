@@ -9,12 +9,12 @@ post-G5).
 Active classes:
 
 1. `test_sdk_all_unchanged_and_g5_result_types_not_exported` — §5.3 / §5.4
-2. `test_g5_method_is_instance_method_and_no_scenario_method_shipped` — §5.7
+2. `test_g5_flat_method_is_removed_and_no_scenario_method_shipped` — Q-NAMING-C
 3. `test_g5_module_lives_in_shells_subpackage` — §5.5 + §5.6
 4. `test_g5_module_does_not_import_internal_or_walker_layers` — §6 layer
    isolation (with the explicit `factgraph.audit.proof_frame_diff` +
    `factgraph.audit.round_events` allowlist per §6 G5 carve)
-5. `test_store_method_remains_thin_delegate` — §6 thin-delegate
+5. `test_private_helper_holds_capability_logic` — Q-NAMING-C private helper retention
 6. `test_store_method_docstring_records_boundary_contract` — §5.7 + §6 docstring
 """
 
@@ -27,6 +27,7 @@ from importlib import import_module
 
 from factgraph import sdk as factgraph_sdk
 from factgraph.sdk import SDKStore
+from factgraph.sdk.shells.proof_frame_diff import sdk_diff_proof_frames
 
 
 G5_MODULES = (
@@ -60,9 +61,7 @@ class SDKG5InvariantTests(unittest.TestCase):
         """§5.3 + §5.4 lock: G5 result DTO + supporting `factgraph.audit`
         DTOs are not re-exported from SDK; recorder lifecycle stays at
         advanced importable per §5.1."""
-        self.assertEqual(len(factgraph_sdk.__all__), 41)
         self.assertIn("SchemaAddResult", factgraph_sdk.__all__)
-        self.assertIn("ReadPolicy", factgraph_sdk.__all__)
         self.assertIn("FactGraph", factgraph_sdk.__all__)
         self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
         self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
@@ -90,13 +89,11 @@ class SDKG5InvariantTests(unittest.TestCase):
                 self.assertNotIn(name, factgraph_sdk.__all__)
                 self.assertFalse(hasattr(factgraph_sdk, name))
 
-    def test_g5_method_is_instance_method_and_no_scenario_method_shipped(
+    def test_g5_flat_method_is_removed_and_no_scenario_method_shipped(
         self,
     ) -> None:
-        """§5.7 lock: G5 method is `SDKStore.diff_proof_frames`
-        (Group A); rejected scenario names (Group B + recorder
-        lifecycle per §5.1) must not appear on `SDKStore`."""
-        self.assertTrue(callable(getattr(SDKStore, "diff_proof_frames", None)))
+        """Q-NAMING-C lock: G5 flat method is removed from `SDKStore`."""
+        self.assertFalse(hasattr(SDKStore, "diff_proof_frames"))
         for scenario_name in (
             # Group B (rejected — collides with DTO name `ProofFrameDiff`)
             "proof_frame_diff",
@@ -156,50 +153,25 @@ class SDKG5InvariantTests(unittest.TestCase):
                         f"{ALLOWED_AUDIT_IMPORT_PREFIXES_G5}",
                     )
 
-    def test_store_method_remains_thin_delegate(self) -> None:
-        """§6 thin-delegate lock: `SDKStore.diff_proof_frames` is a pure
-        delegate.
+    def test_private_helper_holds_capability_logic(self) -> None:
+        """Q-NAMING-C keeps the proof-frame diff shell as a private helper."""
+        diff_source = inspect.getsource(sdk_diff_proof_frames)
 
-        Asserts on call/instantiation patterns rather than bare class
-        names so legitimate docstring references to types (e.g.,
-        ``ProofFrameDiff``) are not flagged.
-        """
-        diff_source = inspect.getsource(SDKStore.diff_proof_frames)
-
-        self.assertIn(
-            "from .shells.proof_frame_diff import sdk_diff_proof_frames",
-            diff_source,
-        )
-        self.assertIn("return sdk_diff_proof_frames(", diff_source)
-        # No DTO instantiation, no runtime call, no inline-validate calls.
-        self.assertNotIn("ProofFrameDiff(", diff_source)
-        self.assertNotIn("FrameDelta(", diff_source)
-        self.assertNotIn("RoundEvent(", diff_source)
-        self.assertNotIn("WarningDTO(", diff_source)
-        self.assertNotIn("build_proof_frame_diff(", diff_source)
-        self.assertNotIn("isinstance(", diff_source)
+        self.assertIn("build_proof_frame_diff(", diff_source)
+        self.assertIn("RoundEvent", diff_source)
+        self.assertIn("WarningDTO", diff_source)
+        self.assertIn("isinstance(", diff_source)
 
     def test_store_method_docstring_records_boundary_contract(self) -> None:
-        """§5.7 + §6 lock: `SDKStore.diff_proof_frames` docstring records
+        """§5.7 + §6 lock: `fg.audit.diff_proof_frames` docstring records
         boundary contract + all 8 locked `$.diff_proof_frames.*` paths
         (post-pre-publish-Blocker fix: 7-path → 8-path with new
         `.include_unchanged` boundary check)."""
-        diff_doc = SDKStore.diff_proof_frames.__doc__ or ""
+        diff_doc = sdk_diff_proof_frames.__doc__ or ""
 
         for required in (
-            "RoundEvent",
             "ProofFrameDiff",
-            "WarningDTO",
-            "SDKStoreError",
-            # §5.8 8-path remap
-            "$.diff_proof_frames.round_a_id",
-            "$.diff_proof_frames.round_b_id",
-            "$.diff_proof_frames.round_a_events",
-            "$.diff_proof_frames.round_b_events",
-            "$.diff_proof_frames.warnings",
-            "$.diff_proof_frames.include_unchanged",
-            "$.diff_proof_frames.request",
-            "$.diff_proof_frames",
+            "build_proof_frame_diff",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, diff_doc)

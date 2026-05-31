@@ -1,13 +1,13 @@
 """SDK shell for Batch 4 ProofFrame Recheck capability.
 
-Implements the ``SDKStore.recheck_proof_frame`` facade method per the
+Implements the ``sdk_proof_frame_recheck`` facade method per the
 archived G2 blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md``
 §5.
 
 Public surface contract per blueprint §5 locks:
 
-- Method:      ``SDKStore.recheck_proof_frame(...)`` (instance method;
+- Method:      ``sdk_proof_frame_recheck(...)`` (instance method;
                not a free function in ``factgraph.sdk.__all__`` — see §5.7
                lock and G1 + G4 + Fact Overlay precedent).
 - Signature:   ``recheck_proof_frame(support_artifact, overlay)`` (see

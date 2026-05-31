@@ -320,7 +320,7 @@ evaluate surface:
 
 Constraints:
 
-- `sdk.evaluate(..., engine="problog", engine_options={"timeout": 15})`
+- `sdk.eval.evaluate(..., engine="problog", engine_options={"timeout": 15})`
   takes effect
 - When omitted, the adapter default `timeout=30` is used
 - Unknown keys raise `ValueError`

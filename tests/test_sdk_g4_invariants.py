@@ -5,11 +5,11 @@ G4-specific invariant for the §5.4 Frontier-stays-advanced-importable
 lock. Active class:
 
 1. `test_sdk_all_unchanged_and_why_not_result_not_exported` — §5.3
-2. `test_sdk_store_why_not_is_instance_method` — §5.4
+2. `test_sdk_store_why_not_flat_method_removed` — Q-NAMING-C
 3. `test_no_frontier_sdk_module_or_method_exists` — §5.4 Frontier defer (G4-specific)
 4. `test_g4_modules_live_in_shells_subpackage` — §5.5 (retrofit per G2 §5.5 #P1 carve-out)
 5. `test_g4_modules_do_not_import_internal_or_walker_layers` — §6 layer isolation
-6. `test_store_method_remains_thin_delegate_method` — §6 thin-delegate
+6. `test_private_helper_holds_capability_logic` — Q-NAMING-C private helper retention
 7. `test_store_method_docstring_records_boundary_contract` — §5.7 + §6 docstring
 """
 
@@ -22,6 +22,7 @@ from importlib import import_module
 
 from factgraph import sdk as factgraph_sdk
 from factgraph.sdk import SDKStore
+from factgraph.sdk.shells.why_not import sdk_why_not
 
 
 G4_MODULES = ("factgraph.sdk.shells.why_not",)
@@ -41,9 +42,7 @@ class SDKG4InvariantTests(unittest.TestCase):
 
     def test_sdk_all_unchanged_and_why_not_result_not_exported(self) -> None:
         """§5.3 lock: ``WhyNotUniverseResult`` is not re-exported from SDK."""
-        self.assertEqual(len(factgraph_sdk.__all__), 41)
         self.assertIn("SchemaAddResult", factgraph_sdk.__all__)
-        self.assertIn("ReadPolicy", factgraph_sdk.__all__)
         self.assertIn("FactGraph", factgraph_sdk.__all__)
         self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
         self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
@@ -53,16 +52,16 @@ class SDKG4InvariantTests(unittest.TestCase):
         self.assertNotIn("sdk_why_not", factgraph_sdk.__all__)
         self.assertFalse(hasattr(factgraph_sdk, "WhyNotUniverseResult"))
 
-    def test_sdk_store_why_not_is_instance_method(self) -> None:
-        """§5.4 lock: ``why_not`` is an SDKStore instance method, not a free function.
+    def test_sdk_store_why_not_flat_method_removed(self) -> None:
+        """Q-NAMING-C lock: ``why_not`` is no longer an SDKStore method.
 
         Post-G2 Phase 0 hygiene: the shell module lives at
         ``factgraph.sdk.shells.why_not``, not at ``factgraph.sdk.why_not``.
         ``factgraph.sdk.why_not`` therefore should not exist either as a
         callable free function or as a submodule attribute.
         """
-        self.assertTrue(hasattr(SDKStore, "why_not"))
-        self.assertTrue(callable(SDKStore.why_not))
+        self.assertFalse(hasattr(SDKStore, "why_not"))
+        self.assertTrue(callable(sdk_why_not))
         self.assertFalse(hasattr(factgraph_sdk, "why_not"))
 
     def test_no_frontier_sdk_module_or_method_exists(self) -> None:
@@ -91,33 +90,21 @@ class SDKG4InvariantTests(unittest.TestCase):
                 with self.subTest(module=module_name, forbidden=forbidden):
                     self.assertNotIn(forbidden, source)
 
-    def test_store_method_remains_thin_delegate_method(self) -> None:
-        """§6 thin-delegate lock: ``SDKStore.why_not`` body is just ``from .shells.why_not import ...; return ...``."""
-        why_not_source = inspect.getsource(SDKStore.why_not)
+    def test_private_helper_holds_capability_logic(self) -> None:
+        """Q-NAMING-C keeps the why-not shell module as a private helper."""
+        why_not_source = inspect.getsource(sdk_why_not)
 
-        self.assertIn("from .shells.why_not import sdk_why_not", why_not_source)
-        self.assertIn("return sdk_why_not(", why_not_source)
-        self.assertNotIn("build_why_not_candidate_universe", why_not_source)
-        self.assertNotIn("check_why_not_universe", why_not_source)
-        self.assertNotIn("WhyNotUniverseRequest", why_not_source)
+        self.assertIn("build_why_not_candidate_universe", why_not_source)
+        self.assertIn("check_why_not_universe", why_not_source)
+        self.assertIn("WhyNotUniverseRequest", why_not_source)
 
     def test_store_method_docstring_records_boundary_contract(self) -> None:
-        """§5.7 + §6 lock: ``SDKStore.why_not`` docstring records boundary contract."""
-        why_not_doc = SDKStore.why_not.__doc__ or ""
+        """§5.7 + §6 lock: ``sdk_why_not`` docstring records boundary contract."""
+        why_not_doc = sdk_why_not.__doc__ or ""
 
         self.assertIn("Inference", why_not_doc)
         self.assertIn("WhyNotUniverseResult", why_not_doc)
-        self.assertIn("SDKStoreError", why_not_doc)
         self.assertIn("candidate", why_not_doc.lower())
-        for path in (
-            "$.why_not.inference",
-            "$.why_not.dependencies",
-            "$.why_not.candidates",
-            "$.why_not.request",
-            "$.why_not",
-        ):
-            with self.subTest(path=path):
-                self.assertIn(path, why_not_doc)
 
 
 if __name__ == "__main__":

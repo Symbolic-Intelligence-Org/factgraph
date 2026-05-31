@@ -1,13 +1,13 @@
 """SDK shell for G3 Batch 5a Rule Disable capability.
 
-Implements the ``SDKStore.check_rule_disable`` facade method per the
+Implements the ``sdk_rule_disable`` facade method per the
 archived G3 blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g3-rule-overlays.md``
 §5.
 
 Public surface contract per blueprint §5 locks:
 
-- Method:      ``SDKStore.check_rule_disable(...)`` (instance method;
+- Method:      ``sdk_rule_disable(...)`` (instance method;
                not a free function in ``factgraph.sdk.__all__`` — see
                §5.7 lock and G1 + G4 + G2 precedent).
 - Signature:   ``check_rule_disable(rule, support, *, branch_index,

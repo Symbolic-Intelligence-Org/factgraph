@@ -1,13 +1,13 @@
 """SDK shell for G5 ProofFrame Diff capability.
 
-Implements the ``SDKStore.diff_proof_frames`` facade method per the
+Implements the ``fg.audit.diff_proof_frames`` facade method per the
 archived G5 blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g5-round-events-proofframe-diff.md``
 §5.
 
 Public surface contract per blueprint §5 locks:
 
-- Method:      ``SDKStore.diff_proof_frames(...)`` (instance method;
+- Method:      ``fg.audit.diff_proof_frames(...)`` (instance method;
                not a free function in ``factgraph.sdk.__all__`` — see
                §5.7 lock and G1 + G4 + G2 + G3 precedent).
 - Signature:   ``diff_proof_frames(round_a_id, round_b_id,

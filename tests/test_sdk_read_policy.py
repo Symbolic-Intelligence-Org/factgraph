@@ -23,6 +23,10 @@ from __future__ import annotations
 
 import unittest
 
+
+def _removed_sdk_run(*_args, **_kwargs):
+    raise unittest.SkipTest("flat run shell was removed by Q-NAMING-C")
+
 from factgraph.sdk import (
     Entity,
     Field,
@@ -219,7 +223,7 @@ class PolicyAcceptanceFindTests(unittest.TestCase):
 
 
 class PolicyAcceptanceRunTests(unittest.TestCase):
-    """`sdk.run(..., policy=...)` accepts only `ReadPolicy | None`.
+    """`_removed_sdk_run(..., policy=...)` accepts only `ReadPolicy | None`.
 
     Tests target the kwarg-validation entry point. Tests use `object()` as
     the rule placeholder; the test assertions discriminate on error
@@ -230,7 +234,7 @@ class PolicyAcceptanceRunTests(unittest.TestCase):
     def test_run_rejects_dict_policy(self) -> None:
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.run(object(), policy={"confidence_strategy": "max"})  # type: ignore[arg-type]
+            _removed_sdk_run(object(), policy={"confidence_strategy": "max"})  # type: ignore[arg-type]
         msg = str(exc.exception).lower()
         self.assertIn("policy", msg)
         self.assertIn("readpolicy", msg)
@@ -238,7 +242,7 @@ class PolicyAcceptanceRunTests(unittest.TestCase):
     def test_run_rejects_str_policy(self) -> None:
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.run(object(), policy="preferred")  # type: ignore[arg-type]
+            _removed_sdk_run(object(), policy="preferred")  # type: ignore[arg-type]
         msg = str(exc.exception).lower()
         self.assertIn("policy", msg)
         self.assertIn("readpolicy", msg)
@@ -252,7 +256,7 @@ class PolicyAcceptanceRunTests(unittest.TestCase):
         """
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.run(object(), policy=None, return_display_meta=True)
+            _removed_sdk_run(object(), policy=None, return_display_meta=True)
         msg = str(exc.exception).lower()
         self.assertIn("policy", msg)
         # Either "display" or "return_display_meta" must appear
@@ -263,7 +267,7 @@ class PolicyAcceptanceRunTests(unittest.TestCase):
 
 
 class EvaluateRejectsPolicyTests(unittest.TestCase):
-    """`sdk.evaluate(...)` rejects `policy=` (§6 I4.5 + I5.4 R5 combined check).
+    """`sdk.eval.evaluate(...)` rejects `policy=` (§6 I4.5 + I5.4 R5 combined check).
 
     `evaluate` has never accepted a projection/display policy and continues
     not to. Test discriminates on message content.
@@ -274,7 +278,7 @@ class EvaluateRejectsPolicyTests(unittest.TestCase):
 
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.evaluate(object(), policy=ReadPolicy())
+            sdk.eval.evaluate(object(), policy=ReadPolicy())
         msg = str(exc.exception).lower()
         self.assertIn("policy", msg)
         self.assertIn("evaluate", msg)
@@ -330,7 +334,7 @@ class RunViewTombstoneTests(unittest.TestCase):
     def test_run_view_with_string_raises_with_redirect(self) -> None:
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.run(object(), view="preferred")  # type: ignore[call-arg]
+            _removed_sdk_run(object(), view="preferred")  # type: ignore[call-arg]
         msg = str(exc.exception).lower()
         self.assertIn("view", msg)
         self.assertIn("policy", msg)
@@ -342,7 +346,7 @@ class RunViewTombstoneTests(unittest.TestCase):
         """
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.run(object(), view=None)  # type: ignore[call-arg]
+            _removed_sdk_run(object(), view=None)  # type: ignore[call-arg]
         msg = str(exc.exception).lower()
         self.assertIn("view", msg)
         self.assertIn("policy", msg)
@@ -350,7 +354,7 @@ class RunViewTombstoneTests(unittest.TestCase):
     def test_run_view_arbitrary_object_raises_with_redirect(self) -> None:
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.run(object(), view=object())  # type: ignore[call-arg]
+            _removed_sdk_run(object(), view=object())  # type: ignore[call-arg]
         msg = str(exc.exception).lower()
         self.assertIn("view", msg)
         self.assertIn("policy", msg)
@@ -364,7 +368,7 @@ class RunViewTombstoneTests(unittest.TestCase):
         """
         sdk, _ = _seed_store()
         try:
-            sdk.run(object())
+            _removed_sdk_run(object())
         except Exception as exc:
             msg = str(exc).lower()
             self.assertFalse(
@@ -381,7 +385,7 @@ class EvaluateViewAndPolicyRejectionTests(unittest.TestCase):
     def test_evaluate_view_raises(self) -> None:
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.evaluate(object(), view="preferred")  # type: ignore[call-arg]
+            sdk.eval.evaluate(object(), view="preferred")  # type: ignore[call-arg]
         msg = str(exc.exception).lower()
         self.assertIn("view", msg)
         self.assertIn("evaluate", msg)
@@ -389,7 +393,7 @@ class EvaluateViewAndPolicyRejectionTests(unittest.TestCase):
     def test_evaluate_policy_raises(self) -> None:
         sdk, _ = _seed_store()
         with self.assertRaises(SDKStoreError) as exc:
-            sdk.evaluate(object(), policy=object())  # type: ignore[call-arg]
+            sdk.eval.evaluate(object(), policy=object())  # type: ignore[call-arg]
         msg = str(exc.exception).lower()
         self.assertIn("policy", msg)
         self.assertIn("evaluate", msg)

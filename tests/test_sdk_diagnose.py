@@ -1,4 +1,4 @@
-"""SDKStore.diagnose contract tests."""
+"""sdk_diagnose contract tests."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from factgraph.application.protocol import DiagnoseResult
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.sdk import Inference, Entity, Field, Identity, Pred, SDKDSLError, SDKStore, SDKStoreError, vars
 from factgraph.sdk.dsl import Rule
+from factgraph.sdk.shells.diagnose import sdk_diagnose
 from factgraph.sdk.store import _compiled_derivation_plan_to_application
 
 
@@ -25,9 +26,9 @@ def _build_sdk() -> SDKStore:
 
 
 def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
-    ref = sdk.ref(Person, name=name)
-    sdk.set(Person.age, ref, age)
-    sdk.set(Person.region, ref, region)
+    ref = sdk.entities.ref(Person, name=name)
+    sdk.fields.set(Person.age, ref, age)
+    sdk.fields.set(Person.region, ref, region)
     return ref
 
 
@@ -66,7 +67,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         sdk = _build_sdk()
         person_ref = _seed_person(sdk, name="alice", age=30, region="us")
 
-        result = sdk.diagnose(_age_derivation(), {"$p": person_ref, "$age": 30})
+        result = sdk_diagnose(sdk, _age_derivation(), {"$p": person_ref, "$age": 30})
 
         self.assertIsInstance(result, DiagnoseResult)
         self.assertEqual(result.status, "passed")
@@ -78,7 +79,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         sdk = _build_sdk()
         person_ref = _seed_person(sdk, name="alice", age=30, region="us")
 
-        result = sdk.diagnose(_age_derivation(), {"$p": person_ref, "$age": 99})
+        result = sdk_diagnose(sdk, _age_derivation(), {"$p": person_ref, "$age": 99})
 
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.failure_kind, "atom_localized")
@@ -104,7 +105,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
             "factgraph.sdk.shells.diagnose.diagnose_derivation_binding",
             return_value=expected,
         ):
-            result = sdk.diagnose(_age_derivation(), {"$age": 30})
+            result = sdk_diagnose(sdk, _age_derivation(), {"$age": 30})
 
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.failure_kind, "no_candidate")
@@ -115,7 +116,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_person(sdk, name="alice", age=30, region="us")
 
-        result = sdk.diagnose(_age_derivation(), {"$unknown": "x"})
+        result = sdk_diagnose(sdk, _age_derivation(), {"$unknown": "x"})
 
         self.assertEqual(result.status, "invalid_request")
         self.assertGreater(len(result.errors), 0)
@@ -124,7 +125,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_person(sdk, name="alice", age=30, region="us")
 
-        result = sdk.diagnose(
+        result = sdk_diagnose(sdk,
             _region_filtered_age_derivation(),
             {"$region": "us"},
             engine="problog",
@@ -143,7 +144,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
             )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            _build_sdk().diagnose(rule, {})  # type: ignore[arg-type]
+            sdk_diagnose(_build_sdk(), rule, {})  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.diagnose.inference")
         self.assertIn("Inference", str(ctx.exception))
@@ -158,7 +159,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diagnose(app_plan, {})  # type: ignore[arg-type]
+            sdk_diagnose(sdk, app_plan, {})  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.diagnose.inference")
 
@@ -166,7 +167,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diagnose(_age_derivation(), (("$age", 30),))  # type: ignore[arg-type]
+            sdk_diagnose(sdk, _age_derivation(), (("$age", 30),))  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.diagnose.binding")
 
@@ -176,7 +177,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         for binding in ({"age": 30}, {"": 30}, {1: 30}):
             with self.subTest(binding=binding):
                 with self.assertRaises(SDKStoreError) as ctx:
-                    sdk.diagnose(_age_derivation(), binding)  # type: ignore[arg-type]
+                    sdk_diagnose(sdk, _age_derivation(), binding)  # type: ignore[arg-type]
                 self.assertEqual(ctx.exception.path, "$.diagnose.binding")
 
     def test_multi_head_derivation_is_rejected_before_request_construction(self) -> None:
@@ -192,7 +193,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         with patch("factgraph.sdk.shells.diagnose.build_diagnose_request") as mock_builder:
             mock_builder.side_effect = CapabilityHelperError("bad helper input")
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.diagnose(_age_derivation(), {"$age": 30})
+                sdk_diagnose(sdk, _age_derivation(), {"$age": 30})
 
         self.assertEqual(ctx.exception.path, "$.diagnose")
         self.assertIsInstance(ctx.exception.__cause__, CapabilityHelperError)
@@ -203,7 +204,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         with patch("factgraph.sdk.shells.diagnose.build_diagnose_request") as mock_builder:
             mock_builder.side_effect = OriginPackageError("sdk object leaked")
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.diagnose(_age_derivation(), {"$age": 30})
+                sdk_diagnose(sdk, _age_derivation(), {"$age": 30})
 
         self.assertEqual(ctx.exception.path, "$.diagnose")
         self.assertIsInstance(ctx.exception.__cause__, OriginPackageError)
@@ -216,7 +217,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
         ) as mock_runtime:
             mock_builder.side_effect = RuntimeError("stop after observing engine")
             with self.assertRaises(RuntimeError):
-                sdk.diagnose(_age_derivation(), {"$age": 30}, engine="souffle")
+                sdk_diagnose(sdk, _age_derivation(), {"$age": 30}, engine="souffle")
 
         self.assertEqual(mock_builder.call_args.kwargs["engine"], "souffle")
         mock_runtime.assert_not_called()
@@ -238,7 +239,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
                 failure_kind="no_candidate",
                 diagnostic_payload=None,
             )
-            result = sdk.diagnose(derivation, {"$age": 30}, registry=registry)
+            result = sdk_diagnose(sdk, derivation, {"$age": 30}, registry=registry)
 
         self.assertEqual(result.status, "failed")
         mock_resolve.assert_called_once_with(derivation, explicit_registry=registry)
@@ -258,7 +259,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
             ),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.diagnose(_age_derivation(), {"$age": 30})
+                sdk_diagnose(sdk, _age_derivation(), {"$age": 30})
 
         self.assertEqual(ctx.exception.path, "$.diagnose.inference")
         self.assertIsInstance(ctx.exception.__cause__, ValueError)
@@ -274,7 +275,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
             side_effect=RuleCompileError("duplicate rule registration"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.diagnose(_age_derivation(), {"$age": 30})
+                sdk_diagnose(sdk, _age_derivation(), {"$age": 30})
 
         self.assertEqual(ctx.exception.path, "$.diagnose.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
@@ -293,7 +294,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
             side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.diagnose(_age_derivation(), {"$age": 30})
+                sdk_diagnose(sdk, _age_derivation(), {"$age": 30})
 
         self.assertEqual(ctx.exception.path, "$.diagnose.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
@@ -321,7 +322,7 @@ class SDKDiagnoseContractTests(unittest.TestCase):
                 failure_kind="no_candidate",
                 diagnostic_payload=None,
             )
-            sdk.diagnose(_age_derivation(), {"$p": person_ref, "$age": 99})
+            sdk_diagnose(sdk, _age_derivation(), {"$p": person_ref, "$age": 99})
 
         mock_check.assert_not_called()
 

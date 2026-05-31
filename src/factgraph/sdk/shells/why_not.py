@@ -1,11 +1,11 @@
 """SDK shell for Q4 Why-not Universe Diagnose capability.
 
-Implements the ``SDKStore.why_not`` facade method per the archived G4 blueprint
+Implements the ``sdk_why_not`` facade method per the archived G4 blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g4-why-not-frontier.md`` §5.
 
 Public surface contract per blueprint §5 locks:
 
-- Method:      ``SDKStore.why_not(...)`` (instance method; not a free function
+- Method:      ``sdk_why_not(...)`` (instance method; not a free function
                in ``factgraph.sdk.__all__`` — see §5.4 lock language and G1 §5.4
                precedent).
 - Signature:   ``why_not(inference, candidates, *, engine="native",

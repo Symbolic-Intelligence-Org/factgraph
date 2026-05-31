@@ -33,8 +33,8 @@ Currently covered:
 
 Entry points:
 
-- `SDKStore.run(...)`
-- `SDKStore.evaluate(...)`
+- `fg.run (removed)(...)`
+- `fg.eval.evaluate(...)`
 
 > **post-L SDK ergonomics redesign cross-ref (§5.5.6):** since the
 > post-L redesign, `FactGraph` enters `factgraph.sdk.__all__` as a

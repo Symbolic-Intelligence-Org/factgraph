@@ -97,13 +97,13 @@ class T5WhyNotQuarantineTests(unittest.TestCase):
         self.assertFalse(hasattr(evaluate_result_protocol.EvaluateResult, "counterfactuals"))
         self.assertNotIn("WhyNotUniverseResult", factgraph_sdk.__all__)
         self.assertNotIn("why_not", factgraph_sdk.__all__)
-        self.assertTrue(callable(SDKStore.why_not))
+        self.assertFalse(hasattr(SDKStore, "why_not"))
+        self.assertTrue(callable(sdk_why_not_shell.sdk_why_not))
 
     def test_legacy_why_not_surfaces_are_quarantined_not_deleted(self) -> None:
         self.assertIn("T5 quarantine", why_not_protocol.__doc__ or "")
         self.assertIn("T5 quarantine", why_not_runtime.__doc__ or "")
         self.assertIn("T5 quarantine", sdk_why_not_shell.__doc__ or "")
-        self.assertIn("T5 quarantine", SDKStore.why_not.__doc__ or "")
 
     def test_no_lossy_why_not_to_explanation_conversion_path_exists(self) -> None:
         sources = (

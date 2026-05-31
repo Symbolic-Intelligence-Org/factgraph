@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
-import warnings
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -67,7 +66,6 @@ from factgraph.application.protocol.rule_expr_lowering import (
 from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
 from factgraph.authoring.rules import compile_authoring_rule_v1
-from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import WriteProtocolError, retract_by_asrt
 from factgraph.core.protocol.digests import sha256_hex
@@ -76,7 +74,7 @@ from factgraph.core.semantics import SemanticsProfile, inspect_semantics_profile
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
-from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec, run_rule
+from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
 from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND, ProvenanceEnvelope, SupportArtifact
 from factgraph.adapters.souffle.runner import run_package
@@ -96,10 +94,6 @@ from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, 
 
 from .compile import compile_schema_from_classes
 from .dsl.branch import Branch
-from .error_codes import (
-    INVALID_ROW_FORMAT,
-    QUERY_INVALID_ROW_FORMAT,
-)
 from .facade import _ASSERTION_FILTER_MISSING
 from .errors import (
     CardinalityError,
@@ -112,22 +106,10 @@ from .errors import (
     SDKStoreError,
     SDKValueError,
 )
-from .query_lower import QueryPlan, lower_query
-from .query_runtime import execute_query_plan
 from .schema import Entity, Field, Identity
 from .semantics import ProbLogSemantics, PyReasonSemantics
 
 if TYPE_CHECKING:
-    from factgraph.application.protocol import (
-        CheckResult,
-        DiagnoseResult,
-        FactOverlayCheckResult,
-        ProofFrameRecheckResult,
-        RuleAddConditionResult,
-        RuleDisableResult,
-        RuleLiteralReplaceResult,
-        WhyNotUniverseResult,
-    )
     from factgraph.audit.proof_frame_diff import ProofFrameDiff
 
 
@@ -156,11 +138,6 @@ _ATTACH_REJECTED_KWARGS = {
 _ATTACHED_WRITE_ERROR = (
     "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
     "{method_name} is not available on attached runtimes"
-)
-_T5_LEGACY_SHELL_REMOVED = (
-    "{method_name} was removed by the T5 EvaluateResult hard-cut; use "
-    "fg.eval.evaluate(...), row.explain(), row.close(), or "
-    "fg.eval.explain(expr, head=closed_head)"
 )
 _RULE_EXPR_DEFAULT_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
@@ -652,10 +629,10 @@ class _SDKSchemaManager:
         raise FrozenSnapshotError("FactGraph.schema namespace is read-only")
 
     def ingest(self, *args: Any, **kwargs: Any) -> Any:
-        return self._sdk.ingest(*args, **kwargs)
+        return self._sdk._ingest(*args, **kwargs)
 
     def validate_provenance(self, *args: Any, **kwargs: Any) -> Any:
-        return self._sdk.validate_provenance(*args, **kwargs)
+        return self._sdk._validate_provenance(*args, **kwargs)
 
     def register(self, entity_cls: type[Entity]) -> SchemaAddResult:
         """Register a new Entity type."""
@@ -1285,7 +1262,7 @@ class _SDKRulesManager:
         ids, and body atom identifiers. This is a read-only view for debugging
         rule shape and branch semantics.
         """
-        return self._sdk.inspect_rule(*args, **kwargs)
+        return self._sdk._inspect_rule(*args, **kwargs)
 
 
 class _SDKInferencesManager:
@@ -1316,11 +1293,11 @@ class _SDKEvalManager:
 
     def evaluate(self, *args: Any, **kwargs: Any) -> Any:
         """Evaluate an `Inference`, application `Rule`, or RuleExpr."""
-        return self._sdk.evaluate(*args, **kwargs)
+        return self._sdk._evaluate(*args, **kwargs)
 
     def explain(self, *args: Any, **kwargs: Any) -> Any:
         """Explain a closed-head evaluation replay."""
-        return self._sdk.explain(*args, **kwargs)
+        return self._sdk._explain(*args, **kwargs)
 
     def inspect_semantics(self, *args: Any, **kwargs: Any) -> Any:
         """Inspect semantics configuration without evaluating an inference.
@@ -1329,94 +1306,15 @@ class _SDKEvalManager:
         and returns a JSON-like structural preview. Public wrappers include
         their lowered canonical profile preview.
         """
-        return self._sdk.inspect_semantics(*args, **kwargs)
-
-
-class _SDKWhatIfFactOverlayManager:
-    """Read-only sub-namespace manager for `what_if.fact_overlay` (G2)."""
-
-    def __init__(self, sdk: "SDKStore") -> None:
-        object.__setattr__(self, "_sdk", sdk)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenSnapshotError("FactGraph.what_if.fact_overlay namespace is read-only")
-
-    def check(self, *args: Any, **kwargs: Any) -> Any:
-        """Check a proposed fact overlay without committing it."""
-        return self._sdk.check_fact_overlay(*args, **kwargs)
-
-    def recheck_proof_frame(self, *args: Any, **kwargs: Any) -> Any:
-        """Re-run a fact-overlay check from a recorded proof frame."""
-        return self._sdk.recheck_proof_frame(*args, **kwargs)
-
-
-class _SDKWhatIfRuleManager:
-    """Read-only sub-namespace manager for `what_if.rule` (G3)."""
-
-    def __init__(self, sdk: "SDKStore") -> None:
-        object.__setattr__(self, "_sdk", sdk)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenSnapshotError("FactGraph.what_if.rule namespace is read-only")
-
-    def disable(self, *args: Any, **kwargs: Any) -> Any:
-        """Check a what-if result with one rule disabled."""
-        return self._sdk.check_rule_disable(*args, **kwargs)
-
-    def literal_replace(self, *args: Any, **kwargs: Any) -> Any:
-        """Check a what-if result with one rule literal replaced."""
-        return self._sdk.check_rule_literal_replace(*args, **kwargs)
-
-    def add_condition(self, *args: Any, **kwargs: Any) -> Any:
-        """Check a what-if result with an extra rule condition."""
-        return self._sdk.check_rule_add_condition(*args, **kwargs)
-
-
-class _SDKWhatIfManager:
-    """Read-only namespace manager for the `what_if` taxonomy group.
-
-    Per §5.2 Option B split: G1 + G4 methods (check, diagnose, why_not)
-    are direct on this manager; G2 routed under ``fact_overlay`` sub-
-    namespace; G3 routed under ``rule`` sub-namespace. G5 ``diff_proof_
-    frames`` lives under ``audit`` per §5.2.1 placement decision.
-    """
-
-    def __init__(self, sdk: "SDKStore") -> None:
-        object.__setattr__(self, "_sdk", sdk)
-        object.__setattr__(self, "_fact_overlay", _SDKWhatIfFactOverlayManager(sdk))
-        object.__setattr__(self, "_rule", _SDKWhatIfRuleManager(sdk))
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenSnapshotError("FactGraph.what_if namespace is read-only")
-
-    def check(self, *args: Any, **kwargs: Any) -> Any:
-        """Run a one-shot what-if check for an inference."""
-        return self._sdk.check(*args, **kwargs)
-
-    def diagnose(self, *args: Any, **kwargs: Any) -> Any:
-        """Diagnose why a requested inference outcome did or did not appear."""
-        return self._sdk.diagnose(*args, **kwargs)
-
-    def why_not(self, *args: Any, **kwargs: Any) -> Any:
-        """Ask for missing support paths for a desired inference result."""
-        return self._sdk.why_not(*args, **kwargs)
-
-    @property
-    def fact_overlay(self) -> _SDKWhatIfFactOverlayManager:
-        return self._fact_overlay
-
-    @property
-    def rule(self) -> _SDKWhatIfRuleManager:
-        return self._rule
+        return self._sdk._inspect_semantics(*args, **kwargs)
 
 
 class _SDKAuditManager:
     """Read-only namespace manager for the `audit` taxonomy group.
 
     Per §5.2 §5.2.1 placement #2, ``diff_proof_frames`` (G5) lives here
-    rather than under ``what_if`` because it consumes recorded round
-    events and compares persisted proof-frame outcomes — post-hoc
-    audit, not hypothetical evaluation.
+    because it consumes recorded round events and compares persisted
+    proof-frame outcomes — post-hoc audit, not hypothetical evaluation.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
@@ -1488,7 +1386,7 @@ class _SDKAuditManager:
 
     def diff_proof_frames(self, *args: Any, **kwargs: Any) -> Any:
         """Compare two recorded proof-frame outcomes."""
-        return self._sdk.diff_proof_frames(*args, **kwargs)
+        return self._sdk._diff_proof_frames(*args, **kwargs)
 
 
 class _SDKPackageManager:
@@ -1606,8 +1504,8 @@ class SDKStore:
     `FactGraph` is a literal alias of this class and is the recommended public
     name. It owns the compiled schema, append-only ledger, optional authoring
     registry, optional workspace path, and user-facing namespaces such as
-    `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `what_if`,
-    `audit`, `package`, and `assertion_views`.
+    `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `audit`,
+    `package`, and `assertion_views`.
 
     `FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle
     for new DB/view substrate work. Attached runtimes expose
@@ -2005,7 +1903,7 @@ class SDKStore:
 
         return SDKBatchTx(self, meta=meta)
 
-    def ingest(
+    def _ingest(
         self,
         data: Any,
         *,
@@ -2017,7 +1915,7 @@ class SDKStore:
 
         return sdk_ingest(self, data, meta=meta, allow_sensitive_meta=allow_sensitive_meta)
 
-    def validate_provenance(self, obj: Any, *, standard: str = "derivation_v1"):
+    def _validate_provenance(self, obj: Any, *, standard: str = "derivation_v1"):
         from .ingest import sdk_validate_provenance
 
         return sdk_validate_provenance(self, obj, standard=standard)
@@ -2127,414 +2025,7 @@ class SDKStore:
             for cls in self._classes
         }
 
-    def check(
-        self,
-        inference: Any,
-        binding: Mapping[str, Any],
-        *,
-        engine: str = "native",
-        registry: RuleRegistry | None = None,
-        semantics: Any = _PROFILE_KWARG_UNSET,
-        semantics_profile: Any = _PROFILE_KWARG_UNSET,
-    ) -> "CheckResult":
-        """Check one SDK ``Inference`` against a concrete binding.
-
-        Args:
-            inference: SDK ``Inference`` authoring object. ``Rule`` and
-                application ``CompiledDerivationPlan`` inputs are rejected at
-                the SDK boundary.
-            binding: Mapping of ``$``-prefixed variable names to Python
-                values. Tuple-form ``BindingItems`` are intentionally not part
-                of the SDK shell contract.
-            engine: Runtime engine name passed through to the application
-                Check request builder.
-            registry: Optional runtime registry override.
-
-        Returns:
-            The application ``CheckResult`` DTO directly. For ergonomic
-            evidence traversal, advanced callers may opt into
-            ``factgraph.application.walker.SupportArtifactView`` outside the SDK.
-
-        Raises:
-            SDKStoreError: For SDK input-shape errors or application helper
-                validation errors. Helper errors are preserved as
-                ``__cause__``.
-        """
-        del inference, binding, engine, registry, semantics, semantics_profile
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check"))
-
-    def diagnose(
-        self,
-        inference: Any,
-        binding: Mapping[str, Any],
-        *,
-        engine: str = "native",
-        registry: RuleRegistry | None = None,
-        semantics: Any = _PROFILE_KWARG_UNSET,
-        semantics_profile: Any = _PROFILE_KWARG_UNSET,
-    ) -> "DiagnoseResult":
-        """Diagnose one SDK ``Inference`` against a concrete binding.
-
-        Args:
-            inference: SDK ``Inference`` authoring object. ``Rule`` and
-                application ``CompiledDerivationPlan`` inputs are rejected at
-                the SDK boundary.
-            binding: Mapping of ``$``-prefixed variable names to Python
-                values.
-            engine: Runtime engine name passed through to the application
-                Diagnose request builder.
-            registry: Optional runtime registry override.
-
-        Returns:
-            The application ``DiagnoseResult`` DTO directly. Locator parsing
-            remains an opt-in application-layer workflow; this SDK shell does
-            not import walker helpers.
-
-        Raises:
-            SDKStoreError: For SDK input-shape errors or application helper
-                validation errors. Helper errors are preserved as
-                ``__cause__``.
-        """
-        del inference, binding, engine, registry, semantics, semantics_profile
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.diagnose"))
-
-    def why_not(
-        self,
-        inference: Any,
-        candidates: Sequence[Mapping[str, Any] | Sequence[Any]],
-        *,
-        engine: str = "native",
-        registry: RuleRegistry | None = None,
-        semantics: Any = _PROFILE_KWARG_UNSET,
-        semantics_profile: Any = _PROFILE_KWARG_UNSET,
-    ) -> "WhyNotUniverseResult":
-        """Run Why-not for one SDK ``Inference`` against an explicit candidate universe.
-
-        Args:
-            inference: SDK ``Inference`` authoring object. ``Rule`` and
-                application ``CompiledDerivationPlan`` inputs are rejected at
-                the SDK boundary (per §5.1 lock).
-            candidates: Sequence of candidate rows. Each row is either a
-                ``Mapping[str, Any]`` keyed by the head variable names, or a
-                positional ``Sequence[Any]`` matching the head variable
-                order. Rows are normalized internally against the plan
-                head variable order.
-            engine: Runtime engine name passed through to the application
-                Why-not request DTO.
-            registry: Optional runtime registry override.
-
-        Returns:
-            The application ``WhyNotUniverseResult`` DTO directly. The SDK
-            shell does not wrap or re-export the result; advanced callers
-            can import ``WhyNotUniverseResult`` from
-            ``factgraph.application.protocol`` if a typed reference is needed.
-            T5 quarantine: this method is a legacy surface and D23/T5.7
-            hard-cut target; row/manual evidence should use ``fg.eval`` explain
-            APIs instead.
-
-        Raises:
-            SDKStoreError: For non-SDK exceptions crossing the SDK boundary.
-                The ``path`` field locates the failure: ``$.why_not.inference``
-                for SDK input-shape and inference-lowering failures,
-                ``$.why_not.dependencies`` for dependency registration
-                failures, ``$.why_not.candidates`` for candidate-row
-                validation errors, ``$.why_not.request`` for request DTO
-                shape errors, and ``$.why_not`` for runtime Why-not
-                failures. Original exceptions are preserved as
-                ``__cause__``.
-        """
-        del inference, candidates, engine, registry, semantics, semantics_profile
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.why_not"))
-
-    def check_fact_overlay(
-        self,
-        inference: Any,
-        binding: Mapping[str, Any],
-        overlay: Any,
-        *,
-        engine: str = "native",
-        registry: RuleRegistry | None = None,
-        semantics: Any = _PROFILE_KWARG_UNSET,
-        semantics_profile: Any = _PROFILE_KWARG_UNSET,
-    ) -> "FactOverlayCheckResult":
-        """Run Fact Overlay Check for one SDK ``Inference`` + binding + overlay.
-
-        Args:
-            inference: SDK ``Inference`` authoring object. ``Rule`` and
-                application ``CompiledDerivationPlan`` inputs are rejected
-                at the SDK boundary (per §5.1 lock).
-            binding: Mapping of ``$``-prefixed variable names to Python
-                values; validated through ``factgraph.sdk.shells._validation``.
-            overlay: Raw application ``EvaluationOverlay`` protocol DTO
-                (per §5.1 lock — author-time intent, not a lowered plan).
-                Wrong-type or malformed overlay shape is caught by
-                ``FactOverlayCheckRequest`` construction and remapped to
-                ``$.check_fact_overlay.request`` per §5.8.
-            engine: Runtime engine name passed through to the application
-                Fact Overlay request DTO.
-            registry: Optional runtime registry override.
-
-        Returns:
-            The application ``FactOverlayCheckResult`` DTO directly. The
-            runtime represents unsupported overlay / runtime conditions as
-            ``invalid_request`` result DTOs (not raised exceptions); the
-            SDK shell passes the result through unchanged per §5.8 lock.
-
-        Raises:
-            SDKStoreError: For non-SDK exceptions crossing the SDK
-                boundary. The ``path`` field locates the failure:
-                ``$.check_fact_overlay.inference`` for SDK input-shape
-                and inference-lowering failures,
-                ``$.check_fact_overlay.binding`` for binding shape errors,
-                ``$.check_fact_overlay.overlay`` for non-
-                ``EvaluationOverlay`` overlay input (the SDK rejects
-                ``tuple[FactValueOverride, ...]`` form even though the
-                application request DTO would tolerate it),
-                ``$.check_fact_overlay.dependencies`` for dependency
-                registration failures,
-                ``$.check_fact_overlay.request`` for request DTO shape
-                errors, and base ``$.check_fact_overlay`` for unexpected
-                runtime exceptions (the runtime ordinarily returns
-                ``FactOverlayCheckResult(status="invalid_request")`` for
-                unsupported overlay / runtime conditions, which is
-                passed through unchanged). Original exceptions are
-                preserved as ``__cause__``.
-        """
-        del inference, binding, overlay, engine, registry, semantics, semantics_profile
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_fact_overlay"))
-
-    def recheck_proof_frame(
-        self,
-        support_artifact: Any,
-        overlay: Any,
-    ) -> "ProofFrameRecheckResult":
-        """Recheck a previously captured support frame under a fact-side overlay.
-
-        Args:
-            support_artifact: Raw application ``SupportArtifact`` (frozen
-                dataclass) obtained from a prior Check run's
-                ``CheckResult.evidence_envelope.engine_payload``. Per §5.2
-                lock, the SDK never wraps ``SupportArtifact``, never
-                extracts it from a ``CheckResult`` argument, and never
-                calls ``sdk.check(...)`` internally to obtain it.
-            overlay: Raw application ``EvaluationOverlay`` protocol DTO
-                (per §5.2 lock — author-time intent).
-
-        Returns:
-            The application ``ProofFrameRecheckResult`` DTO directly. The
-            runtime represents unsupported support kinds, rule-ref edges,
-            and rule actions as result DTOs; the SDK shell passes the
-            result through unchanged per §5.8 lock.
-
-        Raises:
-            SDKStoreError: For non-SDK exceptions crossing the SDK
-                boundary. The ``path`` field locates the failure:
-                ``$.recheck_proof_frame.support_artifact`` for non-
-                ``SupportArtifact`` input, ``$.recheck_proof_frame.overlay``
-                for non-``EvaluationOverlay`` input,
-                ``$.recheck_proof_frame.request`` for request DTO shape
-                errors, and ``$.recheck_proof_frame`` for unexpected
-                runtime exceptions. Original exceptions are preserved as
-                ``__cause__``.
-        """
-        del support_artifact, overlay
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.recheck_proof_frame"))
-
-    def check_rule_disable(
-        self,
-        rule: Any,
-        support: Any,
-        *,
-        branch_index: int,
-        atom_index: int,
-        overlay: Any = None,
-        note: str | None = None,
-    ) -> "RuleDisableResult":
-        """Check a Rule Disable rule-overlay action against captured support.
-
-        Args:
-            rule: SDK ``Rule`` describing the target rule. Lowered through
-                ``SDKStore._compile_rule_input(...)`` to a substrate
-                ``RuleSpec`` per §5.2 lock; raw ``RuleSpec`` is rejected.
-            support: Raw application ``SupportArtifact`` from a prior
-                Check run's ``CheckResult.evidence_envelope.engine_payload``.
-                Per §5.3 lock the SDK never wraps it, never extracts it
-                from a ``CheckResult`` argument, and never calls
-                ``sdk.check(...)`` internally.
-            branch_index: Non-negative branch locator into
-                ``rule_spec.where`` per §5.4 lock.
-            atom_index: Non-negative atom locator into
-                ``rule_spec.where[branch_index]`` per §5.4 lock.
-            overlay: ``None`` or an empty ``EvaluationOverlay``. The
-                rule-action overlay is constructed internally by the A
-                helper ``build_rule_disable_request(...)``; non-empty
-                overlay is rejected at the SDK boundary per §5.4 + §5.8
-                locks.
-            note: Optional human-readable annotation forwarded to the
-                ``RuleDisableAction`` per §5.4 lock.
-
-        Returns:
-            The application ``RuleDisableResult`` DTO directly. The
-            runtime represents unsupported support kinds, rule-ref
-            edges, target-not-found, rule-id/version mismatch, and
-            native evaluation failures as result DTOs; the SDK shell
-            passes the result through unchanged per §5.8 lock.
-
-        Raises:
-            SDKStoreError: For non-SDK exceptions crossing the SDK
-                boundary. The ``path`` field locates the failure:
-                ``$.check_rule_disable.rule`` for non-``Rule`` SDK
-                input or invalid rule shape after lowering;
-                ``$.check_rule_disable.support`` for non-
-                ``SupportArtifact`` input;
-                ``$.check_rule_disable.overlay`` for non-
-                ``EvaluationOverlay`` non-None or non-empty
-                ``EvaluationOverlay`` input;
-                ``$.check_rule_disable.dependencies`` for dependency
-                rule registration / RuleRef resolution failures;
-                ``$.check_rule_disable.request`` for action / request
-                DTO shape errors; and ``$.check_rule_disable`` for
-                unexpected runtime exceptions. Original exceptions are
-                preserved as ``__cause__``.
-        """
-        del rule, support, branch_index, atom_index, overlay, note
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_rule_disable"))
-
-    def check_rule_literal_replace(
-        self,
-        rule: Any,
-        support: Any,
-        *,
-        branch_index: int,
-        atom_index: int,
-        literal_path: Any,
-        old_literal: Any,
-        new_literal: Any,
-        overlay: Any = None,
-        note: str | None = None,
-    ) -> "RuleLiteralReplaceResult":
-        """Check a Rule Literal Replace rule-overlay action against captured support.
-
-        Args:
-            rule: SDK ``Rule`` describing the target rule. Lowered through
-                ``SDKStore._compile_rule_input(...)`` to a substrate
-                ``RuleSpec`` per §5.2 lock; raw ``RuleSpec`` is rejected.
-            support: Raw application ``SupportArtifact`` from a prior
-                Check run's ``CheckResult.evidence_envelope.engine_payload``.
-                Per §5.3 lock the SDK never wraps it.
-            branch_index: Non-negative branch locator into
-                ``rule_spec.where`` per §5.4 lock.
-            atom_index: Non-negative atom locator into
-                ``rule_spec.where[branch_index]`` per §5.4 lock.
-            literal_path: Raw application ``RuleLiteralPath`` per §5.4
-                lock (frozen application-canonical, no SDK alternative
-                without inventing outward surface — G2 §5.1+§5.2
-                cross-cutting precedent applies).
-            old_literal: Existing literal value at the locator. ``Any``
-                typing matches the application protocol.
-            new_literal: Replacement literal value at the locator.
-                ``Any`` typing matches the application protocol.
-            overlay: ``None`` or an empty ``EvaluationOverlay``. The
-                rule-action overlay is constructed internally by the A
-                helper ``build_rule_literal_replace_request(...)``;
-                non-empty overlay is rejected at the SDK boundary per
-                §5.4 + §5.8 locks.
-            note: Optional human-readable annotation forwarded to the
-                ``RuleLiteralReplaceAction`` per §5.4 lock.
-
-        Returns:
-            The application ``RuleLiteralReplaceResult`` DTO directly.
-            The runtime represents unsupported support kinds, rule-ref
-            edges, target-not-found, rule-id/version mismatch, and
-            native evaluation failures as result DTOs; the SDK shell
-            passes the result through unchanged per §5.8 lock.
-
-        Raises:
-            SDKStoreError: For non-SDK exceptions crossing the SDK
-                boundary. The ``path`` field locates the failure:
-                ``$.check_rule_literal_replace.rule`` for non-``Rule``
-                SDK input or invalid rule shape after lowering;
-                ``$.check_rule_literal_replace.support`` for non-
-                ``SupportArtifact`` input;
-                ``$.check_rule_literal_replace.overlay`` for non-
-                ``EvaluationOverlay`` non-None or non-empty
-                ``EvaluationOverlay`` input;
-                ``$.check_rule_literal_replace.dependencies`` for
-                dependency rule registration / RuleRef resolution
-                failures; ``$.check_rule_literal_replace.request`` for
-                ``RuleLiteralPath`` shape errors / action / request
-                DTO shape errors; and ``$.check_rule_literal_replace``
-                for unexpected runtime exceptions. Original exceptions
-                are preserved as ``__cause__``.
-        """
-        del rule, support, branch_index, atom_index, literal_path, old_literal, new_literal, overlay, note
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_rule_literal_replace"))
-
-    def check_rule_add_condition(
-        self,
-        rule: Any,
-        support: Any,
-        *,
-        branch_index: int,
-        added_atom: Any,
-        overlay: Any = None,
-        note: str | None = None,
-    ) -> "RuleAddConditionResult":
-        """Check a Rule Add Condition rule-overlay action against captured support.
-
-        Args:
-            rule: SDK ``Rule`` describing the target rule. Lowered through
-                ``SDKStore._compile_rule_input(...)`` to a substrate
-                ``RuleSpec`` per §5.2 lock; raw ``RuleSpec`` is rejected.
-            support: Raw application ``SupportArtifact`` from a prior
-                Check run's ``CheckResult.evidence_envelope.engine_payload``.
-                Per §5.3 lock the SDK never wraps it.
-            branch_index: Non-negative branch locator into
-                ``rule_spec.where`` per §5.4 lock. Note Add Condition
-                has no ``atom_index`` argument — it appends a new atom
-                to the branch rather than pointing at an existing
-                locator.
-            added_atom: Raw application ``RuleAddedAtom`` per §5.4
-                lock (frozen application-canonical, no SDK alternative
-                without inventing outward surface — G2 §5.1+§5.2
-                cross-cutting precedent applies).
-            overlay: ``None`` or an empty ``EvaluationOverlay``. The
-                rule-action overlay is constructed internally by the A
-                helper ``build_rule_add_condition_request(...)``;
-                non-empty overlay is rejected at the SDK boundary per
-                §5.4 + §5.8 locks.
-            note: Optional human-readable annotation forwarded to the
-                ``RuleAddConditionAction`` per §5.4 lock.
-
-        Returns:
-            The application ``RuleAddConditionResult`` DTO directly.
-            The runtime represents unsupported support kinds, rule-ref
-            edges, rule-id/version mismatch, and native evaluation
-            failures as result DTOs; the SDK shell passes the result
-            through unchanged per §5.8 lock.
-
-        Raises:
-            SDKStoreError: For non-SDK exceptions crossing the SDK
-                boundary. The ``path`` field locates the failure:
-                ``$.check_rule_add_condition.rule`` for non-``Rule``
-                SDK input or invalid rule shape after lowering;
-                ``$.check_rule_add_condition.support`` for non-
-                ``SupportArtifact`` input;
-                ``$.check_rule_add_condition.overlay`` for non-
-                ``EvaluationOverlay`` non-None or non-empty
-                ``EvaluationOverlay`` input;
-                ``$.check_rule_add_condition.dependencies`` for
-                dependency rule registration / RuleRef resolution
-                failures; ``$.check_rule_add_condition.request`` for
-                ``RuleAddedAtom`` shape errors / action / request DTO
-                shape errors; and ``$.check_rule_add_condition`` for
-                unexpected runtime exceptions. Original exceptions are
-                preserved as ``__cause__``.
-        """
-        del rule, support, branch_index, added_atom, overlay, note
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.check_rule_add_condition"))
-
-    def diff_proof_frames(
+    def _diff_proof_frames(
         self,
         round_a_id: Any,
         round_b_id: Any,
@@ -2764,129 +2255,12 @@ class SDKStore:
             raise SDKValueError(err.message, code=err.code, path=path)
         raise SDKStoreError(err.message, code=err.code)
 
-    def run(
-        self,
-        obj: Any,
-        *,
-        row_format: str | None = None,
-        policy: Any = _POLICY_TOMBSTONE,
-        view: Any = _VIEW_TOMBSTONE,
-        return_display_meta: bool = False,
-        registry: RuleRegistry | None = None,
-    ) -> list[Any]:
-        del obj, row_format, policy, view, return_display_meta, registry
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.run"))
-
-    def _run_dispatch_key(self, obj: Any) -> str:
-        detectors = (
-            ("query", _is_sdk_query_object),
-            ("derivation", _is_derivation_run_object),
-        )
-        for key, detector in detectors:
-            if detector(obj):
-                return key
-        return "rule"
-
-    def _run_dispatch_query(
-        self,
-        query: Any,
-        *,
-        row_format: str | None,
-        registry: RuleRegistry | None,
-    ) -> list[Any]:
-        resolved_row_format = _resolve_query_row_format(row_format)
-        runtime_registry = self._resolve_runtime_registry(query, explicit_registry=registry)
-        return self._run_query(query, row_format=resolved_row_format, registry=runtime_registry)
-
-    def _run_dispatch_derivation(
-        self,
-        derivation: Any,
-        *,
-        row_format: str | None,
-        registry: RuleRegistry | None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-        del derivation, row_format, registry
-        raise SDKStoreError(
-            "Inference is not supported by run(); use sdk.evaluate() instead",
-            code=QUERY_INVALID_ROW_FORMAT,
-            path="$.run.obj",
-        )
-
-    def _run_dispatch_rule(
-        self,
-        rule: Any,
-        *,
-        row_format: str | None,
-        registry: RuleRegistry | None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-        resolved_row_format = _resolve_row_format(
-            call_site=row_format,
-            store_default=self._default_row_format,
-            env_var=self._env_row_format,
-        )
-        return self._run_rule(
-            rule,
-            row_format=resolved_row_format,
-            registry=registry,
-        )
-
-    def _run_rule(
-        self,
-        rule: Any,
-        *,
-        row_format: str,
-        registry: RuleRegistry | None,
-    ) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-        if isinstance(rule, str):
-            raise SDKStoreError(
-                "string rule DSL is not supported in SDK v1; use Rule object, RuleSpec, or structured rule dict"
-            )
-        compiled = self._compile_rule_input(rule)
-        rule_spec = RuleSpec(
-            rule_id=compiled["rule_id"],
-            version=compiled["version"],
-            select_vars=list(compiled["select_vars"]),
-            where=list(compiled["where"]),
-            expose=bool(compiled.get("expose", False)),
-        )
-        active_registry = registry if registry is not None else RuleRegistry()
-        if registry is None:
-            self._register_rule_dependencies(active_registry, rule)
-        rows = run_rule(self._store, rule_spec, active_registry)
-        return _format_rule_rows(rows, select_vars=list(rule_spec.select_vars), row_format=row_format)
-
-    def _run_query(
-        self,
-        query: Any,
-        *,
-        row_format: str = "dict",
-        registry: RuleRegistry | None = None,
-    ) -> list[Any]:
-        plan = self._lower_query(query, return_mode=row_format)
-        return execute_query_plan(self, plan, registry=registry)
-
-    def _lower_query(self, query: Any, *, return_mode: str = "dict") -> QueryPlan:
-        try:
-            from .dsl import Query as SDKQuery
-        except Exception as exc:
-            raise SDKStoreError(f"Query DSL is unavailable: {exc}", path="$.run.obj") from exc
-
-        if not isinstance(query, SDKQuery):
-            raise SDKStoreError("query must be Query", path="$.run.obj")
-
-        return lower_query(
-            query,
-            schema_ir=self._schema_ir,
-            schema_digest=self._schema_digest,
-            return_mode=return_mode,
-        )
-
     def _reject_removed_read_policy(self, policy: Any, *, api_path: str) -> None:
         if policy is _POLICY_TOMBSTONE:
             return
         raise SDKStoreError(f"{api_path}: {_READPOLICY_REMOVED_MESSAGE}")
 
-    def inspect_semantics(self, profile: Any) -> dict[str, Any]:
+    def _inspect_semantics(self, profile: Any) -> dict[str, Any]:
         if isinstance(profile, SemanticsProfile):
             return inspect_semantics_profile(profile)
         if isinstance(profile, (ProbLogSemantics, PyReasonSemantics)):
@@ -2897,7 +2271,7 @@ class SDKStore:
             return inspected
         raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile or SDK public semantics")
 
-    def inspect_rule(self, obj: Any) -> Any:
+    def _inspect_rule(self, obj: Any) -> Any:
         from factgraph.application.protocol import Rule as ApplicationRule
         from factgraph.application.protocol.rule_expr import _RuleExpr
         from factgraph.application.protocol.rule_expr_inspect import _inspect_application_rule, _inspect_rule_expr
@@ -2935,15 +2309,6 @@ class SDKStore:
             raise SDKStoreError(str(exc)) from exc
         self._workspace_path = paths.root
         return {"path": str(paths.root), "manifest": str(paths.manifest)}
-
-    @staticmethod
-    def _reject_shell_semantics(*, semantics: Any, semantics_profile: Any) -> None:
-        if semantics is not _PROFILE_KWARG_UNSET:
-            raise SDKStoreError("semantics= is not accepted by SDK what_if shells in E; use fg.eval.evaluate(...)")
-        if semantics_profile is not _PROFILE_KWARG_UNSET:
-            raise SDKStoreError(
-                "semantics_profile= is not accepted by SDK what_if shells in E; use fg.eval.evaluate(..., semantics=...)"
-            )
 
     @staticmethod
     def _resolve_public_engine(raw_engine: Any, *, api_path: str) -> str:
@@ -3006,7 +2371,7 @@ class SDKStore:
             raise SDKStoreError("SDK public semantics require Rule, RuleExpr, or Inference object input")
         return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
 
-    def evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
+    def _evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
         if "view" in kwargs:
             raise SDKStoreError(
                 "method-level view= is not supported by evaluate(); use FactGraph.attach(db, view=view) instead"
@@ -3095,7 +2460,7 @@ class SDKStore:
             "derivation dict"
         )
 
-    def explain(self, *args: Any, **kwargs: Any) -> Explanation:
+    def _explain(self, *args: Any, **kwargs: Any) -> Explanation:
         if len(args) != 1:
             raise SDKStoreError("eval.explain(expr, ...) accepts exactly one RuleExpr or Rule input")
         if "head" not in kwargs:
@@ -3120,7 +2485,7 @@ class SDKStore:
         if raw_semantics is not None:
             evaluate_kwargs["semantics"] = raw_semantics
         evaluate_kwargs["head"] = self._manual_explain_replay_head(args[0], head)
-        result = self.evaluate(args[0], **evaluate_kwargs)
+        result = self._evaluate(args[0], **evaluate_kwargs)
         checked_scope = self._manual_explain_checked_scope(result, closed_head=head)
         first = self._manual_explain_matching_row(result, closed_head=head)
         if first is None:
@@ -3517,26 +2882,6 @@ class SDKStore:
             return f"{derivation_id}:{uuid4().hex[:8]}"
         return f"derive:{uuid4().hex[:8]}"
 
-    def accept(self, *args: Any, **kwargs: Any) -> AcceptResult:
-        del args, kwargs
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.accept"))
-
-    def accept_many(
-        self,
-        requests: list[AcceptRequest | CandidateSet | dict[str, Any]],
-        *,
-        mode: str = "atomic",
-        idempotent_duplicate_ok: bool = True,
-    ) -> list[dict[str, Any]]:
-        del requests, mode, idempotent_duplicate_ok
-        raise SDKStoreError(_T5_LEGACY_SHELL_REMOVED.format(method_name="fg.accept_many"))
-
-    def explain_fact(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        return self._store.explain_fact(*args, **kwargs)
-
-    def conflicts(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        return self._store.conflicts(*args, **kwargs)
-
     def export_package(self, out_dir, options: ExportOptions, **kwargs: Any):
         return export_package(self._store, out_dir, options, **kwargs)
 
@@ -3663,39 +3008,6 @@ class SDKStore:
             return compiled_payloads
         except Exception as exc:
             raise SDKStoreError(f"invalid derivation input: {exc}") from exc
-
-    @staticmethod
-    def _accept_options_from_user_kwargs(kwargs: dict[str, Any]) -> AcceptOptions:
-        raw_meta_overrides = kwargs.pop("meta_overrides", None)
-        if raw_meta_overrides is None:
-            meta_overrides: dict[str, Any] = {}
-        elif isinstance(raw_meta_overrides, dict):
-            meta_overrides = dict(raw_meta_overrides)
-        else:
-            raise SDKStoreError("meta_overrides must be dict when provided")
-
-        # Blueprints commonly use meta_overrides={"approved_by": ...}; also support keyword sugar.
-        for key in ("approved_by", "note", "dry_run", "identity_override"):
-            if key in kwargs:
-                if key in meta_overrides:
-                    raise SDKStoreError(f"duplicate accept option: {key} provided in meta_overrides and keyword")
-                meta_overrides[key] = kwargs.pop(key)
-
-        approved_by = meta_overrides.pop("approved_by", None)
-        note = meta_overrides.pop("note", None)
-        dry_run = meta_overrides.pop("dry_run", False)
-        identity_override = meta_overrides.pop("identity_override", None)
-        if identity_override is not None and not isinstance(identity_override, dict):
-            raise SDKStoreError("identity_override must be dict when provided")
-        if meta_overrides:
-            unknown = ", ".join(sorted(meta_overrides.keys()))
-            raise SDKStoreError(f"unsupported meta_overrides keys for accept(): {unknown}")
-        return AcceptOptions(
-            approved_by=approved_by,
-            note=note,
-            dry_run=bool(dry_run),
-            identity_override=dict(identity_override) if isinstance(identity_override, dict) else None,
-        )
 
     def _index_schema(self) -> None:
         pred_index: dict[tuple[str, str], dict[str, Any]] = {}
@@ -4666,138 +3978,6 @@ def _resolve_engine_ext_for_evaluate_plan(
         engine_ext=compiled_engine_ext,
         legacy_body_confidences=legacy_body_confidences,
     )
-
-
-def _resolve_row_format(*, call_site: Any, store_default: Any, env_var: Any) -> str:
-    for raw_value, path, source in (
-        (call_site, "$.run.row_format", "call_site"),
-        (store_default, "$.store.default_row_format", "store_default"),
-        (env_var, "env:FACTPY_ROW_FORMAT", "env_var"),
-    ):
-        normalized = _normalize_row_format_value(raw_value, path=path)
-        if normalized is not None:
-            _warn_deprecated_tuple_row_format_if_needed(normalized, source=source)
-            return normalized
-    return "dict"
-
-
-def _resolve_query_row_format(value: Any) -> str:
-    if value is None:
-        return "dict"
-    if not isinstance(value, str):
-        raise SDKStoreError(
-            "Query row_format must be 'dict' or 'instance'",
-            code=QUERY_INVALID_ROW_FORMAT,
-            path="$.run.row_format",
-        )
-    normalized = value.strip().lower()
-    if normalized not in {"dict", "instance"}:
-        raise SDKStoreError(
-            "Query row_format must be 'dict' or 'instance'",
-            code=QUERY_INVALID_ROW_FORMAT,
-            path="$.run.row_format",
-        )
-    return normalized
-
-
-def _normalize_row_format_value(value: Any, *, path: str) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise SDKStoreError(
-            "row_format must be 'tuple' or 'dict'",
-            code=INVALID_ROW_FORMAT,
-            path=path,
-        )
-    normalized = value.strip().lower()
-    if normalized not in {"tuple", "dict"}:
-        raise SDKStoreError(
-            "row_format must be 'tuple' or 'dict'",
-            code=INVALID_ROW_FORMAT,
-            path=path,
-        )
-    return normalized
-
-
-def _warn_deprecated_tuple_row_format_if_needed(normalized: str, *, source: str) -> None:
-    if normalized != "tuple":
-        return
-    warnings.warn(
-        "row_format='tuple' is deprecated and will be removed in a future release "
-        f"(source={source}); use row_format='dict' or set FACTPY_ROW_FORMAT=dict.",
-        DeprecationWarning,
-        stacklevel=4,
-    )
-
-
-def _format_rule_rows(
-    rows: list[tuple[Any, ...]],
-    *,
-    select_vars: list[str],
-    row_format: str,
-) -> list[tuple[Any, ...]] | list[dict[str, Any]]:
-    if row_format == "tuple":
-        return rows
-    if row_format != "dict":
-        raise SDKStoreError(
-            "row_format must be 'tuple' or 'dict'",
-            code=INVALID_ROW_FORMAT,
-            path="$.run.row_format",
-        )
-
-    columns: list[str] = []
-    seen: set[str] = set()
-    for idx, var in enumerate(select_vars):
-        if not isinstance(var, str) or not var:
-            raise SDKStoreError(
-                "rule select_vars must be non-empty strings for row_format='dict'",
-                code=INVALID_ROW_FORMAT,
-                path=f"$.rule.select_vars[{idx}]",
-            )
-        key = var[1:] if var.startswith("$") else var
-        if not key:
-            raise SDKStoreError(
-                "rule select_vars must not be empty for row_format='dict'",
-                code=INVALID_ROW_FORMAT,
-                path=f"$.rule.select_vars[{idx}]",
-            )
-        if key in seen:
-            raise SDKStoreError(
-                f"rule select_vars are not unique after alias normalization: {key}",
-                code=INVALID_ROW_FORMAT,
-                path=f"$.rule.select_vars[{idx}]",
-            )
-        seen.add(key)
-        columns.append(key)
-
-    out: list[dict[str, Any]] = []
-    for row_index, row in enumerate(rows):
-        if len(row) != len(columns):
-            raise SDKStoreError(
-                f"row arity mismatch at row {row_index}: expected {len(columns)}, got {len(row)}",
-                code=INVALID_ROW_FORMAT,
-                path="$.run.result",
-            )
-        out.append({col: row[col_index] for col_index, col in enumerate(columns)})
-    return out
-
-
-def _is_sdk_query_object(obj: Any) -> bool:
-    try:
-        from .dsl import Query
-    except Exception:
-        return False
-    return isinstance(obj, Query)
-
-
-def _is_derivation_run_object(obj: Any) -> bool:
-    if isinstance(obj, dict):
-        return any(key in obj for key in ("derivation_id", "target_pred_id", "head"))
-    try:
-        from .dsl import Inference
-    except Exception:
-        return False
-    return isinstance(obj, Inference)
 
 
 # Post-L SDK ergonomics redesign (locked at §5.3 / §5.7) — `FactGraph` is

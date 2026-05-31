@@ -12,7 +12,7 @@ The PyReason adapter is factpy's integration with the
 [PyReason](https://github.com/lab-v2/pyreason) graph-reasoning
 engine. It is now wired into the shared evaluate surface:
 `Store.evaluate(mode="pyreason")` /
-`SDKStore.evaluate(derivation, engine="pyreason")` go through
+`fg.eval.evaluate(derivation, engine="pyreason")` go through
 the adapter's EDB materialization, WhereIR compilation, runner,
 and `CandidateSet` output. The adapter-local provenance, session,
 rule extension, runner, and accept helper are still kept as

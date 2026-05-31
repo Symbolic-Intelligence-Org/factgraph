@@ -1,13 +1,13 @@
 """SDK shell for G3 Batch 5c Rule Add Condition capability.
 
-Implements the ``SDKStore.check_rule_add_condition`` facade method per
+Implements the ``sdk_rule_add_condition`` facade method per
 the archived G3 blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g3-rule-overlays.md``
 §5.
 
 Public surface contract per blueprint §5 locks:
 
-- Method:      ``SDKStore.check_rule_add_condition(...)`` (instance
+- Method:      ``sdk_rule_add_condition(...)`` (instance
                method; not a free function in ``factgraph.sdk.__all__``).
 - Signature:   ``check_rule_add_condition(rule, support, *,
                branch_index, added_atom, overlay=None, note=None)``

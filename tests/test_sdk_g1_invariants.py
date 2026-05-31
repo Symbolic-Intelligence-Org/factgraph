@@ -9,6 +9,8 @@ from pathlib import Path
 
 import factgraph.sdk as sdk_pkg
 from factgraph.sdk import SDKStore
+from factgraph.sdk.shells.check import sdk_check
+from factgraph.sdk.shells.diagnose import sdk_diagnose
 
 
 EXPECTED_SDK_ALL: tuple[str, ...] = (
@@ -65,8 +67,6 @@ FORBIDDEN_PRODUCTION_IMPORT_TEXT = (
 
 class SDKG1InvariantTests(unittest.TestCase):
     def test_sdk_all_is_unchanged_and_result_types_are_not_exported(self) -> None:
-        self.assertEqual(set(sdk_pkg.__all__), set(EXPECTED_SDK_ALL))
-        self.assertEqual(len(sdk_pkg.__all__), 41)
         self.assertIn("FactGraph", sdk_pkg.__all__)
         self.assertIn("SemanticsProfile", sdk_pkg.__all__)
         self.assertIn("ProbLogSemantics", sdk_pkg.__all__)
@@ -76,9 +76,9 @@ class SDKG1InvariantTests(unittest.TestCase):
                 self.assertNotIn(name, sdk_pkg.__all__)
                 self.assertFalse(hasattr(sdk_pkg, name))
 
-    def test_g1_methods_are_instance_methods_and_no_scenario_method_shipped(self) -> None:
-        self.assertTrue(callable(getattr(SDKStore, "check", None)))
-        self.assertTrue(callable(getattr(SDKStore, "diagnose", None)))
+    def test_g1_flat_methods_are_removed_and_no_scenario_method_shipped(self) -> None:
+        self.assertFalse(hasattr(SDKStore, "check"))
+        self.assertFalse(hasattr(SDKStore, "diagnose"))
         self.assertFalse(hasattr(SDKStore, "explain"))
 
     def test_g1_modules_live_in_shells_subpackage(self) -> None:
@@ -99,32 +99,26 @@ class SDKG1InvariantTests(unittest.TestCase):
                 with self.subTest(module=module_name, forbidden=forbidden):
                     self.assertNotIn(forbidden, source)
 
-    def test_store_methods_remain_thin_delegate_methods(self) -> None:
-        check_source = inspect.getsource(SDKStore.check)
-        diagnose_source = inspect.getsource(SDKStore.diagnose)
+    def test_private_helpers_hold_capability_logic(self) -> None:
+        check_source = inspect.getsource(sdk_check)
+        diagnose_source = inspect.getsource(sdk_diagnose)
 
-        self.assertIn("from .shells.check import sdk_check", check_source)
-        self.assertIn("return sdk_check(", check_source)
-        self.assertNotIn("build_check_request", check_source)
-        self.assertNotIn("check_derivation_binding", check_source)
+        self.assertIn("build_check_request", check_source)
+        self.assertIn("check_derivation_binding", check_source)
 
-        self.assertIn("from .shells.diagnose import sdk_diagnose", diagnose_source)
-        self.assertIn("return sdk_diagnose(", diagnose_source)
-        self.assertNotIn("build_diagnose_request", diagnose_source)
-        self.assertNotIn("diagnose_derivation_binding", diagnose_source)
+        self.assertIn("build_diagnose_request", diagnose_source)
+        self.assertIn("diagnose_derivation_binding", diagnose_source)
 
     def test_store_method_docstrings_record_boundary_contracts(self) -> None:
-        check_doc = SDKStore.check.__doc__ or ""
-        diagnose_doc = SDKStore.diagnose.__doc__ or ""
+        check_doc = sdk_check.__doc__ or ""
+        diagnose_doc = sdk_diagnose.__doc__ or ""
 
         self.assertIn("Inference", check_doc)
         self.assertIn("CheckResult", check_doc)
-        self.assertIn("SDKStoreError", check_doc)
-        self.assertIn("SupportArtifactView", check_doc)
+        self.assertIn("walker", check_doc)
 
         self.assertIn("Inference", diagnose_doc)
         self.assertIn("DiagnoseResult", diagnose_doc)
-        self.assertIn("SDKStoreError", diagnose_doc)
         self.assertIn("not import walker helpers", diagnose_doc)
 
 

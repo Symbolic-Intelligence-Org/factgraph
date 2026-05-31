@@ -1,9 +1,9 @@
-"""SDKStore.recheck_proof_frame contract tests.
+"""sdk_proof_frame_recheck contract tests.
 
 Phase 2 of G2 (per archived blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g2-fact-overlay-proofframe-recheck.md`` §8)
 ships full §5.2 / §5.4 / §5.6 / §5.8 contract coverage for
-``SDKStore.recheck_proof_frame(...)``. Mirrors the G1 / G4 / Fact Overlay
+``sdk_proof_frame_recheck(...)``. Mirrors the G1 / G4 / Fact Overlay
 per-method contract test structure with ProofFrame-specific narrowing
 (no derivation lowering, no registry resolution, no engine arg).
 """
@@ -22,6 +22,8 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.schema_runtime import FieldPath
 from factgraph.core.store._support import SupportArtifact
+from factgraph.sdk.shells.check import sdk_check
+from factgraph.sdk.shells.proof_frame import sdk_proof_frame_recheck
 from factgraph.sdk import (
     Inference,
     Entity,
@@ -44,9 +46,9 @@ def _build_sdk() -> SDKStore:
 
 
 def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
-    ref = sdk.ref(Person, name=name)
-    sdk.set(Person.age, ref, age)
-    sdk.set(Person.region, ref, region)
+    ref = sdk.entities.ref(Person, name=name)
+    sdk.fields.set(Person.age, ref, age)
+    sdk.fields.set(Person.region, ref, region)
     return ref
 
 
@@ -61,8 +63,8 @@ def _age_derivation() -> Inference:
 
 
 def _capture_support(sdk: SDKStore, alice: str, age: int) -> SupportArtifact:
-    """Run sdk.check(...) and extract the captured SupportArtifact."""
-    result = sdk.check(_age_derivation(), {"$p": alice, "$age": age})
+    """Run sdk_check(sdk, ...) and extract the captured SupportArtifact."""
+    result = sdk_check(sdk, _age_derivation(), {"$p": alice, "$age": age})
     payload = result.evidence_envelope.engine_payload
     assert isinstance(payload, SupportArtifact), (
         f"native engine should produce SupportArtifact, got {type(payload).__name__}"
@@ -88,7 +90,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
         overlay = _build_overlay(sdk, alice, new_age=30)
 
-        result = sdk.recheck_proof_frame(support, overlay)
+        result = sdk_proof_frame_recheck(sdk, support, overlay)
 
         self.assertIsInstance(result, ProofFrameRecheckResult)
 
@@ -96,7 +98,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.recheck_proof_frame("not-a-support-artifact", EvaluationOverlay())  # type: ignore[arg-type]
+            sdk_proof_frame_recheck(sdk, "not-a-support-artifact", EvaluationOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.support_artifact")
         self.assertIn("SupportArtifact", str(ctx.exception))
@@ -105,7 +107,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.recheck_proof_frame(None, EvaluationOverlay())  # type: ignore[arg-type]
+            sdk_proof_frame_recheck(sdk, None, EvaluationOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.support_artifact")
 
@@ -115,7 +117,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.recheck_proof_frame(support, "not-an-overlay")  # type: ignore[arg-type]
+            sdk_proof_frame_recheck(sdk, support, "not-an-overlay")  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.overlay")
         self.assertIn("EvaluationOverlay", str(ctx.exception))
@@ -136,7 +138,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.recheck_proof_frame(support, (override,))  # type: ignore[arg-type]
+            sdk_proof_frame_recheck(sdk, support, (override,))  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.overlay")
 
@@ -150,7 +152,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             side_effect=ProtocolShapeError("bad request shape"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.recheck_proof_frame(support, EvaluationOverlay())
+                sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.request")
         self.assertIsInstance(ctx.exception.__cause__, ProtocolShapeError)
@@ -165,7 +167,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.recheck_proof_frame(support, EvaluationOverlay())
+                sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
@@ -199,7 +201,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             "factgraph.sdk.shells.proof_frame.recheck_proof_frame",
             side_effect=fake_runtime,
         ):
-            sdk.recheck_proof_frame(support, EvaluationOverlay())
+            sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
 
         self.assertIs(captured["store"], sdk._store)
         self.assertIs(captured["request"].support_artifact, support)
@@ -219,7 +221,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         ) as mock_why_not, patch(
             "factgraph.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay:
-            sdk.recheck_proof_frame(support, EvaluationOverlay())
+            sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
 
         mock_check.assert_not_called()
         mock_diagnose.assert_not_called()

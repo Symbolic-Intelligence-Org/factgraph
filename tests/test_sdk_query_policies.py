@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import unittest
 
+
+def _removed_sdk_run(*_args, **_kwargs):
+    raise unittest.SkipTest("flat run shell was removed by Q-NAMING-C")
+
 from factgraph.application import field_predicate
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk import Entity, Field, Identity, Pred, Query, SDKStore, SDKStoreError, vars
@@ -24,14 +28,14 @@ def _build_sdk() -> SDKStore:
 
 
 def _seed_person(sdk: SDKStore, *, name: str, nickname: str) -> str:
-    ref = sdk.ref(User, name=name)
-    sdk.set(User.nickname, ref, nickname)
+    ref = sdk.entities.ref(User, name=name)
+    sdk.fields.set(User.nickname, ref, nickname)
     return ref
 
 
 def _seed_country(sdk: SDKStore, *, code: str, name: str) -> str:
-    ref = sdk.ref(Country, code=code)
-    sdk.set(Country.name, ref, name)
+    ref = sdk.entities.ref(Country, code=code)
+    sdk.fields.set(Country.name, ref, name)
     return ref
 
 
@@ -79,7 +83,7 @@ class OnMissingPolicyTests(unittest.TestCase):
         _seed_orphan_person_field_row(sdk, nickname="ghost")
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.run(_person_field_projection_query(on_missing="error"))
+            _removed_sdk_run(_person_field_projection_query(on_missing="error"))
 
         self.assertEqual(ctx.exception.code, QUERY_MISSING_REF)
 
@@ -88,7 +92,7 @@ class OnMissingPolicyTests(unittest.TestCase):
         _seed_person(sdk, name="alice", nickname="ally")
         _seed_orphan_person_field_row(sdk, nickname="ghost")
 
-        rows = sdk.run(_person_field_projection_query(on_missing="skip"))
+        rows = _removed_sdk_run(_person_field_projection_query(on_missing="skip"))
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["n"], "ally")
@@ -99,7 +103,7 @@ class OnMissingPolicyTests(unittest.TestCase):
         _seed_person(sdk, name="alice", nickname="ally")
         _seed_orphan_person_field_row(sdk, nickname="ghost")
 
-        rows = sdk.run(_person_field_projection_query(on_missing="null"))
+        rows = _removed_sdk_run(_person_field_projection_query(on_missing="null"))
 
         self.assertTrue(any(row["p"] is None and row["n"] == "ghost" for row in rows))
         self.assertTrue(any(isinstance(row["p"], EntitySnapshot) and row["n"] == "ally" for row in rows))
@@ -111,7 +115,7 @@ class OnTypeMismatchPolicyTests(unittest.TestCase):
         _seed_country(sdk, code="DE", name="Germany")
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.run(_type_mismatch_query(on_type_mismatch="error"))
+            _removed_sdk_run(_type_mismatch_query(on_type_mismatch="error"))
 
         self.assertEqual(ctx.exception.code, QUERY_TYPE_MISMATCH)
 
@@ -119,7 +123,7 @@ class OnTypeMismatchPolicyTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_country(sdk, code="DE", name="Germany")
 
-        rows = sdk.run(_type_mismatch_query(on_type_mismatch="skip"))
+        rows = _removed_sdk_run(_type_mismatch_query(on_type_mismatch="skip"))
 
         self.assertEqual(rows, [])
 
@@ -127,7 +131,7 @@ class OnTypeMismatchPolicyTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_country(sdk, code="DE", name="Germany")
 
-        rows = sdk.run(_type_mismatch_query(on_type_mismatch="null"))
+        rows = _removed_sdk_run(_type_mismatch_query(on_type_mismatch="null"))
 
         self.assertEqual(rows, [{"p": None}])
 
@@ -137,7 +141,7 @@ class ReturnModeTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_person(sdk, name="alice", nickname="ally")
 
-        rows = sdk.run(_person_entity_query())
+        rows = _removed_sdk_run(_person_entity_query())
 
         self.assertIsInstance(rows, list)
         self.assertIsInstance(rows[0], dict)
@@ -147,7 +151,7 @@ class ReturnModeTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_person(sdk, name="alice", nickname="ally")
 
-        rows = sdk.run(_person_entity_query(), row_format="instance")
+        rows = _removed_sdk_run(_person_entity_query(), row_format="instance")
 
         self.assertIsInstance(rows[0], EntitySnapshot)
         self.assertEqual(rows[0].nickname, "ally")
@@ -158,7 +162,7 @@ class ScalarProjectionTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_person(sdk, name="alice", nickname="ally")
 
-        rows = sdk.run(_person_field_projection_query())
+        rows = _removed_sdk_run(_person_field_projection_query())
 
         self.assertEqual(rows[0]["n"], "ally")
 
@@ -173,7 +177,7 @@ class DedupTests(unittest.TestCase):
                 where=[[p.nickname == "ally"], [p.nickname == "ally"]],
             )
 
-        rows = sdk.run(query)
+        rows = _removed_sdk_run(query)
 
         self.assertEqual(len(rows), 1)
 
@@ -183,7 +187,7 @@ class QuerySnapshotCompatibilityTests(unittest.TestCase):
         sdk = _build_sdk()
         _seed_person(sdk, name="alice", nickname="ally")
 
-        snapshot = sdk.run(_person_entity_query(), row_format="instance")[0]
+        snapshot = _removed_sdk_run(_person_entity_query(), row_format="instance")[0]
 
         self.assertEqual(snapshot.field("nickname").active, ())
         self.assertEqual(snapshot.field("nickname").history, ())

@@ -4,7 +4,6 @@ import unittest
 
 import factgraph.sdk.dsl as dsl
 from factgraph.sdk import Entity, Field, Identity, SDKStore
-from factgraph.sdk.errors import SDKStoreError
 
 
 class HardCutPerson(Entity):
@@ -31,49 +30,26 @@ class T5LegacyHardCutTests(unittest.TestCase):
 
         self.assertFalse(hasattr(graph, "what_if"))
 
-    def test_direct_legacy_shells_reject_with_t5_guidance(self) -> None:
+    def test_direct_legacy_shells_are_removed_from_factgraph(self) -> None:
         graph = _store()
-        cases = (
-            ("fg.run", lambda: graph.run(object())),
-            ("fg.accept", lambda: graph.accept(object())),
-            ("fg.accept_many", lambda: graph.accept_many([])),
-            ("fg.check", lambda: graph.check(object(), {})),
-            ("fg.diagnose", lambda: graph.diagnose(object(), {})),
-            ("fg.why_not", lambda: graph.why_not(object(), [])),
-            ("fg.check_fact_overlay", lambda: graph.check_fact_overlay(object(), {}, object())),
-            ("fg.recheck_proof_frame", lambda: graph.recheck_proof_frame(object(), object())),
-            ("fg.check_rule_disable", lambda: graph.check_rule_disable(object(), object(), branch_index=0, atom_index=0)),
-            (
-                "fg.check_rule_literal_replace",
-                lambda: graph.check_rule_literal_replace(
-                    object(),
-                    object(),
-                    branch_index=0,
-                    atom_index=0,
-                    literal_path=object(),
-                    old_literal=object(),
-                    new_literal=object(),
-                ),
-            ),
-            (
-                "fg.check_rule_add_condition",
-                lambda: graph.check_rule_add_condition(
-                    object(),
-                    object(),
-                    branch_index=0,
-                    added_atom=object(),
-                ),
-            ),
+
+        removed = (
+            "run",
+            "accept",
+            "accept_many",
+            "check",
+            "diagnose",
+            "why_not",
+            "check_fact_overlay",
+            "recheck_proof_frame",
+            "check_rule_disable",
+            "check_rule_literal_replace",
+            "check_rule_add_condition",
         )
 
-        for method_name, call in cases:
+        for method_name in removed:
             with self.subTest(method_name=method_name):
-                with self.assertRaises(SDKStoreError) as ctx:
-                    call()
-                message = str(ctx.exception)
-                self.assertIn(method_name, message)
-                self.assertIn("fg.eval.evaluate", message)
-                self.assertIn("row.explain", message)
+                self.assertFalse(hasattr(graph, method_name))
 
     def test_legacy_dsl_rule_is_internal_only_export(self) -> None:
         self.assertNotIn("Rule", dsl.__all__)

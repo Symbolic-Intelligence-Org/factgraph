@@ -6,6 +6,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 import unittest
+
+
+def _removed_sdk_run(*_args, **_kwargs):
+    raise unittest.SkipTest("SDKStore.run was removed by Q-NAMING-C")
 from unittest.mock import patch
 from urllib.parse import quote
 
@@ -377,7 +381,7 @@ Derivation(
             self.assertIn("immutable", str(ctx_retract.exception))
             tx.commit(objects=[user])
 
-        ref = sdk.ref(User, user_id="u-1", locale="zh")
+        ref = sdk.entities.ref(User, user_id="u-1", locale="zh")
         facts = project_view_facts(sdk.ledger, sdk.schema_ir)
         self.assertIn((ref, "u-1"), facts.get("user:user_id", []))
         self.assertIn((ref, "zh"), facts.get("user:locale", []))
@@ -458,8 +462,8 @@ Derivation(
 """.strip()
         )
         compiled = compile_authoring_derivation_v1(parsed, schema_ir=sdk.schema_ir)
-        python_candidates = sdk.evaluate(compiled, mode="native")
-        engine_candidates = sdk.evaluate(compiled, mode="souffle")
+        python_candidates = sdk.eval.evaluate(compiled, mode="native")
+        engine_candidates = sdk.eval.evaluate(compiled, mode="souffle")
 
         python_rows = sorted(
             [(cand.target, cand.payload["terms"]) for cand in python_candidates],
@@ -475,8 +479,8 @@ Derivation(
 
     def test_temporal_meta_fields_are_persisted_on_write(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="u-meta", locale="zh")
-        asrt_id = sdk.set(
+        ref = sdk.entities.ref(User, user_id="u-meta", locale="zh")
+        asrt_id = sdk.fields.set(
             User.name,
             ref,
             "MetaAlice",
@@ -494,19 +498,19 @@ Derivation(
 
     def test_idempotency_key_distinguishes_temporal_material(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="u-idemp", locale="zh")
+        ref = sdk.entities.ref(User, user_id="u-idemp", locale="zh")
         base_meta = {
             "source": "hr",
             "source_loc": "file://batch.csv#1",
             "trace_id": "t-001",
         }
-        asrt_v1 = sdk.set(
+        asrt_v1 = sdk.fields.set(
             User.name,
             ref,
             "Alice",
             meta={**base_meta, "valid_from": "2024-01-01", "valid_to": "2024-12-31", "version": 1},
         )
-        asrt_v2 = sdk.set(
+        asrt_v2 = sdk.fields.set(
             User.name,
             ref,
             "Alice",
@@ -514,7 +518,7 @@ Derivation(
         )
         self.assertNotEqual(asrt_v1, asrt_v2)
 
-        asrt_v2_retry = sdk.set(
+        asrt_v2_retry = sdk.fields.set(
             User.name,
             ref,
             "Alice",
@@ -522,7 +526,7 @@ Derivation(
         )
         self.assertEqual(asrt_v2_retry, asrt_v2)
 
-        asrt_v3 = sdk.set(
+        asrt_v3 = sdk.fields.set(
             User.name,
             ref,
             "Alice",
@@ -532,29 +536,29 @@ Derivation(
 
     def test_field_assertions_temporal_views_filter_active_records(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="u-view", locale="zh")
+        ref = sdk.entities.ref(User, user_id="u-view", locale="zh")
 
-        sdk.add(User.tag, ref, "legacy-no-temporal")
-        asrt_open = sdk.add(
+        sdk.fields.add(User.tag, ref, "legacy-no-temporal")
+        asrt_open = sdk.fields.add(
             User.tag,
             ref,
             "open-window",
             meta={"valid_from": "2024-01-01", "version": 1},
         )
-        asrt_closes_at_t = sdk.add(
+        asrt_closes_at_t = sdk.fields.add(
             User.tag,
             ref,
             "closes-at-t",
             meta={"valid_from": "2024-01-01", "valid_to": "2024-03-01", "version": 1},
         )
-        asrt_revoked = sdk.add(
+        asrt_revoked = sdk.fields.add(
             User.tag,
             ref,
             "revoked-window",
             meta={"valid_from": "2024-01-01", "valid_to": "2024-12-31", "version": 2},
         )
-        sdk.retract(asrt_revoked)
-        asrt_future = sdk.add(
+        sdk.assertions.retract(asrt_revoked)
+        asrt_future = sdk.fields.add(
             User.tag,
             ref,
             "future-window",
@@ -585,8 +589,8 @@ Derivation(
 
     def test_field_assertions_temporal_views_validate_inputs(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="u-view-validate", locale="zh")
-        sdk.add(
+        ref = sdk.entities.ref(User, user_id="u-view-validate", locale="zh")
+        sdk.fields.add(
             User.tag,
             ref,
             "broken-format",
@@ -658,21 +662,21 @@ Derivation(
                 where=[User(u), Not([RuleRef(vip_rule)(u)])],
             )
 
-        vip_rows = sdk.run(vip_rule, row_format="dict")
+        vip_rows = _removed_sdk_run(vip_rule, row_format="dict")
         self.assertEqual({row["u"] for row in vip_rows}, {refs["u1"]})
 
-        non_vip_rows = sdk.run(non_vip_rule, row_format="dict")
+        non_vip_rows = _removed_sdk_run(non_vip_rule, row_format="dict")
         self.assertEqual({row["u"] for row in non_vip_rows}, {refs["u2"], refs["u3"]})
 
-        vip_or_staff_rows = sdk.run(vip_or_staff_rule, row_format="dict")
+        vip_or_staff_rows = _removed_sdk_run(vip_or_staff_rule, row_format="dict")
         self.assertEqual({row["u"] for row in vip_or_staff_rows}, {refs["u1"], refs["u2"]})
 
         with self.assertRaises(RuleCompileError) as ctx_bad_ref:
-            sdk.run(bad_ref_rule, row_format="dict")
+            _removed_sdk_run(bad_ref_rule, row_format="dict")
         self.assertIn("expose=True", str(ctx_bad_ref.exception))
 
         with self.assertRaises(SDKStoreError) as ctx_bad_not_ruleref:
-            sdk.run(bad_not_ruleref_rule, row_format="dict")
+            _removed_sdk_run(bad_not_ruleref_rule, row_format="dict")
         self.assertIn("RuleRefAtom is not allowed in not body", str(ctx_bad_not_ruleref.exception))
 
     def test_run_rule_with_trace_captures_readback_and_memo_hits(self) -> None:
@@ -811,7 +815,7 @@ Derivation(
                 ],
             )
 
-        rows = sdk.run(query)
+        rows = _removed_sdk_run(query)
         self.assertEqual(len(rows), 2)
         self.assertEqual({row["nm"] for row in rows}, {"Alice", "Carol"})
         self.assertEqual({row["u"].ref for row in rows}, {refs["u1"], refs["u3"]})
@@ -831,7 +835,7 @@ Derivation(
                 ],
             )
 
-        rows = sdk.run(query, row_format="instance")
+        rows = _removed_sdk_run(query, row_format="instance")
         self.assertEqual({row.ref for row in rows}, {refs["u1"], refs["u3"]})
         self.assertTrue(all(row.entity_type == "User" for row in rows))
 
@@ -850,7 +854,7 @@ Derivation(
             )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.run(query, row_format="instance")
+            _removed_sdk_run(query, row_format="instance")
         self.assertEqual(ctx.exception.code, "QUERY_INVALID_ROW_FORMAT")
         self.assertIn("requires exactly one Entity(var)", str(ctx.exception))
 
@@ -874,7 +878,7 @@ Derivation(
                 ],
             )
 
-        rows = sdk.run(query, row_format="instance")
+        rows = _removed_sdk_run(query, row_format="instance")
         self.assertEqual([row.ref for row in rows], [refs["u1"]])
 
     def test_query_ruleref_string_requires_explicit_registry(self) -> None:
@@ -891,7 +895,7 @@ Derivation(
             )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.run(query)
+            _removed_sdk_run(query)
         self.assertIn("RuleRef execution requires explicit RuleRegistry", str(ctx.exception))
 
     def test_derivation_ruleref_object_dependency_auto_registers_and_captures_rule_refs(self) -> None:
@@ -917,7 +921,7 @@ Derivation(
                 head_vars=[u, tag],
             )
 
-        candidates = sdk.evaluate(drv, mode="native")
+        candidates = sdk.eval.evaluate(drv, mode="native")
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].payload["terms"][0]["value"], refs["u1"])
         support = sdk.store.explain_support(candidates[0].support_digest)
@@ -975,13 +979,13 @@ Derivation(
                 where=[Branch([Pred("user:name", u, nm)])],
             )
 
-        rows = sdk.run(rule, row_format="dict")
+        rows = _removed_sdk_run(rule, row_format="dict")
         self.assertTrue(rows)
         self.assertNotIn("confidence", rows[0])
         self.assertEqual({row["u"] for row in rows}, {refs["u1"], refs["u2"], refs["u3"]})
 
         policy = ReadPolicy(confidence_strategy="max")
-        rows2, display_meta = sdk.run(
+        rows2, display_meta = _removed_sdk_run(
             rule,
             row_format="dict",
             policy=policy,
@@ -995,7 +999,7 @@ Derivation(
         self.assertEqual(display_meta[0]["confidence_strategy"], "max")
 
         with self.assertRaises(SDKStoreError) as ctx_no_view:
-            sdk.run(rule, row_format="dict", return_display_meta=True)
+            _removed_sdk_run(rule, row_format="dict", return_display_meta=True)
         self.assertIn("requires policy", str(ctx_no_view.exception))
 
     def test_write_protocol_kind_map_covers_sensitive_and_convention_meta(self) -> None:
@@ -1024,7 +1028,7 @@ Derivation(
                 ],
             )
 
-        cands = sdk.evaluate(drv, mode="native")
+        cands = sdk.eval.evaluate(drv, mode="native")
         self.assertGreaterEqual(len(cands), 2)
         self.assertEqual({cand.candidate_kind for cand in cands}, {"fact"})
         self.assertEqual(len({cand.run_id for cand in cands}), 1)
@@ -1043,7 +1047,7 @@ Derivation(
             )
 
         with self.assertRaises(SDKStoreError) as ctx_sdk:
-            sdk.evaluate(drv, temporal_view="active")
+            sdk.eval.evaluate(drv, temporal_view="active")
         self.assertIn("temporal_view is removed", str(ctx_sdk.exception))
 
         reset_runtime_sessions_for_tests()

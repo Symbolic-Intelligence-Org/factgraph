@@ -2,11 +2,11 @@
 
 Phase 2 of G1 (per blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g1-check-diagnose.md`` §8)
-implements the ``SDKStore.diagnose`` facade method.
+implements the ``sdk_diagnose`` facade method.
 
 Public surface contract per blueprint §5 locks:
 
-- Method:      ``SDKStore.diagnose(...)`` (instance method; not a free function
+- Method:      ``sdk_diagnose(...)`` (instance method; not a free function
                in ``factgraph.sdk.__all__`` — see §5.4 lock).
 - Signature:   ``diagnose(inference, binding, *, engine="native", registry=None)``
                (see §5.7 lock; ``inference`` is SDK ``Inference`` only,

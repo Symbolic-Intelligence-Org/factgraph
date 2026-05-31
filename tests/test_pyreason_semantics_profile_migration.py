@@ -83,9 +83,9 @@ def _profile(
 
 def _make_sdk_with_valid_times() -> SDKStore:
     sdk = SDKStore([User])
-    alice_ref = sdk.ref(User, user_id="Alice")
-    bob_ref = sdk.ref(User, user_id="Bob")
-    carol_ref = sdk.ref(User, user_id="Carol")
+    alice_ref = sdk.entities.ref(User, user_id="Alice")
+    bob_ref = sdk.entities.ref(User, user_id="Bob")
+    carol_ref = sdk.entities.ref(User, user_id="Carol")
     set_field(
         sdk.ledger,
         pred_id="user:name",
@@ -760,7 +760,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_time_binned_maps_partial_fact_span_to_covering_bins(self, mock_run) -> None:
         sdk = SDKStore([User])
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         set_field(
             sdk.ledger,
             pred_id="user:name",
@@ -895,7 +895,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_valid_time_boundaries_without_fact_times_uses_universe_only(self, mock_run) -> None:
         sdk = SDKStore([User])
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         set_field(
             sdk.ledger,
             pred_id="user:name",

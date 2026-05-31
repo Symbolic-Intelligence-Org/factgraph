@@ -166,7 +166,7 @@ class ProbLogSemanticsProfileResolverTests(unittest.TestCase):
 class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
     def _make_sdk(self, *, seed_meta: dict[str, object] | None = None) -> SDKStore:
         sdk = SDKStore([User])
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         set_field(
             sdk.ledger,
             pred_id="user:name",
@@ -194,7 +194,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             )
 
     def _mock_output(self, sdk: SDKStore) -> str:
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         return "\n".join(
             [
                 " call query(X1,X2) {0.00000} []",
@@ -209,7 +209,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
         )
 
     def _mock_nested_output(self, sdk: SDKStore) -> str:
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         return "\n".join(
             [
                 " call query(X1,X2) {0.00000} []",
@@ -429,7 +429,7 @@ class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
 
     def test_direct_probability_projection_policies(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="Alice")
+        ref = sdk.entities.ref(User, user_id="Alice")
         asrt_id = set_field(
             sdk.ledger,
             pred_id="user:tag_seed",
@@ -454,7 +454,7 @@ class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
 
     def test_claim_probability_records_projection_decisions_without_changing_return_value(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="Alice")
+        ref = sdk.entities.ref(User, user_id="Alice")
         asrt_id = set_field(
             sdk.ledger,
             pred_id="user:tag_seed",
@@ -486,7 +486,7 @@ class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
 
     def test_identity_probability_requires_degenerate_probabilistic_bound(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="Alice")
+        ref = sdk.entities.ref(User, user_id="Alice")
         asrt_id = set_field(
             sdk.ledger,
             pred_id="user:tag_seed",
@@ -505,7 +505,7 @@ class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
 
     def test_interval_policies_reject_for_problog_point_export(self) -> None:
         sdk = SDKStore([User])
-        ref = sdk.ref(User, user_id="Alice")
+        ref = sdk.entities.ref(User, user_id="Alice")
         asrt_id = set_field(
             sdk.ledger,
             pred_id="user:tag_seed",

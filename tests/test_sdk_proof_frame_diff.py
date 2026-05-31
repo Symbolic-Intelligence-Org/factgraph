@@ -1,9 +1,9 @@
-"""SDKStore.diff_proof_frames contract tests.
+"""fg.audit.diff_proof_frames contract tests.
 
 Phase 1 of G5 (per archived blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g5-round-events-proofframe-diff.md`` §8)
 ships full §5.1 / §5.2 / §5.3 / §5.4 / §5.7 / §5.8 contract coverage
-for ``SDKStore.diff_proof_frames(...)``. Mirrors the G2 ProofFrame
+for ``fg.audit.diff_proof_frames(...)``. Mirrors the G2 ProofFrame
 Recheck per-method contract test structure with diff-specific
 input-rejection tests for raw ``tuple[RoundEvent, ...]`` × 2 and
 ``tuple[WarningDTO, ...]``.
@@ -105,7 +105,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         round_a = _empty_round("round-a")
         round_b = _empty_round("round-b")
 
-        result = sdk.diff_proof_frames(
+        result = sdk.audit.diff_proof_frames(
             "round-a", "round-b", round_a, round_b
         )
 
@@ -118,7 +118,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 123,  # type: ignore[arg-type]
                 "round-b",
                 _empty_round("round-a"),
@@ -132,7 +132,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "",
                 "round-b",
                 _empty_round("round-a"),
@@ -145,7 +145,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "round-a",
                 None,  # type: ignore[arg-type]
                 _empty_round("round-a"),
@@ -158,7 +158,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "round-a",
                 "round-b",
                 list(_empty_round("round-a")),  # type: ignore[arg-type]
@@ -174,7 +174,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "round-a",
                 "round-b",
                 ("not-a-round-event",),  # type: ignore[arg-type]
@@ -189,7 +189,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "round-a",
                 "round-b",
                 _empty_round("round-a"),
@@ -204,7 +204,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "round-a",
                 "round-b",
                 _empty_round("round-a"),
@@ -219,7 +219,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "round-a",
                 "round-b",
                 _empty_round("round-a"),
@@ -234,7 +234,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.diff_proof_frames(
+            sdk.audit.diff_proof_frames(
                 "round-a",
                 "round-b",
                 _empty_round("round-a"),
@@ -261,7 +261,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         for bad_value in ("yes", 1, 0, "", None, [True]):
             with self.subTest(value=bad_value):
                 with self.assertRaises(SDKStoreError) as ctx:
-                    sdk.diff_proof_frames(
+                    sdk.audit.diff_proof_frames(
                         "round-a",
                         "round-b",
                         round_a,
@@ -281,7 +281,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
 
         for good_value in (True, False):
             with self.subTest(value=good_value):
-                result = sdk.diff_proof_frames(
+                result = sdk.audit.diff_proof_frames(
                     "round-a",
                     "round-b",
                     round_a,
@@ -303,7 +303,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
             side_effect=ProofFrameDiffError("simulated payload error"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.diff_proof_frames("round-a", "round-b", round_a, round_b)
+                sdk.audit.diff_proof_frames("round-a", "round-b", round_a, round_b)
 
         self.assertEqual(ctx.exception.path, "$.diff_proof_frames.request")
         self.assertIsInstance(ctx.exception.__cause__, ProofFrameDiffError)
@@ -321,7 +321,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.diff_proof_frames("round-a", "round-b", round_a, round_b)
+                sdk.audit.diff_proof_frames("round-a", "round-b", round_a, round_b)
 
         self.assertEqual(ctx.exception.path, "$.diff_proof_frames")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
@@ -362,7 +362,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
             atom_verdicts=[{"atom_key": "atom-1", "verdict": "invalidated"}],
         )
 
-        result = sdk.diff_proof_frames(
+        result = sdk.audit.diff_proof_frames(
             "round-a", "round-b", round_a, round_b
         )
 
@@ -396,7 +396,7 @@ class SDKDiffProofFramesContractTests(unittest.TestCase):
         ) as mock_rule_literal_replace, patch(
             "factgraph.sdk.shells.rule_add_condition.sdk_rule_add_condition"
         ) as mock_rule_add_condition:
-            sdk.diff_proof_frames("round-a", "round-b", round_a, round_b)
+            sdk.audit.diff_proof_frames("round-a", "round-b", round_a, round_b)
 
         mock_check.assert_not_called()
         mock_diagnose.assert_not_called()

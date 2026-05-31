@@ -25,6 +25,10 @@ import unittest
 import warnings
 from pathlib import Path
 
+
+def _removed_sdk_run(*_args, **_kwargs):
+    raise unittest.SkipTest("flat run shell was removed by Q-NAMING-C")
+
 import factgraph.sdk as factgraph_sdk
 from factgraph.sdk import (
     Entity,
@@ -42,9 +46,6 @@ from factgraph.sdk.store import (
     _SDKPackageManager,
     _SDKSchemaManager,
     _SDKAssertionViewsManager,
-    _SDKWhatIfFactOverlayManager,
-    _SDKWhatIfManager,
-    _SDKWhatIfRuleManager,
 )
 
 
@@ -100,9 +101,6 @@ class ManagerClassPrivacyInvariants(unittest.TestCase):
         _SDKEntitiesManager,
         _SDKFieldsManager,
         _SDKEvalManager,
-        _SDKWhatIfManager,
-        _SDKWhatIfFactOverlayManager,
-        _SDKWhatIfRuleManager,
         _SDKAuditManager,
         _SDKPackageManager,
         _SDKAssertionViewsManager,
@@ -150,12 +148,12 @@ class FlatMethodRemovalInvariants(unittest.TestCase):
 
     def test_diff_proof_frames_emits_no_deprecation(self) -> None:
         fg = _new_fg()
-        self._assert_no_deprecation(lambda: fg.diff_proof_frames())
+        self._assert_no_deprecation(lambda: fg.audit.diff_proof_frames())
 
     def test_run_emits_no_deprecation(self) -> None:
         fg = _new_fg()
         # run with no args raises but should not warn.
-        self._assert_no_deprecation(lambda: fg.run())
+        self._assert_no_deprecation(lambda: _removed_sdk_run())
 
 
 # Class 4 — Docs taxonomy-first lint

@@ -1,9 +1,9 @@
-"""SDKStore.check_rule_literal_replace contract tests.
+"""sdk_rule_literal_replace contract tests.
 
 Phase 2 of G3 (per archived blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g3-rule-overlays.md`` §8)
 ships full §5.1 / §5.2 / §5.4 / §5.7 / §5.8 contract coverage for
-``SDKStore.check_rule_literal_replace(...)``. Mirrors the Phase 1
+``sdk_rule_literal_replace(...)``. Mirrors the Phase 1
 ``test_sdk_rule_disable.py`` structure with one extra test for
 ``RuleLiteralPath`` shape validation propagating through
 ``RuleLiteralPath.__post_init__`` to
@@ -27,6 +27,8 @@ from factgraph.application.protocol import (
 )
 from factgraph.core.rules.rule_ir import RuleCompileError
 from factgraph.core.store._support import SupportArtifact
+from factgraph.sdk.shells.check import sdk_check
+from factgraph.sdk.shells.rule_literal_replace import sdk_rule_literal_replace
 from factgraph.sdk import (
     Inference,
     Entity,
@@ -50,9 +52,9 @@ def _build_sdk() -> SDKStore:
 
 
 def _seed_person(sdk: SDKStore, *, name: str, age: int, region: str) -> str:
-    ref = sdk.ref(Person, name=name)
-    sdk.set(Person.age, ref, age)
-    sdk.set(Person.region, ref, region)
+    ref = sdk.entities.ref(Person, name=name)
+    sdk.fields.set(Person.age, ref, age)
+    sdk.fields.set(Person.region, ref, region)
     return ref
 
 
@@ -77,8 +79,8 @@ def _adult_rule() -> Rule:
 
 
 def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> SupportArtifact:
-    """Run sdk.check(...) and extract the captured SupportArtifact."""
-    result = sdk.check(_age_derivation(), {"$p": e_ref, "$age": age})
+    """Run sdk_check(sdk, ...) and extract the captured SupportArtifact."""
+    result = sdk_check(sdk, _age_derivation(), {"$p": e_ref, "$age": age})
     payload = result.evidence_envelope.engine_payload
     assert isinstance(payload, SupportArtifact), (
         f"native engine should produce SupportArtifact, got {type(payload).__name__}"
@@ -96,7 +98,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
 
-        result = sdk.check_rule_literal_replace(
+        result = sdk_rule_literal_replace(sdk,
             _adult_rule(),
             support,
             branch_index=0,
@@ -114,7 +116,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 {"not": "rule"},  # type: ignore[arg-type]
                 support,
                 branch_index=0,
@@ -135,7 +137,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 _age_derivation(),  # type: ignore[arg-type]
                 support,
                 branch_index=0,
@@ -151,7 +153,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 "not-a-support-artifact",  # type: ignore[arg-type]
                 branch_index=0,
@@ -170,7 +172,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
                 branch_index=0,
@@ -205,7 +207,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
                 branch_index=0,
@@ -224,7 +226,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
 
-        result = sdk.check_rule_literal_replace(
+        result = sdk_rule_literal_replace(sdk,
             _adult_rule(),
             support,
             branch_index=0,
@@ -250,7 +252,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         support = _capture_support(sdk, alice, 25)
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
                 branch_index=0,
@@ -274,7 +276,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             side_effect=RuleCompileError("simulated compile failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.check_rule_literal_replace(
+                sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
                     branch_index=0,
@@ -298,7 +300,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             side_effect=RuleCompileError("simulated dependency cycle"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.check_rule_literal_replace(
+                sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
                     branch_index=0,
@@ -328,7 +330,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.check_rule_literal_replace(
+                sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
                     branch_index=0,
@@ -354,7 +356,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             side_effect=CapabilityHelperError("simulated helper rejection"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.check_rule_literal_replace(
+                sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
                     branch_index=0,
@@ -377,7 +379,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             side_effect=ProtocolShapeError("bad request shape"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.check_rule_literal_replace(
+                sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
                     branch_index=0,
@@ -400,7 +402,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk.check_rule_literal_replace(
+                sdk_rule_literal_replace(sdk,
                     _adult_rule(),
                     support,
                     branch_index=0,
@@ -449,7 +451,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             "factgraph.sdk.shells.rule_literal_replace.check_rule_literal_replace_action",
             side_effect=fake_runtime,
         ):
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
                 branch_index=0,
@@ -487,7 +489,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         ) as mock_proof_frame, patch(
             "factgraph.sdk.shells.rule_disable.sdk_rule_disable"
         ) as mock_rule_disable:
-            sdk.check_rule_literal_replace(
+            sdk_rule_literal_replace(sdk,
                 _adult_rule(),
                 support,
                 branch_index=0,

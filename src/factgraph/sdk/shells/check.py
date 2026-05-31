@@ -2,11 +2,11 @@
 
 Phase 1 of G1 (per blueprint
 ``docs/blueprints/archive/2026-05-08_l-direction-g1-check-diagnose.md`` §8)
-implements the ``SDKStore.check`` facade method.
+implements the ``sdk_check`` facade method.
 
 Public surface contract per blueprint §5 locks:
 
-- Method:      ``SDKStore.check(...)`` (instance method; not a free function in
+- Method:      ``sdk_check(...)`` (instance method; not a free function in
                ``factgraph.sdk.__all__`` — see §5.4 lock).
 - Signature:   ``check(inference, binding, *, engine="native", registry=None)``
                (see §5.7 lock; ``inference`` is SDK ``Inference`` only,

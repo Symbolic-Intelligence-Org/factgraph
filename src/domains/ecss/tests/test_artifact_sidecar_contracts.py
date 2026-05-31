@@ -240,7 +240,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                 ],
                 head=User.tag(locale=loc, tag=tag),
             )
-        candidates = sdk.evaluate(drv, mode="native")
+        candidates = sdk.eval.evaluate(drv, mode="native")
         self.assertTrue(candidates)
         self.assertEqual(candidates[0].support_kind, "native_binding_v1")
         support_digest = candidates[0].support_digest
@@ -319,7 +319,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                 head=User.tag(locale=loc, tag=tag),
             )
 
-        candidates = sdk.evaluate(drv, mode="native")
+        candidates = sdk.eval.evaluate(drv, mode="native")
         self.assertTrue(candidates)
         for candidate in candidates:
             digest = sdk.store.get_candidate_support_digest(candidate.candidate_id)
@@ -745,7 +745,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                     head=User.tag(locale="zh", tag=tag),
                 )
 
-            candidates = writer.evaluate(drv, mode="native")
+            candidates = writer.eval.evaluate(drv, mode="native")
             self.assertTrue(candidates)
             support_digest = candidates[0].support_digest
 
