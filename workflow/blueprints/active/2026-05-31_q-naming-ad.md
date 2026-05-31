@@ -1,8 +1,8 @@
 # Q-NAMING-AD Blueprint: Assertions naming polish + Persistence rename
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-05-31
-- Last Updated: 2026-05-31
+- Last Updated: 2026-05-31(implemented after Step 4.7 review pass at `36e2a4a7`)
 - Related Modules:
   - `src/factgraph/sdk/` (SDK facade — primary blast radius)
   - `src/factgraph/core/store/` (FrozenAssertionView core class — dual rename per §4.2)
@@ -234,21 +234,21 @@ Out-of-scope grep hits remain historical / archive / working material (for examp
 
 ## 7. Acceptance
 
-- [ ] G1: `fg.views` removed; `fg.assertion_views` present with same operational semantics
-- [ ] G2: `FrozenAssertionView` removed from both core and SDK; `FrozenAssertionSet` present at both layers; `__all__` exports updated
-- [ ] G3: `by_ids(strict=True)` on both surfaces ([`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) and [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py)) with explicit raise on missing/duplicate ID; default `strict=False` preserves permissive behavior
-- [ ] G4: `fg.audit.explain_fact` removed; `fg.audit.explain(target)` accepts `str | AssertionRecord` with semantic preservation
-- [ ] G5: `fg.audit.conflicts(pred_id, e_ref)` signature replaced with `fg.audit.conflicts(record | (entity, field))` with semantic preservation
-- [ ] G6: `fg.save` removed; `fg.save_workspace` present at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py). [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py) `BatchHandle.save` preserved as-is per P2-1 (out of scope: batch commit alias, not workspace persistence)
-- [ ] G7: `FactGraph.load` classmethod removed; `FactGraph.load_workspace` present
-- [ ] G8: No alias methods, no dual-emit, no deprecation properties anywhere in §5.1 / §5.2 surfaces
-- [ ] G9: Workspace file format binary unchanged (verify: load old workspace file with new method succeeds)
-- [ ] G10: Module docs updated; current SDK docs / quickstarts / current examples migrated
-- [ ] Q-PR1 sacred 5 paths 0-diff vs `4c472b50` confirmed at impl commit HEAD
-- [ ] Sacred master `562c74...` unchanged through slice
-- [ ] Dirty baseline preserved (no baseline file in `git diff --cached`)
-- [ ] All targeted tests pass; full-kernel test suite acknowledged unrelated baseline failures recorded in §10 if any
-- [ ] No push without explicit user authorization
+- [x] G1: `fg.views` removed; `fg.assertion_views` present with same operational semantics
+- [x] G2: `FrozenAssertionView` removed from both core and SDK; `FrozenAssertionSet` present at both layers; `__all__` exports updated
+- [x] G3: `by_ids(strict=True)` on both surfaces ([`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) and [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py)) with explicit raise on missing/duplicate ID; default `strict=False` preserves permissive behavior
+- [x] G4: `fg.audit.explain_fact` removed; `fg.audit.explain(target)` accepts `str | AssertionRecord` with semantic preservation
+- [x] G5: `fg.audit.conflicts(pred_id, e_ref)` signature replaced with `fg.audit.conflicts(record | (entity, field))` with semantic preservation
+- [x] G6: `fg.save` removed; `fg.save_workspace` present at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py). [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py) `BatchHandle.save` preserved as-is per P2-1 (out of scope: batch commit alias, not workspace persistence)
+- [x] G7: `FactGraph.load` classmethod removed; `FactGraph.load_workspace` present
+- [x] G8: No alias methods, no dual-emit, no deprecation properties anywhere in §5.1 / §5.2 surfaces
+- [x] G9: Workspace file format binary unchanged (verify: load old workspace file with new method succeeds)
+- [x] G10: Module docs updated; current SDK docs / quickstarts / current examples migrated
+- [x] Q-PR1 sacred 5 paths 0-diff vs `4c472b50` confirmed at impl commit HEAD
+- [x] Sacred master `562c74...` unchanged through slice
+- [x] Dirty baseline preserved (no baseline file in `git diff --cached`)
+- [x] All targeted tests pass; full-kernel test suite acknowledged unrelated baseline failures recorded in §10 if any
+- [x] No push without explicit user authorization
 
 ## 8. Implementation Plan
 
@@ -290,4 +290,105 @@ Out-of-scope grep hits remain historical / archive / working material (for examp
 
 ## 10. Outcome / Deviations
 
-(To be filled at Step 4.8 closure.)
+### §10.1 Final Landing Result
+
+| Step | Commit / artifact | Result |
+|---|---|---|
+| Stage 1 | `10de33b9` feasibility audit | Batch A/D feasibility and hidden dependency scan complete. |
+| Stage 2 | `f1a017ec` Q-NAMING adopted | Q-NAMING decision adopted after D1 branch recovery + D2 filename resolution. |
+| Step 4.1 | `cae6b059` | Q-NAMING-AD blueprint draft created. |
+| Step 4.2 | `31e951f1` | Review amend applied P2-1 / P2-2 / P3-1 / P3-2. |
+| Step 4.3 | `a0d2ba82` preflight artifact | Mandatory preflight passed; B2 workspace persistence did not block AD. |
+| Step 4.4 | `18da88b9` | PF-R1 / PF-r1 / PF-r2 amendments landed. |
+| Step 4.6 | `62c0c55a` | Scoped anchor. |
+| Step 4.6.5 | `4874a76e` | Pre-implementation grep amendment folded exact targets into scope. |
+| Step 4.7 | `36e2a4a7` | Implementation landed: 31 files, +441 / -327. |
+| Step 4.8 | this commit | Status flipped to `implemented`; outcome recorded. |
+
+Acceptance result: 15 / 15 checkboxes complete.
+
+### §10.2 Implementation Choices
+
+- **PF-R1**: implemented Option (a). `_SDKAuditManager` now uses private helpers (`_resolve_record_asrt_id`, `_claim_for_audit_target`, `_conflict_cell_for_target`) to resolve assertion targets and call existing store/core query paths. `_queries.py` stayed unchanged.
+- **PF-r1**: both `by_ids` surfaces implement duplicate detection before `set(...)` deduplication when `strict=True`; missing IDs raise under strict mode; default permissive behavior remains.
+- **PF-r2**: `DatabaseFrozenAssertionView` import alias and all internal references were renamed to `DatabaseFrozenAssertionSet`; SDK and core public classes are `FrozenAssertionSet`.
+- **P2-1 preserved**: `BatchHandle.save` remains untouched because it is a batch commit alias, not workspace persistence.
+- **P2-2 preserved**: flat `SDKStore.explain_fact` / `SDKStore.conflicts` remain untouched as Q-NAMING-C deletion debt.
+- **PF-s1**: permissive `strict=False` ordering behavior remains whatever each existing surface already exposed; strict mode only adds validation.
+
+### §10.3 Runtime / API Behavior
+
+- `fg.assertion_views` replaces `fg.views`.
+- `FrozenAssertionSet` replaces `FrozenAssertionView` in core database and SDK layers.
+- `fg.assertions.by_ids(..., strict=True)` and `AssertionView.by_ids(..., strict=True)` reject duplicates before deduplication and reject missing IDs.
+- `fg.audit.explain(record_or_asrt_id)` returns chosen-policy state for the assertion's fact cell and includes `asrt_id` + `chosen`.
+- `fg.audit.conflicts(record_or_asrt_id)` and `fg.audit.conflicts((entity_ref_or_snapshot, field_name_or_descriptor))` return current conflict diagnostics.
+- `fg.save_workspace(...)` and `FactGraph.load_workspace(...)` replace workspace persistence method names.
+
+### §10.4 Tests And Verification
+
+Step 4.7 implementation verification:
+
+- Direct Q-NAMING-AD scope suites: 80 pass, 3 skipped, 0 errors.
+- Broader §5.6 inventory suites: 177 ran, 29 errors, 18 skipped. The 29 errors were independently reproduced at `4874a76e` pre-implementation HEAD and are unrelated baseline failures from Uncertainty Phase 1 (`meta[confidence] was removed. Use raw_kind / bound for uncertainty inputs`).
+- Codex target suites before review: 206 tests passed, 12 skipped.
+- API smoke passed for `assertion_views`, strict `by_ids`, `audit.explain`, `audit.conflicts`, `save_workspace`, and `load_workspace`.
+- `PYTHONPATH=src python -m compileall -q src` clean.
+- `git diff --check` clean.
+- Targeted `ruff check` on implementation files clean.
+- Broad `ruff check src tests` still fails on unrelated baseline lint in `src/agent/`, `src/domains/`, `src/service/`, and pre-existing `FileAuthoringRegistry` test references.
+
+### §10.5 Scope Grep Result
+
+Independent old-surface grep found no stale live API usage for:
+
+- `FrozenAssertionView`
+- `DatabaseFrozenAssertionView`
+- `fg.views`
+- `fg.save(`
+- `FactGraph.load(`
+- `fg.audit.explain_fact`
+- old positional `fg.audit.conflicts(pred_id, e_ref)` usage
+
+Remaining related strings are legitimate: new `fg.audit.conflicts(...)` usage, error-message text, `docs/references/working/` historical carve-out material, and `paths.views` workspace-directory naming unrelated to the SDK namespace.
+
+### §10.6 Docs Landed
+
+Updated current docs and examples in scope:
+
+- `src/factgraph/sdk/docs/*`
+- `src/factgraph/core/store/docs/README.md`
+- `src/factgraph/application/docs/01_overview_en.md`
+- `src/factgraph/authoring/docs/01_overview.md`
+- `src/service/docs/04_rules_registry.md`
+- `docs/official/kernel/quickstart/database.md`
+- `docs/official/kernel/quickstart/persistence.md`
+- `docs/official/kernel/quickstart/namespace-map.md`
+- `examples/05_sdk_assertion_views.ipynb`
+- `src/factgraph/cli.py`
+
+Historical / archive / working material remains out of scope per Q-NAMING §4.8.5.
+
+### §10.7 Sacred / Dirty Preservation
+
+- Q-PR1 sacred 5 paths: 0-diff vs `4c472b50`.
+- Sacred `master`: `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged.
+- Dirty baseline preserved and left unstaged: 4 modified files, 2 deleted `.gitkeep` files, 2 untracked entries.
+- No push performed.
+
+### §10.8 Carry-Forward
+
+- Q-NAMING-C owns flat shell deletion (`SDKStore.explain_fact`, `SDKStore.conflicts`, and related flat SDK shells).
+- Q-NAMING-B2 owns branch/atom field migration and any wire/persistence hard-cut work.
+- Q-NAMING-F owns engine config / semantics digest rename work.
+- Existing broad ruff/test baseline debt remains outside Q-NAMING-AD.
+
+### §10.9 Archive Cadence
+
+Next step:
+
+1. Move `workflow/blueprints/active/2026-05-31_q-naming-ad.md` to `workflow/blueprints/archive/`.
+2. Move `workflow/blueprints/active/2026-05-31_q-naming-ad.audit.md` to `workflow/blueprints/archive/`.
+3. Add a dense `q-naming-ad` row to `workflow/blueprints/archive/INVENTORY.md`.
+4. Add an `archived` row to the audit log and flip the audit state if present.
+5. Commit archive move locally; do not push without explicit user authorization.
