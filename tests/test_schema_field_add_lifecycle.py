@@ -429,12 +429,12 @@ class SchemaFieldAddWorkspaceTests(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             fg, _, _ = _seed_fg(path=workspace)
-            fg.save()
+            fg.save_workspace()
             old_manifest = _read_manifest(workspace)
 
             result = fg.schema.apply(_user_with_nickname())
             after_add_manifest = _read_manifest(workspace)
-            fg.save()
+            fg.save_workspace()
             after_save_manifest = _read_manifest(workspace)
 
         self.assertEqual(after_add_manifest["schema_digest"], old_manifest["schema_digest"])
@@ -447,8 +447,8 @@ class SchemaFieldAddWorkspaceTests(unittest.TestCase):
             NewUser = _user_with_nickname()
 
             fg.schema.apply(NewUser)
-            fg.save()
-            loaded = FactGraph.load(workspace, schema_classes=[NewUser])
+            fg.save_workspace()
+            loaded = FactGraph.load_workspace(workspace, schema_classes=[NewUser])
 
         self.assertEqual(schema_digest(loaded.schema_ir), schema_digest(fg.schema_ir))
 
@@ -457,10 +457,10 @@ class SchemaFieldAddWorkspaceTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg, OldUser, _ = _seed_fg(path=workspace)
             fg.schema.apply(_user_with_nickname())
-            fg.save()
+            fg.save_workspace()
 
             with self.assertRaises(SDKStoreError) as ctx:
-                FactGraph.load(workspace, schema_classes=[OldUser])
+                FactGraph.load_workspace(workspace, schema_classes=[OldUser])
 
         self.assertIn("schema_digest", str(ctx.exception))
 
@@ -554,8 +554,8 @@ class SchemaFieldAddPreservationTests(unittest.TestCase):
             NewUser = _user_with_nickname()
             fg.schema.apply(NewUser)
 
-            fg.save()
-            loaded = FactGraph.load(workspace, schema_classes=[NewUser])
+            fg.save_workspace()
+            loaded = FactGraph.load_workspace(workspace, schema_classes=[NewUser])
 
         self.assertEqual(schema_digest(loaded.schema_ir), schema_digest(fg.schema_ir))
 

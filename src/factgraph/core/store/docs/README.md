@@ -57,7 +57,7 @@ SQLite writes remains a future storage-hardening concern.
 ## Frozen Assertion View Persistence
 
 `Database.create_view(name, asrt_ids, *, base=None)` creates anonymous,
-content-addressed `FrozenAssertionView` objects for new-layout workspaces only.
+content-addressed `FrozenAssertionSet` objects for new-layout workspaces only.
 Memory-mode and legacy-ledger-mode Databases reject durable view persistence.
 
 The canonical view record has six fields: `name`, `db_id`, `base_tx_id`,
@@ -74,8 +74,8 @@ future snapshot/attach slice.
 
 Membership validation checks that each `asrt_id` exists as a ledger claim. It
 does not require assertions to be active; revoked assertions may remain in a
-frozen view scope per Q5. SDK in-memory `_SDKViewsManager` views and
-`fg.save(...)` compatibility behavior remain separate and unchanged.
+frozen view scope per Q5. SDK in-memory `_SDKAssertionViewsManager` views and
+`fg.save_workspace(...)` compatibility behavior remain separate and unchanged.
 
 ## Attach Lifecycle
 
@@ -88,9 +88,9 @@ route through `fg.commit_assertions(...)`, which delegates to
 Attached runtimes reject the shipped SDK mutation surfaces (`fg.set`,
 `fg.add`, `fg.retract`, `fg.edit`, `fg.ingest`, `fg.add_schema_classes`,
 `fg.save_rule`, `fg.save_inference`, `fg.accept`, `fg.accept_many`,
-`fg.batch`, `fg.save`, and the corresponding manager delegates) because those
+`fg.batch`, `fg.save_workspace`, and the corresponding manager delegates) because those
 paths bypass the Database boundary. Non-attached `FactGraph.create`,
-`FactGraph.from_schema_classes`, and `FactGraph.load` runtimes keep the shipped
+`FactGraph.from_schema_classes`, and `FactGraph.load_workspace` runtimes keep the shipped
 behavior.
 
 View-scoped attach is shipped through `FactGraph.attach(db, view=view)` and is

@@ -220,7 +220,7 @@ A20(E) registry final-exit 后，下列 registry read routes 已从 service v1
 
 迁移方法：
 
-- schema/workspace 读取走 `FactGraph.load(...)` / workspace APIs。
+- schema/workspace 读取走 `FactGraph.load_workspace(...)` / workspace APIs。
 - 客户端构造 in-memory `Rule(...)` 并在 runtime session 内通过
   `/v1/runtime/sessions/{session_id}/ephemeral-rules` 注册 ephemeral rule，
   然后调用 `/rules/run`。

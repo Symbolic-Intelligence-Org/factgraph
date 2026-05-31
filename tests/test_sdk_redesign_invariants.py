@@ -41,7 +41,7 @@ from factgraph.sdk.store import (
     _SDKFieldsManager,
     _SDKPackageManager,
     _SDKSchemaManager,
-    _SDKViewsManager,
+    _SDKAssertionViewsManager,
     _SDKWhatIfFactOverlayManager,
     _SDKWhatIfManager,
     _SDKWhatIfRuleManager,
@@ -105,7 +105,7 @@ class ManagerClassPrivacyInvariants(unittest.TestCase):
         _SDKWhatIfRuleManager,
         _SDKAuditManager,
         _SDKPackageManager,
-        _SDKViewsManager,
+        _SDKAssertionViewsManager,
     )
 
     def test_all_manager_class_names_are_private(self) -> None:

@@ -72,7 +72,7 @@ class DatabaseValue:
 
 
 @dataclass(frozen=True)
-class FrozenAssertionView:
+class FrozenAssertionSet:
     name: str
     db_id: str
     base_tx_id: str
@@ -481,7 +481,7 @@ class Database:
         asrt_ids: Iterable[str],
         *,
         base: DatabaseValue | None = None,
-    ) -> FrozenAssertionView:
+    ) -> FrozenAssertionSet:
         if self._workspace_paths is None:
             raise DatabaseError("durable view persistence requires a new-layout Database workspace")
 
@@ -500,7 +500,7 @@ class Database:
             schema_digest=head.schema_digest,
             asrt_ids=normalized_ids,
         )
-        view = FrozenAssertionView(
+        view = FrozenAssertionSet(
             name=normalized_name,
             db_id=head.db_id,
             base_tx_id=head.tx_id,
@@ -644,7 +644,7 @@ def _write_schema_object(
     _write_once_bytes(schema_path, schema_bytes)
 
 
-def _write_view_object(paths: DatabaseWorkspacePaths, view: FrozenAssertionView) -> None:
+def _write_view_object(paths: DatabaseWorkspacePaths, view: FrozenAssertionSet) -> None:
     expected_digest = view_digest_for(
         db_id=view.db_id,
         base_tx_id=view.base_tx_id,
@@ -656,7 +656,7 @@ def _write_view_object(paths: DatabaseWorkspacePaths, view: FrozenAssertionView)
     _write_once_bytes(_view_object_path(paths, view.view_digest), _json_bytes(_view_object_payload(view)))
 
 
-def _view_object_payload(view: FrozenAssertionView) -> dict[str, Any]:
+def _view_object_payload(view: FrozenAssertionSet) -> dict[str, Any]:
     return {
         "asrt_ids": list(view.asrt_ids),
         "base_tx_id": _require_token(view.base_tx_id, prefix="tx:", field="base_tx_id"),
@@ -1084,7 +1084,7 @@ __all__ = [
     "DatabaseValue",
     "DatabaseWorkspacePaths",
     "DuplicateAssertionError",
-    "FrozenAssertionView",
+    "FrozenAssertionSet",
     "MetaEntry",
     "asrt_id_for",
     "assertion_digest_for",

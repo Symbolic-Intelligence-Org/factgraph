@@ -107,22 +107,22 @@ Persisted proof-frame comparison remains under `fg.audit.*`.
 
 ## 2. Frozen assertion views
 
-`fg.views` is for **named frozen assertion membership**.
+`fg.assertion_views` is for **named frozen assertion membership**.
 
 ```python
 # Named frozen assertion-id membership.
-review = fg.views.create("review_set", asrt_ids=[asrt_id])
+review = fg.assertion_views.create("review_set", asrt_ids=[asrt_id])
 records = fg.assertions.by_ids(review.asrt_ids)
 ```
 
-`fg.views` stores only `FrozenAssertionView` objects. A frozen view is a
+`fg.assertion_views` stores only `FrozenAssertionSet` objects. A frozen view is a
 named set of concrete `asrt_id` strings captured at creation time. The
 membership does not grow automatically when new assertions are written.
 The view is useful when users need a stable review set, audit selection,
 or hand-curated assertion universe.
 
 There is no built-in `default` view. The name `"default"` is not
-reserved: if users create `fg.views.create("default", asrt_ids=[...])`,
+reserved: if users create `fg.assertion_views.create("default", asrt_ids=[...])`,
 it is just another frozen assertion-id selection and has no special read
 behavior. Frozen views are read back through `fg.assertions.by_ids(...)`;
 they are not accepted as `fg.entities.where(...)` or
@@ -294,7 +294,7 @@ prefers to add wrappers after seeing real usage patterns.
 | String DSL | `sdk.run("...")` / `sdk.evaluate("...")` are unsupported |
 | `find(...)` | No `temporal_view`; identity filters may be partial, including primary-only filters |
 | Assertion view surface | `.chosen` is removed; field assertion collections expose `active`, `history`, `at`, `version`; `AssertionRecordSet` also supports `where`, `at`, `version`, `by_id`, `one`, `first`, `all` |
-| Frozen assertion views | `fg.views` supports named frozen assertion-id selections only; no built-in `default` view and no read-policy registry |
+| Frozen assertion views | `fg.assertion_views` supports named frozen assertion-id selections only; no built-in `default` view and no read-policy registry |
 | Snapshot history | `active` returns currently non-revoked assertions; `history` returns the append-only field assertion history |
 | `sdk.run(...)` dispatch | Removed by the T5 hard-cut; use `fg.eval.evaluate(...)` for Rule/Inference evidence paths |
 | `sdk.evaluate(...)` params | `temporal_view` is removed and fails explicitly |

@@ -159,7 +159,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.ingest": lambda: fg.ingest({}),
             "fg.add_schema_classes": lambda: fg.add_schema_classes(Account),
             "fg.batch": lambda: fg.batch(),
-            "fg.save": lambda: fg.save(),
+            "fg.save_workspace": lambda: fg.save_workspace(),
         }
 
         for method_name, call in write_calls.items():
@@ -190,9 +190,9 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.entities.edit": lambda: fg.entities.edit(User, user_id="u-1"),
             "fg.schema.ingest": lambda: fg.schema.ingest({}),
             "fg.schema.apply": lambda: fg.schema.apply(Account),
-            "fg.views.create": lambda: fg.views.create("review", asrt_ids=[]),
-            "fg.views.update": lambda: fg.views.update("review", asrt_ids=[]),
-            "fg.views.delete": lambda: fg.views.delete("review"),
+            "fg.assertion_views.create": lambda: fg.assertion_views.create("review", asrt_ids=[]),
+            "fg.assertion_views.update": lambda: fg.assertion_views.update("review", asrt_ids=[]),
+            "fg.assertion_views.delete": lambda: fg.assertion_views.delete("review"),
         }
 
         for method_name, call in manager_calls.items():
@@ -207,13 +207,13 @@ class DBAttachLifecycleTests(unittest.TestCase):
         ref = fg.entities.ref(User, user_id="u-1")
         asrt_id = fg.fields.set(User.name, ref, "Ada")
 
-        view = fg.views.create("review", asrt_ids=[asrt_id])
+        view = fg.assertion_views.create("review", asrt_ids=[asrt_id])
 
         self.assertEqual(view.asrt_ids, frozenset({asrt_id}))
-        self.assertIs(fg.views.get("review"), view)
+        self.assertIs(fg.assertion_views.get("review"), view)
         self.assertIsNotNone(fg.batch())
         with self.assertRaises(FrozenSnapshotError):
-            fg.views.created_elsewhere = object()
+            fg.assertion_views.created_elsewhere = object()
 
     def test_multiple_attaches_commit_against_current_database_head(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
@@ -284,7 +284,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
             with self.assertRaisesRegex(SDKStoreError, "view-attached runtimes are read-only"):
                 scoped.commit_assertions(_entity_assertions(scoped, "u-2", "Grace"))
             with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
-                scoped.views.create("another", asrt_ids=[])
+                scoped.assertion_views.create("another", asrt_ids=[])
 
     def test_attach_with_view_rejects_in_memory_view_and_stale_database_anchors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -292,7 +292,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
             writer = FactGraph.attach(db, schema_classes=[User])
             result = writer.commit_assertions(_entity_assertions(writer, "u-1", "Ada"))
             view = db.create_view("ada", [record.asrt_id for record in result.assertions])
-            memory_view = FactGraph.from_schema_classes([User]).views.create(
+            memory_view = FactGraph.from_schema_classes([User]).assertion_views.create(
                 "memory",
                 asrt_ids=[result.assertions[0].asrt_id],
             )

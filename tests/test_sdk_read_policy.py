@@ -30,7 +30,7 @@ from factgraph.sdk import (
     SDKStore,
     SDKStoreError,
 )
-from factgraph.sdk.store import FrozenAssertionView
+from factgraph.sdk.store import FrozenAssertionSet
 
 
 class User(Entity):
@@ -41,10 +41,10 @@ class User(Entity):
 
 def _seed_store() -> tuple[SDKStore, dict[str, str]]:
     sdk = SDKStore([User])
-    ref = sdk.ref(User, user_id="u-1")
+    ref = sdk.entities.ref(User, user_id="u-1")
     ids = {
-        "name": sdk.set(User.name, ref, "Alice", meta={"source": "seed", "confidence": 0.91}),
-        "tag": sdk.add(User.tag, ref, "vip", meta={"source": "seed", "confidence": 0.72}),
+        "name": sdk.fields.set(User.name, ref, "Alice", meta={"source": "seed", "confidence": 0.91}),
+        "tag": sdk.fields.add(User.tag, ref, "vip", meta={"source": "seed", "confidence": 0.72}),
     }
     return sdk, ids
 
@@ -163,7 +163,7 @@ class ReadPolicyDTOContractTests(unittest.TestCase):
 class PolicyAcceptanceFindTests(unittest.TestCase):
     """`sdk.read.find(..., policy=...)` accepts only `ReadPolicy | None`.
 
-    `dict`, `str`, `FrozenAssertionView`, and other types raise
+    `dict`, `str`, `FrozenAssertionSet`, and other types raise
     `SDKStoreError`. Error message must mention both "policy" and the
     expected DTO name (`ReadPolicy`) to discriminate from old-behavior
     "User has no field 'policy'" errors.
@@ -202,7 +202,7 @@ class PolicyAcceptanceFindTests(unittest.TestCase):
 
     def test_find_rejects_frozen_assertion_view_policy(self) -> None:
         sdk, _ = _seed_store()
-        view = FrozenAssertionView(name="x", asrt_ids=frozenset())
+        view = FrozenAssertionSet(name="x", asrt_ids=frozenset())
         with self.assertRaises(SDKStoreError) as exc:
             sdk.read.find(User, policy=view)  # type: ignore[arg-type]
         msg = str(exc.exception).lower()

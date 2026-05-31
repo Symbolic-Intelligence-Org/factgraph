@@ -102,7 +102,7 @@ class WorkspaceCreatePathTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
 
             fg = FactGraph.create(schema_classes=[User], path=workspace)
-            fg.save()
+            fg.save_workspace()
 
             self.assertIsInstance(fg, FactGraph)
             self.assertTrue((workspace / "factgraph_workspace.json").exists())
@@ -159,7 +159,7 @@ class WorkspaceCreatePathTests(unittest.TestCase):
                     ledger_path=str(ledger_path),
                     registry_root=registry_root,
                 )
-            fg.save()
+            fg.save_workspace()
 
             self.assertTrue((workspace / "ledger.db").exists())
             self.assertTrue((workspace / "registry" / "registry_manifest.json").exists())
@@ -175,10 +175,10 @@ class WorkspaceSaveTests(unittest.TestCase):
         fg = FactGraph.create(schema_classes=[User])
 
         with self.assertRaises(SDKStoreError) as ctx:
-            fg.save()
+            fg.save_workspace()
 
         self.assertIn(
-            "workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)",
+            "workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)",
             str(ctx.exception),
         )
 
@@ -192,8 +192,8 @@ class WorkspaceSaveTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg()
 
-            fg.save(workspace)
-            fg.save()
+            fg.save_workspace(workspace)
+            fg.save_workspace()
 
             self.assertTrue((workspace / "factgraph_workspace.json").exists())
             self.assertTrue((workspace / "ledger.db").exists())
@@ -203,7 +203,7 @@ class WorkspaceSaveTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg(path=workspace)
 
-            fg.save()
+            fg.save_workspace()
 
             manifest = _read_manifest(workspace)
         self.assertEqual(manifest["factgraph_workspace_version"], "1")
@@ -221,7 +221,7 @@ class WorkspaceSaveTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg()
 
-            fg.save(workspace)
+            fg.save_workspace(workspace)
 
             self.assertFalse((workspace / "registry").exists())
             self.assertTrue(_schema_object_file(workspace, schema_digest(fg.schema_ir)).is_file())
@@ -231,11 +231,11 @@ class WorkspaceSaveTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg(path=workspace)
 
-            fg.save()
+            fg.save_workspace()
             first = _read_manifest(workspace)
-            fg.save()
+            fg.save_workspace()
             second = _read_manifest(workspace)
-            loaded = FactGraph.load(workspace, schema_classes=[User])
+            loaded = FactGraph.load_workspace(workspace, schema_classes=[User])
 
         self.assertEqual(first["schema_digest"], second["schema_digest"])
         self.assertEqual(first["components"], second["components"])
@@ -247,10 +247,10 @@ class WorkspaceSaveTests(unittest.TestCase):
             second_workspace = Path(tmp_dir) / "second"
             fg = _seed_fg(path=first_workspace)
 
-            fg.save(second_workspace)
-            fg.save()
+            fg.save_workspace(second_workspace)
+            fg.save_workspace()
 
-            loaded = FactGraph.load(second_workspace, schema_classes=[User])
+            loaded = FactGraph.load_workspace(second_workspace, schema_classes=[User])
             self.assertTrue((second_workspace / "ledger.db").exists())
             self.assertFalse((second_workspace / "registry").exists())
             self.assertTrue(_schema_object_file(second_workspace, schema_digest(fg.schema_ir)).is_file())
@@ -271,20 +271,20 @@ class WorkspaceLoadTests(unittest.TestCase):
     def test_factgraph_load_requires_schema_classes(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
-            _seed_fg(path=workspace).save()
+            _seed_fg(path=workspace).save_workspace()
 
             with self.assertRaises((TypeError, SDKStoreError)) as ctx:
-                FactGraph.load(workspace)
+                FactGraph.load_workspace(workspace)
 
         self.assertIn("schema_classes", str(ctx.exception))
 
     def test_factgraph_load_rejects_wrong_schema_classes(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
-            _seed_fg(path=workspace).save()
+            _seed_fg(path=workspace).save_workspace()
 
             with self.assertRaises(SDKStoreError) as ctx:
-                FactGraph.load(workspace, schema_classes=[Account])
+                FactGraph.load_workspace(workspace, schema_classes=[Account])
 
         msg = str(ctx.exception)
         self.assertIn("schema", msg)
@@ -296,7 +296,7 @@ class WorkspaceLoadTests(unittest.TestCase):
             workspace.mkdir()
 
             with self.assertRaises(SDKStoreError) as ctx:
-                FactGraph.load(workspace, schema_classes=[User])
+                FactGraph.load_workspace(workspace, schema_classes=[User])
 
         self.assertIn("factgraph_workspace.json", str(ctx.exception))
 
@@ -306,12 +306,12 @@ class WorkspaceLoadTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             registry_root = workspace / "registry"
             fg = FactGraph.create(schema_classes=[User], path=workspace, registry_root=registry_root)
-            fg.save()
+            fg.save_workspace()
             digest = schema_digest(fg.schema_ir)
             schema_object = _schema_object_file(workspace, digest)
             schema_object.unlink()
 
-            loaded = FactGraph.load(workspace, schema_classes=[User])
+            loaded = FactGraph.load_workspace(workspace, schema_classes=[User])
             self.assertTrue(schema_object.is_file())
 
         self.assertIsNotNone(loaded)
@@ -322,12 +322,12 @@ class WorkspaceLoadTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             registry_root = workspace / "registry"
             fg = FactGraph.create(schema_classes=[User], path=workspace, registry_root=registry_root)
-            fg.save()
+            fg.save_workspace()
 
             FileAuthoringRegistry(registry_root).upsert_schema_ir(compile_schema_from_classes([Account]))
 
             with self.assertRaises(SDKStoreError) as ctx:
-                FactGraph.load(workspace, schema_classes=[User])
+                FactGraph.load_workspace(workspace, schema_classes=[User])
 
         self.assertIn("workspace schema digest mismatch", str(ctx.exception))
         self.assertIn("registry", str(ctx.exception))
@@ -354,7 +354,7 @@ class WorkspaceExclusionTests(unittest.TestCase):
             artifact_root = Path(tmp_dir) / "artifacts"
             fg = FactGraph.create(schema_classes=[User], artifact_store_root=str(artifact_root))
 
-            fg.save(workspace)
+            fg.save_workspace(workspace)
 
             self.assertFalse((workspace / "artifacts").exists())
             self.assertFalse((workspace / "support").exists())
@@ -365,9 +365,9 @@ class WorkspaceExclusionTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg()
             asrt_id = fg.fields.set(User.name, fg.entities.ref(User, user_id="Bob"), "Bob")
-            fg.views.create("review", asrt_ids=[asrt_id])
+            fg.assertion_views.create("review", asrt_ids=[asrt_id])
 
-            fg.save(workspace)
+            fg.save_workspace(workspace)
 
             self.assertFalse((workspace / "views.json").exists())
             self.assertFalse((workspace / "views").exists())
@@ -377,7 +377,7 @@ class WorkspaceExclusionTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg()
 
-            fg.save(workspace)
+            fg.save_workspace(workspace)
 
             names = {child.name for child in workspace.iterdir()}
             self.assertNotIn("audit", names)
@@ -428,10 +428,10 @@ class PreservationGuards(unittest.TestCase):
     def test_views_remain_in_memory_manager(self) -> None:
         fg = _seed_fg()
         asrt_id = fg.fields.set(User.name, fg.entities.ref(User, user_id="Bob"), "Bob")
-        view = fg.views.create("review", asrt_ids=[asrt_id])
+        view = fg.assertion_views.create("review", asrt_ids=[asrt_id])
 
-        self.assertEqual(fg.views.get("review"), view)
-        self.assertEqual(fg.views.list()["review"], view)
+        self.assertEqual(fg.assertion_views.get("review"), view)
+        self.assertEqual(fg.assertion_views.list()["review"], view)
 
     def test_rules_inspect_still_accepts_rule_and_inference(self) -> None:
         fg = FactGraph.create(schema_classes=[User])

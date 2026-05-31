@@ -164,7 +164,7 @@ Stable contract:
 - Identity filters may be partial, including primary-only filters; combine
   them with field filters when you need AND semantics.
 - `view=` is not accepted on `find(...)`. Frozen assertion views are read
-  back via `fg.views.get(name).asrt_ids` plus
+  back via `fg.assertion_views.get(name).asrt_ids` plus
   `fg.assertions.by_ids(...)`, not by passing a view to snapshot reads.
 - `policy=` is removed. Read-time confidence/display aggregation is not a
   public SDK surface.

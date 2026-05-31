@@ -12,7 +12,7 @@ Invocation:
 
     python -m factgraph migrate-workspace <path> [--dry-run] [--archive | --no-archive]
 
-The migration is opt-in. ``FactGraph.load(...)`` rejects legacy workspaces
+The migration is opt-in. ``FactGraph.load_workspace(...)`` rejects legacy workspaces
 with an ``SDKStoreError`` instructing users to run this CLI; this CLI is
 NOT auto-invoked from load. The migration writes no ``authoring_apply_events.jsonl``
 entry (Slice 7C retired the apply-execute write path; Q6-A (a.2)).

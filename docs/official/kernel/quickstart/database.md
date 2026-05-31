@@ -22,13 +22,13 @@ intentionally unsupported.
 
 | Need | Use |
 | --- | --- |
-| Normal SDK application code | `FactGraph.create(...)`, `fg.fields.*`, `fg.save()` |
+| Normal SDK application code | `FactGraph.create(...)`, `fg.fields.*`, `fg.save_workspace()` |
 | Low-level Database identity and head tracking | `Database.create(...)`, `Database.open(...)`, `db.head()` |
 | Database-owned assertion commits | `fg.commit_assertions(...)` on an attached runtime |
 | Durable frozen assertion-id objects | `db.create_view(...)` |
-| Session-local named id sets | `fg.views.create(...)` |
+| Session-local named id sets | `fg.assertion_views.create(...)` |
 
-`FactGraph.save()` and `FactGraph.load(...)` remain the high-level workspace
+`FactGraph.save_workspace()` and `FactGraph.load_workspace(...)` remain the high-level workspace
 path. `Database` is useful when you need the lower Database boundary directly.
 
 ## Define a schema IR
@@ -44,7 +44,7 @@ resulting compiled IR inside the runtime.
 | Surface | Accepts | Why |
 | --- | --- | --- |
 | `FactGraph.create(schema_classes=[...])` | Python `Entity` classes | High-level constructor. Compiles internally and stores the IR. |
-| `FactGraph.load(path, schema_classes=[...])` | Python `Entity` classes | Compiles internally and validates the compiled digest against the saved workspace digest. |
+| `FactGraph.load_workspace(path, schema_classes=[...])` | Python `Entity` classes | Compiles internally and validates the compiled digest against the saved workspace digest. |
 | `FactGraph.attach(db, schema_classes=[...])` | Python `Entity` classes | Compiles internally and validates the compiled digest against `db.schema_digest`. |
 | `Database.create(path, schema_ir=...)` | Already-compiled IR | Lower Database boundary. Identity-anchored; takes the IR directly. |
 | `Database.open(path, schema_ir=...)` | Already-compiled IR | Lower Database boundary. Validates the workspace schema object against the supplied IR. |
@@ -146,8 +146,8 @@ Common SDK mutation shortcuts reject in attached mode:
 ```python
 # fg.fields.set(...)    # rejected on attached runtimes
 # fg.fields.add(...)    # rejected on attached runtimes
-# fg.save()            # rejected on attached runtimes
-# fg.views.create(...) # rejected on attached runtimes
+# fg.save_workspace()            # rejected on attached runtimes
+# fg.assertion_views.create(...) # rejected on attached runtimes
 ```
 
 Use attached runtimes for SDK readback and schema-aware helpers around a
@@ -297,10 +297,10 @@ public delete or update path because doing so would mutate
 content-addressed objects.
 
 If you only need a short-lived assertion-id set scoped to one SDK session,
-use `fg.views.create(...)` instead — that surface **does** support
+use `fg.assertion_views.create(...)` instead — that surface **does** support
 `update(...)`, `delete(...)`, `get(...)`, and `list()`, but it is
-in-memory-only and is not written by `fg.save(...)` or restored by
-`FactGraph.load(...)`. The contrast is summarized below in
+in-memory-only and is not written by `fg.save_workspace(...)` or restored by
+`FactGraph.load_workspace(...)`. The contrast is summarized below in
 [SDK views are different](#sdk-views-are-different).
 
 ## Open the Database again
@@ -329,16 +329,16 @@ persistence.
 
 ## SDK views are different
 
-The SDK also has `fg.views`, taught in
+The SDK also has `fg.assertion_views`, taught in
 [Assertion records and views](assertions.md). That surface is intentionally
 different:
 
 | Surface | Shape | Persistence | Purpose |
 | --- | --- | --- | --- |
-| `fg.views.create(...)` | `name`, `asrt_ids` | In-memory only | Session-local named assertion-id sets |
+| `fg.assertion_views.create(...)` | `name`, `asrt_ids` | In-memory only | Session-local named assertion-id sets |
 | `db.create_view(...)` | `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest` | Durable `views/objects` object | Database-owned frozen scope object |
 
-SDK views are not written by `fg.save(...)`, and `FactGraph.load(...)` does not
+SDK views are not written by `fg.save_workspace(...)`, and `FactGraph.load_workspace(...)` does not
 restore them. Database durable views are content-addressed objects owned by the
 Database workspace.
 
@@ -509,9 +509,9 @@ with TemporaryDirectory() as tmp_dir:
   name + different `asrt_ids` writes a new view object whose file path is the
   new `view_digest`. To "change" a view, create a new one; to "remove" one,
   delete `views/objects/<view_digest>.json` outside the SDK.
-- Use `fg.views.create(name, asrt_ids=[...])` only for in-memory named id sets.
-  `fg.views` **does** support `get(...)`, `list()`, `update(...)`, and
-  `delete(...)`, but it is session-local and not written by `fg.save(...)`.
+- Use `fg.assertion_views.create(name, asrt_ids=[...])` only for in-memory named id sets.
+  `fg.assertion_views` **does** support `get(...)`, `list()`, `update(...)`, and
+  `delete(...)`, but it is session-local and not written by `fg.save_workspace(...)`.
 - `view=` is an attach-time argument: `FactGraph.attach(db, schema_classes=[...], view=view)`
   produces a read-only, view-scoped runtime. It is not accepted as a row-level
   parameter on `fg.entities.where(...)` or `fg.eval.evaluate(...)`.

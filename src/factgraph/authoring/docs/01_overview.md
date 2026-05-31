@@ -266,7 +266,7 @@ no runtime, SDK, service, or authoring path reads or migrates them.
 ### 7.2 Registry publishing retired
 
 Publishing to a filesystem registry is retired. Use `fg.schema.register(...)`,
-`fg.schema.extend(...)`, or `fg.schema.apply(...)` with `fg.save()` for schema
+`fg.schema.extend(...)`, or `fg.schema.apply(...)` with `fg.save_workspace()` for schema
 evolution, in-memory `Rule(...)` / `Inference(...)` values for execution, and
 the migration CLI for legacy workspaces.
 
@@ -275,7 +275,7 @@ the migration CLI for legacy workspaces.
 - `FactGraph.create(..., path=...)` binds the graph to a workspace root. The
   workspace owns `ledger.db`, `factgraph_workspace.json`, and the Database schema
   object under `db/objects/schema/<digest>.json`. Clean SDK workspaces no longer
-  create or write a live `registry/` schema anchor. `FactGraph.load(path,
+  create or write a live `registry/` schema anchor. `FactGraph.load_workspace(path,
   schema_classes=[...])` restores the graph with explicit schema-class
   validation. Legacy `registry/schema/schema_ir.json` anchors now require the
   explicit `python -m factgraph migrate-workspace <path>` CLI. Construct

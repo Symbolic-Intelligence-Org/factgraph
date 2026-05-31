@@ -116,12 +116,12 @@ the ledger plus a Database-owned schema object:
 
 ```python
 fg = FactGraph.create(schema_classes=[User, Document], path="./workspace")
-fg.save()
+fg.save_workspace()
 
-same_graph = FactGraph.load("./workspace", schema_classes=[User, Document])
+same_graph = FactGraph.load_workspace("./workspace", schema_classes=[User, Document])
 ```
 
-`FactGraph.load(...)` requires the same Python `Entity` classes used to create
+`FactGraph.load_workspace(...)` requires the same Python `Entity` classes used to create
 the workspace. It validates the manifest, ledger schema digest, Database schema
 object, any legacy registry schema entry that is still present, and supplied
 classes before returning a graph.
@@ -685,12 +685,12 @@ and boundaries are documented in the official
 ```python
 ref = fg.entities.ref(User, user_id="u-1")
 
-# explain_fact(pred_id, e_ref, *val_atoms) — narrow by value atoms when needed
-explanation = fg.audit.explain_fact("user:name", ref)
+# explain(asrt_id_or_record) — narrow by value atoms when needed
+explanation = fg.audit.explain("user:name", ref)
 # → {"pred_id": "user:name", "e_ref": ref, "active_claims": [...], "chosen_asrt_id": "asrt-..."}
 
-# conflicts(pred_id, e_ref) — inspect active assertion ids on a pred+entity
-conflicting = fg.audit.conflicts("user:name", ref)
+# conflicts(record_or_entity_field) — inspect active assertion ids on a pred+entity
+conflicting = fg.audit.conflicts(record)
 
 # diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events,
 #                   *, warnings=(), include_unchanged=False)
@@ -703,7 +703,7 @@ diff = fg.audit.diff_proof_frames(
 )
 ```
 
-- `explain_fact` returns the active claims for a `(pred_id, e_ref)`
+- `explain` returns the active claims for a `(pred_id, e_ref)`
   pair (optionally narrowed by trailing value atoms) plus the
   currently-chosen `asrt_id` per the current read/display policy.
 - `conflicts` enumerates active conflicting assertions on the same
@@ -723,8 +723,8 @@ diff = fg.audit.diff_proof_frames(
 
 ### Views
 
-`fg.views` stores named frozen assertion-id selections. A
-`FrozenAssertionView` captures a deduplicated set of `asrt_id` strings
+`fg.assertion_views` stores named frozen assertion-id selections. A
+`FrozenAssertionSet` captures a deduplicated set of `asrt_id` strings
 at creation time.
 
 There is no built-in `default` view. The name `"default"` is not reserved:
@@ -737,14 +737,14 @@ that expose `.asrt_id`:
 ```python
 target = snap.field("name").history.where(_meta={"source": "seed"}).one()
 
-review = fg.views.create("review_set", asrt_ids=[target.asrt_id])
-review = fg.views.update("review_set", asrts=[target])
+review = fg.assertion_views.create("review_set", asrt_ids=[target.asrt_id])
+review = fg.assertion_views.update("review_set", asrts=[target])
 
-view = fg.views.get("review_set")        # → FrozenAssertionView
+view = fg.assertion_views.get("review_set")        # → FrozenAssertionSet
 records = fg.assertions.by_ids(view.asrt_ids)
 
-fg.views.delete("review_set")
-all_views = fg.views.list()              # → dict[str, FrozenAssertionView]
+fg.assertion_views.delete("review_set")
+all_views = fg.assertion_views.list()              # → dict[str, FrozenAssertionSet]
 ```
 
 Frozen assertion views are read back through `fg.assertions.by_id(...)`
@@ -753,7 +753,7 @@ and `fg.assertions.by_ids(...)`. They are not accepted as `find(...)` or
 membership and then look up records by id:
 
 ```python
-view = fg.views.get("review_set")
+view = fg.assertion_views.get("review_set")
 records = fg.assertions.by_ids(view.asrt_ids)
 ```
 
@@ -894,7 +894,7 @@ reads or writes through superseded entity classes or descriptors raise
 The operation is immediate for the active graph: new classes can be used for
 `fg.entities.*`, `fg.fields.*`, `fg.assertions.*`, in-memory `Rule(...)`, and
 in-memory `Inference(...)` right away. If the graph is workspace-backed, call
-`fg.save()` to persist the new workspace manifest digest; the manifest is not
+`fg.save_workspace()` to persist the new workspace manifest digest; the manifest is not
 rewritten implicitly.
 
 Only additive entity-class extension and additive non-identity field extension
@@ -974,7 +974,7 @@ workspace.
 Old workspaces written before Q8 Phase 2 may contain `registry/rules/` and
 `registry/inferences/` directories on disk; those files are inert. Old
 workspaces with `registry/schema/schema_ir.json` are no longer auto-loaded:
-`FactGraph.load(...)` raises `SDKStoreError` with the migration command above.
+`FactGraph.load_workspace(...)` raises `SDKStoreError` with the migration command above.
 The migration writes the Database schema object and can archive the historical
 registry directory. Apply-log readers remain read-only compatible with
 historical `db/audit/authoring_apply_events.jsonl`,

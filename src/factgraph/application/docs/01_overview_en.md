@@ -37,7 +37,7 @@ It is not responsible for:
 - SDK `Field` descriptors, metaclasses, DSL sugar, or `Query` / `Derivation` authoring objects
 - HTTP routes, sessions, or registry delivery
 - package export/run delivery surfaces
-- the named view registry (`sdk.views`)
+- the named view registry (`sdk.assertion_views`)
 
 ## 2. Module Structure
 
@@ -78,7 +78,7 @@ It is not responsible for:
 - `workspace_runtime.py`
   - FactGraph workspace layout authority: v1 manifest construction/validation,
     `ledger.db` backup/checkpoint, and component path resolution for
-    `fg.save(...)` / `FactGraph.load(...)`. Clean SDK workspaces no longer use
+    `fg.save_workspace(...)` / `FactGraph.load_workspace(...)`. Clean SDK workspaces no longer use
     `registry/` as the live schema anchor; the SDK writes schema bytes to the
     Database schema-object location. A20(E) / Q6-A removed the old registry-copy
     helper entirely.

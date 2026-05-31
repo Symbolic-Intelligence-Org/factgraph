@@ -452,8 +452,8 @@ result = fg.eval.evaluate(my_inference)
 `fg.rules.inspect(rule_or_inference)` is the only remaining structural inspection
 API on the `fg.rules.*` namespace.
 
-When the graph is workspace-backed, `fg.save()` persists the ledger plus the
-schema IR. `FactGraph.load("./workspace", schema_classes=[User])` restores the
+When the graph is workspace-backed, `fg.save_workspace()` persists the ledger plus the
+schema IR. `FactGraph.load_workspace("./workspace", schema_classes=[User])` restores the
 workspace; user code constructs Rule/Inference values in memory afresh each
 session.
 

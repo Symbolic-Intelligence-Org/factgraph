@@ -27,7 +27,7 @@ from factgraph.sdk.store import (
     _SDKPackageManager,
     _SDKRulesManager,
     _SDKSchemaManager,
-    _SDKViewsManager,
+    _SDKAssertionViewsManager,
 )
 
 
@@ -87,9 +87,13 @@ class TopLevelNamespacePresenceTests(unittest.TestCase):
         fg = _new_fg()
         self.assertIsInstance(fg.package, _SDKPackageManager)
 
-    def test_views_namespace_present(self) -> None:
+    def test_assertion_views_namespace_present(self) -> None:
         fg = _new_fg()
-        self.assertIsInstance(fg.views, _SDKViewsManager)
+        self.assertIsInstance(fg.assertion_views, _SDKAssertionViewsManager)
+
+    def test_views_namespace_removed(self) -> None:
+        fg = _new_fg()
+        self.assertFalse(hasattr(fg, "views"))
 
 
 class ManagerPrivacyTests(unittest.TestCase):
@@ -102,7 +106,7 @@ class ManagerPrivacyTests(unittest.TestCase):
         "_SDKEvalManager",
         "_SDKAuditManager",
         "_SDKPackageManager",
-        "_SDKViewsManager",
+        "_SDKAssertionViewsManager",
         "_SDKRulesManager",
         "_SDKInferencesManager",
     )
@@ -163,11 +167,11 @@ class ReadOnlyEnforcementTests(unittest.TestCase):
     def test_package_manager_read_only(self) -> None:
         self._assert_read_only(_new_fg().package, "package")
 
-    def test_views_manager_read_only(self) -> None:
-        """Per pre-publish audit Blocker 2: `views` is part of the 8
+    def test_assertion_views_manager_read_only(self) -> None:
+        """Per pre-publish audit Blocker 2: `assertion_views` is part of the 8
         top-level taxonomy and must enforce read-only attribute
         boundary uniformly with the other managers."""
-        self._assert_read_only(_new_fg().views, "views")
+        self._assert_read_only(_new_fg().assertion_views, "assertion_views")
 
 
 class PropertyAccessorIdempotenceTests(unittest.TestCase):

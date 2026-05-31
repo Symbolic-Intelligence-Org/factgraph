@@ -37,7 +37,7 @@ A few principles run through the whole map:
    live?", which is a property of the graph itself.
 
 2. **Assertion surfaces are invariant.**
-   `fg.read`, `fg.write`, `fg.assertions`, and `fg.views` describe how facts
+   `fg.read`, `fg.write`, `fg.assertions`, and `fg.assertion_views` describe how facts
    enter and leave the ledger. Those surfaces are stable across releases; new
    capabilities should not reshape them.
 
@@ -65,8 +65,8 @@ A few principles run through the whole map:
 7. **Workspace is the persistence mechanism; filesystem registry adapters are gone.**
    A20(E) / Q6-A removed `SDKRegistry`, `FileAuthoringRegistry`,
    `registry_root=`, and `registry=`. The normal product path is in-memory
-   `Rule(...)` / `Inference(...)`, `FactGraph.create(path=...)`, `fg.save(...)`,
-   and `FactGraph.load(...)`.
+   `Rule(...)` / `Inference(...)`, `FactGraph.create(path=...)`, `fg.save_workspace(...)`,
+   and `FactGraph.load_workspace(...)`.
 
 ## FactGraph entry points
 
@@ -76,10 +76,10 @@ that live directly on `FactGraph`, not on a namespace.
 | Surface | Use it for |
 | --- | --- |
 | `FactGraph.create(schema_classes=[...])` | Build a new graph. Pass `path=` for a path-backed workspace; pass `ledger_path=` or `artifact_store_root=` for explicit supported components. |
-| `FactGraph.load(path, schema_classes=[...])` | Restore a saved workspace. The loader validates the workspace schema digest against the supplied classes. |
+| `FactGraph.load_workspace(path, schema_classes=[...])` | Restore a saved workspace. The loader validates the workspace schema digest against the supplied classes. |
 | `FactGraph.attach(db, schema_classes=[...], view=None)` | Bind the SDK to a `Database`. Passing a durable `db.create_view(...)` view creates a read-only, view-scoped runtime. See [Database and durable views](database.md) for the full Database / view tutorial. The signature deliberately **does not include `rules=`** — rule sets are code artifacts, not part of the attach contract; their content digest is computed at `fg.eval.evaluate(...)` time and recorded as `EvaluateResult.rule_set_digest`. |
 | `FactGraph.from_schema_classes([...])` | Lower-level class-first constructor. `create(...)` is the normal teaching path. |
-| `fg.save(path=None)` | Persist the graph to its workspace. No-arg save requires a bound path; passing `path` rebinds the graph. |
+| `fg.save_workspace(path=None)` | Persist the graph to its workspace. No-arg save requires a bound path; passing `path` rebinds the graph. |
 | `fg.batch(meta=None)` | Open a batch transaction context for grouped writes. |
 | `fg.store` | Underlying core store (advanced). |
 | `fg.ledger` | Underlying append-only ledger (advanced). |
@@ -119,14 +119,14 @@ ideas separate when reading the rest of the API.
 
 ## Frozen views
 
-`fg.views` stores session-local named frozen selections of assertion ids. A view
+`fg.assertion_views` stores session-local named frozen selections of assertion ids. A view
 is not a read policy and not a dynamic query.
 
 | Surface | Methods | Returns |
 | --- | --- | --- |
-| `fg.views` | `create(name, asrt_ids=[...])`, `update(name, asrt_ids=[...])`, `delete(name)`, `get(name)`, `list()` | `FrozenAssertionView` per item; `dict[str, FrozenAssertionView]` for `list()`. |
+| `fg.assertion_views` | `create(name, asrt_ids=[...])`, `update(name, asrt_ids=[...])`, `delete(name)`, `get(name)`, `list()` | `FrozenAssertionSet` per item; `dict[str, FrozenAssertionSet]` for `list()`. |
 
-Session-local `fg.views` entries are in-memory and are not part of the
+Session-local `fg.assertion_views` entries are in-memory and are not part of the
 workspace save format. Durable Database views are created with
 `db.create_view(...)`; consume those through `FactGraph.attach(db, view=view)`.
 The attached runtime is read-only and automatically scopes reads and evaluation
@@ -156,9 +156,9 @@ Different review surfaces with different boundaries.
 | --- | --- | --- |
 | `EvaluateRow` | `explain()`, `close()` | Row-level evidence and closed-head replay anchors. |
 | `fg.eval` | `explain(expr, head=closed_head)` | Manual closed-head replay. |
-| `fg.audit` | `explain_fact(pred_id, e_ref, *value_atoms)`, `conflicts(pred_id, e_ref)`, `diff_proof_frames(...)` | Persisted-fact explanation and cross-round proof-frame diff. |
+| `fg.audit` | `explain(asrt_id_or_record)`, `conflicts(record_or_entity_field)`, `diff_proof_frames(...)` | Persisted-fact explanation and cross-round proof-frame diff. |
 
-`fg.audit.explain_fact(...)` is the user-facing bridge into evidence in the
+`fg.audit.explain(...)` is the user-facing bridge into evidence in the
 quickstart path: assertion ids first, then fact-level explanation. Durable
 cross-engine `EvidenceGraph` objects, rendered proof pages, and round-event
 archives are audit-layer advanced surfaces, not the beginner read/write path.
@@ -170,7 +170,7 @@ persistence.
 
 | Surface | Methods | Notes |
 | --- | --- | --- |
-| `fg.package` | `export_package(out_dir, options)`, `run_package(package_dir, entrypoints=[...], engine="souffle")` | Packages and workspaces have different scopes. Workspace lifecycle is `FactGraph.create(path=...)`, `fg.save(...)`, and `FactGraph.load(...)`. |
+| `fg.package` | `export_package(out_dir, options)`, `run_package(package_dir, entrypoints=[...], engine="souffle")` | Packages and workspaces have different scopes. Workspace lifecycle is `FactGraph.create(path=...)`, `fg.save_workspace(...)`, and `FactGraph.load_workspace(...)`. |
 
 ## Public imports panorama
 
@@ -219,8 +219,8 @@ same project; some are out of scope for `factpy-kernel` entirely.
 ## Syntax checklist
 
 - `FactGraph.create(schema_classes=[...], path=...)` is the normal constructor.
-- `FactGraph.load(path, schema_classes=[...])` restores a workspace.
-- `fg.save(path=None)` persists ledger, schema IR, registry, and manifest.
+- `FactGraph.load_workspace(path, schema_classes=[...])` restores a workspace.
+- `fg.save_workspace(path=None)` persists ledger, schema IR, registry, and manifest.
 - `fg.batch(meta=...)` opens a batch transaction; batch `save(...)` is unrelated
   to graph save.
 - `fg.schema.register(...)`, `fg.schema.extend(...)`, and
@@ -234,7 +234,7 @@ same project; some are out of scope for `factpy-kernel` entirely.
   `fg.assertions.all` read assertion records. Chain `.where(...)`,
   `.at(...)`, and `.by_id(...)` after a returned `AssertionRecordSet`;
   use `.where(_meta={"version": v})` for version metadata filters.
-- `fg.views.create/update/delete/get/list` manages frozen assertion-id
+- `fg.assertion_views.create/update/delete/get/list` manages frozen assertion-id
   selections.
 - `fg.rules.inspect(...)` previews structure for rules, inferences, and
   queries.
@@ -244,7 +244,7 @@ same project; some are out of scope for `factpy-kernel` entirely.
   `EvaluateResult`; rows can be explained or closed for manual replay.
 - `fg.eval.inspect_semantics(...)` previews semantics shape; it does not run an
   engine.
-- `fg.audit.explain_fact(...)`, `fg.audit.conflicts(...)`, and
+- `fg.audit.explain(...)`, `fg.audit.conflicts(...)`, and
   `fg.audit.diff_proof_frames(...)` inspect persisted records.
 - `fg.package.export_package(...)` / `fg.package.run_package(...)` is for
   portable distribution, distinct from workspace save.

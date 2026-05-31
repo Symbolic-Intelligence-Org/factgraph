@@ -7,8 +7,8 @@ There is one supported persistence path in the public SDK:
 
 | Need | Use |
 | --- | --- |
-| Save graph state to disk | `fg.save()` |
-| Restore graph state from disk | `FactGraph.load(path, schema_classes=[...])` |
+| Save graph state to disk | `fg.save_workspace()` |
+| Restore graph state from disk | `FactGraph.load_workspace(path, schema_classes=[...])` |
 | Migrate a pre-v0.2 workspace with `registry/` | `python -m factgraph migrate-workspace <path>` |
 
 Rules and inferences are ordinary Python value objects. Keep them in code,
@@ -55,7 +55,7 @@ alice = fg.entities.ref(User, user_id="u-1")
 fg.fields.set(User.tag_seed, alice, "engineer")
 ```
 
-Because `path=` is set, `fg.save()` can later write the workspace without
+Because `path=` is set, `fg.save_workspace()` can later write the workspace without
 another path argument.
 
 ## Use rules and inferences in memory
@@ -110,10 +110,10 @@ Keep them in source files, packages, or application configuration.
 
 ## Save the workspace
 
-Call `fg.save()` to persist the workspace:
+Call `fg.save_workspace()` to persist the workspace:
 
 ```python
-save_result = fg.save()
+save_result = fg.save_workspace()
 
 assert Path(save_result["path"]) == workspace
 assert (workspace / "factgraph_workspace.json").exists()
@@ -135,7 +135,7 @@ Durable Database views are a separate Database feature. Create them with
 `db.create_view(...)` on a `Database`, then consume them with
 `FactGraph.attach(db, schema_classes=[...], view=view)`. A view-attached runtime
 is read-only and automatically scopes `fg.entities.*` and `fg.eval.evaluate(...)` to
-the view's assertion ids. Session-local `fg.views.create(...)` entries do not
+the view's assertion ids. Session-local `fg.assertion_views.create(...)` entries do not
 carry Database anchors and cannot be passed to `FactGraph.attach(...)`.
 
 See [Database and durable views](database.md) for the full Database identity
@@ -147,7 +147,7 @@ The two boundaries serve different concerns: **`FactGraph` is the runtime
 layer** (per-session reads, writes, evaluation, evidence helpers) while
 **`Database` is the only persistent write point** (durable identity,
 content-addressed transactions, durable views). Workspace persistence
-covered on this page (`fg.save(...)` / `FactGraph.load(...)`) is the
+covered on this page (`fg.save_workspace(...)` / `FactGraph.load_workspace(...)`) is the
 high-level path that wraps a Database underneath; the database.md tutorial
 exposes the lower boundary directly when you need it.
 
@@ -157,7 +157,7 @@ Load requires the schema classes. Class-less dynamic load is not part of the
 current public surface.
 
 ```python
-loaded = FactGraph.load(workspace, schema_classes=[User])
+loaded = FactGraph.load_workspace(workspace, schema_classes=[User])
 
 loaded_snap = loaded.entities.get(User, user_id="u-1")
 
@@ -176,7 +176,7 @@ assert result_after_load.count() == 1
 ## Migrate legacy workspaces
 
 Older workspaces may still contain a filesystem `registry/` directory and a
-schema snapshot at `registry/schema/schema_ir.json`. `FactGraph.load(...)` now
+schema snapshot at `registry/schema/schema_ir.json`. `FactGraph.load_workspace(...)` now
 rejects that shape with an `SDKStoreError` and points you to the migration CLI.
 
 Run:
@@ -202,8 +202,8 @@ saved-inference persistence; historical `registry/rules/` and
 
 | Task | Use |
 | --- | --- |
-| Persist facts and schema anchor | `fg.save()` |
-| Restore a graph workspace | `FactGraph.load(path, schema_classes=[...])` |
+| Persist facts and schema anchor | `fg.save_workspace()` |
+| Restore a graph workspace | `FactGraph.load_workspace(path, schema_classes=[...])` |
 | Reuse rule/inference definitions | Keep `Rule(...)` / `Inference(...)` in Python code |
 | Share executable engine artifacts | `fg.package.export_package(...)` |
 | Migrate old registry-backed workspace | `python -m factgraph migrate-workspace <path>` |
@@ -222,7 +222,7 @@ fg.inferences.load(saved_ref)   # removed
 Do not pass `registry_root=` or `registry=` to `FactGraph.create(...)`; both
 raise `SDKStoreError` with migration guidance.
 
-Do not call `FactGraph.load(path)` without `schema_classes=[...]`. The loader
+Do not call `FactGraph.load_workspace(path)` without `schema_classes=[...]`. The loader
 validates the workspace schema digest against your Python schema declarations.
 
 ## Complete example
@@ -282,9 +282,9 @@ with TemporaryDirectory() as tmp_dir:
 
     assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
 
-    fg.save()
+    fg.save_workspace()
 
-    restored = FactGraph.load(workspace, schema_classes=[User])
+    restored = FactGraph.load_workspace(workspace, schema_classes=[User])
     restored_rule = make_rule()
     restored_result = restored.eval.evaluate(restored_rule, head=restored_rule)
 
@@ -300,9 +300,9 @@ with TemporaryDirectory() as tmp_dir:
   `Inference(...)` for inference values; both stay in-memory.
 - Use `fg.eval.evaluate(rule, head=rule)` for application rules and
   `fg.eval.evaluate(inference)` for inferences.
-- Use `fg.save()` for the Level-4 workspace: manifest, ledger, and Database
+- Use `fg.save_workspace()` for the Level-4 workspace: manifest, ledger, and Database
   schema object.
-- Use `FactGraph.load(path, schema_classes=[...])` to restore a workspace.
+- Use `FactGraph.load_workspace(path, schema_classes=[...])` to restore a workspace.
 - Use `python -m factgraph migrate-workspace <path>` for pre-v0.2 workspaces
   that still carry `registry/`.
 - Class-less load is not part of the current public surface.

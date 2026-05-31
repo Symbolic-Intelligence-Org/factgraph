@@ -36,7 +36,7 @@ fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_event
 | `assertions` | `by_id`, `by_ids`, `where`, `retract`, `active`, `all` |
 | `schema` | `register`, `extend`, `apply`, `ingest`, `validate_provenance` |
 | `eval` | `evaluate`, `explain`, `inspect_semantics` |
-| `audit` | `explain_fact`, `conflicts`, `diff_proof_frames` |
+| `audit` | `explain`, `conflicts`, `diff_proof_frames` |
 | `package` | `export_package`, `run_package` |
 | `views` | `create`, `update`, `delete`, `get`, `list` |
 
@@ -67,7 +67,7 @@ The export list currently has 59 names.
 values in declaration order; unset `Field` values render as `None`.
 
 `FactGraph.create(schema_classes=[...])` is the canonical constructor.
-`FactGraph.load(path, schema_classes=[...])` restores a saved workspace.
+`FactGraph.load_workspace(path, schema_classes=[...])` restores a saved workspace.
 `FactGraph.from_schema_classes([...])` remains available as the lower-level
 class-first constructor name and does not accept workspace `path=`.
 
@@ -238,14 +238,14 @@ supplied).
 class-first constructor name.
 
 ```python
-FactGraph.load(path, *, schema_classes=[...], default_row_format=None)
-fg.save(path=None)
+FactGraph.load_workspace(path, *, schema_classes=[...], default_row_format=None)
+fg.save_workspace(path=None)
 ```
 
-`fg.save()` writes the bound workspace. `fg.save(path)` writes and rebinds the
+`fg.save_workspace()` writes the bound workspace. `fg.save_workspace(path)` writes and rebinds the
 graph to that workspace. An unbound graph raises
-`SDKStoreError("workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)")`.
-`FactGraph.load(...)` requires Python schema classes and validates the workspace
+`SDKStoreError("workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)")`.
+`FactGraph.load_workspace(...)` requires Python schema classes and validates the workspace
 manifest digest, ledger schema digest, Database schema object, any legacy
 registry schema entry that is still present, and the digest compiled from the
 supplied classes.
@@ -291,7 +291,7 @@ predicate are rejected with zero side effects.
 On success, the in-memory schema, compiled SchemaIndex, class registry,
 descriptor maps, ledger schema digest, and Database schema object are updated
 as one schema transaction. If the graph is bound to a workspace, the manifest is
-not rewritten until a later explicit `fg.save(...)`.
+not rewritten until a later explicit `fg.save_workspace(...)`.
 
 Field-add uses a replacement class object. After a field-add succeeds, reads
 or writes through superseded entity classes or their descriptors raise
@@ -394,7 +394,7 @@ path. Use `fg.eval.evaluate(...)`, `row.explain()`, `row.close()`, and
 
 | Method | One-liner |
 |---|---|
-| `explain_fact(locator)` | Get proof explanation for a fact |
+| `explain(asrt_id_or_record)` | Get proof explanation for a fact |
 | `conflicts()` | Return active conflicting assertions |
 | `diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False)` | Compare two recorded rounds; returns `ProofFrameDiff` |
 
@@ -409,7 +409,7 @@ via `factgraph.audit.load_audit_package` or hold them from a recorder.
 | `export_package(out_dir, options, **kwargs)` | Export Souffle-format package; `options` is a required `ExportOptions` instance |
 | `run_package(package_dir, *, entrypoints, engine='souffle')` | Execute an exported package |
 
-### 2.14 Views namespace (`fg.views.*`)
+### 2.14 Views namespace (`fg.assertion_views.*`)
 
 | Method | One-liner |
 |---|---|
@@ -418,16 +418,16 @@ via `factgraph.audit.load_audit_package` or hold them from a recorder.
 | `update(name, *, asrt_ids=[...])` | Replace an existing view with frozen assertion-id membership |
 | `update(name, *, asrts=[...])` | Replace an existing view from objects exposing `.asrt_id` |
 | `delete(name)` | Delete a frozen assertion view |
-| `get(name)` | Retrieve `FrozenAssertionView` |
-| `list()` | Return `dict[str, FrozenAssertionView]` of all views |
+| `get(name)` | Retrieve `FrozenAssertionSet` |
+| `list()` | Return `dict[str, FrozenAssertionSet]` of all views |
 
-`FrozenAssertionView` is a returned-object surface with
+`FrozenAssertionSet` is a returned-object surface with
 `asrt_ids: frozenset[str]`; it is not exported from `factgraph.sdk.__all__`.
-`fg.views` has no built-in `default` entry; `"default"` is just another
+`fg.assertion_views` has no built-in `default` entry; `"default"` is just another
 user-defined frozen assertion view name when created explicitly. Frozen
 assertion views are not accepted as snapshot input to `fg.entities.where(...)`
 or evaluation input to `fg.eval.evaluate(...)`; use
-`fg.assertions.by_ids(fg.views.get(name).asrt_ids)` for record-level
+`fg.assertions.by_ids(fg.assertion_views.get(name).asrt_ids)` for record-level
 readback.
 
 Read-time confidence/display aggregation is not a public SDK surface.

@@ -64,7 +64,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_adapter_derivation_plan,
     _validate_rule_expr_head_foundation,
 )
-from factgraph.application.schema_runtime import build_schema_index, entity_info, entity_type_from_ref
+from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
 from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.core.derivation.accept import AcceptOptions, AcceptRequest, AcceptResult
@@ -85,7 +85,7 @@ from factgraph.core.store.database import (
     CommitResult,
     Database,
     DatabaseError,
-    FrozenAssertionView as DatabaseFrozenAssertionView,
+    FrozenAssertionSet as DatabaseFrozenAssertionSet,
     _read_tx_object,
     schema_object_exists_for_workspace,
     validate_schema_object_for_workspace,
@@ -132,7 +132,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class FrozenAssertionView:
+class FrozenAssertionSet:
     name: str
     asrt_ids: frozenset[str]
 
@@ -172,7 +172,7 @@ class _ViewScopedLedger(Ledger):
         self,
         base: Ledger,
         *,
-        view: DatabaseFrozenAssertionView,
+        view: DatabaseFrozenAssertionSet,
         base_asrt_ids: frozenset[str],
     ) -> None:
         self._base = base
@@ -310,10 +310,10 @@ class _ViewScopedLedger(Ledger):
 
 
 def _ledger_for_durable_database_view(db: Database, view: object) -> Ledger:
-    if not isinstance(view, DatabaseFrozenAssertionView):
+    if not isinstance(view, DatabaseFrozenAssertionSet):
         raise SDKStoreError(
             "FactGraph.attach(db, view=...) expects a durable Database view from db.create_view(...); "
-            "SDK in-memory fg.views.create(...) views are not Database-anchored"
+            "SDK in-memory fg.assertion_views.create(...) views are not Database-anchored"
         )
     if view.db_id != db.db_id:
         raise SDKStoreError(
@@ -354,18 +354,18 @@ def _database_asrt_ids_at_tx(db: Database, tx_id: str) -> set[str]:
     return asrt_ids
 
 
-class _SDKViewsManager:
+class _SDKAssertionViewsManager:
     """Read-only namespace for named frozen assertion-id selections.
 
-    `fg.views` no longer stores read policies and has no built-in
+    `fg.assertion_views` stores assertion-id sets and has no built-in
     `default` entry. The name `default` is just another user-defined frozen
-    assertion view name when callers create it.
+    assertion set name when callers create it.
     """
 
     def __init__(self, sdk: "SDKStore") -> None:
         # Read-only attribute boundary per post-L redesign §5.4 lock.
         # Internal init bypasses ``__setattr__`` via ``object.__setattr__``;
-        # external assignment (``fg.views.foo = ...``) raises
+        # external assignment (``fg.assertion_views.foo = ...``) raises
         # ``FrozenSnapshotError``. Dict mutation against ``self._views``
         # via ``create`` / ``update`` / ``delete`` is unaffected (it
         # mutates the dict, not the attribute).
@@ -373,7 +373,7 @@ class _SDKViewsManager:
         object.__setattr__(self, "_views", {})
 
     def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenSnapshotError("FactGraph.views namespace is read-only")
+        raise FrozenSnapshotError("FactGraph.assertion_views namespace is read-only")
 
     def create(
         self,
@@ -381,13 +381,13 @@ class _SDKViewsManager:
         *,
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
-    ) -> FrozenAssertionView:
-        """Create a named frozen assertion view.
+    ) -> FrozenAssertionSet:
+        """Create a named frozen assertion set.
 
-        A view stores assertion ids only. It does not store a read policy and
-        it is not included in `fg.save(...)` workspace persistence.
+        An assertion set stores assertion ids only. It does not store a read
+        policy and it is not included in `fg.save_workspace(...)` persistence.
         """
-        self._sdk._reject_attached_write("fg.views.create")
+        self._sdk._reject_attached_write("fg.assertion_views.create")
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
@@ -405,9 +405,9 @@ class _SDKViewsManager:
         *,
         asrt_ids: Iterable[str] | None = None,
         asrts: Iterable[Any] | None = None,
-    ) -> FrozenAssertionView:
-        """Replace the assertion ids for an existing frozen view."""
-        self._sdk._reject_attached_write("fg.views.update")
+    ) -> FrozenAssertionSet:
+        """Replace the assertion ids for an existing frozen assertion set."""
+        self._sdk._reject_attached_write("fg.assertion_views.update")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -420,22 +420,22 @@ class _SDKViewsManager:
         return entry
 
     def delete(self, name: str) -> None:
-        """Delete a named frozen assertion view."""
-        self._sdk._reject_attached_write("fg.views.delete")
+        """Delete a named frozen assertion set."""
+        self._sdk._reject_attached_write("fg.assertion_views.delete")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         self._views.pop(normalized, None)
 
-    def get(self, name: str) -> FrozenAssertionView:
-        """Return a named frozen assertion view."""
+    def get(self, name: str) -> FrozenAssertionSet:
+        """Return a named frozen assertion set."""
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
         return self._views[normalized]
 
-    def list(self) -> dict[str, FrozenAssertionView]:
-        """Return all frozen assertion views keyed by view name."""
+    def list(self) -> dict[str, FrozenAssertionSet]:
+        """Return all frozen assertion sets keyed by set name."""
         return {name: spec for name, spec in self._views.items()}
 
 
@@ -453,9 +453,11 @@ class AssertionsManager:
             raise SDKStoreError("fg.assertions.by_id(asrt_id) expects non-empty string")
         return _assertion_record_by_id(self._sdk, asrt_id)
 
-    def by_ids(self, asrt_ids: Iterable[str]) -> Any:
+    def by_ids(self, asrt_ids: Iterable[str], *, strict: bool = False) -> Any:
         if isinstance(asrt_ids, (str, bytes)):
             raise SDKStoreError("fg.assertions.by_ids(asrt_ids) expects iterable[str], not string")
+        if not isinstance(strict, bool):
+            raise SDKStoreError("fg.assertions.by_ids(..., strict=...) expects bool")
         try:
             normalized = tuple(asrt_ids)
         except TypeError as exc:
@@ -463,14 +465,23 @@ class AssertionsManager:
         for value in normalized:
             if not isinstance(value, str) or not value:
                 raise SDKStoreError("fg.assertions.by_ids(asrt_ids) expects non-empty string ids")
+        if strict:
+            seen: set[str] = set()
+            for asrt_id in normalized:
+                if asrt_id in seen:
+                    raise SDKStoreError(f"by_ids strict mode: duplicate assertion id {asrt_id!r} in input")
+                seen.add(asrt_id)
 
         from .facade import AssertionRecordSet
 
         records = []
         for asrt_id in sorted(set(normalized)):
             record = _assertion_record_by_id(self._sdk, asrt_id)
-            if record is not None:
-                records.append(record)
+            if record is None:
+                if strict:
+                    raise SDKStoreError(f"by_ids strict mode: assertion id {asrt_id!r} not found")
+                continue
+            records.append(record)
         return AssertionRecordSet(records)
 
     @property
@@ -1414,13 +1425,66 @@ class _SDKAuditManager:
     def __setattr__(self, name: str, value: Any) -> None:
         raise FrozenSnapshotError("FactGraph.audit namespace is read-only")
 
-    def explain_fact(self, *args: Any, **kwargs: Any) -> Any:
-        """Explain the recorded support for a fact in the current graph."""
-        return self._sdk.explain_fact(*args, **kwargs)
+    def _resolve_record_asrt_id(self, target: Any, *, method: str) -> str:
+        if isinstance(target, str) and target:
+            return target
+        asrt_id = getattr(target, "asrt_id", None)
+        if isinstance(asrt_id, str) and asrt_id:
+            return asrt_id
+        raise SDKStoreError(f"fg.audit.{method}(...) expects asrt_id string or AssertionRecord")
 
-    def conflicts(self, *args: Any, **kwargs: Any) -> Any:
-        """Return conflict diagnostics for the current graph state."""
-        return self._sdk.conflicts(*args, **kwargs)
+    def _claim_for_audit_target(self, target: Any, *, method: str) -> Claim:
+        asrt_id = self._resolve_record_asrt_id(target, method=method)
+        claim = self._sdk.ledger.get_claim(asrt_id)
+        if claim is None:
+            raise SDKStoreError(f"fg.audit.{method}(...) assertion id not found: {asrt_id!r}")
+        return claim
+
+    def _conflict_cell_for_target(self, target: Any) -> tuple[str, str]:
+        if isinstance(target, tuple) and len(target) == 2:
+            entity, field = target
+            if isinstance(field, Field):
+                schema_pred = self._sdk._schema_pred_for_field(field)
+            elif isinstance(field, str) and field:
+                e_ref_for_type = entity if isinstance(entity, str) else getattr(entity, "ref", None)
+                if not isinstance(e_ref_for_type, str) or not e_ref_for_type:
+                    raise SDKStoreError(
+                        "fg.audit.conflicts((entity, field_name)) expects entity ref string or EntitySnapshot"
+                    )
+                entity_type = entity_type_from_ref(e_ref_for_type)
+                pred_info = self._sdk._application_schema_index.field_predicates.get((entity_type, field))
+                if pred_info is None:
+                    raise SDKStoreError(f"schema predicate not found for {entity_type}.{field}")
+                schema_pred = {
+                    "pred_id": pred_info.pred_id,
+                    "owner_type": pred_info.owner_type,
+                    "py_field_name": pred_info.py_field_name,
+                }
+            else:
+                raise SDKStoreError("fg.audit.conflicts((entity, field)) expects sdk.Field descriptor or field name")
+            pred_id = schema_pred.get("pred_id")
+            if not isinstance(pred_id, str) or not pred_id:
+                raise SDKStoreError("schema predicate missing pred_id for field")
+            e_ref = entity if isinstance(entity, str) else getattr(entity, "ref", None)
+            if not isinstance(e_ref, str) or not e_ref:
+                raise SDKStoreError("fg.audit.conflicts((entity, field)) expects entity ref string or EntitySnapshot")
+            return pred_id, e_ref
+        claim = self._claim_for_audit_target(target, method="conflicts")
+        return claim.pred_id, claim.e_ref
+
+    def explain(self, target: Any) -> Any:
+        """Explain chosen-policy state for the assertion's predicate/entity cell."""
+        claim = self._claim_for_audit_target(target, method="explain")
+        val_atoms = tuple(value for _tag, value in claim.rest_terms)
+        result = self._sdk._store.explain_fact(claim.pred_id, claim.e_ref, *val_atoms)
+        result["asrt_id"] = claim.asrt_id
+        result["chosen"] = result.get("chosen_asrt_id") == claim.asrt_id
+        return result
+
+    def conflicts(self, target: Any) -> Any:
+        """Return conflict diagnostics for an assertion record or entity field cell."""
+        pred_id, e_ref = self._conflict_cell_for_target(target)
+        return self._sdk._store.conflicts(pred_id, e_ref)
 
     def diff_proof_frames(self, *args: Any, **kwargs: Any) -> Any:
         """Compare two recorded proof-frame outcomes."""
@@ -1439,8 +1503,8 @@ class _SDKPackageManager:
     def export_package(self, *args: Any, **kwargs: Any) -> Any:
         """Export a runnable package from the graph.
 
-        Package export is separate from `fg.save(...)`: it creates an execution
-        artifact, not a FactGraph workspace.
+        Package export is separate from `fg.save_workspace(...)`: it creates an
+        execution artifact, not a FactGraph workspace.
         """
         return self._sdk.export_package(*args, **kwargs)
 
@@ -1543,12 +1607,12 @@ class SDKStore:
     name. It owns the compiled schema, append-only ledger, optional authoring
     registry, optional workspace path, and user-facing namespaces such as
     `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `what_if`,
-    `audit`, `package`, and `views`.
+    `audit`, `package`, and `assertion_views`.
 
     `FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle
     for new DB/view substrate work. Attached runtimes expose
     `fg.commit_assertions(...)` for Database-routed writes; shipped
-    `create` / `from_schema_classes` / `load` constructors remain available as
+    `create` / `from_schema_classes` / `load_workspace` constructors remain available as
     compatibility lifecycles.
     """
 
@@ -1611,7 +1675,7 @@ class SDKStore:
         # remove the shadow store (Slice 3a ADR-API Q10 namespace migration
         # carry-forward; compatibility preservation in Slice 2).
         self._identity_values_by_e_ref: dict[str, dict[str, Any]] = {}
-        self._views_manager = _SDKViewsManager(self)
+        self._assertion_views_manager = _SDKAssertionViewsManager(self)
         self._assertions_manager = AssertionsManager(self)
         self._schema_manager = _SDKSchemaManager(self)
         self._entities_manager = _SDKEntitiesManager(self)
@@ -1652,8 +1716,8 @@ class SDKStore:
         """Create a `FactGraph` from Python `Entity` classes.
 
         This is the normal SDK constructor. Pass `path=` when the graph should
-        own a durable workspace that can later be saved with `fg.save()` and
-        restored with `FactGraph.load(...)`.
+        own a durable workspace that can later be saved with
+        `fg.save_workspace()` and restored with `FactGraph.load_workspace(...)`.
 
         Args:
             schema_classes: Non-empty list of `Entity` subclasses.
@@ -1725,7 +1789,7 @@ class SDKStore:
         )
 
     @classmethod
-    def load(
+    def load_workspace(
         cls,
         path: str | Path,
         *,
@@ -1741,7 +1805,7 @@ class SDKStore:
         ``python -m factgraph migrate-workspace <path>``.
 
         Args:
-            path: Workspace directory created by `fg.save(...)`.
+            path: Workspace directory created by `fg.save_workspace(...)`.
             schema_classes: Entity classes matching the saved workspace schema.
             default_row_format: Optional default output row format.
 
@@ -1751,7 +1815,7 @@ class SDKStore:
                 schema digest does not match.
         """
         if schema_classes is None:
-            raise SDKStoreError("schema_classes is required for FactGraph.load(...)")
+            raise SDKStoreError("schema_classes is required for FactGraph.load_workspace(...)")
         schema_ir = compile_schema_from_classes(schema_classes)
         digest = schema_digest(schema_ir)
         try:
@@ -1776,7 +1840,7 @@ class SDKStore:
         db: Database,
         *,
         schema_classes: list[type[Entity]],
-        view: DatabaseFrozenAssertionView | None = None,
+        view: DatabaseFrozenAssertionSet | None = None,
         default_row_format: str | None = None,
         **kwargs: Any,
     ) -> "SDKStore":
@@ -1863,8 +1927,8 @@ class SDKStore:
         return self._schema_ir
 
     @property
-    def views(self) -> _SDKViewsManager:
-        return self._views_manager
+    def assertion_views(self) -> _SDKAssertionViewsManager:
+        return self._assertion_views_manager
 
     @property
     def assertions(self) -> AssertionsManager:
@@ -1914,7 +1978,7 @@ class SDKStore:
 
     @property
     def audit(self) -> _SDKAuditManager:
-        """`audit` taxonomy namespace exposing ``explain_fact`` / ``conflicts`` / ``diff_proof_frames``."""
+        """`audit` taxonomy namespace exposing ``explain`` / ``conflicts`` / ``diff_proof_frames``."""
         return self._audit_manager
 
     @property
@@ -2844,19 +2908,19 @@ class SDKStore:
             return _inspect_rule_expr(obj)
         return _inspect_rule_or_inference(obj)
 
-    def save(self, path: str | Path | None = None) -> dict[str, Any]:
+    def save_workspace(self, path: str | Path | None = None) -> dict[str, Any]:
         """Persist this graph as a FactGraph workspace.
 
         A workspace contains the ledger, schema metadata, authoring registry,
         and a workspace manifest. If `path` is omitted, the graph must already
         be bound to a workspace path through `FactGraph.create(path=...)` or an
-        earlier `fg.save(path)`.
+        earlier `fg.save_workspace(path)`.
         """
-        self._reject_attached_write("fg.save")
+        self._reject_attached_write("fg.save_workspace")
         workspace_path = _normalize_workspace_path(path) or self._workspace_path
         if workspace_path is None:
             raise SDKStoreError(
-                "workspace path not bound; pass fg.save(path=...) or create with FactGraph.create(path=...)"
+                "workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)"
             )
         try:
             write_schema_object_for_workspace(workspace_path, self.schema_ir)
@@ -3774,16 +3838,16 @@ def _build_view_entry(
     *,
     asrt_ids: Iterable[str] | None,
     asrts: Iterable[Any] | None,
-) -> FrozenAssertionView:
+) -> FrozenAssertionSet:
     payload_count = sum(value is not None for value in (asrt_ids, asrts))
     if payload_count != 1:
         raise SDKStoreError("provide exactly one view payload: asrt_ids=... or asrts=...")
     if asrts is not None:
-        return FrozenAssertionView(
+        return FrozenAssertionSet(
             name=name,
             asrt_ids=_normalize_asrt_ids_from_records(asrts),
         )
-    return FrozenAssertionView(
+    return FrozenAssertionSet(
         name=name,
         asrt_ids=_normalize_asrt_ids(asrt_ids),
     )

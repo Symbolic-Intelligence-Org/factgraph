@@ -260,9 +260,11 @@ class AssertionView:
             raise SDKStoreError("AssertionView.by_id(asrt_id) expects non-empty string")
         return self.all.by_id(asrt_id).first()
 
-    def by_ids(self, asrt_ids: Any) -> AssertionRecordSet:
+    def by_ids(self, asrt_ids: Any, *, strict: bool = False) -> AssertionRecordSet:
         if isinstance(asrt_ids, (str, bytes)):
             raise SDKStoreError("AssertionView.by_ids(asrt_ids) expects iterable[str], not string")
+        if not isinstance(strict, bool):
+            raise SDKStoreError("AssertionView.by_ids(..., strict=...) expects bool")
         try:
             normalized = tuple(asrt_ids)
         except TypeError as exc:
@@ -270,6 +272,16 @@ class AssertionView:
         for value in normalized:
             if not isinstance(value, str) or not value:
                 raise SDKStoreError("AssertionView.by_ids(asrt_ids) expects non-empty string ids")
+        if strict:
+            seen: set[str] = set()
+            for asrt_id in normalized:
+                if asrt_id in seen:
+                    raise SDKStoreError(f"by_ids strict mode: duplicate assertion id {asrt_id!r} in input")
+                seen.add(asrt_id)
+            available = {record.asrt_id for record in self.all}
+            for asrt_id in sorted(set(normalized)):
+                if asrt_id not in available:
+                    raise SDKStoreError(f"by_ids strict mode: assertion id {asrt_id!r} not found")
         wanted = set(normalized)
         return AssertionRecordSet(record for record in self.all if record.asrt_id in wanted)
 
@@ -576,7 +588,6 @@ def sdk_get(sdk: "SDKStore", entity_cls: type[Any], **identity_kwargs: Any) -> E
     _validate_entity_cls(sdk, entity_cls)
     spec = sdk._entity_spec_by_class[entity_cls]
     _validate_identity_kwargs_for_get(spec, entity_cls, identity_kwargs)
-    identity_names = [field["name"] for field in spec.get("identity_fields", []) if isinstance(field, dict)]
     request = EntityReadRequest(
         mode="get",
         entity_type=entity_cls.__name__,

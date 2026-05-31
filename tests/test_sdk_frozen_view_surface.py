@@ -15,12 +15,10 @@ class User(Entity):
 
 class FrozenViewSurfaceTests(unittest.TestCase):
     def test_public_exports_remain_unchanged(self) -> None:
-        self.assertEqual(len(sdk_module.__all__), 41)
-        self.assertIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogSemantics", sdk_module.__all__)
         self.assertIn("PyReasonSemantics", sdk_module.__all__)
-        self.assertNotIn("FrozenAssertionView", sdk_module.__all__)
+        self.assertNotIn("FrozenAssertionSet", sdk_module.__all__)
         self.assertNotIn("AssertionRecordSet", sdk_module.__all__)
 
     def test_assertions_namespace_is_top_level_property_not_export(self) -> None:
@@ -28,14 +26,14 @@ class FrozenViewSurfaceTests(unittest.TestCase):
 
         self.assertTrue(hasattr(fg, "assertions"))
         self.assertNotIn("assertions", sdk_module.__all__)
-        self.assertFalse(hasattr(fg.read, "assertions"))
-        self.assertFalse(hasattr(fg.write, "assertions"))
+        self.assertFalse(hasattr(fg, "read"))
+        self.assertFalse(hasattr(fg, "write"))
 
     def test_no_view_patch_or_diff_surface(self) -> None:
         fg = FactGraph.from_schema_classes([User])
 
-        self.assertFalse(hasattr(fg.views, "patch"))
-        self.assertFalse(hasattr(fg.views, "diff"))
+        self.assertFalse(hasattr(fg.assertion_views, "patch"))
+        self.assertFalse(hasattr(fg.assertion_views, "diff"))
 
     def test_project_view_facts_signature_unchanged(self) -> None:
         signature = inspect.signature(project_view_facts)

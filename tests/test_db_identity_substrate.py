@@ -16,7 +16,7 @@ from factgraph.core.store.database import (
     Database,
     DatabaseError,
     DuplicateAssertionError,
-    FrozenAssertionView,
+    FrozenAssertionSet,
     MetaEntry,
     asrt_id_for,
     assertion_digest_for,
@@ -233,7 +233,7 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             self.assertEqual(marker.read_text(encoding="utf-8"), "legacy registry data")
             paths = resolve_database_workspace_paths(path)
             manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["components"]["registry"], "registry/")
+            self.assertNotIn("registry", manifest["components"])
 
     def test_data_digest_is_path_independent_for_same_active_universe(self) -> None:
         db_ab = Database.create(schema_ir=_schema_ir())
@@ -339,7 +339,7 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
 
             view = db.create_view(" review ", reversed(ids))
 
-            self.assertIsInstance(view, FrozenAssertionView)
+            self.assertIsInstance(view, FrozenAssertionSet)
             self.assertEqual(view.name, "review")
             self.assertEqual(view.asrt_ids, tuple(sorted(ids)))
             self.assertEqual(view.db_id, db.db_id)

@@ -13,10 +13,10 @@ class User(Entity):
 
 def _seed_store() -> tuple[SDKStore, dict[str, str]]:
     sdk = SDKStore([User])
-    ref = sdk.ref(User, user_id="u-1")
+    ref = sdk.entities.ref(User, user_id="u-1")
     ids = {
-        "name": sdk.set(User.name, ref, "Alice", meta={"source": "seed"}),
-        "tag": sdk.add(User.tag, ref, "vip", meta={"source": "seed"}),
+        "name": sdk.fields.set(User.name, ref, "Alice", meta={"source": "seed"}),
+        "tag": sdk.fields.add(User.tag, ref, "vip", meta={"source": "seed"}),
     }
     return sdk, ids
 
@@ -44,7 +44,7 @@ class FGAssertionsNamespaceTests(unittest.TestCase):
 
     def test_by_ids_accepts_iterable_and_skips_unknowns(self) -> None:
         sdk, ids = _seed_store()
-        view = sdk.views.create("review_set", asrt_ids=[ids["name"], "missing-asrt", ids["tag"]])
+        view = sdk.assertion_views.create("review_set", asrt_ids=[ids["name"], "missing-asrt", ids["tag"]])
 
         records = sdk.assertions.by_ids(view.asrt_ids)
 
@@ -52,16 +52,65 @@ class FGAssertionsNamespaceTests(unittest.TestCase):
         self.assertTrue(hasattr(records, "where"))
         self.assertEqual(records.where(value="vip").one().asrt_id, ids["tag"])
 
-    def test_by_ids_has_no_strict_parameter_in_first_slice(self) -> None:
+    def test_by_ids_strict_rejects_missing_ids(self) -> None:
         sdk, ids = _seed_store()
 
-        with self.assertRaises(TypeError):
-            sdk.assertions.by_ids([ids["name"]], strict=True)
+        with self.assertRaises(Exception) as ctx:
+            sdk.assertions.by_ids([ids["name"], "missing-asrt"], strict=True)
+        self.assertIn("missing-asrt", str(ctx.exception))
 
-    def test_no_graph_wide_assertion_query_methods_ship(self) -> None:
+    def test_by_ids_strict_rejects_duplicate_input_before_deduplication(self) -> None:
+        sdk, ids = _seed_store()
+
+        with self.assertRaises(Exception) as ctx:
+            sdk.assertions.by_ids([ids["name"], ids["name"]], strict=True)
+        self.assertIn("duplicate assertion id", str(ctx.exception))
+
+    def test_field_assertion_view_by_ids_strict_matches_top_level_behavior(self) -> None:
+        sdk, ids = _seed_store()
+        view = sdk.assertions.field(User.name)
+
+        self.assertEqual(view.by_ids([ids["name"]], strict=True).one().asrt_id, ids["name"])
+        with self.assertRaises(Exception) as missing_ctx:
+            view.by_ids([ids["name"], "missing-asrt"], strict=True)
+        self.assertIn("missing-asrt", str(missing_ctx.exception))
+        with self.assertRaises(Exception) as duplicate_ctx:
+            view.by_ids([ids["name"], ids["name"]], strict=True)
+        self.assertIn("duplicate assertion id", str(duplicate_ctx.exception))
+
+    def test_audit_explain_and_conflicts_accept_assertion_record(self) -> None:
+        sdk, ids = _seed_store()
+        record = sdk.assertions.by_id(ids["name"])
+        self.assertIsNotNone(record)
+        assert record is not None
+
+        explanation = sdk.audit.explain(record)
+        self.assertEqual(explanation["asrt_id"], ids["name"])
+        self.assertEqual(explanation["pred_id"], record.pred_id)
+        self.assertEqual(explanation["e_ref"], record.e_ref)
+        self.assertTrue(explanation["chosen"])
+
+        conflicts = sdk.audit.conflicts(record)
+        self.assertEqual(conflicts["pred_id"], record.pred_id)
+        self.assertEqual(conflicts["e_ref"], record.e_ref)
+        self.assertIn(ids["name"], conflicts["active_asrt_ids"])
+
+    def test_audit_conflicts_accepts_entity_ref_and_field_name(self) -> None:
+        sdk, ids = _seed_store()
+        ref = sdk.entities.ref(User, user_id="u-1")
+
+        conflicts = sdk.audit.conflicts((ref, "name"))
+
+        self.assertEqual(conflicts["e_ref"], ref)
+        self.assertIn(ids["name"], conflicts["active_asrt_ids"])
+
+    def test_expected_graph_wide_assertion_query_methods_ship(self) -> None:
         sdk, _ = _seed_store()
 
-        for name in ("active", "history", "where", "at", "version"):
+        for name in ("active", "all", "where", "field", "by_id", "by_ids", "retract"):
+            with self.subTest(name=name):
+                self.assertTrue(hasattr(sdk.assertions, name))
+        for name in ("history", "at", "version"):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(sdk.assertions, name))
 
@@ -72,7 +121,10 @@ class FGAssertionsNamespaceTests(unittest.TestCase):
         self.assertIsNotNone(record)
         assert record is not None
 
-        for attr in ("entity_type", "field_name", "pred_id", "ref", "identity"):
+        for attr in ("entity_type", "field_name", "pred_id"):
+            with self.subTest(attr=attr):
+                self.assertTrue(hasattr(record, attr))
+        for attr in ("ref", "identity"):
             with self.subTest(attr=attr):
                 self.assertFalse(hasattr(record, attr))
 

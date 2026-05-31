@@ -10,7 +10,7 @@ Replaces the Slice 7B ``test_a20e_registry_final_exit.py`` file. Validates:
    (Q6-A (d) + R-1 from audit).
 4. Migration CLI output classes: dry-run / migrated / noop / error
    (PF-5 amendment).
-5. ``FactGraph.load(...)`` loudly rejects legacy ``registry/`` markers.
+5. ``FactGraph.load_workspace(...)`` loudly rejects legacy ``registry/`` markers.
 6. Service registry routes are gone (PF-6 amendment).
 """
 
@@ -124,7 +124,7 @@ class WorkspaceManifestLayoutTests(unittest.TestCase):
     def test_save_writes_manifest_without_registry_component(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             fg = FactGraph.create(schema_classes=[_UserForA20E], path=tmp_dir)
-            fg.save()
+            fg.save_workspace()
             manifest_path = Path(tmp_dir) / "factgraph_workspace.json"
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             components = payload.get("components", {})
@@ -135,12 +135,12 @@ class WorkspaceManifestLayoutTests(unittest.TestCase):
     def test_load_rejects_legacy_registry_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             fg = FactGraph.create(schema_classes=[_UserForA20E], path=tmp_dir)
-            fg.save()
+            fg.save_workspace()
             # Plant a legacy registry/ directory to trigger the rejection.
             legacy = Path(tmp_dir) / "registry"
             legacy.mkdir()
             with self.assertRaises(SDKStoreError) as cm:
-                FactGraph.load(tmp_dir, schema_classes=[_UserForA20E])
+                FactGraph.load_workspace(tmp_dir, schema_classes=[_UserForA20E])
             self.assertIn("migrate-workspace", str(cm.exception))
 
 
@@ -167,7 +167,7 @@ class MigrationCLIOutputTests(unittest.TestCase):
     def test_noop_class_already_migrated_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             fg = FactGraph.create(schema_classes=[_UserForA20E], path=tmp_dir)
-            fg.save()
+            fg.save_workspace()
             rc, stdout, stderr = self._run_cli(["migrate-workspace", tmp_dir])
             self.assertEqual(rc, 0, f"stderr={stderr!r}")
             payload = json.loads(stdout)
@@ -177,7 +177,7 @@ class MigrationCLIOutputTests(unittest.TestCase):
     def test_dry_run_class_legacy_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             fg = FactGraph.create(schema_classes=[_UserForA20E], path=tmp_dir)
-            fg.save()
+            fg.save_workspace()
             legacy = Path(tmp_dir) / "registry" / "schema"
             legacy.mkdir(parents=True)
             schema_path = legacy / "schema_ir.json"
@@ -193,7 +193,7 @@ class MigrationCLIOutputTests(unittest.TestCase):
     def test_migrated_class_legacy_workspace_to_db_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             fg = FactGraph.create(schema_classes=[_UserForA20E], path=tmp_dir)
-            fg.save()
+            fg.save_workspace()
             legacy = Path(tmp_dir) / "registry" / "schema"
             legacy.mkdir(parents=True)
             schema_path = legacy / "schema_ir.json"
@@ -207,7 +207,7 @@ class MigrationCLIOutputTests(unittest.TestCase):
             archives = list(Path(tmp_dir).glob("registry.legacy.*"))
             self.assertEqual(len(archives), 1)
             # Subsequent load should succeed now.
-            fg2 = FactGraph.load(tmp_dir, schema_classes=[_UserForA20E])
+            fg2 = FactGraph.load_workspace(tmp_dir, schema_classes=[_UserForA20E])
             self.assertEqual(fg2.schema_ir, fg.schema_ir)
 
 

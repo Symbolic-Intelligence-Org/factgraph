@@ -416,12 +416,12 @@ class SchemaMutationWorkspaceTests(unittest.TestCase):
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg(path=workspace)
-            fg.save()
+            fg.save_workspace()
             old_manifest = _read_workspace_manifest(workspace)
 
             result = fg.schema.apply(Account)
             after_add_manifest = _read_workspace_manifest(workspace)
-            fg.save()
+            fg.save_workspace()
             after_save_manifest = _read_workspace_manifest(workspace)
 
         self.assertEqual(after_add_manifest["schema_digest"], old_manifest["schema_digest"])
@@ -470,7 +470,7 @@ class SchemaMutationPreservationTests(unittest.TestCase):
     def test_package_namespace_remains_distinct_from_workspace_save(self) -> None:
         fg = FactGraph.create(schema_classes=[User])
 
-        self.assertTrue(hasattr(fg, "save"))
+        self.assertTrue(hasattr(fg, "save_workspace"))
         self.assertTrue(hasattr(fg.package, "export_package"))
 
     def test_existing_facts_remain_readable_after_add(self) -> None:
@@ -501,11 +501,11 @@ class SchemaMutationPreservationTests(unittest.TestCase):
     def test_views_namespace_remains_in_memory_after_add(self) -> None:
         fg = _seed_fg()
         asrt_id = fg.fields.set(User.name, fg.entities.ref(User, user_id="Bob"), "Bob")
-        view = fg.views.create("review", asrt_ids=[asrt_id])
+        view = fg.assertion_views.create("review", asrt_ids=[asrt_id])
 
         fg.schema.apply(Account)
 
-        self.assertEqual(fg.views.get("review"), view)
+        self.assertEqual(fg.assertion_views.get("review"), view)
 
     def test_track3_semantics_exports_remain_available(self) -> None:
         sdk_module = _sdk_module()
@@ -531,8 +531,8 @@ class SchemaMutationPreservationTests(unittest.TestCase):
             workspace = Path(tmp_dir) / "workspace"
             fg = _seed_fg(path=workspace)
 
-            fg.save()
-            loaded = FactGraph.load(workspace, schema_classes=[User])
+            fg.save_workspace()
+            loaded = FactGraph.load_workspace(workspace, schema_classes=[User])
 
             self.assertEqual(schema_digest(loaded.schema_ir), schema_digest(fg.schema_ir))
 
