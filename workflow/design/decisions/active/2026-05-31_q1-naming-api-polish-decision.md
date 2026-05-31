@@ -132,13 +132,14 @@ Per user "B, 还是 worth rename 的, 但是要先判断哪些应该变" (rename
 - `atom_key` → `condition_key` (240 hits / 60 files)
 - `_atom_index_from_key` → `_condition_index_from_key`
 - `materialized_atom_index` → `materialized_condition_index`
-- `RuleAddedAtom` → `RuleAddedCondition`
-- `RuleAddedAtomKind` → `RuleAddedConditionKind`
+- `RuleAddedAtom` → `AddedCondition` (corrected 2026-05-31 P2-1: user lock matrix specifies drop of `Rule` prefix; current shipped class at [`src/factgraph/application/protocol/derivation_fact_overlay.py:202`](../../../../src/factgraph/application/protocol/derivation_fact_overlay.py))
+- `RuleAddedAtomKind` → `AddedConditionKind` (corrected 2026-05-31 P2-1: paired with above; current shipped TypeAlias at [`src/factgraph/application/protocol/derivation_fact_overlay.py:34`](../../../../src/factgraph/application/protocol/derivation_fact_overlay.py))
 - `AtomDescriptor` → `ConditionDescriptor`
 - `DiagnoseAtomLocator` → `DiagnoseConditionLocator`
 - `WhyNotAtomLocator` → `WhyNotConditionLocator`
 - `ProofFrameAtomVerdict` → `ProofFrameConditionVerdict`
-- `RuleLiteralPath`: **VERIFY in Q-NAMING-B1** whether corresponding rename is warranted (audit §3 lists 109 hits but no explicit rename target; decide during sub-slice draft).
+- `RuleLiteralPath` → `ConditionPath` (corrected 2026-05-31 P2-2: ADOPT, not VERIFY; user lock matrix specifies rename. Current shipped class at [`src/factgraph/application/protocol/derivation_fact_overlay.py:160`](../../../../src/factgraph/application/protocol/derivation_fact_overlay.py); re-exported via [`src/factgraph/application/protocol/__init__.py:36`](../../../../src/factgraph/application/protocol/__init__.py); consumed by SDK shell [`src/factgraph/sdk/shells/rule_literal_replace.py:18`](../../../../src/factgraph/sdk/shells/rule_literal_replace.py) and application runtime [`src/factgraph/application/rule_literal_replace_runtime.py:21`](../../../../src/factgraph/application/rule_literal_replace_runtime.py); 109 audit hits.)
+- `RuleLiteralPathKind` → `ConditionPathKind` (added 2026-05-31 P2-2: paired TypeAlias confirmed at [`src/factgraph/application/protocol/derivation_fact_overlay.py:31`](../../../../src/factgraph/application/protocol/derivation_fact_overlay.py) and re-exported via [`src/factgraph/application/protocol/__init__.py:37`](../../../../src/factgraph/application/protocol/__init__.py).)
 
 **§4.3.3 atom_bounds — EXCLUDE (Sub-Q4, sharpened 2026-05-31):**
 
@@ -500,3 +501,4 @@ This decision is honored when:
 |---|---|---|---|
 | 2026-05-31 | proposed | Decision drafted by Claude | Captures user PDF chapter responses 2026-05-30 + module-by-module locks 2026-05-30..05-31 + Sub-Q1-Q5 resolutions 2026-05-31. Sourced from audit `10de33b9` (`workflow/audit/active/2026-05-31_naming-polish-feasibility.md`). Phased per audit §9. Awaiting user adopt action. |
 | 2026-05-31 | proposed (amended) | Sharpen atom_bounds rationale | User clarified atom_bounds is PyReason-domain syntax. §4.3.3, §4.8.2, §5(f) sharpened from "partially adapter semantics wording" to explicit "PyReason-domain syntax preservation principle" with classification table for other PyReason-wrapper fields. No scope change to Sub-Q4 (atom_bounds still excluded). branch_bounds/branch_probabilities remain in §4.7.3 cascade (FactGraph branch concept); head_bound remains §4.7.5 cleanup. |
+| 2026-05-31 | proposed (amended) | P2-1 / P2-2 fix + D2 filename rename + D1 branch recovery | Codex review surfaced two Required-severity content errors in §4.3.2: (P2-1) `RuleAddedAtom` rename target was `RuleAddedCondition` but user lock matrix specifies `AddedCondition` (drop `Rule` prefix); same for `RuleAddedAtomKind` → `AddedConditionKind`. (P2-2) `RuleLiteralPath` was marked "VERIFY in Q-NAMING-B1" but user lock matrix specifies ADOPT rename to `ConditionPath`; paired `RuleLiteralPathKind` → `ConditionPathKind` added (confirmed shipped at `derivation_fact_overlay.py:31`). Both corrections cite line-precise shipped source. D2 (CADENCE filename convention): file renamed from `2026-05-31_q-naming-api-polish.md` to `2026-05-31_q1-naming-api-polish-decision.md` to match `q<N>-<topic>-decision` precedent. D1 (Stage 2 branch placement): decision commits cherry-picked from Stage 1 audit branch onto dedicated Stage 2 branch `v0.2.0-q1-naming-api-polish-decision-2026-05-31` (forked from audit HEAD `10de33b9`); audit branch HEAD restored to `10de33b9` via user-authorized `git branch -f` per Slice 7B Option A recovery pattern. Sacred Q-PR1 paths 0-diff preserved through recovery. |
