@@ -1,6 +1,6 @@
 # Q-NAMING-AD Blueprint: Assertions naming polish + Persistence rename
 
-- Status: draft
+- Status: scoped
 - Created: 2026-05-31
 - Last Updated: 2026-05-31
 - Related Modules:
