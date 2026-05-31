@@ -52,16 +52,16 @@ Q-NAMING decision 6-phase routemap (AD/C/E/B1/B2/F) completed and pushed to orig
   - `sdk.ref(...)` → `sdk.entities.ref(...)` (per user guide:60)
   - `sdk.set(...)` → `sdk.fields.set(...)` (per user guide:62)
   - `sdk.get(...)` → `sdk.entities.get(...)` (per user guide:66)
-  - `sdk.read(...)` → audit-required: likely `sdk.facts.read(...)` or `sdk.assertions.read(...)` (Step 4.3 preflight 2.d locks exact namespaced equivalent)
+  - **`sdk.read.match(...)` → `sdk.entities.match(...)`** **[LOCKED Step 4.4 PF-r2]** per shipped docs `sdk/docs/04_api_surface.en.md:557` ("Use `fg.entities.where(...)` for simple snapshot reads and `fg.entities.match(...)` for match"). Note: `sdk.read.*` was a NAMESPACE (not method) per Q-NAMING-C archive `23389a2b` — its replacement is `sdk.entities.*` namespace, NOT a single method rename.
   - `sdk.retract(...)` → `sdk.assertions.retract(...)` (per api_surface:350+521)
 - **Restoring flat shells `SDKStore.ref/.read/.retract/.set/.get` is OUT of SS4 scope** — would require separate Red blueprint per Q-NAMING-C precedent (reversing 20-shell deletion is a public-surface decision, not test cleanup). SS4 must NOT add `SDKStore.ref`/`.read`/etc. methods back.
 - SS4 audit at Step 4.3 preflight 2.d: per-method confirm namespaced equivalent + verify all 27 test files' callsites can migrate cleanly without source change.
 
 - **SS5**: `meta[confidence] was removed` — **68 error instances** across multiple test files. **Root cause**: Uncertainty Phase 1 (2026-05-11 implemented + pushed at `origin/master 8a11b3a5` per project_uncertainty_phase1_implemented.md) replaced `meta[confidence]` with `raw_kind` / `bound`; tests still pass `meta={"confidence": ...}`. Fix: fixture migration `meta={"confidence": X}` → `raw_kind=... + bound=...` per Uncertainty Phase 1 DSL.
 
-- **SS6**: `_eval_eq_atom() / _eval_arith_atom() missing 1 required positional argument: 'atom'` — **24 error instances** (20 + 4). **Root cause**: core/derivation evaluator signature drift — internal `_eval_*` helpers gained required `atom` parameter; some callsites still call legacy 1-arg form. Fix: locate evaluator definition + audit per N7 layer authority — is the signature change in shipped code consistent with the rest of the codebase, or is it itself a baseline drift bug?
+- **SS6**: `_eval_eq_atom() / _eval_arith_atom() missing 1 required positional argument: 'atom'` — **24 error instances** (20 + 4). **[LOCKED Step 4.4 PF-r1 SOURCE TOUCH AUTHORIZED]** Step 4.3 preflight `f8dd647f` traceback origin grep confirms 11 callsites in **`src/factgraph/core/rules/frontier.py`** SOURCE file call helpers with wrong arity + 1 in `application/diagnose_runtime.py` + 1 in `test_t5_why_not_quarantine.py`. Helper signatures at `core/rules/where_eval.py:526` (`_eval_eq_atom(view_facts, envs, atom, *, ast_gate_on)`) + line 857 (`_eval_arith_atom(view_facts, envs, atom, *, ast_gate_on)`) confirm `atom: tuple[Any, ...]` is REQUIRED positional. **Root cause**: BUG is in shipped SOURCE (`frontier.py`), not test fixture — signature drift after `01bac07a blueprint(slice-1): rewrite attr-eq identity lowering` or `765eb10a feat(naming)` was not caught because tests already broken. **SS6 source touch authorization** (per §6 source touch policy + N7 layer authority): SS6 IS the first cleanup sub-slice to invoke source touch authorization clause; explicit audit log entry at source change + per-site rationale required at Step 4.7. Fix: locate per-callsite missing-`atom` site in `frontier.py` + `diagnose_runtime.py` + verify each callsite signature aligns with helper definition; preserve N7 layer authority (no cross-layer signature change).
 
-- **SS7**: `NoneType.proof` AttributeError — **102 error instances** (largest single category). **Root cause**: post-Q-NAMING-F migration of `engine_payload → proof` field rename; tests setup `result.evidence_envelope` returns None → `.proof` AttributeError. **Investigation hypothesis**: 102 errors likely chain-blocked by upstream SS5 (meta[confidence] in `_make_sdk()` setup) — `_make_sdk()` fails at `set_field(meta={"confidence":...})` → test setup incomplete → `evidence_envelope` is None → `.proof` access fails. Expected behavior: **after SS5 ships, SS7 should drop dramatically** (perhaps to <30 errors). Defer SS7 to last position to measure auto-resolve effect.
+- **SS7**: `NoneType.proof` AttributeError — **102 error instances** (largest single category). **[LOCKED Step 4.4 PF-R1 — chain hypothesis DISPROVEN; active investigation required]** Step 4.3 preflight `f8dd647f` independent grep verification revealed only **5 of 102 (~5%) NoneType.proof failures have meta[confidence] in immediate setup chain** — NOT the 70-100% initial blueprint hypothesis predicted. The 102 errors are concentrated in 4 SDK rule overlay test files: `test_sdk_rule_literal_replace.py` 15 + `test_sdk_rule_add_condition.py` 15 + `test_sdk_rule_disable.py` 14 + `test_sdk_proof_frame.py` 7 = 51, plus 51 in other files. These are INDEPENDENT test setup failures where `result.evidence_envelope` returns None for reasons NOT related to Uncertainty Phase 1 chain. **Root cause**: post-Q-NAMING-F migration of `engine_payload → proof` field rename; tests setup `result.evidence_envelope` returns None → `.proof` AttributeError. **Chain auto-resolve assumption DISCARDED** per PF-R1 LOCK. SS7 reframed as **direct active investigation** (NOT auto-deferred): SS7 needs root-cause audit of why `evidence_envelope` returns None in SDK rule overlay capability protocol tests, then per-site migration. SS7 reordered: still LAST in execution sequence (per Step 4.2 P2-FP1) so that recensus after SS6 establishes precise SS7 baseline before active investigation begins.
 
 - **SS8**: Miscellaneous (~17 error instances): 4 `0 != 1`, 4 `'failed' != 'passed'`, 2×2 `Tuples differ`, 2 sha256 mismatch, 2 idref_v1 mismatch, 2 `EvaluateRow.support_kind`. **Root cause**: per-site investigation. Likely individual fixture or assertion drift cases.
 
@@ -121,16 +121,20 @@ Total unique failing test files: **27**
 
 ### §4.2 Sub-slice sequence (per 方案 C quick wins first, locked)
 
-| Order | SS | Estimated effort | Risk | Expected baseline after |
+**[REVISED Step 4.4 PF-s1 — recensus-gated trajectory]** Per Step 4.3 preflight PF-R1 chain disproval, category counts have overlap/chain effects that violate linear subtraction. Replaced with **recensus-gated trajectory** — each SS ships then runs canonical census per §5.1; expected outcomes documented as direction (DROP / CLASSIFICATION-ONLY / RECENSUS-REQUIRED), not absolute numbers (except SS1/SS3 which have clear non-chained baselines):
+
+| Order | SS | Estimated effort | Risk | Expected outcome |
 |---|---|---|---|---|
-| 1 | SS1 Rule(where=) — **application Rule constructor ONLY per P2-1** | Small (6 files fixture migration; carve-outs for legacy DSL / aggregate / Query / adapter tests) | Low | 189 → ~145 |
-| 2 | SS3 ReadPolicy — **retire/quarantine per P2-3 LOCK** | Small (1 file rename/rewrite) | Low | ~145 → ~121 |
-| 3 | SS4 SDKStore shape — **namespaced migration per P2-4 LOCK** | Medium (multi-file; per-method namespaced mapping) | Medium | ~121 → ~29 |
-| 4 | SS5 meta[confidence] | Medium (DSL migration; unblocks SS7) | Medium | ~29 → ~29 (-68 direct, but unblocks ~70-100 SS7 errors) |
-| 5 | SS2 engine_options= — **reordered after SS5 per P2-2** (chain-blocked) | Tiny (residual after SS5 likely 0-2 cases) | Low | ~29 → ~29 (residual migrated) |
-| 6 | SS6 _eval_*_atom missing 'atom' | Medium (evaluator audit) | Medium | ~29 → ~5 |
-| 7 | SS7 NoneType.proof | Auto-deferred; measure after SS5 | Low if upstream fixed | ~5 → ~0 |
-| 8 | SS8 misc | Tiny (per-site) | Low | ~0 |
+| 1 | SS1 Rule(where=) — **application Rule constructor ONLY per P2-1** | Small (6 files fixture migration; carve-outs for legacy DSL / aggregate / Query / adapter tests) | Low | DIRECT DROP: 189 → ~145 (Rule(where=) failures cleanly independent) |
+| 2 | SS3 ReadPolicy — **retire/quarantine per P2-3 LOCK** | Small (1 file rename/rewrite) | Low | DIRECT DROP: ~145 → ~121 (single test file cleanly independent) |
+| 3 | SS4 SDKStore shape — **namespaced migration per P2-4 + P2-r2 LOCK** | Medium (multi-file; per-method namespaced mapping incl. `sdk.read.match → sdk.entities.match`) | Medium | RECENSUS REQUIRED post-SS4 — 92 SDKStore.* error instances may overlap with downstream chains (cannot assume linear -92); re-run canonical census to establish actual residual |
+| 4 | SS5 meta[confidence] | Medium (DSL migration `meta[confidence]` → `raw_kind`/`bound`) | Medium | DIRECT meta[confidence] failures EXPECTED TO DROP (~68 direct hits); **SS7 chain auto-resolve DISPROVEN per PF-R1 — only ~5 of 102 NoneType.proof errors auto-resolve via SS5 chain**; recensus required to establish actual residual |
+| 5 | SS2 engine_options= — **reordered after SS5 per P2-2** (chain-blocked) | Tiny (residual after SS5 likely 0-2 cases) | Low | CLASSIFICATION-ONLY until SS5 ships; then re-census + migrate residual (likely 0-2 cases) |
+| 6 | SS6 _eval_*_atom missing 'atom' — **SOURCE TOUCH AUTHORIZED per PF-r1 LOCK** | Medium (`frontier.py` 11 callsites + `diagnose_runtime.py` 1 + 1 test file) | Medium (SOURCE change requires per-site rationale per §6) | DIRECT DROP: ~24 evaluator drift failures cleanly addressable via shipped-source signature alignment |
+| 7 | SS7 NoneType.proof — **DIRECT active investigation per PF-R1 LOCK** | Medium-Large (102 errors; root-cause audit of `evidence_envelope = None` in SDK rule overlay capability protocol tests) | Medium | DIRECT INVESTIGATION: post-SS6 recensus establishes precise SS7 baseline; ~95 of 102 expected to remain (chain disproven); SS7 implementation requires audit-first per `test_sdk_rule_literal_replace/add_condition/disable/proof_frame` cluster |
+| 8 | SS8 misc | Tiny (per-site) | Low | FINAL MISC CLEANUP per case-by-case |
+
+**Census-gated discipline**: numerical predictions for SS4/SS5/SS7 are AVOIDED because chain effects + overlapping categories make linear arithmetic unreliable. Each SS ships → runs canonical `PYTHONPATH=src python -m pytest tests/ --tb=no -q --no-header 2>&1 | tail -5` (per §5.1) → records observed delta in audit log; cumulative state tracked in this meta's Event Log.
 
 **Target**: 189 → ~0 baseline failures after all 8 sub-slices.
 
@@ -233,6 +237,7 @@ Per Q-NAMING precedent verification ritual:
   - Multi-category bundled commits
 - **兼容性约束**:
   - Cleanup commits do NOT touch shipped source unless required to unblock test fixture
+  - **[Step 4.4 PF-r1 SOURCE TOUCH AUTHORIZATION for SS6]**: SS6 explicitly authorized to modify `src/factgraph/core/rules/frontier.py` (11 callsites) + `src/factgraph/application/diagnose_runtime.py` (1 callsite) to align `_eval_eq_atom`/`_eval_arith_atom` callsites with helper signatures at `where_eval.py:526/857` (`atom: tuple[Any, ...]` required positional). SS6 implementation discipline: per-callsite explicit rationale at audit log; preserve N7 layer authority (no cross-layer signature change); no other source-touch beyond signature alignment.
   - When source touch IS required, must explicitly document at audit log + retain N7 layer authority
   - Alpha release; no historical user protection
 
@@ -282,4 +287,19 @@ Per Q-NAMING precedent verification ritual:
 
 ## 10. Outcome / Deviations
 
-(To be filled at Step 4.8 closure after all 8 SS ship.)
+**Step 4.4 PF locks** (per Step 4.3 preflight `f8dd647f`):
+
+- **PF-R1 LOCK SS7 chain hypothesis DISPROVEN**: only 5 of 102 NoneType.proof failures (~5%) chain-blocked by SS5; SS7 reframed as direct active investigation (NOT auto-deferred). 102 errors concentrated in 4 SDK rule overlay test files + 51 others — independent setup failures where `result.evidence_envelope` returns None for reasons unrelated to Uncertainty Phase 1 chain. Blueprint §2 SS7 + §4.2 trajectory + §10.4-style alignment updated.
+- **PF-r1 LOCK SS6 SOURCE TOUCH AUTHORIZED**: `frontier.py` 11 callsites + `diagnose_runtime.py` 1 callsite missing required `atom` arg per `where_eval.py:526/857` helper signatures. SS6 IS the first cleanup sub-slice to invoke §6 source touch authorization clause; per-callsite rationale required at audit log; N7 layer authority preserved.
+- **PF-r2 LOCK SS4 sdk.read.match → sdk.entities.match**: per shipped `api_surface.en.md:557`. Complete SS4 namespaced migration map.
+- **PF-s1 recensus-gated trajectory** (replacing linear subtraction): §4.2 trajectory revised to direction-based outcomes (DIRECT DROP / CLASSIFICATION-ONLY / RECENSUS REQUIRED / DIRECT INVESTIGATION / FINAL MISC); numerical predictions for SS4/SS5/SS7 avoided because chain effects + overlapping categories violate linear arithmetic.
+
+**Step 4.7 implementation discipline carry-forward** (per Step 4.3 preflight PF-s1 at `f8dd647f`):
+
+- **Per-SS canonical census** (per §5.1): `PYTHONPATH=src python -m pytest tests/ --tb=no -q --no-header 2>&1 | tail -5` ran post-impl per SS; recorded observed delta in audit log Event Log; cumulative state tracked in this meta's audit row sequence.
+- **SS6 source touch site list** (per PF-r1 LOCK): per-callsite rationale required at audit log when changing `frontier.py` + `diagnose_runtime.py`; verify each callsite signature aligns with helper definition; preserve N7 layer authority (no cross-layer signature change).
+- **SS7 active investigation requirement** (per PF-R1 LOCK): post-SS6 recensus establishes precise SS7 baseline; SS7 implementation requires audit-first per `test_sdk_rule_literal_replace/add_condition/disable/proof_frame` cluster (~51 of 102 hits); ~95 of 102 expected to remain after SS5 (chain disproven); SS7 root-cause audit must investigate why `result.evidence_envelope` returns None in SDK rule overlay capability protocol tests.
+- **SS4 namespaced migration complete map**: `sdk.ref→sdk.entities.ref`, `sdk.get→sdk.entities.get`, `sdk.set→sdk.fields.set`, `sdk.read.match→sdk.entities.match`, `sdk.retract→sdk.assertions.retract`.
+- **SS-by-SS cadence**: each SS = single commit + canonical census + audit log row + sacred verification ritual + per-SS push authorization. NO bundled SS commits.
+
+(Step 4.8 closure outcome / deviations to be filled at implementation closure after all 8 SS ship + cumulative baseline verified.)
