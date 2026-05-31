@@ -15,12 +15,15 @@
 
 - **Cleanup vs release prep priority**: per user 2026-06-01 direct directive, baseline drift cleanup precedes v0.2.0-rc release prep because 189 pre-existing failures repeatedly forced expensive failure-categorization analysis during Q-NAMING-E + B2 + F Step 4.7 Red slice reviews. Cleaning these now means future release gates and any subsequent slice reviews start from a clean baseline.
 
-- **方案 C + 方案 A locked**: quick wins first ordering + meta-blueprint with sub-slice tracking. Rationale:
-  - Quick wins (SS1 Rule.where + SS2 engine_options + SS3 ReadPolicy = 74 errors) are small + well-defined fixture migrations → fast baseline drop establishes momentum
-  - Medium-risk sub-slices (SS4 SDKStore shape + SS5 uncertainty + SS6 evaluator = 184 errors) need audit-first investigation but bounded scope
-  - SS7 (NoneType.proof 102 errors) deferred to LAST because hypothesis predicts upstream SS5 (meta[confidence]) will unblock most of them via chain propagation (test setup at `_make_sdk()` calls `set_field(meta={"confidence":...})` which fails → `evidence_envelope` returns None → `.proof` access fails)
-  - SS8 misc deferred to LAST because likely individual case-by-case investigation
-  - Meta-blueprint avoids one giant cleanup commit; tracks cumulative progress; allows per-SS independent review
+- **方案 C + 方案 A locked**: quick wins first ordering + meta-blueprint with sub-slice tracking. Rationale **[REVISED Step 4.2 P2-FP1 — sequence reorder per amend]**:
+  - **Early quick wins = SS1 + SS3 (44 + 24 = 68 errors)** are small + well-defined fixture migrations → fast baseline drop establishes momentum. SS1 = application Rule constructor only (carve-outs locked per P2-1); SS3 = retire/quarantine red-baseline ReadPolicy test file (locked per P2-3).
+  - **SS4 (92 errors) ordered after SS3 but before SS5** as audit-first medium slice — namespaced migration to `fg.entities.ref/get`, `fg.fields.set`, `fg.assertions.retract` per Q-NAMING-C documented canonical surfaces (locked per P2-4). SS4 in this position clears SDK shape noise that otherwise compounds downstream errors during SS5/SS6 reviews.
+  - **SS5 (68 errors) ordered after SS4** — Uncertainty Phase 1 DSL migration (`meta[confidence]` → `raw_kind`/`bound`). Unblocks SS7 chain.
+  - **SS2 (6 errors) ordered AFTER SS5 per P2-2** — chain-blocked by SS5's `meta[confidence]` setup failure. SS2 = classification-only until SS5 ships; expected 0 delta until chain unblocks. Likely 0-2 residual fixtures to migrate.
+  - **SS6 (24 errors) follows SS2** — evaluator signature drift audit (`_eval_eq_atom/_eval_arith_atom` missing 'atom').
+  - SS7 (NoneType.proof 102 errors) deferred to LAST because hypothesis predicts upstream SS5 (meta[confidence]) will unblock most of them via chain propagation (test setup at `_make_sdk()` calls `set_field(meta={"confidence":...})` which fails → `evidence_envelope` returns None → `.proof` access fails).
+  - SS8 misc deferred to LAST because likely individual case-by-case investigation.
+  - Meta-blueprint avoids one giant cleanup commit; tracks cumulative progress; allows per-SS independent review.
 
 - **Lightweight mini-cadence per SS**: cleanup is not Red slice — does not require full 9-stage CADENCE per SS. Per §5.1:
   - Each SS = pre-impl census + root cause + migration + post-impl census + audit log + single commit + per-commit ritual + push (with explicit per-SS authorization)
