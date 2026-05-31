@@ -36,16 +36,26 @@ Q-NAMING decision 6-phase routemap (AD/C/E/B1/B2/F) completed and pushed to orig
 
 **Sub-slice priority (quick wins first per 方案 C)**:
 
-- **SS1**: `Rule(where=)` keyword TypeError — **44 error instances** across 6 active test files: `tests/application/protocol/test_rule_aggregate.py`, `tests/application/protocol/test_rule_expr_head_validation.py`, `tests/sdk/test_t5_why_not_quarantine.py`, `tests/test_db_attach_lifecycle.py`, `tests/test_sdk_find_partial_identity.py`, `tests/test_sdk_frozen_view_read_runtime_boundaries.py`. **Root cause**: Q-NAMING-E migration leftover — Rule class renamed `where` field → `when` field; tests still pass legacy `where=` kwarg. Fix: fixture migration `Rule(where=[...])` → `Rule(when=[...])` per Q-NAMING-E + B1 fixture migration precedent.
+- **SS1**: `Rule(where=)` keyword TypeError — **44 error instances** across 6 active test files: `tests/application/protocol/test_rule_aggregate.py`, `tests/application/protocol/test_rule_expr_head_validation.py`, `tests/sdk/test_t5_why_not_quarantine.py`, `tests/test_db_attach_lifecycle.py`, `tests/test_sdk_find_partial_identity.py`, `tests/test_sdk_frozen_view_read_runtime_boundaries.py`. **Root cause**: Q-NAMING-E migration leftover — public application `Rule` constructor renamed `where=` kwarg → `when=`; tests still pass legacy `where=` kwarg. **[NARROWED Step 4.2 P2-1: constructor-type discrimination]** SS1 scope is restricted to **traceback-confirmed application `Rule(...)` constructor failures ONLY** (i.e., the public `factgraph.sdk.Rule` per Q-NAMING-E §4.6.2). Explicit carve-outs (NOT in SS1 scope; remain unchanged per Q-NAMING-E inherited):
+  - **Legacy DSL Rule.where preserved** per Q-NAMING-E PF-R1 G4 Option D (legacy `sdk.dsl.rule.Rule.where` field at `sdk/dsl/rule.py:71` UNCHANGED — required by Q-PR1 sacred `pyreason/rule_ext.py:101`).
+  - **Aggregate helpers `agg_count/sum/min/max/mean(*, where=[...])`** at `sdk/dsl/expr.py:329-349` PRESERVED per Q-NAMING-E PF-v7.
+  - **Query.where / Query.where_ir** at `sdk/dsl/rule.py:242` PRESERVED per Q-NAMING-E N17 + B1 N17 + B2/F N18.
+  - **Inference body `where`** if any legacy references exist (post-Q-NAMING-E should be `Inference.when`) — verify per traceback at Step 4.3 preflight 2.b.
+  - **PyReason adapter test `where=` callsites** that wrap adapter input (different namespace) — verify per file at Step 4.3 preflight 2.b.
+  - SS1 implementation: migrate only `Rule(where=[...])` callsites with **public application Rule** receiver — traceback line + test file name confirms which.
 
-- **SS2**: `engine_options=` T5 rejection — **6 error instances** in `tests/test_pyreason_e2e.py` (chain-blocked by SS5 setup but error msg per F G4 says "use config="). **Root cause**: T5 migration leftover — `evaluate(engine_options=...)` rejected since T5; tests still pass `engine_options=`. Fix: migrate test fixtures to use `engine=` + `config=` per Q-NAMING-F G4. **Note**: 6 errors all chain-blocked by SS5 (meta[confidence]) — may auto-resolve after SS5.
+- **SS2**: `engine_options=` T5 rejection — **6 error instances** chain-blocked by SS5. **[REORDERED Step 4.2 P2-2 — move SS2 after SS5]** Fresh grep confirms `engine_options=` appears across MUCH BROADER active surface than initially documented: 11 test files (`test_sdk_diagnose.py`, `test_application_diagnose_protocol.py`, `test_problog_engine_eval.py`, `test_pyreason_engine_eval.py`, `test_pyreason_e2e.py`, `test_sdk_check.py`, `test_sdk_fact_overlay.py`, `test_sdk_why_not.py`, `test_pyreason_semantics_profile_migration.py`, `tests/sdk/test_rule_expr_evaluate.py`, `tests/application/protocol/test_evaluate_result_digests.py`) + 12+ src files (`core/store/runtime.py`, `adapters/pyreason/engine_eval.py`, 4 `sdk/shells/*.py`, `sdk/store.py`, `application/derivation_runtime.py`, multiple `sdk/docs/` + `adapters/docs/`). Most src refs are LEGITIMATE error-message strings ("use config= or engine-specific configuration") per Q-NAMING-F G4 — NOT migration targets. Only test fixtures that CONSTRUCT `evaluate(engine_options=...)` are SS2 scope. **Order change**: SS2 ordered AFTER SS5 because 6 errors all chain-blocked by SS5's `meta[confidence]` setup failure in `_make_sdk()`; running SS2 before SS5 produces 0 observable delta (errors still chain-blocked). Default lock: SS2 = "classification only until SS5 ships; then re-census + migrate residual engine_options= test fixtures (likely 0-2 remaining after SS5 unblocks setup)". **Root cause**: T5 migration leftover — `evaluate(engine_options=...)` rejected since T5; tests still pass `engine_options=`. Fix: migrate test fixtures to use `engine=` + `config=` per Q-NAMING-F G4 (only for residual cases after SS5).
 
-- **SS3**: `ReadPolicy` import error — **24 error instances** all in `tests/test_sdk_read_policy.py` (single file). **Root cause**: pre-existing import baseline — `ReadPolicy` no longer exported from `factgraph.sdk.__init__`. Fix: investigate per project_readpolicy_migration_implemented.md (ReadPolicy/policy= migration implemented 2026-05-11 @ origin/master `b53e9bd1` + retired flat-shell access). Likely test file needs migration to new import path OR test file marked deprecated.
+- **SS3**: `ReadPolicy` import error — **24 error instances** all in `tests/test_sdk_read_policy.py` (single file). **[LOCKED Step 4.2 P2-3 — retired-surface handling, NOT new import path]** Shipped source confirms ReadPolicy was REMOVED, not migrated to new namespace: `src/factgraph/sdk/store.py:126` declares `_READPOLICY_REMOVED_MESSAGE = "ReadPolicy was removed. Use raw_kind / bound for uncertainty inputs."` Test file `tests/test_sdk_read_policy.py:1` describes itself as **"Phase 1 G1.1 red-baseline tests for the ReadPolicy migration blueprint"** with comment at line 86: `"All ReadPolicy imports are dynamic ... so file collects cleanly while ReadPolicy does not yet exist."` These are HISTORICAL TDD red-baseline tests for a migration design that ultimately went a different direction (ReadPolicy removed entirely, replaced by `raw_kind`/`bound` Uncertainty Phase 1 DSL). **Root cause**: pre-implementation TDD test file for an abandoned migration design path. **Fix LOCKED default**: retire/quarantine `tests/test_sdk_read_policy.py` (rename to `tests/_retired/test_sdk_read_policy.py` with archive header explaining context) OR rewrite to assert `ReadPolicy` removal (`assertNotIn("ReadPolicy", factgraph.sdk.__all__)` + `assertRaises(ImportError)` patterns). Step 4.3 preflight 2.c locks which approach. **Default expectation**: retire (cleanest; honors original "red-baseline" intent now that migration design diverged). NOT hunt for replacement import path.
 
-- **SS4**: `SDKStore.ref/.read/.retract/.set/.get` AttributeError — **88+ error instances** (66 .ref + 18 .read + 4 .retract + 2 .set + 2 .get) across multiple test files. **Root cause**: pre-existing SDK shape baseline — flat shells were removed in Q-NAMING-C archive `23389a2b` (20 flat shells deleted); tests still call `sdk.ref(...)` / `sdk.read(...)` / etc. Fix: investigate per Q-NAMING-C precedent — should the tests be:
-  - (a) migrated to use namespaced manager methods (e.g., `sdk.facts.read(...)`)?
-  - (b) deleted as obsolete (Q-NAMING-C N16 documented commit_assertions preservation; what's the equivalent decision for these methods)?
-  - SS4 starts with audit grep to discover the namespaced equivalent for each method before migration.
+- **SS4**: `SDKStore.ref/.read/.retract/.set/.get` AttributeError — **92 error instances** (66 .ref + 18 .read + 4 .retract + 2 .set + 2 .get) across multiple test files. **[LOCKED Step 4.2 P2-4 — namespaced migration default; restoration requires separate Red blueprint]** Shipped reality confirms namespaced surfaces are canonical post-Q-NAMING-C: `src/factgraph/sdk/docs/00_user_guide.en.md:60+` documents `fg.entities.ref(User, user_id=...)`, `fg.fields.set(User.name, ref, value)`, `fg.entities.get(User, ...)`; `src/factgraph/sdk/docs/04_api_surface.en.md:23+187+335+350+521` documents `fg.entities.ref`, `fg.entities.get`, `fg.entities.edit`, `fg.fields.set`, `fg.assertions.retract` as canonical entries; `fg.assertions.retract(...)` is "only public assertion-id mutation entry" per line 350. Q-NAMING-C archive `23389a2b` deleted 20 flat shells per documented design decision. **Root cause**: pre-existing SDK shape baseline — flat shells `SDKStore.ref/.read/.retract/.set/.get` deleted in Q-NAMING-C; tests still call legacy flat-shell form. **Fix LOCKED default**: migrate tests to namespaced managers:
+  - `sdk.ref(...)` → `sdk.entities.ref(...)` (per user guide:60)
+  - `sdk.set(...)` → `sdk.fields.set(...)` (per user guide:62)
+  - `sdk.get(...)` → `sdk.entities.get(...)` (per user guide:66)
+  - `sdk.read(...)` → audit-required: likely `sdk.facts.read(...)` or `sdk.assertions.read(...)` (Step 4.3 preflight 2.d locks exact namespaced equivalent)
+  - `sdk.retract(...)` → `sdk.assertions.retract(...)` (per api_surface:350+521)
+- **Restoring flat shells `SDKStore.ref/.read/.retract/.set/.get` is OUT of SS4 scope** — would require separate Red blueprint per Q-NAMING-C precedent (reversing 20-shell deletion is a public-surface decision, not test cleanup). SS4 must NOT add `SDKStore.ref`/`.read`/etc. methods back.
+- SS4 audit at Step 4.3 preflight 2.d: per-method confirm namespaced equivalent + verify all 27 test files' callsites can migrate cleanly without source change.
 
 - **SS5**: `meta[confidence] was removed` — **68 error instances** across multiple test files. **Root cause**: Uncertainty Phase 1 (2026-05-11 implemented + pushed at `origin/master 8a11b3a5` per project_uncertainty_phase1_implemented.md) replaced `meta[confidence]` with `raw_kind` / `bound`; tests still pass `meta={"confidence": ...}`. Fix: fixture migration `meta={"confidence": X}` → `raw_kind=... + bound=...` per Uncertainty Phase 1 DSL.
 
@@ -113,13 +123,13 @@ Total unique failing test files: **27**
 
 | Order | SS | Estimated effort | Risk | Expected baseline after |
 |---|---|---|---|---|
-| 1 | SS1 Rule(where=) | Small (6 files fixture migration) | Low | 189 → ~145 |
-| 2 | SS2 engine_options= | Tiny (1 file?) | Low | ~145 → ~139 (or auto-resolved by SS5) |
-| 3 | SS3 ReadPolicy | Small (1 file) | Low (per memory: ReadPolicy migration 2026-05-11) | ~139 → ~115 |
-| 4 | SS4 SDKStore shape | Medium (multi-file; needs API audit) | Medium | ~115 → ~25 |
-| 5 | SS5 meta[confidence] | Medium (DSL migration; unblocks SS7) | Medium | ~25 → ~25 (-68 direct, but unblocks ~70-100 SS7 errors) |
-| 6 | SS6 _eval_*_atom missing 'atom' | Medium (evaluator audit) | Medium | ~25 → ~1 |
-| 7 | SS7 NoneType.proof | Auto-deferred; measure after SS5 | Low if upstream fixed | ~1 → ~0 |
+| 1 | SS1 Rule(where=) — **application Rule constructor ONLY per P2-1** | Small (6 files fixture migration; carve-outs for legacy DSL / aggregate / Query / adapter tests) | Low | 189 → ~145 |
+| 2 | SS3 ReadPolicy — **retire/quarantine per P2-3 LOCK** | Small (1 file rename/rewrite) | Low | ~145 → ~121 |
+| 3 | SS4 SDKStore shape — **namespaced migration per P2-4 LOCK** | Medium (multi-file; per-method namespaced mapping) | Medium | ~121 → ~29 |
+| 4 | SS5 meta[confidence] | Medium (DSL migration; unblocks SS7) | Medium | ~29 → ~29 (-68 direct, but unblocks ~70-100 SS7 errors) |
+| 5 | SS2 engine_options= — **reordered after SS5 per P2-2** (chain-blocked) | Tiny (residual after SS5 likely 0-2 cases) | Low | ~29 → ~29 (residual migrated) |
+| 6 | SS6 _eval_*_atom missing 'atom' | Medium (evaluator audit) | Medium | ~29 → ~5 |
+| 7 | SS7 NoneType.proof | Auto-deferred; measure after SS5 | Low if upstream fixed | ~5 → ~0 |
 | 8 | SS8 misc | Tiny (per-site) | Low | ~0 |
 
 **Target**: 189 → ~0 baseline failures after all 8 sub-slices.
@@ -146,6 +156,30 @@ Each sub-slice ships independently using:
 6. **Commit**: single `cleanup(baseline-drift): SS<N> <description>` commit on this branch
 7. **Per-commit ritual**: Q-PR1 0-diff + sacred master + dirty baseline checks
 8. **Push**: only at explicit user authorization per sub-slice (not bundled)
+
+**[ADDED Step 4.2 P3-2 — canonical test runner + census command]**
+
+Per-SS pre-impl + post-impl census must use the SAME canonical command for comparable deltas:
+
+```bash
+PYTHONPATH=src python -m pytest tests/ --tb=no -q --no-header 2>&1 | tail -5
+```
+
+Expected output format (matches Step 4.1 baseline at `fa030b06`):
+```
+<N> failed, <N> passed, <N> skipped, <N> subtests passed in <T>s
+```
+
+For per-SS targeted error category re-verification + delta isolation:
+
+```bash
+# Per-SS category-specific count
+PYTHONPATH=src python -m pytest tests/ --tb=line --no-header 2>&1 | grep -E "Error\b" | sed 's/.*[A-Z][a-z]*Error/Error/' | sort | uniq -c | sort -rn | head -20
+```
+
+**Failure-log artifact convention**: each SS commit message includes the pre-impl + post-impl numeric delta (e.g., `189 → 145 (−44)`) in the commit footer; audit log Event Log row cites the same numbers with reference to running cumulative state per §5.3.
+
+`PYTHONPATH=src` required because `factgraph` package not installed in pip-editable mode in this environment (per project_evidence_db_view_phase_c_abandoned.md baseline). Use of any other runner (e.g., `pytest tests/`, `uv run pytest`, `pip install -e .`) DEPRECATED for census purposes — variant runners produce non-comparable failure counts.
 
 Skip full 9-stage CADENCE per sub-slice because:
 - No new architecture decisions (cleanup-only)
@@ -207,7 +241,7 @@ Per Q-NAMING precedent verification ritual:
 - [ ] SS1 Rule(where=) — 44 errors fixed; 6 test files migrated
 - [ ] SS2 engine_options= — 6 errors fixed (or auto-resolved by SS5)
 - [ ] SS3 ReadPolicy import — 24 errors fixed
-- [ ] SS4 SDKStore shape — 88+ errors fixed; tests migrated to namespaced managers OR deleted as obsolete
+- [ ] SS4 SDKStore shape — 92 observed error instances fixed (per Step 4.2 P3-1 + P2-4 LOCK); tests migrated to namespaced managers (`fg.entities.ref/get`, `fg.fields.set`, `fg.assertions.retract`, etc.); flat-shell restoration explicitly OUT of scope (requires separate Red blueprint per Q-NAMING-C precedent)
 - [ ] SS5 meta[confidence] — 68 errors fixed; tests migrated to Uncertainty Phase 1 DSL (raw_kind/bound)
 - [ ] SS6 _eval_*_atom signature — 24 errors fixed; evaluator audit complete
 - [ ] SS7 NoneType.proof — ~102 errors fixed (mostly via upstream SS5 propagation)
