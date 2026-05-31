@@ -14,7 +14,7 @@ from factgraph.core.store.runtime import get_engine_evaluator
 from factgraph.core.store.types import EngineExtBase
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk.dsl import vars as sdk_vars
-from factgraph.sdk.dsl import Inference, Pred
+from factgraph.sdk.dsl import EmitSpec, Inference, Pred
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStore
 
@@ -56,9 +56,8 @@ class ProbLogEngineEvalTests(unittest.TestCase):
             return Inference(
                 id="drv.problog_tag",
                 version="v1",
-                where=[Pred("user:tag_seed", u, tag)],
-                target="user:tag",
-                head_vars=[u, tag],
+                when=[Pred("user:tag_seed", u, tag)],
+                emits=EmitSpec("user:tag", [u, tag]),
             )
 
     def _mock_output(self, sdk: SDKStore) -> str:

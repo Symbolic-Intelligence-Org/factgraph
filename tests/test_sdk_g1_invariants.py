@@ -14,7 +14,7 @@ from factgraph.sdk.shells.diagnose import sdk_diagnose
 
 
 EXPECTED_SDK_ALL: tuple[str, ...] = (
-    "Branch",
+    "Case",
     "CardinalityError",
     "Inference",
     "EditorClosedError",

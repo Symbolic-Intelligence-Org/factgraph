@@ -289,7 +289,7 @@ def _validate_join_constraint_shapes(constraints: tuple[RuleJoinConstraint, ...]
 
 def _validate_not_same_occurrence(left: RulePortRef, right: RulePortRef) -> None:
     if left.occurrence_alias == right.occurrence_alias and left.rule_id == right.rule_id:
-        raise RuleExprError("join constraints must connect distinct Rule occurrences; put self constraints in Rule.where")
+        raise RuleExprError("join constraints must connect distinct Rule occurrences; put self constraints in Rule.when")
 
 
 def _validate_join_reach(group: _AndGroup, constraints: tuple[RuleJoinConstraint, ...]) -> None:

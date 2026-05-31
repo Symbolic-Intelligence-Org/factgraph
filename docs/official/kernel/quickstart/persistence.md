@@ -26,7 +26,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from factgraph.sdk import (
-    Branch,
+    Case,
+    EmitSpec,
     Entity,
     FactGraph,
     Field,
@@ -67,7 +68,7 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 
@@ -84,9 +85,8 @@ with vars("u", "tag") as (u, tag):
     tags_from_seed = Inference(
         id="inf.tags_from_seed",
         version="v1",
-        where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-        target="user:tag",
-        head_vars=[u, tag],
+        when=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
+        emits=EmitSpec("user:tag", [u, tag]),
     )
 
 result = fg.eval.evaluate(tags_from_seed)
@@ -231,7 +231,7 @@ validates the workspace schema digest against your Python schema declarations.
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from factgraph.sdk import Branch, Entity, FactGraph, Field, Identity, Inference, Pred, Rule, build_application_rule, vars
+from factgraph.sdk import Case, EmitSpec, Entity, FactGraph, Field, Identity, Inference, Pred, Rule, build_application_rule, vars
 
 
 class User(Entity):
@@ -255,9 +255,8 @@ def make_inference() -> Inference:
         return Inference(
             id="inf.tags_from_seed",
             version="v1",
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-            target="user:tag",
-            head_vars=[u, tag],
+            when=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            emits=EmitSpec("user:tag", [u, tag]),
         )
 
 

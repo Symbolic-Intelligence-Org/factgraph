@@ -48,7 +48,7 @@ class PersonEntity(Entity):
 
 def _person_exists_rule(rule_id: str = "person_exists") -> Rule:
     person = Var("$person")
-    return Rule(id=rule_id, where=(PredAtom("Person:exists", [person]),), ports={"person": person})
+    return Rule(id=rule_id, when=(PredAtom("Person:exists", [person]),), ports={"person": person})
 
 
 def _person_region_rule(rule_id: str = "person_region") -> Rule:
@@ -56,7 +56,7 @@ def _person_region_rule(rule_id: str = "person_region") -> Rule:
     region = Var("$region")
     return Rule(
         id=rule_id,
-        where=(PredAtom("Person:exists", [person]), PredAtom("Person:region", [person, region])),
+        when=(PredAtom("Person:exists", [person]), PredAtom("Person:region", [person, region])),
         ports={"person": person, "region": region},
     )
 
@@ -68,7 +68,7 @@ def _aggregate_rule() -> Rule:
     aggregate = AggregateAtom("sum", amount, [PredAtom("OrderAmount", [order, amount])])
     return Rule(
         id="amount_sum",
-        where=(CmpAtom("eq", total, aggregate),),
+        when=(CmpAtom("eq", total, aggregate),),
         ports={"total": total},
     )
 
@@ -188,7 +188,7 @@ class RuleExprPyReasonClassifierTests(unittest.TestCase):
         person = Var("$person")
         rule = Rule(
             id="source_eq",
-            where=(PredAtom("Person:exists", [person]), CmpAtom("eq", person, Const("person:alice"))),
+            when=(PredAtom("Person:exists", [person]), CmpAtom("eq", person, Const("person:alice"))),
             ports={"person": person},
         )
         plan = _lower_application_rule(rule, head=rule)
@@ -211,7 +211,7 @@ class RuleExprPyReasonClassifierTests(unittest.TestCase):
 
     def test_pyreason_classifier_rejects_aggregate_external_head_body(self) -> None:
         total = Var("$total")
-        body = Rule(id="total_source", where=(PredAtom("TotalValue", [total]),), ports={"total": total})
+        body = Rule(id="total_source", when=(PredAtom("TotalValue", [total]),), ports={"total": total})
         head = _aggregate_rule()
         plan = _lower_application_rule(body, head=head)
 

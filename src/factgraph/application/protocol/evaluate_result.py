@@ -731,10 +731,10 @@ def _build_closed_head_from_row(
             )
         )
 
-    base_where = () if _is_projection_rule(head) else tuple(head.where)
+    base_where = () if _is_projection_rule(head) else tuple(head.when)
     closed = Rule(
         id=f"{head.id}_closed_{row.row_id}",
-        where=tuple(base_where) + tuple(closure_atoms),
+        when=tuple(base_where) + tuple(closure_atoms),
         ports=dict(head.ports),
         version=head.version,
         desc=head.desc,

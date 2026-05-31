@@ -47,7 +47,7 @@ def _person_exists_rule() -> Rule:
     person = Var("$p")
     return Rule(
         id="Person:exists",
-        where=(PredAtom("Person:exists", [person]),),
+        when=(PredAtom("Person:exists", [person]),),
         ports={"person": person},
     )
 
@@ -57,7 +57,7 @@ def _person_region_rule() -> Rule:
     region = Var("$region")
     return Rule(
         id="person_region",
-        where=(
+        when=(
             PredAtom("Person:exists", [person]),
             PredAtom("Person:region", [person, region]),
         ),
@@ -67,7 +67,7 @@ def _person_region_rule() -> Rule:
 
 class RuleExprLoweringPlanTests(unittest.TestCase):
     def test_application_rule_lowers_to_private_plan(self) -> None:
-        rule = Rule(id="user_rule", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        rule = Rule(id="user_rule", when=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
 
         plan = _lower_application_rule(rule, head=rule)
 
@@ -80,7 +80,7 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         self.assertEqual(plan.branches[0].occurrence_aliases, ("user_rule",))
 
     def test_dtos_are_frozen_and_not_public_exports(self) -> None:
-        rule = Rule(id="user_rule", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        rule = Rule(id="user_rule", when=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
         plan = _lower_application_rule(rule, head=rule)
 
         with self.assertRaises(FrozenInstanceError):
@@ -93,7 +93,7 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         self.assertFalse(hasattr(sdk, "RuleExprLoweringPlan"))
 
     def test_dto_invariants_reject_invalid_shapes(self) -> None:
-        rule = Rule(id="user_rule", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        rule = Rule(id="user_rule", when=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
         head_binding = RuleExprHeadBinding(
             kind="inline",
             head_rule_id=rule.id,
@@ -130,8 +130,8 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
             )
 
     def test_alias_local_variables_prevent_private_name_collisions(self) -> None:
-        left = Rule(id="left", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
-        right = Rule(id="right", where=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        left = Rule(id="left", when=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
+        right = Rule(id="right", when=(PredAtom("User:exists", [Var("$u")]),), ports={"user": Var("$u")})
 
         plan = _lower_rule_expr(left.as_("a") & right.as_("b"), head=left)
 
@@ -145,9 +145,9 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         self.assertNotEqual(bindings[("a", "user")], bindings[("b", "user")])
 
     def test_and_or_lowers_to_deterministic_branch_alternatives(self) -> None:
-        a = Rule(id="a", where=(PredAtom("A", [Var("$a")]),), ports={"a": Var("$a")})
-        b = Rule(id="b", where=(PredAtom("B", [Var("$b")]),), ports={"b": Var("$b")})
-        c = Rule(id="c", where=(PredAtom("C", [Var("$c")]),), ports={"c": Var("$c")})
+        a = Rule(id="a", when=(PredAtom("A", [Var("$a")]),), ports={"a": Var("$a")})
+        b = Rule(id="b", when=(PredAtom("B", [Var("$b")]),), ports={"b": Var("$b")})
+        c = Rule(id="c", when=(PredAtom("C", [Var("$c")]),), ports={"c": Var("$c")})
 
         plan = _lower_rule_expr((a.as_("a") & b.as_("b")) | c.as_("c"), head=a)
 
@@ -160,7 +160,7 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         left = _person_region_rule()
         right = Rule(
             id="right_region",
-            where=(PredAtom("Person:region", [Var("$q"), Var("$region")]),),
+            when=(PredAtom("Person:region", [Var("$q"), Var("$region")]),),
             ports={"person": Var("$q"), "region": Var("$region")},
         )
         expr = (left.as_("left") & right.as_("right")).join(left.as_("left").region.eq(right.as_("right").region))
@@ -177,7 +177,7 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         left = _person_region_rule()
         right = Rule(
             id="right_value",
-            where=(PredAtom("Person:region", [Var("$person"), Var("$region")]),),
+            when=(PredAtom("Person:region", [Var("$person"), Var("$region")]),),
             ports={"region": Var("$region")},
         )
         expr = (left.as_("left") & right.as_("right")).join(left.as_("left").person.eq(right.as_("right").region))
@@ -190,7 +190,7 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         left = _person_region_rule()
         right = Rule(
             id="right_region",
-            where=(PredAtom("Person:region", [Var("$q"), Var("$region")]),),
+            when=(PredAtom("Person:region", [Var("$q"), Var("$region")]),),
             ports={"person": Var("$q"), "region": Var("$region")},
         )
         join = left.as_("left").region.eq(right.as_("right").region)
@@ -205,7 +205,7 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
     def test_external_head_body_and_links_materialize_after_expression_and_joins(self) -> None:
         body = _person_region_rule()
         head = _person_exists_rule()
-        plan = _lower_rule_expr(body & Rule(id="other", where=(PredAtom("Other", [Var("$o")]),), ports={"other": Var("$o")}), head=head)
+        plan = _lower_rule_expr(body & Rule(id="other", when=(PredAtom("Other", [Var("$o")]),), ports={"other": Var("$o")}), head=head)
 
         self.assertEqual(plan.head_binding.kind, "external")
         compiled, traces = _materialize_native_derivation_plan(plan)
@@ -218,11 +218,11 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         self.assertEqual(traces[0].head_port_link_materializations[0].head_port_name, "person")
 
     def test_external_head_body_applies_to_every_or_branch_without_var_collision(self) -> None:
-        left = Rule(id="left", where=(PredAtom("Person:exists", [Var("$person")]),), ports={"person": Var("$person")})
-        right = Rule(id="right", where=(PredAtom("Person:exists", [Var("$person")]),), ports={"person": Var("$person")})
+        left = Rule(id="left", when=(PredAtom("Person:exists", [Var("$person")]),), ports={"person": Var("$person")})
+        right = Rule(id="right", when=(PredAtom("Person:exists", [Var("$person")]),), ports={"person": Var("$person")})
         head = Rule(
             id="head",
-            where=(PredAtom("Person:exists", [Var("$person")]), PredAtom("Allowed", [Var("$person")])),
+            when=(PredAtom("Person:exists", [Var("$person")]), PredAtom("Allowed", [Var("$person")])),
             ports={"person": Var("$person")},
         )
         plan = _lower_rule_expr(left.as_("left") | right.as_("right"), head=head)
@@ -238,8 +238,8 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         self.assertEqual(tuple(len(trace.head_port_link_materializations) for trace in traces), (1, 1))
 
     def test_external_head_links_by_public_port_name_not_internal_var_name(self) -> None:
-        source = Rule(id="source", where=(PredAtom("Person:exists", [Var("$p")]),), ports={"person": Var("$p")})
-        head = Rule(id="head", where=(PredAtom("Person:exists", [Var("$different")]),), ports={"person": Var("$different")})
+        source = Rule(id="source", when=(PredAtom("Person:exists", [Var("$p")]),), ports={"person": Var("$p")})
+        head = Rule(id="head", when=(PredAtom("Person:exists", [Var("$different")]),), ports={"person": Var("$different")})
         plan = _lower_application_rule(source, head=head)
 
         compiled, traces = _materialize_native_derivation_plan(plan)
@@ -270,7 +270,7 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
         aggregate = AggregateAtom("sum", amount, [PredAtom("OrderAmount", [order, amount])])
         rule = Rule(
             id="amount_sum",
-            where=(CmpAtom("eq", Var("$total"), aggregate),),
+            when=(CmpAtom("eq", Var("$total"), aggregate),),
             ports={"total": Var("$total")},
         )
 
@@ -293,7 +293,7 @@ class RuleExprNativeExecutionTests(unittest.TestCase):
         store, index = _build_store()
         encoded = _seed_person(store, index, "alice")
         rule = _person_exists_rule()
-        copy = Rule(id="person_exists_copy", where=(PredAtom("Person:exists", [Var("$q")]),), ports={"person": Var("$q")})
+        copy = Rule(id="person_exists_copy", when=(PredAtom("Person:exists", [Var("$q")]),), ports={"person": Var("$q")})
 
         candidates = _evaluate_rule_expr_native_for_tests(
             rule.as_("exists") & copy.as_("copy"),
@@ -307,7 +307,7 @@ class RuleExprNativeExecutionTests(unittest.TestCase):
 
     def test_trace_tuple_is_per_branch(self) -> None:
         rule = _person_exists_rule()
-        other = Rule(id="Other:exists", where=(PredAtom("Other:exists", [Var("$o")]),), ports={"other": Var("$o")})
+        other = Rule(id="Other:exists", when=(PredAtom("Other:exists", [Var("$o")]),), ports={"other": Var("$o")})
         plan = _lower_rule_expr(rule.as_("a") | other.as_("b"), head=rule)
 
         compiled, traces = _materialize_native_derivation_plan(plan)

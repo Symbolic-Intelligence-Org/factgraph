@@ -56,14 +56,14 @@ def _person_region_rule(rule_id: str = "person_region") -> Rule:
     region = Var("$region")
     return Rule(
         id=rule_id,
-        where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
+        when=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
         ports={"person": person, "region": region},
     )
 
 
 def _person_exists_rule(rule_id: str = "person_exists") -> Rule:
     person = Var("$person")
-    return Rule(id=rule_id, where=(PredAtom("Person:exists", [person]),), ports={"person": person})
+    return Rule(id=rule_id, when=(PredAtom("Person:exists", [person]),), ports={"person": person})
 
 
 def _person_tag_rule() -> Rule:
@@ -71,7 +71,7 @@ def _person_tag_rule() -> Rule:
     tag = Var("$tag")
     return Rule(
         id="person_tag",
-        where=(PredAtom("Person:exists", [person]), PredAtom("person:tag", [person, tag])),
+        when=(PredAtom("Person:exists", [person]), PredAtom("person:tag", [person, tag])),
         ports={"person": person, "tag": tag},
     )
 
@@ -81,7 +81,7 @@ def _person_region_marker_rule(rule_id: str = "person_region_marker") -> Rule:
     marker = Var("$marker")
     return Rule(
         id=rule_id,
-        where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, marker])),
+        when=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, marker])),
         ports={"person": person, "marker": marker},
     )
 
@@ -91,7 +91,7 @@ def _person_tag_marker_rule(rule_id: str = "person_tag_marker") -> Rule:
     marker = Var("$marker")
     return Rule(
         id=rule_id,
-        where=(PredAtom("Person:exists", [person]), PredAtom("person:tag", [person, marker])),
+        when=(PredAtom("Person:exists", [person]), PredAtom("person:tag", [person, marker])),
         ports={"person": person, "marker": marker},
     )
 
@@ -102,7 +102,7 @@ def _person_account_label_disconnected_rule() -> Rule:
     marker = Var("$marker")
     return Rule(
         id="person_account_label_disconnected",
-        where=(
+        when=(
             PredAtom("Person:exists", [person]),
             PredAtom("Account:exists", [account]),
             PredAtom("account:label", [account, marker]),
@@ -189,12 +189,12 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         region = Var("$region")
         value_only = Rule(
             id="value_only",
-            where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
+            when=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
             ports={"region": region},
         )
         ambiguous = Rule(
             id="ambiguous",
-            where=(PredAtom("Person:exists", [person]), PredAtom("Person:exists", [other])),
+            when=(PredAtom("Person:exists", [person]), PredAtom("Person:exists", [other])),
             ports={"person": person, "other": other},
         )
 
@@ -207,7 +207,7 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "template must be application Rule or AND RuleExpr"):
             graph.read.match(Person, ["not", "a", "rule"])
         with sdk.vars("p") as (p,):
-            query = Query(head=Person(p), where=[Person(p)])
+            query = Query(head=Person(p), when=[Person(p)])
         with self.assertRaisesRegex(SDKStoreError, "template must be application Rule or AND RuleExpr"):
             graph.read.match(Person, query)
         with self.assertRaisesRegex(RuleExprError, "require at least one operand"):
@@ -221,7 +221,7 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         region = Var("$region")
         rule = Rule(
             id="disconnected",
-            where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [other, region])),
+            when=(PredAtom("Person:exists", [person]), PredAtom("person:region", [other, region])),
             ports={"person": person, "other": other, "region": region},
         )
 

@@ -93,7 +93,7 @@ from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 
 from .compile import compile_schema_from_classes
-from .dsl.branch import Branch
+from .dsl.branch import Case
 from .facade import _ASSERTION_FILTER_MISSING
 from .errors import (
     CardinalityError,
@@ -3274,10 +3274,10 @@ def _expand_authoring_derivation_heads(payload: dict[str, Any]) -> list[dict[str
 def _authoring_derivation_payload_from_sdk_object(
     derivation: Any,
 ) -> tuple[dict[str, Any], list[float] | None]:
-    where_value = getattr(derivation, "where", None)
+    where_value = getattr(derivation, "when", None)
     normalized_where, used_branch_wrapper = _normalize_where_branch_wrappers(
         where_value,
-        path="$.where",
+        path="$.when",
     )
     if not used_branch_wrapper:
         payload = derivation.to_authoring_payload()
@@ -3570,7 +3570,7 @@ def _semantics_context_for_ruleexpr_plan(
 
 
 def _branch_id_index_for_derivation(derivation: Any) -> dict[str, int]:
-    where = getattr(derivation, "where", None)
+    where = getattr(derivation, "when", None)
     branches = _inspect_where_branches(where)
     out: dict[str, int] = {}
     for branch in branches:
@@ -3613,7 +3613,7 @@ def _inspect_rule_or_inference(obj: Any) -> dict[str, Any]:
             "id": obj.id,
             "version": obj.version,
             "heads": [head.to_authoring_head() for head in obj.heads],
-            "branches": _inspect_where_branches(obj.where),
+            "branches": _inspect_where_branches(obj.when),
         }
     raise SDKStoreError("rules.inspect(...) expects SDK Rule or Inference")
 
@@ -3622,10 +3622,10 @@ def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
     if not isinstance(where, list) or not where:
         raise SDKStoreError("rules.inspect(...) requires non-empty where")
 
-    if all(isinstance(item, Branch) for item in where):
+    if all(isinstance(item, Case) for item in where):
         raw_branches = [(item.id, list(item.atoms)) for item in where]
-    elif any(isinstance(item, Branch) for item in where):
-        raise SDKStoreError("where/branch cannot mix Branch(...) with bare branches")
+    elif any(isinstance(item, Case) for item in where):
+        raise SDKStoreError("where/case cannot mix Case(...) with bare cases")
     elif _where_items_are_atoms(where):
         raw_branches = [(None, list(where))]
     else:
@@ -3639,7 +3639,7 @@ def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
         fallback_id = f"b{idx}"
         branch_id = explicit_id if explicit_id is not None else fallback_id
         if branch_id in seen_ids:
-            raise SDKStoreError(f"duplicate Branch.id {branch_id!r} in inspected where")
+            raise SDKStoreError(f"duplicate Case.id {branch_id!r} in inspected when")
         seen_ids[branch_id] = idx
         out.append(
             {
@@ -3656,7 +3656,7 @@ def _inspect_where_branches(where: Any) -> list[dict[str, Any]]:
 
 
 def _where_items_are_atoms(where: list[Any]) -> bool:
-    return bool(where) and all(not isinstance(item, list) and not isinstance(item, Branch) for item in where)
+    return bool(where) and all(not isinstance(item, list) and not isinstance(item, Case) for item in where)
 
 
 def _lower_inspect_atoms(atoms: list[Any]) -> list[Any]:
@@ -3712,15 +3712,18 @@ def _build_authoring_derivation_payload_with_where(
     if isinstance(heads, list) and heads:
         payload["head"] = heads[0].to_authoring_head() if len(heads) == 1 else [head.to_authoring_head() for head in heads]
 
-    target = getattr(derivation, "target", None)
-    if target is not None:
-        payload["target"] = target
-
-    head_vars = getattr(derivation, "head_vars", None)
-    if head_vars is not None:
-        if not isinstance(head_vars, list):
-            raise SDKStoreError("derivation.head_vars must be list when provided", path="$.head_vars")
-        payload["head_vars"] = [_lower_derivation_head_var(item) for item in head_vars]
+    emits = getattr(derivation, "emits", None)
+    if emits is not None:
+        target = getattr(emits, "target", None)
+        vars_ = getattr(emits, "vars", None)
+        if not isinstance(target, str) or not target:
+            raise SDKStoreError("derivation.emits.target must be non-empty string", path="$.emits.target")
+        if not isinstance(vars_, list):
+            raise SDKStoreError("derivation.emits.vars must be list", path="$.emits.vars")
+        payload["emits"] = {
+            "target": target,
+            "vars": [_lower_derivation_head_var(item) for item in vars_],
+        }
 
     status = getattr(derivation, "status", None)
     if status is not None:
@@ -3752,17 +3755,17 @@ def _normalize_where_branch_wrappers(
     if not isinstance(raw_where, list) or not raw_where:
         return raw_where, False
 
-    has_branch_wrapper = any(isinstance(item, Branch) for item in raw_where)
+    has_branch_wrapper = any(isinstance(item, Case) for item in raw_where)
     if not has_branch_wrapper:
         return raw_where, False
-    if not all(isinstance(item, Branch) for item in raw_where):
-        raise SDKStoreError("where/branch cannot mix Branch(...) with bare branches", path=path)
+    if not all(isinstance(item, Case) for item in raw_where):
+        raise SDKStoreError("where/case cannot mix Case(...) with bare cases", path=path)
 
     branches: list[list[Any]] = []
     for idx, branch in enumerate(raw_where):
         atoms = list(branch.atoms)
         if not atoms:
-            raise SDKStoreError("Branch.atoms must be non-empty list", path=f"{path}[{idx}]")
+            raise SDKStoreError("Case.atoms must be non-empty list", path=f"{path}[{idx}]")
         branches.append(atoms)
     return branches, True
 
@@ -3878,7 +3881,7 @@ def _head_rule_for_compiled_plans(plans: Sequence[CompiledDerivationPlan]) -> Ap
         ports[port_name] = var
     return ApplicationRule(
         id=head.target_pred_id,
-        where=(PredAtom(head.target_pred_id, list(vars_by_port)),),
+        when=(PredAtom(head.target_pred_id, list(vars_by_port)),),
         ports=ports,
     )
 

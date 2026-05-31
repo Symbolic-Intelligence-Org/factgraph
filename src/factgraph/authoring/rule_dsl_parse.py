@@ -4,7 +4,7 @@ import ast
 from typing import Any
 
 
-_BRANCH_MARKER = "__branch__"
+_CASE_MARKER = "__case__"
 
 
 class AuthoringRuleDSLParseError(Exception):
@@ -76,7 +76,7 @@ def _parse_rule_expr(node: ast.AST, *, path: str) -> dict[str, Any]:
         if kw.arg in out:
             raise _err(f"duplicate keyword: {kw.arg}", path=f"{path}.{kw.arg}")
         if kw.arg in {"where", "body"}:
-            normalized_where, _used_branch_wrapper = _normalize_where_with_branch_wrappers(
+            normalized_where, _used_case_wrapper = _normalize_where_with_case_wrappers(
                 _where_literal(kw.value, path=f"{path}.{kw.arg}", record_var_types={}),
                 path=f"{path}.{kw.arg}",
             )
@@ -138,8 +138,8 @@ def _where_dsl_call(node: ast.Call, *, path: str, record_var_types: dict[str, st
         if isinstance(node.func, ast.Call):
             return _where_rule_ref_call(node, path=path)
         raise _helper_err("unsupported DSL helper call", path=path, detail_code="helper_callable", helper=None)
-    if name == "Branch":
-        return _where_branch_call(node, path=path, record_var_types=record_var_types)
+    if name == "Case":
+        return _where_case_call(node, path=path, record_var_types=record_var_types)
     if node.keywords:
         raise _helper_err(
             "DSL helper calls do not support keyword arguments",
@@ -228,13 +228,13 @@ def _where_dsl_call(node: ast.Call, *, path: str, record_var_types: dict[str, st
 
     if name == "Or":
         if len(node.args) < 2:
-            raise _helper_err("Or(...) requires at least 2 branch bodies", path=path, detail_code="helper_arity", helper=name)
+            raise _helper_err("Or(...) requires at least 2 case bodies", path=path, detail_code="helper_arity", helper=name)
         bodies: list[Any] = []
         for idx, arg in enumerate(node.args):
             body = _where_literal(arg, path=f"{path}.args[{idx}]", record_var_types=dict(record_var_types))
             if not isinstance(body, list):
                 raise _helper_err(
-                    "Or(...) branches must be list bodies",
+                    "Or(...) cases must be list bodies",
                     path=f"{path}.args[{idx}]",
                     detail_code="helper_arg_type",
                     helper=name,
@@ -450,13 +450,13 @@ def _dsl_call(node: ast.Call, *, path: str) -> Any:
 
     if name == "Or":
         if len(node.args) < 2:
-            raise _helper_err("Or(...) requires at least 2 branch bodies", path=path, detail_code="helper_arity", helper=name)
+            raise _helper_err("Or(...) requires at least 2 case bodies", path=path, detail_code="helper_arity", helper=name)
         bodies: list[Any] = []
         for idx, arg in enumerate(node.args):
             body = _literal(arg, path=f"{path}.args[{idx}]")
             if not isinstance(body, list):
                 raise _helper_err(
-                    "Or(...) branches must be list bodies",
+                    "Or(...) cases must be list bodies",
                     path=f"{path}.args[{idx}]",
                     detail_code="helper_arg_type",
                     helper=name,
@@ -474,7 +474,7 @@ def _call_name(func: ast.expr) -> str | None:
     return None
 
 
-def _where_branch_call(
+def _where_case_call(
     node: ast.Call,
     *,
     path: str,
@@ -482,30 +482,30 @@ def _where_branch_call(
 ) -> tuple[str, list[Any]]:
     if len(node.args) != 1:
         raise _helper_err(
-            "Branch(...) requires exactly one positional atoms list",
+            "Case(...) requires exactly one positional atoms list",
             path=path,
             detail_code="helper_arity",
-            helper="Branch",
+            helper="Case",
         )
     atoms = _where_literal(node.args[0], path=f"{path}.args[0]", record_var_types=dict(record_var_types))
     if not isinstance(atoms, list) or not atoms:
         raise _helper_err(
-            "Branch(...) first argument must be non-empty list",
+            "Case(...) first argument must be non-empty list",
             path=f"{path}.args[0]",
             detail_code="helper_arg_type",
-            helper="Branch",
+            helper="Case",
             arg_index=0,
         )
 
     for kw_idx, kw in enumerate(node.keywords):
         if kw.arg is None:
-            raise _err("Branch(...) **kwargs are not supported", path=f"{path}.keywords[{kw_idx}]")
-        raise _err(f"unsupported Branch keyword: {kw.arg}", path=f"{path}.{kw.arg}")
+            raise _err("Case(...) **kwargs are not supported", path=f"{path}.keywords[{kw_idx}]")
+        raise _err(f"unsupported Case keyword: {kw.arg}", path=f"{path}.{kw.arg}")
 
-    return (_BRANCH_MARKER, atoms)
+    return (_CASE_MARKER, atoms)
 
 
-def _normalize_where_with_branch_wrappers(
+def _normalize_where_with_case_wrappers(
     raw_where: Any,
     *,
     path: str,
@@ -515,29 +515,29 @@ def _normalize_where_with_branch_wrappers(
     if not raw_where:
         return raw_where, False
 
-    branch_indexes = [
+    case_indexes = [
         idx
         for idx, item in enumerate(raw_where)
         if (
             isinstance(item, tuple)
             and len(item) == 2
-            and item[0] == _BRANCH_MARKER
+            and item[0] == _CASE_MARKER
             and isinstance(item[1], list)
         )
     ]
-    if not branch_indexes:
+    if not case_indexes:
         return raw_where, False
-    if len(branch_indexes) != len(raw_where):
-        raise _err("where/branch cannot mix Branch(...) with bare branch bodies", path=path)
+    if len(case_indexes) != len(raw_where):
+        raise _err("where/case cannot mix Case(...) with bare case bodies", path=path)
 
-    branches: list[list[Any]] = []
+    cases: list[list[Any]] = []
     for idx, item in enumerate(raw_where):
         assert isinstance(item, tuple)
         atoms = item[1]
         if not isinstance(atoms, list) or not atoms:
-            raise _err("Branch.atoms must be non-empty list", path=f"{path}[{idx}]")
-        branches.append(atoms)
-    return branches, True
+            raise _err("Case.atoms must be non-empty list", path=f"{path}[{idx}]")
+        cases.append(atoms)
+    return cases, True
 
 
 def _assert_user_var_name(name: str, *, path: str) -> None:

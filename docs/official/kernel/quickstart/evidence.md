@@ -357,7 +357,7 @@ construction time. Violating any raises `ValueError`:
 
 Allowed graph shapes and runtime conventions (not checked at construction):
 
-- **Branch convergence allowed** — repeated support for the same assertion may converge on a single `NODE_SEED` rather than duplicating it. This is a permitted shape, not a required one; producers may also choose to duplicate seeds.
+- **Case convergence allowed** — repeated support for the same assertion may converge on a single `NODE_SEED` rather than duplicating it. This is a permitted shape, not a required one; producers may also choose to duplicate seeds.
 - **Renderer input guard** — `render_evidence_graph_html(...)` accepts a constructed `EvidenceGraph` only; raw dicts and duck-typed stand-ins are rejected.
 - **Large graph warning** — more than 250 nodes or more than 500 edges emits a warning banner. The reference renderer still renders the graph; it does not truncate or reject solely because the graph is large.
 
@@ -534,37 +534,37 @@ What changes per engine:
 For deeper traversal helpers and renderer integration, see the
 `src/factgraph/audit/` module docs.
 
-## 7. Stability of `Inference` and `Branch`
+## 7. Stability of `Inference` and `Case`
 
 Application `Rule` (built via `build_application_rule(...)`) plus
 `RuleExpr` composition is the **preferred read-pattern surface for new
-code** in v0.2. `Inference` and `Branch` (legacy DSL) remain available as
+code** in v0.2. `Inference` and `Case` (legacy DSL) remain available as
 the **compatibility surface**: they produce the same `EvaluateResult` /
 `EvaluateRow` / `Claim` / `Explanation` shapes documented in §§1–5 and
 share the same lower evaluation pipeline (`SemanticsProfile`, engine
 adapters, evidence runtime).
 
-The design has committed to retiring `Branch` from user-facing layers and
+The design has committed to retiring `Case` from user-facing layers and
 folding `Inference` into a `RuleExpr`-based runtime entry in a later
 cycle:
 
-> 在新 user-facing 表达层 (`Rule` / `RuleExpr`),`Branch` 不出现 …
+> 在新 user-facing 表达层 (`Rule` / `RuleExpr`),`Case` 不出现 …
 > 与 Inference 关系: 新设计 = **解耦** — Inference 是运行时入口,接受 RuleExpr
 > — `workflow/design/design-points/archive/rule-expression-and-proof-attempt.zh.md` §3.10
 
 Until that migration spec is locked by a future blueprint:
 
 - No `DeprecationWarning` is raised; no public symbol is removed.
-- `Inference(..., where=[Branch([...], id="...")])` remains stable for
+- `Inference(..., when=[Case([...], id="...")])` remains stable for
   current use and continues to be exercised by tests and adapters.
-- `Branch` is not a stand-alone user-facing concept — it is the OR-body
+- `Case` is not a stand-alone user-facing concept — it is the OR-body
   primitive inside `Inference` only. `build_application_rule(...)`
-  rejects `Branch` because application `Rule` bodies are AND-only;
+  rejects `Case` because application `Rule` bodies are AND-only;
   multi-pattern composition belongs at the `RuleExpr` level (`&` / `|`
   operators on application `Rule` values).
 - New quickstart examples and SDK docs introduce application `Rule`
   first; `Inference` is shown for cases that need the legacy
-  `Branch`-list OR-body syntax (e.g. for compatibility with engine
+  `Case`-list OR-body syntax (e.g. for compatibility with engine
   adapters that historically consumed it).
 
 ## A note on naming collisions

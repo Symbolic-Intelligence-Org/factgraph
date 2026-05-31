@@ -191,10 +191,10 @@ def _inspect_closed_head(rule: Rule, *, schema_index: object | None) -> _ClosedH
     for name, var in rule.ports.items():
         port_type = rule.port_types[name]
         if port_type.kind == "value":
-            if not _value_port_is_closed(var, rule.where):
+            if not _value_port_is_closed(var, rule.when):
                 unbound.append(name)
             continue
-        if not _entity_ref_port_is_closed(var, port_type.entity_type, rule.where, schema_index):
+        if not _entity_ref_port_is_closed(var, port_type.entity_type, rule.when, schema_index):
             unbound.append(name)
     return _ClosedHeadInspect(is_closed=not unbound, unbound_ports=tuple(unbound))
 
@@ -301,7 +301,7 @@ def _inspect_rule_operand(operand: _RuleOperand) -> OccurrenceInspect:
         alias=operand.alias,
         desc_template=rule.desc,
         ports=tuple(sorted(rule.ports)),
-        atoms=tuple(_derive_atom_descriptor(atom, atom_ids[idx]) for idx, atom in enumerate(rule.where)),
+        atoms=tuple(_derive_atom_descriptor(atom, atom_ids[idx]) for idx, atom in enumerate(rule.when)),
     )
 
 

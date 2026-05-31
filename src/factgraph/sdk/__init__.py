@@ -51,8 +51,9 @@ from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry
 from .dsl import (
-    Branch,
+    Case,
     DSLToApplicationRuleError,
+    EmitSpec,
     Inference,
     Not,
     Pred,
@@ -88,7 +89,7 @@ __all__ = [
     "IngestResult",
     "ValidationReport",
     "SDKDSLError",
-    "Branch",
+    "Case",
     "Entity",
     "Field",
     "Identity",
@@ -110,6 +111,7 @@ __all__ = [
     "Rule",
     "ApplicationRule",
     "RuleRef",
+    "EmitSpec",
     "Inference",
     "Query",
     "Pred",

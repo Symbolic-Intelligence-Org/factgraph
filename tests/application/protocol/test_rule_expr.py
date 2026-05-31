@@ -21,7 +21,7 @@ from factgraph.sdk.dsl.errors import SDKDSLError
 
 def _rule(rule_id: str, *, var_name: str = "u") -> Rule:
     var = Var(var_name)
-    return Rule(id=rule_id, where=(PredAtom("User:exists", [var]),), ports={"user": var})
+    return Rule(id=rule_id, when=(PredAtom("User:exists", [var]),), ports={"user": var})
 
 
 def _rule_with_two_ports(rule_id: str) -> Rule:
@@ -29,7 +29,7 @@ def _rule_with_two_ports(rule_id: str) -> Rule:
     region = Var("r")
     return Rule(
         id=rule_id,
-        where=(PredAtom("User:exists", [user]), PredAtom("Region:exists", [region])),
+        when=(PredAtom("User:exists", [user]), PredAtom("Region:exists", [region])),
         ports={"user": user, "region": region},
     )
 

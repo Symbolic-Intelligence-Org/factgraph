@@ -10,7 +10,7 @@ from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.rules.where_ast import PredAtom as CorePredAtom, Var as CoreVar
-from factgraph.sdk import Branch, FactGraph, Pred, Rule, SDKStore, vars as sdk_vars
+from factgraph.sdk import Case, EmitSpec, FactGraph, Pred, Rule, SDKStore, vars as sdk_vars
 from factgraph.sdk.schema import Entity, Field, Identity
 
 
@@ -56,7 +56,7 @@ def _rule() -> Rule:
     return Rule(
         id="public_inference_tag_seed",
         version="v1",
-        where=(CorePredAtom("user:tag_seed", [u, tag]),),
+        when=(CorePredAtom("user:tag_seed", [u, tag]),),
         ports={"u": u, "tag": tag},
     )
 
@@ -67,9 +67,8 @@ def _inference():
         return Inference(
             id="inf.public_inference.tag",
             version="v1",
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-            target="user:tag",
-            head_vars=[u, tag],
+            when=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            emits=EmitSpec("user:tag", [u, tag]),
         )
 
 

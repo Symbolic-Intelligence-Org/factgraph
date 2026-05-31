@@ -20,7 +20,7 @@ from factgraph.core.semantics import SemanticsProfile
 from factgraph.sdk.errors import SDKStoreError
 from factgraph.sdk.semantics import PyReasonSemantics
 from factgraph.sdk.dsl import vars as sdk_vars
-from factgraph.sdk.dsl import Branch, Inference, Pred, Rule
+from factgraph.sdk.dsl import Case, EmitSpec, Inference, Pred, Rule
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStore, _lower_public_semantics, _preview_public_semantics
 
@@ -115,9 +115,8 @@ def _make_derivation() -> Inference:
         return Inference(
             id="drv.d.pyreason_popular",
             version="v1",
-            where=[Pred("user:name", u, name)],
-            target="user:popular",
-            head_vars=[u],
+            when=[Pred("user:name", u, name)],
+            emits=EmitSpec("user:popular", [u]),
         )
 
 
@@ -127,7 +126,7 @@ def _application_rule_two_atoms() -> ApplicationRule:
     risk = CoreVar("$risk")
     return ApplicationRule(
         id="rule.c74",
-        where=(
+        when=(
             CorePredAtom("user:name", [user, name]),
             CorePredAtom("user:risk_score", [user, risk]),
         ),
@@ -956,9 +955,8 @@ class PyReasonSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             derivation = Inference(
                 id="drv.d.pyreason_popular",
                 version="v1",
-                where=[Branch([Pred("user:name", u, name), Pred("user:risk_score", u, risk)])],
-                target="user:popular",
-                head_vars=[u],
+                when=[Case([Pred("user:name", u, name), Pred("user:risk_score", u, risk)])],
+                emits=EmitSpec("user:popular", [u]),
             )
         compiled = sdk._compile_derivation_input(derivation)[0]
 

@@ -111,7 +111,7 @@ def _build_match_plan(sdk: Any, entity_cls: type[Entity], template: Rule | _Rule
             _DeclaredMatchPort(name=name, port_type=template.port_types[name], var=var)
             for name, var in template.ports.items()
         )
-        body_ir = lower_ast_to_where_ir(AndExpr(list(template.where)))
+        body_ir = lower_ast_to_where_ir(AndExpr(list(template.when)))
         return _plan_from_declared_ports(
             entity_cls,
             declared,

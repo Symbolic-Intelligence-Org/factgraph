@@ -48,7 +48,7 @@ def _seed_person(graph: sdk.SDKStore, name: str, region: str = "us") -> str:
 
 def _person_exists_rule(rule_id: str = "Person:exists") -> Rule:
     person = Var("$person")
-    return Rule(id=rule_id, where=(PredAtom("Person:exists", [person]),), ports={"person": person})
+    return Rule(id=rule_id, when=(PredAtom("Person:exists", [person]),), ports={"person": person})
 
 
 def _person_region_rule(rule_id: str = "person_region") -> Rule:
@@ -56,7 +56,7 @@ def _person_region_rule(rule_id: str = "person_region") -> Rule:
     region = Var("$region")
     return Rule(
         id=rule_id,
-        where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
+        when=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
         ports={"person": person, "region": region},
     )
 
@@ -66,7 +66,7 @@ def _aggregate_rule() -> Rule:
     amount = Var("$amount")
     order = Var("$order")
     aggregate = AggregateAtom("sum", amount, [PredAtom("OrderAmount", [order, amount])])
-    return Rule(id="amount_sum", where=(CmpAtom("eq", total, aggregate),), ports={"total": total})
+    return Rule(id="amount_sum", when=(CmpAtom("eq", total, aggregate),), ports={"total": total})
 
 
 class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
@@ -127,9 +127,8 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             inference = sdk.Inference(
                 id="legacy_inference",
                 version="v1",
-                where=[sdk.Pred("Person:exists", p)],
-                target="Person:exists",
-                head_vars=[p],
+                when=[sdk.Pred("Person:exists", p)],
+                emits=sdk.EmitSpec("Person:exists", [p]),
             )
         inspected = RuleExprInspect(ast=(), occurrences=(), joins=(), unjoined_same_name_ports=())
 
@@ -147,7 +146,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         region = Var("$region")
         external_head = Rule(
             id="person:region",
-            where=(
+            when=(
                 PredAtom("Person:exists", [person]),
                 PredAtom("person:region", [person, region]),
                 CmpAtom("eq", region, Const("eu")),
@@ -187,7 +186,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         region = Var("$region")
         head = Rule(
             id="person:region",
-            where=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
+            when=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
             ports={"person": person, "region": region},
         )
 
@@ -196,9 +195,9 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
 
         self.assertIsInstance(closed, Rule)
         self.assertIn("_closed_", closed.id)
-        self.assertNotIn("__factgraph_projection_placeholder", repr(closed.where))
+        self.assertNotIn("__factgraph_projection_placeholder", repr(closed.when))
         self.assertIn(encoded, str(result[0].bindings))
-        self.assertTrue(any(isinstance(atom, CmpAtom) and atom.rhs == Const("eu") for atom in closed.where))
+        self.assertTrue(any(isinstance(atom, CmpAtom) and atom.rhs == Const("eu") for atom in closed.when))
         index = build_schema_index(graph.schema_ir)
         identity_pred_id = entity_info(index, "Person").identity_predicates["name"].pred_id
         self.assertTrue(
@@ -206,7 +205,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 isinstance(atom, PredAtom)
                 and atom.pred_id == identity_pred_id
                 and tuple(atom.terms)[1] == Const("alice")
-                for atom in closed.where
+                for atom in closed.when
             )
         )
         self.assertTrue(_inspect_closed_head(closed, schema_index=build_schema_index(graph.schema_ir)).is_closed)
@@ -269,10 +268,10 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         rule = Rule(
             id="Person:exists",
             version="v1",
-            where=(PredAtom("Person:exists", [person]),),
+            when=(PredAtom("Person:exists", [person]),),
             ports={"person": person},
         )
-        head = Rule(id=rule.id, version="v2", where=rule.where, ports=rule.ports)
+        head = Rule(id=rule.id, version="v2", when=rule.when, ports=rule.ports)
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -374,9 +373,8 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             inference = sdk.Inference(
                 id="legacy_wrapper_inference",
                 version="v1",
-                where=[sdk.Branch([sdk.Pred("Person:exists", p)], id="seed_path")],
-                target="Person:exists",
-                head_vars=[p],
+                when=[sdk.Case([sdk.Pred("Person:exists", p)], id="seed_path")],
+                emits=sdk.EmitSpec("Person:exists", [p]),
             )
 
         with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[]) as evaluate:
@@ -490,9 +488,8 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             inference = sdk.Inference(
                 id="legacy_inference",
                 version="v1",
-                where=[sdk.Pred("Person:exists", p)],
-                target="Person:exists",
-                head_vars=[p],
+                when=[sdk.Pred("Person:exists", p)],
+                emits=sdk.EmitSpec("Person:exists", [p]),
             )
 
         result = graph.eval.evaluate(inference, engine="native")
@@ -508,9 +505,8 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             derivation = sdk.Inference(
                 id="dict_inference",
                 version="v1",
-                where=[sdk.Pred("Person:exists", p)],
-                target="Person:exists",
-                head_vars=[p],
+                when=[sdk.Pred("Person:exists", p)],
+                emits=sdk.EmitSpec("Person:exists", [p]),
             ).to_authoring_payload()
 
         result = graph.eval.evaluate(derivation, engine="native")

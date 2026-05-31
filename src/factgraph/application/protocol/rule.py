@@ -51,10 +51,10 @@ _PROJECTION_VAR_PREFIX = "$__projection_"
 
 @dataclass(frozen=True)
 class Rule:
-    """Application protocol Rule DTO storing core where AST atoms directly."""
+    """Application protocol Rule DTO storing core when-body AST atoms directly."""
 
     id: str
-    where: tuple[Atom, ...]
+    when: tuple[Atom, ...]
     ports: Mapping[str, Var]
     version: str | None = None
     desc: str | None = None
@@ -65,19 +65,19 @@ class Rule:
             _require_non_empty_str(self.version, field_name="version")
         if self.desc is not None:
             _require_non_empty_str(self.desc, field_name="desc")
-        if not isinstance(self.where, tuple) or not self.where:
-            raise RuleValidationError("where must be non-empty tuple[Atom, ...]")
+        if not isinstance(self.when, tuple) or not self.when:
+            raise RuleValidationError("when must be non-empty tuple[Atom, ...]")
         if not isinstance(self.ports, Mapping) or not self.ports:
             raise RuleValidationError("ports must be non-empty Mapping[str, Var]")
 
         outer_seen_vars: set[Var] = set()
-        for idx, atom in enumerate(self.where):
-            _validate_atom(atom, field_name=f"where[{idx}]", seen_vars=outer_seen_vars)
+        for idx, atom in enumerate(self.when):
+            _validate_atom(atom, field_name=f"when[{idx}]", seen_vars=outer_seen_vars)
         seen_vars: set[Var] = set(outer_seen_vars)
-        for idx, atom in enumerate(self.where):
+        for idx, atom in enumerate(self.when):
             _collect_aggregate_term_vars_from_atom(
                 atom,
-                field_name=f"where[{idx}]",
+                field_name=f"when[{idx}]",
                 outer_seen_vars=outer_seen_vars,
                 seen_vars=seen_vars,
             )
@@ -93,11 +93,11 @@ class Rule:
 
         _validate_desc(self.desc, port_names=frozenset(frozen_ports))
         object.__setattr__(self, "ports", MappingProxyType(dict(frozen_ports)))
-        object.__setattr__(self, "_port_types", MappingProxyType(_infer_port_types(frozen_ports, self.where)))
+        object.__setattr__(self, "_port_types", MappingProxyType(_infer_port_types(frozen_ports, self.when)))
 
     @property
     def atom_ids(self) -> tuple[str, ...]:
-        return tuple(f"{self.id}:atom_{idx}" for idx in range(len(self.where)))
+        return tuple(f"{self.id}:atom_{idx}" for idx in range(len(self.when)))
 
     @property
     def port_types(self) -> Mapping[str, PortType]:
@@ -107,7 +107,7 @@ class Rule:
     def content_digest(self) -> str:
         payload = {
             "ports": [(name, _serialize_var(var)) for name, var in sorted(self.ports.items())],
-            "where": [_serialize_atom(atom) for atom in self.where],
+            "when": [_serialize_atom(atom) for atom in self.when],
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return sha256_hex(canonical)
@@ -146,7 +146,7 @@ class Rule:
         variables = tuple(Var(f"{_PROJECTION_VAR_PREFIX}{idx}", _PROJECTION_ORIGIN) for idx, _name in enumerate(port_names))
         return cls(
             id=_projection_rule_id(port_names),
-            where=tuple(PredAtom(_PROJECTION_PLACEHOLDER_PRED_ID, [var], _PROJECTION_ORIGIN) for var in variables),
+            when=tuple(PredAtom(_PROJECTION_PLACEHOLDER_PRED_ID, [var], _PROJECTION_ORIGIN) for var in variables),
             ports={name: var for name, var in zip(port_names, variables, strict=True)},
         )
 
@@ -266,12 +266,12 @@ def _is_projection_rule(rule: Rule) -> bool:
     port_names = tuple(rule.ports)
     if not port_names or rule.id != _projection_rule_id(port_names):
         return False
-    if len(rule.where) != len(port_names):
+    if len(rule.when) != len(port_names):
         return False
     expected_vars = tuple(Var(f"{_PROJECTION_VAR_PREFIX}{idx}", _PROJECTION_ORIGIN) for idx, _name in enumerate(port_names))
     if tuple(rule.ports.values()) != expected_vars:
         return False
-    for atom, expected_var in zip(rule.where, expected_vars, strict=True):
+    for atom, expected_var in zip(rule.when, expected_vars, strict=True):
         if not isinstance(atom, PredAtom):
             return False
         if atom.pred_id != _PROJECTION_PLACEHOLDER_PRED_ID:
@@ -505,10 +505,10 @@ def _atom_has_aggregate_term(atom: Atom) -> bool:
     return False
 
 
-def _infer_port_types(ports: Mapping[str, Var], where: tuple[Atom, ...]) -> dict[str, PortType]:
+def _infer_port_types(ports: Mapping[str, Var], when: tuple[Atom, ...]) -> dict[str, PortType]:
     out: dict[str, PortType] = {}
     for name, var in ports.items():
-        entity_type = _find_entity_ref_type(var, where)
+        entity_type = _find_entity_ref_type(var, when)
         if entity_type is not None:
             out[name] = PortType(kind="entity_ref", entity_type=entity_type)
         else:

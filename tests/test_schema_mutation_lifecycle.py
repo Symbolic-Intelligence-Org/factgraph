@@ -16,7 +16,8 @@ import warnings
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import (
-    Branch,
+    Case,
+    EmitSpec,
     FactGraph,
     Inference,
     Pred,
@@ -79,7 +80,7 @@ def _rule(*, rule_id: str = "rule.schema.tag_seed", version: str = "v1") -> Rule
             id=rule_id,
             version=version,
             select=[u, tag],
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            where=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
             expose=True,
         )
 
@@ -89,9 +90,8 @@ def _inference(*, inference_id: str = "inf.schema.tag", version: str = "v1") -> 
         return Inference(
             id=inference_id,
             version=version,
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-            target="user:tag",
-            head_vars=[u, tag],
+            when=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            emits=EmitSpec("user:tag", [u, tag]),
         )
 
 
@@ -101,7 +101,7 @@ def _account_rule(*, rule_id: str = "rule.schema.risk_seed", version: str = "v1"
             id=rule_id,
             version=version,
             select=[a, risk],
-            where=[Branch([Pred("account:risk_seed", a, risk)], id="risk_path")],
+            where=[Case([Pred("account:risk_seed", a, risk)], id="risk_path")],
             expose=True,
         )
 
@@ -113,9 +113,8 @@ def _account_inference(
         return Inference(
             id=inference_id,
             version=version,
-            where=[Branch([Pred("account:risk_seed", a, risk)], id="risk_path")],
-            target="account:risk",
-            head_vars=[a, risk],
+            when=[Case([Pred("account:risk_seed", a, risk)], id="risk_path")],
+            emits=EmitSpec("account:risk", [a, risk]),
         )
 
 

@@ -144,7 +144,7 @@ described and executed.
 | `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. The empty namespace is a deliberate **v0.2 compatibility placeholder** — `Inference` authoring stays available but new code prefers application `Rule` (`build_application_rule(...)`) + `RuleExpr` composition (see [Rules and inferences](rules-and-inferences.md#evaluate-an-inference)); the namespace remains as a reserved name without removal date. |
 | `fg.eval` | `evaluate(inference_or_expr, *, head=None, engine=None, semantics=None)`, `explain(expr, *, head=closed_head)`, `inspect_semantics(semantics_or_profile)` | `evaluate(...)` is read-only and returns `EvaluateResult`. `explain(...)` replays a closed-head explanation. `inspect_semantics(...)` previews wrapper or profile shape without running an engine. |
 
-Public DSL value objects are `Rule`, `Inference`, `Query`, `Branch`, `Pred`,
+Public DSL value objects are `Rule`, `Inference`, `Query`, `Case`, `Pred`,
 `Not`, `RuleRef`, and `vars`. Saved rule/inference handles were removed; pass
 the value objects directly to `fg.eval.*`.
 
@@ -182,7 +182,7 @@ whole module.
 | --- | --- | --- |
 | Graph entry point | `FactGraph`, `SDKStore` | Create / load / save the graph. `FactGraph` is the alias used in docs; `SDKStore` is the same class for advanced use. |
 | Schema declaration | `Entity`, `Identity`, `Field`, `Relationship` | Define entity vocabulary and field coordinates. |
-| Rule DSL | `Rule`, `Inference`, `Query`, `Branch`, `Pred`, `Not`, `RuleRef`, `vars` | Author saved rules, inferences, ad-hoc queries, and rule-body atoms. |
+| Rule DSL | `Rule`, `Inference`, `Query`, `Case`, `Pred`, `Not`, `RuleRef`, `vars` | Author saved rules, inferences, ad-hoc queries, and rule-body atoms. |
 | Persistence handles | `SchemaAddResult` | Return type from `fg.schema.register`, `extend`, or `apply`. Rule/inference persistence handles were removed. |
 | Ingest results | `IngestResult`, `ValidationReport` | Return types from `fg.schema.ingest(...)` and `fg.schema.validate_provenance(...)`. |
 | Semantics | `ProbLogSemantics`, `PyReasonSemantics`, `SemanticsProfile` | Configure inference evaluation. Wrappers are the teaching path; `SemanticsProfile` is the canonical lower form. |

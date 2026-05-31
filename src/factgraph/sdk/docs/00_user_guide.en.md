@@ -440,7 +440,7 @@ from factgraph.sdk import Query, vars
 with vars("u", "nm") as (u, nm):
     q = Query(
         head=[User(u), User.name(name=nm)],
-        where=[User(u), u.name == nm],
+        when=[User(u), u.name == nm],
     )
 
 rows = fg.entities.where(User)
@@ -448,8 +448,8 @@ rows = fg.entities.where(User)
 
 # Single-projection head — pass the item directly OR wrap it in a list
 with vars("u",) as (u,):
-    q_one = Query(head=User(u), where=[User(u)])           # single item
-    q_one_list = Query(head=[User(u)], where=[User(u)])    # equivalent
+    q_one = Query(head=User(u), when=[User(u)])           # single item
+    q_one_list = Query(head=[User(u)], when=[User(u)])    # equivalent
     snaps = fg.entities.where(User)
     # → [<EntitySnapshot for Alice>, ...]
 ```
@@ -486,7 +486,7 @@ with vars("u",) as (u,):
     r = build_application_rule(
         id="User:exists",
         version="1.0.0",
-        where=[User(u), User(u).name == "Alice"],
+        when=[User(u), User(u).name == "Alice"],
         ports={"user": u},
     )
 
@@ -500,7 +500,7 @@ fits a single `user` port). Use `<entity>:<field>` predicate ids when the
 rule projects multiple ports.
 
 Application Rule `where` is AND-only: a flat list of atoms such as
-`[User(u), User(u).name == "Alice"]`. `Branch(...)` alternatives are not
+`[User(u), User(u).name == "Alice"]`. `Case(...)` alternatives are not
 accepted in application Rule bodies; use multi-branch composition via
 `RuleExpr` (the `&` / `|` operators on application `Rule` values) or place
 branch alternatives inside an `Inference` body.
@@ -519,7 +519,7 @@ explicitly raises (`use sdk.eval.evaluate() instead`).
 
 ### Inference + evaluate
 
-An `Inference(id, version, where, head=None, ...)` is a
+An `Inference(id, version, when, head=None, ...)` is a
 single inference that produces accept-ready candidates. `head` is one
 entity or field head. Multi-head public inferences are removed in
 Track 1; use one `Inference` per head.
@@ -531,7 +531,7 @@ with vars("d", "kw") as (d, kw):
     inf = Inference(
         id="drv.document_keyword",
         version="1.0.0",
-        where=[Document(d), d.title == "FactPy guide"],
+        when=[Document(d), d.title == "FactPy guide"],
         head=Document.keywords(value=kw),  # fact-candidate head
     )
 
@@ -592,17 +592,16 @@ rule objects. Track 2 adds lightweight public semantics wrappers as the
 preferred SDK authoring shape:
 
 ```python
-from factgraph.sdk import Branch, ProbLogSemantics, PyReasonSemantics
+from factgraph.sdk import Case, EmitSpec, ProbLogSemantics, PyReasonSemantics
 
 inf = Inference(
     id="drv.user_tag",
     version="v1",
-    where=[
-        Branch([Pred("user:tag_seed", u, tag)], id="seed_path"),
-        Branch([Pred("user:tag_hint", u, tag)]),
+    when=[
+        Case([Pred("user:tag_seed", u, tag)], id="seed_path"),
+        Case([Pred("user:tag_hint", u, tag)]),
     ],
-    target="user:tag",
-    head_vars=[u, tag],
+    emits=EmitSpec("user:tag", [u, tag]),
 )
 
 fg.eval.evaluate(
@@ -932,7 +931,7 @@ with vars("u",) as (u,):
     my_rule = build_application_rule(
         id="User:exists",
         version="1.0.0",
-        where=[User(u), User(u).name == "Alice"],
+        when=[User(u), User(u).name == "Alice"],
         ports={"user": u},
     )
 result = fg.eval.evaluate(my_rule, head=my_rule)
@@ -1030,7 +1029,7 @@ Notable changes:
 
 ### ProbLog branch probability transition
 
-`Branch(...)` represents rule structure only. It does not carry
+`Case(...)` represents rule structure only. It does not carry
 probability, confidence, or engine-specific parameters. Public
 `body_confidences` and `engine_ext` payloads are rejected. The old names
 remain only in rejection messages and adapter/internal bridges.
@@ -1053,8 +1052,8 @@ shape for direct profile users and service JSON.
 probabilities; use the quickstart semantics page for the policy list.
 
 Track 1 adds optional structural branch ids and rule inspection:
-`Branch([...], id="declared_pref")` and `fg.rules.inspect(rule_or_inference)`.
-Branch ids are inspect-only SDK metadata; authoring payloads, compiled
+`Case([...], id="declared_pref")` and `fg.rules.inspect(rule_or_inference)`.
+Case ids are inspect-only SDK metadata; authoring payloads, compiled
 plans, registries, and adapters still receive positional branch structure.
 
 ### PyReason profile transition

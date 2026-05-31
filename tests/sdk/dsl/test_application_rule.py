@@ -22,11 +22,11 @@ class LivesIn(Entity):
 
 
 def _pred_ids(rule: Rule) -> list[str]:
-    return [atom.pred_id for atom in rule.where if isinstance(atom, PredAtom)]
+    return [atom.pred_id for atom in rule.when if isinstance(atom, PredAtom)]
 
 
 def _pred(rule: Rule, pred_id: str) -> PredAtom:
-    for atom in rule.where:
+    for atom in rule.when:
         if isinstance(atom, PredAtom) and atom.pred_id == pred_id:
             return atom
     raise AssertionError(f"missing pred atom: {pred_id}")
@@ -76,7 +76,7 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
             )
 
         self.assertEqual(_pred_ids(rule), ["User:exists", "User:exists", "user:name"])
-        self.assertNotEqual(rule.where[0].terms[0], rule.where[1].terms[0])
+        self.assertNotEqual(rule.when[0].terms[0], rule.when[1].terms[0])
 
     def test_cross_entity_ref_emits_both_existence_preds(self) -> None:
         with vars("li", "u") as (li, u):
@@ -194,9 +194,9 @@ class BuildApplicationRuleArithmeticTests(unittest.TestCase):
                 ports={"user": u},
             )
 
-        self.assertEqual([type(atom) for atom in rule.where], [BuiltinAtom, CmpAtom])
-        builtin = rule.where[0]
-        compare = rule.where[1]
+        self.assertEqual([type(atom) for atom in rule.when], [BuiltinAtom, CmpAtom])
+        builtin = rule.when[0]
+        compare = rule.when[1]
         self.assertIsInstance(builtin, BuiltinAtom)
         self.assertIsInstance(compare, CmpAtom)
         self.assertEqual(builtin.op, "addc")
@@ -210,7 +210,7 @@ class BuildApplicationRuleArithmeticTests(unittest.TestCase):
                 ports={"user": u},
             )
 
-        builtin = rule.where[0]
+        builtin = rule.when[0]
         self.assertIsInstance(builtin, BuiltinAtom)
         self.assertEqual(builtin.op, "mulc")
 

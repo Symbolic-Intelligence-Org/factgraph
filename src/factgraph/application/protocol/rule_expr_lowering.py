@@ -632,8 +632,8 @@ def _lower_operand(
     *,
     path: tuple[int, ...],
 ) -> RuleExprLoweringBranch:
-    alias_var_map = _alias_var_map(operand.alias, operand.rule.where)
-    body_atoms = tuple(_rewrite_atom(atom, alias_var_map) for atom in operand.rule.where)
+    alias_var_map = _alias_var_map(operand.alias, operand.rule.when)
+    body_atoms = tuple(_rewrite_atom(atom, alias_var_map) for atom in operand.rule.when)
     port_bindings = tuple(
         RuleExprPortBinding(
             occurrence_alias=operand.alias,
@@ -730,7 +730,7 @@ def _materialize_branch(
     materialized_atoms: list[Atom] = list(branch.body_atoms)
     if plan.head_binding.kind == "external":
         head_var_map = _head_alias_var_map(plan.head)
-        materialized_atoms.extend(_rewrite_atom(atom, head_var_map) for atom in plan.head.where)
+        materialized_atoms.extend(_rewrite_atom(atom, head_var_map) for atom in plan.head.when)
 
     joins: list[RuleExprJoinMaterialization] = []
     unique_joins: dict[tuple[object, ...], RuleJoinConstraint] = {}
@@ -869,7 +869,7 @@ def _head_var_names(plan: RuleExprLoweringPlan) -> tuple[str, ...]:
 
 
 def _head_alias_var_map(head: Rule) -> dict[Var, Var]:
-    return _alias_var_map("__head", head.where)
+    return _alias_var_map("__head", head.when)
 
 
 def _occurrence_binding(

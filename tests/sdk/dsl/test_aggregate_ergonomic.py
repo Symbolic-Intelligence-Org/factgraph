@@ -139,10 +139,10 @@ class AggregateApplicationBridgeTests(unittest.TestCase):
                 ports={"user": u, "total": total},
             )
 
-        aggregate_atom = rule.where[1]
+        aggregate_atom = rule.when[1]
         self.assertIsInstance(aggregate_atom, CmpAtom)
         self.assertIsInstance(aggregate_atom.rhs, AggregateAtom)
-        raw_where = lower_ast_to_where_ir(AndExpr(list(rule.where)))
+        raw_where = lower_ast_to_where_ir(AndExpr(list(rule.when)))
         rows = evaluate_where(
             {
                 "User:exists": [("u-1",), ("u-2",)],

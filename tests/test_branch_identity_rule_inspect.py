@@ -1,11 +1,11 @@
-"""Red + guard baseline for post-Track-3 Branch identity / rule inspect."""
+"""Red + guard baseline for post-Track-3 Case identity / rule inspect."""
 
 from __future__ import annotations
 
 import unittest
 
 from factgraph.authoring.rule_compile import AuthoringRuleCompileError, compile_authoring_rule_v1
-from factgraph.sdk import Branch, Inference, Pred, SDKStore, vars as sdk_vars
+from factgraph.sdk import Case, EmitSpec, Inference, Pred, SDKStore, vars as sdk_vars
 from factgraph.sdk.dsl import Rule
 from factgraph.sdk.dsl.errors import SDKDSLError
 from factgraph.sdk.schema import Entity, Field, Identity
@@ -28,8 +28,8 @@ def _rule_with_branches() -> Rule:
             version="v1",
             select=[u, tag],
             where=[
-                Branch([Pred("user:tag_seed", u, tag)], id="seed_path"),
-                Branch([Pred("user:tag_hint", u, tag)]),
+                Case([Pred("user:tag_seed", u, tag)], id="seed_path"),
+                Case([Pred("user:tag_hint", u, tag)]),
             ],
             expose=True,
         )
@@ -40,12 +40,11 @@ def _derivation_with_branches() -> Inference:
         return Inference(
             id="drv.track1.user_tag",
             version="v1",
-            where=[
-                Branch([Pred("user:tag_seed", u, tag)], id="seed_path"),
-                Branch([Pred("user:tag_hint", u, tag)]),
+            when=[
+                Case([Pred("user:tag_seed", u, tag)], id="seed_path"),
+                Case([Pred("user:tag_hint", u, tag)]),
             ],
-            target="user:tag",
-            head_vars=[u, tag],
+            emits=EmitSpec("user:tag", [u, tag]),
         )
 
 
@@ -54,9 +53,8 @@ def _single_head_derivation() -> Inference:
         return Inference(
             id="drv.track1.single",
             version="v1",
-            where=[Pred("user:tag_seed", u, tag)],
-            target="user:tag",
-            head_vars=[u, tag],
+            when=[Pred("user:tag_seed", u, tag)],
+            emits=EmitSpec("user:tag", [u, tag]),
         )
 
 
@@ -65,7 +63,7 @@ def _multi_head_derivation() -> Inference:
         return Inference(
             id="drv.track1.multi",
             version="v1",
-            where=[Pred("user:tag_seed", u, tag)],
+            when=[Pred("user:tag_seed", u, tag)],
             head=[User.tag(value=tag), User.region(value=region)],
         )
 
@@ -75,7 +73,7 @@ def _multi_head_derivation_bypass() -> Inference:
         derivation = Inference(
             id="drv.track1.multi_bypass",
             version="v1",
-            where=[Pred("user:tag_seed", u, tag)],
+            when=[Pred("user:tag_seed", u, tag)],
             head=User.tag(value=tag),
         )
         object.__setattr__(derivation, "_heads", (User.tag(value=tag), User.region(value=region)))
@@ -92,13 +90,13 @@ def _contains_key(value: object, key: str) -> bool:
 
 class BranchIdentityConstructionTests(unittest.TestCase):
     def test_branch_accepts_optional_keyword_id(self) -> None:
-        branch = Branch([Pred("user:tag_seed", "$u", "$tag")], id="seed_path")
+        branch = Case([Pred("user:tag_seed", "$u", "$tag")], id="seed_path")
 
         self.assertEqual(branch.id, "seed_path")
         self.assertEqual(len(branch.atoms), 1)
 
     def test_branch_without_id_keeps_positional_atoms_behavior(self) -> None:
-        branch = Branch([Pred("user:tag_seed", "$u", "$tag")])
+        branch = Case([Pred("user:tag_seed", "$u", "$tag")])
 
         self.assertEqual(len(branch.atoms), 1)
 
@@ -106,9 +104,9 @@ class BranchIdentityConstructionTests(unittest.TestCase):
         for invalid in ("", "1seed", "seed-path", "seed.path"):
             with self.subTest(invalid=invalid):
                 with self.assertRaises(SDKDSLError) as ctx:
-                    Branch([Pred("user:tag_seed", "$u", "$tag")], id=invalid)
+                    Case([Pred("user:tag_seed", "$u", "$tag")], id=invalid)
 
-                self.assertIn("Branch.id", str(ctx.exception))
+                self.assertIn("Case.id", str(ctx.exception))
 
     def test_branch_still_rejects_engine_semantic_keywords(self) -> None:
         for keyword, value in (
@@ -118,7 +116,7 @@ class BranchIdentityConstructionTests(unittest.TestCase):
         ):
             with self.subTest(keyword=keyword):
                 with self.assertRaises((TypeError, SDKDSLError)):
-                    Branch([Pred("user:tag_seed", "$u", "$tag")], **{keyword: value})
+                    Case([Pred("user:tag_seed", "$u", "$tag")], **{keyword: value})
 
 
 class RuleInspectTests(unittest.TestCase):
@@ -168,8 +166,8 @@ class RuleInspectTests(unittest.TestCase):
                 version="v1",
                 select=[u, tag],
                 where=[
-                    Branch([Pred("user:tag_seed", u, tag)], id="dup"),
-                    Branch([Pred("user:tag_hint", u, tag)], id="dup"),
+                    Case([Pred("user:tag_seed", u, tag)], id="dup"),
+                    Case([Pred("user:tag_hint", u, tag)], id="dup"),
                 ],
             )
         sdk = SDKStore([User])
@@ -177,7 +175,7 @@ class RuleInspectTests(unittest.TestCase):
         with self.assertRaises(SDKStoreError) as ctx:
             sdk.rules.inspect(rule)
 
-        self.assertIn("duplicate Branch.id", str(ctx.exception))
+        self.assertIn("duplicate Case.id", str(ctx.exception))
 
 
 class SingleHeadCutTests(unittest.TestCase):
@@ -191,7 +189,7 @@ class SingleHeadCutTests(unittest.TestCase):
         derivation = _single_head_derivation()
 
         self.assertEqual(len(derivation.heads), 0)
-        self.assertEqual(derivation.target, "user:tag")
+        self.assertEqual(derivation.emits, EmitSpec("user:tag", ["$u", "$tag"]))
 
     def test_sdk_evaluate_rejects_multi_head_if_it_reaches_runtime(self) -> None:
         sdk = SDKStore([User])
@@ -214,7 +212,7 @@ class BranchIdentityGuardTests(unittest.TestCase):
                 id="rule.track1.payload",
                 version="v1",
                 select=[u, tag],
-                where=[Branch([Pred("user:tag_seed", u, tag)])],
+                where=[Case([Pred("user:tag_seed", u, tag)])],
             )
 
         payload = rule.to_authoring_payload()

@@ -7,7 +7,7 @@ from typing import Any
 from factgraph.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factgraph.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
 from ..error_codes import QUERY_ALIAS_CONFLICT, QUERY_UNBOUND_VAR
-from .branch import Branch
+from .branch import Case
 from .errors import SDKDSLError
 from .expr import CompareExpr, ExistsAtom, HeadCall, LogicVar, NotExpr, RuleRefAtom, lower_where
 
@@ -117,26 +117,41 @@ class Rule:
 
 
 @dataclass(frozen=True)
+class EmitSpec:
+    """Compatibility fact head emitted by a legacy `Inference`."""
+
+    target: str
+    vars: list[Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, str) or not self.target:
+            raise SDKDSLError("EmitSpec.target must be non-empty string", path="$.emits.target")
+        if not isinstance(self.vars, list) or not self.vars:
+            raise SDKDSLError("EmitSpec.vars must be non-empty list", path="$.emits.vars")
+        object.__setattr__(self, "vars", list(self.vars))
+
+
+@dataclass(frozen=True)
 class Inference:
     """Declarative rule that proposes new fact candidates.
 
-    `Inference` uses a `where` body plus a head/target declaration to derive
+    `Inference` uses a `when` body plus a head/emits declaration to derive
     candidate facts. `fg.eval.evaluate(inference)` returns candidate sets;
     candidates enter the ledger only after `fg.eval.accept(...)`.
 
     Args:
         id: Stable inference id used by persistence and runtime output.
         version: Version string for this inference definition.
-        where: Body atoms or branches that must match before proposing facts.
+        when: Body atoms or cases that must match before proposing facts.
         head: Optional DSL head call describing the fact to propose.
+        emits: Optional fact head emitted by compatibility no-head syntax.
     """
 
     id: str
     version: str
-    where: list[Any]
+    when: list[Any]
     head: Any = None
-    target: str | None = None
-    head_vars: list[Any] | None = None
+    emits: EmitSpec | None = None
     status: str | None = None
     description: str | None = None
     tags: list[str] = field(default_factory=list)
@@ -147,8 +162,10 @@ class Inference:
             raise SDKDSLError("Inference.id must be non-empty string")
         if not isinstance(self.version, str) or not self.version:
             raise SDKDSLError("Inference.version must be non-empty string")
-        if not isinstance(self.where, list) or not self.where:
-            raise SDKDSLError("Inference.where must be non-empty list")
+        if not isinstance(self.when, list) or not self.when:
+            raise SDKDSLError("Inference.when must be non-empty list")
+        if self.emits is not None and not isinstance(self.emits, EmitSpec):
+            raise SDKDSLError("Inference.emits must be EmitSpec when provided", path="$.emits")
         _validate_optional_description(self.description, owner="Inference")
         _validate_tags(self.tags, owner="Inference")
         heads = _normalize_derivation_head_items(self.head)
@@ -164,17 +181,18 @@ class Inference:
         payload: dict[str, Any] = {
             "derivation_id": self.id,
             "version": self.version,
-            "where": _lower_or_preserve_authoring_where(self.where),
+            "where": _lower_or_preserve_authoring_where(self.when),
         }
         if self._heads:
             if len(self._heads) == 1:
                 payload["head"] = self._heads[0].to_authoring_head()
             else:
                 payload["head"] = [item.to_authoring_head() for item in self._heads]
-        if self.target is not None:
-            payload["target"] = self.target
-        if self.head_vars is not None:
-            payload["head_vars"] = [_lower_select_item(item) for item in self.head_vars]
+        if self.emits is not None:
+            payload["emits"] = {
+                "target": self.emits.target,
+                "vars": [_lower_select_item(item) for item in self.emits.vars],
+            }
         if self.status is not None:
             payload["status"] = self.status
         if self.description is not None:
@@ -184,7 +202,7 @@ class Inference:
         return payload
 
     def dependency_rules(self) -> list[Rule]:
-        return _dependency_rules_from_where(self.where)
+        return _dependency_rules_from_where(self.when)
 
 
 @dataclass(frozen=True)
@@ -302,11 +320,11 @@ def _lower_select_item(item: Any) -> Any:
 def _normalize_rule_where_for_payload(where: list[Any]) -> list[Any]:
     if not isinstance(where, list) or not where:
         raise SDKDSLError("Rule.where must be non-empty list")
-    has_branch = any(isinstance(item, Branch) for item in where)
+    has_branch = any(isinstance(item, Case) for item in where)
     if not has_branch:
         return where
-    if not all(isinstance(item, Branch) for item in where):
-        raise SDKDSLError("where/branch cannot mix Branch(...) with bare branches")
+    if not all(isinstance(item, Case) for item in where):
+        raise SDKDSLError("where/case cannot mix Case(...) with bare cases")
     return [list(item.atoms) for item in where]
 
 
@@ -356,7 +374,7 @@ def _dependency_rules_from_where(where: Any) -> list[Rule]:
     found: dict[tuple[str, str], Rule] = {}
 
     def walk(node: Any) -> None:
-        if isinstance(node, Branch):
+        if isinstance(node, Case):
             walk(list(node.atoms))
             return
         if isinstance(node, list):
@@ -413,7 +431,7 @@ def _validate_condition_weights(condition_weights: Any, *, owner: str) -> None:
 
 
 def _validate_query_where_branch_wrapper(node: Any, *, path: str) -> None:
-    if isinstance(node, Branch):
+    if isinstance(node, Case):
         for idx, atom in enumerate(node.atoms):
             _validate_query_where_branch_wrapper(atom, path=f"{path}.atoms[{idx}]")
         return

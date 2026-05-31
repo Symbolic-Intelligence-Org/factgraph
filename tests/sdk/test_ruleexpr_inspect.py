@@ -35,7 +35,7 @@ def _application_rule(rule_id: str = "active_user", *, var_name: str = "u") -> A
     status = Var(f"{var_name}_status")
     return ApplicationRule(
         id=rule_id,
-        where=(
+        when=(
             PredAtom("User:exists", [user]),
             PredAtom("User:status", [user, status]),
             CmpAtom("eq", status, Const("active")),
@@ -49,7 +49,7 @@ def _other_rule() -> ApplicationRule:
     user = Var("v")
     return ApplicationRule(
         id="trusted_user",
-        where=(PredAtom("User:exists", [user]),),
+        when=(PredAtom("User:exists", [user]),),
         ports={"user": user},
         desc="Trusted %user",
     )
@@ -82,9 +82,8 @@ class RuleExprInspectDispatchTests(unittest.TestCase):
             inference = sdk.Inference(
                 id="legacy_inference",
                 version="v1",
-                where=[sdk.Pred("User:exists", u)],
-                target="User:status",
-                head_vars=[u],
+                when=[sdk.Pred("User:exists", u)],
+                emits=sdk.EmitSpec("User:status", [u]),
             )
 
         inspected = sdk.SDKStore([User]).rules.inspect(inference)
@@ -174,7 +173,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         user = Var("u")
         rule = ApplicationRule(
             id="multi_exists",
-            where=(PredAtom("User:exists", [marker, user]),),
+            when=(PredAtom("User:exists", [marker, user]),),
             ports={"user": user},
         )
 
@@ -223,7 +222,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         user = Var("u")
         rule = ApplicationRule(
             id="atom_kinds",
-            where=(
+            when=(
                 InAtom(status, [Const("active"), Const("pending")]),
                 BuiltinAtom("add", [Const(1), Const(2)]),
                 NotAtom(body=AndExpr([PredAtom("User:exists", [user])])),
@@ -244,7 +243,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         status = Var("status")
         rule = ApplicationRule(
             id="closed_status",
-            where=(CmpAtom("eq", status, Const("active")),),
+            when=(CmpAtom("eq", status, Const("active")),),
             ports={"status": status},
         )
 
@@ -257,7 +256,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         status = Var("status")
         rule = ApplicationRule(
             id="closed_status_reverse",
-            where=(CmpAtom("eq", Const("active"), status),),
+            when=(CmpAtom("eq", Const("active"), status),),
             ports={"status": status},
         )
 
@@ -278,7 +277,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
 
         for index, where in enumerate(cases):
             with self.subTest(index=index):
-                rule = ApplicationRule(id=f"open_value_{index}", where=where, ports={"status": Var("status")})
+                rule = ApplicationRule(id=f"open_value_{index}", when=where, ports={"status": Var("status")})
 
                 inspected = sdk.SDKStore([User]).rules.inspect(rule)
 
@@ -289,7 +288,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         user = Var("u")
         rule = ApplicationRule(
             id="closed_user",
-            where=(
+            when=(
                 PredAtom("User:exists", [user]),
                 PredAtom("user:user_id", [user, Const("user-1")]),
             ),
@@ -305,7 +304,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         user = Var("u")
         rule = ApplicationRule(
             id="wrong_identity_order",
-            where=(
+            when=(
                 PredAtom("User:exists", [user]),
                 PredAtom("user:user_id", [Const("user-1"), user]),
             ),
@@ -321,7 +320,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         account = Var("a")
         closed = ApplicationRule(
             id="closed_account",
-            where=(
+            when=(
                 PredAtom("Account:exists", [account]),
                 PredAtom("account:account_id", [account, Const("acct-1")]),
                 PredAtom("account:tenant_id", [account, Const("tenant-1")]),
@@ -330,7 +329,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         )
         open_rule = ApplicationRule(
             id="open_account",
-            where=(
+            when=(
                 PredAtom("Account:exists", [account]),
                 PredAtom("account:account_id", [account, Const("acct-1")]),
             ),
@@ -348,7 +347,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         user = Var("u")
         rule = ApplicationRule(
             id="schema_missing",
-            where=(
+            when=(
                 PredAtom("User:exists", [user]),
                 PredAtom("user:user_id", [user, Const("user-1")]),
             ),

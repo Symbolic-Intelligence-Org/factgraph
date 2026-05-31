@@ -14,7 +14,7 @@ from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 from factgraph.sdk.dsl import vars as sdk_vars
-from factgraph.sdk.dsl import Inference, Pred
+from factgraph.sdk.dsl import EmitSpec, Inference, Pred
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.semantics import ProbLogSemantics
 from factgraph.sdk.store import SDKStore, _lower_public_semantics
@@ -188,9 +188,8 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
             return Inference(
                 id="drv.c.problog_tag",
                 version="v1",
-                where=[Pred("user:tag_seed", u, tag)],
-                target="user:tag",
-                head_vars=[u, tag],
+                when=[Pred("user:tag_seed", u, tag)],
+                emits=EmitSpec("user:tag", [u, tag]),
             )
 
     def _mock_output(self, sdk: SDKStore) -> str:

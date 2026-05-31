@@ -124,7 +124,7 @@ exported from `factgraph.sdk`.
 
 | Symbol | Purpose |
 |---|---|
-| `Branch` | Rule `where` branch constructor (alternative conjunction) |
+| `Case` | Rule `where` branch constructor (alternative conjunction) |
 | `Rule` | Application protocol Rule |
 | `ApplicationRule` | Transitional alias for `Rule` |
 | `RuleRef` | Where-clause reference to an exposed rule |
@@ -580,7 +580,7 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - Track 3-post extends `PyReasonSemantics` with
   `branch_bounds={branch_id: [lower, upper]}`. These bounds override the
   global `head_bound` for the referenced branch and may use explicit
-  `Branch(id=...)` names or fallback `b0` / `b1` ids.
+  `Case(id=...)` names or fallback `b0` / `b1` ids.
 - `fg.eval.inspect_semantics(...)` accepts wrappers or `SemanticsProfile`;
   wrapper inspection includes a lowered canonical profile preview. Public
   SDK calls reject `mode=` and `semantics_profile=`; core/application

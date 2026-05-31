@@ -16,7 +16,8 @@ from factgraph.adapters.souffle.package import ExportOptions
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import (
-    Branch,
+    Case,
+    EmitSpec,
     FactGraph,
     Inference,
     Pred,
@@ -47,7 +48,7 @@ def _rule(*, rule_id: str = "rule.workspace.tag_seed", version: str = "v1") -> R
             id=rule_id,
             version=version,
             select=[u, tag],
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            where=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
             expose=True,
         )
 
@@ -57,9 +58,8 @@ def _inference(*, inference_id: str = "inf.workspace.tag", version: str = "v1") 
         return Inference(
             id=inference_id,
             version=version,
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-            target="user:tag",
-            head_vars=[u, tag],
+            when=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            emits=EmitSpec("user:tag", [u, tag]),
         )
 
 

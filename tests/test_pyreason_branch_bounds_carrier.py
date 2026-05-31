@@ -15,7 +15,7 @@ from factgraph.adapters.pyreason.where_compile import compile_where_ir_to_pyreas
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store.types import EngineExtBase
-from factgraph.sdk import Branch, Inference, Pred, SDKStore, vars as sdk_vars
+from factgraph.sdk import Case, EmitSpec, Inference, Pred, SDKStore, vars as sdk_vars
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError, _lower_public_semantics
 
@@ -72,12 +72,11 @@ def _two_branch_derivation() -> Inference:
         return Inference(
             id="drv.track3post.pyreason_branch_bounds",
             version="v1",
-            where=[
-                Branch([Pred("user:name", u, name)], id="sensor_path"),
-                Branch([Pred("user:risk_score", u, risk)]),
+            when=[
+                Case([Pred("user:name", u, name)], id="sensor_path"),
+                Case([Pred("user:risk_score", u, risk)]),
             ],
-            target="user:popular",
-            head_vars=[u],
+            emits=EmitSpec("user:popular", [u]),
         )
 
 
@@ -86,9 +85,8 @@ def _single_branch_derivation() -> Inference:
         return Inference(
             id="drv.track3post.pyreason_single",
             version="v1",
-            where=[Branch([Pred("user:name", u, name)])],
-            target="user:popular",
-            head_vars=[u],
+            when=[Case([Pred("user:name", u, name)])],
+            emits=EmitSpec("user:popular", [u]),
         )
 
 

@@ -6,17 +6,17 @@ from typing import Any
 
 from .errors import SDKDSLError
 
-_BRANCH_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_CASE_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 @dataclass(frozen=True)
-class Branch:
-    """Named alternative body inside a rule or inference.
+class Case:
+    """Named alternative body inside an inference.
 
-    A rule with multiple branches expresses alternative pathways: each branch
-    is a conjunction of atoms, and the branch list acts like OR over those
+    An inference with multiple cases expresses alternative pathways: each case
+    is a conjunction of atoms, and the case list acts like OR over those
     conjunctions. Supplying `id=` gives inspection and semantics APIs a stable
-    branch name.
+    case name.
     """
 
     atoms: list[Any]
@@ -25,13 +25,13 @@ class Branch:
 
     def __post_init__(self) -> None:
         if not isinstance(self.atoms, list) or not self.atoms:
-            raise SDKDSLError("Branch.atoms must be non-empty list", path="$.where[]")
+            raise SDKDSLError("Case.atoms must be non-empty list", path="$.when[]")
         if self.id is not None:
             if not isinstance(self.id, str) or not self.id:
-                raise SDKDSLError("Branch.id must be non-empty string when provided", path="$.where[].id")
-            if not _BRANCH_ID_RE.fullmatch(self.id):
+                raise SDKDSLError("Case.id must be non-empty string when provided", path="$.when[].id")
+            if not _CASE_ID_RE.fullmatch(self.id):
                 raise SDKDSLError(
-                    "Branch.id must match ^[A-Za-z_][A-Za-z0-9_]*$",
-                    path="$.where[].id",
+                    "Case.id must match ^[A-Za-z_][A-Za-z0-9_]*$",
+                    path="$.when[].id",
                 )
         object.__setattr__(self, "atoms", list(self.atoms))

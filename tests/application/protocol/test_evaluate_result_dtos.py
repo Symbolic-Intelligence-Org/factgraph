@@ -46,7 +46,7 @@ from factgraph.core.store._support import (
 
 def _head_rule() -> Rule:
     person = Var("$person")
-    return Rule(id="person_head", where=(PredAtom("Person:exists", [person]),), ports={"person": person})
+    return Rule(id="person_head", when=(PredAtom("Person:exists", [person]),), ports={"person": person})
 
 
 def _token(label: str) -> str:
@@ -398,8 +398,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         self.assertIsInstance(closed, Rule)
         self.assertIn("_closed_", closed.id)
-        self.assertNotIn("__factgraph_projection_placeholder", repr(closed.where))
-        self.assertTrue(any(isinstance(atom, CmpAtom) and atom.rhs == Const("eu") for atom in closed.where))
+        self.assertNotIn("__factgraph_projection_placeholder", repr(closed.when))
+        self.assertTrue(any(isinstance(atom, CmpAtom) and atom.rhs == Const("eu") for atom in closed.when))
 
     def test_live_row_explain_returns_passed_explanation(self) -> None:
         (

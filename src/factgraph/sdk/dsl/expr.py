@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from itertools import count
 from typing import Any
 
-from .branch import Branch
+from .branch import Case
 from .errors import SDKDSLError
 
 
@@ -385,7 +385,7 @@ def lower_where_branch(
 
 
 def lower_where_atom(atom: Any, bindings: dict[LogicVar, str], *, temp_seq: Any) -> list[Any]:
-    if isinstance(atom, Branch):
+    if isinstance(atom, Case):
         return lower_where_branch(atom.atoms, initial_bindings=bindings)
     if (
         isinstance(atom, tuple)
@@ -589,11 +589,11 @@ def _is_numeric_literal(value: Any) -> bool:
 
 
 def _normalize_where_branch_wrappers(where: list[Any]) -> list[Any]:
-    has_branch = any(isinstance(item, Branch) for item in where)
+    has_branch = any(isinstance(item, Case) for item in where)
     if not has_branch:
         return where
-    if not all(isinstance(item, Branch) for item in where):
-        raise SDKDSLError("where/branch cannot mix Branch(...) with bare branches")
+    if not all(isinstance(item, Case) for item in where):
+        raise SDKDSLError("where/case cannot mix Case(...) with bare cases")
     return [list(item.atoms) for item in where]
 
 

@@ -74,7 +74,15 @@ def compile_authoring_derivation_v1(
             path="$.id_policy",
         )
 
-    explicit_target_pred_id = authoring_derivation.get("target_pred_id", authoring_derivation.get("target"))
+    emits_target_pred_id: str | None = None
+    emits_head_vars: list[Any] | None = None
+    if "emits" in authoring_derivation:
+        emits_target_pred_id, emits_head_vars = _compile_emits(authoring_derivation["emits"])
+
+    explicit_target_pred_id = authoring_derivation.get(
+        "target_pred_id",
+        authoring_derivation.get("target", emits_target_pred_id),
+    )
     lowered_target_pred_id: str | None = None
     lowered_head_vars: list[Any] | None = None
     if (
@@ -112,9 +120,19 @@ def compile_authoring_derivation_v1(
             "target_pred_id/target conflicts with head-derived target from schema",
             path="$.target_pred_id" if "target_pred_id" in authoring_derivation else "$.target",
         )
+    if emits_target_pred_id is not None and target_pred_id != emits_target_pred_id:
+        raise _compile_error(
+            "emits.target conflicts with target_pred_id/target",
+            path="$.emits.target",
+        )
 
     if "head_vars" in authoring_derivation or "select" in authoring_derivation:
         head_vars = _compile_head_vars(authoring_derivation)
+        if emits_head_vars is not None and head_vars != emits_head_vars:
+            raise _compile_error(
+                "emits.vars conflicts with head_vars/select",
+                path="$.emits.vars",
+            )
         if lowered_head_vars is not None and head_vars != lowered_head_vars:
             raise _compile_error(
                 "head_vars/select conflicts with head-derived positional mapping from schema arg_specs",
@@ -122,6 +140,8 @@ def compile_authoring_derivation_v1(
             )
     elif lowered_head_vars is not None:
         head_vars = lowered_head_vars
+    elif emits_head_vars is not None:
+        head_vars = emits_head_vars
     else:
         head_vars = _compile_head_vars(authoring_derivation)
     mode = _compile_mode(authoring_derivation)
@@ -516,6 +536,18 @@ def _compile_head_vars(payload: dict[str, Any]) -> list[Any]:
             continue
         raise _compile_error("head var/literal must be str|int|bool", path=item_path)
     return out
+
+
+def _compile_emits(value: Any) -> tuple[str, list[Any]]:
+    if not isinstance(value, dict):
+        raise _compile_error("emits must be object", path="$.emits")
+    target = value.get("target")
+    if not isinstance(target, str) or not target:
+        raise _compile_error("emits.target must be non-empty string", path="$.emits.target")
+    vars_ = value.get("vars")
+    if not isinstance(vars_, list) or not vars_:
+        raise _compile_error("emits.vars must be non-empty list", path="$.emits.vars")
+    return target, list(vars_)
 
 
 def _compile_where(payload: dict[str, Any], *, schema_ir: dict[str, Any] | None = None) -> list[Any]:

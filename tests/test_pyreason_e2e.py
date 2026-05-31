@@ -20,7 +20,7 @@ from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 from factgraph.core.store.ledger import Claim
 from factgraph.sdk.compile import compile_schema_from_classes
 from factgraph.sdk.dsl import vars as sdk_vars
-from factgraph.sdk.dsl import Inference, Pred
+from factgraph.sdk.dsl import EmitSpec, Inference, Pred
 from factgraph.sdk.schema import Entity, Field, Identity, Relationship
 from factgraph.sdk.store import SDKStore
 
@@ -111,9 +111,8 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
             return Inference(
                 id="drv.pyreason_popular",
                 version="v1",
-                where=where if where is not None else [Pred("user:name", u, name)],
-                target="user:popular",
-                head_vars=[u],
+                when=where if where is not None else [Pred("user:name", u, name)],
+                emits=EmitSpec("user:popular", [u]),
             )
 
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)

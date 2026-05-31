@@ -26,7 +26,7 @@ from factgraph.core.rules.where_ast_validate import (
     validate_where_ast,
 )
 
-from .branch import Branch
+from .branch import Case
 from .errors import SDKDSLError
 from .expr import (
     AttrRef,
@@ -77,7 +77,7 @@ def build_application_rule(
         id=id,
         version=version,
         desc=desc,
-        where=tuple(where_expr.atoms),
+        when=tuple(where_expr.atoms),
         ports=converted_ports,
     )
 
@@ -85,8 +85,8 @@ def build_application_rule(
 def _reject_or_shape(where: Any) -> None:
     if not isinstance(where, list) or not where:
         raise DSLToApplicationRuleError("where must be a non-empty list")
-    if any(isinstance(item, Branch) for item in where):
-        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only where bodies; Branch is not allowed")
+    if any(isinstance(item, Case) for item in where):
+        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only where bodies; Case is not allowed")
     if all(isinstance(item, list) for item in where):
         raise DSLToApplicationRuleError("application Rule bridge accepts AND-only where bodies; OR branches are not allowed")
 
@@ -94,8 +94,8 @@ def _reject_or_shape(where: Any) -> None:
 def _reject_legacy_where(items: Sequence[Any], *, path: str) -> None:
     for index, item in enumerate(items):
         item_path = f"{path}[{index}]"
-        if isinstance(item, Branch):
-            raise DSLToApplicationRuleError(f"{item_path}: Branch is not allowed in new Rule path")
+        if isinstance(item, Case):
+            raise DSLToApplicationRuleError(f"{item_path}: Case is not allowed in new Rule path")
         if isinstance(item, list):
             raise DSLToApplicationRuleError(f"{item_path}: OR branch list is not allowed in new Rule path")
         _reject_legacy_atom(item, path=item_path)

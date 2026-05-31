@@ -82,7 +82,7 @@ with vars("u", "tag") as (u, tag):
     tags_from_seed = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 ```
@@ -278,7 +278,7 @@ The default is worth calling out: `PyReasonSemantics()` lowers to canonical
 `iteration_count=1`. Direct no-profile PyReason adapter execution still keeps
 its existing engine default.
 
-Branch-specific `branch_probabilities` and `branch_bounds` require a concrete
+Case-specific `branch_probabilities` and `branch_bounds` require a concrete
 multi-branch context such as a `RuleExpr` OR expression or a v0.2 compatibility
 `Inference` with explicit branch ids. A single application `Rule` has no public
 branch ids — application `Rule` bodies are **AND-only by design**, with OR
@@ -344,20 +344,19 @@ Keep this separation in mind:
 
 ## Compatibility with Inference branch ids
 
-`Inference` and `Branch` remain available as v0.2 compatibility surfaces.
+`Inference` and `Case` remain available as v0.2 compatibility surfaces.
 Use them when you need the legacy branch-id authoring shape; prefer application
 `Rule` or `RuleExpr` for new examples.
 
 ```python
-from factgraph.sdk import Branch, Inference, Pred
+from factgraph.sdk import Case, EmitSpec, Inference, Pred
 
 with vars("u", "tag") as (u, tag):
     inference = Inference(
         id="inf.tags_from_seed",
         version="v1",
-        where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-        target="user:tag",
-        head_vars=[u, tag],
+        when=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
+        emits=EmitSpec("user:tag", [u, tag]),
     )
 
 branch_profile = ProbLogSemantics(branch_probabilities={"seed_path": 0.7})
@@ -410,7 +409,7 @@ with vars("u", "tag") as (u, tag):
     tags_from_seed = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 
@@ -464,7 +463,7 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
   engine.
 - The SDK derives `engine=` from public wrappers; explicit mismatches are
   rejected.
-- Branch-level semantics require RuleExpr branch ids or compatibility
+- Case-level semantics require RuleExpr branch ids or compatibility
   `Inference` branch ids.
-- Branch ids are lowered to adapter branch indexes such as `branch:0`.
+- Case ids are lowered to adapter branch indexes such as `branch:0`.
 - `evaluate(...)` returns `EvaluateResult` rows and does not write facts.

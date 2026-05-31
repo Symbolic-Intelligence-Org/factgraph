@@ -14,7 +14,7 @@ import warnings
 # that exercised the legacy adapter directly are skipped below.
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
-from factgraph.sdk import Branch, FactGraph, Inference, Pred, SDKSchemaError, vars as sdk_vars
+from factgraph.sdk import Case, EmitSpec, FactGraph, Inference, Pred, SDKSchemaError, vars as sdk_vars
 from factgraph.sdk.compile import compile_schema_from_classes
 from factgraph.sdk.dsl import Rule
 from factgraph.sdk.schema import Entity, Field, Identity
@@ -184,7 +184,7 @@ def _rule_for_tag_seed(*, rule_id: str = "rule.field.seed", version: str = "v1")
             id=rule_id,
             version=version,
             select=[u, tag],
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            where=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
             expose=True,
         )
 
@@ -194,9 +194,8 @@ def _inference_for_tag(*, inference_id: str = "inf.field.tag", version: str = "v
         return Inference(
             id=inference_id,
             version=version,
-            where=[Branch([Pred("user:tag_seed", u, tag)], id="seed_path")],
-            target="user:tag",
-            head_vars=[u, tag],
+            when=[Case([Pred("user:tag_seed", u, tag)], id="seed_path")],
+            emits=EmitSpec("user:tag", [u, tag]),
         )
 
 
@@ -206,7 +205,7 @@ def _rule_for_nickname(*, rule_id: str = "rule.field.nickname", version: str = "
             id=rule_id,
             version=version,
             select=[u, nickname],
-            where=[Branch([Pred("user:nickname", u, nickname)], id="nickname_path")],
+            where=[Case([Pred("user:nickname", u, nickname)], id="nickname_path")],
             expose=True,
         )
 

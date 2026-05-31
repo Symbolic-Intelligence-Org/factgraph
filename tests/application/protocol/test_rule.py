@@ -25,19 +25,19 @@ class RuleConstructionTests(unittest.TestCase):
     def test_rule_requires_non_empty_id(self) -> None:
         u = Var("u")
         with self.assertRaises(RuleValidationError):
-            Rule(id="", where=(PredAtom("User:exists", [u]),), ports={"user": u})
+            Rule(id="", when=(PredAtom("User:exists", [u]),), ports={"user": u})
 
     def test_rule_requires_non_empty_tuple_where(self) -> None:
         u = Var("u")
         with self.assertRaises(RuleValidationError):
-            Rule(id="r1", where=(), ports={"user": u})
+            Rule(id="r1", when=(), ports={"user": u})
 
     def test_rule_requires_var_ports(self) -> None:
         u = Var("u")
         with self.assertRaises(RuleValidationError):
             Rule(
                 id="r1",
-                where=(PredAtom("User:exists", [u]),),
+                when=(PredAtom("User:exists", [u]),),
                 ports={"user": Const("u")},  # type: ignore[dict-item]
             )
 
@@ -52,20 +52,20 @@ class AtomKindAllowlistTests(unittest.TestCase):
             BuiltinAtom("add", [u, Const(1)]),
             NotAtom(AndExpr([CmpAtom("ne", u, Const("blocked"))])),
         )
-        rule = Rule(id="r1", where=atoms, ports={"user": u})
-        self.assertEqual(rule.where, atoms)
+        rule = Rule(id="r1", when=atoms, ports={"user": u})
+        self.assertEqual(rule.when, atoms)
 
     def test_rule_ref_atom_is_rejected(self) -> None:
         u = Var("u")
         with self.assertRaises(RuleValidationError):
-            Rule(id="r1", where=(RuleRefAtom("other", "v1", [u]),), ports={"user": u})
+            Rule(id="r1", when=(RuleRefAtom("other", "v1", [u]),), ports={"user": u})
 
     def test_sdk_dsl_types_are_rejected(self) -> None:
         u = SDKLogicVar("u")
         with self.assertRaises(RuleValidationError):
             Rule(
                 id="r1",
-                where=(SDKExistsAtom("User", u),),  # type: ignore[arg-type]
+                when=(SDKExistsAtom("User", u),),  # type: ignore[arg-type]
                 ports={"user": Var("u")},
             )
 
@@ -75,14 +75,14 @@ class PortValidationTests(unittest.TestCase):
         u = Var("u")
         region = Var("region")
         with self.assertRaises(RuleValidationError):
-            Rule(id="r1", where=(PredAtom("User:exists", [u]),), ports={"region": region})
+            Rule(id="r1", when=(PredAtom("User:exists", [u]),), ports={"region": region})
 
     def test_port_types_infer_entity_ref_and_value(self) -> None:
         u = Var("u")
         status = Var("status")
         rule = Rule(
             id="r1",
-            where=(
+            when=(
                 PredAtom("User:exists", [u]),
                 CmpAtom("eq", status, Const("active")),
             ),
@@ -97,7 +97,7 @@ class DescRenderTests(unittest.TestCase):
         u = Var("u")
         rule = Rule(
             id="r1",
-            where=(PredAtom("User:exists", [u]),),
+            when=(PredAtom("User:exists", [u]),),
             ports={"user": u},
             desc="user %user is active",
         )
@@ -109,7 +109,7 @@ class DescRenderTests(unittest.TestCase):
         with self.assertRaises(RuleValidationError):
             Rule(
                 id="r1",
-                where=(PredAtom("User:exists", [u]),),
+                when=(PredAtom("User:exists", [u]),),
                 ports={"user": u},
                 desc="user %missing",
             )
@@ -120,7 +120,7 @@ class RuleIdentityTests(unittest.TestCase):
         u = Var("u")
         rule = Rule(
             id="active_user",
-            where=(PredAtom("User:exists", [u]), CmpAtom("eq", u, Const("u-1"))),
+            when=(PredAtom("User:exists", [u]), CmpAtom("eq", u, Const("u-1"))),
             ports={"user": u},
         )
         self.assertEqual(rule.atom_ids, ("active_user:atom_0", "active_user:atom_1"))
@@ -129,9 +129,9 @@ class RuleIdentityTests(unittest.TestCase):
         u = Var("u")
         a = PredAtom("User:exists", [u])
         b = CmpAtom("eq", u, Const("u-1"))
-        first = Rule(id="r1", where=(a, b), ports={"user": u})
-        same = Rule(id="r2", where=(a, b), ports={"user": u})
-        reordered = Rule(id="r1", where=(b, a), ports={"user": u})
+        first = Rule(id="r1", when=(a, b), ports={"user": u})
+        same = Rule(id="r2", when=(a, b), ports={"user": u})
+        reordered = Rule(id="r1", when=(b, a), ports={"user": u})
         self.assertEqual(first.content_digest, same.content_digest)
         self.assertNotEqual(first.content_digest, reordered.content_digest)
 
@@ -139,14 +139,14 @@ class RuleIdentityTests(unittest.TestCase):
 class ImmutabilityTests(unittest.TestCase):
     def test_rule_container_is_shallow_immutable(self) -> None:
         u = Var("u")
-        rule = Rule(id="r1", where=(PredAtom("User:exists", [u]),), ports={"user": u})
+        rule = Rule(id="r1", when=(PredAtom("User:exists", [u]),), ports={"user": u})
         with self.assertRaises(FrozenInstanceError):
             rule.id = "other"  # type: ignore[misc]
         self.assertIsInstance(rule.ports, MappingProxyType)
         with self.assertRaises(TypeError):
             rule.ports["other"] = u  # type: ignore[index]
         with self.assertRaises(AttributeError):
-            rule.where.append(PredAtom("User:exists", [u]))  # type: ignore[attr-defined]
+            rule.when.append(PredAtom("User:exists", [u]))  # type: ignore[attr-defined]
 
 
 class RuleOccurrenceTests(unittest.TestCase):
@@ -154,7 +154,7 @@ class RuleOccurrenceTests(unittest.TestCase):
         user = Var(var_name)
         return Rule(
             id=rule_id,
-            where=(PredAtom("User:exists", [user]),),
+            when=(PredAtom("User:exists", [user]),),
             ports={"user": user},
         )
 

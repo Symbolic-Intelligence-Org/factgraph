@@ -32,8 +32,8 @@ path.
   `engine=` and `semantics=`, or omit `engine=` when it can be derived
   from the semantics object.
 - Track 3-post lets `PyReasonSemantics.branch_bounds` reference branch
-  ids from `Branch([...], id="...")` or fallback positional ids such as
-  `b0` / `b1`. Branch-specific bounds override the wrapper's global
+  ids from `Case([...], id="...")` or fallback positional ids such as
+  `b0` / `b1`. Case-specific bounds override the wrapper's global
   `head_bound` for that branch only.
 
 ## 1. `vars(...)`
@@ -96,19 +96,19 @@ Supported:
 - negation: `Not([...])`
 - comparisons: `== != > >= < <=`
 - OR branches: `where=[[...], [...]]` (Inference only — application `Rule` is AND-only)
-- `Branch` branches: `where=[Branch([...], id="seed_path"), Branch([...])]` (Inference only)
+- `Case` branches: `when=[Case([...], id="seed_path"), Case([...])]` (Inference only)
 - linear arithmetic inside comparisons (for example `age == (2026 - by)`, `x * 2`)
 - aggregate helpers for the application Rule bridge:
   `agg_count`, `agg_sum`, `agg_min`, `agg_max`, and `agg_mean`
 
-`Branch` example:
+`Case` example:
 
 ```python
-from factgraph.sdk import Branch
+from factgraph.sdk import Case
 
 where = [
-    Branch([User(u), Pred("user:lang_pref", u, lang)], id="declared_pref"),
-    Branch([User(u), Pred("user:inferred_lang", u, lang)]),
+    Case([User(u), Pred("user:lang_pref", u, lang)], id="declared_pref"),
+    Case([User(u), Pred("user:inferred_lang", u, lang)]),
 ]
 ```
 
@@ -116,8 +116,8 @@ Limits:
 - path sugar supports only `==`.
 - attr-vs-attr comparisons support only `==`, and require schema-aware compilation.
 - non-linear multiplication (`x * y`) is unsupported.
-- `where` cannot mix `Branch(...)` with bare branches (for example `[Branch([...]), [...]]`).
-- `Branch(...)` accepts the branch atom list plus optional keyword-only structural `id=`.
+- `where` cannot mix `Case(...)` with bare branches (for example `[Case([...]), [...]]`).
+- `Case(...)` accepts the branch atom list plus optional keyword-only structural `id=`.
   Probability, confidence, and engine-specific kwargs are rejected.
 - `fg.rules.inspect(rule_or_inference)` exposes explicit branch ids, positional fallback ids (`b0`, `b1`, ...), and atom ids such as `b0.a0`.
 - string DSL is unsupported (`sdk.run("...")`, `sdk.eval.evaluate("...")`).
@@ -127,7 +127,7 @@ Limits:
 For schema-field conditions in `where`, prefer field sugar:
 
 ```python
-where=[User(u), u.name == nm, u.tag == "vip"]
+when=[User(u), u.name == nm, u.tag == "vip"]
 ```
 
 This lowers to the corresponding predicates:
@@ -168,7 +168,7 @@ with vars("u", "o", "total") as (u, o, total):
     )
 ```
 
-`agg_count(where=[...])` has no target. `agg_sum`, `agg_min`, `agg_max`, and
+`agg_count(when=[...])` has no target. `agg_sum`, `agg_min`, `agg_max`, and
 `agg_mean` require a target, usually a schema field reference such as
 `Order(o).amount`. Aggregate filters may correlate with variables bound outside
 the aggregate, but variables introduced only inside the filter remain local to
@@ -207,7 +207,7 @@ from factgraph.sdk import build_application_rule, vars
 with vars("u") as (u,):
     active_user = build_application_rule(
         id="active_user",
-        where=[User(u), User(u).status == "active"],
+        when=[User(u), User(u).status == "active"],
         ports={"user": u},
         desc="active user %user",
     )
@@ -215,7 +215,7 @@ with vars("u") as (u,):
 with vars("u") as (u,):
     assigned_owner = build_application_rule(
         id="assigned_owner",
-        where=[User(u), User(u).role == "owner"],
+        when=[User(u), User(u).role == "owner"],
         ports={"user": u},
         desc="assigned owner %user",
     )
@@ -442,10 +442,10 @@ Rules:
 ```python
 fg = FactGraph.create(schema_classes=[User], path="./workspace")
 
-my_rule = Rule(id="rule_alice", where=[...], ports={"x": x})
+my_rule = Rule(id="rule_alice", when=[...], ports={"x": x})
 rule_result = fg.eval.evaluate(my_rule)
 
-my_inference = Inference(id="drv.copy_name", version="1.0.0", where=[...], head=...)
+my_inference = Inference(id="drv.copy_name", version="1.0.0", when=[...], head=...)
 result = fg.eval.evaluate(my_inference)
 ```
 
@@ -463,7 +463,7 @@ session.
 with vars("u", "loc", "nm") as (u, loc, nm):
     q = Query(
         head=[User(u), User.name(locale=loc, name=nm)],
-        where=[User(u), u.locale == loc, u.name == nm],
+        when=[User(u), u.locale == loc, u.name == nm],
         on_missing="error",
         on_type_mismatch="error",
     )
@@ -486,7 +486,7 @@ with vars("u", "loc", "nm") as (u, loc, nm):
     inf = Inference(
         id="drv.copy_name",
         version="1.0.0",
-        where=[User(u), u.locale == loc, u.name == nm],
+        when=[User(u), u.locale == loc, u.name == nm],
         head=User.name(locale=loc, name=nm),
     )
 
@@ -497,13 +497,13 @@ if row is not None:
 ```
 
 Fields:
-- required: `id`, `version`, `where`
-- optional: `head`, `target`, `head_vars`, `status`, `description`, `tags`
+- required: `id`, `version`, `when`
+- optional: `head`, `emits`, `status`, `description`, `tags`
 
 Stable contract:
 - `head` shape infers candidate kind (fact/entity).
 - Public SDK `Inference` is single-head. Multi-head (`head=[H1, H2, ...]`) is rejected in Track 1; define one inference per head.
-- `Inference.where` supports `Branch(...)`; it unwraps to normalized OR-branch structure. Application `Rule.where` is AND-only (use `RuleExpr` `&` / `|` for multi-rule composition).
+- `Inference.when` supports `Case(...)`; it unwraps to normalized OR-branch structure. Application `Rule.when` is AND-only (use `RuleExpr` `&` / `|` for multi-rule composition).
 - `sdk.run(inference)` was removed; use `sdk.eval.evaluate(...)`.
 
 ## 7. Compile-Time Hard Constraints (v2)
@@ -605,7 +605,7 @@ with vars("u", "loc", "nm") as (u, loc, nm):
     inf = Inference(
         id="drv.alias",
         version="1.0.0",
-        where=[User(u), u.locale == loc, u.name == nm],
+        when=[User(u), u.locale == loc, u.name == nm],
         head=User.name(locale=loc, name=nm),
     )
 
@@ -622,7 +622,7 @@ with vars("u", "lang") as (u, lang):
     inf = Inference(
         id="drv.speaks",
         version="1.0.0",
-        where=[User(u), Pred("user:lang_pref", u, lang)],
+        when=[User(u), Pred("user:lang_pref", u, lang)],
         head=Speaks(user=u, language=lang),
     )
 

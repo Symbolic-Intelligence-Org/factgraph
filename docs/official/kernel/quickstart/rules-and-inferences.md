@@ -17,7 +17,7 @@ The short version is:
 | --- | --- |
 | Read matching snapshots | `Rule` / `RuleExpr` + `fg.entities.match(...)` |
 | Propose new facts | `Rule` / `RuleExpr` + `fg.eval.evaluate(...)` |
-| Maintain v0.2 branch-id compatibility | `Inference` / `Branch` |
+| Maintain v0.2 branch-id compatibility | `Inference` / `Case` |
 | Explain evaluated rows | `row.explain()` / `fg.eval.explain(...)` |
 | Inspect rule shape | `fg.rules.inspect(...)` |
 
@@ -65,7 +65,7 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 ```
@@ -90,7 +90,7 @@ between user-facing DSL and the underlying `Rule` data shape:
 | Surface | Accepts | Role |
 | --- | --- | --- |
 | `build_application_rule(id=..., where=[Entity(var), ...], ports={...})` | SDK DSL atoms + `ports={name: logic_var}` | Ergonomic factory. Lowers, validates, canonicalizes Vars, returns `Rule`. |
-| `Rule(id=..., where=(PredAtom(...), CmpAtom(...)), ports={...})` | Already-canonical core atom tuple | Low-level data shape. Manual construction only required if you are working at the core protocol layer. |
+| `Rule(id=..., when=(PredAtom(...), CmpAtom(...)), ports={...})` | Already-canonical core atom tuple | Low-level data shape. Manual construction only required if you are working at the core protocol layer. |
 
 This is the same high-level-factory / low-level-data-shape pattern as
 `FactGraph.create(schema_classes=[...])` vs `Database.create(schema_ir=...)`
@@ -100,7 +100,7 @@ The factory does four things for you that `Rule(...)` directly does not:
 
 1. **Lowers DSL** — converts `Entity(var)` / `Entity(var).field == value` /
    `Pred(...)` into the underlying `PredAtom` / `CmpAtom` shape.
-2. **Validates the body** — rejects `Branch` (use `Inference` for that),
+2. **Validates the body** — rejects `Case` (use `Inference` for that),
    rejects OR branch lists (application `Rule` is AND-only), rejects
    legacy raw `Pred` atoms in `where`, rejects bare `AttrRef`.
 3. **Canonicalizes `Var` instances** — same name -> same object, so
@@ -190,7 +190,7 @@ with vars("u", "r") as (u, r):
     user_in_region = build_application_rule(
         id="user:region",
         version="v1",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},   # both u and r exposed
     )
 ```
@@ -233,7 +233,7 @@ with vars("u", "r") as (u, r):
         id="user:region",
         version="v1",
         desc="user %user lives in region %region",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -272,7 +272,7 @@ with vars("u", "r") as (u, r):
     user_region = build_application_rule(
         id="user:region",
         version="v1",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -431,7 +431,7 @@ with vars("u",) as (u,):
     user_exists = build_application_rule(
         id="User:exists",      # 1-arg predicate
         version="v1",
-        where=[User(u)],
+        when=[User(u)],
         ports={"user": u},      # 1 port matches arg arity
     )
 
@@ -446,7 +446,7 @@ with vars("u", "r") as (u, r):
     user_region = build_application_rule(
         id="user:region",      # 2-arg predicate (user_ref, region_string)
         version="v1",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -504,7 +504,7 @@ quickstart path.
 ## Legacy compatibility: evaluate an Inference
 
 `Inference` is the **v0.2 compatibility surface** for rule authoring that
-uses explicit `Branch(...)` bodies and a separate `target` head predicate.
+uses explicit `Case(...)` bodies and a separate `target` head predicate.
 It remains available for v0.2 and is what runtime methods like `fg.eval.evaluate(...)`
 accept when given an OR-branching rule. New tutorials and new authoring
 prefer the application `Rule` path (`build_application_rule(...)` +
@@ -514,20 +514,19 @@ date so existing call sites keep working.
 An inference can use the same body and propose a new target predicate.
 
 ```python
-from factgraph.sdk import Branch, Inference, Pred
+from factgraph.sdk import Case, EmitSpec, Inference, Pred
 
 with vars("u", "tag") as (u, tag):
     tags_from_seed = Inference(
         id="inf.tags_from_seed",
         version="v1",
-        where=[
-            Branch(
+        when=[
+            Case(
                 [Pred("user:tag_seed", u, tag)],
                 id="seed_path",
             )
         ],
-        target="user:tag",
-        head_vars=[u, tag],
+        emits=EmitSpec("user:tag", [u, tag]),
     )
 ```
 
@@ -574,7 +573,7 @@ assert inspected["branches"][0]["fallback_id"] == "b0"
 assert inspected["branches"][0]["atom_count"] == 1
 ```
 
-Branch ids are structural names. Use explicit branch ids when a rule has
+Case ids are structural names. Use explicit branch ids when a rule has
 meaningful pathways that you may want to inspect or configure later. If you do
 not provide an id, the SDK still exposes a fallback id such as `b0`.
 
@@ -617,20 +616,20 @@ Rule / RuleExpr -> evaluate -> EvaluateResult rows -> explain/close -> explicit 
 
 Learn the lifecycle first. Engine-specific semantics are an advanced topic.
 
-## Stability of `Inference` and `Branch`
+## Stability of `Inference` and `Case`
 
 Application `Rule` (built via `build_application_rule(...)`) is the
 preferred read-pattern surface for new code in v0.2. `Inference` and
-`Branch` remain available as the compatibility surface: same
+`Case` remain available as the compatibility surface: same
 `EvaluateResult` / `EvaluateRow` / `Explanation` shapes, same lower
-evaluation pipeline. The design has committed to retiring `Branch` from
+evaluation pipeline. The design has committed to retiring `Case` from
 user-facing layers and folding `Inference` into a `RuleExpr`-based
 runtime entry in a later cycle, but the migration spec is pending a
 future blueprint and **no `DeprecationWarning` is raised in v0.2**.
 
 For the full positioning (invariants, what to use for new code, why
-`build_application_rule` rejects `Branch`), see
-[`evidence.md` §7 Stability of `Inference` and `Branch`](evidence.md).
+`build_application_rule` rejects `Case`), see
+[`evidence.md` §7 Stability of `Inference` and `Case`](evidence.md).
 
 ## Complete example
 
@@ -661,7 +660,7 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 
@@ -706,10 +705,10 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
 - Explain rows with `row.explain()` or replay with
   `fg.eval.explain(expr, head=row.close())`.
 - Inspect rule or inference structure with `fg.rules.inspect(...)`.
-- Use `Inference(id=..., where=[...], target=..., head_vars=[...])` only for
-  v0.2 compatibility call sites that still need explicit `Branch` ids.
+- Use `Inference(id=..., when=[...], emits=EmitSpec(...))` only for
+  v0.2 compatibility call sites that still need explicit `Case` ids.
 - Use `Pred("entity:field", ...)` inside legacy `Inference` bodies.
-- Use `Branch([...], id="...")` inside legacy `Inference` bodies when branch
+- Use `Case([...], id="...")` inside legacy `Inference` bodies when branch
   identity matters; application `Rule` accepts only AND-flat bodies.
 - `RuleRef` is a body-composition tool, not a persistence handle.
 - Rule and inference persistence handles were removed; runtime methods consume
