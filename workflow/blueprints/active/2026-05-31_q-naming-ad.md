@@ -84,7 +84,7 @@ Combining Batch A + Batch D into one slice is supported by audit §9 recommendat
 | SDK class | `FrozenAssertionView` | `FrozenAssertionSet` | [`sdk/store.py:135`](../../../src/factgraph/sdk/store.py) |
 | Core exports | `__all__` entry `FrozenAssertionView` | `FrozenAssertionSet` | [`core/store/__init__.py:14`](../../../src/factgraph/core/store/__init__.py) (`__all__` tuple) + [`core/store/__init__.py:40`](../../../src/factgraph/core/store/__init__.py) (re-export tuple) — both rows. Confirmed in Step 4.2 review P3-1. |
 | SDK exports | `__all__` entry `FrozenAssertionView` (if present) | `FrozenAssertionSet` | `sdk/__init__.py` — Step 4.3 preflight PF-v2 confirmed: full-file grep returns 0 hits, so no `__all__` update required in `sdk/__init__.py`. |
-| SDK internal alias (Step 4.3 PF-r2) | Import alias `FrozenAssertionView as DatabaseFrozenAssertionView` at [`sdk/store.py:88`](../../../src/factgraph/sdk/store.py) + all internal references | `FrozenAssertionSet as DatabaseFrozenAssertionSet` + all internal references | Step 4.7 implementation must rename the import alias AND all `DatabaseFrozenAssertionView` references within `sdk/store.py` (type hints, `isinstance` checks, parameter annotations). Pre-impl grep in Step 4.6.5 enumerates the exact set; current Step 4.3 spot-check identified hits at line 175 (parameter type), line 313 (isinstance check), and line 1779 (parameter type) — but the rename target is "import alias + all internal references", not a fixed count. |
+| SDK internal alias (Step 4.3 PF-r2 + Step 4.6.5 N-1) | Import alias `FrozenAssertionView as DatabaseFrozenAssertionView` at [`sdk/store.py:88`](../../../src/factgraph/sdk/store.py) + all internal references | `FrozenAssertionSet as DatabaseFrozenAssertionSet` + all internal references | Step 4.6.5 pre-impl grep exact set: import alias at line 88; internal alias references at lines 175, 313, and 1779. SDK `FrozenAssertionView` class references at lines 135, 384, 408, 430, 437, 3777, 3782, and 3786 are covered by the SDK class rename row above. |
 | by_ids top-level | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) |
 | by_ids facade | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py) |
 | Audit explain | `fg.audit.explain_fact(pred_id, e_ref, *val_atoms)` | `fg.audit.explain(target)` where `target: str \| AssertionRecord` | [`sdk/store.py:1417`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.explain_fact` → `explain`) **only**; manager body calls core `_queries.explain_fact` directly or via a private helper |
@@ -177,6 +177,40 @@ Per CADENCE Stage 4.8 + Q-NAMING-AD §10:
 
 Historical workflow / archive references preserved per Q-NAMING §4.8.5.
 
+### §5.6 Step 4.6.5 pre-implementation grep inventory
+
+Step 4.6.5 deletion-grep found no major blocker and no need to roll scope back to `draft`. The following current targets are folded into Q-NAMING-AD implementation scope under CADENCE Option 2:
+
+- **Tests**:
+  - `tests/test_sdk_frozen_assertion_view.py`
+  - `tests/test_sdk_frozen_view_surface.py`
+  - `tests/test_sdk_redesign_namespace_shape.py`
+  - `tests/test_db_identity_substrate.py`
+  - `tests/test_sdk_read_policy.py`
+  - `tests/test_factgraph_workspace_lifecycle.py`
+  - `tests/test_db_attach_lifecycle.py`
+  - `tests/test_schema_mutation_lifecycle.py`
+  - `tests/test_schema_field_add_lifecycle.py`
+  - `tests/test_a20e_registry_final_removal.py`
+- **Current docs and source docstrings**:
+  - `src/factgraph/sdk/docs/00_user_guide.en.md`
+  - `src/factgraph/sdk/docs/01_concepts.en.md`
+  - `src/factgraph/sdk/docs/02_readwrite_and_ingest.en.md`
+  - `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
+  - `src/factgraph/sdk/docs/04_api_surface.en.md`
+  - `src/factgraph/core/store/docs/README.md`
+  - `src/factgraph/application/docs/01_overview_en.md`
+  - `src/factgraph/authoring/docs/01_overview.md`
+  - `src/service/docs/04_rules_registry.md`
+  - `src/factgraph/cli.py`
+  - `docs/official/kernel/quickstart/database.md`
+  - `docs/official/kernel/quickstart/persistence.md`
+  - `docs/official/kernel/quickstart/namespace-map.md`
+- **Current example**:
+  - `examples/05_sdk_assertion_views.ipynb`
+
+Out-of-scope grep hits remain historical / archive / working material (for example `examples/archive/*` and `docs/references/working/*`) and are preserved per Q-NAMING §4.8.5.
+
 ## 6. Boundaries And Invariants
 
 - **必须保持的边界**:
@@ -228,7 +262,7 @@ Historical workflow / archive references preserved per Q-NAMING §4.8.5.
 3. **Step 4.4 preflight amendment (on blueprint branch)**: apply Required + Recommended PFs. Update audit log Event Log + Decision Notes.
 4. **Step 4.5 self-check (lightweight)**: PF coverage verification, no commit.
 5. **Step 4.6 scoped anchor**: `Status: draft` → `Status: scoped` single small commit + audit log event row.
-6. **Step 4.6.5 pre-impl grep amendment (recommended)**: pre-impl grep `(fg\.views|FrozenAssertionView|fg\.audit\.(explain_fact|conflicts)|fg\.save|FactGraph\.load)` against `src/` + `tests/`. Surface any consumer beyond §5.1 / §5.2 as N-1, N-2, ... Apply Option 2 (no status rollback) if minor.
+6. **Step 4.6.5 pre-impl grep amendment (completed at scoped)**: pre-impl grep `(fg\.views|FrozenAssertionView|fg\.audit\.(explain_fact|conflicts)|fg\.save|FactGraph\.load|DatabaseFrozenAssertionView)` against `src/`, `tests/`, current docs, and current examples. Minor N-1 targets were folded into §5.1 + §5.6 under CADENCE Option 2 with no status rollback and no implementation started.
 7. **Step 4.7 implementation (Codex承接)** on branch `v0.2.0-impl-q-naming-ad-2026-05-31`:
    - 7.1 Rename `FrozenAssertionView` → `FrozenAssertionSet` (core + SDK, in same commit cluster).
    - 7.2 Rename `fg.views` → `fg.assertion_views` (namespace + manager class name).
