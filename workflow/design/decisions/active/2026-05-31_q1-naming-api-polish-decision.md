@@ -1,6 +1,6 @@
 # Q-NAMING Decision: API naming polish for v0.2.0 alpha
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-05-31
 - Last Updated: 2026-05-31
 - Authority: design constraint; locks public API naming for v0.2.0 alpha release before any naming-rename blueprint enters scoped status.
@@ -18,7 +18,7 @@
 - Related:
   - [`workflow/blueprints/archive/`](../../../blueprints/archive/) Slice 6 archive HEAD `4c472b50` (form-i debt cleanup) — branch base
   - Sacred master `562c74195df43e933bed92a3ff25de94dd8ce666` (immutable across all sub-slices)
-- Branch: `v0.2.0-naming-polish-feasibility-2026-05-31` (decision authored on top of audit commit `10de33b9`)
+- Branch: `v0.2.0-q1-naming-api-polish-decision-2026-05-31` (Stage 2 decision branch forked from audit commit `10de33b9` per D1 Option A recovery 2026-05-31; commit chain `10de33b9 → fd28728e → 284d81fb → 1f56aa79 → <adopt-commit>`)
 
 > ADR 4-state lifecycle (per Q2 §4.5): `proposed` → `adopted` (current binding constraint, stays in `active/`) → `superseded` or `withdrawn` (moves to `archive/`). Transitions are explicit; no `adopted` → `proposed` re-opening.
 
@@ -502,3 +502,4 @@ This decision is honored when:
 | 2026-05-31 | proposed | Decision drafted by Claude | Captures user PDF chapter responses 2026-05-30 + module-by-module locks 2026-05-30..05-31 + Sub-Q1-Q5 resolutions 2026-05-31. Sourced from audit `10de33b9` (`workflow/audit/active/2026-05-31_naming-polish-feasibility.md`). Phased per audit §9. Awaiting user adopt action. |
 | 2026-05-31 | proposed (amended) | Sharpen atom_bounds rationale | User clarified atom_bounds is PyReason-domain syntax. §4.3.3, §4.8.2, §5(f) sharpened from "partially adapter semantics wording" to explicit "PyReason-domain syntax preservation principle" with classification table for other PyReason-wrapper fields. No scope change to Sub-Q4 (atom_bounds still excluded). branch_bounds/branch_probabilities remain in §4.7.3 cascade (FactGraph branch concept); head_bound remains §4.7.5 cleanup. |
 | 2026-05-31 | proposed (amended) | P2-1 / P2-2 fix + D2 filename rename + D1 branch recovery | Codex review surfaced two Required-severity content errors in §4.3.2: (P2-1) `RuleAddedAtom` rename target was `RuleAddedCondition` but user lock matrix specifies `AddedCondition` (drop `Rule` prefix); same for `RuleAddedAtomKind` → `AddedConditionKind`. (P2-2) `RuleLiteralPath` was marked "VERIFY in Q-NAMING-B1" but user lock matrix specifies ADOPT rename to `ConditionPath`; paired `RuleLiteralPathKind` → `ConditionPathKind` added (confirmed shipped at `derivation_fact_overlay.py:31`). Both corrections cite line-precise shipped source. D2 (CADENCE filename convention): file renamed from `2026-05-31_q-naming-api-polish.md` to `2026-05-31_q1-naming-api-polish-decision.md` to match `q<N>-<topic>-decision` precedent. D1 (Stage 2 branch placement): decision commits cherry-picked from Stage 1 audit branch onto dedicated Stage 2 branch `v0.2.0-q1-naming-api-polish-decision-2026-05-31` (forked from audit HEAD `10de33b9`); audit branch HEAD restored to `10de33b9` via user-authorized `git branch -f` per Slice 7B Option A recovery pattern. Sacred Q-PR1 paths 0-diff preserved through recovery. |
+| 2026-05-31 | adopted | Codex fast-pass review passed; decision adopted | Codex independently verified post-recovery state: decision branch `v0.2.0-q1-naming-api-polish-decision-2026-05-31` @ `1f56aa79`, audit branch restored to `10de33b9`, Q-PR1 5-path 0-diff, sacred master unchanged, dirty baseline preserved, P2-1/P2-2 content corrections to §4.3.2 confirmed (`AddedCondition`/`AddedConditionKind` drop `Rule` prefix; `ConditionPath`/`ConditionPathKind` adopt). No new blocking findings. Role split confirmed: Claude continues decision adopt + blueprint planning; Codex承接 implementation landing + per-step verification. ADR 4-state: `proposed` → `adopted`. Downstream Stage 4.1 Q-NAMING-AD blueprint draft unblocked. |
