@@ -1,0 +1,209 @@
+# Q-NAMING-AD Blueprint: Assertions naming polish + Persistence rename
+
+- Status: draft
+- Created: 2026-05-31
+- Last Updated: 2026-05-31
+- Related Modules:
+  - `src/factgraph/sdk/` (SDK facade — primary blast radius)
+  - `src/factgraph/core/store/` (FrozenAssertionView core class — dual rename per §4.2)
+  - `src/factgraph/application/` (audit query consumers — semantic boundary preserved)
+- Related Docs:
+  - [`workflow/design/decisions/active/2026-05-31_q1-naming-api-polish-decision.md`](../../design/decisions/active/2026-05-31_q1-naming-api-polish-decision.md) — Q-NAMING decision §4.2 + §4.5 + §4.8 (adopted at `f1a017ec`)
+  - [`workflow/audit/active/2026-05-31_naming-polish-feasibility.md`](../../audit/active/2026-05-31_naming-polish-feasibility.md) — feasibility audit §2 (Batch A) + §5 (Batch D) at `10de33b9`
+  - [`workflow/foundations/architecture_principles.md`](../../foundations/architecture_principles.md) §2.1 layer authority
+- Audit Log:
+  - [2026-05-31_q-naming-ad.audit.md](./2026-05-31_q-naming-ad.audit.md)
+
+## 1. Problem
+
+PDF "Change Requests for FactGraph" identified user-experience polish opportunities on the public Assertions and Persistence surfaces. Q-NAMING decision §4.2 (Batch A, 800 hits / 146 files, Yellow risk) and §4.5 (Batch D, 299 hits / 43 files, Yellow risk) lock five Assertions renames and two Persistence renames as adopted. This blueprint implements both batches as the first Q-NAMING sub-slice — the lowest-risk phase per Q-NAMING §4.9 — to validate the cross-slice cadence before the higher-risk B/C/E/F sub-slices.
+
+Combining Batch A + Batch D into one slice is supported by audit §9 recommendation (Q-NAMING-A/D = "smallest useful slice") and Q-NAMING §4.9 Phase 1.
+
+## 2. Goals
+
+- G1: Rename `fg.views` → `fg.assertion_views` (SDK namespace manager) per §4.2 hard-cut.
+- G2: Rename `FrozenAssertionView` → `FrozenAssertionSet` on **both** the SDK-facing class at [`src/factgraph/sdk/store.py:135`](../../../src/factgraph/sdk/store.py) and the core database-facing class at [`src/factgraph/core/store/database.py:75`](../../../src/factgraph/core/store/database.py) per §4.2 (wider scope explicitly accepted).
+- G3: Add `strict=True` flag to `by_ids` on **every** public by-ids surface (top-level [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) + assertion view [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py)) with explicit missing-ID and duplicate-ID raise behavior. Default `strict=False` preserves current permissive behavior.
+- G4: Change `fg.audit.explain_fact(pred_id, e_ref)` public signature → `fg.audit.explain(asrt_id | record)`. **Semantic preservation**: `fg.audit` continues to explain chosen-policy among multiple active claims (NOT derivation reasoning). Core query helper at [`src/factgraph/core/store/_queries.py:13`](../../../src/factgraph/core/store/_queries.py) may remain private under existing name (`explain_fact`).
+- G5: Change `fg.audit.conflicts(pred_id, e_ref)` public signature → `fg.audit.conflicts(record | entity, field)`. Same semantic preservation — returns active-claim set + policy-chosen winner.
+- G6: Rename `fg.save(...)` → `fg.save_workspace(...)` per §4.5 hard-cut. Covers both `SDKStore.save` at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py) and any batch-save delegation in [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py).
+- G7: Rename `FactGraph.load(...)` classmethod → `FactGraph.load_workspace(...)` at [`sdk/store.py:1728`](../../../src/factgraph/sdk/store.py).
+- G8: All renames are hard-cut per §4.8.1 — no aliases, no dual-emit, old names removed in same commit as new names introduced.
+- G9: Workspace file format binary structure unchanged per §4.5 (only method names change).
+- G10: Update affected module docs (`src/factgraph/*/docs/`) + current SDK quickstart / examples (`docs/`) in same slice per CADENCE Stage 4.8.
+
+## 3. Non-goals
+
+- N1: Cascade renames in §4.3 (atom → condition, branch → case, class renames). Reserved for Q-NAMING-B1 / B2.
+- N2: Flat shell deletion in §4.4. Reserved for Q-NAMING-C.
+- N3: Rule/Inference DSL renames in §4.6 (Branch → Case, .where → .when, target+head_vars → emits). Reserved for Q-NAMING-E.
+- N4: Engine config renames in §4.7 (ProbLog/PyReason Semantics → Config, SemanticsProfile → EngineProfile, semantics= → config=, etc.). Reserved for Q-NAMING-F.
+- N5: PDF Module 1 Schema renames per §4.1 REJECT (Entity.__default_eref_pattern__, Factory IDs, create_with_id, schema strict identity).
+- N6: PDF Module 4 Rules/Inferences proposals beyond 4.1 + 4.2 per §4.6.5 REJECT.
+- N7: Lower-level core query function rename (`_queries.explain_fact` / `_queries.conflicts`). Public boundary changes only; core helpers may remain private under existing names per §4.2 explicit permission.
+- N8: Workspace file format binary structure changes per §4.5.
+- N9: Historical workflow / archive material per §4.8.5 carve-out. Only current SDK docs, quickstarts, current examples, and active tests migrate.
+- N10: Q-PR1 sacred 5 paths per §4.8.6 — must remain 0-diff vs `4c472b50`.
+- N11: Persistence schema digest renames. Reserved for Q-NAMING-F per §4.7.7.
+
+## 4. Current Context
+
+- **当前 SDK 入口**:
+  - `fg.views` namespace manager: `_SDKViewsManager` reached via `SDKStore.views` property at [`sdk/store.py:1866`](../../../src/factgraph/sdk/store.py)
+  - `FrozenAssertionView`: dual definition at [`core/store/database.py:75`](../../../src/factgraph/core/store/database.py) (core) and [`sdk/store.py:135`](../../../src/factgraph/sdk/store.py) (SDK)
+  - `by_ids`: top-level [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) returns `Any` over assertion ids; facade [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py) returns `AssertionRecordSet`
+  - `_SDKAuditManager`: defined at [`sdk/store.py:1402`](../../../src/factgraph/sdk/store.py); `explain_fact` and `conflicts` delegate to flat `SDKStore` methods at lines 1417 and 1421
+  - Flat `SDKStore.explain_fact` and `SDKStore.conflicts` at lines 3470 / 3473 — these flat shells stay during Q-NAMING-AD (Q-NAMING-C deletes them); Q-NAMING-AD only changes their public *names* (the signature change is part of G4/G5)
+  - Core query helpers: `_queries.explain_fact` at [`core/store/_queries.py:13`](../../../src/factgraph/core/store/_queries.py) returns `{pred_id, e_ref, active_claims, chosen_asrt_id}`; `_queries.conflicts` at line 51 returns `{pred_id, e_ref, active_asrt_ids, chosen_asrt_id}`
+  - `FactGraph.load`: classmethod at [`sdk/store.py:1728`](../../../src/factgraph/sdk/store.py)
+  - `SDKStore.save`: instance method at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py)
+  - Batch save delegation: [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py)
+
+- **当前已知约束**:
+  - Q-PR1 sacred 5 paths at 0-diff vs `4c472b50` — must hold through every commit
+  - Sacred `master` at `562c74195df43e933bed92a3ff25de94dd8ce666` — never modified
+  - Dirty baseline (4 M + 2 D + 2 untracked) preserved at session start (Q-NAMING §4.8.8 lists exact entries)
+  - Hard-cut per §4.8.1: no aliases, no dual-emit
+  - Workspace file format binary unchanged per §4.5 + G9
+  - Audit semantic preservation: `fg.audit` explains chosen-policy, not derivation (G4 / G5)
+  - Layer authority per [`workflow/foundations/architecture_principles.md`](../../foundations/architecture_principles.md) §2.1: SDK can call application, application does not import SDK. Core query helpers stay in core.
+
+- **当前相关历史蓝图**:
+  - Slice 6 form-i debt cleanup archived at `4c472b50` ([`workflow/blueprints/archive/2026-05-30_form-i-debt-cleanup.md`](../archive/2026-05-30_form-i-debt-cleanup.md)) — predecessor branch base.
+  - No prior naming-polish blueprint exists for this surface.
+
+## 5. Proposed Shape
+
+### §5.1 Batch A rename layout
+
+| Surface | Old | New | File:line scope |
+|---|---|---|---|
+| SDK namespace property | `SDKStore.views` (returns `_SDKViewsManager`) | `SDKStore.assertion_views` (returns `_SDKAssertionViewsManager`) | [`sdk/store.py:1866`](../../../src/factgraph/sdk/store.py) + namespace class definition |
+| Core class | `FrozenAssertionView` | `FrozenAssertionSet` | [`core/store/database.py:75`](../../../src/factgraph/core/store/database.py) |
+| SDK class | `FrozenAssertionView` | `FrozenAssertionSet` | [`sdk/store.py:135`](../../../src/factgraph/sdk/store.py) |
+| SDK exports | `__all__` entry `FrozenAssertionView` | `FrozenAssertionSet` | `sdk/__init__.py` (verify location) |
+| by_ids top-level | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) |
+| by_ids facade | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py) |
+| Audit explain | `fg.audit.explain_fact(pred_id, e_ref, *val_atoms)` | `fg.audit.explain(target)` where `target: str \| AssertionRecord` | [`sdk/store.py:1417`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.explain_fact` → `explain`) + delegating flat at [`sdk/store.py:3470`](../../../src/factgraph/sdk/store.py) |
+| Audit conflicts | `fg.audit.conflicts(pred_id, e_ref)` | `fg.audit.conflicts(target)` where `target: AssertionRecord \| tuple[Entity, str]` | [`sdk/store.py:1421`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.conflicts`) + delegating flat at [`sdk/store.py:3473`](../../../src/factgraph/sdk/store.py) |
+
+### §5.2 Batch D rename layout
+
+| Surface | Old | New | File:line scope |
+|---|---|---|---|
+| FactGraph classmethod | `FactGraph.load(path)` | `FactGraph.load_workspace(path)` | [`sdk/store.py:1728`](../../../src/factgraph/sdk/store.py) |
+| SDKStore instance method | `SDKStore.save(path)` | `SDKStore.save_workspace(path)` | [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py) |
+| Batch save delegation | `BatchHandle.save(path)` | `BatchHandle.save_workspace(path)` | [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py) |
+
+Workspace file format binary unchanged (G9).
+
+### §5.3 `strict=True` semantics
+
+Define explicit error model for `by_ids(strict=True)`:
+
+- Missing ID: raise `SDKStoreError("by_ids strict mode: assertion id '{id}' not found")`
+- Duplicate ID in input: raise `SDKStoreError("by_ids strict mode: duplicate assertion id '{id}' in input")`
+- Default `strict=False` preserves current permissive behavior (caller-visible: same return, missing IDs silently dropped per current behavior)
+
+Implementation must apply to all by-ids public surfaces (G3 enumerates two; preflight Step 4.3 verifies no third surface exists).
+
+### §5.4 Audit signature semantics (G4 / G5)
+
+`fg.audit.explain(target)`:
+- If `target` is `str`: treated as `asrt_id`. Returns `{asrt_id, args, meta, chosen: bool, ...}` (specific shape per §6 invariants).
+- If `target` is `AssertionRecord`: extracts the assertion id and reduces to the str case.
+- Semantic: explains which active claim wins under current chosen-policy for the (pred, eref) cell containing this assertion id.
+
+`fg.audit.conflicts(target)`:
+- If `target` is `AssertionRecord`: extracts (pred_id, e_ref) from the record.
+- If `target` is `tuple[Entity, str]`: extracts (pred_id from entity-field, e_ref from entity id).
+- Returns `{pred_id, e_ref, active_asrt_ids, chosen_asrt_id}` matching current `_queries.conflicts` shape.
+
+Core query helpers (`_queries.explain_fact`, `_queries.conflicts`) retain existing signatures and names — only the SDK public boundary changes (per §4.2 explicit permission).
+
+### §5.5 Docs sync targets
+
+Per CADENCE Stage 4.8 + Q-NAMING-AD §10:
+
+- `src/factgraph/sdk/docs/README.md` — SDK namespace + FrozenAssertionSet + audit signature changes + persistence renames
+- `src/factgraph/core/store/docs/README.md` — core FrozenAssertionSet
+- `src/factgraph/application/docs/README.md` — if audit query is documented as application capability (verify in preflight)
+- `docs/quickstart` / current SDK examples — verify scope in Step 4.3 preflight
+- `docs/README.md` — only if a new persistent docs entry is introduced (none expected)
+
+Historical workflow / archive references preserved per Q-NAMING §4.8.5.
+
+## 6. Boundaries And Invariants
+
+- **必须保持的边界**:
+  - Q-PR1 sacred 5 paths: `src/factgraph/core/evidence/write_protocol.py`, `src/factgraph/core/store/ledger.py`, `src/factgraph/core/store/_builders.py`, `src/factgraph/adapters/pyreason/`, `src/factgraph/core/derivation/accept.py` — 0-diff vs `4c472b50` after every commit
+  - Sacred master `562c74195df43e933bed92a3ff25de94dd8ce666` — never modified
+  - Dirty baseline preserved — never `git add` baseline files
+  - Layer authority (architecture_principles.md §2.1): SDK boundary changes; core query helpers may stay private
+  - Audit semantic: chosen-policy explanation, NOT derivation reasoning (G4 / G5)
+  - Workspace file format binary: unchanged
+- **明确不做的内容**:
+  - N1-N11 above
+  - Core query helper `_queries.explain_fact` / `_queries.conflicts` rename
+  - Any rename outside §4.2 Batch A + §4.5 Batch D surfaces enumerated in §5.1 / §5.2
+  - Persistence schema digest rename (reserved for Q-NAMING-F per §4.7.7)
+- **兼容性约束**:
+  - Hard-cut per §4.8.1 — no aliases, no dual-emit, no deprecation shims
+  - Alpha release, no historical user protection burden
+  - Old name removed in same commit as new name introduced
+
+## 7. Acceptance
+
+- [ ] G1: `fg.views` removed; `fg.assertion_views` present with same operational semantics
+- [ ] G2: `FrozenAssertionView` removed from both core and SDK; `FrozenAssertionSet` present at both layers; `__all__` exports updated
+- [ ] G3: `by_ids(strict=True)` on both surfaces ([`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) and [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py)) with explicit raise on missing/duplicate ID; default `strict=False` preserves permissive behavior
+- [ ] G4: `fg.audit.explain_fact` removed; `fg.audit.explain(target)` accepts `str | AssertionRecord` with semantic preservation
+- [ ] G5: `fg.audit.conflicts(pred_id, e_ref)` signature replaced with `fg.audit.conflicts(record | (entity, field))` with semantic preservation
+- [ ] G6: `fg.save` removed; `fg.save_workspace` present at both [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py) and [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py)
+- [ ] G7: `FactGraph.load` classmethod removed; `FactGraph.load_workspace` present
+- [ ] G8: No alias methods, no dual-emit, no deprecation properties anywhere in §5.1 / §5.2 surfaces
+- [ ] G9: Workspace file format binary unchanged (verify: load old workspace file with new method succeeds)
+- [ ] G10: Module docs updated; current SDK docs / quickstarts / current examples migrated
+- [ ] Q-PR1 sacred 5 paths 0-diff vs `4c472b50` confirmed at impl commit HEAD
+- [ ] Sacred master `562c74...` unchanged through slice
+- [ ] Dirty baseline preserved (no baseline file in `git diff --cached`)
+- [ ] All targeted tests pass; full-kernel test suite acknowledged unrelated baseline failures recorded in §10 if any
+- [ ] No push without explicit user authorization
+
+## 8. Implementation Plan
+
+1. **Step 4.2 review (Codex)**: review draft, surface 2-4 tightenings per CADENCE Rule 1 + Rule 2 + scope discipline. Cross-check P2-1 / P2-2 corrections in Q-NAMING §4.3.2 are NOT touched (N1).
+2. **Step 4.3 preflight (TBD drafter)**: independent branch `v0.2.0-q-naming-ad-preflight-2026-05-31`. Re-read all blueprint-referenced shipped files at preflight-row drafting time per Rule 1. Build 5-bucket severity findings table. **Mandatory preflight finding**: `branch_index → case_id` persistence pre-lock check per Q-NAMING §4.5 — confirm no persistence blocker before scope-freeze.
+3. **Step 4.4 preflight amendment (on blueprint branch)**: apply Required + Recommended PFs. Update audit log Event Log + Decision Notes.
+4. **Step 4.5 self-check (lightweight)**: PF coverage verification, no commit.
+5. **Step 4.6 scoped anchor**: `Status: draft` → `Status: scoped` single small commit + audit log event row.
+6. **Step 4.6.5 pre-impl grep amendment (recommended)**: pre-impl grep `(fg\.views|FrozenAssertionView|fg\.audit\.(explain_fact|conflicts)|fg\.save|FactGraph\.load)` against `src/` + `tests/`. Surface any consumer beyond §5.1 / §5.2 as N-1, N-2, ... Apply Option 2 (no status rollback) if minor.
+7. **Step 4.7 implementation (Codex承接)** on branch `v0.2.0-impl-q-naming-ad-2026-05-31`:
+   - 7.1 Rename `FrozenAssertionView` → `FrozenAssertionSet` (core + SDK, in same commit cluster).
+   - 7.2 Rename `fg.views` → `fg.assertion_views` (namespace + manager class name).
+   - 7.3 Add `strict=True` flag to both by-ids surfaces with explicit raise semantics.
+   - 7.4 Change audit public signatures (`_SDKAuditManager.explain_fact` → `.explain`; same for `.conflicts`). Update flat `SDKStore` shells (still present until Q-NAMING-C) to mirror new names.
+   - 7.5 Rename persistence methods (`save` → `save_workspace`, `load` → `load_workspace`).
+   - 7.6 Migrate tests (one-pass per file, code + test together).
+   - 7.7 Update module docs (`src/factgraph/sdk/docs/`, `src/factgraph/core/store/docs/`, possibly `src/factgraph/application/docs/`).
+   - 7.8 Update current SDK docs / quickstarts / current examples in `docs/`.
+   - 7.9 Lint pass (`ruff check`).
+   - 7.10 Single feat commit (or 3-commit pattern per CADENCE if Step 4.7 review surfaces P1 fix).
+8. **Step 4.7 review (Claude)**: independent test re-run, scope grep, cross-check PF / N findings, cross-check prior-slice contract preservation (Q-PR1 sacred + sacred master + dirty baseline).
+9. **Step 4.8 closure**: `Status: scoped` → `Status: implemented` + §10 Outcome / Deviations filled + audit log "implemented" event.
+10. **Step 4.9 archive**: `git mv` blueprint + audit log pair from `active/` to `archive/` + `INVENTORY.md` entry.
+
+## 9. Docs To Update
+
+- `src/factgraph/sdk/docs/README.md` — fg.assertion_views, FrozenAssertionSet, audit.explain / audit.conflicts new signatures, save_workspace / load_workspace
+- `src/factgraph/core/store/docs/README.md` — FrozenAssertionSet (replace FrozenAssertionView)
+- `src/factgraph/application/docs/README.md` — if application docs reference audit query (verify in preflight)
+- `docs/quickstart/` (or equivalent) — public-facing examples that use any renamed surface
+- `docs/official/kernel/` — public quickstart docs (verify scope in preflight)
+- `docs/README.md` — only if new persistent docs entry introduced (none expected)
+- Historical material under `workflow/heritage/` / `workflow/blueprints/archive/` / `workflow/audit/archive/` — NOT touched per Q-NAMING §4.8.5
+
+## 10. Outcome / Deviations
+
+(To be filled at Step 4.8 closure.)
