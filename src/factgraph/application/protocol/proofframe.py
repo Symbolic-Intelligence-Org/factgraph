@@ -1,7 +1,7 @@
 """ProofFrame recheck protocol DTOs.
 
 ProofFrame Rechecker is a narrow application capability over native
-``SupportArtifact`` frames and fact-side ``EvaluationOverlay`` actions. Runtime
+``ProofReceipt`` frames and fact-side ``FactOverlay`` actions. Runtime
 dependencies such as ``Store`` stay side-channel kwargs to the executor.
 """
 
@@ -12,12 +12,12 @@ from typing import Any, Literal, TypeAlias
 
 from factgraph.core.store._support import (
     BindingItems,
-    SupportArtifact,
+    ProofReceipt,
     normalize_binding_items,
 )
 
 from .common import ProtocolShapeError, _require_literal, _require_non_empty_str
-from .derivation_fact_overlay import EvaluationOverlay
+from .derivation_fact_overlay import FactOverlay
 
 ProofFrameStatus: TypeAlias = Literal["still_valid", "invalidated", "unknown"]
 
@@ -30,7 +30,7 @@ _PROOF_FRAME_STATUS_PRIORITY = {
 
 
 def aggregate_proof_frame_status(
-    atom_verdicts: tuple["ProofFrameAtomVerdict", ...],
+    atom_verdicts: tuple["ProofFrameConditionVerdict", ...],
 ) -> ProofFrameStatus:
     """Aggregate per-atom verdicts using the scoped Batch 4 priority rule."""
 
@@ -72,29 +72,29 @@ def _validate_action_indices(
 
 def _validate_atom_verdicts(
     value: Any, *, field_name: str
-) -> tuple["ProofFrameAtomVerdict", ...]:
+) -> tuple["ProofFrameConditionVerdict", ...]:
     if not isinstance(value, tuple):
-        raise ProtocolShapeError(f"{field_name} must be tuple[ProofFrameAtomVerdict, ...]")
+        raise ProtocolShapeError(f"{field_name} must be tuple[ProofFrameConditionVerdict, ...]")
     for idx, item in enumerate(value):
-        if not isinstance(item, ProofFrameAtomVerdict):
-            raise ProtocolShapeError(f"{field_name}[{idx}] must be ProofFrameAtomVerdict")
+        if not isinstance(item, ProofFrameConditionVerdict):
+            raise ProtocolShapeError(f"{field_name}[{idx}] must be ProofFrameConditionVerdict")
     return value
 
 
 @dataclass(frozen=True)
 class ProofFrameRecheckRequest:
-    support_artifact: SupportArtifact
-    overlay: EvaluationOverlay
+    support_artifact: ProofReceipt
+    overlay: FactOverlay
 
     def __post_init__(self) -> None:
-        if not isinstance(self.support_artifact, SupportArtifact):
-            raise ProtocolShapeError("support_artifact must be SupportArtifact")
-        if not isinstance(self.overlay, EvaluationOverlay):
-            raise ProtocolShapeError("overlay must be EvaluationOverlay")
+        if not isinstance(self.support_artifact, ProofReceipt):
+            raise ProtocolShapeError("support_artifact must be ProofReceipt")
+        if not isinstance(self.overlay, FactOverlay):
+            raise ProtocolShapeError("overlay must be FactOverlay")
 
 
 @dataclass(frozen=True)
-class ProofFrameAtomVerdict:
+class ProofFrameConditionVerdict:
     atom_key: str
     verdict: ProofFrameStatus
     affected_action_indices: tuple[int, ...]
@@ -120,7 +120,7 @@ class ProofFrameAtomVerdict:
 class ProofFrameRecheckResult:
     status: ProofFrameStatus
     binding_items: BindingItems
-    atom_verdicts: tuple[ProofFrameAtomVerdict, ...]
+    atom_verdicts: tuple[ProofFrameConditionVerdict, ...]
 
     def __post_init__(self) -> None:
         _require_literal(self.status, field_name="status", allowed=_PROOF_FRAME_STATUSES)
@@ -142,7 +142,7 @@ class ProofFrameRecheckResult:
 
 
 __all__ = [
-    "ProofFrameAtomVerdict",
+    "ProofFrameConditionVerdict",
     "ProofFrameRecheckRequest",
     "ProofFrameRecheckResult",
     "ProofFrameStatus",

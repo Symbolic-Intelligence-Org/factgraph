@@ -8,7 +8,7 @@ from typing import Any, Literal, TypeAlias
 from factgraph.core.rules.rule_ir import RuleSpec
 from factgraph.core.store._support import (
     BindingItems,
-    SupportArtifact,
+    ProofReceipt,
     normalize_binding_items,
 )
 
@@ -19,7 +19,7 @@ from .common import (
     _require_literal,
     _validate_tuple_items,
 )
-from .derivation_fact_overlay import EvaluationOverlay
+from .derivation_fact_overlay import FactOverlay
 from .proofframe import ProofFrameRecheckResult
 
 RuleAddConditionStatus: TypeAlias = Literal[
@@ -66,16 +66,16 @@ def _validate_variant_rows(
 @dataclass(frozen=True)
 class RuleAddConditionRequest:
     rule_spec: RuleSpec
-    support_artifact: SupportArtifact
-    overlay: EvaluationOverlay
+    support_artifact: ProofReceipt
+    overlay: FactOverlay
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule_spec, RuleSpec):
             raise ProtocolShapeError("rule_spec must be RuleSpec")
-        if not isinstance(self.support_artifact, SupportArtifact):
-            raise ProtocolShapeError("support_artifact must be SupportArtifact")
-        if not isinstance(self.overlay, EvaluationOverlay):
-            raise ProtocolShapeError("overlay must be EvaluationOverlay")
+        if not isinstance(self.support_artifact, ProofReceipt):
+            raise ProtocolShapeError("support_artifact must be ProofReceipt")
+        if not isinstance(self.overlay, FactOverlay):
+            raise ProtocolShapeError("overlay must be FactOverlay")
 
 
 @dataclass(frozen=True)

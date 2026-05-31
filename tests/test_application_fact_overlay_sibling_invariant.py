@@ -51,7 +51,7 @@ _BANNED_SYMBOLS = frozenset(
         "CheckStatus",
         "CheckEngine",
         "EvidenceEnvelope",
-        "SupportArtifact",
+        "ProofReceipt",
         "ProvenanceEnvelope",
     }
 )

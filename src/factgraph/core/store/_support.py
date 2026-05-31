@@ -94,7 +94,7 @@ class RuleRefEdge:
 
 
 @dataclass(frozen=True)
-class SupportArtifact:
+class ProofReceipt:
     kind: str
     root_result_kind: SupportRootResultKind
     binding_items: BindingItems
@@ -105,25 +105,25 @@ class SupportArtifact:
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, str) or not self.kind:
-            raise ValueError("SupportArtifact.kind must be non-empty string")
+            raise ValueError("ProofReceipt.kind must be non-empty string")
         if self.root_result_kind not in {"fact", "entity", "row"}:
-            raise ValueError("SupportArtifact.root_result_kind must be 'fact', 'entity', or 'row'")
+            raise ValueError("ProofReceipt.root_result_kind must be 'fact', 'entity', or 'row'")
         if tuple(self.binding_items) != normalize_binding_items(self.binding_items):
-            raise ValueError("SupportArtifact.binding_items must be sorted binding tuples")
+            raise ValueError("ProofReceipt.binding_items must be sorted binding tuples")
         if tuple(self.pred_witnesses) != tuple(
             sorted(self.pred_witnesses, key=lambda row: row.pred_atom_key)
         ):
-            raise ValueError("SupportArtifact.pred_witnesses must be sorted by pred_atom_key")
+            raise ValueError("ProofReceipt.pred_witnesses must be sorted by pred_atom_key")
         if tuple(self.non_fact_steps) != tuple(
             sorted(self.non_fact_steps, key=lambda row: (row.step_key, row.kind, row.status, row.details))
         ):
-            raise ValueError("SupportArtifact.non_fact_steps must be sorted")
+            raise ValueError("ProofReceipt.non_fact_steps must be sorted")
         normalized_rule_refs = tuple(sorted(_normalize_non_empty_strings(self.rule_refs)))
         if tuple(self.rule_refs) != normalized_rule_refs:
-            raise ValueError("SupportArtifact.rule_refs must be sorted unique non-empty strings")
+            raise ValueError("ProofReceipt.rule_refs must be sorted unique non-empty strings")
         normalized_rule_ref_edges = tuple(sorted(self.rule_ref_edges, key=_rule_ref_edge_sort_key))
         if tuple(self.rule_ref_edges) != normalized_rule_ref_edges:
-            raise ValueError("SupportArtifact.rule_ref_edges must be sorted")
+            raise ValueError("ProofReceipt.rule_ref_edges must be sorted")
 
 
 @dataclass(frozen=True)
@@ -226,7 +226,7 @@ def make_non_fact_step_key(
     return f"b{branch_index}.a{atom_index}:{kind}"
 
 
-def support_artifact_to_dict(artifact: SupportArtifact) -> dict[str, Any]:
+def support_artifact_to_dict(artifact: ProofReceipt) -> dict[str, Any]:
     # This shape is optimized for canonical digest/round-trip stability, not display formatting.
     return {
         "kind": artifact.kind,
@@ -262,10 +262,10 @@ def support_artifact_to_dict(artifact: SupportArtifact) -> dict[str, Any]:
     }
 
 
-def support_artifact_from_dict(row: Mapping[str, Any]) -> SupportArtifact:
+def support_artifact_from_dict(row: Mapping[str, Any]) -> ProofReceipt:
     if not isinstance(row, Mapping):
         raise ValueError("row must be Mapping[str, Any]")
-    return SupportArtifact(
+    return ProofReceipt(
         kind=row["kind"],
         root_result_kind=row["root_result_kind"],
         binding_items=tuple((key, _from_jsonable(value)) for key, value in row["binding"]),
@@ -299,7 +299,7 @@ def support_artifact_from_dict(row: Mapping[str, Any]) -> SupportArtifact:
     )
 
 
-def support_artifact_bytes(artifact: SupportArtifact) -> bytes:
+def support_artifact_bytes(artifact: ProofReceipt) -> bytes:
     return json.dumps(
         support_artifact_to_dict(artifact),
         sort_keys=True,
@@ -308,7 +308,7 @@ def support_artifact_bytes(artifact: SupportArtifact) -> bytes:
     ).encode("utf-8")
 
 
-def compute_support_digest(artifact: SupportArtifact) -> str:
+def compute_support_digest(artifact: ProofReceipt) -> str:
     return sha256_token(support_artifact_bytes(artifact))
 
 
@@ -402,7 +402,7 @@ __all__ = [
     "ProvenanceEnvelope",
     "RuleRefEdge",
     "SOUFFLE_WITNESS_KIND",
-    "SupportArtifact",
+    "ProofReceipt",
     "SupportRootResultKind",
     "_DEGRADED_SUPPORT_KINDS",
     "_PROVENANCE_BEARING_SUPPORT_KINDS",

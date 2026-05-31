@@ -16,7 +16,7 @@ Current implementation status:
   are implemented for already-frozen tuple collections.
 - **Implementation Phase 3:** `AtomKeyView`, `parse_atom_key(...)`,
   `SupportArtifactView`, and `AssertionView` are implemented for
-  `SupportArtifact` / ledger-claim cross-referencing.
+  `ProofReceipt` / ledger-claim cross-referencing.
 - **Implementation Phase 4:** `ProofFrameView` is implemented for
   `ProofFrameRecheckResult`.
 - **Implementation Phase 5:** `ProofFrameDiffView` is implemented for
@@ -62,7 +62,7 @@ first = invalidated.first()  # item | None
 The parser is syntactic and returns `AtomKeyView(kind="unknown")`; contextual
 callers promote with `.as_pred()` or `.as_step()`.
 
-`SupportArtifactView` wraps a frozen `SupportArtifact` plus caller-provided
+`SupportArtifactView` wraps a frozen `ProofReceipt` plus caller-provided
 claim / metadata indexes:
 
 ```python
@@ -84,7 +84,7 @@ The view exposes:
 - `non_fact_steps` as `FrozenTupleView[NonFactStep]`
 - `parse_pred_atom_key(...)` / `parse_step_key(...)`
 - `lookup_assertion(asrt_id) -> AssertionView`
-- `underlying`, the original `SupportArtifact` escape hatch
+- `underlying`, the original `ProofReceipt` escape hatch
 
 `AssertionView` exposes `asrt_id`, `pred_id`, `e_ref`, `rest_terms`,
 `meta_rows`, and `underlying`. `rest_terms` and `meta_rows[*].value` are
@@ -100,7 +100,7 @@ invalidated = proof.atom_verdicts.filter(verdict="invalidated")
 ```
 
 The view exposes `status`, recursively frozen `binding_items`, `atom_verdicts`
-as `FrozenTupleView[ProofFrameAtomVerdict]`, and `underlying`, the original
+as `FrozenTupleView[ProofFrameConditionVerdict]`, and `underlying`, the original
 `ProofFrameRecheckResult` escape hatch.
 
 `ProofFrameDiffView` wraps a `ProofFrameDiff`:

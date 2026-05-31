@@ -6,7 +6,7 @@ import unittest
 import factgraph.sdk as sdk
 import factgraph.sdk.dsl as dsl
 from factgraph.application.protocol import (
-    AtomDescriptor,
+    ConditionDescriptor,
     OccurrenceInspect,
     PortInspect,
     Rule as ApplicationRule,
@@ -59,10 +59,10 @@ class RuleExprInspectExportTests(unittest.TestCase):
     def test_sdk_exports_ruleexpr_inspect_public_names(self) -> None:
         self.assertIs(sdk.RuleExprInspect, RuleExprInspect)
         self.assertIs(sdk.OccurrenceInspect, OccurrenceInspect)
-        self.assertIs(sdk.AtomDescriptor, AtomDescriptor)
+        self.assertIs(sdk.ConditionDescriptor, ConditionDescriptor)
         self.assertIs(sdk.PortInspect, PortInspect)
         self.assertEqual(len(sdk.__all__), len(set(sdk.__all__)))
-        for name in ("RuleExprInspect", "OccurrenceInspect", "AtomDescriptor", "PortInspect"):
+        for name in ("RuleExprInspect", "OccurrenceInspect", "ConditionDescriptor", "PortInspect"):
             self.assertIn(name, sdk.__all__)
 
 
@@ -125,7 +125,7 @@ class RuleExprInspectDispatchTests(unittest.TestCase):
 
 class RuleExprInspectDTOTests(unittest.TestCase):
     def test_dtos_are_frozen_and_shape_validated(self) -> None:
-        atom = AtomDescriptor(atom_id="rule:atom_0", kind="pred", summary="pred")
+        atom = ConditionDescriptor(atom_id="rule:atom_0", kind="pred", summary="pred")
         occurrence = OccurrenceInspect(
             template_id="rule",
             alias="alias",

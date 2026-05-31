@@ -76,7 +76,7 @@ from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
-from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND, ProvenanceEnvelope, SupportArtifact
+from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND, ProvenanceEnvelope, ProofReceipt
 from factgraph.adapters.souffle.runner import run_package
 from factgraph.core.store.database import (
     AssertionInput,
@@ -2745,13 +2745,13 @@ class SDKStore:
         self,
         candidates: Sequence[CandidateSet],
         rows: Sequence[Any],
-    ) -> Mapping[str, SupportArtifact]:
-        out: dict[str, SupportArtifact] = {}
+    ) -> Mapping[str, ProofReceipt]:
+        out: dict[str, ProofReceipt] = {}
         for candidate, row in zip(candidates, rows):
             if candidate.support_kind not in _FORM1_ROW_SUPPORT_KINDS:
                 continue
             artifact = self._store._lookup_support_artifact(candidate.support_digest)
-            if isinstance(artifact, SupportArtifact):
+            if isinstance(artifact, ProofReceipt):
                 out[row.row_id] = artifact
         return out
 

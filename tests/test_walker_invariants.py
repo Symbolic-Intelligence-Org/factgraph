@@ -13,7 +13,7 @@ from typing import Any
 
 import factgraph.application.walker as walker_package
 from factgraph.application.protocol.common import WarningDTO
-from factgraph.application.protocol.proofframe import ProofFrameAtomVerdict, ProofFrameRecheckResult
+from factgraph.application.protocol.proofframe import ProofFrameConditionVerdict, ProofFrameRecheckResult
 from factgraph.application.walker import (
     AssertionView,
     FrozenTupleView,
@@ -32,7 +32,7 @@ from factgraph.audit.proof_frame_diff import (
     FrameStatusChange,
     ProofFrameDiff,
 )
-from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact
+from factgraph.core.store._support import NonFactStep, PredWitness, ProofReceipt
 from factgraph.core.store.ledger import Claim
 
 
@@ -40,8 +40,8 @@ def _claim() -> Claim:
     return Claim("a1", "Person:age", "person:alice", [("value", 40)])
 
 
-def _support_artifact() -> SupportArtifact:
-    return SupportArtifact(
+def _support_artifact() -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="row",
         binding_items=(("$p", "person:alice"),),
@@ -59,7 +59,7 @@ def _proof_frame_result() -> ProofFrameRecheckResult:
         status="invalidated",
         binding_items=(("$p", "person:alice"),),
         atom_verdicts=(
-            ProofFrameAtomVerdict(
+            ProofFrameConditionVerdict(
                 atom_key="b0.a0:Person:age",
                 verdict="invalidated",
                 affected_action_indices=(0,),

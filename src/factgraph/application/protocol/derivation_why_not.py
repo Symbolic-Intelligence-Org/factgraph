@@ -165,7 +165,7 @@ def _validate_ordered_partition(
 
 
 @dataclass(frozen=True)
-class WhyNotAtomLocator:
+class WhyNotConditionLocator:
     branch_index: int
     failed_atom_index: int
     attempted_binding: BindingItems
@@ -210,7 +210,7 @@ class WhyNotRowDiagnostic:
     status: WhyNotRowStatus
     failure_kind: WhyNotFailureKind | None
     diagnostic_granularity: WhyNotRowGranularity
-    atom_locator: WhyNotAtomLocator | None
+    atom_locator: WhyNotConditionLocator | None
     errors: tuple[ErrorDTO, ...] = field(default_factory=tuple)
     warnings: tuple[WarningDTO, ...] = field(default_factory=tuple)
 
@@ -230,9 +230,9 @@ class WhyNotRowDiagnostic:
                 allowed=_WHY_NOT_FAILURE_KINDS,
             )
         if self.atom_locator is not None and not isinstance(
-            self.atom_locator, WhyNotAtomLocator
+            self.atom_locator, WhyNotConditionLocator
         ):
-            raise ProtocolShapeError("atom_locator must be WhyNotAtomLocator or None")
+            raise ProtocolShapeError("atom_locator must be WhyNotConditionLocator or None")
         _validate_tuple_items(self.errors, field_name="errors", item_type=ErrorDTO)
         _validate_tuple_items(self.warnings, field_name="warnings", item_type=WarningDTO)
 
@@ -274,7 +274,7 @@ class WhyNotRowDiagnostic:
                 "failed atom_localized WhyNotRowDiagnostic requires "
                 "diagnostic_granularity='atom_localized'"
             )
-        if not isinstance(self.atom_locator, WhyNotAtomLocator):
+        if not isinstance(self.atom_locator, WhyNotConditionLocator):
             raise ProtocolShapeError(
                 "failed atom_localized WhyNotRowDiagnostic requires atom_locator"
             )
@@ -337,7 +337,7 @@ class WhyNotUniverseResult:
 
 
 __all__ = [
-    "WhyNotAtomLocator",
+    "WhyNotConditionLocator",
     "WhyNotEngine",
     "WhyNotFailureKind",
     "WhyNotRedRow",

@@ -10,19 +10,19 @@ from dataclasses import FrozenInstanceError
 from factgraph.application import protocol as protocol_pkg
 from factgraph.application.protocol import (
     ErrorDTO,
-    EvaluationOverlay,
-    ProofFrameAtomVerdict,
+    FactOverlay,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
     ProtocolShapeError,
     RuleAddConditionAction,
     RuleAddConditionRequest,
     RuleAddConditionResult,
     RuleAddConditionStatus,
-    RuleAddedAtom,
+    AddedCondition,
 )
 from factgraph.application.protocol import rule_add_condition as add_protocol
 from factgraph.core.rules.rule_ir import RuleSpec
-from factgraph.core.store._support import PredWitness, SupportArtifact
+from factgraph.core.store._support import PredWitness, ProofReceipt
 
 
 def _rule_spec() -> RuleSpec:
@@ -34,7 +34,7 @@ def _rule_spec() -> RuleSpec:
     )
 
 
-def _artifact(**kwargs: object) -> SupportArtifact:
+def _artifact(**kwargs: object) -> ProofReceipt:
     fields = {
         "kind": "native_binding_v1",
         "root_result_kind": "row",
@@ -44,7 +44,7 @@ def _artifact(**kwargs: object) -> SupportArtifact:
         ),
     }
     fields.update(kwargs)
-    return SupportArtifact(**fields)  # type: ignore[arg-type]
+    return ProofReceipt(**fields)  # type: ignore[arg-type]
 
 
 def _action() -> RuleAddConditionAction:
@@ -52,16 +52,16 @@ def _action() -> RuleAddConditionAction:
         rule_id="person.eligible",
         version="1.0",
         branch_index=0,
-        added_atom=RuleAddedAtom(("lt", "$age", 65)),
+        added_atom=AddedCondition(("lt", "$age", 65)),
     )
 
 
-def _overlay() -> EvaluationOverlay:
-    return EvaluationOverlay(rule_actions=(_action(),))
+def _overlay() -> FactOverlay:
+    return FactOverlay(rule_actions=(_action(),))
 
 
 def _proof_frame() -> ProofFrameRecheckResult:
-    verdict = ProofFrameAtomVerdict(
+    verdict = ProofFrameConditionVerdict(
         atom_key="b0.add0:lt",
         verdict="invalidated",
         affected_action_indices=(0,),
@@ -93,15 +93,15 @@ class RuleAddConditionActionProtocolTests(unittest.TestCase):
 
     def test_action_rejects_bad_shape(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            RuleAddedAtom(())  # type: ignore[arg-type]
+            AddedCondition(())  # type: ignore[arg-type]
         with self.assertRaises(ProtocolShapeError):
-            RuleAddedAtom((1, "$age", 65))  # type: ignore[arg-type]
+            AddedCondition((1, "$age", 65))  # type: ignore[arg-type]
         with self.assertRaises(ProtocolShapeError):
             RuleAddConditionAction(
                 rule_id="person.eligible",
                 version="1.0",
                 branch_index=-1,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
             )
         with self.assertRaises(ProtocolShapeError):
             RuleAddConditionAction(
@@ -112,7 +112,7 @@ class RuleAddConditionActionProtocolTests(unittest.TestCase):
             )
 
     def test_evaluation_overlay_accepts_rule_add_condition_action(self) -> None:
-        overlay = EvaluationOverlay(rule_actions=(_action(),))
+        overlay = FactOverlay(rule_actions=(_action(),))
 
         self.assertEqual(overlay.rule_actions, (_action(),))
 
@@ -132,7 +132,7 @@ class RuleAddConditionRequestProtocolTests(unittest.TestCase):
     def test_request_is_frozen(self) -> None:
         request = RuleAddConditionRequest(_rule_spec(), _artifact(), _overlay())
         with self.assertRaises(FrozenInstanceError):
-            request.overlay = EvaluationOverlay()  # type: ignore[misc]
+            request.overlay = FactOverlay()  # type: ignore[misc]
 
     def test_request_rejects_wrong_types(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -252,7 +252,7 @@ class RuleAddConditionProtocolStaticInvariantTests(unittest.TestCase):
         )
 
     def test_protocol_package_exports_rule_add_condition_types(self) -> None:
-        self.assertIs(protocol_pkg.RuleAddedAtom, RuleAddedAtom)
+        self.assertIs(protocol_pkg.AddedCondition, AddedCondition)
         self.assertIs(protocol_pkg.RuleAddConditionAction, RuleAddConditionAction)
         self.assertIs(protocol_pkg.RuleAddConditionRequest, RuleAddConditionRequest)
         self.assertIs(protocol_pkg.RuleAddConditionResult, RuleAddConditionResult)

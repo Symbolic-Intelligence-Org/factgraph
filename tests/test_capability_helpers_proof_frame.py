@@ -10,17 +10,17 @@ from factgraph.application import (
     build_proof_frame_recheck_request,
 )
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     ProofFrameRecheckRequest,
 )
-from factgraph.core.store._support import PredWitness, SupportArtifact
+from factgraph.core.store._support import PredWitness, ProofReceipt
 from factgraph.sdk import Pred, vars as sdk_vars
 from factgraph.sdk.dsl import Rule
 
 
-def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> SupportArtifact:
-    return SupportArtifact(
+def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="row",
         binding_items=binding_items if binding_items is not None else (("$p", "person:alice"),),
@@ -30,10 +30,10 @@ def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> 
     )
 
 
-def _overlay(*, old_value: object = 25, new_value: object = 26) -> EvaluationOverlay:
-    return EvaluationOverlay(
+def _overlay(*, old_value: object = 25, new_value: object = 26) -> FactOverlay:
+    return FactOverlay(
         fact_actions=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id="a1",
                 pred_id="Person.age",
                 e_ref="person:alice",
@@ -62,7 +62,7 @@ class BuildProofFrameRecheckRequestTests(unittest.TestCase):
 
         self.assertIsInstance(request, ProofFrameRecheckRequest)
         self.assertIs(request.support_artifact, support)
-        self.assertEqual(request.overlay, EvaluationOverlay())
+        self.assertEqual(request.overlay, FactOverlay())
 
     def test_builds_request_with_explicit_overlay(self) -> None:
         support = _support()
@@ -74,11 +74,11 @@ class BuildProofFrameRecheckRequestTests(unittest.TestCase):
         self.assertIs(request.overlay, overlay)
 
     def test_non_support_rejected_by_helper(self) -> None:
-        with self.assertRaisesRegex(CapabilityHelperError, "SupportArtifact"):
+        with self.assertRaisesRegex(CapabilityHelperError, "ProofReceipt"):
             build_proof_frame_recheck_request(object())  # type: ignore[arg-type]
 
     def test_non_overlay_rejected_by_helper(self) -> None:
-        with self.assertRaisesRegex(CapabilityHelperError, "EvaluationOverlay"):
+        with self.assertRaisesRegex(CapabilityHelperError, "FactOverlay"):
             build_proof_frame_recheck_request(_support(), overlay=object())  # type: ignore[arg-type]
 
     def test_sdk_object_as_support_raises_origin_package_error(self) -> None:

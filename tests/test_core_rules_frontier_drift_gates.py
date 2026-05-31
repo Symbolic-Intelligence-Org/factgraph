@@ -65,7 +65,7 @@ _BANNED_ROW_FIELDS = frozenset(
 _BANNED_PAYLOAD_SYMBOLS = frozenset(
     {
         "CandidateSet",
-        "SupportArtifact",
+        "ProofReceipt",
         "ProvenanceEnvelope",
         "EvidenceEnvelope",
         "ErrorDTO",

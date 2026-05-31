@@ -16,12 +16,12 @@ from unittest.mock import patch
 
 from factgraph.application.capability_helpers import build_fact_value_override
 from factgraph.application.protocol import (
-    EvaluationOverlay,
+    FactOverlay,
     ProofFrameRecheckResult,
     ProtocolShapeError,
 )
 from factgraph.application.protocol.schema_runtime import FieldPath
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import ProofReceipt
 from factgraph.sdk.shells.check import sdk_check
 from factgraph.sdk.shells.proof_frame import sdk_proof_frame_recheck
 from factgraph.sdk import (
@@ -62,17 +62,17 @@ def _age_derivation() -> Inference:
         )
 
 
-def _capture_support(sdk: SDKStore, alice: str, age: int) -> SupportArtifact:
-    """Run sdk_check(sdk, ...) and extract the captured SupportArtifact."""
+def _capture_support(sdk: SDKStore, alice: str, age: int) -> ProofReceipt:
+    """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": alice, "$age": age})
     payload = result.evidence_envelope.engine_payload
-    assert isinstance(payload, SupportArtifact), (
-        f"native engine should produce SupportArtifact, got {type(payload).__name__}"
+    assert isinstance(payload, ProofReceipt), (
+        f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )
     return payload
 
 
-def _build_overlay(sdk: SDKStore, e_ref: str, new_age: int) -> EvaluationOverlay:
+def _build_overlay(sdk: SDKStore, e_ref: str, new_age: int) -> FactOverlay:
     override = build_fact_value_override(
         sdk._store,
         sdk._application_schema_index,
@@ -80,7 +80,7 @@ def _build_overlay(sdk: SDKStore, e_ref: str, new_age: int) -> EvaluationOverlay
         field=FieldPath(entity_type="Person", field_name="age"),
         new_value=new_age,
     )
-    return EvaluationOverlay(fact_actions=(override,))
+    return FactOverlay(fact_actions=(override,))
 
 
 class SDKProofFrameRecheckContractTests(unittest.TestCase):
@@ -98,16 +98,16 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk_proof_frame_recheck(sdk, "not-a-support-artifact", EvaluationOverlay())  # type: ignore[arg-type]
+            sdk_proof_frame_recheck(sdk, "not-a-support-artifact", FactOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.support_artifact")
-        self.assertIn("SupportArtifact", str(ctx.exception))
+        self.assertIn("ProofReceipt", str(ctx.exception))
 
     def test_none_support_artifact_rejected_at_sdk_surface(self) -> None:
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk_proof_frame_recheck(sdk, None, EvaluationOverlay())  # type: ignore[arg-type]
+            sdk_proof_frame_recheck(sdk, None, FactOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.support_artifact")
 
@@ -120,11 +120,11 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             sdk_proof_frame_recheck(sdk, support, "not-an-overlay")  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.overlay")
-        self.assertIn("EvaluationOverlay", str(ctx.exception))
+        self.assertIn("FactOverlay", str(ctx.exception))
 
     def test_tuple_form_overlay_rejected_at_sdk_surface(self) -> None:
-        """SDK accepts only EvaluationOverlay; tuple-form
-        ``tuple[FactValueOverride, ...]`` (which the application request
+        """SDK accepts only FactOverlay; tuple-form
+        ``tuple[ReplaceFact, ...]`` (which the application request
         DTO permits) is rejected at the SDK boundary per §5.2."""
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=25, region="us")
@@ -152,7 +152,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             side_effect=ProtocolShapeError("bad request shape"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
+                sdk_proof_frame_recheck(sdk, support, FactOverlay())
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.request")
         self.assertIsInstance(ctx.exception.__cause__, ProtocolShapeError)
@@ -167,7 +167,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
+                sdk_proof_frame_recheck(sdk, support, FactOverlay())
 
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
@@ -201,7 +201,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
             "factgraph.sdk.shells.proof_frame.recheck_proof_frame",
             side_effect=fake_runtime,
         ):
-            sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
+            sdk_proof_frame_recheck(sdk, support, FactOverlay())
 
         self.assertIs(captured["store"], sdk._store)
         self.assertIs(captured["request"].support_artifact, support)
@@ -221,7 +221,7 @@ class SDKProofFrameRecheckContractTests(unittest.TestCase):
         ) as mock_why_not, patch(
             "factgraph.sdk.shells.fact_overlay.sdk_fact_overlay_check"
         ) as mock_fact_overlay:
-            sdk_proof_frame_recheck(sdk, support, EvaluationOverlay())
+            sdk_proof_frame_recheck(sdk, support, FactOverlay())
 
         mock_check.assert_not_called()
         mock_diagnose.assert_not_called()

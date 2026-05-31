@@ -10,15 +10,15 @@ from factgraph.core.rules.where_eval import (
     WhereValidationError,
     evaluate_where,
 )
-from factgraph.core.store._support import BindingItems, SupportArtifact, normalize_binding_items
+from factgraph.core.store._support import BindingItems, ProofReceipt, normalize_binding_items
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
     ErrorDTO,
-    ProofFrameAtomVerdict,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
     RuleLiteralReplaceResult,
@@ -188,7 +188,7 @@ def _where_literal_replacement(
     )
 
 
-def _core_literal_path(path: RuleLiteralPath) -> tuple[str, int | None]:
+def _core_literal_path(path: ConditionPath) -> tuple[str, int | None]:
     return (path.kind, path.index)
 
 
@@ -229,7 +229,7 @@ def _validate_action_target(
     return None
 
 
-def _literal_at_path(atom: tuple[Any, ...], path: RuleLiteralPath) -> Any:
+def _literal_at_path(atom: tuple[Any, ...], path: ConditionPath) -> Any:
     kind = path.kind
     index = path.index
     atom_kind = atom[0]
@@ -271,7 +271,7 @@ def _is_native_literal(value: Any) -> bool:
 
 
 def _build_proof_frame_result(
-    artifact: SupportArtifact,
+    artifact: ProofReceipt,
     *,
     action_index: int,
     action: RuleLiteralReplaceAction,
@@ -280,7 +280,7 @@ def _build_proof_frame_result(
     atom_verdicts = tuple(
         [
             *(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key=witness.pred_atom_key,
                     verdict=(
                         "invalidated"
@@ -296,7 +296,7 @@ def _build_proof_frame_result(
                 for witness in artifact.pred_witnesses
             ),
             *(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key=step.step_key,
                     verdict=(
                         "invalidated"

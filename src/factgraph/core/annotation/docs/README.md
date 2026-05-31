@@ -112,7 +112,7 @@ implementation".
   consumes the determined semantic lane
 - Does not modify the stable structure of `CandidateSet`
 - Does not write certainty summary back to `CandidateSet`,
-  `SupportArtifact`, or the core 12-field summary of the evidence
+  `ProofReceipt`, or the core 12-field summary of the evidence
   tree
 - Structured `certainty_summary` is exposed only as a
   response-level sibling, not embedded in the core 12-field summary

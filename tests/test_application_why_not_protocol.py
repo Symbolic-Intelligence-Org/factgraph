@@ -16,7 +16,7 @@ from factgraph.application.protocol import (
     ErrorDTO,
     EvidenceEnvelope,
     ProtocolShapeError,
-    WhyNotAtomLocator,
+    WhyNotConditionLocator,
     WhyNotEngine,
     WhyNotFailureKind,
     WhyNotRedRow,
@@ -28,7 +28,7 @@ from factgraph.application.protocol import (
     WhyNotUniverseResult,
 )
 from factgraph.application.protocol import derivation_why_not as why_not_protocol
-from factgraph.core.store._support import ProvenanceEnvelope, SupportArtifact
+from factgraph.core.store._support import ProvenanceEnvelope, ProofReceipt
 
 
 def _head(
@@ -70,14 +70,14 @@ def _error(code: str = "WHY_NOT_UNSUPPORTED") -> ErrorDTO:
     return ErrorDTO(code=code, message="why-not unavailable")
 
 
-def _atom_locator(**kwargs: object) -> WhyNotAtomLocator:
+def _atom_locator(**kwargs: object) -> WhyNotConditionLocator:
     fields = {
         "branch_index": 0,
         "failed_atom_index": 1,
         "attempted_binding": _attempted_binding(),
     }
     fields.update(kwargs)
-    return WhyNotAtomLocator(**fields)  # type: ignore[arg-type]
+    return WhyNotConditionLocator(**fields)  # type: ignore[arg-type]
 
 
 def _diagnostic(**kwargs: object) -> WhyNotRowDiagnostic:
@@ -301,7 +301,7 @@ class WhyNotRowDiagnosticProtocolTests(unittest.TestCase):
             atom_locator=_atom_locator(),
         )
         self.assertEqual(diagnostic.failure_kind, "atom_localized")
-        self.assertIsInstance(diagnostic.atom_locator, WhyNotAtomLocator)
+        self.assertIsInstance(diagnostic.atom_locator, WhyNotConditionLocator)
 
     def test_unsupported_unavailable_construction(self) -> None:
         diagnostic = _diagnostic(
@@ -645,11 +645,11 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
     def test_protocol_module_does_not_expose_sibling_or_payload_dtos(self) -> None:
         banned_names = (
             "DiagnoseResult",
-            "DiagnoseAtomLocator",
+            "DiagnoseConditionLocator",
             "CheckRequest",
             "CheckResult",
             "EvidenceEnvelope",
-            "SupportArtifact",
+            "ProofReceipt",
             "ProvenanceEnvelope",
         )
         for name in banned_names:
@@ -661,11 +661,11 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
         tree = ast.parse(source)
         banned_names = {
             "DiagnoseResult",
-            "DiagnoseAtomLocator",
+            "DiagnoseConditionLocator",
             "CheckRequest",
             "CheckResult",
             "EvidenceEnvelope",
-            "SupportArtifact",
+            "ProofReceipt",
             "ProvenanceEnvelope",
         }
         imported_names: set[str] = set()
@@ -702,7 +702,7 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
             )
 
     def test_evidence_envelope_existing_payload_types_unchanged(self) -> None:
-        support = SupportArtifact(
+        support = ProofReceipt(
             kind="native_binding_v1",
             root_result_kind="fact",
             binding_items=_binding(),
@@ -722,7 +722,7 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
                 branch_index=0,
                 engine_payload=support,
             ).engine_payload,
-            SupportArtifact,
+            ProofReceipt,
         )
         self.assertIsInstance(
             EvidenceEnvelope(
@@ -740,7 +740,7 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
         self.assertIs(protocol_pkg.WhyNotUniverseResult, WhyNotUniverseResult)
         self.assertIs(protocol_pkg.WhyNotRedRow, WhyNotRedRow)
         self.assertIs(protocol_pkg.WhyNotRowDiagnostic, WhyNotRowDiagnostic)
-        self.assertIs(protocol_pkg.WhyNotAtomLocator, WhyNotAtomLocator)
+        self.assertIs(protocol_pkg.WhyNotConditionLocator, WhyNotConditionLocator)
         self.assertIs(protocol_pkg.WhyNotStatus, WhyNotStatus)
         self.assertIs(protocol_pkg.WhyNotEngine, WhyNotEngine)
         self.assertIs(protocol_pkg.WhyNotRowStatus, WhyNotRowStatus)

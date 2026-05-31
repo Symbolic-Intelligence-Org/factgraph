@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Protocol
 
-from factgraph.core.store._support import RuleRefEdge, SupportArtifact
+from factgraph.core.store._support import RuleRefEdge, ProofReceipt
 
 
 class RuleSpecReader(Protocol):
@@ -27,13 +27,13 @@ class ConfidenceKindResolver(Protocol):
         self,
         support_digest: str,
         support_kind: str,
-        artifact_lookup: Callable[[str], SupportArtifact | None],
+        artifact_lookup: Callable[[str], ProofReceipt | None],
     ) -> str: ...
 
 
 def check_certainty_artifact_eligibility(
-    artifact: SupportArtifact,
-    child_artifact_lookup: Callable[[str], SupportArtifact | None],
+    artifact: ProofReceipt,
+    child_artifact_lookup: Callable[[str], ProofReceipt | None],
 ) -> RuleRefEdge | None:
     """Check if a support artifact is eligible for certainty routing.
 
@@ -63,7 +63,7 @@ class CertaintyConfidenceKindResolver:
         self,
         support_digest: str,
         support_kind: str,
-        artifact_lookup: Callable[[str], SupportArtifact | None],
+        artifact_lookup: Callable[[str], ProofReceipt | None],
     ) -> str:
         artifact = artifact_lookup(support_digest)
         if artifact is None:

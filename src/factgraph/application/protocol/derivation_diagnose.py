@@ -15,10 +15,10 @@ Anti-regression invariants enforced here (per blueprint §7.2):
   ``EVIDENCE_LOOKUP_MISS`` error (NOT ``status="failed"`` with a hypothetical
   ``failure_kind="evidence_unavailable"``); ``DiagnoseFailureKind`` Literal
   therefore contains only ``no_candidate`` and ``atom_localized``.
-- §7-Diagnose-2: ``DiagnoseAtomLocator`` lives only on
+- §7-Diagnose-2: ``DiagnoseConditionLocator`` lives only on
   ``DiagnoseResult.diagnostic_payload``; never joins
   ``EvidenceEnvelope.engine_payload`` Union (per D8.note §6.5 scope clarification —
-  DiagnoseAtomLocator is capability-output, not engine-native).
+  DiagnoseConditionLocator is capability-output, not engine-native).
 """
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def _validate_non_negative_int(value: Any, *, field_name: str) -> int:
 
 
 @dataclass(frozen=True)
-class DiagnoseAtomLocator:
+class DiagnoseConditionLocator:
     """Native atom-localizer payload (Step 0.B D8).
 
     Capability-output (Diagnose-runtime-computed), NOT engine-native — does NOT
@@ -160,7 +160,7 @@ class DiagnoseResult:
     matched_count: int | None
     matched_binding: BindingItems | None
     failure_kind: DiagnoseFailureKind | None
-    diagnostic_payload: DiagnoseAtomLocator | None
+    diagnostic_payload: DiagnoseConditionLocator | None
     errors: tuple[ErrorDTO, ...] = field(default_factory=tuple)
     warnings: tuple[WarningDTO, ...] = field(default_factory=tuple)
 
@@ -189,10 +189,10 @@ class DiagnoseResult:
                 allowed=_DIAGNOSE_FAILURE_KINDS,
             )
         if self.diagnostic_payload is not None and not isinstance(
-            self.diagnostic_payload, DiagnoseAtomLocator
+            self.diagnostic_payload, DiagnoseConditionLocator
         ):
             raise ProtocolShapeError(
-                "diagnostic_payload must be DiagnoseAtomLocator or None"
+                "diagnostic_payload must be DiagnoseConditionLocator or None"
             )
 
         if status == "passed":
@@ -226,7 +226,7 @@ class DiagnoseResult:
                         "requires diagnostic_payload=None"
                     )
             else:  # atom_localized
-                if not isinstance(self.diagnostic_payload, DiagnoseAtomLocator):
+                if not isinstance(self.diagnostic_payload, DiagnoseConditionLocator):
                     raise ProtocolShapeError(
                         "failed DiagnoseResult with failure_kind='atom_localized' "
                         "requires diagnostic_payload"
@@ -249,7 +249,7 @@ class DiagnoseResult:
 
 
 __all__ = [
-    "DiagnoseAtomLocator",
+    "DiagnoseConditionLocator",
     "DiagnoseEngine",
     "DiagnoseFailureKind",
     "DiagnoseRequest",

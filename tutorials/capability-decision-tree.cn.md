@@ -28,7 +28,7 @@
 - **Fact Overlay Check** 是 fact what-if:不写 ledger,只比较 before / after。
 - **Why-not Universe Diagnose** 是有限集合分区:一次性得到 green / red rows。
 - **Evaluator Frontier Trace** 是 evaluator-layer 工具:不是 application protocol DTO,直接读 native where-body frontier。
-- **ProofFrame Rechecker** 是 fact-overlay 路径的 per-atom 解释器:复用 Q1 Check 输出的 `SupportArtifact`,统一 3-status verdict;`not` step 永远 emit `unknown`(strict deferral)。
+- **ProofFrame Rechecker** 是 fact-overlay 路径的 per-atom 解释器:复用 Q1 Check 输出的 `ProofReceipt`,统一 3-status verdict;`not` step 永远 emit `unknown`(strict deferral)。
 - **Rule Disable / Literal Replace / Add Condition** 都是 rule-side overlay 操作:输出 `variant_rows + ProofFrame` dual-output;native only;single-action MVP;`evaluate_native_where` 签名 hard-stable;不复活 `superseded_by_full_eval`。
 
 ## 何时不在已 shipped 范围(留作 Batch 6+)

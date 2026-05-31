@@ -5,8 +5,8 @@ Phase 2 of G3 (per archived blueprint
 ships full §5.1 / §5.2 / §5.4 / §5.7 / §5.8 contract coverage for
 ``sdk_rule_literal_replace(...)``. Mirrors the Phase 1
 ``test_sdk_rule_disable.py`` structure with one extra test for
-``RuleLiteralPath`` shape validation propagating through
-``RuleLiteralPath.__post_init__`` to
+``ConditionPath`` shape validation propagating through
+``ConditionPath.__post_init__`` to
 ``$.check_rule_literal_replace.request``.
 """
 
@@ -18,15 +18,15 @@ from unittest.mock import patch
 
 from factgraph.application.capability_helpers.errors import CapabilityHelperError
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     ProtocolShapeError,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceResult,
 )
 from factgraph.core.rules.rule_ir import RuleCompileError
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import ProofReceipt
 from factgraph.sdk.shells.check import sdk_check
 from factgraph.sdk.shells.rule_literal_replace import sdk_rule_literal_replace
 from factgraph.sdk import (
@@ -78,18 +78,18 @@ def _adult_rule() -> Rule:
         )
 
 
-def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> SupportArtifact:
-    """Run sdk_check(sdk, ...) and extract the captured SupportArtifact."""
+def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> ProofReceipt:
+    """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": e_ref, "$age": age})
     payload = result.evidence_envelope.engine_payload
-    assert isinstance(payload, SupportArtifact), (
-        f"native engine should produce SupportArtifact, got {type(payload).__name__}"
+    assert isinstance(payload, ProofReceipt), (
+        f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )
     return payload
 
 
-def _literal_path() -> RuleLiteralPath:
-    return RuleLiteralPath(kind="pred_term", index=0)
+def _literal_path() -> ConditionPath:
+    return ConditionPath(kind="pred_term", index=0)
 
 
 class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
@@ -164,7 +164,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_literal_replace.support")
-        self.assertIn("SupportArtifact", str(ctx.exception))
+        self.assertIn("ProofReceipt", str(ctx.exception))
 
     def test_non_evaluation_overlay_input_rejected_at_sdk_surface(self) -> None:
         sdk = _build_sdk()
@@ -184,19 +184,19 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_literal_replace.overlay")
-        self.assertIn("EvaluationOverlay", str(ctx.exception))
+        self.assertIn("FactOverlay", str(ctx.exception))
 
     def test_non_empty_overlay_rejected_at_sdk_surface(self) -> None:
-        """§5.4 lock: SDK rejects non-empty ``EvaluationOverlay`` because
+        """§5.4 lock: SDK rejects non-empty ``FactOverlay`` because
         the rule-action overlay is constructed internally by the A
-        helper; SDK callers pass ``None`` or empty ``EvaluationOverlay()``.
+        helper; SDK callers pass ``None`` or empty ``FactOverlay()``.
         """
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
-        non_empty_overlay = EvaluationOverlay(
+        non_empty_overlay = FactOverlay(
             fact_actions=(
-                FactValueOverride(
+                ReplaceFact(
                     asrt_id="a1",
                     pred_id="Person:age",
                     e_ref=alice,
@@ -234,17 +234,17 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
             literal_path=_literal_path(),
             old_literal="alice",
             new_literal="bob",
-            overlay=EvaluationOverlay(),
+            overlay=FactOverlay(),
         )
 
         self.assertIsInstance(result, RuleLiteralReplaceResult)
 
     def test_non_rule_literal_path_remaps_to_request_path(self) -> None:
-        """§5.4 lock: ``literal_path`` is a raw ``RuleLiteralPath``;
-        non-``RuleLiteralPath`` inputs slip past SDK pre-validation
-        (no shared validator for ``RuleLiteralPath``) and are caught
+        """§5.4 lock: ``literal_path`` is a raw ``ConditionPath``;
+        non-``ConditionPath`` inputs slip past SDK pre-validation
+        (no shared validator for ``ConditionPath``) and are caught
         by the A helper / action DTO ``__post_init__``, which raises
-        ``ProtocolShapeError("literal_path must be RuleLiteralPath")``
+        ``ProtocolShapeError("literal_path must be ConditionPath")``
         — remapped to ``$.check_rule_literal_replace.request``.
         """
         sdk = _build_sdk()
@@ -424,7 +424,7 @@ class SDKRuleLiteralReplaceContractTests(unittest.TestCase):
         self.assertFalse(hasattr(sdk_pkg, "RuleLiteralReplaceResult"))
         self.assertNotIn("RuleLiteralReplaceAction", sdk_pkg.__all__)
         self.assertNotIn("RuleLiteralReplaceRequest", sdk_pkg.__all__)
-        self.assertNotIn("RuleLiteralPath", sdk_pkg.__all__)
+        self.assertNotIn("ConditionPath", sdk_pkg.__all__)
 
     def test_runtime_dispatched_with_store_and_resolved_registry(self) -> None:
         sdk = _build_sdk()

@@ -154,7 +154,7 @@
 - 若当前 session 中不存在对应 artifact，返回 `runtime_explain_not_found`。
 - 未配置 `artifact_store_root` 时，这不是 durable lookup；session 清理后 handle 可能失效。
 - 为兼容旧客户端，响应顶层不新增 `kind` 字段。
-- native `SupportArtifact` 当前可能同时包含：
+- native `ProofReceipt` 当前可能同时包含：
   - legacy `rule_refs`
   - structured `rule_ref_edges`
 - `rule_ref_edges` 是 per-occurrence child-proof edges：
@@ -355,7 +355,7 @@
   - 第一跳 `candidate_id -> (support_digest, support_kind)` 只存在于当前 session 的 `_candidate_support_index` / `_candidate_support_kind_index`
   - 第一跳 miss 时直接返回 `runtime_explain_not_found`
   - 第二跳按 `support_kind` 分流：
-    - native / Souffle tree-bearing kind：`support_digest -> SupportArtifact`
+    - native / Souffle tree-bearing kind：`support_digest -> ProofReceipt`
     - engine provenance kind：`support_digest -> ProvenanceEnvelope`
   - 若 `support_kind in {"native_binding_v1", "souffle_witness_v1"}`，service 会继续回放 `Store.explain_support(...)`：
     - 响应仍为 `ok=true`
@@ -365,7 +365,7 @@
     - 响应仍为 `ok=true`
     - `explain.support_kind` 保留当前 kind
     - `explain.provenance` 携带 engine-native `ProvenanceEnvelope`
-    - 当前不把 envelope 强制转成 `SupportArtifact` 或 candidate evidence tree
+    - 当前不把 envelope 强制转成 `ProofReceipt` 或 candidate evidence tree
   - 若 `support_kind="problog_provenance_v1"`，service 也会回放 `Store.explain_provenance(...)`：
     - 响应仍为 `ok=true`
     - `explain.support_kind` 保留当前 kind
@@ -474,7 +474,7 @@
     - `unresolved_support`
     - `recursion_boundary`
 - `support_section` 当前始终存在。
-- `rule_ref_section` 在 `SupportArtifact.rule_ref_edges` 非空时优先按 structured edge emit；若只有 legacy `rule_refs`，则回退到 minimal `rule_ref` 节点。
+- `rule_ref_section` 在 `ProofReceipt.rule_ref_edges` 非空时优先按 structured edge emit；若只有 legacy `rule_refs`，则回退到 minimal `rule_ref` 节点。
 - `rule_ref` 节点当前会显式暴露：
   - `ruleref_atom_key`
   - `rule_ref_id`
@@ -1113,7 +1113,7 @@
   当前 session 注册 matching ephemeral rule；否则运行时会 fail fast。
 - native inference support 当前可记录 direct `rule_refs`，因此后续 `explain-support` / `explain-tree` 可能看到 minimal `rule_ref` 节点；这还不是递归 child proof。
 - native inference support 现在会优先记录 structured `rule_ref_edges`，因此后续 `explain-support` / `explain-tree` 已可沿 `child_support_digest` 继续展开 first-round recursive proof。
-- direct `rule_refs` 继续保留为兼容摘要字段；child row proof 复用既有 native `SupportArtifact` readback，而不是发明第二套 handle。
+- direct `rule_refs` 继续保留为兼容摘要字段；child row proof 复用既有 native `ProofReceipt` readback，而不是发明第二套 handle。
 - evaluate 失败时，常见 agent-facing恢复分支会在 `errors[0].details` 中追加稳定字段：
   - unknown RuleRef：`error_code="unknown_rule_ref"` + `missing_rule_ref` + `remediation_hint="register_referenced_rule_first_or_check_fs_registry"`
   - RuleRef target not exposed：`error_code="rule_not_expose"` + `rule_ref_id` + `remediation_hint="add_expose_true_to_rule_definition"`
@@ -1670,7 +1670,7 @@
   - `audit/provenance_trees.jsonl`（可选 — 当 accepted candidate 仍可通过当前 session 的 `run_id`-keyed derivation recipe replay 成 query-bearing Souffle package，并能匹配到具体 output row 时写入）
   - `audit/provenance_statuses.jsonl`（可选 — 当 `package_kind="audit"` 时与 provenance materialization 同步写入，按 candidate 记录 `present | missing_recipe | export_failed | no_matching_row | explain_failed` 等状态）
   - `audit/evidence_graphs.jsonl`（可选 — 当 accepted candidate 的 engine provenance / proof tree 可在 export-time 确定性转换为 `EvidenceGraph` 时写入）
-  前两个文件分别导出 `SupportArtifact` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
+  前两个文件分别导出 `ProofReceipt` 与 `RuleTraceArtifact` 的 flat JSONL rows，用于离线 audit / explain 消费。
   `certainty_summaries.jsonl` 导出 export-time 预计算的 `certainty_summary` dict（每行 `{candidate_id, certainty_summary}`），因为 `condition_weights` 只在 registry filesystem 可用、离线 audit 无法 query-time 派生。
   `condition_weights` 不作为 engine adapter 参数导出；它是 runtime
   certainty/explain projection input，未来运行时配置归

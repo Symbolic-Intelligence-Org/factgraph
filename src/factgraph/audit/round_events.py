@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, TypeAlias
 
 from factgraph.core.protocol.digests import sha256_token
-from factgraph.core.store._support import BindingItems, SupportArtifact, compute_support_digest
+from factgraph.core.store._support import BindingItems, ProofReceipt, compute_support_digest
 
 if TYPE_CHECKING:
     from factgraph.application.protocol.common import WarningDTO
@@ -399,7 +399,7 @@ def project_why_not_event_payload(request: Any, result: Any) -> dict[str, JSONVa
 
 def project_proof_frame_event_payload(request: Any, result: Any) -> dict[str, JSONValue]:
     support = getattr(request, "support_artifact", None)
-    support_digest = compute_support_digest(support) if isinstance(support, SupportArtifact) else _opaque_digest(support)
+    support_digest = compute_support_digest(support) if isinstance(support, ProofReceipt) else _opaque_digest(support)
     return {
         "request": {
             "support_digest": support_digest,

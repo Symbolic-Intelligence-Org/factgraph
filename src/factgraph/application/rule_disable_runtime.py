@@ -6,13 +6,13 @@ from typing import Any
 
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry, RuleSpec
 from factgraph.core.rules.where_eval import WhereValidationError, evaluate_where
-from factgraph.core.store._support import BindingItems, SupportArtifact, normalize_binding_items
+from factgraph.core.store._support import BindingItems, ProofReceipt, normalize_binding_items
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
     ErrorDTO,
-    ProofFrameAtomVerdict,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
     RuleDisableAction,
     RuleDisableRequest,
@@ -162,7 +162,7 @@ def _evaluate_variant_rows(
 
 
 def _build_proof_frame_result(
-    artifact: SupportArtifact,
+    artifact: ProofReceipt,
     *,
     action_index: int,
     action: RuleDisableAction,
@@ -171,7 +171,7 @@ def _build_proof_frame_result(
     atom_verdicts = tuple(
         [
             *(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key=witness.pred_atom_key,
                     verdict=(
                         "invalidated"
@@ -187,7 +187,7 @@ def _build_proof_frame_result(
                 for witness in artifact.pred_witnesses
             ),
             *(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key=step.step_key,
                     verdict=(
                         "invalidated"

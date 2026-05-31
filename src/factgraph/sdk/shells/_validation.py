@@ -23,15 +23,15 @@ Input validators (pure type / shape guards):
   ``Inference``).
 - ``validate_binding`` — G1 + G4 + G2 Fact Overlay (validates
   ``$``-prefixed variable name mapping).
-- ``validate_evaluation_overlay`` — G2 (rejects non-``EvaluationOverlay``
+- ``validate_evaluation_overlay`` — G2 (rejects non-``FactOverlay``
   including ``None``; used at boundaries that require an overlay).
 - ``validate_rule`` — G3 (rejects non-SDK ``Rule``; mirrors
   ``validate_derivation`` shape).
 - ``validate_support_artifact`` — G2 ProofFrame + G3 (rejects
-  non-``SupportArtifact``).
+  non-``ProofReceipt``).
 - ``validate_optional_evaluation_overlay`` — G3 (rejects non-
-  ``EvaluationOverlay`` non-None AND rejects non-empty
-  ``EvaluationOverlay``; allows ``None`` because the G3 rule-overlay A
+  ``FactOverlay`` non-None AND rejects non-empty
+  ``FactOverlay``; allows ``None`` because the G3 rule-overlay A
   helpers construct the rule-action overlay internally).
 
 Boundary normalizers (catch + re-raise with caller-supplied path):
@@ -51,9 +51,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from factgraph.application.protocol import EvaluationOverlay
+from factgraph.application.protocol import FactOverlay
 from factgraph.core.rules.rule_ir import RuleCompileError
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import ProofReceipt
 
 from ..dsl import Inference, Rule
 from ..errors import SDKStoreError
@@ -96,20 +96,20 @@ def validate_binding(binding: Any, *, path: str) -> dict[str, Any]:
 
 
 def validate_evaluation_overlay(value: Any, *, path: str) -> None:
-    """Reject anything that is not an ``EvaluationOverlay`` instance.
+    """Reject anything that is not an ``FactOverlay`` instance.
 
     Used by Fact Overlay Check (``$.check_fact_overlay.overlay``) and
     ProofFrame Recheck (``$.recheck_proof_frame.overlay``) to enforce the
     G2 §5.1 + §5.2 lock that the SDK boundary accepts only
-    ``EvaluationOverlay`` — narrower than the application
+    ``FactOverlay`` — narrower than the application
     ``FactOverlayCheckRequest.overlay`` field which also tolerates
-    ``tuple[FactValueOverride, ...]``. Rejects ``None``; G3 callers that
+    ``tuple[ReplaceFact, ...]``. Rejects ``None``; G3 callers that
     accept a None default use ``validate_optional_evaluation_overlay``
     instead.
     """
 
-    if not isinstance(value, EvaluationOverlay):
-        raise SDKStoreError("overlay must be EvaluationOverlay", path=path)
+    if not isinstance(value, FactOverlay):
+        raise SDKStoreError("overlay must be FactOverlay", path=path)
 
 
 def validate_rule(rule: Any, *, path: str) -> None:
@@ -128,7 +128,7 @@ def validate_rule(rule: Any, *, path: str) -> None:
 
 
 def validate_support_artifact(value: Any, *, path: str) -> None:
-    """Reject anything that is not a ``SupportArtifact`` instance.
+    """Reject anything that is not a ``ProofReceipt`` instance.
 
     Used by G2 ProofFrame Recheck
     (``$.recheck_proof_frame.support_artifact``) and the three G3
@@ -137,20 +137,20 @@ def validate_support_artifact(value: Any, *, path: str) -> None:
     deferred trigger ("until G3/G5 also need them").
     """
 
-    if not isinstance(value, SupportArtifact):
-        raise SDKStoreError("support must be SupportArtifact", path=path)
+    if not isinstance(value, ProofReceipt):
+        raise SDKStoreError("support must be ProofReceipt", path=path)
 
 
 def validate_optional_evaluation_overlay(value: Any, *, path: str) -> None:
-    """Reject non-``EvaluationOverlay`` and non-empty ``EvaluationOverlay``.
+    """Reject non-``FactOverlay`` and non-empty ``FactOverlay``.
 
     G3 rule-overlay A helpers (``build_rule_disable_request`` /
     ``build_rule_literal_replace_request`` /
     ``build_rule_add_condition_request``) construct the single rule-action
     overlay internally; SDK callers pass either ``None`` or an empty
-    ``EvaluationOverlay()``. This validator pre-rejects (a) non-
-    ``EvaluationOverlay`` non-None inputs, and (b) non-empty
-    ``EvaluationOverlay`` (i.e. with any ``fact_actions`` or
+    ``FactOverlay()``. This validator pre-rejects (a) non-
+    ``FactOverlay`` non-None inputs, and (b) non-empty
+    ``FactOverlay`` (i.e. with any ``fact_actions`` or
     ``rule_actions``). After this check, the application-layer
     ``_request_overlay(...)`` non-empty rejection becomes defensive /
     unreachable from SDK.
@@ -162,11 +162,11 @@ def validate_optional_evaluation_overlay(value: Any, *, path: str) -> None:
 
     if value is None:
         return
-    if not isinstance(value, EvaluationOverlay):
-        raise SDKStoreError("overlay must be EvaluationOverlay or None", path=path)
+    if not isinstance(value, FactOverlay):
+        raise SDKStoreError("overlay must be FactOverlay or None", path=path)
     if value.fact_actions or value.rule_actions:
         raise SDKStoreError(
-            "overlay must be empty EvaluationOverlay (or None); "
+            "overlay must be empty FactOverlay (or None); "
             "rule-action overlay is constructed internally",
             path=path,
         )

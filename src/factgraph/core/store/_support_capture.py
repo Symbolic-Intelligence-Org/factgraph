@@ -17,7 +17,7 @@ from factgraph.core.store._support import (
     PredWitness,
     ProjectedFact,
     RuleRefEdge,
-    SupportArtifact,
+    ProofReceipt,
     make_non_fact_step_key,
     make_pred_atom_key,
     normalize_asrt_ids,
@@ -34,7 +34,7 @@ def build_support_artifact_for_binding(
     root_result_kind: str,
     selected_branch_index: int,
     rule_ref_edges: tuple[RuleRefEdge, ...] = (),
-) -> SupportArtifact:
+) -> ProofReceipt:
     pred_witnesses: list[PredWitness] = []
     non_fact_steps: list[NonFactStep] = []
 
@@ -68,7 +68,7 @@ def build_support_artifact_for_binding(
             )
         )
 
-    return SupportArtifact(
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind=_validate_root_result_kind(root_result_kind),
         binding_items=normalize_binding_items(binding),

@@ -58,16 +58,16 @@ from factgraph.application.protocol import (  # noqa: E402
     CompiledHeadCall,
     DiagnoseRequest,
     EntitySelector,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayCheckRequest,
     FieldPath,
     ProofFrameRecheckRequest,
     RuleAddConditionAction,
     RuleAddConditionRequest,
-    RuleAddedAtom,
+    AddedCondition,
     RuleDisableAction,
     RuleDisableRequest,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
     WhyNotUniverseRequest,
@@ -87,7 +87,7 @@ from factgraph.core.evidence.write_protocol import set_field  # noqa: E402
 from factgraph.core.rules.frontier import evaluate_native_where_frontier  # noqa: E402
 from factgraph.core.rules.rule_ir import RuleSpec  # noqa: E402
 from factgraph.core.store import Store  # noqa: E402
-from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact  # noqa: E402
+from factgraph.core.store._support import NonFactStep, PredWitness, ProofReceipt  # noqa: E402
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes  # noqa: E402
 
 
@@ -137,7 +137,7 @@ class DemoFixture:
 @dataclass(frozen=True)
 class RuleContext:
     rule_spec: RuleSpec
-    support_artifact: SupportArtifact
+    support_artifact: ProofReceipt
 
 
 def _binding(*items: tuple[str, object]) -> tuple[tuple[str, object], ...]:
@@ -255,8 +255,8 @@ def _rule_spec(index: Any) -> RuleSpec:
     )
 
 
-def _rule_support_artifact(person: SeededPerson) -> SupportArtifact:
-    return SupportArtifact(
+def _rule_support_artifact(person: SeededPerson) -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="row",
         binding_items=(("$p", person.e_ref),),
@@ -284,7 +284,7 @@ def _phase_check(
     fixture: DemoFixture,
     *,
     verbose: bool,
-) -> tuple[CheckRequest, Any, SupportArtifact]:
+) -> tuple[CheckRequest, Any, ProofReceipt]:
     alice = fixture.people["alice"]
     request = CheckRequest(
         plan=fixture.plan,
@@ -298,7 +298,7 @@ def _phase_check(
     assert result.matched_binding == request.binding, result
     assert result.evidence_envelope is not None, result
     support = result.evidence_envelope.engine_payload
-    assert isinstance(support, SupportArtifact), result.evidence_envelope
+    assert isinstance(support, ProofReceipt), result.evidence_envelope
 
     _announce(verbose, "1. SDK setup + Q1 Check")
     _announce(
@@ -333,9 +333,9 @@ def _phase_fact_overlay(
     fixture: DemoFixture,
     *,
     verbose: bool,
-) -> tuple[FactOverlayCheckRequest, Any, EvaluationOverlay]:
+) -> tuple[FactOverlayCheckRequest, Any, FactOverlay]:
     alice = fixture.people["alice"]
-    overlay = EvaluationOverlay(
+    overlay = FactOverlay(
         fact_actions=(
             build_fact_value_override(
                 fixture.store,
@@ -428,14 +428,14 @@ def _phase_frontier(fixture: DemoFixture, *, verbose: bool) -> str:
 
 def _phase_proofframe(
     fixture: DemoFixture,
-    support: SupportArtifact,
-    overlay: EvaluationOverlay,
+    support: ProofReceipt,
+    overlay: FactOverlay,
     *,
     verbose: bool,
 ) -> tuple[ProofFrameRecheckRequest, Any, ProofFrameRecheckRequest, Any]:
     baseline_request = ProofFrameRecheckRequest(
         support_artifact=support,
-        overlay=EvaluationOverlay(),
+        overlay=FactOverlay(),
     )
     baseline = recheck_proof_frame(baseline_request, store=fixture.store)
     overlay_request = ProofFrameRecheckRequest(support_artifact=support, overlay=overlay)
@@ -466,7 +466,7 @@ def _phase_rule_disable(
         RuleDisableRequest(
             rule_spec=context.rule_spec,
             support_artifact=context.support_artifact,
-            overlay=EvaluationOverlay(rule_actions=(action,)),
+            overlay=FactOverlay(rule_actions=(action,)),
         ),
         store=fixture.store,
     )
@@ -491,7 +491,7 @@ def _phase_rule_literal_replace(
         version="1.0",
         branch_index=0,
         atom_index=3,
-        literal_path=RuleLiteralPath(kind="rhs"),
+        literal_path=ConditionPath(kind="rhs"),
         old_literal="us",
         new_literal="eu",
     )
@@ -499,7 +499,7 @@ def _phase_rule_literal_replace(
         RuleLiteralReplaceRequest(
             rule_spec=context.rule_spec,
             support_artifact=context.support_artifact,
-            overlay=EvaluationOverlay(rule_actions=(action,)),
+            overlay=FactOverlay(rule_actions=(action,)),
         ),
         store=fixture.store,
     )
@@ -523,13 +523,13 @@ def _phase_rule_add_condition(
         rule_id="person.eligible",
         version="1.0",
         branch_index=0,
-        added_atom=RuleAddedAtom(("lt", "$age", 20)),
+        added_atom=AddedCondition(("lt", "$age", 20)),
     )
     result = check_rule_add_condition_action(
         RuleAddConditionRequest(
             rule_spec=context.rule_spec,
             support_artifact=context.support_artifact,
-            overlay=EvaluationOverlay(rule_actions=(action,)),
+            overlay=FactOverlay(rule_actions=(action,)),
         ),
         store=fixture.store,
     )

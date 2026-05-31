@@ -238,7 +238,7 @@ Evaluate now also records a lightweight candidate explain backref after candidat
 - `candidate_id -> confidence_kind`
 - native candidates write `support_kind="native_binding_v1"` and can continue to `Store.explain_support(...)`
 - Souffle first-round partial witness now writes `support_kind="souffle_witness_v1"`:
-  - the carrier continues to reuse `SupportArtifact`
+  - the carrier continues to reuse `ProofReceipt`
   - currently only promises the native subset:
     - `binding`
     - `pred_witnesses`
@@ -267,10 +267,10 @@ Evaluate now also records a lightweight candidate explain backref after candidat
     parse-compatible internal data only
   - `confidence_kind` does not enter `candidate_key` / `candidate_id` / `support_digest` computation, nor does it change evaluate / accept / chosen behavior
 - `Store.get_candidate_support_digest(candidate_id)`, `Store.get_candidate_support_kind(candidate_id)`, and `Store.get_candidate_confidence_kind(candidate_id)` all recover only the first hop inside the current `Store` instance
-- when `Store(..., artifact_sidecar=...)` is configured, only the native `support_digest -> SupportArtifact` second hop can be re-read from later `Store` instances sharing the same sidecar root
+- when `Store(..., artifact_sidecar=...)` is configured, only the native `support_digest -> ProofReceipt` second hop can be re-read from later `Store` instances sharing the same sidecar root
 - on this foundation, service/audit can now assemble the candidate explain into a `candidate_evidence_tree`:
   - entrypoint is still `candidate_id`
-  - native proof substrate remains the existing `SupportArtifact`
+  - native proof substrate remains the existing `ProofReceipt`
   - the current tree uses a sectioned shape:
     - `candidate_result`
     - `support_section`
@@ -290,14 +290,14 @@ Evaluate now also records a lightweight candidate explain backref after candidat
     - **degraded**: `degraded_support` — engine path with no witness artifact
   - first-round does not add `source_kind` / `provenance_kind` fields; `node_kind` itself serves as the provenance-role carrier
   - deeper assertion-origin taxonomy (direct write / derivation accept / import) is deferred; if needed, it would be extended on `assertion_fact` nodes in the future
-  - native `SupportArtifact` now retains both:
+  - native `ProofReceipt` now retains both:
     - legacy `rule_refs` summary
     - structured `rule_ref_edges`
   - `rule_ref_edges` records per-occurrence child proof edges by `ruleref_atom_key`, carrying:
     - `rule_ref_id`
     - `rule_ref_version`
     - `child_support_digest | unresolved_reason`
-  - child support continues to reuse the existing `support_digest -> SupportArtifact` readback; internal child row proof is expressed through native support artifacts with `root_result_kind="row"`
+  - child support continues to reuse the existing `support_digest -> ProofReceipt` readback; internal child row proof is expressed through native support artifacts with `root_result_kind="row"`
   - native support capture now performs winning-branch narrowing at artifact generation time:
     - `pred_witnesses`
     - `non_fact_steps`
@@ -432,7 +432,7 @@ Current trace semantics:
 - `T1` temporal checks do not add new trace-carrier fields: fact-backed temporal anchors still surface through `pred_witnesses`, and scalar comparison bindings stay in `non_fact_steps.details.binding`
 - Scenario A threshold-bearing uncertainty checks follow the same rule: measurement/threshold assertions surface through `pred_witnesses`, and scalar comparison bindings stay in `non_fact_steps.details.binding`
 - deterministic NL explain sits on top of summary/narrative and only consumes those two structured DTOs; it does not read the raw trace payload directly
-- `RuleTraceArtifact` remains separate from derivation `SupportArtifact`
+- `RuleTraceArtifact` remains separate from derivation `ProofReceipt`
 - `rule_run_summary`'s deterministic narrative is solely owned by `rules._trace_narrative`; the presentation layer should not duplicate narrative templates
 
 ```mermaid
@@ -552,18 +552,18 @@ Additional notes:
   - `_candidate_support_kind_index`: `candidate_id -> support_kind`
   - this index does not go to sidecar; both native and engine-degraded candidate explain rely on this first hop
 - the three registries currently coexist only at the readback protocol layer and do not share underlying carriers:
-  - native / Souffle witness → `SupportArtifact`
+  - native / Souffle witness → `ProofReceipt`
   - engine provenance → `ProvenanceEnvelope`
   - rule runtime trace → `RuleTraceArtifact`
 - when `artifact_sidecar` is configured, lookup misses on durably-readable registries rehydrate from the sidecar into the in-memory dicts; without it, the behavior remains purely in-process.
-- only `SupportArtifact` / `RuleTraceArtifact` go to the sidecar; `ProvenanceEnvelope` remains a session-scoped in-process registry.
+- only `ProofReceipt` / `RuleTraceArtifact` go to the sidecar; `ProvenanceEnvelope` remains a session-scoped in-process registry.
 - `FileArtifactSidecar` now writes sidecar-adjacent `.meta.json` files on first durable write:
   - `support/sha256/<hex>.meta.json`
   - `rule_trace/<rule_run_id>.meta.json`
 - the first metadata slice carries only `captured_at_ns` and does not change artifact payload canonical bytes.
 - the only maintenance surface in this slice is `FileArtifactSidecar.gc_rule_trace(ttl_ns, dry_run=False)`:
   - it applies age-only TTL GC only to `RuleTraceArtifact`
-  - `SupportArtifact` remains write-and-retain
+  - `ProofReceipt` remains write-and-retain
   - payload orphans are reported and skipped, while metadata orphans may be cleaned up
 
 ## 8.1 Annotation Prototype Boundary

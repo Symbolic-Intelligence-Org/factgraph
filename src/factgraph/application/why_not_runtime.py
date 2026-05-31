@@ -14,7 +14,7 @@ from typing import Any
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
 from factgraph.core.rules.ruleref_substrate import evaluate_native_where
-from factgraph.core.store._support import BindingItems, SupportArtifact, normalize_binding_items
+from factgraph.core.store._support import BindingItems, ProofReceipt, normalize_binding_items
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts
 
@@ -24,7 +24,7 @@ from .protocol import (
     DerivationEvaluateRequest,
     DiagnoseRequest,
     ErrorDTO,
-    WhyNotAtomLocator,
+    WhyNotConditionLocator,
     WhyNotRedRow,
     WhyNotRowDiagnostic,
     WhyNotUniverseRequest,
@@ -357,7 +357,7 @@ def _diagnose_red_binding(
                 status="failed",
                 failure_kind="atom_localized",
                 diagnostic_granularity="atom_localized",
-                atom_locator=WhyNotAtomLocator(
+                atom_locator=WhyNotConditionLocator(
                     branch_index=locator.branch_index,
                     failed_atom_index=locator.failed_atom_index,
                     attempted_binding=locator.attempted_binding,
@@ -482,7 +482,7 @@ def _unrepresentable_candidate_error(
     )
 
 
-def _lookup_support_artifact(store: Store, digest: str) -> SupportArtifact | None:
+def _lookup_support_artifact(store: Store, digest: str) -> ProofReceipt | None:
     return store._lookup_support_artifact(digest)
 
 

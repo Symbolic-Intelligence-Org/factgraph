@@ -18,11 +18,11 @@ from factgraph.application import (
 )
 from factgraph.application.protocol import (
     EntitySelector,
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     RuleAddConditionAction,
     RuleAddConditionRequest,
-    RuleAddedAtom,
+    AddedCondition,
     RuleDisableAction,
     RuleDisableRequest,
     RuleLiteralReplaceRequest,
@@ -30,7 +30,7 @@ from factgraph.application.protocol import (
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.rule_ir import RuleSpec
 from factgraph.core.store import Store
-from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, SupportArtifact
+from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, ProofReceipt
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -112,7 +112,7 @@ def _rule_spec(index: Any, *, where: list[Any] | None = None) -> RuleSpec:
     )
 
 
-def _artifact(seeded: SeededPerson, **kwargs: object) -> SupportArtifact:
+def _artifact(seeded: SeededPerson, **kwargs: object) -> ProofReceipt:
     fields = {
         "kind": "native_binding_v1",
         "root_result_kind": "row",
@@ -136,7 +136,7 @@ def _artifact(seeded: SeededPerson, **kwargs: object) -> SupportArtifact:
         ),
     }
     fields.update(kwargs)
-    return SupportArtifact(**fields)  # type: ignore[arg-type]
+    return ProofReceipt(**fields)  # type: ignore[arg-type]
 
 
 def _action(**kwargs: object) -> RuleAddConditionAction:
@@ -144,7 +144,7 @@ def _action(**kwargs: object) -> RuleAddConditionAction:
         "rule_id": "person.eligible",
         "version": "1.0",
         "branch_index": 0,
-        "added_atom": RuleAddedAtom(("lt", "$age", 20)),
+        "added_atom": AddedCondition(("lt", "$age", 20)),
     }
     fields.update(kwargs)
     return RuleAddConditionAction(**fields)  # type: ignore[arg-type]
@@ -152,8 +152,8 @@ def _action(**kwargs: object) -> RuleAddConditionAction:
 
 def _request(
     rule_spec: RuleSpec,
-    artifact: SupportArtifact,
-    overlay: EvaluationOverlay,
+    artifact: ProofReceipt,
+    overlay: FactOverlay,
 ) -> RuleAddConditionRequest:
     return RuleAddConditionRequest(
         rule_spec=rule_spec,
@@ -176,7 +176,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
             store=store,
         )
@@ -201,8 +201,8 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(
-                    rule_actions=(_action(added_atom=RuleAddedAtom(("lt", "$age", 65))),)
+                FactOverlay(
+                    rule_actions=(_action(added_atom=AddedCondition(("lt", "$age", 65))),)
                 ),
             ),
             store=store,
@@ -226,8 +226,8 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index),
                         _artifact(alice),
-                        EvaluationOverlay(
-                            rule_actions=(_action(added_atom=RuleAddedAtom(atom)),)
+                        FactOverlay(
+                            rule_actions=(_action(added_atom=AddedCondition(atom)),)
                         ),
                     ),
                     store=store,
@@ -238,7 +238,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
     def test_fact_actions_and_wrong_rule_action_type_are_rejected(self) -> None:
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
-        fact_action = FactValueOverride(
+        fact_action = ReplaceFact(
             asrt_id=alice.age_asrt_id,
             pred_id=alice.age_pred_id,
             e_ref=alice.e_ref,
@@ -250,7 +250,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(fact_actions=(fact_action,), rule_actions=(_action(),)),
+                FactOverlay(fact_actions=(fact_action,), rule_actions=(_action(),)),
             ),
             store=store,
         )
@@ -258,7 +258,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(
+                FactOverlay(
                     rule_actions=(
                         RuleDisableAction(
                             rule_id="person.eligible",
@@ -286,7 +286,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
 
         cases = [
             ((), "RULE_ADD_CONDITION_ACTION_COUNT"),
-            ((_action(), _action(added_atom=RuleAddedAtom(("lt", "$age", 65)))), "RULE_ADD_CONDITION_ACTION_COUNT"),
+            ((_action(), _action(added_atom=AddedCondition(("lt", "$age", 65)))), "RULE_ADD_CONDITION_ACTION_COUNT"),
             ((_action(rule_id="other.rule"),), "RULE_ADD_CONDITION_RULE_MISMATCH"),
             ((_action(branch_index=99),), "RULE_ADD_CONDITION_BRANCH_NOT_FOUND"),
         ]
@@ -296,7 +296,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index),
                         _artifact(alice),
-                        EvaluationOverlay(rule_actions=actions),
+                        FactOverlay(rule_actions=actions),
                     ),
                     store=store,
                 )
@@ -320,8 +320,8 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index),
                         _artifact(alice),
-                        EvaluationOverlay(
-                            rule_actions=(_action(added_atom=RuleAddedAtom(atom)),)
+                        FactOverlay(
+                            rule_actions=(_action(added_atom=AddedCondition(atom)),)
                         ),
                     ),
                     store=store,
@@ -351,22 +351,22 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
             _request(
                 nested_rule_spec,
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
             _request(
                 _rule_spec(index),
                 _artifact(alice, rule_refs=("child.rule",)),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
             _request(
                 _rule_spec(index),
                 _artifact(alice, rule_ref_edges=(edge,)),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
         ):
             with self.subTest(request=request):
@@ -385,7 +385,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice, kind="souffle_witness_v1"),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
             store=store,
         )
@@ -401,8 +401,8 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(
-                    rule_actions=(_action(added_atom=RuleAddedAtom(("lt", "$age", "not-an-int"))),)
+                FactOverlay(
+                    rule_actions=(_action(added_atom=AddedCondition(("lt", "$age", "not-an-int"))),)
                 ),
             ),
             store=store,
@@ -417,7 +417,7 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
         before = _ledger_dump(store)
 
         check_rule_add_condition_action(
-            _request(_rule_spec(index), _artifact(alice), EvaluationOverlay(rule_actions=(_action(),))),
+            _request(_rule_spec(index), _artifact(alice), FactOverlay(rule_actions=(_action(),))),
             store=store,
         )
 
@@ -439,7 +439,7 @@ class RuleAddConditionCrossRuntimeGuardTests(unittest.TestCase):
     def test_existing_rule_runtimes_reject_rule_add_condition_action(self) -> None:
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
-        overlay = EvaluationOverlay(rule_actions=(_action(),))
+        overlay = FactOverlay(rule_actions=(_action(),))
 
         disable_result = check_rule_disable_action(
             RuleDisableRequest(_rule_spec(index), _artifact(alice), overlay),

@@ -142,7 +142,7 @@ exported from `factgraph.sdk`.
 | `RuleJoinConstraint` | Immutable RuleExpr join constraint produced by `occurrence.port.eq(other_port)` / `occurrence.port_name.eq(other.port_name)`; initial joins use explicit `.eq(...)`, not Python `==` |
 | `RuleExprInspect` | Immutable object returned by `fg.rules.inspect(application_rule_or_rule_expr)`; exposes `ast`, `occurrences`, `joins`, `unjoined_same_name_ports`, `render()`, and `render_compact()` |
 | `OccurrenceInspect` | Immutable occurrence descriptor used by `RuleExprInspect.occurrences`; exposes alias, template id, port names, and atom descriptors |
-| `AtomDescriptor` | Immutable authoring-time atom descriptor used by `OccurrenceInspect.atoms`; exposes structured fields plus a display `summary` |
+| `ConditionDescriptor` | Immutable authoring-time atom descriptor used by `OccurrenceInspect.atoms`; exposes structured fields plus a display `summary` |
 | `PortInspect` | Immutable rich port descriptor used by `RuleExprInspect.ports`; exposes port name, kind, entity type, field, and value type |
 | `ExplicitBoolError` (← `RuleExprError`) | Raised when application `Rule` or RuleExpr values are used in Python boolean contexts; use `&` / `|`, not `and` / `or` |
 
@@ -754,7 +754,7 @@ These are reachable via direct imports, not through `factgraph.sdk`:
 | Round events recorder lifecycle (`start_round`, `record_round_event`, `finalize_round`) | `factgraph.audit.round_events` |
 | Frontier trace | `factgraph.core.rules.frontier` |
 | Walker views (`ProofFrameDiffView`, etc.) | `factgraph.application.walker` |
-| Raw cross-boundary DTOs (`EvaluationOverlay`, `RuleLiteralPath`, `RuleAddedAtom`, `RoundEvent`) | `factgraph.application.protocol`, `factgraph.audit` |
+| Raw cross-boundary DTOs (`FactOverlay`, `ConditionPath`, `AddedCondition`, `RoundEvent`) | `factgraph.application.protocol`, `factgraph.audit` |
 | Audit package loading | `factgraph.audit.load_audit_package` |
 | Engine adapter registration | `factgraph.adapters.{souffle,problog,pyreason}` |
 | Aggregate DSL helpers (`agg_count`, `agg_sum`, `agg_min`, `agg_max`, `agg_mean`) | `factgraph.sdk.dsl` |

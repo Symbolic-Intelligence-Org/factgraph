@@ -243,10 +243,10 @@ def _make_support_artifact(
     pred_witness_keys: tuple[str, ...] = ("b0.a0:Person:exists",),
     kind: str = "souffle_witness_v1",
 ) -> Any:
-    """Step 5 fixture: minimal SupportArtifact for souffle path mocking."""
-    from factgraph.core.store._support import PredWitness, SupportArtifact
+    """Step 5 fixture: minimal ProofReceipt for souffle path mocking."""
+    from factgraph.core.store._support import PredWitness, ProofReceipt
 
-    return SupportArtifact(
+    return ProofReceipt(
         kind=kind,
         root_result_kind="fact",
         binding_items=binding_items,

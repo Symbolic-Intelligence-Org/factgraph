@@ -15,7 +15,7 @@ from factgraph.core.rules._trace import (
     rule_trace_artifact_from_dict,
 )
 from factgraph.core.store._support import (
-    SupportArtifact,
+    ProofReceipt,
     support_artifact_bytes,
     support_artifact_from_dict,
 )
@@ -24,11 +24,11 @@ _LOG = logging.getLogger(__name__)
 
 
 class ArtifactSidecar(Protocol):
-    def write_support(self, support_digest: str, artifact: SupportArtifact) -> None: ...
+    def write_support(self, support_digest: str, artifact: ProofReceipt) -> None: ...
 
     def write_rule_trace(self, rule_run_id: str, artifact: RuleTraceArtifact) -> None: ...
 
-    def read_support(self, support_digest: str) -> SupportArtifact | None: ...
+    def read_support(self, support_digest: str) -> ProofReceipt | None: ...
 
     def read_rule_trace(self, rule_run_id: str) -> RuleTraceArtifact | None: ...
 
@@ -47,14 +47,14 @@ class FileArtifactSidecar:
         self._sidecar_root = Path(sidecar_root)
         self._clock = clock
 
-    def write_support(self, support_digest: str, artifact: SupportArtifact) -> None:
-        if not isinstance(artifact, SupportArtifact):
-            raise ValueError("artifact must be SupportArtifact")
+    def write_support(self, support_digest: str, artifact: ProofReceipt) -> None:
+        if not isinstance(artifact, ProofReceipt):
+            raise ValueError("artifact must be ProofReceipt")
         payload_path = self._support_path(support_digest)
         first_write = self._write_bytes(
             payload_path,
             support_artifact_bytes(artifact),
-            f"support_digest collision for different SupportArtifact on disk: {support_digest}",
+            f"support_digest collision for different ProofReceipt on disk: {support_digest}",
         )
         if first_write:
             self._write_meta(payload_path)
@@ -71,7 +71,7 @@ class FileArtifactSidecar:
         if first_write:
             self._write_meta(payload_path)
 
-    def read_support(self, support_digest: str) -> SupportArtifact | None:
+    def read_support(self, support_digest: str) -> ProofReceipt | None:
         path = self._support_path(support_digest)
         row = self._read_json_row(path)
         if row is None:

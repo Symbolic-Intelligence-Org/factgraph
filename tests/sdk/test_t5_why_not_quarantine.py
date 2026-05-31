@@ -114,7 +114,7 @@ class T5WhyNotQuarantineTests(unittest.TestCase):
             "WhyNotUniverseResult",
             "WhyNotRedRow",
             "WhyNotRowDiagnostic",
-            "WhyNotAtomLocator",
+            "WhyNotConditionLocator",
             "DiagnoseResult",
             "atom_locator",
             "red[0]",

@@ -142,7 +142,7 @@ Explainability addendum:
   - `support_digest=<ProvenanceEnvelope digest>`
   - Runtime `explain_ref(kind="candidate")` returns the
     engine-native provenance envelope
-- This provenance is not forcibly converted into a `SupportArtifact`.
+- This provenance is not forcibly converted into a `ProofReceipt`.
 - Row-result evidence now has a separate protocol bridge: for passed
   ProbLog rows, `EvaluateRow.explain().evidence` materializes a
   row-level `EvidenceGraph` from the proof trace instead of falling

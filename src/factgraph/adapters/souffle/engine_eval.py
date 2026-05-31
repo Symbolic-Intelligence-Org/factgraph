@@ -21,7 +21,7 @@ from factgraph.core.store._support import (
     BindingSupportCapture,
     ProjectedFact,
     SOUFFLE_WITNESS_KIND,
-    SupportArtifact,
+    ProofReceipt,
     binding_dict_from_items,
     compute_support_digest,
     make_pred_atom_key,
@@ -404,7 +404,7 @@ def _build_souffle_support_artifact(
     root_result_kind: str,
     selected_branch_index: int,
     witness_ids_by_atom_key: dict[str, set[str]],
-) -> SupportArtifact:
+) -> ProofReceipt:
     binding = binding_dict_from_items(binding_items)
     witness_facts = _build_synthetic_witness_facts(
         where=where,
@@ -420,7 +420,7 @@ def _build_souffle_support_artifact(
         selected_branch_index=selected_branch_index,
         rule_ref_edges=(),
     )
-    return SupportArtifact(
+    return ProofReceipt(
         kind=SOUFFLE_WITNESS_KIND,
         root_result_kind=native_like.root_result_kind,
         binding_items=native_like.binding_items,

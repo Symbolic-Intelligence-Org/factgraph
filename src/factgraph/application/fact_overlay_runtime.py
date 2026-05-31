@@ -13,12 +13,12 @@ from factgraph.core.view.projector import project_view_facts_with_witness
 from ._derivation_match_helpers import _binding_matches
 from .protocol import (
     ErrorDTO,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayAction,
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
-    FactRemoveAction,
-    FactValueOverride,
+    RemoveFact,
+    ReplaceFact,
     OverlayCheckDiff,
     OverlayCheckPhase,
 )
@@ -117,11 +117,11 @@ def check_fact_overlay_binding(
 
 
 def _normalize_evaluation_overlay(
-    overlay: tuple[FactValueOverride, ...] | EvaluationOverlay,
-) -> EvaluationOverlay:
-    if isinstance(overlay, EvaluationOverlay):
+    overlay: tuple[ReplaceFact, ...] | FactOverlay,
+) -> FactOverlay:
+    if isinstance(overlay, FactOverlay):
         return overlay
-    return EvaluationOverlay(fact_actions=overlay)
+    return FactOverlay(fact_actions=overlay)
 
 
 def _overlay_engine_support_preflight(
@@ -292,7 +292,7 @@ def _validate_fact_overlay_actions(
             )
 
         expected_arity = len(current_tuple)
-        new_tuple = action.new_fact_tuple if isinstance(action, FactValueOverride) else None
+        new_tuple = action.new_fact_tuple if isinstance(action, ReplaceFact) else None
         if len(action.old_fact_tuple) != expected_arity or (
             new_tuple is not None and len(new_tuple) != expected_arity
         ):
@@ -321,7 +321,7 @@ def _validate_fact_overlay_actions(
             )
 
         schema_pred = schema_predicates.get(action.pred_id)
-        if isinstance(action, FactValueOverride) and schema_pred is not None and _group_key_changed(
+        if isinstance(action, ReplaceFact) and schema_pred is not None and _group_key_changed(
             schema_pred,
             current_tuple,
             action.new_fact_tuple,
@@ -353,7 +353,7 @@ def _apply_fact_overlay_projection(
             if action is None:
                 copied_rows.append(row)
                 continue
-            if isinstance(action, FactRemoveAction):
+            if isinstance(action, RemoveFact):
                 continue
             copied_rows.append(
                 ProjectedFact(
@@ -422,7 +422,7 @@ def _e_ref_position_matches(
         return False
     if not action.old_fact_tuple or action.old_fact_tuple[0] != action.e_ref:
         return False
-    if isinstance(action, FactRemoveAction):
+    if isinstance(action, RemoveFact):
         return True
     return bool(action.new_fact_tuple and action.new_fact_tuple[0] == action.e_ref)
 

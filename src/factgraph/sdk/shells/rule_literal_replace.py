@@ -14,11 +14,11 @@ Public surface contract per blueprint §5 locks:
                new_literal, overlay=None, note=None)`` per §5.1 / §5.2 /
                §5.4 locks. ``rule`` is an SDK ``Rule`` (lowered through
                ``SDKStore._compile_rule_input`` to a ``RuleSpec``);
-               ``support`` is a raw ``SupportArtifact`` from a prior
-               Check; ``literal_path`` is a raw ``RuleLiteralPath``
+               ``support`` is a raw ``ProofReceipt`` from a prior
+               Check; ``literal_path`` is a raw ``ConditionPath``
                (G2 §5.1+§5.2 cross-cutting precedent — frozen
                application-canonical, no SDK alternative); ``overlay``
-               is ``None`` or an empty ``EvaluationOverlay`` (the
+               is ``None`` or an empty ``FactOverlay`` (the
                rule-action overlay is constructed internally by the A
                helper).
 - Return:      ``RuleLiteralReplaceResult`` (raw application protocol
@@ -42,7 +42,7 @@ Public surface contract per blueprint §5 locks:
                ``sdk_why_not`` / ``sdk_fact_overlay_check`` /
                ``sdk_proof_frame_recheck`` / ``sdk_rule_disable`` /
                ``sdk_rule_add_condition``). It owns its own dispatch
-               and never extracts a ``SupportArtifact`` from a
+               and never extracts a ``ProofReceipt`` from a
                ``CheckResult.engine_payload``.
 """
 

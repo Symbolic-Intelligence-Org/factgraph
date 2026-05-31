@@ -11,11 +11,11 @@ from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts_with_witness
 
 from .protocol import (
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayAction,
-    FactRemoveAction,
-    FactValueOverride,
-    ProofFrameAtomVerdict,
+    RemoveFact,
+    ReplaceFact,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckRequest,
     ProofFrameRecheckResult,
     aggregate_proof_frame_status,
@@ -81,7 +81,7 @@ def recheck_proof_frame(
 def render_proof_frame_narrative(
     result: ProofFrameRecheckResult,
     *,
-    overlay: EvaluationOverlay,
+    overlay: FactOverlay,
 ) -> str:
     """Render a deterministic single-frame English summary."""
 
@@ -103,7 +103,7 @@ def _recheck_pred_witness(
     *,
     visible_rows: dict[tuple[str, str], ProjectedFact],
     action_index: dict[tuple[str, str], list[tuple[int, FactOverlayAction]]],
-) -> ProofFrameAtomVerdict:
+) -> ProofFrameConditionVerdict:
     pred_id = _pred_id_from_atom_key(witness.pred_atom_key)
     affected: list[int] = []
     still_witnessed = False
@@ -121,7 +121,7 @@ def _recheck_pred_witness(
             still_witnessed = True
 
     verdict = "still_valid" if still_witnessed else "invalidated"
-    return ProofFrameAtomVerdict(
+    return ProofFrameConditionVerdict(
         atom_key=witness.pred_atom_key,
         verdict=verdict,
         affected_action_indices=tuple(sorted(set(affected))),
@@ -132,26 +132,26 @@ def _recheck_non_fact_step(
     step: NonFactStep,
     *,
     frame_relevant_action_indices: tuple[int, ...],
-) -> ProofFrameAtomVerdict:
+) -> ProofFrameConditionVerdict:
     if step.kind == "not":
-        return ProofFrameAtomVerdict(
+        return ProofFrameConditionVerdict(
             atom_key=step.step_key,
             verdict="unknown",
             affected_action_indices=(),
         )
     if step.kind in _BINDING_DRIVEN_NON_FACT_KINDS:
-        return ProofFrameAtomVerdict(
+        return ProofFrameConditionVerdict(
             atom_key=step.step_key,
             verdict="still_valid",
             affected_action_indices=(),
         )
     if not frame_relevant_action_indices:
-        return ProofFrameAtomVerdict(
+        return ProofFrameConditionVerdict(
             atom_key=step.step_key,
             verdict="still_valid",
             affected_action_indices=(),
         )
-    return ProofFrameAtomVerdict(
+    return ProofFrameConditionVerdict(
         atom_key=step.step_key,
         verdict="unknown",
         affected_action_indices=frame_relevant_action_indices,
@@ -159,7 +159,7 @@ def _recheck_non_fact_step(
 
 
 def _index_overlay_actions(
-    overlay: EvaluationOverlay,
+    overlay: FactOverlay,
 ) -> dict[tuple[str, str], list[tuple[int, FactOverlayAction]]]:
     output: dict[tuple[str, str], list[tuple[int, FactOverlayAction]]] = {}
     for index, action in enumerate(overlay.fact_actions):
@@ -187,9 +187,9 @@ def _action_preserves_witness(
 ) -> bool:
     if row is None:
         return False
-    if isinstance(action, FactRemoveAction):
+    if isinstance(action, RemoveFact):
         return False
-    return isinstance(action, FactValueOverride) and action.new_fact_tuple == row.fact_tuple
+    return isinstance(action, ReplaceFact) and action.new_fact_tuple == row.fact_tuple
 
 
 def _visible_projected_rows(
@@ -220,7 +220,7 @@ def _unknown_frame_result(request: ProofFrameRecheckRequest) -> ProofFrameRechec
 def _action_suffix(
     affected_action_indices: tuple[int, ...],
     *,
-    overlay: EvaluationOverlay,
+    overlay: FactOverlay,
 ) -> str:
     if not affected_action_indices:
         return ""
@@ -231,12 +231,12 @@ def _action_suffix(
     return f" by {labels}"
 
 
-def _action_label(index: int, *, overlay: EvaluationOverlay) -> str:
+def _action_label(index: int, *, overlay: FactOverlay) -> str:
     try:
         action = overlay.fact_actions[index]
     except IndexError:
         return f"action #{index}"
-    action_kind = "remove" if isinstance(action, FactRemoveAction) else "replace"
+    action_kind = "remove" if isinstance(action, RemoveFact) else "replace"
     return f"action #{index}({action_kind} {action.pred_id})"
 
 

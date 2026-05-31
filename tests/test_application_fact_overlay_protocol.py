@@ -12,11 +12,11 @@ from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     ErrorDTO,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
-    FactRemoveAction,
-    FactValueOverride,
+    RemoveFact,
+    ReplaceFact,
     OverlayCheckDiff,
     OverlayCheckEngine,
     OverlayCheckPhase,
@@ -24,7 +24,7 @@ from factgraph.application.protocol import (
     OverlayCheckStatus,
     ProtocolShapeError,
     RuleDisableAction,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
 )
 from factgraph.application.protocol import derivation_fact_overlay as overlay_protocol
@@ -51,7 +51,7 @@ def _partial_binding() -> tuple[tuple[str, object], ...]:
     return (("$doc", "d-1"),)
 
 
-def _override(**kwargs: object) -> FactValueOverride:
+def _override(**kwargs: object) -> ReplaceFact:
     fields = {
         "asrt_id": "asrt-1",
         "pred_id": "doc:risk",
@@ -60,10 +60,10 @@ def _override(**kwargs: object) -> FactValueOverride:
         "new_fact_tuple": ("doc-1", "high"),
     }
     fields.update(kwargs)
-    return FactValueOverride(**fields)  # type: ignore[arg-type]
+    return ReplaceFact(**fields)  # type: ignore[arg-type]
 
 
-def _remove(**kwargs: object) -> FactRemoveAction:
+def _remove(**kwargs: object) -> RemoveFact:
     fields = {
         "asrt_id": "asrt-1",
         "pred_id": "doc:risk",
@@ -71,7 +71,7 @@ def _remove(**kwargs: object) -> FactRemoveAction:
         "old_fact_tuple": ("doc-1", "low"),
     }
     fields.update(kwargs)
-    return FactRemoveAction(**fields)  # type: ignore[arg-type]
+    return RemoveFact(**fields)  # type: ignore[arg-type]
 
 
 def _disable(**kwargs: object) -> RuleDisableAction:
@@ -91,7 +91,7 @@ def _replace_rule_literal(**kwargs: object) -> RuleLiteralReplaceAction:
         "version": "1.0",
         "branch_index": 0,
         "atom_index": 3,
-        "literal_path": RuleLiteralPath(kind="rhs"),
+        "literal_path": ConditionPath(kind="rhs"),
         "old_literal": "us",
         "new_literal": "eu",
     }
@@ -232,23 +232,23 @@ class RuleDisableActionProtocolTests(unittest.TestCase):
 
 class RuleLiteralReplaceActionProtocolTests(unittest.TestCase):
     def test_literal_path_shape(self) -> None:
-        self.assertEqual(RuleLiteralPath(kind="rhs").index, None)
-        self.assertEqual(RuleLiteralPath(kind="pred_term", index=1).index, 1)
-        self.assertEqual(RuleLiteralPath(kind="in_value", index=0).index, 0)
+        self.assertEqual(ConditionPath(kind="rhs").index, None)
+        self.assertEqual(ConditionPath(kind="pred_term", index=1).index, 1)
+        self.assertEqual(ConditionPath(kind="in_value", index=0).index, 0)
 
         with self.assertRaises(ProtocolShapeError):
-            RuleLiteralPath(kind="pred_term")
+            ConditionPath(kind="pred_term")
         with self.assertRaises(ProtocolShapeError):
-            RuleLiteralPath(kind="rhs", index=1)
+            ConditionPath(kind="rhs", index=1)
         with self.assertRaises(ProtocolShapeError):
-            RuleLiteralPath(kind="unknown")  # type: ignore[arg-type]
+            ConditionPath(kind="unknown")  # type: ignore[arg-type]
         with self.assertRaises(ProtocolShapeError):
-            RuleLiteralPath(kind="in_value", index=-1)
+            ConditionPath(kind="in_value", index=-1)
 
     def test_replace_action_construction(self) -> None:
         action = _replace_rule_literal()
         self.assertEqual(action.rule_id, "person.eligible")
-        self.assertEqual(action.literal_path, RuleLiteralPath(kind="rhs"))
+        self.assertEqual(action.literal_path, ConditionPath(kind="rhs"))
         self.assertEqual(action.old_literal, "us")
         self.assertEqual(action.new_literal, "eu")
         self.assertIsNone(action.note)
@@ -273,43 +273,43 @@ class RuleLiteralReplaceActionProtocolTests(unittest.TestCase):
 
 class EvaluationOverlayProtocolTests(unittest.TestCase):
     def test_overlay_accepts_replace_and_remove_actions(self) -> None:
-        overlay = EvaluationOverlay(fact_actions=(_override(), _remove()))
+        overlay = FactOverlay(fact_actions=(_override(), _remove()))
         self.assertEqual(overlay.fact_actions, (_override(), _remove()))
         self.assertEqual(overlay.rule_actions, ())
 
     def test_overlay_allows_empty_actions_for_runtime_invalid_request(self) -> None:
-        overlay = EvaluationOverlay()
+        overlay = FactOverlay()
         self.assertEqual(overlay.fact_actions, ())
         self.assertEqual(overlay.rule_actions, ())
 
     def test_overlay_preserves_legacy_positional_fact_actions(self) -> None:
-        overlay = EvaluationOverlay((_override(),))
+        overlay = FactOverlay((_override(),))
         self.assertEqual(overlay.fact_actions, (_override(),))
         self.assertEqual(overlay.rule_actions, ())
 
     def test_overlay_accepts_rule_actions_lane(self) -> None:
-        overlay = EvaluationOverlay(rule_actions=(_disable(), _replace_rule_literal()))
+        overlay = FactOverlay(rule_actions=(_disable(), _replace_rule_literal()))
         self.assertEqual(overlay.fact_actions, ())
         self.assertEqual(overlay.rule_actions, (_disable(), _replace_rule_literal()))
 
     def test_overlay_is_frozen(self) -> None:
-        overlay = EvaluationOverlay(fact_actions=(_override(),))
+        overlay = FactOverlay(fact_actions=(_override(),))
         with self.assertRaises(FrozenInstanceError):
             overlay.fact_actions = ()  # type: ignore[misc]
 
     def test_overlay_rejects_non_tuple_actions(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            EvaluationOverlay(fact_actions=[_override()])  # type: ignore[arg-type]
+            FactOverlay(fact_actions=[_override()])  # type: ignore[arg-type]
 
     def test_overlay_rejects_unknown_action_type(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            EvaluationOverlay(fact_actions=(object(),))  # type: ignore[arg-type]
+            FactOverlay(fact_actions=(object(),))  # type: ignore[arg-type]
 
     def test_overlay_rejects_bad_rule_actions(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            EvaluationOverlay(rule_actions=[_disable()])  # type: ignore[arg-type]
+            FactOverlay(rule_actions=[_disable()])  # type: ignore[arg-type]
         with self.assertRaises(ProtocolShapeError):
-            EvaluationOverlay(rule_actions=(object(),))  # type: ignore[arg-type]
+            FactOverlay(rule_actions=(object(),))  # type: ignore[arg-type]
 
 
 class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
@@ -345,7 +345,7 @@ class FactOverlayCheckRequestProtocolTests(unittest.TestCase):
         self.assertEqual(request.overlay, ())
 
     def test_request_accepts_evaluation_overlay(self) -> None:
-        overlay = EvaluationOverlay(fact_actions=(_override(), _remove()))
+        overlay = FactOverlay(fact_actions=(_override(), _remove()))
         request = FactOverlayCheckRequest(
             plan=_plan(),
             binding=_binding(),
@@ -607,15 +607,15 @@ class FactOverlayProtocolStaticInvariantTests(unittest.TestCase):
 
     def test_phase_and_diff_do_not_import_engine_payload_types(self) -> None:
         self.assertFalse(hasattr(overlay_protocol, "EvidenceEnvelope"))
-        self.assertFalse(hasattr(overlay_protocol, "SupportArtifact"))
+        self.assertFalse(hasattr(overlay_protocol, "ProofReceipt"))
         self.assertFalse(hasattr(overlay_protocol, "ProvenanceEnvelope"))
 
     def test_protocol_package_exports_overlay_dtos(self) -> None:
         self.assertIs(protocol_pkg.FactOverlayCheckRequest, FactOverlayCheckRequest)
         self.assertIs(protocol_pkg.FactOverlayCheckResult, FactOverlayCheckResult)
-        self.assertIs(protocol_pkg.FactValueOverride, FactValueOverride)
+        self.assertIs(protocol_pkg.ReplaceFact, ReplaceFact)
         self.assertIs(protocol_pkg.RuleDisableAction, RuleDisableAction)
-        self.assertIs(protocol_pkg.RuleLiteralPath, RuleLiteralPath)
+        self.assertIs(protocol_pkg.ConditionPath, ConditionPath)
         self.assertIs(protocol_pkg.RuleLiteralReplaceAction, RuleLiteralReplaceAction)
         self.assertIs(protocol_pkg.OverlayCheckPhase, OverlayCheckPhase)
         self.assertIs(protocol_pkg.OverlayCheckPhaseStatus, OverlayCheckPhaseStatus)

@@ -50,7 +50,7 @@ class PortInspect:
 
 
 @dataclass(frozen=True)
-class AtomDescriptor:
+class ConditionDescriptor:
     atom_id: str
     kind: str
     subject: str | None = None
@@ -61,10 +61,10 @@ class AtomDescriptor:
     summary: str = ""
 
     def __post_init__(self) -> None:
-        _require_non_empty_str(self.atom_id, field_name="AtomDescriptor.atom_id")
-        _require_non_empty_str(self.kind, field_name="AtomDescriptor.kind")
+        _require_non_empty_str(self.atom_id, field_name="ConditionDescriptor.atom_id")
+        _require_non_empty_str(self.kind, field_name="ConditionDescriptor.kind")
         if not isinstance(self.summary, str):
-            raise RuleExprError("AtomDescriptor.summary must be string")
+            raise RuleExprError("ConditionDescriptor.summary must be string")
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ class OccurrenceInspect:
     alias: str
     desc_template: str | None
     ports: tuple[str, ...]
-    atoms: tuple[AtomDescriptor, ...]
+    atoms: tuple[ConditionDescriptor, ...]
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.template_id, field_name="OccurrenceInspect.template_id")
@@ -82,8 +82,8 @@ class OccurrenceInspect:
             raise RuleExprError("OccurrenceInspect.desc_template must be string or None")
         if not isinstance(self.ports, tuple) or any(not isinstance(port, str) or not port for port in self.ports):
             raise RuleExprError("OccurrenceInspect.ports must be tuple of non-empty strings")
-        if not isinstance(self.atoms, tuple) or any(not isinstance(atom, AtomDescriptor) for atom in self.atoms):
-            raise RuleExprError("OccurrenceInspect.atoms must be tuple[AtomDescriptor, ...]")
+        if not isinstance(self.atoms, tuple) or any(not isinstance(atom, ConditionDescriptor) for atom in self.atoms):
+            raise RuleExprError("OccurrenceInspect.atoms must be tuple[ConditionDescriptor, ...]")
 
 
 @dataclass(frozen=True)
@@ -378,7 +378,7 @@ def _port_name_fully_joined(name: str, aliases: tuple[str, ...], joins: tuple[Ru
     return expected <= actual
 
 
-def _derive_atom_descriptor(atom: Atom, atom_id: str) -> AtomDescriptor:
+def _derive_atom_descriptor(atom: Atom, atom_id: str) -> ConditionDescriptor:
     if isinstance(atom, PredAtom):
         if atom.pred_id.endswith(":exists") and atom.terms:
             entity_type = atom.pred_id.removesuffix(":exists")
@@ -438,8 +438,8 @@ def _atom_descriptor(
     op: str | None = None,
     value: object = None,
     summary: str = "",
-) -> AtomDescriptor:
-    return AtomDescriptor(
+) -> ConditionDescriptor:
+    return ConditionDescriptor(
         atom_id=atom_id,
         kind=kind,
         subject=subject,
@@ -530,7 +530,7 @@ def _require_non_empty_str(value: object, *, field_name: str) -> str:
 
 
 __all__ = [
-    "AtomDescriptor",
+    "ConditionDescriptor",
     "OccurrenceInspect",
     "PortInspect",
     "RuleExprInspect",

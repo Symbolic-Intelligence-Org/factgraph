@@ -12,7 +12,7 @@ FactPy v0.1 的 "evidence pipeline" 是从 **用户写入 fact** 到 **capabilit
 Layer 6   Capability Lines              Check / Diagnose / Fact Overlay / Why-not / (Frontier)
             ↑    capability 调
 Layer 5   Engine Adapters               souffle / problog / pyreason
-            ↑                            → CandidateSet + SupportArtifact / ProvenanceEnvelope
+            ↑                            → CandidateSet + ProofReceipt / ProvenanceEnvelope
 Layer 4   Native Evaluator              evaluate_native_where + body_ir + atom evaluators
             ↑    读
 Layer 3   Projection                    project_view_facts / _with_witness
@@ -32,11 +32,11 @@ v0.1 已 shipped 的 5 条 capability line 统一回答这 5 个问题:
 | Q4 | Given a finite candidate universe, who passes / who fails / why? | Why-not Universe Diagnose |
 | Q5 | In native evaluation, where does the where-body collapse? | Evaluator Frontier Trace |
 
-Layer 6 后续 shipped 4 个 overlay-driven capability(详见 §16),消费 Q1 输出的 `SupportArtifact` + `EvaluationOverlay` 做 hypothetical evaluation:
+Layer 6 后续 shipped 4 个 overlay-driven capability(详见 §16),消费 Q1 输出的 `ProofReceipt` + `FactOverlay` 做 hypothetical evaluation:
 
 | 能力 | Batch | 输入 → 输出 |
 |---|---|---|
-| ProofFrame Rechecker | 4 | SupportArtifact + fact overlay → per-atom verdicts |
+| ProofFrame Rechecker | 4 | ProofReceipt + fact overlay → per-atom verdicts |
 | Rule Disable | 5a | RuleSpec + RuleDisableAction → variant rows + ProofFrame |
 | Rule Literal Replace | 5b | RuleSpec + RuleLiteralReplaceAction → variant rows + ProofFrame |
 | Rule Add Condition | 5c | RuleSpec + RuleAddConditionAction → variant rows + synthetic ProofFrame |
@@ -52,7 +52,7 @@ Layer 6 后续 shipped 4 个 overlay-driven capability(详见 §16),消费 Q1 �
 | `BindingItems` | `tuple[tuple[str, JSONValue], ...]`,变量名 `$` 起头 | capability request/result |
 | `ProjectedFact` | `(asrt_id, fact_tuple)` | `project_view_facts_with_witness(...)` |
 | `CandidateSet` | engine 输出 candidate(`candidate_key` + `payload` + `support_digest`) | adapter dispatch |
-| `SupportArtifact` | souffle witness 形态(`binding_items` + `pred_witnesses`) | engine-side evidence |
+| `ProofReceipt` | souffle witness 形态(`binding_items` + `pred_witnesses`) | engine-side evidence |
 | `ProvenanceEnvelope` | problog / pyreason 形态(adapter-local proof trace / event log) | engine-side evidence |
 
 ### Application-first hard constraint
@@ -211,7 +211,7 @@ where_or_not = [
 
 每个 `CandidateSet` 携带:**identity**(`candidate_key` 内容哈希、`key_tuple_digest`)、**payload**(结果数据)、**support 引用**(`support_digest` + `support_kind`)。真正的"证据"分两类:
 
-1. **`SupportArtifact`**(native + souffle witness)—— `binding_items`(变量绑定 k-v 对)+ `pred_witnesses`(哪些 pred atom 及对应 assertion 满足该候选),记录完整推导路径中的 fact 引用
+1. **`ProofReceipt`**(native + souffle witness)—— `binding_items`(变量绑定 k-v 对)+ `pred_witnesses`(哪些 pred atom 及对应 assertion 满足该候选),记录完整推导路径中的 fact 引用
 2. **`ProvenanceEnvelope`**(problog / pyreason)—— adapter-local 概率级联 / event log,attach 到 successful candidate
 
 两种都存在 store 的支撑库中,candidate 仅保留 digest 指针。`EvidenceEnvelope`(Check 协议层)是 capability-level wrapper,把 engine 评估输出 normalize 到 shipped capability 用得上的形态。
@@ -242,7 +242,7 @@ for cand in candidates:
 
 关键代码:
 - `src/kernel/core/derivation/candidates.py` — `CandidateSet` 字段 + post_init 校验
-- `src/kernel/core/store/_support.py` — `SupportArtifact(kind, root_result_kind, binding_items, pred_witnesses)`
+- `src/kernel/core/store/_support.py` — `ProofReceipt(kind, root_result_kind, binding_items, pred_witnesses)`
 - `src/kernel/application/derivation_runtime.py` — `evaluate_derivation_plans` entry + engine dispatch
 
 ---
@@ -284,7 +284,7 @@ assert result.matched_binding == binding
 **Result:** `DiagnoseResult(status, matched_count, matched_binding, failure_kind, diagnostic_payload, errors, warnings)`
 **Status:** 同 Check 4 值
 **`failure_kind`:** `Literal["no_candidate", "atom_localized"] | None`(仅 failed 时填)
-**`diagnostic_payload`:** `DiagnoseAtomLocator(branch_index, failed_atom_index, attempted_binding) | None`(failed.atom_localized 时填,**仅 native engine 支持**;非 native 返回 `failed.no_candidate`)
+**`diagnostic_payload`:** `DiagnoseConditionLocator(branch_index, failed_atom_index, attempted_binding) | None`(failed.atom_localized 时填,**仅 native engine 支持**;非 native 返回 `failed.no_candidate`)
 
 ```python
 from kernel.application import diagnose_derivation_binding
@@ -306,8 +306,8 @@ assert locator.branch_index == 0
 
 **何时用:** 不修改数据库的前提下,评估某些 fact 值改变后 binding 成立状态是否变化。
 
-**Request:** `FactOverlayCheckRequest(plan, binding, overlay, engine)`,`overlay: tuple[FactValueOverride, ...]`(至少 1 个;空 tuple 在 runtime 返回 `invalid_request` + `EMPTY_OVERLAY_NOT_PERMITTED`)
-**`FactValueOverride`:** `(asrt_id, pred_id, e_ref, old_fact_tuple, new_fact_tuple, note=None)`
+**Request:** `FactOverlayCheckRequest(plan, binding, overlay, engine)`,`overlay: tuple[ReplaceFact, ...]`(至少 1 个;空 tuple 在 runtime 返回 `invalid_request` + `EMPTY_OVERLAY_NOT_PERMITTED`)
+**`ReplaceFact`:** `(asrt_id, pred_id, e_ref, old_fact_tuple, new_fact_tuple, note=None)`
 **Result:** `FactOverlayCheckResult(status, before, after, diff, errors, warnings)`
 - `before / after: OverlayCheckPhase | None`(`status` / `matched_count` / `matched_binding`)
 - `diff: OverlayCheckDiff | None`(`status_changed` / `matched_count_delta` / `bindings_added` / `bindings_removed`)
@@ -317,7 +317,7 @@ assert locator.branch_index == 0
 
 ```python
 from kernel.application import check_fact_overlay_binding
-from kernel.application.protocol import FactOverlayCheckRequest, FactValueOverride
+from kernel.application.protocol import FactOverlayCheckRequest, ReplaceFact
 
 binding = (("$p", alice.e_ref), ("$age", 30), ("$region", "us"))
 result = check_fact_overlay_binding(
@@ -325,7 +325,7 @@ result = check_fact_overlay_binding(
         plan=plan,
         binding=binding,
         overlay=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id=alice.age_asrt_id,
                 pred_id=alice.age_pred_id,
                 e_ref=alice.e_ref,
@@ -353,7 +353,7 @@ assert result.diff.status_changed
 **`red: tuple[WhyNotRedRow, ...]`,`WhyNotRedRow(binding, diagnostic)`,`diagnostic: WhyNotRowDiagnostic(status, failure_kind, diagnostic_granularity, atom_locator, errors, warnings)`**
 - `diagnostic.status`:仅 `failed | unsupported`
 - `diagnostic.diagnostic_granularity`:`atom_localized`(native 失败 + 可定位)/ `coarse`(非 native failed)/ `unavailable`(Diagnose 返 unsupported)
-- `diagnostic.atom_locator: WhyNotAtomLocator | None`(Why-not 自有类型,**不嵌套 `DiagnoseAtomLocator`**)
+- `diagnostic.atom_locator: WhyNotConditionLocator | None`(Why-not 自有类型,**不嵌套 `DiagnoseConditionLocator`**)
 
 ```python
 from kernel.application import check_why_not_universe
@@ -489,7 +489,7 @@ store.ledger 投影(view_facts)          DerivationAcceptRequest(...)
 evaluate_derivation_plans(...)          accept_derivation_candidate_sets(...)
     ↓                                       ↓
 list[CandidateSet]                     ledger append fact assertion
-+ SupportArtifact / ProvenanceEnvelope  + 新 asrt_id 列表
++ ProofReceipt / ProvenanceEnvelope  + 新 asrt_id 列表
   写 store in-memory cache              candidate "升级"为 ledger truth
 ```
 
@@ -512,7 +512,7 @@ candidates: list[CandidateSet] = evaluate_derivation_plans(
 )
 ```
 
-Native 路径走 `evaluate_native_where(...)` + `_evaluate_where_over_view_with_support`(产 `SupportArtifact`);非 native 经 `Store.evaluate_engine(...)` 走 adapter 产 adapter-specific evidence。两路均末尾调 `_remember_candidate_support_backrefs(...)` 把 candidate→evidence 关联落 cache。
+Native 路径走 `evaluate_native_where(...)` + `_evaluate_where_over_view_with_support`(产 `ProofReceipt`);非 native 经 `Store.evaluate_engine(...)` 走 adapter 产 adapter-specific evidence。两路均末尾调 `_remember_candidate_support_backrefs(...)` 把 candidate→evidence 关联落 cache。
 
 ### 10.3 Accept 入口
 
@@ -547,7 +547,7 @@ for result in results:
 
 | 时刻 | Evidence 形态 | 存储位置 |
 |---|---|---|
-| Evaluate 中 | `SupportArtifact` / `ProvenanceEnvelope` | `store._remember_*` in-memory cache |
+| Evaluate 中 | `ProofReceipt` / `ProvenanceEnvelope` | `store._remember_*` in-memory cache |
 | Evaluate 后 | `CandidateSet`(含 `support_digest` 指针) | 调用方持有 |
 | Accept 中 | `AcceptRequest`(transient) | 事务边界内 |
 | Accept 成功 | Ledger fact assertion | `store.ledger`(append-only,持久) |
@@ -824,7 +824,7 @@ jupyter notebook examples/11_capabilities_e2e_demo.ipynb     # 见 §8
 
 ## 16. Layer 6 拓展 —— Overlay & ProofFrame Operations(4 capability)
 
-> 这 4 个 capability 不在 Q1-Q5 canonical questions 内。它们消费已有 `SupportArtifact` + `EvaluationOverlay`,做 hypothetical 评估,统一输出 `variant_rows + ProofFrame`。
+> 这 4 个 capability 不在 Q1-Q5 canonical questions 内。它们消费已有 `ProofReceipt` + `FactOverlay`,做 hypothetical 评估,统一输出 `variant_rows + ProofFrame`。
 
 ### 16.1 ProofFrame Rechecker(Batch 4)
 
@@ -837,11 +837,11 @@ ProofFrameStatus = Literal["still_valid", "invalidated", "unknown"]
 
 @dataclass(frozen=True)
 class ProofFrameRecheckRequest:
-    support_artifact: SupportArtifact
-    overlay: EvaluationOverlay  # fact actions only
+    support_artifact: ProofReceipt
+    overlay: FactOverlay  # fact actions only
 
 @dataclass(frozen=True)
-class ProofFrameAtomVerdict:
+class ProofFrameConditionVerdict:
     atom_key: str
     verdict: ProofFrameStatus  # 共享同 enum,无 second status set
     affected_action_indices: tuple[int, ...]
@@ -850,13 +850,13 @@ class ProofFrameAtomVerdict:
 class ProofFrameRecheckResult:
     status: ProofFrameStatus  # MUST 等于 aggregate(atom_verdicts)
     binding_items: BindingItems
-    atom_verdicts: tuple[ProofFrameAtomVerdict, ...]
+    atom_verdicts: tuple[ProofFrameConditionVerdict, ...]
 ```
 
 入口:`recheck_proof_frame(request, *, store, registry=None) -> ProofFrameRecheckResult`
 
 要点:
-- **Native + fact-overlay only**:`SupportArtifact.kind != "native_binding_v1"` / `rule_ref_edges` 非空 / `rule_actions` 非空 → frame-level `unknown`(空 atom_verdicts)
+- **Native + fact-overlay only**:`ProofReceipt.kind != "native_binding_v1"` / `rule_ref_edges` 非空 / `rule_actions` 非空 → frame-level `unknown`(空 atom_verdicts)
 - **Aggregation 优先级**:`invalidated > unknown > still_valid`(protocol `__post_init__` enforce 不变量)
 - **`not` step strict deferral**:任何 `kind == "not"` 永远 emit `unknown`(per Batch 4 §5.5.5 Decision 4)
 - **Multi-witness pred_atom 区分** vs Fact Overlay Check:Fact Overlay 给 binding-level pass/fail;ProofFrame 区分"原 witness chain 还在"vs"alternative witness 救场"
@@ -879,7 +879,7 @@ class RuleDisableAction:
     note: str | None = None
 ```
 
-放入 `EvaluationOverlay.rule_actions`(`fact_actions=()` 时仅 rule action 路径有效)。
+放入 `FactOverlay.rule_actions`(`fact_actions=()` 时仅 rule action 路径有效)。
 
 入口:`check_rule_disable_action(request, *, store, registry=None) -> RuleDisableResult`
 
@@ -899,7 +899,7 @@ DTO:
 
 ```python
 @dataclass(frozen=True)
-class RuleLiteralPath:
+class ConditionPath:
     kind: Literal["pred_term", "lhs", "rhs", "in_value", "const_operand"]
     index: int | None  # pred_term / in_value 必需,其他必须 None
 
@@ -909,7 +909,7 @@ class RuleLiteralReplaceAction:
     version: str
     branch_index: int
     atom_index: int
-    literal_path: RuleLiteralPath
+    literal_path: ConditionPath
     old_literal: Any  # stale-target guard
     new_literal: Any
     note: str | None = None
@@ -921,7 +921,7 @@ class RuleLiteralReplaceAction:
 - **Const-to-Const only**:不可 Var↔Const swap(避 binder/filter 角色变化 → 走 binding planner territory = Batch 5c)
 - **5 path kinds 覆盖 7 atom kinds**:`pred_term`(pred terms[index]) / `lhs/rhs`(comparison sides) / `in_value`(in values[index]) / `const_operand`(addc/mulc 的 c)
 - **atom kind / arity / list length 全 preserved**
-- **`old_literal` stale-target guard**(同 `FactValueOverride.old_fact_tuple` 模式)
+- **`old_literal` stale-target guard**(同 `ReplaceFact.old_fact_tuple` 模式)
 - Core primitive:`evaluate_where(..., literal_replacements=frozenset())`
 
 ### 16.4 Rule Add Condition(Batch 5c)
@@ -932,7 +932,7 @@ DTO:
 
 ```python
 @dataclass(frozen=True)
-class RuleAddedAtom:
+class AddedCondition:
     atom: tuple[Any, ...]  # raw native atom tuple
 
 @dataclass(frozen=True)
@@ -940,7 +940,7 @@ class RuleAddConditionAction:
     rule_id: str
     version: str
     branch_index: int  # 注:无 atom_index(因为是 append)
-    added_atom: RuleAddedAtom
+    added_atom: AddedCondition
     note: str | None = None
 ```
 

@@ -20,7 +20,7 @@ from factgraph.application import (
 from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
-    DiagnoseAtomLocator,
+    DiagnoseConditionLocator,
     DiagnoseResult,
     EntitySelector,
     ErrorDTO,
@@ -32,7 +32,7 @@ from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.store import Store
 from factgraph.core.store._support import (
-    SupportArtifact,
+    ProofReceipt,
     compute_support_digest,
     normalize_binding_items,
 )
@@ -638,7 +638,7 @@ class WhyNotRuntimeRowDiagnosticTests(unittest.TestCase):
             matched_count=0,
             matched_binding=None,
             failure_kind="atom_localized",
-            diagnostic_payload=DiagnoseAtomLocator(
+            diagnostic_payload=DiagnoseConditionLocator(
                 branch_index=3,
                 failed_atom_index=4,
                 attempted_binding=attempted,
@@ -810,7 +810,7 @@ class WhyNotRuntimeNonNativeBoardTests(unittest.TestCase):
         store, index = _build_store()
         body, target = _exists_age_body(index)
         binding = normalize_binding_items((("$p", "person-1"),))
-        artifact = SupportArtifact(
+        artifact = ProofReceipt(
             kind="souffle_witness_v1",
             root_result_kind="fact",
             binding_items=binding,
@@ -897,7 +897,7 @@ class WhyNotRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("check_derivation_binding", imported_names)
         self.assertNotIn("derivation_check_runtime", imported_names)
         self.assertNotIn("DiagnoseResult", imported_names)
-        self.assertNotIn("DiagnoseAtomLocator", imported_names)
+        self.assertNotIn("DiagnoseConditionLocator", imported_names)
 
 
 if __name__ == "__main__":

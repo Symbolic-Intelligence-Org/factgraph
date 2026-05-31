@@ -5,7 +5,7 @@ matching:
 
 - native enumerates final bindings via ``evaluate_native_where(...)``;
 - souffle delegates through ``evaluate_derivation_plans(...)`` and matches
-  witness-bearing ``SupportArtifact.binding_items``;
+  witness-bearing ``ProofReceipt.binding_items``;
 - problog / pyreason delegate through ``evaluate_derivation_plans(...)`` and
   match only payload-representable head-variable bindings carried by
   ``CandidateSet.payload["terms"]``.
@@ -50,7 +50,7 @@ from factgraph.core.rules.ruleref_substrate import evaluate_native_where
 from factgraph.core.store._support import (
     BindingItems,
     ProvenanceEnvelope,
-    SupportArtifact,
+    ProofReceipt,
     compute_support_digest,
     normalize_binding_items,
 )
@@ -290,17 +290,17 @@ def _souffle_check(
     store: Store,
     registry: RuleRegistry | None,
 ) -> CheckResult:
-    """Souffle Check via evaluate-then-match against witness-bearing SupportArtifact.
+    """Souffle Check via evaluate-then-match against witness-bearing ProofReceipt.
 
     Algorithm (per audit log Step 0.C C3 / C4 / C6):
 
     - Delegate evaluate to ``evaluate_derivation_plans`` in souffle mode.
-    - For each candidate, look up its ``SupportArtifact`` from store; the artifact's
+    - For each candidate, look up its ``ProofReceipt`` from store; the artifact's
       ``binding_items`` carries the full query binding.
     - Subset-match each candidate's full binding against the requested binding.
     - Primary key = ``(branch_index, binding_items, candidate_key)`` (per C4).
     - EvidenceEnvelope reuses the candidate's ``support_kind`` + ``support_digest``
-      and embeds the typed ``SupportArtifact`` as ``engine_payload`` (per
+      and embeds the typed ``ProofReceipt`` as ``engine_payload`` (per
       Step 0.B B9 + B10; ``branch_atom_projection`` stays None).
 
     Candidates without a retrievable artifact are skipped silently in MVP — they
@@ -315,7 +315,7 @@ def _souffle_check(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, SupportArtifact, dict[str, Any]]] = []
+    matches: list[tuple[CandidateSet, ProofReceipt, dict[str, Any]]] = []
     for candidate in candidates:
         artifact = _lookup_support_artifact(store, candidate.support_digest)
         if artifact is None:
@@ -335,7 +335,7 @@ def _souffle_check(
             warnings=(),
         )
 
-    def _sort_key(item: tuple[CandidateSet, SupportArtifact, dict[str, Any]]) -> tuple[Any, ...]:
+    def _sort_key(item: tuple[CandidateSet, ProofReceipt, dict[str, Any]]) -> tuple[Any, ...]:
         candidate, artifact, binding = item
         branch_index = _derive_branch_index_from_artifact(artifact)
         # Known branch_index participates in source-order sorting. If the artifact
@@ -368,8 +368,8 @@ def _souffle_check(
     )
 
 
-def _lookup_support_artifact(store: Store, digest: str) -> SupportArtifact | None:
-    """Get the typed SupportArtifact behind a candidate's support_digest.
+def _lookup_support_artifact(store: Store, digest: str) -> ProofReceipt | None:
+    """Get the typed ProofReceipt behind a candidate's support_digest.
 
     Uses ``Store._lookup_support_artifact`` (typed internal API) instead of
     ``Store.explain_support`` (public consumer API that returns a rendered dict).
@@ -379,8 +379,8 @@ def _lookup_support_artifact(store: Store, digest: str) -> SupportArtifact | Non
     return store._lookup_support_artifact(digest)
 
 
-def _derive_branch_index_from_artifact(artifact: SupportArtifact) -> int | None:
-    """Extract the branch_index from a SupportArtifact via b{n}.a{m}: prefix on atom keys.
+def _derive_branch_index_from_artifact(artifact: ProofReceipt) -> int | None:
+    """Extract the branch_index from a ProofReceipt via b{n}.a{m}: prefix on atom keys.
 
     Per audit log Step 0.C C4: souffle ``branch_index`` is derived from the
     artifact's atom keys (which encode ``b{branch}.a{atom}:...``). Returns the

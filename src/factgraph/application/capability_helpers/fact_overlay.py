@@ -9,10 +9,10 @@ from factgraph.core.view.projector import project_view_facts_with_witness
 
 from factgraph.application.protocol import (
     EntityRef,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayAction,
-    FactRemoveAction,
-    FactValueOverride,
+    RemoveFact,
+    ReplaceFact,
     FieldPath,
 )
 from factgraph.application.schema_runtime import (
@@ -33,7 +33,7 @@ def build_fact_value_override(
     field: FieldPath,
     new_value: Any,
     note: str | None = None,
-) -> FactValueOverride:
+) -> ReplaceFact:
     """Build a Fact Overlay value override from a current active field fact."""
 
     if not isinstance(store, Store):
@@ -82,7 +82,7 @@ def build_fact_value_override(
         new_value,
         field=field,
     )
-    return FactValueOverride(
+    return ReplaceFact(
         asrt_id=current.asrt_id,
         pred_id=pred_info.pred_id,
         e_ref=e_ref,
@@ -100,7 +100,7 @@ def build_fact_remove_action(
     field: FieldPath,
     current_value: Any | None = None,
     note: str | None = None,
-) -> FactRemoveAction:
+) -> RemoveFact:
     """Build a Fact Overlay remove action from a current active field fact.
 
     For multi-cardinality fields, pass ``current_value`` to identify the row to
@@ -161,7 +161,7 @@ def build_fact_remove_action(
         )
 
     current = matches[0]
-    return FactRemoveAction(
+    return RemoveFact(
         asrt_id=current.asrt_id,
         pred_id=pred_info.pred_id,
         e_ref=e_ref,
@@ -170,12 +170,12 @@ def build_fact_remove_action(
     )
 
 
-def build_evaluation_overlay(*actions: FactOverlayAction) -> EvaluationOverlay:
-    """Build an EvaluationOverlay from fact overlay actions."""
+def build_evaluation_overlay(*actions: FactOverlayAction) -> FactOverlay:
+    """Build an FactOverlay from fact overlay actions."""
 
     if not actions:
         raise CapabilityHelperError("build_evaluation_overlay requires at least one action")
-    return EvaluationOverlay(fact_actions=actions)
+    return FactOverlay(fact_actions=actions)
 
 
 def _normalize_scalar_value(

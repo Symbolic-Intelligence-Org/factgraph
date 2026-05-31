@@ -16,13 +16,13 @@ from factgraph.application.protocol import (
     CompiledHeadCall,
     DiagnoseRequest,
     DiagnoseResult,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayCheckRequest,
     FactOverlayCheckResult,
-    FactValueOverride,
+    ReplaceFact,
     OverlayCheckDiff,
     OverlayCheckPhase,
-    ProofFrameAtomVerdict,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckRequest,
     ProofFrameRecheckResult,
     WhyNotUniverseRequest,
@@ -35,7 +35,7 @@ from factgraph.audit.round_events import (
     project_proof_frame_event_payload,
     project_why_not_event_payload,
 )
-from factgraph.core.store._support import PredWitness, SupportArtifact, normalize_binding_items
+from factgraph.core.store._support import PredWitness, ProofReceipt, normalize_binding_items
 from factgraph.sdk import Pred, vars as sdk_vars
 from factgraph.sdk.dsl import Rule
 
@@ -62,10 +62,10 @@ def _plan_with_sdk_rule_in_body_ir() -> CompiledDerivationPlan:
     )
 
 
-def _overlay() -> EvaluationOverlay:
-    return EvaluationOverlay(
+def _overlay() -> FactOverlay:
+    return FactOverlay(
         fact_actions=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id="a1",
                 pred_id="Person:age",
                 e_ref="person:alice",
@@ -76,8 +76,8 @@ def _overlay() -> EvaluationOverlay:
     )
 
 
-def _support() -> SupportArtifact:
-    return SupportArtifact(
+def _support() -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="row",
         binding_items=_binding(),
@@ -178,7 +178,7 @@ def _proof_frame_pair() -> tuple[ProofFrameRecheckRequest, ProofFrameRecheckResu
         status="invalidated",
         binding_items=binding,
         atom_verdicts=(
-            ProofFrameAtomVerdict(
+            ProofFrameConditionVerdict(
                 atom_key="b0.a0:Person:exists",
                 verdict="invalidated",
                 affected_action_indices=(0,),

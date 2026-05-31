@@ -108,7 +108,7 @@ Explainability addendum:
       exports a `_w` witness variant view and lets the query
       output additionally pass through witness columns
     - `engine_eval` aggregates these witness columns by binding,
-      builds a restricted subset of `SupportArtifact`, and
+      builds a restricted subset of `ProofReceipt`, and
       registers it with `Store`
     - Externally, `support_kind="souffle_witness_v1"`
     - Currently committed field scope:

@@ -17,9 +17,9 @@ from factgraph.application import (
 )
 from factgraph.application.protocol import (
     EntitySelector,
-    EvaluationOverlay,
-    FactRemoveAction,
-    FactValueOverride,
+    FactOverlay,
+    RemoveFact,
+    ReplaceFact,
     ProofFrameRecheckRequest,
     RuleDisableAction,
     aggregate_proof_frame_status,
@@ -31,7 +31,7 @@ from factgraph.core.store._support import (
     PredWitness,
     ProjectedFact,
     RuleRefEdge,
-    SupportArtifact,
+    ProofReceipt,
 )
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
@@ -96,8 +96,8 @@ def _artifact(
     non_fact_steps: tuple[NonFactStep, ...] = (),
     kind: str = "native_binding_v1",
     rule_ref_edges: tuple[RuleRefEdge, ...] = (),
-) -> SupportArtifact:
-    return SupportArtifact(
+) -> ProofReceipt:
+    return ProofReceipt(
         kind=kind,
         root_result_kind="row",
         binding_items=(("$age", 25), ("$p", seeded.e_ref)),
@@ -114,8 +114,8 @@ def _artifact(
     )
 
 
-def _replace_age(seeded: SeededPerson, *, new_age: int) -> FactValueOverride:
-    return FactValueOverride(
+def _replace_age(seeded: SeededPerson, *, new_age: int) -> ReplaceFact:
+    return ReplaceFact(
         asrt_id=seeded.age_asrt_id,
         pred_id=seeded.age_pred_id,
         e_ref=seeded.e_ref,
@@ -124,8 +124,8 @@ def _replace_age(seeded: SeededPerson, *, new_age: int) -> FactValueOverride:
     )
 
 
-def _replace_region(seeded: SeededPerson, *, new_region: str) -> FactValueOverride:
-    return FactValueOverride(
+def _replace_region(seeded: SeededPerson, *, new_region: str) -> ReplaceFact:
+    return ReplaceFact(
         asrt_id=seeded.region_asrt_id,
         pred_id=seeded.region_pred_id,
         e_ref=seeded.e_ref,
@@ -134,8 +134,8 @@ def _replace_region(seeded: SeededPerson, *, new_region: str) -> FactValueOverri
     )
 
 
-def _remove_age(seeded: SeededPerson) -> FactRemoveAction:
-    return FactRemoveAction(
+def _remove_age(seeded: SeededPerson) -> RemoveFact:
+    return RemoveFact(
         asrt_id=seeded.age_asrt_id,
         pred_id=seeded.age_pred_id,
         e_ref=seeded.e_ref,
@@ -144,14 +144,14 @@ def _remove_age(seeded: SeededPerson) -> FactRemoveAction:
 
 
 def _request(
-    artifact: SupportArtifact,
-    overlay: EvaluationOverlay,
+    artifact: ProofReceipt,
+    overlay: FactOverlay,
 ) -> ProofFrameRecheckRequest:
     return ProofFrameRecheckRequest(support_artifact=artifact, overlay=overlay)
 
 
-def _overlay(*actions: object) -> EvaluationOverlay:
-    return EvaluationOverlay(fact_actions=actions)  # type: ignore[arg-type]
+def _overlay(*actions: object) -> FactOverlay:
+    return FactOverlay(fact_actions=actions)  # type: ignore[arg-type]
 
 
 def _ledger_dump(store: Store) -> bytes:
@@ -346,7 +346,7 @@ class ProofFrameRuntimeNativeTests(unittest.TestCase):
         result = recheck_proof_frame(
             _request(
                 _artifact(seeded),
-                EvaluationOverlay(
+                FactOverlay(
                     rule_actions=(
                         RuleDisableAction(
                             rule_id="person.eligible",

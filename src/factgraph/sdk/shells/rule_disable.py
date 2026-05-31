@@ -14,9 +14,9 @@ Public surface contract per blueprint §5 locks:
                atom_index, overlay=None, note=None)`` per §5.1 / §5.2 /
                §5.4 locks. ``rule`` is an SDK ``Rule`` (lowered through
                ``SDKStore._compile_rule_input`` to a ``RuleSpec``);
-               ``support`` is a raw ``SupportArtifact`` from a prior
+               ``support`` is a raw ``ProofReceipt`` from a prior
                Check; ``overlay`` is ``None`` or an empty
-               ``EvaluationOverlay`` (the rule-action overlay is
+               ``FactOverlay`` (the rule-action overlay is
                constructed internally by the A helper).
 - Return:      ``RuleDisableResult`` (raw application protocol DTO;
                documented passthrough per §5.3 lock; not re-exported
@@ -41,8 +41,8 @@ Public surface contract per blueprint §5 locks:
                ``sdk_fact_overlay_check`` / ``sdk_proof_frame_recheck``
                / ``sdk_rule_literal_replace`` / ``sdk_rule_add_condition``).
                It owns its own dispatch and never extracts a
-               ``SupportArtifact`` from a ``CheckResult.engine_payload``
-               (a ``SupportArtifact | ProvenanceEnvelope`` union).
+               ``ProofReceipt`` from a ``CheckResult.engine_payload``
+               (a ``ProofReceipt | ProvenanceEnvelope`` union).
 """
 
 from __future__ import annotations

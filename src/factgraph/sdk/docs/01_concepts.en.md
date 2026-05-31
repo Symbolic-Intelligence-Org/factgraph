@@ -86,7 +86,7 @@ A *derivation* in proof terms is the structured trace showing how a
 candidate or assertion came to exist: which rule fired, which body
 literals supported it, which sub-proofs were chained. This proof
 vocabulary is not the public SDK `Inference` value-object type. The typed
-representation is `SupportArtifact`
+representation is `ProofReceipt`
 (`factgraph.core.store._support`). "ProofFrame" in this doc is an
 informal umbrella for the audit-log shapes that wrap or compare
 support artifacts — concretely `ProofFrameRecheckResult`
@@ -152,7 +152,7 @@ they are not accepted as `fg.entities.where(...)` or
 │  │  • Read/write planning + execution                   │  │
 │  │  • Compiled derivation evaluate / accept             │  │
 │  │  • What-if shells (Check, Diagnose, ...)             │  │
-│  │  • Frozen DTOs (CheckResult, EvaluationOverlay, ...) │  │
+│  │  • Frozen DTOs (CheckResult, FactOverlay, ...) │  │
 │  └─────────────────┬────────────────────────────────────┘  │
 │                    │ uses                                  │
 │                    ▼                                       │
@@ -203,19 +203,19 @@ types**. Other internal types stay inside their layer.
 
 | DTO | Used in |
 |---|---|
-| `EvaluationOverlay`, `FactOverlayAction`, `RuleOverlayAction` | `fact_overlay.check`, rule overlays |
-| `RuleLiteralPath`, `RuleAddedAtom` | `rule.literal_replace`, `rule.add_condition` |
-| `SupportArtifact` | Returned inside `CheckResult.evidence_envelope.engine_payload`; consumed by `recheck_proof_frame` |
+| `FactOverlay`, `FactOverlayAction`, `RuleOverlayAction` | `fact_overlay.check`, rule overlays |
+| `ConditionPath`, `AddedCondition` | `rule.literal_replace`, `rule.add_condition` |
+| `ProofReceipt` | Returned inside `CheckResult.evidence_envelope.engine_payload`; consumed by `recheck_proof_frame` |
 | `ProofFrameRecheckResult` | Returned by `recheck_proof_frame` |
 | `RoundEvent`, `WarningDTO` | `audit.diff_proof_frames` |
 | `ProofFrameDiff`, `FrameDelta`, `AtomDelta`, `FrameIdentity`, `FrameStatusChange`, `EventReference` | Returned by `audit.diff_proof_frames` |
-| `RuleExpr`, `RuleJoinConstraint`, `RuleExprInspect`, `OccurrenceInspect`, `AtomDescriptor`, `PortInspect` | RuleExpr authoring and inspect; execution reuses `fg.eval.evaluate(..., head=...)` without new public result DTOs |
+| `RuleExpr`, `RuleJoinConstraint`, `RuleExprInspect`, `OccurrenceInspect`, `ConditionDescriptor`, `PortInspect` | RuleExpr authoring and inspect; execution reuses `fg.eval.evaluate(..., head=...)` without new public result DTOs |
 
 These mostly live in `factgraph.application.protocol` and `factgraph.audit`.
 They are frozen dataclasses with `__post_init__` validation —
 constructing one with bad shape raises `ProtocolShapeError`.
 
-> Footnote on `SupportArtifact`: defined in
+> Footnote on `ProofReceipt`: defined in
 > `factgraph.core.store._support` (substrate-private module) but referenced
 > as a frozen DTO at the protocol boundary
 > (`factgraph.application.protocol.derivation_check.EvidenceEnvelope.engine_payload`).

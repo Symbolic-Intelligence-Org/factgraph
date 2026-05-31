@@ -18,10 +18,10 @@ from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     EntitySelector,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayCheckRequest,
-    FactRemoveAction,
-    FactValueOverride,
+    RemoveFact,
+    ReplaceFact,
     OverlayCheckPhase,
     RuleDisableAction,
 )
@@ -157,16 +157,16 @@ def _override(
     seeded: SeededPerson | None = None,
     *,
     new_age: int = 26,
-) -> FactValueOverride:
+) -> ReplaceFact:
     if seeded is None:
-        return FactValueOverride(
+        return ReplaceFact(
             asrt_id="asrt-placeholder",
             pred_id="Person.age",
             e_ref="person:alice",
             old_fact_tuple=("person:alice", 25),
             new_fact_tuple=("person:alice", new_age),
         )
-    return FactValueOverride(
+    return ReplaceFact(
         asrt_id=seeded.age_asrt_id,
         pred_id=seeded.age_pred_id,
         e_ref=seeded.e_ref,
@@ -175,8 +175,8 @@ def _override(
     )
 
 
-def _region_override(seeded: SeededPerson, *, new_region: str) -> FactValueOverride:
-    return FactValueOverride(
+def _region_override(seeded: SeededPerson, *, new_region: str) -> ReplaceFact:
+    return ReplaceFact(
         asrt_id=seeded.region_asrt_id,
         pred_id=seeded.region_pred_id,
         e_ref=seeded.e_ref,
@@ -185,8 +185,8 @@ def _region_override(seeded: SeededPerson, *, new_region: str) -> FactValueOverr
     )
 
 
-def _remove_age(seeded: SeededPerson) -> FactRemoveAction:
-    return FactRemoveAction(
+def _remove_age(seeded: SeededPerson) -> RemoveFact:
+    return RemoveFact(
         asrt_id=seeded.age_asrt_id,
         pred_id=seeded.age_pred_id,
         e_ref=seeded.e_ref,
@@ -198,7 +198,7 @@ def _request(
     *,
     plan: CompiledDerivationPlan,
     binding: tuple[tuple[str, object], ...],
-    overlay: tuple[FactValueOverride, ...] | EvaluationOverlay,
+    overlay: tuple[ReplaceFact, ...] | FactOverlay,
     engine: str = "native",
 ) -> FactOverlayCheckRequest:
     return FactOverlayCheckRequest(
@@ -239,7 +239,7 @@ class FactOverlayRuntimePreflightTests(unittest.TestCase):
         request = _request(
             plan=_build_plan(body, exists_pred),
             binding=(),
-            overlay=EvaluationOverlay(
+            overlay=FactOverlay(
                 rule_actions=(
                     RuleDisableAction(
                         rule_id="person.eligible",
@@ -369,7 +369,7 @@ class FactOverlayProjectionHelperTests(unittest.TestCase):
                 ProjectedFact(asrt_id="a2", fact_tuple=("person:bob", 40)),
             ]
         }
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -389,14 +389,14 @@ class FactOverlayProjectionHelperTests(unittest.TestCase):
             "age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))],
             "region": [ProjectedFact(asrt_id="r1", fact_tuple=("person:alice", "us"))],
         }
-        age_override = FactValueOverride(
+        age_override = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
             old_fact_tuple=("person:alice", 25),
             new_fact_tuple=("person:alice", 99),
         )
-        region_override = FactValueOverride(
+        region_override = ReplaceFact(
             asrt_id="r1",
             pred_id="region",
             e_ref="person:alice",
@@ -416,7 +416,7 @@ class FactOverlayProjectionHelperTests(unittest.TestCase):
                 ProjectedFact(asrt_id="a2", fact_tuple=("person:bob", 40)),
             ]
         }
-        action = FactRemoveAction(
+        action = RemoveFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -431,7 +431,7 @@ class FactOverlayProjectionHelperTests(unittest.TestCase):
 
     def test_apply_fact_overlay_projection_ignores_unmatched_override(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="missing",
             pred_id="age",
             e_ref="person:alice",
@@ -451,7 +451,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
     def test_validate_fact_overlay_actions_accepts_visible_matching_override(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -466,7 +466,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
     def test_validate_fact_overlay_actions_accepts_visible_matching_remove(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
-        action = FactRemoveAction(
+        action = RemoveFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -480,14 +480,14 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
     def test_validate_fact_overlay_actions_collects_duplicate_asrt_ids(self) -> None:
         witness = {"age": [ProjectedFact(asrt_id="a1", fact_tuple=("person:alice", 25))]}
         schema_ir = {"predicates": [{"pred_id": "age", "group_key_indexes": [0]}]}
-        first = FactValueOverride(
+        first = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
             old_fact_tuple=("person:alice", 25),
             new_fact_tuple=("person:alice", 99),
         )
-        second = FactValueOverride(
+        second = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -500,7 +500,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
         self.assertIn("OVERLAY_DUPLICATE_ASRT_ID", {error.code for error in errors})
 
     def test_validate_fact_overlay_actions_rejects_non_visible_asrt_id(self) -> None:
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="missing",
             pred_id="age",
             e_ref="person:alice",
@@ -517,7 +517,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
         self.assertEqual([error.code for error in errors], ["OVERLAY_ASRT_ID_NOT_VISIBLE"])
 
     def test_validate_fact_overlay_actions_rejects_stale_old_fact_tuple(self) -> None:
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -534,7 +534,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
         self.assertIn("OVERLAY_STALE_OLD_FACT_TUPLE", {error.code for error in errors})
 
     def test_validate_fact_overlay_actions_rejects_tuple_arity_mismatch(self) -> None:
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -551,7 +551,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
         self.assertIn("OVERLAY_TUPLE_ARITY_MISMATCH", {error.code for error in errors})
 
     def test_validate_fact_overlay_actions_rejects_e_ref_position_mismatch(self) -> None:
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:alice",
@@ -568,7 +568,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
         self.assertIn("OVERLAY_E_REF_POSITION_MISMATCH", {error.code for error in errors})
 
     def test_validate_fact_overlay_actions_rejects_group_key_change(self) -> None:
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="rel1",
             pred_id="friend_strength",
             e_ref="person:alice",
@@ -592,7 +592,7 @@ class FactOverlayValidationHelperTests(unittest.TestCase):
         self.assertIn("OVERLAY_GROUP_KEY_CHANGED", {error.code for error in errors})
 
     def test_validate_fact_overlay_actions_collects_multiple_errors(self) -> None:
-        override = FactValueOverride(
+        override = ReplaceFact(
             asrt_id="a1",
             pred_id="age",
             e_ref="person:bob",
@@ -735,7 +735,7 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
         request = _request(
             plan=_build_plan(body, exists_pred),
             binding=(("$p", seeded.e_ref), ("$age", 25)),
-            overlay=EvaluationOverlay(fact_actions=(_remove_age(seeded),)),
+            overlay=FactOverlay(fact_actions=(_remove_age(seeded),)),
         )
 
         result = check_fact_overlay_binding(request, store=store)
@@ -834,7 +834,7 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
         request = _request(
             plan=_build_plan(body, exists_pred),
             binding=(("$p", seeded.e_ref), ("$age", 25)),
-            overlay=EvaluationOverlay(fact_actions=(_remove_age(seeded),)),
+            overlay=FactOverlay(fact_actions=(_remove_age(seeded),)),
         )
         before = _ledger_dump(store)
 
@@ -902,7 +902,7 @@ class FactOverlayRuntimeNativeDoubleRunTests(unittest.TestCase):
         store, index = _build_store()
         seeded = _seed_person(store, index, "alice", 25, "us")
         body, exists_pred = _exists_body(index)
-        invalid_override = FactValueOverride(
+        invalid_override = ReplaceFact(
             asrt_id=seeded.age_asrt_id,
             pred_id=seeded.age_pred_id,
             e_ref=seeded.e_ref,

@@ -12,8 +12,8 @@ Public surface contract per blueprint §5 locks:
                lock and G1 + G4 + Fact Overlay precedent).
 - Signature:   ``recheck_proof_frame(support_artifact, overlay)`` (see
                §5.2 lock; ``support_artifact`` is a raw
-               ``SupportArtifact`` from a prior Check, ``overlay`` is a
-               raw ``EvaluationOverlay``). No derivation lowering, no
+               ``ProofReceipt`` from a prior Check, ``overlay`` is a
+               raw ``FactOverlay``). No derivation lowering, no
                registry resolution, no engine argument — ProofFrame
                Recheck operates on already-captured support, not on a
                derivation plan.
@@ -37,15 +37,15 @@ Public surface contract per blueprint §5 locks:
                SDK shell (``sdk_check`` / ``sdk_diagnose`` /
                ``sdk_why_not`` / ``sdk_fact_overlay_check``). It owns
                its own dispatch; in particular it never extracts
-               ``SupportArtifact`` from a ``CheckResult.engine_payload``
-               (which is a ``SupportArtifact | ProvenanceEnvelope``
+               ``ProofReceipt`` from a ``CheckResult.engine_payload``
+               (which is a ``ProofReceipt | ProvenanceEnvelope``
                union per G2 §5.2 falsifier F2).
 
 Both validators (``validate_support_artifact`` and
 ``validate_evaluation_overlay``) live in
 ``factgraph.sdk.shells._validation``. The overlay validator was extracted
 during the G2 post-publish verification round 2026-05-08 (Fact Overlay
-and ProofFrame Recheck share the same ``EvaluationOverlay`` boundary
+and ProofFrame Recheck share the same ``FactOverlay`` boundary
 check). The support-artifact validator was promoted from local at G3
 Phase 0 hygiene 2026-05-08 — G3 rule-overlay shells also need it, which
 fires the G2 §5.2 deferred extraction trigger ("until G3/G5 also need

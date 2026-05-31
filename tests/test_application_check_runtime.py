@@ -40,7 +40,7 @@ from factgraph.application.protocol import (
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.store import Store
-from factgraph.core.store._support import SupportArtifact, normalize_binding_items
+from factgraph.core.store._support import ProofReceipt, normalize_binding_items
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -369,8 +369,8 @@ class SemanticInvalidRequestTests(unittest.TestCase):
         envelope = result.evidence_envelope
         assert envelope is not None
         artifact = envelope.engine_payload
-        self.assertIsInstance(artifact, SupportArtifact)
-        assert isinstance(artifact, SupportArtifact)
+        self.assertIsInstance(artifact, ProofReceipt)
+        assert isinstance(artifact, ProofReceipt)
         self.assertEqual(artifact.rule_refs, ("person.exists",))
         self.assertEqual(len(artifact.rule_ref_edges), 1)
 
@@ -402,7 +402,7 @@ class EvidenceEnvelopeShapeTests(unittest.TestCase):
     def test_evidence_engine_payload_is_support_artifact_typed(self) -> None:
         envelope = self._passed_result().evidence_envelope
         assert envelope is not None
-        self.assertIsInstance(envelope.engine_payload, SupportArtifact)
+        self.assertIsInstance(envelope.engine_payload, ProofReceipt)
 
     def test_evidence_branch_atom_projection_always_none_on_passed(self) -> None:
         envelope = self._passed_result().evidence_envelope
@@ -676,10 +676,10 @@ def _make_support_artifact(
     pred_witness_keys: tuple[str, ...] = ("b0.a0:Person:exists",),
     kind: str = "souffle_witness_v1",
 ) -> Any:
-    """Step 4.2 fixture: minimal SupportArtifact for souffle path mocking."""
-    from factgraph.core.store._support import PredWitness, SupportArtifact
+    """Step 4.2 fixture: minimal ProofReceipt for souffle path mocking."""
+    from factgraph.core.store._support import PredWitness, ProofReceipt
 
-    return SupportArtifact(
+    return ProofReceipt(
         kind=kind,
         root_result_kind="fact",
         binding_items=binding_items,
@@ -693,7 +693,7 @@ def _make_support_artifact(
 
 
 class SouffleCheckTests(unittest.TestCase):
-    """Step 4.2: Souffle Check via evaluate-then-match against SupportArtifact.
+    """Step 4.2: Souffle Check via evaluate-then-match against ProofReceipt.
 
     These tests mock ``evaluate_derivation_plans`` and ``_lookup_support_artifact``
     (the typed internal API used by the runtime) so they exercise the Check
@@ -768,7 +768,7 @@ class SouffleCheckTests(unittest.TestCase):
         self.assertEqual(result.matched_count, 0)
 
     def test_souffle_skips_candidate_without_retrievable_artifact(self) -> None:
-        """Candidate whose SupportArtifact lookup returns None is silently skipped."""
+        """Candidate whose ProofReceipt lookup returns None is silently skipped."""
         request, store, _ = self._build_request(binding=(("$p", "person-1"),))
         good_candidate = _make_souffle_candidate(
             candidate_key="candk_v2:good",

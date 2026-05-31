@@ -14,19 +14,19 @@ from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     DiagnoseResult,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayCheckResult,
-    FactValueOverride,
+    ReplaceFact,
     OverlayCheckDiff,
     OverlayCheckPhase,
-    ProofFrameAtomVerdict,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
-    RuleAddedAtom,
-    RuleLiteralPath,
+    AddedCondition,
+    ConditionPath,
     WhyNotUniverseResult,
 )
 from factgraph.core.rules.rule_ir import RuleSpec
-from factgraph.core.store._support import PredWitness, SupportArtifact, normalize_binding_items
+from factgraph.core.store._support import PredWitness, ProofReceipt, normalize_binding_items
 from factgraph.sdk import Pred, vars as sdk_vars
 from factgraph.sdk.dsl import Rule
 
@@ -87,8 +87,8 @@ def _sdk_rule() -> Rule:
 
 def _support(
     *, binding_items: tuple[tuple[str, object], ...] | None = None
-) -> SupportArtifact:
-    return SupportArtifact(
+) -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="row",
         binding_items=binding_items if binding_items is not None else _binding(),
@@ -98,10 +98,10 @@ def _support(
     )
 
 
-def _overlay(*, new_value: object = 26) -> EvaluationOverlay:
-    return EvaluationOverlay(
+def _overlay(*, new_value: object = 26) -> FactOverlay:
+    return FactOverlay(
         fact_actions=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id="a1",
                 pred_id="Person:age",
                 e_ref="person:alice",
@@ -173,7 +173,7 @@ def _proof_frame_result() -> ProofFrameRecheckResult:
         status="invalidated",
         binding_items=_binding(),
         atom_verdicts=(
-            ProofFrameAtomVerdict(
+            ProofFrameConditionVerdict(
                 atom_key="b0.a0:Person:exists",
                 verdict="invalidated",
                 affected_action_indices=(0,),
@@ -218,7 +218,7 @@ def _builder_cases() -> tuple[tuple[str, Any, tuple[Any, ...], dict[str, Any]], 
             {
                 "branch_index": 0,
                 "atom_index": 0,
-                "literal_path": RuleLiteralPath(kind="rhs"),
+                "literal_path": ConditionPath(kind="rhs"),
                 "old_literal": "us",
                 "new_literal": "eu",
             },
@@ -229,7 +229,7 @@ def _builder_cases() -> tuple[tuple[str, Any, tuple[Any, ...], dict[str, Any]], 
             (rule_spec, support),
             {
                 "branch_index": 0,
-                "added_atom": RuleAddedAtom(atom=("eq", "$p", "person:alice")),
+                "added_atom": AddedCondition(atom=("eq", "$p", "person:alice")),
             },
         ),
         (
@@ -330,7 +330,7 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
                 {
                     "branch_index": 0,
                     "atom_index": 0,
-                    "literal_path": RuleLiteralPath(kind="rhs"),
+                    "literal_path": ConditionPath(kind="rhs"),
                     "old_literal": "us",
                     "new_literal": "eu",
                 },
@@ -341,7 +341,7 @@ class CapabilityHelperInvariantTests(unittest.TestCase):
                 (sdk_rule, _support()),
                 {
                     "branch_index": 0,
-                    "added_atom": RuleAddedAtom(atom=("eq", "$p", "person:alice")),
+                    "added_atom": AddedCondition(atom=("eq", "$p", "person:alice")),
                 },
             ),
             (

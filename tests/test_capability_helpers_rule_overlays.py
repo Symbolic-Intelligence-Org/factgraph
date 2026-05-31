@@ -12,19 +12,19 @@ from factgraph.application import (
     build_rule_literal_replace_request,
 )
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     RuleAddConditionAction,
     RuleAddConditionRequest,
-    RuleAddedAtom,
+    AddedCondition,
     RuleDisableAction,
     RuleDisableRequest,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
 )
 from factgraph.core.rules.rule_ir import RuleSpec
-from factgraph.core.store._support import PredWitness, SupportArtifact
+from factgraph.core.store._support import PredWitness, ProofReceipt
 from factgraph.sdk import Pred, vars as sdk_vars
 from factgraph.sdk.dsl import Rule
 
@@ -40,8 +40,8 @@ def _rule_spec(*, where: list[object] | None = None) -> RuleSpec:
     )
 
 
-def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> SupportArtifact:
-    return SupportArtifact(
+def _support(*, binding_items: tuple[tuple[str, object], ...] | None = None) -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="row",
         binding_items=binding_items if binding_items is not None else (("$p", "person:alice"),),
@@ -61,10 +61,10 @@ def _sdk_rule() -> Rule:
         )
 
 
-def _fact_overlay() -> EvaluationOverlay:
-    return EvaluationOverlay(
+def _fact_overlay() -> FactOverlay:
+    return FactOverlay(
         fact_actions=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id="a1",
                 pred_id="Person.age",
                 e_ref="person:alice",
@@ -75,10 +75,10 @@ def _fact_overlay() -> EvaluationOverlay:
     )
 
 
-def _sdk_fact_overlay() -> EvaluationOverlay:
-    return EvaluationOverlay(
+def _sdk_fact_overlay() -> FactOverlay:
+    return FactOverlay(
         fact_actions=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id="a1",
                 pred_id="Person.age",
                 e_ref="person:alice",
@@ -121,7 +121,7 @@ class BuildRuleDisableRequestTests(unittest.TestCase):
             _support(),
             branch_index=0,
             atom_index=1,
-            overlay=EvaluationOverlay(),
+            overlay=FactOverlay(),
         )
 
         self.assertIsInstance(request.overlay.rule_actions[0], RuleDisableAction)
@@ -213,7 +213,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
     def test_builds_literal_replace_request_with_generated_overlay(self) -> None:
         rule_spec = _rule_spec()
         support = _support()
-        literal_path = RuleLiteralPath(kind="rhs")
+        literal_path = ConditionPath(kind="rhs")
 
         request = build_rule_literal_replace_request(
             rule_spec,
@@ -246,10 +246,10 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
             _support(),
             branch_index=0,
             atom_index=1,
-            literal_path=RuleLiteralPath(kind="rhs"),
+            literal_path=ConditionPath(kind="rhs"),
             old_literal="us",
             new_literal="eu",
-            overlay=EvaluationOverlay(),
+            overlay=FactOverlay(),
         )
 
         self.assertIsInstance(request.overlay.rule_actions[0], RuleLiteralReplaceAction)
@@ -261,7 +261,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
                 overlay=_fact_overlay(),
@@ -274,7 +274,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
             )
@@ -284,7 +284,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 object(),  # type: ignore[arg-type]
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
             )
@@ -296,7 +296,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
             )
@@ -306,7 +306,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(binding_items=(("$rule", _sdk_rule()),)),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
             )
@@ -316,7 +316,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal=_sdk_rule(),
             )
@@ -328,7 +328,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
             )
@@ -338,7 +338,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
                 overlay=_sdk_rule(),  # type: ignore[arg-type]
@@ -349,7 +349,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal="us",
                 new_literal="eu",
                 overlay=_sdk_fact_overlay(),
@@ -370,7 +370,7 @@ class BuildRuleLiteralReplaceRequestTests(unittest.TestCase):
                 _support(),
                 branch_index=0,
                 atom_index=1,
-                literal_path=RuleLiteralPath(kind="rhs"),
+                literal_path=ConditionPath(kind="rhs"),
                 old_literal=_sdk_rule(),
                 new_literal="eu",
             )
@@ -380,7 +380,7 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
     def test_builds_add_condition_request_with_generated_overlay(self) -> None:
         rule_spec = _rule_spec()
         support = _support()
-        added_atom = RuleAddedAtom(("lt", "$age", 65))
+        added_atom = AddedCondition(("lt", "$age", 65))
 
         request = build_rule_add_condition_request(
             rule_spec,
@@ -406,8 +406,8 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
             _rule_spec(),
             _support(),
             branch_index=0,
-            added_atom=RuleAddedAtom(("lt", "$age", 65)),
-            overlay=EvaluationOverlay(),
+            added_atom=AddedCondition(("lt", "$age", 65)),
+            overlay=FactOverlay(),
         )
 
         self.assertIsInstance(request.overlay.rule_actions[0], RuleAddConditionAction)
@@ -418,7 +418,7 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
                 _rule_spec(),
                 _support(),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
                 overlay=_fact_overlay(),
             )
 
@@ -428,14 +428,14 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
                 object(),  # type: ignore[arg-type]
                 _support(),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
             )
         with self.assertRaisesRegex(CapabilityHelperError, "support"):
             build_rule_add_condition_request(
                 _rule_spec(),
                 object(),  # type: ignore[arg-type]
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
             )
 
     def test_rejects_sdk_origin_in_rule_spec_support_and_added_atom(self) -> None:
@@ -444,21 +444,21 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
                 _rule_spec(where=[_sdk_rule()]),
                 _support(),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
             )
         with self.assertRaises(OriginPackageError):
             build_rule_add_condition_request(
                 _rule_spec(),
                 _support(binding_items=(("$rule", _sdk_rule()),)),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
             )
         with self.assertRaises(OriginPackageError):
             build_rule_add_condition_request(
                 _rule_spec(),
                 _support(),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", _sdk_rule())),
+                added_atom=AddedCondition(("lt", "$age", _sdk_rule())),
             )
 
     def test_rejects_top_level_sdk_origin_before_type_or_overlay_errors(self) -> None:
@@ -467,14 +467,14 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
                 _sdk_rule(),  # type: ignore[arg-type]
                 _support(),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
             )
         with self.assertRaises(OriginPackageError):
             build_rule_add_condition_request(
                 _rule_spec(),
                 _support(),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
                 overlay=_sdk_rule(),  # type: ignore[arg-type]
             )
         with self.assertRaises(OriginPackageError):
@@ -482,7 +482,7 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
                 _rule_spec(),
                 _support(),
                 branch_index=0,
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
                 overlay=_sdk_fact_overlay(),
             )
         with self.assertRaises(OriginPackageError):
@@ -490,7 +490,7 @@ class BuildRuleAddConditionRequestTests(unittest.TestCase):
                 _rule_spec(),
                 _support(),
                 branch_index=_sdk_rule(),  # type: ignore[arg-type]
-                added_atom=RuleAddedAtom(("lt", "$age", 65)),
+                added_atom=AddedCondition(("lt", "$age", 65)),
             )
         with self.assertRaises(OriginPackageError):
             build_rule_add_condition_request(

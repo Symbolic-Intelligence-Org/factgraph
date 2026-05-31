@@ -8,7 +8,7 @@ from factgraph.core.rules.ruleref_types import NativeRuleRefResolution, NativeRu
 from factgraph.core.rules.where_ast import WhereASTError, parse_where_ir_to_ast
 from factgraph.core.rules.where_ast_validate import WhereASTValidationError, validate_where_ast
 from factgraph.core.rules.where_eval import WhereValidationError, evaluate_where
-from factgraph.core.store._support import ProjectedFact, SupportArtifact, compute_support_digest
+from factgraph.core.store._support import ProjectedFact, ProofReceipt, compute_support_digest
 from factgraph.core.store._support_capture import (
     build_support_artifact_for_binding,
     derive_rule_ref_edges_for_binding,
@@ -35,7 +35,7 @@ def evaluate_native_where(
     *,
     registry: Any | None = None,
     witness_facts: dict[str, list[ProjectedFact]] | None = None,
-    remember_support_artifact: Callable[[str, SupportArtifact], None] | None = None,
+    remember_support_artifact: Callable[[str, ProofReceipt], None] | None = None,
 ) -> NativeWhereEvaluation:
     memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation] = {}
     stack: set[tuple[str, str]] = set()
@@ -56,7 +56,7 @@ def _evaluate_native_where_internal(
     *,
     registry: Any | None,
     witness_facts: dict[str, list[ProjectedFact]] | None,
-    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    remember_support_artifact: Callable[[str, ProofReceipt], None] | None,
     memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation],
     stack: set[tuple[str, str]],
 ) -> NativeWhereEvaluation:
@@ -109,7 +109,7 @@ def _rewrite_where_rule_refs(
     registry: Any,
     base_view_facts: dict[str, list[tuple[Any, ...]]],
     witness_facts: dict[str, list[ProjectedFact]] | None,
-    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    remember_support_artifact: Callable[[str, ProofReceipt], None] | None,
     memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation],
     stack: set[tuple[str, str]],
 ) -> tuple[list[Any], dict[str, list[tuple[Any, ...]]], tuple[NativeRuleRefResolution, ...]]:
@@ -178,7 +178,7 @@ def _evaluate_registered_rule_output(
     base_view_facts: dict[str, list[tuple[Any, ...]]],
     witness_facts: dict[str, list[ProjectedFact]] | None,
     registry: Any,
-    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    remember_support_artifact: Callable[[str, ProofReceipt], None] | None,
     memo_outputs: dict[tuple[str, str], _RegisteredRuleEvaluation],
     stack: set[tuple[str, str]],
 ) -> _RegisteredRuleEvaluation:
@@ -229,7 +229,7 @@ def _build_rule_row_support(
     binding: dict[str, Any],
     row_terms: tuple[Any, ...],
     witness_facts: dict[str, list[ProjectedFact]] | None,
-    remember_support_artifact: Callable[[str, SupportArtifact], None] | None,
+    remember_support_artifact: Callable[[str, ProofReceipt], None] | None,
     child_rule_ref_resolutions: tuple[NativeRuleRefResolution, ...],
 ) -> NativeRuleRefRowSupport:
     if witness_facts is None or remember_support_artifact is None:

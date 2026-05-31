@@ -6,7 +6,7 @@ ships full §5.1 / §5.2 / §5.4 / §5.7 / §5.8 contract coverage for
 ``sdk_rule_disable(...)``. Mirrors the G1 / G4 / G2
 per-method contract test structure with rule-overlay specifics
 (SDK ``Rule`` lowering through ``_compile_rule_input``, raw
-``SupportArtifact`` from a prior Check, ``branch_index`` /
+``ProofReceipt`` from a prior Check, ``branch_index`` /
 ``atom_index`` action arguments mirroring the A helper).
 """
 
@@ -18,14 +18,14 @@ from unittest.mock import patch
 
 from factgraph.application.capability_helpers.errors import CapabilityHelperError
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     ProtocolShapeError,
     RuleDisableAction,
     RuleDisableResult,
 )
 from factgraph.core.rules.rule_ir import RuleCompileError
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import ProofReceipt
 from factgraph.sdk.shells.check import sdk_check
 from factgraph.sdk.shells.rule_disable import sdk_rule_disable
 from factgraph.sdk import (
@@ -77,12 +77,12 @@ def _adult_rule() -> Rule:
         )
 
 
-def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> SupportArtifact:
-    """Run sdk_check(sdk, ...) and extract the captured SupportArtifact."""
+def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> ProofReceipt:
+    """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": e_ref, "$age": age})
     payload = result.evidence_envelope.engine_payload
-    assert isinstance(payload, SupportArtifact), (
-        f"native engine should produce SupportArtifact, got {type(payload).__name__}"
+    assert isinstance(payload, ProofReceipt), (
+        f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )
     return payload
 
@@ -147,7 +147,7 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.support")
-        self.assertIn("SupportArtifact", str(ctx.exception))
+        self.assertIn("ProofReceipt", str(ctx.exception))
 
     def test_non_evaluation_overlay_input_rejected_at_sdk_surface(self) -> None:
         sdk = _build_sdk()
@@ -164,19 +164,19 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.overlay")
-        self.assertIn("EvaluationOverlay", str(ctx.exception))
+        self.assertIn("FactOverlay", str(ctx.exception))
 
     def test_non_empty_overlay_rejected_at_sdk_surface(self) -> None:
-        """§5.4 lock: SDK rejects non-empty ``EvaluationOverlay`` because
+        """§5.4 lock: SDK rejects non-empty ``FactOverlay`` because
         the rule-action overlay is constructed internally by the A
-        helper; SDK callers pass ``None`` or empty ``EvaluationOverlay()``.
+        helper; SDK callers pass ``None`` or empty ``FactOverlay()``.
         """
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
-        non_empty_overlay = EvaluationOverlay(
+        non_empty_overlay = FactOverlay(
             fact_actions=(
-                FactValueOverride(
+                ReplaceFact(
                     asrt_id="a1",
                     pred_id="Person:age",
                     e_ref=alice,
@@ -208,7 +208,7 @@ class SDKRuleDisableContractTests(unittest.TestCase):
             support,
             branch_index=0,
             atom_index=0,
-            overlay=EvaluationOverlay(),
+            overlay=FactOverlay(),
         )
 
         self.assertIsInstance(result, RuleDisableResult)

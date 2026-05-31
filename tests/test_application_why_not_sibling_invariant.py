@@ -45,11 +45,11 @@ _BANNED_CHECK_SYMBOLS = frozenset(
 _BANNED_PROTOCOL_SYMBOLS = frozenset(
     {
         "DiagnoseResult",
-        "DiagnoseAtomLocator",
+        "DiagnoseConditionLocator",
         "CheckRequest",
         "CheckResult",
         "EvidenceEnvelope",
-        "SupportArtifact",
+        "ProofReceipt",
         "ProvenanceEnvelope",
     }
 )
@@ -57,7 +57,7 @@ _BANNED_PROTOCOL_SYMBOLS = frozenset(
 _BANNED_DIAGNOSE_RESULT_IMPORTS_IN_RUNTIME = frozenset(
     {
         "DiagnoseResult",
-        "DiagnoseAtomLocator",
+        "DiagnoseConditionLocator",
     }
 )
 
@@ -215,7 +215,7 @@ class WhyNotSiblingImportInvariantTests(unittest.TestCase):
                 "CheckRequest",
                 "CheckResult",
                 "DiagnoseResult",
-                "DiagnoseAtomLocator",
+                "DiagnoseConditionLocator",
             }
             - (_BANNED_CHECK_SYMBOLS | _BANNED_DIAGNOSE_RESULT_IMPORTS_IN_RUNTIME),
             set(),

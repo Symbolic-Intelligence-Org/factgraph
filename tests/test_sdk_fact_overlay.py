@@ -20,9 +20,9 @@ from unittest.mock import patch
 from factgraph.application.capability_helpers import build_fact_value_override
 from factgraph.application.protocol import (
     ErrorDTO,
-    EvaluationOverlay,
+    FactOverlay,
     FactOverlayCheckResult,
-    FactValueOverride,
+    ReplaceFact,
 )
 from factgraph.application.protocol.schema_runtime import FieldPath
 from factgraph.core.rules.rule_ir import RuleCompileError, RuleRegistry
@@ -79,8 +79,8 @@ def _multi_head_derivation() -> Inference:
         )
 
 
-def _build_overlay(sdk: SDKStore, e_ref: str, new_age: int) -> EvaluationOverlay:
-    """Build an EvaluationOverlay via A helper for happy-path tests."""
+def _build_overlay(sdk: SDKStore, e_ref: str, new_age: int) -> FactOverlay:
+    """Build an FactOverlay via A helper for happy-path tests."""
     override = build_fact_value_override(
         sdk._store,
         sdk._application_schema_index,
@@ -88,7 +88,7 @@ def _build_overlay(sdk: SDKStore, e_ref: str, new_age: int) -> EvaluationOverlay
         field=FieldPath(entity_type="Person", field_name="age"),
         new_value=new_age,
     )
-    return EvaluationOverlay(fact_actions=(override,))
+    return FactOverlay(fact_actions=(override,))
 
 
 def _empty_result() -> FactOverlayCheckResult:
@@ -114,9 +114,9 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         self.assertNotIn(result.status, ("", None))
 
     def test_empty_overlay_returns_invalid_request_passthrough(self) -> None:
-        """Empty `EvaluationOverlay` is a runtime ``invalid_request`` condition;
+        """Empty `FactOverlay` is a runtime ``invalid_request`` condition;
         the SDK passes the result through unchanged per §5.8 lock."""
-        empty_overlay = EvaluationOverlay(fact_actions=(), rule_actions=())
+        empty_overlay = FactOverlay(fact_actions=(), rule_actions=())
         result = sdk_fact_overlay_check(_build_sdk(),
             _age_derivation(), {"$age": 30}, empty_overlay
         )
@@ -124,9 +124,9 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         self.assertEqual(result.status, "invalid_request")
 
     def test_tuple_form_overlay_rejected_at_sdk_surface(self) -> None:
-        """Per §5.1 lock, the SDK accepts only `EvaluationOverlay`; the
+        """Per §5.1 lock, the SDK accepts only `FactOverlay`; the
         application `FactOverlayCheckRequest.overlay` would otherwise tolerate
-        ``tuple[FactValueOverride, ...]``, but the SDK boundary rejects it."""
+        ``tuple[ReplaceFact, ...]``, but the SDK boundary rejects it."""
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         override = build_fact_value_override(
@@ -141,7 +141,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, (override,))  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.overlay")
-        self.assertIsInstance(override, FactValueOverride)
+        self.assertIsInstance(override, ReplaceFact)
 
     def test_rule_is_rejected_at_sdk_surface(self) -> None:
         with vars("p") as (p,):
@@ -153,7 +153,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk_fact_overlay_check(_build_sdk(), rule, {"$age": 30}, EvaluationOverlay())  # type: ignore[arg-type]
+            sdk_fact_overlay_check(_build_sdk(), rule, {"$age": 30}, FactOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.inference")
         self.assertIn("Inference", str(ctx.exception))
@@ -168,7 +168,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         )
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk_fact_overlay_check(sdk, app_plan, {"$age": 30}, EvaluationOverlay())  # type: ignore[arg-type]
+            sdk_fact_overlay_check(sdk, app_plan, {"$age": 30}, FactOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.inference")
 
@@ -183,7 +183,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk_fact_overlay_check(sdk, _age_derivation(), [("$age", 30)], EvaluationOverlay())  # type: ignore[arg-type]
+            sdk_fact_overlay_check(sdk, _age_derivation(), [("$age", 30)], FactOverlay())  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.binding")
         self.assertIn("Mapping", str(ctx.exception))
@@ -192,12 +192,12 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with self.assertRaises(SDKStoreError) as ctx:
-            sdk_fact_overlay_check(sdk, _age_derivation(), {"age": 30}, EvaluationOverlay())
+            sdk_fact_overlay_check(sdk, _age_derivation(), {"age": 30}, FactOverlay())
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.binding")
 
     def test_string_overlay_rejected_at_sdk_surface_overlay_path(self) -> None:
-        """Non-`EvaluationOverlay` input (string) is caught by the shared
+        """Non-`FactOverlay` input (string) is caught by the shared
         ``validate_evaluation_overlay`` SDK-side validator and remapped to
         ``$.check_fact_overlay.overlay``. This is a direct `SDKStoreError`
         raise (no `ProtocolShapeError` chain), distinct from the §5.8
@@ -208,7 +208,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, "not-an-overlay")  # type: ignore[arg-type]
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.overlay")
-        self.assertIn("EvaluationOverlay", str(ctx.exception))
+        self.assertIn("FactOverlay", str(ctx.exception))
 
     def test_engine_ext_conflict_raises_sdk_store_error(self) -> None:
         sdk = _build_sdk()
@@ -220,7 +220,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             ),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, EvaluationOverlay())
+                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, FactOverlay())
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.inference")
         self.assertIsInstance(ctx.exception.__cause__, ValueError)
@@ -234,7 +234,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             side_effect=RuleCompileError("duplicate rule registration"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, EvaluationOverlay())
+                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, FactOverlay())
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, RuleCompileError)
@@ -252,7 +252,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             side_effect=SDKStoreError("invalid rule input: malformed dep payload"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, EvaluationOverlay())
+                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, FactOverlay())
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.dependencies")
         self.assertIsInstance(ctx.exception.__cause__, SDKStoreError)
@@ -268,7 +268,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             sdk_fact_overlay_check(sdk,
                 _age_derivation(),
                 {"$age": 30},
-                EvaluationOverlay(fact_actions=()),
+                FactOverlay(fact_actions=()),
                 engine="native",
             )
 
@@ -286,7 +286,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             return_value=_empty_result(),
         ) as mock_runtime:
             sdk_fact_overlay_check(sdk,
-                derivation, {"$age": 30}, EvaluationOverlay(), registry=registry
+                derivation, {"$age": 30}, FactOverlay(), registry=registry
             )
 
         mock_resolve.assert_called_once_with(derivation, explicit_registry=registry)
@@ -310,7 +310,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             side_effect=RuntimeError("simulated runtime failure"),
         ):
             with self.assertRaises(SDKStoreError) as ctx:
-                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, EvaluationOverlay())
+                sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, FactOverlay())
 
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay")
         self.assertIsInstance(ctx.exception.__cause__, RuntimeError)
@@ -330,7 +330,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
             "factgraph.sdk.shells.fact_overlay.check_fact_overlay_binding",
             return_value=_empty_result(),
         ):
-            sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, EvaluationOverlay())
+            sdk_fact_overlay_check(sdk, _age_derivation(), {"$age": 30}, FactOverlay())
 
         mock_check.assert_not_called()
         mock_diagnose.assert_not_called()

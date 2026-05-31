@@ -28,10 +28,10 @@ OverlayCheckStatus: TypeAlias = Literal[
 ]
 OverlayCheckPhaseStatus: TypeAlias = Literal["passed", "failed"]
 OverlayCheckEngine: TypeAlias = Literal["native", "souffle", "problog", "pyreason"]
-RuleLiteralPathKind: TypeAlias = Literal[
+ConditionPathKind: TypeAlias = Literal[
     "pred_term", "lhs", "rhs", "in_value", "const_operand"
 ]
-RuleAddedAtomKind: TypeAlias = Literal["eq", "ne", "gt", "ge", "lt", "le", "in"]
+AddedConditionKind: TypeAlias = Literal["eq", "ne", "gt", "ge", "lt", "le", "in"]
 
 _OVERLAY_CHECK_STATUSES = ("passed", "failed", "unsupported", "invalid_request")
 _OVERLAY_CHECK_PHASE_STATUSES = ("passed", "failed")
@@ -101,7 +101,7 @@ def _validate_binding_items_tuple(
 
 
 @dataclass(frozen=True)
-class FactValueOverride:
+class ReplaceFact:
     asrt_id: str
     pred_id: str
     e_ref: str
@@ -120,7 +120,7 @@ class FactValueOverride:
 
 
 @dataclass(frozen=True)
-class FactRemoveAction:
+class RemoveFact:
     asrt_id: str
     pred_id: str
     e_ref: str
@@ -136,7 +136,7 @@ class FactRemoveAction:
             raise ProtocolShapeError("note must be str or None")
 
 
-FactOverlayAction: TypeAlias = FactValueOverride | FactRemoveAction
+FactOverlayAction: TypeAlias = ReplaceFact | RemoveFact
 
 
 @dataclass(frozen=True)
@@ -157,8 +157,8 @@ class RuleDisableAction:
 
 
 @dataclass(frozen=True)
-class RuleLiteralPath:
-    kind: RuleLiteralPathKind
+class ConditionPath:
+    kind: ConditionPathKind
     index: int | None = None
 
     def __post_init__(self) -> None:
@@ -182,7 +182,7 @@ class RuleLiteralReplaceAction:
     version: str
     branch_index: int
     atom_index: int
-    literal_path: RuleLiteralPath
+    literal_path: ConditionPath
     old_literal: Any
     new_literal: Any
     note: str | None = None
@@ -192,14 +192,14 @@ class RuleLiteralReplaceAction:
         _require_non_empty_str(self.version, field_name="version")
         _validate_non_negative_int(self.branch_index, field_name="branch_index")
         _validate_non_negative_int(self.atom_index, field_name="atom_index")
-        if not isinstance(self.literal_path, RuleLiteralPath):
-            raise ProtocolShapeError("literal_path must be RuleLiteralPath")
+        if not isinstance(self.literal_path, ConditionPath):
+            raise ProtocolShapeError("literal_path must be ConditionPath")
         if self.note is not None and not isinstance(self.note, str):
             raise ProtocolShapeError("note must be str or None")
 
 
 @dataclass(frozen=True)
-class RuleAddedAtom:
+class AddedCondition:
     atom: tuple[Any, ...]
 
     def __post_init__(self) -> None:
@@ -214,15 +214,15 @@ class RuleAddConditionAction:
     rule_id: str
     version: str
     branch_index: int
-    added_atom: RuleAddedAtom
+    added_atom: AddedCondition
     note: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.rule_id, field_name="rule_id")
         _require_non_empty_str(self.version, field_name="version")
         _validate_non_negative_int(self.branch_index, field_name="branch_index")
-        if not isinstance(self.added_atom, RuleAddedAtom):
-            raise ProtocolShapeError("added_atom must be RuleAddedAtom")
+        if not isinstance(self.added_atom, AddedCondition):
+            raise ProtocolShapeError("added_atom must be AddedCondition")
         if self.note is not None and not isinstance(self.note, str):
             raise ProtocolShapeError("note must be str or None")
 
@@ -238,9 +238,9 @@ def _validate_fact_actions(
     if not isinstance(value, tuple):
         raise ProtocolShapeError(f"{field_name} must be tuple[FactOverlayAction, ...]")
     for idx, item in enumerate(value):
-        if not isinstance(item, (FactValueOverride, FactRemoveAction)):
+        if not isinstance(item, (ReplaceFact, RemoveFact)):
             raise ProtocolShapeError(
-                f"{field_name}[{idx}] must be FactValueOverride or FactRemoveAction"
+                f"{field_name}[{idx}] must be ReplaceFact or RemoveFact"
             )
     return value
 
@@ -261,7 +261,7 @@ def _validate_rule_actions(
 
 
 @dataclass(frozen=True)
-class EvaluationOverlay:
+class FactOverlay:
     fact_actions: tuple[FactOverlayAction, ...] = ()
     rule_actions: tuple[RuleOverlayAction, ...] = ()
 
@@ -282,7 +282,7 @@ class EvaluationOverlay:
 class FactOverlayCheckRequest:
     plan: CompiledDerivationPlan
     binding: BindingItems
-    overlay: tuple[FactValueOverride, ...] | EvaluationOverlay
+    overlay: tuple[ReplaceFact, ...] | FactOverlay
     engine: OverlayCheckEngine
 
     def __post_init__(self) -> None:
@@ -297,11 +297,11 @@ class FactOverlayCheckRequest:
             "binding",
             _validate_binding_items(self.binding, field_name="binding"),
         )
-        if isinstance(self.overlay, EvaluationOverlay):
+        if isinstance(self.overlay, FactOverlay):
             overlay = self.overlay
         else:
             overlay = _validate_tuple_items(
-                self.overlay, field_name="overlay", item_type=FactValueOverride
+                self.overlay, field_name="overlay", item_type=ReplaceFact
             )
         object.__setattr__(self, "overlay", overlay)
         _require_literal(self.engine, field_name="engine", allowed=_OVERLAY_CHECK_ENGINES)
@@ -418,23 +418,23 @@ class FactOverlayCheckResult:
 
 
 __all__ = [
-    "EvaluationOverlay",
+    "FactOverlay",
     "FactOverlayAction",
     "FactOverlayCheckRequest",
     "FactOverlayCheckResult",
-    "FactRemoveAction",
-    "FactValueOverride",
+    "RemoveFact",
+    "ReplaceFact",
     "OverlayCheckDiff",
     "OverlayCheckEngine",
     "OverlayCheckPhase",
     "OverlayCheckPhaseStatus",
     "OverlayCheckStatus",
     "RuleAddConditionAction",
-    "RuleAddedAtom",
-    "RuleAddedAtomKind",
+    "AddedCondition",
+    "AddedConditionKind",
     "RuleDisableAction",
-    "RuleLiteralPath",
-    "RuleLiteralPathKind",
+    "ConditionPath",
+    "ConditionPathKind",
     "RuleLiteralReplaceAction",
     "RuleOverlayAction",
 ]

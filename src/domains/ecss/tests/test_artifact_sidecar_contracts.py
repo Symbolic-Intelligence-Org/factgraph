@@ -405,7 +405,7 @@ class ArtifactSidecarContractsTests(unittest.TestCase):
                 )
             self.assertEqual(
                 str(ctx.exception),
-                f"support_digest collision for different SupportArtifact on disk: {digest}",
+                f"support_digest collision for different ProofReceipt on disk: {digest}",
             )
 
     def test_file_artifact_sidecar_rule_trace_read_write_collision_and_path_guard(self) -> None:

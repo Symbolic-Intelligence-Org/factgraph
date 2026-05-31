@@ -38,7 +38,7 @@ Optional files are backward-compatible. If absent from the manifest or missing o
 
 | Key | Row shape | Reader field |
 |---|---|---|
-| `support_artifacts` | `SupportArtifact` JSON-friendly row keyed by `support_digest` | `support_artifacts` |
+| `support_artifacts` | `ProofReceipt` JSON-friendly row keyed by `support_digest` | `support_artifacts` |
 | `rule_trace_artifacts` | `RuleTraceArtifact` JSON-friendly row keyed by `rule_run_id` | `rule_trace_artifacts` |
 | `certainty_summaries` | `{candidate_id, certainty_summary}` | `certainty_summaries` |
 | `provenance_trees` | `{candidate_id, provenance_tree}` | `provenance_trees` |

@@ -14,13 +14,13 @@ from factgraph.core.rules.where_eval import (
     WhereValidationError,
     evaluate_where,
 )
-from factgraph.core.store._support import BindingItems, SupportArtifact, normalize_binding_items
+from factgraph.core.store._support import BindingItems, ProofReceipt, normalize_binding_items
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
     ErrorDTO,
-    ProofFrameAtomVerdict,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
     RuleAddConditionAction,
     RuleAddConditionRequest,
@@ -254,7 +254,7 @@ def _evaluate_variant_rows(
 
 
 def _build_proof_frame_result(
-    artifact: SupportArtifact,
+    artifact: ProofReceipt,
     *,
     action_index: int,
     action: RuleAddConditionAction,
@@ -266,7 +266,7 @@ def _build_proof_frame_result(
     atom_verdicts = tuple(
         [
             *(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key=witness.pred_atom_key,
                     verdict="still_valid",
                     affected_action_indices=(),
@@ -274,14 +274,14 @@ def _build_proof_frame_result(
                 for witness in artifact.pred_witnesses
             ),
             *(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key=step.step_key,
                     verdict="still_valid",
                     affected_action_indices=(),
                 )
                 for step in artifact.non_fact_steps
             ),
-            ProofFrameAtomVerdict(
+            ProofFrameConditionVerdict(
                 atom_key=synthetic_key,
                 verdict=synthetic_verdict,
                 affected_action_indices=(

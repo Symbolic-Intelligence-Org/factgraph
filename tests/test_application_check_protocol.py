@@ -13,7 +13,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.core.store._support import (
     ProvenanceEnvelope,
-    SupportArtifact,
+    ProofReceipt,
     provenance_envelope_from_dict,
     provenance_envelope_to_dict,
     support_artifact_from_dict,
@@ -46,8 +46,8 @@ def _error(code: str = "BINDING_NOT_REPRESENTABLE_FOR_ENGINE") -> ErrorDTO:
     return ErrorDTO(code=code, message="not representable")
 
 
-def _support_artifact() -> SupportArtifact:
-    return SupportArtifact(
+def _support_artifact() -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="fact",
         binding_items=_binding(),
@@ -67,11 +67,11 @@ def _provenance_envelope() -> ProvenanceEnvelope:
 def _evidence_envelope(
     *,
     engine: str = "native",
-    payload: SupportArtifact | ProvenanceEnvelope | None = None,
+    payload: ProofReceipt | ProvenanceEnvelope | None = None,
 ) -> EvidenceEnvelope:
     return EvidenceEnvelope(
         engine=engine,  # type: ignore[arg-type]
-        support_kind="native_binding_v1" if payload is None or isinstance(payload, SupportArtifact) else "problog_provenance_v1",
+        support_kind="native_binding_v1" if payload is None or isinstance(payload, ProofReceipt) else "problog_provenance_v1",
         support_digest="sha256:" + ("1" * 64),
         branch_index=0 if engine in {"native", "souffle"} else None,
         engine_payload=payload or _support_artifact(),
@@ -153,7 +153,7 @@ class EvidenceEnvelopeProtocolTests(unittest.TestCase):
 
     def test_evidence_envelope_accepts_support_artifact_payload(self) -> None:
         env = _evidence_envelope(payload=_support_artifact())
-        self.assertIsInstance(env.engine_payload, SupportArtifact)
+        self.assertIsInstance(env.engine_payload, ProofReceipt)
 
     def test_evidence_envelope_accepts_provenance_payload(self) -> None:
         env = _evidence_envelope(engine="problog", payload=_provenance_envelope())

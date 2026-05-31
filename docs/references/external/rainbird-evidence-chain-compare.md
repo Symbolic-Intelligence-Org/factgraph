@@ -43,7 +43,7 @@ Result (factID + certainty)
 
 | 维度 | Rainbird | 当前状态 | 差距 |
 |---|---|---|---|
-| 结论对象 | `subject + relationship + object + certainty + factID` | `CandidateSet` 携带 `candidate_id` + `support_digest` + `support_kind`；`candidate_id` 即为 proof entry handle，可串联 `SupportArtifact` readback | ✅ `factID` 等价物已存在 |
+| 结论对象 | `subject + relationship + object + certainty + factID` | `CandidateSet` 携带 `candidate_id` + `support_digest` + `support_kind`；`candidate_id` 即为 proof entry handle，可串联 `ProofReceipt` readback | ✅ `factID` 等价物已存在 |
 | 置信度语义 | 明确是 certainty-weighted（非概率），1-100 整数，有 rule-level cap | `confidence` 语义未分离（certainty vs probability 混用风险，母蓝图 §5.4 已点出） | ⚠️ 语义分离问题已识别但未解决 |
 | 多结果 | 每个 result 有独立 evidence tree | 每个 candidate 有独立 `support_digest` + `support_kind`，可各自展开为独立 `candidate_evidence_tree` | ✅ 已明确 |
 
@@ -51,8 +51,8 @@ Result (factID + certainty)
 
 | 维度 | Rainbird | 当前状态 | 差距 |
 |---|---|---|---|
-| 树的入口 | `factID` → `GET /analysis/evidence/{factID}/{sessionID}` | `candidate_id` → `Store.get_candidate_support_digest()` → `SupportArtifact` → recursive `candidate_evidence_tree`；runtime 提供 `GET /v1/runtime/sessions/{sid}/evidence/candidate/{cid}` HTML permalink | ✅ per-result proof entry point 已存在 |
-| 递归结构 | 每个 condition 有 `factID`，可无限递归到 leaf | `candidate_evidence_tree` 已实现递归展开：`rule_ref_edges` → child `SupportArtifact` → 递归子树；`_MAX_RECURSION_DEPTH=8`；cycle detection via `ancestry: set[str]`；4 种 terminal reason（`child_support_unavailable` / `artifact_missing` / `cycle` / `depth_limit`） | ✅ 递归结构与终止条件已定义 |
+| 树的入口 | `factID` → `GET /analysis/evidence/{factID}/{sessionID}` | `candidate_id` → `Store.get_candidate_support_digest()` → `ProofReceipt` → recursive `candidate_evidence_tree`；runtime 提供 `GET /v1/runtime/sessions/{sid}/evidence/candidate/{cid}` HTML permalink | ✅ per-result proof entry point 已存在 |
+| 递归结构 | 每个 condition 有 `factID`，可无限递归到 leaf | `candidate_evidence_tree` 已实现递归展开：`rule_ref_edges` → child `ProofReceipt` → 递归子树；`_MAX_RECURSION_DEPTH=8`；cycle detection via `ancestry: set[str]`；4 种 terminal reason（`child_support_unavailable` / `artifact_missing` / `cycle` / `depth_limit`） | ✅ 递归结构与终止条件已定义 |
 | 条件来源类型 | 6 种明确的 source（Rule/Inject/Answer/Datasource/KM/Synthesised），颜色编码 | `node_kind` 已提升为 carrier-level provenance-role taxonomy（6 类：structural / witness / constraint / rule_chain / terminal / degraded）；但更深的 assertion-origin taxonomy（direct write / derivation accept / import）仍 deferred | ⚠️ provenance-role 层已关闭；assertion-origin 层仍开放（依赖 assertion metadata schema） |
 | 可选条件处理 | optional condition 缺失时生成 synthesised fact at 0%，在树中显示为 strikethrough | `unresolved_support` + `unresolved_reason` 机制可表达"子证明不可用"；但 **optional condition 语义**（rule IR 级别的"条件缺失但允许跳过"）仍未实现 | ⚠️ 结构性 unresolved 机制存在，但 authoring-level optional 语义仍为 deferred |
 
@@ -123,7 +123,7 @@ Rainbird 能做 `今天 - 开户日 > 36小时`，但不能做 `在36小时窗�
 #### 5.1 已关闭的早期建议（仅作历史记录）
 
 - ~~把交付形态纳入讨论~~：三种形态（evidence URL / structured API / NL explain）均已实现
-- ~~把 `factID` 等价物加入设计~~：`candidate_id → support_digest → SupportArtifact → candidate_evidence_tree` 链路已完整
+- ~~把 `factID` 等价物加入设计~~：`candidate_id → support_digest → ProofReceipt → candidate_evidence_tree` 链路已完整
 
 #### 5.2 当前最大的结构性 gap：certainty/weight 基础设施
 

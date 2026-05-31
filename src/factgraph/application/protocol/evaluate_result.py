@@ -32,7 +32,7 @@ from factgraph.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
     ProvenanceEnvelope,
-    SupportArtifact,
+    ProofReceipt,
 )
 
 
@@ -180,7 +180,7 @@ class EvaluateResult:
         compare=False,
         hash=False,
     )
-    _row_support_artifacts: Mapping[str, SupportArtifact] | None = field(
+    _row_support_artifacts: Mapping[str, ProofReceipt] | None = field(
         default=None,
         repr=False,
         compare=False,
@@ -992,7 +992,7 @@ def _build_form1_evidence_graph(
     row: EvaluateRow,
     result: EvaluateResult,
     metadata: Mapping[str, Any],
-    support_artifact: SupportArtifact,
+    support_artifact: ProofReceipt,
 ) -> EvidenceGraph:
     if support_artifact.kind not in _FORM1_ROW_SUPPORT_KINDS:
         supported = ", ".join(sorted(_FORM1_ROW_SUPPORT_KINDS))
@@ -1198,21 +1198,21 @@ def _validate_evidence_metadata_for_row_result(
 
 
 def _validate_row_support_artifacts(
-    artifacts: Mapping[str, SupportArtifact] | None,
+    artifacts: Mapping[str, ProofReceipt] | None,
     *,
     valid_row_ids: set[str],
-) -> Mapping[str, SupportArtifact]:
+) -> Mapping[str, ProofReceipt]:
     if artifacts is None:
         return MappingProxyType({})
     if not isinstance(artifacts, Mapping):
         raise ProtocolShapeError("EvaluateResult._row_support_artifacts must be mapping or None")
-    normalized: dict[str, SupportArtifact] = {}
+    normalized: dict[str, ProofReceipt] = {}
     for row_id, artifact in artifacts.items():
         _require_non_empty_str(row_id, field_name="EvaluateResult._row_support_artifacts key")
         if row_id not in valid_row_ids:
             raise ProtocolShapeError("EvaluateResult._row_support_artifacts contains unknown row_id")
-        if not isinstance(artifact, SupportArtifact):
-            raise ProtocolShapeError("EvaluateResult._row_support_artifacts values must be SupportArtifact")
+        if not isinstance(artifact, ProofReceipt):
+            raise ProtocolShapeError("EvaluateResult._row_support_artifacts values must be ProofReceipt")
         normalized[row_id] = artifact
     return MappingProxyType(normalized)
 

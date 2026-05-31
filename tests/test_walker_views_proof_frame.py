@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from factgraph.application.protocol.proofframe import (
-    ProofFrameAtomVerdict,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
 )
 from factgraph.application.walker import (
@@ -23,12 +23,12 @@ def _proof_frame_result() -> ProofFrameRecheckResult:
             ("$p", "person:alice"),
         ),
         atom_verdicts=(
-            ProofFrameAtomVerdict(
+            ProofFrameConditionVerdict(
                 atom_key="b0.a0:Person:age",
                 verdict="still_valid",
                 affected_action_indices=(),
             ),
-            ProofFrameAtomVerdict(
+            ProofFrameConditionVerdict(
                 atom_key="b0.a1:eq",
                 verdict="invalidated",
                 affected_action_indices=(0,),
@@ -98,7 +98,7 @@ class ProofFrameViewTests(unittest.TestCase):
                 status="still_valid",
                 binding_items=(("$p", "person:alice"),),
                 atom_verdicts=(
-                    ProofFrameAtomVerdict(
+                    ProofFrameConditionVerdict(
                         atom_key="b0.a0:Person:age",
                         verdict="still_valid",
                         affected_action_indices=(),

@@ -22,8 +22,8 @@ from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
     EntitySelector,
-    EvaluationOverlay,
-    FactRemoveAction,
+    FactOverlay,
+    RemoveFact,
     FieldPath,
     WhyNotUniverseRequest,
 )
@@ -386,9 +386,9 @@ class EvaluationOverlayHelperTests(unittest.TestCase):
 
         overlay = build_evaluation_overlay(override, remove)
 
-        self.assertIsInstance(overlay, EvaluationOverlay)
+        self.assertIsInstance(overlay, FactOverlay)
         self.assertEqual(overlay.fact_actions, (override, remove))
-        self.assertIsInstance(overlay.fact_actions[1], FactRemoveAction)
+        self.assertIsInstance(overlay.fact_actions[1], RemoveFact)
 
     def test_build_evaluation_overlay_requires_action(self) -> None:
         with self.assertRaisesRegex(CapabilityHelperError, "requires at least one action"):

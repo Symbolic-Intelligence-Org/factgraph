@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import ProofReceipt
 
 from factgraph.application.protocol import (
-    EvaluationOverlay,
+    FactOverlay,
     ProofFrameRecheckRequest,
 )
 
@@ -14,21 +14,21 @@ from .errors import CapabilityHelperError
 
 
 def build_proof_frame_recheck_request(
-    support: SupportArtifact,
+    support: ProofReceipt,
     *,
-    overlay: EvaluationOverlay | None = None,
+    overlay: FactOverlay | None = None,
 ) -> ProofFrameRecheckRequest:
     """Build a ProofFrameRecheckRequest from application-canonical inputs."""
 
-    overlay_value = EvaluationOverlay() if overlay is None else overlay
+    overlay_value = FactOverlay() if overlay is None else overlay
 
     _reject_sdk_origin(support, path="support")
     _reject_sdk_origin(overlay_value, path="overlay")
 
-    if not isinstance(support, SupportArtifact):
-        raise CapabilityHelperError("support must be SupportArtifact")
-    if not isinstance(overlay_value, EvaluationOverlay):
-        raise CapabilityHelperError("overlay must be EvaluationOverlay or None")
+    if not isinstance(support, ProofReceipt):
+        raise CapabilityHelperError("support must be ProofReceipt")
+    if not isinstance(overlay_value, FactOverlay):
+        raise CapabilityHelperError("overlay must be FactOverlay or None")
 
     return ProofFrameRecheckRequest(
         support_artifact=support,

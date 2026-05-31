@@ -15,8 +15,8 @@ verification round polish landed 2026-05-08):
                engine="native", registry=None)`` (see §5.1 lock;
                ``inference`` is SDK ``Inference`` only, ``binding`` is a
                ``$``-prefixed mapping validated through the shared SDK
-               validators, and ``overlay`` is a raw ``EvaluationOverlay``
-               protocol DTO — the SDK rejects ``tuple[FactValueOverride,
+               validators, and ``overlay`` is a raw ``FactOverlay``
+               protocol DTO — the SDK rejects ``tuple[ReplaceFact,
                ...]`` form even though the application
                ``FactOverlayCheckRequest.overlay`` field would otherwise
                tolerate it).

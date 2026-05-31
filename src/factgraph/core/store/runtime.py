@@ -20,7 +20,7 @@ from factgraph.core.store._explain_support import render_support_artifact
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
     ProvenanceEnvelope,
-    SupportArtifact,
+    ProofReceipt,
     provenance_envelope_to_dict,
 )
 from factgraph.core.store.evaluation import evaluate_store
@@ -79,7 +79,7 @@ class Store:
         self.ledger = ledger if ledger is not None else Ledger()
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
-        self._support_artifacts: dict[str, SupportArtifact] = {}
+        self._support_artifacts: dict[str, ProofReceipt] = {}
         self._provenance_envelopes: dict[str, ProvenanceEnvelope] = {}
         self._candidate_support_index: dict[str, str] = {}
         self._candidate_support_kind_index: dict[str, str] = {}
@@ -101,12 +101,12 @@ class Store:
     def _remember_support_artifact(
         self,
         support_digest: str,
-        artifact: SupportArtifact,
+        artifact: ProofReceipt,
     ) -> None:
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             raise ValueError("support_digest must be sha256 token")
-        if not isinstance(artifact, SupportArtifact):
-            raise ValueError("artifact must be SupportArtifact")
+        if not isinstance(artifact, ProofReceipt):
+            raise ValueError("artifact must be ProofReceipt")
         existing = self._support_artifacts.get(support_digest)
         if existing is None:
             if self._artifact_sidecar is not None:
@@ -114,12 +114,12 @@ class Store:
             self._support_artifacts[support_digest] = artifact
             return
         if existing != artifact:
-            raise ValueError("support_digest collision for different SupportArtifact")
+            raise ValueError("support_digest collision for different ProofReceipt")
 
     def _lookup_support_artifact(
         self,
         support_digest: str,
-    ) -> SupportArtifact | None:
+    ) -> ProofReceipt | None:
         if not isinstance(support_digest, str) or not support_digest.startswith("sha256:"):
             raise ValueError("support_digest must be sha256 token")
         artifact = self._support_artifacts.get(support_digest)

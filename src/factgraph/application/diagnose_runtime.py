@@ -32,7 +32,7 @@ from factgraph.core.rules.where_eval import (
 from factgraph.core.store._support import (
     BindingItems,
     ProvenanceEnvelope,
-    SupportArtifact,
+    ProofReceipt,
     normalize_binding_items,
 )
 from factgraph.core.store._support_capture import find_winning_branch_index
@@ -45,7 +45,7 @@ from factgraph.core.view.projector import (
 from .derivation_runtime import evaluate_derivation_plans
 from .protocol import (
     DerivationEvaluateRequest,
-    DiagnoseAtomLocator,
+    DiagnoseConditionLocator,
     DiagnoseRequest,
     DiagnoseResult,
     ErrorDTO,
@@ -207,7 +207,7 @@ def _diagnose_native(
         matched_count=0,
         matched_binding=None,
         failure_kind="atom_localized",
-        diagnostic_payload=DiagnoseAtomLocator(
+        diagnostic_payload=DiagnoseConditionLocator(
             branch_index=localized.branch_index,
             failed_atom_index=localized.failed_atom_index,
             attempted_binding=normalize_binding_items(localized.attempted_env),
@@ -510,7 +510,7 @@ def _diagnose_souffle(
     Algorithm:
 
     - Delegate evaluate to ``evaluate_derivation_plans`` in souffle mode.
-    - For each candidate, look up its ``SupportArtifact`` from the store via
+    - For each candidate, look up its ``ProofReceipt`` from the store via
       the typed internal API. Three buckets per candidate:
       - **lookup-miss**: artifact lookup returned ``None`` (engine advertised
         ``souffle_witness_v1`` support but no payload was retrievable).
@@ -543,7 +543,7 @@ def _diagnose_souffle(
         eval_request, store=store, registry=registry
     )
 
-    matches: list[tuple[CandidateSet, SupportArtifact, dict[str, Any]]] = []
+    matches: list[tuple[CandidateSet, ProofReceipt, dict[str, Any]]] = []
     lookup_miss: list[CandidateSet] = []
     for candidate in candidates:
         artifact = _lookup_support_artifact(store, candidate.support_digest)
@@ -556,7 +556,7 @@ def _diagnose_souffle(
 
     if matches:
         def _sort_key(
-            item: tuple[CandidateSet, SupportArtifact, dict[str, Any]],
+            item: tuple[CandidateSet, ProofReceipt, dict[str, Any]],
         ) -> tuple[Any, ...]:
             candidate, artifact, binding = item
             branch_index = _derive_branch_index_from_artifact(artifact)
@@ -614,7 +614,7 @@ def _diagnose_souffle(
     )
 
 
-def _lookup_support_artifact(store: Store, digest: str) -> SupportArtifact | None:
+def _lookup_support_artifact(store: Store, digest: str) -> ProofReceipt | None:
     """Diagnose's own typed support-artifact lookup (Q1 Sibling D11 invariant).
 
     Mirrors Check's ``_lookup_support_artifact`` without importing Check
@@ -761,8 +761,8 @@ def _extract_term_value(term: Any) -> Any:
     return None
 
 
-def _derive_branch_index_from_artifact(artifact: SupportArtifact) -> int | None:
-    """Extract branch_index from a SupportArtifact's atom-key prefixes.
+def _derive_branch_index_from_artifact(artifact: ProofReceipt) -> int | None:
+    """Extract branch_index from a ProofReceipt's atom-key prefixes.
 
     Mirror of Check's helper per Q1 Sibling. Souffle artifacts encode branch
     indices via ``b{n}.a{m}:...`` on ``pred_witnesses`` and ``non_fact_steps``;

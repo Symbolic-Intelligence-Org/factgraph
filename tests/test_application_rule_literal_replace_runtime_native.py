@@ -16,17 +16,17 @@ from factgraph.application import (
 )
 from factgraph.application.protocol import (
     EntitySelector,
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     RuleDisableAction,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
 )
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.rule_ir import RuleSpec
 from factgraph.core.store import Store
-from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, SupportArtifact
+from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, ProofReceipt
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -108,7 +108,7 @@ def _rule_spec(index: Any, *, where: list[Any] | None = None) -> RuleSpec:
     )
 
 
-def _artifact(seeded: SeededPerson, **kwargs: object) -> SupportArtifact:
+def _artifact(seeded: SeededPerson, **kwargs: object) -> ProofReceipt:
     fields = {
         "kind": "native_binding_v1",
         "root_result_kind": "row",
@@ -132,7 +132,7 @@ def _artifact(seeded: SeededPerson, **kwargs: object) -> SupportArtifact:
         ),
     }
     fields.update(kwargs)
-    return SupportArtifact(**fields)  # type: ignore[arg-type]
+    return ProofReceipt(**fields)  # type: ignore[arg-type]
 
 
 def _action(**kwargs: object) -> RuleLiteralReplaceAction:
@@ -141,7 +141,7 @@ def _action(**kwargs: object) -> RuleLiteralReplaceAction:
         "version": "1.0",
         "branch_index": 0,
         "atom_index": 3,
-        "literal_path": RuleLiteralPath(kind="rhs"),
+        "literal_path": ConditionPath(kind="rhs"),
         "old_literal": "us",
         "new_literal": "eu",
     }
@@ -151,8 +151,8 @@ def _action(**kwargs: object) -> RuleLiteralReplaceAction:
 
 def _request(
     rule_spec: RuleSpec,
-    artifact: SupportArtifact,
-    overlay: EvaluationOverlay,
+    artifact: ProofReceipt,
+    overlay: FactOverlay,
 ) -> RuleLiteralReplaceRequest:
     return RuleLiteralReplaceRequest(
         rule_spec=rule_spec,
@@ -173,7 +173,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
         rule_spec = _rule_spec(index)
 
         result = check_rule_literal_replace_action(
-            _request(rule_spec, _artifact(alice), EvaluationOverlay(rule_actions=(_action(),))),
+            _request(rule_spec, _artifact(alice), FactOverlay(rule_actions=(_action(),))),
             store=store,
         )
 
@@ -218,11 +218,11 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 artifact,
-                EvaluationOverlay(
+                FactOverlay(
                     rule_actions=(
                         _action(
                             atom_index=1,
-                            literal_path=RuleLiteralPath(kind="pred_term", index=1),
+                            literal_path=ConditionPath(kind="pred_term", index=1),
                             old_literal="us",
                             new_literal="eu",
                         ),
@@ -241,7 +241,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
     def test_fact_actions_and_wrong_rule_action_type_are_rejected(self) -> None:
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
-        fact_action = FactValueOverride(
+        fact_action = ReplaceFact(
             asrt_id=alice.age_asrt_id,
             pred_id=alice.age_pred_id,
             e_ref=alice.e_ref,
@@ -253,7 +253,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(fact_actions=(fact_action,), rule_actions=(_action(),)),
+                FactOverlay(fact_actions=(fact_action,), rule_actions=(_action(),)),
             ),
             store=store,
         )
@@ -261,7 +261,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(
+                FactOverlay(
                     rule_actions=(
                         RuleDisableAction(
                             rule_id="person.eligible",
@@ -302,7 +302,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index),
                         _artifact(alice),
-                        EvaluationOverlay(rule_actions=actions),
+                        FactOverlay(rule_actions=actions),
                     ),
                     store=store,
                 )
@@ -323,7 +323,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
                 ),
                 _action(
                     atom_index=1,
-                    literal_path=RuleLiteralPath(kind="const_operand"),
+                    literal_path=ConditionPath(kind="const_operand"),
                     old_literal=1,
                     new_literal=2,
                 ),
@@ -331,7 +331,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             ),
             (
                 _rule_spec(index),
-                _action(literal_path=RuleLiteralPath(kind="pred_term", index=0)),
+                _action(literal_path=ConditionPath(kind="pred_term", index=0)),
                 "RULE_LITERAL_REPLACE_PATH_INVALID",
             ),
             (
@@ -352,7 +352,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
                     _request(
                         rule_spec,
                         _artifact(alice),
-                        EvaluationOverlay(rule_actions=(action,)),
+                        FactOverlay(rule_actions=(action,)),
                     ),
                     store=store,
                 )
@@ -381,22 +381,22 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(atom_index=0),)),
+                FactOverlay(rule_actions=(_action(atom_index=0),)),
             ),
             _request(
                 nested_rule_spec,
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(atom_index=0),)),
+                FactOverlay(rule_actions=(_action(atom_index=0),)),
             ),
             _request(
                 _rule_spec(index),
                 _artifact(alice, rule_refs=("child.rule",)),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
             _request(
                 _rule_spec(index),
                 _artifact(alice, rule_ref_edges=(edge,)),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
         ):
             with self.subTest(request=request):
@@ -415,7 +415,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice, kind="souffle_witness_v1"),
-                EvaluationOverlay(rule_actions=(_action(),)),
+                FactOverlay(rule_actions=(_action(),)),
             ),
             store=store,
         )
@@ -438,11 +438,11 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice, non_fact_steps=(NonFactStep(step_key="b0.a1:gt", kind="gt", status="satisfied"),)),
-                EvaluationOverlay(
+                FactOverlay(
                     rule_actions=(
                         _action(
                             atom_index=1,
-                            literal_path=RuleLiteralPath(kind="rhs"),
+                            literal_path=ConditionPath(kind="rhs"),
                             old_literal=20,
                             new_literal="not-an-int",
                         ),
@@ -461,7 +461,7 @@ class RuleLiteralReplaceRuntimeNativeTests(unittest.TestCase):
         before = _ledger_dump(store)
 
         check_rule_literal_replace_action(
-            _request(_rule_spec(index), _artifact(alice), EvaluationOverlay(rule_actions=(_action(),))),
+            _request(_rule_spec(index), _artifact(alice), FactOverlay(rule_actions=(_action(),))),
             store=store,
         )
 

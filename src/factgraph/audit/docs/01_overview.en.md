@@ -313,7 +313,7 @@ When a package is exported with `package_kind="audit"`, in addition to ledger / 
 
 - `audit/support_artifacts.jsonl`
   - flat JSONL rows keyed by `support_digest`
-  - the payload reuses the JSON-friendly shape of `SupportArtifact`
+  - the payload reuses the JSON-friendly shape of `ProofReceipt`
 - `audit/rule_trace_artifacts.jsonl`
   - flat JSONL rows keyed by `rule_run_id`
   - the payload reuses the JSON-friendly shape of `RuleTraceArtifact`
@@ -350,7 +350,7 @@ These files are currently exported in full without reference-subset trimming; th
 
 - the reader reads JSONL rows (older packages without the file return an empty set)
 - the query layer can offline-rebuild the witness-bearing candidate evidence tree by `candidate_id -> support_digest` (currently including `native_binding_v1` and `souffle_witness_v1`)
-- the query layer prefers `SupportArtifact.rule_ref_edges` and continues to offline-dereference child support artifacts via `child_support_digest`; if the package only has legacy `rule_refs`, it preserves a minimal fallback tree
+- the query layer prefers `ProofReceipt.rule_ref_edges` and continues to offline-dereference child support artifacts via `child_support_digest`; if the package only has legacy `rule_refs`, it preserves a minimal fallback tree
 - the DTO layer can directly return `candidate_evidence_tree` isomorphic to runtime
 - `service.static_ui` can render `candidate_id` into a recursive sectioned tree page and continue drilling into the existing assertion-detail page
 

@@ -6,7 +6,7 @@ from typing import Literal, TypeAlias, Any
 from factgraph.core.store._support import (
     BindingItems,
     ProvenanceEnvelope,
-    SupportArtifact,
+    ProofReceipt,
     normalize_binding_items,
 )
 
@@ -65,7 +65,7 @@ class EvidenceEnvelope:
     support_kind: str
     support_digest: str
     branch_index: int | None
-    engine_payload: SupportArtifact | ProvenanceEnvelope
+    engine_payload: ProofReceipt | ProvenanceEnvelope
     branch_atom_projection: None = None
 
     def __post_init__(self) -> None:
@@ -75,8 +75,8 @@ class EvidenceEnvelope:
         if not support_digest.startswith("sha256:"):
             raise ProtocolShapeError("support_digest must be sha256 token")
         _validate_non_negative_int_or_none(self.branch_index, field_name="branch_index")
-        if not isinstance(self.engine_payload, (SupportArtifact, ProvenanceEnvelope)):
-            raise ProtocolShapeError("engine_payload must be SupportArtifact or ProvenanceEnvelope")
+        if not isinstance(self.engine_payload, (ProofReceipt, ProvenanceEnvelope)):
+            raise ProtocolShapeError("engine_payload must be ProofReceipt or ProvenanceEnvelope")
         if self.branch_atom_projection is not None:
             raise ProtocolShapeError("branch_atom_projection must be None in MVP")
 

@@ -8,19 +8,19 @@ from dataclasses import FrozenInstanceError
 
 from factgraph.application import protocol as protocol_pkg
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactValueOverride,
-    ProofFrameAtomVerdict,
+    FactOverlay,
+    ReplaceFact,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckRequest,
     ProofFrameRecheckResult,
     ProtocolShapeError,
     aggregate_proof_frame_status,
 )
 from factgraph.application.protocol import proofframe as proofframe_protocol
-from factgraph.core.store._support import PredWitness, SupportArtifact
+from factgraph.core.store._support import PredWitness, ProofReceipt
 
 
-def _artifact(**kwargs: object) -> SupportArtifact:
+def _artifact(**kwargs: object) -> ProofReceipt:
     fields = {
         "kind": "native_binding_v1",
         "root_result_kind": "row",
@@ -30,13 +30,13 @@ def _artifact(**kwargs: object) -> SupportArtifact:
         ),
     }
     fields.update(kwargs)
-    return SupportArtifact(**fields)  # type: ignore[arg-type]
+    return ProofReceipt(**fields)  # type: ignore[arg-type]
 
 
-def _overlay() -> EvaluationOverlay:
-    return EvaluationOverlay(
+def _overlay() -> FactOverlay:
+    return FactOverlay(
         fact_actions=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id="a1",
                 pred_id="Person.age",
                 e_ref="person:alice",
@@ -52,8 +52,8 @@ def _verdict(
     atom_key: str = "b0.a0:Person.age",
     verdict: str = "still_valid",
     affected_action_indices: tuple[int, ...] = (),
-) -> ProofFrameAtomVerdict:
-    return ProofFrameAtomVerdict(
+) -> ProofFrameConditionVerdict:
+    return ProofFrameConditionVerdict(
         atom_key=atom_key,
         verdict=verdict,  # type: ignore[arg-type]
         affected_action_indices=affected_action_indices,
@@ -73,7 +73,7 @@ class ProofFrameRecheckRequestProtocolTests(unittest.TestCase):
     def test_request_is_frozen(self) -> None:
         request = ProofFrameRecheckRequest(_artifact(), _overlay())
         with self.assertRaises(FrozenInstanceError):
-            request.overlay = EvaluationOverlay(fact_actions=())  # type: ignore[misc]
+            request.overlay = FactOverlay(fact_actions=())  # type: ignore[misc]
 
     def test_request_rejects_wrong_types(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -198,7 +198,7 @@ class ProofFrameProtocolExportTests(unittest.TestCase):
     def test_protocol_package_exports_proofframe_types(self) -> None:
         self.assertIs(protocol_pkg.ProofFrameRecheckRequest, ProofFrameRecheckRequest)
         self.assertIs(protocol_pkg.ProofFrameRecheckResult, ProofFrameRecheckResult)
-        self.assertIs(protocol_pkg.ProofFrameAtomVerdict, ProofFrameAtomVerdict)
+        self.assertIs(protocol_pkg.ProofFrameConditionVerdict, ProofFrameConditionVerdict)
 
     def test_dataclass_surface_is_exact(self) -> None:
         self.assertEqual(
@@ -206,7 +206,7 @@ class ProofFrameProtocolExportTests(unittest.TestCase):
             ["support_artifact", "overlay"],
         )
         self.assertEqual(
-            [field.name for field in dataclasses.fields(ProofFrameAtomVerdict)],
+            [field.name for field in dataclasses.fields(ProofFrameConditionVerdict)],
             ["atom_key", "verdict", "affected_action_indices"],
         )
         self.assertEqual(
@@ -218,7 +218,7 @@ class ProofFrameProtocolExportTests(unittest.TestCase):
         self.assertEqual(
             set(proofframe_protocol.__all__),
             {
-                "ProofFrameAtomVerdict",
+                "ProofFrameConditionVerdict",
                 "ProofFrameRecheckRequest",
                 "ProofFrameRecheckResult",
                 "ProofFrameStatus",

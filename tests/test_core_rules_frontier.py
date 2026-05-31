@@ -27,7 +27,7 @@ _BANNED_IMPORT_PREFIXES = (
 _BANNED_SYMBOLS = frozenset(
     {
         "CandidateSet",
-        "SupportArtifact",
+        "ProofReceipt",
         "ProvenanceEnvelope",
         "EvidenceEnvelope",
         "ErrorDTO",

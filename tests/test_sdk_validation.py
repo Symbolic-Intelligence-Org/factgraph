@@ -20,9 +20,9 @@ import unittest
 from unittest.mock import MagicMock
 
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactRemoveAction,
-    FactValueOverride,
+    FactOverlay,
+    RemoveFact,
+    ReplaceFact,
     RuleDisableAction,
 )
 from factgraph.core.rules.rule_ir import RuleCompileError
@@ -168,7 +168,7 @@ class ValidateSupportArtifactTests(unittest.TestCase):
                 {"not": "support"}, path="$.check_rule_disable.support"
             )
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.support")
-        self.assertIn("support must be SupportArtifact", str(ctx.exception))
+        self.assertIn("support must be ProofReceipt", str(ctx.exception))
 
     def test_rejects_none(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:
@@ -190,7 +190,7 @@ class ValidateOptionalEvaluationOverlayTests(unittest.TestCase):
 
     def test_accepts_empty_evaluation_overlay(self) -> None:
         validate_optional_evaluation_overlay(
-            EvaluationOverlay(), path="$.check_rule_disable.overlay"
+            FactOverlay(), path="$.check_rule_disable.overlay"
         )
 
     def test_rejects_non_evaluation_overlay_non_none_with_provided_path(self) -> None:
@@ -202,24 +202,24 @@ class ValidateOptionalEvaluationOverlayTests(unittest.TestCase):
             ctx.exception.path, "$.check_rule_literal_replace.overlay"
         )
         self.assertIn(
-            "overlay must be EvaluationOverlay or None", str(ctx.exception)
+            "overlay must be FactOverlay or None", str(ctx.exception)
         )
 
     def test_rejects_tuple_form_overlay(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:
             validate_optional_evaluation_overlay(
-                (FactValueOverride(asrt_id="A1", pred_id="Person:age", e_ref="alice", old_fact_tuple=(20,), new_fact_tuple=(30,)),),
+                (ReplaceFact(asrt_id="A1", pred_id="Person:age", e_ref="alice", old_fact_tuple=(20,), new_fact_tuple=(30,)),),
                 path="$.check_rule_disable.overlay",
             )
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.overlay")
         self.assertIn(
-            "overlay must be EvaluationOverlay or None", str(ctx.exception)
+            "overlay must be FactOverlay or None", str(ctx.exception)
         )
 
     def test_rejects_overlay_with_fact_actions(self) -> None:
-        overlay = EvaluationOverlay(
+        overlay = FactOverlay(
             fact_actions=(
-                FactValueOverride(asrt_id="A1", pred_id="Person:age", e_ref="alice", old_fact_tuple=(20,), new_fact_tuple=(30,)),
+                ReplaceFact(asrt_id="A1", pred_id="Person:age", e_ref="alice", old_fact_tuple=(20,), new_fact_tuple=(30,)),
             )
         )
         with self.assertRaises(SDKStoreError) as ctx:
@@ -227,15 +227,15 @@ class ValidateOptionalEvaluationOverlayTests(unittest.TestCase):
                 overlay, path="$.check_rule_disable.overlay"
             )
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.overlay")
-        self.assertIn("must be empty EvaluationOverlay", str(ctx.exception))
+        self.assertIn("must be empty FactOverlay", str(ctx.exception))
         self.assertIn(
             "rule-action overlay is constructed internally", str(ctx.exception)
         )
 
     def test_rejects_overlay_with_fact_remove_actions(self) -> None:
-        overlay = EvaluationOverlay(
+        overlay = FactOverlay(
             fact_actions=(
-                FactRemoveAction(
+                RemoveFact(
                     asrt_id="A1",
                     pred_id="Person:age",
                     e_ref="alice",
@@ -252,7 +252,7 @@ class ValidateOptionalEvaluationOverlayTests(unittest.TestCase):
         )
 
     def test_rejects_overlay_with_rule_actions(self) -> None:
-        overlay = EvaluationOverlay(
+        overlay = FactOverlay(
             rule_actions=(
                 RuleDisableAction(
                     rule_id="sdk.validation.adult",
@@ -267,7 +267,7 @@ class ValidateOptionalEvaluationOverlayTests(unittest.TestCase):
                 overlay, path="$.check_rule_disable.overlay"
             )
         self.assertEqual(ctx.exception.path, "$.check_rule_disable.overlay")
-        self.assertIn("must be empty EvaluationOverlay", str(ctx.exception))
+        self.assertIn("must be empty FactOverlay", str(ctx.exception))
 
     def test_path_is_forwarded_verbatim(self) -> None:
         custom_path = "$.future_g3.future_method.overlay"
@@ -378,18 +378,18 @@ class ValidateEvaluationOverlayTests(unittest.TestCase):
     """
 
     def test_accepts_evaluation_overlay(self) -> None:
-        validate_evaluation_overlay(EvaluationOverlay(), path="$.check_fact_overlay.overlay")
+        validate_evaluation_overlay(FactOverlay(), path="$.check_fact_overlay.overlay")
 
     def test_rejects_none(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:
             validate_evaluation_overlay(None, path="$.check_fact_overlay.overlay")
         self.assertEqual(ctx.exception.path, "$.check_fact_overlay.overlay")
-        self.assertIn("overlay must be EvaluationOverlay", str(ctx.exception))
+        self.assertIn("overlay must be FactOverlay", str(ctx.exception))
 
     def test_rejects_non_evaluation_overlay(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:
             validate_evaluation_overlay(
-                (FactValueOverride(asrt_id="A1", pred_id="Person:age", e_ref="alice", old_fact_tuple=(20,), new_fact_tuple=(30,)),),
+                (ReplaceFact(asrt_id="A1", pred_id="Person:age", e_ref="alice", old_fact_tuple=(20,), new_fact_tuple=(30,)),),
                 path="$.recheck_proof_frame.overlay",
             )
         self.assertEqual(ctx.exception.path, "$.recheck_proof_frame.overlay")

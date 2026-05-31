@@ -31,7 +31,7 @@ from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogSemantics, PyReasonSemantics
 from .store import FactGraph, SDKStore
 from factgraph.application.protocol import (
-    AtomDescriptor,
+    ConditionDescriptor,
     Claim,
     DetachedRowError,
     EvaluateResult,
@@ -121,7 +121,7 @@ __all__ = [
     "DSLToApplicationRuleError",
     "RuleExprInspect",
     "OccurrenceInspect",
-    "AtomDescriptor",
+    "ConditionDescriptor",
     "PortInspect",
     "RuleExpr",
     "RuleExprError",

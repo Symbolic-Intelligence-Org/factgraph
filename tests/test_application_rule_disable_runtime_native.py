@@ -16,17 +16,17 @@ from factgraph.application import (
 )
 from factgraph.application.protocol import (
     EntitySelector,
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     RuleDisableAction,
     RuleDisableRequest,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
 )
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.rule_ir import RuleSpec
 from factgraph.core.store import Store
-from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, SupportArtifact
+from factgraph.core.store._support import NonFactStep, PredWitness, RuleRefEdge, ProofReceipt
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -108,7 +108,7 @@ def _rule_spec(index: Any, *, where: list[Any] | None = None) -> RuleSpec:
     )
 
 
-def _artifact(seeded: SeededPerson, **kwargs: object) -> SupportArtifact:
+def _artifact(seeded: SeededPerson, **kwargs: object) -> ProofReceipt:
     fields = {
         "kind": "native_binding_v1",
         "root_result_kind": "row",
@@ -132,7 +132,7 @@ def _artifact(seeded: SeededPerson, **kwargs: object) -> SupportArtifact:
         ),
     }
     fields.update(kwargs)
-    return SupportArtifact(**fields)  # type: ignore[arg-type]
+    return ProofReceipt(**fields)  # type: ignore[arg-type]
 
 
 def _action(**kwargs: object) -> RuleDisableAction:
@@ -148,8 +148,8 @@ def _action(**kwargs: object) -> RuleDisableAction:
 
 def _request(
     rule_spec: RuleSpec,
-    artifact: SupportArtifact,
-    overlay: EvaluationOverlay,
+    artifact: ProofReceipt,
+    overlay: FactOverlay,
 ) -> RuleDisableRequest:
     return RuleDisableRequest(rule_spec=rule_spec, support_artifact=artifact, overlay=overlay)
 
@@ -166,7 +166,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         rule_spec = _rule_spec(index)
 
         result = check_rule_disable_action(
-            _request(rule_spec, _artifact(alice), EvaluationOverlay(rule_actions=(_action(),))),
+            _request(rule_spec, _artifact(alice), FactOverlay(rule_actions=(_action(),))),
             store=store,
         )
 
@@ -187,7 +187,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         artifact = _artifact(alice, non_fact_steps=())
 
         result = check_rule_disable_action(
-            _request(_rule_spec(index), artifact, EvaluationOverlay(rule_actions=(_action(),))),
+            _request(_rule_spec(index), artifact, FactOverlay(rule_actions=(_action(),))),
             store=store,
         )
 
@@ -208,7 +208,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
     def test_fact_actions_are_rejected_in_rule_disable_request(self) -> None:
         store, index = _build_store()
         alice = _seed_person(store, index, name="alice")
-        fact_action = FactValueOverride(
+        fact_action = ReplaceFact(
             asrt_id=alice.age_asrt_id,
             pred_id=alice.age_pred_id,
             e_ref=alice.e_ref,
@@ -220,7 +220,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(fact_actions=(fact_action,), rule_actions=(_action(),)),
+                FactOverlay(fact_actions=(fact_action,), rule_actions=(_action(),)),
             ),
             store=store,
         )
@@ -238,7 +238,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index),
                         _artifact(alice),
-                        EvaluationOverlay(rule_actions=actions),
+                        FactOverlay(rule_actions=actions),
                     ),
                     store=store,
                 )
@@ -253,7 +253,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             version="1.0",
             branch_index=0,
             atom_index=3,
-            literal_path=RuleLiteralPath(kind="rhs"),
+            literal_path=ConditionPath(kind="rhs"),
             old_literal="us",
             new_literal="eu",
         )
@@ -262,7 +262,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(action,)),
+                FactOverlay(rule_actions=(action,)),
             ),
             store=store,
         )
@@ -278,7 +278,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(rule_id="other.rule"),)),
+                FactOverlay(rule_actions=(_action(rule_id="other.rule"),)),
             ),
             store=store,
         )
@@ -294,7 +294,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 _rule_spec(index),
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(atom_index=99),)),
+                FactOverlay(rule_actions=(_action(atom_index=99),)),
             ),
             store=store,
         )
@@ -318,7 +318,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index, where=where),
                         _artifact(alice),
-                        EvaluationOverlay(rule_actions=(_action(atom_index=0),)),
+                        FactOverlay(rule_actions=(_action(atom_index=0),)),
                     ),
                     store=store,
                 )
@@ -351,7 +351,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
                     _request(
                         _rule_spec(index),
                         artifact,
-                        EvaluationOverlay(rule_actions=(_action(),)),
+                        FactOverlay(rule_actions=(_action(),)),
                     ),
                     store=store,
                 )
@@ -371,7 +371,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(atom_index=0),)),
+                FactOverlay(rule_actions=(_action(atom_index=0),)),
             ),
             store=store,
         )
@@ -398,7 +398,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
             _request(
                 rule_spec,
                 _artifact(alice),
-                EvaluationOverlay(rule_actions=(_action(atom_index=1),)),
+                FactOverlay(rule_actions=(_action(atom_index=1),)),
             ),
             store=store,
         )
@@ -413,7 +413,7 @@ class RuleDisableRuntimeNativeTests(unittest.TestCase):
         before = _ledger_dump(store)
 
         check_rule_disable_action(
-            _request(_rule_spec(index), _artifact(alice), EvaluationOverlay(rule_actions=(_action(),))),
+            _request(_rule_spec(index), _artifact(alice), FactOverlay(rule_actions=(_action(),))),
             store=store,
         )
 

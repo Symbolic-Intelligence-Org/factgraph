@@ -6,25 +6,25 @@ import unittest
 
 from factgraph.application import render_proof_frame_narrative
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactRemoveAction,
-    FactValueOverride,
-    ProofFrameAtomVerdict,
+    FactOverlay,
+    RemoveFact,
+    ReplaceFact,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
 )
 
 
-def _overlay() -> EvaluationOverlay:
-    return EvaluationOverlay(
+def _overlay() -> FactOverlay:
+    return FactOverlay(
         fact_actions=(
-            FactValueOverride(
+            ReplaceFact(
                 asrt_id="opaque-age-asrt",
                 pred_id="Person.age",
                 e_ref="person:alice",
                 old_fact_tuple=("person:alice", 25),
                 new_fact_tuple=("person:alice", 26),
             ),
-            FactRemoveAction(
+            RemoveFact(
                 asrt_id="opaque-region-asrt",
                 pred_id="Person.region",
                 e_ref="person:alice",
@@ -40,12 +40,12 @@ class ProofFrameNarrativeTests(unittest.TestCase):
             status="invalidated",
             binding_items=(("$p", "person:alice"),),
             atom_verdicts=(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key="b0.a0:Person.age",
                     verdict="invalidated",
                     affected_action_indices=(0,),
                 ),
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key="b0.a1:eq",
                     verdict="still_valid",
                     affected_action_indices=(),
@@ -75,7 +75,7 @@ class ProofFrameNarrativeTests(unittest.TestCase):
             status="still_valid",
             binding_items=(("$p", "person:alice"),),
             atom_verdicts=(
-                ProofFrameAtomVerdict(
+                ProofFrameConditionVerdict(
                     atom_key="b0.a0:Person.age",
                     verdict="still_valid",
                     affected_action_indices=(),
@@ -84,7 +84,7 @@ class ProofFrameNarrativeTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            render_proof_frame_narrative(result, overlay=EvaluationOverlay(fact_actions=())),
+            render_proof_frame_narrative(result, overlay=FactOverlay(fact_actions=())),
             "Proof frame status: still_valid.",
         )
 
@@ -96,7 +96,7 @@ class ProofFrameNarrativeTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            render_proof_frame_narrative(result, overlay=EvaluationOverlay(fact_actions=())),
+            render_proof_frame_narrative(result, overlay=FactOverlay(fact_actions=())),
             "Proof frame status: unknown.\nNo recheckable proof atoms were evaluated.",
         )
 

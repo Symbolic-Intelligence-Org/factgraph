@@ -27,7 +27,7 @@ from typing import Any, Generic, TypeVar
 
 from factgraph.application.protocol.common import WarningDTO
 from factgraph.application.protocol.proofframe import (
-    ProofFrameAtomVerdict,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
     ProofFrameStatus,
 )
@@ -37,7 +37,7 @@ from factgraph.audit.proof_frame_diff import (
     FrameDelta,
     ProofFrameDiff,
 )
-from factgraph.core.store._support import BindingItems, SupportArtifact
+from factgraph.core.store._support import BindingItems, ProofReceipt
 from factgraph.core.store.ledger import Claim, MetaRow
 
 from ._freeze import freeze_value
@@ -344,7 +344,7 @@ class ProofFrameView:
         return self._binding_items
 
     @property
-    def atom_verdicts(self) -> FrozenTupleView[ProofFrameAtomVerdict]:
+    def atom_verdicts(self) -> FrozenTupleView[ProofFrameConditionVerdict]:
         return self._atom_verdicts
 
     @property
@@ -480,7 +480,7 @@ class ProofFrameDiffView:
 
 
 class SupportArtifactView:
-    """Frozen wrapper view over `SupportArtifact` plus assertion indexes."""
+    """Frozen wrapper view over `ProofReceipt` plus assertion indexes."""
 
     __slots__ = (
         "_claim_index",
@@ -494,14 +494,14 @@ class SupportArtifactView:
 
     def __init__(
         self,
-        support: SupportArtifact,
+        support: ProofReceipt,
         frozen_claim_index: Mapping[str, Claim],
         frozen_meta_index: Mapping[str, tuple[MetaRow, ...]] | None = None,
         *,
         source_id: str | None = None,
     ) -> None:
-        if not isinstance(support, SupportArtifact):
-            raise TypeError("support must be SupportArtifact")
+        if not isinstance(support, ProofReceipt):
+            raise TypeError("support must be ProofReceipt")
         if not isinstance(frozen_claim_index, Mapping):
             raise TypeError("frozen_claim_index must be Mapping[str, Claim]")
 
@@ -528,7 +528,7 @@ class SupportArtifactView:
         object.__delattr__(self, name)
 
     @property
-    def underlying(self) -> SupportArtifact:
+    def underlying(self) -> ProofReceipt:
         return self._underlying
 
     @property

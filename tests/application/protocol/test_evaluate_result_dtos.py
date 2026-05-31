@@ -40,7 +40,7 @@ from factgraph.core.store._support import (
     NonFactStep,
     PredWitness,
     ProvenanceEnvelope,
-    SupportArtifact,
+    ProofReceipt,
 )
 
 
@@ -116,7 +116,7 @@ def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[st
 def _single_row_result(
     bindings: dict[str, object] | None = None,
     *,
-    support_artifact: SupportArtifact | None = None,
+    support_artifact: ProofReceipt | None = None,
     provenance_envelope: ProvenanceEnvelope | None = None,
 ) -> EvaluateResult:
     (
@@ -172,8 +172,8 @@ def _native_support_artifact(
     *,
     kind: str = "native_binding_v1",
     non_fact_steps: tuple[NonFactStep, ...] = (),
-) -> SupportArtifact:
-    return SupportArtifact(
+) -> ProofReceipt:
+    return ProofReceipt(
         kind=kind,
         root_result_kind="row",
         binding_items=(("$person", "p1"),),

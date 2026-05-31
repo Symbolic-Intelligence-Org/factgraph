@@ -6,7 +6,7 @@ ships full §5.1 / §5.2 / §5.4 / §5.7 / §5.8 contract coverage for
 ``sdk_rule_add_condition(...)``. Mirrors the Phase 1
 ``test_sdk_rule_disable.py`` and Phase 2
 ``test_sdk_rule_literal_replace.py`` structure with one extra test for
-``RuleAddedAtom`` shape validation propagating through
+``AddedCondition`` shape validation propagating through
 ``RuleAddConditionAction.__post_init__`` to
 ``$.check_rule_add_condition.request``.
 """
@@ -19,15 +19,15 @@ from unittest.mock import patch
 
 from factgraph.application.capability_helpers.errors import CapabilityHelperError
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactValueOverride,
+    FactOverlay,
+    ReplaceFact,
     ProtocolShapeError,
     RuleAddConditionAction,
     RuleAddConditionResult,
-    RuleAddedAtom,
+    AddedCondition,
 )
 from factgraph.core.rules.rule_ir import RuleCompileError
-from factgraph.core.store._support import SupportArtifact
+from factgraph.core.store._support import ProofReceipt
 from factgraph.sdk.shells.check import sdk_check
 from factgraph.sdk.shells.rule_add_condition import sdk_rule_add_condition
 from factgraph.sdk import (
@@ -79,25 +79,25 @@ def _adult_rule() -> Rule:
         )
 
 
-def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> SupportArtifact:
-    """Run sdk_check(sdk, ...) and extract the captured SupportArtifact."""
+def _capture_support(sdk: SDKStore, e_ref: str, age: int) -> ProofReceipt:
+    """Run sdk_check(sdk, ...) and extract the captured ProofReceipt."""
     result = sdk_check(sdk, _age_derivation(), {"$p": e_ref, "$age": age})
     payload = result.evidence_envelope.engine_payload
-    assert isinstance(payload, SupportArtifact), (
-        f"native engine should produce SupportArtifact, got {type(payload).__name__}"
+    assert isinstance(payload, ProofReceipt), (
+        f"native engine should produce ProofReceipt, got {type(payload).__name__}"
     )
     return payload
 
 
-def _added_atom() -> RuleAddedAtom:
-    """Construct a minimal valid ``RuleAddedAtom`` for happy-path tests.
+def _added_atom() -> AddedCondition:
+    """Construct a minimal valid ``AddedCondition`` for happy-path tests.
 
     The ``atom`` tuple shape is application-protocol opaque — the
     runtime validates atom structure during native evaluation. For SDK
     contract testing we use a syntactically valid atom (kind string +
     args); semantic validity is the runtime's concern.
     """
-    return RuleAddedAtom(atom=("eq", "$age", 30))
+    return AddedCondition(atom=("eq", "$age", 30))
 
 
 class SDKRuleAddConditionContractTests(unittest.TestCase):
@@ -160,7 +160,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_add_condition.support")
-        self.assertIn("SupportArtifact", str(ctx.exception))
+        self.assertIn("ProofReceipt", str(ctx.exception))
 
     def test_non_evaluation_overlay_input_rejected_at_sdk_surface(self) -> None:
         sdk = _build_sdk()
@@ -177,19 +177,19 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.path, "$.check_rule_add_condition.overlay")
-        self.assertIn("EvaluationOverlay", str(ctx.exception))
+        self.assertIn("FactOverlay", str(ctx.exception))
 
     def test_non_empty_overlay_rejected_at_sdk_surface(self) -> None:
-        """§5.4 lock: SDK rejects non-empty ``EvaluationOverlay`` because
+        """§5.4 lock: SDK rejects non-empty ``FactOverlay`` because
         the rule-action overlay is constructed internally by the A
-        helper; SDK callers pass ``None`` or empty ``EvaluationOverlay()``.
+        helper; SDK callers pass ``None`` or empty ``FactOverlay()``.
         """
         sdk = _build_sdk()
         alice = _seed_person(sdk, name="alice", age=25, region="us")
         support = _capture_support(sdk, alice, 25)
-        non_empty_overlay = EvaluationOverlay(
+        non_empty_overlay = FactOverlay(
             fact_actions=(
-                FactValueOverride(
+                ReplaceFact(
                     asrt_id="a1",
                     pred_id="Person:age",
                     e_ref=alice,
@@ -221,15 +221,15 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
             support,
             branch_index=0,
             added_atom=_added_atom(),
-            overlay=EvaluationOverlay(),
+            overlay=FactOverlay(),
         )
 
         self.assertIsInstance(result, RuleAddConditionResult)
 
     def test_non_rule_added_atom_remaps_to_request_path(self) -> None:
-        """§5.4 lock: ``added_atom`` is a raw ``RuleAddedAtom``;
-        non-``RuleAddedAtom`` inputs slip past SDK pre-validation
-        (no shared validator for ``RuleAddedAtom``) and are caught by
+        """§5.4 lock: ``added_atom`` is a raw ``AddedCondition``;
+        non-``AddedCondition`` inputs slip past SDK pre-validation
+        (no shared validator for ``AddedCondition``) and are caught by
         the A helper / action DTO ``__post_init__``, which raises
         ``ProtocolShapeError`` — remapped to
         ``$.check_rule_add_condition.request``.
@@ -387,7 +387,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         self.assertFalse(hasattr(sdk_pkg, "RuleAddConditionResult"))
         self.assertNotIn("RuleAddConditionAction", sdk_pkg.__all__)
         self.assertNotIn("RuleAddConditionRequest", sdk_pkg.__all__)
-        self.assertNotIn("RuleAddedAtom", sdk_pkg.__all__)
+        self.assertNotIn("AddedCondition", sdk_pkg.__all__)
 
     def test_runtime_dispatched_with_store_and_resolved_registry(self) -> None:
         sdk = _build_sdk()
@@ -427,7 +427,7 @@ class SDKRuleAddConditionContractTests(unittest.TestCase):
         action = captured["request"].overlay.rule_actions[0]
         self.assertIsInstance(action, RuleAddConditionAction)
         self.assertEqual(action.branch_index, 0)
-        self.assertIsInstance(action.added_atom, RuleAddedAtom)
+        self.assertIsInstance(action.added_atom, AddedCondition)
         self.assertEqual(action.added_atom.atom, ("eq", "$age", 30))
 
     def test_sibling_does_not_call_other_sdk_shells_at_runtime(self) -> None:

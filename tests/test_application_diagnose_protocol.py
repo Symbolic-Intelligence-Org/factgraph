@@ -11,7 +11,7 @@ import unittest
 from factgraph.application.protocol import (
     CompiledDerivationPlan,
     CompiledHeadCall,
-    DiagnoseAtomLocator,
+    DiagnoseConditionLocator,
     DiagnoseFailureKind,
     DiagnoseRequest,
     DiagnoseResult,
@@ -20,7 +20,7 @@ from factgraph.application.protocol import (
     EvidenceEnvelope,
     ProtocolShapeError,
 )
-from factgraph.core.store._support import ProvenanceEnvelope, SupportArtifact
+from factgraph.core.store._support import ProvenanceEnvelope, ProofReceipt
 
 
 def _head(target: str = "doc:eligible", vars_: tuple[str, ...] = ("$doc",)) -> CompiledHeadCall:
@@ -48,8 +48,8 @@ def _error(code: str = "EVIDENCE_LOOKUP_MISS") -> ErrorDTO:
     return ErrorDTO(code=code, message="evidence lookup miss")
 
 
-def _atom_locator() -> DiagnoseAtomLocator:
-    return DiagnoseAtomLocator(
+def _atom_locator() -> DiagnoseConditionLocator:
+    return DiagnoseConditionLocator(
         branch_index=0,
         failed_atom_index=1,
         attempted_binding=_partial_binding(),
@@ -65,7 +65,7 @@ class DiagnoseAtomLocatorProtocolTests(unittest.TestCase):
 
     def test_atom_locator_negative_branch_rejected(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            DiagnoseAtomLocator(
+            DiagnoseConditionLocator(
                 branch_index=-1,
                 failed_atom_index=0,
                 attempted_binding=_partial_binding(),
@@ -73,7 +73,7 @@ class DiagnoseAtomLocatorProtocolTests(unittest.TestCase):
 
     def test_atom_locator_negative_atom_index_rejected(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            DiagnoseAtomLocator(
+            DiagnoseConditionLocator(
                 branch_index=0,
                 failed_atom_index=-1,
                 attempted_binding=_partial_binding(),
@@ -81,15 +81,15 @@ class DiagnoseAtomLocatorProtocolTests(unittest.TestCase):
 
     def test_atom_locator_invalid_binding_rejected(self) -> None:
         with self.assertRaises(ProtocolShapeError):
-            DiagnoseAtomLocator(
+            DiagnoseConditionLocator(
                 branch_index=0,
                 failed_atom_index=0,
                 attempted_binding=(("doc", "d-1"),),  # missing $-prefix
             )
 
     def test_atom_locator_is_capability_output_not_in_evidence_envelope(self) -> None:
-        # §7-Diagnose-2: DiagnoseAtomLocator must NOT be accepted by
-        # EvidenceEnvelope.engine_payload (which is SupportArtifact | ProvenanceEnvelope only).
+        # §7-Diagnose-2: DiagnoseConditionLocator must NOT be accepted by
+        # EvidenceEnvelope.engine_payload (which is ProofReceipt | ProvenanceEnvelope only).
         with self.assertRaises(ProtocolShapeError):
             EvidenceEnvelope(
                 engine="native",
@@ -263,7 +263,7 @@ class DiagnoseResultFailedTests(unittest.TestCase):
             diagnostic_payload=_atom_locator(),
         )
         self.assertEqual(result.failure_kind, "atom_localized")
-        self.assertIsInstance(result.diagnostic_payload, DiagnoseAtomLocator)
+        self.assertIsInstance(result.diagnostic_payload, DiagnoseConditionLocator)
 
     def test_failed_requires_failure_kind(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -444,12 +444,12 @@ class DiagnoseStatusEnumInvarianceTests(unittest.TestCase):
 class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
     """§7-Diagnose-2: Check's EvidenceEnvelope.engine_payload Union is unchanged.
 
-    Verifies that adding DiagnoseAtomLocator did not widen the Union; the
-    Union members remain exactly {SupportArtifact, ProvenanceEnvelope}.
+    Verifies that adding DiagnoseConditionLocator did not widen the Union; the
+    Union members remain exactly {ProofReceipt, ProvenanceEnvelope}.
     """
 
     def test_engine_payload_accepts_support_artifact(self) -> None:
-        artifact = SupportArtifact(
+        artifact = ProofReceipt(
             kind="native_binding_v1",
             root_result_kind="fact",
             binding_items=_binding(),
@@ -462,7 +462,7 @@ class DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests(unittest.TestCase):
             branch_index=0,
             engine_payload=artifact,
         )
-        self.assertIsInstance(env.engine_payload, SupportArtifact)
+        self.assertIsInstance(env.engine_payload, ProofReceipt)
 
     def test_engine_payload_accepts_provenance_envelope(self) -> None:
         envelope = ProvenanceEnvelope(

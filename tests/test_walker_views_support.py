@@ -13,12 +13,12 @@ from factgraph.application.walker import (
     WalkerReferenceError,
     WalkerSnapshotError,
 )
-from factgraph.core.store._support import NonFactStep, PredWitness, SupportArtifact
+from factgraph.core.store._support import NonFactStep, PredWitness, ProofReceipt
 from factgraph.core.store.ledger import Claim, MetaRow
 
 
-def _support_artifact() -> SupportArtifact:
-    return SupportArtifact(
+def _support_artifact() -> ProofReceipt:
+    return ProofReceipt(
         kind="native_binding_v1",
         root_result_kind="row",
         binding_items=(("$p", "person:alice"),),

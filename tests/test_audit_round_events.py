@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 import unittest
 
-from factgraph.application.protocol.derivation_diagnose import DiagnoseAtomLocator
+from factgraph.application.protocol.derivation_diagnose import DiagnoseConditionLocator
 from factgraph.audit import AuditQuery, load_audit_package
 from factgraph.audit.round_events import (
     RoundEventError,
@@ -192,7 +192,7 @@ class AuditRoundEventTests(unittest.TestCase):
                 matched_count=0,
                 matched_binding=None,
                 failure_kind="atom_localized",
-                diagnostic_payload=DiagnoseAtomLocator(
+                diagnostic_payload=DiagnoseConditionLocator(
                     branch_index=0,
                     failed_atom_index=1,
                     attempted_binding=binding,

@@ -20,13 +20,13 @@ Reach for the layers below when you need:
   out is your responsibility.
 - **LLM-generated payloads** — when the calling code is producing
   inferences or overlays from string templates, raw application
-  protocol DTOs (`EvaluationOverlay`, `RuleLiteralPath`,
-  `RuleAddedAtom`, etc.) are the only path for some advanced
+  protocol DTOs (`FactOverlay`, `ConditionPath`,
+  `AddedCondition`, etc.) are the only path for some advanced
   constructs that don't yet have an SDK builder. Construct them
   directly — the constructors are precise about their fields, so
   read `factgraph.application.protocol` before composing.
 - **Walker-driven analysis** — proof-frame diffs and large
-  `SupportArtifact` trees are easier to navigate via walker views
+  `ProofReceipt` trees are easier to navigate via walker views
   than via direct attribute access.
 - **Round event recording** — the recorder lifecycle
   (`start_round`, `record_round_event`, `finalize_round`) is mutable
@@ -159,11 +159,11 @@ directly:
 
 ```python
 from factgraph.application.protocol import (
-    EvaluationOverlay,
-    FactValueOverride,         # FactOverlayAction = FactValueOverride | FactRemoveAction
-    FactRemoveAction,
-    RuleLiteralPath,
-    RuleAddedAtom,
+    FactOverlay,
+    ReplaceFact,         # FactOverlayAction = ReplaceFact | RemoveFact
+    RemoveFact,
+    ConditionPath,
+    AddedCondition,
     RuleDisableAction,         # RuleOverlayAction = RuleDisableAction | RuleLiteralReplaceAction | RuleAddConditionAction
     RuleLiteralReplaceAction,
     RuleAddConditionAction,
@@ -179,9 +179,9 @@ fr_lang_asrt_id = (
     .asrt_id
 )
 
-overlay = EvaluationOverlay(
+overlay = FactOverlay(
     fact_actions=(
-        FactValueOverride(
+        ReplaceFact(
             asrt_id=fr_lang_asrt_id,
             pred_id="country:official_language",
             e_ref="idref_v1:Country:<digest>",
@@ -193,13 +193,13 @@ overlay = EvaluationOverlay(
     rule_actions=(),
 )
 
-# RuleLiteralPath: targets a literal slot inside an atom
-literal_path = RuleLiteralPath(kind="pred_term", index=2)
+# ConditionPath: targets a literal slot inside an atom
+literal_path = ConditionPath(kind="pred_term", index=2)
 # kind ∈ {"pred_term", "in_value", "lhs", "rhs", "const_operand"}
 # index is required for "pred_term" / "in_value" only
 
-# RuleAddedAtom: a tuple-encoded atom; the SDK predicate IR shape
-added_atom = RuleAddedAtom(atom=("pred", "user:tag", "$u", "vip"))
+# AddedCondition: a tuple-encoded atom; the SDK predicate IR shape
+added_atom = AddedCondition(atom=("pred", "user:tag", "$u", "vip"))
 # atom[0] is the kind tag (e.g. "pred"); the rest are atom-specific terms
 ```
 

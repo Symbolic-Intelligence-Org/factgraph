@@ -10,11 +10,11 @@ from dataclasses import FrozenInstanceError
 from factgraph.application import protocol as protocol_pkg
 from factgraph.application.protocol import (
     ErrorDTO,
-    EvaluationOverlay,
-    ProofFrameAtomVerdict,
+    FactOverlay,
+    ProofFrameConditionVerdict,
     ProofFrameRecheckResult,
     ProtocolShapeError,
-    RuleLiteralPath,
+    ConditionPath,
     RuleLiteralReplaceAction,
     RuleLiteralReplaceRequest,
     RuleLiteralReplaceResult,
@@ -22,7 +22,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol import rule_literal_replace as replace_protocol
 from factgraph.core.rules.rule_ir import RuleSpec
-from factgraph.core.store._support import PredWitness, SupportArtifact
+from factgraph.core.store._support import PredWitness, ProofReceipt
 
 
 def _rule_spec() -> RuleSpec:
@@ -34,7 +34,7 @@ def _rule_spec() -> RuleSpec:
     )
 
 
-def _artifact(**kwargs: object) -> SupportArtifact:
+def _artifact(**kwargs: object) -> ProofReceipt:
     fields = {
         "kind": "native_binding_v1",
         "root_result_kind": "row",
@@ -44,7 +44,7 @@ def _artifact(**kwargs: object) -> SupportArtifact:
         ),
     }
     fields.update(kwargs)
-    return SupportArtifact(**fields)  # type: ignore[arg-type]
+    return ProofReceipt(**fields)  # type: ignore[arg-type]
 
 
 def _action() -> RuleLiteralReplaceAction:
@@ -53,18 +53,18 @@ def _action() -> RuleLiteralReplaceAction:
         version="1.0",
         branch_index=0,
         atom_index=1,
-        literal_path=RuleLiteralPath(kind="rhs"),
+        literal_path=ConditionPath(kind="rhs"),
         old_literal="us",
         new_literal="eu",
     )
 
 
-def _overlay() -> EvaluationOverlay:
-    return EvaluationOverlay(rule_actions=(_action(),))
+def _overlay() -> FactOverlay:
+    return FactOverlay(rule_actions=(_action(),))
 
 
 def _proof_frame() -> ProofFrameRecheckResult:
-    verdict = ProofFrameAtomVerdict(
+    verdict = ProofFrameConditionVerdict(
         atom_key="b0.a1:eq",
         verdict="invalidated",
         affected_action_indices=(0,),
@@ -95,7 +95,7 @@ class RuleLiteralReplaceRequestProtocolTests(unittest.TestCase):
     def test_request_is_frozen(self) -> None:
         request = RuleLiteralReplaceRequest(_rule_spec(), _artifact(), _overlay())
         with self.assertRaises(FrozenInstanceError):
-            request.overlay = EvaluationOverlay()  # type: ignore[misc]
+            request.overlay = FactOverlay()  # type: ignore[misc]
 
     def test_request_rejects_wrong_types(self) -> None:
         with self.assertRaises(ProtocolShapeError):
@@ -215,7 +215,7 @@ class RuleLiteralReplaceProtocolStaticInvariantTests(unittest.TestCase):
         )
 
     def test_protocol_package_exports_rule_literal_replace_types(self) -> None:
-        self.assertIs(protocol_pkg.RuleLiteralPath, RuleLiteralPath)
+        self.assertIs(protocol_pkg.ConditionPath, ConditionPath)
         self.assertIs(protocol_pkg.RuleLiteralReplaceAction, RuleLiteralReplaceAction)
         self.assertIs(protocol_pkg.RuleLiteralReplaceRequest, RuleLiteralReplaceRequest)
         self.assertIs(protocol_pkg.RuleLiteralReplaceResult, RuleLiteralReplaceResult)
