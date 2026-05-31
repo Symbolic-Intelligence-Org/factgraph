@@ -83,7 +83,8 @@ Combining Batch A + Batch D into one slice is supported by audit §9 recommendat
 | Core class | `FrozenAssertionView` | `FrozenAssertionSet` | [`core/store/database.py:75`](../../../src/factgraph/core/store/database.py) |
 | SDK class | `FrozenAssertionView` | `FrozenAssertionSet` | [`sdk/store.py:135`](../../../src/factgraph/sdk/store.py) |
 | Core exports | `__all__` entry `FrozenAssertionView` | `FrozenAssertionSet` | [`core/store/__init__.py:14`](../../../src/factgraph/core/store/__init__.py) (`__all__` tuple) + [`core/store/__init__.py:40`](../../../src/factgraph/core/store/__init__.py) (re-export tuple) — both rows. Confirmed in Step 4.2 review P3-1. |
-| SDK exports | `__all__` entry `FrozenAssertionView` (if present) | `FrozenAssertionSet` | `sdk/__init__.py` — Step 4.3 preflight verifies location (current grep shows no direct `FrozenAssertionView` in `sdk/__init__.py`; may re-export via different path or omit from public `__all__`). |
+| SDK exports | `__all__` entry `FrozenAssertionView` (if present) | `FrozenAssertionSet` | `sdk/__init__.py` — Step 4.3 preflight PF-v2 confirmed: full-file grep returns 0 hits, so no `__all__` update required in `sdk/__init__.py`. |
+| SDK internal alias (Step 4.3 PF-r2) | Import alias `FrozenAssertionView as DatabaseFrozenAssertionView` at [`sdk/store.py:88`](../../../src/factgraph/sdk/store.py) + all internal references | `FrozenAssertionSet as DatabaseFrozenAssertionSet` + all internal references | Step 4.7 implementation must rename the import alias AND all `DatabaseFrozenAssertionView` references within `sdk/store.py` (type hints, `isinstance` checks, parameter annotations). Pre-impl grep in Step 4.6.5 enumerates the exact set; current Step 4.3 spot-check identified hits at line 175 (parameter type), line 313 (isinstance check), and line 1779 (parameter type) — but the rename target is "import alias + all internal references", not a fixed count. |
 | by_ids top-level | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) |
 | by_ids facade | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py) |
 | Audit explain | `fg.audit.explain_fact(pred_id, e_ref, *val_atoms)` | `fg.audit.explain(target)` where `target: str \| AssertionRecord` | [`sdk/store.py:1417`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.explain_fact` → `explain`) **only**; manager body calls core `_queries.explain_fact` directly or via a private helper |
@@ -113,7 +114,29 @@ Define explicit error model for `by_ids(strict=True)`:
 - Duplicate ID in input: raise `SDKStoreError("by_ids strict mode: duplicate assertion id '{id}' in input")`
 - Default `strict=False` preserves current permissive behavior (caller-visible: same return, missing IDs silently dropped per current behavior)
 
-Implementation must apply to all by-ids public surfaces (G3 enumerates two; preflight Step 4.3 verifies no third surface exists).
+Implementation must apply to all by-ids public surfaces (G3 enumerates two; preflight Step 4.3 PF-v3 verified no third surface exists).
+
+**§5.3.1 Duplicate-detection placement (Step 4.3 PF-r1)**
+
+Current shipped behavior auto-deduplicates input BEFORE any strict check:
+- [`sdk/store.py:470`](../../../src/factgraph/sdk/store.py): `for asrt_id in sorted(set(normalized)):`
+- [`sdk/facade.py:268`](../../../src/factgraph/sdk/facade.py): `wanted = set(normalized)`
+
+**Decision (locked at Step 4.4)**: duplicate detection under `strict=True` MUST occur **before** the `set(...)` deduplication step. Reference implementation pattern:
+
+```python
+if strict:
+    seen: set[str] = set()
+    for asrt_id in normalized:
+        if asrt_id in seen:
+            raise SDKStoreError(
+                f"by_ids strict mode: duplicate assertion id {asrt_id!r} in input"
+            )
+        seen.add(asrt_id)
+# existing dedup proceeds afterwards for downstream lookup
+```
+
+Both surfaces ([`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) + [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py)) must apply this pattern. Missing-id detection follows the existing per-id lookup loop and raises on first `None` return when `strict=True`. Default `strict=False` skips the pre-set check entirely, preserving permissive behavior.
 
 ### §5.4 Audit signature semantics (G4 / G5)
 
@@ -128,6 +151,19 @@ Implementation must apply to all by-ids public surfaces (G3 enumerates two; pref
 - Returns `{pred_id, e_ref, active_asrt_ids, chosen_asrt_id}` matching current `_queries.conflicts` shape.
 
 Core query helpers (`_queries.explain_fact`, `_queries.conflicts`) retain existing signatures and names — only the SDK public boundary changes (per §4.2 explicit permission).
+
+#### §5.4.1 asrt_id → (pred_id, e_ref, val_atoms) reverse-resolution (Step 4.3 PF-R1)
+
+`_queries.explain_fact(store, pred_id, e_ref, *val_atoms)` requires `pred_id` and `e_ref` as positional arguments (verified at [`core/store/_queries.py:13`](../../../src/factgraph/core/store/_queries.py) by Step 4.3 preflight PF-R1 + §3.1 spot-check). The G4 surface accepts only `target: str | AssertionRecord` and must reverse-resolve to those positional arguments. Same constraint applies to G5 `conflicts` (but `conflicts` takes only `(pred_id, e_ref)`, no `val_atoms` tail).
+
+**Decision (locked at Step 4.4)**: implementation MUST provide a reverse-resolution mechanism reachable from `_SDKAuditManager.explain` / `.conflicts` bodies. The implementation chooses one of:
+
+- **Option (a) — private helper in `_SDKAuditManager` or `sdk/store.py`**: a helper `_resolve_asrt_to_explain_args(store, asrt_id) → (pred_id, e_ref, val_atoms_tuple)` reads the ledger via `store.ledger.find_claims(...)` or `store.ledger.get_claim(asrt_id)` to extract the claim's (pred_id, e_ref, args). Manager body: `helper(...) → unpack → _queries.explain_fact(self._sdk._store, *args)`.
+- **Option (b) — new public function on `_queries`**: e.g., `_queries.explain_assertion(store, asrt_id) → dict[str, Any]` that performs the reverse-resolution + delegation internally. Manager body: `_queries.explain_assertion(self._sdk._store, asrt_id)`.
+
+**Implementation choice (a) vs (b)** is a scoped-detail per CADENCE Step 4.3 (PF-R1 + PF-s1 family). Both satisfy P2-2 (do not call `self._sdk.explain_fact(...)`) and preserve `_queries.explain_fact` core signature (per §4.2 + N7 layer-authority invariant). Choice is recorded in Step 4.7 implementation commit + Step 4.8 closure §10.
+
+`AssertionRecord` → `asrt_id` extraction uses the existing `AssertionRecord.asrt_id` attribute (preflight already verified shipped `AssertionRecord` shape via `sdk/facade.py:263+` re-read). For `conflicts`, the `tuple[Entity, str]` branch uses entity.id and field name to construct `(pred_id, e_ref)` directly without ledger lookup.
 
 ### §5.5 Docs sync targets
 
