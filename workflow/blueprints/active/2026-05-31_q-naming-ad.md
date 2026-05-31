@@ -27,7 +27,7 @@ Combining Batch A + Batch D into one slice is supported by audit §9 recommendat
 - G3: Add `strict=True` flag to `by_ids` on **every** public by-ids surface (top-level [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) + assertion view [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py)) with explicit missing-ID and duplicate-ID raise behavior. Default `strict=False` preserves current permissive behavior.
 - G4: Change `fg.audit.explain_fact(pred_id, e_ref)` public signature → `fg.audit.explain(asrt_id | record)`. **Semantic preservation**: `fg.audit` continues to explain chosen-policy among multiple active claims (NOT derivation reasoning). Core query helper at [`src/factgraph/core/store/_queries.py:13`](../../../src/factgraph/core/store/_queries.py) may remain private under existing name (`explain_fact`).
 - G5: Change `fg.audit.conflicts(pred_id, e_ref)` public signature → `fg.audit.conflicts(record | entity, field)`. Same semantic preservation — returns active-claim set + policy-chosen winner.
-- G6: Rename `fg.save(...)` → `fg.save_workspace(...)` per §4.5 hard-cut. Covers both `SDKStore.save` at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py) and any batch-save delegation in [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py).
+- G6: Rename `fg.save(...)` → `fg.save_workspace(...)` per §4.5 hard-cut. Covers `SDKStore.save` at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py). **EXCLUDES** `sdk/batch.py:1189` per Step 4.2 review finding P2-1: that `save(obj, *, include_deps, meta)` is a batch commit alias forwarding to `self.commit(...)`, returning `BatchCommitResult` — it is **NOT** workspace persistence and is therefore out of Batch D scope.
 - G7: Rename `FactGraph.load(...)` classmethod → `FactGraph.load_workspace(...)` at [`sdk/store.py:1728`](../../../src/factgraph/sdk/store.py).
 - G8: All renames are hard-cut per §4.8.1 — no aliases, no dual-emit, old names removed in same commit as new names introduced.
 - G9: Workspace file format binary structure unchanged per §4.5 (only method names change).
@@ -54,7 +54,7 @@ Combining Batch A + Batch D into one slice is supported by audit §9 recommendat
   - `FrozenAssertionView`: dual definition at [`core/store/database.py:75`](../../../src/factgraph/core/store/database.py) (core) and [`sdk/store.py:135`](../../../src/factgraph/sdk/store.py) (SDK)
   - `by_ids`: top-level [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) returns `Any` over assertion ids; facade [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py) returns `AssertionRecordSet`
   - `_SDKAuditManager`: defined at [`sdk/store.py:1402`](../../../src/factgraph/sdk/store.py); `explain_fact` and `conflicts` delegate to flat `SDKStore` methods at lines 1417 and 1421
-  - Flat `SDKStore.explain_fact` and `SDKStore.conflicts` at lines 3470 / 3473 — these flat shells stay during Q-NAMING-AD (Q-NAMING-C deletes them); Q-NAMING-AD only changes their public *names* (the signature change is part of G4/G5)
+  - Flat `SDKStore.explain_fact` and `SDKStore.conflicts` at lines 3470 / 3473 — these flat shells stay **fully untouched** during Q-NAMING-AD per Step 4.2 review finding P2-2. Q-NAMING-AD changes ONLY the `fg.audit.*` namespace manager surface; flat `SDKStore.explain_fact` / `.conflicts` are C-owned deletion debt (Q-NAMING-C will delete them per §4.4.1). Touching them here would either rename additional flat public shells (out of AD scope) or pre-implement Q-NAMING-C's delete (also out of AD scope).
   - Core query helpers: `_queries.explain_fact` at [`core/store/_queries.py:13`](../../../src/factgraph/core/store/_queries.py) returns `{pred_id, e_ref, active_claims, chosen_asrt_id}`; `_queries.conflicts` at line 51 returns `{pred_id, e_ref, active_asrt_ids, chosen_asrt_id}`
   - `FactGraph.load`: classmethod at [`sdk/store.py:1728`](../../../src/factgraph/sdk/store.py)
   - `SDKStore.save`: instance method at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py)
@@ -82,11 +82,16 @@ Combining Batch A + Batch D into one slice is supported by audit §9 recommendat
 | SDK namespace property | `SDKStore.views` (returns `_SDKViewsManager`) | `SDKStore.assertion_views` (returns `_SDKAssertionViewsManager`) | [`sdk/store.py:1866`](../../../src/factgraph/sdk/store.py) + namespace class definition |
 | Core class | `FrozenAssertionView` | `FrozenAssertionSet` | [`core/store/database.py:75`](../../../src/factgraph/core/store/database.py) |
 | SDK class | `FrozenAssertionView` | `FrozenAssertionSet` | [`sdk/store.py:135`](../../../src/factgraph/sdk/store.py) |
-| SDK exports | `__all__` entry `FrozenAssertionView` | `FrozenAssertionSet` | `sdk/__init__.py` (verify location) |
+| Core exports | `__all__` entry `FrozenAssertionView` | `FrozenAssertionSet` | [`core/store/__init__.py:14`](../../../src/factgraph/core/store/__init__.py) (`__all__` tuple) + [`core/store/__init__.py:40`](../../../src/factgraph/core/store/__init__.py) (re-export tuple) — both rows. Confirmed in Step 4.2 review P3-1. |
+| SDK exports | `__all__` entry `FrozenAssertionView` (if present) | `FrozenAssertionSet` | `sdk/__init__.py` — Step 4.3 preflight verifies location (current grep shows no direct `FrozenAssertionView` in `sdk/__init__.py`; may re-export via different path or omit from public `__all__`). |
 | by_ids top-level | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) |
 | by_ids facade | `def by_ids(self, asrt_ids)` | `def by_ids(self, asrt_ids, *, strict: bool = False)` | [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py) |
-| Audit explain | `fg.audit.explain_fact(pred_id, e_ref, *val_atoms)` | `fg.audit.explain(target)` where `target: str \| AssertionRecord` | [`sdk/store.py:1417`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.explain_fact` → `explain`) + delegating flat at [`sdk/store.py:3470`](../../../src/factgraph/sdk/store.py) |
-| Audit conflicts | `fg.audit.conflicts(pred_id, e_ref)` | `fg.audit.conflicts(target)` where `target: AssertionRecord \| tuple[Entity, str]` | [`sdk/store.py:1421`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.conflicts`) + delegating flat at [`sdk/store.py:3473`](../../../src/factgraph/sdk/store.py) |
+| Audit explain | `fg.audit.explain_fact(pred_id, e_ref, *val_atoms)` | `fg.audit.explain(target)` where `target: str \| AssertionRecord` | [`sdk/store.py:1417`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.explain_fact` → `explain`) **only**; manager body calls core `_queries.explain_fact` directly or via a private helper |
+| Audit conflicts | `fg.audit.conflicts(pred_id, e_ref)` | `fg.audit.conflicts(target)` where `target: AssertionRecord \| tuple[Entity, str]` | [`sdk/store.py:1421`](../../../src/factgraph/sdk/store.py) (`_SDKAuditManager.conflicts`) **only**; same private-helper / core-direct pattern |
+
+**Out of Q-NAMING-AD scope (Step 4.2 P2-2)**:
+- Flat `SDKStore.explain_fact` at [`sdk/store.py:3470`](../../../src/factgraph/sdk/store.py) and flat `SDKStore.conflicts` at [`sdk/store.py:3473`](../../../src/factgraph/sdk/store.py): preserve untouched. These are C-owned deletion debt (Q-NAMING-C §4.4.1). Q-NAMING-AD must NOT rename them to mirror new audit-namespace names (would create new public flat shells `fg.explain` / `fg.conflicts`) AND must NOT delete them (pre-implements Q-NAMING-C).
+- Implementation pattern: `_SDKAuditManager.explain` body reaches the core query helper through the existing private path (e.g., direct `_queries.explain_fact` call or an intermediate private helper extracted under `_internal/`). Manager body **does not** call `self._sdk.explain_fact(...)` or any flat shell.
 
 ### §5.2 Batch D rename layout
 
@@ -94,7 +99,9 @@ Combining Batch A + Batch D into one slice is supported by audit §9 recommendat
 |---|---|---|---|
 | FactGraph classmethod | `FactGraph.load(path)` | `FactGraph.load_workspace(path)` | [`sdk/store.py:1728`](../../../src/factgraph/sdk/store.py) |
 | SDKStore instance method | `SDKStore.save(path)` | `SDKStore.save_workspace(path)` | [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py) |
-| Batch save delegation | `BatchHandle.save(path)` | `BatchHandle.save_workspace(path)` | [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py) |
+
+**Out of Batch D scope (Step 4.2 P2-1)**:
+- [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py) `BatchHandle.save(obj, *, include_deps, meta) → BatchCommitResult` is a batch commit alias forwarding to `self.commit(...)`. Despite name-grep hit it is NOT workspace persistence. Preserve as-is in Q-NAMING-AD. If a future decision wants to rename batch commit aliases, that is a separate Q-decision scope.
 
 Workspace file format binary unchanged (G9).
 
@@ -148,6 +155,8 @@ Historical workflow / archive references preserved per Q-NAMING §4.8.5.
   - Core query helper `_queries.explain_fact` / `_queries.conflicts` rename
   - Any rename outside §4.2 Batch A + §4.5 Batch D surfaces enumerated in §5.1 / §5.2
   - Persistence schema digest rename (reserved for Q-NAMING-F per §4.7.7)
+  - **Flat `SDKStore.explain_fact` and `SDKStore.conflicts` rename or deletion** (per Step 4.2 P2-2): these flat public shells are C-owned deletion debt; Q-NAMING-AD does NOT rename them (would create new `fg.explain` / `fg.conflicts` public surface) and does NOT delete them (pre-implements Q-NAMING-C). They remain untouched until Q-NAMING-C.
+  - **`BatchHandle.save` rename** (per Step 4.2 P2-1): `sdk/batch.py:1189` is a batch commit alias forwarding to `self.commit(...)`, not workspace persistence; preserved as-is in AD.
 - **兼容性约束**:
   - Hard-cut per §4.8.1 — no aliases, no dual-emit, no deprecation shims
   - Alpha release, no historical user protection burden
@@ -160,7 +169,7 @@ Historical workflow / archive references preserved per Q-NAMING §4.8.5.
 - [ ] G3: `by_ids(strict=True)` on both surfaces ([`sdk/store.py:456`](../../../src/factgraph/sdk/store.py) and [`sdk/facade.py:263`](../../../src/factgraph/sdk/facade.py)) with explicit raise on missing/duplicate ID; default `strict=False` preserves permissive behavior
 - [ ] G4: `fg.audit.explain_fact` removed; `fg.audit.explain(target)` accepts `str | AssertionRecord` with semantic preservation
 - [ ] G5: `fg.audit.conflicts(pred_id, e_ref)` signature replaced with `fg.audit.conflicts(record | (entity, field))` with semantic preservation
-- [ ] G6: `fg.save` removed; `fg.save_workspace` present at both [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py) and [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py)
+- [ ] G6: `fg.save` removed; `fg.save_workspace` present at [`sdk/store.py:2847`](../../../src/factgraph/sdk/store.py). [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py) `BatchHandle.save` preserved as-is per P2-1 (out of scope: batch commit alias, not workspace persistence)
 - [ ] G7: `FactGraph.load` classmethod removed; `FactGraph.load_workspace` present
 - [ ] G8: No alias methods, no dual-emit, no deprecation properties anywhere in §5.1 / §5.2 surfaces
 - [ ] G9: Workspace file format binary unchanged (verify: load old workspace file with new method succeeds)
@@ -174,7 +183,12 @@ Historical workflow / archive references preserved per Q-NAMING §4.8.5.
 ## 8. Implementation Plan
 
 1. **Step 4.2 review (Codex)**: review draft, surface 2-4 tightenings per CADENCE Rule 1 + Rule 2 + scope discipline. Cross-check P2-1 / P2-2 corrections in Q-NAMING §4.3.2 are NOT touched (N1).
-2. **Step 4.3 preflight (TBD drafter)**: independent branch `v0.2.0-q-naming-ad-preflight-2026-05-31`. Re-read all blueprint-referenced shipped files at preflight-row drafting time per Rule 1. Build 5-bucket severity findings table. **Mandatory preflight finding**: `branch_index → case_id` persistence pre-lock check per Q-NAMING §4.5 — confirm no persistence blocker before scope-freeze.
+2. **Step 4.3 preflight (TBD drafter)**: independent branch `v0.2.0-q-naming-ad-preflight-2026-05-31`. Re-read all blueprint-referenced shipped files at preflight-row drafting time per Rule 1. Build 5-bucket severity findings table. **Mandatory preflight findings (corrected per Step 4.2 P3-2)**:
+   - 2.a `branch_index → case_index` (field-level rename per Q-NAMING §4.3.4) persistence impact check: Q-NAMING §4.5 requires Codex pre-lock confirmation that the §4.3.4 cascade (deferred to Q-NAMING-B2) does not block Batch D workspace methods. Verify that current workspace persistence does NOT serialize `branch_index` strings into the workspace binary; if it does, B2 stop gate becomes a hard prerequisite to Q-NAMING-AD scope-freeze.
+   - 2.b Confirm `sdk/batch.py:1189` `BatchHandle.save` is out-of-scope despite grep hit (per Step 4.2 P2-1).
+   - 2.c Confirm `sdk/__init__.py` `FrozenAssertionView` re-export status (per Step 4.2 P3-1 — current grep returns no hit; preflight either locates indirect re-export or confirms SDK does not re-export the class at top level).
+   - 2.d Confirm no third `by_ids` public surface beyond `sdk/store.py:456` and `sdk/facade.py:263` (audit §2 blocker 5).
+   - 2.e Confirm flat `SDKStore.explain_fact` / `.conflicts` at lines 3470 / 3473 are reachable through `_queries` without going through `_SDKAuditManager` (verifies P2-2 rewire is feasible).
 3. **Step 4.4 preflight amendment (on blueprint branch)**: apply Required + Recommended PFs. Update audit log Event Log + Decision Notes.
 4. **Step 4.5 self-check (lightweight)**: PF coverage verification, no commit.
 5. **Step 4.6 scoped anchor**: `Status: draft` → `Status: scoped` single small commit + audit log event row.
@@ -183,8 +197,8 @@ Historical workflow / archive references preserved per Q-NAMING §4.8.5.
    - 7.1 Rename `FrozenAssertionView` → `FrozenAssertionSet` (core + SDK, in same commit cluster).
    - 7.2 Rename `fg.views` → `fg.assertion_views` (namespace + manager class name).
    - 7.3 Add `strict=True` flag to both by-ids surfaces with explicit raise semantics.
-   - 7.4 Change audit public signatures (`_SDKAuditManager.explain_fact` → `.explain`; same for `.conflicts`). Update flat `SDKStore` shells (still present until Q-NAMING-C) to mirror new names.
-   - 7.5 Rename persistence methods (`save` → `save_workspace`, `load` → `load_workspace`).
+   - 7.4 Change audit public signatures on the `_SDKAuditManager` namespace **only** (`explain_fact` → `explain`; same for `conflicts`). Rewire manager body to reach the core query helper through `_queries.explain_fact` / `_queries.conflicts` directly or via a private helper, NOT through `self._sdk.explain_fact(...)`. **Preserve flat `SDKStore.explain_fact` and `SDKStore.conflicts` at [`sdk/store.py:3470`](../../../src/factgraph/sdk/store.py) / [`:3473`](../../../src/factgraph/sdk/store.py) untouched** per P2-2 (C-owned deletion debt; AD must not rename them to mirror new names nor delete them).
+   - 7.5 Rename persistence methods on `SDKStore` and `FactGraph` only (`SDKStore.save` → `save_workspace`, `FactGraph.load` → `load_workspace`). **Preserve `BatchHandle.save` at [`sdk/batch.py:1189`](../../../src/factgraph/sdk/batch.py) untouched** per P2-1 out-of-scope determination.
    - 7.6 Migrate tests (one-pass per file, code + test together).
    - 7.7 Update module docs (`src/factgraph/sdk/docs/`, `src/factgraph/core/store/docs/`, possibly `src/factgraph/application/docs/`).
    - 7.8 Update current SDK docs / quickstarts / current examples in `docs/`.
