@@ -140,9 +140,11 @@ Per user "B, 还是 worth rename 的, 但是要先判断哪些应该变" (rename
 - `ProofFrameAtomVerdict` → `ProofFrameConditionVerdict`
 - `RuleLiteralPath`: **VERIFY in Q-NAMING-B1** whether corresponding rename is warranted (audit §3 lists 109 hits but no explicit rename target; decide during sub-slice draft).
 
-**§4.3.3 atom_bounds — EXCLUDE (Sub-Q4):**
+**§4.3.3 atom_bounds — EXCLUDE (Sub-Q4, sharpened 2026-05-31):**
 
-- `atom_bounds` is partially adapter semantics wording (audit §3: "Some occurrences may still belong to engine semantics rather than rule condition wording"). Preserved as-is in adapter code and adapter-facing docs. Q-NAMING-B2 scope must explicitly exclude `atom_bounds` from cascade.
+- `atom_bounds` is **PyReason-domain syntax**, not generic rule-condition wording. It appears only on the `PyReasonSemantics` SDK wrapper ([`src/factgraph/sdk/semantics.py:195`](../../../../src/factgraph/sdk/semantics.py)) and its SDK→adapter translation ([`src/factgraph/sdk/store.py:4055+`](../../../../src/factgraph/sdk/store.py)). Keys use PyReason's native atom_id format `"<rule_id>:atom_<index>"`. It does NOT appear in `src/factgraph/core/`, `src/factgraph/application/`, or the Q-PR1 sacred `src/factgraph/adapters/pyreason/` directory.
+- Decision principle (PyReason-domain syntax preservation): where a field's NAME or KEY FORMAT reflects PyReason's own native terminology, the name is preserved across the FactGraph atom→condition cascade. The atom→condition cascade applies to FactGraph rule-DSL terminology, not to PyReason's domain language packaged for adapter consumption.
+- Preserved as-is on the renamed `PyReasonConfig` wrapper after §4.7.1 (i.e., field is `PyReasonConfig.atom_bounds`, not `PyReasonConfig.condition_bounds`). Q-NAMING-B2 and Q-NAMING-F scope must explicitly exclude `atom_bounds` from cascade.
 
 **§4.3.4 branch → case cascade (audit §3) — ADOPT (hard-cut on wire/persistence):**
 
@@ -288,7 +290,8 @@ Per user "Module 5, 同意" and Sub-Q1 (hard-cut on wire/digests). `atom_bounds`
 
 - Applies to §4.3 Batch B and §4.7 Batch F.
 - Q-NAMING-B2 and Q-NAMING-F scope sections must explicitly list `atom_bounds` as excluded.
-- Adapter semantics wording preserved.
+- Rationale: PyReason-domain syntax (per §4.3.3 sharpened 2026-05-31). The atom→condition cascade renames FactGraph rule-DSL terminology, not PyReason's native domain language packaged into the adapter wrapper.
+- Cross-reference: PyReason-internal adapter source (`src/factgraph/adapters/pyreason/`) is Q-PR1 sacred (§4.8.6), independently immutable. §4.8.2 covers the SDK-wrapper boundary where Q-PR1 alone does not.
 
 **§4.8.3 `head_bound` cleanup not a rename** (audit §7):
 
@@ -371,7 +374,8 @@ Six sub-slice blueprints in this order, with stop gates before B2 and F (per aud
 - **Why rejected**: Single-slice combined refactor + delete chosen — matches Slice 3a Step 7 precedent. Internal delegation refactor is a precondition step within the slice, not a separately reviewable cycle. Reduces inter-slice coordination overhead.
 
 ### Option (f): Full `atom_bounds` cascade (Sub-Q4)
-- **Why rejected**: `atom_bounds` is partially adapter semantics wording per audit §3 ("Some occurrences may still belong to engine semantics rather than rule condition wording"). Renaming to `condition_bounds` would conflate rule-DSL terminology with engine-projection terminology, weakening the very layer separation the rename is meant to clarify.
+- **Why rejected** (sharpened 2026-05-31): `atom_bounds` is **PyReason-domain syntax**. Its key format `"<rule_id>:atom_<index>"` uses PyReason's native atom_id convention; the field exists only on the `PyReasonSemantics` SDK wrapper (and its SDK→adapter translation), not in `src/factgraph/core/` or `src/factgraph/application/`. The atom→condition cascade renames FactGraph rule-DSL terminology, not PyReason's domain language. Renaming `atom_bounds → condition_bounds` would import FactGraph's rule-DSL vocabulary into PyReason's adapter wrapper surface, creating a category error worse than the inconsistency it tries to fix.
+- Decision principle established: PyReason-domain syntax preserved across cascade. Other PyReason-wrapper fields are classified case-by-case: `branch_bounds` / `branch_probabilities` follow §4.3.4 because `branch` is a FactGraph concept (RuleExpr disjunctive heads / legacy Inference branches) merely packaged for PyReason consumption — keys carry FactGraph branch ids that the cascade renames to case ids; `head_bound` is §4.7.5 cleanup-not-rename due to FactGraph/PyReason terminology overlap; pure PyReason-domain fields like `derived_bound`, `temporal_projection`, `uncertainty_projection`, `timestep_delay`, `iteration_count`, `fallback`, `rule_params` are out of Q-NAMING scope (preserved by default).
 
 ### Option (g): Six separate Q-NAMING decision documents (Sub-Q5)
 - **Why rejected**: Matches Slice 3a Q10-Q14 precedent of single multi-§ decision. Six standalone decisions would force inter-decision cross-references for shared cross-cutting policy (Sub-Q1, Sub-Q2, sacred constraints), creating duplication and drift risk.
@@ -495,3 +499,4 @@ This decision is honored when:
 | Date | Stage | Event | Notes |
 |---|---|---|---|
 | 2026-05-31 | proposed | Decision drafted by Claude | Captures user PDF chapter responses 2026-05-30 + module-by-module locks 2026-05-30..05-31 + Sub-Q1-Q5 resolutions 2026-05-31. Sourced from audit `10de33b9` (`workflow/audit/active/2026-05-31_naming-polish-feasibility.md`). Phased per audit §9. Awaiting user adopt action. |
+| 2026-05-31 | proposed (amended) | Sharpen atom_bounds rationale | User clarified atom_bounds is PyReason-domain syntax. §4.3.3, §4.8.2, §5(f) sharpened from "partially adapter semantics wording" to explicit "PyReason-domain syntax preservation principle" with classification table for other PyReason-wrapper fields. No scope change to Sub-Q4 (atom_bounds still excluded). branch_bounds/branch_probabilities remain in §4.7.3 cascade (FactGraph branch concept); head_bound remains §4.7.5 cleanup. |
