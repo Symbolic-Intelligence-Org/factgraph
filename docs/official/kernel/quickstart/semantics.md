@@ -364,7 +364,7 @@ branch_profile = ProbLogSemantics(branch_probabilities={"seed_path": 0.7})
 
 The branch id `seed_path` is resolved against that concrete `Inference` during
 evaluation. The same branch-specific maps can also target RuleExpr branch ids
-such as `b0` and `b1`.
+such as `c0` and `c1`.
 
 ## What not to do
 

@@ -271,7 +271,7 @@ class AuditRoundEventTests(unittest.TestCase):
                 binding_items=binding,
                 atom_verdicts=(
                     SimpleNamespace(
-                        condition_key="b0.add0:gt",
+                        condition_key="c0.add0:gt",
                         verdict="invalidated",
                         affected_action_indices=(0,),
                     ),
@@ -282,7 +282,7 @@ class AuditRoundEventTests(unittest.TestCase):
             proof_frame_payload["result"]["atom_verdicts"],
             [
                 {
-                    "condition_key": "b0.add0:gt",
+                    "condition_key": "c0.add0:gt",
                     "verdict": "invalidated",
                     "affected_action_indices": [0],
                 }

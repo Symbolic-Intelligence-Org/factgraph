@@ -188,8 +188,8 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
         assert proof_frame is not None
         self.assertEqual(proof_frame.status, "invalidated")
         verdicts = {verdict.condition_key: verdict for verdict in proof_frame.atom_verdicts}
-        self.assertEqual(verdicts["b0.add0:lt"].verdict, "invalidated")
-        self.assertEqual(verdicts["b0.add0:lt"].affected_action_indices, (0,))
+        self.assertEqual(verdicts["c0.add0:lt"].verdict, "invalidated")
+        self.assertEqual(verdicts["c0.add0:lt"].affected_action_indices, (0,))
         self.assertEqual(verdicts[f"c0.c0:{alice.exists_pred_id}"].verdict, "still_valid")
         self.assertEqual(verdicts["c0.c3:eq"].verdict, "still_valid")
 
@@ -212,8 +212,8 @@ class RuleAddConditionRuntimeNativeTests(unittest.TestCase):
         self.assertEqual(result.variant_rows, ((("$p", alice.e_ref),),))
         assert result.proof_frame is not None
         verdicts = {verdict.condition_key: verdict for verdict in result.proof_frame.atom_verdicts}
-        self.assertEqual(verdicts["b0.add0:lt"].verdict, "still_valid")
-        self.assertEqual(verdicts["b0.add0:lt"].affected_action_indices, ())
+        self.assertEqual(verdicts["c0.add0:lt"].verdict, "still_valid")
+        self.assertEqual(verdicts["c0.add0:lt"].affected_action_indices, ())
         self.assertEqual(result.proof_frame.status, "still_valid")
 
     def test_in_and_eq_filter_atoms_are_supported(self) -> None:

@@ -76,7 +76,7 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         self.assertEqual(plan.head_binding.kind, "inline")
         self.assertEqual(plan.head_binding.projection_occurrence_alias, "user_rule")
         self.assertEqual(len(plan.branches), 1)
-        self.assertEqual(plan.branches[0].branch_id, "b0")
+        self.assertEqual(plan.branches[0].branch_id, "c0")
         self.assertEqual(plan.branches[0].occurrence_aliases, ("user_rule",))
 
     def test_dtos_are_frozen_and_not_public_exports(self) -> None:
@@ -118,7 +118,7 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(RuleExprError, "inline head binding"):
             RuleExprHeadBinding(kind="inline", head_rule_id=rule.id, head_content_digest=rule.content_digest)
         with self.assertRaisesRegex(RuleExprError, "body_atoms"):
-            RuleExprLoweringBranch(branch_id="b0", path=(), occurrence_aliases=(rule.id,), body_atoms=())
+            RuleExprLoweringBranch(branch_id="c0", path=(), occurrence_aliases=(rule.id,), body_atoms=())
         with self.assertRaisesRegex(RuleExprError, "branches"):
             RuleExprLoweringPlan(
                 source_kind="rule",
@@ -151,7 +151,7 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
 
         plan = _lower_rule_expr((a.as_("a") & b.as_("b")) | c.as_("c"), head=a)
 
-        self.assertEqual(tuple(branch.branch_id for branch in plan.branches), ("b0", "b1"))
+        self.assertEqual(tuple(branch.branch_id for branch in plan.branches), ("c0", "c1"))
         self.assertEqual(tuple(branch.occurrence_aliases for branch in plan.branches), (("a", "b"), ("c",)))
 
 
@@ -314,7 +314,7 @@ class RuleExprNativeExecutionTests(unittest.TestCase):
 
         self.assertEqual(len(traces), 2)
         self.assertEqual(tuple(trace.runtime_case_index for trace in traces), (0, 1))
-        self.assertEqual(tuple(trace.branch_id for trace in traces), ("b0", "b1"))
+        self.assertEqual(tuple(trace.branch_id for trace in traces), ("c0", "c1"))
         self.assertEqual(compiled.body_ir[0][0][0], "pred")
         self.assertIsInstance(traces[0], RuleExprEvaluationTrace)
 

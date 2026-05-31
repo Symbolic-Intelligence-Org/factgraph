@@ -359,7 +359,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             result = graph.eval.evaluate(
                 expr,
                 head=left,
-                semantics=sdk.ProbLogSemantics(branch_probabilities={"b0": 0.7}),
+                semantics=sdk.ProbLogSemantics(branch_probabilities={"c0": 0.7}),
             )
 
         self.assertIsInstance(result, EvaluateResult)
@@ -414,7 +414,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         rule = _person_exists_rule()
 
         with self.assertRaisesRegex(SDKStoreError, "single application Rule"):
-            graph.eval.evaluate(rule, head=rule, semantics=sdk.ProbLogSemantics(branch_probabilities={"b0": 0.7}))
+            graph.eval.evaluate(rule, head=rule, semantics=sdk.ProbLogSemantics(branch_probabilities={"c0": 0.7}))
 
     def test_ruleexpr_wrapper_rejects_unknown_branch_ids(self) -> None:
         graph = _store()

@@ -62,7 +62,7 @@ def _overlay() -> FactOverlay:
 
 def _proof_frame() -> ProofFrameRecheckResult:
     verdict = ProofFrameConditionVerdict(
-        condition_key="b0.add0:lt",
+        condition_key="c0.add0:lt",
         verdict="invalidated",
         affected_action_indices=(0,),
     )

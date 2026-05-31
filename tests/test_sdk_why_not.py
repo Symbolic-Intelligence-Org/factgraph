@@ -67,8 +67,8 @@ def _empty_result() -> WhyNotUniverseResult:
     return WhyNotUniverseResult(
         status="completed",
         requested_universe=(),
-        green=(),
-        red=(),
+        passed=(),
+        failed=(),
     )
 
 
@@ -91,8 +91,8 @@ class SDKWhyNotContractTests(unittest.TestCase):
         self.assertIsInstance(result, WhyNotUniverseResult)
         self.assertEqual(result.status, "completed")
         self.assertNotIsInstance(result, tuple)
-        self.assertEqual(tuple(dict(row)["$p"] for row in result.green), (alice, bob))
-        self.assertEqual(tuple(dict(row.binding)["$p"] for row in result.red), (missing,))
+        self.assertEqual(tuple(dict(row)["$p"] for row in result.passed), (alice, bob))
+        self.assertEqual(tuple(dict(row.binding)["$p"] for row in result.failed), (missing,))
 
     def test_sequence_candidate_rows_are_accepted_in_head_var_order(self) -> None:
         sdk = _build_sdk()
@@ -101,16 +101,16 @@ class SDKWhyNotContractTests(unittest.TestCase):
         result = sdk_why_not(sdk, _age_derivation(), [(alice, 30)])
 
         self.assertEqual(result.status, "completed")
-        self.assertEqual(tuple(dict(row) for row in result.green), ({"$p": alice, "$age": 30},))
-        self.assertEqual(result.red, ())
+        self.assertEqual(tuple(dict(row) for row in result.passed), ({"$p": alice, "$age": 30},))
+        self.assertEqual(result.failed, ())
 
     def test_empty_candidate_universe_returns_completed_without_runtime_errors(self) -> None:
         result = sdk_why_not(_build_sdk(), _age_derivation(), [])
 
         self.assertEqual(result.status, "completed")
         self.assertEqual(result.requested_universe, ())
-        self.assertEqual(result.green, ())
-        self.assertEqual(result.red, ())
+        self.assertEqual(result.passed, ())
+        self.assertEqual(result.failed, ())
 
     def test_rule_is_rejected_at_sdk_surface(self) -> None:
         with vars("p") as (p,):

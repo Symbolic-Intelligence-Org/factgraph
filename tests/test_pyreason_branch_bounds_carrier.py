@@ -136,7 +136,7 @@ class PublicPyReasonBranchBoundsTests(unittest.TestCase):
     def test_lowering_resolves_explicit_and_fallback_branch_ids(self) -> None:
         semantics = _pyreason_semantics(
             head_bound=[0.1, 0.9],
-            branch_bounds={"sensor_path": [0.8, 1.0], "b1": [0.2, 0.8]},
+            branch_bounds={"sensor_path": [0.8, 1.0], "c1": [0.2, 0.8]},
         )
 
         profile = _lower_public_semantics(semantics, derivation=_two_branch_derivation())
@@ -182,7 +182,7 @@ class PublicPyReasonBranchBoundsTests(unittest.TestCase):
         )
 
     def test_single_branch_fallback_b0_is_accepted(self) -> None:
-        semantics = _pyreason_semantics(branch_bounds={"b0": [0.6, 0.9]})
+        semantics = _pyreason_semantics(branch_bounds={"c0": [0.6, 0.9]})
 
         profile = _lower_public_semantics(semantics, derivation=_single_branch_derivation())
 
@@ -221,7 +221,7 @@ class PyReasonBranchBoundsProfileTests(unittest.TestCase):
                 semantics_profile=profile,
             )
 
-        self.assertIn("rule_projection.pyreason[0] case index out of range", str(ctx.exception))
+        self.assertIn("rule_projection.pyreason[0] branch index out of range", str(ctx.exception))
 
     def test_profile_branch_bound_and_global_head_bound_coexist(self) -> None:
         profile = _profile_with_branch_entries(
@@ -328,7 +328,7 @@ class PyReasonBranchBoundsIntegrationTests(unittest.TestCase):
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
     def test_evaluate_with_branch_bounds_drives_compiled_rules(self, mock_run: Any) -> None:
         sdk = _make_sdk()
-        semantics = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0], "b1": [0.2, 0.8]})
+        semantics = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0], "c1": [0.2, 0.8]})
 
         sdk.eval.evaluate(_two_branch_derivation(), semantics=semantics)
 

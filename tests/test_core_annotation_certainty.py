@@ -371,17 +371,17 @@ class RankCertaintyConditionsTests(unittest.TestCase):
 
     def test_unweighted_conditions_sorted_after_weighted_by_atom_key(self) -> None:
         conditions = (
-            ConditionImpact(condition_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="c0.c1", node_kind="non_fact_check", weight=None, impact=None),
             ConditionImpact(
                 condition_key="c0.c0",
                 node_kind="predicate_witness_group",
                 weight=0.5,
                 impact=0.4,
             ),
-            ConditionImpact(condition_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="c0.c0", node_kind="non_fact_check", weight=None, impact=None),
         )
         ranked = rank_certainty_conditions(conditions, aggregate_certainty=0.4)
-        self.assertEqual([item.condition_key for item in ranked], ["c0.c0", "b0.c0", "b0.c1"])
+        self.assertEqual([item.condition_key for item in ranked], ["c0.c0", "c0.c0", "c0.c1"])
         self.assertFalse(ranked[1].is_bottleneck)
         self.assertFalse(ranked[2].is_bottleneck)
 
@@ -434,12 +434,12 @@ class RankCertaintyConditionsTests(unittest.TestCase):
 
     def test_unweighted_only_no_bottleneck(self) -> None:
         conditions = (
-            ConditionImpact(condition_key="b0.c1", node_kind="non_fact_check", weight=None, impact=None),
-            ConditionImpact(condition_key="b0.c0", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="c0.c1", node_kind="non_fact_check", weight=None, impact=None),
+            ConditionImpact(condition_key="c0.c0", node_kind="non_fact_check", weight=None, impact=None),
         )
         ranked = rank_certainty_conditions(conditions, aggregate_certainty=None)
         self.assertEqual(len(ranked), 2)
-        self.assertEqual([item.condition_key for item in ranked], ["b0.c0", "b0.c1"])
+        self.assertEqual([item.condition_key for item in ranked], ["c0.c0", "c0.c1"])
         self.assertFalse(any(item.is_bottleneck for item in ranked))
 
     def test_empty_conditions(self) -> None:

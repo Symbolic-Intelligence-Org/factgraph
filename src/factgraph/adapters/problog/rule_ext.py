@@ -162,7 +162,7 @@ def _materialize_profile_branch_probabilities(
 
 
 def _parse_profile_branch_target(raw: Any, *, entry_index: int) -> int:
-    if not isinstance(raw, str) or not raw.startswith("cranch:"):
+    if not isinstance(raw, str) or not raw.startswith("branch:"):
         raise ValueError(
             f"rule_projection.problog[{entry_index}].target must use branch:{{index}}"
         )

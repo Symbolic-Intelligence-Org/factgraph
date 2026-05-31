@@ -326,7 +326,7 @@ class PyReasonCanonicalC74Tests(unittest.TestCase):
             {"target": "body_atom:0:1", "kind": "interval_threshold", "value": [0.4, 0.8]},
             entries,
         )
-        self.assertNotIn("b0.a", str(entries))
+        self.assertNotIn("c0.a", str(entries))
         self.assertNotIn("user:risk_score", str(entries))
 
         resolved = _resolve_pyreason_engine_ext()(
