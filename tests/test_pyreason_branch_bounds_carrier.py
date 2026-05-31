@@ -70,7 +70,7 @@ def _make_sdk() -> SDKStore:
 def _two_branch_derivation() -> Inference:
     with sdk_vars("u", "name", "risk") as (u, name, risk):
         return Inference(
-            id="drv.track3post.pyreason_branch_bounds",
+            id="drv.track3post.pyreason_case_bounds",
             version="v1",
             when=[
                 Case([Pred("user:name", u, name)], id="sensor_path"),
@@ -91,9 +91,9 @@ def _single_branch_derivation() -> Inference:
 
 
 def _pyreason_semantics(**kwargs: Any) -> Any:
-    from factgraph.sdk import PyReasonSemantics
+    from factgraph.sdk import PyReasonConfig
 
-    return PyReasonSemantics(**kwargs)
+    return PyReasonConfig(**kwargs)
 
 
 def _profile_with_branch_entries(entries: list[dict[str, object]]) -> SemanticsProfile:
@@ -126,17 +126,17 @@ def _mock_pyreason_empty(session, *, rules=None, rule_defs=None, facts=None, fac
 
 
 class PublicPyReasonBranchBoundsTests(unittest.TestCase):
-    def test_pyreason_semantics_accepts_branch_bounds_and_empty_noop(self) -> None:
-        configured = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0]})
-        empty = _pyreason_semantics(branch_bounds={})
+    def test_pyreason_semantics_accepts_case_bounds_and_empty_noop(self) -> None:
+        configured = _pyreason_semantics(case_bounds={"sensor_path": [0.8, 1.0]})
+        empty = _pyreason_semantics(case_bounds={})
 
-        self.assertEqual(configured.branch_bounds["sensor_path"], (0.8, 1.0))
-        self.assertEqual(empty.branch_bounds, {})
+        self.assertEqual(configured.case_bounds["sensor_path"], (0.8, 1.0))
+        self.assertEqual(empty.case_bounds, {})
 
     def test_lowering_resolves_explicit_and_fallback_branch_ids(self) -> None:
         semantics = _pyreason_semantics(
             head_bound=[0.1, 0.9],
-            branch_bounds={"sensor_path": [0.8, 1.0], "c1": [0.2, 0.8]},
+            case_bounds={"sensor_path": [0.8, 1.0], "c1": [0.2, 0.8]},
         )
 
         profile = _lower_public_semantics(semantics, derivation=_two_branch_derivation())
@@ -151,15 +151,15 @@ class PublicPyReasonBranchBoundsTests(unittest.TestCase):
         )
 
     def test_unknown_branch_id_rejects_with_anchor(self) -> None:
-        semantics = _pyreason_semantics(branch_bounds={"missing_path": [0.8, 1.0]})
+        semantics = _pyreason_semantics(case_bounds={"missing_path": [0.8, 1.0]})
 
         with self.assertRaises(SDKStoreError) as ctx:
             _lower_public_semantics(semantics, derivation=_two_branch_derivation())
 
-        self.assertIn("branch_bounds contains unknown branch id 'missing_path'", str(ctx.exception))
+        self.assertIn("case_bounds contains unknown branch id 'missing_path'", str(ctx.exception))
 
     def test_wrapper_lowered_profile_matches_direct_profile_shape(self) -> None:
-        semantics = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0]})
+        semantics = _pyreason_semantics(case_bounds={"sensor_path": [0.8, 1.0]})
 
         lowered = _lower_public_semantics(semantics, derivation=_two_branch_derivation())
         direct = _profile_with_branch_entries(
@@ -169,20 +169,20 @@ class PublicPyReasonBranchBoundsTests(unittest.TestCase):
         self.assertEqual(lowered.engine, direct.engine)
         self.assertEqual(lowered.rule_projection, direct.rule_projection)
 
-    def test_inspect_semantics_wrapper_includes_lowered_branch_targets(self) -> None:
+    def test_preview_config_wrapper_includes_lowered_branch_targets(self) -> None:
         sdk = _make_sdk()
-        semantics = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0]})
+        semantics = _pyreason_semantics(case_bounds={"sensor_path": [0.8, 1.0]})
 
-        inspected = sdk.eval.inspect_semantics(semantics)
+        inspected = sdk.eval.preview_config(semantics)
 
-        self.assertEqual(inspected["semantics_type"], "PyReasonSemantics")
+        self.assertEqual(inspected["semantics_type"], "PyReasonConfig")
         self.assertIn(
             {"target": "branch:0", "kind": "interval", "value": [0.8, 1.0]},
             inspected["lowered_profile"]["rule_projection"]["pyreason"],
         )
 
     def test_single_branch_fallback_b0_is_accepted(self) -> None:
-        semantics = _pyreason_semantics(branch_bounds={"c0": [0.6, 0.9]})
+        semantics = _pyreason_semantics(case_bounds={"c0": [0.6, 0.9]})
 
         profile = _lower_public_semantics(semantics, derivation=_single_branch_derivation())
 
@@ -310,7 +310,7 @@ class PyReasonBranchBoundsCompileTests(unittest.TestCase):
 
         self.assertEqual(rules, [("popular(u) : [0.6, 0.9] <-0 name(u)", "derived_popular")])
 
-    def test_existing_global_head_bound_without_branch_bounds_still_works(self) -> None:
+    def test_existing_global_head_bound_without_case_bounds_still_works(self) -> None:
         ext = MockPyReasonRuleExt(head_bound=(0.7, 0.9))
 
         rules = compile_where_ir_to_pyreason(
@@ -326,11 +326,11 @@ class PyReasonBranchBoundsCompileTests(unittest.TestCase):
 
 class PyReasonBranchBoundsIntegrationTests(unittest.TestCase):
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_pyreason_empty)
-    def test_evaluate_with_branch_bounds_drives_compiled_rules(self, mock_run: Any) -> None:
+    def test_evaluate_with_case_bounds_drives_compiled_rules(self, mock_run: Any) -> None:
         sdk = _make_sdk()
-        semantics = _pyreason_semantics(branch_bounds={"sensor_path": [0.8, 1.0], "c1": [0.2, 0.8]})
+        semantics = _pyreason_semantics(case_bounds={"sensor_path": [0.8, 1.0], "c1": [0.2, 0.8]})
 
-        sdk.eval.evaluate(_two_branch_derivation(), semantics=semantics)
+        sdk.eval.evaluate(_two_branch_derivation(), config=semantics)
 
         self.assertEqual(
             mock_run.call_args.kwargs["rules"],

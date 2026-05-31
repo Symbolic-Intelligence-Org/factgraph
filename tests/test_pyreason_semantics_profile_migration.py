@@ -18,7 +18,7 @@ from factgraph.core.rules.where_ast import PredAtom as CorePredAtom
 from factgraph.core.rules.where_ast import Var as CoreVar
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.sdk.errors import SDKStoreError
-from factgraph.sdk.semantics import PyReasonSemantics
+from factgraph.sdk.semantics import PyReasonConfig
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import Case, EmitSpec, Inference, Pred, Rule
 from factgraph.sdk.schema import Entity, Field, Identity
@@ -149,7 +149,7 @@ def _mock_run_empty(session, *, rules=None, rule_defs=None, facts=None, fact_def
     )
 
 
-class PyReasonSemanticsProfileResolverTests(unittest.TestCase):
+class PyReasonConfigProfileResolverTests(unittest.TestCase):
     def test_profile_rule_projection_materializes_pyreason_rule_ext(self) -> None:
         resolved = _resolve_pyreason_engine_ext()(
             where=_where_two_body_atoms(),
@@ -290,7 +290,7 @@ class PyReasonSemanticsProfileResolverTests(unittest.TestCase):
 
 class PyReasonCanonicalC74Tests(unittest.TestCase):
     def test_pyreason_semantics_accepts_derived_and_atom_bounds(self) -> None:
-        semantics = PyReasonSemantics(
+        semantics = PyReasonConfig(
             derived_bound=[0.7, 0.9],
             atom_bounds={"rule.c74:atom_1": [0.4, 0.8]},
         )
@@ -300,20 +300,20 @@ class PyReasonCanonicalC74Tests(unittest.TestCase):
 
     def test_pyreason_semantics_rejects_invalid_c74_fields_with_canonical_names(self) -> None:
         with self.assertRaises(SDKStoreError) as derived_ctx:
-            PyReasonSemantics(derived_bound=[0.9, 0.2])
-        self.assertIn("PyReasonSemantics.derived_bound", str(derived_ctx.exception))
+            PyReasonConfig(derived_bound=[0.9, 0.2])
+        self.assertIn("PyReasonConfig.derived_bound", str(derived_ctx.exception))
         self.assertNotIn("iteration_count", str(derived_ctx.exception))
         self.assertNotIn("timestep_delay", str(derived_ctx.exception))
 
         with self.assertRaises(SDKStoreError) as atom_ctx:
-            PyReasonSemantics(atom_bounds={"rule.c74:not_atom": [0.1, 0.9]})
-        self.assertIn("PyReasonSemantics.atom_bounds", str(atom_ctx.exception))
+            PyReasonConfig(atom_bounds={"rule.c74:not_atom": [0.1, 0.9]})
+        self.assertIn("PyReasonConfig.atom_bounds", str(atom_ctx.exception))
         self.assertNotIn("head_bound", str(atom_ctx.exception))
-        self.assertNotIn("branch_bounds", str(atom_ctx.exception))
+        self.assertNotIn("case_bounds", str(atom_ctx.exception))
 
     def test_lowering_converts_canonical_c74_bounds_for_application_rule(self) -> None:
         profile = _lower_public_semantics(
-            PyReasonSemantics(
+            PyReasonConfig(
                 derived_bound=[0.7, 0.9],
                 atom_bounds={"rule.c74:atom_1": [0.4, 0.8]},
             ),
@@ -341,21 +341,21 @@ class PyReasonCanonicalC74Tests(unittest.TestCase):
     def test_canonical_atom_bounds_reject_unknown_or_unsupported_inputs(self) -> None:
         with self.assertRaises(SDKStoreError) as unknown_ctx:
             _lower_public_semantics(
-                PyReasonSemantics(atom_bounds={"other_rule:atom_0": [0.4, 0.8]}),
+                PyReasonConfig(atom_bounds={"other_rule:atom_0": [0.4, 0.8]}),
                 derivation=_application_rule_two_atoms(),
             )
         self.assertIn("unknown atom id 'other_rule:atom_0'", str(unknown_ctx.exception))
 
         with self.assertRaises(SDKStoreError) as legacy_ctx:
             _lower_public_semantics(
-                PyReasonSemantics(atom_bounds={"drv.d.pyreason_popular:atom_0": [0.4, 0.8]}),
+                PyReasonConfig(atom_bounds={"drv.d.pyreason_popular:atom_0": [0.4, 0.8]}),
                 derivation=_make_derivation(),
             )
         self.assertIn("requires application Rule atom ids", str(legacy_ctx.exception))
 
     def test_derived_bound_conflicts_with_legacy_head_bound(self) -> None:
         with self.assertRaises(SDKStoreError) as ctx:
-            PyReasonSemantics(derived_bound=[0.7, 0.9], head_bound=[0.6, 0.8])
+            PyReasonConfig(derived_bound=[0.7, 0.9], head_bound=[0.6, 0.8])
 
         message = str(ctx.exception)
         self.assertIn("derived_bound", message)
@@ -363,11 +363,11 @@ class PyReasonCanonicalC74Tests(unittest.TestCase):
         self.assertNotIn("iteration_count", message)
         self.assertNotIn("timestep_delay", message)
 
-    def test_atom_bounds_and_branch_bounds_coexist_in_preview(self) -> None:
+    def test_atom_bounds_and_case_bounds_coexist_in_preview(self) -> None:
         profile = _preview_public_semantics(
-            PyReasonSemantics(
+            PyReasonConfig(
                 atom_bounds={"rule.c74:atom_1": [0.4, 0.8]},
-                branch_bounds={"legacy_branch": [0.6, 0.9]},
+                case_bounds={"legacy_branch": [0.6, 0.9]},
             )
         )
 
@@ -381,14 +381,14 @@ class PyReasonCanonicalC74Tests(unittest.TestCase):
 
 class PyReasonTemporalProjectionTests(unittest.TestCase):
     def test_pyreason_semantics_iteration_count_default_and_validation(self) -> None:
-        self.assertEqual(PyReasonSemantics().iteration_count, 1)
-        self.assertEqual(PyReasonSemantics(iteration_count=3).iteration_count, 3)
+        self.assertEqual(PyReasonConfig().iteration_count, 1)
+        self.assertEqual(PyReasonConfig(iteration_count=3).iteration_count, 3)
 
         invalid_values = [True, "3", 0, -1]
         for value in invalid_values:
             with self.subTest(value=value):
                 with self.assertRaises(SDKStoreError) as ctx:
-                    PyReasonSemantics(iteration_count=value)  # type: ignore[arg-type]
+                    PyReasonConfig(iteration_count=value)  # type: ignore[arg-type]
 
                 message = str(ctx.exception)
                 self.assertIn("iteration_count", message)
@@ -407,13 +407,13 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
                 self.assertIn("iteration_count", str(ctx.exception))
 
     def test_pyreason_semantics_lowering_emits_iteration_count_with_compat_omission(self) -> None:
-        preview = _preview_public_semantics(PyReasonSemantics())
-        lowered = _lower_public_semantics(PyReasonSemantics(iteration_count=3), derivation=_make_derivation())
+        preview = _preview_public_semantics(PyReasonConfig())
+        lowered = _lower_public_semantics(PyReasonConfig(iteration_count=3), derivation=_make_derivation())
         legacy_default = _preview_public_semantics(
-            PyReasonSemantics(temporal_projection={"mode": "fixed_timesteps", "timesteps": 5})
+            PyReasonConfig(temporal_projection={"mode": "fixed_timesteps", "timesteps": 5})
         )
         legacy_explicit = _preview_public_semantics(
-            PyReasonSemantics(iteration_count=3, temporal_projection={"mode": "fixed_timesteps", "timesteps": 5})
+            PyReasonConfig(iteration_count=3, temporal_projection={"mode": "fixed_timesteps", "timesteps": 5})
         )
 
         self.assertEqual(preview.iteration_count, 1)
@@ -947,7 +947,7 @@ class PyReasonTemporalProjectionTests(unittest.TestCase):
         self.assertIn("engine_options.timesteps", message)
 
 
-class PyReasonSemanticsProfileCoreEvaluateTests(unittest.TestCase):
+class PyReasonConfigProfileCoreEvaluateTests(unittest.TestCase):
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_empty)
     def test_core_store_evaluate_semantics_profile_drives_generated_rule(self, mock_run) -> None:
         sdk = _make_sdk_with_valid_times()
@@ -1011,7 +1011,7 @@ class PyReasonSemanticsProfileCoreEvaluateTests(unittest.TestCase):
         self.assertIn("SemanticsProfile.engine='pyreason'", str(ctx.exception))
 
 
-class PyReasonSemanticsProfileGuardTests(unittest.TestCase):
+class PyReasonConfigProfileGuardTests(unittest.TestCase):
     def test_existing_pyreason_rule_ext_compile_survives(self) -> None:
         with sdk_vars("u", "name") as (u, name):
             rule = Rule(
@@ -1066,7 +1066,7 @@ class PyReasonSemanticsProfileGuardTests(unittest.TestCase):
         )
 
         self.assertIsInstance(resolved, ProbLogRuleExt)
-        self.assertEqual(resolved.branch_probabilities, (0.5,))
+        self.assertEqual(resolved.case_probabilities, (0.5,))
 
     def test_pyreason_exporter_remains_profile_agnostic(self) -> None:
         import factgraph.adapters.pyreason.where_compile as where_compile

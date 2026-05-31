@@ -53,7 +53,7 @@ A few principles run through the whole map:
    already stored."
 
 5. **Semantics are evaluate-time configuration.**
-   `ProbLogSemantics` and `PyReasonSemantics` are call-time arguments to
+   `ProbLogConfig` and `PyReasonConfig` are call-time arguments to
    `fg.eval.evaluate(...)`. They do not live inside the `Inference` template
    and they do not change the candidate -> accept -> ledger lifecycle.
 
@@ -142,7 +142,7 @@ described and executed.
 | --- | --- | --- |
 | `fg.rules` | `inspect(rule_or_inference_or_query)` | `inspect(...)` shows structure for in-memory `Rule`, `Inference`, or `Query` values. |
 | `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. The empty namespace is a deliberate **v0.2 compatibility placeholder** — `Inference` authoring stays available but new code prefers application `Rule` (`build_application_rule(...)`) + `RuleExpr` composition (see [Rules and inferences](rules-and-inferences.md#evaluate-an-inference)); the namespace remains as a reserved name without removal date. |
-| `fg.eval` | `evaluate(inference_or_expr, *, head=None, engine=None, semantics=None)`, `explain(expr, *, head=closed_head)`, `inspect_semantics(semantics_or_profile)` | `evaluate(...)` is read-only and returns `EvaluateResult`. `explain(...)` replays a closed-head explanation. `inspect_semantics(...)` previews wrapper or profile shape without running an engine. |
+| `fg.eval` | `evaluate(inference_or_expr, *, head=None, engine=None, config=None)`, `explain(expr, *, head=closed_head)`, `preview_config(semantics_or_profile)` | `evaluate(...)` is read-only and returns `EvaluateResult`. `explain(...)` replays a closed-head explanation. `preview_config(...)` previews wrapper or profile shape without running an engine. |
 
 Public DSL value objects are `Rule`, `Inference`, `Query`, `Case`, `Pred`,
 `Not`, `RuleRef`, and `vars`. Saved rule/inference handles were removed; pass
@@ -185,7 +185,7 @@ whole module.
 | Rule DSL | `Rule`, `Inference`, `Query`, `Case`, `Pred`, `Not`, `RuleRef`, `vars` | Author saved rules, inferences, ad-hoc queries, and rule-body atoms. |
 | Persistence handles | `SchemaAddResult` | Return type from `fg.schema.register`, `extend`, or `apply`. Rule/inference persistence handles were removed. |
 | Ingest results | `IngestResult`, `ValidationReport` | Return types from `fg.schema.ingest(...)` and `fg.schema.validate_provenance(...)`. |
-| Semantics | `ProbLogSemantics`, `PyReasonSemantics`, `SemanticsProfile` | Configure inference evaluation. Wrappers are the teaching path; `SemanticsProfile` is the canonical lower form. |
+| Semantics | `ProbLogConfig`, `PyReasonConfig`, `SemanticsProfile` | Configure inference evaluation. Wrappers are the teaching path; `SemanticsProfile` is the canonical lower form. |
 | Error types | `SDKSchemaError`, `SDKStoreError`, `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError`, `SDKDSLError` | Catch these for kernel-level failure modes. |
 | Error codes (advanced) | `INVALID_ROW_FORMAT`, `QUERY_ALIAS_CONFLICT`, `QUERY_INVALID_ROW_FORMAT`, `QUERY_MISSING_REF`, `QUERY_NOT_IMPLEMENTED`, `QUERY_TYPE_MISMATCH`, `QUERY_UNBOUND_VAR` | Stable string constants used inside error messages. |
 | Schema compile helpers (advanced) | `build_authoring_schema_from_classes`, `compile_schema_from_classes`, `schema_preflight_from_classes` | Lower-level schema compilation. Not part of the normal teaching path. |
@@ -240,9 +240,9 @@ same project; some are out of scope for `factpy-kernel` entirely.
   queries.
 - Rules and inferences are in-memory value objects; keep reusable definitions in
   Python code or application configuration.
-- `fg.eval.evaluate(inference, engine=..., semantics=...)` returns
+- `fg.eval.evaluate(inference, engine=..., config=...)` returns
   `EvaluateResult`; rows can be explained or closed for manual replay.
-- `fg.eval.inspect_semantics(...)` previews semantics shape; it does not run an
+- `fg.eval.preview_config(...)` previews semantics shape; it does not run an
   engine.
 - `fg.audit.explain(...)`, `fg.audit.conflicts(...)`, and
   `fg.audit.diff_proof_frames(...)` inspect persisted records.

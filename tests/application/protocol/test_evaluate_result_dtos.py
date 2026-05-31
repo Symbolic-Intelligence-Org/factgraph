@@ -60,13 +60,13 @@ def _result_parts() -> tuple[str, str, str, str, str, str, str, str, str, Rule]:
     expr_digest = _token("expr")
     rule_set_digest = _token("rules")
     view_snapshot_digest = _token("view")
-    semantics_digest = _token("semantics")
+    config_digest = _token("semantics")
     result_id = result_id_for(
         run_id=run_id,
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
-        semantics_digest=semantics_digest,
+        config_digest=config_digest,
         engine=engine,
         head_id=head.id,
         head_content_digest=head.content_digest,
@@ -78,7 +78,7 @@ def _result_parts() -> tuple[str, str, str, str, str, str, str, str, str, Rule]:
         expr_digest,
         rule_set_digest,
         view_snapshot_digest,
-        semantics_digest,
+        config_digest,
         closed_head_digest,
         head.content_digest,
         engine,
@@ -125,7 +125,7 @@ def _single_row_result(
         expr_digest,
         rule_set_digest,
         view_snapshot_digest,
-        semantics_digest,
+        config_digest,
         closed_head_digest,
         head_content_digest,
         engine,
@@ -144,7 +144,7 @@ def _single_row_result(
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
-        semantics_digest=semantics_digest,
+        config_digest=config_digest,
     )
     row_support_artifacts = {row.row_id: support_artifact} if support_artifact is not None else None
     row_provenance_envelopes = {row.row_id: provenance_envelope} if provenance_envelope is not None else None
@@ -159,7 +159,7 @@ def _single_row_result(
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
-        semantics_digest=semantics_digest,
+        config_digest=config_digest,
         evaluated_at="2026-05-25T00:00:00Z",
         result_digest=result_digest,
         _row_support_artifacts=row_support_artifacts,
@@ -257,7 +257,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest,
             rule_set_digest,
             view_snapshot_digest,
-            semantics_digest,
+            config_digest,
             closed_head_digest,
             head_content_digest,
             engine,
@@ -276,7 +276,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
         )
 
         result = EvaluateResult(
@@ -290,7 +290,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
         )
@@ -317,7 +317,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
                 expr_digest=result.expr_digest,
                 rule_set_digest=result.rule_set_digest,
                 view_snapshot_digest=result.view_snapshot_digest,
-                semantics_digest=result.semantics_digest,
+                config_digest=result.config_digest,
                 evaluated_at=result.evaluated_at,
                 result_digest=result.result_digest,
                 _row_provenance_envelopes={"missing-row": _problog_provenance_envelope()},
@@ -351,13 +351,13 @@ class EvaluateResultDTOTests(unittest.TestCase):
         expr_digest = _token("expr")
         rule_set_digest = _token("rules")
         view_snapshot_digest = _token("view")
-        semantics_digest = _token("semantics")
+        config_digest = _token("semantics")
         result_id = result_id_for(
             run_id=run_id,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             engine="native",
             head_id=head.id,
             head_content_digest=head.content_digest,
@@ -376,7 +376,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
         )
         result = EvaluateResult(
             result_id=result_id,
@@ -389,7 +389,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
         )
@@ -408,7 +408,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest,
             rule_set_digest,
             view_snapshot_digest,
-            semantics_digest,
+            config_digest,
             closed_head_digest,
             head_content_digest,
             engine,
@@ -427,7 +427,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
         )
         result = EvaluateResult(
             result_id=result_id,
@@ -440,7 +440,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
         )
@@ -456,10 +456,10 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.raw_kind, result[0].raw_kind)
         self.assertEqual(explanation.bound, result[0].bound)
         self.assertEqual(explanation.failure_class, None)
-        self.assertEqual(explanation.checked_scope["semantics_digest"], semantics_digest)
+        self.assertEqual(explanation.checked_scope["config_digest"], config_digest)
         self.assertEqual(explanation.checked_scope["semantics_source"], "row_result")
-        self.assertEqual(explanation.checked_scope["evaluate_semantics_digest"], semantics_digest)
-        self.assertEqual(explanation.checked_scope["explain_semantics_digest"], semantics_digest)
+        self.assertEqual(explanation.checked_scope["evaluate_config_digest"], config_digest)
+        self.assertEqual(explanation.checked_scope["explain_config_digest"], config_digest)
         self.assertEqual(explanation.checked_scope["semantics_match"], True)
         self.assertEqual(explanation.evidence.root_node_id, result[0].row_id)
         expected_metadata_keys = {
@@ -471,7 +471,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             "expr_digest",
             "rule_set_digest",
             "view_snapshot_digest",
-            "semantics_digest",
+            "config_digest",
             "result_digest",
             "engine",
             "engine_version",
@@ -488,7 +488,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.evidence.metadata["expr_digest"], expr_digest)
         self.assertEqual(explanation.evidence.metadata["rule_set_digest"], rule_set_digest)
         self.assertEqual(explanation.evidence.metadata["view_snapshot_digest"], view_snapshot_digest)
-        self.assertEqual(explanation.evidence.metadata["semantics_digest"], semantics_digest)
+        self.assertEqual(explanation.evidence.metadata["config_digest"], config_digest)
         self.assertEqual(explanation.evidence.metadata["result_digest"], result_digest)
         self.assertEqual(explanation.evidence.metadata["engine"], engine)
         self.assertEqual(explanation.evidence.metadata["engine_version"], None)
@@ -584,7 +584,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
                 "expr_digest",
                 "rule_set_digest",
                 "view_snapshot_digest",
-                "semantics_digest",
+                "config_digest",
                 "result_digest",
                 "engine",
                 "engine_version",
@@ -728,7 +728,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest,
             rule_set_digest,
             view_snapshot_digest,
-            semantics_digest,
+            config_digest,
             closed_head_digest,
             head_content_digest,
             engine,
@@ -748,7 +748,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
         )
         result = EvaluateResult(
             result_id=result_id,
@@ -761,7 +761,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
         )
@@ -788,7 +788,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest,
             rule_set_digest,
             view_snapshot_digest,
-            semantics_digest,
+            config_digest,
             closed_head_digest,
             head_content_digest,
             engine,
@@ -807,7 +807,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
         )
         result = EvaluateResult(
             result_id=result_id,
@@ -820,7 +820,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
         )
@@ -885,7 +885,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest,
             rule_set_digest,
             view_snapshot_digest,
-            semantics_digest,
+            config_digest,
             closed_head_digest,
             head_content_digest,
             engine,
@@ -904,7 +904,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
         )
 
         with self.assertRaisesRegex(ProtocolShapeError, "duplicate row_id"):
@@ -919,7 +919,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
-                semantics_digest=semantics_digest,
+                config_digest=config_digest,
                 evaluated_at="2026-05-25T00:00:00Z",
                 result_digest=result_digest,
             )

@@ -16,7 +16,7 @@ from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import EmitSpec, Inference, Pred
 from factgraph.sdk.schema import Entity, Field, Identity
-from factgraph.sdk.semantics import ProbLogSemantics
+from factgraph.sdk.semantics import ProbLogConfig
 from factgraph.sdk.store import SDKStore, _lower_public_semantics
 
 
@@ -48,8 +48,8 @@ def _profile(
     )
 
 
-class ProbLogSemanticsProfileResolverTests(unittest.TestCase):
-    def test_profile_rule_projection_materializes_branch_probabilities_with_default_one(self) -> None:
+class ProbLogConfigProfileResolverTests(unittest.TestCase):
+    def test_profile_rule_projection_materializes_case_probabilities_with_default_one(self) -> None:
         resolved = resolve_problog_engine_ext(
             where=_two_branch_where(),
             engine_ext=None,
@@ -57,7 +57,7 @@ class ProbLogSemanticsProfileResolverTests(unittest.TestCase):
         )
 
         self.assertIsInstance(resolved, ProbLogRuleExt)
-        self.assertEqual(resolved.branch_probabilities, (0.4, 1.0))
+        self.assertEqual(resolved.case_probabilities, (0.4, 1.0))
 
     def test_profile_rule_projection_requires_problog_engine_at_consumption(self) -> None:
         with self.assertRaises(ValueError) as ctx:
@@ -129,25 +129,25 @@ class ProbLogSemanticsProfileResolverTests(unittest.TestCase):
     def test_matching_profile_engine_ext_and_legacy_carriers_are_allowed(self) -> None:
         resolved = resolve_problog_engine_ext(
             where=_two_branch_where(),
-            engine_ext=ProbLogRuleExt(branch_probabilities=(0.4, 1.0)),
+            engine_ext=ProbLogRuleExt(case_probabilities=(0.4, 1.0)),
             legacy_body_confidences=[0.4, 1.0],
             semantics_profile=_profile(),
         )
 
         self.assertIsInstance(resolved, ProbLogRuleExt)
-        self.assertEqual(resolved.branch_probabilities, (0.4, 1.0))
+        self.assertEqual(resolved.case_probabilities, (0.4, 1.0))
 
     def test_conflicting_profile_and_engine_ext_rejects_with_carrier_names(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             resolve_problog_engine_ext(
                 where=_two_branch_where(),
-                engine_ext=ProbLogRuleExt(branch_probabilities=(0.8, 1.0)),
+                engine_ext=ProbLogRuleExt(case_probabilities=(0.8, 1.0)),
                 semantics_profile=_profile(),
             )
 
         message = str(ctx.exception)
         self.assertIn("SemanticsProfile.rule_projection.problog", message)
-        self.assertIn("ProbLogRuleExt.branch_probabilities", message)
+        self.assertIn("ProbLogRuleExt.case_probabilities", message)
 
     def test_conflicting_profile_and_legacy_bridge_rejects_with_carrier_names(self) -> None:
         with self.assertRaises(ValueError) as ctx:
@@ -163,7 +163,7 @@ class ProbLogSemanticsProfileResolverTests(unittest.TestCase):
         self.assertIn("legacy_body_confidences", message)
 
 
-class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
+class ProbLogConfigProfileCoreEvaluateTests(unittest.TestCase):
     def _make_sdk(self, *, seed_meta: dict[str, object] | None = None) -> SDKStore:
         sdk = SDKStore([User])
         alice_ref = sdk.entities.ref(User, user_id="Alice")
@@ -319,7 +319,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
 
         result = sdk.eval.evaluate(
             self._make_derivation(),
-            semantics=ProbLogSemantics(uncertainty_projection={"probabilistic": {"policy": "midpoint"}}),
+            config=ProbLogConfig(uncertainty_projection={"probabilistic": {"policy": "midpoint"}}),
         )
 
         self.assertEqual(result.count(), 1)
@@ -342,7 +342,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
                 "expr_digest",
                 "rule_set_digest",
                 "view_snapshot_digest",
-                "semantics_digest",
+                "config_digest",
                 "result_digest",
                 "engine",
                 "engine_version",
@@ -369,7 +369,7 @@ class ProbLogSemanticsProfileCoreEvaluateTests(unittest.TestCase):
         self.assertEqual(compiled["target_pred_id"], "user:tag")
 
 
-class ProbLogSemanticsProfileGuardTests(unittest.TestCase):
+class ProbLogConfigProfileGuardTests(unittest.TestCase):
     def test_exporter_stays_profile_agnostic(self) -> None:
         import factgraph.adapters.problog.problog_export as problog_export
 
@@ -384,21 +384,21 @@ class ProbLogSemanticsProfileGuardTests(unittest.TestCase):
         )
 
         self.assertIsInstance(resolved, ProbLogRuleExt)
-        self.assertEqual(resolved.branch_probabilities, (0.7, 0.6))
+        self.assertEqual(resolved.case_probabilities, (0.7, 0.6))
 
     def test_existing_explicit_problog_rule_ext_survives(self) -> None:
         resolved = resolve_problog_engine_ext(
             where=_two_branch_where(),
-            engine_ext=ProbLogRuleExt(branch_probabilities=(0.7, 0.6)),
+            engine_ext=ProbLogRuleExt(case_probabilities=(0.7, 0.6)),
         )
 
         self.assertIsInstance(resolved, ProbLogRuleExt)
-        self.assertEqual(resolved.branch_probabilities, (0.7, 0.6))
+        self.assertEqual(resolved.case_probabilities, (0.7, 0.6))
 
 
 class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
     def test_problog_semantics_defaults_to_reject_uncertainty_projection(self) -> None:
-        semantics = ProbLogSemantics()
+        semantics = ProbLogConfig()
 
         self.assertEqual(
             semantics.uncertainty_projection,
@@ -410,7 +410,7 @@ class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
         )
 
     def test_lowering_preserves_explicit_uncertainty_projection(self) -> None:
-        semantics = ProbLogSemantics(
+        semantics = ProbLogConfig(
             uncertainty_projection={
                 "probabilistic": {"policy": "midpoint"},
                 "fallback": "reject_unconfigured",
@@ -419,7 +419,7 @@ class PublicProbLogUncertaintyProjectionTests(unittest.TestCase):
 
         profile = _lower_public_semantics(
             semantics,
-            derivation=ProbLogSemanticsProfileCoreEvaluateTests()._make_derivation(),
+            derivation=ProbLogConfigProfileCoreEvaluateTests()._make_derivation(),
         )
 
         self.assertEqual(profile.engine, "problog")

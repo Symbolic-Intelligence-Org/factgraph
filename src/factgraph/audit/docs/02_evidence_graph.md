@@ -97,7 +97,7 @@ audit bridge keys:
 | `expr_digest` | evaluated expression digest |
 | `rule_set_digest` | rule set digest |
 | `view_snapshot_digest` | database/view snapshot digest |
-| `semantics_digest` | semantics profile digest, or `None` |
+| `config_digest` | semantics profile digest, or `None` |
 | `result_digest` | full result digest |
 | `engine` | engine id |
 | `engine_version` | engine version, or `None` |

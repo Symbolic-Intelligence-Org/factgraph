@@ -19,7 +19,7 @@ explanation = row.explain()                  # → Explanation
 | `row.explain()` | `Explanation` | Live row-bound explanation (主路径) |
 | `row.close()` | application `Rule` | Closed head for cross-session replay |
 | `fg.eval.explain(expr, head=closed_head, ...)` | `Explanation` | Manual / advanced replay path |
-| `fg.eval.inspect_semantics(profile)` | preview | Inspect a semantics profile shape |
+| `fg.eval.preview_config(profile)` | preview | Inspect a semantics profile shape |
 
 The rest of this page walks through each DTO in the chain.
 
@@ -31,7 +31,7 @@ The fields fall into four roles:
 | Role | Fields |
 | --- | --- |
 | Envelope identity | `result_id` (`evalr_v1:...`), `run_id` (`run_v1:...`), `result_digest` (`sha256:...`) |
-| Replay anchors | `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `semantics_digest` (or `None`) |
+| Replay anchors | `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `config_digest` (or `None`) |
 | Engine provenance | `engine` (`"native"` / `"problog"` / `"pyreason"`), `engine_version`, `adapter_version` |
 | Evaluation context | `head` (the closed application `Rule`), `evaluated_at` (`datetime` UTC), `rows` (`tuple[EvaluateRow, ...]`) |
 
@@ -52,7 +52,7 @@ for row in result:     # iteration over rows
 
 Identity and replay anchors are content-addressed digests. Two `EvaluateResult`
 values with matching `expr_digest`, `rule_set_digest`, `view_snapshot_digest`,
-and `semantics_digest` evaluated the same logical query against the same
+and `config_digest` evaluated the same logical query against the same
 snapshot under the same semantics — they are replay-equivalent regardless of
 when they ran.
 

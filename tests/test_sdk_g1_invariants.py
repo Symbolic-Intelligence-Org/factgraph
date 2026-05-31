@@ -45,8 +45,8 @@ EXPECTED_SDK_ALL: tuple[str, ...] = (
     "SDKStore",
     "SDKStoreError",
     "SemanticsProfile",
-    "ProbLogSemantics",
-    "PyReasonSemantics",
+    "ProbLogConfig",
+    "PyReasonConfig",
     "ValidationReport",
     "build_authoring_schema_from_classes",
     "compile_schema_from_classes",
@@ -69,8 +69,8 @@ class SDKG1InvariantTests(unittest.TestCase):
     def test_sdk_all_is_unchanged_and_result_types_are_not_exported(self) -> None:
         self.assertIn("FactGraph", sdk_pkg.__all__)
         self.assertIn("SemanticsProfile", sdk_pkg.__all__)
-        self.assertIn("ProbLogSemantics", sdk_pkg.__all__)
-        self.assertIn("PyReasonSemantics", sdk_pkg.__all__)
+        self.assertIn("ProbLogConfig", sdk_pkg.__all__)
+        self.assertIn("PyReasonConfig", sdk_pkg.__all__)
         for name in ("CheckResult", "DiagnoseResult"):
             with self.subTest(name=name):
                 self.assertNotIn(name, sdk_pkg.__all__)

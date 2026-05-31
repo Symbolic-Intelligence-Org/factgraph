@@ -509,7 +509,7 @@ class SchemaMutationPreservationTests(unittest.TestCase):
     def test_track3_semantics_exports_remain_available(self) -> None:
         sdk_module = _sdk_module()
 
-        for name in ("SemanticsProfile", "ProbLogSemantics", "PyReasonSemantics"):
+        for name in ("SemanticsProfile", "ProbLogConfig", "PyReasonConfig"):
             with self.subTest(name=name):
                 self.assertIn(name, sdk_module.__all__)
                 self.assertTrue(hasattr(sdk_module, name))

@@ -6,7 +6,7 @@ validated core value object:
 
 - SDK namespace export exists through `factgraph.sdk.SemanticsProfile`
   for advanced/canonical users; Track 2 also exposes SDK-local
-  `ProbLogSemantics` and `PyReasonSemantics` wrappers that lower into
+  `ProbLogConfig` and `PyReasonConfig` wrappers that lower into
   `SemanticsProfile` at the SDK boundary;
 - service runtime accepts top-level inline `semantics` in canonical
   `SemanticsProfile` JSON shape for derivation evaluation;
@@ -42,10 +42,10 @@ Adapter migration is intentionally staged:
   profile constructor.
 - Track 3 / E exposed the durable SDK/service runtime call-site.
   Track 2 adds preferred SDK wrappers: `fg.eval.evaluate(...,
-  semantics=ProbLogSemantics(...))` or `PyReasonSemantics(...)`.
+  config=ProbLogConfig(...))` or `PyReasonConfig(...)`.
   Service callers still pass canonical top-level JSON `"semantics": {...}`.
 - Track 3-post adds the PyReason branch-bound lane. SDK
-  `PyReasonSemantics(branch_bounds=...)` lowers to canonical
+  `PyReasonConfig(case_bounds=...)` lowers to canonical
   `rule_projection.pyreason` `branch:{index}` interval entries; adapter
   consumption normalizes those entries into `PyReasonRuleExt.branch_head_bounds`.
 

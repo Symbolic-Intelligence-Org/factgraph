@@ -86,7 +86,7 @@ Main flow of `evaluate_problog(...)`:
 3. Normalize adapter-internal rule semantics via
    `resolve_problog_engine_ext(...)`:
    - Accepts an internal
-     `ProbLogRuleExt(branch_probabilities=...)`
+     `ProbLogRuleExt(case_probabilities=...)`
    - Internal compiled `body_confidences` may still be bridged
      upstream (in `sdk/store.py` and `service/runtime_v1.py`), but
      public authoring / service payloads reject that key
@@ -100,7 +100,7 @@ Main flow of `evaluate_problog(...)`:
      and probability values in `(0, 1]`, defaults omitted branches to
      `1.0`, and normalizes the result into `ProbLogRuleExt`.
    - When `SemanticsProfile.rule_projection.problog`,
-     `ProbLogRuleExt.branch_probabilities`, and legacy
+     `ProbLogRuleExt.case_probabilities`, and legacy
      `body_confidences` are all present, their materialized branch
      probability tuples must match.
 4. Assemble `rule_spec` (containing
@@ -213,7 +213,7 @@ Semantic-delivery addendum:
   - user-authored `probability`, `bound_lower`, and `bound_upper` meta
     are rejected; those names are reserved for adapter projection / output
     lanes
-  - `ProbLogSemantics()` and canonical
+  - `ProbLogConfig()` and canonical
     `SemanticsProfile.uncertainty_projection` default to rejecting raw
     uncertainty; configure a policy explicitly before projecting raw
     intervals into ProbLog point probabilities
@@ -249,8 +249,8 @@ Semantic-delivery addendum:
     semantic lanes and raw uncertainty projection are absent, the adapter
     uses the deterministic default `1.0`
 - Branch probabilities for `where` are currently carried internally by
-  `ProbLogRuleExt.branch_probabilities`:
-  - `branch_probabilities[i]` corresponds to normalized `where`
+  `ProbLogRuleExt.case_probabilities`:
+  - `case_probabilities[i]` corresponds to normalized `where`
     OR branch `i`
   - `None` is equivalent to all branches at `1.0`
   - The value range remains `(0, 1]`
@@ -269,16 +269,16 @@ Semantic-delivery addendum:
   - `Store.evaluate(..., mode="native", semantics_profile=...)` rejects
     rather than silently ignoring the profile
 - Track 3 / E exposes the durable public call-site:
-  `fg.eval.evaluate(..., engine="problog", semantics=profile)` and service
+  `fg.eval.evaluate(..., engine="problog", config=profile)` and service
   top-level `"semantics": {...}`.
 - Track 2 adds the preferred SDK wrapper:
-  `fg.eval.evaluate(..., semantics=ProbLogSemantics(...))`. The SDK resolves
+  `fg.eval.evaluate(..., config=ProbLogConfig(...))`. The SDK resolves
   explicit branch ids or `c0` / `c1` fallback ids while the SDK
   `Rule` / `Derivation` object is still in hand, lowers the wrapper into
   canonical `SemanticsProfile.rule_projection.problog`, then reuses the
   Track 3 / C adapter consumption path. Service and compiled paths still use
   canonical `SemanticsProfile`, not wrapper-shaped JSON.
-  `ProbLogSemantics.uncertainty_projection` lowers into the canonical
+  `ProbLogConfig.uncertainty_projection` lowers into the canonical
   profile-level projection map and follows the same export path.
 - The output program contains:
   - `edb_fact(...)` facts
@@ -355,7 +355,7 @@ Constraints:
   expose only `timeout`
 - The internal ProbLog engine extension currently contains only a
   minimal contract:
-  - `ProbLogRuleExt(branch_probabilities=...)`
+  - `ProbLogRuleExt(case_probabilities=...)`
   - Expresses only OR-branch weighting, not fact probability,
     candidate probability, or annotation persistence
 - `problog_trace_to_evidence_graph(...)` currently uses

@@ -148,7 +148,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         mock_run.side_effect = _fake_run
 
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
-        compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.5,))
+        compiled["engine_ext"] = ProbLogRuleExt(case_probabilities=(0.5,))
 
         candidates = sdk.eval.evaluate(compiled, engine="problog")
 
@@ -177,7 +177,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
         compiled["body_confidences"] = [0.25]
-        compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.5,))
+        compiled["engine_ext"] = ProbLogRuleExt(case_probabilities=(0.5,))
 
         with self.assertRaises(ValueError) as ctx:
             sdk.eval.evaluate(compiled, engine="problog")
@@ -189,7 +189,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         sdk = self._make_sdk()
         compiled = sdk._compile_derivation_input(self._make_derivation())[0]
         compiled["body_confidences"] = [0.25]
-        compiled["engine_ext"] = ProbLogRuleExt(branch_probabilities=(0.25,))
+        compiled["engine_ext"] = ProbLogRuleExt(case_probabilities=(0.25,))
         seen: dict[str, str] = {}
 
         def _fake_run(pl_path, *, timeout, trace):

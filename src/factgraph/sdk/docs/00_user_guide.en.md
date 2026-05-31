@@ -537,13 +537,13 @@ with vars("d", "kw") as (d, kw):
 
 result = fg.eval.evaluate(inf, engine="native")               # → EvaluateResult
 result = fg.eval.evaluate(inf, engine="problog")              # probabilistic rows
-result = fg.eval.evaluate(inf, semantics=PyReasonSemantics(...))
+result = fg.eval.evaluate(inf, config=PyReasonConfig(...))
 ```
 
 `engine` is **call-time**, not stored on the `Inference`. Allowed values:
 `"native"` (default), `"souffle"`, `"problog"`, `"pyreason"`.
 The public SDK rejects `engine_options=`, `registry=`, and the removed
-`mode=` keyword. Use `engine=` and `semantics=`.
+`mode=` keyword. Use `engine=` and `config=`.
 
 For multiple output facts, define separate inferences. This keeps the
 public runtime call-site aligned with `SemanticsProfile` and with the
@@ -578,7 +578,7 @@ SDK; persist new facts with explicit `fg.fields.*`, `fg.entities.*`, or
 ```python
 fg.eval.evaluate(
     inf,
-    semantics=PyReasonSemantics(
+    config=PyReasonConfig(
         temporal_projection={
             "mode": "fact_boundaries",
             "universe": ["2026-01-01", "2026-12-31"],
@@ -592,7 +592,7 @@ rule objects. Track 2 adds lightweight public semantics wrappers as the
 preferred SDK authoring shape:
 
 ```python
-from factgraph.sdk import Case, EmitSpec, ProbLogSemantics, PyReasonSemantics
+from factgraph.sdk import Case, EmitSpec, ProbLogConfig, PyReasonConfig
 
 inf = Inference(
     id="drv.user_tag",
@@ -606,24 +606,24 @@ inf = Inference(
 
 fg.eval.evaluate(
     inf,
-    semantics=ProbLogSemantics(branch_probabilities={"seed_path": 0.7}),
+    config=ProbLogConfig(case_probabilities={"seed_path": 0.7}),
 )
 
 fg.eval.evaluate(
     inf,
-    semantics=PyReasonSemantics(
+    config=PyReasonConfig(
         timestep_delay=2,
         iteration_count=3,
         derived_bound=[0.7, 0.9],
-        branch_bounds={"seed_path": [0.8, 1.0], "c1": [0.2, 0.8]},
+        case_bounds={"seed_path": [0.8, 1.0], "c1": [0.2, 0.8]},
     ),
 )
 ```
 
-When `semantics=` is a public wrapper or `SemanticsProfile`, `engine=` is
+When `config=` is a public wrapper or `SemanticsProfile`, `engine=` is
 derived from the semantics object unless explicitly provided as a mismatch
 guard. `SemanticsProfile` remains exported as the advanced/canonical shape
-for direct profile users and service JSON. Use `fg.eval.inspect_semantics(...)`
+for direct profile users and service JSON. Use `fg.eval.preview_config(...)`
 to inspect configured projection lanes and the wrapper's lowered canonical
 profile preview. The public SDK rejects `semantics_profile=`; that name is
 reserved for core/application internals.
@@ -635,7 +635,7 @@ uncertainty until you choose a policy such as `lower`, `midpoint`, `upper`, or
 
 For PyReason, prefer canonical `iteration_count`, `derived_bound`,
 `atom_bounds`, `fact_boundaries`, and `time_binned` for new code. Legacy
-`head_bound`, `branch_bounds`, `fixed_timesteps`, and `valid_time_boundaries`
+`head_bound`, `case_bounds`, `fixed_timesteps`, and `valid_time_boundaries`
 remain compatibility surfaces. `atom_bounds` keys use application atom ids such
 as `<rule_id>:atom_<index>` and are for application `Rule` inputs. For full
 examples, see `docs/official/kernel/quickstart/semantics.md`.
@@ -1024,7 +1024,7 @@ Notable changes:
 | `.chosen` on assertion view | (removed) | Use `snapshot.field("X").active` |
 | `temporal_view` parameter | (removed) | Pass via `meta` and use a custom view |
 | `mode=` keyword on SDK `evaluate` | (removed) | Use `engine=` |
-| `semantics_profile=` keyword on SDK `evaluate` | (removed) | Use `semantics=` |
+| `semantics_profile=` keyword on SDK `evaluate` | (removed) | Use `config=` |
 | public multi-head `Inference` | (removed) | Use one `Inference` per head |
 
 ### ProbLog branch probability transition
@@ -1033,20 +1033,20 @@ Notable changes:
 probability, confidence, or engine-specific parameters. Public
 `body_confidences` and `engine_ext` payloads are rejected. The old names
 remain only in rejection messages and adapter/internal bridges.
-`ProbLogSemantics` is the preferred public wrapper for branch probabilities
+`ProbLogConfig` is the preferred public wrapper for branch probabilities
 and raw-uncertainty projection:
 
 ```python
 fg.eval.evaluate(
     deriv,
-    semantics=ProbLogSemantics(branch_probabilities={"declared_pref": 0.7}),
+    config=ProbLogConfig(case_probabilities={"declared_pref": 0.7}),
 )
 ```
 
 `SemanticsProfile.rule_projection.problog` remains the advanced/canonical
 shape for direct profile users and service JSON.
 
-`ProbLogSemantics()` rejects raw uncertainty by default. Configure
+`ProbLogConfig()` rejects raw uncertainty by default. Configure
 `uncertainty_projection` explicitly when projecting
 `meta={"raw_kind": ..., "bound": ...}` intervals into ProbLog point
 probabilities; use the quickstart semantics page for the policy list.
@@ -1066,13 +1066,13 @@ intervals, and rule `timestep_delay`, plus canonical profile fields such as
 Current temporal modes are `none`, `fixed_timesteps`, `fact_boundaries`,
 `valid_time_boundaries`, and `time_binned`.
 
-`PyReasonSemantics` is the preferred public wrapper for currently lowerable
+`PyReasonConfig` is the preferred public wrapper for currently lowerable
 PyReason lanes:
 
 ```python
 fg.eval.evaluate(
     inf,
-    semantics=PyReasonSemantics(
+    config=PyReasonConfig(
         timestep_delay=2,
         iteration_count=3,
         derived_bound=[0.7, 0.9],
@@ -1086,7 +1086,7 @@ for fixed temporal bins:
 ```python
 fg.eval.evaluate(
     inf,
-    semantics=PyReasonSemantics(
+    config=PyReasonConfig(
         temporal_projection={
             "mode": "time_binned",
             "universe": ["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"],
@@ -1096,9 +1096,9 @@ fg.eval.evaluate(
 )
 ```
 
-`PyReasonSemantics()` lowers to canonical `iteration_count=1`; do not combine
+`PyReasonConfig()` lowers to canonical `iteration_count=1`; do not combine
 `iteration_count` with temporal modes that also imply timesteps. Legacy
-`head_bound`, `branch_bounds`, `fixed_timesteps`, and
+`head_bound`, `case_bounds`, `fixed_timesteps`, and
 `valid_time_boundaries` remain accepted for compatibility, but new examples
 should prefer `derived_bound`, `atom_bounds`, `fact_boundaries`, and
 `time_binned`. `time_binned.bin_size` is strict: ISO-style `P<n>D` /

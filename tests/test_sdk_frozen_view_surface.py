@@ -16,8 +16,8 @@ class User(Entity):
 class FrozenViewSurfaceTests(unittest.TestCase):
     def test_public_exports_remain_unchanged(self) -> None:
         self.assertIn("SemanticsProfile", sdk_module.__all__)
-        self.assertIn("ProbLogSemantics", sdk_module.__all__)
-        self.assertIn("PyReasonSemantics", sdk_module.__all__)
+        self.assertIn("ProbLogConfig", sdk_module.__all__)
+        self.assertIn("PyReasonConfig", sdk_module.__all__)
         self.assertNotIn("FrozenAssertionSet", sdk_module.__all__)
         self.assertNotIn("AssertionRecordSet", sdk_module.__all__)
 

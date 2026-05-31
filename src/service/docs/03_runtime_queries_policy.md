@@ -1039,7 +1039,7 @@
     "expr_digest": "sha256:...",
     "rule_set_digest": "sha256:...",
     "view_snapshot_digest": "sha256:...",
-    "semantics_digest": null,
+    "config_digest": null,
     "result_digest": "sha256:...",
     "rows": [
       {
@@ -1099,11 +1099,11 @@
   `SemanticsProfile(**semantics)` 校验；`semantics_profile` 和
   `inference.semantics` / `inference.semantics_profile` 继续返回
   `shape` error。
-- Track 2 的 `ProbLogSemantics` / `PyReasonSemantics` 是 SDK-only wrapper：
+- Track 2 的 `ProbLogConfig` / `PyReasonConfig` 是 SDK-only wrapper：
   SDK 会在持有 SDK `Rule` / `Inference` 对象时解析 branch id 并 lower 成
   canonical `SemanticsProfile`。Service runtime 不接受 wrapper-style JSON
-  keys，例如 `branch_probabilities` / `timestep_delay` / `head_bound` /
-  `branch_bounds`；
+  keys，例如 `case_probabilities` / `timestep_delay` / `head_bound` /
+  `case_bounds`；
   service 仍只接受 top-level canonical `SemanticsProfile` shape。
 - native `engine="native"` inference 会在 evaluate-time 使用当前 session 的
   `ephemeral_rules` 构造 in-memory `RuleRegistry`。

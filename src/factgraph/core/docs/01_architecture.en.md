@@ -185,7 +185,7 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   plans; it forwards adapter-owned extension objects but does not
   interpret field meanings
 - `pyreason` internals currently use `PyReasonRuleExt`
-- `problog` internals currently use `ProbLogRuleExt(branch_probabilities=...)`
+- `problog` internals currently use `ProbLogRuleExt(case_probabilities=...)`
   - semantics: normalized `where` OR-branch weighting
   - internal compiled `body_confidences` is only a temporary SDK/runtime bridge; public authoring and service payloads reject it
 - `SemanticsProfile.rule_projection` owns the durable public
@@ -195,7 +195,7 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   adapter: the core `Store.evaluate(..., mode="problog",
   semantics_profile=...)` path maps `rule_projection.problog`
   `branch_probability` entries into `ProbLogRuleExt`. Track 3 / E exposes
-  this through `fg.eval.evaluate(..., engine="problog", semantics=profile)`
+  this through `fg.eval.evaluate(..., engine="problog", config=profile)`
   and service top-level `"semantics": {...}`. No profile-derived values are
   written into assertion storage.
 - Track 3 / D makes PyReason the second consuming adapter: the core
@@ -203,15 +203,15 @@ Adapter-specific rule projection is no longer public SDK rule syntax:
   `rule_projection.pyreason` into `PyReasonRuleExt` and maps
   `temporal_projection` into PyReason run timesteps plus EDB
   `active_from` / `active_to` coordinates. Track 3 / E exposes this through
-  `fg.eval.evaluate(..., engine="pyreason", semantics=profile)` and service
+  `fg.eval.evaluate(..., engine="pyreason", config=profile)` and service
   top-level `"semantics": {...}`.
-- Track 2 adds SDK-local `ProbLogSemantics` and `PyReasonSemantics` wrappers
+- Track 2 adds SDK-local `ProbLogConfig` and `PyReasonConfig` wrappers
   as the preferred Python authoring shape. SDK `evaluate(...)` can derive
   `engine=` from those wrappers, then lowers them into canonical
   `SemanticsProfile` before crossing the core/application boundary. Service
   JSON and compiled evaluation remain canonical `SemanticsProfile` surfaces.
 - Track 3-post completes the PyReason branch-bound lane:
-  `PyReasonSemantics.branch_bounds` resolves SDK branch ids into canonical
+  `PyReasonConfig.case_bounds` resolves SDK branch ids into canonical
   `rule_projection.pyreason` `branch:{index}` entries, which normalize into
   the adapter-local `PyReasonRuleExt.branch_head_bounds` carrier and compile
   as per-branch head annotations.

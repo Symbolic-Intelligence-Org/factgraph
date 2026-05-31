@@ -14,7 +14,7 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
     rule_set_digest_for_entries,
-    semantics_digest_for,
+    config_digest_for,
     view_snapshot_digest_for_parts,
 )
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
@@ -33,7 +33,7 @@ class EvaluateResultDigestTests(unittest.TestCase):
         expr_digest = sha256_token(b"expr")
         rule_set_digest = sha256_token(b"rules")
         view_snapshot_digest = sha256_token(b"view")
-        semantics_digest = sha256_token(b"semantics")
+        config_digest = sha256_token(b"semantics")
         head_content_digest = sha256_hex(b"head")
 
         result_id = result_id_for(
@@ -41,7 +41,7 @@ class EvaluateResultDigestTests(unittest.TestCase):
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             engine="native",
             head_id="head",
             head_content_digest=head_content_digest,
@@ -76,14 +76,14 @@ class EvaluateResultDigestTests(unittest.TestCase):
             expr_digest=sha256_token(b"expr"),
             rule_set_digest=sha256_token(b"rules"),
             view_snapshot_digest=sha256_token(b"view"),
-            semantics_digest=None,
+            config_digest=None,
         )
 
         self.assertEqual(result_digest_for(**kwargs), result_digest_for(**kwargs))
         self.assertNotIn("evaluated_at", result_digest_for(**kwargs))
         self.assertNotIn("evref_v1", result_digest_for(**kwargs))
 
-    def test_semantics_digest_uses_normalized_profile_content(self) -> None:
+    def test_config_digest_uses_normalized_profile_content(self) -> None:
         profile = SemanticsProfile(
             name="default",
             engine="native",
@@ -109,8 +109,8 @@ class EvaluateResultDigestTests(unittest.TestCase):
             fallback="reject_unconfigured",
         )
 
-        self.assertIsNone(semantics_digest_for(None))
-        self.assertEqual(semantics_digest_for(profile), semantics_digest_for(same))
+        self.assertIsNone(config_digest_for(None))
+        self.assertEqual(config_digest_for(profile), config_digest_for(same))
 
     def test_view_snapshot_digest_uses_store_substrate_without_placeholder(self) -> None:
         digest = view_snapshot_digest_for_parts(

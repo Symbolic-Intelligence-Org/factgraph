@@ -19,32 +19,32 @@ mathematics of ProbLog or PyReason.
 
 | Need | Use |
 | --- | --- |
-| ProbLog branch probabilities or raw-uncertainty projection | `ProbLogSemantics(...)` |
-| PyReason iteration count, rule bounds, or temporal projection | `PyReasonSemantics(...)` |
+| ProbLog branch probabilities or raw-uncertainty projection | `ProbLogConfig(...)` |
+| PyReason iteration count, rule bounds, or temporal projection | `PyReasonConfig(...)` |
 | Lower-level canonical control | `SemanticsProfile(...)` |
-| See what a semantics object means | `fg.eval.inspect_semantics(...)` |
+| See what a semantics object means | `fg.eval.preview_config(...)` |
 
-Most application code should start with `ProbLogSemantics` or
-`PyReasonSemantics`. `SemanticsProfile` is public, but it is the advanced
+Most application code should start with `ProbLogConfig` or
+`PyReasonConfig`. `SemanticsProfile` is public, but it is the advanced
 canonical form that adapters consume internally.
 
 ### Wrappers lower into `SemanticsProfile`
 
-`ProbLogSemantics(...)` and `PyReasonSemantics(...)` are **high-level
+`ProbLogConfig(...)` and `PyReasonConfig(...)` are **high-level
 wrappers** with engine-specific ergonomics. Internally, both lower into a
 canonical `SemanticsProfile` value before any adapter sees them:
 
 | Surface | Accepts | Role |
 | --- | --- | --- |
-| `ProbLogSemantics(branch_probabilities=..., uncertainty_projection=..., ...)` | ProbLog-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
-| `PyReasonSemantics(iteration_count=..., derived_bound=..., atom_bounds=..., temporal_projection=..., ...)` | PyReason-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
+| `ProbLogConfig(case_probabilities=..., uncertainty_projection=..., ...)` | ProbLog-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
+| `PyReasonConfig(iteration_count=..., derived_bound=..., atom_bounds=..., temporal_projection=..., ...)` | PyReason-specific kwargs | Engine-flavored ergonomic factory. Lowers to `SemanticsProfile` internally. |
 | `SemanticsProfile(name=..., engine=..., iteration_count=..., uncertainty_projection=..., temporal_projection=..., rule_projection=...)` | Canonical fields | Lower-level data shape. Adapter consumes this directly. |
 
 This is the same high-level-factory / low-level-data-shape pattern as
 `build_application_rule(...)` vs `Rule(...)` in
 [Rules and inferences](rules-and-inferences.md#why-build_application_rule-instead-of-rule-directly).
 The lowering result is visible at the `lowered_profile` field of
-`fg.eval.inspect_semantics(wrapper)`; for a `SemanticsProfile` argument the
+`fg.eval.preview_config(wrapper)`; for a `SemanticsProfile` argument the
 inspection returns the canonical form directly (no `lowered_profile`).
 
 ## Build an application Rule
@@ -58,8 +58,8 @@ from factgraph.sdk import (
     FactGraph,
     Field,
     Identity,
-    ProbLogSemantics,
-    PyReasonSemantics,
+    ProbLogConfig,
+    PyReasonConfig,
     SDKStoreError,
     SemanticsProfile,
     build_application_rule,
@@ -99,19 +99,19 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 
 Evaluation returns `EvaluateResult`; it does not write derived facts.
 
-## Use ProbLogSemantics with a Rule
+## Use ProbLogConfig with a Rule
 
-`ProbLogSemantics` selects the ProbLog engine. Empty wrappers are useful when
+`ProbLogConfig` selects the ProbLog engine. Empty wrappers are useful when
 you want ProbLog evaluation without branch-specific configuration.
 
 ```python
-problog = ProbLogSemantics()
+problog = ProbLogConfig()
 
 assert problog.engine == "problog"
 
-preview = fg.eval.inspect_semantics(problog)
+preview = fg.eval.preview_config(problog)
 
-assert preview["semantics_type"] == "ProbLogSemantics"
+assert preview["semantics_type"] == "ProbLogConfig"
 assert preview["engine"] == "problog"
 assert preview["lowered_profile"]["engine"] == "problog"
 ```
@@ -120,14 +120,14 @@ Engine-specific evaluation uses the same public call site:
 
 ```python
 # Shape only. This page does not require a ProbLog runtime to be installed.
-# result = fg.eval.evaluate(tags_from_seed, head=tags_from_seed, semantics=problog)
+# result = fg.eval.evaluate(tags_from_seed, head=tags_from_seed, config=problog)
 ```
 
 If you pass `engine=...` explicitly, it must match the wrapper:
 
 ```python
 try:
-    fg.eval.evaluate(tags_from_seed, head=tags_from_seed, engine="pyreason", semantics=problog)
+    fg.eval.evaluate(tags_from_seed, head=tags_from_seed, engine="pyreason", config=problog)
 except SDKStoreError as exc:
     assert "does not match" in str(exc)
 else:
@@ -135,7 +135,7 @@ else:
 ```
 
 Most code should omit `engine=` when using a public wrapper. The SDK derives
-the engine from `ProbLogSemantics` or `PyReasonSemantics`.
+the engine from `ProbLogConfig` or `PyReasonConfig`.
 
 ### ProbLog raw uncertainty projection
 
@@ -144,7 +144,7 @@ Facts can carry raw uncertainty as paired `raw_kind` and `bound` fields; see
 write-side contract. ProbLog consumes the probabilistic lane natively, but it
 does not silently choose a projection for intervals.
 
-By default, `ProbLogSemantics()` rejects raw uncertainty unless you explicitly
+By default, `ProbLogConfig()` rejects raw uncertainty unless you explicitly
 choose a projection policy:
 
 ```python
@@ -159,14 +159,14 @@ Use an explicit policy when you want to project a raw interval into the point
 probability that ProbLog exports:
 
 ```python
-project_midpoint = ProbLogSemantics(
+project_midpoint = ProbLogConfig(
     uncertainty_projection={
         "probabilistic": {"policy": "midpoint"},
         "fallback": "reject_unconfigured",
     }
 )
 
-profile = fg.eval.inspect_semantics(project_midpoint)["lowered_profile"]
+profile = fg.eval.preview_config(project_midpoint)["lowered_profile"]
 assert profile["uncertainty_projection"]["probabilistic"] == {"policy": "midpoint"}
 ```
 
@@ -180,9 +180,9 @@ This is intentionally anti-silent-ignore: midpoint is a semantic choice, not a
 default. If raw uncertainty is present and no matching policy is configured,
 the adapter rejects instead of guessing.
 
-## Use PyReasonSemantics with a Rule
+## Use PyReasonConfig with a Rule
 
-`PyReasonSemantics` configures PyReason-specific iteration count, rule bounds,
+`PyReasonConfig` configures PyReason-specific iteration count, rule bounds,
 and temporal projection. The canonical quickstart knobs are:
 
 - `iteration_count`: global PyReason inference round count. The wrapper
@@ -197,7 +197,7 @@ For a single application `Rule`, prefer canonical `derived_bound` and
 `atom_bounds`:
 
 ```python
-pyreason = PyReasonSemantics(
+pyreason = PyReasonConfig(
     timestep_delay=2,
     iteration_count=3,
     derived_bound=[0.7, 0.9],
@@ -209,10 +209,10 @@ assert pyreason.iteration_count == 3
 assert pyreason.derived_bound == (0.7, 0.9)
 assert pyreason.atom_bounds["user:tag:atom_1"] == (0.4, 0.8)
 
-preview = fg.eval.inspect_semantics(pyreason)
+preview = fg.eval.preview_config(pyreason)
 entries = preview["lowered_profile"]["rule_projection"]["pyreason"]
 
-assert preview["semantics_type"] == "PyReasonSemantics"
+assert preview["semantics_type"] == "PyReasonConfig"
 assert preview["engine"] == "pyreason"
 assert {"target": "head:0", "kind": "interval", "value": [0.7, 0.9]} in entries
 assert {"target": "rule", "kind": "timestep_delay", "value": 2} in entries
@@ -227,7 +227,7 @@ Legacy names remain accepted for compatibility:
 
 - `head_bound` is the old spelling for the rule-head interval. Do not pass both
   `derived_bound` and `head_bound`; that conflict is rejected.
-- `branch_bounds` is still accepted for branch-head intervals keyed by explicit
+- `case_bounds` is still accepted for branch-head intervals keyed by explicit
   branch id or fallback branch id. It can coexist with `atom_bounds` because
   body-atom intervals and branch-head intervals are different surfaces.
 
@@ -236,7 +236,7 @@ Legacy names remain accepted for compatibility:
 Use `fact_boundaries` for canonical valid-time projection:
 
 ```python
-by_fact_time = PyReasonSemantics(
+by_fact_time = PyReasonConfig(
     temporal_projection={
         "mode": "fact_boundaries",
         "universe": ["2026-01-01", "2026-12-31"],
@@ -250,7 +250,7 @@ examples should use `fact_boundaries`.
 Use `time_binned` when you want a fixed temporal grid:
 
 ```python
-hourly = PyReasonSemantics(
+hourly = PyReasonConfig(
     temporal_projection={
         "mode": "time_binned",
         "universe": ["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"],
@@ -274,11 +274,11 @@ modes that also imply PyReason timesteps (`fixed_timesteps`,
 `fact_boundaries`, `valid_time_boundaries`, or `time_binned`). The adapter
 rejects explicit conflicts instead of choosing a winner.
 
-The default is worth calling out: `PyReasonSemantics()` lowers to canonical
+The default is worth calling out: `PyReasonConfig()` lowers to canonical
 `iteration_count=1`. Direct no-profile PyReason adapter execution still keeps
 its existing engine default.
 
-Case-specific `branch_probabilities` and `branch_bounds` require a concrete
+Case-specific `case_probabilities` and `case_bounds` require a concrete
 multi-branch context such as a `RuleExpr` OR expression or a v0.2 compatibility
 `Inference` with explicit branch ids. A single application `Rule` has no public
 branch ids — application `Rule` bodies are **AND-only by design**, with OR
@@ -296,7 +296,7 @@ and per-engine `rule_projection` entries.
 
 ```python
 profile = SemanticsProfile(name="manual.native", engine="native")
-profile_preview = fg.eval.inspect_semantics(profile)
+profile_preview = fg.eval.preview_config(profile)
 
 assert profile_preview["engine"] == "native"
 assert profile_preview["profile"] == "manual.native"
@@ -315,7 +315,7 @@ Semantics choose how rows are evaluated. Evaluation is still read-only.
 before = fg.entities.get(User, user_id="u-1")
 assert tuple(before.tag) == ()
 
-result = fg.eval.evaluate(tags_from_seed, head=tags_from_seed, semantics=ProbLogSemantics())
+result = fg.eval.evaluate(tags_from_seed, head=tags_from_seed, config=ProbLogConfig())
 row = result.first()
 assert row is not None
 
@@ -338,7 +338,7 @@ Keep this separation in mind:
 | Step | Question |
 | --- | --- |
 | `Rule` / `RuleExpr` | What should be evaluated? |
-| `semantics=...` | How should an engine evaluate it? |
+| `config=...` | How should an engine evaluate it? |
 | `EvaluateResult` / `EvaluateRow` | What did evaluation derive? |
 | explicit writes | Which facts enter the ledger? |
 
@@ -359,7 +359,7 @@ with vars("u", "tag") as (u, tag):
         emits=EmitSpec("user:tag", [u, tag]),
     )
 
-branch_profile = ProbLogSemantics(branch_probabilities={"seed_path": 0.7})
+branch_profile = ProbLogConfig(case_probabilities={"seed_path": 0.7})
 ```
 
 The branch id `seed_path` is resolved against that concrete `Inference` during
@@ -374,7 +374,7 @@ logic can be evaluated with different semantics objects at call time.
 Do not use `SemanticsProfile` for basic ProbLog or PyReason examples unless
 you need the advanced canonical form. The wrappers are easier to read.
 
-Do not assume `inspect_semantics(...)` runs an engine. It only shows structure.
+Do not assume `preview_config(...)` runs an engine. It only shows structure.
 
 Do not expect `evaluate(...)` to write facts. It returns rows; explicit write
 APIs decide which facts enter the ledger.
@@ -387,8 +387,8 @@ from factgraph.sdk import (
     FactGraph,
     Field,
     Identity,
-    ProbLogSemantics,
-    PyReasonSemantics,
+    ProbLogConfig,
+    PyReasonConfig,
     SDKStoreError,
     build_application_rule,
     vars,
@@ -414,19 +414,19 @@ with vars("u", "tag") as (u, tag):
     )
 
 
-problog = ProbLogSemantics()
-pyreason = PyReasonSemantics(
+problog = ProbLogConfig()
+pyreason = PyReasonConfig(
     timestep_delay=2,
     iteration_count=3,
     derived_bound=[0.7, 0.9],
     atom_bounds={"user:tag:atom_1": [0.4, 0.8]},
 )
 
-assert fg.eval.inspect_semantics(problog)["engine"] == "problog"
-assert fg.eval.inspect_semantics(pyreason)["engine"] == "pyreason"
+assert fg.eval.preview_config(problog)["engine"] == "problog"
+assert fg.eval.preview_config(pyreason)["engine"] == "pyreason"
 
 try:
-    fg.eval.evaluate(tags_from_seed, head=tags_from_seed, engine="pyreason", semantics=problog)
+    fg.eval.evaluate(tags_from_seed, head=tags_from_seed, engine="pyreason", config=problog)
 except SDKStoreError as exc:
     assert "does not match" in str(exc)
 else:
@@ -444,11 +444,11 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 ## Syntax checklist
 
 - Semantics are evaluate-time configuration.
-- Use `ProbLogSemantics(...)` for ProbLog defaults, branch probabilities, or
+- Use `ProbLogConfig(...)` for ProbLog defaults, branch probabilities, or
   explicit raw-uncertainty projection.
 - ProbLog raw uncertainty defaults to reject; configure
   `uncertainty_projection` when projecting `raw_kind` + `bound` intervals.
-- Use `PyReasonSemantics(...)` for PyReason delays, iteration count, canonical
+- Use `PyReasonConfig(...)` for PyReason delays, iteration count, canonical
   rule bounds, and temporal projection.
 - Prefer `derived_bound` over legacy `head_bound`.
 - Use `atom_bounds={"<rule_id>:atom_<index>": [lower, upper]}` for body atom
@@ -459,7 +459,7 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
   "bin_size": ...}` for fixed temporal bins.
 - Use `SemanticsProfile(...)` only when you need the canonical lower-level
   profile.
-- `fg.eval.inspect_semantics(...)` inspects configuration; it does not run an
+- `fg.eval.preview_config(...)` inspects configuration; it does not run an
   engine.
 - The SDK derives `engine=` from public wrappers; explicit mismatches are
   rejected.

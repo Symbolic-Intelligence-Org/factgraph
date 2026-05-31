@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from factgraph.adapters.problog.rule_ext import (
     ProbLogRuleExt,
     branch_count_for_where,
-    materialize_problog_branch_probabilities,
+    materialize_problog_case_probabilities,
     resolve_problog_engine_ext,
 )
 from factgraph.core.store.types import EngineExtBase
@@ -22,24 +22,24 @@ class DummyProbLogExt(EngineExtBase):
 class ProbLogRuleExtTests(unittest.TestCase):
     def test_defaults_to_none(self) -> None:
         ext = ProbLogRuleExt()
-        self.assertIsNone(ext.branch_probabilities)
+        self.assertIsNone(ext.case_probabilities)
 
     def test_normalizes_list_to_tuple(self) -> None:
-        ext = ProbLogRuleExt(branch_probabilities=[0.8, 0.6])
-        self.assertEqual(ext.branch_probabilities, (0.8, 0.6))
+        ext = ProbLogRuleExt(case_probabilities=[0.8, 0.6])
+        self.assertEqual(ext.case_probabilities, (0.8, 0.6))
 
-    def test_rejects_empty_branch_probabilities(self) -> None:
+    def test_rejects_empty_case_probabilities(self) -> None:
         with self.assertRaises(ValueError):
-            ProbLogRuleExt(branch_probabilities=())
+            ProbLogRuleExt(case_probabilities=())
 
     def test_rejects_out_of_range_branch_probability(self) -> None:
         with self.assertRaises(ValueError):
-            ProbLogRuleExt(branch_probabilities=(1.2,))
+            ProbLogRuleExt(case_probabilities=(1.2,))
 
     def test_materialize_defaults_to_deterministic_branches(self) -> None:
         where = [[("pred", "user:name", ["$u", "Alice"])], [("pred", "user:name", ["$u", "Bob"])]]
         self.assertEqual(
-            materialize_problog_branch_probabilities(where=where, engine_ext=None),
+            materialize_problog_case_probabilities(where=where, engine_ext=None),
             (1.0, 1.0),
         )
 
@@ -55,7 +55,7 @@ class ProbLogRuleExtTests(unittest.TestCase):
             legacy_body_confidences=[0.7],
         )
         self.assertIsInstance(resolved, ProbLogRuleExt)
-        self.assertEqual(resolved.branch_probabilities, (0.7,))
+        self.assertEqual(resolved.case_probabilities, (0.7,))
 
     def test_resolve_rejects_other_engine_ext(self) -> None:
         where = [[("pred", "user:name", ["$u", "Alice"])]]
@@ -71,7 +71,7 @@ class ProbLogRuleExtTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             resolve_problog_engine_ext(
                 where=where,
-                engine_ext=ProbLogRuleExt(branch_probabilities=(0.8,)),
+                engine_ext=ProbLogRuleExt(case_probabilities=(0.8,)),
                 legacy_body_confidences=[0.6],
             )
         self.assertIn("Conflicting ProbLog branch probabilities", str(ctx.exception))

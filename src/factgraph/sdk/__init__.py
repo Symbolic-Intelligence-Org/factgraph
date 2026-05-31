@@ -28,7 +28,7 @@ from .error_codes import (
     QUERY_UNBOUND_VAR,
 )
 from .schema import Entity, Field, Identity, Relationship
-from .semantics import ProbLogSemantics, PyReasonSemantics
+from .semantics import ProbLogConfig, PyReasonConfig
 from .store import FactGraph, SDKStore
 from factgraph.application.protocol import (
     ConditionDescriptor,
@@ -101,8 +101,8 @@ __all__ = [
     "EvaluateRow",
     "EvidenceRef",
     "Explanation",
-    "ProbLogSemantics",
-    "PyReasonSemantics",
+    "ProbLogConfig",
+    "PyReasonConfig",
     "SchemaAddResult",
     "AssertionInput",
     "CommitResult",

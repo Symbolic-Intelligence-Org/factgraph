@@ -35,7 +35,7 @@ fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_event
 | `fields` | `set`, `add`, `retract`, `delete`, `get` |
 | `assertions` | `by_id`, `by_ids`, `where`, `retract`, `active`, `all` |
 | `schema` | `register`, `extend`, `apply`, `ingest`, `validate_provenance` |
-| `eval` | `evaluate`, `explain`, `inspect_semantics` |
+| `eval` | `evaluate`, `explain`, `preview_config` |
 | `audit` | `explain`, `conflicts`, `diff_proof_frames` |
 | `package` | `export_package`, `run_package` |
 | `views` | `create`, `update`, `delete`, `get`, `list` |
@@ -355,9 +355,9 @@ Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 
 | Method | One-liner |
 |---|---|
-| `evaluate(inference_or_expr, *, head=None, engine='native', semantics=None)` | Evaluate an `Inference`, `Rule`, or `RuleExpr`; returns `EvaluateResult`. |
-| `explain(expr, *, head=closed_head, engine='native', semantics=None)` | Replay a closed-head explanation; returns `Explanation`. |
-| `inspect_semantics(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
+| `evaluate(inference_or_expr, *, head=None, engine='native', config=None)` | Evaluate an `Inference`, `Rule`, or `RuleExpr`; returns `EvaluateResult`. |
+| `explain(expr, *, head=closed_head, engine='native', config=None)` | Replay a closed-head explanation; returns `Explanation`. |
+| `preview_config(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 
 Public `evaluate(...)` rejects `engine_options=`, `registry=`, `mode=`, and
 candidate compatibility flags.
@@ -569,19 +569,19 @@ Used inside batch context: `ManagedFieldHandle.retract(assertion_id, ...)`
 - `head=[...]` is rejected in public SDK `Inference`; use one inference per head
 - `EvaluateRow.raw_kind` and `EvaluateRow.bound` carry public quantitative
   results when an adapter produces them.
-- `engine_options=` is rejected; use public `semantics=` wrappers.
+- `engine_options=` is rejected; use public `config=` wrappers.
 - Public `Rule` / `Inference` objects do not carry adapter-specific
   `engine_ext` parameters. `SemanticsProfile.rule_projection` owns
   engine-specific rule projection.
-- Track 2 exposes `factgraph.sdk.ProbLogSemantics` and
-  `factgraph.sdk.PyReasonSemantics` as the preferred public SDK wrappers for
+- Track 2 exposes `factgraph.sdk.ProbLogConfig` and
+  `factgraph.sdk.PyReasonConfig` as the preferred public SDK wrappers for
   engine-specific semantics. `factgraph.sdk.SemanticsProfile` remains exported
   as the advanced/canonical profile shape.
-- Track 3-post extends `PyReasonSemantics` with
-  `branch_bounds={branch_id: [lower, upper]}`. These bounds override the
+- Track 3-post extends `PyReasonConfig` with
+  `case_bounds={branch_id: [lower, upper]}`. These bounds override the
   global `head_bound` for the referenced branch and may use explicit
   `Case(id=...)` names or fallback `c0` / `c1` ids.
-- `fg.eval.inspect_semantics(...)` accepts wrappers or `SemanticsProfile`;
+- `fg.eval.preview_config(...)` accepts wrappers or `SemanticsProfile`;
   wrapper inspection includes a lowered canonical profile preview. Public
   SDK calls reject `mode=` and `semantics_profile=`; core/application
   internals keep using `Store.evaluate(..., mode=..., semantics_profile=...)`.

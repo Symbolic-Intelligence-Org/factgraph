@@ -75,8 +75,8 @@ class SDKAllLengthAndFactGraphExportInvariants(unittest.TestCase):
 
     def test_semantics_profile_in_all(self) -> None:
         self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
-        self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
-        self.assertIn("PyReasonSemantics", factgraph_sdk.__all__)
+        self.assertIn("ProbLogConfig", factgraph_sdk.__all__)
+        self.assertIn("PyReasonConfig", factgraph_sdk.__all__)
 
     def test_sdkstore_still_in_all(self) -> None:
         """Per §5.7 non-commitment #1: SDKStore stays in __all__."""

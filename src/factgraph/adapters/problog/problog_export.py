@@ -9,7 +9,7 @@ from typing import Any
 
 from factgraph.adapters.problog.rule_ext import (
     ProbLogRuleExt,
-    materialize_problog_branch_probabilities,
+    materialize_problog_case_probabilities,
 )
 from factgraph.adapters.souffle.where_compile import extract_where_variables
 from factgraph.core.store.runtime import Store
@@ -63,7 +63,7 @@ def export_problog(
     if engine_ext is not None and not isinstance(engine_ext, ProbLogRuleExt):
         raise ProbLogExportError(f"rule_spec.engine_ext must be ProbLogRuleExt, got {type(engine_ext).__name__}")
     try:
-        branch_probabilities = materialize_problog_branch_probabilities(
+        case_probabilities = materialize_problog_case_probabilities(
             where=where,
             engine_ext=engine_ext,
         )
@@ -116,7 +116,7 @@ def export_problog(
     for idx, body in enumerate(bodies):
         branch_head = _predicate_call(f"rule_body_{idx}", query_vars)
         compiled_body = compiled_bodies[idx]
-        lines.append(f"{_format_probability(branch_probabilities[idx])}::{branch_head} :- {compiled_body}.")
+        lines.append(f"{_format_probability(case_probabilities[idx])}::{branch_head} :- {compiled_body}.")
 
     answer_head = _predicate_call("answer", query_vars)
     for idx in range(len(bodies)):

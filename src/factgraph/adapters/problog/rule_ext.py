@@ -13,17 +13,17 @@ from factgraph.core.store.types import EngineExtBase
 class ProbLogRuleExt(EngineExtBase):
     """ProbLog-specific branch weighting for normalized OR branches."""
 
-    branch_probabilities: tuple[float, ...] | None = None
+    case_probabilities: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
-        normalized = normalize_problog_branch_probabilities(
-            self.branch_probabilities,
-            field_name="branch_probabilities",
+        normalized = normalize_problog_case_probabilities(
+            self.case_probabilities,
+            field_name="case_probabilities",
         )
-        object.__setattr__(self, "branch_probabilities", normalized)
+        object.__setattr__(self, "case_probabilities", normalized)
 
 
-def normalize_problog_branch_probabilities(
+def normalize_problog_case_probabilities(
     raw: Any,
     *,
     field_name: str,
@@ -54,18 +54,18 @@ def branch_count_for_where(where: Any) -> int:
     return 1
 
 
-def materialize_problog_branch_probabilities(
+def materialize_problog_case_probabilities(
     *,
     where: Any,
     engine_ext: ProbLogRuleExt | None,
 ) -> tuple[float, ...]:
     """Return the effective per-branch probabilities for a compiled where IR."""
     branch_count = branch_count_for_where(where)
-    raw = None if engine_ext is None else engine_ext.branch_probabilities
+    raw = None if engine_ext is None else engine_ext.case_probabilities
     if raw is None:
         return (1.0,) * branch_count
     if len(raw) != branch_count:
-        raise ValueError("engine_ext.branch_probabilities length must match where branch count")
+        raise ValueError("engine_ext.case_probabilities length must match where branch count")
     return tuple(raw)
 
 
@@ -78,11 +78,11 @@ def resolve_problog_engine_ext(
 ) -> ProbLogRuleExt | None:
     """Resolve explicit, legacy, and profile ProbLog branch-weight carriers."""
     branch_count = branch_count_for_where(where)
-    profile = _materialize_profile_branch_probabilities(
+    profile = _materialize_profile_case_probabilities(
         where=where,
         semantics_profile=semantics_profile,
     )
-    legacy = normalize_problog_branch_probabilities(
+    legacy = normalize_problog_case_probabilities(
         legacy_body_confidences,
         field_name="body_confidences",
     )
@@ -93,7 +93,7 @@ def resolve_problog_engine_ext(
     if engine_ext is not None:
         if not isinstance(engine_ext, ProbLogRuleExt):
             raise ValueError(f"ProbLog engine_ext must be ProbLogRuleExt, got {type(engine_ext).__name__}")
-        explicit = materialize_problog_branch_probabilities(
+        explicit = materialize_problog_case_probabilities(
             where=where,
             engine_ext=engine_ext,
         )
@@ -102,7 +102,7 @@ def resolve_problog_engine_ext(
     if profile is not None:
         carriers.append(("SemanticsProfile.rule_projection.problog", profile))
     if explicit is not None:
-        carriers.append(("ProbLogRuleExt.branch_probabilities", explicit))
+        carriers.append(("ProbLogRuleExt.case_probabilities", explicit))
     if legacy is not None:
         carriers.append(("legacy_body_confidences", tuple(legacy)))
 
@@ -111,13 +111,13 @@ def resolve_problog_engine_ext(
     _reject_conflicting_carriers(carriers)
 
     if profile is not None:
-        return ProbLogRuleExt(branch_probabilities=profile)
+        return ProbLogRuleExt(case_probabilities=profile)
     if engine_ext is not None:
         return engine_ext
-    return ProbLogRuleExt(branch_probabilities=tuple(legacy)) if legacy is not None else None
+    return ProbLogRuleExt(case_probabilities=tuple(legacy)) if legacy is not None else None
 
 
-def _materialize_profile_branch_probabilities(
+def _materialize_profile_case_probabilities(
     *,
     where: Any,
     semantics_profile: SemanticsProfile | None,
@@ -201,7 +201,7 @@ def _reject_conflicting_carriers(carriers: list[tuple[str, tuple[float, ...]]]) 
 __all__ = [
     "ProbLogRuleExt",
     "branch_count_for_where",
-    "materialize_problog_branch_probabilities",
-    "normalize_problog_branch_probabilities",
+    "materialize_problog_case_probabilities",
+    "normalize_problog_case_probabilities",
     "resolve_problog_engine_ext",
 ]

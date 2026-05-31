@@ -53,8 +53,8 @@ class SDKG3InvariantTests(unittest.TestCase):
         self.assertIn("SchemaAddResult", factgraph_sdk.__all__)
         self.assertIn("FactGraph", factgraph_sdk.__all__)
         self.assertIn("SemanticsProfile", factgraph_sdk.__all__)
-        self.assertIn("ProbLogSemantics", factgraph_sdk.__all__)
-        self.assertIn("PyReasonSemantics", factgraph_sdk.__all__)
+        self.assertIn("ProbLogConfig", factgraph_sdk.__all__)
+        self.assertIn("PyReasonConfig", factgraph_sdk.__all__)
         for name in (
             "RuleDisableResult",
             "RuleDisableAction",

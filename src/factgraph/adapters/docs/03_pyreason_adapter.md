@@ -269,11 +269,11 @@ result = run_pyreason(
   `temporal_projection`, then normalizes them into adapter-local
   `PyReasonRuleExt`, `PyReasonRunConfig`, and EDB active-time
   coordinates. Track 3 / E exposes the durable public call-site:
-  `fg.eval.evaluate(..., engine="pyreason", semantics=profile)` and service
+  `fg.eval.evaluate(..., engine="pyreason", config=profile)` and service
   top-level `"semantics": {...}`.
 - Track 2 / T10 adds the preferred SDK wrapper for currently lowerable
   PyReason lanes:
-  `fg.eval.evaluate(..., semantics=PyReasonSemantics(...))`. The wrapper can
+  `fg.eval.evaluate(..., config=PyReasonConfig(...))`. The wrapper can
   express `timestep_delay`, canonical `iteration_count`, canonical
   `derived_bound`, canonical `atom_bounds`, and `temporal_projection`, then
   lowers into canonical `SemanticsProfile` before adapter consumption.
@@ -287,9 +287,9 @@ result = run_pyreason(
   - `atom_bounds` keys are not evidence witness keys.
 - Legacy compatibility remains explicit:
   - Passing both `derived_bound` and `head_bound` rejects.
-  - `branch_bounds` remains accepted for branch-head intervals and lowers to
+  - `case_bounds` remains accepted for branch-head intervals and lowers to
     `rule_projection.pyreason` `branch:{index}` entries. `atom_bounds` and
-    `branch_bounds` may coexist because they target different surfaces.
+    `case_bounds` may coexist because they target different surfaces.
   - During compilation, a branch-specific bound overrides the global
     head interval; branches without an override keep the global bound.
 - `compile_pyreason_rule(...)` currently supports only
@@ -324,14 +324,14 @@ Cleanup contract:
 
 The current shared execution path is:
 
-Public SDK calls should use `PyReasonSemantics` or an advanced
-`SemanticsProfile` through the public `semantics=` argument. Core /
+Public SDK calls should use `PyReasonConfig` or an advanced
+`SemanticsProfile` through the public `config=` argument. Core /
 application internals may still call `Store.evaluate(..., mode="pyreason",
 semantics_profile=profile)` directly.
 
 Execution sequence:
 
-1. Public `fg.eval.evaluate(...)` lowers `PyReasonSemantics(...)` to
+1. Public `fg.eval.evaluate(...)` lowers `PyReasonConfig(...)` to
    `SemanticsProfile` before crossing into the adapter. Core
    `Store.evaluate(...)` keeps call-time `engine_options` at the evaluate-call
    layer; they do not enter authoring payloads. Public `Rule` / `RuleExpr` /
@@ -390,7 +390,7 @@ Constraints:
   engine_options={"timesteps": 5})` takes effect
 - When omitted, the adapter default `timesteps=2` is used
 - This direct no-profile default is distinct from the public wrapper default:
-  `PyReasonSemantics()` lowers to canonical `iteration_count=1`.
+  `PyReasonConfig()` lowers to canonical `iteration_count=1`.
 - Unknown keys raise `ValueError`
 - `atom_trace` / `convergence_*` remain adapter-internal and are
   not exposed via the shared evaluate surface
@@ -403,7 +403,7 @@ Constraints:
   matching `mode="pyreason"` call. Passing a PyReason profile to
   another mode rejects instead of silently ignoring the profile.
 - Track 3 / E adds the public SDK/service call-site:
-  `fg.eval.evaluate(..., engine="pyreason", semantics=profile)`.
+  `fg.eval.evaluate(..., engine="pyreason", config=profile)`.
 - `SemanticsProfile.iteration_count` maps to effective PyReason timesteps.
   It conflicts with temporal projection modes that also imply timesteps:
   `fixed_timesteps`, `valid_time_boundaries`, `fact_boundaries`, and
@@ -428,9 +428,9 @@ Supported rule-projection targets:
 
 Public wrappers hide most positional targets:
 
-- `PyReasonSemantics.derived_bound` is the canonical wrapper spelling for the
+- `PyReasonConfig.derived_bound` is the canonical wrapper spelling for the
   `head:0` interval target.
-- `PyReasonSemantics.atom_bounds` uses application atom ids in the form
+- `PyReasonConfig.atom_bounds` uses application atom ids in the form
   `<rule_id>:atom_<index>`. The SDK resolves those ids while the application
   `Rule` is still available and lowers them to internal
   `body_atom:0:<index>` interval-threshold entries.
@@ -448,7 +448,7 @@ The adapter enforces a carrier-conflict rule:
 profile-agnostic. The adapter normalizes profile data to
 `PyReasonRuleExt` before rule export. `branch_head_bounds` is an
 adapter-internal carrier, not a public SDK argument; public callers use
-`PyReasonSemantics(branch_bounds=...)` or canonical
+`PyReasonConfig(case_bounds=...)` or canonical
 `SemanticsProfile.rule_projection.pyreason` entries.
 
 `SemanticsProfile.temporal_projection` accepts these D-time modes:
@@ -667,7 +667,7 @@ honest timeline + intra-fact update chain".
 
 ## 7. Current limitations
 
-- The shared evaluate surface and public `PyReasonSemantics` wrapper are
+- The shared evaluate surface and public `PyReasonConfig` wrapper are
   implemented for the canonical C78/C74/C77 lanes described above.
 - Candidate explain stores the runtime `explain_ref(kind="candidate")`
   provenance envelope of `payload_type="event_log"`. Row-result rich temporal

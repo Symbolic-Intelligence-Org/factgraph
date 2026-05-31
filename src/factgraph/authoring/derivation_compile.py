@@ -43,7 +43,7 @@ def compile_authoring_derivation_v1(
     if "body_confidences" in authoring_derivation:
         raise _compile_error(
             "body_confidences is not accepted in derivation payload; "
-            "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+            "use ProbLogRuleExt.case_probabilities or future SemanticsProfile.rule_projection.problog",
             path="$.body_confidences",
         )
     if "engine_ext" in authoring_derivation:

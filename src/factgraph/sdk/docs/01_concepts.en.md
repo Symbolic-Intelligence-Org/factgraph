@@ -308,7 +308,7 @@ prefers to add wrappers after seeing real usage patterns.
 | Query head constraints | Only `Entity(var)` or `Entity.field(...)`; field projection supports only `single` fields |
 | Case identity | `Case([...], id="name")` adds optional structural SDK metadata for `fg.rules.inspect(...)`. Unnamed branches inspect as `c0`, `c1`, ... fallback ids. Case ids are not serialized into authoring payloads, compiled plans, registries, or adapters. |
 | Single-head inferences | Public SDK `Inference` accepts one head. Multi-head public inferences are removed in Track 1; define one inference per head. Capability shells were already single-head surfaces. |
-| Public semantics wrappers | Track 2 adds SDK-local `ProbLogSemantics` and `PyReasonSemantics` as preferred Python authoring wrappers for `evaluate(..., semantics=...)`. The SDK can derive `engine=` from these objects, lower them into canonical `SemanticsProfile`, and keep service / compiled paths on the canonical shape. |
+| Public semantics wrappers | Track 2 adds SDK-local `ProbLogConfig` and `PyReasonConfig` as preferred Python authoring wrappers for `evaluate(..., config=...)`. The SDK can derive `engine=` from these objects, lower them into canonical `SemanticsProfile`, and keep service / compiled paths on the canonical shape. |
 
 ---
 

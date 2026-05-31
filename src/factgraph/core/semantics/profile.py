@@ -26,7 +26,7 @@ TIME_BIN_SHORT_FORMS = frozenset({"1d", "1h", "15m", "1m"})
 class SemanticsProfile:
     """Canonical semantics profile consumed by runtime adapters.
 
-    Most SDK users should start with `ProbLogSemantics` or `PyReasonSemantics`.
+    Most SDK users should start with `ProbLogConfig` or `PyReasonConfig`.
     `SemanticsProfile` is the lower-level, engine-explicit form used when a
     caller needs direct control over projections and adapter buckets.
 

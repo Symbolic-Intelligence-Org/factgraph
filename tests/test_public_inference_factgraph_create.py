@@ -186,14 +186,14 @@ class PublicInferenceGuardTests(unittest.TestCase):
     def test_track3_semantics_imports_still_available(self) -> None:
         sdk_module = _sdk_module()
 
-        self.assertTrue(hasattr(sdk_module, "ProbLogSemantics"))
-        self.assertTrue(hasattr(sdk_module, "PyReasonSemantics"))
+        self.assertTrue(hasattr(sdk_module, "ProbLogConfig"))
+        self.assertTrue(hasattr(sdk_module, "PyReasonConfig"))
         self.assertTrue(hasattr(sdk_module, "SemanticsProfile"))
 
     def test_semantics_profile_inspection_still_available(self) -> None:
         sdk = SDKStore([User])
         profile = SemanticsProfile(name="profile.public_inference.problog", engine="problog")
 
-        inspected = sdk.eval.inspect_semantics(profile)
+        inspected = sdk.eval.preview_config(profile)
 
         self.assertEqual(inspected["engine"], "problog")

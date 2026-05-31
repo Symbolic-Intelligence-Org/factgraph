@@ -50,7 +50,7 @@ from factgraph.application.protocol.evaluate_result import (
     result_digest_for,
     result_id_for,
     rule_set_digest_for_entries,
-    semantics_digest_for,
+    config_digest_for,
     view_snapshot_digest_for_parts,
 )
 from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
@@ -107,7 +107,7 @@ from .errors import (
     SDKValueError,
 )
 from .schema import Entity, Field, Identity
-from .semantics import ProbLogSemantics, PyReasonSemantics
+from .semantics import ProbLogConfig, PyReasonConfig
 
 if TYPE_CHECKING:
     from factgraph.audit.proof_frame_diff import ProofFrameDiff
@@ -1299,14 +1299,14 @@ class _SDKEvalManager:
         """Explain a closed-head evaluation replay."""
         return self._sdk._explain(*args, **kwargs)
 
-    def inspect_semantics(self, *args: Any, **kwargs: Any) -> Any:
+    def preview_config(self, *args: Any, **kwargs: Any) -> Any:
         """Inspect semantics configuration without evaluating an inference.
 
-        Accepts `SemanticsProfile`, `ProbLogSemantics`, or `PyReasonSemantics`
+        Accepts `SemanticsProfile`, `ProbLogConfig`, or `PyReasonConfig`
         and returns a JSON-like structural preview. Public wrappers include
         their lowered canonical profile preview.
         """
-        return self._sdk._inspect_semantics(*args, **kwargs)
+        return self._sdk._preview_config(*args, **kwargs)
 
 
 class _SDKAuditManager:
@@ -2260,16 +2260,16 @@ class SDKStore:
             return
         raise SDKStoreError(f"{api_path}: {_READPOLICY_REMOVED_MESSAGE}")
 
-    def _inspect_semantics(self, profile: Any) -> dict[str, Any]:
+    def _preview_config(self, profile: Any) -> dict[str, Any]:
         if isinstance(profile, SemanticsProfile):
             return inspect_semantics_profile(profile)
-        if isinstance(profile, (ProbLogSemantics, PyReasonSemantics)):
+        if isinstance(profile, (ProbLogConfig, PyReasonConfig)):
             lowered = _preview_public_semantics(profile)
             inspected = inspect_semantics_profile(lowered)
             inspected["semantics_type"] = type(profile).__name__
             inspected["lowered_profile"] = _semantics_profile_preview(lowered)
             return inspected
-        raise SDKStoreError("inspect_semantics(profile) expects SemanticsProfile or SDK public semantics")
+        raise SDKStoreError("preview_config(profile) expects SemanticsProfile or SDK public semantics")
 
     def _inspect_rule(self, obj: Any) -> Any:
         from factgraph.application.protocol import Rule as ApplicationRule
@@ -2323,7 +2323,7 @@ class SDKStore:
         if raw is None:
             return None
         if not isinstance(raw, SemanticsProfile):
-            raise SDKStoreError(f"{api_path}: semantics= expects SemanticsProfile or None")
+            raise SDKStoreError(f"{api_path}: config= expects SemanticsProfile or None")
         if engine not in _SEMANTICS_PROFILE_ENGINES:
             raise SDKStoreError(f"engine='{engine}' does not consume SemanticsProfile")
         if raw.engine != engine:
@@ -2333,30 +2333,30 @@ class SDKStore:
     def _resolve_public_engine_and_semantics(
         self,
         raw_engine: Any,
-        raw_semantics: Any,
+        raw_config: Any,
         *,
         derivation: Any | None,
         api_path: str,
     ) -> tuple[str, SemanticsProfile | None]:
-        if raw_semantics is None:
+        if raw_config is None:
             return (self._resolve_public_engine(raw_engine, api_path=api_path), None)
 
-        semantics_engine = _public_semantics_engine(raw_semantics)
+        semantics_engine = _public_semantics_engine(raw_config)
         if semantics_engine is None:
-            raise SDKStoreError(f"{api_path}: semantics= expects SemanticsProfile or SDK public semantics")
+            raise SDKStoreError(f"{api_path}: config= expects SemanticsProfile or SDK public semantics")
 
-        if isinstance(raw_semantics, SemanticsProfile):
+        if isinstance(raw_config, SemanticsProfile):
             if raw_engine is None:
                 engine = semantics_engine
             else:
                 engine = self._resolve_public_engine(raw_engine, api_path=api_path)
                 if engine not in _SEMANTICS_PROFILE_ENGINES:
                     raise SDKStoreError(f"engine='{engine}' does not consume SemanticsProfile")
-                if raw_semantics.engine != engine:
+                if raw_config.engine != engine:
                     raise SDKStoreError(
-                        f"SemanticsProfile.engine='{raw_semantics.engine}' does not match engine='{engine}'"
+                        f"SemanticsProfile.engine='{raw_config.engine}' does not match engine='{engine}'"
                     )
-            return (engine, raw_semantics)
+            return (engine, raw_config)
 
         if raw_engine is None:
             engine = semantics_engine
@@ -2369,7 +2369,7 @@ class SDKStore:
 
         if derivation is None:
             raise SDKStoreError("SDK public semantics require Rule, RuleExpr, or Inference object input")
-        return (engine, _lower_public_semantics(raw_semantics, derivation=derivation))
+        return (engine, _lower_public_semantics(raw_config, derivation=derivation))
 
     def _evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
         if "view" in kwargs:
@@ -2379,7 +2379,7 @@ class SDKStore:
         if "policy" in kwargs:
             raise SDKStoreError("policy= was removed for read APIs and is not accepted for inference evaluation")
         if "semantics_profile" in kwargs:
-            raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use semantics=")
+            raise SDKStoreError("evaluate() does not accept semantics_profile= in SDK; use config=")
         if "mode" in kwargs:
             raise SDKStoreError("evaluate() does not accept mode= in E; use engine=")
         if "temporal_view" in kwargs:
@@ -2392,9 +2392,9 @@ class SDKStore:
         if registry is not None:
             raise SDKStoreError("evaluate() does not accept registry= in T5; register dependencies on the inference object")
         if engine_options is not None:
-            raise SDKStoreError("evaluate() does not accept engine_options= in T5; use semantics= or engine-specific configuration")
+            raise SDKStoreError("evaluate() does not accept engine_options= in T5; use config= or engine-specific configuration")
         raw_engine = kwargs.pop("engine", None)
-        raw_semantics = kwargs.pop("semantics", None)
+        raw_config = kwargs.pop("config", None)
         if args and isinstance(args[0], str):
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
@@ -2404,13 +2404,13 @@ class SDKStore:
                 args,
                 kwargs,
                 raw_engine=raw_engine,
-                raw_semantics=raw_semantics,
+                raw_config=raw_config,
             )
         if args and hasattr(args[0], "to_authoring_payload"):
             derivation = args[0]
             engine, semantics_profile = self._resolve_public_engine_and_semantics(
                 raw_engine,
-                raw_semantics,
+                raw_config,
                 derivation=derivation,
                 api_path="evaluate()",
             )
@@ -2434,7 +2434,7 @@ class SDKStore:
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
             engine, semantics_profile = self._resolve_public_engine_and_semantics(
                 raw_engine,
-                raw_semantics,
+                raw_config,
                 derivation=None,
                 api_path="evaluate()",
             )
@@ -2467,7 +2467,7 @@ class SDKStore:
             raise SDKStoreError("eval.explain(expr, ...) requires head= closed Rule")
         head = kwargs.pop("head")
         raw_engine = kwargs.pop("engine", None)
-        raw_semantics = kwargs.pop("semantics", None)
+        raw_config = kwargs.pop("config", None)
         if "view" in kwargs:
             raise SDKStoreError(
                 "method-level view= is not supported by eval.explain(...); use FactGraph.attach(db, view=view) instead"
@@ -2482,8 +2482,8 @@ class SDKStore:
         evaluate_kwargs: dict[str, Any] = {"head": head}
         if raw_engine is not None:
             evaluate_kwargs["engine"] = raw_engine
-        if raw_semantics is not None:
-            evaluate_kwargs["semantics"] = raw_semantics
+        if raw_config is not None:
+            evaluate_kwargs["config"] = raw_config
         evaluate_kwargs["head"] = self._manual_explain_replay_head(args[0], head)
         result = self._evaluate(args[0], **evaluate_kwargs)
         checked_scope = self._manual_explain_checked_scope(result, closed_head=head)
@@ -2526,10 +2526,10 @@ class SDKStore:
 
     def _manual_explain_checked_scope(self, result: EvaluateResult, *, closed_head: ApplicationRule) -> Mapping[str, Any]:
         return {
-            "semantics_digest": result.semantics_digest,
+            "config_digest": result.config_digest,
             "semantics_source": "manual_standalone",
-            "evaluate_semantics_digest": None,
-            "explain_semantics_digest": result.semantics_digest,
+            "evaluate_config_digest": None,
+            "explain_config_digest": result.config_digest,
             "semantics_match": None,
             "result_id": result.result_id,
             "expr_digest": result.expr_digest,
@@ -2602,7 +2602,7 @@ class SDKStore:
         kwargs: dict[str, Any],
         *,
         raw_engine: Any,
-        raw_semantics: Any,
+        raw_config: Any,
     ) -> EvaluateResult:
         if len(args) != 1:
             raise SDKStoreError("evaluate(rule_expr, ...) accepts exactly one RuleExpr or application Rule input")
@@ -2632,7 +2632,7 @@ class SDKStore:
         _validate_rule_expr_head_foundation(plan)
         engine, semantics_profile = self._resolve_public_engine_and_semantics(
             raw_engine,
-            raw_semantics,
+            raw_config,
             derivation=_semantics_context_for_ruleexpr_plan(source, head=head, plan=plan),
             api_path="evaluate(rule_expr)",
         )
@@ -2678,13 +2678,13 @@ class SDKStore:
         )
         rule_set_digest = rule_set_digest_for_entries(_rule_set_entries_for_result(compiled_plans, head=head))
         view_snapshot_digest = self._view_snapshot_digest()
-        semantics_digest = semantics_digest_for(semantics_profile)
+        config_digest = config_digest_for(semantics_profile)
         result_id = result_id_for(
             run_id=run_id,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
-            semantics_digest=semantics_digest,
+            config_digest=config_digest,
             engine=engine,
             head_id=head.id,
             head_content_digest=head.content_digest,
@@ -2715,7 +2715,7 @@ class SDKStore:
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
-                semantics_digest=semantics_digest,
+                config_digest=config_digest,
             )
             return EvaluateResult(
                 result_id=result_id,
@@ -2728,7 +2728,7 @@ class SDKStore:
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
-                semantics_digest=semantics_digest,
+                config_digest=config_digest,
                 evaluated_at=datetime.now(timezone.utc),
                 result_digest=result_digest,
                 _schema_index=self._application_schema_index,
@@ -3294,9 +3294,9 @@ def _authoring_derivation_payload_from_sdk_object(
 def _public_semantics_engine(value: Any) -> str | None:
     if isinstance(value, SemanticsProfile):
         return value.engine
-    if isinstance(value, ProbLogSemantics):
+    if isinstance(value, ProbLogConfig):
         return value.engine
-    if isinstance(value, PyReasonSemantics):
+    if isinstance(value, PyReasonConfig):
         return value.engine
     return None
 
@@ -3310,8 +3310,8 @@ class _SemanticsLoweringContext:
     branch_specific_allowed: bool = True
 
 
-def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> SemanticsProfile:
-    if isinstance(value, ProbLogSemantics):
+def _preview_public_semantics(value: ProbLogConfig | PyReasonConfig) -> SemanticsProfile:
+    if isinstance(value, ProbLogConfig):
         rule_params = _rule_param_entries(value.rule_params, known_rule_ids=None)
         return SemanticsProfile(
             name=value.name or "problog",
@@ -3320,10 +3320,10 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
             uncertainty_projection=dict(value.uncertainty_projection),
             fallback=value.fallback,
         )
-    if isinstance(value, PyReasonSemantics):
+    if isinstance(value, PyReasonConfig):
         rule_entries: list[dict[str, Any]] = []
         rule_entries.extend(_preview_pyreason_bound_entries(value))
-        for case_index, interval in _preview_branch_bounds(value.branch_bounds):
+        for case_index, interval in _preview_case_bounds(value.case_bounds):
             rule_entries.append({"target": f"branch:{case_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
             rule_entries.append({"target": "rule", "kind": "timestep_delay", "value": value.timestep_delay})
@@ -3347,17 +3347,17 @@ def _preview_public_semantics(value: ProbLogSemantics | PyReasonSemantics) -> Se
 
 def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
     context = _semantics_lowering_context(derivation)
-    if isinstance(value, ProbLogSemantics):
+    if isinstance(value, ProbLogConfig):
         entries: list[dict[str, Any]] = []
-        if value.branch_probabilities and not context.branch_specific_allowed:
+        if value.case_probabilities and not context.branch_specific_allowed:
             raise SDKStoreError(
-                "ProbLogSemantics.branch_probabilities requires RuleExpr branches or legacy Inference branches; "
-                "single application Rule inputs only accept empty branch_probabilities"
+                "ProbLogConfig.case_probabilities requires RuleExpr branches or legacy Inference branches; "
+                "single application Rule inputs only accept empty case_probabilities"
             )
-        for branch_id, probability in value.branch_probabilities.items():
+        for branch_id, probability in value.case_probabilities.items():
             case_index = context.case_indexes.get(branch_id)
             if case_index is None:
-                raise SDKStoreError(f"unknown branch id {branch_id!r} for ProbLogSemantics.branch_probabilities")
+                raise SDKStoreError(f"unknown branch id {branch_id!r} for ProbLogConfig.case_probabilities")
             entries.append(
                 {
                     "target": f"branch:{case_index}",
@@ -3378,20 +3378,20 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
             uncertainty_projection=dict(value.uncertainty_projection),
             fallback=value.fallback,
         )
-    if isinstance(value, PyReasonSemantics):
+    if isinstance(value, PyReasonConfig):
         rule_entries: list[dict[str, Any]] = []
         rule_entries.extend(_lower_pyreason_bound_entries(value, context=context))
-        if value.branch_bounds and not context.branch_specific_allowed:
+        if value.case_bounds and not context.branch_specific_allowed:
             raise SDKStoreError(
-                "PyReasonSemantics.branch_bounds requires RuleExpr branches or legacy Inference branches; "
-                "single application Rule inputs only accept empty branch_bounds"
+                "PyReasonConfig.case_bounds requires RuleExpr branches or legacy Inference branches; "
+                "single application Rule inputs only accept empty case_bounds"
             )
-        for branch_id, interval in value.branch_bounds.items():
+        for branch_id, interval in value.case_bounds.items():
             case_index = context.case_indexes.get(branch_id)
             if case_index is None:
                 known = ", ".join(sorted(context.case_indexes)) or "<none>"
                 raise SDKStoreError(
-                    f"branch_bounds contains unknown branch id {branch_id!r}; known branch ids: {known}"
+                    f"case_bounds contains unknown branch id {branch_id!r}; known branch ids: {known}"
                 )
             rule_entries.append({"target": f"branch:{case_index}", "kind": "interval", "value": list(interval)})
         if value.timestep_delay:
@@ -3414,16 +3414,16 @@ def _lower_public_semantics(value: Any, *, derivation: Any) -> SemanticsProfile:
     raise SDKStoreError("unsupported public semantics wrapper")
 
 
-def _preview_branch_bounds(
-    branch_bounds: dict[str, tuple[float, float]],
+def _preview_case_bounds(
+    case_bounds: dict[str, tuple[float, float]],
 ) -> list[tuple[int, tuple[float, float]]]:
     preview: list[tuple[int, tuple[float, float]]] = []
-    for idx, interval in enumerate(branch_bounds.values()):
+    for idx, interval in enumerate(case_bounds.values()):
         preview.append((idx, interval))
     return preview
 
 
-def _preview_pyreason_bound_entries(value: PyReasonSemantics) -> list[dict[str, Any]]:
+def _preview_pyreason_bound_entries(value: PyReasonConfig) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     head_interval = value.derived_bound if value.derived_bound is not None else value.head_bound
     if head_interval is not None:
@@ -3431,7 +3431,7 @@ def _preview_pyreason_bound_entries(value: PyReasonSemantics) -> list[dict[str, 
     for atom_id, interval in value.atom_bounds.items():
         _rule_id, condition_index = _parse_pyreason_atom_bound_id(
             atom_id,
-            field_name="PyReasonSemantics.atom_bounds",
+            field_name="PyReasonConfig.atom_bounds",
         )
         entries.append(
             {
@@ -3444,7 +3444,7 @@ def _preview_pyreason_bound_entries(value: PyReasonSemantics) -> list[dict[str, 
 
 
 def _lower_pyreason_bound_entries(
-    value: PyReasonSemantics,
+    value: PyReasonConfig,
     *,
     context: _SemanticsLoweringContext,
 ) -> list[dict[str, Any]]:
@@ -3456,17 +3456,17 @@ def _lower_pyreason_bound_entries(
         return entries
     if not context.atom_ids:
         raise SDKStoreError(
-            "PyReasonSemantics.atom_bounds requires application Rule atom ids; "
+            "PyReasonConfig.atom_bounds requires application Rule atom ids; "
             "use direct SemanticsProfile.rule_projection.pyreason body_atom targets for legacy branched inputs"
         )
     atom_index_by_id = {atom_id: idx for idx, atom_id in enumerate(context.atom_ids)}
     known = ", ".join(context.atom_ids)
     for atom_id, interval in value.atom_bounds.items():
-        _parse_pyreason_atom_bound_id(atom_id, field_name="PyReasonSemantics.atom_bounds")
+        _parse_pyreason_atom_bound_id(atom_id, field_name="PyReasonConfig.atom_bounds")
         condition_index = atom_index_by_id.get(atom_id)
         if condition_index is None:
             raise SDKStoreError(
-                f"PyReasonSemantics.atom_bounds contains unknown atom id {atom_id!r}; known atom ids: {known}"
+                f"PyReasonConfig.atom_bounds contains unknown atom id {atom_id!r}; known atom ids: {known}"
             )
         entries.append(
             {
@@ -3487,7 +3487,7 @@ def _parse_pyreason_atom_bound_id(value: str, *, field_name: str) -> tuple[str, 
     return (rule_id, int(atom_index_text))
 
 
-def _pyreason_iteration_count_carrier(value: PyReasonSemantics) -> int | None:
+def _pyreason_iteration_count_carrier(value: PyReasonConfig) -> int | None:
     mode = value.temporal_projection.get("mode", "none")
     if mode != "none" and value.iteration_count == 1:
         return None
@@ -3675,7 +3675,7 @@ def _normalize_authoring_derivation_payload(
     if "body_confidences" in normalized:
         raise SDKStoreError(
             "body_confidences is not accepted in public derivation payloads; "
-            "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+            "use ProbLogRuleExt.case_probabilities or future SemanticsProfile.rule_projection.problog",
             path="$.body_confidences",
         )
 

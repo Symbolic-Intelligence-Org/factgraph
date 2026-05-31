@@ -13,7 +13,7 @@ All flat methods are also reachable through namespaces:
 | `fg.entities.match(EntityCls, rule_or_expr, **ports)` | Return snapshots selected by a `Rule` or `RuleExpr` |
 | `fg.eval.evaluate(...)` | Evaluate an `Inference`, `Rule`, or `RuleExpr` and return `EvaluateResult` |
 | `fg.eval.explain(expr, head=closed_head, ...)` | Replay a closed-head explanation and return `Explanation` |
-| `fg.eval.inspect_semantics(...)` | Inspect semantics configuration without running an engine |
+| `fg.eval.preview_config(...)` | Inspect semantics configuration without running an engine |
 
 Legacy `run`, `accept`, `accept_many`, direct `check` / `diagnose` /
 `why_not`, and `what_if.*` shells are not part of the T5 public evidence
@@ -24,14 +24,14 @@ path.
 - Public `Rule` and `Inference` objects are engine-independent business
   templates. They do not carry adapter-specific `engine_ext` parameters.
 - Public `evaluate(...)` rejects `engine_options=` and `registry=`.
-  Runtime-specific semantics are expressed through `semantics=`.
-- Track 2 makes `ProbLogSemantics` and `PyReasonSemantics` the
+  Runtime-specific semantics are expressed through `config=`.
+- Track 2 makes `ProbLogConfig` and `PyReasonConfig` the
   preferred public SDK wrappers for engine-specific semantics.
   `SemanticsProfile` remains the advanced/canonical profile shape.
   Public SDK calls reject `mode=` and `semantics_profile=`; use
-  `engine=` and `semantics=`, or omit `engine=` when it can be derived
+  `engine=` and `config=`, or omit `engine=` when it can be derived
   from the semantics object.
-- Track 3-post lets `PyReasonSemantics.branch_bounds` reference branch
+- Track 3-post lets `PyReasonConfig.case_bounds` reference branch
   ids from `Case([...], id="...")` or fallback positional ids such as
   `c0` / `c1`. Case-specific bounds override the wrapper's global
   `head_bound` for that branch only.
@@ -558,7 +558,7 @@ result = sdk.eval.evaluate(inf, engine="native")
 
 - `result_id`, `run_id`, and `result_digest` identify the evaluation envelope.
 - `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, and
-  `semantics_digest` are replay anchors.
+  `config_digest` are replay anchors.
 - `rows` is a tuple-like sequence of `EvaluateRow` values.
 - Each row exposes `bindings`, `claim`, `raw_kind`, `bound`, and an
   `EvidenceRef`.

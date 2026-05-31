@@ -116,15 +116,15 @@ def _normalize_uncertainty_projection_map(value: Any, *, field_name: str) -> dic
 
 
 @dataclass(frozen=True)
-class ProbLogSemantics:
+class ProbLogConfig:
     """Public ProbLog semantics wrapper for Rule or Inference evaluation.
 
-    Pass to `fg.eval.evaluate(application_rule_or_inference, semantics=...)` to
+    Pass to `fg.eval.evaluate(application_rule_or_inference, config=...)` to
     configure ProbLog semantics without constructing a raw `SemanticsProfile`.
     The SDK derives `engine="problog"` from this wrapper.
 
     Args:
-        branch_probabilities: Mapping from branch id to probability in `(0, 1]`.
+        case_probabilities: Mapping from branch id to probability in `(0, 1]`.
         rule_params: Per-Rule metadata keyed by application `Rule.id`; lowered
             into canonical `SemanticsProfile.rule_projection` for future
             adapter cycles.
@@ -134,7 +134,7 @@ class ProbLogSemantics:
         fallback: Policy for unconfigured semantics.
     """
 
-    branch_probabilities: dict[str, float] = field(default_factory=dict)
+    case_probabilities: dict[str, float] = field(default_factory=dict)
     rule_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     uncertainty_projection: dict[str, Any] = field(default_factory=_default_problog_uncertainty_projection)
     name: str | None = None
@@ -146,13 +146,13 @@ class ProbLogSemantics:
 
     def __post_init__(self) -> None:
         if self.name is not None and (not isinstance(self.name, str) or not self.name):
-            raise SDKStoreError("ProbLogSemantics.name must be non-empty string when provided")
+            raise SDKStoreError("ProbLogConfig.name must be non-empty string when provided")
         if not isinstance(self.fallback, str) or not self.fallback:
-            raise SDKStoreError("ProbLogSemantics.fallback must be non-empty string")
+            raise SDKStoreError("ProbLogConfig.fallback must be non-empty string")
         object.__setattr__(
             self,
-            "branch_probabilities",
-            _normalize_probability_map(self.branch_probabilities, field_name="branch_probabilities"),
+            "case_probabilities",
+            _normalize_probability_map(self.case_probabilities, field_name="case_probabilities"),
         )
         object.__setattr__(
             self,
@@ -170,10 +170,10 @@ class ProbLogSemantics:
 
 
 @dataclass(frozen=True)
-class PyReasonSemantics:
+class PyReasonConfig:
     """Public PyReason semantics wrapper for Rule or Inference evaluation.
 
-    Pass to `fg.eval.evaluate(application_rule_or_inference, semantics=...)` to
+    Pass to `fg.eval.evaluate(application_rule_or_inference, config=...)` to
     configure PyReason time delay and interval bounds. The SDK derives
     `engine="pyreason"` from this wrapper.
 
@@ -183,7 +183,7 @@ class PyReasonSemantics:
         derived_bound: Optional canonical `[lower, upper]` interval for rule heads.
         atom_bounds: Optional body atom intervals keyed by `<rule_id>:atom_<index>`.
         head_bound: Optional global `[lower, upper]` interval for rule heads.
-        branch_bounds: Optional per-branch interval overrides keyed by branch id.
+        case_bounds: Optional per-branch interval overrides keyed by branch id.
         rule_params: Per-Rule metadata keyed by application `Rule.id`; lowered
             into canonical `SemanticsProfile.rule_projection` for future
             adapter cycles.
@@ -194,7 +194,7 @@ class PyReasonSemantics:
     derived_bound: tuple[float, float] | None = None
     atom_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     head_bound: tuple[float, float] | None = None
-    branch_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    case_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
     rule_params: dict[str, dict[str, Any]] = field(default_factory=dict)
     temporal_projection: dict[str, Any] = field(default_factory=lambda: {"mode": "none"})
     uncertainty_projection: dict[str, Any] = field(default_factory=dict)
@@ -207,36 +207,36 @@ class PyReasonSemantics:
 
     def __post_init__(self) -> None:
         if self.name is not None and (not isinstance(self.name, str) or not self.name):
-            raise SDKStoreError("PyReasonSemantics.name must be non-empty string when provided")
+            raise SDKStoreError("PyReasonConfig.name must be non-empty string when provided")
         if isinstance(self.timestep_delay, bool) or not isinstance(self.timestep_delay, int):
-            raise SDKStoreError("PyReasonSemantics.timestep_delay must be int")
+            raise SDKStoreError("PyReasonConfig.timestep_delay must be int")
         if self.timestep_delay < 0:
-            raise SDKStoreError("PyReasonSemantics.timestep_delay must be >= 0")
+            raise SDKStoreError("PyReasonConfig.timestep_delay must be >= 0")
         if isinstance(self.iteration_count, bool) or not isinstance(self.iteration_count, int):
-            raise SDKStoreError("PyReasonSemantics.iteration_count must be int")
+            raise SDKStoreError("PyReasonConfig.iteration_count must be int")
         if self.iteration_count < 1:
-            raise SDKStoreError("PyReasonSemantics.iteration_count must be >= 1")
+            raise SDKStoreError("PyReasonConfig.iteration_count must be >= 1")
         if not isinstance(self.fallback, str) or not self.fallback:
-            raise SDKStoreError("PyReasonSemantics.fallback must be non-empty string")
+            raise SDKStoreError("PyReasonConfig.fallback must be non-empty string")
         derived_bound = (
             None
             if self.derived_bound is None
-            else _normalize_interval(self.derived_bound, field_name="PyReasonSemantics.derived_bound")
+            else _normalize_interval(self.derived_bound, field_name="PyReasonConfig.derived_bound")
         )
         if derived_bound is not None and self.head_bound is not None:
-            raise SDKStoreError("PyReasonSemantics.derived_bound conflicts with PyReasonSemantics.head_bound")
+            raise SDKStoreError("PyReasonConfig.derived_bound conflicts with PyReasonConfig.head_bound")
         object.__setattr__(self, "derived_bound", derived_bound)
         object.__setattr__(
             self,
             "atom_bounds",
-            _normalize_atom_interval_map(self.atom_bounds, field_name="PyReasonSemantics.atom_bounds"),
+            _normalize_atom_interval_map(self.atom_bounds, field_name="PyReasonConfig.atom_bounds"),
         )
         head_bound = None if self.head_bound is None else _normalize_interval(self.head_bound, field_name="head_bound")
         object.__setattr__(self, "head_bound", head_bound)
         object.__setattr__(
             self,
-            "branch_bounds",
-            _normalize_interval_map(self.branch_bounds, field_name="branch_bounds"),
+            "case_bounds",
+            _normalize_interval_map(self.case_bounds, field_name="case_bounds"),
         )
         object.__setattr__(
             self,
@@ -255,4 +255,4 @@ class PyReasonSemantics:
         )
 
 
-__all__ = ["ProbLogSemantics", "PyReasonSemantics"]
+__all__ = ["ProbLogConfig", "PyReasonConfig"]

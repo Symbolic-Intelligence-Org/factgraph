@@ -132,14 +132,14 @@ def _query_guaranteed_bound(expr: WhereExpr, *, bound_in: set[str]) -> set[str]:
     if isinstance(expr, AndExpr):
         return _query_guaranteed_bound_and(expr, bound_in=bound_in)
     if isinstance(expr, OrExpr):
-        branch_bounds = [
+        case_bounds = [
             _query_guaranteed_bound_and(branch, bound_in=set(bound_in))
             for branch in expr.branches
         ]
-        if not branch_bounds:
+        if not case_bounds:
             return set(bound_in)
-        out = set(branch_bounds[0])
-        for bounds in branch_bounds[1:]:
+        out = set(case_bounds[0])
+        for bounds in case_bounds[1:]:
             out &= bounds
         return out
     return set(bound_in)

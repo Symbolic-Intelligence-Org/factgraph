@@ -29,7 +29,7 @@ from factgraph.application.protocol.evaluate_result import (
     result_digest_for,
     result_id_for,
     rule_set_digest_for_entries,
-    semantics_digest_for,
+    config_digest_for,
     view_snapshot_digest_for_parts,
 )
 from factgraph.application.protocol.rule import Rule as ApplicationRule
@@ -959,7 +959,7 @@ def evaluate_runtime_derivation(session_id: str, dto: dict[str, Any]) -> dict[st
         if isinstance(dto, dict) and "body_confidences" in dto:
             raise facade_error(
                 "body_confidences is not accepted in runtime inference evaluation; "
-                "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+                "use ProbLogRuleExt.case_probabilities or future SemanticsProfile.rule_projection.problog",
                 kind="shape",
                 path="$.body_confidences",
             )
@@ -1351,7 +1351,7 @@ def _compile_runtime_derivation(dto: Any, *, schema_ir: dict[str, Any]) -> dict[
     if "body_confidences" in inference:
         raise facade_error(
             "inference.body_confidences is not accepted; "
-            "use ProbLogRuleExt.branch_probabilities or future SemanticsProfile.rule_projection.problog",
+            "use ProbLogRuleExt.case_probabilities or future SemanticsProfile.rule_projection.problog",
             kind="shape",
             path="$.inference.body_confidences",
         )
@@ -1416,7 +1416,7 @@ def _resolve_runtime_semantics_profile(dto: Any, *, mode: str) -> SemanticsProfi
         return None
     if not isinstance(raw, dict):
         raise facade_error("semantics must be object", kind="shape", path="$.semantics")
-    if any(key in raw for key in ("type", "branch_probabilities", "timestep_delay", "head_bound")):
+    if any(key in raw for key in ("type", "case_probabilities", "timestep_delay", "head_bound")):
         raise facade_error(
             "service semantics accepts SemanticsProfile shape only in Track 2",
             kind="shape",
@@ -2336,13 +2336,13 @@ def _evaluate_result_from_candidates(
     )
     rule_set_digest = rule_set_digest_for_entries(_rule_set_entries_for_result(app_plans, head=head))
     view_snapshot_digest = _runtime_view_snapshot_digest(session)
-    semantics_digest = semantics_digest_for(semantics_profile)
+    config_digest = config_digest_for(semantics_profile)
     result_id = result_id_for(
         run_id=run_id,
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
-        semantics_digest=semantics_digest,
+        config_digest=config_digest,
         engine=mode,
         head_id=head.id,
         head_content_digest=head.content_digest,
@@ -2369,7 +2369,7 @@ def _evaluate_result_from_candidates(
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
-        semantics_digest=semantics_digest,
+        config_digest=config_digest,
     )
     return EvaluateResult(
         result_id=result_id,
@@ -2382,7 +2382,7 @@ def _evaluate_result_from_candidates(
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
-        semantics_digest=semantics_digest,
+        config_digest=config_digest,
         evaluated_at=time_ns(),
         result_digest=result_digest,
     )
@@ -2448,7 +2448,7 @@ def _evaluate_result_to_dict(result: EvaluateResult, *, rows: tuple[EvaluateRow,
         "expr_digest": result.expr_digest,
         "rule_set_digest": result.rule_set_digest,
         "view_snapshot_digest": result.view_snapshot_digest,
-        "semantics_digest": result.semantics_digest,
+        "config_digest": result.config_digest,
         "evaluated_at": _to_jsonable(result.evaluated_at),
         "result_digest": result.result_digest,
         "row_count": len(result.rows),

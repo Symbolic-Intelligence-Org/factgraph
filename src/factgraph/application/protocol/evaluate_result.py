@@ -70,7 +70,7 @@ _EVIDENCE_GRAPH_METADATA_KEYS = (
     "expr_digest",
     "rule_set_digest",
     "view_snapshot_digest",
-    "semantics_digest",
+    "config_digest",
     "result_digest",
     "engine",
     "engine_version",
@@ -170,7 +170,7 @@ class EvaluateResult:
     expr_digest: str
     rule_set_digest: str
     view_snapshot_digest: str
-    semantics_digest: str | None
+    config_digest: str | None
     evaluated_at: object
     result_digest: str
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
@@ -204,8 +204,8 @@ class EvaluateResult:
         _require_sha256_token(self.expr_digest, field_name="EvaluateResult.expr_digest")
         _require_sha256_token(self.rule_set_digest, field_name="EvaluateResult.rule_set_digest")
         _require_sha256_token(self.view_snapshot_digest, field_name="EvaluateResult.view_snapshot_digest")
-        if self.semantics_digest is not None:
-            _require_sha256_token(self.semantics_digest, field_name="EvaluateResult.semantics_digest")
+        if self.config_digest is not None:
+            _require_sha256_token(self.config_digest, field_name="EvaluateResult.config_digest")
         _require_sha256_token(self.result_digest, field_name="EvaluateResult.result_digest")
         if self._row_close_builder is not None and not callable(self._row_close_builder):
             raise ProtocolShapeError("EvaluateResult._row_close_builder must be callable or None")
@@ -346,7 +346,7 @@ def result_id_for(
     expr_digest: str,
     rule_set_digest: str,
     view_snapshot_digest: str,
-    semantics_digest: str | None,
+    config_digest: str | None,
     engine: str,
     head_id: str,
     head_content_digest: str,
@@ -355,8 +355,8 @@ def result_id_for(
     _require_sha256_token(expr_digest, field_name="expr_digest")
     _require_sha256_token(rule_set_digest, field_name="rule_set_digest")
     _require_sha256_token(view_snapshot_digest, field_name="view_snapshot_digest")
-    if semantics_digest is not None:
-        _require_sha256_token(semantics_digest, field_name="semantics_digest")
+    if config_digest is not None:
+        _require_sha256_token(config_digest, field_name="config_digest")
     _require_non_empty_str(engine, field_name="engine")
     _require_non_empty_str(head_id, field_name="head_id")
     _require_sha256_hex(head_content_digest, field_name="head_content_digest")
@@ -370,7 +370,7 @@ def result_id_for(
                 "head_id": head_id,
                 "rule_set_digest": rule_set_digest,
                 "run_id": run_id,
-                "semantics_digest": semantics_digest,
+                "config_digest": config_digest,
                 "view_snapshot_digest": view_snapshot_digest,
             },
         )
@@ -471,7 +471,7 @@ def result_digest_for(
     expr_digest: str,
     rule_set_digest: str,
     view_snapshot_digest: str,
-    semantics_digest: str | None,
+    config_digest: str | None,
 ) -> str:
     _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
@@ -485,8 +485,8 @@ def result_digest_for(
     _require_sha256_token(expr_digest, field_name="expr_digest")
     _require_sha256_token(rule_set_digest, field_name="rule_set_digest")
     _require_sha256_token(view_snapshot_digest, field_name="view_snapshot_digest")
-    if semantics_digest is not None:
-        _require_sha256_token(semantics_digest, field_name="semantics_digest")
+    if config_digest is not None:
+        _require_sha256_token(config_digest, field_name="config_digest")
     return sha256_token(
         canonical_bytes_for_evaluate(
             "evaluate_result_digest_v1",
@@ -501,14 +501,14 @@ def result_digest_for(
                 "row_digests": tuple(row_digests),
                 "rule_set_digest": rule_set_digest,
                 "run_id": run_id,
-                "semantics_digest": semantics_digest,
+                "config_digest": config_digest,
                 "view_snapshot_digest": view_snapshot_digest,
             },
         )
     )
 
 
-def semantics_digest_for(profile: SemanticsProfile | None) -> str | None:
+def config_digest_for(profile: SemanticsProfile | None) -> str | None:
     if profile is None:
         return None
     if not isinstance(profile, SemanticsProfile):
@@ -1163,7 +1163,7 @@ def _evidence_metadata_payload_for_row_result(row: EvaluateRow, result: Evaluate
         "expr_digest": result.expr_digest,
         "rule_set_digest": result.rule_set_digest,
         "view_snapshot_digest": result.view_snapshot_digest,
-        "semantics_digest": result.semantics_digest,
+        "config_digest": result.config_digest,
         "result_digest": result.result_digest,
         "engine": result.engine,
         "engine_version": result.engine_version,
@@ -1242,10 +1242,10 @@ def _validate_row_provenance_envelopes(
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:
     return _freeze_mapping(
         {
-            "semantics_digest": result.semantics_digest,
+            "config_digest": result.config_digest,
             "semantics_source": "row_result",
-            "evaluate_semantics_digest": result.semantics_digest,
-            "explain_semantics_digest": result.semantics_digest,
+            "evaluate_config_digest": result.config_digest,
+            "explain_config_digest": result.config_digest,
             "semantics_match": True,
             "result_id": result.result_id,
             "row_id": row.row_id,
@@ -1413,6 +1413,6 @@ __all__ = [
     "result_id_for",
     "row_id_for",
     "rule_set_digest_for_entries",
-    "semantics_digest_for",
+    "config_digest_for",
     "view_snapshot_digest_for_parts",
 ]
