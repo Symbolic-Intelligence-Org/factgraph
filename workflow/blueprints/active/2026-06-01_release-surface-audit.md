@@ -128,17 +128,22 @@ Step 4.3 preflight produces a single report file at `workflow/audit/active/2026-
 - §8 Audit method notes
 - §9 Completeness checklist
 
-### §5.3 Conditional implementation slice
+### §5.3 Implementation slice (mandatory per Step 4.4 PF-R2 LOCK; previously conditional)
 
-If §7 surfaces drift:
-- A separate fix slice opens with its own narrow scope (LOCKED to surfaced drift rows only)
-- Cross-flip per standard pattern: Codex implements fix, Claude reviews
-- Scope discipline: no expansion beyond audit findings
+Step 4.3 preflight at `5b822b6a` (artifact branch `v0.2.0-release-surface-audit-preflight-2026-06-01`) surfaced PF-R2 BLOCKER ADDs — Step 4.7 is therefore MANDATORY, not conditional:
 
-If §7 declares "stack ready":
-- Skip Step 4.7 implementation entirely
-- Step 4.8 closure documents the "stack-ready: YES" outcome + records the handoff package for release teammate
-- Step 4.9 archives audit blueprint
+- Mandatory fix slice on impl branch `v0.2.0-impl-release-surface-audit-2026-06-01` (forked from scope-frozen blueprint HEAD post Step 4.6)
+- Required scope: 4 allowlist entries per PF-R2; no other source touch
+- Optional scope: per Q4 user decision, 12 `docs/official/kernel/*` quickstart ADDs (PF-r2 spot-checked clean of bad-link hits); per Q2/Q3 user decision, docs ADDs only if user authorizes inline bad-link cleanup
+- Cross-flip per standard pattern: Codex implements fix; Claude reviews via independent grep + post-fix G3.a + G3.b + G1 re-sweep
+- Scope discipline: no expansion beyond Step 4.3 preflight findings table
+
+Step 4.8 closure (post fix slice):
+- Document the final v0.2.0-rc handoff `--source-ref` (PF-R1 LOCK)
+- Record stack-ready: YES outcome
+- Produce handoff package for release teammate
+
+Step 4.9 archives audit blueprint + preflight artifact + impl branch.
 
 ## 6. Boundaries And Invariants
 
@@ -151,6 +156,18 @@ If §7 declares "stack ready":
 - **Release execution boundary**: this blueprint NEVER executes `scripts/release.sh` (NEITHER full release NOR `--dry-run`; per P2-2 LOCK `--dry-run` is NOT read-only). If §7 Recommendations include a future dry-run, that recommendation is delivered to the user with explicit prerequisites: (i) user authorization, (ii) clean isolated worktree distinct from current dirty-baseline-preserving worktree, (iii) appropriate `--source-ref` selection. The current worktree is permanently OFF-TARGET for any execution attempt during this audit's lifetime.
 - **Push policy (per Step 4.2 P3-2 wording fix)**: feature branches (`v0.2.0-blueprint-release-surface-audit-2026-06-01` + any preflight + any impl) may be pushed to `hnsm-backend/origin` only with **explicit per-push authorization** (commits are local; pushes require auth). `master` push NEVER auto. Projection to `factgraph` repo NEVER by agent.
 - **Alpha release context**: factgraph is an alpha line; no historical user backward-compat guarantee. Drift fixes should align with Q-NAMING-C "no flat shells restoration without independent Red blueprint" precedent.
+
+- **[LOCKED Step 4.4 PF-R1 — G6 source-ref handoff requirement]**: any teammate-facing handoff package produced by this audit MUST document `--source-ref <final-v0.2.0-rc-feature-line-ref>` as a mandatory parameter when invoking `scripts/release.sh`. The final ref is determined at Step 4.8 closure (post-Step-4.7 fix slice). `be0f2351` (baseline cleanup archive HEAD) is the historical lower bound — usable as `<final-ref>` ONLY if no fix slice lands; otherwise the Step 4.7 fix slice impl HEAD (or its merge into this blueprint branch) is the correct ref. Without correct `--source-ref`, projection uses pre-v0.2 master = wrong artifact.
+
+- **[LOCKED Step 4.4 PF-R2 — G7-SRC-2..5 mandatory allowlist ADDs]**: 4 src files are projection-completeness BLOCKERs because they are imported by already-allowlisted modules (`application/__init__.py` → `entity_visibility`; `entity_write.py` + `ingest_runtime.py` + `sdk/store.py` → `retract_guard`; `entity_write.py` → `value_validation`; `sdk/store.py` → `.match_runtime`). Step 4.7 implementation MUST add the 4 entries to `scripts/release_surface_allowlist.txt`:
+  - `src/factgraph/application/entity_visibility.py`
+  - `src/factgraph/application/retract_guard.py`
+  - `src/factgraph/application/value_validation.py`
+  - `src/factgraph/sdk/match_runtime.py`
+  
+  This is the only allowlist edit MANDATORY for stack-readiness. Step 4.7 is NO LONGER conditional (was conditional in §5.3 + §8 step 6 of the draft; Step 4.4 amendment makes it mandatory).
+
+- **[LOCKED Step 4.4 PF-r3 — Q2/Q3 docs ADD bad-link gate]**: any future ADD of `docs/README.md` or `docs/api/openapi.yaml` to allowlist MUST include doc-content cleanup of bad-link hits (verified at Step 4.3 preflight: `docs/README.md:17` references `workflow/AGENTS.md`, `:23` references `src/factgraph/AGENTS.md`; `docs/api/openapi.yaml:22` references `src/service/docs/06_frontend_integration.md`). Bare ADD without cleanup will fail G3.b projection check. Default for both: DEFER pending separate cleanup or surface decision.
 
 ## 7. Acceptance
 
@@ -166,6 +183,9 @@ If §7 declares "stack ready":
 - [ ] If fix slice required: shipped after Codex implementation + Claude review + per-fix-slice canonical pytest census ≥ baseline cleanup HEAD `f1e0dc67` (2450 passed / 0 failed, recorded in audit log)
 - [ ] AD/C/E/B1/B2/F + baseline cleanup inherited contracts preserved (verified via re-grep of N1-N24 + baseline N1-N9)
 - [ ] `v0.1-oss-prep` + `master` + `release/0.1.x` + `release/0.2.x` (if exists) all untouched
+- [ ] **[Step 4.4 PF-R2 LOCK]** Step 4.7 fix slice landed 4 mandatory allowlist ADDs (`src/factgraph/application/entity_visibility.py` + `application/retract_guard.py` + `application/value_validation.py` + `sdk/match_runtime.py`); post-fix allowlist count = 275 (from 271) and `scripts/release_surface_allowlist.txt` regression-checked via existing G3.a sweep
+- [ ] **[Step 4.4 PF-R1 LOCK]** Step 4.8 closure documents the final v0.2.0-rc handoff `--source-ref` (post-fix-slice ref) for teammate; explicitly NOT `be0f2351` if any fix slice landed
+- [ ] **[Step 4.4 PF-r3 LOCK]** If Q2/Q3 Option A inline docs ADD chosen, doc-content bad-link cleanup completed in same Step 4.7 commit and post-clean G3.b re-grep returns 0 hits
 
 ## 8. Implementation Plan
 
@@ -182,7 +202,7 @@ If §7 declares "stack ready":
 3. **Step 4.4 amend (Claude)**: apply preflight Required + Recommended LOCKs (PF-R / PF-r) on blueprint branch per Slice 7B Option A learning.
 4. **Step 4.5 self-check (Claude)**: doc-only, no commit; verify PF coverage matrix consistent, invariant coverage complete.
 5. **Step 4.6 scope freeze (Claude)**: blueprint Status `draft` → `scoped`.
-6. **Step 4.7 implementation (conditional)**: as per §5.3.
+6. **Step 4.7 implementation (MANDATORY per Step 4.4 PF-R2 LOCK; previously conditional)**: Codex implements PF-R2 fix slice on impl branch `v0.2.0-impl-release-surface-audit-2026-06-01` forked from scope-frozen blueprint HEAD. Required: add 4 G7-SRC-BLOCKER allowlist entries (`src/factgraph/application/entity_visibility.py` + `application/retract_guard.py` + `application/value_validation.py` + `sdk/match_runtime.py`); preserve allowlist ordering convention; run G3.a sweep on post-fix allowlist to confirm 0 deny_pattern hits. **Conditional optional**: PF-r2 12 `docs/official/kernel/*` quickstart ADDs (per Q4 user decision) + PF-r3 Q2/Q3 Option A docs ADD-with-cleanup (only if user authorizes inline cleanup; default DEFER). Cross-flip per standard pattern: Codex implements; Claude reviews via independent grep + post-fix G3 + G1 re-sweep.
 7. **Step 4.8 closure**: blueprint Status `scoped` → `implemented`; populate §10 Outcome with stack-ready determination + handoff package OR fix-slice outcome.
 8. **Step 4.9 archive**: `git mv` blueprint + audit log pair from `active/` to `archive/`; update `INVENTORY.md`; preflight artifact branch retained as immutable snapshot per Slice 7B Option A pattern.
 
@@ -197,4 +217,26 @@ If §7 declares "stack ready":
 
 ## 10. Outcome / Deviations
 
-(Step 4.8 closure outcome / deviations to be filled at implementation closure after Step 4.3 preflight findings + optional Step 4.7 fix slice.)
+### Step 4.4 preflight LOCKs (per Step 4.3 preflight at `5b822b6a` on `v0.2.0-release-surface-audit-preflight-2026-06-01`)
+
+Preflight surfaced 3 Required + 3 Recommended findings via Codex Step 4.3 review + 1 fast-pass cleanup. All applied to preflight artifact + propagated to blueprint per Slice 7B Option A:
+
+- **PF-R1 LOCK (G6 source-ref handoff)**: §6 Boundaries banner + §7 Acceptance checkbox added. Final teammate handoff ref = post-Step-4.7 fix slice ref, NOT `be0f2351`. `release.sh --source-ref <final-ref>` is the mandatory teammate-invocation pattern.
+
+- **PF-R2 LOCK (4 G7-SRC-BLOCKER ADDs)**: §5.3 + §6 Boundaries + §7 Acceptance + §8 Implementation Plan all updated to reflect that Step 4.7 is MANDATORY (no longer conditional). 4 specific allowlist entries enumerated.
+
+- **PF-r2 (12 quickstart docs candidate ADD)**: optional per Q4 user decision; G3.b spot-check at preflight returned 0 hits but per-row confirmation at Step 4.7 implementation.
+
+- **PF-r3 LOCK (Q2/Q3 docs bad-link gate)**: §6 Boundaries banner added; `docs/README.md` + `docs/api/openapi.yaml` bare ADD is FORBIDDEN (would fail G3.b); inline cleanup required if user chooses Option A; default DEFER.
+
+- **PF-v1..PF-v8 verified findings** (recorded in audit log Decision Notes per CADENCE verified-findings convention): G1 allowlist 271/271 fresh; G2.a 11 modules fresh + import-clean; G2.b 156+6 excluded tests correctly denied; G3.a 0 deny_pattern hits; G3.b 0 bad_link hits in 41 allowlisted docs; G4 EN-only convention preserved; G5 typing-extensions 4.15.0 healthy; Q-PR1 5 paths 0-diff at audit source + preflight artifact HEAD.
+
+### Step 4.3 Open Questions status
+
+- ~~Q1 (4 src files inclusion)~~ — RETRACTED per P2-1 LOCK; now PF-R2 mandatory
+- **Q2 (`docs/README.md` ADD)** — OPEN; default DEFER per PF-r3
+- **Q3 (`docs/api/openapi.yaml` ADD)** — OPEN; default DEFER per PF-r3
+- **Q4 (12 quickstart docs ADD)** — OPEN; working hypothesis ADD ALL per PF-r2 (G3.b spot-clean)
+- ~~Q5 (G6 source-ref handoff phrasing)~~ — RESOLVED by PF-R1 LOCK
+
+(Final Step 4.8 closure outcome / deviations to be filled after Step 4.7 fix slice + Q2/Q3/Q4 user decisions + Claude review PASS.)
