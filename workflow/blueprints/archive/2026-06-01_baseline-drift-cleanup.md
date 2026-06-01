@@ -9,8 +9,8 @@
   - `src/factgraph/core/derivation/` (evaluator signature drift — `_eval_eq_atom/_eval_arith_atom`)
   - `src/factgraph/core/evidence/write_protocol.py` (Uncertainty Phase 1 `meta[confidence]` removal)
 - Related Docs:
-  - [`workflow/blueprints/archive/2026-05-31_q-naming-f.md`](../archive/2026-05-31_q-naming-f.md) §10.6 — B2/F baseline failures classification + carry-forward
-  - [`workflow/blueprints/archive/2026-05-31_q-naming-b2.md`](../archive/2026-05-31_q-naming-b2.md) §10.6 — B2 189-failure baseline source
+  - [`workflow/blueprints/archive/2026-05-31_q-naming-f.md`](./2026-05-31_q-naming-f.md) §10.6 — B2/F baseline failures classification + carry-forward
+  - [`workflow/blueprints/archive/2026-05-31_q-naming-b2.md`](./2026-05-31_q-naming-b2.md) §10.6 — B2 189-failure baseline source
   - [`workflow/CADENCE.md`](../../CADENCE.md) — 9-stage Audit-to-Archive Cadence (lightweight variant for cleanup sub-slices)
   - [`workflow/AGENTS.md`](../../AGENTS.md) — workflow governance
 - Audit Log:
