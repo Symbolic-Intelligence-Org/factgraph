@@ -1,6 +1,6 @@
 # Baseline Drift Cleanup Meta-Blueprint: 189 pre-existing failures across 27 test files
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-01
 - Last Updated: 2026-06-01
 - Related Modules:
@@ -302,4 +302,50 @@ Per Q-NAMING precedent verification ritual:
 - **SS4 namespaced migration complete map**: `sdk.ref→sdk.entities.ref`, `sdk.get→sdk.entities.get`, `sdk.set→sdk.fields.set`, `sdk.read.match→sdk.entities.match`, `sdk.retract→sdk.assertions.retract`.
 - **SS-by-SS cadence**: each SS = single commit + canonical census + audit log row + sacred verification ritual + per-SS push authorization. NO bundled SS commits.
 
-(Step 4.8 closure outcome / deviations to be filled at implementation closure after all 8 SS ship + cumulative baseline verified.)
+### Step 4.8 closure summary (2026-06-01)
+
+**Scope achievement**: 189 → 0 baseline failures across `tests/` cohort. ALL 8 sub-slices shipped with cross-flip review PASS verdicts. Independent canonical census at HEAD `f1e0dc67`: `2450 passed / 32 skipped / 1044 subtests passed / 0 failed`.
+
+**Per-SS commit lineage on `v0.2.0-impl-baseline-drift-cleanup-2026-06-01`** (execution order per Step 4.2 P2-FP1 LOCK):
+
+| SS | Commit | Pre→Post | Δ | Files | Source touch |
+|---|---|---|---|---|---|
+| SS1 application `Rule(where=)` | `493c04bd` | 189 → 168 | -21 | 5 tests | none |
+| SS3 ReadPolicy retire | `e4514fd3` | 168 → 139 | -29 | 1 test (retire to `_retired/`) | none |
+| SS4 SDKStore namespaced shape | `69dc1500` | 139 → 94 | -45 | 8 tests | none |
+| SS5 raw uncertainty DSL | `84aca86c` | 94 → 81 | -13 | 4 tests | none |
+| SS2 `engine_options=` classification | `a87a9925` | 81 → 76 | -5 | 2 tests | none |
+| SS6 frontier evaluator callsites | `7b6f2d5d` | 76 → 64 | -12 | 4 tests + **2 source (PF-r1 authorized)** | `frontier.py` 2 callsites + `diagnose_runtime.py` 2 callsites |
+| SS7 NoneType.proof support fixtures | `b6a50af4` | 64 → 13 | -51 | 4 tests | none |
+| SS8 misc closure | `f1e0dc67` | 13 → 0 | -13 | 7 tests | none |
+
+**Sacred invariant verification across all 8 SS commits**:
+
+- Q-PR1 5 paths 0-diff vs `4c472b50`: ✓ preserved every commit
+- Sacred master `562c74195df43e933bed92a3ff25de94dd8ce666`: ✓ never modified
+- Dirty baseline 8 entries (4 M + 2 D + 2 untracked): ✓ preserved every commit
+- N7 layer authority: ✓ preserved (only SS6 source touch, strictly within PF-r1 authorized boundary; helper signatures at `where_eval.py:526/857` unchanged)
+- AD/C/E/B1/B2/F inherited N1-N24 contracts: ✓ preserved (verified via PF-v3 grep snapshot at preflight HEAD `f8dd647f`)
+
+### Deviations from initial Step 4.4 scope
+
+- **PF-s1 recensus-gated trajectory validated**: numerical predictions for SS4/SS5/SS7 correctly avoided. Actual deltas (SS4 -45 vs ~92 initial estimate; SS5 -13 vs ~68 initial estimate; SS7 -51 vs ~95 expected after PF-R1 disprove; SS2 -5 with chain unblocking from SS5 raising the SS2-attributable count from 10 → 14 mid-cycle) confirmed chain/overlap effects violate linear subtraction. Recensus-gated outcome model adopted by §4.2 worked as designed.
+- **PF-r1 SS6 callsite count over-estimated**: handoff briefing inherited preflight estimate of "frontier 11 callsites + diagnose 1 = 12". Source-grounded re-check at SS6 implementation (Codex) found actual 2 + 2 = 4 callsites. Additionally, the real missing arg was `view_facts` (first positional), not `atom` (third positional) — Python's "missing required positional argument 'atom'" error was reporting the LAST unfilled positional, not the first. Codex corrected at implementation and recorded source correction in audit log row #18.
+- **SS5 `raw_kind` allowed values briefing error**: handoff briefing cited `write_protocol.py:103` `("semantic", "observed")` as the allowed set; that tuple is a different-purpose schema element. Source-grounded re-check at SS5 implementation (Codex) found line 40 canonical `_RAW_UNCERTAINTY_KINDS = {"probabilistic", "possibilistic"}`. Codex used correct `"probabilistic"` and recorded the source correction in audit log row #16.
+- **SS7 root cause clustering surprise**: PF-R1 disprove (Step 4.4 amend) predicted "~95 of 102 are independent root causes" for the NoneType.proof errors. SS7 DIRECT INVESTIGATION (Codex) found 95% share a SINGLE shared root cause — the `Person(p)` entity-exists fixture pattern at shared `_age_derivation()` / `_adult_rule()` helpers — making the fix highly leveraged (51 errors cleared with ~13 source lines across 4 test files via 8 fixture helpers).
+- **`engine_options`-named test misclassification at SS2**: 1 test (`test_default_timeout_used_when_engine_options_missing`) named with `engine_options` token but failing on `EvaluateRow.support_kind` — correctly classified to SS8 per category review.
+- **SS8 SS7-pattern extension discovery**: SS8 micro-categories B/D (`sdk_check`, `sdk_diagnose`, `sdk_why_not` residuals) exhibited the same `Person(p)` entity-exists drift as SS7. Codex extended the SS7 `Pred("person:age", p, age)` migration template to SS8 cohort, validating the cross-SS shared-root-cause pattern beyond initial blueprint anticipation.
+
+### Cross-flip Rule 1 effectiveness record
+
+3 consecutive `feedback_audit_execution_discipline` Rule 1 catches by Codex's shipped-source re-grounding at implementation time:
+
+1. **SS5** — `raw_kind` allowed values: `{"probabilistic", "possibilistic"}` not `{"semantic", "observed"}` (briefing cited wrong line).
+2. **SS6** — `_eval_*_atom` missing arg: `view_facts` first positional, not `atom` third positional (briefing inherited PF-r1 imprecision).
+3. **SS6** — callsite enumeration: 4 total (2 frontier + 2 diagnose), not 13 (briefing inherited PF-r1 over-count for frontier).
+
+None resulted in buggy code because each was caught at Step 4.7 source-grounding before commit. Validates the `feedback_preflight_code_audit_required` + `feedback_audit_execution_discipline` pattern in practice. The meta-blueprint cadence (Codex implements with fresh source re-read, Claude reviews independently with independent census) double-checked the audit log corrections.
+
+### Cumulative outcome
+
+Baseline cleanup meta-blueprint scope **fully achieved**. v0.2.0-rc release prep can proceed with a clean 0-failure baseline on `v0.2.0-impl-baseline-drift-cleanup-2026-06-01 @ f1e0dc67`. Step 4.9 archive can follow immediately (doc-only file moves + INVENTORY.md update). Per-SS push authorization for the 8 implementation commits + this closure commit + the upcoming archive commit remains at user's discretion per `feedback_push_master_gate`.
