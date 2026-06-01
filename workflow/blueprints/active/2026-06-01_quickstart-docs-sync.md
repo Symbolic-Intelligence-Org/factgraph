@@ -1,6 +1,6 @@
 # Quickstart Docs Code-vs-Shipped Sync Blueprint
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-01
 - Last Updated: 2026-06-01
 - Related Modules:
@@ -121,4 +121,42 @@ The audit doc + this blueprint qualify as "task blueprint". Single sustaining co
 
 ## 10. Outcome / Deviations
 
-(Step 4.8 closure outcome to be filled post-Step 4.7 fix commit + factgraph re-projection.)
+### Step 4.8 closure summary (2026-06-01)
+
+**Scope achievement**: all 33 audit findings applied in single commit `b3c99f2f docs(quickstart): apply 33 audit findings (P0+P1+P2+P3)` on `v0.2.0-blueprint-quickstart-vs-shipped-audit-2026-06-01` (branch HEAD). Factgraph feature branch re-projected and force-pushed (5th iteration: `37cb335f` → `3e306c02` → `ec85b287` → `ca916dee` → **`7ef339ee`**).
+
+**Per-priority deliverable**:
+
+| Priority | Sites | Status |
+|---|---|---|
+| P0 — user-runtime-error | 2 | ✓ (namespace-map.md Query claim + rules-and-inferences.md AggregateAtom claim) |
+| P1 — broken cross-references | 4 | ✓ (new `## Raw uncertainty: raw_kind and bound` section in assertions.md + 3 link/anchor updates) |
+| P2 — signature/wording drift | 13 | ✓ (namespace-map.md signatures + database.md correctness + factpy-kernel → factgraph in 4 sites + read-write.md ref() framing) |
+| P3 — prose polish | 13 | ✓ (error-code phrasing + superseded-class warning + snippet context + optional-field markers + ProbLog reject policy + ref() consistency + eval.evaluate reject set + opaque idref_v1) |
+
+**Sacred invariant verification**:
+- Q-PR1 5 paths 0-diff vs `4c472b50`: ✓ preserved every commit
+- Sacred master `562c74195df43e933bed92a3ff25de94dd8ce666`: ✓ never modified
+- Dirty baseline 8 entries: ✓ preserved every commit
+- N7 layer authority: ✓ preserved (zero src/ touch; all fixes in docs/official/kernel/)
+- AD/C/E/B1/B2/F + baseline cleanup + release-surface-audit inherited contracts: ✓ preserved
+
+**Method effectiveness records**:
+
+- **L1 — parallel-agent breadth + supplementary depth**: 7 parallel general-purpose agents covered 12 docs × ~30 claims each in ~5 min wall-clock. Supplementary "查缺补漏" by Claude added 5 findings (1 BUG + 4 DRIFT) that agents missed because they focused on per-method API claims rather than systematic patterns (project naming, cross-references). Combined methodology delivered 33 actionable findings vs 28 from agents alone (+18%).
+
+- **L2 — single-commit P0+P1+P2+P3 absorption**: applying all priority tiers in one commit avoided the "P0 fix lands, user then catches P1, force-push, etc." iterative force-push pattern that would have produced 4+ factgraph branch HEADs. Single commit + single factgraph re-projection (`ca916dee` → `7ef339ee`).
+
+- **L3 — assertions.md as the single source of truth for raw_kind/bound contract**: the 3 broken cross-refs all pointed to assertions.md sections that did not exist; rather than rewriting 3 different links to other docs, adding ONE new section to assertions.md satisfies all 3 references AND consolidates the canonical contract description in one place.
+
+### Deviations from initial Step 4.4 scope
+
+- **Agent-reported "27 omissions from __all__"** was inaccurate; supplementary verification confirmed actual count: `__all__ = 64` entries vs ~46 backticked in namespace-map.md = ~18 omissions. Fixed by reframing "Everything in `__all__`" to "Selected exports from `__all__`" rather than expanding to 64-entry table (which would require domain decisions about each export's purpose).
+
+- **`AggregateAtom` listed as Atom in rules-and-inferences.md:84** was found by 1 of 7 agents but is a real shipped-code issue affecting users who try to construct `Rule(when=(AggregateAtom(...),))` directly. Promoted to P0 (user-runtime-error) class.
+
+- **`factpy-kernel` legacy naming in 4 sites** was missed by all 7 agents and surfaced only via supplementary check. Future audit prompts should include "project naming consistency" as an explicit verification axis.
+
+### Cumulative outcome
+
+Quickstart docs sync cycle **fully achieved**. Public-facing kernel documentation aligned with shipped code state at HEAD `b3c99f2f`. Factgraph feature branch `feature/v0.2.0-release-surface-audit-2026-06-01` at `7ef339ee` now contains the fully aligned quickstart docs as part of v0.2.0 publish surface. Teammate handoff `--source-ref` updated from `d12352e4` → `b3c99f2f` for the latest stack-ready ref.
