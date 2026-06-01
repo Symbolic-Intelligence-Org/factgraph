@@ -42,7 +42,7 @@ def _person_exists_rule(rule_id: str = "QuarantinePerson:exists") -> Rule:
     person = Var("$person")
     return Rule(
         id=rule_id,
-        where=(PredAtom("QuarantinePerson:exists", [person]),),
+        when=(PredAtom("QuarantinePerson:exists", [person]),),
         ports={"person": person},
     )
 
@@ -53,7 +53,7 @@ def _closed_missing_person_head(graph: SDKStore) -> Rule:
     person = Var("$person")
     return Rule(
         id="QuarantinePerson:exists_closed_missing",
-        where=(
+        when=(
             PredAtom("QuarantinePerson:exists", [person]),
             PredAtom(identity_predicate_id, [person, Const("missing")]),
         ),

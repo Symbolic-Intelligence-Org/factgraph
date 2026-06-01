@@ -18,7 +18,7 @@ def _person_exists_rule(rule_id: str = "person_exists", *, version: str | None =
     return Rule(
         id=rule_id,
         version=version,
-        where=(PredAtom("Person:exists", [person]),),
+        when=(PredAtom("Person:exists", [person]),),
         ports={"person": person},
     )
 
@@ -28,7 +28,7 @@ def _person_region_rule(rule_id: str = "person_region") -> Rule:
     region = Var("$region")
     return Rule(
         id=rule_id,
-        where=(PredAtom("Person:exists", [person]), PredAtom("Person:region", [person, region])),
+        when=(PredAtom("Person:exists", [person]), PredAtom("Person:region", [person, region])),
         ports={"person": person, "region": region},
     )
 
@@ -37,7 +37,7 @@ def _person_named_rule(rule_id: str = "person_named") -> Rule:
     name = Var("$name")
     return Rule(
         id=rule_id,
-        where=(CmpAtom("eq", name, Const("alice")),),
+        when=(CmpAtom("eq", name, Const("alice")),),
         ports={"name": name},
     )
 
@@ -46,7 +46,7 @@ def _person_value_rule(rule_id: str = "person_value") -> Rule:
     value = Var("$value")
     return Rule(
         id=rule_id,
-        where=(CmpAtom("eq", value, Const("alice")),),
+        when=(CmpAtom("eq", value, Const("alice")),),
         ports={"person": value},
     )
 
@@ -106,7 +106,7 @@ class RuleExprHeadValidationTests(unittest.TestCase):
         unknown = Var("$unknown")
         head = Rule(
             id="head",
-            where=(PredAtom("Unknown:exists", [unknown]),),
+            when=(PredAtom("Unknown:exists", [unknown]),),
             ports={"unknown": unknown},
         )
         plan = _lower_application_rule(body, head=head)

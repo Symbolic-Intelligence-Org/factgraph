@@ -243,7 +243,7 @@ Per Q-NAMING precedent verification ritual:
 
 ## 7. Acceptance
 
-- [ ] SS1 Rule(where=) — 44 errors fixed; 6 test files migrated
+- [x] SS1 Rule(where=) — shipped at Step 4.7 SS1; public application Rule fixtures migrated; observed census 189 → 168 (-21) with remaining cohort failures belonging to SS4 SDKStore shape
 - [ ] SS2 engine_options= — classified after SS5; residual fixtures migrated if observable (per Step 4.2 P2-2 + Step 4.4 PF-s1 recensus-gated)
 - [ ] SS3 ReadPolicy import — 24 errors fixed
 - [ ] SS4 SDKStore shape — 92 observed error instances fixed (per Step 4.2 P3-1 + P2-4 LOCK); tests migrated to namespaced managers (`fg.entities.ref/get`, `fg.fields.set`, `fg.assertions.retract`, etc.); flat-shell restoration explicitly OUT of scope (requires separate Red blueprint per Q-NAMING-C precedent)

@@ -25,7 +25,7 @@ def _name_rule() -> Rule:
     name = Var("$name")
     return Rule(
         id="user:name",
-        where=(PredAtom("User:exists", [user]), PredAtom("user:name", [user, name])),
+        when=(PredAtom("User:exists", [user]), PredAtom("user:name", [user, name])),
         ports={"user": user, "name": name},
     )
 

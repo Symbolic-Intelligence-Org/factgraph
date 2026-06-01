@@ -17,7 +17,7 @@ class RuleAggregateTests(unittest.TestCase):
         )
         rule = Rule(
             id="order_count",
-            where=(
+            when=(
                 PredAtom("User:exists", [u]),
                 CmpAtom("eq", Var("$count"), aggregate),
             ),
@@ -38,7 +38,7 @@ class RuleAggregateTests(unittest.TestCase):
         with self.assertRaises(RuleValidationError):
             Rule(
                 id="order_count",
-                where=(PredAtom("User:exists", [u]), CmpAtom("eq", Var("$count"), aggregate)),
+                when=(PredAtom("User:exists", [u]), CmpAtom("eq", Var("$count"), aggregate)),
                 ports={"order": order},
             )
 
@@ -53,7 +53,7 @@ class RuleAggregateTests(unittest.TestCase):
 
         rule = Rule(
             id="amount_sum",
-            where=(CmpAtom("eq", Const(10), aggregate),),
+            when=(CmpAtom("eq", Const(10), aggregate),),
             ports={"amount": amount},
         )
 
