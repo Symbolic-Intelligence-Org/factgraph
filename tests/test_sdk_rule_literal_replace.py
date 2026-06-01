@@ -34,6 +34,7 @@ from factgraph.sdk import (
     Entity,
     Field,
     Identity,
+    Pred,
     SDKStore,
     SDKStoreError,
     vars,
@@ -63,7 +64,7 @@ def _age_derivation() -> Inference:
         return Inference(
             id="sdk.check_rule_literal_replace.age",
             version="v1",
-            when=[Person(p), p.age == age],
+            when=[Pred("person:age", p, age)],
             head=Person.age(value=age),
         )
 
@@ -74,7 +75,7 @@ def _adult_rule() -> Rule:
             id="sdk.check_rule_literal_replace.adult",
             version="v1",
             select=[p, age],
-            where=[Person(p), p.age == age],
+            where=[Pred("person:age", p, age)],
         )
 
 

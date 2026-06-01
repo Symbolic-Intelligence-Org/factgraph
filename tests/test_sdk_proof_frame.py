@@ -29,6 +29,7 @@ from factgraph.sdk import (
     Entity,
     Field,
     Identity,
+    Pred,
     SDKStore,
     SDKStoreError,
     vars,
@@ -57,7 +58,7 @@ def _age_derivation() -> Inference:
         return Inference(
             id="sdk.recheck_proof_frame.age",
             version="v1",
-            when=[Person(p), p.age == age],
+            when=[Pred("person:age", p, age)],
             head=Person.age(value=age),
         )
 
