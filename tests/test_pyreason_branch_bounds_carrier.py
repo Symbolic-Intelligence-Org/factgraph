@@ -42,7 +42,7 @@ def _schema_ir() -> dict[str, Any]:
 
 def _make_sdk() -> SDKStore:
     sdk = SDKStore([User])
-    alice_ref = sdk.ref(User, user_id="Alice")
+    alice_ref = sdk.entities.ref(User, user_id="Alice")
     set_field(
         sdk.ledger,
         pred_id="user:name",

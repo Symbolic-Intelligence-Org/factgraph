@@ -117,22 +117,22 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         _seed_person(graph, "alice", "us", tags=("vip", "admin"))
         _seed_person(graph, "bob", "eu")
 
-        matches = graph.read.match(Person, _person_tag_rule(), tag="vip")
-        limited = graph.read.match(Person, _person_tag_rule(), limit=1)
+        matches = graph.entities.match(Person, _person_tag_rule(), tag="vip")
+        limited = graph.entities.match(Person, _person_tag_rule(), limit=1)
 
         self.assertEqual([row.region for row in matches], ["us"])
         self.assertEqual(len(limited), 1)
-        self.assertEqual(len({row.ref for row in graph.read.match(Person, _person_tag_rule())}), 1)
+        self.assertEqual(len({row.ref for row in graph.entities.match(Person, _person_tag_rule())}), 1)
 
     def test_rule_accepts_idref_and_snapshot_entity_ref_constraints(self) -> None:
         graph = _store()
         alice_ref = _seed_person(graph, "alice", "us")
         _seed_person(graph, "bob", "eu")
         rule = _person_region_rule()
-        alice_snapshot = graph.read.get(Person, name="alice")
+        alice_snapshot = graph.entities.get(Person, name="alice")
 
-        self.assertEqual([row.ref for row in graph.read.match(Person, rule, person=alice_ref)], [alice_ref])
-        self.assertEqual([row.ref for row in graph.read.match(Person, rule, person=alice_snapshot)], [alice_ref])
+        self.assertEqual([row.ref for row in graph.entities.match(Person, rule, person=alice_ref)], [alice_ref])
+        self.assertEqual([row.ref for row in graph.entities.match(Person, rule, person=alice_snapshot)], [alice_ref])
 
     def test_own_class_field_constraints_are_allowed_and_cross_entity_fields_reject(self) -> None:
         graph = _store()
@@ -140,11 +140,11 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         _seed_person(graph, "bob", "eu")
 
         self.assertEqual(
-            sorted(row.region for row in graph.read.match(Person, _person_region_rule(), region=Person.region)),
+            sorted(row.region for row in graph.entities.match(Person, _person_region_rule(), region=Person.region)),
             ["eu", "us"],
         )
         with self.assertRaisesRegex(SDKStoreError, "cross-entity Field constraints"):
-            graph.read.match(Person, _person_region_rule(), region=Account.label)
+            graph.entities.match(Person, _person_region_rule(), region=Account.label)
 
     def test_ruleexpr_and_match_works_and_or_matches(self) -> None:
         graph = _store()
@@ -153,8 +153,8 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         region = _person_region_rule()
         expr = (exists.as_("exists") & region.as_("region")).join_by_ports("person")
 
-        self.assertEqual([row.region for row in graph.read.match(Person, expr, region="us")], ["us"])
-        self.assertEqual([row.region for row in graph.read.match(Person, exists | region)], ["us"])
+        self.assertEqual([row.region for row in graph.entities.match(Person, expr, region="us")], ["us"])
+        self.assertEqual([row.region for row in graph.entities.match(Person, exists | region)], ["us"])
 
     def test_ruleexpr_or_distributes_constraints_and_deduplicates_across_branches(self) -> None:
         graph = _store()
@@ -163,8 +163,8 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         _seed_person(graph, "carol", "eu")
         expr = _person_region_marker_rule().as_("region") | _person_tag_marker_rule().as_("tag")
 
-        matches = graph.read.match(Person, expr, marker="vip")
-        limited = graph.read.match(Person, expr, marker="vip", limit=1)
+        matches = graph.entities.match(Person, expr, marker="vip")
+        limited = graph.entities.match(Person, expr, marker="vip", limit=1)
 
         self.assertEqual([row.ref for row in matches], [alice_ref, bob_ref])
         self.assertEqual([row.ref for row in limited], [alice_ref])
@@ -180,7 +180,7 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
             | (exists.as_("exists_tag") & _person_tag_marker_rule().as_("tag")).join_by_ports("person")
         )
 
-        self.assertEqual([row.ref for row in graph.read.match(Person, expr, marker="vip")], [alice_ref, bob_ref])
+        self.assertEqual([row.ref for row in graph.entities.match(Person, expr, marker="vip")], [alice_ref, bob_ref])
 
     def test_projection_missing_ambiguous_unknown_and_legacy_template_errors(self) -> None:
         graph = _store()
@@ -199,17 +199,17 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SDKStoreError, "requires exactly one entity_ref port"):
-            graph.read.match(Person, value_only)
+            graph.entities.match(Person, value_only)
         with self.assertRaisesRegex(SDKStoreError, "ambiguous"):
-            graph.read.match(Person, ambiguous)
+            graph.entities.match(Person, ambiguous)
         with self.assertRaisesRegex(SDKStoreError, "unknown match port 'missing'"):
-            graph.read.match(Person, _person_region_rule(), missing="x")
+            graph.entities.match(Person, _person_region_rule(), missing="x")
         with self.assertRaisesRegex(SDKStoreError, "template must be application Rule or AND RuleExpr"):
-            graph.read.match(Person, ["not", "a", "rule"])
+            graph.entities.match(Person, ["not", "a", "rule"])
         with sdk.vars("p") as (p,):
-            query = Query(head=Person(p), when=[Person(p)])
+            query = Query(head=Person(p), where=[Person(p)])
         with self.assertRaisesRegex(SDKStoreError, "template must be application Rule or AND RuleExpr"):
-            graph.read.match(Person, query)
+            graph.entities.match(Person, query)
         with self.assertRaisesRegex(RuleExprError, "require at least one operand"):
             RuleExpr.any()
 
@@ -226,7 +226,7 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(SDKStoreError, "silent cross product"):
-            graph.read.match(Person, rule, other=alice)
+            graph.entities.match(Person, rule, other=alice)
 
     def test_ruleexpr_or_rejects_disconnected_branch_and_partial_port_constraint(self) -> None:
         graph = _store()
@@ -237,9 +237,9 @@ class SDKReadMatchRuntimeTests(unittest.TestCase):
         partial = _person_region_rule().as_("region") | _person_exists_rule().as_("exists")
 
         with self.assertRaisesRegex(SDKStoreError, "silent cross product"):
-            graph.read.match(Person, connected | disconnected, marker="vip")
+            graph.entities.match(Person, connected | disconnected, marker="vip")
         with self.assertRaisesRegex(SDKStoreError, "only declared in some RuleExpr branches"):
-            graph.read.match(Person, partial, region="us")
+            graph.entities.match(Person, partial, region="us")
 
 
 if __name__ == "__main__":

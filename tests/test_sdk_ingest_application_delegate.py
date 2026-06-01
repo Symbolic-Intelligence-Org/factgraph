@@ -36,7 +36,7 @@ def _active_claim_count(sdk: SDKStore, *, pred_id: str, e_ref: str) -> int:
 class IngestCacheHitPathTests(unittest.TestCase):
     def test_set_cache_hit_delegates_to_application_and_returns_field_assertion_id(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.entities.ref(User, user_id="u-1")
+        user_ref = sdk.entities.create(User, user_id="u-1")
 
         result = sdk.schema.ingest(
             [
@@ -57,7 +57,7 @@ class IngestCacheHitPathTests(unittest.TestCase):
 
     def test_add_cache_hit_delegates_to_application(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.entities.ref(User, user_id="u-1")
+        user_ref = sdk.entities.create(User, user_id="u-1")
 
         result = sdk.schema.ingest(
             [
@@ -73,15 +73,15 @@ class IngestCacheHitPathTests(unittest.TestCase):
         expected_pred = field_predicate(sdk._application_schema_index, "User", "tag").pred_id
         self.assertEqual(len(result.written_assertion_ids), 1)
         self.assertEqual(_claim_pred_id(sdk, result.written_assertion_ids[0]), expected_pred)
-        snap = sdk.get(User, user_id="u-1")
+        snap = sdk.entities.get(User, user_id="u-1")
         self.assertIsNotNone(snap)
         assert snap is not None
         self.assertEqual(snap.tag, ("vip",))
 
     def test_entity_ref_value_cache_hit_delegates_to_application_dependencies(self) -> None:
         sdk = _build_sdk()
-        user_ref = sdk.entities.ref(User, user_id="u-1")
-        country_ref = sdk.entities.ref(Country, code="DE")
+        user_ref = sdk.entities.create(User, user_id="u-1")
+        country_ref = sdk.entities.create(Country, code="DE")
 
         result = sdk.schema.ingest(
             [

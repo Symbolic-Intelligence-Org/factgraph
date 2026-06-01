@@ -17,19 +17,19 @@ class User(Entity):
 
 def _seed_store() -> SDKStore:
     sdk = SDKStore([User])
-    user_en = sdk.ref(User, user_id="u-1", locale="en")
-    user_zh = sdk.ref(User, user_id="u-1", locale="zh")
-    user_other = sdk.ref(User, user_id="u-2", locale="en")
+    user_en = sdk.entities.ref(User, user_id="u-1", locale="en")
+    user_zh = sdk.entities.ref(User, user_id="u-1", locale="zh")
+    user_other = sdk.entities.ref(User, user_id="u-2", locale="en")
 
-    sdk.set(User.name, user_en, "Alice")
-    sdk.add(User.tag, user_en, "vip")
-    sdk.add(User.tag, user_en, "editor")
+    sdk.fields.set(User.name, user_en, "Alice")
+    sdk.fields.add(User.tag, user_en, "vip")
+    sdk.fields.add(User.tag, user_en, "editor")
 
-    sdk.set(User.name, user_zh, "Alice")
-    sdk.add(User.tag, user_zh, "viewer")
+    sdk.fields.set(User.name, user_zh, "Alice")
+    sdk.fields.add(User.tag, user_zh, "viewer")
 
-    sdk.set(User.name, user_other, "Bob")
-    sdk.add(User.tag, user_other, "vip")
+    sdk.fields.set(User.name, user_other, "Bob")
+    sdk.fields.add(User.tag, user_other, "vip")
     return sdk
 
 
@@ -37,7 +37,7 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_partial_identity_filter_returns_all_matching_full_coordinates(self) -> None:
         sdk = _seed_store()
 
-        rows = sdk.find(User, user_id="u-1")
+        rows = sdk.entities.where(User, user_id="u-1")
 
         self.assertEqual({row.identity["locale"] for row in rows}, {"en", "zh"})
         self.assertEqual({row.identity["user_id"] for row in rows}, {"u-1"})
@@ -46,7 +46,7 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_partial_identity_filter_exposes_full_identity_for_each_snapshot(self) -> None:
         sdk = _seed_store()
 
-        rows = sdk.find(User, user_id="u-1")
+        rows = sdk.entities.where(User, user_id="u-1")
 
         self.assertEqual(
             {tuple(sorted(row.identity.items())) for row in rows},
@@ -60,7 +60,7 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_full_identity_filter_keeps_exact_coordinate_behavior(self) -> None:
         sdk = _seed_store()
 
-        rows = sdk.find(User, user_id="u-1", locale="en")
+        rows = sdk.entities.where(User, user_id="u-1", locale="en")
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].identity, {"user_id": "u-1", "locale": "en"})
@@ -70,7 +70,7 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_combined_identity_and_field_filters_use_and_semantics(self) -> None:
         sdk = _seed_store()
 
-        rows = sdk.find(User, user_id="u-1", tag="vip")
+        rows = sdk.entities.where(User, user_id="u-1", tag="vip")
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].identity, {"user_id": "u-1", "locale": "en"})
@@ -79,14 +79,14 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_partial_identity_no_match_returns_empty_list(self) -> None:
         sdk = _seed_store()
 
-        rows = sdk.find(User, user_id="missing")
+        rows = sdk.entities.where(User, user_id="missing")
 
         self.assertEqual(rows, [])
 
     def test_limit_applies_after_partial_identity_filters_match(self) -> None:
         sdk = _seed_store()
 
-        rows = sdk.find(User, user_id="u-1", limit=1)
+        rows = sdk.entities.where(User, user_id="u-1", limit=1)
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].identity["user_id"], "u-1")
@@ -95,7 +95,7 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_zero_filter_find_behavior_is_unchanged(self) -> None:
         sdk = _seed_store()
 
-        rows = sdk.find(User)
+        rows = sdk.entities.where(User)
 
         self.assertEqual(len(rows), 3)
 
@@ -103,7 +103,7 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         sdk = _seed_store()
 
         with self.assertRaises(SDKSchemaError) as ctx:
-            sdk.find(User, unknown="x")
+            sdk.entities.where(User, unknown="x")
 
         self.assertIn("unknown", str(ctx.exception))
         self.assertIn("User", str(ctx.exception))
@@ -112,7 +112,7 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         sdk = _seed_store()
 
         with self.assertRaises(SDKSchemaError) as ctx:
-            sdk.get(User, user_id="u-1")
+            sdk.entities.get(User, user_id="u-1")
 
         self.assertIn("locale", str(ctx.exception))
 
@@ -136,14 +136,13 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_no_new_public_sdk_names_or_read_helpers_are_added(self) -> None:
         sdk = _seed_store()
 
-        self.assertEqual(len(sdk_module.__all__), 41)
-        self.assertIn("ReadPolicy", sdk_module.__all__)
+        self.assertEqual(len(sdk_module.__all__), 64)
+        self.assertNotIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogConfig", sdk_module.__all__)
         self.assertIn("PyReasonConfig", sdk_module.__all__)
         self.assertNotIn("EntityDomainSet", sdk_module.__all__)
-        self.assertFalse(hasattr(sdk.read, "domains"))
-        self.assertFalse(hasattr(sdk.read, "entity"))
+        self.assertFalse(hasattr(sdk, "read"))
 
 
 if __name__ == "__main__":

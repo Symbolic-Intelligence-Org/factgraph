@@ -566,7 +566,7 @@ Derivation(
             meta={"valid_from": "2025-01-01", "version": "v3"},
         )
 
-        snap = sdk.get(User, user_id="u-view", locale="zh")
+        snap = sdk.entities.get(User, user_id="u-view", locale="zh")
         self.assertIsNotNone(snap)
         assert snap is not None  # for type checker
 
@@ -597,7 +597,7 @@ Derivation(
             "broken-format",
             meta={"valid_from": "03/01/2024", "version": 1},
         )
-        snap = sdk.get(User, user_id="u-view-validate", locale="zh")
+        snap = sdk.entities.get(User, user_id="u-view-validate", locale="zh")
         self.assertIsNotNone(snap)
         assert snap is not None
 

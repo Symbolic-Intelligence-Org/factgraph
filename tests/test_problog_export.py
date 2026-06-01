@@ -21,7 +21,7 @@ class User(Entity):
 class ProbLogExportTests(unittest.TestCase):
     def _make_sdk(self) -> SDKStore:
         sdk = SDKStore([User])
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         set_field(
             sdk.ledger,
             pred_id="user:name",
@@ -78,7 +78,7 @@ class ProbLogExportTests(unittest.TestCase):
 
     def test_export_defaults_to_deterministic_without_probability_data(self) -> None:
         sdk = SDKStore([User])
-        alice_ref = sdk.ref(User, user_id="Alice")
+        alice_ref = sdk.entities.ref(User, user_id="Alice")
         set_field(
             sdk.ledger,
             pred_id="user:name",
@@ -318,7 +318,7 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
             label: str = Field()
 
         sdk = SDKStore([Item])
-        ref = sdk.ref(Item, item_id="x")
+        ref = sdk.entities.ref(Item, item_id="x")
         asrt_id = set_field(
             sdk.ledger,
             pred_id="item:label",
@@ -354,7 +354,7 @@ class TestProbLogExportReadsSharedProbability(unittest.TestCase):
             label: str = Field()
 
         sdk = SDKStore([Item])
-        ref = sdk.ref(Item, item_id="x")
+        ref = sdk.entities.ref(Item, item_id="x")
         asrt_id = set_field(
             sdk.ledger,
             pred_id="item:label",
