@@ -78,7 +78,7 @@ The agent's role per `project_release_branch_invariants` is **NOT to execute rel
 ### §4.2 Release machinery inventory (read-only census at draft)
 
 - `scripts/release.sh`: 1 entrypoint, projects source to `release/X.Y.x` and tags `vX.Y.Z[-rc.N]`. Per-trap defense from `feedback_release_workflow_traps` baked in.
-- `scripts/release_surface_allowlist.txt`: 271 lines. Each line = a path that the projection includes; deletions of source files on `master` require simultaneous allowlist edits (T1).
+- `scripts/release_surface_allowlist.txt`: 271 lines. Each line = a path that the projection includes; deletions of source files on the **release source ref** (the `--source-ref` selected at release execution time; v0.2.0 feature-line release source ref candidate per P2-1 LOCK) require simultaneous allowlist edits (T1). `master` referenced here is sacred invariant only, NOT the implied projection source.
 - `scripts/project_release_surface.sh`: the projection script invoked by `release.sh`.
 - `docs/official/kernel/`: public quickstart docs target (per `CLAUDE.md` "Non-workflow content only" doc map).
 - `docs/SECURITY.md`: shipped security policy (CONFIRMED in allowlist).
@@ -155,7 +155,7 @@ If §7 declares "stack ready":
 ## 7. Acceptance
 
 - [ ] Step 4.3 preflight findings table covers all 7 G-buckets (G1-G7) with 5-state classification per row
-- [ ] Every allowlist entry resolves to an existing file in `master` HEAD source
+- [ ] Every allowlist entry resolves to an existing file at the v0.2.0 feature-line release source ref candidate (per P2-1 LOCK; `master` referenced as sacred invariant only)
 - [ ] Every shipped public-API file is either in allowlist OR explicitly classified `(e) deferred-aligned`
 - [ ] All `(c)`-class rows surfaced as formal Open Questions
 - [ ] Stack-ready determination recorded: **YES** with handoff package OR **NO** with fix slice recommendation
