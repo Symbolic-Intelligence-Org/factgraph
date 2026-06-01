@@ -65,6 +65,7 @@ src/factgraph/application/diagnose_runtime.py
 src/factgraph/application/docs/01_overview_en.md
 src/factgraph/application/docs/README.md
 src/factgraph/application/docs/rule.md
+src/factgraph/application/entity_visibility.py
 src/factgraph/application/entity_view.py
 src/factgraph/application/entity_write.py
 src/factgraph/application/fact_overlay_runtime.py
@@ -92,11 +93,13 @@ src/factgraph/application/protocol/rule_expr_lowering.py
 src/factgraph/application/protocol/rule_literal_replace.py
 src/factgraph/application/protocol/schema_runtime.py
 src/factgraph/application/query_runtime.py
+src/factgraph/application/retract_guard.py
 src/factgraph/application/rule_add_condition_runtime.py
 src/factgraph/application/rule_disable_runtime.py
 src/factgraph/application/rule_literal_replace_runtime.py
 src/factgraph/application/schema_mutation_runtime.py
 src/factgraph/application/schema_runtime.py
+src/factgraph/application/value_validation.py
 src/factgraph/application/walker/__init__.py
 src/factgraph/application/walker/_freeze.py
 src/factgraph/application/walker/docs/README.md
@@ -241,6 +244,7 @@ src/factgraph/sdk/error_codes.py
 src/factgraph/sdk/errors.py
 src/factgraph/sdk/facade.py
 src/factgraph/sdk/ingest.py
+src/factgraph/sdk/match_runtime.py
 src/factgraph/sdk/query_lower.py
 src/factgraph/sdk/query_runtime.py
 src/factgraph/sdk/schema.py

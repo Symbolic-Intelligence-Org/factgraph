@@ -183,7 +183,7 @@ Step 4.9 archives audit blueprint + preflight artifact + impl branch.
 - [ ] If fix slice required: shipped after Codex implementation + Claude review + per-fix-slice canonical pytest census ≥ baseline cleanup HEAD `f1e0dc67` (2450 passed / 0 failed, recorded in audit log)
 - [ ] AD/C/E/B1/B2/F + baseline cleanup inherited contracts preserved (verified via re-grep of N1-N24 + baseline N1-N9)
 - [ ] `v0.1-oss-prep` + `master` + `release/0.1.x` + `release/0.2.x` (if exists) all untouched
-- [ ] **[Step 4.4 PF-R2 LOCK]** Step 4.7 fix slice landed 4 mandatory allowlist ADDs (`src/factgraph/application/entity_visibility.py` + `application/retract_guard.py` + `application/value_validation.py` + `sdk/match_runtime.py`); post-fix allowlist count = 275 (from 271) and `scripts/release_surface_allowlist.txt` regression-checked via existing G3.a sweep
+- [x] **[Step 4.4 PF-R2 LOCK]** Step 4.7 fix slice landed 4 mandatory allowlist ADDs (`src/factgraph/application/entity_visibility.py` + `application/retract_guard.py` + `application/value_validation.py` + `sdk/match_runtime.py`); post-fix allowlist count = 275 (from 271) and `scripts/release_surface_allowlist.txt` regression-checked via existing G3.a sweep
 - [ ] **[Step 4.4 PF-R1 LOCK]** Step 4.8 closure documents the final v0.2.0-rc handoff `--source-ref` (post-fix-slice ref) for teammate; explicitly NOT `be0f2351` if any fix slice landed
 - [ ] **[Step 4.4 PF-r3 LOCK]** If Q2/Q3 Option A inline docs ADD chosen, doc-content bad-link cleanup completed in same Step 4.7 commit and post-clean G3.b re-grep returns 0 hits
 
@@ -240,3 +240,16 @@ Preflight surfaced 3 Required + 3 Recommended findings via Codex Step 4.3 review
 - ~~Q5 (G6 source-ref handoff phrasing)~~ — RESOLVED by PF-R1 LOCK
 
 (Final Step 4.8 closure outcome / deviations to be filled after Step 4.7 fix slice + Q2/Q3/Q4 user decisions + Claude review PASS.)
+
+### Step 4.7 fix slice implementation (Codex)
+
+Step 4.7 mandatory PF-R2 fix slice landed on `v0.2.0-impl-release-surface-audit-2026-06-01`: added the 4 projection-completeness allowlist entries required by Step 4.4 PF-R2:
+
+- `src/factgraph/application/entity_visibility.py`
+- `src/factgraph/application/retract_guard.py`
+- `src/factgraph/application/value_validation.py`
+- `src/factgraph/sdk/match_runtime.py`
+
+Post-fix allowlist count is 275 lines (271 + 4). Q2/Q3/Q4 optional docs decisions remain deferred/open by default; no docs were added or edited in this fix slice. Step 4.8 closure must use the final post-fix implementation HEAD as the teammate handoff `--source-ref` per PF-R1.
+
+Verification: `scripts/project_release_surface.sh` completed successfully with 275 projected files at `/tmp/release-surface-audit-check`; canonical pytest census remains clean at 2450 passed / 32 skipped / 1044 subtests passed. Q-PR1 5 paths, sacred master, and dirty baseline all remained unchanged.
