@@ -244,7 +244,7 @@ Per Q-NAMING precedent verification ritual:
 ## 7. Acceptance
 
 - [x] SS1 Rule(where=) — shipped at Step 4.7 SS1; public application Rule fixtures migrated; observed census 189 → 168 (-21) with remaining cohort failures belonging to SS4 SDKStore shape
-- [ ] SS2 engine_options= — classified after SS5; residual fixtures migrated if observable (per Step 4.2 P2-2 + Step 4.4 PF-s1 recensus-gated)
+- [x] SS2 engine_options= — shipped at Step 4.7 SS2; public SDK fixtures migrated to `config=` / explicit old-kwarg rejection while core/adapter DTO `engine_options` paths remain preserved; observed census 81 → 76 (-5)
 - [x] SS3 ReadPolicy import — retired/quarantined; observed census 168 → 139 (-29) with historical red-baseline file moved out of active tests
 - [x] SS4 SDKStore shape — shipped at Step 4.7 SS4; tests migrated to namespaced managers (`fg.entities.ref/get/match/where`, `fg.fields.set/add`, `fg.assertions.retract`); observed census 139 → 94 (-45); flat-shell restoration explicitly OUT of scope (requires separate Red blueprint per Q-NAMING-C precedent)
 - [x] SS5 meta[confidence] — shipped at Step 4.7 SS5; write-protocol fixtures migrated to Uncertainty Phase 1 DSL (`raw_kind="probabilistic"`, point `bound=[x, x]`); observed census 94 → 81 (-13)

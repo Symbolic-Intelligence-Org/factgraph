@@ -15,6 +15,7 @@ from factgraph.core.store.types import EngineExtBase
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import EmitSpec, Inference, Pred
+from factgraph.sdk.errors import SDKStoreError
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStore
 
@@ -92,39 +93,35 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertEqual(candidates[0].support_kind, PROBLOG_PROVENANCE_KIND)
         self.assertNotEqual(candidates[0].support_digest, f"sha256:{'0' * 64}")
 
-    @patch("factgraph.adapters.problog.engine_eval.run_problog")
-    def test_engine_options_timeout_override_default(self, mock_run) -> None:
+    def test_sdk_evaluate_rejects_engine_options_timeout(self) -> None:
         sdk = self._make_sdk()
-        mock_run.return_value = self._mock_output(sdk)
 
         compiled = sdk._compile_derivation_input(self._make_derivation())
         self.assertNotIn("engine_options", compiled[0])
 
-        candidates = sdk.eval.evaluate(
-            self._make_derivation(),
-            engine="problog",
-            engine_options={"timeout": 7},
-        )
-
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(mock_run.call_args.kwargs["timeout"], 7)
-        self.assertTrue(mock_run.call_args.kwargs["trace"])
+        with self.assertRaises(SDKStoreError) as ctx:
+            sdk.eval.evaluate(
+                self._make_derivation(),
+                engine="problog",
+                engine_options={"timeout": 7},
+            )
+        self.assertIn("engine_options", str(ctx.exception))
 
     def test_unknown_engine_option_raises(self) -> None:
         sdk = self._make_sdk()
 
-        with self.assertRaises(ValueError) as ctx:
+        with self.assertRaises(SDKStoreError) as ctx:
             sdk.eval.evaluate(self._make_derivation(), engine="problog", engine_options={"timesteps": 5})
 
-        self.assertIn("Supported keys: timeout", str(ctx.exception))
+        self.assertIn("engine_options", str(ctx.exception))
 
     def test_bad_timeout_type_raises(self) -> None:
         sdk = self._make_sdk()
 
-        with self.assertRaises(ValueError) as ctx:
+        with self.assertRaises(SDKStoreError) as ctx:
             sdk.eval.evaluate(self._make_derivation(), engine="problog", engine_options={"timeout": "slow"})
 
-        self.assertIn("positive int", str(ctx.exception))
+        self.assertIn("engine_options", str(ctx.exception))
 
     def test_non_problog_engine_ext_is_rejected(self) -> None:
         sdk = self._make_sdk()

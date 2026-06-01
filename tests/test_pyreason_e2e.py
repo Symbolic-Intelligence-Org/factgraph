@@ -21,7 +21,9 @@ from factgraph.core.store.ledger import Claim
 from factgraph.sdk.compile import compile_schema_from_classes
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import EmitSpec, Inference, Pred
+from factgraph.sdk.errors import SDKStoreError
 from factgraph.sdk.schema import Entity, Field, Identity, Relationship
+from factgraph.sdk.semantics import PyReasonConfig
 from factgraph.sdk.store import SDKStore
 
 
@@ -174,14 +176,14 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(rules, [("popular(u) : [0.8, 0.9] <-0 name(u)", "derived_popular")])
 
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
-    def test_engine_options_are_call_time_only_and_forwarded(self, mock_run) -> None:
+    def test_public_pyreason_config_sets_iteration_count(self, mock_run) -> None:
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
         compiled = sdk._compile_derivation_input(derivation)
         self.assertNotIn("engine_options", compiled[0])
 
-        sdk.eval.evaluate(derivation, engine="pyreason", engine_options={"timesteps": 5})
+        sdk.eval.evaluate(derivation, config=PyReasonConfig(iteration_count=5))
 
         config = mock_run.call_args.kwargs["config"]
         self.assertEqual(config.timesteps, 5)
@@ -191,10 +193,10 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        with self.assertRaises(ValueError) as ctx:
+        with self.assertRaises(SDKStoreError) as ctx:
             sdk.eval.evaluate(derivation, engine="pyreason", engine_options={"atom_trace": True})
 
-        self.assertIn("Supported keys: timesteps", str(ctx.exception))
+        self.assertIn("engine_options", str(ctx.exception))
 
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_runner_receives_materialized_edb_from_ledger(self, mock_run) -> None:
