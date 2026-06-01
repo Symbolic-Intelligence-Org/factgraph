@@ -106,9 +106,9 @@ selections appear to the user.
 | Surface | Methods | Notes |
 | --- | --- | --- |
 | `fg.schema` | `register(EntityCls)`, `extend(EntityCls)`, `apply(EntityCls)`, `ingest(...)`, `validate_provenance(obj, *, standard="derivation_v1")` | Schema mutation is explicit: register new entity types, extend existing entity types additively, or apply either safe path. Delete, rename, identity changes, and destructive migrations are not part of the current surface. |
-| `fg.entities` | `create(EntityCls, **identity)`, `delete(...)`, `exists(EntityCls, **identity)`, `edit(EntityCls, **identity)`, `ref(EntityCls, **identity)`, `get(EntityCls, **identity)`, `where(EntityCls, **partial_filters)`, `match(EntityCls, rule_or_expr, **ports)` | Owns entity lifecycle, deterministic refs, full-coordinate snapshots, matching-snapshot collections, and rule-backed snapshot reads. |
-| `fg.fields` | `set(field, ref, value, meta=None)`, `add(field, ref, value, meta=None)`, `retract(field, ref, value, meta=None)`, `delete(field, ref, meta=None)`, `get(field, ref)` | Appends or retracts field assertions. `set` is for single-cardinality fields; `add` is for multi-cardinality fields. |
-| `fg.assertions` | `by_id(asrt_id)`, `by_ids(asrt_ids)`, `field(Field)`, `where(...)`, `active`, `all`, `retract(asrt_id, meta=None)` | Graph-scoped assertion-record readback, selection, and assertion-id retract. See [Assertion records and views](assertions.md) for the full assertion model. |
+| `fg.entities` | `create(EntityCls, **identity)`, `delete(e_ref_or_cls, *, meta=None, **identity)`, `exists(EntityCls, **identity)`, `edit(EntityCls, **identity)`, `ref(EntityCls, **identity)`, `get(EntityCls, **identity)`, `where(EntityCls, *, limit=None, _meta=None, **field_filters)`, `match(EntityCls, template, *, limit=None, **port_constraints)` | Owns entity lifecycle, deterministic refs, full-coordinate snapshots, matching-snapshot collections, and rule-backed snapshot reads. `_meta=` accepts an `AssertionMeta`-shaped filter dict; flat `source=`/`trace_id=` etc. are rejected. |
+| `fg.fields` | `set(field, e_ref, value, *, meta=None)`, `add(field, e_ref, value, *, meta=None)`, `retract(field_or_identity, e_ref, value, *, meta=None)`, `delete(field_or_identity, e_ref, *, meta=None)`, `get(field, e_ref)` | Appends or retracts field assertions. `set` is for single-cardinality fields; `add` is for multi-cardinality fields. `retract`/`delete` accept either a `Field` or an `Identity` descriptor. |
+| `fg.assertions` | `by_id(asrt_id)`, `by_ids(asrt_ids, *, strict=False)`, `field(Field)` → `AssertionView`, `where(...)`, `active`, `all`, `retract(asrt_id, *, meta=None)` | Graph-scoped assertion-record readback, selection, and assertion-id retract. `field(...)` returns `AssertionView`; `active` / `all` properties return `AssertionRecordSet`. See [Assertion records and views](assertions.md) for the full assertion model. |
 
 ```text
 schema declaration -> managed ref -> assertion write -> snapshot read
@@ -124,7 +124,7 @@ is not a read policy and not a dynamic query.
 
 | Surface | Methods | Returns |
 | --- | --- | --- |
-| `fg.assertion_views` | `create(name, asrt_ids=[...])`, `update(name, asrt_ids=[...])`, `delete(name)`, `get(name)`, `list()` | `FrozenAssertionSet` per item; `dict[str, FrozenAssertionSet]` for `list()`. |
+| `fg.assertion_views` | `create(name, *, asrt_ids=None, asrts=None)`, `update(name, *, asrt_ids=None, asrts=None)`, `delete(name)`, `get(name)`, `list()` | `FrozenAssertionSet` per item; `dict[str, FrozenAssertionSet]` for `list()`. Provide either `asrt_ids=` (a list of assertion ids) or `asrts=` (a list of records); both forms are accepted. |
 
 Session-local `fg.assertion_views` entries are in-memory and are not part of the
 workspace save format. Durable Database views are created with
@@ -140,9 +140,9 @@ described and executed.
 
 | Surface | Methods | Notes |
 | --- | --- | --- |
-| `fg.rules` | `inspect(rule_or_inference_or_query)` | `inspect(...)` shows structure for in-memory `Rule`, `Inference`, or `Query` values. |
-| `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. The empty namespace is a deliberate **v0.2 compatibility placeholder** — `Inference` authoring stays available but new code prefers application `Rule` (`build_application_rule(...)`) + `RuleExpr` composition (see [Rules and inferences](rules-and-inferences.md#evaluate-an-inference)); the namespace remains as a reserved name without removal date. |
-| `fg.eval` | `evaluate(inference_or_expr, *, head=None, engine=None, config=None)`, `explain(expr, *, head=closed_head)`, `preview_config(semantics_or_profile)` | `evaluate(...)` is read-only and returns `EvaluateResult`. `explain(...)` replays a closed-head explanation. `preview_config(...)` previews wrapper or profile shape without running an engine. |
+| `fg.rules` | `inspect(rule_or_inference)` | `inspect(...)` shows structure for in-memory SDK `Rule` or `Inference` (or application `Rule` / `RuleExpr`) values. `Query` is not supported and raises `SDKStoreError`. |
+| `fg.inferences` | *(empty namespace)* | Inferences are in-memory `Inference(...)` values evaluated through `fg.eval.evaluate(...)`. The empty namespace is a deliberate **v0.2 compatibility placeholder** — `Inference` authoring stays available but new code prefers application `Rule` (`build_application_rule(...)`) + `RuleExpr` composition (see [Rules and inferences](rules-and-inferences.md#legacy-compatibility-evaluate-an-inference)); the namespace remains as a reserved name without removal date. |
+| `fg.eval` | `evaluate(inference_or_expr, *, head=None, engine=None, config=None)`, `explain(expr, *, head=closed_head)`, `preview_config(semantics_or_profile)` | `evaluate(...)` is read-only and returns `EvaluateResult`. `explain(...)` replays a closed-head explanation. `preview_config(...)` previews wrapper or profile shape without running an engine. `evaluate(...)` explicitly rejects the legacy/internal kwargs `view=`, `policy=`, `semantics_profile=`, `mode=`, `temporal_view=`, `registry=`, and `engine_options=` with actionable error messages. |
 
 Public DSL value objects are `Rule`, `Inference`, `Query`, `Case`, `Pred`,
 `Not`, `RuleRef`, and `vars`. Saved rule/inference handles were removed; pass
@@ -170,13 +170,15 @@ persistence.
 
 | Surface | Methods | Notes |
 | --- | --- | --- |
-| `fg.package` | `export_package(out_dir, options)`, `run_package(package_dir, entrypoints=[...], engine="souffle")` | Packages and workspaces have different scopes. Workspace lifecycle is `FactGraph.create(path=...)`, `fg.save_workspace(...)`, and `FactGraph.load_workspace(...)`. |
+| `fg.package` | `export_package(out_dir, options: ExportOptions)`, `run_package(package_dir, entrypoints=[...], engine="souffle")` | Packages and workspaces have different scopes. Workspace lifecycle is `FactGraph.create(path=...)`, `fg.save_workspace(...)`, and `FactGraph.load_workspace(...)`. |
 
 ## Public imports panorama
 
-Everything in `factgraph.sdk.__all__`, grouped by purpose. The intent of this
-table is to answer "what should I import for this task?" without scanning the
-whole module.
+Selected exports from `factgraph.sdk.__all__`, grouped by purpose. The intent
+of this table is to answer "what should I import for this task?" without
+scanning the whole module. The full `__all__` list has 64 entries and
+includes additional error types, error codes, and protocol DTOs not
+duplicated in the per-purpose groups below.
 
 | Group | Names | Use it for |
 | --- | --- | --- |
@@ -193,7 +195,7 @@ whole module.
 ## What is not on this surface
 
 The kernel SDK does not own these surfaces. Some are different layers of the
-same project; some are out of scope for `factpy-kernel` entirely.
+same project; some are out of scope for `factgraph` entirely.
 
 - Service routes, HTTP payloads, and service authentication.
 - Agent workflows, dialog runtime, and conversation memory.
@@ -221,8 +223,8 @@ same project; some are out of scope for `factpy-kernel` entirely.
 - `FactGraph.create(schema_classes=[...], path=...)` is the normal constructor.
 - `FactGraph.load_workspace(path, schema_classes=[...])` restores a workspace.
 - `fg.save_workspace(path=None)` persists ledger, schema IR, registry, and manifest.
-- `fg.batch(meta=...)` opens a batch transaction; batch `save(...)` is unrelated
-  to graph save.
+- `fg.batch(*, meta=None)` opens a batch transaction; batch `save(...)` is
+  unrelated to graph save.
 - `fg.schema.register(...)`, `fg.schema.extend(...)`, and
   `fg.schema.apply(...)` return `SchemaAddResult`.
 - `fg.entities.ref(...)`, `fg.entities.get(...)`, and

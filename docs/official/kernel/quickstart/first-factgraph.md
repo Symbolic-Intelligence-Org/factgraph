@@ -52,9 +52,12 @@ The returned value is an opaque `idref_v1` token for "the `User` whose
 `user_id` is `u-1`". Treat it as a handle returned by the SDK; do not parse or
 construct it yourself.
 
-If you only need the deterministic reference for a coordinate that was already
-seen by the graph, use `fg.entities.ref(...)`. For new application code,
-`fg.entities.create(...)` is the explicit entity-lifecycle entry point.
+`fg.entities.ref(...)` returns the deterministic reference for an identity
+coordinate and registers the bundle in the SDK shadow store, without writing
+identity Claims to the ledger; it works for both already-seen and new
+coordinates. For new application code, `fg.entities.create(...)` is the
+explicit entity-lifecycle entry point (it writes Identity Claims and a
+`<EntityType>:exists` Claim atomically).
 
 ## Write facts
 
@@ -117,7 +120,8 @@ assert tuple(snap.tags) == ("engineer",)
 - `FactGraph.create(...)` builds the graph.
 - `fg.entities.create(...)` creates an entity coordinate.
 - `fg.entities.ref(...)` returns a deterministic reference for an identity
-  coordinate already known to the graph.
+  coordinate and registers the bundle in the SDK shadow store (no ledger
+  writes).
 - `fg.fields.set(...)` writes a single-value field.
 - `fg.fields.add(...)` writes a multi-value field.
 - `fg.entities.get(...)` reads the current snapshot.

@@ -32,7 +32,7 @@ The fields fall into four roles:
 | --- | --- |
 | Envelope identity | `result_id` (`evalr_v1:...`), `run_id` (`run_v1:...`), `result_digest` (`sha256:...`) |
 | Replay anchors | `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `config_digest` (or `None`) |
-| Engine provenance | `engine` (`"native"` / `"problog"` / `"pyreason"`), `engine_version`, `adapter_version` |
+| Engine provenance | `engine` (`"native"` / `"problog"` / `"pyreason"`), `engine_version` (or `None`), `adapter_version` (or `None`) |
 | Evaluation context | `head` (the closed application `Rule`), `evaluated_at` (`datetime` UTC), `rows` (`tuple[EvaluateRow, ...]`) |
 
 Row access:
@@ -110,7 +110,7 @@ projections.
 ledger and engine adapters. The invariant `raw_kind is None ⇒ bound is None`
 holds; the reverse pairing is enforced by the protocol. This is the
 read-side projection of the same single-source contract documented at
-[Canonical quantitative carrier](assertions.md#canonical-quantitative-carrier)
+[Raw uncertainty: raw_kind and bound](assertions.md#raw-uncertainty-raw_kind-and-bound)
 on the write side — same two fields, never duplicated, never normalized to
 a single number.
 
@@ -232,7 +232,10 @@ result = fg.eval.evaluate(rule, head=rule)
 row = result.first()
 closed_head = row.close()
 
-# Mutate the ledger so the closed head's facts no longer hold
+# Mutate the ledger so the closed head's facts no longer hold.
+# (`fg.fields.set` writes to an unattached SDKStore; on a `FactGraph.attach(db, ...)`
+# read-only runtime it raises `SDKStoreError` and you would mutate the underlying
+# `Database` directly instead.)
 fg.fields.set(User.name, alice, "Bob")
 
 e = fg.eval.explain(rule, head=closed_head)

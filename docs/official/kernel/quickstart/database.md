@@ -28,8 +28,9 @@ intentionally unsupported.
 | Durable frozen assertion-id objects | `db.create_view(...)` |
 | Session-local named id sets | `fg.assertion_views.create(...)` |
 
-`FactGraph.save_workspace()` and `FactGraph.load_workspace(...)` remain the high-level workspace
-path. `Database` is useful when you need the lower Database boundary directly.
+`fg.save_workspace()` (an instance method) and `FactGraph.load_workspace(...)` (a classmethod)
+remain the high-level workspace path. `Database` is useful when you need the lower Database
+boundary directly.
 
 ## Define a schema IR
 
@@ -201,9 +202,11 @@ assert commit.value == db.head()
 assert record.asrt_id.startswith("asrt:")
 ```
 
-`ingested_at` is required for snapshot projection policies. The Database commit
-surface is lower-level than `fg.fields.*`, so this example supplies it
-explicitly.
+`ingested_at` is consumed by downstream snapshot projection policies (notably
+the `:active` projection). The Database commit API itself does not require it,
+but providing it makes the commit consumable by those policies without further
+post-processing. The Database commit surface is lower-level than `fg.fields.*`,
+so this example supplies it explicitly.
 
 Attached SDK readback works at the assertion-record layer:
 
@@ -275,6 +278,8 @@ write.
 ### Same name, different ids creates a *new* view; the old one stays
 
 ```python
+# `other_record` is a second assertion committed alongside `record` earlier;
+# any second assertion id can stand in here.
 v_one = db.create_view("review", [record.asrt_id])
 v_two = db.create_view("review", [record.asrt_id, other_record.asrt_id])
 
@@ -335,8 +340,8 @@ different:
 
 | Surface | Shape | Persistence | Purpose |
 | --- | --- | --- | --- |
-| `fg.assertion_views.create(...)` | `name`, `asrt_ids` | In-memory only | Session-local named assertion-id sets |
-| `db.create_view(...)` | `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest` | Durable `views/objects` object | Database-owned frozen scope object |
+| `fg.assertion_views.create(...)` | `FrozenAssertionSet` (6 fields: `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest`) | In-memory only; SDK-owned anchors (`db_id="db:<sdk>"`, empty `base_tx_id`/`schema_digest`) | Session-local named assertion-id sets |
+| `db.create_view(...)` | `FrozenAssertionSet` (same 6-field dataclass) | Durable `views/objects/<view_digest>.json` object; anchored to a real Database head | Database-owned frozen scope object |
 
 SDK views are not written by `fg.save_workspace(...)`, and `FactGraph.load_workspace(...)` does not
 restore them. Database durable views are content-addressed objects owned by the

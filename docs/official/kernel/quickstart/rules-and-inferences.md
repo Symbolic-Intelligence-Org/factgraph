@@ -80,9 +80,10 @@ the rule is read-only.
 `Rule` is the **data shape** — a frozen dataclass at
 `factgraph.application.protocol.Rule` with `when: tuple[Atom, ...]` and
 `ports: Mapping[str, Var]`. Its `when` field accepts **core-level atom
-objects** (`PredAtom`, `CmpAtom`, `BuiltinAtom`, `NotAtom`, `InAtom`,
-`AggregateAtom`), not the SDK DSL forms `Entity(var)` / `Entity(var).field
-== value`.
+objects** (`PredAtom`, `CmpAtom`, `BuiltinAtom`, `NotAtom`, `InAtom`),
+not the SDK DSL forms `Entity(var)` / `Entity(var).field == value`.
+(`AggregateAtom` is a **Term**, not an `Atom`, and may only appear
+nested inside `CmpAtom` left/right-hand sides.)
 
 `build_application_rule(...)` is the **canonical SDK factory** that bridges
 between user-facing DSL and the underlying `Rule` data shape:

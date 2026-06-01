@@ -32,12 +32,16 @@ alice = fg.entities.create(User, user_id="u-1")
 ```
 
 The reference is the graph coordinate for "the `User` whose `user_id` is
-`u-1`". It is an opaque `idref_v1` token. Treat it as a handle returned by the
-SDK, not as a string you parse or construct yourself.
+`u-1`". The token has a canonical `idref_v1:` prefix and an opaque payload;
+treat it as a handle returned by the SDK and do not parse or construct it
+yourself.
 
-`fg.entities.create(...)` emits the entity identity. `fg.entities.ref(...)`
-returns the deterministic reference for an identity coordinate and is useful
-when the graph has already seen that coordinate.
+`fg.entities.create(...)` emits the entity identity (writes Identity Claims
+plus a `<EntityType>:exists` Claim to the ledger). `fg.entities.ref(...)`
+returns the deterministic reference for an identity coordinate and registers
+the bundle in the SDK shadow store, without writing identity Claims to the
+ledger. Use `create(...)` for explicit entity-lifecycle entries, and `ref(...)`
+when you only need the reference for follow-up `fg.fields.*` writes.
 
 ## Single and multi writes
 
@@ -142,7 +146,8 @@ Here `tag_reviewer` is the `asrt_id` returned by the earlier
 of the active set into history. The retract itself is a separate ledger record.
 
 Identity Claims are protected. Attempting to retract an identity assertion by
-id raises `INV_7C_IDENTITY_PROTECTED`; use `fg.entities.delete(...)` for whole
+id raises `SDKStoreError` with code `INV_7C_IDENTITY_PROTECTED`; use
+`fg.entities.delete(...)` for whole
 entity lifecycle changes.
 
 ## Complete example

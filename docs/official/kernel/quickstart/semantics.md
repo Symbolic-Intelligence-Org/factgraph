@@ -174,7 +174,8 @@ ProbLog point export supports `lower`, `midpoint`, and `upper` for interval
 bounds. It also supports `identity_probability` for probabilistic degenerate
 bounds such as `[0.7, 0.7]`. `probability_interval` and
 `possibility_interval` are canonical policy names, but they are not accepted by
-ProbLog point export.
+ProbLog point export. (The `reject` policy is also accepted by the validator
+but, as its name implies, blocks projection rather than producing a point.)
 
 This is intentionally anti-silent-ignore: midpoint is a semantic choice, not a
 default. If raw uncertainty is present and no matching policy is configured,
@@ -321,7 +322,7 @@ assert row is not None
 
 # A probabilistic adapter may populate raw_kind/bound carriers on rows.
 # Deterministic/native rows keep both fields as None.
-# See assertions.md "Canonical quantitative carrier" for the underlying
+# See assertions.md "Raw uncertainty: raw_kind and bound" for the underlying
 # contract: raw_kind and bound are paired (both None or both populated),
 # and deterministic is None/None rather than (1.0, 1.0).
 assert (row.raw_kind is None) == (row.bound is None)

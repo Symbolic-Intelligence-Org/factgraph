@@ -1,6 +1,6 @@
 # Quickstart
 
-A sequential path through the public `factpy-kernel` API.
+A sequential path through the public `factgraph` API.
 
 1. [Your first FactGraph](first-factgraph.md)
 2. [Define a schema](schema.md)

@@ -171,6 +171,45 @@ same = snap.field("name").all.by_id(name_seed).one()
 assert same.asrt_id == name_seed
 ```
 
+## Raw uncertainty: raw_kind and bound
+
+`raw_kind` and `bound` are the canonical quantitative carrier for
+user-authored uncertainty on write APIs (`fg.fields.set`, `fg.fields.add`,
+`fg.assertions.retract`) and on row-level evidence (`row.raw_kind`,
+`row.bound`).
+
+**Pairing contract** (enforced by `write_protocol.py`):
+
+- `meta["raw_kind"]` and `meta["bound"]` must be **provided together or
+  not at all**. Providing only one raises `WriteProtocolError("meta[raw_kind]
+  and meta[bound] must be provided together")`.
+- `meta["raw_kind"]` must be one of `"probabilistic"` or `"possibilistic"`.
+- `meta["bound"]` must be a two-element JSON list of finite floats in `[0,1]`
+  with `lower <= upper`.
+- The legacy keys `confidence` and `confidence_source` are removed; passing
+  them raises `WriteProtocolError("meta[confidence] was removed. Use
+  raw_kind / bound for uncertainty inputs.")`.
+
+**Row-level mirror invariant** (enforced on `EvaluateRow` and `Explanation`):
+
+- `row.raw_kind is None ⇒ row.bound is None`.
+- `(row.raw_kind is not None and row.bound is not None)` ⇒ pairing holds.
+
+**Example**:
+
+```python
+# Write an assertion with raw uncertainty:
+fg.fields.set(
+    User.name, alice, "Alice",
+    meta={"raw_kind": "probabilistic", "bound": [0.85, 0.85]},
+)
+```
+
+See `semantics.md` for how `raw_kind` / `bound` originate from rule
+evaluation under `ProbLogConfig` / `PyReasonConfig`, and `evidence.md` for
+how they propagate into the row-level `EvaluateRow` and `Explanation`
+shapes.
+
 ## Graph-level assertion lookup
 
 Use `fg.assertions.by_id(...)` and `fg.assertions.by_ids(...)` when you already

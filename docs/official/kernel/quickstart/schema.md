@@ -192,7 +192,9 @@ assert tuple(updated.skills) == ()
 ```
 
 After a successful extension, use the replacement class object for reads and
-writes. Superseded descriptors belong to the older schema declaration.
+writes. Superseded descriptors belong to the older schema declaration, and
+reusing the original class object after extension raises `SDKStoreError`
+("`<EntityType>` is superseded; use the latest schema class").
 
 ## Applying a safe schema diff
 

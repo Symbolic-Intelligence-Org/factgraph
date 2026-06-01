@@ -1,6 +1,6 @@
-# factpy-kernel official docs
+# factgraph official docs
 
-This is the canonical user documentation for `factpy-kernel`.
+This is the canonical user documentation for `factgraph`.
 The release is kernel-only; service, agent, and extraction docs live elsewhere.
 
 Start with the [Quickstart](quickstart/index.md). The quickstart is the
