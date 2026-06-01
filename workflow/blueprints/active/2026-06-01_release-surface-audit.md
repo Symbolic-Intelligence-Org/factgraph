@@ -9,7 +9,8 @@
   - `scripts/project_release_surface.sh` (projection script)
   - `src/factgraph/` (current canonical source namespace, post-2026-04-27 split)
   - `docs/official/kernel/` (public quickstart docs target)
-  - `docs/SECURITY.md` + `docs/api/openapi.yaml` (release-surface docs)
+  - `docs/SECURITY.md` (release-surface doc; confirmed in `scripts/release_surface_allowlist.txt`)
+  - `docs/api/openapi.yaml` (**candidate** release-surface doc; **[LOCKED Step 4.2 P2-3]** file exists but is NOT in allowlist — must be classified as a Step 4.3 preflight finding row, NOT assumed shipped)
 - Related Docs:
   - [`workflow/blueprints/archive/2026-06-01_baseline-drift-cleanup.md`](./2026-06-01_baseline-drift-cleanup.md) — direct predecessor; cleared 189 baseline failures to 0
   - [`workflow/blueprints/archive/2026-05-31_q-naming-f.md`](./2026-05-31_q-naming-f.md) — final Q-NAMING phase that closed the 6-phase naming routemap
@@ -39,13 +40,16 @@ The agent's role per `project_release_branch_invariants` is **NOT to execute rel
 
 ## 2. Goals
 
-- **G1 Allowlist freshness vs Q-NAMING-C/F + baseline cleanup changes**: verify every entry in `scripts/release_surface_allowlist.txt` still resolves to an existing file; verify no shipped public-API file is missing from allowlist; classify each delta into `(a) shipped covers / (b) small gap / (c) shape conflict / (d) genuinely new / (e) deferred-aligned` (5-state per CADENCE Stage 1).
-- **G2 Test exclusion landscape**: enumerate any test file in `tests/` or `src/domains/*/tests/` that imports modules not present in the kernel-only release projection (per T2). Post-2026-04-27 namespace is `src/factgraph/`, NOT the historical `src/factpy_kernel/` or `src/kernel/`; verify excluded-import patterns are reset to current reality.
-- **G3 Deny-pattern audit**: grep shipped docs (those in allowlist) for references to private dev-only paths (`AGENTS.md`, `docs/blueprints/`, `docs/references/`, `workflow/`, `CLAUDE.md`, `AGENTS.md` in any sub-package) per T3. Each hit triages to (a) legitimate cross-ref / (b) needs rephrasing.
+- **G1 Allowlist current-projection consistency (per Step 4.2 P3-1 ownership split)**: G1 owns **current** allowlist freshness — verify every entry in `scripts/release_surface_allowlist.txt` still resolves to an existing file at the v0.2.0 feature-line ref (regression check for Q-NAMING-C 20-shell deletion, Q-NAMING-F 12-cluster renames, baseline cleanup SS3 retired-file relocation, etc.). G1 does NOT own "what new files since v0.1.0-rc.1 should be added" — that belongs to G7. Classification per 5-state per CADENCE Stage 1.
+- **G2 Test exclusion landscape (split per Step 4.2 P2-4)**:
+  - **G2.a Release-verify test set freshness**: `scripts/release.sh:213-224` invokes a fixed focused unittest set of **11 named test modules** (`tests.application.protocol.test_rule`, `tests.application.protocol.test_rule_expr`, `tests.sdk.test_ruleexpr_inspect`, `tests.sdk.test_rule_naming`, `tests.application.protocol.test_rule_aggregate`, `tests.test_branch_identity_rule_inspect`, `tests.application.protocol.test_rule_expr_lowering`, `tests.application.protocol.test_rule_expr_lowering_adapter`, `tests.sdk.test_rule_expr_evaluate`, `tests.application.protocol.test_rule_expr_head_validation`, `tests.test_sdk_assertion_record_set_view_filters`). G2.a verifies each module (i) still exists at the feature-line ref, (ii) imports only allowlisted modules, (iii) passes under current shipped state. If any was renamed/retired by Q-NAMING / baseline cleanup, surface as drift. **[LOCKED Step 4.2 P2-4]**
+  - **G2.b Excluded dev tests verification**: every other `tests/**/*.py` is intentionally OUT of the release projection (the projection only includes allowlisted files; non-allowlisted tests stay on `master` but do not project). G2.b verifies that **excluded tests' import-chain dependencies (the modules they import) are correctly classified** — an excluded test importing a non-existent or rename-targeted module is harmless to the projection (test stays excluded), but is a signal worth flagging for separate cleanup, NOT a release blocker. G2.b is informational classification, not pass/fail.
+  - Post-2026-04-27 namespace is `src/factgraph/`, NOT historical `src/factpy_kernel/` or `src/kernel/`; G2.a + G2.b both ground in current namespace reality.
+- **G3 Deny-pattern audit (shipped grounded per Step 4.2 P2-5)**: mirror the two shipped pattern sets in `scripts/project_release_surface.sh` exactly. **(G3.a Deny-list path check)** verify no allowlisted file matches any `deny_patterns` entry from `project_release_surface.sh:56-87` (`.claude/*`, `AGENTS.md`, `*/AGENTS.md`, `CLAUDE.md`, `*/CLAUDE.md`, `memory/*`, `docs/blueprints/*`, `docs/blueprint_history/*`, `docs/references/*`, `src/agent/*`, `src/service/*`, `src/domains/*`, `third_party/*`, `tools/*`, `.tmp_backend_preview/*`, `.gitmodules`, `requirements/dev.txt`, `scripts/*`, `*/__pycache__/*`, `*.pyc`, `dist/*`, `build/*`, `*.egg-info/*`, `archive/*`, `out/*`, `*_demo_output/*`, `test.ipynb`, `context.md`, `关于mvp的思考.md`, `best_conf.csv`, `path_conf.csv`). **(G3.b Bad-link doc-content grep)** grep allowlisted docs for any reference matching `bad_link_pattern` from `project_release_surface.sh:100` (`docs/blueprints|docs/blueprint_history|docs/references|memory/|\.claude|AGENTS\.md|src/agent|src/service|src/domains|src/kernel|kernel\.sdk|from kernel|third_party|tools/|requirements/dev\.txt|examples/|samples/`). Each hit triages to (a) legitimate cross-ref / (b) needs rephrasing per T3 precedent commit `0275396`.
 - **G4 EN-only verification**: scan allowlist for any `*.zh.md` entries; scan shipped source/docs for CN halves of CN/EN pairs that would need T6 projection handling. Verify v0.2.0 maintains v0.1.0-rc.1's EN-only kernel artifact convention.
 - **G5 typing-extensions environment hygiene (informational)**: document the current host env state per T5; this is environment hygiene, not a code/doc fix, but the audit records the check.
-- **G6 release.sh dry-run feasibility**: assess whether a `--dry-run` invocation of `scripts/release.sh v0.2.0-rc.1` is **safe to attempt** at audit time (without authorization to perform the dry-run itself). Identify any blocker that would prevent dry-run before the user authorizes it.
-- **G7 v0.2.0 fresh additions delta vs v0.1.0-rc.1**: enumerate every shipped public-API file added since v0.1.0-rc.1 publish HEAD `1aa157cc` that requires new allowlist entries; surface any module/file expectation gap.
+- **G6 release.sh dry-run feasibility ASSESSMENT-ONLY**: **[LOCKED Step 4.2 P2-2 — stricter boundary]** `release.sh --dry-run` is **NOT read-only** — it creates a local milestone branch, worktrees, release branch and tag, then cleanup-restores refs. It also requires a CLEAN tracked working tree. The audit's dirty baseline (4 M + 2 D + 2 untracked) is INTENTIONALLY preserved, making the current worktree **incompatible** with release.sh execution. G6 is therefore **assessment ONLY**: produce a written readiness report + blocker enumeration; **NEVER execute `release.sh` (with or without `--dry-run`)** during this audit. The current worktree is NOT the execution target for any future dry-run. Any future dry-run requires (i) explicit user authorization AND (ii) a clean isolated worktree/ref distinct from the current dirty baseline.
+- **G7 v0.2.0 fresh additions delta vs v0.1.0-rc.1 (per Step 4.2 P3-1 ownership split)**: G7 owns **forward** delta only — enumerate every shipped public-API file added since v0.1.0-rc.1 publish HEAD `1aa157cc` that is a CANDIDATE for new allowlist entry, and surface inclusion/defer decisions per row. G7 does NOT own "is current allowlist still valid for already-shipped files" — that belongs to G1. Classification per 5-state per CADENCE Stage 1.
 
 ## 3. Non-goals
 
@@ -77,8 +81,8 @@ The agent's role per `project_release_branch_invariants` is **NOT to execute rel
 - `scripts/release_surface_allowlist.txt`: 271 lines. Each line = a path that the projection includes; deletions of source files on `master` require simultaneous allowlist edits (T1).
 - `scripts/project_release_surface.sh`: the projection script invoked by `release.sh`.
 - `docs/official/kernel/`: public quickstart docs target (per `CLAUDE.md` "Non-workflow content only" doc map).
-- `docs/SECURITY.md`: shipped security policy.
-- `docs/api/openapi.yaml`: shipped OpenAPI spec.
+- `docs/SECURITY.md`: shipped security policy (CONFIRMED in allowlist).
+- `docs/api/openapi.yaml`: file exists in repo but **NOT in allowlist per Step 4.2 P2-3 LOCK**; status as release-surface doc is UNRESOLVED. Step 4.3 preflight 2.b will classify this into 5-state (likely `(c) shape conflict` or `(d) genuinely new` requiring user decision).
 
 ### §4.3 Predecessor commit lineage referenced by this audit
 
@@ -144,8 +148,8 @@ If §7 declares "stack ready":
 - **Dirty baseline**: 8 entries (4 M + 2 D + 2 untracked) preserved through every commit.
 - **N7 layer authority**: preserved; audit does NOT touch `src/factgraph/`. If audit surfaces a drift that requires source touch, it is recorded as a finding for separate fix slice — NOT auto-implemented.
 - **AD/C/E/B1/B2/F + baseline cleanup inherited contracts**: N1-N24 + baseline cleanup N1-N9 all preserved; no re-litigation.
-- **Release execution boundary**: this blueprint NEVER executes `scripts/release.sh`. If §7 recommends a dry-run, that recommendation is delivered to the user, who decides whether to authorize.
-- **Push policy**: feature branches (`v0.2.0-blueprint-release-surface-audit-2026-06-01` + any preflight + any impl) may be pushed to `hnsm-backend/origin` only with explicit user authorization at each push. `master` push NEVER auto. Projection to `factgraph` repo NEVER by agent.
+- **Release execution boundary**: this blueprint NEVER executes `scripts/release.sh` (NEITHER full release NOR `--dry-run`; per P2-2 LOCK `--dry-run` is NOT read-only). If §7 Recommendations include a future dry-run, that recommendation is delivered to the user with explicit prerequisites: (i) user authorization, (ii) clean isolated worktree distinct from current dirty-baseline-preserving worktree, (iii) appropriate `--source-ref` selection. The current worktree is permanently OFF-TARGET for any execution attempt during this audit's lifetime.
+- **Push policy (per Step 4.2 P3-2 wording fix)**: feature branches (`v0.2.0-blueprint-release-surface-audit-2026-06-01` + any preflight + any impl) may be pushed to `hnsm-backend/origin` only with **explicit per-push authorization** (commits are local; pushes require auth). `master` push NEVER auto. Projection to `factgraph` repo NEVER by agent.
 - **Alpha release context**: factgraph is an alpha line; no historical user backward-compat guarantee. Drift fixes should align with Q-NAMING-C "no flat shells restoration without independent Red blueprint" precedent.
 
 ## 7. Acceptance
@@ -158,7 +162,7 @@ If §7 declares "stack ready":
 - [ ] Q-PR1 sacred 5 paths 0-diff vs `4c472b50` preserved across all blueprint commits
 - [ ] Sacred master unchanged
 - [ ] Dirty baseline 8 entries preserved
-- [ ] No push without explicit per-commit authorization
+- [ ] No push without explicit per-push authorization (commits are local; pushes require auth)
 - [ ] If fix slice required: shipped after Codex implementation + Claude review + per-fix-slice canonical pytest census ≥ baseline cleanup HEAD `f1e0dc67` (2450 passed / 0 failed, recorded in audit log)
 - [ ] AD/C/E/B1/B2/F + baseline cleanup inherited contracts preserved (verified via re-grep of N1-N24 + baseline N1-N9)
 - [ ] `v0.1-oss-prep` + `master` + `release/0.1.x` + `release/0.2.x` (if exists) all untouched
@@ -167,13 +171,13 @@ If §7 declares "stack ready":
 
 1. **Step 4.2 review (Codex)**: surface scope/methodology gaps. Likely probes: (a) is G6 dry-run feasibility OUT of scope vs read-only audit definition? (b) is G5 typing-extensions purely informational vs needing remediation step? (c) is there a gap between G1 file-level allowlist freshness and G7 v0.2.0 fresh additions delta (overlap risk)? (d) should the audit also cover the prior Q-NAMING-C archive `23389a2b` 20-shell deletion as a discrete allowlist regression check?
 2. **Step 4.3 preflight (Claude)**: on independent artifact branch `v0.2.0-release-surface-audit-preflight-2026-06-01` (forked from this scope-frozen blueprint HEAD). Execute:
-   - 2.a Allowlist file-existence sweep: for each of 271 entries, verify file exists at current `master` HEAD `562c74195df4...` (NOT current blueprint branch HEAD, which has baseline cleanup local-only commits)
+   - 2.a Allowlist file-existence sweep: **[LOCKED Step 4.2 P2-1 — audit target ref correction]** for each of 271 entries, verify file exists at the **v0.2.0 feature-line release source ref candidate** (current preflight HEAD on baseline cleanup archive lineage at or after `be0f2351`) — NOT pre-v0.2 sacred `master 562c74195df4...`. The audit is for v0.2.0 publish surface from the feature-line state; `master` is referenced as the SACRED INVARIANT that must remain immutable through this audit, NOT as the projection source. Future release.sh execution will define its own `--source-ref`; this audit's 2.a sweep targets the feature-line state representing v0.2.0 publish candidate.
    - 2.b Shipped public-API enumeration: list every `src/factgraph/**/*.py` + every documented public docs file; cross-check vs allowlist
    - 2.c Q-NAMING-C archive `23389a2b` 20-shell deletion delta check: explicit grep of allowlist for any flat-shell file path that no longer exists
    - 2.d Q-NAMING-F renamed file delta check: explicit grep of allowlist for any pre-Q-NAMING-F file name (per Q-NAMING-F archive §10 closure)
    - 2.e Baseline cleanup SS3 retired file `tests/test_sdk_read_policy.py` → `tests/_retired/test_sdk_read_policy.py` allowlist check
    - 2.f T2 test-import landscape: grep all `tests/**/*.py` for imports of any module excluded by allowlist
-   - 2.g T3 deny-pattern: grep allowlist-included docs for references to `AGENTS.md`, `workflow/`, `docs/blueprints/`, `docs/references/`, `CLAUDE.md`
+   - 2.g T3 deny-pattern (mirror shipped per P2-5 LOCK): **(2.g.1)** verify no allowlisted file matches any `deny_patterns` array entry from `project_release_surface.sh:56-87` (complete 31-entry list per G3.a above); **(2.g.2)** grep allowlisted docs for `bad_link_pattern` references from `project_release_surface.sh:100` (16-token regex including `src/kernel|kernel.sdk|from kernel|examples/|samples/` etc.); per-hit triage per G3 5-state classification
    - 2.h T6 EN-only audit: grep allowlist for `*.zh.md`; grep source tree for CN/EN pair files
 3. **Step 4.4 amend (Claude)**: apply preflight Required + Recommended LOCKs (PF-R / PF-r) on blueprint branch per Slice 7B Option A learning.
 4. **Step 4.5 self-check (Claude)**: doc-only, no commit; verify PF coverage matrix consistent, invariant coverage complete.
