@@ -65,7 +65,7 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
         id="user:tag",
         version="v1",
-        when=[User(u), User(u).tag_seed == tag],
+        where=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 ```
@@ -78,8 +78,8 @@ the rule is read-only.
 ### Why `build_application_rule(...)` instead of `Rule(...)` directly
 
 `Rule` is the **data shape** — a frozen dataclass at
-`factgraph.application.protocol.Rule` with `where: tuple[Atom, ...]` and
-`ports: Mapping[str, Var]`. Its `where` field accepts **core-level atom
+`factgraph.application.protocol.Rule` with `when: tuple[Atom, ...]` and
+`ports: Mapping[str, Var]`. Its `when` field accepts **core-level atom
 objects** (`PredAtom`, `CmpAtom`, `BuiltinAtom`, `NotAtom`, `InAtom`,
 `AggregateAtom`), not the SDK DSL forms `Entity(var)` / `Entity(var).field
 == value`.
@@ -190,7 +190,7 @@ with vars("u", "r") as (u, r):
     user_in_region = build_application_rule(
         id="user:region",
         version="v1",
-        when=[User(u), User(u).region == r],
+        where=[User(u), User(u).region == r],
         ports={"user": u, "region": r},   # both u and r exposed
     )
 ```
@@ -233,7 +233,7 @@ with vars("u", "r") as (u, r):
         id="user:region",
         version="v1",
         desc="user %user lives in region %region",
-        when=[User(u), User(u).region == r],
+        where=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -272,7 +272,7 @@ with vars("u", "r") as (u, r):
     user_region = build_application_rule(
         id="user:region",
         version="v1",
-        when=[User(u), User(u).region == r],
+        where=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -431,7 +431,7 @@ with vars("u",) as (u,):
     user_exists = build_application_rule(
         id="User:exists",      # 1-arg predicate
         version="v1",
-        when=[User(u)],
+        where=[User(u)],
         ports={"user": u},      # 1 port matches arg arity
     )
 
@@ -446,7 +446,7 @@ with vars("u", "r") as (u, r):
     user_region = build_application_rule(
         id="user:region",      # 2-arg predicate (user_ref, region_string)
         version="v1",
-        when=[User(u), User(u).region == r],
+        where=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -660,7 +660,7 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
         id="user:tag",
         version="v1",
-        when=[User(u), User(u).tag_seed == tag],
+        where=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 
