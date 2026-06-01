@@ -125,14 +125,14 @@ class PyReasonSessionInternalTests(unittest.TestCase):
         self.assertNotIn("confidence", s.node_facts[0]["meta"])
         self.assertNotIn("confidence_source", s.node_facts[0]["meta"])
 
-    def test_explicit_confidence_is_dropped_from_generic_meta(self) -> None:
+    def test_raw_uncertainty_meta_does_not_derive_confidence(self) -> None:
         s = self._session()
         s._write_node_fact_internal(
             "user:name",
             "ref",
             "Alice",
             bound=[0.7, 0.9],
-            meta={"confidence": 0.85},
+            meta={"raw_kind": "probabilistic", "bound": [0.85, 0.85]},
         )
         self.assertNotIn("confidence", s.node_facts[0]["meta"])
         self.assertNotIn("confidence_source", s.node_facts[0]["meta"])

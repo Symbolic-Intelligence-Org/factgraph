@@ -43,20 +43,23 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
         self.assertEqual(annos[0].origin, "observed")
         self.assertIsNone(annos[0].derivation)
 
-    def test_confidence_stays_meta_only(self) -> None:
+    def test_raw_uncertainty_point_estimate_projects_meta_and_annotations(self) -> None:
         ledger = Ledger()
         asrt_id = set_field(
             ledger,
             "user:name",
             _eref("alice"),
             [("string", "Alice")],
-            meta={"confidence": 0.85},
+            meta={"raw_kind": "probabilistic", "bound": [0.85, 0.85]},
         )
-        annos = ledger.find_annotations(asrt_id=asrt_id, namespace="shared", category="derived")
-        self.assertEqual(annos, [])
-        meta = ledger.find_meta(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(meta), 1)
-        self.assertEqual(meta[0].value, 0.85)
+        meta = {row.key: row.value for row in ledger.find_meta(asrt_id=asrt_id)}
+        self.assertEqual(meta["raw_kind"], "probabilistic")
+        self.assertEqual(meta["bound"], [0.85, 0.85])
+
+        annos = ledger.find_annotations(asrt_id=asrt_id, namespace="shared", category="semantic")
+        by_key = {row.key: row.value for row in annos}
+        self.assertEqual(by_key["raw_kind"], "probabilistic")
+        self.assertEqual(by_key["bound"], [0.85, 0.85])
 
     def test_multiple_whitelisted_keys(self) -> None:
         ledger = Ledger()
@@ -69,13 +72,14 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
                 "source": "handbook",
                 "source_loc": "ch3.2",
                 "trace_id": "t001",
-                "confidence": 0.9,
+                "raw_kind": "probabilistic",
+                "bound": [0.9, 0.9],
                 "approved_by": "reviewer_A",
                 "note": "verified manually",
             },
         )
         annos = ledger.find_annotations(asrt_id=asrt_id)
-        self.assertEqual(len(annos), 5)
+        self.assertEqual(len(annos), 7)
 
         source_annos = ledger.find_annotations(asrt_id=asrt_id, category="source")
         self.assertEqual(len(source_annos), 5)
@@ -97,7 +101,8 @@ class TestSetFieldAnnotationProjection(unittest.TestCase):
                 "source": "s",
                 "source_loc": "sl",
                 "trace_id": "t",
-                "confidence": 0.5,
+                "raw_kind": "probabilistic",
+                "bound": [0.5, 0.5],
                 "approved_by": "a",
                 "note": "n",
             },
@@ -149,21 +154,22 @@ class TestNonWhitelistedKeysExcluded(unittest.TestCase):
 class TestDualWriteConsistency(unittest.TestCase):
     """meta_rows and annotation_rows contain consistent values."""
 
-    def test_confidence_in_both_stores(self) -> None:
+    def test_raw_uncertainty_in_both_stores(self) -> None:
         ledger = Ledger()
         asrt_id = set_field(
             ledger,
             "p:test",
             _eref("e"),
             [("string", "v")],
-            meta={"confidence": 0.75},
+            meta={"raw_kind": "probabilistic", "bound": [0.75, 0.75]},
         )
-        meta_conf = ledger.find_meta(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(len(meta_conf), 1)
-        self.assertEqual(meta_conf[0].value, 0.75)
+        meta_bound = ledger.find_meta(asrt_id=asrt_id, key="bound")
+        self.assertEqual(len(meta_bound), 1)
+        self.assertEqual(meta_bound[0].value, [0.75, 0.75])
 
-        anno_conf = ledger.find_annotations(asrt_id=asrt_id, key="confidence")
-        self.assertEqual(anno_conf, [])
+        anno_bound = ledger.find_annotations(asrt_id=asrt_id, key="bound")
+        self.assertEqual(len(anno_bound), 1)
+        self.assertEqual(anno_bound[0].value, [0.75, 0.75])
 
     def test_source_in_both_stores(self) -> None:
         ledger = Ledger()
@@ -313,12 +319,12 @@ class TestAddFieldAndReplaceField(unittest.TestCase):
             "user:tag",
             _eref("alice"),
             [("string", "vip")],
-            meta={"source": "crm", "confidence": 0.9},
+            meta={"source": "crm", "raw_kind": "probabilistic", "bound": [0.9, 0.9]},
         )
         annos = ledger.find_annotations(asrt_id=asrt_id)
-        self.assertEqual(len(annos), 1)
+        self.assertEqual(len(annos), 3)
         keys = {a.key for a in annos}
-        self.assertEqual(keys, {"source"})
+        self.assertEqual(keys, {"source", "raw_kind", "bound"})
 
     def test_replace_field_new_assertion_has_annotations(self) -> None:
         ledger = Ledger()
@@ -378,7 +384,7 @@ class TestRetractAnnotationProjection(unittest.TestCase):
         revoker_id = retract_by_asrt(
             ledger,
             asrt_id,
-            meta={"source": "review", "confidence": 0.4, "confidence_source": "manual:review"},
+            meta={"source": "review", "raw_kind": "probabilistic", "bound": [0.4, 0.4]},
         )
         self.assertIsNotNone(revoker_id)
 
@@ -387,6 +393,7 @@ class TestRetractAnnotationProjection(unittest.TestCase):
         self.assertEqual(by_key["source"].origin, "observed")
         self.assertEqual(by_key["source"].value, "review")
         self.assertNotIn("confidence", by_key)
+        self.assertEqual(by_key["bound"].value, [0.4, 0.4])
 
 
 class TestWhitelistCoverage(unittest.TestCase):
@@ -448,7 +455,7 @@ class TestReplaceFieldAtomicity(unittest.TestCase):
         return ledger, asrt_id
 
     def test_invalid_meta_preserves_old_assertion(self) -> None:
-        """confidence='bad' should raise before revoking the old assertion."""
+        """Invalid raw uncertainty should raise before revoking the old assertion."""
         ledger, old_asrt_id = self._setup_existing()
 
         with self.assertRaises(WriteProtocolError):
@@ -458,7 +465,7 @@ class TestReplaceFieldAtomicity(unittest.TestCase):
                 _eref("alice"),
                 old_rest_terms=[("string", "Alice")],
                 new_rest_terms=[("string", "Alice Updated")],
-                meta={"confidence": "bad"},
+                meta={"raw_kind": "probabilistic", "bound": "bad"},
             )
 
         # Old assertion must still be active (not revoked).
