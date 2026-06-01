@@ -65,12 +65,12 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 ```
 
-The `where` clause describes what must be found, and `ports` declares what the
+The `when` clause describes what must be found, and `ports` declares what the
 rule returns. `build_application_rule(...)` is the canonical SDK bridge that
 lowers Entity-DSL atoms into the application protocol `Rule` value. Running
 the rule is read-only.
@@ -90,7 +90,7 @@ between user-facing DSL and the underlying `Rule` data shape:
 
 | Surface | Accepts | Role |
 | --- | --- | --- |
-| `build_application_rule(id=..., where=[Entity(var), ...], ports={...})` | SDK DSL atoms + `ports={name: logic_var}` | Ergonomic factory. Lowers, validates, canonicalizes Vars, returns `Rule`. |
+| `build_application_rule(id=..., when=[Entity(var), ...], ports={...})` | SDK DSL atoms + `ports={name: logic_var}` | Ergonomic factory. Lowers, validates, canonicalizes Vars, returns `Rule`. |
 | `Rule(id=..., when=(PredAtom(...), CmpAtom(...)), ports={...})` | Already-canonical core atom tuple | Low-level data shape. Manual construction only required if you are working at the core protocol layer. |
 
 This is the same high-level-factory / low-level-data-shape pattern as
@@ -103,7 +103,7 @@ The factory does four things for you that `Rule(...)` directly does not:
    `Pred(...)` into the underlying `PredAtom` / `CmpAtom` shape.
 2. **Validates the body** — rejects `Case` (use `Inference` for that),
    rejects OR branch lists (application `Rule` is AND-only), rejects
-   legacy raw `Pred` atoms in `where`, rejects bare `AttrRef`.
+   legacy raw `Pred` atoms in `when`, rejects bare `AttrRef`.
 3. **Canonicalizes `Var` instances** — same name -> same object, so
    cross-occurrence joins resolve correctly without manual care.
 4. **Validates `ports`** — every declared port's `Var` must appear in
@@ -173,25 +173,25 @@ once; it makes every later cross-rule example readable.
 
 ### Three kinds of variables
 
-A `where` body introduces logic variables. The SDK classifies them into
+A `when` body introduces logic variables. The SDK classifies them into
 three roles, only one of which is externally visible:
 
 | Kind | Definition | Externally visible? |
 | --- | --- | --- |
-| free variable | Any variable appearing in `where` | Internal |
+| free variable | Any variable appearing in `when` | Internal |
 | **port** | A free variable explicitly listed in `ports={...}` | ✓ |
 | non-port free variable | A free variable not in `ports` | ✗ existential witness only |
 
 Ports are **not collected automatically** — you must declare them
 explicitly. The SDK rejects construction if a declared port's `Var` is
-not present in `where`, or if `ports` is empty.
+not present in `when`, or if `ports` is empty.
 
 ```python
 with vars("u", "r") as (u, r):
     user_in_region = build_application_rule(
         id="user:region",
         version="v1",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},   # both u and r exposed
     )
 ```
@@ -202,7 +202,7 @@ with vars("u", "r") as (u, r):
 `kind` (`"entity_ref"` or `"value"`) and `entity_type` (only set when
 `kind == "entity_ref"`). Inference is automatic from the body:
 
-- `Entity(var)` in `where` → the port for `var` is `entity_ref` of that entity type;
+- `Entity(var)` in `when` → the port for `var` is `entity_ref` of that entity type;
 - `Entity(var).field == value` → the port for `value` is `value`.
 
 ```python
@@ -234,7 +234,7 @@ with vars("u", "r") as (u, r):
         id="user:region",
         version="v1",
         desc="user %user lives in region %region",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -273,7 +273,7 @@ with vars("u", "r") as (u, r):
     user_region = build_application_rule(
         id="user:region",
         version="v1",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -281,7 +281,7 @@ with vars("o", "r") as (o, r):
     order_region = build_application_rule(
         id="order:region",
         version="v1",
-        where=[Order(o), Order(o).region == r],
+        when=[Order(o), Order(o).region == r],
         ports={"order": o, "region": r},
     )
 ```
@@ -432,7 +432,7 @@ with vars("u",) as (u,):
     user_exists = build_application_rule(
         id="User:exists",      # 1-arg predicate
         version="v1",
-        where=[User(u)],
+        when=[User(u)],
         ports={"user": u},      # 1 port matches arg arity
     )
 
@@ -447,7 +447,7 @@ with vars("u", "r") as (u, r):
     user_region = build_application_rule(
         id="user:region",      # 2-arg predicate (user_ref, region_string)
         version="v1",
-        where=[User(u), User(u).region == r],
+        when=[User(u), User(u).region == r],
         ports={"user": u, "region": r},
     )
 
@@ -661,7 +661,7 @@ with vars("u", "tag") as (u, tag):
     seeded_tags = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 
@@ -681,7 +681,7 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
 ## Syntax checklist
 
 - Use `vars(...)` to create logic variables for DSL bodies.
-- Use `build_application_rule(id=..., where=[Entity(var), ...], ports={...})`
+- Use `build_application_rule(id=..., when=[Entity(var), ...], ports={...})`
   to construct application `Rule` values via the canonical SDK bridge.
 - Declare `ports={...}` explicitly; the SDK does not auto-collect them.
   Inspect inferred port types via `rule.port_types`.

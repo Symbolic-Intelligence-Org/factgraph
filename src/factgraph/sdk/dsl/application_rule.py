@@ -46,21 +46,21 @@ class DSLToApplicationRuleError(SDKDSLError):
 def build_application_rule(
     *,
     id: str,
-    where: list[Any],
+    when: list[Any],
     ports: Mapping[str, Any],
     version: str | None = None,
     desc: str | None = None,
 ) -> ApplicationRule:
-    """Build an application-layer Rule from SDK DSL where atoms and ports."""
+    """Build an application-layer Rule from SDK DSL when atoms and ports."""
 
-    _reject_or_shape(where)
-    _reject_legacy_where(where, path="where")
+    _reject_or_shape(when)
+    _reject_legacy_when(when, path="when")
     initial_bound_vars = _initial_bound_var_names_from_ports(ports)
     try:
-        where_ir = lower_where(where)
-        where_expr = _canonicalize_vars(parse_where_ir_to_ast(where_ir))
+        when_ir = lower_where(when)
+        when_expr = _canonicalize_vars(parse_where_ir_to_ast(when_ir))
         validate_where_ast(
-            where_expr,
+            when_expr,
             mode="python",
             capabilities={"allow_ruleref": False},
             initial_bound_vars=initial_bound_vars,
@@ -68,30 +68,30 @@ def build_application_rule(
     except (SDKDSLError, WhereASTError, WhereASTValidationError) as exc:
         raise DSLToApplicationRuleError(str(exc)) from exc
 
-    if not isinstance(where_expr, AndExpr):
-        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only where bodies")
+    if not isinstance(when_expr, AndExpr):
+        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only when bodies")
 
-    vars_by_name = _collect_vars_by_name(where_expr)
+    vars_by_name = _collect_vars_by_name(when_expr)
     converted_ports = _convert_ports(ports, vars_by_name=vars_by_name)
     return ApplicationRule(
         id=id,
         version=version,
         desc=desc,
-        when=tuple(where_expr.atoms),
+        when=tuple(when_expr.atoms),
         ports=converted_ports,
     )
 
 
-def _reject_or_shape(where: Any) -> None:
-    if not isinstance(where, list) or not where:
-        raise DSLToApplicationRuleError("where must be a non-empty list")
-    if any(isinstance(item, Case) for item in where):
-        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only where bodies; Case is not allowed")
-    if all(isinstance(item, list) for item in where):
-        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only where bodies; OR branches are not allowed")
+def _reject_or_shape(when: Any) -> None:
+    if not isinstance(when, list) or not when:
+        raise DSLToApplicationRuleError("when must be a non-empty list")
+    if any(isinstance(item, Case) for item in when):
+        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only when bodies; Case is not allowed")
+    if all(isinstance(item, list) for item in when):
+        raise DSLToApplicationRuleError("application Rule bridge accepts AND-only when bodies; OR branches are not allowed")
 
 
-def _reject_legacy_where(items: Sequence[Any], *, path: str) -> None:
+def _reject_legacy_when(items: Sequence[Any], *, path: str) -> None:
     for index, item in enumerate(items):
         item_path = f"{path}[{index}]"
         if isinstance(item, Case):
@@ -118,7 +118,7 @@ def _reject_legacy_atom(atom: Any, *, path: str) -> None:
         _reject_legacy_compare(atom, path=path)
         return
     if isinstance(atom, NotExpr):
-        _reject_legacy_where(atom.body, path=f"{path}.body")
+        _reject_legacy_when(atom.body, path=f"{path}.body")
 
 
 def _reject_legacy_compare(expr: CompareExpr, *, path: str) -> None:
@@ -144,7 +144,7 @@ def _reject_legacy_aggregate_ref(ref: _AggregateRef, *, path: str) -> None:
         )
     if isinstance(ref.target, _AggregateRef):
         _reject_legacy_aggregate_ref(ref.target, path=f"{path}.target")
-    _reject_legacy_where(ref.filter, path=f"{path}.filter")
+    _reject_legacy_when(ref.filter, path=f"{path}.filter")
 
 
 def _convert_ports(ports: Mapping[str, Any], *, vars_by_name: Mapping[str, Var]) -> dict[str, Var]:
@@ -165,7 +165,7 @@ def _convert_ports(ports: Mapping[str, Any], *, vars_by_name: Mapping[str, Var])
         try:
             converted[name] = vars_by_name[token]
         except KeyError as exc:
-            raise DSLToApplicationRuleError(f"ports[{name!r}] LogicVar must appear in where") from exc
+            raise DSLToApplicationRuleError(f"ports[{name!r}] LogicVar must appear in when") from exc
     return converted
 
 

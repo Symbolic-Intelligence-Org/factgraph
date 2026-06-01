@@ -56,7 +56,7 @@ class SDKRuleNamingTests(unittest.TestCase):
         with sdk.vars("u") as (u,):
             rule = sdk.build_application_rule(
                 id="active_user",
-                where=[User(u).status == "active"],
+                when=[User(u).status == "active"],
                 ports={"user": u},
             )
 

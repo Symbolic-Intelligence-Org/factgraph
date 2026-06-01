@@ -37,7 +37,7 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="active_user",
-                where=[User(u)],
+                when=[User(u)],
                 ports={"user": u},
             )
 
@@ -49,7 +49,7 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="user_by_id",
-                where=[User(u).user_id == "u-2"],
+                when=[User(u).user_id == "u-2"],
                 ports={"user": u},
             )
 
@@ -61,7 +61,7 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="active_user",
-                where=[User(u).status == "active"],
+                when=[User(u).status == "active"],
                 ports={"user": u},
             )
 
@@ -71,7 +71,7 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="named_users_exist",
-                where=[User(u), User(...).name == "alice"],
+                when=[User(u), User(...).name == "alice"],
                 ports={"user": u},
             )
 
@@ -82,7 +82,7 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
         with vars("li", "u") as (li, u):
             rule = build_application_rule(
                 id="lives_in_user",
-                where=[LivesIn(li).user == User(u)],
+                when=[LivesIn(li).user == User(u)],
                 ports={"edge": li, "user": u},
             )
 
@@ -94,7 +94,7 @@ class BuildApplicationRuleUnifiedFormsTests(unittest.TestCase):
         with vars("li", "country") as (li, country):
             rule = build_application_rule(
                 id="lives_in_country",
-                where=[LivesIn(li).country == country],
+                when=[LivesIn(li).country == country],
                 ports={"edge": li, "country": country},
             )
 
@@ -108,7 +108,7 @@ class BuildApplicationRuleRejectTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="legacy_bare_attr",
-                    where=[u.status == "active"],
+                    when=[u.status == "active"],
                     ports={"user": u},
                 )
 
@@ -117,7 +117,7 @@ class BuildApplicationRuleRejectTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="legacy_two_line",
-                    where=[User(u), u.status == "active"],
+                    when=[User(u), u.status == "active"],
                     ports={"user": u},
                 )
 
@@ -126,7 +126,7 @@ class BuildApplicationRuleRejectTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="legacy_pred",
-                    where=[Pred("User:exists", u)],
+                    when=[Pred("User:exists", u)],
                     ports={"user": u},
                 )
 
@@ -135,7 +135,7 @@ class BuildApplicationRuleRejectTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="legacy_rule_ref",
-                    where=[RuleRefAtom("other", "v1", (u,))],
+                    when=[RuleRefAtom("other", "v1", (u,))],
                     ports={"user": u},
                 )
 
@@ -144,7 +144,7 @@ class BuildApplicationRuleRejectTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="or_shape",
-                    where=[[User(u)], [User(v)]],
+                    when=[[User(u)], [User(v)]],
                     ports={"user": u},
                 )
 
@@ -153,7 +153,7 @@ class BuildApplicationRuleRejectTests(unittest.TestCase):
         with self.assertRaises(DSLToApplicationRuleError):
             build_application_rule(
                 id="anonymous_port",
-                where=[User(...).status == "active"],
+                when=[User(...).status == "active"],
                 ports={"user": anon},
             )
 
@@ -163,7 +163,7 @@ class BuildApplicationRuleIdentityTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="active_user",
-                where=[User(u).status == "active"],
+                when=[User(u).status == "active"],
                 ports={"user": u},
                 desc="active user %user",
             )
@@ -176,7 +176,7 @@ class BuildApplicationRuleIdentityTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="active_user",
-                where=[User(u).status == "active"],
+                when=[User(u).status == "active"],
                 ports={"user": u},
             )
 
@@ -190,7 +190,7 @@ class BuildApplicationRuleArithmeticTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="user_plus_one",
-                where=[(u + 1) == 3],
+                when=[(u + 1) == 3],
                 ports={"user": u},
             )
 
@@ -206,7 +206,7 @@ class BuildApplicationRuleArithmeticTests(unittest.TestCase):
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="user_times_two",
-                where=[(u * 2) == 6],
+                when=[(u * 2) == 6],
                 ports={"user": u},
             )
 

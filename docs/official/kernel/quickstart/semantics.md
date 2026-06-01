@@ -82,7 +82,7 @@ with vars("u", "tag") as (u, tag):
     tags_from_seed = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 ```
@@ -410,7 +410,7 @@ with vars("u", "tag") as (u, tag):
     tags_from_seed = build_application_rule(
         id="user:tag",
         version="v1",
-        where=[User(u), User(u).tag_seed == tag],
+        when=[User(u), User(u).tag_seed == tag],
         ports={"user": u, "tag": tag},
     )
 

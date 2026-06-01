@@ -131,7 +131,7 @@ class AggregateApplicationBridgeTests(unittest.TestCase):
         with vars("u", "o", "total") as (u, o, total):
             rule = build_application_rule(
                 id="user_order_total",
-                where=[
+                when=[
                     User(u),
                     total == agg_sum(Order(o).amount, where=[Order(o).buyer == u]),
                     total > 4,
@@ -160,7 +160,7 @@ class AggregateApplicationBridgeTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="invalid_sum",
-                    where=[total == agg_sum(amount, where=[Order(o)])],
+                    when=[total == agg_sum(amount, where=[Order(o)])],
                     ports={"total": total},
                 )
 
@@ -169,7 +169,7 @@ class AggregateApplicationBridgeTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="legacy_aggregate_target",
-                    where=[total == agg_sum(o.amount, where=[Order(o)])],
+                    when=[total == agg_sum(o.amount, where=[Order(o)])],
                     ports={"total": total},
                 )
 
@@ -178,7 +178,7 @@ class AggregateApplicationBridgeTests(unittest.TestCase):
             with self.assertRaises(DSLToApplicationRuleError):
                 build_application_rule(
                     id="legacy_aggregate_filter",
-                    where=[n == agg_count(where=[Pred("User:exists", u)])],
+                    when=[n == agg_count(where=[Pred("User:exists", u)])],
                     ports={"count": n},
                 )
 
@@ -187,7 +187,7 @@ class AggregateApplicationBridgeTests(unittest.TestCase):
             with self.assertRaises(RuleValidationError):
                 build_application_rule(
                     id="aggregate_local_port",
-                    where=[
+                    when=[
                         User(u),
                         total == agg_sum(Order(o).amount, where=[Order(o).buyer == u]),
                     ],
