@@ -1,4 +1,12 @@
-"""Phase 1 G1.1 red-baseline tests for the ReadPolicy migration blueprint.
+"""Retired ReadPolicy red-baseline tests.
+
+SS3 baseline-drift cleanup retired this historical TDD fixture because shipped
+source removed ReadPolicy instead of migrating it to a replacement API. Keep the
+file as archive context only; active tests assert the removed surface elsewhere.
+
+Original context follows.
+
+Phase 1 G1.1 red-baseline tests for the ReadPolicy migration blueprint.
 
 This file is the §7 G1.1 deliverable for blueprint
 `docs/blueprints/active/2026-05-11_readpolicy-call-site-migration.md`:
@@ -22,6 +30,8 @@ freedom.
 from __future__ import annotations
 
 import unittest
+
+__test__ = False
 
 
 def _removed_sdk_run(*_args, **_kwargs):
