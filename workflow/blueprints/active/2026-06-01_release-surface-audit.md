@@ -1,6 +1,6 @@
 # v0.2.0 Release Surface Audit Blueprint: stack-ready readiness for factgraph publish handoff
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-01
 - Last Updated: 2026-06-01
 - Related Modules:
