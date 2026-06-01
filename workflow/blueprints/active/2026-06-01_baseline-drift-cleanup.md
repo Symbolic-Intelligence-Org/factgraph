@@ -248,7 +248,7 @@ Per Q-NAMING precedent verification ritual:
 - [x] SS3 ReadPolicy import — retired/quarantined; observed census 168 → 139 (-29) with historical red-baseline file moved out of active tests
 - [x] SS4 SDKStore shape — shipped at Step 4.7 SS4; tests migrated to namespaced managers (`fg.entities.ref/get/match/where`, `fg.fields.set/add`, `fg.assertions.retract`); observed census 139 → 94 (-45); flat-shell restoration explicitly OUT of scope (requires separate Red blueprint per Q-NAMING-C precedent)
 - [x] SS5 meta[confidence] — shipped at Step 4.7 SS5; write-protocol fixtures migrated to Uncertainty Phase 1 DSL (`raw_kind="probabilistic"`, point `bound=[x, x]`); observed census 94 → 81 (-13)
-- [ ] SS6 _eval_*_atom signature — 24 errors fixed; evaluator audit complete
+- [x] SS6 _eval_*_atom signature — shipped at Step 4.7 SS6; authorized source touch aligned frontier/diagnose callsites with helper signatures; observed census 76 → 64 (-12)
 - [ ] SS7 NoneType.proof — direct investigation completed; `evidence_envelope` None root cause fixed/migrated (per Step 4.4 PF-R1 LOCK chain disproven; ~95 of 102 expected to remain after SS5 — active investigation required, not auto-resolved)
 - [ ] SS8 misc — ~17 errors fixed
 - [ ] Cumulative: 189 → ~0 baseline failures in `tests/` cohort

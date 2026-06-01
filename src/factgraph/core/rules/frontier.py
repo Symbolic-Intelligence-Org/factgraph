@@ -214,7 +214,7 @@ def _eval_body_frontier(
                 pred_lookup_cache=pred_lookup_cache,
             )
         elif kind == "eq":
-            envs = _eval_eq_atom(envs, atom, ast_gate_on=ast_gate_on)
+            envs = _eval_eq_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "in":
             envs = _eval_in_atom(envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "ne":
@@ -222,7 +222,7 @@ def _eval_body_frontier(
         elif kind in {"gt", "ge", "lt", "le"}:
             envs = _eval_cmp_atom(envs, atom, ast_gate_on=ast_gate_on)
         elif kind in _ARITH_KINDS:
-            envs = _eval_arith_atom(envs, atom, ast_gate_on=ast_gate_on)
+            envs = _eval_arith_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         elif kind == "not":
             envs = _eval_not_atom(view_facts, envs, atom, ast_gate_on=ast_gate_on)
         else:

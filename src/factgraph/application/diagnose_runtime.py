@@ -278,7 +278,7 @@ def _extend_env_with_atom(
             pred_lookup_cache={},
         )
     if kind == "eq":
-        return _eval_eq_atom([dict(env)], atom, ast_gate_on=ast_gate_on)
+        return _eval_eq_atom(view_facts, [dict(env)], atom, ast_gate_on=ast_gate_on)
     if kind == "in":
         return _eval_in_atom([dict(env)], atom, ast_gate_on=ast_gate_on)
     if kind == "ne":
@@ -286,7 +286,7 @@ def _extend_env_with_atom(
     if kind in {"gt", "ge", "lt", "le"}:
         return _eval_cmp_atom([dict(env)], atom, ast_gate_on=ast_gate_on)
     if kind in _ARITH_KINDS:
-        return _eval_arith_atom([dict(env)], atom, ast_gate_on=ast_gate_on)
+        return _eval_arith_atom(view_facts, [dict(env)], atom, ast_gate_on=ast_gate_on)
     if kind == "not":
         return _eval_not_atom(view_facts, [dict(env)], atom, ast_gate_on=ast_gate_on)
     if kind == "ruleref":
