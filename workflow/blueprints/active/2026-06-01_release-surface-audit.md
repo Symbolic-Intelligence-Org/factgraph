@@ -98,7 +98,7 @@ The agent's role per `project_release_branch_invariants` is **NOT to execute rel
 - Step 4.4 preflight amend → Claude
 - Step 4.5 self-check → Claude (doc-only, no commit)
 - Step 4.6 scope freeze → Claude (`draft` → `scoped`)
-- Step 4.7 implementation → **conditional**: if 0 drift → audit-only blueprint, skip to 4.8; if drift found → Codex implements fix slice with Claude review per cross-flip
+- Step 4.7 implementation → **[SUPERSEDED Step 4.4 PF-R2 — now MANDATORY]**: was initially conditional (if 0 drift → audit-only blueprint; if drift found → Codex implements fix slice with Claude review per cross-flip); now MANDATORY because Step 4.3 preflight surfaced 4 G7-SRC-BLOCKER ADDs requiring fix slice; Codex implements + Claude reviews regardless of "drift" framing
 - Step 4.8 closure → Claude or Codex (per CADENCE no strict assignment)
 - Step 4.9 archive → Claude or Codex
 
@@ -164,7 +164,7 @@ Step 4.9 archives audit blueprint + preflight artifact + impl branch.
   - `src/factgraph/application/retract_guard.py`
   - `src/factgraph/application/value_validation.py`
   - `src/factgraph/sdk/match_runtime.py`
-  
+
   This is the only allowlist edit MANDATORY for stack-readiness. Step 4.7 is NO LONGER conditional (was conditional in §5.3 + §8 step 6 of the draft; Step 4.4 amendment makes it mandatory).
 
 - **[LOCKED Step 4.4 PF-r3 — Q2/Q3 docs ADD bad-link gate]**: any future ADD of `docs/README.md` or `docs/api/openapi.yaml` to allowlist MUST include doc-content cleanup of bad-link hits (verified at Step 4.3 preflight: `docs/README.md:17` references `workflow/AGENTS.md`, `:23` references `src/factgraph/AGENTS.md`; `docs/api/openapi.yaml:22` references `src/service/docs/06_frontend_integration.md`). Bare ADD without cleanup will fail G3.b projection check. Default for both: DEFER pending separate cleanup or surface decision.
@@ -212,7 +212,7 @@ Step 4.9 archives audit blueprint + preflight artifact + impl branch.
 - Step 4.3 preflight artifact (`workflow/audit/active/2026-06-01_release-surface-vs-shipped.md`) — moved to `workflow/audit/archive/` at Step 4.9
 - IF fix slice required: any allowlist edit to `scripts/release_surface_allowlist.txt` recorded as separate fix-slice commit with its own audit log row
 - IF fix slice required + touches public-API docs: respective `src/factgraph/*/docs/` module docs updated per CADENCE Stage 4.8 docs sync
-- NO update to `docs/README.md` expected (no new persistent docs entry from this audit)
+- Default: NO update to `docs/README.md` unless Q2 Option A is explicitly authorized by user; if Q2 Option A authorized, inline bad-link cleanup is REQUIRED per PF-r3 LOCK (Step 4.3 preflight verified `docs/README.md:17` + `:23` AGENTS.md refs would otherwise fail G3.b)
 - NO update to `scripts/release.sh` itself expected (release machinery is teammate territory)
 
 ## 10. Outcome / Deviations

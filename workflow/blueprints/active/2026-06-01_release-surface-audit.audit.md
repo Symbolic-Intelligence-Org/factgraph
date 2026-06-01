@@ -25,7 +25,7 @@
 
 - **Predecessor commit lineage**: blueprint forked from `be0f2351` (baseline cleanup archive HEAD) NOT from `master` (which is at sacred `562c74195df4...`, pre-v0.2 line). This is intentional — the audit operates on the v0.2 feature-line state because that's what represents v0.2 publish candidate. Per Step 4.2 P2-1 LOCK: `master` is sacred invariant only (must remain immutable through this audit); the projection audit consumes the **v0.2.0 feature-line state** (current branch HEAD on baseline cleanup archive lineage at or after `be0f2351`). The `--source-ref` selected at future release execution is teammate decision, NOT this audit's projection target.
 
-- **Cross-flip role assignment notes for this audit**: Step 4.2 review by Codex is critical because Claude drafted the scope; Codex's source-grounded review (Rule 1) is the first cross-check. Step 4.3 preflight by Claude is the actual finding-table production — independent artifact branch per Slice 7B Option A. Step 4.7 implementation conditional: if drift found, Codex implements + Claude reviews per established 8-SS pattern; if no drift, blueprint becomes audit-only deliverable.
+- **Cross-flip role assignment notes for this audit** **[SUPERSEDED Step 4.4 PF-R2 for Step 4.7 conditionality]**: Step 4.2 review by Codex is critical because Claude drafted the scope; Codex's source-grounded review (Rule 1) is the first cross-check. Step 4.3 preflight by Claude is the actual finding-table production — independent artifact branch per Slice 7B Option A. Step 4.7 implementation was initially conditional ("if drift found, Codex implements; if no drift, blueprint becomes audit-only deliverable") but is now MANDATORY per Step 4.4 PF-R2 LOCK (preflight surfaced 4 G7-SRC-BLOCKER ADDs); Codex implements fix slice + Claude reviews per established 8-SS pattern regardless of "drift" framing.
 
 - **Push gate posture**: this blueprint will produce 1 + N commits (where N = preflight commits + optional fix slice commits + closure/archive). Per `feedback_push_master_gate`, no auto-push of any commit. Each push decision requires user signal. Feature branches push to `hnsm-backend/origin` is OK per user clarification 2026-06-01; projection to `factgraph` publish repo NEVER by agent.
 
@@ -39,7 +39,7 @@ User explicitly continued AD/C/E/B1/B2/F + Baseline Drift Cleanup cross-flip pat
 - Step 4.4 preflight amendment → Claude
 - Step 4.5 self-check → Claude (doc-only)
 - Step 4.6 scoped anchor → Claude
-- Step 4.7 implementation **conditional**: Codex if drift found + Claude review per cross-flip; skip if 0 drift
+- Step 4.7 implementation **[SUPERSEDED Step 4.4 PF-R2 — now MANDATORY]**: was initially conditional ("Codex if drift found; skip if 0 drift") but Step 4.3 preflight surfaced 4 PF-R2 BLOCKER ADDs; Step 4.7 fix slice is required; Codex implements + Claude reviews per cross-flip
 - Step 4.8 closure → Codex or Claude (per CADENCE no strict assignment)
 - Step 4.9 archive → Codex or Claude
 
