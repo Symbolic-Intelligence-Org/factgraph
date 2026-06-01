@@ -20,11 +20,11 @@ class ProtocolV1Tests(unittest.TestCase):
         token = encode_idref_v1("Person", identity_fields)
         self.assertEqual(
             token,
-            "idref_v1:Person:ry37kwbswkbrb7mc72gdfc6skukkguim3cyjur4pwpuokf3rd4ga",
+            "idref_v1:Person:irk4tcjz3wzyl4ja6245k5duzqd3vn5dypm4rr5s7glkdulef4ha",
         )
 
     def test_tup_v1_example_a_claim_args_and_digest(self) -> None:
-        entity_ref = "idref_v1:Person:ry37kwbswkbrb7mc72gdfc6skukkguim3cyjur4pwpuokf3rd4ga"
+        entity_ref = "idref_v1:Person:irk4tcjz3wzyl4ja6245k5duzqd3vn5dypm4rr5s7glkdulef4ha"
         rest_terms = [("entity_ref", entity_ref), ("string", "de"), ("int", 3)]
         claim_args = claim_args_from_rest_terms(rest_terms)
         self.assertEqual(
@@ -39,7 +39,7 @@ class ProtocolV1Tests(unittest.TestCase):
         self.assertTrue(canonical.startswith(TUP_V1_PREFIX))
         self.assertEqual(
             sha256_token(canonical),
-            "sha256:a492bceedc8ca8ab66d114d3ab574f1c8d2920665dbb3d2d9101564dd1bcea65",
+            "sha256:5a02dcfdd201f292bd4175e543657b17f1d549b42cb2864a9208b54bdafe793e",
         )
 
     def test_tup_v1_example_b_time_and_bytes_val_atom(self) -> None:

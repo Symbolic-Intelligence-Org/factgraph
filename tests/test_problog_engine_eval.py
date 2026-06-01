@@ -90,8 +90,9 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(mock_run.call_args.kwargs["timeout"], 30)
         self.assertTrue(mock_run.call_args.kwargs["trace"])
-        self.assertEqual(candidates[0].support_kind, PROBLOG_PROVENANCE_KIND)
-        self.assertNotEqual(candidates[0].support_digest, f"sha256:{'0' * 64}")
+        explanation = candidates[0].explain()
+        self.assertEqual(explanation.evidence.support_kind, PROBLOG_PROVENANCE_KIND)
+        self.assertNotEqual(candidates[0].evidence_ref.ref_id, f"sha256:{'0' * 64}")
 
     def test_sdk_evaluate_rejects_engine_options_timeout(self) -> None:
         sdk = self._make_sdk()

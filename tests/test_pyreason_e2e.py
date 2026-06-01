@@ -117,6 +117,14 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
                 emits=EmitSpec("user:popular", [u]),
             )
 
+    def _evaluate_candidate_sets(self, sdk: SDKStore, derivation: Inference):
+        return sdk._evaluate_compiled_derivation_plans(
+            sdk._compile_derivation_input(derivation),
+            mode="pyreason",
+            registry=None,
+            semantics_profile=None,
+        )
+
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
     def test_sdk_evaluate_derivation_returns_candidates(self, mock_run) -> None:
         sdk = self._make_sdk()
@@ -126,15 +134,13 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
 
         self.assertEqual(len(candidates), 1)
         candidate = candidates[0]
-        self.assertEqual(candidate.derivation_id, "drv.pyreason_popular")
-        self.assertEqual(candidate.derivation_version, "v1")
-        self.assertEqual(candidate.target, "user:popular")
-        self.assertEqual(candidate.support_kind, PYREASON_PROVENANCE_KIND)
-        self.assertEqual(candidate.state, "generated")
-        self.assertEqual(candidate.payload["pred_id"], "user:popular")
-        self.assertEqual(candidate.payload["terms"][0]["value"], sdk.entities.ref(User, user_id="Alice"))
-        self.assertEqual(candidate.payload["terms"][1]["value"], "true")
-        self.assertEqual(candidate.confidence, 0.8)
+        explanation = candidate.explain()
+        self.assertEqual(candidate.claim.name, "user:popular")
+        self.assertEqual(explanation.evidence.support_kind, "evaluate_row")
+        self.assertEqual(candidate.claim.arguments["pred_id"], "user:popular")
+        self.assertEqual(candidate.claim.arguments["terms"][0]["value"], sdk.entities.ref(User, user_id="Alice"))
+        self.assertEqual(candidate.claim.arguments["terms"][1]["value"], "true")
+        self.assertIsNone(candidate.bound)
         mock_run.assert_called_once()
 
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)
@@ -218,7 +224,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        candidates = sdk.eval.evaluate(derivation, engine="pyreason")
+        candidates = self._evaluate_candidate_sets(sdk, derivation)
         candidate = candidates[0]
 
         self.assertTrue(hasattr(sdk.store, "_engine_pending_annotations"))
@@ -253,7 +259,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        candidate = sdk.eval.evaluate(derivation, engine="pyreason")[0]
+        candidate = self._evaluate_candidate_sets(sdk, derivation)[0]
         accept_result = sdk.store.accept(
             derivation_id=candidate.derivation_id,
             version=candidate.derivation_version,
@@ -285,7 +291,7 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         sdk = self._make_sdk()
         derivation = self._make_derivation()
 
-        candidate = sdk.eval.evaluate(derivation, engine="pyreason")[0]
+        candidate = self._evaluate_candidate_sets(sdk, derivation)[0]
         accept_result = sdk.store.accept(
             derivation_id=candidate.derivation_id,
             version=candidate.derivation_version,

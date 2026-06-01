@@ -250,14 +250,14 @@ Per Q-NAMING precedent verification ritual:
 - [x] SS5 meta[confidence] — shipped at Step 4.7 SS5; write-protocol fixtures migrated to Uncertainty Phase 1 DSL (`raw_kind="probabilistic"`, point `bound=[x, x]`); observed census 94 → 81 (-13)
 - [x] SS6 _eval_*_atom signature — shipped at Step 4.7 SS6; authorized source touch aligned frontier/diagnose callsites with helper signatures; observed census 76 → 64 (-12)
 - [x] SS7 NoneType.proof — shipped at Step 4.7 SS7; SDK rule overlay/proof-frame support fixtures migrated from stale `Person(p)` entity-exists body to explicit `Pred("person:age", p, age)` body; observed census 64 → 13 (-51)
-- [ ] SS8 misc — ~17 errors fixed
-- [ ] Cumulative: 189 → ~0 baseline failures in `tests/` cohort
-- [ ] Q-PR1 sacred 5 paths 0-diff vs `4c472b50` preserved across all sub-slices
-- [ ] Sacred master unchanged through cleanup
-- [ ] Dirty baseline 8 entries preserved
-- [ ] No push without explicit per-sub-slice authorization
-- [ ] All AD/C/E/B1/B2/F inherited contracts preserved (N12-N24)
-- [ ] Audit log Event Log records each SS ship with failure delta + commit hash
+- [x] SS8 misc — shipped at Step 4.7 SS8; final 13 failures across EvaluateRow shape, check/diagnose/why_not fixture body, ingest side-effect expectations, and protocol vectors fixed; observed census 13 → 0
+- [x] Cumulative: 189 → 0 baseline failures in `tests/` cohort
+- [x] Q-PR1 sacred 5 paths 0-diff vs `4c472b50` preserved across all sub-slices
+- [x] Sacred master unchanged through cleanup
+- [x] Dirty baseline 8 entries preserved
+- [x] No push without explicit per-sub-slice authorization
+- [x] All AD/C/E/B1/B2/F inherited contracts preserved (N12-N24)
+- [x] Audit log Event Log records each SS ship with failure delta + commit hash
 
 ## 8. Implementation Plan
 
