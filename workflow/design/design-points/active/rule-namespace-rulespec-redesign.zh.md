@@ -1,0 +1,219 @@
+# Rule namespace redesign: application 层重命名为 RuleSpec(未来工作)
+
+- Status: working / **current mode locked**(application `Rule` 占名 + SDK 必须用 `build_application_rule(...)`)/ **future direction open**(rename to `RuleSpec` + SDK shadow `Rule`)
+- Authority: candidate design / non-authoritative reference;现状描述属实,未来方向属设计空间
+- First draft: 2026-06-02
+- Last updated: 2026-06-02
+- Scope: `factgraph.application.protocol.Rule` 与 `factgraph.sdk.build_application_rule(...)` 之间的层级与命名分裂;user-facing SDK Rule namespace 的重设计
+- Parent: 与 [`schema-mutation-additive-only.zh.md`](schema-mutation-additive-only.zh.md) / [`fields-iterable-value-batch.zh.md`](fields-iterable-value-batch.zh.md) 同级;均属 SDK 用户面 ergonomic 设计空间
+- Design intent: 把"`Rule(when=[User(u), ...])` 直接构造不被支持,必须经 `build_application_rule(...)` 这条 lowering 显式可见"这件事从用户面文档(`docs/quickstart/rules.md`)抽出来,作为 SDK 命名与层级重设计的 future direction 记录
+
+---
+
+## §1 当前模式:application `Rule` 占名 + SDK 必须经 `build_application_rule(...)`
+
+`factgraph.application.protocol.Rule` 是 frozen DTO,`when` 只接 core atoms(`PredAtom` / `CmpAtom` / `InAtom` / `BuiltinAtom` / `NotAtom`),拒绝 SDK DSL 形态(`User(u)` / `User(u).field == v` / `Pred(...)` / `Case` / 裸 `AttrRef`)。
+
+`factgraph.sdk.build_application_rule(...)` 是 SDK 层 ergonomic factory,做 4 件事:
+1. Lower Entity-DSL atoms → core atoms
+2. Reject 不支持的形态(OR branch list, `Case`, raw `Pred`, 裸 `AttrRef`)
+3. Canonicalize `Var` instances(同名 → 同 canonical Var,支持跨 occurrence join)
+4. Validate `ports`(non-empty + 每个 port var 必须在 `when` 出现)
+
+**`factgraph.sdk.__init__.py`** 把 application `Rule` 顶层 re-export:
+
+```python
+from factgraph.application.protocol import (
+    ...
+    Rule,                # = factgraph.application.protocol.Rule(application DTO)
+    ...
+)
+ApplicationRule = Rule   # legacy alias
+```
+
+也就是说 user `from factgraph.sdk import Rule` 拿到的是 **application 层 DTO**,而**不是** ergonomic shell。
+
+## §2 现状的根源(三条强约束)
+
+### §2.1 INV-6 application-first runtime authority(架构 invariant)
+
+来自 [`workflow/foundations/architecture_principles.md §2.1 Layer authority`](../../../foundations/architecture_principles.md):
+
+> 所有新增 runtime capability 先以 DTO + pure function 形式落在 `factgraph.application` 层;SDK 仅作为 product surface / ergonomic shell,**不携带 substrate**。
+
+层级关系:`factgraph.sdk` → `factgraph.application` → `factgraph.core`,反向依赖(application → sdk)被显式 reject。
+
+具体到 Rule:`Rule.__post_init__` 不允许 import / 引用 SDK 层的 `ExistsAtom` / `CompareExpr`,否则 application 反向依赖 SDK。
+
+### §2.2 命名占用
+
+application 层 DTO **直接占用了 "Rule" 这个最直观的名字**,这跟 codebase 已有的 SDK-shell / application-DTO 命名模式**不一致**:
+
+| application 层(canonical DTO) | SDK 层(user-facing ergonomic shell) |
+|---|---|
+| `SemanticsProfile` | `ProbLogSemantics` / `PyReasonSemantics` |
+| `EntityWriteCommand` | `FactGraph.entities.create / fields.set / ...` |
+| `EvaluateResult` / `EvaluateRow` / `Explanation` | (consumed via `fg.eval.evaluate(...).first()` 等访问) |
+| **`Rule` ← 占了用户最想要的名字** | **(无 — 只能叫 `build_application_rule(...)`)** |
+
+`SemanticsProfile` 是命名良性的:application 层用中性名,SDK 层 `ProbLogSemantics` / `PyReasonSemantics` 拿到 `*Semantics` 这个 user-facing 名字空间。
+
+Rule 是命名占名的:application 层抢了 `Rule`,SDK 层无路可走,只能用更长的 `build_application_rule(...)`。
+
+### §2.3 historical 路径
+
+Track 1 Branch identity + rule inspect(2026-05-12,`milestone/branch-identity-rule-inspect-2026-05-12 @ 03f76380`)把 application protocol `Rule` shipped 时,采用了"application-first per 项目固定原则 + SDK alias `kernel.sdk.Rule`"这个候选(per archived design-point `rule-expression-and-proof-track-plan.zh.md` TPQ-1)。当时的决策是直接使用 `Rule` 作为 application 层 class 名,SDK alias 只是 re-export,这导致今天 SDK 无独立 ergonomic shell class 可用。
+
+## §3 用户当下的 friction
+
+### §3.1 第一次撞墙:直接 `Rule(when=[Entity-DSL])`
+
+```python
+with vars("u", "age") as (u, age):
+    rule = Rule(
+        id="adult",
+        when=[User(u), User(u).age == age, age > 18],   # ← Entity-DSL syntax
+        ports={"user": u, "age": age},
+    )
+# RuleValidationError: when must be non-empty tuple[Atom, ...]   (list rejected)
+#                      / when[0] must be one of PredAtom/CmpAtom/InAtom/BuiltinAtom/NotAtom
+```
+
+用户从 quickstart 看完 `build_application_rule(...)`,自然假设 `Rule(...)` 也能接 Entity-DSL —— 实际不能。这是 user mental model 第一次撞硬边界。
+
+### §3.2 第二次撞墙:Inference 承接性缺失
+
+Inference(legacy)接受 `when=[Pred(...) / Case(...) / SDK DSL atoms]`,新 Rule + RuleExpr 设计**故意不承接**这个形态。但 user 看 `from factgraph.sdk import Rule, Inference` 两个并列 import,自然预期它们 API 一致 —— 实际 `Inference(when=[...])` 接受 list of SDK DSL,`Rule(when=tuple)` 只接 core atoms tuple。
+
+### §3.3 第三次撞墙:命名分裂
+
+`fg.entities.create(...)` / `fg.fields.set(...)` / `fg.eval.evaluate(...)` 这些 user-facing API 都用 short ergonomic 名字。唯独 rule 构造要写 `build_application_rule(...)` 这种暴露 internal layer 名字的形态。
+
+## §4 未来设计空间:RuleSpec 重命名 + SDK 真 `Rule` shadow class
+
+### §4.1 目标形态
+
+```
+factgraph/application/protocol/rule.py
+    class RuleSpec:                            # ← 重命名(原 Rule)
+        # frozen DTO,接 core atoms,不变
+        when: tuple[Atom, ...]
+        ports: Mapping[str, Var]
+        version: str | None
+        desc: str | None
+
+factgraph/sdk/rule.py                          # ← 新文件
+    class Rule:                                # ← user 看的唯一 Rule
+        @classmethod
+        def build(cls, *, id, when=[User(u), ...], ports={...},
+                  version=None, desc=None) -> RuleSpec:
+            # 调用现有 build_application_rule lowering
+            ...
+
+        @classmethod
+        def from_atoms(cls, *, id, when=(PredAtom(...),), ports=...,
+                       version=None, desc=None) -> RuleSpec:
+            # 直接 RuleSpec(...) 构造
+            ...
+
+        def __new__(cls, **kwargs) -> RuleSpec:
+            # 直接 Rule(...) 调用,自动 dispatch 到 .build(...)
+            return cls.build(**kwargs)
+```
+
+User 视角统一:
+- `Rule(when=[User(u), ...])` ← natural ergonomic 入口
+- `Rule.build(when=[...])` ← 显式 named
+- `Rule.from_atoms(when=(...))` ← 显式 raw atom 入口
+
+返回值都是 `RuleSpec`(application DTO),下游 API(`fg.rules.inspect` / `fg.eval.evaluate` / `RuleExpr` 组合 / `match`)消费 `RuleSpec`,user 不需要直接接触 `RuleSpec` 这个名字。
+
+INV-6 完全保留:`RuleSpec` 仍然不知道 SDK,所有 lowering 由 SDK `Rule` shadow class 承担。
+
+### §4.2 命名候选评估
+
+| 候选 | 评价 | 决议 |
+|---|---|---|
+| **`RuleSpec`** | 跟 `EmitSpec` / `SchemaAddResult` 等 `*Spec` 系列命名风格一致;user 一看就知是 specification | **adopted** |
+| `RuleDef` | 直观,GraphQL-style;但 codebase 无 `*Def` 系列,引入新命名约定 | 备选 |
+| `RuleIR` | 强调 intermediate representation;过于技术性 | rejected |
+| `CompiledRule` | 暗示"未编译 Rule",反而误导(谁是源?) | rejected |
+| `RuleEntity` | ⚠️ 与 `factgraph.sdk.Entity` schema base class 冲突 | rejected |
+| `RuleTemplate` | 与 desc template 的 "template" 用法冲突 | rejected |
+| `RuleStatement` | Datalog 风格;codebase 无 "statement" 约定 | rejected |
+
+### §4.3 候选实施路径
+
+**路径 A — RuleSpec 重命名 + SDK 真 Rule shadow class(本设计 preferred)**
+
+- application:`Rule` → `RuleSpec`,所有 application-internal 引用跟着改
+- SDK:新建 `factgraph.sdk.rule.Rule` shadow class,带 `.build()` / `.from_atoms()` / `__new__`
+- SDK exports:`factgraph.sdk.Rule` 指向 shadow,新增 `factgraph.sdk.RuleSpec` export(advanced 路径)
+- legacy:`build_application_rule(...)` 保留,内部转发到 `Rule.build(...)`,标 `DeprecationWarning`(可选)
+- `ApplicationRule = Rule` alias 移除或重定义为 `ApplicationRule = RuleSpec`
+
+**路径 B — 候选 (2) 的 SDK wrapper class(保留 application "Rule" 名字)**
+
+- application:`Rule` 不变
+- SDK:新建 wrapper class(必须用 import alias `_AppRule`)
+- 命名 namespace 仍然有冲突,SDK 内部代码 readability 受损
+- 比路径 A 改动小,但 ergonomic 改善有限
+
+**路径 C — minimum surface(只重命名 `build_application_rule`)**
+
+- application:不变
+- SDK:`build_application_rule(...)` 加一个更短 alias(`compile_rule(...)` / `make_rule(...)`)
+- 不解决"直接 `Rule(...)` 调用"问题
+- 几乎不改 codebase,但只是 cosmetic
+
+| 路径 | INV-6 兼容 | user ergonomic 收益 | breaking surface | 实施成本 |
+|---|---|---|---|---|
+| A (RuleSpec + SDK Rule) | ✓ | ★★★ | high(public Rule re-points) | high |
+| B (SDK wrapper) | ✓ | ★★ | low | medium |
+| C (rename factory) | ✓ | ★ | low | low |
+
+### §4.4 待定设计问题(路径 A 展开)
+
+1. **`Rule(...)` 直接调用 dispatch 策略**:用 `__new__` 转 classmethod、还是 metaclass 拦截、还是 documented `Rule.build()` only(不允许 `Rule(...)`)?
+2. **`from_atoms` 跟 `RuleSpec(...)` 关系**:`Rule.from_atoms(...)` 应该是 `RuleSpec(...)` 的薄壳,还是真做额外 validation?
+3. **`fg.rules.inspect(Rule)` vs `fg.rules.inspect(RuleSpec)`**:两者都能 inspect,还是 inspect 只接受 RuleSpec(因为 Rule 不是 value,是 factory)?
+4. **`isinstance(x, Rule)` 语义**:用户写 `isinstance(rule_value, Rule)` 时 should be True or False?(rule_value 实际是 RuleSpec)
+5. **`Inference` 的承接**:Inference 是否也跟着 SDK shadow → RuleSpec-like canonical DTO 重构,还是保持 legacy 不动?
+6. **migration**:`from factgraph.sdk import Rule` 的语义改变,如何文档化 + warning + 兼容期?
+
+### §4.5 与其他设计的耦合
+
+- 与 [`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md):无直接耦合,Rule 重命名不影响 Identity 语义
+- 与 [`explanation-completion-roadmap.zh.md`](explanation-completion-roadmap.zh.md) D21 desc-driven explain:无直接耦合,但属同类"shipped 架构对,user mental model 体验有 friction"的 ergonomic gap
+- 与 archived [`rule-expression-and-proof-track-plan.zh.md`](../archive/rule-expression-and-proof-track-plan.zh.md) TPQ-1:本设计 supersede TPQ-1 当年选择的"application-first per 项目固定原则 + SDK alias `kernel.sdk.Rule`"决策,提议 SDK alias 升级为独立 shadow class
+
+## §5 当前位置的边界
+
+| 属于本 design-point | 不属于 |
+|---|---|
+| application `Rule` 与 SDK 层 ergonomic shell 之间的命名/层级 friction | INV-6 application-first principle 本身(已锁,不在重设计 scope) |
+| `RuleSpec` 命名候选评估 + 路径 A/B/C 实施权衡 | `Rule.when` 内部 atom 类型(`PredAtom` / `CmpAtom` etc.)的形态 |
+| Inference 的 mental-model 承接性问题(§3.2) | Inference 本身的 legacy lifecycle(在 `docs/quickstart/rules.md` §6.1) |
+| SDK `Rule.build` / `.from_atoms` / `__new__` dispatch API 表面 | RuleExpr / RuleOccurrence / RulePortRef 的命名(那是另一个 redesign scope) |
+
+## §6 关联代码锚点
+
+- `src/factgraph/application/protocol/rule.py:52-167` — `class Rule` 当前 application DTO 定义
+- `src/factgraph/sdk/dsl/application_rule.py:46-82` — `build_application_rule(...)` 当前 SDK factory
+- `src/factgraph/sdk/__init__.py:33-49` — application Rule 在 SDK 顶层 re-export(`Rule` + `ApplicationRule`)
+- `src/factgraph/sdk/dsl/__init__.py:6-10` — `Pred` / `Not` / `agg_*` 等 SDK DSL atom factory
+- `src/factgraph/sdk/dsl/expr.py:181-211` — `ExistsAtom` / `PredAtom` (SDK DSL form) / `CompareExpr` 等 SDK 层 atom 表示
+- `src/factgraph/core/rules/where_ast.py:32-71` — `PredAtom` / `CmpAtom` / `InAtom` / `BuiltinAtom` / `NotAtom` 等 core atom 类型
+
+## §7 关联文档
+
+- 用户面 Rule 文档:[`docs/quickstart/rules.md`](../../../../docs/quickstart/rules.md) §2.6(直接 `Rule(...)` 构造的边界 + 与 `build_application_rule` 的 trade-off table)
+- 架构原则源:[`workflow/foundations/architecture_principles.md §2.1 Layer authority`](../../../foundations/architecture_principles.md)
+- INV-6 引用 ADRs(reject 反向依赖 SDK 案例):
+  - [`workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md`](../../decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md) §3 / §4 reject reasons
+  - [`workflow/design/decisions/active/2026-05-29_q-sys-b-revokes-migration-decision.md`](../../decisions/active/2026-05-29_q-sys-b-revokes-migration-decision.md) §4.1 lowering 路径
+- 历史 TPQ-1 决策:[`workflow/design/design-points/archive/rule-expression-and-proof-track-plan.zh.md`](../archive/rule-expression-and-proof-track-plan.zh.md) §T1.1(本设计提议 supersede 部分)
+- 同级 design-point:
+  - [`schema-mutation-additive-only.zh.md`](schema-mutation-additive-only.zh.md)
+  - [`fields-iterable-value-batch.zh.md`](fields-iterable-value-batch.zh.md)
+- 同类 ergonomic gap(在 explanation-completion-roadmap):D21 desc-driven explain([`explanation-completion-roadmap.zh.md §6.6`](explanation-completion-roadmap.zh.md))
