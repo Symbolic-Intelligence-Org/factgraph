@@ -13,6 +13,8 @@
   - `src/factgraph/sdk/store.py:86` — `from ... import FrozenAssertionSet as DatabaseFrozenAssertionSet`
   - `src/factgraph/sdk/store.py:355-377` — `fg.assertion_views.create` return type
   - `src/factgraph/sdk/store.py:480-501` — `fg.assertions.field(Field)` public method
+  - `src/factgraph/sdk/store.py:1326-1339` — `fg.audit._resolve_record_asrt_id` + `_claim_for_audit_target` (asrt_id string / object-with-`.asrt_id` resolution path shared by `explain` and `conflicts`)
+  - `src/factgraph/sdk/store.py:1341-1371` — `fg.audit._conflict_cell_for_target` target normalization (handles `(entity, Field)` and `(entity, field_name)` tuple shapes in addition to inheriting the asrt_id-string / object-with-`.asrt_id` shapes via `_claim_for_audit_target`)
   - `src/factgraph/sdk/store.py:1373-1389` — `fg.audit.{explain,conflicts,diff_proof_frames}` signatures
   - `src/factgraph/sdk/store.py:2374-2461` — `fg.eval.evaluate` signature + reject set
   - `src/factgraph/sdk/store.py:2463-2502` — `fg.eval.explain` signature
@@ -33,7 +35,7 @@ These findings remained after the `80a60f66` fg.entities docs alignment commit (
 - **G1** — Fix all 3 P0 factual errors in `database.md:357-358` by replacing the misleading "same 6-field dataclass" framing with the correct "two same-named-but-different classes across SDK vs Database layers" framing. Single paragraph rewrite at implementation layer; preserve 3 separate findings in blueprint + preflight tables for factual-boundary integrity per user directive.
 - **G2** — Fix P1.F4 in `04_api_surface.en.md:398` — `fg.audit.conflicts()` signature → `conflicts(target)`.
 - **G3** — Fix P1.F5 in `04_api_surface.en.md` §2.5 table — add row for `field(Field) -> AssertionView` method (currently omitted).
-- **G4** — Fix P1.F6 in `04_api_surface.en.md:362-363` — expand `fg.eval.evaluate(...)` reject list from 3 items to all 7 (`view=, policy=, semantics_profile=, mode=, temporal_view=, registry=, engine_options=`).
+- **G4** — Fix P1.F6 in `04_api_surface.en.md:362-363` — document all 7 deprecated/blocked kwargs `fg.eval.evaluate(...)` rejects, with the **hard-presence vs non-None distinction** preserved: `view=`, `policy=`, `semantics_profile=`, `mode=`, `temporal_view=` reject on key presence alone (even `key=None` raises); `registry=`, `engine_options=` reject only when the popped value is **non-None**.
 - **G5** — Fix P2.F7 in `04_api_surface.en.md:358-359` — clarify `engine=` default value (signature default `None`; effective default `"native"` resolved internally).
 - **G6** — All edits in a single Step 4.7 commit; cadence Step 4.8 closure + Step 4.9 archive.
 
@@ -74,7 +76,7 @@ These findings remained after the `80a60f66` fg.entities docs alignment commit (
 | **F3** | 🔴 P0 | `quickstart/database.md` | L357 | (c) shape conflict: claimed "SDK-owned anchors" fields don't exist on SDK class |
 | **F4** | 🟡 P1 | `sdk/docs/04_api_surface.en.md` | L398 | (b) signature drift: `conflicts()` shown zero-arg, code is `conflicts(target)` |
 | **F5** | 🟡 P1 | `sdk/docs/04_api_surface.en.md` | §2.5 table | (b) omitted method row: `field(Field) -> AssertionView` |
-| **F6** | 🟡 P1 | `sdk/docs/04_api_surface.en.md` | L362-363 | (b) under-specified reject list (3 of 7 items shown) |
+| **F6** | 🟡 P1 | `sdk/docs/04_api_surface.en.md` | L362-363 | (b) under-specified reject list (3 of 7 items shown);also lacks the **hard-presence vs non-None reject distinction** (5 keys reject on presence; 2 keys reject only on non-None value) |
 | **F7** | 🟢 P2 | `sdk/docs/04_api_surface.en.md` | L358-359 | (b) signature precision: `engine='native'` shown as default, true default is `None` (resolved → `"native"`) |
 | **F8** | 🟢 P3 | `sdk/docs/04_api_surface.en.md` | L359 | (b) `head=closed_head` looks like default, head is required |
 | **F9** | 🟢 P3 | `sdk/docs/04_api_surface.en.md` | numbering | §2.10 / §2.11 holes from `648c0b6c` What-if removal |
@@ -115,8 +117,13 @@ Per user directive at Step 4.1 entry: F1, F2, F3 may merge at implementation lay
 
 - **§2.5 Assertions table (L344-348)**: add row `field(field: Field) -> AssertionView` between `by_ids` and `where`.
 - **§2.6 Eval table (L358-359)**: replace `engine='native'` → `engine=None` in signature rendering; add parenthetical "(resolved to `'native'` if not provided; permitted: `native`/`souffle`/`problog`/`pyreason`)" inline or as following sentence.
-- **§2.6 Eval rejection sentence (L362-363)**: replace "Public `evaluate(...)` rejects `engine_options=`, `registry=`, `mode=`, and candidate compatibility flags." with the full 7-item enumeration matching code at `sdk/store.py:2375-2395`.
-- **§2.12 Audit table (L397-399)**: change `conflicts()` → `conflicts(target)`; add brief inline "(target may be assertion record or entity field cell)" matching code docstring at `sdk/store.py:1382-1385`.
+- **§2.6 Eval rejection sentence (L362-363)**: replace "Public `evaluate(...)` rejects `engine_options=`, `registry=`, `mode=`, and candidate compatibility flags." with a 7-item enumeration that preserves the two reject mechanisms distinct: (a) hard-presence reject (5 keys: `view=`, `policy=`, `semantics_profile=`, `mode=`, `temporal_view=`) — even `key=None` raises; (b) non-None reject (2 keys: `registry=`, `engine_options=`) — popped with `None` default, only non-None values raise. Source: `sdk/store.py:2375-2395`.
+- **§2.12 Audit table (L397-399)**: change `conflicts()` → `conflicts(target)`; replace the vague "entity field cell" hint with the **4 accepted target shapes** from `_resolve_record_asrt_id` (1326-1339) + `_conflict_cell_for_target` (1341-1371):
+  1. assertion id string
+  2. object exposing `.asrt_id` (e.g. `AssertionRecord`)
+  3. `(entity, Field)` tuple where `entity` is a ref string or object with `.ref`
+  4. `(entity, field_name: str)` tuple where `entity` is a ref string or object with `.ref`
+  Shapes 1+2 are inherited via `_claim_for_audit_target`; shapes 3+4 are the tuple-branch additions specific to `conflicts`. Note: `fg.audit.explain(target)` accepts only shapes 1+2 (no tuple branch); §2.12 sub-text or footnote should call this out so users do not assume the tuple shapes work for `explain`.
 
 ### §5.4 Cadence step plan (parallel to §5.1)
 
@@ -147,9 +154,9 @@ Per user directive at Step 4.1 entry: F1, F2, F3 may merge at implementation lay
 ## 7. Acceptance
 
 - [ ] **F1+F2+F3 merged fix**: `quickstart/database.md:355-362` paragraph rewritten with 2-class disambiguation
-- [ ] **F4**: `04_api_surface.en.md:398` `conflicts(target)` signature
+- [ ] **F4**: `04_api_surface.en.md:398` `conflicts(target)` signature + **4 accepted target shapes enumerated** (asrt_id string / object with `.asrt_id` / `(entity, Field)` tuple / `(entity, field_name)` tuple) + footnote that `fg.audit.explain(target)` accepts only shapes 1+2 (no tuple branch)
 - [ ] **F5**: `04_api_surface.en.md` §2.5 table includes `field(Field) -> AssertionView` row
-- [ ] **F6**: `04_api_surface.en.md` L362-363 rejection list lists all 7 reject items
+- [ ] **F6**: `04_api_surface.en.md` L362-363 documents all 7 rejected kwargs **with the hard-presence (5 keys) vs non-None (2 keys) reject mechanism distinction preserved**
 - [ ] **F7**: `04_api_surface.en.md` L358-359 engine default precision corrected
 - [ ] Post-fix grep for `6 fields` in `quickstart/database.md` returns 0 hits
 - [ ] Post-fix grep for `conflicts()` (zero-arg) in `04_api_surface.en.md` returns 0 hits
