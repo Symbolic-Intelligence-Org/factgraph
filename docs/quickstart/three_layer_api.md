@@ -209,35 +209,9 @@ Reads work the opposite way: `fg.fields.get(field, ref)` returns one scalar for 
 
 ### 3.3 Identity descriptors at Layer 2
 
-`Identity` descriptors behave specially at Layer 2 because Identity Claims are the immutable anchor of an entity (INV-7c). The rule is: **Identity can be used and viewed, but never mutated.**
+Identity values can be **read** (via `snap.user_id` / `snap.identity[...]`) and **introspected** (via `fg.assertions.field(User.user_id)`), but never **mutated** — all four write methods (`set` / `add` / `retract` / `delete`) reject `Identity` descriptors with `SDKStoreError(code="INV_7C_IDENTITY_PROTECTED")`. Identity Claims are the immutable entity anchor per INV-7c.
 
-What works:
-
-- Reading the current Identity value: through the `EntitySnapshot` (`snap.user_id`, `snap.identity["user_id"]`)
-- Using the Identity descriptor as a key into Layer 3 introspection: `fg.assertions.field(User.user_id)` returns the `AssertionView` of all Identity Claims for that field, so you can inspect history, meta, and the original `asrt_id`
-
-What does **not** work:
-
-- `fg.fields.set(User.user_id, ref, "new_id")` rejects at dispatch with `INV_7C_IDENTITY_PROTECTED`:
-
-```text
-SDKStoreError (code=INV_7C_IDENTITY_PROTECTED):
-fg.fields.set() does not accept Identity descriptors for value writes;
-Identity Claims are immutable anchors per INV-7c. Use fg.entities.delete
-+ fg.entities.create for identity-bundle changes. See ADR-API §4.1.1.
-```
-
-- `fg.fields.add` / `fg.fields.retract` / `fg.fields.delete` reach the runtime guard or the downstream Layer 3 INV-7c check, all raising the same code.
-
-To "change" an entity's identity, the supported pattern is:
-
-```python
-fg.entities.delete(old_alice)                                    # revoke whole entity
-new_alice = fg.entities.create(User, user_id="u-2", locale="en")  # new identity bundle
-# re-apply any Field values you want to carry forward against new_alice
-```
-
-(See [ADR-IC §4.1](../../workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md) for the design rationale. Wrong-key rejections for non-Field non-Identity inputs are covered by the same Layer-shape guard described in §2.5.)
+To "change" an identity, delete and recreate: `fg.entities.delete(old_ref)` + `fg.entities.create(EntityCls, **new_identity)`. See [ADR-IC §4.1](../../workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md).
 
 ## 4. Layer 3 — Assertions (`fg.assertions.*`)
 
