@@ -125,5 +125,15 @@ assert tuple(snap.tags) == ("engineer",)
 - `fg.fields.set(...)` writes a single-value field.
 - `fg.fields.add(...)` writes a multi-value field.
 - `fg.entities.get(...)` reads the current snapshot.
+- `fg.entities.where(...)` returns all snapshots matching entity/field filters.
+- `fg.entities.exists(...)` returns a boolean visibility check without
+  materializing a snapshot (useful for `create`-then-`exists` guards).
+- `fg.entities.delete(...)` retracts a whole entity coordinate; see [Read
+  and write facts](read-write.md#existence-and-entity-lifecycle).
+- `fg.entities.edit(...)` opens a multi-field staged editor; see [Read
+  and write facts](read-write.md#existence-and-entity-lifecycle).
+- For Rule/RuleExpr-based selection, see [Reading snapshots with
+  match](rules-and-inferences.md#reading-snapshots-with-match) for
+  `fg.entities.match(...)`.
 - For schema-level metadata, see [Define a schema](schema.md#entity-metadata-class-meta) (`class Meta:` with version/description/tags).
 - For the supported engine list, see [Configure inference semantics](semantics.md#supported-engines) (native / souffle / problog / pyreason).

@@ -190,6 +190,7 @@ duplicated in the per-purpose groups below.
 | Semantics | `ProbLogConfig`, `PyReasonConfig`, `SemanticsProfile` | Configure inference evaluation. Wrappers are the teaching path; `SemanticsProfile` is the canonical lower form. |
 | Error types | `SDKSchemaError`, `SDKStoreError`, `SDKValueError`, `EntityNotFoundError`, `EntityAlreadyExistsError`, `FrozenSnapshotError`, `SchemaConflictError`, `SchemaNonAdditiveError`, `SchemaNotFoundError`, `CardinalityError`, `EditorClosedError`, `SDKDSLError` | Catch these for kernel-level failure modes. Use `isinstance(exc, SDKStoreError)` for the most common runtime guard. |
 | Error codes (advanced) | `INVALID_ROW_FORMAT`, `QUERY_ALIAS_CONFLICT`, `QUERY_INVALID_ROW_FORMAT`, `QUERY_MISSING_REF`, `QUERY_NOT_IMPLEMENTED`, `QUERY_TYPE_MISMATCH`, `QUERY_UNBOUND_VAR` | Stable string constants used inside error messages (advanced; for parsing error code components). |
+| Entity / field error codes (advanced) | `ENTITY_NOT_FOUND` (`EntityNotFoundError`), `ENTITY_ALREADY_EXISTS` (`EntityAlreadyExistsError`), `UNRESOLVABLE_E_REF` (`SDKStoreError`), `INV_7C_IDENTITY_PROTECTED` (`SDKStoreError`), `EXISTENCE_CLAIM_TRANSITIONAL_GUARD` (`SDKStoreError`), `FIELD_CARDINALITY_MISMATCH` (`CardinalityError`), `FIELD_VALUE_VALIDATION_FAILED` (`SDKValueError`) | Codes raised across `fg.entities.*`, `fg.fields.*`, and `fg.assertions.retract(...)`. Inspect `exc.code` to match. |
 | Schema compile helpers (advanced) | `build_authoring_schema_from_classes`, `compile_schema_from_classes`, `schema_preflight_from_classes` | Lower-level schema compilation. Not part of the normal teaching path. |
 | Capability shells (advanced importable) | `from factgraph.sdk.shells import check, diagnose, why_not, fact_overlay, proof_frame, proof_frame_diff, rule_add_condition, rule_disable` | Direct functional access to the capability primitives that `fg.eval` / `fg.audit` build on. Useful for embedding kernel reasoning into third-party orchestration; not surfaced via the `fg.*` namespaces. |
 
@@ -274,8 +275,10 @@ same project; some are out of scope for `factgraph` entirely.
   unrelated to graph save.
 - `fg.schema.register(...)`, `fg.schema.extend(...)`, and
   `fg.schema.apply(...)` return `SchemaAddResult`.
-- `fg.entities.ref(...)`, `fg.entities.get(...)`, and
-  `fg.entities.where(...)` are the entity read entry points.
+- `fg.entities.ref(...)`, `fg.entities.get(...)`, `fg.entities.where(...)`,
+  `fg.entities.exists(...)`, and `fg.entities.match(...)` are entity read
+  entry points; `fg.entities.create(...)`, `fg.entities.delete(...)`, and
+  `fg.entities.edit(...)` are entity lifecycle entry points.
 - `fg.fields.set(...)`, `fg.fields.add(...)`, and `fg.assertions.retract(...)` append
   ledger assertions or retractions.
 - `fg.assertions.by_id(...)`, `fg.assertions.by_ids(...)`,

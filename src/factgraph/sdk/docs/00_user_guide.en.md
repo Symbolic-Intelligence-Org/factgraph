@@ -1016,6 +1016,9 @@ Notable changes:
 | `temporal` field on `Field` | (removed) | Temporal semantics moved to `meta` |
 | `dims` field on `Field` | (removed) | Multi-dimensional fields not supported |
 | `fg.get/find/ref/match` | `fg.entities.get/where/ref/match` | Layer 1 entity navigation |
+| (new in v3) | `fg.entities.create` | Explicit Identity Claim + `:exists` Claim emit; replaces implicit-create through `fg.fields.set` |
+| (new in v3) | `fg.entities.delete` | Whole-entity retract; PF-S2 Form A `(e_ref)` or Form B `(EntityCls, **identity)` |
+| (new in v3) | `fg.entities.exists` | Boolean visibility check on the active Identity Claim bundle (no snapshot materialization) |
 | `fg.set/add` | `fg.fields.set/add` | Layer 2 field writes |
 | `fg.retract` | `fg.assertions.retract` | Layer 3 assertion-id mutation |
 | `fg.edit` | `fg.entities.edit` | EntityEditor entry point |

@@ -167,15 +167,29 @@ if not fg.entities.exists(User, user_id="u-3"):
     fg.entities.create(User, user_id="u-3")
 ```
 
-`fg.entities.delete(e_ref_or_cls, *, meta=None, **identity)` retracts the
-entity coordinate (its Identity Claims + `<EntityType>:exists` Claim). It
-accepts either an existing entity ref or an `EntityCls + **identity`
-descriptor:
+`fg.entities.delete(...)` retracts the entity coordinate (its Identity
+Claims + `<EntityType>:exists` Claim). It accepts two mutually exclusive
+selector forms:
+
+| Form | Signature | Notes |
+| --- | --- | --- |
+| A | `delete(e_ref, *, meta=None)` | Pass an existing managed `e_ref` string. Identity kwargs are rejected. Unmanaged refs raise `SDKStoreError(UNRESOLVABLE_E_REF)`. |
+| B | `delete(EntityCls, *, meta=None, **identity)` | Pass the entity class plus the full identity bundle. `e_ref` positional is rejected. |
 
 ```python
+# Form A: by managed e_ref string
+intern = fg.entities.create(User, user_id="u-temp")
+fg.entities.delete(intern)
+assert not fg.entities.exists(User, user_id="u-temp")
+
+# Form B: by class + identity (the form used through the rest of this page)
 fg.entities.delete(User, user_id="u-2")
 assert not fg.entities.exists(User, user_id="u-2")
 ```
+
+Passing a tuple-shaped selector (mixing positional and identity kwargs)
+raises `SDKStoreError`. A coordinate that is not currently visible raises
+`EntityNotFoundError(ENTITY_NOT_FOUND)`.
 
 For multi-field staged edits before commit, `fg.entities.edit(EntityCls,
 **identity)` returns an `EntityEditor` that buffers writes. The editor
