@@ -343,6 +343,7 @@ trusted internal paths and do not run this SDK-layer validation.
 |---|---|
 | `by_id(asrt_id)` | Return `AssertionRecord | None` for one assertion id |
 | `by_ids(asrt_ids)` | Return `AssertionRecordSet` for an iterable of assertion ids; unknown ids are skipped |
+| `field(Field)` | Return `AssertionView` for one schema field; exposes `active_records` and `history_records` |
 | `where(*, field=None, e_ref=None, value=None, value_tag=None, _meta=None)` | Filter active assertions by canonical Layer 3 criteria |
 | `retract(asrt_id, *, meta=None)` | Retract a specific assertion id; Identity Claims and legacy `:exists` Claims are protected |
 | `active` / `all` | Active or all assertion records |
@@ -355,12 +356,21 @@ Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 
 | Method | One-liner |
 |---|---|
-| `evaluate(inference_or_expr, *, head=None, engine='native', config=None)` | Evaluate an `Inference`, `Rule`, or `RuleExpr`; returns `EvaluateResult`. |
-| `explain(expr, *, head=closed_head, engine='native', config=None)` | Replay a closed-head explanation; returns `Explanation`. |
+| `evaluate(inference_or_expr, *, head=None, engine=None, config=None)` | Evaluate an `Inference`, `Rule`, or `RuleExpr`; returns `EvaluateResult`. `engine=None` resolves to `"native"`; explicit values must be one of `"native"`, `"souffle"`, `"problog"`, `"pyreason"`. |
+| `explain(expr, *, head, engine=None, config=None)` | Replay a closed-head explanation; `head=` is required (no default). `engine=` resolves the same way as `evaluate`. Returns `Explanation`. |
 | `preview_config(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 
-Public `evaluate(...)` rejects `engine_options=`, `registry=`, `mode=`, and
-candidate compatibility flags.
+Public `evaluate(...)` rejects **seven** deprecated/blocked kwargs through two
+distinct mechanisms:
+
+- **Presence-rejected (5 kwargs)** — raises even when the value is `None`:
+  `view=`, `policy=`, `semantics_profile=`, `mode=`, `temporal_view=`.
+- **Non-None-rejected (2 kwargs)** — popped with a `None` default; raises
+  only on a non-None value: `registry=`, `engine_options=`.
+
+The mechanism distinction matters when threading kwargs through wrappers: a
+wrapper that passes `view=None` to `evaluate(...)` will still raise, while
+`registry=None` is silently dropped.
 
 Pass `Rule` / `Inference` value objects directly to `run(...)` or
 `evaluate(...)`. Registry-backed SavedRule/SavedInference persistence was
@@ -395,8 +405,22 @@ path. Use `fg.eval.evaluate(...)`, `row.explain()`, `row.close()`, and
 | Method | One-liner |
 |---|---|
 | `explain(asrt_id_or_record)` | Get proof explanation for a fact |
-| `conflicts()` | Return active conflicting assertions |
+| `conflicts(target)` | Diagnose conflicts for an assertion record or entity field cell (see target shapes below) |
 | `diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_events, *, warnings=(), include_unchanged=False)` | Compare two recorded rounds; returns `ProofFrameDiff` |
+
+`fg.audit.conflicts(target)` accepts four target shapes:
+
+1. assertion id string (e.g. `"asrt:..."`);
+2. object exposing `.asrt_id` (e.g. `AssertionRecord` or any record returned by
+   `fg.assertions.*`);
+3. `(entity, Field)` tuple, where `entity` is an `e_ref` string or any object
+   with a `.ref` attribute (e.g. an `EntitySnapshot`);
+4. `(entity, field_name: str)` tuple, with the same `entity` shape as (3).
+
+`fg.audit.explain(target)` accepts only shapes 1 and 2 — the `(entity, field)`
+tuple branch is specific to `conflicts` because it resolves to a cell, not a
+specific assertion. Passing shapes 3 or 4 to `explain(...)` raises
+`SDKStoreError`.
 
 `diff_proof_frames` is pure (no store/registry/engine/IO). Load events
 via `factgraph.audit.load_audit_package` or hold them from a recorder.

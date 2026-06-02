@@ -354,8 +354,19 @@ different:
 
 | Surface | Shape | Persistence | Purpose |
 | --- | --- | --- | --- |
-| `fg.assertion_views.create(...)` | `FrozenAssertionSet` (6 fields: `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids`, `view_digest`) | In-memory only; SDK-owned anchors (`db_id="db:<sdk>"`, empty `base_tx_id`/`schema_digest`) | Session-local named assertion-id sets |
-| `db.create_view(...)` | `FrozenAssertionSet` (same 6-field dataclass) | Durable `views/objects/<view_digest>.json` object; anchored to a real Database head | Database-owned frozen scope object |
+| `fg.assertion_views.create(...)` | `FrozenAssertionSet` (SDK-layer dataclass, 2 fields: `name`, `asrt_ids: frozenset[str]`) | In-memory only; not written by `fg.save_workspace(...)` | Session-local named assertion-id sets |
+| `db.create_view(...)` | `FrozenAssertionSet` (Database-layer dataclass fields: `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids: tuple[str, ...]`, `view_digest`) | Durable `views/objects/<view_digest>.json` object; anchored to a real Database head | Database-owned frozen scope object |
+
+The two surfaces return **different `FrozenAssertionSet` classes that share a
+name but not a schema**. `factgraph.sdk.FrozenAssertionSet` is a 2-field
+session-local set; `factgraph.core.store.database.FrozenAssertionSet` is a
+6-field Database-anchored object whose extra fields (`db_id`, `base_tx_id`,
+`schema_digest`, `view_digest`) tie the set to a specific Database head and
+schema version. The SDK module imports the Database class with
+`from factgraph.core.store.database import FrozenAssertionSet as
+DatabaseFrozenAssertionSet` to keep the two names disambiguated inside the
+SDK source; users importing `FrozenAssertionSet` from `factgraph.sdk` always
+get the 2-field SDK version.
 
 SDK views are not written by `fg.save_workspace(...)`, and `FactGraph.load_workspace(...)` does not
 restore them. Database durable views are content-addressed objects owned by the
