@@ -87,6 +87,64 @@ If `locale` decides which facts are being described, make it an `Identity()`.
 If `locale` is only a changeable preference about one user coordinate, make it
 a `Field()`.
 
+## Supported types and constraints
+
+Form I infers the storage type and cardinality from the Python annotation on
+each `Identity()` / `Field()` descriptor. There is no separate `type=` or
+`cardinality=` keyword.
+
+### Scalar types
+
+| Annotation | Storage domain | Notes |
+| --- | --- | --- |
+| `str` | string | Required when using `pattern=r"..."`. |
+| `int` | int | |
+| `bool` | bool | |
+| `bytes` | bytes | |
+| `float` | float64 | Float values cannot appear in `Literal[...]` enums. |
+| `uuid.UUID` | uuid | |
+| `datetime.datetime` | time | |
+| Another `Entity` subclass (e.g., `team: Team = Field()`) | entity_ref | Forward-string annotations like `"Team"` resolve the same way. |
+
+### Multi-value collections
+
+Cardinality becomes `multi` when the annotation is `list[T]`, `set[T]`,
+`frozenset[T]`, or `tuple[T, ...]`, where `T` is one of the scalar types
+above. Nested collections (`list[list[str]]`) and untyped containers are
+rejected at class-definition time.
+
+### `Literal[...]` enums
+
+Use `Literal[...]` on a `Field()` annotation to constrain accepted values:
+
+```python
+status: Literal["active", "inactive"] = Field()
+```
+
+All literal values must share one scalar domain. Mixed-type literals and
+float literals raise `SDKSchemaError` when the entity class is declared.
+Invalid runtime values raise `SDKValueError` before ledger append.
+
+### `pattern=` regex constraints
+
+`pattern=r"..."` applies to string-typed `Identity()` or `Field()` descriptors,
+on both single and multi annotations. The regex is compiled at class
+declaration; an invalid regex raises `SDKSchemaError`. Non-matching values
+raise `SDKValueError` at write time.
+
+### Not supported in Form I
+
+These annotations and keywords raise `SDKSchemaError` at class-declaration
+time:
+
+| Construct | Why |
+| --- | --- |
+| `Optional[T]`, `Union[T, U]`, `T \| None` | Form I has no optional/union shape; unset reads return `None` (single) or `()` (multi). |
+| `dict[K, V]` | Dictionaries are not a Form I storage shape. |
+| Nested collections (`list[list[T]]`) | Multi fields must hold scalar element types. |
+| `Identity(primary_key=...)`, `Identity(default=...)`, `Identity(default_factory=...)` | Every `Identity()` is part of the full immutable coordinate; callers always supply the complete bundle. |
+| `Field(cardinality="single"\|"multi")` | Cardinality is inferred from the annotation. Replace with a scalar or `list[T]` annotation. |
+
 ## Entity metadata: `class Meta:`
 
 Each `Entity` subclass can declare an optional inner `class Meta:` block to
@@ -121,9 +179,22 @@ and discoverability.
 
 ## Writing values from schema descriptors
 
-Cardinality is inferred from type annotations. A scalar annotation is a
-single-value field. Collection annotations such as `list[T]` are multi-value
-fields.
+`fg.fields.*` dispatches on the descriptor type and the inferred cardinality:
+
+| Call | Accepts | Rejects |
+| --- | --- | --- |
+| `fg.fields.set(field, ref, value)` | Single-cardinality `Field()` | Multi `Field()` → `CardinalityError`; `Identity()` → `SDKStoreError(INV_7C_IDENTITY_PROTECTED)` |
+| `fg.fields.add(field, ref, value)` | Multi-cardinality `Field()` | Single `Field()` → `CardinalityError`; `Identity()` → `SDKStoreError(INV_7C_IDENTITY_PROTECTED)` |
+| `fg.fields.retract(field, ref, value)` | The unique active `(field, ref, value)` assertion | Zero matches → `SDKStoreError`; multiple matches → `SDKStoreError` |
+| `fg.fields.delete(field_or_identity, ref)` | `Field()` (retracts all active values) or `Identity()` (retracts the identity-field claim) | Wrong descriptor type → `SDKStoreError` |
+
+Unset reads return `None` for single fields and `()` for multi fields; there
+is no separate "missing vs explicitly null" distinction.
+
+The cardinality check fires at dispatch time. Calling
+`fg.fields.add(User.display_name, ref, "Alice")` on a single-value field
+raises `CardinalityError` before any ledger work. See [Read and write
+facts](read-write.md#field-level-reads-and-deletes) for full CRUD examples.
 
 `Literal[...]` adds an enum constraint, and `pattern=` adds a regex constraint
 for string-valued `Identity()` or `Field()` descriptors.
@@ -157,6 +228,36 @@ rows = fg.entities.where(User, user_id="u-1")
 assert {row.identity["locale"] for row in rows} == {"en", "zh"}
 assert {row.display_name for row in rows} == {"Alice", "Alice ZH"}
 ```
+
+## Identity is immutable
+
+Identity values are fixed by `fg.entities.create(...)` at coordinate creation
+time and participate in the `idref_v1` reference hash. They cannot be
+modified on an existing entity.
+
+`fg.fields.set` and `fg.fields.add` reject `Identity()` descriptors with
+`SDKStoreError(code="INV_7C_IDENTITY_PROTECTED")`:
+
+```python
+from factgraph.sdk import SDKStoreError
+
+try:
+    fg.fields.set(User.user_id, user_en, "u-2")
+except SDKStoreError as exc:
+    assert exc.code == "INV_7C_IDENTITY_PROTECTED"
+```
+
+To replace an identity bundle, delete the existing coordinate and create a
+new one:
+
+```python
+fg.entities.delete(user_en)
+new_user = fg.entities.create(User, user_id="u-2", locale="en")
+```
+
+Schema-level Identity changes (adding, removing, or retyping an `Identity()`)
+are rejected by `fg.schema.extend(...)` — see [What schema extension will
+not do](#what-schema-extension-will-not-do).
 
 ## Registering a new entity type
 

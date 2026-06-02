@@ -37,11 +37,16 @@ treat it as a handle returned by the SDK and do not parse or construct it
 yourself.
 
 `fg.entities.create(...)` emits the entity identity (writes Identity Claims
-plus a `<EntityType>:exists` Claim to the ledger). `fg.entities.ref(...)`
-returns the deterministic reference for an identity coordinate and registers
-the bundle in the SDK shadow store, without writing identity Claims to the
-ledger. Use `create(...)` for explicit entity-lifecycle entries, and `ref(...)`
-when you only need the reference for follow-up `fg.fields.*` writes.
+plus a `<EntityType>:exists` Claim to the ledger) and registers the bundle in
+the SDK shadow store. `fg.entities.ref(...)` registers the bundle in the
+shadow store **without** writing identity Claims to the ledger; it returns
+the deterministic reference token. Use `create(...)` for explicit
+entity-lifecycle entries, and `ref(...)` when you only need the reference
+for follow-up `fg.fields.*` writes against an already-known coordinate.
+
+Passing an unmanaged token (one not produced by `ref(...)` or `create(...)`)
+to `fg.fields.set(...)` / `add(...)` raises `SDKStoreError` with code
+`UNRESOLVABLE_E_REF`.
 
 ## Single and multi writes
 
@@ -72,6 +77,12 @@ tag_reviewer = fg.fields.add(
 Each call returns an `asrt_id`. The id identifies the exact ledger record that
 was written. Keep it whenever you may want to audit or retract that assertion
 later.
+
+The `meta=` dict is free-form, but two keys are reserved for the uncertainty
+contract: `raw_kind` and `bound` must appear together when used, and are
+validated by the write protocol. See [Assertion records and
+views](assertions.md#raw-uncertainty-raw_kind-and-bound) for the full pairing
+rules.
 
 Calling `set` again appends a newer assertion. The snapshot's scalar view
 chooses the latest active value for a single-value field.
@@ -115,20 +126,36 @@ current_tags = fg.fields.get(User.tags, alice)
 assert set(current_tags) == {"engineer", "reviewer"}
 ```
 
-`fg.fields.delete(field_or_identity, e_ref, *, meta=None)` retracts the
-entire field (all active assertions for that coordinate) in a single call.
-It accepts either a `Field` descriptor or an `Identity` descriptor:
+`fg.fields.retract(field, e_ref, value, *, meta=None)` retracts the
+**unique** active `(field, e_ref, value)` assertion when you know the value
+but not the `asrt_id`. Zero matches or multiple matches raise
+`SDKStoreError`. Use this for "undo one specific multi-value entry" without
+needing to capture the `asrt_id` at write time:
+
+```python
+fg.fields.retract(User.tags, alice, "reviewer")
+assert "reviewer" not in set(fg.fields.get(User.tags, alice))
+```
+
+`fg.fields.delete(field_or_identity, e_ref, *, meta=None)` retracts every
+active assertion for that coordinate in a single call. It accepts either a
+`Field` descriptor or an `Identity` descriptor:
 
 ```python
 fg.fields.delete(User.tags, alice)
 assert fg.fields.get(User.tags, alice) == ()
 ```
 
-`fg.fields.set(...)` chooses the latest active assertion under
-single-cardinality semantics (tie-broken by `ingested_at` descending, then
-`asrt_id` lexicographic); for multi-cardinality fields, `set(...)` replaces
-the whole set while `add(...)` appends. Use `fg.assertions.retract(asrt_id,
-*, meta=None)` for assertion-id-level retraction (next section).
+Passing an `Identity` descriptor retracts the identity-field Claim itself;
+whole-entity changes still need `fg.entities.delete(...)` (see "Existence
+and entity lifecycle" below).
+
+When `set(...)` is called on a single-value field, the snapshot view chooses
+the latest active assertion (tie-broken by `ingested_at` descending, then
+`asrt_id` lexicographic). Calling `set(...)` on a multi-value field, or
+`add(...)` on a single-value field, raises `CardinalityError` before any
+ledger work. Use `fg.assertions.retract(asrt_id, *, meta=None)` for
+assertion-id-level retraction (next section).
 
 ## Existence and entity lifecycle
 
@@ -151,33 +178,45 @@ assert not fg.entities.exists(User, user_id="u-2")
 ```
 
 For multi-field staged edits before commit, `fg.entities.edit(EntityCls,
-**identity)` returns an `EntityEditor` that buffers writes until
-`.commit()` (or `.rollback()`):
+**identity)` returns an `EntityEditor` that buffers writes. The editor
+exposes one accessor per `Field()` declared on the entity class; field
+writes go through the accessor:
 
 ```python
 with fg.entities.edit(User, user_id="u-1") as editor:
-    editor.set(User.name, "Alicia")
-    editor.add(User.tags, "lead")
-    editor.commit()
+    editor.name.set("Alicia")
+    editor.tags.add("lead")
 ```
 
-The editor closes at the end of the `with` block; using it after closure
-raises `EditorClosedError`.
+Within the editor, `editor.<field>.retract(asrt_id=...)` removes a specific
+prior assertion by id. The `with` block auto-commits on normal exit and
+auto-rolls-back on exception, so explicit `editor.commit()` /
+`editor.rollback()` are only needed when you commit mid-block or abandon a
+staged set early. Calling either explicitly closes the editor; using it
+after closure (including a second commit) raises `EditorClosedError`.
+`editor.preview()` returns a `BatchPlan` for inspection without committing.
 
 ## Finding entities
 
-Use `fg.entities.where(...)` when you want all matching snapshots. Field filters
-are exact matches. For a multi-value field, the filter is a containment check.
+Use `fg.entities.where(...)` when you want all matching snapshots. It returns
+a `list[EntitySnapshot]`. Single-value field filters are exact matches; for a
+multi-value field the filter is a containment check (the user matches if the
+filter value appears in the active set).
 
 ```python
 bob = fg.entities.create(User, user_id="u-2")
 fg.fields.set(User.name, bob, "Bob")
 fg.fields.add(User.tags, bob, "reviewer")
+fg.fields.add(User.tags, bob, "lead")  # bob has {"reviewer", "lead"}
 
-reviewers = fg.entities.where(User, tags="reviewer")
+reviewers = fg.entities.where(User, tags="reviewer")  # containment
 
 assert {row.name for row in reviewers} == {"Alice", "Bob"}
 ```
+
+Each snapshot carries `row.identity` (the full identity dict) and
+`row.identity_available` (bool) so a returned row can be fed straight back
+into `fg.entities.edit(User, **row.identity)` for follow-up writes.
 
 `where(...)` is for direct entity and field filters. When the read pattern needs
 a `Rule` or an AND-only `RuleExpr`, use `fg.entities.match(...)`; see
@@ -208,10 +247,11 @@ Here `tag_reviewer` is the `asrt_id` returned by the earlier
 `fg.fields.add(...)` call. The original assertion is not deleted; it moves out
 of the active set into history. The retract itself is a separate ledger record.
 
-Identity Claims are protected. Attempting to retract an identity assertion by
-id raises `SDKStoreError` with code `INV_7C_IDENTITY_PROTECTED`; use
-`fg.entities.delete(...)` for whole
-entity lifecycle changes.
+Identity and existence Claims are protected. Attempting to retract an
+identity assertion by id raises `SDKStoreError` with code
+`INV_7C_IDENTITY_PROTECTED`; retracting a legacy `<EntityType>:exists` Claim
+raises `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`. Use `fg.entities.delete(...)`
+for whole-entity lifecycle changes.
 
 ## Complete example
 

@@ -117,21 +117,46 @@ batch of facts:
 
 ```python
 with fg.batch(meta={"source": "import.csv", "ingested_at": "2026-06-01T00:00:00Z"}) as tx:
-    tx.entity(User, user_id="u-3").set(User.name, "Charlie")
-    tx.entity(User, user_id="u-3").add(User.tags, "intern")
-    tx.entity(User, user_id="u-4").set(User.name, "Diana")
+    u3 = tx.entity(User, user_id="u-3")
+    u3.tag_seed.set("intern")
+    u3.tag.add("intern")
+
+    u4 = tx.entity(User, user_id="u-4")
+    u4.tag_seed.set("contractor")
+
+    tx.commit(objects=[u3, u4])
 ```
 
-The `tx.entity(...)` accessor returns a per-entity batch handle that
-mirrors `fg.fields.*` semantics within the batch. On exit (either normal
-completion of `with` or an explicit `tx.commit()`), the buffered writes
-are committed as a single transaction. Exceptions raised inside the block
-roll the batch back without writing.
+`tx.entity(EntityCls, **identity)` returns a `ManagedEntityHandle`. Each
+declared `Field()` is exposed as an attribute accessor on the handle that
+provides `.set(value)`, `.add(value)`, and `.retract(assertion_id)` — the
+write goes through the handle attribute (`u3.tag_seed.set("intern")`), not
+through a positional Field descriptor argument.
+
+`tx.commit(objects=[...])` must be called explicitly to persist the staged
+operations as one ledger transaction. The `with` block by itself does **not**
+auto-commit; exiting without calling `commit(...)` discards every staged
+operation. An exception raised inside the block also discards the batch.
+`tx.preview(objects=[...])` returns a `BatchPlan` for inspection without
+committing.
 
 `fg.batch(...)` is the canonical bulk-write entry for transactional groups;
 `fg.schema.ingest(...)` is for declarative payloads. Both are higher-level
 than the underlying `commit_assertions(...)` Database surface used by
 adapters and audit-package loaders.
+
+### Choosing `fg.entities.edit(...)` vs `fg.batch(...)`
+
+Both surfaces stage writes before commit, but they target different shapes:
+
+| Use | When |
+| --- | --- |
+| `fg.entities.edit(EntityCls, **identity)` | One entity, multiple field writes, auto-commit on `with` exit. Returns an `EntityEditor`. |
+| `fg.batch(meta=...)` | Multiple entities, atomic group commit, shared provenance, explicit `tx.commit(objects=[...])`. Returns an `SDKBatchTx`. |
+
+If you only touch a single entity, prefer `fg.entities.edit(...)` for the
+auto-commit ergonomics. If your unit of atomicity spans more than one
+entity, use `fg.batch(...)`.
 
 ## Save the workspace
 
