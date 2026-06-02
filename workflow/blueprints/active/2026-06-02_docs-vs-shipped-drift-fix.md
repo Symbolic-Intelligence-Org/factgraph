@@ -1,8 +1,8 @@
 # Docs-vs-Shipped Drift Fix Blueprint: post-`80a60f66` strict re-audit findings
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-02
-- Last Updated: 2026-06-02
+- Last Updated: 2026-06-02 (Step 4.6 scope freeze)
 - Fork basis: **`80a60f66`** (current feature-line HEAD; contains the fg.entities docs alignment commit). **NOT forked from sacred master** — that baseline is pre-v0.2 and would pull the audit subject back into the old world.
 - Related Modules:
   - `docs/official/kernel/quickstart/database.md` (P0 site)
