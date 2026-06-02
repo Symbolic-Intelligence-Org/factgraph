@@ -123,6 +123,55 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 The second assertion matters. The rule found the `tag_seed` fact, but it did
 not write a `tag` fact.
 
+### Aggregate helpers in `when` bodies
+
+For correlated aggregates inside a rule body, use the canonical
+`agg_count` / `agg_sum` / `agg_min` / `agg_max` / `agg_mean` helpers from
+`factgraph.sdk.dsl`. They take their own inner `where=[...]` (preserved as
+the aggregate-specific filter; this is the only place where `where=` is
+used after the Q-NAMING-E rename — `build_application_rule(...)` takes
+`when=[...]` while aggregate filters take `where=[...]`).
+
+```python
+from factgraph.sdk.dsl import (
+    agg_count,
+    agg_max,
+    agg_mean,
+    agg_min,
+    agg_sum,
+    build_application_rule,
+    vars,
+)
+
+with vars("u", "o", "total") as (u, o, total):
+    user_orders_total = build_application_rule(
+        id="user:order_total",
+        version="v1",
+        when=[
+            User(u),
+            total == agg_sum(Order(o).amount, where=[Order(o).buyer == u]),
+            total > 4,
+        ],
+        ports={"user": u, "total": total},
+    )
+```
+
+Signatures (all keyword-only `where=`):
+
+| Helper | Signature | Notes |
+| --- | --- | --- |
+| `agg_count(*, where=[...])` | counts matching binding rows | No target term; pure count over the filter. |
+| `agg_sum(target, *, where=[...])` | sums `target` term over filter | `target` may be `Entity(var).field`, a logic variable, or an arithmetic expression. |
+| `agg_min(target, *, where=[...])` | minimum of `target` over filter | Same `target` shape. |
+| `agg_max(target, *, where=[...])` | maximum of `target` over filter | Same. |
+| `agg_mean(target, *, where=[...])` | arithmetic mean of `target` over filter | Same. |
+
+Aggregates appear as the right-hand side of comparison expressions
+(`total == agg_sum(...)` above). The `where=` argument is canonical for
+aggregate filters and is **not** renamed (per Q-NAMING-E §5.4 carve-out
+— aggregate helpers preserve `where=` because they describe a filtering
+sub-clause, not a rule body).
+
 ## Reading snapshots with match
 
 Use `fg.entities.match(EntityCls, rule_or_expr, **port_constraints)` when you want
@@ -577,6 +626,12 @@ assert inspected["branches"][0]["atom_count"] == 1
 Case ids are structural names. Use explicit branch ids when a rule has
 meaningful pathways that you may want to inspect or configure later. If you do
 not provide an id, the SDK still exposes a fallback id such as `c0`.
+
+For an application `Rule` or `RuleExpr`, `fg.rules.inspect(...)` returns a
+`RuleExprInspect` dict containing `kind` (`"Rule"` / `"RuleExpr"`), `id`,
+`heads`, occurrence aliases, and per-occurrence port type metadata. See
+`factgraph.application.protocol.rule_expr_inspect` for the canonical
+return shape.
 
 ## RuleRef composes in-memory rules
 

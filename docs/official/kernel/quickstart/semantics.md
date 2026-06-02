@@ -28,6 +28,17 @@ Most application code should start with `ProbLogConfig` or
 `PyReasonConfig`. `SemanticsProfile` is public, but it is the advanced
 canonical form that adapters consume internally.
 
+### Supported engines
+
+The kernel ships four runtime engines: `native`, `souffle`, `problog`, and
+`pyreason`. `ProbLogConfig` and `PyReasonConfig` are the high-level
+wrappers for the latter two; `engine="native"` and `engine="souffle"` are
+selected by passing the string directly (or by lowering through a
+`SemanticsProfile(engine="souffle", ...)`). The Souffle adapter has no
+quickstart wrapper — it consumes a `SemanticsProfile` directly. See the
+adapter docs at `src/factgraph/adapters/docs/01_souffle_adapter.md` for
+the Souffle-specific surface.
+
 ### Wrappers lower into `SemanticsProfile`
 
 `ProbLogConfig(...)` and `PyReasonConfig(...)` are **high-level
@@ -180,6 +191,22 @@ but, as its name implies, blocks projection rather than producing a point.)
 This is intentionally anti-silent-ignore: midpoint is a semantic choice, not a
 default. If raw uncertainty is present and no matching policy is configured,
 the adapter rejects instead of guessing.
+
+### ProbLog runtime timeout
+
+The single ProbLog runtime knob exposed at evaluation time is `timeout`,
+passed via the legacy `engine_options={"timeout": N}` kwarg on
+`fg.eval.evaluate(...)`. The public SDK wrappers are call-time only:
+
+```python
+# Internal/adapter call site — public SDK rejects this kwarg on fg.eval.evaluate.
+# Pass through ProbLogConfig only via lower-level SemanticsProfile paths if
+# you need to set the timeout from quickstart-level code.
+```
+
+The public `fg.eval.evaluate(...)` surface rejects `engine_options=` with
+`SDKStoreError`; the legacy kwarg remains a core/adapter-internal surface
+only.
 
 ## Use PyReasonConfig with a Rule
 
@@ -379,6 +406,20 @@ Do not assume `preview_config(...)` runs an engine. It only shows structure.
 
 Do not expect `evaluate(...)` to write facts. It returns rows; explicit write
 APIs decide which facts enter the ledger.
+
+Do not put `body_confidences=`, `engine_ext=`, or other legacy adapter
+kwargs on `Inference(...)`. Public application code uses `SemanticsProfile`
+/ `ProbLogConfig` / `PyReasonConfig` for engine configuration; `Inference`
+remains the legacy v0.2 compatibility shape but does not accept those
+kwargs and never has on the application layer.
+
+### PyReason JIT compile warning
+
+PyReason executes via `numba` JIT-compilation. The **first** PyReason
+evaluation in a fresh Python process pays a one-time compile cost (often
+~30–170 seconds depending on machine). Subsequent evaluations in the same
+process are fast. Cache warm-up time is intentional and outside the
+adapter's control; it is not a kernel bug.
 
 ## Complete example
 

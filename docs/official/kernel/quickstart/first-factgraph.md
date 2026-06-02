@@ -125,3 +125,6 @@ assert tuple(snap.tags) == ("engineer",)
 - `fg.fields.set(...)` writes a single-value field.
 - `fg.fields.add(...)` writes a multi-value field.
 - `fg.entities.get(...)` reads the current snapshot.
+- For schema-level metadata, see [Define a schema](schema.md#entity-metadata-class-meta) (`class Meta:` with version/description/tags).
+- For relationship (edge) declarations, see [Relationship descriptors](schema.md#relationship-descriptors).
+- For the supported engine list, see [Configure inference semantics](semantics.md#supported-engines) (native / souffle / problog / pyreason).

@@ -87,6 +87,67 @@ If `locale` decides which facts are being described, make it an `Identity()`.
 If `locale` is only a changeable preference about one user coordinate, make it
 a `Field()`.
 
+## Entity metadata: `class Meta:`
+
+Each `Entity` subclass can declare an optional inner `class Meta:` block to
+attach schema-level metadata. The metadata is preserved in the compiled
+authoring asset and is read by `fg.schema.*` and `fg.audit.*` consumers.
+
+```python
+class EmploymentEvent(Entity):
+    """Used as description fallback only when Meta.description is absent."""
+
+    class Meta:
+        version = "v1"
+        description = "Employment event"
+        tags = ["employment", "event"]
+
+    event_id: str = Identity()
+    company: str = Field()
+```
+
+Only three keys are accepted; passing anything else raises
+`SDKSchemaError("Entity.Meta only supports version, description, and tags; ...")`.
+
+| Key | Type | Notes |
+| --- | --- | --- |
+| `version` | non-empty `str` | Schema-level version tag (independent of any rule/inference `version=`). |
+| `description` | non-empty `str` | Takes precedence over the class docstring. The class docstring is used only as a fallback when `description` is absent. |
+| `tags` | `list[str]` of non-empty strings | Free-form tags surfaced by `fg.audit.*` and authoring inspection. |
+
+`class Meta:` is optional. Most teaching examples in this quickstart omit it
+for brevity; production schemas frequently declare it to anchor versioning
+and discoverability.
+
+## Relationship descriptors
+
+`Relationship` is the sibling of `Entity` for declaring edge types. It is
+listed in the public `factgraph.sdk` import surface and uses a similar
+metaclass-driven declaration form. A minimal example:
+
+```python
+from factgraph.sdk import Entity, FactGraph, Field, Identity, Relationship
+
+
+class Team(Entity):
+    team_id: str = Identity()
+    name: str = Field()
+
+
+class MemberOf(Relationship):
+    from_entity = User
+    to_entity = Team
+    role: str = Field()
+```
+
+`from_entity` and `to_entity` are required and may be declared as class
+attributes (as above) or as type-annotated descriptors; omitting either
+raises `SDKSchemaError("Relationship '...' must declare from_entity")`.
+Relationships register through `fg.schema.register(MemberOf)` exactly like
+entities and become part of the predicate space used by Rules and
+Inferences. Relationship declarations are advanced usage; the rest of this
+quickstart focuses on entity + field shape.
+
 ## Writing values from schema descriptors
 
 Cardinality is inferred from type annotations. A scalar annotation is a
@@ -215,6 +276,61 @@ assert apply_result.added_fields == ["Team.region"]
 
 Use `apply(...)` when the caller is intentionally accepting either safe path.
 Use `register(...)` or `extend(...)` when the operation kind itself matters.
+
+## Bulk ingest with `fg.schema.ingest(...)`
+
+`fg.schema.ingest(data, *, meta=None)` accepts a structured payload describing
+multiple entity / field writes in one call and returns an `IngestResult`:
+
+```python
+result = fg.schema.ingest(
+    {
+        "entities": [
+            {"type": "User", "identity": {"user_id": "u-1"}},
+            {"type": "User", "identity": {"user_id": "u-2"}},
+        ],
+        "fields": [
+            {"field": "User.display_name", "ref": "u-1", "value": "Alice"},
+            {"field": "User.display_name", "ref": "u-2", "value": "Bob"},
+        ],
+    },
+    meta={"source": "import.csv"},
+)
+
+assert isinstance(result, IngestResult)
+assert len(result.written_assertion_ids) >= 1
+assert result.duplicate_count >= 0
+```
+
+`IngestResult` has fields `written_assertion_ids: list[str]`,
+`skipped_count: int`, `duplicate_count: int`, `warnings: list[dict]`,
+`diagnostics: list[dict]`, and `diagnostics_contract_version: int = 1`.
+
+`fg.schema.ingest(...)` is the bulk equivalent of `fg.entities.create(...)` +
+`fg.fields.set(...)` / `.add(...)` and is the recommended entry point for
+large-batch loads (e.g., CSV import, data migration). It rejects on attached
+read-only SDKStores.
+
+## Validate authored payloads with `fg.schema.validate_provenance(...)`
+
+`fg.schema.validate_provenance(obj, *, standard="derivation_v1")` validates
+a derivation or schema authoring payload against the named contract standard
+without performing any writes:
+
+```python
+report = fg.schema.validate_provenance(payload, standard="derivation_v1")
+
+assert isinstance(report, ValidationReport)
+assert report.ok in (True, False)
+for issue in report.warnings + report.errors:
+    print(issue)
+```
+
+`ValidationReport` is a frozen dataclass with `ok: bool`,
+`warnings: list[dict]`, `errors: list[dict]`, and
+`diagnostics_contract_version: int = 1`. Use this when shipping
+authoring assets out-of-band; the writes themselves still go through
+`fg.schema.ingest(...)` or `fg.fields.*`.
 
 ## What schema extension will not do
 

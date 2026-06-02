@@ -101,6 +101,69 @@ tag_records = snap.field("tags").all
 The next page, [Assertion records and views](assertions.md), explains how to
 filter those records by value and metadata.
 
+## Field-level reads and deletes
+
+`fg.fields.get(field, e_ref)` returns the **current** value for a single
+coordinate (single-cardinality fields return the chosen value; multi-cardinality
+fields return the tuple of active values):
+
+```python
+current_name = fg.fields.get(User.name, alice)
+assert current_name == "Alice"
+
+current_tags = fg.fields.get(User.tags, alice)
+assert set(current_tags) == {"engineer", "reviewer"}
+```
+
+`fg.fields.delete(field_or_identity, e_ref, *, meta=None)` retracts the
+entire field (all active assertions for that coordinate) in a single call.
+It accepts either a `Field` descriptor or an `Identity` descriptor:
+
+```python
+fg.fields.delete(User.tags, alice)
+assert fg.fields.get(User.tags, alice) == ()
+```
+
+`fg.fields.set(...)` chooses the latest active assertion under
+single-cardinality semantics (tie-broken by `ingested_at` descending, then
+`asrt_id` lexicographic); for multi-cardinality fields, `set(...)` replaces
+the whole set while `add(...)` appends. Use `fg.assertions.retract(asrt_id,
+*, meta=None)` for assertion-id-level retraction (next section).
+
+## Existence and entity lifecycle
+
+`fg.entities.exists(EntityCls, **identity)` returns a boolean without
+materializing a snapshot. Useful for guard clauses:
+
+```python
+if not fg.entities.exists(User, user_id="u-3"):
+    fg.entities.create(User, user_id="u-3")
+```
+
+`fg.entities.delete(e_ref_or_cls, *, meta=None, **identity)` retracts the
+entity coordinate (its Identity Claims + `<EntityType>:exists` Claim). It
+accepts either an existing entity ref or an `EntityCls + **identity`
+descriptor:
+
+```python
+fg.entities.delete(User, user_id="u-2")
+assert not fg.entities.exists(User, user_id="u-2")
+```
+
+For multi-field staged edits before commit, `fg.entities.edit(EntityCls,
+**identity)` returns an `EntityEditor` that buffers writes until
+`.commit()` (or `.rollback()`):
+
+```python
+with fg.entities.edit(User, user_id="u-1") as editor:
+    editor.set(User.name, "Alicia")
+    editor.add(User.tags, "lead")
+    editor.commit()
+```
+
+The editor closes at the end of the `with` block; using it after closure
+raises `EditorClosedError`.
+
 ## Finding entities
 
 Use `fg.entities.where(...)` when you want all matching snapshots. Field filters

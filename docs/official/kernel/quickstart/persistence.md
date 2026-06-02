@@ -108,6 +108,31 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
 The rule and inference definitions themselves are not stored in the workspace.
 Keep them in source files, packages, or application configuration.
 
+## Batch transactional writes
+
+`fg.batch(*, meta=None)` opens a transactional context that buffers multiple
+field writes and commits them together as a single ledger transaction. Use
+it when you need atomic group writes or shared `meta=` provenance across a
+batch of facts:
+
+```python
+with fg.batch(meta={"source": "import.csv", "ingested_at": "2026-06-01T00:00:00Z"}) as tx:
+    tx.entity(User, user_id="u-3").set(User.name, "Charlie")
+    tx.entity(User, user_id="u-3").add(User.tags, "intern")
+    tx.entity(User, user_id="u-4").set(User.name, "Diana")
+```
+
+The `tx.entity(...)` accessor returns a per-entity batch handle that
+mirrors `fg.fields.*` semantics within the batch. On exit (either normal
+completion of `with` or an explicit `tx.commit()`), the buffered writes
+are committed as a single transaction. Exceptions raised inside the block
+roll the batch back without writing.
+
+`fg.batch(...)` is the canonical bulk-write entry for transactional groups;
+`fg.schema.ingest(...)` is for declarative payloads. Both are higher-level
+than the underlying `commit_assertions(...)` Database surface used by
+adapters and audit-package loaders.
+
 ## Save the workspace
 
 Call `fg.save_workspace()` to persist the workspace:

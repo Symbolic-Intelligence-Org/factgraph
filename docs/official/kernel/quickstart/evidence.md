@@ -272,6 +272,16 @@ shared cross-engine explainability representation that audit-layer consumers
 read. It is part of the public read surface; **construct it via engine
 adapters or protocol bridges, not by hand**.
 
+`EvidenceGraph` is the **read-time, audit-layer** representation surfaced by
+`row.explain()`. The kernel substrate also maintains an internal
+`candidate_evidence_tree` (12-field summary + `node_kind` / `support_kind`
+taxonomies) used by service / runtime-explain consumers. The two shapes
+are intentionally distinct — `EvidenceGraph` is the public audit surface,
+and `candidate_evidence_tree` is an advanced substrate not exposed
+through the SDK. See `src/factgraph/audit/docs/02_evidence_graph.md` for
+the audit-layer contract and `src/factgraph/audit/docs/03_audit_package_contract.md`
+for the durable JSONL audit-package format that consumes both.
+
 ### 6.1 The three nested DTOs
 
 `EvidenceGraph` is a frozen container of two frozen sub-types (`EvidenceNode`

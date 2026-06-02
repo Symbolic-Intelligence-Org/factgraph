@@ -188,9 +188,56 @@ duplicated in the per-purpose groups below.
 | Persistence handles | `SchemaAddResult` | Return type from `fg.schema.register`, `extend`, or `apply`. Rule/inference persistence handles were removed. |
 | Ingest results | `IngestResult`, `ValidationReport` | Return types from `fg.schema.ingest(...)` and `fg.schema.validate_provenance(...)`. |
 | Semantics | `ProbLogConfig`, `PyReasonConfig`, `SemanticsProfile` | Configure inference evaluation. Wrappers are the teaching path; `SemanticsProfile` is the canonical lower form. |
-| Error types | `SDKSchemaError`, `SDKStoreError`, `EntityNotFoundError`, `FrozenSnapshotError`, `CardinalityError`, `EditorClosedError`, `SDKDSLError` | Catch these for kernel-level failure modes. |
-| Error codes (advanced) | `INVALID_ROW_FORMAT`, `QUERY_ALIAS_CONFLICT`, `QUERY_INVALID_ROW_FORMAT`, `QUERY_MISSING_REF`, `QUERY_NOT_IMPLEMENTED`, `QUERY_TYPE_MISMATCH`, `QUERY_UNBOUND_VAR` | Stable string constants used inside error messages. |
+| Error types | `SDKSchemaError`, `SDKStoreError`, `SDKValueError`, `EntityNotFoundError`, `EntityAlreadyExistsError`, `FrozenSnapshotError`, `SchemaConflictError`, `SchemaNonAdditiveError`, `SchemaNotFoundError`, `CardinalityError`, `EditorClosedError`, `SDKDSLError` | Catch these for kernel-level failure modes. Use `isinstance(exc, SDKStoreError)` for the most common runtime guard. |
+| Error codes (advanced) | `INVALID_ROW_FORMAT`, `QUERY_ALIAS_CONFLICT`, `QUERY_INVALID_ROW_FORMAT`, `QUERY_MISSING_REF`, `QUERY_NOT_IMPLEMENTED`, `QUERY_TYPE_MISMATCH`, `QUERY_UNBOUND_VAR` | Stable string constants used inside error messages (advanced; for parsing error code components). |
 | Schema compile helpers (advanced) | `build_authoring_schema_from_classes`, `compile_schema_from_classes`, `schema_preflight_from_classes` | Lower-level schema compilation. Not part of the normal teaching path. |
+| Capability shells (advanced importable) | `from factgraph.sdk.shells import check, diagnose, why_not, fact_overlay, proof_frame, proof_frame_diff, rule_add_condition, rule_disable` | Direct functional access to the capability primitives that `fg.eval` / `fg.audit` build on. Useful for embedding kernel reasoning into third-party orchestration; not surfaced via the `fg.*` namespaces. |
+
+## Layering
+
+The kernel ships in four layers (top → bottom):
+
+```text
+factgraph.sdk          ← public ergonomic surface (FactGraph / SDKStore / DSL)
+factgraph.application  ← protocol DTOs + bridges + capability runtimes
+factgraph.core         ← substrate (Database, ledger, Store, derivation, semantics)
+factgraph.adapters     ← engine adapters (native, souffle, problog, pyreason)
+```
+
+Each lower layer is importable but not the primary teaching surface;
+quickstart focuses on `factgraph.sdk`. The application + core layers ship
+their own module docs at `src/factgraph/application/docs/` and
+`src/factgraph/core/docs/` for advanced consumers.
+
+## Advanced importable namespaces
+
+These surfaces ship with `factgraph` but are not re-exported from
+`factgraph.sdk.__all__`. Reach for them only when you need the lower-level
+contract:
+
+| Namespace | Examples | When to use |
+| --- | --- | --- |
+| `factgraph.audit` | `EvidenceGraph`, `EvidenceNode`, `EvidenceEdge`, `EDGE_SUPPORTS`/`EDGE_DERIVES`/`EDGE_UPDATES`, `NODE_CONCLUSION`/`NODE_PREMISE`/`NODE_SEED`, `RoundRecorder`, `RoundEvent`, `RoundSummary`, `AuditAssertionIndex`, `AuditPackageData`, `AuthoringApplyEvent`, `LAYOUT_TREE`/`LAYOUT_TIMELINE` | Build durable explainability artifacts, round-event recording, audit-package loading, evidence graph rendering. See `src/factgraph/audit/docs/*` for the contract details. |
+| `factgraph.application.walker` | `ProofFrameView`, `SupportArtifactView`, `ProofFrameDiffView`, `FrozenTupleView`, `IRBodyWalker`, etc. | Walk evidence-result DTOs without re-decoding raw frozen tuples. |
+| `factgraph.authoring` | `compile_authoring_schema_v1`, `validate_authored_rule`, schema/rule/inference preflight helpers | Lower-level authoring asset preflight before `fg.schema.*` / `fg.eval.*`. See `src/factgraph/authoring/docs/01_overview.md`. |
+| `factgraph.core.semantics` | `inspect_semantics_profile` | Core-level semantics inspection; the public SDK exposes `fg.eval.preview_config(...)` for the same purpose. |
+
+## Public Contract v1 stability anchor
+
+The kernel ships a **Public Contract v1** stability marker for advanced
+consumers and service integrators:
+
+- `AcceptResult.diagnostics_contract_version = 1` — error/warning row
+  structure for `Store.accept` / `Store.accept_many`.
+- `ProjectorAudit.contract_version = 2` — internal projection audit shape
+  (predicate_count, selected_by_pred, dropped_by_policy_count).
+- Four-engine `mode` set: `native | souffle | problog | pyreason`. Legacy
+  aliases (`python`, `engine`) were removed in v0.2.
+- Rejected string DSL rules return `SDKStoreError` with stable error code
+  prefixes for downstream pattern matching.
+
+See `src/factgraph/core/docs/04_public_contract_v1.md` for the canonical
+contract document.
 
 ## What is not on this surface
 

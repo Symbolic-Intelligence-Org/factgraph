@@ -10,15 +10,17 @@ lowering user-facing DSL objects into application protocol objects.
 The DTO has five fields:
 
 - `id`: stable non-empty rule id.
-- `where`: non-empty tuple of core AST atoms from
+- `when`: non-empty tuple of core AST atoms from
   `factgraph.core.rules.where_ast`.
 - `ports`: explicit mapping from public port names to core `Var` objects.
 - `version`: optional non-empty version string.
 - `desc`: optional description template using `%port_name` interpolation.
 
-The accepted `where` atoms are `PredAtom`, `CmpAtom`, `InAtom`, `BuiltinAtom`,
+The accepted `when` atoms are `PredAtom`, `CmpAtom`, `InAtom`, `BuiltinAtom`,
 and `NotAtom`. `RuleRefAtom` is rejected because the new paradigm composes
 Rules through RuleExpr and port joins, not through rule-reference atoms.
+(`AggregateAtom` is a Term, not an Atom, and may only appear nested inside
+`CmpAtom` left/right-hand sides — see "Internal Aggregate Terms" below.)
 
 ## Layer Boundary
 
@@ -38,9 +40,9 @@ and lowers that syntax into the core AST shape consumed here through
 Construction validates the DTO shape:
 
 - `id`, optional `version`, and optional `desc` are non-empty strings.
-- `where` is a non-empty tuple.
+- `when` is a non-empty tuple.
 - `ports` is a non-empty mapping from string names to core `Var` objects.
-- Every port variable appears somewhere in `where`.
+- Every port variable appears somewhere in `when`.
 - `desc` may only reference declared ports.
 - Unsupported atom kinds raise `RuleValidationError`.
 
@@ -101,7 +103,7 @@ from factgraph.sdk.dsl import build_application_rule, vars
 with vars("u") as (u,):
     rule = build_application_rule(
         id="active_user",
-        where=[User(u).status == "active"],
+        when=[User(u).status == "active"],
         ports={"user": u},
         desc="active user %user",
     )
@@ -152,12 +154,12 @@ accepted by the legacy SDK Rule surface:
 - two-line legacy forms such as `User(u), u.status == "active"`
 - raw `Pred(...)` atoms
 - raw rule-reference atoms
-- OR-shaped where bodies
+- OR-shaped when bodies
 - anonymous `User(...)` variables declared as public ports
 
 ## Immutability
 
-`Rule` is a frozen dataclass and stores `where` as a tuple and `ports` as a
+`Rule` is a frozen dataclass and stores `when` as a tuple and `ports` as a
 mapping proxy. This is shallow/container immutability. Core AST atoms currently
 contain mutable list fields such as `PredAtom.terms`; this DTO does not
 deep-freeze or clone those shipped core types.

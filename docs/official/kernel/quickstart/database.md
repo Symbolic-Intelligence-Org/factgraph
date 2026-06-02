@@ -217,6 +217,20 @@ assert readback is not None
 assert readback.value == "Alice"
 ```
 
+### Accept lifecycle is advanced
+
+The quickstart writes through `fg.fields.*` (single-write per call) and
+`fg.schema.ingest(...)` (bulk-write per call). The kernel substrate also
+ships a lower-level `Store.accept(candidate)` / `Store.accept_many(...)`
+machinery that processes pre-built `CandidateAssertion` values and
+returns an `AcceptResult` with states drawn from
+`{ACCEPTED, DUPLICATE, FAILED_VALIDATION, FAILED_RUNTIME,
+BLOCKED_DEPENDENCY}`. The accept lifecycle is intentionally not exposed
+at the quickstart level — it is the canonical commit path for engine
+adapters and bulk batch service workflows. See
+`src/factgraph/core/docs/04_public_contract_v1.md` §5 for the
+`AcceptResult` contract and state taxonomy.
+
 ## Create a durable Database view
 
 `Database.create_view(...)` creates a durable six-field view object:
