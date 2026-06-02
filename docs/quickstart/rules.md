@@ -165,7 +165,7 @@ A rule can carry a human-readable description with `%portname` placeholders:
 
 ```python
 rule = build_application_rule(
-    id="user:adult_in_us",
+    id="adult_in_us",
     when=[User(u), User(u).age == age, age > 18],
     ports={"user": u, "age": age},
     desc="User %user is %age years old",
@@ -175,7 +175,12 @@ rule.render_desc({"user": "alice", "age": 25})
 # → "User alice is 25 years old"
 ```
 
-Unprovided bindings render as `<portname>`. Placeholder names must match declared port names; an unknown placeholder is a validation error at `Rule` construction.
+Behavior reference:
+
+- **Default**: `desc=None`. `render_desc()` on a rule with no `desc` returns `""`.
+- **Placeholder syntax**: `%<identifier>` where `<identifier>` matches `[A-Za-z_][A-Za-z0-9_]*`. Every placeholder name must reference a declared port — `desc="%foo ..."` with `foo` not in `ports` raises `RuleValidationError: desc references undeclared port: foo` at construction time.
+- **No `%` escape**. A `%` followed by anything other than an identifier start is `RuleValidationError: desc contains malformed percent port interpolation`. This means `desc="50% off for %user"` is rejected (the `%5` is malformed), and there is **no `%%` escape** for a literal percent sign — `desc="100%% literal"` raises the same error.
+- **`render_desc(bindings)`**: `bindings` may be `None` (treated as `{}`) or a `Mapping[str, Any]`. Placeholders without a binding render as `<portname>`. Extra keys not referenced by any placeholder are silently ignored.
 
 ### 2.6 Direct `Rule(id, when=tuple, ports=...)` — advanced
 
