@@ -34,17 +34,81 @@ The config fields are not arbitrary knobs; each one maps to a real feature of th
 | `pyreason` | Temporal annotated logic with interval bounds (RPI PyReason). Rules carry per-rule timestep delay and per-atom `[lower, upper]` interval annotations. | Yes |
 | `souffle` | High-performance Datalog evaluation. Currently a registered engine name; no `SemanticsProfile` lowering. | No |
 
-## 2. `engine=` parameter
+`fg.eval.evaluate(...)` takes the engine via:
 
 ```python
 engine: Literal["native", "problog", "pyreason", "souffle"] = "native"
 ```
 
-The four engines and the SDK config wrapper they map to are summarised in §1. `native` and `souffle` do not consume `SemanticsProfile`; `problog` and `pyreason` do. The reconciliation rules between `engine=` and `config=` live in §6.
+`native` and `souffle` do not consume `SemanticsProfile` or any SDK config wrapper. `problog` and `pyreason` do. The reconciliation rules between `engine=` and `config=` (and the legacy kwargs they reject) live in §6.
+
+## 2. Shared meta substrate that configs project
+
+`ProbLogConfig` and `PyReasonConfig` differ in their engine-specific fields, but they share one load-bearing surface: **what they project**. Both configs reach into the ledger and read the assertion-level meta keys an author wrote at `fg.fields.set(...)` time. Those meta keys are the language by which author intent (uncertainty, time) reaches the engine — the configs only decide *how* to project them.
+
+| Meta key | Author writes at | Config that projects it | Engine consumes as |
+|---|---|---|---|
+| `raw_kind` + `bound` | every write, paired | both configs' `uncertainty_projection` | ProbLog: point probability `0.7::fact.`<br>PyReason: interval `fact : [lo, hi]` |
+| `valid_from` / `valid_to` | every write, optional | (PyReason only) `temporal_projection.valid_time_boundaries` | PyReason timestep enumeration |
+| `ingested_at` | auto-set on write | (PyReason only) `temporal_projection.fact_boundaries` | PyReason timestep enumeration |
+
+The deeper design intent: **author intent stays orthogonal to engine choice**. An assertion carries `meta={"raw_kind": "probabilistic", "bound": [0.7, 0.7]}` regardless of which engine will eventually evaluate over it. Switching from ProbLog to PyReason does not require re-writing the ledger; it requires choosing a different `config=` that projects the same meta into the new engine's native form.
+
+### 2.1 `raw_kind` + `bound` — uncertainty carrier
+
+Recap of the write-time form (see [`data_model.md`](data_model.md) §2.2):
+
+```python
+fg.fields.set(
+    User.age, alice, 25,
+    meta={"raw_kind": "probabilistic", "bound": [0.7, 0.7]},
+)
+```
+
+- `raw_kind` ∈ `{"probabilistic", "possibilistic"}`
+- `bound` is `[lower, upper]` with `0 <= lower <= upper <= 1`
+- They must be provided together; the ledger rejects half-pairs
+
+Why a projection is necessary, not optional:
+
+- **ProbLog** is a point-probability engine — facts in its native form look like `0.7::fact.`. A degenerate interval `bound=[0.7, 0.7]` maps naturally to `0.7`; a wider interval `bound=[0.5, 0.9]` has no canonical point representation (lower? upper? midpoint?). Possibility-theoretic assertions (`raw_kind="possibilistic"`) cannot be reinterpreted as probabilistic at all without changing the mathematical object.
+- **PyReason** is interval-native — facts in its native form look like `fact : [0.5, 0.9]`. Probability and possibility intervals can both pass through structurally, but the engine still needs to know *which kind* it is dealing with.
+
+The 7-policy enum (`reject` / `lower` / `midpoint` / `upper` / `identity_probability` / `probability_interval` / `possibility_interval`) is shared across both configs — it is the substrate-level grammar for "how do you turn an `(raw_kind, bound)` pair into engine-native form". Each engine validates which policies it can actually realise (ProbLog rejects the two `*_interval` policies; PyReason accepts everything). The per-engine details are in §3.3 (ProbLog) and §4.9 (PyReason).
+
+### 2.2 `valid_from` / `valid_to` — business-time interval
+
+Author writes ISO-8601 markers on the meta to assert *when this fact is valid in business time*:
+
+```python
+fg.fields.add(
+    User.role, alice, "admin",
+    meta={
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_to":   "2026-06-30T23:59:59Z",
+    },
+)
+```
+
+The same keys are consumed in two places:
+
+- **Read-side time-travel**: `snap.field("role").at("2026-03-15T...")` filters assertions by their business-time interval (see [`assertions.md`](../official/kernel/quickstart/assertions.md))
+- **PyReason `temporal_projection.valid_time_boundaries` mode** (§4.8): treats every assertion's business-time interval as a fragment of the timeline that PyReason's timestep enumeration discretises
+
+A ProbLog evaluation ignores these keys entirely — there is no time dimension in ProbLog's semantics. Writing `valid_from` / `valid_to` is safe regardless of which engine you later choose; only the temporal modes of `PyReasonConfig` read them.
+
+### 2.3 `ingested_at` — fact arrival time
+
+`ingested_at` is automatically set when an assertion enters the ledger — a nanosecond Unix timestamp marking *when the fact arrived*, distinct from when it is valid. Two consumers:
+
+- **PyReason `temporal_projection.fact_boundaries` mode** (§4.8): uses arrival time, not business time, as the discretisation timeline
+- **Snapshot active-view freshness policies**: the assertion-view projection uses `ingested_at` to pick the latest active claim when a field is over-asserted
+
+The author never writes `ingested_at` explicitly. It is set by the write pipeline. Use `valid_from` / `valid_to` for "when is this true", `ingested_at` for "when did we learn this".
 
 ## 3. `ProbLogConfig` — probabilistic semantics wrapper
 
-`ProbLogConfig` is the SDK ergonomic wrapper for ProbLog. It carries five fields, all of which map to real ProbLog (Sato distribution semantics / De Raedt PLP) concepts.
+`ProbLogConfig` is the SDK ergonomic wrapper for ProbLog. Five fields, each mapping either to a ProbLog (Sato distribution semantics / De Raedt PLP) feature or to the shared meta substrate (§2).
 
 ### 3.1 Minimal example
 
@@ -92,20 +156,11 @@ Validation: every value must be a finite float in `(0, 1]`. Zero is rejected —
 
 Important relationship to **Track 1 Branch identity**: branch ids are first-class anchors in FactGraph (see `Rule.inspect` / `Inference.inspect` `branches` field). `case_probabilities` keys reference those branch ids, so the SDK can lower them to the positional tuple form the adapter expects (`ProbLogRuleExt.case_probabilities: tuple[float, ...]` in branch order).
 
-### 3.3 `uncertainty_projection` — `raw_kind`+`bound` → point-probability projection
+### 3.3 `uncertainty_projection` — projecting `raw_kind`+`bound` to point probability
 
-ProbLog facts carry point probabilities — `0.5::fact.` — not intervals. But FactGraph assertions carry the canonical `meta["raw_kind"]` + `meta["bound"]` form (see `data_model.md` §2.2):
+§2.1 covered the substrate: every assertion may carry `meta["raw_kind"]` + `meta["bound"]`, and both ProbLog and PyReason configs project that pair into engine-native form. This subsection covers the ProbLog half — which policies ProbLog accepts at export.
 
-```python
-fg.fields.set(
-    User.age, alice, 25,
-    meta={"raw_kind": "probabilistic", "bound": [0.7, 0.7]},
-)
-```
-
-`uncertainty_projection` says: *how do we convert this interval-carrying assertion form into the form the engine needs?*
-
-The schema is a flat dict keyed by `raw_kind` value plus a `fallback` key:
+The config schema is a flat dict keyed by `raw_kind` value plus a `fallback` key:
 
 ```python
 {
@@ -115,23 +170,21 @@ The schema is a flat dict keyed by `raw_kind` value plus a `fallback` key:
 }
 ```
 
-The `policy` value is an enum from `UNCERTAINTY_POLICIES` (`factgraph.core.semantics.profile`):
+The 7 policies and which ones ProbLog will export:
 
-| Policy | What it does | ProbLog accepts? | PyReason accepts? |
-|---|---|---|---|
-| `"reject"` | Refuse this `raw_kind`; raise if any assertion carries it. The default for both `probabilistic` and `possibilistic`. | ✓ (rejects at export) | ✓ (rejects at compile) |
-| `"lower"` | Project `[lo, hi]` → `lo` (conservative — lowest support) | ✓ | ✓ |
-| `"midpoint"` | Project `[lo, hi]` → `(lo + hi) / 2` (most neutral point choice) | ✓ | ✓ |
-| `"upper"` | Project `[lo, hi]` → `hi` (optimistic — highest support) | ✓ | ✓ |
-| `"identity_probability"` | Pass through only when `raw_kind="probabilistic"` AND `bound[0] == bound[1]` (degenerate / point bound); raises otherwise. Forces the author to assert points explicitly | ✓ | ✓ |
-| `"probability_interval"` | Pass the interval through unchanged as a probability interval | ✗ rejected — ProbLog is a point-probability engine | ✓ |
-| `"possibility_interval"` | Pass the interval through as a possibility interval | ✗ rejected | ✓ |
+| Policy | What ProbLog does with it | Accepted? |
+|---|---|---|
+| `"reject"` | Raise at export if any assertion carries this `raw_kind`. The default for both `probabilistic` and `possibilistic`. | ✓ (intentional gate) |
+| `"lower"` | Emit probability `bound[0]` (conservative) | ✓ |
+| `"midpoint"` | Emit probability `(bound[0] + bound[1]) / 2` | ✓ |
+| `"upper"` | Emit probability `bound[1]` (optimistic) | ✓ |
+| `"identity_probability"` | Emit `bound[0]` — only if `raw_kind="probabilistic"` AND `bound[0] == bound[1]`; raises otherwise. Forces the author to assert points explicitly | ✓ |
+| `"probability_interval"` | (Interval-preserving policy — ProbLog cannot emit intervals) | ✗ rejected at export |
+| `"possibility_interval"` | (Possibility-theoretic interval — ProbLog has no possibility semantics) | ✗ rejected at export |
 
-The default ProbLog profile (`_default_problog_uncertainty_projection`) **rejects both `probabilistic` and `possibilistic` by default** — the author must opt in by setting an explicit policy. The reasoning: silently converting an interval into a point probability is exactly the kind of "hidden semantic coercion" that produces invisible bugs. The default forces the question to surface.
+The default ProbLog profile (`_default_problog_uncertainty_projection`) **rejects both `probabilistic` and `possibilistic` by default** — the author must opt in by setting an explicit point-projection policy. Silently coercing an interval into a single point probability is the kind of hidden semantic conversion that produces invisible bugs; the strict default forces the question to surface.
 
-`probability_interval` and `possibility_interval` are *interval-preserving* policies. ProbLog is point-only — its native form is `0.7::fact.`, no intervals — so it rejects both. PyReason is interval-native (`fact : [0.7, 1.0]`), so it accepts them. The same enum value means different things at different engines, and each engine validates which policies it can handle.
-
-Possibility theory (Dubois & Prade) and probability theory (Kolmogorov) are different mathematical objects; the policy enum is split between them deliberately so the author cannot accidentally cross the boundary.
+Possibility theory (Dubois & Prade) and probability theory (Kolmogorov) are different mathematical objects; the `*_interval` policies are split between them so an author writing `raw_kind="possibilistic"` cannot accidentally reach the ProbLog probabilistic surface.
 
 ### 3.4 `fallback` — what to do when an assertion is not configured
 
@@ -253,25 +306,35 @@ This is how you say "this rule only fires when these specific body atoms match *
 
 Use this when different evidence paths to the same head carry different certainty (e.g. an authoritative source path with `[0.95, 1.0]` and a heuristic path with `[0.5, 0.8]`).
 
-### 4.8 `temporal_projection` — how time is discretized
+### 4.8 `temporal_projection` — discretising the timeline
 
-`temporal_projection: dict` controls PyReason's timestep enumeration. Five modes:
+`temporal_projection: dict` controls PyReason's timestep enumeration. The mode chooses *which timeline drives the discretisation* — pulling from the substrate meta keys covered in §2.2 (`valid_from`/`valid_to`) and §2.3 (`ingested_at`):
 
-| Mode | Meaning |
-|---|---|
-| `{"mode": "none"}` *(default)* | No temporal projection; `iteration_count` alone controls timesteps |
-| `{"mode": "fixed_timesteps", "timesteps": N}` | Run N explicit timesteps. N must be positive int |
-| `{"mode": "valid_time_boundaries", "universe": [start, end]}` | Derive timesteps from the `valid_from` / `valid_to` boundaries of assertions, clipped to `universe` |
-| `{"mode": "fact_boundaries", "universe": [start, end]}` | Same shape as `valid_time_boundaries` but driven by the `ingested_at` meta key (fact arrival time) instead of business-time validity |
-| `{"mode": "time_binned", "universe": [start, end], "bin_size": ...}` | Map a real-time universe into discrete bins. `bin_size` accepts the short forms `1d` / `1h` / `15m` / `1m` |
+| Mode | Drives discretisation by | Required fields |
+|---|---|---|
+| `{"mode": "none"}` *(default)* | nothing — `iteration_count` alone controls timesteps | — |
+| `{"mode": "fixed_timesteps", "timesteps": N}` | explicit positive `int` | `timesteps` |
+| `{"mode": "valid_time_boundaries", "universe": [start, end]}` | author-written `valid_from` / `valid_to` (§2.2) | ISO `universe` |
+| `{"mode": "fact_boundaries", "universe": [start, end]}` | auto-set `ingested_at` (§2.3) | ISO `universe` |
+| `{"mode": "time_binned", "universe": [start, end], "bin_size": ...}` | wall-clock bins; `bin_size` accepts `1d` / `1h` / `15m` / `1m` | `universe` + `bin_size` |
 
-`valid_time_boundaries` / `fact_boundaries` / `time_binned` all need a `universe` of `[start, end]` ISO timestamps; assertions outside the universe are clipped. The choice between them comes down to *which timeline drives the discretisation*: business-time validity (`valid_time_boundaries`), arrival time (`fact_boundaries`), or fixed wall-clock bins (`time_binned`).
+`valid_time_boundaries` is the natural choice when assertions carry *business validity* intervals; `fact_boundaries` is for *arrival-driven* simulation; `time_binned` is for *uniform wall-clock discretisation*. All three clip assertions outside their `universe`.
 
 Validation pathing surfaces in error messages as `SemanticsProfile.temporal_projection.<mode>.<field>` so you can trace which projection rule rejected your config.
 
 ### 4.9 `uncertainty_projection`, `rule_params`, `name`, `fallback`
 
-- **`uncertainty_projection`** — same role as on ProbLog (§3.3): convert assertion-level `raw_kind`+`bound` into engine-native form. PyReason is interval-native, so the most common policy is identity (pass `[lo, hi]` through unchanged) — but you can still configure strict / lenient handling per `raw_kind`.
+- **`uncertainty_projection`** — same substrate as ProbLog's (§2.1, §3.3): projects `raw_kind`+`bound` into engine-native form. The full 7-policy enum:
+
+  | Policy | PyReason behavior |
+  |---|---|
+  | `"reject"` | Raise if any assertion carries this `raw_kind` |
+  | `"lower"` / `"midpoint"` / `"upper"` | Collapse the interval to a point at the chosen position |
+  | `"identity_probability"` | Pass `bound[0]` through (only if `raw_kind="probabilistic"` and bound is degenerate) |
+  | `"probability_interval"` | Pass the interval through unchanged — PyReason's most natural mode for `raw_kind="probabilistic"` |
+  | `"possibility_interval"` | Pass the interval through as a possibility-theoretic interval — PyReason's natural mode for `raw_kind="possibilistic"` |
+
+  PyReason accepts all 7 because its native form is intervals. The point-collapse policies are still legal — sometimes you want to project away the interval width even on an interval engine.
 - **`rule_params: dict[rule_id, dict]`** — same role as on ProbLog: per-rule metadata, lowered into `SemanticsProfile.rule_projection["pyreason"]`. Forward-compatible slot.
 - **`name` / `fallback`** — same shape and semantics as on ProbLog (§3.5, §3.4).
 
