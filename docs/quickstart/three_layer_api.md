@@ -257,7 +257,7 @@ Layer 3 owns per-write introspection and targeted retract. Its navigation key is
 | Method | What it filters by |
 |---|---|
 | `where(*, field=None, e_ref=None, value=None, value_tag=None, _meta=None)` | active records matching the canonical Layer-3 criteria |
-| `field(Field)` | every record (active and history) for one schema field; returns an `AssertionView` with `.active_records` and `.history_records` |
+| `field(Field)` | every record for one schema field; returns an `AssertionView` exposing `.active` (non-revoked) and `.all` (every record) |
 
 The `_meta` filter accepts a dict and matches assertions whose meta values agree; flat `source=` / `trace_id=` etc. kwargs are not accepted.
 
@@ -319,7 +319,7 @@ AssertionView
 `AssertionView` has two scopes that share the same surface:
 
 - **Entity-scope** — returned by `snap.assertions` on any `EntitySnapshot`. Holds an internal field-name → field-scope view map. `.active` / `.all` aggregate records across every field on the entity. `.field(name)` descends.
-- **Field-scope** — returned by `fg.assertions.field(Field)`, `snap.field(name)`, or `entity_view.field(name)`. Holds `active_records` + `history_records` for that one field directly. `.field(...)` is not meaningful here.
+- **Field-scope** — returned by `fg.assertions.field(Field)`, `snap.field(name)`, or `entity_view.field(name)`. Exposes the field's records directly through `.active` and `.all`. `.field(...)` is not meaningful here.
 
 A typical drill-down:
 
