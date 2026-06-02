@@ -69,6 +69,15 @@ fg.fields.set(
 - `bound` is `[lower, upper]` with `0 <= lower <= upper <= 1`
 - They must be provided together; the ledger rejects half-pairs
 
+**The two `raw_kind` values are different mathematical objects, not different scales of the same thing.** Choosing one over the other changes how `bound` is interpreted, which engines can consume it, and what the projection policies mean.
+
+| `raw_kind` | Theory | `bound = [lower, upper]` means | Use when |
+|---|---|---|---|
+| `"probabilistic"` | Kolmogorov probability | A confidence interval *around* a probability. The fact's actual probability `p ∈ [lower, upper]`; both endpoints are still probability values that obey the standard axioms (P(A∪B) = P(A) + P(B) − P(A∩B), etc.) | Source is itself a probability — a Bayesian posterior, an empirical frequency, a model's calibrated output |
+| `"possibilistic"` | Dubois–Prade possibility theory | A `[necessity, possibility]` pair. `lower = N(fact)` is the *necessary* truth degree (everything below this is definitely true), `upper = Π(fact)` is the *possible* truth degree (everything above this is definitely false). N and Π are dual measures: `N(A) = 1 − Π(¬A)`. They are **not** probabilities and do not have to sum to 1 over a partition. | Source is partial knowledge, linguistic / fuzzy information, or expressing ignorance (e.g. `bound=[0, 1]` is "I don't know"; `bound=[1, 1]` is "definitely true"; `bound=[0, 0]` is "definitely false") |
+
+This is why §3.3's `_interval` policies are split into `probability_interval` and `possibility_interval` — the same `[0.3, 0.7]` bound means different things under the two theories, and the engine has to know which. An author writing `raw_kind="possibilistic"` cannot accidentally reach ProbLog's probabilistic surface, because ProbLog has no possibility semantics.
+
 Why a projection is necessary, not optional:
 
 - **ProbLog** is a point-probability engine — facts in its native form look like `0.7::fact.`. A degenerate interval `bound=[0.7, 0.7]` maps naturally to `0.7`; a wider interval `bound=[0.5, 0.9]` has no canonical point representation (lower? upper? midpoint?). Possibility-theoretic assertions (`raw_kind="possibilistic"`) cannot be reinterpreted as probabilistic at all without changing the mathematical object.
