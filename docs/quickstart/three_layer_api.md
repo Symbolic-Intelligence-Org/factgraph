@@ -265,47 +265,74 @@ The `_meta` filter accepts a dict and matches assertions whose meta values agree
 
 `retract(asrt_id, *, meta=None)` is the only public assertion-id-level mutation. It returns the revoker's `asrt_id`.
 
-Two guards apply before the revoke is appended:
 
-```text
-SDKStoreError (code=INV_7C_IDENTITY_PROTECTED):
-Identity Claim asrt:... is immutable per INV-7c.
-Identity Claims can only be:
-  (a) created via fg.entities.create(EntityCls, **identity_kwargs);
-  (b) removed as part of fg.entities.delete(e_ref) (atomic full-entity revoke).
-To modify the identity bundle of an entity, delete the old entity and create a
-new one with the new identity values (Identity is immutable per INV-7a).
-See ADR-IC §4.1.
+### 4.4 Returned types
+
+Layer 3 reads compose three types. All are read-only; mutation goes through `retract`.
+
+**`AssertionRecord`** — one immutable record describing one assertion. Frozen dataclass with 9 fields:
+
+```
+AssertionRecord
+├── asrt_id: str            # content-addressed assertion id
+├── value: Any              # the stored value
+├── value_tag: str          # storage tag (e.g., "string" / "int" / "entity_ref")
+├── is_active: bool         # False if this assertion has been revoked
+├── entity_type: str        # SDK entity type name (e.g., "User")
+├── field_name: str         # SDK field name (e.g., "name")
+├── pred_id: str            # kernel predicate id (e.g., "User.name")
+├── e_ref: str              # idref_v1 entity reference
+└── meta: AssertionMeta     # typed meta projection (see data_model.md §2.1)
 ```
 
-```text
-SDKStoreError (code=EXISTENCE_CLAIM_TRANSITIONAL_GUARD):
-<EntityType>:exists Claim asrt:... cannot be retracted independently.
-The :exists Claim is co-emitted atomically with Identity Claims and can only be
-removed via fg.entities.delete(e_ref) (atomic full-entity revoke).
-This guard is transitional — Step 2+ may remove :exists emission entirely
-(see ADR-IC §4.4).
+**`AssertionRecordSet`** — an immutable `tuple` subclass holding a collection of `AssertionRecord`. Iterable, slice-able, addition-able. Chainable filter / lookup methods all return another `AssertionRecordSet` so you can pipeline them:
+
+```
+AssertionRecordSet  (extends tuple[AssertionRecord, ...])
+├── .where(*, value=..., value_tag=..., _meta={...}) → AssertionRecordSet
+├── .at(t: str)                                        → AssertionRecordSet  # business-time filter
+├── .by_id(asrt_id: str)                               → AssertionRecordSet  # 0 or 1 match
+├── .one()                                             → AssertionRecord     # raises if not exactly 1
+├── .first()                                           → AssertionRecord | None
+└── .all()                                             → tuple[AssertionRecord, ...]
 ```
 
-### 4.4 What Layer 3 rejects
+**`AssertionView`** — a structured view over a subset of records, scoped either to one entity or one field. Returned by `fg.assertions.field(Field)`, `snap.assertions`, and `snap.field(name)`. Read-only (raises `FrozenSnapshotError` on attribute set).
 
-```text
-SDKStoreError: fg.assertions.where(field=...) expects sdk.Field descriptor;
-pass assertion ids to by_id/by_ids or use fg.entities/fg.fields for other
-navigation keys. See ADR-API §4.1.1.
+```
+AssertionView
+├── .is_entity_scope: bool      # True if entity-scope, False if field-scope
+├── .active: AssertionRecordSet # non-revoked records (aggregated across all
+│                                 fields when entity-scope)
+├── .all:    AssertionRecordSet # active + revoked records
+├── .history: AssertionRecordSet  # deprecated alias of .all
+├── .field(name_or_Field) → AssertionView    # descend to one field's view
+│                                              # (meaningful on entity-scope only)
+├── .by_id(asrt_id)            → AssertionRecord | None
+├── .by_ids(asrt_ids, *, strict=False) → AssertionRecordSet
+├── .where(*, field=..., e_ref=..., value=..., value_tag=..., _meta={...})
+│                              → AssertionRecordSet  # filter over .active
+├── .at(t)                     → AssertionRecordSet  # business-time filter over .active
+└── view.<field_name>          → AssertionView       # __getattr__ shortcut to .field(name)
+                                                       # for entity-scope views only
 ```
 
-`fg.assertions.retract(...)` rejects any input that is not a non-empty `asrt_id` string:
+`AssertionView` has two scopes that share the same surface:
 
-```text
-SDKStoreError: fg.assertions.retract(asrt_id) expects non-empty string
-(Layer 3); use fg.entities.delete(...) for entity-level delete.
-See ADR-API §4.1.1.
+- **Entity-scope** — returned by `snap.assertions` on any `EntitySnapshot`. Holds an internal field-name → field-scope view map. `.active` / `.all` aggregate records across every field on the entity. `.field(name)` descends.
+- **Field-scope** — returned by `fg.assertions.field(Field)`, `snap.field(name)`, or `entity_view.field(name)`. Holds `active_records` + `history_records` for that one field directly. `.field(...)` is not meaningful here.
+
+A typical drill-down:
+
+```python
+snap = fg.entities.get(User, user_id="u-1")
+snap.assertions                               # AssertionView (entity-scope)
+snap.assertions.active                        # AssertionRecordSet, aggregated across all u-1's fields
+snap.assertions.field("name")                 # AssertionView (field-scope for User.name on u-1)
+snap.assertions.field("name").active          # AssertionRecordSet for name only
+snap.assertions.field("name").all.where(_meta={"version": "v1"})  # filtered AssertionRecordSet
+snap.assertions.field("name").all.where(_meta={"version": "v1"}).one()  # AssertionRecord
 ```
-
-### 4.5 Returned types
-
-Layer 3 reads return `AssertionRecord` (one record), `AssertionRecordSet` (an iterable record bundle with `.where(...)` / `.at(t)` / `.by_id(...)` chainable), and `AssertionView` (a field-scoped view exposing `.active_records` / `.history_records`). All three are read-only objects; the only mutation on Layer 3 is `retract`.
 
 ## 5. Crossing layers
 
