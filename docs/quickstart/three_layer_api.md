@@ -93,7 +93,7 @@ with fg.batch(meta={"source": "import"}) as tx:
 
 **`match` — ports, constraints, and connectivity**
 
-The `template` is a `Rule` or AND-only `RuleExpr` that declares the search pattern. It must declare **exactly one `entity_ref` port whose entity_type matches `EntityCls`** — that is the **projection port**, and its bound values become the returned snapshots. Zero matching ports raises with a list of available port names; more than one raises as ambiguous.
+The `template` is a `Rule` or AND-only `RuleExpr` that declares the search pattern. Among its declared ports, **exactly one must be an `entity_ref` port whose entity_type equals `EntityCls`** — that one is the **projection port**, and its bound values become the returned snapshots. The template may freely declare additional ports of other shapes (scalar Field ports, `entity_ref` ports for *different* entity types, etc.); only the one projection port drives the result set. Zero matching ports raises with a list of available port names; more than one matching port raises as ambiguous.
 
 `port_constraints` narrow the match. Each keyword argument names a port declared in the template and pins it to one of two value shapes:
 
