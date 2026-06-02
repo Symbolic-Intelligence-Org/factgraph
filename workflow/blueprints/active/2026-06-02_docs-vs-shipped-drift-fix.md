@@ -1,8 +1,8 @@
 # Docs-vs-Shipped Drift Fix Blueprint: post-`80a60f66` strict re-audit findings
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-02
-- Last Updated: 2026-06-02 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-02 (Step 4.8 closure)
 - Fork basis: **`80a60f66`** (current feature-line HEAD; contains the fg.entities docs alignment commit). **NOT forked from sacred master** — that baseline is pre-v0.2 and would pull the audit subject back into the old world.
 - Related Modules:
   - `docs/official/kernel/quickstart/database.md` (P0 site)
@@ -189,13 +189,55 @@ Per user directive at Step 4.1 entry: F1, F2, F3 may merge at implementation lay
 
 ## 10. Outcome / Deviations
 
-### Deferred to carry-forward (Step 4.1 declared; not addressed this slice)
+### Step 4.8 closure summary (2026-06-02)
 
-| ID | Severity | Reason for deferral |
+**Scope achievement**: all 7 LOCKED findings landed in single Step 4.7 commit `bd75763b docs(quickstart+sdk): fix 7 docs-vs-shipped drift findings (P0+P1+P2)` on `v0.2.0-blueprint-docs-vs-shipped-drift-fix-2026-06-02`. 2 files changed; +42 insertions / -7 deletions in final committed state.
+
+**Per-finding deliverable**:
+
+| Finding | Severity | Site | Status |
+|---|---|---|---|
+| **F1+F2+F3** (merged) | P0 | `quickstart/database.md:355-369` | ✓ Two table rows rewritten + one sub-prose paragraph inserted. SDK row now accurately states "SDK-layer dataclass, 2 fields: `name`, `asrt_ids: frozenset[str]`". Database row accurately enumerates 6 fields including `asrt_ids: tuple[str, ...]` distinction. Misleading "SDK-owned anchors" subclaim removed. New paragraph explicitly frames the two-classes-share-a-name-not-a-schema reality + cites the `as DatabaseFrozenAssertionSet` rename import. |
+| **F4** | P1 | `04_api_surface.en.md` §2.12 | ✓ Row updated `conflicts()` → `conflicts(target)`. New sub-prose enumerates 4 accepted target shapes (asrt_id string / object with `.asrt_id` / `(entity, Field)` tuple / `(entity, field_name)` tuple) + asymmetry footnote noting `fg.audit.explain(target)` accepts only shapes 1+2. |
+| **F5** | P1 | `04_api_surface.en.md` §2.5 | ✓ New row `field(Field) -> AssertionView` inserted between `by_ids` and `where` rows; one-liner cites `active_records` + `history_records` exposure. |
+| **F6** | P1 | `04_api_surface.en.md` §2.6 | ✓ Reject sentence replaced with 2-column mechanism split per Step 4.2 amend P2-1: Presence-rejected (5 kwargs) — `view`, `policy`, `semantics_profile`, `mode`, `temporal_view` — raises even at `key=None`; Non-None-rejected (2 kwargs) — `registry`, `engine_options` — popped with `None` default, raises only on non-None. Threading-wrapper warning added. |
+| **F7** | P2 | `04_api_surface.en.md` §2.6 | ✓ `evaluate` + `explain` rows: `engine='native'` → `engine=None` (matches `kwargs.pop("engine", None)` at `sdk/store.py:2396`); resolution note + 4 permitted engine strings added. `explain` row: `head=closed_head` → `head` (no default), matches `if "head" not in kwargs: raise` at `sdk/store.py:2466-2467`. |
+
+**Sacred invariant verification at Step 4.7 HEAD `bd75763b`**:
+
+- Q-PR1 5 sacred paths 0-diff vs `4c472b50`: ✓ preserved (0 lines)
+- Sacred master `562c74195df43e933bed92a3ff25de94dd8ce666`: ✓ unchanged through entire cycle
+- Dirty baseline 8 entries: ✓ preserved (4 M + 2 D + 2 untracked)
+- Preflight branch `v0.2.0-docs-vs-shipped-drift-fix-preflight-2026-06-02`: ✓ tip still at `4f5f2af4` (created Step 4.3, untouched after)
+- Q-NAMING-F impl branch: ✓ untouched
+- 0 `src/factgraph/` source touch (markdown-only)
+- 0 `release.sh` execution
+- 0 release surface allowlist modification
+- No push authorization issued; nothing pushed
+
+**Method effectiveness records**:
+
+- **L1 — Audit-then-fix lightweight cadence reuse at smaller scale**: 2026-06-01 `quickstart-docs-sync` archive (33 findings) established "audit doc IS the scope freeze" precedent. This blueprint reused the pattern at 7 findings scale and confirmed the cadence is well-calibrated for clustered docs-only drift. Cadence overhead (blueprint draft + preflight artifact + 6 audit log rows pre-impl) was proportionate to the finding count; if the inventory had been ≤3 findings, a typo/comment-only exception path would have been more efficient. The 7-finding scale is approximately the lower bound where the full audit-then-fix cadence pays off.
+
+- **L2 — Three-stage precision tightening via cross-review**: Step 4.2 user review surfaced 3 source-grounded refinements (P2-1 F6 reject mechanism, P2-2 F4 4-target-shape enumeration, P3-1 F4 source anchor split) that would have produced misleading docs rows if collapsed naively. Step 4.4 user review accepted preflight PASS without further amend (precision already tightened). Step 4.7 user implementation introduced wording refinement ("dataclass fields:" replacing "6 fields,") making Verify 1 grep return 0 hits while preserving full Database field list. This three-stage pattern (Step 4.2 catches scope drift, Step 4.4 confirms preflight accuracy, Step 4.7 catches commit-time wording opportunities) catches issues single-pass review misses.
+
+- **L3 — F1+F2+F3 collapse rule**: The merge-at-implementation-but-preserve-as-3-findings-in-blueprint pattern (per user Step 4.1 directive) successfully kept the factual-boundary auditable in blueprint §4.2 + preflight §3.1 while compressing the docs commit footprint to one logical edit (one table-row rewrite + one sub-prose paragraph). Future drift-fix slices with clustered same-paragraph findings can adopt the same rule without re-deriving from scratch.
+
+### Deviations
+
+- **D1 — Step 4.7 HEAD evolution `7283da3c → bd75763b`**: My initial Step 4.7 commit at `7283da3c` carried "Database-layer dataclass, 6 fields:" in the Database row. The text was factually accurate (Database class has 6 fields) but matched user Verify 1's coarse grep pattern, leaving 1 hit. User refined the wording at `bd75763b` to "Database-layer dataclass fields:" — removes the literal "6 fields," prefix, preserves the full field enumeration, and lets Verify 1 grep return 0 hits as originally specified. The sub-prose paragraph (L360-369) still carries the "6-field Database-anchored object" accurate description in narrative form. Both versions are factually correct; the `bd75763b` wording is grep-clean for the verification pattern. **No scope deviation; one wording adjustment within the same logical edit cell.**
+
+- **D2 — Audit log row order incident at Step 4.4-4.6**: Initial Step 4.4-4.6 audit log row insertion placed the three new rows BEFORE the Step 4.2 row (chronological inversion). Caught at self-check post-edit; single repair edit moved the Step 4.2 row back to its chronological position (between Step 4.1 and Step 4.4) and removed the duplicate at end-of-table. Per `feedback_audit_execution_discipline.md` Rule 1 + Slice 7B precedent, audit log row order is a structural invariant. Repair landed before scope-freeze commit. **No commit-history pollution; no permanent deviation.**
+
+### Deferred to carry-forward (declared at Step 4.1; confirmed at Step 4.8)
+
+| ID | Severity | Status update at Step 4.8 |
 |---|---|---|
-| F8 | P3 | `head=closed_head` rendering convention works for readers familiar with closed-head replay; explicit reframing has low value vs maintenance risk. |
-| F9 | P3 | §2.10 / §2.11 numbering holes are cosmetic; renumbering risks breaking cross-references outside this scope. |
-| F10 | P3 | `ingest` param name `items` vs `data` is positional and user-invisible; rename costs more than benefit. |
-| F11 | P3 | Standalone `quickstart/package.md` requires non-trivial new content authoring; out of audit-then-fix lightweight cadence scope. |
+| F8 | P3 | **Partially relieved** by Step 4.7 cell 3 — `head=closed_head` placeholder rendering replaced with `head` (required, no default), matching code reality. The "what is closed_head" wording reframe remains deferred but the misleading default-value rendering is gone. |
+| F9 | P3 | Still deferred. §2.10 / §2.11 numbering holes cosmetic; renumbering risks breaking cross-references outside scope. |
+| F10 | P3 | Still deferred. `ingest(items, ...)` doc vs `ingest(data, ...)` code is positional and user-invisible; rename costs more than benefit. |
+| F11 | P3 | Still deferred. Standalone `quickstart/package.md` requires non-trivial new content authoring; out of audit-then-fix lightweight cadence scope. |
 
-(Step 4.7 / 4.8 / 4.9 fields populated in later cadence steps.)
+### Cumulative outcome
+
+Docs-vs-shipped drift fix cycle for the 2026-06-02 audit surface fully achieved. Public-facing `docs/official/kernel/quickstart/database.md` + `src/factgraph/sdk/docs/04_api_surface.en.md` now accurately describe shipped behavior at `src/factgraph/sdk/store.py` HEAD `80a60f66` baseline. Future drift-fix cycles can fork from this archive HEAD `bd75763b` and apply the same audit-then-fix lightweight cadence pattern, with the F1+F2+F3 collapse rule and the three-stage precision-tightening pattern as reusable templates.
