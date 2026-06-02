@@ -144,22 +144,21 @@ In FactGraph's adapter (`src/factgraph/adapters/problog/problog_export.py:119`),
 <probability>::rule_body_<idx>(...) :- <compiled body>.
 ```
 
-`case_probabilities` is the dict that supplies those probabilities:
+`case_probabilities: dict[branch_id, float]` supplies those probabilities. **`branch_id` is the id of an OR branch, not a Rule id.** Where the branch ids come from depends on what you pass to `evaluate(...)`:
 
-| Form | Meaning |
+| Input | Where `branch_id` comes from |
 |---|---|
-| `case_probabilities={"branch_id_a": 0.7, "branch_id_b": 0.3}` | The `branch_id_*` keys are the branch ids from your `RuleExpr` / OR shape; each value is the probability that branch derives the head when its body matches |
-| `case_probabilities={}` *(default)* | All branches default to probability `1.0` — the rule degenerates to deterministic OR (any matching branch implies the head with certainty) |
+| Single application `Rule` from `build_application_rule(...)` | **Not applicable** — application Rule is AND-only, has no branches. Passing non-empty `case_probabilities` raises `"single application Rule inputs only accept empty case_probabilities"` |
+| `RuleExpr` with `\|` / `RuleExpr.any(...)` operators | The lowering plan's `branch_id` for each OR child (introspectable via `fg.rules.inspect(rule_expr)`) |
+| Legacy `Inference` with `Case([...], id="seed_path")` | The `Case.id` you wrote — or the fallback `c0` / `c1` / ... when no id was given |
 
-Validation: every value must be a finite float in `(0, 1]`. Zero is rejected — a 0-probability branch is meaningless (it never derives anything).
+Values must be finite floats in `(0, 1]`; zero is rejected (a 0-probability branch never derives anything). Default `{}` makes every branch implicit `1.0` — the rule degenerates to deterministic OR.
 
-Important relationship to **Track 1 Branch identity**: branch ids are first-class anchors in FactGraph (see `Rule.inspect` / `Inference.inspect` `branches` field). `case_probabilities` keys reference those branch ids, so the SDK can lower them to the positional tuple form the adapter expects (`ProbLogRuleExt.case_probabilities: tuple[float, ...]` in branch order).
+Unknown `branch_id` raises `unknown branch id <id> for ProbLogConfig.case_probabilities`, so a typo will surface immediately rather than silently fall through.
 
-### 3.3 `uncertainty_projection` — projecting `raw_kind`+`bound` to point probability
+### 3.3 `uncertainty_projection` + `fallback` — projecting `raw_kind`+`bound` to point probability
 
-§2.1 covered the substrate: every assertion may carry `meta["raw_kind"]` + `meta["bound"]`, and both ProbLog and PyReason configs project that pair into engine-native form. This subsection covers the ProbLog half — which policies ProbLog accepts at export.
-
-The config schema is a flat dict keyed by `raw_kind` value plus a `fallback` key:
+§2.1 introduced the substrate. The ProbLog half is which of the 7 policies actually export, plus what to do for assertions that have no `raw_kind` at all:
 
 ```python
 {
@@ -169,38 +168,20 @@ The config schema is a flat dict keyed by `raw_kind` value plus a `fallback` key
 }
 ```
 
-The 7 policies and which ones ProbLog will export:
-
-| Policy | What ProbLog does with it | Accepted? |
-|---|---|---|
-| `"reject"` | Raise at export if any assertion carries this `raw_kind`. The default for both `probabilistic` and `possibilistic`. | ✓ (intentional gate) |
-| `"lower"` | Emit probability `bound[0]` (conservative) | ✓ |
-| `"midpoint"` | Emit probability `(bound[0] + bound[1]) / 2` | ✓ |
-| `"upper"` | Emit probability `bound[1]` (optimistic) | ✓ |
-| `"identity_probability"` | Emit `bound[0]` — only if `raw_kind="probabilistic"` AND `bound[0] == bound[1]`; raises otherwise. Forces the author to assert points explicitly | ✓ |
-| `"probability_interval"` | (Interval-preserving policy — ProbLog cannot emit intervals) | ✗ rejected at export |
-| `"possibility_interval"` | (Possibility-theoretic interval — ProbLog has no possibility semantics) | ✗ rejected at export |
-
-The default ProbLog profile (`_default_problog_uncertainty_projection`) **rejects both `probabilistic` and `possibilistic` by default** — the author must opt in by setting an explicit point-projection policy. Silently coercing an interval into a single point probability is the kind of hidden semantic conversion that produces invisible bugs; the strict default forces the question to surface.
-
-Possibility theory (Dubois & Prade) and probability theory (Kolmogorov) are different mathematical objects; the `*_interval` policies are split between them so an author writing `raw_kind="possibilistic"` cannot accidentally reach the ProbLog probabilistic surface.
-
-### 3.4 `fallback` — what to do when an assertion is not configured
-
-Some assertions may have no `raw_kind` at all (a deterministically asserted fact). The `fallback` key inside `uncertainty_projection` (and the top-level `ProbLogConfig.fallback`) decides:
-
-| Fallback | Behavior |
+| Policy | ProbLog behavior |
 |---|---|
-| `"reject_unconfigured"` *(default)* | Raise if an assertion has no policy — force the author to be explicit |
-| `"warn_default"` | Emit a warning and project to probability `1.0` |
-| `"use_default"` | Silently project to probability `1.0` |
+| `"reject"` | Raise at export. **Default for both `probabilistic` and `possibilistic`** — author must opt in to any projection |
+| `"lower"` / `"midpoint"` / `"upper"` | Emit `bound[0]` / `(bound[0]+bound[1])/2` / `bound[1]` |
+| `"identity_probability"` | Emit `bound[0]` — only if `raw_kind="probabilistic"` AND `bound[0]==bound[1]`; raises otherwise |
+| `"probability_interval"` / `"possibility_interval"` | ✗ rejected at export — ProbLog cannot emit intervals or possibility semantics |
 
-The default is strict because a silent fallback to `1.0` quietly turns an uncertainty-aware computation into a certainty-aware one — a class of bug that is invisible in the output.
+`fallback` (also accessible as `ProbLogConfig.fallback`) handles assertions with no `raw_kind` at all (deterministic facts): `"reject_unconfigured"` (default — raise), `"warn_default"` (warn + project to `1.0`), or `"use_default"` (silently project to `1.0`).
 
-### 3.5 `rule_params` and `name`
+Both defaults are strict on purpose. Silently coercing an interval to a point or a missing `raw_kind` to `1.0` are the kinds of invisible semantic conversion that produce silent bugs; the strict defaults force the question to surface.
 
-- **`rule_params: dict[rule_id, dict]`** — per-rule metadata that lowers into the canonical `SemanticsProfile.rule_projection["problog"]`. Currently a forward-compatible slot for upcoming per-rule ProbLog options (the application-layer profile schema already accepts it; future adapter cycles will extend consumption). Empty by default.
-- **`name: str | None`** — optional profile label that shows up in `fg.eval.preview_config(...)` and the canonical profile preview. Diagnostic only.
+### 3.4 `rule_params` and `name`
+
+`rule_params: dict[rule_id, dict]` is a per-rule metadata slot lowered into `SemanticsProfile.rule_projection["problog"]` — forward-compatible for upcoming per-rule ProbLog options; empty by default. `name: str | None` is a diagnostic label surfaced in `fg.eval.preview_config(...)`.
 
 ## 4. `PyReasonConfig` — temporal-interval semantics wrapper
 
