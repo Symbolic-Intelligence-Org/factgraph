@@ -48,17 +48,72 @@ Form 1 is for first-time lookup or creation; Form 2 is for following operations 
 | `delete(e_ref_or_cls, *, meta=None, **identity)` | Whole-entity revoke. Two forms: `delete(e_ref)` (string passed back from `ref`/`create`) or `delete(EntityCls, **identity)` (rebuilds the e_ref from the identity bundle) |
 | `edit(EntityCls, **identity)` | Opens an `EntityEditor` context manager for staged multi-field writes against one entity |
 
+**EntityEditor — multi-field writes on one entity in one transaction:**
+
+```python
+with fg.entities.edit(User, user_id="u-1") as editor:
+    editor.name.set("Alice")                # single-cardinality field
+    editor.tags.add("engineer")             # multi-cardinality field
+    editor.tags.add("reviewer")
+    # commit on context exit; if any one operation raises,
+    # the whole edit is abandoned
+```
+
+The editor exposes one attribute per declared field of the entity. Each attribute is a typed handle:
+
+- `editor.<single_field>.set(value, meta=...)`
+- `editor.<multi_field>.add(value, meta=...)`
+- `editor.<field>.retract(asrt_id=..., meta=...)`
+
+Using `.set` on a multi-cardinality field (or `.add` on a single) raises `CardinalityError` at dispatch. Identity fields expose a `.value` property for read but reject `.set` / `.add` / `.retract` with `INV_7C_IDENTITY_PROTECTED` (see §3.3).
+
+**`fg.batch(...)` — multi-entity / multi-write in one transaction:**
+
+```python
+with fg.batch(meta={"source": "import"}) as tx:
+    alice = tx.entity(User, user_id="u-1")
+    bob   = tx.entity(User, user_id="u-2")
+    alice.name.set("Alice")
+    alice.tags.add("engineer")
+    bob.name.set("Bob")
+    # commit on context exit; atomic across all writes
+```
+
+`tx.entity(EntityCls, **identity)` returns a `ManagedEntityHandle` with the same `editor.<field>.set/add/retract` shape as `EntityEditor`. Use `fg.batch` when you need to coordinate writes across multiple entities; use `fg.entities.edit` when all writes target one entity.
+
 ### 2.3 Read methods
 
 | Method | What it returns |
 |---|---|
 | `get(EntityCls, **identity)` | The full snapshot for one full identity, or `None` |
 | `where(EntityCls, *, limit=None, _meta=None, **field_filters)` | Snapshots matching equality filters on entity/field values |
-| `match(EntityCls, template, *, limit=None, **port_constraints)` | Snapshots selected by an application `Rule` or AND-only `RuleExpr` |
+| `match(EntityCls, template, *, limit=None, **port_constraints)` | Snapshots selected by an application `Rule` or AND-only `RuleExpr`. **Replaces the older `Query` mechanism** — instead of constructing a query object you express the search as a rule/condition expression, and `match` returns the entities that satisfy it. |
 | `ref(EntityCls, **identity)` | A managed `e_ref` string; does not write to the ledger |
 | `exists(EntityCls, **identity)` | Boolean visibility check |
 
-### 2.4 What Layer 1 rejects
+### 2.4 The EntitySnapshot
+
+`get(...)` returns an `EntitySnapshot`; `where(...)` and `match(...)` return iterables of them. The snapshot is a read-only projection over one entity's current active state at the moment the read was issued.
+
+```
+EntitySnapshot
+├── ref: str                              # e.g., "idref_v1:User:7c12...3a"
+├── entity_type: str                      # e.g., "User"
+├── identity: dict                        # e.g., {"user_id": "u-1", "locale": "en"}
+├── identity_available: bool              # True after fg.entities.get / where / match
+├── <field attribute access>              # snap.name, snap.tags, ...
+│       └─ single → value or None
+│          multi  → tuple or ()
+├── assertions: AssertionView             # Layer 3 view scoped to this entity
+│       ├── .active                       # AssertionRecordSet of non-revoked records
+│       ├── .all                          # AssertionRecordSet of every record
+│       └── .field(name) → AssertionView  # field-scoped sub-view
+└── .field(name) → AssertionView          # shortcut to .assertions.field(name)
+```
+
+Snapshots are frozen (`FrozenSnapshotError` on attribute set). A reference projection over Identity field values goes through `snap.<identity_field>` or `snap.identity[<key>]`; Field values use the same `snap.<field>` syntax. The snapshot does not refresh on its own — re-read with `fg.entities.get(...)` to see later writes.
+
+### 2.5 What Layer 1 rejects
 
 Passing the wrong navigation key raises immediately, before any ledger work:
 
@@ -105,26 +160,51 @@ CardinalityError: ... (code=FIELD_CARDINALITY_MISMATCH)
 
 `retract` rejects when the `(field, ref, value)` triple matches zero or more than one active assertion — you must disambiguate by passing an `asrt_id` to `fg.assertions.retract(...)` (Layer 3) instead.
 
-### 3.3 What Layer 2 rejects
+**Value shape — one element per call:**
 
-```text
-SDKStoreError: fg.fields.set() requires a Field descriptor (Layer 2 navigation
-key); got str/asrt_id — pass assertion ids to fg.assertions.* (Layer 3)
-instead. See ADR-API §4.1.1.
+The `value` argument is always **one scalar** of the field's declared storage domain (see [`schema_definition.md`](schema_definition.md) §1.4). It is **not** a list, even for multi-cardinality fields. To add multiple elements to a multi-cardinality field, call `add` multiple times:
+
+```python
+fg.fields.add(User.tags, alice, "engineer")
+fg.fields.add(User.tags, alice, "reviewer")
+# Each call appends one element. Passing a list/tuple raises SDKValueError.
 ```
 
-```text
-SDKStoreError: fg.fields.set() requires a Field descriptor (Layer 2 navigation
-key); got Entity class — use fg.entities.* (Layer 1) instead. See ADR-API §4.1.1.
-```
+Passing `["engineer", "reviewer"]` as the value raises `SDKValueError` because `list` does not match the declared element type. The same rule applies to `set` (always one scalar) and `retract` (revoke one specific `(field, ref, value)` triple at a time).
 
-There is also a special guard for passing an `Identity` descriptor to a value-write method:
+Reads work the opposite way: `fg.fields.get(field, ref)` returns one scalar for single-cardinality fields and a `tuple` of scalars for multi-cardinality fields (possibly empty `()`).
+
+### 3.3 Identity descriptors at Layer 2
+
+`Identity` descriptors behave specially at Layer 2 because Identity Claims are the immutable anchor of an entity (INV-7c). The rule is: **Identity can be used and viewed, but never mutated.**
+
+What works:
+
+- Reading the current Identity value: through the `EntitySnapshot` (`snap.user_id`, `snap.identity["user_id"]`)
+- Using the Identity descriptor as a key into Layer 3 introspection: `fg.assertions.field(User.user_id)` returns the `AssertionView` of all Identity Claims for that field, so you can inspect history, meta, and the original `asrt_id`
+
+What does **not** work:
+
+- `fg.fields.set(User.user_id, ref, "new_id")` rejects at dispatch with `INV_7C_IDENTITY_PROTECTED`:
 
 ```text
-SDKStoreError: fg.fields.set() does not accept Identity descriptors for value
-writes; Identity Claims are immutable anchors per INV-7c. Use fg.entities.delete
+SDKStoreError (code=INV_7C_IDENTITY_PROTECTED):
+fg.fields.set() does not accept Identity descriptors for value writes;
+Identity Claims are immutable anchors per INV-7c. Use fg.entities.delete
 + fg.entities.create for identity-bundle changes. See ADR-API §4.1.1.
 ```
+
+- `fg.fields.add` / `fg.fields.retract` / `fg.fields.delete` reach the runtime guard or the downstream Layer 3 INV-7c check, all raising the same code.
+
+To "change" an entity's identity, the supported pattern is:
+
+```python
+fg.entities.delete(old_alice)                                    # revoke whole entity
+new_alice = fg.entities.create(User, user_id="u-2", locale="en")  # new identity bundle
+# re-apply any Field values you want to carry forward against new_alice
+```
+
+(See [ADR-IC §4.1](../../workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md) for the design rationale. Wrong-key rejections for non-Field non-Identity inputs are covered by the same Layer-shape guard described in §2.5.)
 
 ## 4. Layer 3 — Assertions (`fg.assertions.*`)
 
