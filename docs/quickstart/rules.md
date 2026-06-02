@@ -147,6 +147,8 @@ adult_in_us.port_types["age"]    # PortType(kind="value", entity_type=None)
 
 `ports` is also the surface that `fg.entities.match(...)` and `RuleExpr.join_by_ports(...)` consume.
 
+**Declaration-time ports vs evaluation-time `head=`**. `Rule.ports` declares *what this rule exposes*. When the rule is executed through a `RuleExpr` with multiple occurrences, the evaluator additionally needs to know *which occurrence's ports are the output answer* — that selection is made at call time via `fg.eval.evaluate(rule_expr, head=<Rule>)`. The `head=` parameter is covered in `evaluation.md` (next chapter); for a single-rule `evaluate(rule, head=rule)` it is trivial, but `RuleExpr` composition makes it load-bearing.
+
 ### 2.4 `Rule.projection(*port_names)`
 
 A shortcut for a rule whose only job is to *expose* named ports without imposing a body:
