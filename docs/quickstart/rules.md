@@ -199,7 +199,7 @@ Behavior reference:
 
 ### 2.6 Direct `Rule(id, when=tuple, ports=...)` — advanced
 
-`Rule` itself is a frozen dataclass at `factgraph.application.protocol.Rule`:
+`Rule` is a frozen dataclass at `factgraph.application.protocol.Rule`. Constructing it directly is supported and produces a fully usable rule (same `port_types` inference, same `render_desc`, same `fg.rules.inspect(...)`, same `RuleExpr` composition). The only difference from `build_application_rule(...)` is that `when` takes already-canonical *core* atoms instead of Entity-DSL forms.
 
 ```python
 Rule(
@@ -211,12 +211,63 @@ Rule(
 )
 ```
 
-`when` accepts only the *core* atom shapes (`PredAtom`, `CmpAtom`, `NotAtom`, `BuiltinAtom`, `InAtom`). It does **not** accept the Entity-DSL forms (`User(u)`, `User(u).age == v`, etc.). Use this only when working at the core protocol layer; for everything else `build_application_rule(...)` is the path.
+#### Imports
 
-| Surface | Accepts | Role |
+Core atoms are **not** re-exported from `factgraph.sdk`. Import them from `factgraph.core.rules.where_ast`:
+
+```python
+from factgraph.core.rules.where_ast import (
+    PredAtom, CmpAtom, InAtom, BuiltinAtom, NotAtom,
+    AndExpr, OrExpr,        # only needed inside NotAtom.body
+    Var, Const,
+)
+from factgraph.application.protocol import Rule    # or: from factgraph.sdk import Rule
+```
+
+#### Working example — same rule as §2.1, written with core atoms
+
+```python
+u   = Var(name="u")
+age = Var(name="age")
+
+adult_in_us_core = Rule(
+    id="adult_in_us_core",
+    when=(
+        PredAtom(pred_id="User:exists", terms=[u]),
+        PredAtom(pred_id="user:age",    terms=[u, age]),
+        PredAtom(pred_id="user:region", terms=[u, Const(value="US")]),
+        CmpAtom(op="gt", lhs=age, rhs=Const(value=18)),
+    ),
+    ports={"user": u, "age": age},
+    version="v1",
+    desc="User %user is %age years old",
+)
+```
+
+The pred-id convention that `build_application_rule(...)` produces internally:
+
+| Entity-DSL form | core `PredAtom` form |
+|---|---|
+| `User(u)` | `PredAtom(pred_id="User:exists", terms=[u])` — entity name capitalised, `:exists` suffix |
+| `User(u).age == age` | `PredAtom(pred_id="user:age", terms=[u, age])` — entity name lower-cased + `:` + field name |
+| `User(u).age == "x"` | `PredAtom(pred_id="user:age", terms=[u, Const(value="x")])` — constants wrapped in `Const` |
+| `age > 18` | `CmpAtom(op="gt", lhs=age, rhs=Const(value=18))` — ops: `eq` / `ne` / `gt` / `ge` / `lt` / `le` |
+| `Not([User(u).age == minor_age])` | `NotAtom(body=AndExpr(atoms=[PredAtom(...)]))` — body is a `WhereExpr` (`AndExpr` or `OrExpr`), **not** a list |
+
+#### What direct construction rejects
+
+- **SDK DSL atoms in `when`** — `Rule(when=(Pred("user:age", u, age),))` raises `RuleValidationError: when[0] must be one of PredAtom/CmpAtom/InAtom/BuiltinAtom/NotAtom`. Mixing the two surfaces is not allowed; use one path consistently.
+- **Empty `when` or empty `ports`** — both raise `RuleValidationError`.
+- **`ports` `Var` not appearing in `when`** — same constraint as `build_application_rule(...)`.
+
+#### When to choose direct construction over `build_application_rule(...)`
+
+| Surface | Accepts | When to use |
 |---|---|---|
-| `build_application_rule(id, when=[Entity-DSL atoms], ports={...})` | SDK DSL atoms + ports | Lowers, validates, canonicalizes `Var` instances. The default. |
-| `Rule(id, when=tuple[PredAtom, CmpAtom, ...], ports={...})` | Already-canonical core atoms | Low-level data shape; only for core-protocol callers. |
+| `build_application_rule(id, when=[Entity-DSL atoms], ports={...})` | SDK DSL atoms + ports | Default for application code. Handles lowering, `Var` canonicalisation, and the Entity-DSL ergonomics. |
+| `Rule(id, when=tuple[PredAtom, CmpAtom, ...], ports={...})` | Already-canonical core atoms | When you already hold core atoms — typically because you are composing them from another core-layer source (rule migration / programmatic generation / IR round-trip), or when you need atom shapes the Entity-DSL does not expose (`InAtom`, `BuiltinAtom`, raw `RuleRefAtom`). |
+
+Both paths produce the **same** `Rule` value; downstream APIs (`fg.rules.inspect`, `fg.eval.evaluate`, `RuleExpr` composition, `match`) do not distinguish them.
 
 ## 3. RuleExpr — composition
 
