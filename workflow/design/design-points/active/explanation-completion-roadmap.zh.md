@@ -45,7 +45,7 @@
 - T8-D rounds 1-5 user quickstart 闭合
 - Adapter module docs aligned
 
-### 1.2 剩余 explainability gaps (5 维)
+### 1.2 剩余 explainability gaps (6 维)
 
 | 维度 | 当前状态 | 用户感知缺口 |
 |---|---|---|
@@ -54,8 +54,9 @@
 | **Match witness** | `fg.entities.match(...)` returns snapshot only | 无 assertion ids / witness ids / view 创建 |
 | **Attribution** | 无 | salience / impact decomposition 全缺 |
 | **Aggregate visibility** | aggregate 只给 `count`, kinds 锁定 | 无 contributors 展开 / `any` / `all` / `isSubset` / `join` / 等扩展 |
+| **Desc-driven NL** | `Rule.desc` + `render_desc` + `RuleExprInspect.render` (inspect-only); closed-head 内部 carry-over | `EvaluateRow` / `Explanation` / `fg.eval.explain` 不消费 desc, author 写的 NL 模板在 explain 时**不可见** |
 
-本文件**收敛**这 5 维的设计入口, **不写**完整 schema, 留作未来多 cycle 的 design source.
+本文件**收敛**这 6 维的设计入口, **不写**完整 schema, 留作未来多 cycle 的 design source.
 
 ---
 
@@ -91,6 +92,7 @@
 | D19 Aggregate target implicit cast | 类型转换便利性 |
 | **D2 / D3 / D4** (top-down regression / SAT why-provenance / atom-complete probing) | **作为 D5 的 implementation hints, 不独立** |
 | D12 Eager / Lazy switching | 性能优化; evidence > 10MB 触发 |
+| **D21 Desc-driven deterministic NL explain** | author-controlled NL 模板 (`Rule.desc`) 已 ship 但 explain 不消费; 完全 deterministic + 零 LLM; **不等于 D9** (D9 是 LLM-driven, 已 Tier Z) |
 
 ### ❌ Tier Z — 不重要 / 没价值做 / 明示拒绝
 
@@ -280,6 +282,47 @@
 - view scoping (multi-attached Database 时哪个 view)
 - API exact shape (Rule 与 Cross-entity tuple 输出形态)
 - 与 D18 matched_facts 的关系 (witness 是否就是 contributors 的展开形式)
+
+### 6.6 Desc-driven deterministic NL explain — D21
+
+**Scope**: 把 author-controlled `Rule.desc` 模板从 inspect-only 扩展到 evaluation / explain 路径, 让 author 写的 NL 模板在 user-facing explain 输出中**自动 surface**.
+
+**Source-back 现状**:
+- `Rule.desc: str | None` 已锁 ([`src/factgraph/application/protocol/rule.py:60`](../../../../src/factgraph/application/protocol/rule.py))
+- `Rule.render_desc(bindings)` shipped (用户级单 rule 渲染)
+- `RuleExprInspect.render(bindings)` shipped (`fg.rules.inspect(...).render(...)` 多 occurrence 渲染, `alias.portname` 限定 keys)
+- `evaluate_result.py:740` 将 `desc=head.desc` 拷贝到每行 closed-head `Rule` (internal carry-over)
+- **gap**: `EvaluateRow` / `Explanation` / `fg.eval.explain(...)` 路径**不消费 desc** — author 写的模板在 explain 时完全不可见
+
+**与 D9 (Tier Z) 的明示区分**:
+| 项 | D9 (rejected) | D21 (本项) |
+|---|---|---|
+| 渲染机制 | LLM-driven | deterministic 模板替换 |
+| 数据源 | 模型生成 | author 写的 `desc` 字段 |
+| Prompt / version / audit 复杂性 | 高 (LLM 引入) | 零 (字段已 ship) |
+| Cosmetic vs structural | 纯 cosmetic | structural (author intent surface) |
+
+D9 拒绝理由 "renderer 已 deterministic" 实际指 evidence-graph HTML/JSON renderer; 与本项是不同 surface (本项是 row/explain 级的 author-controlled NL).
+
+**候选设计形态**(任选其一, 未锁):
+- **A. `EvaluateRow.render_desc(bindings_from_row=None)`** — 行级自渲染方法, bindings 默认从 row 的 port bindings 自动取
+- **B. 新 API `fg.eval.explain_nl(...)`** — 显式 NL 入口, 返回 `tuple[str, ...]` 每行一段 rendered desc
+- **C. `Explanation.desc_lines: tuple[str, ...]` 字段** — explain 时自动 populate, structural carrier
+- **D. `EvaluateRow.closed_head_desc` accessor** — 暴露 closed-head 已携 desc 模板, 用户显式渲染
+
+A + C 组合可能是最完整: row level 提供 ergonomic, Explanation level 提供 structural carrier.
+
+**未锁设计问题**:
+1. row → desc placeholder binding source: 用 `port_name` 还是 `alias.port_name` (closed-head 上下文里 alias 是合成的 `head` 还是原 rule.id)
+2. multi-rule RuleExpr 行的 desc 组合策略: 每 occurrence 一行 vs 集合 vs join 表达
+3. Explanation 失败行的 desc 渲染语义: missing bindings 是 `<portname>` (rule level) 还是空 (row level)
+4. 与 evidence-graph renderer 已有 NL surface 的边界: 避免双重 NL channel (一处 author-controlled, 一处 engine-controlled)
+5. desc 不存在 (`desc=None`) 时 explain 输出策略: 静默省略 vs 空字符串 vs `<no desc>` 占位
+
+**下游 blueprint candidate**:
+- `t8-x-desc-driven-explain-render` (gated on 上述 5 问题)
+
+**Tier**: B (作者控制的小型 ergonomic gap; demand 中等; 完全 backward-compatible — `desc` 字段 + render API 已 ship, 只是 explain 路径不消费)
 
 ---
 
@@ -488,6 +531,7 @@ archive 后 `design-points/active/` 仅余本文件作为 tracked 唯一 design-
 | §11 legacy 5 个 db-view Q 是否独立 governance cycle 关闭 | future | DB/view release alignment 触发 |
 | §12 未结 T9/T11/T12/N6 tracks 是否独立 future cycle | future | release claim 改变 / housekeeping demand |
 | 4 untracked ledger 设计文档 (`append-only-ledger-evaluation` / `identity-mechanism-redesign` / `ledger-schema-specification` / `identity-and-data-model-redesign` 已 in archive) 的 intake 决策 | future | 独立战略 session |
+| D21 desc-driven NL explain (§6.6) 的 5 个未锁问题 + 4 候选形态评审 | future cycle | rules.md §2.5 explainability gap 已记录; 用户 demand 触发 |
 
 ---
 
