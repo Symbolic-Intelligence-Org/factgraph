@@ -309,44 +309,47 @@ snap.assertions.field("name").all.where(_meta={"version": "v1"}).one()  # Assert
 
 ## 5. Crossing layers
 
-The three layers are connected by two bridge tokens.
+Two bridge tokens wire the layers downward: an `e_ref` from Layer 1, an `asrt_id` from Layer 2.
 
-### 5.1 The `e_ref` bridge — Layer 1 → Layer 2 (and 3)
+```text
+  Layer 1 — fg.entities                          key:    EntityCls + identity_kwargs
+                                                 handle: e_ref (managed string)
 
-`fg.entities.ref(EntityCls, **identity)` and `fg.entities.create(EntityCls, **identity)` both return a managed `e_ref` string. That string is what Layer 2's `Field` writes take as their second positional argument:
+            create(...) / ref(...)   ─── returns ───┐
+            delete / edit / get / where / match
+                                                    │
+                                                    │ e_ref string
+                                                    │ "idref_v1:<EntityType>:<digest>"
+                                                    │ opaque; treat as a token
+                                                    ▼
+  Layer 2 — fg.fields                             key: Field + e_ref (+ value)
 
-```python
-alice = fg.entities.create(User, user_id="u-1")           # Layer 1 → e_ref
-fg.fields.set(User.name, alice, "Alice")                  # Layer 2 consumes e_ref
-fg.assertions.where(field=User.name, e_ref=alice)         # Layer 3 also consumes e_ref
+            set(...) / add(...)      ─── returns ───┐
+            retract / delete / get
+                                                    │
+                                                    │ asrt_id string
+                                                    │ content-addressed
+                                                    ▼
+  Layer 3 — fg.assertions                         key: asrt_id (or iterable)
+
+            by_id / by_ids / where / field / active / all
+            retract(asrt_id)  ── INV-7c + :exists guards apply
 ```
 
-The string is opaque — it's a content-derived hash (`idref_v1:<EntityType>:<digest>`), not a free-form id you should parse or construct yourself.
+Remove verbs scale by layer to match granularity:
 
-### 5.2 The `asrt_id` bridge — Layer 2 → Layer 3
-
-Every Layer 2 write returns the `asrt_id` of the assertion it appended:
-
-```python
-name_asrt = fg.fields.set(User.name, alice, "Alice")      # returns str: asrt_id
-# ... later, to revoke just this specific write:
-fg.assertions.retract(name_asrt, meta={"source": "fix-001"})
+```text
+  fg.entities.delete(e_ref)                 ► every claim on that entity
+                                              (Identity + :exists + every Field)
+  fg.fields.delete(field, e_ref)            ► every value at one field cell
+                                              (fail-fast on first revoke error)
+  fg.fields.retract(field, e_ref, value)    ► the one (field, ref, value) record
+                                              (raises on 0 or >1 matches)
+  fg.assertions.retract(asrt_id)            ► exactly one assertion id
+                                              (Identity / :exists asrt_ids rejected)
 ```
 
-This bridge is how you target one specific historical write without touching anything else.
-
-### 5.3 Three ways to remove data — choose the layer
-
-When you want to "remove" something, the layer matches the granularity:
-
-| You want to remove | Use | Effect |
-|---|---|---|
-| The whole entity (all its claims) | `fg.entities.delete(e_ref)` | atomic revoke of every Identity Claim + `:exists` Claim + every Field Claim for that `e_ref` |
-| Every active value at one field-cell | `fg.fields.delete(field, e_ref)` | sequential revoke of every active assertion at `(field, e_ref)`; fail-fast on first error |
-| One specific historical value at a cell | `fg.fields.retract(field, e_ref, value)` | revoke the unique active `(field, e_ref, value)` assertion (raises if zero or more than one match) |
-| One specific assertion id | `fg.assertions.retract(asrt_id)` | revoke exactly the named assertion; subject to INV-7c / `:exists` guards |
-
-The decision boils down to: do you have the asrt_id (use Layer 3), do you have the field + value (use Layer 2's `retract`), do you want to wipe a cell (use Layer 2's `delete`), or do you want to delete the whole entity (use Layer 1)? Audit, replay, and provenance-aware fixes typically work at Layer 3 because they already carry assertion ids; ergonomic UI flows usually work at Layer 1 or Layer 2.
+Pick the smallest layer whose key you already have.
 
 ## 6. Reference
 
