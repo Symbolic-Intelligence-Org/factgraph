@@ -182,6 +182,21 @@ Behavior reference:
 - **No `%` escape**. A `%` followed by anything other than an identifier start is `RuleValidationError: desc contains malformed percent port interpolation`. This means `desc="50% off for %user"` is rejected (the `%5` is malformed), and there is **no `%%` escape** for a literal percent sign — `desc="100%% literal"` raises the same error.
 - **`render_desc(bindings)`**: `bindings` may be `None` (treated as `{}`) or a `Mapping[str, Any]`. Placeholders without a binding render as `<portname>`. Extra keys not referenced by any placeholder are silently ignored.
 
+**Where `desc` is consumed.** `desc` is an author-controlled label — the evaluation runtime does **not** automatically render it. It does **not** appear in `EvaluateRow` or `Explanation` payloads (those are covered in `evidence.md`). Four actual consumption points:
+
+1. `rule.render_desc(bindings)` — the per-rule render shown above.
+2. `fg.rules.inspect(rule_or_expr).render(bindings)` — `RuleExprInspect.render(...)` composes the AST, each occurrence's rendered desc, and the joins into a one-line summary. With more than one occurrence of the same rule, use `alias.portname` qualified keys to disambiguate same-named ports:
+   ```python
+   info = fg.rules.inspect((adult.as_("a") & adult.as_("b")).join_by_ports("user"))
+   info.render({"a.user": "alice", "a.age": 25, "b.user": "alice", "b.age": 30})
+   # → 'RuleExprInspect | (a:adult & b:adult).join(1)
+   #    | a:adult alice is 25 years old; b:adult alice is 30 years old
+   #    | joins a.user = b.user'
+   ```
+   Bare `portname` keys also work for single-occurrence expressions; the renderer falls back to bare names when no qualified key matches.
+3. `RuleExprInspect.render_compact()` — emits only the AST short form (e.g. `'adult'` or `'(a:adult & b:adult).join(1)'`). Does not consume `desc`.
+4. Internal carry-over: each closed-head `Rule` produced per evaluation row copies `desc=head.desc` ([`evaluate_result.py:740`](../../src/factgraph/application/protocol/evaluate_result.py)). This is data plumbing — it propagates the template along the closed-head chain but does not surface it to user-visible output on its own.
+
 ### 2.6 Direct `Rule(id, when=tuple, ports=...)` — advanced
 
 `Rule` itself is a frozen dataclass at `factgraph.application.protocol.Rule`:
@@ -312,7 +327,11 @@ When passing an application `Rule` whose `id` contains characters disallowed in 
 .ports                    -> PortInspect-typed view of port shapes
 .is_closed                -> bool: every port is bound by the body
 .unbound_ports            -> tuple[str, ...] of names still open
+.render(bindings=None)    -> str: AST + occurrences (with rendered desc) + joins
+.render_compact()         -> str: AST short form only (no desc)
 ```
+
+`.render(bindings)` is the multi-occurrence consumer for `desc` (see §2.5). `.render_compact()` is the AST-only view useful for debugging composition shape.
 
 `is_closed` is the key signal for "is this expression ready to be a closed-head evaluation input" — an open port means there is a `value` port not pinned to a constant in `when`, or an `entity_ref` port without an identifying atom path. Evaluation typically requires a closed head.
 
