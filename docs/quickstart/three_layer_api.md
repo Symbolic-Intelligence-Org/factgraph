@@ -87,9 +87,32 @@ with fg.batch(meta={"source": "import"}) as tx:
 |---|---|
 | `get(EntityCls, **identity)` | The full snapshot for one full identity, or `None` |
 | `where(EntityCls, *, limit=None, _meta=None, **field_filters)` | Snapshots matching equality filters on entity/field values |
-| `match(EntityCls, template, *, limit=None, **port_constraints)` | Snapshots selected by an application `Rule` or AND-only `RuleExpr`. **Replaces the older `Query` mechanism** — instead of constructing a query object you express the search as a rule/condition expression, and `match` returns the entities that satisfy it. |
+| `match(EntityCls, template, *, limit=None, **port_constraints)` | Snapshots selected by an application `Rule` or AND-only `RuleExpr`. **Replaces the older `Query` mechanism** — instead of constructing a query object you express the search as a rule/condition expression, and `match` returns the entities that satisfy it. See expansion below for `template`, `limit`, and `port_constraints`. |
 | `ref(EntityCls, **identity)` | A managed `e_ref` string; does not write to the ledger |
 | `exists(EntityCls, **identity)` | Boolean visibility check |
+
+**`match` — ports, constraints, and connectivity**
+
+The `template` is a `Rule` or AND-only `RuleExpr` that declares the search pattern. It must declare **exactly one `entity_ref` port whose entity_type matches `EntityCls`** — that is the **projection port**, and its bound values become the returned snapshots. Zero matching ports raises with a list of available port names; more than one raises as ambiguous.
+
+`port_constraints` narrow the match. Each keyword argument names a port declared in the template and pins it to one of two value shapes:
+
+- A **concrete value** (scalar, `idref_v1` string, or an `EntitySnapshot`) — pins the port via equality
+- A **`Field` descriptor of `EntityCls`** — binds the port to the value of that field on each candidate entity
+
+```python
+# Pin a port to a literal value
+fg.entities.match(User, my_rule, region="US")
+
+# Bind a port to a Field of the matched entity
+fg.entities.match(User, tag_match_rule, tag=User.tag_seed)
+```
+
+Cross-entity `Field` constraints are **not** supported via `port_constraints`: a `Field` descriptor passed as a constraint must belong to `EntityCls`. To match across entities, express the join inside the `RuleExpr` (e.g., `RuleExpr.join_by_ports(...)`) rather than as a port constraint.
+
+**Connectivity requirement.** When you provide any `port_constraints`, every constrained port must be reachable from the projection port through the template's body atoms. A constraint on a port that the template does not connect to the projection port raises. In practice this means: for every constrained port, at least one atom in the rule body must transitively tie that port's variable to the projected entity's variable. The check fires before any ledger work, so disconnected templates fail fast rather than silently returning an empty result.
+
+**`limit`** caps the number of distinct returned snapshots (the result is already deduplicated by `e_ref`). Pass a non-negative integer or `None` (default) for unlimited. `limit=0` returns an empty tuple. Negative values, booleans, or non-integer types raise `SDKStoreError`.
 
 ### 2.4 The EntitySnapshot
 
