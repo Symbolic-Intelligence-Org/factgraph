@@ -35,6 +35,7 @@
 | `identity-mechanism-redesign.zh.md` | active design exploration (2026-05-29 intake) | Identity 机制重设计:Form I schema(Identity/Field + `_DataMember`)+ 3-layer API(entities/fields/assertions)+ AssertionView 统一 + INV-7a/b/c(Identity-as-Claim mirrored anchor)+ Q1 idref_v1 typed content-derived hash locked. Stage 1 audit pending. |
 | `ledger-schema-specification.zh.md` | active design exploration (2026-05-29 intake) | Claim-first 3-table ledger schema(claims / claim_meta / ledger_meta)+ INV-1..INV-15 + 7-条数据精简 migration + INV-7c strategy C 实施同步(Identity pred_id set,拒 claim_meta tag). |
 | `append-only-ledger-evaluation.zh.md` | active design exploration (2026-05-29 intake) | Append-only 范式 10 维度评估 + future gap 识别(GDPR / bitemporal / compaction);G1 措辞需后续按 identity §14.2 更新。 |
+| `factgraph-storage-architecture-evolution.zh.md` | active strategic synthesis (2026-06-02 draft) | 存储架构演化路线:lifecycle 收敛(阶段 A,commit_assertions 统一)→ ledger 读路径迁 SQL(B)→ eval lazy materialize(C)→ eager mode 废弃(D)。挖出 5 个相互纠缠的事实(workspace 双格式 / 内存 cache / attach 半拒绝 / entities.create-delete 漏洞 / 命名错位),Q-SAE-1..6 待 decision。 |
 
 ## 2026-05-29 archive batch
 
