@@ -183,7 +183,7 @@ duplicated in the per-purpose groups below.
 | Group | Names | Use it for |
 | --- | --- | --- |
 | Graph entry point | `FactGraph`, `SDKStore` | Create / load / save the graph. `FactGraph` is the alias used in docs; `SDKStore` is the same class for advanced use. |
-| Schema declaration | `Entity`, `Identity`, `Field`, `Relationship` | Define entity vocabulary and field coordinates. |
+| Schema declaration | `Entity`, `Identity`, `Field` | Define entity vocabulary and field coordinates. |
 | Rule DSL | `Rule`, `Inference`, `Query`, `Case`, `Pred`, `Not`, `RuleRef`, `vars` | Author saved rules, inferences, ad-hoc queries, and rule-body atoms. |
 | Persistence handles | `SchemaAddResult` | Return type from `fg.schema.register`, `extend`, or `apply`. Rule/inference persistence handles were removed. |
 | Ingest results | `IngestResult`, `ValidationReport` | Return types from `fg.schema.ingest(...)` and `fg.schema.validate_provenance(...)`. |

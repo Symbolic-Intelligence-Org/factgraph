@@ -119,35 +119,6 @@ Only three keys are accepted; passing anything else raises
 for brevity; production schemas frequently declare it to anchor versioning
 and discoverability.
 
-## Relationship descriptors
-
-`Relationship` is the sibling of `Entity` for declaring edge types. It is
-listed in the public `factgraph.sdk` import surface and uses a similar
-metaclass-driven declaration form. A minimal example:
-
-```python
-from factgraph.sdk import Entity, FactGraph, Field, Identity, Relationship
-
-
-class Team(Entity):
-    team_id: str = Identity()
-    name: str = Field()
-
-
-class MemberOf(Relationship):
-    from_entity = User
-    to_entity = Team
-    role: str = Field()
-```
-
-`from_entity` and `to_entity` are required and may be declared as class
-attributes (as above) or as type-annotated descriptors; omitting either
-raises `SDKSchemaError("Relationship '...' must declare from_entity")`.
-Relationships register through `fg.schema.register(MemberOf)` exactly like
-entities and become part of the predicate space used by Rules and
-Inferences. Relationship declarations are advanced usage; the rest of this
-quickstart focuses on entity + field shape.
-
 ## Writing values from schema descriptors
 
 Cardinality is inferred from type annotations. A scalar annotation is a
