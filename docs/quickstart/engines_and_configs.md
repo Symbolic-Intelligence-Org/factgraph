@@ -36,36 +36,11 @@ The config fields are not arbitrary knobs; each one maps to a real feature of th
 
 ## 2. `engine=` parameter
 
-### 2.1 Allowed values
-
 ```python
 engine: Literal["native", "problog", "pyreason", "souffle"] = "native"
 ```
 
-Passing any other string raises:
-
-```
-SDKStoreError: evaluate(rule_expr): engine= must be one of: native, problog, pyreason, souffle
-```
-
-### 2.2 Choosing an engine
-
-| You want | Use |
-|---|---|
-| Deterministic "does this rule fire?" | `engine="native"` |
-| Probabilistic answer (P(head) given uncertain facts) | `engine="problog"` |
-| Time-windowed / interval-bounded reasoning | `engine="pyreason"` |
-| Pure datalog at scale | `engine="souffle"` |
-
-### 2.3 Which engines consume a profile
-
-Only `problog` and `pyreason` consume `SemanticsProfile` / SDK config wrappers. Passing `config=` to `engine="native"` raises:
-
-```
-SDKStoreError: engine='native' does not consume SemanticsProfile
-```
-
-`engine="souffle"` is the same — registered but does not currently take a config.
+The four engines and the SDK config wrapper they map to are summarised in §1. `native` and `souffle` do not consume `SemanticsProfile`; `problog` and `pyreason` do. The reconciliation rules between `engine=` and `config=` live in §6.
 
 ## 3. `ProbLogConfig` — probabilistic semantics wrapper
 
