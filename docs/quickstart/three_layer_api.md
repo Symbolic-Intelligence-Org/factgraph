@@ -305,7 +305,6 @@ AssertionView
 ├── .active: AssertionRecordSet # non-revoked records (aggregated across all
 │                                 fields when entity-scope)
 ├── .all:    AssertionRecordSet # active + revoked records
-├── .history: AssertionRecordSet  # deprecated alias of .all
 ├── .field(name_or_Field) → AssertionView    # descend to one field's view
 │                                              # (meaningful on entity-scope only)
 ├── .by_id(asrt_id)            → AssertionRecord | None
