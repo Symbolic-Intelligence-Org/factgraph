@@ -3,9 +3,10 @@
 - Status: working / specification v2（claim-first immutable payload model）
 - Authority: candidate design / non-authoritative reference; not current implementation truth
 - First draft: 2026-05-27
-- Last updated: 2026-05-28
+- Last updated: 2026-06-02(§10 联动节加入)
 - Scope: FactGraph ledger 数据格式终态 — 表 schema、SQL canonical 编码契约、digest path 纪律、structural 不变量族、数据精简 migration 路径
 - Parent: 取代 `identity-and-data-model-redesign.zh.md`(之前的 umbrella doc,已或即将归档);与 `append-only-ledger-evaluation.zh.md`(背景评估)配套
+- Co-roadmap: [`factgraph-storage-architecture-evolution.zh.md`](factgraph-storage-architecture-evolution.zh.md) — lifecycle 收敛 + SQL 读路径 + lazy eval 演化路线;本 design-point 的 Slice 3b 实施 = 该 essay Stage A 完成后启动(详见 §10)
 - Design intent: 锁定 ledger 数据格式终态,作为下游实现/测试/migration 的契约源头;与 Identity 重设计 doc 解耦
 
 ## 目录
@@ -20,9 +21,10 @@
 §7   Implementation discipline
 §8   写入 / 读取 / 撤销 / 更新 / 删除流程概览
 §9   数据精简 migration 路径(7 条)
-§10  决策日志
-§11  关联文档与代码锚点
-§12  当前批次完成状态
+§10  与 storage-architecture-evolution 的联动 / migration 时机
+§11  决策日志
+§12  关联文档与代码锚点
+§13  当前批次完成状态
 ```
 
 ---
@@ -788,7 +790,74 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 
 ---
 
-## §10 决策日志
+## §10 与 storage-architecture-evolution 的联动 / migration 时机
+
+本 design-point §9 描述 ledger 数据格式的 7 步迁移路径。但格式迁移不能孤立进行 —— 它依赖另一份 design-point [`factgraph-storage-architecture-evolution.zh.md`](factgraph-storage-architecture-evolution.zh.md)(2026-06-02 draft)所描述的 lifecycle 收敛先落地,否则会留下数据完整性漏洞。
+
+### 10.1 与 storage-architecture-evolution 的关系
+
+`storage-architecture-evolution` essay 提出 4 阶段演化路线(详该 essay §3):
+
+- **Stage A** —— Lifecycle convergence(commit_assertions 收敛)
+- **Stage B** —— Ledger 读路径迁 SQL prepared statement
+- **Stage C** —— Eval engine lazy materialize
+- **Stage D** —— 废弃 eager mode(可选)
+
+本 design-point 的 Slice 3b(§9 7 步精简)在两条线的交叉点上:
+
+- **必须**在 storage-architecture-evolution **Stage A 完成之后**实施(硬前提)
+- **应**在 storage-architecture-evolution **Stage B 启动之前**完成(软前提)
+
+### 10.2 为什么 Stage A 必须先做(硬前提)
+
+Stage A 的目标是收敛所有 ergonomic 写入入口经 `commit_assertions` 路径(详 storage-architecture-evolution §3.1)。在 Stage A 完成前:
+
+- `fg.entities.create` / `fg.entities.delete` 绕过 `Database.commit_assertions`,直接调 `Ledger.append_assertion`(storage-evolution essay §1 problem 3 的 silent data integrity 漏洞)
+- 同一份 ledger 同时存在"经 tx 链写入"和"绕 tx 链写入"两类 Claim
+
+若在此状态下把 ledger 切到本 design-point §3 终态(claim_meta + revokes-as-Claim):
+
+- 旧的"绕 tx 链"写入仍在 leak,只是 leak 到新格式 ledger 里
+- 数据完整性漏洞从"7 表 ledger"原样搬到"3 表 ledger"
+- Slice 3b 的迁移投入没有 close 任何根本问题
+
+**结论**:Stage A 完成 = Slice 3b 启动的硬前提。
+
+### 10.3 为什么应在 Stage B 启动前完成(软前提)
+
+Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-architecture-evolution §3.2)。在 ledger 仍是 7 表布局时实施 Stage B 意味着:
+
+- 为旧 schema 写大量 SQL prepared statement → Slice 3b 后所有 statement 重写
+- 浪费 ~4-6 周工程量(storage-architecture-evolution §3.2 估算)
+
+合理实施序列:Stage A → Slice 3b(本 design-point §9)→ Stage B → Stage C → (D)。
+
+### 10.4 联合 update plan
+
+| 顺序 | Track | 来源 | Scope |
+|---|---|---|---|
+| 1 | Lifecycle | storage-architecture-evolution §3.1 Stage A | 收敛 commit_assertions,删 entities.create/delete 漏洞,统一 tx 链 |
+| 2 | Format | **本 design-point §9 Slice 3b** | 7 → 2 数据表 + revokes-as-Claim + claim_args/annotation_rows/ingest_keys drop |
+| 3 | Read path | storage-architecture-evolution §3.2 Stage B | SQL prepared statement,内存索引降级 cache |
+| 4 | Engine | storage-architecture-evolution §3.3 Stage C | eval bulk_load(pred_ids) + discard;4 engine 各适配 |
+| 5(可选)| Deprecate | storage-architecture-evolution §3.4 Stage D | 仅当 lazy 性能 ≥ eager,废弃 eager mode |
+
+5 个阶段,跨越两份 design-point;Slice 3b 是本 design-point 的实施切片,落在 Stage A 与 Stage B 之间。
+
+### 10.5 待裁定问题(与 storage-architecture-evolution 共享)
+
+- **Q-SAE-6**(storage-architecture-evolution §4 提的 release 节奏问题):Stage A 在 v0.2.0 release 内 vs 推到 v0.3?该问题的答案**直接决定 Slice 3b 的实施起点** — 若 Stage A 在 v0.2.0 内,Slice 3b 可能进入 v0.2.x patch line;若 Stage A 推到 v0.3,联合 update plan 整体推到 v0.3。
+- 本 design-point §9.8 的"migration 时序 4 阶段"与 storage-architecture-evolution §3 的"4 阶段 A-D"**指代不同对象**;两者 ⊆ 上述联合 update plan 中的不同切片。下游 Slice 3b blueprint 起草时需在文中明示边界,避免读者混淆。
+
+### 10.6 引用与本 design-point 其他章节的关系
+
+- §2 演化总览 / §3 表结构 / §9 7 步精简 —— 不变,本 §10 只是给它们指定**实施时序坐标**(在 Stage A 之后,Stage B 之前)
+- §4.1 INV-1 append-only / §4.5 INV-5 ledger 是 source of truth —— Slice 3b 实施期 dual-coexistence 阶段仍持守这两条不变量(详 ADR-SYS-B §4.2 选 (c))
+- §10(本节)是 forward-looking material,**不**在任何已 adopted ADR(SYS-A / SYS-B / IC / API / INV-9)引用范围内 —— 本节内容可在 design-point 迭代中调整,不破坏 ADR 引用完整性
+
+---
+
+## §11 决策日志
 
 每条决策按时间顺序追加。所有数据格式相关决策在此追踪(identity 相关决策见 `identity-mechanism-redesign.zh.md` §决策日志)。
 
@@ -831,7 +900,7 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 
 ---
 
-## §11 关联文档与代码锚点
+## §12 关联文档与代码锚点
 
 ### §11.1 关联 design-points
 
@@ -897,7 +966,7 @@ ledger 层 ↔ API 层的核心映射:
 
 ---
 
-## §12 当前批次完成状态
+## §13 当前批次完成状态
 
 - [x] 单文件 spec 创建于 `workflow/design/design-points/active/ledger-schema-specification.zh.md`
 - [x] 6-field metadata header

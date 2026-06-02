@@ -13,7 +13,7 @@
 - Outputs / Downstream:
   - (none yet)
 - Related:
-  - `ledger-schema-specification.zh.md` — ledger 表结构层面的不变量与本 essay 的内存索引 / SQL 查询分层互为前提
+  - [`ledger-schema-specification.zh.md`](ledger-schema-specification.zh.md) — ledger 表结构演化(7 → 2 数据表 + revokes-as-Claim)与本 essay 的 lifecycle / 读路径演化构成**联合 update plan**;详见 §7
   - `identity-mechanism-redesign.zh.md` — Identity Claim 写入路径在 lifecycle 收敛重构中需保持 INV-7a/b/c 不变量
 
 > **Authority reminder** (per Q2 §4.4): a design-point cannot directly override shipped behavior. Implementation must reach the codebase via the downstream consumption chain (decision → blueprint → impl), not by direct reference to this essay.
@@ -265,7 +265,80 @@ FactGraph 当前存储架构在 2026-06-02 的源码挖掘中暴露出五个相�
 ## 6. Status notes
 
 - **2026-06-02 初稿**:从当时 quickstart-vs-shipped 对话中提炼。挖掘出的 5 个相互纠缠的事实(workspace 双格式 / 内存 cache 架构 / attach 半拒绝 / entities.create-delete 漏洞 / 命名错位)被收拢为单一演化叙事。
+- **2026-06-02 §7 加入**:与 `ledger-schema-specification.zh.md` 显式关联为联合 update plan(5 阶段,跨两份 design-point);Slice 3b 被纳入 Stage A 与 Stage B 之间的实施切片。
 - **下一步迭代触发**:
   - 任一 Q-SAE-* 进入正式 decision 流程
-  - 阶段 A 开 blueprint(将引用本 essay 作为 audit-completed input)
+  - 阶段 A 开 blueprint(将引用本 essay + ledger-schema-specification §10 作为 audit-completed input)
   - 在 quickstart / module docs 中如何呈现现状的具体措辞决策
+
+---
+
+## 7. Combined roadmap with ledger-schema-specification
+
+本 essay §3 描述 lifecycle / 读路径 / eval engine 的 4 阶段演化(A-D)。另一份 design-point [`ledger-schema-specification.zh.md`](ledger-schema-specification.zh.md) 描述 ledger 表结构演化(7 → 2 数据表 + revokes-as-Claim + claim_args / annotation_rows / ingest_keys drop)。两条线在实施层面交错,必须作为联合 update plan 看待。
+
+### 7.1 依赖关系图
+
+```
+本 essay Stage A (lifecycle 收敛)
+    │
+    │  Slice 3b 启动 硬前提:此前 entities.create/delete 仍绕 tx 链,
+    │  格式迁移会把数据完整性漏洞原样搬到新 ledger
+    ▼
+ledger-schema-specification Slice 3b (7 → 2 数据表 + revokes-as-Claim)
+    │
+    │  Stage B 启动 软前提:在新 schema 上写 SQL prepared statement,
+    │  避免为 7 表布局重做一次
+    ▼
+本 essay Stage B (SQL 读路径)
+    ▼
+本 essay Stage C (lazy eval)
+    ▼
+本 essay Stage D (可选,废弃 eager)
+```
+
+### 7.2 联合 update plan
+
+| 顺序 | Track | 来源 | Scope |
+|---|---|---|---|
+| 1 | Lifecycle | 本 essay §3.1 Stage A | commit_assertions 收敛 + 删 entities.create/delete 漏洞 + 统一 tx 链 |
+| 2 | Format | [`ledger-schema-specification.zh.md`](ledger-schema-specification.zh.md) §9 Slice 3b | 7 表 → 2 数据表 + revokes-as-Claim + claim_args / annotation_rows / ingest_keys drop |
+| 3 | Read path | 本 essay §3.2 Stage B | `Ledger.find_*` 走 SQL prepared statement;内存索引降级 cache |
+| 4 | Engine | 本 essay §3.3 Stage C | eval 走 `bulk_load(pred_ids)` + discard;4 engine(native / Souffle / ProbLog / PyReason)各适配 |
+| 5(可选)| Deprecate | 本 essay §3.4 Stage D | 仅当 lazy 性能 ≥ eager,可选废弃 eager mode |
+
+5 阶段,跨越两份 design-point。Release 节奏建议(per §5.2 + ledger-spec §10.5):
+- Stage A 落地 → v0.2.x patch 或 v0.3.0
+- Slice 3b 落地 → 紧随 Stage A
+- Stage B / C / D → v0.3 / v0.4 / 远期
+
+### 7.3 已有 ADR 覆盖与 freeze 状态
+
+[`ledger-schema-specification.zh.md`](ledger-schema-specification.zh.md) 已被 5 个 adopted ADR 引用其特定章节作为 binding constraint:
+
+| ADR | 引用范围 |
+|---|---|
+| `q-ic-identity-as-claim-decision` | §3.1 部分(命名空间)|
+| `q-api-namespace-decision` | §3.1 命名空间边界 |
+| `q-sys-a-system-namespace-decision` | §3.1 命名空间 + §4.7 INV-10 |
+| `q-sys-b-revokes-migration-decision` | §2.1 / §2.2 / §3.1-§3.3 / §3.4 / §4.9 INV-12 / §9.1-§9.7 / §9.8 |
+| `q-inv9-decision` | §4.6 INV-9 + Q-PR1 PyReason adapter |
+
+ledger-schema-specification 的核心章节(§2 / §3 / §9)已是 load-bearing;后续修改需 ADR amendment 流程。
+
+本 essay 当前 **0 ADR 引用**(2026-06-02 起 working draft),仍可自由迭代。下游 decision 起草时,建议联合考虑两份 doc 的 trade-off,避免在某一份做出与另一份冲突的承诺。
+
+### 7.4 Open question 联动
+
+- **Q-SAE-6**(本 essay §4):Stage A 在 v0.2.0 release 内 vs 推到 v0.3?该问题直接决定 Slice 3b 的实施起点 — 同 ledger-schema-specification §10.5 关注的同一问题
+- ledger-schema-specification §9.8 的"4 阶段 migration 时序"与本 essay §3 的"4 阶段 A-D"**指代不同对象**;两者都 ⊆ §7.2 联合 update plan 中的不同切片。下游 Slice 3b blueprint 起草时需在文中明示边界,避免读者混淆
+
+### 7.5 下游 blueprint 命名约定
+
+本 essay §5.4 已预期每阶段产生 1 个 blueprint。联合 update plan 下,blueprint 命名建议:
+
+- `YYYY-MM-DD_stage-a-lifecycle-convergence.md` — 本 essay Stage A
+- `YYYY-MM-DD_slice-3b-ledger-migration.md` — ledger-schema-specification Slice 3b(ADR-SYS-B Outputs 字段已预定此路径)
+- `YYYY-MM-DD_stage-b-sql-read-path.md` — 本 essay Stage B
+- `YYYY-MM-DD_stage-c-eval-lazy-materialize.md` — 本 essay Stage C
+- `YYYY-MM-DD_stage-d-eager-mode-deprecation.md`(可选)— 本 essay Stage D
