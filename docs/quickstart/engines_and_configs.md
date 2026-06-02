@@ -49,8 +49,7 @@ engine: Literal["native", "problog", "pyreason", "souffle"] = "native"
 | Meta key | Author writes at | Config that projects it | Engine consumes as |
 |---|---|---|---|
 | `raw_kind` + `bound` | every write, paired | both configs' `uncertainty_projection` | ProbLog: point probability `0.7::fact.`<br>PyReason: interval `fact : [lo, hi]` |
-| `valid_from` / `valid_to` | every write, optional | (PyReason only) `temporal_projection.valid_time_boundaries` | PyReason timestep enumeration |
-| `ingested_at` | auto-set on write | (PyReason only) `temporal_projection.fact_boundaries` | PyReason timestep enumeration |
+| `valid_from` / `valid_to` | every write, optional | (PyReason only) `temporal_projection.valid_time_boundaries` / `fact_boundaries` (same substrate, two spellings) | PyReason timestep enumeration |
 
 The deeper design intent: **author intent stays orthogonal to engine choice**. An assertion carries `meta={"raw_kind": "probabilistic", "bound": [0.7, 0.7]}` regardless of which engine will eventually evaluate over it. Switching from ProbLog to PyReason does not require re-writing the ledger; it requires choosing a different `config=` that projects the same meta into the new engine's native form.
 
@@ -102,18 +101,9 @@ fg.fields.add(
 The same keys are consumed in two places:
 
 - **Read-side time-travel**: `snap.field("role").at("2026-03-15T...")` filters assertions by their business-time interval (see [`assertions.md`](../official/kernel/quickstart/assertions.md))
-- **PyReason `temporal_projection.valid_time_boundaries` mode** (§4.8): treats every assertion's business-time interval as a fragment of the timeline that PyReason's timestep enumeration discretises
+- **PyReason `temporal_projection.valid_time_boundaries` / `fact_boundaries` modes** (§4.8): both modes treat every assertion's business-time interval as a fragment of the timeline that PyReason's timestep enumeration discretises. `fact_boundaries` is the canonical spelling per the adapter docs; `valid_time_boundaries` is the input alias kept for legacy profiles. They share one code path.
 
 A ProbLog evaluation ignores these keys entirely — there is no time dimension in ProbLog's semantics. Writing `valid_from` / `valid_to` is safe regardless of which engine you later choose; only the temporal modes of `PyReasonConfig` read them.
-
-### 2.3 `ingested_at` — fact arrival time
-
-`ingested_at` is automatically set when an assertion enters the ledger — a nanosecond Unix timestamp marking *when the fact arrived*, distinct from when it is valid. Two consumers:
-
-- **PyReason `temporal_projection.fact_boundaries` mode** (§4.8): uses arrival time, not business time, as the discretisation timeline
-- **Snapshot active-view freshness policies**: the assertion-view projection uses `ingested_at` to pick the latest active claim when a field is over-asserted
-
-The author never writes `ingested_at` explicitly. It is set by the write pipeline. Use `valid_from` / `valid_to` for "when is this true", `ingested_at` for "when did we learn this".
 
 ## 3. `ProbLogConfig` — probabilistic semantics wrapper
 
@@ -323,11 +313,11 @@ Use this when different evidence paths to the same head carry different certaint
 |---|---|---|
 | `{"mode": "none"}` *(default)* | nothing — `iteration_count` alone controls timesteps | — |
 | `{"mode": "fixed_timesteps", "timesteps": N}` | explicit positive `int` | `timesteps` |
-| `{"mode": "valid_time_boundaries", "universe": [start, end]}` | author-written `valid_from` / `valid_to` (§2.2) | ISO `universe` |
-| `{"mode": "fact_boundaries", "universe": [start, end]}` | auto-set `ingested_at` (§2.3) | ISO `universe` |
+| `{"mode": "fact_boundaries", "universe": [start, end]}` | author-written `valid_from` / `valid_to` (§2.2). Canonical spelling | ISO `universe` |
+| `{"mode": "valid_time_boundaries", "universe": [start, end]}` | same substrate as `fact_boundaries` — kept as legacy input alias; same code path | ISO `universe` |
 | `{"mode": "time_binned", "universe": [start, end], "bin_size": ...}` | wall-clock bins; `bin_size` accepts `1d` / `1h` / `15m` / `1m` | `universe` + `bin_size` |
 
-`valid_time_boundaries` is the natural choice when assertions carry *business validity* intervals; `fact_boundaries` is for *arrival-driven* simulation; `time_binned` is for *uniform wall-clock discretisation*. All three clip assertions outside their `universe`.
+Both `fact_boundaries` and `valid_time_boundaries` are valid-time-driven; the adapter handles them in one branch and preserves whichever spelling you wrote. `time_binned` is for *uniform wall-clock discretisation* independent of any assertion's validity interval. All three modes clip assertions outside their `universe`.
 
 Validation pathing surfaces in error messages as `SemanticsProfile.temporal_projection.<mode>.<field>` so you can trace which projection rule rejected your config.
 
