@@ -36,6 +36,8 @@
 | `ledger-schema-specification.zh.md` | active design exploration (2026-05-29 intake) | Claim-first 3-table ledger schema(claims / claim_meta / ledger_meta)+ INV-1..INV-15 + 7-条数据精简 migration + INV-7c strategy C 实施同步(Identity pred_id set,拒 claim_meta tag). |
 | `append-only-ledger-evaluation.zh.md` | active design exploration (2026-05-29 intake) | Append-only 范式 10 维度评估 + future gap 识别(GDPR / bitemporal / compaction);G1 措辞需后续按 identity §14.2 更新。 |
 | `factgraph-storage-architecture-evolution.zh.md` | active strategic synthesis (2026-06-02 draft) | 存储架构演化路线:lifecycle 收敛(阶段 A,commit_assertions 统一)→ ledger 读路径迁 SQL(B)→ eval lazy materialize(C)→ eager mode 废弃(D)。挖出 5 个相互纠缠的事实(workspace 双格式 / 内存 cache / attach 半拒绝 / entities.create-delete 漏洞 / 命名错位),Q-SAE-1..6 待 decision。 |
+| `schema-mutation-additive-only.zh.md` | active design-space record (2026-06-02 draft) | `fg.schema.*` 当前 additive-only 契约 + 7 类拒绝 + workspace digest / no-backfill / identity 锁定的根因;destructive surface(`delete` / `update` / `deprecate` / `migrate`)+ 4 路径选项(A-D)未来空间。 |
+| `fields-iterable-value-batch.zh.md` | active design-space record (2026-06-02 draft) | `fg.fields.set / add / retract` 当前只接受单标量 value,iterable / list 在 SDK 边界 coerce 层被拒;workaround(多次调用 / `fg.batch` / `EntityEditor`);未来 surface 待定项(返回值、原子性、与 single-cardinality 的边界、与 `fg.batch` 的冗余)。 |
 
 ## 2026-05-29 archive batch
 
