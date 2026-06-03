@@ -11,6 +11,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-explanation-repr-walker-2026-06-03` (fork from `77cf9762`). Tight gates default per Slice η §10 D6 lock — evidence-model slices require behavior-change + state-transition individual report boundaries. ε hard-depends on η layered EvidenceGraph vocabulary (verified at `evidence_graph.py:14-29`). |
+| 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-P4: `Explanation.repr` is a computed property rather than constructor field; shipped `status == "passed" iff evidence is not None` invariant preserved; failed explanations without evidence render failure summaries instead of graph-walking atoms; walker renders `NODE_CONCLUSION` from existing node `value_summary` / `label` rather than requiring `head`; service wire default is no change unless preflight finds an explicit Explanation serializer. Status remains `draft`. |
 
 ## Decision Notes
 
@@ -23,11 +24,15 @@
 | 2026-06-03 | Lazy cache via `_repr_cache` internal field | Frozen dataclass + `object.__setattr__` cache pattern reused from Slice α `EvaluateRow._result_resolver` precedent. |
 | 2026-06-03 | Walker direction follows η PF-R1 shipped lock | Walker DFS uses `adjacency[edge.to_node_id].append(edge.from_node_id)` — children iterated from root via existing shipped pattern. No new direction logic. |
 | 2026-06-03 | `unsupported` / `invalid_request` → `repr is None` invariant | Walker has no graph to walk; honest "None" beats fabricated empty tuple or placeholder. |
+| 2026-06-03 | Step 4.2 P1 — failed graph walk conflicts with shipped invariant | `Explanation.__post_init__` currently enforces `status == "passed" iff evidence is not None`, so a failed explanation cannot carry an `EvidenceGraph` without an explicit invariant change. Slice ε preserves that invariant by default: passed explanations walk evidence; failed explanations with no evidence produce deterministic failure summary lines. Atom-level `unsupport` rendering remains gated on Step 4.3 proving a safe failed+evidence path. |
+| 2026-06-03 | Step 4.2 P2 — `repr` must be computed property, not constructor field | A dataclass field named `repr` would either become a constructor argument or block lazy property semantics. Slice ε instead adds an internal `_repr_cache` field and a public `@property repr`, preserving existing `Explanation(...)` construction sites. |
+| 2026-06-03 | Step 4.2 P3 — walker must not require `head` | `Explanation` carries `row` and `evidence`, not `EvaluateResult` / `head`. η builders already put row/result rendering into `NODE_CONCLUSION.value_summary`; the walker should render existing node labels/summaries first and treat row as optional context. |
+| 2026-06-03 | Step 4.2 P4 — service wire default remains unchanged | `src/service/runtime_v1.py` serializes `EvaluateResult` / rows, not `Explanation.repr` today. Step 4.3 still audits service paths, but default scope is no wire addition unless an explicit Explanation serializer is found. |
 
 ## Cross-flip checkpoints (per [[feedback_audit_to_archive_cadence]] + Slice η D6 lock)
 
 - [x] Step 4.1 blueprint draft (Claude — Slice 4/5 default)
-- [ ] Step 4.2 review + tightening (Codex per Slice 4/5 default)
+- [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
 - [ ] Step 4.3 preflight on independent branch `v0.2.0-explanation-repr-walker-preflight-2026-06-03`
 - [ ] Step 4.4 preflight amendment
 - [ ] Step 4.5 self-check

@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.1 draft)
+- Last Updated: 2026-06-03 (Step 4.2 review + tightening)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default per Slice η §10 D6 lock (evidence-model slices; behavior-change + state-transition commits require individual report boundaries)
 - Fork base: `77cf9762` (Slice η memory commit HEAD)
@@ -38,8 +38,8 @@ Parent design §7.3 records that ε **closes D21 §6.6 path C deferred work**(D2
 
 ## 2. Goals
 
-- G1 — Add `Explanation.repr: tuple[str, ...] | None` field. `None` for `unsupported` / `invalid_request`;non-None tuple for `passed` / `failed`(populated via walker)
-- G2 — Implement `factgraph.application.protocol.explanation_render.walk_evidence(graph, *, head=None, row=None) -> tuple[str, ...]` walker per parent §4.7 algorithm
+- G1 — Add public `Explanation.repr: tuple[str, ...] | None` **computed property**, not an `__init__` dataclass argument. `None` for `unsupported` / `invalid_request`;non-None tuple for `passed` and for current shipped `failed` paths via a failure-summary fallback.
+- G2 — Implement `factgraph.application.protocol.explanation_render.walk_evidence(graph, *, row=None, status="passed", failure_class=None) -> tuple[str, ...]` walker per parent §4.7 algorithm. The walker renders existing `EvidenceNode.label` / `value_summary` first; it must not require `head` because `Explanation` does not carry one.
 - G3 — Walker traversal: from `evidence.root_node_id` DFS-down via shipped physical edge direction (per η PF-R1 lock:`adjacency[edge.to_node_id].append(edge.from_node_id)` — children iterated via `adjacency.get(root_node_id, [])`)
 - G4 — Edge-kind-to-connector mapping(text rendering):
   - `EDGE_DERIVED_BY` → `"is derived by"`
@@ -49,8 +49,8 @@ Parent design §7.3 records that ε **closes D21 §6.6 path C deferred work**(D2
   - `EDGE_SUPPORTS` → `"is supported by"`(legacy fallback)
   - `EDGE_DERIVES` → `"derives"`(ProbLog adapter trace fallback)
   - `EDGE_UPDATES` → `"updates"`(PyReason fallback)
-- G5 — Failed status repr: walker output adds `"NOT concluded"` annotation + `failure_class` line + `atom_status="unsupport"` switch wording
-- G6 — Lazy cache pattern:walker runs on first `.repr` access;result cached via `object.__setattr__` to internal `_repr_cache` field;subsequent reads bypass walker
+- G5 — Failed status repr: current shipped failed paths (`closed_head_false`, `stale_row`, `row_not_in_result`) have `evidence=None` by invariant, so they render a deterministic failure summary tuple(`"NOT concluded"` + `failure_class` + next-step context) rather than graph-walking atoms. Atom-level `unsupport` wording is only in scope if Step 4.3 proves a shipped evidence-carrying failed path and explicitly amends the invariant.
+- G6 — Lazy cache pattern:graph walker runs on first `.repr` access for `passed` explanations;result cached via `object.__setattr__` to internal `_repr_cache` field;subsequent reads bypass walker. Failed summaries may be computed directly without invoking graph traversal.
 - G7 — Walker tests cover:passed 4-tier walk(parent §3.9.3 example),failed walk with atom_status="unsupport",unsupported/invalid_request returns None,detached row safety,empty graph safety
 - G8 — Docs cascade: quickstart evaluate_and_evidence + official evidence + SDK example
 - G9 — Close D21 §6.6 path C("Explanation.desc_lines auto-populate"deferred);blueprint Outcome cite parent §7.3 D21 close
@@ -79,7 +79,7 @@ Parent design §7.3 records that ε **closes D21 §6.6 path C deferred work**(D2
 
 ## 5. Proposed Shape(Draft, Not Yet Locked)
 
-### 5.1 Explanation new field
+### 5.1 Explanation new computed property
 
 ```python
 @dataclass(frozen=True)
@@ -93,15 +93,20 @@ class Explanation:
     suggested_next_steps: tuple[str, ...] = ()
     errors: tuple[ErrorDTO, ...] = ()
     warnings: tuple[WarningDTO, ...] = ()
-    repr: tuple[str, ...] | None = None        # ← new (post-init lazy populate)
     _repr_cache: tuple[str, ...] | None = field(
-        default=None, repr=False, compare=False, hash=False
+        default=None, init=False, repr=False, compare=False, hash=False
     )                                          # ← internal cache slot
+
+    @property
+    def repr(self) -> tuple[str, ...] | None:
+        ...
 ```
 
 `__post_init__` validation:
 - `unsupported` / `invalid_request` → `repr is None` invariant
-- `passed` / `failed` → `repr` populated lazily by walker on first access(not eager at `__post_init__`)
+- keep shipped `status == "passed" iff evidence is not None` unless Step 4.3 explicitly proves a safe failed+evidence path
+- `passed` → `repr` populated lazily by walker on first access(not eager at `__post_init__`)
+- `failed` with `evidence=None` → `repr` populated by failure-summary fallback, not by graph walker
 
 ### 5.2 Walker location and signature
 
@@ -111,7 +116,6 @@ class Explanation:
 def walk_evidence(
     graph: EvidenceGraph,
     *,
-    head: Rule | None = None,
     row: EvaluateRow | None = None,
     status: ExplanationStatus = "passed",
     failure_class: ExplanationFailureClass | None = None,
@@ -123,6 +127,8 @@ def walk_evidence(
 ```
 
 Walker uses shipped adjacency direction (`adjacency[edge.to_node_id].append(edge.from_node_id)` per η PF-R1 lock) — children of `root_node_id` are nodes pointing TO `root_node_id` via `from_node_id`。
+
+Step 4.2 P1/P2 LOCK: the walker does **not** receive `head`. `NODE_CONCLUSION` should render from `EvidenceNode.value_summary` / `label` first because η builders already put row/result rendering there. `row` is optional context for fallback lines and metadata only.
 
 ### 5.3 Walker algorithm(per parent §4.7)
 
@@ -142,7 +148,7 @@ visit(node_id, depth, lines, graph, edge_in=None):
 
 ### 5.4 Node label rendering
 
-- `NODE_CONCLUSION` → row desc-rendered text(via `row.bindings` + `result.head.desc` template if exists)or fallback `result.head.id`
+- `NODE_CONCLUSION` → existing `node.value_summary` then `node.label`. Do not re-render from `row.bindings` + `result.head.desc` inside the walker; `Explanation` has no direct `EvaluateResult` / `head`, and η builders already fill the conclusion node from row/result context.
 - `NODE_RULE_EXPR` → `f"RuleExpr({ast_form})"`from `engine_meta.ast_form`
 - `NODE_RULE` → `f"Rule \"{rule_id}\""`from `engine_meta.rule_id`
 - `NODE_ATOM` → atom kind / pred_id + `atom_status` annotation(e.g. `"User(u) — support"`)
@@ -152,10 +158,12 @@ visit(node_id, depth, lines, graph, edge_in=None):
 ### 5.5 Failed status rendering
 
 For `status == "failed"`:
-- Root node label appends `"— NOT concluded"`
-- Second line: `f"failure_class: {failure_class}"`
-- Atom nodes with `atom_status="unsupport"` switch wording to `"— UNSUPPORT (reason)"`
-- Atom nodes with `atom_status="not_visited"` skip with `"(not visited)"`
+- Current shipped failed explanations have `evidence=None` (`closed_head_false`, `stale_row`, `row_not_in_result`) because `Explanation.__post_init__` enforces `status == "passed" iff evidence is not None`.
+- Default Slice ε behavior: return a deterministic failure summary tuple without walking a graph:
+  - `"NOT concluded"`
+  - `f"failure_class: {failure_class}"`
+  - optional `suggested_next_steps` / checked-scope context
+- Atom nodes with `atom_status="unsupport"` are only rendered if Step 4.3 adds an explicit failed+evidence path amendment.
 
 ### 5.6 Cadence path locks(per Slice η §10 D6)
 
@@ -168,6 +176,7 @@ For `status == "failed"`:
 
 - Must preserve:
   - η EvidenceGraph vocabulary + direction(no changes)
+  - current `Explanation` invariant `status == "passed" iff evidence is not None` unless Step 4.3 produces a Required finding to relax it
   - Sacred Q-PR1 5-path 0-diff vs `4c472b50`
   - Dirty baseline preserved
   - Pre-ε Explanation 9-field shape compatibility(adding 1 field + 1 internal slot is additive)
@@ -176,6 +185,7 @@ For `status == "failed"`:
   - Slice δ query-style head decoupling
 - Compatibility constraints:
   - Walker output is per-Explanation deterministic given same graph + status + failure_class
+  - `Explanation.repr` is not an `__init__` parameter; existing `Explanation(...)` construction sites remain source-compatible
 
 ### 6.1 Cadence path locks(per Codex D6)
 
@@ -186,13 +196,15 @@ For `status == "failed"`:
 ## 7. Acceptance Criteria(Draft)
 
 - [ ] Step 4.2 review has confirmed §5.4 node label rendering source for each kind
+- [ ] Step 4.2 review has locked `Explanation.repr` as computed property rather than constructor dataclass field
+- [ ] Step 4.2 review has split failed summaries from graph-walked passed explanations under the shipped `passed iff evidence` invariant
 - [ ] Step 4.3 preflight has enumerated walker test cohort + lazy cache pattern + service wire scope
-- [ ] `Explanation.repr: tuple[str, ...] | None` field added with `__post_init__` lazy invariant
+- [ ] Public `Explanation.repr: tuple[str, ...] | None` computed property added with internal `_repr_cache`; no `repr=` constructor parameter
 - [ ] `explanation_render.walk_evidence(...)` walker implemented per parent §4.7 algorithm
 - [ ] Walker covers all 7 edge kinds(4 η new + 3 legacy)with appropriate connectors
 - [ ] Walker covers all 6 node kinds(3 η new + 3 legacy)with kind-specific labels
 - [ ] Lazy cache via `object.__setattr__` on `_repr_cache`;walker runs once per Explanation
-- [ ] Failed status walker output includes `"NOT concluded"` + failure_class line + per-atom status wording
+- [ ] Failed status output includes `"NOT concluded"` + failure_class line; per-atom `unsupport` wording remains gated on Step 4.3 proving a failed+evidence path
 - [ ] `unsupported` / `invalid_request` → `repr is None` invariant
 - [ ] Walker tests cover passed 4-tier walk + failed walk + edge cases(empty graph,unknown edge kind)
 - [ ] D21 §6.6 path C closed(Outcome cite parent §7.3)
@@ -216,9 +228,9 @@ For `status == "failed"`:
 
 - A1 — Confirm walker DFS direction works under η PF-R1 shipped direction(`adjacency[to_node_id].append(from_node_id)` — children iterated correctly from root)
 - A2 — Enumerate `Explanation(...)` construction sites that need `repr` parameter(should default `None` so additive)
-- A3 — Verify `row.bindings` + `result.head.desc` template availability for NODE_CONCLUSION label rendering
+- A3 — Verify `NODE_CONCLUSION.value_summary` / `label` availability for rendering and confirm no direct `head` dependency is needed in the walker
 - A4 — Check whether any test asserts `Explanation` exact field count(post-ε will have 10 + 1 internal)
-- A5 — Service wire scope:does `_evaluate_result_to_dict(...)` or explain JSON emit `repr`?If yes,decide wire schema
+- A5 — Service wire scope:does `_evaluate_result_to_dict(...)` or explain JSON emit `repr`?Default is no service wire change unless preflight finds an explicit Explanation serializer.
 - A6 — Docs cascade enumeration(quickstart + official + SDK + maybe service)
 - A7 — Cache field naming collision check(`_repr_cache` not used elsewhere)
 - A8 — Walker edge case enumeration:empty graph,cyclic check(should not happen post-η),orphan nodes
