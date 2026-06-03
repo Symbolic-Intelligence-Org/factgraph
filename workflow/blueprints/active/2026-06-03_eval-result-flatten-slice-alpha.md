@@ -2,17 +2,20 @@
 
 - Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-03 (Step 4.6.5 pre-impl grep amendment)
 - Owner: Claude (blueprint) / Codex (impl) — cross-flip per `feedback_design_impl_branch_isolation`
 - Related Modules:
   - `src/factgraph/application/protocol/evaluate_result.py` (Claim / EvidenceRef / EvaluateRow definitions)
+  - `src/service/runtime_v1.py` (evaluate-result REST serialization uses deprecated-target fields)
   - `src/factgraph/sdk/__init__.py` (top-level re-export of Claim / EvidenceRef)
   - `tests/application/protocol/test_evaluate_result_dtos.py` (DTO invariant tests + row/explain fixtures)
   - `tests/application/protocol/test_evaluate_result_digests.py` (digest helper tests)
+  - `tests/test_pyreason_e2e.py` / `tests/test_problog_engine_eval.py` (engine-facing evaluate-result compatibility assertions)
   - `tests/sdk/test_evaluate_result_exports.py` (SDK export smoke tests)
 - Related Docs:
   - [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §6 Slice α (parent design)
   - [`docs/quickstart/evaluate_and_evidence.md`](../../../docs/quickstart/evaluate_and_evidence.md) §2.3 / §2.4 / §9.1 (current Claim / EvidenceRef user-facing surface — gets deprecation notes plus active-field / deprecated-property shape rewrite in this slice)
+  - `docs/official/kernel/quickstart/{evidence,persistence,rules-and-inferences}.md` + `src/factgraph/sdk/docs/01_concepts.en.md` (Step 4.6.5 downstream access consumers)
 - Audit Log:
   - [2026-06-03_eval-result-flatten-slice-alpha.audit.md](./2026-06-03_eval-result-flatten-slice-alpha.audit.md)
 
@@ -38,6 +41,7 @@ Slice α is the lowest-risk slice (parent §6 ordering: α → β → γ → ζ 
 - G5 — Existing user code accessing `row.claim.name` / `row.claim.arguments` / `row.evidence_ref.row_id` / `.result_id` / `.ref_id` / `.fact_digest` continues to work (emits `DeprecationWarning`)
 - G6 — Construction sites enumerated by Step 4.3 preflight (`evaluate_result.py:582-596`, `test_evaluate_result_dtos.py:92-105`, `test_evaluate_result_dtos.py:228-240`) are updated to drop the redundant kwargs (and to rely on resolver injection instead)
 - G7 — Test coverage updated for both the deprecated-property emission and the resolver wiring
+- G8 — Step 4.6.5 downstream access consumers (service serializer, active docs, engine-facing tests) are updated or intentionally preserved without unexpected warnings
 
 ## 3. Non-goals
 
@@ -60,11 +64,12 @@ Slice α is the lowest-risk slice (parent §6 ordering: α → β → γ → ζ 
   - EvaluateRow resolver pattern (template for new Claim/EvidenceRef resolvers): [`:126`](../../../src/factgraph/application/protocol/evaluate_result.py) + [`:149-152`](../../../src/factgraph/application/protocol/evaluate_result.py)
   - EvaluateResult row-binding order: [`:213-236`](../../../src/factgraph/application/protocol/evaluate_result.py) — currently checks `row.evidence_ref.result_id` before rebinding rows with `_result_resolver`; Slice α must rewrite this path to avoid deprecated-property access before owner binding
   - Row digest helper: [`:432-458`](../../../src/factgraph/application/protocol/evaluate_result.py) — currently reads `row.claim.arguments`, `row.claim.name`, and `row.evidence_ref.{fact_digest,result_id,row_id}`; Slice α must rewrite this helper to avoid warning-emitting deprecated properties and to preserve byte-identical row digests via explicit context
+  - Service serializer: [`src/service/runtime_v1.py:2458-2478`](../../../src/service/runtime_v1.py) — exports `claim.name`, `claim.arguments`, and full `evidence_ref` legacy fields into JSON; Step 4.6.5 adds this as a scoped source touch outside `factgraph.application.protocol`
   - SDK top-level re-export: [`src/factgraph/sdk/__init__.py:33-49`](../../../src/factgraph/sdk/__init__.py)
 - Current known constraints:
   - D17 invariant (parent ADR `2026-05-25_t5-d17-result-row-dto-foundation.md`) — this slice does not violate it because the cross-field equalities still hold at runtime through the resolver chain; only the frozen-field enforcement form changes
   - Q-PR1 sacred 5-path 0-diff (per [`project_db_view_audit_complete_2026_05_20`](../../../.claude/projects/-Users-zhenzhili-hnsm-backend/memory/project_db_view_audit_complete_2026_05_20.md) / parent design §7.5) — `evaluate_result.py` is **not** on the sacred path; safe to edit. `core/store/ledger.py` is sacred and untouched here
-  - INV-6 (application-first runtime authority) — all edits inside `factgraph.application.protocol` + tests; no substrate up-cast, no SDK reverse-dependency
+  - INV-6 (application-first runtime authority) — core protocol edits stay inside `factgraph.application.protocol`; Step 4.6.5 authorizes the narrow `src/service/runtime_v1.py` serialization compatibility touch because it is a downstream projection of `EvaluateRow`, not substrate authority or SDK reverse-dependency
 - Current related historical blueprints / decisions:
   - `workflow/design/decisions/active/2026-05-25_t5-d17-result-row-dto-foundation.md` (D17 — partial supersede direction recorded in parent design §7.6; this slice **does not** formally supersede D17 — that is Slice γ's job)
   - `workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md` (D19 — digest algorithm unchanged here; field location unchanged here)
@@ -275,7 +280,44 @@ Normal internal operations must not emit user-facing deprecation warnings merely
 - Evidence graph labels / metadata: [`evaluate_result.py:872`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1006`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1013`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1160`](../../../src/factgraph/application/protocol/evaluate_result.py)
 - Existing protocol tests that intentionally assert old access paths: `tests/application/protocol/test_evaluate_result_dtos.py:455`, `:485`, `:647`, `:656`, `:665`, `:707`, `:956`
 
-### 5.7 Quickstart docs touch (in this slice)
+### 5.7 Downstream consumers from Step 4.6.5 deletion grep
+
+Step 4.6.5 pre-impl grep is required for this subtractive shipped-API slice. It found additional consumers beyond Step 4.3 PF-r2. Status remains `scoped` per CADENCE Option 2; implementation has not started.
+
+#### N-1 — service REST serializer
+
+`src/service/runtime_v1.py:2458-2478` converts `EvaluateRow` into a JSON-compatible dict and currently reads:
+
+- `row.claim.name`
+- `row.claim.arguments`
+- `row.evidence_ref.ref_id`
+- `row.evidence_ref.result_id`
+- `row.evidence_ref.row_id`
+- `row.evidence_ref.fact_digest`
+
+Step 4.7 must keep the output JSON wire shape byte/field-compatible while avoiding internal deprecation warnings. This is the only scoped `src/service/` touch authorized by Slice alpha.
+
+#### N-2 — active docs beyond `docs/quickstart/evaluate_and_evidence.md`
+
+Step 4.7 docs update must include these active docs consumers:
+
+- `docs/official/kernel/quickstart/evidence.md:155-157`
+- `docs/official/kernel/quickstart/persistence.md:78`, `:97`, `:329`
+- `docs/official/kernel/quickstart/rules-and-inferences.md:119`, `:489`, `:504`, `:591`
+- `src/factgraph/sdk/docs/01_concepts.en.md:52`
+
+These are not implementation blockers, but leaving them unchanged would keep public docs recommending soon-deprecated access paths as primary APIs.
+
+#### N-3 — active engine-facing tests
+
+Step 4.7 tests must handle these non-protocol test consumers:
+
+- `tests/test_pyreason_e2e.py:138-142` (`candidate.claim.name` / `candidate.claim.arguments[...]`)
+- `tests/test_problog_engine_eval.py:95` (`candidates[0].evidence_ref.ref_id`)
+
+`tests/test_pyreason_e2e.py:248` is **not** part of this DTO slice: it imports `Claim` from `factgraph.core.store.ledger` and asserts ledger claim equality.
+
+### 5.8 Quickstart docs touch (in this slice)
 
 Step 4.3 PF-R3 confirmed a one-line banner is insufficient because `docs/quickstart/evaluate_and_evidence.md` currently lists the old complete frozen field shapes at §2.3 / §2.4 and in the §9.1 SDK import comments. Step 4.7 docs work must include:
 
@@ -291,9 +333,9 @@ The full wrapper removal / row-level field rewrite remains Slice γ; this slice 
 - Must preserve:
   - User-facing access paths `row.claim.name` / `.arguments` / `row.evidence_ref.row_id` / `.result_id` / `.ref_id` / `.fact_digest` all continue to return the **byte-equal value** they returned before (only with `DeprecationWarning` emitted)
   - Byte-equal `row_digest` and `result_digest` for equivalent rows; internal digest helpers must avoid deprecated-property access
-  - `EvidenceRef.ref_id` formula is preserved bit-for-bit via shipped `evidence_ref_id_for(...)`; Step 4.7 may keep the helper name, wrap it, or alias it, but must not change bytes
+- `EvidenceRef.ref_id` formula is preserved bit-for-bit via shipped `evidence_ref_id_for(...)`; Step 4.7 may keep the helper name, wrap it, or alias it, but must not change bytes
   - D17 invariant *semantics* (cross-field equality) — enforced now by structural property delegation instead of frozen-field equality assertions
-  - INV-6 application-first — no edits outside `factgraph.application.protocol` (other than test updates)
+  - INV-6 application-first — no substrate up-cast, no SDK reverse-dependency; edits outside `factgraph.application.protocol` are limited to the Step 4.6.5 scoped serializer, tests, and docs consumers
   - Q-PR1 sacred 5-path 0-diff (`core/store/ledger.py` etc. untouched)
 - Explicitly NOT in this slice:
   - Wrapper class removal (Slice γ)
@@ -318,6 +360,9 @@ The full wrapper removal / row-level field rewrite remains Slice γ; this slice 
 - [ ] `evidence_ref_id_for(...)` shipped ref-id formula preserved byte-for-byte; any wrapper/alias decision keeps the existing public helper usable
 - [ ] All Step 4.3 enumerated `Claim(...)` / `EvidenceRef(...)` construction sites updated (`evaluate_result.py:582-596`, `test_evaluate_result_dtos.py:92-105`, `:228-240`); Step 4.6.5 grep confirms no drift
 - [ ] Internal compatibility paths listed in §5.6 do not emit deprecation warnings during normal construction, digesting, explaining, or evidence metadata creation
+- [ ] `src/service/runtime_v1.py:2458-2478` preserves legacy JSON fields while avoiding internal deprecation warnings
+- [ ] Step 4.6.5 docs consumers in `docs/official/kernel/quickstart/*` and `src/factgraph/sdk/docs/01_concepts.en.md` no longer present deprecated paths as primary recommended APIs
+- [ ] `tests/test_pyreason_e2e.py` and `tests/test_problog_engine_eval.py` updated for the compatibility/deprecation semantics
 - [ ] New tests:
   - [ ] `test_claim_deprecated_name_emits_warning`
   - [ ] `test_claim_deprecated_arguments_emits_warning`
@@ -330,7 +375,7 @@ The full wrapper removal / row-level field rewrite remains Slice γ; this slice 
 - [ ] Existing test suite passes with `python -m pytest -W "ignore::DeprecationWarning::factgraph" tests/application/protocol tests/sdk/test_evaluate_result_exports.py` (warnings are emitted but tests don't assert against them unless new)
 - [ ] `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 / §9.1 updated with deprecation notes plus active-field / deprecated-property shapes
 - [ ] No `src/factgraph/application/protocol/docs/README.md` update unless a module-docs subtree appears before Step 4.6.5 (Step 4.3 PF-v7 found none)
-- [ ] No edits outside `factgraph.application.protocol` (other than test updates + the quickstart docs field-shape rewrite)
+- [ ] No edits outside `factgraph.application.protocol` except the scoped service serializer, tests, and docs consumers listed in §5.7 / §5.8
 
 ## 8. Implementation Plan
 
@@ -345,14 +390,18 @@ Codex implementation order (each step ends with targeted `python -m pytest tests
 7. **[digest compatibility]** Update `_row_digest_for` or replacement helper per §5.4 so row/result digests preserve shipped bytes without using deprecated properties internally
 8. **[construction-site updates]** Update each site enumerated in step 2 to drop now-removed kwargs and rely on `EvaluateRow.__post_init__` / `EvaluateResult.__post_init__` for resolver wiring
 9. **[internal compatibility paths]** Update the §5.6 clusters so normal construction, digesting, explaining, stale-row checks, and evidence metadata creation use direct context/helpers rather than deprecated-property access
-10. **[new tests]** Add the 8 acceptance tests listed in §7 plus row/result digest byte-equality coverage from §5.4 and no-internal-warning coverage from §5.6
-11. **[quickstart docs rewrite]** Update `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 / §9.1 per §5.7
-12. **[module docs check]** Do not create `src/factgraph/application/protocol/docs/README.md`; only update module docs if a subtree appears before Step 4.6.5
-13. **[final verification]** Targeted pytest clean; manual grep `grep -nE 'Claim\(name=|EvidenceRef\((ref_id|result_id|row_id|fact_digest)=' src/ tests/` returns zero hits
+10. **[service serializer]** Update `src/service/runtime_v1.py:2458-2478` per §5.7 N-1, preserving JSON field shape without warning-emitting property reads
+11. **[new tests]** Add the 8 acceptance tests listed in §7 plus row/result digest byte-equality coverage from §5.4 and no-internal-warning coverage from §5.6 / §5.7
+12. **[quickstart/docs rewrite]** Update `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 / §9.1 per §5.8 and Step 4.6.5 docs consumers per §5.7 N-2
+13. **[non-protocol test consumers]** Update `tests/test_pyreason_e2e.py` and `tests/test_problog_engine_eval.py` per §5.7 N-3
+14. **[module docs check]** Do not create `src/factgraph/application/protocol/docs/README.md`; only update module docs if a subtree appears before Step 4.6.5
+15. **[final verification]** Targeted pytest clean; manual grep `grep -nE 'Claim\(name=|EvidenceRef\((ref_id|result_id|row_id|fact_digest)=' src/ tests/` returns zero hits, except deliberate deprecated-property assertion tests
 
 ## 9. Docs To Update
 
 - `docs/quickstart/evaluate_and_evidence.md` §2.3 + §2.4 + §9.1 (deprecation notes plus active-field / deprecated-property shape rewrite)
+- `docs/official/kernel/quickstart/evidence.md`, `persistence.md`, `rules-and-inferences.md` (Step 4.6.5 deprecated-path consumers)
+- `src/factgraph/sdk/docs/01_concepts.en.md` (Step 4.6.5 deprecated-path consumer)
 - `src/factgraph/application/protocol/docs/README.md` — no action expected because Step 4.3 PF-v7 found no module-docs subtree; revisit only if Step 4.6.5 finds drift
 - This blueprint's Outcome / Deviations section (filled at archive time)
 

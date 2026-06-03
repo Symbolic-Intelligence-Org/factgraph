@@ -15,6 +15,7 @@
 | 2026-06-03 | draft | Step 4.2 draft review + tightening (Codex round 1) | Rule 1 fresh reads verified the folded Stage-0 claims and surfaced 4 polish findings: P1-1 row digest helper cannot call deprecated properties before owner binding; P1-2 EvaluateResult row-binding order currently reads `EvidenceRef.result_id` pre-bind; P2-1 tests/verification anchors used non-existent `tests/factgraph` path; P2-2 internal code must preserve byte-equal digests without emitting deprecation warnings. Blueprint updated in-place on the blueprint branch; §5.4 local Q fold remains below escalation threshold. |
 | 2026-06-03 | draft | Step 4.4 preflight amendment (PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2) | Applied Step 4.3 preflight findings from independent branch `v0.2.0-eval-result-flatten-preflight-2026-06-03` @ `50a2c53e`: locked PF-R1/PF-R2, added PF-R3 quickstart field-shape rewrite, narrowed construction-site scope per PF-r1, added internal compatibility inventory per PF-r2, reclassified PF-A1 as verified PF-v9 to keep 0 abandonment blockers. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | `Status: draft` → `Status: scoped` after Step 4.4 preflight amendment and Step 4.5 self-check passed. Frozen scope includes PF-R1/PF-R2/PF-R3 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v9 verified, and no abandonment blockers. |
+| 2026-06-03 | scoped | Step 4.6.5 pre-impl grep amendment (Option 2) | Deletion grep found N-1 service serializer (`src/service/runtime_v1.py:2458-2478`), N-2 active docs consumers (`docs/official/kernel/quickstart/{evidence,persistence,rules-and-inferences}.md` + `src/factgraph/sdk/docs/01_concepts.en.md`), and N-3 non-protocol test consumers (`tests/test_pyreason_e2e.py:138-142`, `tests/test_problog_engine_eval.py:95`). Status remains `scoped`; no code implementation started. |
 
 ## Step 4.2 Review (Codex Round 1)
 
@@ -130,6 +131,9 @@ Before any code edit, verify the shipped state still matches the blueprint assum
 2. `EvidenceRef` definition at `:102-115` (5 fields: ref_id / result_id / row_id / fact_digest / closed_head_digest)
 3. `EvaluateRow.__post_init__` D17 invariant block at `:128-147` (lines 135-138 contain the two cross-field equality assertions)
 4. `EvaluateRow._result_resolver` pattern at `:126` + `_require_live_result` at `:149-152` (template for the new Claim/EvidenceRef resolvers)
+5. Step 4.6.5 deletion-grep consumers are still exhaustive:
+   - `rg -n '\.claim\.(name|arguments)\b|\.evidence_ref\.(row_id|result_id|ref_id|fact_digest)\b' src tests docs --glob '!docs/references/working/**'`
+   - Confirm N-1 / N-2 / N-3 in blueprint §5.7 still cover all active hits except deliberate deprecated-property tests and design/archive material.
 
 **Expected output in audit log (§Codex Audit Findings A4):**
 - For each of 1-4: ✓ matches blueprint anchor, or ⚠️ drift + actual line range
@@ -172,6 +176,7 @@ _(empty — to be filled by codex)_
 | 2026-06-03 | §5.4 deprecation strategy — local Q fold (no separate Q-decision doc at this point) | Per user lock 2026-06-03. §5.4 is the only §5 Q load-bearing for Slice α field-removal scope. Treat as local implementation policy on blueprint branch; consolidate via Step 4.2 review + Step 4.4 amendment. Escalation rule: if Step 4.2 surfaces public-compat or cross-slice impact for §5.4 (e.g., affects Slice β/γ deprecation contracts), upgrade to single Q-decision doc before scoped anchor. Closure §10 must record as `single-Q local lock consolidated on blueprint branch`. |
 | 2026-06-03 | Stage 1 audit doc deferred per Slice 4/5 precedent | Per user lock 2026-06-03. Stage-0 source audit considered folded into design-point [`evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) (§1-§4 friction + §8 file:line anchors) + this blueprint draft. No `workflow/audit/active/2026-06-03_eval-result-flatten-vs-shipped.md` produced. Step 4.2 reviewer must verify folded audit claims via Rule 1 fresh reads. Escalation rule: if source grounding insufficient at Step 4.2, supplement with preflight artifact at Step 4.3, do NOT regress to standalone Stage 1 doc. |
 | 2026-06-03 | Step 4.4 preflight amendment locks PF-R1/PF-R2/PF-R3 and reclassifies PF-A1 to PF-v9 | Step 4.3 preflight was sound but used the cadence "Abandonment" bucket for a positive deferral confirmation. Reclassifying to Verified restores healthy distribution (3R / 2r / 9v / 2s / 0A) without changing scope. PF-R3 expands docs work from banner-only to shape-truth rewrite because the quickstart currently lists removed fields as frozen DTO fields. |
+| 2026-06-03 | Step 4.6.5 uses CADENCE Option 2 without status rollback | The deletion-grep found additional consumers after scope freeze, but each is bounded and implementation had not started: service serialization, active docs examples, and active non-protocol tests. Folding them into the scoped blueprint avoids rollback while preserving the pre-impl safety purpose of Step 4.6.5. |
 
 ## Cross-flip checkpoints (per `feedback_audit_to_archive_cadence`)
 
