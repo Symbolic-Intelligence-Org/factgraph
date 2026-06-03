@@ -60,36 +60,48 @@ WhereValidationError: target predicate not found: <id>           ← rule's id i
 
 #### How `head=` connects to a `RuleExpr`
 
-When the first argument is a `RuleExpr`, the SDK validates `head=` against the expression in one of three **binding modes** ([`rule_expr_lowering.py:388-449`](../../src/factgraph/application/protocol/rule_expr_lowering.py)):
+The mental model: **`head.ports` is a projection-and-implicit-join spec over the `RuleExpr`.** Whatever the expression's branches compute, the SDK uses the names in `head.ports` to pick out and unify port values across operands — you do not write an explicit `.join_by_ports(...)` for the names that already appear as head ports. Anything you need joined beyond that, you join explicitly in the expression itself.
 
-| Binding mode | When | Detection rule | Notes |
-|---|---|---|---|
-| **inline** | head IS one of the rules in the expression | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | The head's output port values are filled directly from the matched occurrence. A version mismatch (same id+digest, different `version`) only emits a `UserWarning`, evaluation still proceeds |
-| **external** | head is *not* in the expression | head's `id` does not appear in any occurrence | Legal — the head supplies the desired port shape; the SDK validates head's ports against the expression's *declared* ports and threads bindings through |
-| **projection** | head is built via `Rule.projection(*names)` | head matches the `__factgraph_projection__<hash>` id form | Synthetic projection rule; port-type comparison is skipped (just port names matter). Currently **not usable as an `evaluate` head** in v0.2 — runtime raises `WhereValidationError: target predicate not found` (per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head") |
+This is exactly what `Rule.projection(*port_names)` makes literal — a synthetic head that *only* declares port names and nothing else:
 
-Two `RuleExprError`s come from this matching:
+```python
+proj = Rule.projection("user", "region")
+# id="__factgraph_projection__<hash>", body is a placeholder
+# Conceptually: "give me rows projected on user, region; figure out the joins"
+```
+
+`Rule.projection(...)` is the explicit form of the mental model. It is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not currently usable as an `evaluate` head** in v0.2 — the runtime raises:
 
 ```
-RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest
-              ← head and an occurrence share id but differ in body — typically you redefined the rule
-                 (e.g. bumped version) but the expression still holds a stale reference
+WhereValidationError: target predicate not found: __factgraph_projection__<hash>
+```
 
-RuleExprError: head rule '<id>' matches multiple expression occurrences with the same content digest
-              ← the same Rule appears twice in the expression without distinct .as_() aliases
-                 producing collapsing duplicate occurrences
+(per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, supply a real `Rule` whose ports are the projection you want; the SDK does the same projection-and-join derivation from those ports.
+
+Two minor identity-bookkeeping flavors track whether the head's `id` happens to appear in the expression — both produce the same evaluation; the distinction only surfaces as error guards:
+
+| Identity flavor | Detected by | Why you care |
+|---|---|---|
+| **inline** | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | Different `version` on the same id+digest emits a `UserWarning` but evaluation proceeds |
+| **external** | head's `id` does not appear in any occurrence | No bookkeeping cost — head just provides the projection spec |
+
+Three `RuleExprError`s come from head ↔ expression validation:
+
+```
+head rule '<id>' matches an expression occurrence with a different content digest
+   ← head and an occurrence share id but differ in body (you redefined the rule
+      but the expression still holds the old reference)
+
+head rule '<id>' matches multiple expression occurrences with the same content digest
+   ← the same Rule appears twice in the expression without distinct .as_() aliases
+
+RuleExpr head validation failed: head port '<name>' is only declared in some RuleExpr branches
+   ← port-shape contract violation (next paragraph)
 ```
 
 #### Port-shape contract — the silent gotcha
 
-Inline and external heads must declare ports that **every branch** of the `RuleExpr` can supply. If a port appears only in some branches (e.g. one OR side has `region` but the other doesn't), validation rejects:
-
-```
-RuleExprError: RuleExpr head validation failed:
-               head port '<port_name>' is only declared in some RuleExpr branches
-```
-
-In other words: a `RuleExpr` with mismatched per-branch ports cannot have a head that asks for the union. Either make every branch declare the same port set, or pick a head whose ports are a subset present everywhere.
+The head's ports must be **declared in every branch** of the `RuleExpr`. If a port appears in some branches but not others (e.g. one OR side declares `region`, the other doesn't), the head cannot ask for the union — validation rejects with the "only declared in some RuleExpr branches" message. Either equalize the ports across branches, or pick a head whose ports are a subset present everywhere.
 
 ### 1.3 What comes back
 
