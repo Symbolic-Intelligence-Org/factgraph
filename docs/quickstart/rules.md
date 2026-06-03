@@ -122,7 +122,7 @@ It is still importable, but `build_application_rule(when=[Pred(...)])` **rejects
 1. Inside an `Inference` body (history note §6.1) — the legacy DSL path
 2. When constructing a low-level `Rule(id=..., when=tuple[PredAtom, ...], ports=...)` directly (§2.6)
 
-For the full Entity-DSL reference and aggregate signatures, see [`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Run a Rule" and §"Aggregate helpers in `when` bodies".
+Entity-DSL syntax is introduced in §2.2 above; aggregate helpers and the full reference are not yet folded into this quickstart set.
 
 ### 2.3 `ports` — the head
 
@@ -434,8 +434,6 @@ Status:
 - **Track 1 is single-head only** — `Inference(head=[...multi...])` is rejected. For multiple heads, write multiple `Inference` values or compose `Rule`s with `RuleExpr`.
 - `Inference` is the only context where raw `Pred(...)` atoms are accepted in the `when` body.
 
-Detailed Inference usage:[`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Legacy compatibility: evaluate an Inference".
-
 ### 6.2 `Query` — fully deferred
 
 `Query(head, where, on_missing, on_type_mismatch)` was the ad-hoc read template — a "build a query object, run it, get rows" shape.
@@ -506,6 +504,5 @@ Indirect types reached through methods:
 - [`schema_definition.md`](schema_definition.md) — Entity / Identity / Field declarations that rule bodies reference
 - [`data_model.md`](data_model.md) — the Claim / MetaRow shape that rule matches read from
 - [`three_layer_api.md`](three_layer_api.md) — `fg.entities.match(...)` (Query's successor)
-- `evaluation.md` *(next chapter)* — `fg.eval.evaluate` / `explain`, `engine=`, `semantics=`
-- `evidence.md` *(later chapter)* — `EvaluateRow` / `Explanation` shapes
-- Legacy long-form Rule / Inference reference: [`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md)
+- [`engines_and_configs.md`](engines_and_configs.md) — `engine=` / `semantics=` / `config=` consumed by `fg.eval.evaluate`
+- [`evaluate_and_evidence.md`](evaluate_and_evidence.md) — `fg.eval.evaluate` / `explain`, `EvaluateRow` / `Explanation` shapes

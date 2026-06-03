@@ -199,7 +199,7 @@ In normal use the `User` name is rebound to the new class by Python's import or 
 
 Destructive operations (`delete`, `update`, `migrate`, `deprecate`) are not part of the current `fg.schema.*` surface. If you need a non-additive change today — removing a field, changing identity, retyping, or anything that retracts schema state — create a new workspace with the new schema and re-ingest.
 
-This is the **current mode**. Broader schema evolution semantics (destructive operations, in-place migration, digest evolution) are an open design question. The full rejection taxonomy and the design space sit in [`workflow/design/design-points/active/schema-mutation-additive-only.zh.md`](../../workflow/design/design-points/active/schema-mutation-additive-only.zh.md).
+This is the **current mode**. Broader schema evolution semantics (destructive operations, in-place migration, digest evolution) are an open design question.
 
 ## 5. Reference
 

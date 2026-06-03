@@ -32,7 +32,7 @@ result = fg.eval.evaluate(region_rule, head=region_rule)
 
 This is the canonical user-facing form: `build_application_rule(...)` with Entity-DSL atoms (see [`rules.md`](rules.md) §2.2).
 
-> **Current shipped status — known gap.** `build_application_rule(when=[User(u).field == v])` lowering auto-prepends `PredAtom("User:exists", [u])`. `fg.entities.create(...)` does not currently emit `User:exists` claims to the ledger, so the body above does not match anything and `result.count()` returns `0` today. The example shows the form you *should* write; the gap is tracked in [`entity-exists-claim-emission-gap.zh.md`](../../workflow/design/design-points/active/entity-exists-claim-emission-gap.zh.md). Until the gap closes, demonstrations later in this chapter that need live rows fall back to a direct `Rule(...)` + `PredAtom(...)` construction (see §2.1).
+> **Current shipped status — known gap.** `build_application_rule(when=[User(u).field == v])` lowering auto-prepends `PredAtom("User:exists", [u])`. `fg.entities.create(...)` does not currently emit `User:exists` claims to the ledger, so the body above does not match anything and `result.count()` returns `0` today. The example shows the form you *should* write. Until the gap closes, demonstrations later in this chapter that need live rows fall back to a direct `Rule(...)` + `PredAtom(...)` construction (see §2.1).
 
 ### 1.2 `head=` parameter
 
@@ -193,7 +193,7 @@ dict(row.bindings)
 
 Two parts to read:
 
-- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id` = `row.claim.name`). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`. **Why does it look like `entity:field`?** Because `rule.id` is forced to match a known ledger predicate (see §1.2 input rejections — `target predicate not found: <id>`). A "normal" free-form id like `"find_us_users"` is rejected. The shipped design conflates rule identity with predicate identity; see [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) for the same family of cross-layer name occupation.
+- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id` = `row.claim.name`). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`. **Why does it look like `entity:field`?** Because `rule.id` is forced to match a known ledger predicate (see §1.2 input rejections — `target predicate not found: <id>`). A "normal" free-form id like `"find_us_users"` is rejected. The shipped design conflates rule identity with predicate identity.
 - **`terms`** is the per-row port resolution — what *varies* row-to-row. `terms[i]` carries the value bound to the i-th port in `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two `entity_ref` terms — `terms[0]` for the order, `terms[1]` for the user.
 
 > **Shipped arity constraint.** `head.id` must match a known ledger predicate, and `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. You cannot declare "a synthetic head with three entity ports just because I want three columns of output"; the head's arity is bounded by the predicate id it claims. `Rule.projection(*names)` would express that idea but is not usable as an evaluate head in v0.2 (§1.2).
@@ -221,7 +221,7 @@ To map port names to values programmatically, walk `head.ports` in parallel with
 
 `Claim` describes the *thing concluded* on a row — the predicate id (`name`), the argument bindings (`arguments`), a human-readable rendering (`repr`), and a content-addressed digest. It does not carry provenance; provenance lives in `EvidenceRef` (§2.4) and `EvidenceGraph` (§5). Four `kind` values distinguish what role the conclusion plays.
 
-> **Name collision warning.** There are **two** classes named `Claim`. This section documents `factgraph.application.protocol.evaluate_result.Claim` — the *result-side projection* that `EvaluateRow.claim` exposes. It is **not** the on-disk ledger `Claim` (`factgraph.core.store.ledger.Claim` documented in [`data_model.md` §1](data_model.md), with `asrt_id` / `pred_id` / `e_ref` / `rest_terms`). The SDK's top-level `from factgraph.sdk import Claim` re-exports the protocol one, not the ledger one. Same name, two layers — same family as the `Rule` namespace ambiguity in [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md).
+> **Name collision warning.** There are **two** classes named `Claim`. This section documents `factgraph.application.protocol.evaluate_result.Claim` — the *result-side projection* that `EvaluateRow.claim` exposes. It is **not** the on-disk ledger `Claim` (`factgraph.core.store.ledger.Claim` documented in [`data_model.md` §1](data_model.md), with `asrt_id` / `pred_id` / `e_ref` / `rest_terms`). The SDK's top-level `from factgraph.sdk import Claim` re-exports the protocol one, not the ledger one.
 
 ```text
 Claim  (= factgraph.application.protocol.evaluate_result.Claim, frozen)
@@ -427,7 +427,7 @@ EvidenceEdge (frozen)
 | `layout_hint` | Used for |
 |---|---|
 | `"tree"` (default) | Static support graphs — Native Form 1, ProbLog Form 1, Souffle witnesses, etc. |
-| `"timeline"` | Temporal evidence — PyReason multi-timestep traces (deferred per [D11](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — not currently produced) |
+| `"timeline"` | Temporal evidence — PyReason multi-timestep traces (deferred — not currently produced) |
 
 ### 5.4 Per-engine richness today
 
@@ -436,7 +436,7 @@ EvidenceEdge (frozen)
 | Native (`engine="native"`) | Form 1 binding-level support graph — shipped |
 | Souffle | Form 1 witness — shipped via `SOUFFLE_WITNESS_KIND` |
 | ProbLog | Form 1 binding-level + provenance graph with `EDGE_DERIVES` — shipped |
-| PyReason | Form 1 single-conclusion fallback — shipped. **Form 2 timeline (multi-timestep bound updates) deferred** — see [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
+| PyReason | Form 1 single-conclusion fallback — shipped. **Form 2 timeline (multi-timestep bound updates) deferred.** |
 
 ## 6. The closed-head concept
 
@@ -480,7 +480,7 @@ Rule(
 
 ### 6.3 `desc` carries through
 
-If the open head has a `desc` template (e.g. `"User %user is in %region"`, see [`rules.md`](rules.md) §2.5), the closed head receives the same template — letting downstream renderers walk the closed-head chain and produce per-row descriptions. The evaluation runtime does **not** auto-render this; rendering is the consumer's choice via `row.close().render_desc({"user": ..., "region": ...})` or the `RuleExprInspect.render(...)` path. See [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) for the open-design future where this surfaces automatically in `Explanation` payloads.
+If the open head has a `desc` template (e.g. `"User %user is in %region"`, see [`rules.md`](rules.md) §2.5), the closed head receives the same template — letting downstream renderers walk the closed-head chain and produce per-row descriptions. The evaluation runtime does **not** auto-render this; rendering is the consumer's choice via `row.close().render_desc({"user": ..., "region": ...})` or the `RuleExprInspect.render(...)` path.
 
 ## 7. `fg.audit` — post-hoc per-cell inspection
 
@@ -498,14 +498,14 @@ If the open head has a `desc` template (e.g. `"User %user is in %region"`, see [
 
 This chapter covers the shipped surface. Several user-facing capabilities are *designed* but not yet exposed in the SDK:
 
-| Capability | Status | Where designed |
-|---|---|---|
-| `fg.diagnose(...)` SDK public surface | Internal application-layer logic shipped; SDK shell deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D1) |
-| Why-not / counterfactual explanation | Deferred — only `failure_class="closed_head_false"` available today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.2 (D5) |
-| PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
-| Attribution / salience decomposition | Deferred (D6 / D7) | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.3 |
-| Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.5 (D20) |
-| Desc auto-render in `Explanation` payloads | Deferred — only `row.close().render_desc(...)` / `RuleExprInspect.render(...)` consume `desc` today (see §6.3) | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) |
+| Capability | Status |
+|---|---|
+| `fg.diagnose(...)` SDK public surface | Internal application-layer logic shipped; SDK shell deferred |
+| Why-not / counterfactual explanation | Deferred — only `failure_class="closed_head_false"` available today |
+| PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback |
+| Attribution / salience decomposition | Deferred |
+| Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today |
+| Desc auto-render in `Explanation` payloads | Deferred — only `row.close().render_desc(...)` / `RuleExprInspect.render(...)` consume `desc` today (see §6.3) |
 
 ## 9. Reference
 
@@ -579,5 +579,4 @@ fg.audit.diff_proof_frames(...) -> ... # compare two recorded proof outcomes
 - [`rules.md`](rules.md) — `Rule` / `RuleExpr` / `head` declaration, and `fg.rules.inspect`
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=` / `config=` parameters consumed by `evaluate`
 - [`data_model.md`](data_model.md) §2.2 — the `raw_kind` + `bound` meta keys that surface on `EvaluateRow` and `Explanation`
-- [`assertions.md`](../official/kernel/quickstart/assertions.md) — assertion-level read APIs that `fg.audit.explain` / `conflicts` resolve against
-- [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §8
+- assertion-level read APIs (covered in the assertions reference, not yet folded into this quickstart set) — for what `fg.audit.explain` / `conflicts` resolve against
