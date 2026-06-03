@@ -15,6 +15,7 @@
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight findings from `v0.2.0-query-style-head-preflight-2026-06-03@46e179d3`: native/Souffle/ProbLog runtime/import strict lookup paths are in scope; query-style candidates require a distinct helper/branch; `candidate_kind="fact"` + fact-like payload remains the δ compatibility default; service/runtime `target_pred_id` / `head_vars` keys are preserved; PyReason fact-conversion and read/query lookups are carved out. Status remains `draft`. |
 | 2026-06-04 | draft | Step 4.5 self-check PASS | Verified PF-R1/PF-R2/PF-R3/PF-R4 + PF-r1/PF-r2/PF-r3 coverage across §5/§7/§8/§9; confirmed N9/N10 carve-outs, G6 Option A, CandidateSet compatibility payload, and service/runtime wire-key preservation are internally consistent. No stale blockers found; Q-PR1 and dirty-baseline boundaries remain preserved. |
 | 2026-06-04 | scoped | Step 4.6 scope freeze | Status flipped `draft` → `scoped`. Scope frozen with native/Souffle/ProbLog opt-in schema lookup, query-style candidate helper/branch, `candidate_kind="fact"` compatibility payload, service/runtime wire-key preservation, PyReason/read-query exclusions, and strict-error docs cascade. |
+| 2026-06-04 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran `find_schema_pred`, strict-error text, candidate-construction, and wire-key greps. No new production head-validation sites beyond PF-R1. Folded one active agent test expectation, broader docs wording cascade, and N11 test-local fake evaluator carve-out. Status remains `scoped`; no code implementation started. |
 
 ## Decision Notes
 
@@ -30,6 +31,7 @@
 | 2026-06-03 | Step 4.3 PF-R1 — cross-engine strict sites locked | Preflight confirmed native `_evaluate.py`, Souffle `engine_eval.py`, ProbLog runtime `engine_eval.py`, and ProbLog import `problog_import.py` all enforce strict schema lookup/arity. δ implementation scope includes all four. |
 | 2026-06-03 | Step 4.3 PF-R2/PF-R3 — compatibility payload default | Because `CandidateSet(candidate_kind="fact")` canonical content requires `terms`, δ keeps `candidate_kind="fact"` and fact-like `{"pred_id": head.id, "terms": ...}` payloads for query-style candidates. New candidate kinds are deferred unless a later PF expands scope. |
 | 2026-06-03 | Step 4.3 PF-r1/PF-r2 — exclusions | PyReason materialized fact conversion, `_queries.py`, and service read-query lookups are not derivation-head validation and stay out of scope unless implementation proves otherwise. |
+| 2026-06-04 | Step 4.6.5 N-1/N-2/N-3 fold | N-1: `src/agent/tests/test_agent_l4a_workflow.py` still asserts the old free-form missing-predicate failure. N-2: docs strict-predicate wording is broader than PF-r3's four exact lines. N-3: `src/domains/ecss/tests/test_evidence_tree_explain_contracts.py` fake evaluators are schema-backed test fixtures and stay carved out unless tests prove otherwise. |
 
 ## Cross-flip checkpoints (per [[feedback_audit_to_archive_cadence]] + Slice η D6 lock)
 
@@ -39,7 +41,7 @@
 - [x] Step 4.4 preflight amendment
 - [x] Step 4.5 self-check
 - [x] Step 4.6 scope freeze
-- [ ] Step 4.6.5 pre-impl grep
+- [x] Step 4.6.5 pre-impl grep
 - [ ] Step 4.7 implementation on `v0.2.0-impl-query-style-head-2026-06-03` (individual report per D6)
 - [ ] Step 4.8 closure (individual report per D6) + note δ closes parent design chain
 - [ ] Step 4.9 archive

@@ -2,7 +2,7 @@
 
 - Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-04 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-04 (Step 4.6.5 pre-impl grep)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default — δ relaxes a shipped strict invariant (`rule.id` must match schema predicate); preflight will surface cross-engine impact
 - Fork base: `dd65e776` (Slice ε Step 4.9 archive HEAD)
@@ -85,6 +85,7 @@ Slice δ is the **last slice** in parent design §6 ordering(α → β → γ �
 - N8 — Dirty baseline files
 - N9 — PyReason materialized graph fact conversion substrate (`pyreason/engine_eval.py:637-695`) is excluded unless Step 4.7 proves a safe adapter path. It is not public head validation.
 - N10 — Read/query helper lookups (`core/store/_queries.py` and `service/runtime_v1.py:2679`) are excluded; they are not derivation-head evaluation paths.
+- N11 — Test-local fake engine evaluators in `src/domains/ecss/tests/test_evidence_tree_explain_contracts.py` remain schema-backed fixtures. They are not production head validation paths and should only change if Step 4.7 test execution proves they need fixture migration.
 
 ## 4. Current Source Anchors(Step 4.1 fresh read)
 
@@ -178,11 +179,19 @@ Service and runtime protocol still carry `target_pred_id` in compiled plans, run
 
 δ must preserve these wire/key names for compatibility while changing their meaning from "must be schema predicate id" to "head/rule id label, optionally schema-backed". Do not rename runtime DTO keys in δ; update docs/meaning only.
 
-### 5.8 Rule DTO validation
+### 5.8 Step 4.6.5 pre-impl grep additions
+
+Pre-impl grep found no new production head-validation sites beyond PF-R1. It did surface three implementation/testing details:
+
+- `src/agent/tests/test_agent_l4a_workflow.py:195-199` asserts the old free-form/missing predicate failure message (`target predicate not found`). Step 4.7 must migrate or reclassify this active test because δ makes missing schema predicates valid query-style head labels.
+- Docs wording is broader than the four PF-r3 strict-error lines. Step 4.7 docs cascade must also sweep "known ledger predicate", "head predicate id", "real predicate id", and similar wording in `docs/quickstart/evaluate_and_evidence.md`, `docs/quickstart/rules.md`, `docs/official/kernel/quickstart/evidence.md`, and `docs/official/kernel/quickstart/rules-and-inferences.md`.
+- `src/domains/ecss/tests/test_evidence_tree_explain_contracts.py:1450-1455` and `:1572-1574` are test-local fake Souffle evaluators that intentionally exercise schema-backed candidates. They are carved out per N11 unless test execution shows they must be migrated.
+
+### 5.9 Rule DTO validation
 
 `Rule.__post_init__` already only requires `id` to be a non-empty string (`rule.py:62-63`). δ does not need to relax Rule DTO validation; the strictness lives in evaluate/adapters/builders and related docs/tests.
 
-### 5.9 Cadence path locks
+### 5.10 Cadence path locks
 
 - **Tight gates default**:δ 改 shipped strict invariant(`rule.id` must match schema predicate),preflight 必须 surface cross-engine + backward compat scope
 - Step 4.2 review locked G6 arity mismatch severity to **Option A strict reject** for matched-predicate heads
@@ -224,10 +233,12 @@ Service and runtime protocol still carry `target_pred_id` in compiled plans, run
 - [ ] PyReason fact-conversion substrate and read/query helper lookups remain excluded per PF-r1/PF-r2
 - [ ] Query-style candidates keep `candidate_kind="fact"` + fact-like `{"pred_id": head.id, "terms": ...}` compatibility payload unless a new PF explicitly expands scope
 - [ ] Service/runtime compiled-plan fields remain wire-compatible while docs clarify `target_pred_id` / `head.id` now mean head label, optionally schema-backed
+- [ ] `src/agent/tests/test_agent_l4a_workflow.py` old `target predicate not found` expectation is migrated or reclassified
+- [ ] Test-local fake engine evaluators in `src/domains/ecss/tests/test_evidence_tree_explain_contracts.py` remain schema-backed or are migrated only if test execution requires it
 - [ ] All α-ε regression tests pass
 - [ ] Walker output(per Slice ε)still sensible for free-form `head.id`
 - [ ] Service wire serializes free-form `head.id` without alteration
-- [ ] Docs cascade:quickstart rules + evaluate_and_evidence + namespace-map + SDK docs
+- [ ] Docs cascade:quickstart rules + evaluate_and_evidence + namespace-map + SDK docs, including "known ledger predicate" / "head predicate id" / "real predicate id" wording
 - [ ] D21 walker still works(per ε baseline)
 - [ ] Q-PR1 5-path 0-diff vs `4c472b50` preserved
 - [ ] Dirty baseline preserved
