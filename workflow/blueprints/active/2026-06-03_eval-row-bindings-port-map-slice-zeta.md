@@ -2,7 +2,7 @@
 
 - Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-03 (Step 4.6.5 pre-impl grep)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]; hybrid cadence default per [[feedback_hybrid_cadence_sequential_mechanical_slices]] unless Step 4.3 surfaces novel concerns
 - Fork base: `0719ace6` (Slice γ Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.6 + §6 Slice ζ

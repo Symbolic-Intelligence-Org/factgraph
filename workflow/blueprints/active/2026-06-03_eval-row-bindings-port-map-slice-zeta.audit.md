@@ -14,6 +14,7 @@
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight `9d0e1186`: PF-R1 row-derived ProbLog provenance helper; PF-R2 construction sites that can pass `head`; PF-R3 exact v2 schema labels; PF-r1/PF-r2 transition helpers; PF-s1/PF-s2/PF-s3 carve-outs. Status remains `draft`; 0 abandonment. |
 | 2026-06-03 | draft | Step 4.5 self-check PASS | Verified G/N/acceptance consistency, removed stale draft wording, confirmed PF-R/PF-r/PF-s coverage, Q-PR1 0-diff, dirty baseline preservation, and 0 abandonment. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with Step 4.2 locks, Step 4.4 PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2 + PF-s1/PF-s2/PF-s3, and hybrid cadence retained for Step 4.6.5/4.7. |
+| 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran constructor, `row.bindings`, legacy `pred_id`/`terms`, and v1/v2 canonical-label greps across `src/`, `tests/`, `docs/`, and `workflow/`. No new production N-findings beyond Step 4.4 scope: construction remains SDK/service/protocol-test; row-derived legacy payload users remain service wire + ProbLog row evidence graph; direct candidate-payload and ledger/core hits remain carve-outs. Status remains `scoped`; no implementation started. |
 
 ## Decision Notes
 
@@ -38,11 +39,11 @@
 
 - [x] Step 4.1 blueprint draft (Claude — Slice 4/5 default after γ inversion)
 - [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
-- [ ] Step 4.3 preflight on independent branch `v0.2.0-eval-row-bindings-port-map-preflight-2026-06-03`
+- [x] Step 4.3 preflight on independent branch `v0.2.0-eval-row-bindings-port-map-preflight-2026-06-03`
 - [x] Step 4.4 preflight amendment
 - [x] Step 4.5 self-check
 - [x] Step 4.6 scope freeze
-- [ ] Step 4.6.5 pre-impl grep
+- [x] Step 4.6.5 pre-impl grep
 - [ ] Step 4.7 implementation on `v0.2.0-impl-eval-row-bindings-port-map-2026-06-03`
 - [ ] Step 4.8 closure
 - [ ] Step 4.9 archive
