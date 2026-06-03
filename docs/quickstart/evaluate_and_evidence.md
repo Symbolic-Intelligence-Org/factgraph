@@ -193,8 +193,10 @@ dict(row.bindings)
 
 Two parts to read:
 
-- **`pred_id`** is the **head's** predicate id — it identifies which predicate the rule head instantiates. It is constant across every row of the same `EvaluateResult`. It is *not* "the fact this row matched"; rows do not match a single ledger fact one-to-one. Reading `pred_id` per row is mostly redundant — same value as `row.claim.name` and `result.head.id`.
-- **`terms`** is the per-row port resolution — what *varies* row-to-row. `terms[i]` carries the value bound to the i-th port in `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`.
+- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id` = `row.claim.name`). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`.
+- **`terms`** is the per-row port resolution — what *varies* row-to-row. `terms[i]` carries the value bound to the i-th port in `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two `entity_ref` terms — `terms[0]` for the order, `terms[1]` for the user.
+
+> **Shipped arity constraint.** `head.id` must match a known ledger predicate, and `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. You cannot declare "a synthetic head with three entity ports just because I want three columns of output"; the head's arity is bounded by the predicate id it claims. `Rule.projection(*names)` would express that idea but is not usable as an evaluate head in v0.2 (§1.2).
 
 The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports` (the `ports` `Mapping` preserves insertion order). Each term is a typed dict discriminated by `kind`:
 
