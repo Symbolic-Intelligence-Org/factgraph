@@ -56,7 +56,7 @@ Slice gamma is the breaking wrapper-removal slice. It should flatten the useful 
 - G3 — Remove or deprecate `Claim` and `EvidenceRef` wrapper classes according to a locked SDK compatibility policy.
 - G4 — Remove active construction of `Claim(...)` and `EvidenceRef(...)` from production/test row construction paths after the locked policy is applied.
 - G5 — Update `EvaluateRow` digest and evidence helper paths so `row.digest` equals former `row.claim.digest` and `row.closed_head_digest` equals former `row.evidence_ref.closed_head_digest`.
-- G6 — Update `Explanation` from `claim: Claim | None` to the locked parent-design shape (`row: EvaluateRow | None` preferred), including validation and serialization behavior.
+- G6 — Update `Explanation` from `claim: Claim | None` to a direct `row: EvaluateRow | None` reference per parent design §4.1 (not inlined `row_*` top-level fields), including validation and serialization behavior.
 - G7 — Update service row/result JSON projection without confusing application-protocol `Claim` with ledger `factgraph.core.store.ledger.Claim`.
 - G8 — Update SDK/protocol exports, `__all__` guards, docs, and tests so public shape reflects the wrapper-removal decision.
 - G9 — Preserve D19/D17 compatibility contracts that remain meaningful: row digest bytes, closed-head digest, result/evidence metadata identity, and cross-process `(result_id, row_id)` row handle semantics.
@@ -69,7 +69,7 @@ Slice gamma is the breaking wrapper-removal slice. It should flatten the useful 
 - N3 — Do not implement EvidenceGraph 3-tier hierarchy (Slice eta).
 - N4 — Do not implement `Explanation.repr` evidence walker (Slice epsilon).
 - N5 — Do not change `ResultFingerprint` / `engine_meta` from Slice beta except access-path updates required by this slice.
-- N6 — Do not alter ledger-layer `factgraph.core.store.ledger.Claim`; same-name ledger Claim remains a separate layer.
+- N6 — Do not alter ledger-layer `factgraph.core.store.ledger.Claim`; same-name ledger Claim remains a separate layer. This slice resolves the cross-layer `Claim` name friction described in [`rule-namespace-rulespec-redesign.zh.md`](../../design/design-points/active/rule-namespace-rulespec-redesign.zh.md) §3.5/§4.6 via protocol-wrapper removal, not via that design-point's `ResultClaim` rename path.
 - N7 — Do not change service HTTP wire shape unless Step 4.3 explicitly locks wire compatibility updates.
 - N8 — Do not touch Q-PR1 sacred paths: `write_protocol.py`, `ledger.py`, `_builders.py`, `adapters/pyreason/`, `application/accept.py`.
 - N9 — Do not touch accumulated dirty baseline files.
@@ -123,13 +123,16 @@ Open Q: "wrapper class撤销" can mean several levels:
 
 - Option C1 — Remove SDK/protocol exports immediately; no `Claim` / `EvidenceRef` import compatibility. Cleanest, largest breaking change.
 - Option C2 — Keep deprecated SDK/protocol aliases or compatibility proxy classes for one release cycle. Smaller break, but contradicts "wrapper class removal" unless the alias is clearly documented as compatibility-only.
-- Option C3 — Keep `row.claim` / `row.evidence_ref` deprecated properties returning lightweight view objects while removing constructor use. Highest backward compatibility, but risks keeping wrapper abstraction alive.
+- Option C3 — Keep `row.claim` / `row.evidence_ref` deprecated properties while removing active wrapper construction. **Sub-shape is not implicit**; Step 4.3 must either reject C3 or lock one of:
+  - C3a — `types.SimpleNamespace`-style proxy object with only compatibility attributes (no exported class)
+  - C3b — minimal kept compatibility class, explicitly marked deprecated and not used in normal construction paths
+  - C3c — compatibility property raises/removes once A2 consumer enumeration proves access is bounded enough for C1
 
 Step 4.3 preflight must enumerate active import/access consumers before locking. Default draft bias: **C2 or C3 until preflight proves import/access surface is small enough for C1**.
 
 ### 5.3 Explanation shape
 
-Parent design §4.1 target:
+Parent design §4.1 target for the eventual post-gamma/epsilon shape:
 
 ```python
 @dataclass(frozen=True)
@@ -137,7 +140,6 @@ class Explanation:
     status: ExplanationStatus
     row: EvaluateRow | None
     evidence: EvidenceGraph | None
-    repr: tuple[str, ...] | None
     result_id: str | None
     failure_class: ExplanationFailureClass | None
     checked_scope: Mapping[str, Any] | None
@@ -146,7 +148,9 @@ class Explanation:
     warnings: tuple[WarningDTO, ...]
 ```
 
-Slice gamma should update `Explanation.claim` to `Explanation.row` only if Step 4.3 confirms the cascade is bounded. If `Explanation.repr` walker scope leaks into Slice epsilon/eta, gamma should keep `repr` as deferred placeholder and not implement the walker.
+Slice gamma locks the data-bearing part of this change: `Explanation.claim` becomes a direct `Explanation.row: EvaluateRow | None` reference, not a set of inlined `row_id` / `row_bindings` / `row_digest` fields. `Explanation.repr` is **not** added in gamma. The field and the walker ship together in Slice epsilon; adding a field that always returns `None` would create a half-implemented user-facing surface.
+
+Cross-process semantics: an `Explanation` remains standalone-serializable through its inline `row` plus `result_id`; callers that need to re-locate the row use `(result_id, row.row_id)` per parent design §4.5.
 
 ### 5.4 Row digest and evidence identity
 
@@ -187,7 +191,7 @@ Expected exported symbol change is a central risk:
 - [ ] Step 4.3 preflight has enumerated all `Claim` / `EvidenceRef` imports, constructors, row accessors, and docs references across `src/`, `tests/`, and active docs.
 - [ ] `EvaluateRow` exposes `kind`, `digest`, and `closed_head_digest` directly.
 - [ ] Production row construction no longer needs active `Claim(...)` or `EvidenceRef(...)` wrapper construction after the locked compatibility policy is applied.
-- [ ] `Explanation` no longer requires `claim: Claim | None`; new row/inline shape is validated and documented.
+- [ ] `Explanation` no longer requires `claim: Claim | None`; it directly holds `row: EvaluateRow | None` per parent design §4.1 (not inlined `row_*` fields), and this shape is validated and documented.
 - [ ] Service runtime reads row-owned fields directly while preserving any locked wire-compatible payload keys.
 - [ ] SDK/protocol export tests reflect the locked `Claim` / `EvidenceRef` compatibility policy.
 - [ ] D19/D17 identity checks pass: row digest, closed-head digest, and any compatibility `ref_id` formula remain stable where required.
@@ -241,5 +245,5 @@ Pending.
 - D1 — Query-style head/predicate decoupling stays in Slice delta.
 - D2 — Bindings shape simplification stays in Slice zeta.
 - D3 — EvidenceGraph layered hierarchy stays in Slice eta.
-- D4 — `Explanation.repr` walker stays in Slice epsilon unless the `repr` open question is explicitly escalated.
+- D4 — `Explanation.repr` field + walker stay in Slice epsilon; gamma must not add a placeholder field that always returns `None`.
 - D5 — Any decision to keep long-term `Claim` / `EvidenceRef` compatibility aliases beyond one release cycle requires a separate decision record.

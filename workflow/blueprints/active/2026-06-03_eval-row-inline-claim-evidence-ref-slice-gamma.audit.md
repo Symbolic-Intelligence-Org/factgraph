@@ -12,6 +12,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Step 4.1 blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-eval-row-inline-claim-evidence-ref-2026-06-03` (fork from `e2f7f655`). Gamma treated as higher-risk breaking surface: SDK exports, protocol DTO shape, `Explanation`, service projection, and docs cascade all require Step 4.2/4.3 tightening before scope freeze. |
+| 2026-06-03 | draft | Step 4.2 review + tightening | Folded reviewer P1-P5: C3 compatibility sub-shape must be locked or rejected by preflight; gamma must not add placeholder `Explanation.repr`; `Explanation.row` direct-reference shape is locked; ledger Claim name-friction cross-reference added; Explanation cross-process semantics recorded. Status remains `draft`. |
 
 ## Decision Notes
 
@@ -22,6 +23,11 @@
 | 2026-06-03 | SDK compatibility strategy left open for review | Immediate removal is cleanest but may break `from factgraph.sdk import Claim, EvidenceRef`; compatibility aliases/properties may be required for one release cycle. Step 4.3 must enumerate real consumers before locking C1/C2/C3. |
 | 2026-06-03 | Stage 0 source audit folded into Step 4.1 draft | Follows Slice alpha/beta precedent, but with mandatory independent preflight. Step 4.1 fresh reads include `evaluate_result.py`, SDK/protocol exports, DTO tests, quickstart docs, and service runtime import collision. |
 | 2026-06-03 | Ledger `Claim` explicitly out of scope | Service runtime imports ledger `Claim` for claim/candidate payloads; gamma only concerns application-protocol `Claim` in `evaluate_result.py`. Preflight must preserve this layer boundary. |
+| 2026-06-03 | Step 4.2 P1 — C3 compatibility sub-shape made explicit | "Lightweight view object" was underspecified. Step 4.3 must either reject C3 or lock C3a SimpleNamespace-style proxy, C3b minimal deprecated compatibility class, or C3c removal/raising behavior after consumer enumeration. |
+| 2026-06-03 | Step 4.2 P2 — no placeholder `Explanation.repr` in gamma | A `repr` field without the evidence walker would advertise unsupported behavior. Gamma updates `Explanation.claim` to row data only; Slice epsilon ships the `repr` field and walker together. |
+| 2026-06-03 | Step 4.2 P3 — `Explanation.row` direct reference locked | Parent design §4.1 chooses `row: EvaluateRow | None`, not inlined `row_*` fields. Blueprint now locks that shape before preflight to avoid implementation-time drift. |
+| 2026-06-03 | Step 4.2 P4 — ledger Claim friction cross-reference added | `rule-namespace-rulespec-redesign.zh.md` §3.5/§4.6 proposed renaming application protocol Claim to `ResultClaim`. Slice gamma resolves the same cross-layer name friction by removing the protocol wrapper instead; ledger `Claim` remains untouched. |
+| 2026-06-03 | Step 4.2 P5 — Explanation cross-process semantics recorded | Explanation serializes through inline `row` plus `result_id`; re-location uses `(result_id, row.row_id)` per parent design §4.5. |
 
 ## Step 4.2 Review Focus
 
@@ -34,7 +40,7 @@
 
 ## Cross-flip checkpoints
 
-- [ ] Step 4.2 review + tightening on blueprint branch
+- [x] Step 4.2 review + tightening on blueprint branch
 - [ ] Step 4.3 preflight on independent branch `v0.2.0-eval-row-inline-claim-evidence-ref-preflight-2026-06-03`
 - [ ] Step 4.4 preflight amendment on blueprint branch
 - [ ] Step 4.5 self-check
