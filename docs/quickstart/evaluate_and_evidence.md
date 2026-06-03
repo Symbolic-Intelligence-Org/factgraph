@@ -41,28 +41,55 @@ A note about this minimal example: it uses direct `Rule(...)` construction (per 
 
 ### 1.2 `head=` parameter
 
-`head=` is mandatory on every `fg.eval.evaluate(...)` call. It selects *which* rule's ports are the output of the evaluation:
+`head=` is mandatory on every `fg.eval.evaluate(...)` call. It supplies the `Rule` whose `ports` shape the output rows:
 
 ```python
 fg.eval.evaluate(rule, head=rule)                    # single Rule: head=rule
-fg.eval.evaluate(rule_expr, head=one_of_its_rules)   # RuleExpr: pick which occurrence is output
+fg.eval.evaluate(rule_expr, head=some_rule)          # RuleExpr: head can be in OR out of the expression
 ```
 
-| Input | `head=` choice |
-|---|---|
-| Single application `Rule` | Trivial — `head=rule` (the rule is its own output). The rule's `id` must match an existing predicate in the ledger |
-| `RuleExpr` (`r1 & r2`, `r1 \| r2`, joins) | One of the rules involved in the expression. The SDK matches by `content_digest` against an occurrence in the expression |
+The relationship with `Rule.ports` (declaration-time output shape, see [`rules.md`](rules.md) §2.3): `Rule.ports` declares what each rule *exposes*; `head=` says "*this* port shape is the one I want for the answer rows".
 
 Rejected forms:
 
 ```
 SDKStoreError: evaluate(rule_expr, ...) requires head= Rule
 SDKStoreError: evaluate(rule_expr, ...) head= must be Rule       ← SDK DSL Rule / Inference / dict / str / inspect objects all rejected
-RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest
 WhereValidationError: target predicate not found: <id>           ← rule's id is not a known ledger predicate
 ```
 
-The relationship with `Rule.ports` (declaration-time output shape, see [`rules.md`](rules.md) §2.3): `Rule.ports` declares what each rule *exposes*; `head=` decides *which exposed surface* the evaluator returns when multiple rules are composed.
+#### How `head=` connects to a `RuleExpr`
+
+When the first argument is a `RuleExpr`, the SDK validates `head=` against the expression in one of three **binding modes** ([`rule_expr_lowering.py:388-449`](../../src/factgraph/application/protocol/rule_expr_lowering.py)):
+
+| Binding mode | When | Detection rule | Notes |
+|---|---|---|---|
+| **inline** | head IS one of the rules in the expression | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | The head's output port values are filled directly from the matched occurrence. A version mismatch (same id+digest, different `version`) only emits a `UserWarning`, evaluation still proceeds |
+| **external** | head is *not* in the expression | head's `id` does not appear in any occurrence | Legal — the head supplies the desired port shape; the SDK validates head's ports against the expression's *declared* ports and threads bindings through |
+| **projection** | head is built via `Rule.projection(*names)` | head matches the `__factgraph_projection__<hash>` id form | Synthetic projection rule; port-type comparison is skipped (just port names matter). Currently **not usable as an `evaluate` head** in v0.2 — runtime raises `WhereValidationError: target predicate not found` (per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head") |
+
+Two `RuleExprError`s come from this matching:
+
+```
+RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest
+              ← head and an occurrence share id but differ in body — typically you redefined the rule
+                 (e.g. bumped version) but the expression still holds a stale reference
+
+RuleExprError: head rule '<id>' matches multiple expression occurrences with the same content digest
+              ← the same Rule appears twice in the expression without distinct .as_() aliases
+                 producing collapsing duplicate occurrences
+```
+
+#### Port-shape contract — the silent gotcha
+
+Inline and external heads must declare ports that **every branch** of the `RuleExpr` can supply. If a port appears only in some branches (e.g. one OR side has `region` but the other doesn't), validation rejects:
+
+```
+RuleExprError: RuleExpr head validation failed:
+               head port '<port_name>' is only declared in some RuleExpr branches
+```
+
+In other words: a `RuleExpr` with mismatched per-branch ports cannot have a head that asks for the union. Either make every branch declare the same port set, or pick a head whose ports are a subset present everywhere.
 
 ### 1.3 What comes back
 
@@ -101,7 +128,7 @@ The other fields (`result_id`, `engine`, the digest fields) are for caching / au
 ```text
 EvaluateRow (frozen)
   ├── row_id: str
-  ├── bindings: Mapping[str, Any]   ← keyed by port name; values are the matched terms
+  ├── bindings: Mapping[str, Any]   ← engine candidate payload (see below)
   ├── claim: Claim                  ← see §2.4
   ├── raw_kind: "probabilistic" | "possibilistic" | None
   ├── bound: tuple[float, float] | None
@@ -113,14 +140,35 @@ EvaluateRow (frozen)
 row = result.first()
 
 row.row_id                    # str
-dict(row.bindings)            # {"user": <entity_ref_dict>, "region": "US"} (port name → matched term)
 row.claim.name                # "user:region" — the head predicate that fired
 row.raw_kind                  # None (no uncertainty meta on the source claims)
 row.bound                     # None (paired with raw_kind, see engines_and_configs.md §2.1)
 row.evidence_ref.ref_id       # "evref_v1:..." — stable handle for this evidence
 ```
 
-`raw_kind` / `bound` carry through from the source assertion's `meta` (per `engines_and_configs.md` §2.1). They are `None` on rows whose source facts have no uncertainty annotation. The invariant from data_model.md §2.2 holds: `bound is None iff raw_kind is None`.
+**`row.bindings` is the engine's candidate payload, not a `{port_name: value}` map.** For the native engine over a `PredAtom` body, the payload shape is:
+
+```python
+dict(row.bindings)
+# {
+#   "pred_id": "user:region",
+#   "terms": [
+#     {"kind": "entity_ref", "value": "idref_v1:User:<digest>"},     # ← position 0 — port "user"
+#     {"kind": "literal", "tag": "string", "value": "US"},           # ← position 1 — port "region"
+#   ],
+# }
+```
+
+The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports`. Each term is a typed dict:
+
+| Term shape | When |
+|---|---|
+| `{"kind": "entity_ref", "value": "<idref_v1:...>"}` | The port resolved to an entity reference |
+| `{"kind": "literal", "tag": "<type>", "value": <python_value>}` | The port resolved to a typed literal — `tag` is one of `string` / `int` / `bool` / `float64` / `bytes` / `time` / `uuid` |
+
+To go from port name to value, walk `head.ports` (an ordered `Mapping[str, Var]`) in parallel with `terms`. The application protocol exposes an internal helper `_binding_value_for_head_port(row, head, port_name)` that does this lookup but it is not currently re-exported through the SDK.
+
+`raw_kind` / `bound` carry through from the source assertion's `meta` (per `engines_and_configs.md` §2.1). They are `None` on rows whose source facts have no uncertainty annotation. The invariant from `data_model.md` §2.2 holds: `bound is None iff raw_kind is None`.
 
 ### 2.3 `row.close()` — the per-row closed-head `Rule`
 
@@ -459,7 +507,9 @@ from factgraph.audit.evidence_graph import (
 | `SDKStoreError: evaluate(rule_expr, ...) head= must be Rule` | `head=` is a non-Rule value (SDK DSL Rule, Inference, dict, str, inspect object) |
 | `SDKStoreError: eval.explain(...) head= must be Rule` | Same constraint on `fg.eval.explain` |
 | `RuleExprError: manual explain head must be closed; unbound ports: <names>` | `fg.eval.explain(head=...)` with a head whose `when` does not bind every port |
-| `RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest` | RuleExpr with head whose id matches an occurrence but content differs |
+| `RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest` | RuleExpr with head whose id matches an occurrence but content differs (§1.2 stale binding) |
+| `RuleExprError: head rule '<id>' matches multiple expression occurrences with the same content digest` | The same Rule appears more than once in the RuleExpr without distinct `.as_()` aliases (§1.2) |
+| `RuleExprError: RuleExpr head validation failed: head port '<name>' is only declared in some RuleExpr branches` | OR expression where the head port is present in some branches but not all (§1.2 port-shape contract) |
 | `WhereValidationError: target predicate not found: <id>` | Rule's `id` is not a known ledger predicate |
 | `DetachedRowError` | `row.explain()` after the parent `EvaluateResult` has been garbage-collected |
 | `ProtocolShapeError` (various) | `Explanation` / `Claim` / `EvidenceGraph` invariant violations at construction |
