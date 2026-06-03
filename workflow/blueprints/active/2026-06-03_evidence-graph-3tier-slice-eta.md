@@ -1,8 +1,8 @@
 # Task Blueprint: EvidenceGraph 3-tier hierarchy Slice η
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
+- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
 - Owner: Codex (blueprint draft) / Claude review expected — inverted cross-flip, tight gates by default
 - Fork base: `b4d80f13` (Slice ζ memory HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.9 + §6 Slice η

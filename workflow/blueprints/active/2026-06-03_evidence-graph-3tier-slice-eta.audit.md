@@ -12,6 +12,8 @@
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-evidence-graph-3tier-2026-06-03` (fork from `b4d80f13`). Tight gates locked by default because η changes evidence semantics across engines rather than mechanically folding DTO fields. |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-P5: service wire defaults to C2 preservation; PyReason fallback default separated from optional minimal L1/L2 decision; fallback graphs cannot fabricate support atoms; Form 1 atom_index source must be verified; per-engine fill capability table added to acceptance. Status remains `draft`. |
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 findings from preflight commit `a6e24d3b`: PF-R1 shipped edge direction wins; PF-R2 audit EvidenceGraph JSON vocabulary expands while candidate evidence tree wire stays out of scope; PF-R3 ProbLog P1-lite locked; PF-R4 fallback/PyReason L1/L2-only lock; PF-r1/r2/r3 recorded. Status remains `draft`. |
+| 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, stale wording cleanup, 0 abandonment blockers, direction/wire/ProbLog/PyReason locks, and Q-PR1/dirty invariants. No extra amendment required. |
+| 2026-06-03 | scoped | Step 4.6 scope freeze | Status flipped `draft` → `scoped`. Scope frozen with PF-R1/PF-R2/PF-R3/PF-R4 Required, PF-r1/PF-r2/PF-r3 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, and no abandonment blockers. |
 
 ## Decision Notes
 
@@ -34,8 +36,8 @@
 - [x] Step 4.2 review + tightening
 - [x] Step 4.3 preflight on independent branch `v0.2.0-evidence-graph-3tier-preflight-2026-06-03`
 - [x] Step 4.4 preflight amendment
-- [ ] Step 4.5 self-check
-- [ ] Step 4.6 scope freeze
+- [x] Step 4.5 self-check
+- [x] Step 4.6 scope freeze
 - [ ] Step 4.6.5 pre-impl grep
 - [ ] Step 4.7 implementation on `v0.2.0-impl-evidence-graph-3tier-2026-06-03`
 - [ ] Step 4.8 closure
