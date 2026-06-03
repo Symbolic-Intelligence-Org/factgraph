@@ -75,7 +75,7 @@ branching surface.
 | Kind | Member | Purpose |
 | --- | --- | --- |
 | data | `row_id` (`run_v1:...`) | Stable id within `run_id` |
-| data | `bindings` | Frozen `Mapping[str, Any]` keyed by `pred_id` / `terms` |
+| data | `bindings` | Frozen `Mapping[str, Any]` keyed by head port name |
 | data | `kind` | One of four row conclusion roles |
 | data | `digest` | `sha256:` digest of the row claim content |
 | data | `closed_head_digest` | Closed-head replay digest |
@@ -105,10 +105,9 @@ case. Code that needs cross-session explanation should use
 `fg.eval.explain(expr, head=closed_head, ...)` with an explicit closed
 head — see §5 below.
 
-`row.bindings` is keyed by `pred_id` + `terms`, not by `ports` directly.
-The bound port values live inside the `terms` list at positions matching the
-rule's port declaration; use `result.head.id`, `row.digest`, and `row.close()`
-for richer projections.
+`row.bindings` maps each head port name to its typed term dict. Use
+`result.head.id` for the head predicate id, `row.digest` for the row claim
+digest, and `row.close()` when you need a replayable closed-head rule.
 
 `raw_kind` and `bound` carry quantitative uncertainty propagated from the
 ledger and engine adapters. The invariant `raw_kind is None ⇒ bound is None`

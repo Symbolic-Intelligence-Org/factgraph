@@ -159,7 +159,7 @@ Each `EvaluateRow` is one match — one `(rule body, ledger fact-set)` binding t
 ```text
 EvaluateRow (frozen)
   ├── row_id: str
-  ├── bindings: Mapping[str, Any]   ← engine candidate payload (see below)
+  ├── bindings: Mapping[str, Any]   ← port-name → typed term map (see below)
   ├── kind: ClaimKind               ← row conclusion role
   ├── digest: str                   ← row claim digest
   ├── closed_head_digest: str       ← stable replay input for this row
@@ -172,7 +172,7 @@ EvaluateRow (frozen)
 row = result.first()
 
 row.row_id                    # str
-row.bindings                  # Mapping — engine candidate payload, NOT a {port: value} map (see below)
+row.bindings                  # Mapping — port-name → typed term map
 result.head.id                # "user:region" — the head predicate that fired
 row.kind                      # "fact_triple" — row conclusion role
 row.digest                    # "sha256:..." — content digest for this row claim
@@ -181,32 +181,25 @@ row.bound                     # None (paired with raw_kind, see engines_and_conf
 row.closed_head_digest        # "sha256:..." — stable replay input for this row
 ```
 
-#### `bindings` — engine candidate payload (not a port→value map)
+#### `bindings` — port-name → typed term map
 
-`row.bindings` is **not** a `{port_name: value}` mapping; it is the raw payload the engine produced. Each row carries one binding of *all* the head's ports — the row is one *assignment* of port → value, not one matched fact and not necessarily tied to a single entity.
+`row.bindings` is keyed by the head's port names. Each row carries one binding of *all* the head's ports — the row is one *assignment* of port → typed term, not one matched fact and not necessarily tied to a single entity.
 
-For the native engine over a `PredAtom` head body, the payload shape is:
+For the native engine over a `PredAtom` head body, the row shape is:
 
 ```python
 dict(row.bindings)
 # {
-#   "pred_id": "user:region",                                       ← head's predicate id;
-#                                                                     same across every row
-#   "terms": [                                                        ← per-row port values
-#     {"kind": "entity_ref", "value": "idref_v1:User:<digest>"},     # ← position 0 — port "user"
-#     {"kind": "literal", "tag": "string", "value": "US"},           # ← position 1 — port "region"
-#   ],
+#   "user": {"kind": "entity_ref", "value": "idref_v1:User:<digest>"},
+#   "region": {"kind": "literal", "tag": "string", "value": "US"},
 # }
 ```
 
-Two parts to read:
-
-- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id`). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`. **Why does it look like `entity:field`?** Because `rule.id` is forced to match a known ledger predicate (see §1.2 input rejections — `target predicate not found: <id>`). A "normal" free-form id like `"find_us_users"` is rejected. The shipped design conflates rule identity with predicate identity; see [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) for the same family of cross-layer name occupation.
-- **`terms`** is the per-row port resolution — what *varies* row-to-row. `terms[i]` carries the value bound to the i-th port in `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two `entity_ref` terms — `terms[0]` for the order, `terms[1]` for the user.
+`result.head.id` is the head predicate id. It is constant across every row; the per-row variation lives in `row.bindings`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two entity-ref terms keyed by their declared port names.
 
 > **Shipped arity constraint.** `head.id` must match a known ledger predicate, and `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. You cannot declare "a synthetic head with three entity ports just because I want three columns of output"; the head's arity is bounded by the predicate id it claims. `Rule.projection(*names)` would express that idea but is not usable as an evaluate head in v0.2 (§1.2).
 
-The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports` (the `ports` `Mapping` preserves insertion order). Each term is a typed dict discriminated by `kind`:
+Each binding value is a typed term dict discriminated by `kind`:
 
 | Term type | Shape | When |
 |---|---|---|
@@ -215,7 +208,7 @@ The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` 
 
 Reading the example concretely: the row reports `user = "idref_v1:User:<digest>"` and `region = "US"` — the resolved values for `head.ports`. A rule whose head ports are all value-typed produces rows with zero `entity_ref` terms; a rule with multiple entity-typed ports produces rows carrying multiple entity refs simultaneously.
 
-To map port names to values programmatically, walk `head.ports` in parallel with `terms`. The application protocol exposes an internal helper `_binding_value_for_head_port(row, head, port_name)` that does the lookup, but it is not currently re-exported through the SDK.
+To map port names to public values programmatically, read `row.bindings[port_name]["value"]` for typed term dictionaries. The application protocol also has an internal helper `_binding_value_for_head_port(row, head, port_name)` that unwraps typed terms, but it is not currently re-exported through the SDK.
 
 #### `raw_kind` + `bound` — uncertainty carry-through
 

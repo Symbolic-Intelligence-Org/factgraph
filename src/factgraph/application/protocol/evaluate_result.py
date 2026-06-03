@@ -377,7 +377,7 @@ def result_id_for(
 def row_id_for(run_id: str, bindings: Mapping[str, Any]) -> str:
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
     frozen = _freeze_mapping(bindings, field_name="bindings")
-    digest = sha256_hex(canonical_bytes_for_evaluate("evaluate_row_id_v1", frozen))[:16]
+    digest = sha256_hex(canonical_bytes_for_evaluate("evaluate_row_id_v2", frozen))[:16]
     return f"{run_id}:{digest}"
 
 
@@ -386,7 +386,7 @@ def claim_digest_for(kind: ClaimKind, name: str, arguments: Mapping[str, Any]) -
         raise ProtocolShapeError("kind must be one of fact_triple, rule_head, aggregate_result, projection")
     _require_non_empty_str(name, field_name="name")
     frozen = _freeze_mapping(arguments, field_name="arguments")
-    return sha256_token(canonical_bytes_for_evaluate("evaluate_claim_v1", kind, name, frozen))
+    return sha256_token(canonical_bytes_for_evaluate("evaluate_claim_v2", kind, name, frozen))
 
 
 def closed_head_digest_for_parts(closed_head_id: str, closed_head_content_digest: str) -> str:
@@ -447,6 +447,27 @@ def _claim_arguments_for_row(row: EvaluateRow) -> Mapping[str, Any]:
     return row.bindings
 
 
+def _legacy_candidate_payload_for_row_result(row: EvaluateRow, result: EvaluateResult) -> Mapping[str, Any]:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+    terms: list[Any] = []
+    for port_name in result.head.ports:
+        if port_name in row.bindings:
+            terms.append(row.bindings[port_name])
+            continue
+        legacy_terms = row.bindings.get("terms")
+        if isinstance(legacy_terms, Sequence):
+            port_names = tuple(result.head.ports)
+            idx = port_names.index(port_name)
+            if idx < len(legacy_terms):
+                terms.append(legacy_terms[idx])
+                continue
+        raise ProtocolShapeError(f"row binding is missing head port {port_name!r}")
+    return {"pred_id": result.head.id, "terms": terms}
+
+
 def _claim_repr_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
     return _claim_repr_for_row_name(row, _claim_name_for_row_result(row, result))
 
@@ -492,7 +513,7 @@ def _row_digest_for(row: EvaluateRow, *, result_id: str, claim_name: str) -> str
     _require_non_empty_str(claim_name, field_name="claim_name")
     return sha256_token(
         canonical_bytes_for_evaluate(
-            "evaluate_row_digest_v1",
+            "evaluate_row_digest_v2",
             {
                 "bindings": row.bindings,
                 "bound": row.bound,
@@ -623,6 +644,7 @@ def rule_set_digest_for_entries(entries: Iterable[tuple[str, str]]) -> str:
 def _candidate_set_to_evaluate_row(
     candidate: CandidateSet,
     *,
+    head: Rule,
     result_id: str,
     run_id: str,
     closed_head_digest: str,
@@ -631,10 +653,12 @@ def _candidate_set_to_evaluate_row(
 ) -> EvaluateRow:
     if not isinstance(candidate, CandidateSet):
         raise ProtocolShapeError("candidate must be CandidateSet")
+    if not isinstance(head, Rule):
+        raise ProtocolShapeError("head must be application protocol Rule")
     _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
     _require_sha256_token(closed_head_digest, field_name="closed_head_digest")
-    bindings = _bindings_from_candidate(candidate)
+    bindings = _bindings_from_candidate(candidate, head=head)
     effective_claim_name = candidate.target if claim_name is None else claim_name
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
     row_id = row_id_for(run_id, bindings)
@@ -777,7 +801,7 @@ def _build_closed_head_from_row(
 
 def _binding_value_for_head_port(row: EvaluateRow, head: Rule, port_name: str) -> object:
     if port_name in row.bindings:
-        return row.bindings[port_name]
+        return _public_term_value(row.bindings[port_name])
     terms = row.bindings.get("terms")
     if isinstance(terms, Sequence):
         port_names = tuple(head.ports)
@@ -924,7 +948,7 @@ def _build_problog_provenance_row_evidence_graph(
     candidate_graph = problog_trace_to_evidence_graph(
         trace,
         candidate_id=provenance_envelope.candidate_id,
-        candidate_payload=dict(row.bindings),
+        candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
         support_kind=PROBLOG_PROVENANCE_KIND,
     )
     uncertainty_projection = _problog_uncertainty_projection_meta(payload)
@@ -1294,9 +1318,19 @@ def _metadata_value(value: Any) -> Any:
     return str(value)
 
 
-def _bindings_from_candidate(candidate: CandidateSet) -> Mapping[str, Any]:
+def _bindings_from_candidate(candidate: CandidateSet, *, head: Rule) -> Mapping[str, Any]:
+    if not isinstance(head, Rule):
+        raise ProtocolShapeError("head must be application protocol Rule")
     payload = candidate.payload
-    maybe_bindings = payload.get("bindings") if isinstance(payload, Mapping) else None
+    if not isinstance(payload, Mapping):
+        raise ProtocolShapeError("candidate.payload must be mapping")
+    terms = payload.get("terms")
+    port_names = tuple(head.ports)
+    if isinstance(terms, Sequence) and not isinstance(terms, (str, bytes)):
+        if len(terms) < len(port_names):
+            raise ProtocolShapeError("candidate.payload.terms must align with head ports")
+        return _freeze_mapping(dict(zip(port_names, terms[: len(port_names)])), field_name="candidate.payload.terms")
+    maybe_bindings = payload.get("bindings")
     if isinstance(maybe_bindings, Mapping):
         return _freeze_mapping(maybe_bindings, field_name="candidate.payload.bindings")
     return _freeze_mapping(payload, field_name="candidate.payload")

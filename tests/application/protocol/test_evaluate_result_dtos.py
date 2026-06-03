@@ -414,7 +414,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             _single_row_result(provenance_envelope=bad_envelope)
 
     def test_detached_row_live_helper_raises(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaises(DetachedRowError):
@@ -703,7 +703,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         )
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaisesRegex(ProtocolShapeError, "iff"):
@@ -973,7 +973,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             )
 
     def test_candidate_set_conversion_harness_keeps_candidate_internal(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
         candidate = CandidateSet(
             derivation_id="deriv",
             derivation_version="v1",
@@ -992,12 +992,13 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         row = _candidate_set_to_evaluate_row(
             candidate,
+            head=head,
             result_id=result_id,
             run_id=run_id,
             closed_head_digest=closed_head_digest,
         )
 
-        self.assertEqual(dict(row.bindings), {"person": "p1"})
+        self.assertEqual(dict(row.bindings), {"person": {"kind": "const", "value": "p1"}})
         self.assertEqual(row.raw_kind, "probabilistic")
         self.assertEqual(row.bound, (0.75, 0.75))
         self.assertFalse(hasattr(row, "candidate_id"))

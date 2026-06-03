@@ -2,7 +2,7 @@
 
 - Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6.5 pre-impl grep)
+- Last Updated: 2026-06-03 (Step 4.7 implementation)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]; hybrid cadence default per [[feedback_hybrid_cadence_sequential_mechanical_slices]] unless Step 4.3 surfaces novel concerns
 - Fork base: `0719ace6` (Slice γ Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.6 + §6 Slice ζ
@@ -199,20 +199,20 @@ Step 4.3 preflight enumerates exact files.
 - Stage-0 source audit folded into this Step 4.1 draft per Slice α/β/γ precedent. No separate `workflow/audit/active/2026-06-03_eval-row-bindings-port-map-vs-shipped.md`.
 - §5.3 schema version bump and §5.4 legacy payload preservation are locked by Step 4.2 review; Step 4.3 verified no additional consumers require a different path.
 
-## 7. Acceptance Criteria (Draft)
+## 7. Acceptance Criteria (Implemented at Step 4.7)
 
 - [x] Step 4.2 review has locked §5.3 (Option A schema bump) and §5.4 legacy payload preservation.
 - [x] Step 4.3 preflight has enumerated `row.bindings` consumers + wire-compat scope + docs cascade.
-- [ ] `_bindings_from_candidate(candidate)` produces `{port_name: term}` map shape.
-- [ ] `EvaluateRow.bindings["<port_name>"]` returns the corresponding term dict directly.
-- [ ] Canonical bytes decision applied consistently (`row_id_for` + `claim_digest_for` + `_row_digest_for` use v2 schema labels).
-- [ ] Service JSON wire preserves locked compatibility (C2 wire-envelope preservation) via the legacy payload helper.
-- [ ] ProbLog row evidence graph uses helper reconstruction and no longer passes `dict(row.bindings)` when the callee expects `pred_id` + `terms`.
-- [ ] PyReason/core candidate provenance and service candidate evidence tree paths are left out of row-derived migration scope unless a new row-derived caller appears.
-- [ ] D19 digest algorithm unchanged (only canonical bytes payload schema labels evolve under Option A).
-- [ ] No `pred_id` / `terms` keys in `row.bindings` after implementation.
-- [ ] Q-PR1 5-path 0-diff vs `4c472b50` preserved.
-- [ ] Dirty baseline preserved.
+- [x] `_bindings_from_candidate(candidate)` produces `{port_name: term}` map shape.
+- [x] `EvaluateRow.bindings["<port_name>"]` returns the corresponding term dict directly.
+- [x] Canonical bytes decision applied consistently (`row_id_for` + `claim_digest_for` + `_row_digest_for` use v2 schema labels).
+- [x] Service JSON wire preserves locked compatibility (C2 wire-envelope preservation) via the legacy payload helper.
+- [x] ProbLog row evidence graph uses helper reconstruction and no longer passes `dict(row.bindings)` when the callee expects `pred_id` + `terms`.
+- [x] PyReason/core candidate provenance and service candidate evidence tree paths are left out of row-derived migration scope unless a new row-derived caller appears.
+- [x] D19 digest algorithm unchanged (only canonical bytes payload schema labels evolve under Option A).
+- [x] No `pred_id` / `terms` keys in `row.bindings` after implementation.
+- [x] Q-PR1 5-path 0-diff vs `4c472b50` preserved.
+- [x] Dirty baseline preserved.
 
 ## 8. Implementation Plan (Tentative)
 

@@ -2690,6 +2690,7 @@ class SDKStore:
             rows = tuple(
                 _candidate_set_to_evaluate_row(
                     candidate,
+                    head=head,
                     result_id=result_id,
                     run_id=run_id,
                     closed_head_digest=closed_head_digest,

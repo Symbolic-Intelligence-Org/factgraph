@@ -28,6 +28,7 @@ from factgraph.application.protocol.evaluate_result import (
     _evidence_ref_id_for_row_result,
     _evidence_ref_result_id_for_row_result,
     _evidence_ref_row_id_for_row,
+    _legacy_candidate_payload_for_row_result,
     _row_digest_for,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
@@ -2358,6 +2359,7 @@ def _evaluate_result_from_candidates(
     rows = tuple(
         _candidate_set_to_evaluate_row(
             candidate,
+            head=head,
             result_id=result_id,
             run_id=run_id,
             closed_head_digest=closed_head_digest,
@@ -2469,7 +2471,7 @@ def _evaluate_result_to_dict(result: EvaluateResult, *, rows: tuple[EvaluateRow,
 def _evaluate_row_to_dict(row: EvaluateRow, result: EvaluateResult) -> dict[str, Any]:
     return {
         "row_id": row.row_id,
-        "bindings": _to_jsonable(row.bindings),
+        "bindings": _to_jsonable(_legacy_candidate_payload_for_row_result(row, result)),
         "claim": {
             "kind": row.kind,
             "name": _claim_name_for_row_result(row, result),
