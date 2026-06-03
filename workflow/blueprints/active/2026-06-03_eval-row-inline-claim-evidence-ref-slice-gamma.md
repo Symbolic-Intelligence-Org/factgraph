@@ -1,8 +1,8 @@
 # Task Blueprint: Eval-row inline Claim/EvidenceRef Slice gamma — wrapper removal + row evidence fields
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6.5 pre-impl grep)
+- Last Updated: 2026-06-03 (Step 4.8 closure)
 - Owner: Claude/Codex cross-flip; tighter gates than Slice beta because this is a breaking SDK/protocol surface slice
 - Fork base: `e2f7f655` (Slice beta Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.3-§3.5 + §4.1 + §4.5 + §6 Slice gamma
@@ -226,16 +226,16 @@ These docs are scoped as N-1 because they are documentation cascade only. They d
 ## 7. Acceptance Criteria (Draft)
 
 - [x] Step 4.4 PF-R1 has locked no `EvaluateRow.repr`; former `Claim.repr` values are helper-derived compatibility values only.
-- [ ] Step 4.3 preflight has enumerated all `Claim` / `EvidenceRef` imports, constructors, row accessors, and docs references across `src/`, `tests/`, and active docs.
-- [ ] `EvaluateRow` exposes `kind`, `digest`, and `closed_head_digest` directly.
-- [ ] Production row construction no longer needs active `Claim(...)` or `EvidenceRef(...)` wrapper construction.
-- [ ] `Explanation` no longer requires `claim: Claim | None`; it directly holds `row: EvaluateRow | None` per parent design §4.1 and removes redundant direct `row_id` / `evidence_ref_id` / `raw_kind` / `bound` fields.
-- [ ] Service runtime reads row-owned fields directly, contains no `row.claim` / `row.evidence_ref` reads, and still emits wire-compatible nested `claim` / `evidence_ref` dictionaries.
-- [ ] SDK/protocol export tests reflect immediate wrapper removal; `sdk.__all__` expected count is 63 after Step 4.7 corrected PF-r2's SDK export overcount.
-- [ ] Step 4.7 docs cascade updates all Related Docs including Step 4.6.5 N-1 additions, while preserving ledger-Claim docs outside protocol-wrapper scope.
-- [ ] D19/D17 identity checks pass: row digest, closed-head digest, and any compatibility `ref_id` formula remain stable where required.
-- [ ] Q-PR1 5 sacred paths remain 0-diff vs `4c472b50`.
-- [ ] Dirty baseline entries are preserved.
+- [x] Step 4.3 preflight has enumerated all `Claim` / `EvidenceRef` imports, constructors, row accessors, and docs references across `src/`, `tests/`, and active docs.
+- [x] `EvaluateRow` exposes `kind`, `digest`, and `closed_head_digest` directly.
+- [x] Production row construction no longer needs active `Claim(...)` or `EvidenceRef(...)` wrapper construction.
+- [x] `Explanation` no longer requires `claim: Claim | None`; it directly holds `row: EvaluateRow | None` per parent design §4.1 and removes redundant direct `row_id` / `evidence_ref_id` / `raw_kind` / `bound` fields.
+- [x] Service runtime reads row-owned fields directly, contains no `row.claim` / `row.evidence_ref` reads, and still emits wire-compatible nested `claim` / `evidence_ref` dictionaries.
+- [x] SDK/protocol export tests reflect immediate wrapper removal; `sdk.__all__` expected count is 63 after Step 4.7 corrected PF-r2's SDK export overcount.
+- [x] Step 4.7 docs cascade updates all Related Docs including Step 4.6.5 N-1 additions, while preserving ledger-Claim docs outside protocol-wrapper scope.
+- [x] D19/D17 identity checks pass: row digest, closed-head digest, and any compatibility `ref_id` formula remain stable where required.
+- [x] Q-PR1 5 sacred paths remain 0-diff vs `4c472b50`.
+- [x] Dirty baseline entries are preserved.
 
 ## 8. Implementation Plan
 
@@ -278,7 +278,32 @@ These docs are scoped as N-1 because they are documentation cascade only. They d
 
 ## 10. Outcome / Deviations
 
-Pending.
+Implemented in `5c9447e9` on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`.
+
+### Outcome
+
+| Area | Result |
+| --- | --- |
+| Protocol DTO shape | `Claim` / `EvidenceRef` in-process wrappers removed; `EvaluateRow` owns `kind`, `digest`, and `closed_head_digest`. |
+| Explanation shape | `Explanation` now carries `row: EvaluateRow | None` and no longer exposes direct `claim`, `row_id`, `evidence_ref_id`, `raw_kind`, or `bound` fields. |
+| Service wire | `src/service/runtime_v1.py` no longer reads `row.claim` / `row.evidence_ref` while preserving nested JSON `claim` / `evidence_ref` compatibility dictionaries. |
+| SDK/protocol exports | `Claim` and `EvidenceRef` removed from SDK exports; protocol exports also remove detached wrapper errors. `sdk.__all__` is now 63. |
+| Docs cascade | Active quickstart, official, SDK, service, audit, and OpenAPI docs updated, including Step 4.6.5 N-1 additions. |
+
+### Verification
+
+- `compileall` over changed code/test modules passed.
+- Focused protocol/SDK/service test cohorts passed.
+- Full test suite passed: `2454 passed, 32 skipped, 1044 subtests passed`.
+- Q-PR1 5 sacred paths remain 0-diff vs `4c472b50`.
+- Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline entries remain preserved.
+
+### Deviations
+
+- Step 4.7 corrected Step 4.4 PF-r2's SDK export-count assumption. The SDK exported only `Claim` and `EvidenceRef`, not detached wrapper errors, so the final SDK `__all__` count is 65 → 63 rather than 65 → 61.
+- Step 4.7 surfaced one additional docs cascade file, `src/factgraph/sdk/docs/06_what_if_and_proof.en.md`, beyond the Step 4.6.5 N-1 list. The change was docs-only and aligned with the same wrapper-removal cascade, so it was folded into the implementation and recorded here rather than split into a new scope amendment.
+- No service wire-shape deviation: nested JSON `claim` / `evidence_ref` dictionaries remain compatibility payloads even though in-process wrappers were removed.
 
 ## 11. Deferred / Carry-Forward
 

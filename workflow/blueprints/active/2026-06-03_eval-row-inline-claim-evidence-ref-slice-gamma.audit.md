@@ -18,6 +18,7 @@
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with PF-R1/PF-R2/PF-R3/PF-R4 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, 0 abandonment. |
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran mandatory deletion/accessor/Explanation grep over `src/factgraph`, `src/service`, `tests`, and active docs. No new production scope beyond Step 4.4 PF-R1/PF-R2/PF-R3/PF-R4; ledger `Claim` false positives bucketed per PF-r1; N-1 docs cascade additions folded into scoped blueprint. Status remains `scoped`; no code implementation started. |
 | 2026-06-03 | scoped | Step 4.7 implementation | Implemented wrapper removal on impl branch: row-owned `kind` / `digest` / `closed_head_digest`, direct `Explanation.row`, protocol/SDK export removal, service wire-compatible serializer, tests, and docs cascade. Status remains `scoped`; Step 4.8 closure will flip to `implemented`. |
+| 2026-06-03 | implemented | Step 4.8 closure | Status `scoped` → `implemented`; §10 Outcome filled with `5c9447e9` implementation summary, verification results, PF-r2 SDK export-count correction, and docs cascade deviation. |
 
 ## Decision Notes
 
@@ -61,7 +62,7 @@
 - [x] Step 4.6 scoped anchor
 - [x] Step 4.6.5 pre-impl grep
 - [x] Step 4.7 implementation on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`
-- [ ] Step 4.8 closure
+- [x] Step 4.8 closure
 - [ ] Step 4.9 archive
 
 ## Preflight Seed Queries
