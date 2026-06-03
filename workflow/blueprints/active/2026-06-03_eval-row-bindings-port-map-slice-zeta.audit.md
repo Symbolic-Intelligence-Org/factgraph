@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-eval-row-bindings-port-map-2026-06-03` (fork from `0719ace6`). Hybrid cadence default per [[feedback_hybrid_cadence_sequential_mechanical_slices]] — ζ is mechanical surface-organization slice following β pattern. Escalation to tight gates reserved for Step 4.3 if novel concerns surface (byte-equal load-bearing / wire-compat wide / bit-stable ID dependencies). |
+| 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-1/P1-2/P1-3/P2-1/P2-2: explicit `head` context is required for port-name bindings; canonical bytes use v2 schema labels; service wire preserves legacy bindings envelope; provenance paths need legacy candidate payload helper; D19 wording clarified as algorithm-stable but schema-version-evolving. Status remains `draft`. |
 
 ## Decision Notes
 
@@ -20,11 +21,16 @@
 | 2026-06-03 | §5.4 service wire draft bias = C2 (wire-envelope preservation) | Slice γ PF-R4 precedent: in-process DTO shape changes,service JSON wire keys stable. Step 4.3 confirms. |
 | 2026-06-03 | Stage 1 audit doc deferred per Slice 4/5 precedent | Stage-0 source audit folded into parent design + this blueprint draft. Step 4.2 reviewer verifies via Rule 1 fresh reads. |
 | 2026-06-03 | Hybrid cadence default | ζ pattern matches β (mechanical surface fold); per [[feedback_hybrid_cadence_sequential_mechanical_slices]] 4.4→4.6.5 can fast-track; 4.7 + 4.8 individual reports. Step 4.3 escalation rule if novel concerns. |
+| 2026-06-03 | Step 4.2 P1-1 — explicit `head` context required | `CandidateSet` carries `target` + `payload`, not `head`; `_candidate_set_to_evaluate_row(...)` currently lacks a `head` parameter even though SDK/service construction callers have `head` in scope. Step 4.7 must pass `head` (or equivalent port context) into `_bindings_from_candidate(...)`; implementation must not invent `candidate.head`. |
+| 2026-06-03 | Step 4.2 P1-2 — canonical bytes schema bump locked | Changing `row.bindings` shape changes canonical bytes. The slice locks v2 schema labels for `row_id_for`, `claim_digest_for`, and `_row_digest_for(...)`; `evidence_ref_id_for(...)` remains v1 and changes only derivatively through row id / row digest. D19 algorithm discipline remains unchanged. |
+| 2026-06-03 | Step 4.2 P1-3 — provenance helper needed | `_build_problog_provenance_row_evidence_graph(...)` passes `dict(row.bindings)` to `problog_trace_to_evidence_graph(...)`; downstream `_resolve_candidate_info(...)` and `_candidate_binding_from_payload(...)` require `candidate_payload.pred_id` + `candidate_payload.terms`. Row-owned port-map bindings must therefore be converted back to a legacy candidate payload for provenance/wire compatibility paths. |
+| 2026-06-03 | Step 4.2 P2-1 — service wire C2 locked | Following Slice γ PF-R4, in-process DTO shape changes but service JSON `"bindings"` remains the legacy `{pred_id, terms[]}` envelope unless a separate API-breaking slice changes OpenAPI semantics. |
+| 2026-06-03 | Step 4.2 P2-2 — `D19 unchanged` wording narrowed | The digest algorithm remains stable, but row/claim/row-digest payload schema labels intentionally change. Acceptance now says algorithm stable, schema-version-evolving, avoiding a false byte-equal promise. |
 
 ## Cross-flip checkpoints (per [[feedback_audit_to_archive_cadence]] + Slice α/β/γ precedents)
 
 - [x] Step 4.1 blueprint draft (Claude — Slice 4/5 default after γ inversion)
-- [ ] Step 4.2 review + tightening (Codex per Slice 4/5 default)
+- [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
 - [ ] Step 4.3 preflight on independent branch `v0.2.0-eval-row-bindings-port-map-preflight-2026-06-03`
 - [ ] Step 4.4 preflight amendment
 - [ ] Step 4.5 self-check
