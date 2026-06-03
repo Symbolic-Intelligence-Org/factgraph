@@ -40,7 +40,17 @@ The config fields are not arbitrary knobs; each one maps to a real feature of th
 engine: Literal["native", "problog", "pyreason", "souffle"] = "native"
 ```
 
-`native` and `souffle` do not consume `SemanticsProfile` or any SDK config wrapper. `problog` and `pyreason` do. The reconciliation rules between `engine=` and `config=` (and the legacy kwargs they reject) live in §6.
+`native` and `souffle` do not consume `SemanticsProfile` or any SDK config wrapper. `problog` and `pyreason` do.
+
+**`engine=` and `config=` reconciliation** — three call shapes are accepted:
+
+| Call shape | Behavior |
+|---|---|
+| only `config=ProbLogConfig(...)` | engine inferred from the wrapper's `.engine` property |
+| only `engine="problog"` | runs with the engine's internal defaults (`config=None`) |
+| both (`engine=...` + `config=...`) | must agree; mismatch raises `engine='X' does not match semantics.engine='Y'` |
+
+Passing `config=` with `engine="native"` or `"souffle"` raises `engine='<name>' does not consume SemanticsProfile`. Legacy kwargs `semantics_profile=` / `mode=` / `policy=` / `view=` / `temporal_view=` / `engine_options=` are explicitly rejected at the SDK boundary with redirect messages pointing at the new surface.
 
 ## 2. Shared meta substrate that configs project
 
@@ -340,56 +350,7 @@ SemanticsProfile(
 
 This split (`SemanticsProfile` canonical / `ProbLogConfig` + `PyReasonConfig` ergonomic) is the same SDK-shadow / application-DTO pattern documented at [`docs/quickstart/rules.md`](rules.md) §2.6 for Rule vs the lower-level data shape. The SemanticsProfile naming is benign — application takes a neutral name, SDK takes the user-facing engine-specific names. (Compare the deferred Rule-namespace redesign discussed in [`workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) §2.2, where the same pattern is *not* yet applied.)
 
-## 6. `engine=` and `config=` reconciliation
-
-Three call shapes are accepted:
-
-### 6.1 Only `config=` — engine inferred
-
-```python
-fg.eval.evaluate(rule, head=rule, config=ProbLogConfig(...))
-# engine derived as "problog" from the wrapper
-```
-
-`config.engine` (a read-only property on the wrapper) supplies the engine. You do not have to pass `engine=` redundantly.
-
-### 6.2 Only `engine=` — no semantics
-
-```python
-fg.eval.evaluate(rule, head=rule, engine="problog")
-# semantics_profile = None — ProbLog runs without a profile
-```
-
-Legal for `problog` / `pyreason` (they run with their internal defaults) and the only legal form for `native` / `souffle` (which do not consume profiles at all).
-
-### 6.3 Both — they must agree
-
-```python
-fg.eval.evaluate(rule, head=rule, engine="problog", config=ProbLogConfig(...))
-# OK — engine and wrapper agree
-```
-
-Mismatch raises:
-
-```
-SDKStoreError: engine='problog' does not match semantics.engine='pyreason'
-SDKStoreError: SemanticsProfile.engine='pyreason' does not match engine='problog'
-```
-
-### 6.4 Rejected legacy kwargs
-
-The following kwargs are explicitly rejected with a redirect message:
-
-| Old kwarg | Replacement |
-|---|---|
-| `semantics_profile=` | `config=` |
-| `mode=` | `engine=` |
-| `policy=` | (removed; not accepted for inference evaluation) |
-| `view=` | `FactGraph.attach(db, view=view)` |
-| `temporal_view=` | active/history views on read APIs |
-| `engine_options=` | `config=` (or engine-specific configuration) |
-
-## 7. `fg.eval.preview_config(...)` — inspect-only
+## 6. `fg.eval.preview_config(...)` — inspect-only
 
 `preview_config` takes a `SemanticsProfile`, `ProbLogConfig`, or `PyReasonConfig` and returns a structural dict — what the canonical profile looks like, what engine it binds, and (for SDK wrappers) the lowered profile preview. It does not run any evaluation and does not touch the ledger.
 
@@ -408,7 +369,7 @@ preview = fg.eval.preview_config(cfg)
 
 Use it to verify your config lowers to what you expect before running a long evaluation.
 
-## 8. → evaluation (next chapter)
+## 7. → evaluation (next chapter)
 
 This chapter stops at *what* engines and configs are. The actual call:
 
@@ -418,9 +379,9 @@ result = fg.eval.evaluate(rule_or_expr, head=<Rule>, engine=..., config=...)
 
 — with its `head=` parameter, returned `EvaluateResult` shape, row iteration, and explain integration — lives in `evaluation.md`. The shape of `EvaluateRow` / `Explanation` / claim payloads lives in `evidence.md`.
 
-## 9. Reference
+## 8. Reference
 
-### 9.1 Types
+### 8.1 Types
 
 ```python
 from factgraph.sdk import (
@@ -430,7 +391,7 @@ from factgraph.sdk import (
 )
 ```
 
-### 9.2 Errors
+### 8.2 Errors
 
 | Error | Trigger |
 |---|---|
@@ -445,7 +406,7 @@ from factgraph.sdk import (
 | `uncertainty_projection has no policy for raw_kind=...` | An assertion's `raw_kind` is not configured and `fallback="reject_unconfigured"` |
 | `evaluate() does not accept semantics_profile= / mode= / policy= / view= / temporal_view= / engine_options=` | Legacy kwarg redirected to the new surface |
 
-### 9.3 Related chapters
+### 8.3 Related chapters
 
 - [`rules.md`](rules.md) — declarations that `evaluate(...)` consumes
 - [`data_model.md`](data_model.md) §2.2 — the `raw_kind` / `bound` meta keys that `uncertainty_projection` projects
@@ -455,7 +416,7 @@ from factgraph.sdk import (
   - [`src/factgraph/adapters/problog/`](../../src/factgraph/adapters/problog/) — `rule_ext.py`, `problog_export.py`
   - [`src/factgraph/adapters/pyreason/`](../../src/factgraph/adapters/pyreason/) — `rule_ext.py`, `where_compile.py`, `engine_eval.py`
 
-### 9.4 Engine reference
+### 8.4 Engine reference
 
 External references for the engine semantics this chapter describes:
 
