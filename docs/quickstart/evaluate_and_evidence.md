@@ -382,7 +382,7 @@ When `Explanation.status == "passed"`, `Explanation.evidence` is an `EvidenceGra
 ```text
 EvidenceGraph (frozen)
   ├── graph_id          : str
-  ├── engine            : str             ← "native" / "problog" / "pyreason"
+  ├── engine            : str             ← "native" / "souffle" / "problog" / "pyreason"
   ├── root_node_id      : str             ← the conclusion node id (must be in nodes)
   ├── nodes             : tuple[EvidenceNode, ...]
   ├── edges             : tuple[EvidenceEdge, ...]
