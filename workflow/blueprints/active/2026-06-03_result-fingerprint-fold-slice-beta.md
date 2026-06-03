@@ -9,20 +9,27 @@
   - `src/factgraph/sdk/__init__.py` (top-level re-export — add `ResultFingerprint`)
   - `src/factgraph/application/protocol/__init__.py` (protocol re-export — add `ResultFingerprint`)
   - `src/factgraph/sdk/store.py` (EvaluateResult construction site at `_evaluate(...)`)
-  - `src/service/runtime_v1.py` (EvaluateResult JSON serialization — N-1 pattern from Slice α)
+  - `src/service/runtime_v1.py` (EvaluateResult production construction + JSON serialization — N-1/N-2 pattern from Step 4.3 PF-R1/PF-R2)
   - `tests/application/protocol/test_evaluate_result_dtos.py` (EvaluateResult invariant tests)
   - `tests/application/protocol/test_evaluate_result_digests.py` (digest helper byte-equal tests)
   - `tests/sdk/test_evaluate_result_exports.py` (SDK re-export test)
+  - `tests/sdk/test_rule_expr_evaluate.py` (active SDK result digest/config assertions)
+  - `tests/test_db_attach_lifecycle.py` (active view snapshot digest assertion)
+  - `tests/test_problog_semantics_profile_migration.py` (active result wire-key assertions)
   - `tests/test_sdk_find_partial_identity.py` (SDK `__all__` count/surface guard — `ResultFingerprint` add must be intentional)
 - Related Docs:
   - [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.1 + §3.2 + §6 Slice β (parent design)
   - [`docs/quickstart/evaluate_and_evidence.md`](../../../docs/quickstart/evaluate_and_evidence.md) (EvaluateResult field-shape rewrite per Slice α PF-R3 pattern)
+  - [`docs/official/kernel/quickstart/evidence.md`](../../../docs/official/kernel/quickstart/evidence.md) (official quickstart envelope/fingerprint wording)
+  - [`docs/official/kernel/quickstart/namespace-map.md`](../../../docs/official/kernel/quickstart/namespace-map.md) (rule-set digest wording)
+  - [`src/factgraph/sdk/docs/03_rules_and_inferences.en.md`](../../../src/factgraph/sdk/docs/03_rules_and_inferences.en.md) (SDK docs replay anchors)
+  - [`src/service/docs/03_runtime_queries_policy.md`](../../../src/service/docs/03_runtime_queries_policy.md) (service JSON wire fields; must stay flat but be explained as wire compatibility)
 - Audit Log:
   - [2026-06-03_result-fingerprint-fold-slice-beta.audit.md](./2026-06-03_result-fingerprint-fold-slice-beta.audit.md)
 
 ## 1. Problem
 
-Parent design-point §2.4 audit established that `EvaluateResult` carries 7 digest/id fields with **no independent logical consumer** — they are always packed together into metadata snapshots ([`evaluate_result.py:1163`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1252`](../../../src/factgraph/application/protocol/evaluate_result.py), [`sdk/store.py:2535`](../../../src/factgraph/sdk/store.py)). The shipped fields:
+Parent design-point §2.4 audit established that `EvaluateResult` carries 7 digest/id fields with **no independent logical consumer** — they are always packed together into metadata snapshots ([`evaluate_result.py:1251`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1337`](../../../src/factgraph/application/protocol/evaluate_result.py), [`sdk/store.py:2527`](../../../src/factgraph/sdk/store.py)). The shipped fields:
 
 - `expr_digest` / `rule_set_digest` / `view_snapshot_digest` / `config_digest` — 4 provenance digests
 - `result_digest` — 1 master digest
@@ -49,6 +56,7 @@ Slice β is the 2nd slice per parent design §6 ordering (α → **β** → γ �
 - G9 — Test coverage for deprecated-property emission + sub-object access + byte-equal digest preservation
 - G10 — Result construction order remains valid: primitive inputs are used to compute `result_id`, row digests, and `result_digest` before constructing the complete `ResultFingerprint`; no digest helper may depend on deprecated `EvaluateResult` properties
 - G11 — `engine_meta` is normalized + validated, not a loose arbitrary Mapping: required keys `engine_version` / `adapter_version` are present with values `str | None` (extras allowed for future metadata)
+- G12 — Service runtime production construction and service serializer both updated while preserving INV-6 and flat JSON wire compatibility
 
 ## 3. Non-goals
 
@@ -69,11 +77,12 @@ Slice β is the 2nd slice per parent design §6 ordering (α → **β** → γ �
   - EvaluateResult `__post_init__`: [`:241-279`](../../../src/factgraph/application/protocol/evaluate_result.py) — currently validates 7 digest/id fields + 2 engine version fields directly
   - `result_digest_for(...)` helper: [`:565-612`](../../../src/factgraph/application/protocol/evaluate_result.py) — public symbol, takes 7 digest/id + 2 engine version inputs as kwargs, produces `evaluate_result_digest_v1` canonical bytes
   - SDK store construction site: [`src/factgraph/sdk/store.py:2697-2725`](../../../src/factgraph/sdk/store.py) area — Slice α already touched `_row_digest_for(...)` here
-  - Service serializer: [`src/service/runtime_v1.py:2445-2462`](../../../src/service/runtime_v1.py) `_evaluate_result_to_dict(...)` — required N-1 analog to Slice α service serializer preservation
+  - Service production construction site: [`src/service/runtime_v1.py:2328-2395`](../../../src/service/runtime_v1.py) `_evaluate_result_from_candidates(...)` — required PF-R1 scope from Step 4.3 preflight
+  - Service serializer: [`src/service/runtime_v1.py:2445-2462`](../../../src/service/runtime_v1.py) `_evaluate_result_to_dict(...)` — required N-2 analog to Slice α service serializer preservation
 - Current known constraints:
   - D19 digest source-of-truth ([`workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md`](../../design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md)) — digest **algorithm** unchanged; field **location** changes only (parent design §7.6 partial-supersede)
   - Q-PR1 sacred 5-path 0-diff vs `4c472b50` — must preserve through all Slice β commits (`evaluate_result.py` is **not** sacred path; safe to edit; ledger / write_protocol / pyreason adapter etc. untouched)
-  - INV-6 (application-first runtime authority) — core protocol edits inside `factgraph.application.protocol`; service serializer narrow touch may be needed (PF-r1 from Slice α precedent for downstream-projection cases)
+  - INV-6 (application-first runtime authority) — core protocol edits inside `factgraph.application.protocol`; service runtime construction is a legacy production construction path that must follow the protocol DTO shape, not an authority shift; service serializer is downstream projection preserving flat wire JSON
   - Slice α impl branch state: `v0.2.0-impl-eval-result-flatten-2026-06-03 @ 64651454` archived; Slice β builds on top — fork base is `64651454`
 - Current related historical blueprints / decisions:
   - Slice α archived: [`workflow/blueprints/archive/2026-06-03_eval-result-flatten-slice-alpha.md`](../archive/2026-06-03_eval-result-flatten-slice-alpha.md) — establishes deprecated-property + internal-compatibility-inventory + service-serializer N-1 pattern that Slice β reuses
@@ -175,6 +184,7 @@ Do **not** require `ResultFingerprint` as an input to `result_id_for(...)` or `r
 All `EvaluateResult(...)` construction sites must drop the 8 now-removed kwargs and pass `fingerprint=ResultFingerprint(...)` + `engine_meta={...}`. Step 4.3 preflight will enumerate the concrete pairs; expected from Slice α precedent:
 
 - Production: [`src/factgraph/sdk/store.py:2697-2725`](../../../src/factgraph/sdk/store.py) `_evaluate(...)` (already touched by Slice α PF-R1)
+- Production: [`src/service/runtime_v1.py:2328-2395`](../../../src/service/runtime_v1.py) `_evaluate_result_from_candidates(...)` (Step 4.3 PF-R1 critical catch; service-side EvaluateResult construction, not serializer)
 - Test fixtures: `tests/application/protocol/test_evaluate_result_dtos.py` (Slice α touched 2 fixture pairs; β may have parallel sites)
 - Test digests: `tests/application/protocol/test_evaluate_result_digests.py` (byte-equal preservation tests)
 - SDK export guard: `tests/test_sdk_find_partial_identity.py` currently asserts `len(factgraph.sdk.__all__) == 64`; adding `ResultFingerprint` is an intentional public SDK surface expansion and must update this guard (and its positive membership assertion) rather than treating the count failure as drift.
@@ -183,22 +193,38 @@ All `EvaluateResult(...)` construction sites must drop the 8 now-removed kwargs 
 
 Normal internal operations must not emit user-facing deprecation warnings just because they need digest/id values. Step 4.3 preflight enumerates the clusters; expected:
 
-- Metadata snapshot consumers at [`evaluate_result.py:1163-1166`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1245-1254`](../../../src/factgraph/application/protocol/evaluate_result.py) — currently bundle the 7 digest/id fields into dict for audit/provenance. Step 4.7 should rewrite to read from `self.fingerprint.X` / `self.engine_meta.X` directly.
-- SDK store metadata snapshot at [`src/factgraph/sdk/store.py:2529-2537`](../../../src/factgraph/sdk/store.py) — same pattern.
+- Metadata snapshot consumer at [`evaluate_result.py:1251-1267`](../../../src/factgraph/application/protocol/evaluate_result.py) (`_evidence_metadata_payload_for_row_result`) — currently bundles the digest/id/version fields into dict for audit/provenance. Step 4.7 should rewrite to read from `result.fingerprint.X` / validated `result.engine_meta[...]` directly.
+- Checked-scope consumer at [`evaluate_result.py:1337-1353`](../../../src/factgraph/application/protocol/evaluate_result.py) (`_checked_scope_for_row_result`) — currently reads `config_digest`, `expr_digest`, `rule_set_digest`, and `view_snapshot_digest` directly.
+- SDK store metadata snapshot at [`src/factgraph/sdk/store.py:2527-2539`](../../../src/factgraph/sdk/store.py) (`_manual_explain_checked_scope`) — same pattern.
 - result-digest construction path: `result_digest_for(...)` itself takes individual kwargs; internal caller sites read from new fingerprint sub-object inputs without deprecated property access.
 
 ### 5.7 Quickstart docs touch (PF-R3 pattern)
 
-`docs/quickstart/evaluate_and_evidence.md` (and any §-with-EvaluateResult-field-list) gets:
+Required docs cascade:
+
+- `docs/quickstart/evaluate_and_evidence.md`
+- `docs/official/kernel/quickstart/evidence.md`
+- `docs/official/kernel/quickstart/namespace-map.md`
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md`
+- `src/service/docs/03_runtime_queries_policy.md`
+
+The in-process docs (`docs/quickstart`, official quickstart, SDK docs) get:
 
 - Active frozen fields shown as `result_id`, `rows`, `head`, `engine`, `evaluated_at`, `fingerprint`, `engine_meta`
 - Deprecated compatibility properties shown explicitly (`expr_digest` / `rule_set_digest` / `view_snapshot_digest` / `config_digest` / `result_digest` / `run_id` / `engine_version` / `adapter_version`)
 - New `ResultFingerprint` field tree added with its 6 fields
 - SDK import comments updated to reflect deprecated properties
 
-### 5.8 Service serializer (N-1 analog)
+The service policy doc keeps flat JSON fields where it documents HTTP/service wire payloads, but it must label those as wire-compatibility fields backed by `EvaluateResult.fingerprint` / `engine_meta`, not direct in-process frozen fields.
 
-`src/service/runtime_v1.py` has `_evaluate_result_to_dict(...)` at lines 2445-2462 and currently reads `result.run_id`, `result.engine_version`, `result.adapter_version`, the four provenance digests, and `result.result_digest` directly. Slice β must preserve the JSON wire shape (flat fields in JSON) while reading from sub-objects internally. Step 4.3 preflight + Step 4.6.5 grep confirm any additional service scope.
+### 5.8 Service runtime scope (N-1/N-2 analog)
+
+Step 4.3 preflight split service work into two concrete duties:
+
+- **N-1 service production construction** — `src/service/runtime_v1.py:2328-2395` `_evaluate_result_from_candidates(...)` must construct `ResultFingerprint` and validated `engine_meta` after computing `result_digest`, following §5.4.1 ordering.
+- **N-2 service serializer** — `src/service/runtime_v1.py:2445-2462` `_evaluate_result_to_dict(...)` must preserve the JSON wire shape (flat digest/version fields) while reading from sub-objects internally.
+
+This does not violate INV-6: service construction is an existing legacy construction path following the application protocol DTO shape; it is not substrate authority and does not introduce SDK reverse-dependency.
 
 ## 6. Boundaries And Invariants
 
@@ -206,6 +232,7 @@ Normal internal operations must not emit user-facing deprecation warnings just b
   - User-facing access paths `result.expr_digest` / `.rule_set_digest` / `.view_snapshot_digest` / `.config_digest` / `.result_digest` / `.run_id` / `.engine_version` / `.adapter_version` continue to return **byte-equal value** (only with `DeprecationWarning` emitted)
   - **`evaluate_result_digest_v1` canonical bytes preserved** — D19 contract, the digest payload schema is the contract surface, not the field organization of the EvaluateResult container
   - Service JSON wire shape preserved (flat digest fields in JSON output)
+  - Service production construction may be updated only to follow the new application-protocol DTO shape; no new service authority over digest semantics
   - Slice α's resolver pattern + Claim/EvidenceRef deprecated properties untouched (β is independent surface)
   - INV-6 application-first — substrate authority unchanged
   - Q-PR1 sacred 5-path 0-diff (`evaluate_result.py` not on sacred path; safe to edit)
@@ -234,9 +261,10 @@ Normal internal operations must not emit user-facing deprecation warnings just b
 - [ ] `evaluate_result_digest_v1` canonical bytes unchanged for equivalent inputs (D19 contract)
 - [ ] Construction order preserves primitive → `result_id` → rows/row digests → `result_digest` → `ResultFingerprint` → `EvaluateResult`; no circular helper dependency
 - [ ] All `EvaluateResult(...)` construction sites updated (Step 4.3 enumerates) — drop 8 removed kwargs + pass `fingerprint=...` + `engine_meta=...`
+- [ ] Service production construction `_evaluate_result_from_candidates(...)` updated as an explicit construction site, not left to serializer-only work
 - [ ] Internal compatibility paths (metadata snapshot consumers in `evaluate_result.py` + `sdk/store.py`) do not emit deprecation warnings during normal `EvaluateResult` construction
 - [ ] Service serializer `_evaluate_result_to_dict(...)` preserves JSON wire shape (flat digest fields) without internal warnings
-- [ ] Quickstart docs updated with active-field / deprecated-property field tree + new `ResultFingerprint` tree
+- [ ] Active docs cascade updated: quickstart field tree + official evidence quickstart + namespace-map + SDK rules docs + service runtime policy wire-shape note
 - [ ] New tests:
   - [ ] `test_result_fingerprint_field_set`
   - [ ] `test_evaluate_result_deprecated_expr_digest_emits_warning`
@@ -249,7 +277,7 @@ Normal internal operations must not emit user-facing deprecation warnings just b
   - [ ] `test_evaluate_result_deprecated_adapter_version_emits_warning`
   - [ ] `test_result_digest_for_byte_equal_to_pre_beta_fixture`
   - [ ] `test_evaluate_result_construction_with_fingerprint_kwarg`
-- [ ] Existing test suite passes with `PYTHONPATH=src python -m pytest -W "ignore::DeprecationWarning::factgraph" tests/application/protocol tests/sdk/test_evaluate_result_exports.py`
+- [ ] Existing test suite passes with `PYTHONPATH=src python -m pytest -W "ignore::DeprecationWarning::factgraph" tests/application/protocol tests/sdk/test_evaluate_result_exports.py tests/sdk/test_rule_expr_evaluate.py tests/test_db_attach_lifecycle.py tests/test_problog_semantics_profile_migration.py`
 - [ ] SDK `from factgraph.sdk import ResultFingerprint` works; SDK `__all__` includes `ResultFingerprint`
 - [ ] `tests/test_sdk_find_partial_identity.py` updated for the intentional SDK `__all__` count increase + positive `ResultFingerprint` membership assertion
 - [ ] No edits outside `factgraph.application.protocol` except (Step 4.3/4.6.5-enumerated) scoped service serializer, tests, and docs consumers
@@ -260,24 +288,28 @@ Normal internal operations must not emit user-facing deprecation warnings just b
 Codex implementation order (each step ends with targeted `PYTHONPATH=src python -m pytest tests/application/protocol tests/sdk/test_evaluate_result_exports.py -x` clean):
 
 1. **[audit pin]** Re-read shipped `EvaluateResult` definition + `result_digest_for(...)` helper; confirm anchors match blueprint §4
-2. **[audit pin]** Enumerate all `EvaluateResult(...)` construction sites in `src/` + `tests/`; compare against Step 4.3 PF-r1 expectations
+2. **[audit pin]** Enumerate all `EvaluateResult(...)` construction sites in `src/factgraph/` + `src/service/` + `tests/`; compare against Step 4.3 PF-R1/PF-r1 expectations
 3. **[ResultFingerprint definition]** Add `ResultFingerprint` frozen DTO + `__post_init__` validation; add unit test for field set; export from `application/protocol/__init__.py`
 4. **[EvaluateResult field reshape]** Replace `EvaluateResult` class definition with new shape (§5.2) — drop 8 frozen fields, add `fingerprint` + validated immutable `engine_meta` fields, update `__post_init__` to validate new shape
 5. **[8 deprecated @property]** Add deprecated properties for `expr_digest` / `rule_set_digest` / `view_snapshot_digest` / `config_digest` / `result_digest` / `run_id` / `engine_version` / `adapter_version` per §5.3
 6. **[construction order + byte-equal preservation]** Preserve §5.4.1 ordering and verify `result_digest_for(...)` byte output unchanged via pre-Slice-β fixture test (capture before step 4)
-7. **[construction-site updates]** Update each site enumerated in step 2 — `sdk/store.py` `_evaluate(...)` + test fixtures + test digests; construct `ResultFingerprint` only after `result_digest` is available
+7. **[construction-site updates]** Update each site enumerated in step 2 — `sdk/store.py` `_evaluate(...)` + `service/runtime_v1.py` `_evaluate_result_from_candidates(...)` + test fixtures + test digests; construct `ResultFingerprint` only after `result_digest` is available
 8. **[internal compatibility paths]** Rewrite metadata snapshot consumers in `evaluate_result.py` + `sdk/store.py` to read from `self.fingerprint.X` / `self.engine_meta.X` directly
-9. **[service serializer]** Update `src/service/runtime_v1.py` `_evaluate_result_to_dict(...)` per §5.8
+9. **[service runtime]** Update `src/service/runtime_v1.py` `_evaluate_result_from_candidates(...)` + `_evaluate_result_to_dict(...)` per §5.8
 10. **[SDK + protocol re-export]** Add `ResultFingerprint` to `factgraph.application.protocol.__all__` + `factgraph.sdk.__all__`
-11. **[new tests]** Add the acceptance tests listed in §7, including engine-meta validation and SDK `__all__` guard updates
+11. **[new tests]** Add the acceptance tests listed in §7, including engine-meta validation, SDK `__all__` guard updates, and active SDK test coverage from PF-r1
 12. **[quickstart docs rewrite]** Update `docs/quickstart/evaluate_and_evidence.md` per §5.7 (similar to Slice α PF-R3 pattern)
-13. **[docs cascade]** Any active docs consumers Step 4.6.5 finds (parallel to Slice α N-2)
+13. **[docs cascade]** Update the named PF-R3 docs cascade; Step 4.6.5 may still add further docs consumers if deletion-grep finds them
 14. **[final verification]** Targeted pytest clean; manual grep `grep -nE 'EvaluateResult\((expr_digest|rule_set_digest|view_snapshot_digest|config_digest|result_digest|run_id|engine_version|adapter_version)=' src/ tests/` returns zero hits
 
 ## 9. Docs To Update
 
 - `docs/quickstart/evaluate_and_evidence.md` — EvaluateResult field-shape rewrite (active vs deprecated) + new `ResultFingerprint` tree
-- Any active docs consumers found at Step 4.6.5 grep (Slice α N-2 precedent)
+- `docs/official/kernel/quickstart/evidence.md` — envelope/fingerprint wording
+- `docs/official/kernel/quickstart/namespace-map.md` — `rule_set_digest` wording
+- `src/factgraph/sdk/docs/03_rules_and_inferences.en.md` — replay anchors / envelope identity wording
+- `src/service/docs/03_runtime_queries_policy.md` — flat service JSON fields preserved as wire compatibility backed by fingerprint/engine_meta
+- Any additional active docs consumers found at Step 4.6.5 grep (Slice α N-2 precedent)
 - This blueprint's Outcome / Deviations section (filled at archive time)
 
 ## 10. Outcome / Deviations
