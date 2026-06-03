@@ -172,7 +172,9 @@ row.bound                     # None (paired with raw_kind, see engines_and_conf
 row.evidence_ref.ref_id       # "evref_v1:..." — stable handle for this evidence
 ```
 
-**`row.bindings` is the engine's candidate payload, not a `{port_name: value}` map.** For the native engine over a `PredAtom` body, the payload shape is:
+#### `bindings` — engine candidate payload (not a port→value map)
+
+`row.bindings` is **not** a `{port_name: value}` mapping; it is the raw payload the engine produced. For the native engine over a `PredAtom` body the shape is:
 
 ```python
 dict(row.bindings)
@@ -192,11 +194,15 @@ The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` 
 | `entity_ref` | `{"kind": "entity_ref", "value": "<idref_v1:...>"}` | The port resolved to an entity reference |
 | `literal` | `{"kind": "literal", "tag": "<type>", "value": <python_value>}` | The port resolved to a typed literal. `tag` ∈ `{string, int, bool, float64, bytes, time, uuid}` |
 
-To go from port name to value, walk `head.ports` (an ordered `Mapping[str, Var]`) in parallel with `terms`. The application protocol exposes an internal helper `_binding_value_for_head_port(row, head, port_name)` that does this lookup but it is not currently re-exported through the SDK.
+To map port names to values, walk `head.ports` (an ordered `Mapping[str, Var]`) in parallel with `terms`. The application protocol exposes an internal helper `_binding_value_for_head_port(row, head, port_name)` that does the lookup, but it is not currently re-exported through the SDK.
+
+#### `raw_kind` + `bound` — uncertainty carry-through
 
 `raw_kind` / `bound` carry through from the source assertion's `meta` (per `engines_and_configs.md` §2.1). They are `None` on rows whose source facts have no uncertainty annotation. The invariant from `data_model.md` §2.2 holds: `bound is None iff raw_kind is None`.
 
-`row.close()` returns the derived **closed-head `Rule`** for this specific row — the original head's `when` plus extra atoms pinning each port to the row's matched values. Its digest is `row.evidence_ref.closed_head_digest`, and it is the structural input that `fg.eval.explain(...)` / `fg.rules.inspect(...)` consume. The closed-head concept is covered in depth in §6.
+#### `row.close()` — derived closed-head `Rule` for this row
+
+`row.close()` returns the closed-head `Rule` for this specific row — the original head's `when` plus extra atoms pinning each port to the row's matched values. Its digest is `row.evidence_ref.closed_head_digest`, and it is the structural input that `fg.eval.explain(...)` / `fg.rules.inspect(...)` consume. The closed-head concept is covered in depth in §6.
 
 ### 2.3 `Claim` DTO
 
