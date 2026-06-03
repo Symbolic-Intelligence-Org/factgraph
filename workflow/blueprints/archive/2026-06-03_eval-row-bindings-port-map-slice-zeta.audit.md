@@ -17,6 +17,7 @@
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran constructor, `row.bindings`, legacy `pred_id`/`terms`, and v1/v2 canonical-label greps across `src/`, `tests/`, `docs/`, and `workflow/`. No new production N-findings beyond Step 4.4 scope: construction remains SDK/service/protocol-test; row-derived legacy payload users remain service wire + ProbLog row evidence graph; direct candidate-payload and ledger/core hits remain carve-outs. Status remains `scoped`; no implementation started. |
 | 2026-06-03 | scoped | Step 4.7 implementation | Implemented ζ port-map bindings on `v0.2.0-impl-eval-row-bindings-port-map-2026-06-03`: `_bindings_from_candidate(..., head=...)` now emits `{port_name: term}`; row/claim/row-digest canonical labels use v2; service wire + ProbLog row evidence graph reconstruct legacy `{pred_id, terms}` payloads through helpers; docs/tests updated. Full `tests/` cohort passed: 2454 passed / 32 skipped / 1044 subtests. Status remains `scoped` until Step 4.8 closure. |
 | 2026-06-03 | implemented | Step 4.8 closure | Status `scoped` → `implemented`; §10 Outcome filled with `dad98c12` implementation summary, verification, and deviations. Step 4.9 archive remains. |
+| 2026-06-03 | implemented | Step 4.9 archive | Archived blueprint pair and preflight artifact; updated archive inventory. |
 
 ## Decision Notes
 
@@ -48,7 +49,7 @@
 - [x] Step 4.6.5 pre-impl grep
 - [x] Step 4.7 implementation on `v0.2.0-impl-eval-row-bindings-port-map-2026-06-03`
 - [x] Step 4.8 closure
-- [ ] Step 4.9 archive
+- [x] Step 4.9 archive
 
 ## Pre-Impl Audit Tasks (Step 4.3 to verify)
 
