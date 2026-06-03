@@ -185,12 +185,12 @@ dict(row.bindings)
 # }
 ```
 
-The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports`. Each term is a typed dict:
+The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports`. Each term is a typed dict discriminated by `kind`:
 
-| Term shape | When |
-|---|---|
-| `{"kind": "entity_ref", "value": "<idref_v1:...>"}` | The port resolved to an entity reference |
-| `{"kind": "literal", "tag": "<type>", "value": <python_value>}` | The port resolved to a typed literal — `tag` is one of `string` / `int` / `bool` / `float64` / `bytes` / `time` / `uuid` |
+| Term type | Shape | When |
+|---|---|---|
+| `entity_ref` | `{"kind": "entity_ref", "value": "<idref_v1:...>"}` | The port resolved to an entity reference |
+| `literal` | `{"kind": "literal", "tag": "<type>", "value": <python_value>}` | The port resolved to a typed literal. `tag` ∈ `{string, int, bool, float64, bytes, time, uuid}` |
 
 To go from port name to value, walk `head.ports` (an ordered `Mapping[str, Var]`) in parallel with `terms`. The application protocol exposes an internal helper `_binding_value_for_head_port(row, head, port_name)` that does this lookup but it is not currently re-exported through the SDK.
 
