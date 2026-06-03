@@ -7,9 +7,7 @@ This chapter has two halves stitched into one chapter because they share too muc
 ### 1.1 Minimal end-to-end
 
 ```python
-from factgraph.sdk import Entity, FactGraph, Field, Identity
-from factgraph.application.protocol import Rule
-from factgraph.core.rules.where_ast import PredAtom, Var
+from factgraph.sdk import Entity, FactGraph, Field, Identity, build_application_rule, vars
 
 
 class User(Entity):
@@ -21,23 +19,20 @@ fg = FactGraph.create(schema_classes=[User])
 alice = fg.entities.create(User, user_id="u-1")
 fg.fields.set(User.region, alice, "US")
 
-u = Var(name="u")
-r = Var(name="r")
-
-region_rule = Rule(
-    id="user:region",
-    version="v1",
-    when=(PredAtom(pred_id="user:region", terms=[u, r]),),
-    ports={"user": u, "region": r},
-)
+with vars("u", "r") as (u, r):
+    region_rule = build_application_rule(
+        id="user:region",
+        version="v1",
+        when=[User(u).region == r],
+        ports={"user": u, "region": r},
+    )
 
 result = fg.eval.evaluate(region_rule, head=region_rule)
-
-assert result.count() == 1
-assert result.first().claim.name == "user:region"
 ```
 
-A note about this minimal example: it uses direct `Rule(...)` construction (per [`rules.md`](rules.md) §2.6) rather than the `build_application_rule(...)` ergonomic factory. The factory's Entity-DSL form (`User(u)`, `User(u).region == r`) auto-prepends a `User:exists` atom, but `User:exists` claims are not currently emitted by `fg.entities.create(...)` in the shipped ledger — so factory-built rules return 0 rows out of the box. The direct path lets the example actually run; the factory path is the right choice once `User:exists` emission lands.
+This is the canonical user-facing form: `build_application_rule(...)` with Entity-DSL atoms (see [`rules.md`](rules.md) §2.2).
+
+> **Current shipped status — known gap.** `build_application_rule(when=[User(u).field == v])` lowering auto-prepends `PredAtom("User:exists", [u])`. `fg.entities.create(...)` does not currently emit `User:exists` claims to the ledger, so the body above does not match anything and `result.count()` returns `0` today. The example shows the form you *should* write; the gap is tracked in [`entity-exists-claim-emission-gap.zh.md`](../../workflow/design/design-points/active/entity-exists-claim-emission-gap.zh.md). Until the gap closes, demonstrations later in this chapter that need live rows fall back to a direct `Rule(...)` + `PredAtom(...)` construction (see §2.1).
 
 ### 1.2 `head=` parameter
 
@@ -108,6 +103,25 @@ The head's ports must be **declared in every branch** of the `RuleExpr`. If a po
 `fg.eval.evaluate(...)` returns an `EvaluateResult` — covered in §2.
 
 ## 2. `EvaluateResult` navigation and `EvaluateRow`
+
+> **Live-row workaround for the rest of this chapter.** Per §1.1's shipped-status note, `build_application_rule` paths return 0 rows on the unattached default workspace today. To demonstrate `result.first()`, `row.bindings`, `row.explain()` etc. with actual values, the remainder of this chapter uses the direct construction form from [`rules.md`](rules.md) §2.6:
+>
+> ```python
+> from factgraph.application.protocol import Rule
+> from factgraph.core.rules.where_ast import PredAtom, Var
+>
+> u, r = Var(name="u"), Var(name="r")
+> region_rule = Rule(
+>     id="user:region",
+>     version="v1",
+>     when=(PredAtom(pred_id="user:region", terms=[u, r]),),  # no auto-prepend
+>     ports={"user": u, "region": r},
+> )
+> result = fg.eval.evaluate(region_rule, head=region_rule)
+> # result.count() == 1
+> ```
+>
+> The `EvaluateResult` / `EvaluateRow` / `Explanation` shapes documented from §2 onward apply identically to both paths; the workaround is only about *producing* rows in shipped today.
 
 ### 2.1 `EvaluateResult` — 6 navigation methods
 
