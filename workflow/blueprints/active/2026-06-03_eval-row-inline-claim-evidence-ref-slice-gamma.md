@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.1 draft)
+- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
 - Owner: Claude/Codex cross-flip; tighter gates than Slice beta because this is a breaking SDK/protocol surface slice
 - Fork base: `e2f7f655` (Slice beta Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.3-§3.5 + §4.1 + §4.5 + §6 Slice gamma
@@ -52,12 +52,12 @@ Slice gamma is the breaking wrapper-removal slice. It should flatten the useful 
 ## 2. Goals
 
 - G1 — Add row-owned fields to `EvaluateRow`: `kind`, `digest`, and `closed_head_digest` per parent design §3.3.
-- G2 — Resolve the `repr` question before implementation: user-requested gamma scope mentions `repr` flattening, while parent design §3.3 / §3.7 says `repr` is view-level and should not live on `EvaluateRow`.
-- G3 — Remove or deprecate `Claim` and `EvidenceRef` wrapper classes according to a locked SDK compatibility policy.
+- G2 — LOCKED by Step 4.4 PF-R1: do **not** add `EvaluateRow.repr`; derive compatibility `claim.repr` values through helper logic until Slice epsilon ships `Explanation.repr` + walker.
+- G3 — LOCKED by Step 4.4 PF-R2: immediate in-process wrapper removal (C1). Remove protocol/SDK `Claim` / `EvidenceRef` exports, detached wrapper errors, and `row.claim` / `row.evidence_ref` properties.
 - G4 — Remove active construction of `Claim(...)` and `EvidenceRef(...)` from production/test row construction paths after the locked policy is applied.
 - G5 — Update `EvaluateRow` digest and evidence helper paths so `row.digest` equals former `row.claim.digest` and `row.closed_head_digest` equals former `row.evidence_ref.closed_head_digest`.
-- G6 — Update `Explanation` from `claim: Claim | None` to a direct `row: EvaluateRow | None` reference per parent design §4.1 (not inlined `row_*` top-level fields), including validation and serialization behavior.
-- G7 — Update service row/result JSON projection without confusing application-protocol `Claim` with ledger `factgraph.core.store.ledger.Claim`.
+- G6 — LOCKED by Step 4.4 PF-R3: update `Explanation` from `claim: Claim | None` to a direct `row: EvaluateRow | None` reference per parent design §4.1, and remove redundant in-process `row_id` / `evidence_ref_id` / `raw_kind` / `bound` direct fields.
+- G7 — LOCKED by Step 4.4 PF-R4: update service row/result JSON projection without confusing application-protocol `Claim` with ledger `factgraph.core.store.ledger.Claim`; preserve service JSON nested `claim` / `evidence_ref` dictionaries as wire compatibility while sourcing values from row-owned fields.
 - G8 — Update SDK/protocol exports, `__all__` guards, docs, and tests so public shape reflects the wrapper-removal decision.
 - G9 — Preserve D19/D17 compatibility contracts that remain meaningful: row digest bytes, closed-head digest, result/evidence metadata identity, and cross-process `(result_id, row_id)` row handle semantics.
 - G10 — Keep Q-PR1 sacred paths 0-diff and preserve dirty baseline entries.
@@ -70,7 +70,7 @@ Slice gamma is the breaking wrapper-removal slice. It should flatten the useful 
 - N4 — Do not implement `Explanation.repr` evidence walker (Slice epsilon).
 - N5 — Do not change `ResultFingerprint` / `engine_meta` from Slice beta except access-path updates required by this slice.
 - N6 — Do not alter ledger-layer `factgraph.core.store.ledger.Claim`; same-name ledger Claim remains a separate layer. This slice resolves the cross-layer `Claim` name friction described in [`rule-namespace-rulespec-redesign.zh.md`](../../design/design-points/active/rule-namespace-rulespec-redesign.zh.md) §3.5/§4.6 via protocol-wrapper removal, not via that design-point's `ResultClaim` rename path.
-- N7 — Do not change service HTTP wire shape unless Step 4.3 explicitly locks wire compatibility updates.
+- N7 — Do not change service HTTP wire shape. Step 4.4 PF-R4 locks preservation of nested service JSON `claim` / `evidence_ref` dictionaries as compatibility payloads, even though in-process DTO wrappers are removed.
 - N8 — Do not touch Q-PR1 sacred paths: `write_protocol.py`, `ledger.py`, `_builders.py`, `adapters/pyreason/`, `application/accept.py`.
 - N9 — Do not touch accumulated dirty baseline files.
 - N10 — Do not execute release scripts, push branches, or touch sacred master.
@@ -90,7 +90,7 @@ Slice gamma is the breaking wrapper-removal slice. It should flatten the useful 
 - `docs/quickstart/evaluate_and_evidence.md:155-268` — current public docs still explain `EvaluateRow.claim`, `Claim`, and `EvidenceRef`
 - `src/service/runtime_v1.py:21` / `:76` — service imports protocol `EvaluateRow`/`ResultFingerprint` and ledger `Claim`; Step 4.3 must separate those layers precisely
 
-## 5. Proposed Shape (Draft, Not Yet Locked)
+## 5. Proposed Shape (Locked by Step 4.4)
 
 ### 5.1 EvaluateRow target
 
@@ -109,26 +109,31 @@ class EvaluateRow:
     _result_resolver: Callable[[], EvaluateResult] | None = field(default=None, compare=False, repr=False)
 ```
 
-Open tension: user prompt includes `repr` flattening, but parent design says `repr` is view/presentation and should move to `Explanation` / Slice epsilon rather than become `EvaluateRow.repr`. Step 4.2/4.3 must lock one of:
+Step 4.4 PF-R1 locks Option R1:
 
-- Option R1 — **No `EvaluateRow.repr` in Slice gamma** (parent design default). Keep only `kind` / `digest` / `closed_head_digest` on row; docs say `Claim.repr` compatibility is removed/deferred to Slice epsilon.
-- Option R2 — **Add `EvaluateRow.repr` now** (user prompt literal scope). Requires explicit rationale why row now owns a view field despite parent design §3.7.
-- Option R3 — **Temporary deprecated `row.repr` compatibility only**. Higher confusion risk; likely not preferred unless preflight finds heavy user-facing docs/tests depend on `Claim.repr`.
+- `EvaluateRow` gets `kind`, `digest`, and `closed_head_digest`.
+- `EvaluateRow` does **not** get `repr`.
+- Former `Claim.repr` compatibility values are derived where needed by a helper such as `_claim_repr_for_row_result(row, result)` from the same source inputs currently used by production construction (`result.head.id` / effective claim name + `row.bindings`).
+- Slice epsilon owns the user-facing `Explanation.repr` field and evidence walker.
 
-Default draft bias: **R1**, because it preserves the parent design boundary and keeps Slice epsilon meaningful.
+Rejected alternatives:
+
+- R2 (`EvaluateRow.repr` now) — rejected because it moves a view/rendering concern onto the row data DTO and contradicts parent design §3.3/§3.7.
+- R3 (`row.repr` temporary compatibility) — rejected because it creates a confusing one-release view field without the walker.
 
 ### 5.2 Claim / EvidenceRef compatibility strategy
 
-Open Q: "wrapper class撤销" can mean several levels:
+Step 4.4 PF-R2 locks C1 immediate in-process wrapper removal:
 
-- Option C1 — Remove SDK/protocol exports immediately; no `Claim` / `EvidenceRef` import compatibility. Cleanest, largest breaking change.
-- Option C2 — Keep deprecated SDK/protocol aliases or compatibility proxy classes for one release cycle. Smaller break, but contradicts "wrapper class removal" unless the alias is clearly documented as compatibility-only.
-- Option C3 — Keep `row.claim` / `row.evidence_ref` deprecated properties while removing active wrapper construction. **Sub-shape is not implicit**; Step 4.3 must either reject C3 or lock one of:
-  - C3a — `types.SimpleNamespace`-style proxy object with only compatibility attributes (no exported class)
-  - C3b — minimal kept compatibility class, explicitly marked deprecated and not used in normal construction paths
-  - C3c — compatibility property raises/removes once A2 consumer enumeration proves access is bounded enough for C1
+- remove in-process protocol classes `Claim` and `EvidenceRef`;
+- remove SDK/protocol exports for `Claim`, `EvidenceRef`, `DetachedClaimError`, and `DetachedEvidenceRefError`;
+- remove `row.claim` and `row.evidence_ref` compatibility properties;
+- update export guards: `tests/test_sdk_find_partial_identity.py` currently expects `len(sdk_module.__all__) == 65`; expected count is **61** after the four exported names are removed, unless Step 4.7 introduces another intentional replacement symbol.
 
-Step 4.3 preflight must enumerate active import/access consumers before locking. Default draft bias: **C2 or C3 until preflight proves import/access surface is small enough for C1**.
+Rejected alternatives:
+
+- C2 (deprecated SDK/protocol aliases) — rejected because the active consumer surface is bounded and the slice purpose is wrapper removal.
+- C3 (deprecated `row.claim` / `row.evidence_ref` properties) — rejected because it preserves the wrapper abstraction after the removal slice.
 
 ### 5.3 Explanation shape
 
@@ -148,7 +153,9 @@ class Explanation:
     warnings: tuple[WarningDTO, ...]
 ```
 
-Slice gamma locks the data-bearing part of this change: `Explanation.claim` becomes a direct `Explanation.row: EvaluateRow | None` reference, not a set of inlined `row_id` / `row_bindings` / `row_digest` fields. `Explanation.repr` is **not** added in gamma. The field and the walker ship together in Slice epsilon; adding a field that always returns `None` would create a half-implemented user-facing surface.
+Step 4.4 PF-R3 expands and locks the data-bearing part of this change: `Explanation.claim` becomes a direct `Explanation.row: EvaluateRow | None` reference, not a set of inlined `row_id` / `row_bindings` / `row_digest` fields. The in-process `Explanation` also drops redundant direct fields that are now available through `row`: `row_id`, `evidence_ref_id`, `raw_kind`, and `bound`.
+
+`Explanation.repr` is **not** added in gamma. The field and the walker ship together in Slice epsilon; adding a field that always returns `None` would create a half-implemented user-facing surface.
 
 Cross-process semantics: an `Explanation` remains standalone-serializable through its inline `row` plus `result_id`; callers that need to re-locate the row use `(result_id, row.row_id)` per parent design §4.5.
 
@@ -163,19 +170,31 @@ The following identities must remain true unless Step 4.3 raises a Required cont
 
 ### 5.5 Service wire
 
-Service serializer likely needs to keep flat JSON keys for wire compatibility while reading new row fields internally. Step 4.3 must inspect `_evaluate_row_to_dict` / `_evaluate_result_to_dict` and distinguish:
+Service serializer keeps flat/nested JSON keys for wire compatibility while reading new row fields internally. Step 4.4 PF-R4 locks the split:
 
-- application-protocol `EvaluateRow` fields this slice changes
-- ledger `Claim` objects in service candidate paths that are **not** this protocol wrapper
-- wire payload fields that should remain stable even if in-process DTOs flatten
+- in-process application protocol removes `Claim` / `EvidenceRef` wrappers;
+- service JSON still emits nested `"claim": {...}` and `"evidence_ref": {...}` dictionaries;
+- `_evaluate_row_to_dict(...)` must contain no `row.claim` / `row.evidence_ref` reads after implementation;
+- values for the wire dictionaries are computed from `row.kind`, `row.digest`, `row.closed_head_digest`, `result.result_id`, `row.row_id`, `result.head.id`, and helper-derived arguments/repr/ref-id.
 
 ### 5.6 SDK and protocol exports
 
-Expected exported symbol change is a central risk:
+Locked exported symbol change:
 
-- If `Claim` / `EvidenceRef` are removed from SDK `__all__`, update `tests/test_sdk_find_partial_identity.py` count and public import docs intentionally.
-- If compatibility aliases remain, tests must assert deprecation warnings or compatibility-only status.
-- `DetachedClaimError` / `DetachedEvidenceRefError` likely disappear or become compatibility-only depending on C1/C2/C3.
+- remove `Claim`, `EvidenceRef`, `DetachedClaimError`, and `DetachedEvidenceRefError` from protocol exports and SDK exports;
+- update SDK export tests to assert removal or absence;
+- update `tests/test_sdk_find_partial_identity.py` exact `__all__` count from 65 to 61 unless an intentional replacement symbol is introduced.
+
+### 5.7 Ledger Claim carve-outs (PF-r1)
+
+The following are **not** protocol wrapper hits and must remain out of scope:
+
+| Area | Examples | Why excluded |
+| --- | --- | --- |
+| Core ledger/write path | `src/factgraph/core/evidence/write_protocol.py`, `src/factgraph/core/store/database.py`, `src/factgraph/core/store/ledger.py` | Q-PR1 / ledger `Claim` shape (`asrt_id`, `pred_id`, `e_ref`, `rest_terms`) |
+| Service candidate payloads | `src/service/runtime_v1.py` ledger `Claim` import and `_candidate_payload_from_claim(...)` | service reads ledger claims for candidate payloads; not application-protocol wrappers |
+| Ledger/application tests | annotation store, walker views, ledger concurrency, retract/identity guard tests | test ledger Claim behavior, not evaluate-result Claim wrappers |
+| Ledger docs | `docs/quickstart/data_model.md`, read/write/entity docs | document ledger Claims and identity/existence Claims |
 
 ## 6. Cadence Path Locks
 
@@ -187,13 +206,13 @@ Expected exported symbol change is a central risk:
 
 ## 7. Acceptance Criteria (Draft)
 
-- [ ] Step 4.2 review has locked the `repr` handling decision (R1/R2/R3).
+- [x] Step 4.4 PF-R1 has locked no `EvaluateRow.repr`; former `Claim.repr` values are helper-derived compatibility values only.
 - [ ] Step 4.3 preflight has enumerated all `Claim` / `EvidenceRef` imports, constructors, row accessors, and docs references across `src/`, `tests/`, and active docs.
 - [ ] `EvaluateRow` exposes `kind`, `digest`, and `closed_head_digest` directly.
-- [ ] Production row construction no longer needs active `Claim(...)` or `EvidenceRef(...)` wrapper construction after the locked compatibility policy is applied.
-- [ ] `Explanation` no longer requires `claim: Claim | None`; it directly holds `row: EvaluateRow | None` per parent design §4.1 (not inlined `row_*` fields), and this shape is validated and documented.
-- [ ] Service runtime reads row-owned fields directly while preserving any locked wire-compatible payload keys.
-- [ ] SDK/protocol export tests reflect the locked `Claim` / `EvidenceRef` compatibility policy.
+- [ ] Production row construction no longer needs active `Claim(...)` or `EvidenceRef(...)` wrapper construction.
+- [ ] `Explanation` no longer requires `claim: Claim | None`; it directly holds `row: EvaluateRow | None` per parent design §4.1 and removes redundant direct `row_id` / `evidence_ref_id` / `raw_kind` / `bound` fields.
+- [ ] Service runtime reads row-owned fields directly, contains no `row.claim` / `row.evidence_ref` reads, and still emits wire-compatible nested `claim` / `evidence_ref` dictionaries.
+- [ ] SDK/protocol export tests reflect immediate wrapper removal; `sdk.__all__` expected count is 61 unless an intentional replacement symbol is added.
 - [ ] D19/D17 identity checks pass: row digest, closed-head digest, and any compatibility `ref_id` formula remain stable where required.
 - [ ] Q-PR1 5 sacred paths remain 0-diff vs `4c472b50`.
 - [ ] Dirty baseline entries are preserved.
@@ -206,11 +225,12 @@ Expected exported symbol change is a central risk:
 4. Step 4.5 — Self-check for stale boilerplate, open-question disposition, and G/N/acceptance consistency.
 5. Step 4.6 — Scope freeze (`draft` → `scoped`).
 6. Step 4.6.5 — Mandatory pre-impl grep over deletion targets:
-   - `\bClaim\b` / `\bEvidenceRef\b` imports/constructors
+   - `\bClaim\b` / `\bEvidenceRef\b` imports/constructors, bucketed as protocol-wrapper vs ledger Claim false positives
    - `\.claim\b` / `\.evidence_ref\b`
    - `claim\.kind|claim\.repr|claim\.digest`
    - `evidence_ref\.closed_head_digest`
    - `Explanation\(.*claim=`
+   - `row_id=|evidence_ref_id=|raw_kind=|bound=` within `Explanation(...)` construction sites
 7. Step 4.7 — Implementation on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`, likely multi-commit:
    - protocol DTO reshape + construction paths
    - SDK/protocol export + service wire + tests
