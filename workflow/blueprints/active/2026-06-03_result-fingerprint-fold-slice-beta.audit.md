@@ -12,6 +12,8 @@
 | 2026-06-03 | draft | Blueprint created | Initial scope recorded on `v0.2.0-blueprint-result-fingerprint-fold-2026-06-03` (fork from `64651454`). Reuses Slice α cadence pattern: §6.1 cadence path locks (§5.4 single-Q local fold + Stage 0 audit folded per Slice 4/5 precedent + §5.2 sub-object choice locked to Option A). |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Codex Rule 1 spot-check found P1 construction-order risk (`ResultFingerprint.result_digest` cannot exist before `result_digest_for(...)` runs), P1 loose `engine_meta` validation risk, P2 SDK `__all__` guard impact, P2 service serializer concrete scope, and P3 direct-public-field count wording. Tightening landed on blueprint branch; Status remains `draft`. |
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight findings from `348d4dc8`: PF-R1 service production construction, PF-R2 service construction/serializer split, PF-R3 named docs cascade, PF-r1 broader active-test coverage, PF-r2 refreshed metadata anchors. Status remains `draft`; no abandonment blockers. |
+| 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, G/N coverage, stale wording scan, named docs/test/service scope, and no abandonment blockers. No content amend required. |
+| 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with PF-R1/PF-R2/PF-R3 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, 0 abandonment. |
 
 ## Decision Notes
 
@@ -39,8 +41,8 @@
 - [x] Step 4.2 reviewer (Codex) flags polish list P1...PN; tightening applied on blueprint branch
 - [x] Step 4.3 preflight on independent branch `v0.2.0-result-fingerprint-fold-preflight-2026-06-03`
 - [x] Step 4.4 preflight amendment on this blueprint branch
-- [ ] Step 4.5 self-check (doc-only, lightweight)
-- [ ] Step 4.6 scoped anchor (Status: draft → scoped)
+- [x] Step 4.5 self-check (doc-only, lightweight)
+- [x] Step 4.6 scoped anchor (Status: draft → scoped)
 - [ ] Step 4.6.5 pre-impl grep on this blueprint branch (Option 2 fold if N-findings appear)
 - [ ] Step 4.7 implementation on `v0.2.0-impl-result-fingerprint-fold-2026-06-03`
 - [ ] Step 4.8 closure (Status: scoped → implemented + §10 Outcome filled)

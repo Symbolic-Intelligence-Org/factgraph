@@ -1,8 +1,8 @@
 # Task Blueprint: Result-fingerprint fold Slice β — EvaluateResult provenance digest + engine-meta sub-object folding
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03
+- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
 - Owner: Claude (blueprint) / Codex (impl) — cross-flip per Slice 4/5 precedent ([`workflow/CADENCE.md`](../../CADENCE.md):268)
 - Related Modules:
   - `src/factgraph/application/protocol/evaluate_result.py` (EvaluateResult definition + `result_digest_for(...)` helper)
