@@ -333,7 +333,7 @@ The full wrapper removal / row-level field rewrite remains Slice γ; this slice 
 - Must preserve:
   - User-facing access paths `row.claim.name` / `.arguments` / `row.evidence_ref.row_id` / `.result_id` / `.ref_id` / `.fact_digest` all continue to return the **byte-equal value** they returned before (only with `DeprecationWarning` emitted)
   - Byte-equal `row_digest` and `result_digest` for equivalent rows; internal digest helpers must avoid deprecated-property access
-- `EvidenceRef.ref_id` formula is preserved bit-for-bit via shipped `evidence_ref_id_for(...)`; Step 4.7 may keep the helper name, wrap it, or alias it, but must not change bytes
+  - `EvidenceRef.ref_id` formula is preserved bit-for-bit via shipped `evidence_ref_id_for(...)`; Step 4.7 may keep the helper name, wrap it, or alias it, but must not change bytes
   - D17 invariant *semantics* (cross-field equality) — enforced now by structural property delegation instead of frozen-field equality assertions
   - INV-6 application-first — no substrate up-cast, no SDK reverse-dependency; edits outside `factgraph.application.protocol` are limited to the Step 4.6.5 scoped serializer, tests, and docs consumers
   - Q-PR1 sacred 5-path 0-diff (`core/store/ledger.py` etc. untouched)
