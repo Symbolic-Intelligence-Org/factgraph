@@ -2,7 +2,7 @@
 
 - Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-03 (Step 4.6.5 pre-impl grep)
 - Owner: Claude/Codex cross-flip; tighter gates than Slice beta because this is a breaking SDK/protocol surface slice
 - Fork base: `e2f7f655` (Slice beta Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.3-§3.5 + §4.1 + §4.5 + §6 Slice gamma
@@ -23,8 +23,14 @@
   - [`docs/quickstart/evaluate_and_evidence.md`](../../../docs/quickstart/evaluate_and_evidence.md)
   - [`docs/official/kernel/quickstart/evidence.md`](../../../docs/official/kernel/quickstart/evidence.md)
   - [`docs/official/kernel/quickstart/namespace-map.md`](../../../docs/official/kernel/quickstart/namespace-map.md)
+  - [`docs/official/kernel/quickstart/rules-and-inferences.md`](../../../docs/official/kernel/quickstart/rules-and-inferences.md)
+  - [`docs/api/openapi.yaml`](../../../docs/api/openapi.yaml)
+  - [`src/factgraph/audit/docs/02_evidence_graph.md`](../../../src/factgraph/audit/docs/02_evidence_graph.md)
+  - [`src/factgraph/sdk/docs/01_concepts.en.md`](../../../src/factgraph/sdk/docs/01_concepts.en.md)
   - [`src/factgraph/sdk/docs/03_rules_and_inferences.en.md`](../../../src/factgraph/sdk/docs/03_rules_and_inferences.en.md)
+  - [`src/factgraph/sdk/docs/04_api_surface.en.md`](../../../src/factgraph/sdk/docs/04_api_surface.en.md)
   - [`src/service/docs/03_runtime_queries_policy.md`](../../../src/service/docs/03_runtime_queries_policy.md)
+  - [`src/service/docs/06_frontend_integration.md`](../../../src/service/docs/06_frontend_integration.md)
 - Audit Log:
   - [2026-06-03_eval-row-inline-claim-evidence-ref-slice-gamma.audit.md](./2026-06-03_eval-row-inline-claim-evidence-ref-slice-gamma.audit.md)
 
@@ -196,6 +202,18 @@ The following are **not** protocol wrapper hits and must remain out of scope:
 | Ledger/application tests | annotation store, walker views, ledger concurrency, retract/identity guard tests | test ledger Claim behavior, not evaluate-result Claim wrappers |
 | Ledger docs | `docs/quickstart/data_model.md`, read/write/entity docs | document ledger Claims and identity/existence Claims |
 
+### 5.8 Step 4.6.5 docs cascade extension (N-1)
+
+Mandatory pre-impl grep confirmed no new production-code scope beyond Step 4.4 PF-R1/PF-R2/PF-R3/PF-R4. It did surface additional active documentation that references protocol `Claim` / `EvidenceRef` / `row.claim` / `row.evidence_ref` shapes and must be included in the Step 4.7 docs cascade:
+
+- `docs/api/openapi.yaml` — service wire payload schema keeps nested `claim` / `evidence_ref` keys while data source changes.
+- `docs/official/kernel/quickstart/rules-and-inferences.md` — row/claim wording needs migration to row-owned fields.
+- `src/factgraph/audit/docs/02_evidence_graph.md` — EvidenceRef/ref-id wording needs migration to row-owned digest/closed-head digest language.
+- `src/factgraph/sdk/docs/01_concepts.en.md` and `src/factgraph/sdk/docs/04_api_surface.en.md` — SDK result-row surface needs wrapper-removal wording.
+- `src/service/docs/06_frontend_integration.md` — frontend integration sample keeps wire-compatible nested dictionaries but must not imply in-process wrappers remain.
+
+These docs are scoped as N-1 because they are documentation cascade only. They do not add implementation authority, do not change service wire compatibility, and do not alter PF-r1 ledger Claim carve-outs.
+
 ## 6. Cadence Path Locks
 
 - Slice gamma uses the full tight cadence, not Slice beta fast-track. Reason: public SDK exported classes, `Explanation` shape, docs, service projection, and cross-process identity are all affected.
@@ -213,6 +231,7 @@ The following are **not** protocol wrapper hits and must remain out of scope:
 - [ ] `Explanation` no longer requires `claim: Claim | None`; it directly holds `row: EvaluateRow | None` per parent design §4.1 and removes redundant direct `row_id` / `evidence_ref_id` / `raw_kind` / `bound` fields.
 - [ ] Service runtime reads row-owned fields directly, contains no `row.claim` / `row.evidence_ref` reads, and still emits wire-compatible nested `claim` / `evidence_ref` dictionaries.
 - [ ] SDK/protocol export tests reflect immediate wrapper removal; `sdk.__all__` expected count is 61 unless an intentional replacement symbol is added.
+- [ ] Step 4.7 docs cascade updates all Related Docs including Step 4.6.5 N-1 additions, while preserving ledger-Claim docs outside protocol-wrapper scope.
 - [ ] D19/D17 identity checks pass: row digest, closed-head digest, and any compatibility `ref_id` formula remain stable where required.
 - [ ] Q-PR1 5 sacred paths remain 0-diff vs `4c472b50`.
 - [ ] Dirty baseline entries are preserved.
@@ -234,7 +253,7 @@ The following are **not** protocol wrapper hits and must remain out of scope:
 7. Step 4.7 — Implementation on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`, likely multi-commit:
    - protocol DTO reshape + construction paths
    - SDK/protocol export + service wire + tests
-   - docs cascade
+   - docs cascade, including Step 4.6.5 N-1 active docs additions
 8. Step 4.8 — Closure (`scoped` → `implemented`) with Outcome / Deviations.
 9. Step 4.9 — Archive blueprint/audit and preflight artifact; update archive inventory.
 
@@ -253,7 +272,7 @@ The following are **not** protocol wrapper hits and must remain out of scope:
 - A6 — Verify digest/ref-id compatibility:
   - re-read `claim_digest_for(...)`, `closed_head_digest_for(...)`, `evidence_ref_id_for(...)`, row digest helper, evidence metadata builder
 - A7 — Verify docs cascade:
-  - quickstart, official kernel quickstart, SDK docs, service policy docs, namespace-map
+  - quickstart, official kernel quickstart, SDK docs, service policy/frontend docs, audit docs, OpenAPI schema, namespace-map
 - A8 — Verify SDK `__all__` and import count impacts.
 
 ## 10. Outcome / Deviations

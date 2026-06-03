@@ -16,6 +16,7 @@
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight `ef09030c`: PF-R1 no `EvaluateRow.repr`; PF-R2 C1 immediate wrapper removal; PF-R3 expanded `Explanation.row` cascade; PF-R4 service wire split; PF-r1 ledger Claim carve-outs; PF-r2 SDK/protocol export count. Status remains `draft`; no abandonment blockers. |
 | 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, G/N structure, open-question disposition, stale wording scan, Q-PR1/dirty invariants, and no abandonment blockers. One stale "unless Step 4.3" phrase normalized before scope freeze. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with PF-R1/PF-R2/PF-R3/PF-R4 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, 0 abandonment. |
+| 2026-06-03 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran mandatory deletion/accessor/Explanation grep over `src/factgraph`, `src/service`, `tests`, and active docs. No new production scope beyond Step 4.4 PF-R1/PF-R2/PF-R3/PF-R4; ledger `Claim` false positives bucketed per PF-r1; N-1 docs cascade additions folded into scoped blueprint. Status remains `scoped`; no code implementation started. |
 
 ## Decision Notes
 
@@ -37,6 +38,8 @@
 | 2026-06-03 | Step 4.4 PF-R4 — service wire split locked | Service JSON keeps nested `claim` / `evidence_ref` compatibility dictionaries, but `_evaluate_row_to_dict(...)` must source them from row-owned fields and helpers, not protocol wrappers. |
 | 2026-06-03 | Step 4.4 PF-r1 — ledger Claim carve-outs added | Many grep hits are ledger `Claim` (`asrt_id`, `pred_id`, `e_ref`, `rest_terms`) and are out of scope. Pre-impl grep must bucket protocol wrappers vs ledger false positives. |
 | 2026-06-03 | Step 4.4 PF-r2 — SDK export count pinned | Removing `Claim`, `EvidenceRef`, `DetachedClaimError`, and `DetachedEvidenceRefError` drops SDK `__all__` count from 65 to 61 unless implementation adds a deliberate replacement symbol. |
+| 2026-06-03 | Step 4.6.5 N-1 — docs cascade expanded | Pre-impl grep found additional active docs that mention protocol wrapper shape or service wire payloads: `docs/api/openapi.yaml`, `docs/official/kernel/quickstart/rules-and-inferences.md`, `src/factgraph/audit/docs/02_evidence_graph.md`, `src/factgraph/sdk/docs/01_concepts.en.md`, `src/factgraph/sdk/docs/04_api_surface.en.md`, and `src/service/docs/06_frontend_integration.md`. This is documentation cascade only; service wire compatibility and ledger Claim carve-outs remain unchanged. |
+| 2026-06-03 | Step 4.6.5 PF-r1 reconfirmed | Wide `Claim` grep produces many ledger-layer hits in core/store/write/walker/service candidate payloads and ledger docs. Those are excluded by §5.7 and must not be migrated as protocol-wrapper removals. |
 
 ## Step 4.2 Review Focus (Completed; Superseded by Step 4.4 Locks Where Applicable)
 
@@ -54,7 +57,7 @@
 - [x] Step 4.4 preflight amendment on blueprint branch
 - [x] Step 4.5 self-check
 - [x] Step 4.6 scoped anchor
-- [ ] Step 4.6.5 pre-impl grep
+- [x] Step 4.6.5 pre-impl grep
 - [ ] Step 4.7 implementation on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`
 - [ ] Step 4.8 closure
 - [ ] Step 4.9 archive
