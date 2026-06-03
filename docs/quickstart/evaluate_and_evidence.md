@@ -86,8 +86,6 @@ The constraint is one-way: `head.ports ⊆ every branch's ports`. Extras in bran
 | `head.ports` has a name not in *any* branch | ✗ | `head port '<name>' is not declared by the RuleExpr` |
 | Branches declare more ports than `head.ports` | ✓ | — (extras internal to `rule_expr`) |
 
-[`Rule.projection(*port_names)`](rules.md#24-ruleprojectionport_names) is the literal form of this mental model, but it is **not** usable as an `evaluate` head in v0.2 — the runtime rejects the synthetic predicate id with a `WhereValidationError`. For evaluate, pass a real `Rule` whose ports are the projection you want.
-
 Whether `head.id` happens to appear in the expression is incidental — both produce the same evaluation; the difference only surfaces in identity-validation errors:
 
 | Identity flavor | Detected by | Side effect |
@@ -106,16 +104,6 @@ Two identity-validation `RuleExprError`s — stale `content_digest` (same id, di
 > **Live-row workaround for the rest of this chapter.** Per §1.1's shipped-status note, `build_application_rule` paths return 0 rows on the unattached default workspace today. To demonstrate `result.first()`, `row.bindings`, `row.explain()` etc. with actual values, the remainder of this chapter uses the direct construction form from [`rules.md`](rules.md) §2.6:
 >
 > ```python
-> from factgraph.application.protocol import Rule
-> from factgraph.core.rules.where_ast import PredAtom, Var
->
-> u, r = Var(name="u"), Var(name="r")
-> region_rule = Rule(
->     id="user:region",
->     version="v1",
->     when=(PredAtom(pred_id="user:region", terms=[u, r]),),  # no auto-prepend
->     ports={"user": u, "region": r},
-> )
 > result = fg.eval.evaluate(region_rule, head=region_rule)
 > # result yields one row per matching (user, region) fact in the ledger
 > ```
@@ -208,8 +196,10 @@ This is the *closed-head* construction — a derived `Rule` whose `when` is the 
 
 ### 2.4 `Claim` DTO
 
+> **Name collision warning.** There are **two** classes named `Claim`. This section documents `factgraph.application.protocol.evaluate_result.Claim` — the *result-side projection* that `EvaluateRow.claim` exposes. It is **not** the on-disk ledger `Claim` (`factgraph.core.store.ledger.Claim` documented in [`data_model.md` §1](data_model.md), with `asrt_id` / `pred_id` / `e_ref` / `rest_terms`). The SDK's top-level `from factgraph.sdk import Claim` re-exports the protocol one, not the ledger one. Same name, two layers — same family as the `Rule` namespace ambiguity in [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md).
+
 ```text
-Claim (frozen)
+Claim  (= factgraph.application.protocol.evaluate_result.Claim, frozen)
   ├── kind: Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
   ├── name: str               ← the predicate id (e.g. "user:region", "User:exists")
   ├── arguments: Mapping[str, Any]    ← keyed positional / by name; contains the claim's terms
