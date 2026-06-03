@@ -11,6 +11,7 @@
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-eval-row-bindings-port-map-2026-06-03` (fork from `0719ace6`). Hybrid cadence default per [[feedback_hybrid_cadence_sequential_mechanical_slices]] — ζ is mechanical surface-organization slice following β pattern. Escalation to tight gates reserved for Step 4.3 if novel concerns surface (byte-equal load-bearing / wire-compat wide / bit-stable ID dependencies). |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-1/P1-2/P1-3/P2-1/P2-2: explicit `head` context is required for port-name bindings; canonical bytes use v2 schema labels; service wire preserves legacy bindings envelope; provenance paths need legacy candidate payload helper; D19 wording clarified as algorithm-stable but schema-version-evolving. Status remains `draft`. |
+| 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight `9d0e1186`: PF-R1 row-derived ProbLog provenance helper; PF-R2 construction sites that can pass `head`; PF-R3 exact v2 schema labels; PF-r1/PF-r2 transition helpers; PF-s1/PF-s2/PF-s3 carve-outs. Status remains `draft`; 0 abandonment. |
 
 ## Decision Notes
 
@@ -26,13 +27,17 @@
 | 2026-06-03 | Step 4.2 P1-3 — provenance helper needed | `_build_problog_provenance_row_evidence_graph(...)` passes `dict(row.bindings)` to `problog_trace_to_evidence_graph(...)`; downstream `_resolve_candidate_info(...)` and `_candidate_binding_from_payload(...)` require `candidate_payload.pred_id` + `candidate_payload.terms`. Row-owned port-map bindings must therefore be converted back to a legacy candidate payload for provenance/wire compatibility paths. |
 | 2026-06-03 | Step 4.2 P2-1 — service wire C2 locked | Following Slice γ PF-R4, in-process DTO shape changes but service JSON `"bindings"` remains the legacy `{pred_id, terms[]}` envelope unless a separate API-breaking slice changes OpenAPI semantics. |
 | 2026-06-03 | Step 4.2 P2-2 — `D19 unchanged` wording narrowed | The digest algorithm remains stable, but row/claim/row-digest payload schema labels intentionally change. Acceptance now says algorithm stable, schema-version-evolving, avoiding a false byte-equal promise. |
+| 2026-06-03 | Step 4.4 PF-R1/PF-s1/PF-s2 — helper scope narrowed | Preflight distinguished row-derived legacy-payload users from direct candidate-payload users. The mandatory helper applies to service row serializer and ProbLog row evidence graph. PyReason provenance, core candidate timeline, service candidate evidence tree, and direct candidate-payload endpoints remain out of row-derived migration scope unless a future grep finds a row-derived caller. |
+| 2026-06-03 | Step 4.4 PF-R2 — construction-site list locked | Active row construction sites are `sdk/store.py`, `service/runtime_v1.py`, and one protocol test harness. All can pass existing `head` context to `_candidate_set_to_evaluate_row(...)`; no hidden production constructor was found. |
+| 2026-06-03 | Step 4.4 PF-R3 — exact v2 labels recorded | Step 4.7 must use `evaluate_row_id_v2`, `evaluate_claim_v2`, and `evaluate_row_digest_v2`; `evaluate_evidence_ref_v1` stays unchanged. |
+| 2026-06-03 | Step 4.4 PF-r1/PF-r2 — transition helpers kept | `_binding_value_for_head_port(...)` keeps dual-shape fallback during ζ; `_claim_arguments_for_row(row)` remains pass-through as a named row-argument seam. |
 
 ## Cross-flip checkpoints (per [[feedback_audit_to_archive_cadence]] + Slice α/β/γ precedents)
 
 - [x] Step 4.1 blueprint draft (Claude — Slice 4/5 default after γ inversion)
 - [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
 - [ ] Step 4.3 preflight on independent branch `v0.2.0-eval-row-bindings-port-map-preflight-2026-06-03`
-- [ ] Step 4.4 preflight amendment
+- [x] Step 4.4 preflight amendment
 - [ ] Step 4.5 self-check
 - [ ] Step 4.6 scope freeze
 - [ ] Step 4.6.5 pre-impl grep
