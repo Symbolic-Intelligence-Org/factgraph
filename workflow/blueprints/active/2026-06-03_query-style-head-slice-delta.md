@@ -1,8 +1,8 @@
 # Task Blueprint: Query-style head Slice δ — `rule.id` decouple + arity opt-in
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-03
-- Last Updated: 2026-06-04 (Step 4.7 implementation)
+- Last Updated: 2026-06-04 (Step 4.8 closure)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default — δ relaxes a shipped strict invariant (`rule.id` must match schema predicate); preflight will surface cross-engine impact
 - Fork base: `dd65e776` (Slice ε Step 4.9 archive HEAD)
@@ -269,7 +269,61 @@ Pre-impl grep found no new production head-validation sites beyond PF-R1. It did
 
 ## 10. Outcome / Deviations
 
-Pending.
+### 10.1 Final result
+
+Step 4.7 landed at `8a8a6418` on `v0.2.0-impl-query-style-head-2026-06-03`. 14 files **+281/-58**:
+
+- 4 cross-engine evaluator paths(Native `_evaluate.py` +35/-24 / Souffle `engine_eval.py` +60/-42 / ProbLog runtime `engine_eval.py` +8/-7 / ProbLog import `problog_import.py` +10/-1)
+- 1 new helper module `src/factgraph/core/store/_query_style_candidates.py`(134 lines)derives `CandidateSet` from `head.ports` per PF-R2
+- 1 `builders.py +2` re-export(non-underscore `builders.py`,**不在** Q-PR1 sacred 5-path)
+- 1 N-1 agent test update(`tests/test_agent_l4a_workflow.py:199` rewrote to query-style success path)
+- 3 docs cascade files(`docs/quickstart/evaluate_and_evidence.md` + `docs/official/kernel/quickstart/{evidence,rules-and-inferences}.md`)per PF-r3 + N-2 broader wording
+- 2 test files 新 query-style tests(`test_rule_expr_evaluate.py +27` + `test_problog_engine_eval.py +14`)
+- 2 blueprint/audit log
+
+### 10.2 PF + N alignment
+
+- **PF-R1** 4 cross-engine sites strict→opt-in;PyReason fact-conversion(`pyreason/engine_eval.py:637-695`)excluded per PF-r1
+- **PF-R2** query-style candidate helper `_query_style_candidates.py` 独立 builder branch,不动 `candidates_from_bindings(...)`
+- **PF-R3** `CandidateSet(candidate_kind="fact")` + payload `{pred_id: head.id, terms: ordered}` canonical compat 保持,无 schema bump
+- **PF-R4** service wire keys `target_pred_id` / `head_vars` 保留(9 hits 在 `service/runtime_v1.py`)
+- **PF-r1** PyReason 子结构 excluded ✓ / **PF-r2** `_queries.py` + read-query helper excluded ✓ / **PF-r3** 6 docs sites updated ✓
+- **G6 Option A** matched-predicate arity mismatch 仍 strict reject;non-matched(query-style)path 跳 arity check
+- **N-1** agent test 重写 "expects error" → "expects query-style success"(`evaluate_target_pred_id='missing:pred'` → `status='ok'` + `row_count==2`)
+- **N-2** 6 docs strict-wording sites covered(beyond PF-r3 4-site enum)
+- **N-3** ECSS fake Souffle test fixtures carved out per Step 4.6.5 Option 2
+
+### 10.3 Verification
+
+- Independent targeted test re-run(`PYTHONPATH=src python -m pytest tests/application/protocol tests/sdk/test_evaluate_result_exports.py tests/sdk/test_rule_expr_evaluate.py tests/test_problog_engine_eval.py`)→ **187 passed, 11 subtests passed**(+33 vs ε baseline 154,来自新 query-style tests)
+- **Q-PR1 5-path 0-diff vs `4c472b50`**:EMPTY 跨完整 7-commit δ chain
+- Sacred `master` unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`
+- Dirty baseline preserved unstaged
+- Free-form `rule.id="find_us_users"` 端到端可 evaluate(native + Souffle + ProbLog)
+- Backward compat:`rule.id="user:region"` schema-backed style 走 opt-in path 仍 work + Option A 严格 arity
+
+### 10.4 No deviations from scoped δ plan
+
+δ followed **exemplary tight-gates discipline** throughout 4.1→4.7。No procedural slip(unlike α / β / ζ / η)。No scope drift。所有 PF locks substantively honored。Codex Step 4.2 self-review caught 5 substantive issues(P1-P5)Claude draft missed。Step 4.6.5 N-fold(Option 2)吸收 3 N-findings without rollback。
+
+### 10.5 δ closes parent design chain
+
+**evaluate-result-flatten parent design 7 slices(α / β / γ / ζ / η / ε / δ)在 Step 4.9 archive of this slice 后全部 implemented + archived**。
+
+Per [`workflow/design/design-points/README.md`](../../design/design-points/README.md) 三条件(all Qs closed / all impl-eligible content shipped / no active blueprints depend),parent design-point [`evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) 是 **archive candidate**。
+
+Design-side follow-ups(carry-forward to next design cycle):
+- D3 carry-forward:parent §3.7 `row.repr` wording sync to ε `Explanation.repr` reality
+- D4 carry-forward:parent §3.9.2 direction wording sync to η shipped direction reality
+
+文档 drift items 不阻塞 parent archive,但 worth tracking。
+
+### 10.6 Archive intent
+
+Step 4.9 archive will:
+- `git mv` blueprint pair `active/` → `archive/`
+- Copy preflight artifact content from preflight branch to `workflow/audit/archive/`
+- Update `workflow/blueprints/archive/INVENTORY.md` δ entry
 
 ## 11. Deferred / Carry-Forward
 

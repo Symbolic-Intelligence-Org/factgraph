@@ -17,6 +17,7 @@
 | 2026-06-04 | scoped | Step 4.6 scope freeze | Status flipped `draft` → `scoped`. Scope frozen with native/Souffle/ProbLog opt-in schema lookup, query-style candidate helper/branch, `candidate_kind="fact"` compatibility payload, service/runtime wire-key preservation, PyReason/read-query exclusions, and strict-error docs cascade. |
 | 2026-06-04 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran `find_schema_pred`, strict-error text, candidate-construction, and wire-key greps. No new production head-validation sites beyond PF-R1. Folded one active agent test expectation, broader docs wording cascade, and N11 test-local fake evaluator carve-out. Status remains `scoped`; no code implementation started. |
 | 2026-06-04 | scoped | Step 4.7 implementation | Implemented query-style head opt-in across native, Souffle, ProbLog runtime, and ProbLog import; added query-style candidate construction while preserving `candidate_kind="fact"` payload compatibility; updated tests and docs cascade. Status remains `scoped` until Step 4.8 closure. |
+| 2026-06-04 | implemented | Step 4.8 closure (Claude doc-only) | Status `scoped` → `implemented`. §10 Outcome / Deviations filled with PF + N alignment, verification (187 passed / 11 subtests, Q-PR1 0-diff, wire keys preserved), no-deviation note, δ-closes-parent-chain commitment + D3/D4 design-side carry-forward. **δ is the last slice in evaluate-result-flatten parent design chain — α/β/γ/ζ/η/ε/δ 7 slices all complete after this commit.** |
 
 ## Decision Notes
 
@@ -44,7 +45,7 @@
 - [x] Step 4.6 scope freeze
 - [x] Step 4.6.5 pre-impl grep
 - [x] Step 4.7 implementation on `v0.2.0-impl-query-style-head-2026-06-03` (individual report per D6)
-- [ ] Step 4.8 closure (individual report per D6) + note δ closes parent design chain
+- [x] Step 4.8 closure (individual report per D6) — **δ closes parent design chain**
 - [ ] Step 4.9 archive
 - [ ] **Post-δ**: consider archiving parent design-point per `design/README.md` 三条件
 
