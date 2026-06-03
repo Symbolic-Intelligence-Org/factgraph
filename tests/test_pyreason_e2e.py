@@ -135,11 +135,14 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         candidate = candidates[0]
         explanation = candidate.explain()
-        self.assertEqual(candidate.claim.name, "user:popular")
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(candidate.claim.name, "user:popular")
         self.assertEqual(explanation.evidence.support_kind, "evaluate_row")
-        self.assertEqual(candidate.claim.arguments["pred_id"], "user:popular")
-        self.assertEqual(candidate.claim.arguments["terms"][0]["value"], sdk.entities.ref(User, user_id="Alice"))
-        self.assertEqual(candidate.claim.arguments["terms"][1]["value"], "true")
+        with self.assertWarns(DeprecationWarning):
+            claim_arguments = candidate.claim.arguments
+        self.assertEqual(claim_arguments["pred_id"], "user:popular")
+        self.assertEqual(claim_arguments["terms"][0]["value"], sdk.entities.ref(User, user_id="Alice"))
+        self.assertEqual(claim_arguments["terms"][1]["value"], "true")
         self.assertIsNone(candidate.bound)
         mock_run.assert_called_once()
 

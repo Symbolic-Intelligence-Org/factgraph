@@ -21,6 +21,12 @@ from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.application.protocol import EvaluateResult, EvaluateRow
 from factgraph.application.protocol.evaluate_result import (
     _candidate_set_to_evaluate_row,
+    _claim_arguments_for_row,
+    _claim_name_for_row_result,
+    _evidence_ref_fact_digest_for_row,
+    _evidence_ref_id_for_row_result,
+    _evidence_ref_result_id_for_row_result,
+    _evidence_ref_row_id_for_row,
     _row_digest_for,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
@@ -2354,13 +2360,14 @@ def _evaluate_result_from_candidates(
             result_id=result_id,
             run_id=run_id,
             closed_head_digest=closed_head_digest,
+            claim_name=head.id,
         )
         for candidate in candidates
     )
     result_digest = result_digest_for(
         result_id=result_id,
         run_id=run_id,
-        row_digests=tuple(_row_digest_for(row) for row in rows),
+        row_digests=tuple(_row_digest_for(row, result_id=result_id, claim_name=head.id) for row in rows),
         head_id=head.id,
         head_content_digest=head.content_digest,
         engine=mode,
@@ -2440,7 +2447,7 @@ def _evaluate_result_to_dict(result: EvaluateResult, *, rows: tuple[EvaluateRow,
     return {
         "result_id": result.result_id,
         "run_id": result.run_id,
-        "rows": [_evaluate_row_to_dict(row) for row in selected_rows],
+        "rows": [_evaluate_row_to_dict(row, result) for row in selected_rows],
         "head": _application_rule_to_dict(result.head),
         "engine": result.engine,
         "engine_version": result.engine_version,
@@ -2455,24 +2462,24 @@ def _evaluate_result_to_dict(result: EvaluateResult, *, rows: tuple[EvaluateRow,
     }
 
 
-def _evaluate_row_to_dict(row: EvaluateRow) -> dict[str, Any]:
+def _evaluate_row_to_dict(row: EvaluateRow, result: EvaluateResult) -> dict[str, Any]:
     return {
         "row_id": row.row_id,
         "bindings": _to_jsonable(row.bindings),
         "claim": {
             "kind": row.claim.kind,
-            "name": row.claim.name,
-            "arguments": _to_jsonable(row.claim.arguments),
+            "name": _claim_name_for_row_result(row, result),
+            "arguments": _to_jsonable(_claim_arguments_for_row(row)),
             "repr": row.claim.repr,
             "digest": row.claim.digest,
         },
         "raw_kind": row.raw_kind,
         "bound": list(row.bound) if row.bound is not None else None,
         "evidence_ref": {
-            "ref_id": row.evidence_ref.ref_id,
-            "result_id": row.evidence_ref.result_id,
-            "row_id": row.evidence_ref.row_id,
-            "fact_digest": row.evidence_ref.fact_digest,
+            "ref_id": _evidence_ref_id_for_row_result(row, result),
+            "result_id": _evidence_ref_result_id_for_row_result(row, result),
+            "row_id": _evidence_ref_row_id_for_row(row),
+            "fact_digest": _evidence_ref_fact_digest_for_row(row),
             "closed_head_digest": row.evidence_ref.closed_head_digest,
         },
     }

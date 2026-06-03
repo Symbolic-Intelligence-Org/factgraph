@@ -16,7 +16,16 @@ from .derivation_diagnose import (
     DiagnoseResult,
     DiagnoseStatus,
 )
-from .evaluate_result import Claim, DetachedRowError, EvaluateResult, EvaluateRow, EvidenceRef, Explanation
+from .evaluate_result import (
+    Claim,
+    DetachedClaimError,
+    DetachedEvidenceRefError,
+    DetachedRowError,
+    EvaluateResult,
+    EvaluateRow,
+    EvidenceRef,
+    Explanation,
+)
 from .derivation_fact_overlay import (
     FactOverlay,
     FactOverlayAction,
@@ -151,6 +160,8 @@ __all__ = [
     "EntityWriteResult",
     "ErrorDTO",
     "Claim",
+    "DetachedClaimError",
+    "DetachedEvidenceRefError",
     "DetachedRowError",
     "EvaluateResult",
     "EvaluateRow",

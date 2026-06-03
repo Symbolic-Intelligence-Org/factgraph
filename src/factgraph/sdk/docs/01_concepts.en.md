@@ -49,7 +49,7 @@ row.bindings
 row.claim.digest
 row.raw_kind
 row.bound
-row.evidence_ref.ref_id
+row.evidence_ref.closed_head_digest
 ```
 
 The supporting evidence is reachable through `row.explain()`. A row can also

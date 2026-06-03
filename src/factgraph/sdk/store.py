@@ -2697,12 +2697,13 @@ class SDKStore:
                     result_id=result_id,
                     run_id=run_id,
                     closed_head_digest=closed_head_digest,
+                    claim_name=head.id,
                 )
                 for candidate in candidates
             )
             row_support_artifacts = self._row_support_artifacts_for_candidates(candidates, rows)
             row_provenance_envelopes = self._row_provenance_envelopes_for_candidates(candidates, rows)
-            row_digests = tuple(_row_digest_for(row) for row in rows)
+            row_digests = tuple(_row_digest_for(row, result_id=result_id, claim_name=head.id) for row in rows)
             result_digest = result_digest_for(
                 result_id=result_id,
                 run_id=run_id,

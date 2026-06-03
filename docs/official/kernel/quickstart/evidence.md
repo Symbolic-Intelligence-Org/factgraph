@@ -133,8 +133,8 @@ The four `ClaimKind` values:
 - `aggregate_result` — a Count / Sum / Min / Max / Mean result
 - `projection` — a port-projection over evaluation rows
 
-`claim.digest` is what `evidence_ref.fact_digest` mirrors — they must be
-equal on a live row.
+`claim.digest` is the row claim digest. `evidence_ref.fact_digest` remains as
+a deprecated compatibility alias on live rows.
 
 ## 4. `EvidenceRef` — durable identity
 
@@ -143,18 +143,18 @@ envelope. 5 fields:
 
 | Field | Tied to |
 | --- | --- |
-| `ref_id` (`evref_v1:...`) | This evidence reference |
-| `result_id` | Back-pointer to `EvaluateResult.result_id` |
-| `row_id` | Back-pointer to `EvaluateRow.row_id` |
-| `fact_digest` | Mirror of `EvaluateRow.claim.digest` |
-| `closed_head_digest` | Digest of the closed head used for this row |
+| `closed_head_digest` | Active frozen field: digest of the closed head used for this row |
+| `ref_id` (`evref_v1:...`) | Deprecated compatibility property: this evidence reference |
+| `result_id` | Deprecated compatibility property: back-pointer to `EvaluateResult.result_id` |
+| `row_id` | Deprecated compatibility property: back-pointer to `EvaluateRow.row_id` |
+| `fact_digest` | Deprecated compatibility property: mirror of `EvaluateRow.claim.digest` |
 
 Invariants on a live row:
 
 ```python
-assert row.evidence_ref.row_id    == row.row_id
-assert row.evidence_ref.fact_digest == row.claim.digest
-assert row.evidence_ref.result_id == result.result_id
+assert row.row_id
+assert row.claim.digest
+assert row.evidence_ref.closed_head_digest
 ```
 
 `EvidenceRef` is not the public explanation entry point. Use `row.explain()`

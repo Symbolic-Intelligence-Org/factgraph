@@ -75,7 +75,7 @@ with vars("u", "tag") as (u, tag):
 rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
-assert rule_result.first().claim.name == "user:tag"
+assert rule_result.head.id == "user:tag"
 ```
 
 Inferences work the same way:
@@ -94,7 +94,7 @@ result = fg.eval.evaluate(tags_from_seed)
 assert result.count() == 1
 row = result.first()
 assert row is not None
-assert row.claim.name == "user:tag"
+assert result.head.id == "user:tag"
 ```
 
 Evaluation is read-only. Persist facts with explicit writes:
@@ -326,7 +326,7 @@ with TemporaryDirectory() as tmp_dir:
     result = fg.eval.evaluate(inference)
     row = result.first()
     assert row is not None
-    assert row.claim.name == "user:tag"
+    assert result.head.id == "user:tag"
     fg.fields.add(User.tag, alice, "engineer")
 
     assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)

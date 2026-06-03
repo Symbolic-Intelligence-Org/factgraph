@@ -8,6 +8,7 @@ import math
 from types import MappingProxyType
 from typing import Any, Literal
 import uuid
+import warnings
 
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
@@ -38,6 +39,14 @@ from factgraph.core.store._support import (
 
 class DetachedRowError(RuntimeError):
     """Raised when a live-only row operation is requested from a detached row."""
+
+
+class DetachedClaimError(RuntimeError):
+    """Raised when deprecated Claim fields are read without an owner row."""
+
+
+class DetachedEvidenceRefError(RuntimeError):
+    """Raised when deprecated EvidenceRef fields are read without an owner row."""
 
 
 ClaimKind = Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
@@ -85,34 +94,71 @@ _FORM1_ROW_SUPPORT_KINDS = frozenset({_NATIVE_FORM1_SUPPORT_KIND, SOUFFLE_WITNES
 @dataclass(frozen=True)
 class Claim:
     kind: ClaimKind
-    name: str
-    arguments: Mapping[str, Any]
     repr: str
     digest: str
+    _row_resolver: Callable[[], "EvaluateRow"] | None = field(default=None, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         if self.kind not in _CLAIM_KINDS:
             raise ProtocolShapeError("Claim.kind must be one of fact_triple, rule_head, aggregate_result, projection")
-        _require_non_empty_str(self.name, field_name="Claim.name")
         _require_non_empty_str(self.repr, field_name="Claim.repr")
         _require_sha256_token(self.digest, field_name="Claim.digest")
-        object.__setattr__(self, "arguments", _freeze_mapping(self.arguments, field_name="Claim.arguments"))
+        if self._row_resolver is not None and not callable(self._row_resolver):
+            raise ProtocolShapeError("Claim._row_resolver must be callable or None")
+
+    @property
+    def name(self) -> str:
+        _warn_deprecated_claim_field("name", "EvaluateResult.head.id")
+        row = self._require_owner()
+        return _claim_name_for_row_result(row, row._require_live_result())
+
+    @property
+    def arguments(self) -> Mapping[str, Any]:
+        _warn_deprecated_claim_field("arguments", "EvaluateRow.bindings")
+        return _claim_arguments_for_row(self._require_owner())
+
+    def _require_owner(self) -> "EvaluateRow":
+        if self._row_resolver is None:
+            raise DetachedClaimError("Claim deprecated-field access requires owner EvaluateRow resolver")
+        return self._row_resolver()
 
 
 @dataclass(frozen=True)
 class EvidenceRef:
-    ref_id: str
-    result_id: str
-    row_id: str
-    fact_digest: str
     closed_head_digest: str
+    _row_resolver: Callable[[], "EvaluateRow"] | None = field(default=None, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
-        _require_token_prefix(self.ref_id, prefix=_EVIDENCE_REF_ID_PREFIX, field_name="EvidenceRef.ref_id")
-        _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvidenceRef.result_id")
-        _require_non_empty_str(self.row_id, field_name="EvidenceRef.row_id")
-        _require_sha256_token(self.fact_digest, field_name="EvidenceRef.fact_digest")
         _require_sha256_token(self.closed_head_digest, field_name="EvidenceRef.closed_head_digest")
+        if self._row_resolver is not None and not callable(self._row_resolver):
+            raise ProtocolShapeError("EvidenceRef._row_resolver must be callable or None")
+
+    @property
+    def ref_id(self) -> str:
+        _warn_deprecated_evidence_ref_field("ref_id", "EvidenceRef.closed_head_digest plus EvaluateRow/EvaluateResult context")
+        row = self._require_owner()
+        return _evidence_ref_id_for_row_result(row, row._require_live_result())
+
+    @property
+    def result_id(self) -> str:
+        _warn_deprecated_evidence_ref_field("result_id", "EvaluateResult.result_id")
+        row = self._require_owner()
+        return _evidence_ref_result_id_for_row_result(row, row._require_live_result())
+
+    @property
+    def row_id(self) -> str:
+        _warn_deprecated_evidence_ref_field("row_id", "EvaluateRow.row_id")
+        return _evidence_ref_row_id_for_row(self._require_owner())
+
+    @property
+    def fact_digest(self) -> str:
+        _warn_deprecated_evidence_ref_field("fact_digest", "EvaluateRow.claim.digest")
+        return _evidence_ref_fact_digest_for_row(self._require_owner())
+
+    def _require_owner(self) -> "EvaluateRow":
+        if self._row_resolver is None:
+            raise DetachedEvidenceRefError("EvidenceRef deprecated-field access requires owner EvaluateRow resolver")
+        return self._row_resolver()
 
 
 @dataclass(frozen=True)
@@ -132,10 +178,9 @@ class EvaluateRow:
             raise ProtocolShapeError("EvaluateRow.claim must be Claim")
         if not isinstance(self.evidence_ref, EvidenceRef):
             raise ProtocolShapeError("EvaluateRow.evidence_ref must be EvidenceRef")
-        if self.evidence_ref.row_id != self.row_id:
-            raise ProtocolShapeError("EvaluateRow.evidence_ref.row_id must equal EvaluateRow.row_id")
-        if self.evidence_ref.fact_digest != self.claim.digest:
-            raise ProtocolShapeError("EvaluateRow.evidence_ref.fact_digest must equal EvaluateRow.claim.digest")
+        row_self_ref: Callable[[], EvaluateRow] = lambda self_ref=self: self_ref
+        object.__setattr__(self, "claim", replace(self.claim, _row_resolver=row_self_ref))
+        object.__setattr__(self, "evidence_ref", replace(self.evidence_ref, _row_resolver=row_self_ref))
         if self.raw_kind is None:
             if self.bound is not None:
                 raise ProtocolShapeError("EvaluateRow.bound must be None when raw_kind is None")
@@ -220,8 +265,6 @@ class EvaluateResult:
             if row.row_id in seen:
                 raise ProtocolShapeError(f"EvaluateResult.rows contains duplicate row_id: {row.row_id!r}")
             seen.add(row.row_id)
-            if row.evidence_ref.result_id != self.result_id:
-                raise ProtocolShapeError("EvaluateRow.evidence_ref.result_id must equal EvaluateResult.result_id")
             bound_rows.append(replace(row, _result_resolver=lambda self_ref=self: self_ref))
         row_support_artifacts = _validate_row_support_artifacts(
             self._row_support_artifacts,
@@ -429,9 +472,70 @@ def evidence_ref_id_for(result_id: str, row_id: str, fact_digest: str, closed_he
     return f"{_EVIDENCE_REF_ID_PREFIX}{digest}"
 
 
-def _row_digest_for(row: EvaluateRow) -> str:
+def _warn_deprecated_claim_field(field_name: str, replacement: str) -> None:
+    warnings.warn(
+        f"Claim.{field_name} is deprecated; use {replacement}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
+def _warn_deprecated_evidence_ref_field(field_name: str, replacement: str) -> None:
+    warnings.warn(
+        f"EvidenceRef.{field_name} is deprecated; use {replacement}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
+def _claim_name_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
     if not isinstance(row, EvaluateRow):
         raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+    return result.head.id
+
+
+def _claim_arguments_for_row(row: EvaluateRow) -> Mapping[str, Any]:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    return row.bindings
+
+
+def _evidence_ref_result_id_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+    return result.result_id
+
+
+def _evidence_ref_row_id_for_row(row: EvaluateRow) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    return row.row_id
+
+
+def _evidence_ref_fact_digest_for_row(row: EvaluateRow) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    return row.claim.digest
+
+
+def _evidence_ref_id_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
+    return evidence_ref_id_for(
+        _evidence_ref_result_id_for_row_result(row, result),
+        _evidence_ref_row_id_for_row(row),
+        _evidence_ref_fact_digest_for_row(row),
+        row.evidence_ref.closed_head_digest,
+    )
+
+
+def _row_digest_for(row: EvaluateRow, *, result_id: str, claim_name: str) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
+    _require_non_empty_str(claim_name, field_name="claim_name")
     return sha256_token(
         canonical_bytes_for_evaluate(
             "evaluate_row_digest_v1",
@@ -439,17 +543,17 @@ def _row_digest_for(row: EvaluateRow) -> str:
                 "bindings": row.bindings,
                 "bound": row.bound,
                 "claim": {
-                    "arguments": row.claim.arguments,
+                    "arguments": _claim_arguments_for_row(row),
                     "digest": row.claim.digest,
                     "kind": row.claim.kind,
-                    "name": row.claim.name,
+                    "name": claim_name,
                     "repr": row.claim.repr,
                 },
                 "evidence_ref": {
                     "closed_head_digest": row.evidence_ref.closed_head_digest,
-                    "fact_digest": row.evidence_ref.fact_digest,
-                    "result_id": row.evidence_ref.result_id,
-                    "row_id": row.evidence_ref.row_id,
+                    "fact_digest": _evidence_ref_fact_digest_for_row(row),
+                    "result_id": result_id,
+                    "row_id": _evidence_ref_row_id_for_row(row),
                 },
                 "raw_kind": row.raw_kind,
                 "row_id": row.row_id,
@@ -581,17 +685,11 @@ def _candidate_set_to_evaluate_row(
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
     claim = Claim(
         kind=claim_kind,
-        name=effective_claim_name,
-        arguments=bindings,
         repr=f"{effective_claim_name}{dict(bindings)!r}",
         digest=digest,
     )
     row_id = row_id_for(run_id, bindings)
     evidence_ref = EvidenceRef(
-        ref_id=evidence_ref_id_for(result_id, row_id, digest, closed_head_digest),
-        result_id=result_id,
-        row_id=row_id,
-        fact_digest=digest,
         closed_head_digest=closed_head_digest,
     )
     raw_kind, bound = _raw_kind_and_bound_from_candidate(candidate)
@@ -625,7 +723,7 @@ def _explain_live_row(
             claim=row.claim,
             result_id=result.result_id,
             row_id=row.row_id,
-            evidence_ref_id=row.evidence_ref.ref_id,
+            evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
             raw_kind=row.raw_kind,
             bound=row.bound,
             failure_class="row_not_in_result",
@@ -640,7 +738,7 @@ def _explain_live_row(
             claim=row.claim,
             result_id=result.result_id,
             row_id=row.row_id,
-            evidence_ref_id=row.evidence_ref.ref_id,
+            evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
             raw_kind=row.raw_kind,
             bound=row.bound,
             failure_class="stale_row",
@@ -661,7 +759,7 @@ def _explain_live_row(
             claim=row.claim,
             result_id=result.result_id,
             row_id=row.row_id,
-            evidence_ref_id=row.evidence_ref.ref_id,
+            evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
             raw_kind=row.raw_kind,
             bound=row.bound,
             checked_scope=checked_scope,
@@ -680,7 +778,7 @@ def _explain_live_row(
         claim=row.claim,
         result_id=result.result_id,
         row_id=row.row_id,
-        evidence_ref_id=row.evidence_ref.ref_id,
+        evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
         raw_kind=row.raw_kind,
         bound=row.bound,
         checked_scope=checked_scope,
@@ -845,10 +943,7 @@ def _row_anchor_matches(left: EvaluateRow, right: EvaluateRow, result: EvaluateR
     return (
         left.row_id == right.row_id
         and left.claim.digest == right.claim.digest
-        and left.evidence_ref.ref_id == right.evidence_ref.ref_id
-        and left.evidence_ref.result_id == result.result_id
-        and left.evidence_ref.row_id == left.row_id
-        and left.evidence_ref.fact_digest == left.claim.digest
+        and _evidence_ref_id_for_row_result(left, result) == _evidence_ref_id_for_row_result(right, result)
         and left.evidence_ref.closed_head_digest == right.evidence_ref.closed_head_digest
     )
 
@@ -869,7 +964,7 @@ def _build_passed_row_evidence_graph(
         node_id=row.row_id,
         node_kind=NODE_CONCLUSION,
         component="evaluate.row",
-        label=row.claim.name,
+        label=_claim_name_for_row_result(row, result),
         value_summary=row.claim.repr,
     )
     return EvidenceGraph(
@@ -1003,14 +1098,14 @@ def _build_form1_evidence_graph(
             node_id=row.row_id,
             node_kind=NODE_CONCLUSION,
             component=result.head.id,
-            label=row.claim.name,
+            label=_claim_name_for_row_result(row, result),
             value_summary=row.claim.repr,
             engine_meta={
                 "rule_id": result.head.id,
                 "is_head": True,
                 "explained_claim_ref": {
                     "row_id": row.row_id,
-                    "evidence_ref_id": row.evidence_ref.ref_id,
+                    "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
                     "claim_digest": row.claim.digest,
                     "claim_repr_cache": row.claim.repr,
                 },
@@ -1157,7 +1252,7 @@ def _evidence_metadata_payload_for_row_result(row: EvaluateRow, result: Evaluate
     return {
         "result_id": result.result_id,
         "row_id": row.row_id,
-        "evidence_ref_id": row.evidence_ref.ref_id,
+        "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
         "claim_digest": row.claim.digest,
         "closed_head_digest": row.evidence_ref.closed_head_digest,
         "expr_digest": result.expr_digest,
@@ -1397,6 +1492,8 @@ def _validate_tuple_of_type(value: object, item_type: type[Any], *, field_name: 
 
 __all__ = [
     "Claim",
+    "DetachedClaimError",
+    "DetachedEvidenceRefError",
     "DetachedRowError",
     "Explanation",
     "EvaluateResult",

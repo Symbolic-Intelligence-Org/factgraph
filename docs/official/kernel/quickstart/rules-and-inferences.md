@@ -116,7 +116,7 @@ The `Rule` import in the example above is included for type hints /
 rule_result = fg.eval.evaluate(seeded_tags, head=seeded_tags)
 
 assert rule_result.count() == 1
-assert rule_result.first().claim.name == "user:tag"
+assert rule_result.head.id == "user:tag"
 assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 ```
 
@@ -459,8 +459,8 @@ is not part of the v0.2 public surface.
 
 The closed head has two invariants:
 
-1. **`head.id` must be a real predicate id.** The result row's
-   `claim.name` equals `head.id`.
+1. **`head.id` must be a real predicate id.** The result exposes this as
+   `result.head.id`; `row.claim.name` remains a deprecated compatibility alias.
 2. **`len(head.ports)` must equal that predicate's `arg_specs` count.**
    Otherwise the runtime raises
    `WhereValidationError: head_vars length must match target arg_specs`.
@@ -486,7 +486,7 @@ with vars("u",) as (u,):
     )
 
 result = fg.eval.evaluate(user_exists, head=user_exists)
-assert result.first().claim.name == "User:exists"
+assert result.head.id == "User:exists"
 ```
 
 For two-port rules use a two-arg field predicate id:
@@ -500,8 +500,9 @@ with vars("u", "r") as (u, r):
         ports={"user": u, "region": r},
     )
 
-first = fg.eval.evaluate(user_region, head=user_region).first()
-assert first.claim.name == "user:region"
+result = fg.eval.evaluate(user_region, head=user_region)
+first = result.first()
+assert result.head.id == "user:region"
 ```
 
 ### Cross-rule expressions pick one occurrence as head
@@ -588,7 +589,7 @@ result = fg.eval.evaluate(tags_from_seed)
 assert result.count() == 1
 row = result.first()
 assert row is not None
-assert row.claim.name == "user:tag"
+assert result.head.id == "user:tag"
 assert tuple(fg.entities.get(User, user_id="u-1").tag) == ()
 ```
 

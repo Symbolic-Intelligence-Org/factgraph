@@ -167,10 +167,10 @@ row = result.first()
 
 row.row_id                    # str
 row.bindings                  # Mapping — engine candidate payload, NOT a {port: value} map (see below)
-row.claim.name                # "user:region" — the head predicate that fired
+result.head.id                # "user:region" — the head predicate that fired
 row.raw_kind                  # None (no uncertainty meta on the source claims)
 row.bound                     # None (paired with raw_kind, see engines_and_configs.md §2.1)
-row.evidence_ref.ref_id       # "evref_v1:..." — stable handle for this evidence
+row.evidence_ref.closed_head_digest  # "sha256:..." — stable replay input for this row
 ```
 
 #### `bindings` — engine candidate payload (not a port→value map)
@@ -193,7 +193,7 @@ dict(row.bindings)
 
 Two parts to read:
 
-- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id` = `row.claim.name`). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`. **Why does it look like `entity:field`?** Because `rule.id` is forced to match a known ledger predicate (see §1.2 input rejections — `target predicate not found: <id>`). A "normal" free-form id like `"find_us_users"` is rejected. The shipped design conflates rule identity with predicate identity; see [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) for the same family of cross-layer name occupation.
+- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id`; `row.claim.name` remains a deprecated compatibility alias). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`. **Why does it look like `entity:field`?** Because `rule.id` is forced to match a known ledger predicate (see §1.2 input rejections — `target predicate not found: <id>`). A "normal" free-form id like `"find_us_users"` is rejected. The shipped design conflates rule identity with predicate identity; see [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) for the same family of cross-layer name occupation.
 - **`terms`** is the per-row port resolution — what *varies* row-to-row. `terms[i]` carries the value bound to the i-th port in `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two `entity_ref` terms — `terms[0]` for the order, `terms[1]` for the user.
 
 > **Shipped arity constraint.** `head.id` must match a known ledger predicate, and `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. You cannot declare "a synthetic head with three entity ports just because I want three columns of output"; the head's arity is bounded by the predicate id it claims. `Rule.projection(*names)` would express that idea but is not usable as an evaluate head in v0.2 (§1.2).
@@ -219,17 +219,19 @@ To map port names to values programmatically, walk `head.ports` in parallel with
 
 ### 2.3 `Claim` DTO
 
-`Claim` describes the *thing concluded* on a row — the predicate id (`name`), the argument bindings (`arguments`), a human-readable rendering (`repr`), and a content-addressed digest. It does not carry provenance; provenance lives in `EvidenceRef` (§2.4) and `EvidenceGraph` (§5). Four `kind` values distinguish what role the conclusion plays.
+`Claim` describes the *thing concluded* on a row — its role (`kind`), a human-readable rendering (`repr`), and a content-addressed digest. It does not carry provenance; provenance lives in `EvidenceRef` (§2.4) and `EvidenceGraph` (§5). Four `kind` values distinguish what role the conclusion plays.
+
+`Claim.name` and `Claim.arguments` are deprecated compatibility properties. On a live row, `row.claim.name` resolves to `result.head.id`, and `row.claim.arguments` resolves to `row.bindings`. New code should use those active row/result fields directly.
 
 > **Name collision warning.** There are **two** classes named `Claim`. This section documents `factgraph.application.protocol.evaluate_result.Claim` — the *result-side projection* that `EvaluateRow.claim` exposes. It is **not** the on-disk ledger `Claim` (`factgraph.core.store.ledger.Claim` documented in [`data_model.md` §1](data_model.md), with `asrt_id` / `pred_id` / `e_ref` / `rest_terms`). The SDK's top-level `from factgraph.sdk import Claim` re-exports the protocol one, not the ledger one. Same name, two layers — same family as the `Rule` namespace ambiguity in [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md).
 
 ```text
 Claim  (= factgraph.application.protocol.evaluate_result.Claim, frozen)
   ├── kind: Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
-  ├── name: str               ← the predicate id (e.g. "user:region", "User:exists")
-  ├── arguments: Mapping[str, Any]    ← keyed positional / by name; contains the claim's terms
   ├── repr: str               ← human-readable rendering (e.g. "user:region(alice, US)")
-  └── digest: str             ← "sha256:..." over the canonical claim form
+  ├── digest: str             ← "sha256:..." over the canonical claim form
+  ├── name: str               ← deprecated property; use result.head.id
+  └── arguments: Mapping[str, Any]    ← deprecated property; use row.bindings
 ```
 
 The four `kind` values:
@@ -245,13 +247,15 @@ The four `kind` values:
 
 `EvidenceRef` is the stable handle that lets you re-locate a row's evidence across re-evaluations or processes. It is **not** the evidence itself (that lives in `EvidenceGraph`, §5) — it is the pair of digests that let you ask "is this the same row we explained last time?" deterministically.
 
+Only `closed_head_digest` is an active frozen field in Slice α of the evaluate-result flattening design. The other fields below remain available as deprecated compatibility properties on live rows; new code should use `row.row_id`, `result.result_id`, `row.claim.digest`, and `row.explain()`/evidence metadata as the primary access paths.
+
 ```text
 EvidenceRef (frozen)
-  ├── ref_id: str                  ← "evref_v1:..." — stable across re-evaluation
-  ├── result_id: str               ← "evalr_v1:..." — the parent result
-  ├── row_id: str
-  ├── fact_digest: str             ← "sha256:..." over the row's source facts
-  └── closed_head_digest: str      ← "sha256:..." over the closed-head Rule (§6)
+  ├── closed_head_digest: str      ← "sha256:..." over the closed-head Rule (§6)
+  ├── ref_id: str                  ← deprecated property; stable evidence handle
+  ├── result_id: str               ← deprecated property; use result.result_id
+  ├── row_id: str                  ← deprecated property; use row.row_id
+  └── fact_digest: str             ← deprecated property; use row.claim.digest
 ```
 
 Two evaluation runs over the same `(rule, head, engine, config, ledger snapshot)` produce the same `fact_digest` and `closed_head_digest`, even if `result_id` / `run_id` change.
@@ -518,8 +522,8 @@ from factgraph.sdk import FactGraph              # fg.eval.evaluate, fg.eval.exp
 
 # DTOs (frozen)
 from factgraph.sdk import (
-    Claim,           # row.claim (kind / name / arguments / repr / digest)
-    EvidenceRef,     # row.evidence_ref (ref_id / result_id / row_id / fact_digest / closed_head_digest)
+    Claim,           # row.claim (kind / repr / digest; name + arguments are deprecated properties)
+    EvidenceRef,     # row.evidence_ref (closed_head_digest; ref_id/result_id/row_id/fact_digest are deprecated properties)
     EvaluateResult,  # what fg.eval.evaluate returns
     EvaluateRow,     # in result.rows / result.first() / iter(result)
     Explanation,     # what fg.eval.explain / row.explain() returns

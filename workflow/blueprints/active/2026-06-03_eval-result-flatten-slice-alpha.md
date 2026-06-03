@@ -352,30 +352,30 @@ The full wrapper removal / row-level field rewrite remains Slice γ; this slice 
 
 ## 7. Acceptance
 
-- [ ] All 6 redundant fields removed from `Claim` / `EvidenceRef` frozen field set
-- [ ] All 6 deprecated `@property` exist + emit `DeprecationWarning` + return byte-equal values
-- [ ] D17 invariant block (`EvaluateRow.__post_init__` L135-138) replaced with resolver injection
-- [ ] `EvaluateResult.__post_init__` no longer reads deprecated `EvidenceRef.result_id` before owner binding; `result[0].evidence_ref.result_id` returns `result.result_id` with `DeprecationWarning`
-- [ ] `_row_digest_for` / replacement helper preserves byte-identical `evaluate_row_digest_v1` without reading deprecated properties internally
-- [ ] `evidence_ref_id_for(...)` shipped ref-id formula preserved byte-for-byte; any wrapper/alias decision keeps the existing public helper usable
-- [ ] All Step 4.3 enumerated `Claim(...)` / `EvidenceRef(...)` construction sites updated (`evaluate_result.py:582-596`, `test_evaluate_result_dtos.py:92-105`, `:228-240`); Step 4.6.5 grep confirms no drift
-- [ ] Internal compatibility paths listed in §5.6 do not emit deprecation warnings during normal construction, digesting, explaining, or evidence metadata creation
-- [ ] `src/service/runtime_v1.py:2458-2478` preserves legacy JSON fields while avoiding internal deprecation warnings
-- [ ] Step 4.6.5 docs consumers in `docs/official/kernel/quickstart/*` and `src/factgraph/sdk/docs/01_concepts.en.md` no longer present deprecated paths as primary recommended APIs
-- [ ] `tests/test_pyreason_e2e.py` and `tests/test_problog_engine_eval.py` updated for the compatibility/deprecation semantics
-- [ ] New tests:
-  - [ ] `test_claim_deprecated_name_emits_warning`
-  - [ ] `test_claim_deprecated_arguments_emits_warning`
-  - [ ] `test_evidence_ref_deprecated_row_id_emits_warning`
-  - [ ] `test_evidence_ref_deprecated_result_id_emits_warning`
-  - [ ] `test_evidence_ref_deprecated_ref_id_byte_equal_to_pre_alpha`
-  - [ ] `test_evidence_ref_deprecated_fact_digest_emits_warning`
-  - [ ] `test_standalone_claim_without_resolver_raises_detached_error`
-  - [ ] `test_standalone_evidence_ref_without_resolver_raises_detached_error`
-- [ ] Existing test suite passes with `python -m pytest -W "ignore::DeprecationWarning::factgraph" tests/application/protocol tests/sdk/test_evaluate_result_exports.py` (warnings are emitted but tests don't assert against them unless new)
-- [ ] `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 / §9.1 updated with deprecation notes plus active-field / deprecated-property shapes
-- [ ] No `src/factgraph/application/protocol/docs/README.md` update unless a module-docs subtree appears before Step 4.6.5 (Step 4.3 PF-v7 found none)
-- [ ] No edits outside `factgraph.application.protocol` except the scoped service serializer, tests, and docs consumers listed in §5.7 / §5.8
+- [x] All 6 redundant fields removed from `Claim` / `EvidenceRef` frozen field set
+- [x] All 6 deprecated `@property` exist + emit `DeprecationWarning` + return byte-equal values
+- [x] D17 invariant block (`EvaluateRow.__post_init__` L135-138) replaced with resolver injection
+- [x] `EvaluateResult.__post_init__` no longer reads deprecated `EvidenceRef.result_id` before owner binding; `result[0].evidence_ref.result_id` returns `result.result_id` with `DeprecationWarning`
+- [x] `_row_digest_for` / replacement helper preserves byte-identical `evaluate_row_digest_v1` without reading deprecated properties internally
+- [x] `evidence_ref_id_for(...)` shipped ref-id formula preserved byte-for-byte; any wrapper/alias decision keeps the existing public helper usable
+- [x] All Step 4.3 enumerated `Claim(...)` / `EvidenceRef(...)` construction sites updated (`evaluate_result.py:582-596`, `test_evaluate_result_dtos.py:92-105`, `:228-240`); Step 4.6.5 grep confirms no drift
+- [x] Internal compatibility paths listed in §5.6 do not emit deprecation warnings during normal construction, digesting, explaining, or evidence metadata creation
+- [x] `src/service/runtime_v1.py:2458-2478` preserves legacy JSON fields while avoiding internal deprecation warnings
+- [x] Step 4.6.5 docs consumers in `docs/official/kernel/quickstart/*` and `src/factgraph/sdk/docs/01_concepts.en.md` no longer present deprecated paths as primary recommended APIs
+- [x] `tests/test_pyreason_e2e.py` and `tests/test_problog_engine_eval.py` updated for the compatibility/deprecation semantics
+- [x] New tests:
+  - [x] `test_claim_deprecated_name_emits_warning`
+  - [x] `test_claim_deprecated_arguments_emits_warning`
+  - [x] `test_evidence_ref_deprecated_row_id_emits_warning`
+  - [x] `test_evidence_ref_deprecated_result_id_emits_warning`
+  - [x] `test_evidence_ref_deprecated_ref_id_byte_equal_to_pre_alpha`
+  - [x] `test_evidence_ref_deprecated_fact_digest_emits_warning`
+  - [x] `test_standalone_claim_without_resolver_raises_detached_error`
+  - [x] `test_standalone_evidence_ref_without_resolver_raises_detached_error`
+- [x] Existing test suite passes with `python -m pytest -W "ignore::DeprecationWarning::factgraph" tests/application/protocol tests/sdk/test_evaluate_result_exports.py` (warnings are emitted but tests don't assert against them unless new)
+- [x] `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 / §9.1 updated with deprecation notes plus active-field / deprecated-property shapes
+- [x] No `src/factgraph/application/protocol/docs/README.md` update unless a module-docs subtree appears before Step 4.6.5 (Step 4.3 PF-v7 found none)
+- [x] No edits outside `factgraph.application.protocol` except the scoped service serializer, tests, and docs consumers listed in §5.7 / §5.8
 
 ## 8. Implementation Plan
 
