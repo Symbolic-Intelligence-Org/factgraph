@@ -147,6 +147,8 @@ User 读到 `row.claim` 时无法仅凭名字判定是"on-disk Claim"还是"resu
 
 ### §3.6 第六次撞墙:`rule.id` 强制为 ledger predicate id
 
+> **Superseded by [`evaluate-result-flatten-and-query-style.zh.md`](evaluate-result-flatten-and-query-style.zh.md) §2.1 + §3.8 + Slice δ**(2026-06-03)。后者把 `rule.id` 解耦放进 query-style 范式转向的整体设计里 —— `head.id` 自由 + arity check opt-in,不再需要本节单独提的 `head_pred_id` 字段方案。本节内容保留作历史 friction 记录。
+
 构造一条 Rule 时直觉是 `rule.id` 是 rule 的自由命名(如别的 rule engine 习惯的 `"is_adult"` / `"find_us_users"` / `"discount_calc"`)。但 shipped 拒绝这种形态:
 
 ```python
@@ -349,6 +351,8 @@ factgraph.sdk.Claim → ResultClaim   # 保留 user-facing "Claim" 名给最 use
 **Tier**: B(与本 design-point §4 RuleSpec 重命名同一 ergonomic 等级)。
 
 ### §4.7 子设计:`rule.id` 与 ledger predicate id 解耦(配 §3.6)
+
+> **Superseded by [`evaluate-result-flatten-and-query-style.zh.md`](evaluate-result-flatten-and-query-style.zh.md) §3.8 + Slice δ**(2026-06-03)。后者选择"`head.id` 自由 + arity check opt-in"路径(本节候选路径 φ 的等价),**不**引入本节路径 τ 的 `head_pred_id` 显式字段。下面的候选路径表和未锁问题保留作设计空间记录,但实施层面以后者为准。
 
 **目标形态**:让 `rule.id` 是 rule 的**自由命名**,跟 head 落到哪个 predicate 解耦:
 
