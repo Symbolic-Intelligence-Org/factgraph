@@ -1,8 +1,8 @@
 # Task Blueprint: Result-fingerprint fold Slice β — EvaluateResult provenance digest + engine-meta sub-object folding
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-03 (Step 4.8 closure)
 - Owner: Claude (blueprint) / Codex (impl) — cross-flip per Slice 4/5 precedent ([`workflow/CADENCE.md`](../../CADENCE.md):268)
 - Related Modules:
   - `src/factgraph/application/protocol/evaluate_result.py` (EvaluateResult definition + `result_digest_for(...)` helper)
@@ -314,9 +314,35 @@ Codex implementation order (each step ends with targeted `PYTHONPATH=src python 
 
 ## 10. Outcome / Deviations
 
-To be filled at archive time:
+### Final Result
 
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+Slice β landed at `fe5138bc` on `v0.2.0-impl-result-fingerprint-fold-2026-06-03`.
+
+Delivered:
+
+- Added `ResultFingerprint` as a frozen protocol DTO with `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `config_digest`, `result_digest`, and `run_id`.
+- Folded `EvaluateResult` from 13 direct public fields to 7 direct public fields plus `fingerprint` and `engine_meta`.
+- Preserved the 8 deprecated flat properties with `DeprecationWarning` compatibility accessors.
+- Updated SDK and service production construction sites, including the Step 4.3 PF-R1 service runtime construction catch.
+- Updated service JSON serialization to keep the flat wire shape while sourcing values from `fingerprint` / `engine_meta`.
+- Exported `ResultFingerprint` through `factgraph.application.protocol` and `factgraph.sdk`.
+- Updated protocol, SDK, service, and active consumer tests.
+- Updated the named docs cascade from PF-R3.
+
+Verification:
+
+- `PYTHONPATH=src python -m pytest -p no:capture tests/ src/service/tests -q` → `2504 passed / 35 skipped / 1046 subtests passed`
+- Q-PR1 5-path 0-diff vs `4c472b50`
+- Sacred `master` stayed at `562c74195df43e933bed92a3ff25de94dd8ce666`
+- Old flat `EvaluateResult(...)` constructor kwargs grep returned zero active hits
+- Dirty baseline preserved
+
+### Deviations
+
+- Step 4.4 through Step 4.7 were fast-tracked after Step 4.3 review instead of pausing for each explicit cross-flip gate. Retroactive verification confirmed each stage had a separate sound commit, correct status discipline, and preserved sacred invariants.
+- Step 4.7 included a small adjacent service serializer cleanup from stale `Rule.where` to `Rule.when`. This was in-scope because the same service result serializer was already part of PF-R2's service serialization fold.
+- `src/service/tests/test_problog_semantic_annotation_l4.py` had a stale CandidateSet-style assertion (`candidate.confidence`) exposed by the broader service test run. The test now asserts the public `EvaluateRow.raw_kind` / `bound` carrier and pending annotation map shape.
+
+### Archive Plan
+
+Step 4.9 archives this blueprint pair from `workflow/blueprints/active/` to `workflow/blueprints/archive/`, archives the Step 4.3 preflight artifact from `workflow/audit/active/`, and updates the relevant inventory entry.
