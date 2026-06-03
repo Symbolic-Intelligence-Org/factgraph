@@ -287,8 +287,9 @@ are importable from `factgraph.audit`:
 from factgraph.audit import (
     EvidenceGraph, EvidenceNode, EvidenceEdge,
     LAYOUT_TREE, LAYOUT_TIMELINE,
-    NODE_CONCLUSION, NODE_PREMISE, NODE_SEED,
-    EDGE_SUPPORTS, EDGE_DERIVES, EDGE_UPDATES,
+    NODE_CONCLUSION, NODE_PREMISE, NODE_SEED, NODE_RULE_EXPR, NODE_RULE, NODE_ATOM,
+    EDGE_SUPPORTS, EDGE_DERIVES, EDGE_UPDATES, EDGE_DERIVED_BY, EDGE_USES,
+    EDGE_HAS_ATOM, EDGE_SUPPORTED_BY,
 )
 ```
 
@@ -310,7 +311,7 @@ from factgraph.audit import (
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
 | `node_id` | `str` | — | Within-graph stable identifier |
-| `node_kind` | `str` | — | One of `NODE_CONCLUSION` / `NODE_PREMISE` / `NODE_SEED` |
+| `node_kind` | `str` | — | One of `NODE_CONCLUSION` / `NODE_PREMISE` / `NODE_SEED` / `NODE_RULE_EXPR` / `NODE_RULE` / `NODE_ATOM` |
 | `component` | `str` | — | Component identity (`rule_id` / `pred_id` / `atom_id`) |
 | `label` | `str` | — | Human-readable label |
 | `value_summary` | `str` | — | Pre-rendered value text |
@@ -324,7 +325,7 @@ from factgraph.audit import (
 | `edge_id` | `str` | — | Within-graph stable identifier |
 | `from_node_id` | `str` | — | Premise / child / downstream endpoint |
 | `to_node_id` | `str` | — | Conclusion / parent / upstream endpoint |
-| `edge_kind` | `str` | — | One of `EDGE_SUPPORTS` / `EDGE_DERIVES` / `EDGE_UPDATES` |
+| `edge_kind` | `str` | — | One of `EDGE_SUPPORTS` / `EDGE_DERIVES` / `EDGE_UPDATES` / `EDGE_DERIVED_BY` / `EDGE_USES` / `EDGE_HAS_ATOM` / `EDGE_SUPPORTED_BY` |
 | `rule_label` | `str \| None` | `None` | Optional rule reference for the edge |
 | `engine_meta` | `Mapping[str, Any]` | `{}` | Per-engine namespaced debug fields |
 
@@ -341,11 +342,18 @@ LAYOUT_TIMELINE = "timeline"    # Form 2 (PyReason — future)
 NODE_CONCLUSION = "conclusion"  # The conclusion the graph proves
 NODE_PREMISE = "premise"        # Intermediate premises
 NODE_SEED = "seed"              # Ledger assertion witnesses (chain start)
+NODE_RULE_EXPR = "rule_expr"    # RuleExpr composition layer
+NODE_RULE = "rule"              # Rule occurrence
+NODE_ATOM = "atom"              # Rule-body atom/check
 
 # Edge kinds — relation between two nodes
 EDGE_SUPPORTS = "supports"      # Form 1: premise -> conclusion
 EDGE_DERIVES = "derives"        # ProbLog provenance: seed/premise -> derived
 EDGE_UPDATES = "updates"        # Form 2 reserved (PyReason temporal — future)
+EDGE_DERIVED_BY = "derived_by"  # rule_expr -> conclusion
+EDGE_USES = "uses"              # rule -> rule_expr
+EDGE_HAS_ATOM = "has_atom"      # atom -> rule
+EDGE_SUPPORTED_BY = "supported_by"  # seed/proof node -> atom
 ```
 
 ### 6.2 Constructor checks and graph-shape guarantees
@@ -354,8 +362,8 @@ The three dataclasses are frozen; their constructors enforce 9 checks at
 construction time. Violating any raises `ValueError`:
 
 1. **`layout_hint` enumeration** — must be one of `LAYOUT_TREE` / `LAYOUT_TIMELINE`.
-2. **`node_kind` enumeration** — must be one of `NODE_CONCLUSION` / `NODE_PREMISE` / `NODE_SEED`.
-3. **`edge_kind` enumeration** — must be one of `EDGE_SUPPORTS` / `EDGE_DERIVES` / `EDGE_UPDATES`.
+2. **`node_kind` enumeration** — must be one of the six node constants above.
+3. **`edge_kind` enumeration** — must be one of the seven edge constants above.
 4. **Unique node ids** — `nodes` must not contain duplicate `node_id` values.
 5. **Unique edge ids** — `edges` must not contain duplicate `edge_id` values.
 6. **Root in nodes** — `root_node_id` must equal some `node.node_id`.
@@ -377,28 +385,29 @@ identifier:
 
 | Engine | `support_kind` | `layout_hint` | Primary `edge_kind` | Form | Status |
 | --- | --- | --- | --- | --- | --- |
-| Native | `"native_binding_v1"` | `"tree"` | `EDGE_SUPPORTS` | Form 1 | shipped |
-| Souffle | `"souffle_witness_v1"` | `"tree"` | `EDGE_SUPPORTS` | Form 1 | shipped |
-| ProbLog | `"problog_provenance_v1"` | `"tree"` | `EDGE_DERIVES` | Form 1 (row provenance) | shipped |
+| Native | `"native_binding_v1"` | `"tree"` | `EDGE_DERIVED_BY` / `EDGE_USES` / `EDGE_HAS_ATOM` / `EDGE_SUPPORTED_BY` | layered Form 1 | shipped |
+| Souffle | `"souffle_witness_v1"` | `"tree"` | `EDGE_DERIVED_BY` / `EDGE_USES` / `EDGE_HAS_ATOM` / `EDGE_SUPPORTED_BY` | layered Form 1 | shipped |
+| ProbLog | `"problog_provenance_v1"` | `"tree"` | row shell + `EDGE_DERIVES` trace | layered row provenance | shipped |
 | PyReason (adapter-only) | `"pyreason_provenance_v1"` | `"timeline"` | `EDGE_UPDATES` | Form 2 sketch | advanced / row-level deferred |
-| Detached or unaligned row | `"evaluate_row"` | `"tree"` | (no edges) | single-conclusion fallback | shipped |
+| Detached or unaligned row | `"evaluate_row"` | `"tree"` | `EDGE_DERIVED_BY` / `EDGE_USES` | minimal rule shell fallback | shipped |
 
 The next three subsections give the concrete graph shape per engine.
 
-#### 6.3.1 Native and Souffle — Form 1 with `EDGE_SUPPORTS`
+#### 6.3.1 Native and Souffle — layered Form 1
 
 For native or Souffle passed rows with support context, this graph now exposes
 the current Form 1 shape:
 
 ```text
-NODE_SEED --supports--> NODE_PREMISE --supports--> NODE_CONCLUSION
+NODE_SEED --supported_by--> NODE_ATOM --has_atom--> NODE_RULE --uses--> NODE_RULE_EXPR --derived_by--> NODE_CONCLUSION
 ```
 
-The root `NODE_CONCLUSION` represents the row claim. `NODE_PREMISE` nodes
-represent the selected native or Souffle support atoms/checks. `NODE_SEED`
+The root `NODE_CONCLUSION` represents the row claim. `NODE_RULE_EXPR` and
+`NODE_RULE` expose the rule-expression and rule occurrence layers. `NODE_ATOM`
+nodes represent the selected native or Souffle support atoms/checks. `NODE_SEED`
 nodes represent ledger assertion witnesses. If the same assertion id supports
-multiple premises in one row graph, the graph reuses one `NODE_SEED` and adds
-multiple `supports` edges.
+multiple atoms in one row graph, the graph reuses one `NODE_SEED` and adds
+multiple `supported_by` edges.
 
 For OR-shaped native or Souffle evaluation, the graph is
 **winning-path-only**: it shows the selected successful branch, not every
@@ -407,13 +416,16 @@ possible or failed branch. The root metadata exposes that boundary with
 `"winning_path_only"`. Other engine metadata fields are implementation
 details; do not write SDK code that depends on their full shape.
 
-#### 6.3.2 ProbLog — Form 1 with `EDGE_DERIVES`
+#### 6.3.2 ProbLog — layered row shell with preserved `EDGE_DERIVES` trace
 
-ProbLog passed rows now produce a row-level provenance graph rather than this
-Form 1 support tree. Its proof-trace shape uses `derives` edges:
+ProbLog passed rows now produce a row-level shell and preserve the adapter proof
+trace below the shell's synthetic row atom. The row shell uses
+`derived_by` / `uses` / `has_atom` / `supported_by`; the proof-trace subtree
+still uses `derives` edges:
 
 ```text
-NODE_SEED --derives--> NODE_PREMISE --derives--> NODE_CONCLUSION
+NODE_SEED --derives--> NODE_PREMISE --derives--> NODE_CONCLUSION(trace root)
+       --supported_by--> NODE_ATOM --has_atom--> NODE_RULE --uses--> NODE_RULE_EXPR --derived_by--> NODE_CONCLUSION(row root)
 ```
 
 The exact frame hierarchy comes from the ProbLog proof trace. Top-level graph
@@ -425,9 +437,10 @@ carries per-edge details under `edge.engine_meta["problog"]["trace_edge"]`.
 #### 6.3.3 PyReason — adapter-level only; row-result is the fallback
 
 Rows without native or Souffle support context, including manually
-constructed/detached rows, keep the older single-`NODE_CONCLUSION` fallback
-graph. ProbLog passed rows no longer use that fallback; they use the provenance
-graph described above. PyReason and other unaligned adapter rows may still use
+constructed/detached rows, keep a minimal row shell with `NODE_CONCLUSION`,
+`NODE_RULE_EXPR`, and `NODE_RULE`. They do not fabricate `NODE_ATOM` with
+`atom_status="support"` unless real atom evidence exists. ProbLog passed rows
+use the provenance graph described above. PyReason and other unaligned adapter rows may still use
 fallback or adapter-specific graph shapes until their row-level alignment lands.
 
 For PyReason specifically, inference, bounds, and temporal materialization are
@@ -452,9 +465,10 @@ Form 2 design.
   its graph.
 - Session logs, `/interactions/{sessionID}`, signatures, ACL, `x-evidence-key`,
   salience, and impact remain outside the sessionless v1 audit channel.
-- Native and Souffle Form 1 row graphs use `EDGE_SUPPORTS`. ProbLog row
-  provenance graphs use `EDGE_DERIVES`. `EDGE_UPDATES` remains reserved for
-  PyReason / Form 2 / temporal engine paths.
+- Native and Souffle Form 1 row graphs use the layered edge kinds. ProbLog row
+  provenance graphs use a layered row shell plus preserved `EDGE_DERIVES` trace
+  edges. `EDGE_UPDATES` remains reserved for PyReason / Form 2 / temporal
+  engine paths.
 - `dag` layout and `rule_fire` node kind are not in v1 scope.
 
 ### 6.5 Complete walkthrough
@@ -465,8 +479,8 @@ walkthrough:
 ```python
 from factgraph.audit import (
     EvidenceGraph,
-    NODE_CONCLUSION, NODE_PREMISE, NODE_SEED,
-    EDGE_SUPPORTS, EDGE_DERIVES,
+    NODE_CONCLUSION, NODE_PREMISE, NODE_SEED, NODE_RULE_EXPR, NODE_RULE, NODE_ATOM,
+    EDGE_SUPPORTS, EDGE_DERIVES, EDGE_DERIVED_BY, EDGE_USES, EDGE_HAS_ATOM, EDGE_SUPPORTED_BY,
 )
 
 result = fg.eval.evaluate(rule, head=rule)

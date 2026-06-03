@@ -16,12 +16,17 @@ from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.audit.evidence_graph import (
-    EDGE_SUPPORTS,
+    EDGE_DERIVED_BY,
+    EDGE_HAS_ATOM,
+    EDGE_SUPPORTED_BY,
+    EDGE_USES,
     EvidenceEdge,
     EvidenceGraph,
     EvidenceNode,
+    NODE_ATOM,
     NODE_CONCLUSION,
-    NODE_PREMISE,
+    NODE_RULE,
+    NODE_RULE_EXPR,
     NODE_SEED,
 )
 from factgraph.core.derivation.candidates import CandidateSet
@@ -903,6 +908,101 @@ def _row_anchor_matches(left: EvaluateRow, right: EvaluateRow, result: EvaluateR
     )
 
 
+def _layered_shell_ids(row: EvaluateRow, result: EvaluateResult) -> tuple[str, str, str]:
+    rule_expr_id = f"rule_expr:{row.row_id}"
+    rule_id = f"rule:{row.row_id}:{result.head.id}"
+    atom_prefix = f"atom:{row.row_id}"
+    return rule_expr_id, rule_id, atom_prefix
+
+
+def _row_conclusion_node(row: EvaluateRow, result: EvaluateResult, *, support_artifact: ProofReceipt | None = None) -> EvidenceNode:
+    engine_meta: dict[str, Any] = {
+        "rule_id": result.head.id,
+        "is_head": True,
+        "explained_claim_ref": {
+            "row_id": row.row_id,
+            "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
+            "claim_digest": row.digest,
+            "claim_repr_cache": _claim_repr_for_row_result(row, result),
+        },
+        "quantitative_explanation": _quantitative_explanation_for_row(row),
+        "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
+        "bindings": dict(row.bindings),
+        "desc_template": None,
+        "content_digest": result.head.content_digest,
+        "version": result.head.version,
+        "raw_kind": row.raw_kind,
+        "bound": row.bound,
+    }
+    if support_artifact is not None:
+        engine_meta["support_root_result_kind"] = support_artifact.root_result_kind
+    return EvidenceNode(
+        node_id=row.row_id,
+        node_kind=NODE_CONCLUSION,
+        component=result.head.id,
+        label=_claim_name_for_row_result(row, result),
+        value_summary=_claim_repr_for_row_result(row, result),
+        engine_meta=engine_meta,
+    )
+
+
+def _row_rule_expr_node(row: EvaluateRow, result: EvaluateResult) -> EvidenceNode:
+    rule_expr_id, _rule_id, _atom_prefix = _layered_shell_ids(row, result)
+    return EvidenceNode(
+        node_id=rule_expr_id,
+        node_kind=NODE_RULE_EXPR,
+        component=result.head.id,
+        label=f"RuleExpr {result.head.id}",
+        value_summary="single rule expression",
+        engine_meta={"ast_form": "single", "rule_id": result.head.id, "row_id": row.row_id},
+    )
+
+
+def _row_rule_node(row: EvaluateRow, result: EvaluateResult) -> EvidenceNode:
+    _rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
+    return EvidenceNode(
+        node_id=rule_id,
+        node_kind=NODE_RULE,
+        component=result.head.id,
+        label=f"Rule {result.head.id}",
+        value_summary=result.head.id,
+        engine_meta={
+            "rule_id": result.head.id,
+            "content_digest": result.head.content_digest,
+            "version": result.head.version,
+            "row_id": row.row_id,
+        },
+    )
+
+
+def _row_shell_nodes(row: EvaluateRow, result: EvaluateResult, *, support_artifact: ProofReceipt | None = None) -> list[EvidenceNode]:
+    return [
+        _row_conclusion_node(row, result, support_artifact=support_artifact),
+        _row_rule_expr_node(row, result),
+        _row_rule_node(row, result),
+    ]
+
+
+def _row_shell_edges(row: EvaluateRow, result: EvaluateResult) -> list[EvidenceEdge]:
+    rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
+    return [
+        EvidenceEdge(
+            edge_id=f"edge:{rule_expr_id}->{row.row_id}:derived_by",
+            from_node_id=rule_expr_id,
+            to_node_id=row.row_id,
+            edge_kind=EDGE_DERIVED_BY,
+            rule_label=result.head.id,
+        ),
+        EvidenceEdge(
+            edge_id=f"edge:{rule_id}->{rule_expr_id}:uses",
+            from_node_id=rule_id,
+            to_node_id=rule_expr_id,
+            edge_kind=EDGE_USES,
+            rule_label=result.head.id,
+        ),
+    ]
+
+
 def _build_passed_row_evidence_graph(
     row: EvaluateRow,
     result: EvaluateResult,
@@ -915,19 +1015,12 @@ def _build_passed_row_evidence_graph(
     support_artifact = result._row_support_artifacts.get(row.row_id)
     if support_artifact is not None:
         return _build_form1_evidence_graph(row, result, metadata, support_artifact)
-    node = EvidenceNode(
-        node_id=row.row_id,
-        node_kind=NODE_CONCLUSION,
-        component="evaluate.row",
-        label=_claim_name_for_row_result(row, result),
-        value_summary=_claim_repr_for_row_result(row, result),
-    )
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
         engine=result.engine,
         root_node_id=row.row_id,
-        nodes=(node,),
-        edges=(),
+        nodes=tuple(_row_shell_nodes(row, result)),
+        edges=tuple(_row_shell_edges(row, result)),
         support_kind="evaluate_row",
         metadata=metadata,
     )
@@ -954,7 +1047,7 @@ def _build_problog_provenance_row_evidence_graph(
     uncertainty_projection = _problog_uncertainty_projection_meta(payload)
     trace_summary = _problog_trace_summary(candidate_graph, uncertainty_projection)
 
-    nodes = tuple(
+    trace_nodes = tuple(
         EvidenceNode(
             node_id=node.node_id,
             node_kind=node.node_kind,
@@ -970,7 +1063,7 @@ def _build_problog_provenance_row_evidence_graph(
         )
         for node in candidate_graph.nodes
     )
-    edges = tuple(
+    trace_edges = tuple(
         EvidenceEdge(
             edge_id=edge.edge_id,
             from_node_id=edge.from_node_id,
@@ -981,12 +1074,51 @@ def _build_problog_provenance_row_evidence_graph(
         )
         for edge in candidate_graph.edges
     )
+    _rule_expr_id, rule_id, atom_prefix = _layered_shell_ids(row, result)
+    atom_id = f"{atom_prefix}:problog"
+    shell_nodes = _row_shell_nodes(row, result)
+    shell_nodes.append(
+        EvidenceNode(
+            node_id=atom_id,
+            node_kind=NODE_ATOM,
+            component=f"{result.head.id}:problog",
+            label="ProbLog proof trace",
+            value_summary="proof trace",
+            engine_meta={
+                "atom_kind": "problog_trace",
+                "atom_status": "support",
+                "atom_index": 0,
+                "parent_rule_id": result.head.id,
+                "trace_root_node_id": candidate_graph.root_node_id,
+            },
+        )
+    )
+    shell_edges = _row_shell_edges(row, result)
+    shell_edges.append(
+        EvidenceEdge(
+            edge_id=f"edge:{atom_id}->{rule_id}:has_atom",
+            from_node_id=atom_id,
+            to_node_id=rule_id,
+            edge_kind=EDGE_HAS_ATOM,
+            rule_label=result.head.id,
+        )
+    )
+    shell_edges.append(
+        EvidenceEdge(
+            edge_id=f"edge:{candidate_graph.root_node_id}->{atom_id}:supported_by",
+            from_node_id=candidate_graph.root_node_id,
+            to_node_id=atom_id,
+            edge_kind=EDGE_SUPPORTED_BY,
+            rule_label=result.head.id,
+            engine_meta={"problog": {"trace_bridge": True}},
+        )
+    )
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
         engine=result.engine,
-        root_node_id=candidate_graph.root_node_id,
-        nodes=nodes,
-        edges=edges,
+        root_node_id=row.row_id,
+        nodes=tuple((*shell_nodes, *trace_nodes)),
+        edges=tuple((*shell_edges, *trace_edges)),
         support_kind=PROBLOG_PROVENANCE_KIND,
         layout_hint=candidate_graph.layout_hint,
         metadata=metadata,
@@ -1048,62 +1180,45 @@ def _build_form1_evidence_graph(
         supported = ", ".join(sorted(_FORM1_ROW_SUPPORT_KINDS))
         raise ValueError(f"Form 1 row evidence requires support kind in {{{supported}}}")
 
-    nodes: list[EvidenceNode] = [
-        EvidenceNode(
-            node_id=row.row_id,
-            node_kind=NODE_CONCLUSION,
-            component=result.head.id,
-            label=_claim_name_for_row_result(row, result),
-            value_summary=_claim_repr_for_row_result(row, result),
-            engine_meta={
-                "rule_id": result.head.id,
-                "is_head": True,
-                "explained_claim_ref": {
-                    "row_id": row.row_id,
-                    "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
-                    "claim_digest": row.digest,
-                    "claim_repr_cache": _claim_repr_for_row_result(row, result),
-                },
-                "quantitative_explanation": _quantitative_explanation_for_row(row),
-                "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
-                "bindings": dict(row.bindings),
-                "desc_template": None,
-                "content_digest": result.head.content_digest,
-                "version": result.head.version,
-                "raw_kind": row.raw_kind,
-                "bound": row.bound,
-                "support_root_result_kind": support_artifact.root_result_kind,
-            },
-        )
-    ]
-    edges: list[EvidenceEdge] = []
+    nodes = _row_shell_nodes(row, result, support_artifact=support_artifact)
+    edges = _row_shell_edges(row, result)
     seed_node_ids: set[str] = set()
+    _rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
 
-    def _append_edge(from_node_id: str, to_node_id: str, *, label: str | None, index: int) -> None:
+    def _append_edge(
+        from_node_id: str,
+        to_node_id: str,
+        *,
+        edge_kind: str,
+        label: str | None,
+        index: int,
+    ) -> None:
         edges.append(
             EvidenceEdge(
                 edge_id=f"edge:{from_node_id}->{to_node_id}:{index}",
                 from_node_id=from_node_id,
                 to_node_id=to_node_id,
-                edge_kind=EDGE_SUPPORTS,
+                edge_kind=edge_kind,
                 rule_label=label,
             )
         )
 
     edge_index = 0
     for witness in support_artifact.pred_witnesses:
-        premise_id = f"premise:{witness.pred_condition_key}"
+        atom_id = f"atom:{witness.pred_condition_key}"
         pred_id = _pred_id_from_atom_key(witness.pred_condition_key)
         nodes.append(
             EvidenceNode(
-                node_id=premise_id,
-                node_kind=NODE_PREMISE,
+                node_id=atom_id,
+                node_kind=NODE_ATOM,
                 component=witness.pred_condition_key,
                 label=f"Predicate witness {pred_id}",
                 value_summary="satisfied",
                 engine_meta={
                     "atom_id": witness.pred_condition_key,
                     "atom_kind": "pred",
+                    "atom_status": "support",
+                    "atom_index": _condition_index_from_key(witness.pred_condition_key),
                     "condition_index": _condition_index_from_key(witness.pred_condition_key),
                     "parent_rule_id": result.head.id,
                     "reason": {
@@ -1117,7 +1232,7 @@ def _build_form1_evidence_graph(
             )
         )
         edge_index += 1
-        _append_edge(premise_id, row.row_id, label=result.head.id, index=edge_index)
+        _append_edge(atom_id, rule_id, edge_kind=EDGE_HAS_ATOM, label=result.head.id, index=edge_index)
         for asrt_id in witness.asrt_ids:
             seed_id = f"seed:assertion:{asrt_id}"
             if seed_id not in seed_node_ids:
@@ -1133,20 +1248,23 @@ def _build_form1_evidence_graph(
                 )
                 seed_node_ids.add(seed_id)
             edge_index += 1
-            _append_edge(seed_id, premise_id, label=None, index=edge_index)
+            _append_edge(seed_id, atom_id, edge_kind=EDGE_SUPPORTED_BY, label=None, index=edge_index)
 
     for step in support_artifact.non_fact_steps:
-        premise_id = f"premise:{step.step_key}"
+        atom_id = f"atom:{step.step_key}"
+        atom_status = "support" if step.status == "satisfied" else "unknown"
         nodes.append(
             EvidenceNode(
-                node_id=premise_id,
-                node_kind=NODE_PREMISE,
+                node_id=atom_id,
+                node_kind=NODE_ATOM,
                 component=step.step_key,
                 label=f"{step.kind} check",
                 value_summary=step.status,
                 engine_meta={
                     "atom_id": step.step_key,
                     "atom_kind": step.kind,
+                    "atom_status": atom_status,
+                    "atom_index": _condition_index_from_key(step.step_key),
                     "condition_index": _condition_index_from_key(step.step_key),
                     "parent_rule_id": result.head.id,
                     "reason": {
@@ -1160,7 +1278,7 @@ def _build_form1_evidence_graph(
             )
         )
         edge_index += 1
-        _append_edge(premise_id, row.row_id, label=result.head.id, index=edge_index)
+        _append_edge(atom_id, rule_id, edge_kind=EDGE_HAS_ATOM, label=result.head.id, index=edge_index)
 
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",

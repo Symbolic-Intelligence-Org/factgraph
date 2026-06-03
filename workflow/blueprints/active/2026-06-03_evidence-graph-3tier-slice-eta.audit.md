@@ -15,6 +15,7 @@
 | 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, stale wording cleanup, 0 abandonment blockers, direction/wire/ProbLog/PyReason locks, and Q-PR1/dirty invariants. No extra amendment required. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status flipped `draft` → `scoped`. Scope frozen with PF-R1/PF-R2/PF-R3/PF-R4 Required, PF-r1/PF-r2/PF-r3 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, and no abandonment blockers. |
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran graph vocabulary, direction, candidate-evidence-tree, and new eta constant greps. No new production scope beyond Step 4.4 locks. Exact-direction tests/docs and audit EvidenceGraph docs remain in Step 4.7 scope; candidate evidence tree taxonomy remains out of scope. Status remains `scoped`; no code implementation started. |
+| 2026-06-03 | scoped | Step 4.7 implementation | Implemented η layered EvidenceGraph vocabulary and row builders on `v0.2.0-impl-evidence-graph-3tier-2026-06-03`: new node/edge constants, shipped child-to-parent direction preserved, fallback L1/L2 shell, native/Souffle Form 1 atoms, ProbLog P1-lite row shell with adapter trace preserved, docs/tests updated. Full tests: 2455 passed / 32 skipped / 1044 subtests passed. Status remains `scoped` until Step 4.8 closure. |
 
 ## Decision Notes
 
@@ -41,7 +42,7 @@
 - [x] Step 4.5 self-check
 - [x] Step 4.6 scope freeze
 - [x] Step 4.6.5 pre-impl grep
-- [ ] Step 4.7 implementation on `v0.2.0-impl-evidence-graph-3tier-2026-06-03`
+- [x] Step 4.7 implementation on `v0.2.0-impl-evidence-graph-3tier-2026-06-03`
 - [ ] Step 4.8 closure
 - [ ] Step 4.9 archive
 

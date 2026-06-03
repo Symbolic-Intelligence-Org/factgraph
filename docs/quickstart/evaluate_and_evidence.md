@@ -384,7 +384,7 @@ EvidenceGraph (frozen)
 
 EvidenceNode (frozen)
   ├── node_id           : str
-  ├── node_kind         : Literal["conclusion", "premise", "seed"]
+  ├── node_kind         : Literal["conclusion", "premise", "seed", "rule_expr", "rule", "atom"]
   ├── component         : str
   ├── label             : str
   ├── value_summary     : str
@@ -395,7 +395,7 @@ EvidenceEdge (frozen)
   ├── edge_id           : str
   ├── from_node_id      : str
   ├── to_node_id        : str
-  ├── edge_kind         : Literal["supports", "derives", "updates"]
+  ├── edge_kind         : Literal["supports", "derives", "updates", "derived_by", "uses", "has_atom", "supported_by"]
   ├── rule_label        : str | None
   └── engine_meta       : Mapping[str, Any]
 ```
@@ -407,12 +407,23 @@ EvidenceEdge (frozen)
 | `"conclusion"` | The derived head (one per graph; matches `root_node_id`) |
 | `"premise"` | An intermediate derived fact |
 | `"seed"` | An EDB fact directly from the ledger (no further derivation) |
+| `"rule_expr"` | A RuleExpr composition layer |
+| `"rule"` | A rule occurrence inside the RuleExpr |
+| `"atom"` | A single rule-body atom/check |
 
 | `edge_kind` | Meaning |
 |---|---|
 | `"supports"` | from_node is a non-derived premise of to_node |
 | `"derives"` | from_node is a derivation step that produces to_node |
 | `"updates"` | from_node updates the bound on to_node (PyReason temporal) |
+| `"derived_by"` | a rule expression derives a conclusion |
+| `"uses"` | a rule is used by a rule expression |
+| `"has_atom"` | an atom belongs to a rule |
+| `"supported_by"` | a seed/proof node supports an atom |
+
+Edges keep the shipped physical direction: `from_node_id` is the supporting
+child/cause and `to_node_id` is the supported parent/conclusion. Read the new
+edge names as semantic relationships, not as parent-to-child arrows.
 
 ### 5.3 `layout_hint` — `"tree"` vs `"timeline"`
 
@@ -425,10 +436,10 @@ EvidenceEdge (frozen)
 
 | Engine | EvidenceGraph fidelity |
 |---|---|
-| Native (`engine="native"`) | Form 1 binding-level support graph — shipped |
-| Souffle | Form 1 witness — shipped via `SOUFFLE_WITNESS_KIND` |
-| ProbLog | Form 1 binding-level + provenance graph with `EDGE_DERIVES` — shipped |
-| PyReason | Form 1 single-conclusion fallback — shipped. **Form 2 timeline (multi-timestep bound updates) deferred** — see [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
+| Native (`engine="native"`) | Layered Form 1 support graph — shipped |
+| Souffle | Layered Form 1 witness — shipped via `SOUFFLE_WITNESS_KIND` |
+| ProbLog | Row shell plus preserved provenance graph with `EDGE_DERIVES` trace detail — shipped |
+| PyReason | Minimal rule_expr/rule fallback shell — shipped. **Form 2 timeline (multi-timestep bound updates) deferred** — see [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
 
 ## 6. The closed-head concept
 
@@ -527,7 +538,9 @@ from factgraph.audit.evidence_graph import (
     EvidenceEdge,
     LAYOUT_TREE, LAYOUT_TIMELINE,
     EDGE_SUPPORTS, EDGE_DERIVES, EDGE_UPDATES,
+    EDGE_DERIVED_BY, EDGE_USES, EDGE_HAS_ATOM, EDGE_SUPPORTED_BY,
     NODE_CONCLUSION, NODE_PREMISE, NODE_SEED,
+    NODE_RULE_EXPR, NODE_RULE, NODE_ATOM,
 )
 ```
 

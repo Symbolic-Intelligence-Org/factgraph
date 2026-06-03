@@ -9,7 +9,7 @@ from unittest.mock import patch
 import factgraph.application as application  # noqa: F401
 from factgraph.adapters.problog.problog_export import ProbLogExportError, _claim_probability
 from factgraph.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
-from factgraph.audit import EDGE_DERIVES
+from factgraph.audit import EDGE_DERIVES, EDGE_HAS_ATOM, EDGE_SUPPORTED_BY
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
@@ -330,7 +330,9 @@ class ProbLogConfigProfileCoreEvaluateTests(unittest.TestCase):
         self.assertEqual(graph.support_kind, PROBLOG_PROVENANCE_KIND)
         self.assertEqual(graph.engine, "problog")
         self.assertGreater(len(graph.nodes), 1)
-        self.assertTrue(all(edge.edge_kind == EDGE_DERIVES for edge in graph.edges))
+        self.assertTrue(any(edge.edge_kind == EDGE_DERIVES for edge in graph.edges))
+        self.assertTrue(any(edge.edge_kind == EDGE_HAS_ATOM for edge in graph.edges))
+        self.assertTrue(any(edge.edge_kind == EDGE_SUPPORTED_BY for edge in graph.edges))
         self.assertEqual(
             set(graph.metadata),
             {
@@ -353,7 +355,8 @@ class ProbLogConfigProfileCoreEvaluateTests(unittest.TestCase):
         self.assertNotIn("event_count", graph.metadata)
         root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
         self.assertNotIn("goal", root.engine_meta)
-        problog_meta = root.engine_meta["problog"]
+        trace_root = next(node for node in graph.nodes if "problog" in node.engine_meta)
+        problog_meta = trace_root.engine_meta["problog"]
         self.assertEqual(problog_meta["trace_summary"]["event_count"], 12)
         self.assertEqual(problog_meta["trace_summary"]["answer_count"], 1)
         self.assertEqual(problog_meta["trace_summary"]["root_answer_probability"], 0.42)

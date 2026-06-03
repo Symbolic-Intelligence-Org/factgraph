@@ -25,11 +25,16 @@ from factgraph.application.protocol.evaluate_result import (
     row_id_for,
 )
 from factgraph.audit.evidence_graph import (
-    EDGE_SUPPORTS,
+    EDGE_DERIVED_BY,
+    EDGE_HAS_ATOM,
+    EDGE_SUPPORTED_BY,
+    EDGE_USES,
     EvidenceGraph,
     EvidenceNode,
+    NODE_ATOM,
     NODE_CONCLUSION,
-    NODE_PREMISE,
+    NODE_RULE,
+    NODE_RULE_EXPR,
     NODE_SEED,
 )
 from factgraph.core.derivation.candidates import CandidateSet
@@ -563,8 +568,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.evidence.metadata["engine_version"], None)
         self.assertEqual(explanation.evidence.metadata["adapter_version"], None)
         self.assertEqual(explanation.evidence.metadata["evaluated_at"], "2026-05-25T00:00:00Z")
-        self.assertEqual(len(explanation.evidence.nodes), 1)
-        self.assertEqual(explanation.evidence.edges, ())
+        self.assertEqual({node.node_kind for node in explanation.evidence.nodes}, {NODE_CONCLUSION, NODE_RULE_EXPR, NODE_RULE})
+        self.assertEqual({edge.edge_kind for edge in explanation.evidence.edges}, {EDGE_DERIVED_BY, EDGE_USES})
         self.assertEqual(explanation.evidence.support_kind, "evaluate_row")
 
     def test_live_row_explain_uses_native_form1_support_topology(self) -> None:
@@ -592,14 +597,19 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(root.engine_meta["explained_claim_ref"]["row_id"], result[0].row_id)
         self.assertEqual(root.engine_meta["quantitative_explanation"]["mode"], "not_applicable")
 
-        premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
+        rule_expr_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE_EXPR]
+        rule_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE]
+        atom_nodes = [node for node in graph.nodes if node.node_kind == NODE_ATOM]
         seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:c0.c0:Person:exists", "premise:c0.c1:eq"})
+        self.assertEqual(len(rule_expr_nodes), 1)
+        self.assertEqual(len(rule_nodes), 1)
+        self.assertEqual({node.node_id for node in atom_nodes}, {"atom:c0.c0:Person:exists", "atom:c0.c1:eq"})
+        self.assertTrue(all(node.engine_meta["atom_status"] == "support" for node in atom_nodes))
         self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:asrt-1"})
-        self.assertTrue(all(edge.edge_kind == EDGE_SUPPORTS for edge in graph.edges))
-        self.assertIn(("premise:c0.c0:Person:exists", result[0].row_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
+        self.assertEqual({EDGE_DERIVED_BY, EDGE_USES, EDGE_HAS_ATOM, EDGE_SUPPORTED_BY}, {edge.edge_kind for edge in graph.edges})
+        self.assertIn(("atom:c0.c0:Person:exists", rule_nodes[0].node_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
         self.assertIn(
-            ("seed:assertion:asrt-1", "premise:c0.c0:Person:exists"),
+            ("seed:assertion:asrt-1", "atom:c0.c0:Person:exists"),
             {(e.from_node_id, e.to_node_id) for e in graph.edges},
         )
 
@@ -620,7 +630,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:asrt-1"]
         self.assertEqual(
             {edge.to_node_id for edge in seed_edges},
-            {"premise:c0.c0:Person:exists", "premise:c0.c1:Person:active"},
+            {"atom:c0.c0:Person:exists", "atom:c0.c1:Person:active"},
         )
 
     def test_live_row_explain_uses_souffle_form1_support_topology(self) -> None:
@@ -668,16 +678,20 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(root.node_kind, NODE_CONCLUSION)
         self.assertEqual(root.engine_meta["alternative_paths"], {"mode": "winning_path_only", "omitted_count": None})
 
-        premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
+        rule_expr_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE_EXPR]
+        rule_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE]
+        atom_nodes = [node for node in graph.nodes if node.node_kind == NODE_ATOM]
         seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:c0.c0:Person:exists", "premise:c0.c1:eq"})
+        self.assertEqual(len(rule_expr_nodes), 1)
+        self.assertEqual(len(rule_nodes), 1)
+        self.assertEqual({node.node_id for node in atom_nodes}, {"atom:c0.c0:Person:exists", "atom:c0.c1:eq"})
         self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:souffle-asrt-1"})
         self.assertIn(
-            ("premise:c0.c0:Person:exists", result[0].row_id),
+            ("atom:c0.c0:Person:exists", rule_nodes[0].node_id),
             {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
         )
         self.assertIn(
-            ("seed:assertion:souffle-asrt-1", "premise:c0.c0:Person:exists"),
+            ("seed:assertion:souffle-asrt-1", "atom:c0.c0:Person:exists"),
             {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
         )
 
@@ -699,7 +713,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:souffle-asrt-1"]
         self.assertEqual(
             {edge.to_node_id for edge in seed_edges},
-            {"premise:c0.c0:Person:exists", "premise:c0.c1:Person:active"},
+            {"atom:c0.c0:Person:exists", "atom:c0.c1:Person:active"},
         )
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
