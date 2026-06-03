@@ -57,32 +57,43 @@ WhereValidationError: target predicate not found: <id>           ← rule's id i
 
 The mental model — in one line:
 
-> `fg.eval.evaluate(rule_expr, head=head_rule)` is equivalent to writing `(head_rule & rule_expr).join_by_ports(*head_rule.ports)` and projecting result rows onto `head_rule.ports`.
+> `fg.eval.evaluate(rule_expr, head=head_rule)` is equivalent to writing
+```python
+(head_rule & rule_expr).join_by_ports(*head_rule.ports)
+```
+and projecting result rows onto `head_rule.ports`.
 
 You do not write the join yourself. The SDK derives it from `head_rule.ports`. The `.join_by_ports(...)` machinery is documented in [`rules.md`](rules.md) §3.3; `head=` is the implicit form.
 
-Port flow:
+Port flow — head asks for a *subset*, the join is by name:
 
 ```text
-         head_rule.ports = {user, region}                ← what you want in result rows
-                │            │
-                │ user       │ region
-                │ implicit   │ implicit
-                ▼ join       ▼ join
-        ┌────────────────────────────────────────┐
-        │   rule_expr        (e.g.  r_us | r_de)  │
-        │                                         │
-        │   Every branch / operand must declare   │
-        │   user AND region — every name in       │
-        │   head_rule.ports must be present in    │
-        │   every branch.                         │
-        └────────────────────────────────────────┘
-                       │
-                       ▼
-         result.rows: each row's bindings carry
-         {user, region} values from the matching branch,
-         projected onto head_rule.ports
+                  ┌──────┬──────┬────────┬───────┐
+head_rule.ports   │ user │      │ region │       │   ← head asks for a subset
+                  └──┬───┴──────┴───┬────┴───────┘
+                     │              │
+                     │ implicit     │ implicit
+                     │ join         │ join
+                     │ by name      │ by name
+                     ▼              ▼
+                  ┌──────┬──────┬────────┬───────┐
+rule_expr ports   │ user │ name │ region │ party │   ← extras (name, party)
+                  └──────┴──────┴────────┴───────┘     stay internal to expr
+
+                              │
+                              ▼
+                  result.rows project on head_rule.ports
+                  → row.bindings = {"user": …, "region": …}
 ```
+
+The constraint is **one-way**: every port in `head_rule.ports` must be declared in every branch / operand of the `RuleExpr`. The reverse does **not** hold — the `RuleExpr` can declare ports that `head_rule` does not ask for, and those just stay internal to the expression's binding flow (they do not appear in result rows).
+
+| Relationship | Accepted? | Why |
+|---|---|---|
+| `head.ports ⊆ every branch's ports` | ✓ | The join finds every head port in every branch |
+| `head.ports` has a name not present in *some* branches | ✗ — `head port '<name>' is only declared in some RuleExpr branches` | OR branches must each carry the head's port; can't union an absent port |
+| `head.ports` has a name not present in *any* branch | ✗ — `head port '<name>' is not declared by the RuleExpr` | No source to join from |
+| Branches declare more ports than `head.ports` | ✓ | Extras are internal to `rule_expr` |
 
 `Rule.projection(*port_names)` is the *literal* form of this mental model — a synthetic head that only declares port names, no body:
 
@@ -106,7 +117,7 @@ Two minor identity-bookkeeping flavors track whether the head's `id` happens to 
 | **inline** | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | Different `version` on the same id+digest emits a `UserWarning` but evaluation proceeds |
 | **external** | head's `id` does not appear in any occurrence | No bookkeeping cost — head just provides the projection spec |
 
-Three `RuleExprError`s come from head ↔ expression validation:
+Two more `RuleExprError`s come from head ↔ expression identity validation (in addition to the port-flow rejections in the table above):
 
 ```
 head rule '<id>' matches an expression occurrence with a different content digest
@@ -115,14 +126,7 @@ head rule '<id>' matches an expression occurrence with a different content diges
 
 head rule '<id>' matches multiple expression occurrences with the same content digest
    ← the same Rule appears twice in the expression without distinct .as_() aliases
-
-RuleExpr head validation failed: head port '<name>' is only declared in some RuleExpr branches
-   ← port-shape contract violation (next paragraph)
 ```
-
-#### Port-shape contract — the silent gotcha
-
-The head's ports must be **declared in every branch** of the `RuleExpr`. If a port appears in some branches but not others (e.g. one OR side declares `region`, the other doesn't), the head cannot ask for the union — validation rejects with the "only declared in some RuleExpr branches" message. Either equalize the ports across branches, or pick a head whose ports are a subset present everywhere.
 
 ### 1.3 What comes back
 
