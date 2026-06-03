@@ -1,8 +1,8 @@
 # Task Blueprint: Explanation.repr walker Slice ε — layered EvidenceGraph → multi-line NL
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.7 implementation)
+- Last Updated: 2026-06-03 (Step 4.8 closure)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default per Slice η §10 D6 lock (evidence-model slices; behavior-change + state-transition commits require individual report boundaries)
 - Fork base: `77cf9762` (Slice η memory commit HEAD)
@@ -249,7 +249,43 @@ For `status == "failed"`:
 
 ## 10. Outcome / Deviations
 
-Pending.
+### 10.1 Implementation summary
+
+Slice epsilon shipped in `03f48438 feat(explanation): add repr evidence walker`.
+
+Implemented deliverables:
+
+- `Explanation.repr` computed property with internal `_repr_cache`; no `repr=` constructor parameter.
+- New protocol helper module `factgraph.application.protocol.explanation_render` with `walk_evidence(...)`.
+- Walker covers the 4 eta edge kinds plus 3 legacy edge kinds, and all 6 current node kinds.
+- Failed explanations keep `evidence=None` and render deterministic summary lines.
+- `unsupported` / `invalid_request` return `None` for `repr`.
+- Protocol helper is exported from `factgraph.application.protocol`; SDK `__all__` remains unchanged.
+- Focused tests added in `tests/application/protocol/test_explanation_render.py`.
+- Docs cascade updated across quickstart, official evidence docs, namespace map, and SDK docs.
+
+### 10.2 Verification
+
+- Focused command:
+  `PYTHONPATH=src python -m pytest -p no:capture tests/application/protocol tests/sdk/test_evaluate_result_exports.py tests/test_sdk_find_partial_identity.py -q`
+- Result: `154 passed, 4 subtests passed`.
+- SDK `__all__` remained `63`; `walk_evidence` is not exported through `factgraph.sdk`.
+- Q-PR1 5 sacred paths remain 0-diff vs `4c472b50`.
+- Sacred `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline preserved.
+
+### 10.3 PF alignment
+
+- PF-R1/PF-R2: preserved failed `evidence=None` invariant and implemented `repr` as computed property.
+- PF-r1: parent design `row.repr` wording remains a carry-forward; epsilon implements `Explanation.repr`.
+- PF-r2: helper export scope is protocol-only by default; no SDK export change.
+- D21 §6.6 path C is closed for the shipped Explanation payload via `Explanation.repr`.
+
+### 10.4 Deviations
+
+- No scope deviations.
+- No cadence deviations: Step 4.7 and Step 4.8 were individual report boundaries per eta D6.
+- Parent design wording sync remains deferred in D4.
 
 ## 11. Deferred / Carry-Forward
 
