@@ -22,6 +22,7 @@ from factgraph.audit.evidence_graph import EDGE_HAS_ATOM, EDGE_SUPPORTED_BY, NOD
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
+from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
 
@@ -117,6 +118,32 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             result.fingerprint.view_snapshot_digest,
             graph.eval.evaluate(rule, head=rule, engine="native").fingerprint.view_snapshot_digest,
         )
+
+    def test_free_form_head_id_evaluates_query_style_rows(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "query", region="us")
+        rule = _person_region_rule("find_us_users")
+
+        result = graph.eval.evaluate(rule, head=rule, engine="native")
+
+        self.assertEqual(result.head.id, "find_us_users")
+        self.assertEqual(result.count(), 1)
+        self.assertEqual(result[0].bindings["person"]["value"], encoded)
+        self.assertEqual(result[0].bindings["region"]["value"], "us")
+        self.assertEqual(result[0].kind, "fact_triple")
+
+    def test_schema_backed_head_id_still_rejects_arity_mismatch(self) -> None:
+        graph = _store()
+        _seed_person(graph, "arity")
+        person = Var("$person")
+        rule = Rule(
+            id="Person:exists",
+            when=(PredAtom("Person:exists", [person]),),
+            ports={"person": person, "extra": person},
+        )
+
+        with self.assertRaisesRegex(WhereValidationError, "head_vars length must match target arg_specs"):
+            graph.eval.evaluate(rule, head=rule, engine="native")
 
     def test_missing_head_uses_sdk_store_error(self) -> None:
         graph = _store()

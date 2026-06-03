@@ -459,10 +459,12 @@ is not part of the v0.2 public surface.
 
 The closed head has two invariants:
 
-1. **`head.id` must be a real predicate id.** The result exposes this as
-   `result.head.id`; rows now expose claim identity through direct row fields such as `row.kind` and `row.digest`.
-2. **`len(head.ports)` must equal that predicate's `arg_specs` count.**
-   Otherwise the runtime raises
+1. **`head.id` is the result label.** It can be a free-form query-style
+   label or a real predicate id. The result exposes it as
+   `result.head.id`; rows now expose claim identity through direct row
+   fields such as `row.kind` and `row.digest`.
+2. **If `head.id` matches a schema predicate, `len(head.ports)` must
+   equal that predicate's `arg_specs` count.** Otherwise the runtime raises
    `WhereValidationError: head_vars length must match target arg_specs`.
 
 In practice this means:
@@ -529,8 +531,9 @@ but has a different `content_digest` raises
 
 The protocol exports `Rule.projection("a", "b", ...)`, which constructs
 a synthetic projection rule whose id is `__factgraph_projection__<hash>`.
-**This is not usable as an `evaluate` head in v0.2** — the runtime
-raises `WhereValidationError: target predicate not found: __factgraph_projection__<hash>`.
+**This is not documented as an `evaluate` head in v0.2**. Query-style
+head ids are now valid labels, but projection heads remain reserved until
+the projection surface is explicitly designed.
 
 It is reserved for `RuleExpr` inspection and mocked-evaluation tests
 only. Use the field-predicate or existence-predicate head pattern
@@ -755,8 +758,9 @@ assert tuple(fg.entities.get(User, user_id="u-1").tag) == ("engineer",)
   `RuleExprError: declared port ... is ambiguous across occurrences`.
 - `.join(...)` attaches only to AND groups; distribute path-dependent
   joins manually across OR branches.
-- `head=rule` requires `rule.id` to be a real predicate with matching
-  arg arity. `Rule.projection(...)` is not an evaluate head in v0.2.
+- `head=rule` may use a free-form query-style id. If `rule.id` matches a
+  real predicate, its port count must match that predicate's arity.
+  `Rule.projection(...)` is not a documented evaluate head in v0.2.
 - Evaluate rules with `fg.eval.evaluate(rule, head=rule)`; evaluation does not write.
 - Use read APIs for ad-hoc projections; public `fg.eval.run(...)` was removed.
 - Explain rows with `row.explain()` or replay with

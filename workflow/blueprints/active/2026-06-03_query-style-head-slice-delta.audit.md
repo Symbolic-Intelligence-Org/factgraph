@@ -16,6 +16,7 @@
 | 2026-06-04 | draft | Step 4.5 self-check PASS | Verified PF-R1/PF-R2/PF-R3/PF-R4 + PF-r1/PF-r2/PF-r3 coverage across §5/§7/§8/§9; confirmed N9/N10 carve-outs, G6 Option A, CandidateSet compatibility payload, and service/runtime wire-key preservation are internally consistent. No stale blockers found; Q-PR1 and dirty-baseline boundaries remain preserved. |
 | 2026-06-04 | scoped | Step 4.6 scope freeze | Status flipped `draft` → `scoped`. Scope frozen with native/Souffle/ProbLog opt-in schema lookup, query-style candidate helper/branch, `candidate_kind="fact"` compatibility payload, service/runtime wire-key preservation, PyReason/read-query exclusions, and strict-error docs cascade. |
 | 2026-06-04 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran `find_schema_pred`, strict-error text, candidate-construction, and wire-key greps. No new production head-validation sites beyond PF-R1. Folded one active agent test expectation, broader docs wording cascade, and N11 test-local fake evaluator carve-out. Status remains `scoped`; no code implementation started. |
+| 2026-06-04 | scoped | Step 4.7 implementation | Implemented query-style head opt-in across native, Souffle, ProbLog runtime, and ProbLog import; added query-style candidate construction while preserving `candidate_kind="fact"` payload compatibility; updated tests and docs cascade. Status remains `scoped` until Step 4.8 closure. |
 
 ## Decision Notes
 
@@ -42,7 +43,7 @@
 - [x] Step 4.5 self-check
 - [x] Step 4.6 scope freeze
 - [x] Step 4.6.5 pre-impl grep
-- [ ] Step 4.7 implementation on `v0.2.0-impl-query-style-head-2026-06-03` (individual report per D6)
+- [x] Step 4.7 implementation on `v0.2.0-impl-query-style-head-2026-06-03` (individual report per D6)
 - [ ] Step 4.8 closure (individual report per D6) + note δ closes parent design chain
 - [ ] Step 4.9 archive
 - [ ] **Post-δ**: consider archiving parent design-point per `design/README.md` 三条件

@@ -106,8 +106,9 @@ case. Code that needs cross-session explanation should use
 head — see §5 below.
 
 `row.bindings` maps each head port name to its typed term dict. Use
-`result.head.id` for the head predicate id, `row.digest` for the row claim
-digest, and `row.close()` when you need a replayable closed-head rule.
+`result.head.id` for the head label (optionally a schema predicate id),
+`row.digest` for the row claim digest, and `row.close()` when you need a
+replayable closed-head rule.
 
 `raw_kind` and `bound` carry quantitative uncertainty propagated from the
 ledger and engine adapters. The invariant `raw_kind is None ⇒ bound is None`

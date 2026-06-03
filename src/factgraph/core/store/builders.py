@@ -11,6 +11,7 @@ from ._builders import (
     read_group_key_indexes,
     resolve_head_ref,
 )
+from ._query_style_candidates import query_style_candidates_from_bindings
 
 __all__ = [
     "build_tagged_args",
@@ -20,6 +21,7 @@ __all__ = [
     "entity_spec_from_head",
     "find_schema_pred",
     "hashable_value",
+    "query_style_candidates_from_bindings",
     "read_group_key_indexes",
     "resolve_head_ref",
 ]

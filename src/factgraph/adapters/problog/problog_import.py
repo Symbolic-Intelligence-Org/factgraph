@@ -109,7 +109,16 @@ def _build_candidates_from_bindings(
 
     schema_pred = store_builders.find_schema_pred(store, target_pred_id)
     if schema_pred is None:
-        raise WhereValidationError(f"target predicate not found: {target_pred_id}")
+        if not isinstance(head_vars, list) or not head_vars:
+            raise WhereValidationError("head_vars must be non-empty list")
+        return store_builders.query_style_candidates_from_bindings(
+            store,
+            derivation_id=derivation_id,
+            version=version,
+            target_pred_id=target_pred_id,
+            head_vars=head_vars,
+            bindings=bindings,
+        )
 
     arg_specs = schema_pred.get("arg_specs")
     if not isinstance(arg_specs, list) or not arg_specs:

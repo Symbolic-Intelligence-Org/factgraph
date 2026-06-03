@@ -146,15 +146,15 @@ def evaluate_store(
         raise ValueError("mode must be one of: native, souffle, problog, pyreason")
 
     schema_pred = builders.find_schema_pred(store, target_pred_id)
-    if schema_pred is None:
-        raise WhereValidationError(f"target predicate not found: {target_pred_id}")
-
-    arg_specs = schema_pred.get("arg_specs")
-    if not isinstance(arg_specs, list) or not arg_specs:
-        raise WhereValidationError("target predicate arg_specs must be non-empty list")
-
-    if not isinstance(head_vars, list) or len(head_vars) != len(arg_specs):
-        raise WhereValidationError("head_vars length must match target arg_specs")
+    arg_specs = None
+    if schema_pred is not None:
+        arg_specs = schema_pred.get("arg_specs")
+        if not isinstance(arg_specs, list) or not arg_specs:
+            raise WhereValidationError("target predicate arg_specs must be non-empty list")
+        if not isinstance(head_vars, list) or len(head_vars) != len(arg_specs):
+            raise WhereValidationError("head_vars length must match target arg_specs")
+    elif not isinstance(head_vars, list) or not head_vars:
+        raise WhereValidationError("head_vars must be non-empty list")
 
     captures = _evaluate_where_over_view_with_support(
         store,
@@ -165,17 +165,28 @@ def evaluate_store(
     if not captures:
         return []
 
-    candidates = builders.candidates_from_bindings(
-        store,
-        derivation_id=derivation_id,
-        version=version,
-        target_pred_id=target_pred_id,
-        arg_specs=arg_specs,
-        head_vars=head_vars,
-        schema_pred=schema_pred,
-        rows=captures,
-        confidence_kind_resolver=confidence_kind_resolver,
-    )
+    if schema_pred is None:
+        candidates = builders.query_style_candidates_from_bindings(
+            store,
+            derivation_id=derivation_id,
+            version=version,
+            target_pred_id=target_pred_id,
+            head_vars=head_vars,
+            rows=captures,
+            confidence_kind_resolver=confidence_kind_resolver,
+        )
+    else:
+        candidates = builders.candidates_from_bindings(
+            store,
+            derivation_id=derivation_id,
+            version=version,
+            target_pred_id=target_pred_id,
+            arg_specs=arg_specs,
+            head_vars=head_vars,
+            schema_pred=schema_pred,
+            rows=captures,
+            confidence_kind_resolver=confidence_kind_resolver,
+        )
     _remember_candidate_support_backrefs(store, candidates)
     return candidates
 

@@ -2,7 +2,7 @@
 
 - Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-04 (Step 4.6.5 pre-impl grep)
+- Last Updated: 2026-06-04 (Step 4.7 implementation)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default — δ relaxes a shipped strict invariant (`rule.id` must match schema predicate); preflight will surface cross-engine impact
 - Fork base: `dd65e776` (Slice ε Step 4.9 archive HEAD)

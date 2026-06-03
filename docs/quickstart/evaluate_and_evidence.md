@@ -47,7 +47,7 @@ Input-shape rejections (full messages in §9.2):
 
 - missing `head=`
 - `head=` is not a `Rule` (SDK DSL Rule, Inference, dict, str, inspect objects all rejected)
-- `rule.id` is not a known ledger predicate
+- schema-backed `rule.id` arity mismatch (free-form rule ids are valid query-style labels)
 
 #### How `head=` connects to a `RuleExpr`
 
@@ -173,7 +173,7 @@ row = result.first()
 
 row.row_id                    # str
 row.bindings                  # Mapping — port-name → typed term map
-result.head.id                # "user:region" — the head predicate that fired
+result.head.id                # "user:region" — the head label (optionally a schema predicate id)
 row.kind                      # "fact_triple" — row conclusion role
 row.digest                    # "sha256:..." — content digest for this row claim
 row.raw_kind                  # None (no uncertainty meta on the source claims)
@@ -195,9 +195,9 @@ dict(row.bindings)
 # }
 ```
 
-`result.head.id` is the head predicate id. It is constant across every row; the per-row variation lives in `row.bindings`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two entity-ref terms keyed by their declared port names.
+`result.head.id` is the head label. It is constant across every row; the per-row variation lives in `row.bindings`. When that label matches a schema predicate id, evaluation keeps the predicate's arity validation. When it does not match a schema predicate, it is treated as a query-style label whose row shape comes from `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two entity-ref terms keyed by their declared port names.
 
-> **Shipped arity constraint.** `head.id` must match a known ledger predicate, and `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. You cannot declare "a synthetic head with three entity ports just because I want three columns of output"; the head's arity is bounded by the predicate id it claims. `Rule.projection(*names)` would express that idea but is not usable as an evaluate head in v0.2 (§1.2).
+> **Schema-backed arity constraint.** If `head.id` matches a known ledger predicate, `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. If `head.id` does not match a schema predicate, the id is a query-style label and the row shape comes from `head.ports`.
 
 Each binding value is a typed term dict discriminated by `kind`:
 
@@ -562,7 +562,7 @@ from factgraph.audit.evidence_graph import (
 | `RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest` | RuleExpr with head whose id matches an occurrence but content differs (§1.2 stale binding) |
 | `RuleExprError: head rule '<id>' matches multiple expression occurrences with the same content digest` | The same Rule appears more than once in the RuleExpr without distinct `.as_()` aliases (§1.2) |
 | `RuleExprError: RuleExpr head validation failed: head port '<name>' is only declared in some RuleExpr branches` | OR expression where the head port is present in some branches but not all (§1.2 port-shape contract) |
-| `WhereValidationError: target predicate not found: <id>` | Rule's `id` is not a known ledger predicate |
+| `WhereValidationError: head_vars length must match target arg_specs` | Schema-backed `head.id` has a port count that does not match the predicate arity |
 | `DetachedRowError` | `row.explain()` after the parent `EvaluateResult` has been garbage-collected |
 | `ProtocolShapeError` (various) | `Explanation` / `Claim` / `EvidenceGraph` invariant violations at construction |
 

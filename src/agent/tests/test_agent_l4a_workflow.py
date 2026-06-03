@@ -189,14 +189,15 @@ class AgentLayer4AWorkflowTests(unittest.TestCase):
         self.assertEqual(outcome.status, "skipped")
         self.assertEqual(self.orchestrator.list_ephemeral_rules(), [])
 
-    def test_register_and_evaluate_rule_returns_error_outcome_when_evaluate_fails(self) -> None:
+    def test_register_and_evaluate_rule_allows_free_form_evaluate_target(self) -> None:
         register, outcome = self.orchestrator.register_and_evaluate_rule(
-            _rule_spec(rule_id="q.eval_error"),
+            _rule_spec(rule_id="q.free_form_eval"),
             evaluate_target_pred_id="missing:pred",
         )
         self.assertIsInstance(register, RegisterResult)
-        self.assertEqual(outcome.status, "error")
-        self.assertIn("target predicate not found", outcome.error_message or "")
+        self.assertEqual(outcome.status, "ok")
+        assert outcome.result is not None
+        self.assertEqual(outcome.result.row_count, 2)
 
     @unittest.skip(
         "Slice 7C / Q6-A (a.2): FileAuthoringRegistry was removed; FS-shadowed "
