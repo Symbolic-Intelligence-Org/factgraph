@@ -63,8 +63,9 @@ Preflight must enumerate exact test files. Expected families:
   - fallback passed-row graph: conclusion plus minimal `rule_expr` / `rule` layer
   - Form 1 native/Souffle graph: conclusion → rule_expr → rule → atom → seed
   - ProbLog row provenance graph: wrap or enrich candidate graph so row result has conclusion/rule_expr/rule/atom hierarchy without destroying `EDGE_DERIVES` trace information
+  - fallback graphs must not fabricate `atom_status = "support"` when no support evidence exists; use `atom_status = "unknown"` or omit `NODE_ATOM`
 - G5 — Preserve audit-layer graph validation: unique ids, valid edge endpoints, cycle detection, layout hints.
-- G6 — Preserve service JSON compatibility unless Step 4.3 proves a wire-level node/edge vocabulary change is already expected by consumers.
+- G6 — Preserve service JSON compatibility by default per Slice γ/ζ C2 precedent: η node/edge additions are in-process first, and service JSON node_kind/edge_kind wire shape remains the current 3+3 vocabulary unless Step 4.3 proves a Required consumer need to expand wire enums or reverse-map layered graphs to legacy wire shape.
 - G7 — Update active docs and tests to teach layered graph vocabulary.
 
 ## 4. Non-goals
@@ -75,7 +76,7 @@ Preflight must enumerate exact test files. Expected families:
 - N4 — Do not remove `NODE_PREMISE`, `EDGE_SUPPORTS`, `EDGE_DERIVES`, or `EDGE_UPDATES`.
 - N5 — Do not change Q-PR1 sacred paths.
 - N6 — Do not change service wire format unless Step 4.3 makes a Required finding.
-- N7 — Do not implement PyReason rich Form 2 timeline hierarchy; keep row-level PyReason fallback safe unless source audit proves a minimal L1/L2 layer can be added without D11 work.
+- N7 — Do not implement PyReason rich Form 2 timeline hierarchy. Default: keep row-level PyReason fallback safe. Step 4.3 may separately decide whether a minimal L1/L2 rule_expr/rule shell can be added without depending on D11 timeline work.
 - N8 — Do not touch dirty baseline files.
 - N9 — Do not push automatically from Step 4.1.
 
@@ -120,6 +121,7 @@ For native/Souffle row evidence:
 - add one `NODE_RULE_EXPR` with `engine_meta.ast_form = "single"`
 - add one `NODE_RULE` with `engine_meta.rule_id = result.head.id`
 - convert existing predicate witnesses / non-fact steps into `NODE_ATOM`
+- `NODE_ATOM.engine_meta.atom_index` comes from native/Souffle witness ordering or condition keys; Step 4.3 A6 must confirm source availability for each engine before implementation
 - existing ledger assertion witnesses remain `NODE_SEED`
 - old premise details move into atom `engine_meta` instead of `NODE_PREMISE`
 
@@ -172,6 +174,7 @@ No β/ζ-style batch report for 4.7/4.8.
 - [ ] Form 1 row graphs expose rule_expr/rule/atom/seed hierarchy.
 - [ ] ProbLog row graphs preserve proof trace detail while adding the locked η hierarchy.
 - [ ] Fallback row graphs remain semantically honest for missing support context.
+- [ ] Per-engine fill capability table is verified against parent §3.9.4: native, souffle, problog, and pyreason each produce graphs matching their locked L1/L2/L3/seed coverage.
 - [ ] Existing graph renderer/tests are updated for direction semantics.
 - [ ] Active docs list new node/edge vocabulary and engine capabilities.
 - [ ] Full tests pass.
