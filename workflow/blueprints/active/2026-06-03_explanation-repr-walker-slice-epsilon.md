@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.2 review + tightening)
+- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default per Slice η §10 D6 lock (evidence-model slices; behavior-change + state-transition commits require individual report boundaries)
 - Fork base: `77cf9762` (Slice η memory commit HEAD)
@@ -22,7 +22,9 @@
   - `docs/quickstart/evaluate_and_evidence.md` (Explanation surface)
   - `docs/official/kernel/quickstart/evidence.md`
   - `docs/official/kernel/quickstart/namespace-map.md`
-  - SDK docs that show Explanation example
+  - `src/factgraph/sdk/docs/00_user_guide.en.md`
+  - `src/factgraph/sdk/docs/04_api_surface.en.md`
+  - `src/factgraph/sdk/docs/06_what_if_and_proof.en.md` (if examples mention explain output)
 - Audit Log:
   - [2026-06-03_explanation-repr-walker-slice-epsilon.audit.md](./2026-06-03_explanation-repr-walker-slice-epsilon.audit.md)
 
@@ -51,7 +53,7 @@ Parent design §7.3 records that ε **closes D21 §6.6 path C deferred work**(D2
   - `EDGE_UPDATES` → `"updates"`(PyReason fallback)
 - G5 — Failed status repr: current shipped failed paths (`closed_head_false`, `stale_row`, `row_not_in_result`) have `evidence=None` by invariant, so they render a deterministic failure summary tuple(`"NOT concluded"` + `failure_class` + next-step context) rather than graph-walking atoms. Atom-level `unsupport` wording is only in scope if Step 4.3 proves a shipped evidence-carrying failed path and explicitly amends the invariant.
 - G6 — Lazy cache pattern:graph walker runs on first `.repr` access for `passed` explanations;result cached via `object.__setattr__` to internal `_repr_cache` field;subsequent reads bypass walker. Failed summaries may be computed directly without invoking graph traversal.
-- G7 — Walker tests cover:passed 4-tier walk(parent §3.9.3 example),failed walk with atom_status="unsupport",unsupported/invalid_request returns None,detached row safety,empty graph safety
+- G7 — Walker tests cover:passed 4-tier walk(parent §3.9.3 example),failed summary fallback under the shipped `evidence=None` invariant,unsupported/invalid_request returns None,detached row safety,empty graph safety
 - G8 — Docs cascade: quickstart evaluate_and_evidence + official evidence + SDK example
 - G9 — Close D21 §6.6 path C("Explanation.desc_lines auto-populate"deferred);blueprint Outcome cite parent §7.3 D21 close
 
@@ -172,6 +174,13 @@ For `status == "failed"`:
 - Step 4.4 / 4.5 / 4.6 / 4.6.5 individual reports per η §5.6 + Codex D6 lock
 - Stage 0 source audit folded into this Step 4.1 draft + Step 4.3 preflight verifies
 
+### 5.7 Step 4.3 preflight locks
+
+- **PF-R1 confirmed** — failed graph walking is not implemented in ε. Shipped `Explanation.__post_init__` enforces `status == "passed"` iff `evidence is not None`; active failed paths (`closed_head_false`, `stale_row`, `row_not_in_result`) return `evidence=None`. Slice ε preserves this invariant and renders failed explanations through deterministic summary lines.
+- **PF-R2 confirmed** — `Explanation.repr` is a computed property with `_repr_cache`; there is no `repr=` constructor parameter.
+- **PF-r1 carry-forward** — parent design wording that says `row.repr` is stale for ε. This slice implements `Explanation.repr`; `EvaluateRow.repr` remains out of scope. Parent-design wording sync is a follow-up, mirroring η D7.
+- **PF-r2 export scope** — `walk_evidence(...)` is protocol-layer helper surface by default. Do not add it to `factgraph.sdk.__all__` unless Step 4.7 discovers a concrete user-facing need.
+
 ## 6. Boundaries And Invariants
 
 - Must preserve:
@@ -186,6 +195,7 @@ For `status == "failed"`:
 - Compatibility constraints:
   - Walker output is per-Explanation deterministic given same graph + status + failure_class
   - `Explanation.repr` is not an `__init__` parameter; existing `Explanation(...)` construction sites remain source-compatible
+  - `walk_evidence(...)` defaults to protocol exposure only; SDK `__all__` remains unchanged unless implementation finds an explicit user-facing requirement
 
 ### 6.1 Cadence path locks(per Codex D6)
 
@@ -199,6 +209,8 @@ For `status == "failed"`:
 - [ ] Step 4.2 review has locked `Explanation.repr` as computed property rather than constructor dataclass field
 - [ ] Step 4.2 review has split failed summaries from graph-walked passed explanations under the shipped `passed iff evidence` invariant
 - [ ] Step 4.3 preflight has enumerated walker test cohort + lazy cache pattern + service wire scope
+- [ ] Step 4.3 preflight PF-R1/PF-R2 locks are preserved: failed summaries do not graph-walk and no `repr=` constructor parameter exists
+- [ ] Step 4.3 preflight PF-r2 export lock is preserved: protocol helper exposure by default, no SDK `__all__` change by default
 - [ ] Public `Explanation.repr: tuple[str, ...] | None` computed property added with internal `_repr_cache`; no `repr=` constructor parameter
 - [ ] `explanation_render.walk_evidence(...)` walker implemented per parent §4.7 algorithm
 - [ ] Walker covers all 7 edge kinds(4 η new + 3 legacy)with appropriate connectors
@@ -206,7 +218,7 @@ For `status == "failed"`:
 - [ ] Lazy cache via `object.__setattr__` on `_repr_cache`;walker runs once per Explanation
 - [ ] Failed status output includes `"NOT concluded"` + failure_class line; per-atom `unsupport` wording remains gated on Step 4.3 proving a failed+evidence path
 - [ ] `unsupported` / `invalid_request` → `repr is None` invariant
-- [ ] Walker tests cover passed 4-tier walk + failed walk + edge cases(empty graph,unknown edge kind)
+- [ ] Walker tests cover passed 4-tier walk + failed summary fallback + edge cases(empty graph,unknown edge kind)
 - [ ] D21 §6.6 path C closed(Outcome cite parent §7.3)
 - [ ] Docs cascade: quickstart + official + SDK example
 - [ ] Q-PR1 5-path 0-diff vs `4c472b50` preserved
@@ -219,7 +231,7 @@ For `status == "failed"`:
 3. Step 4.4 — Fold preflight findings
 4. Step 4.5 — Self-check
 5. Step 4.6 — Scope freeze(`draft` → `scoped`)
-6. Step 4.6.5 — Pre-impl grep(check `Explanation\(` construction sites,`tuple\[str` annotations,potential collisions with `repr` builtin / field)
+6. Step 4.6.5 — Pre-impl grep(check `Explanation\(` construction sites,`repr=` constructor usage,`_repr_cache`,`walk_evidence` exports,`tuple\[str` annotations,potential collisions with `repr` builtin / field)
 7. Step 4.7 — Implementation on `v0.2.0-impl-explanation-repr-walker-2026-06-03` — protocol DTO + new render module + tests + docs(individual report per D6)
 8. Step 4.8 — Closure(individual report per D6)
 9. Step 4.9 — Archive
@@ -244,3 +256,4 @@ Pending.
 - D1 — Slice δ query-style head decoupling
 - D2 — PyReason Form 2 timeline walker(D11)
 - D3 — Parent design §3.9.2 direction wording sync(from η D7,not in ε scope)
+- D4 — Parent design `row.repr` wording sync(PF-r1). Slice ε implements `Explanation.repr`; `EvaluateRow.repr` remains out of scope.

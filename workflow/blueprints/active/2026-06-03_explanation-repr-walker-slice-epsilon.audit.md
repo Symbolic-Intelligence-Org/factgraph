@@ -12,6 +12,7 @@
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-explanation-repr-walker-2026-06-03` (fork from `77cf9762`). Tight gates default per Slice η §10 D6 lock — evidence-model slices require behavior-change + state-transition individual report boundaries. ε hard-depends on η layered EvidenceGraph vocabulary (verified at `evidence_graph.py:14-29`). |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-P4: `Explanation.repr` is a computed property rather than constructor field; shipped `status == "passed" iff evidence is not None` invariant preserved; failed explanations without evidence render failure summaries instead of graph-walking atoms; walker renders `NODE_CONCLUSION` from existing node `value_summary` / `label` rather than requiring `head`; service wire default is no change unless preflight finds an explicit Explanation serializer. Status remains `draft`. |
+| 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight findings from `v0.2.0-explanation-repr-walker-preflight-2026-06-03@5be22c0b`: PF-R1/PF-R2 confirmed, PF-r1 parent-design `row.repr` wording carry-forward, PF-r2 protocol-helper export scope lock, docs cascade refresh, and Step 4.6.5 grep requirements. Status remains `draft`. |
 
 ## Decision Notes
 
@@ -28,13 +29,16 @@
 | 2026-06-03 | Step 4.2 P2 — `repr` must be computed property, not constructor field | A dataclass field named `repr` would either become a constructor argument or block lazy property semantics. Slice ε instead adds an internal `_repr_cache` field and a public `@property repr`, preserving existing `Explanation(...)` construction sites. |
 | 2026-06-03 | Step 4.2 P3 — walker must not require `head` | `Explanation` carries `row` and `evidence`, not `EvaluateResult` / `head`. η builders already put row/result rendering into `NODE_CONCLUSION.value_summary`; the walker should render existing node labels/summaries first and treat row as optional context. |
 | 2026-06-03 | Step 4.2 P4 — service wire default remains unchanged | `src/service/runtime_v1.py` serializes `EvaluateResult` / rows, not `Explanation.repr` today. Step 4.3 still audits service paths, but default scope is no wire addition unless an explicit Explanation serializer is found. |
+| 2026-06-03 | Step 4.3 PF-R1/PF-R2 confirmed | Preflight re-read `evaluate_result.py:291-292`, active failed Explanation constructors, and 7 active `Explanation(...)` construction sites. No new Required expansion is needed: failed repr remains summary-only and `repr` remains a computed property with no constructor argument. |
+| 2026-06-03 | Step 4.3 PF-r1 — parent design wording carry-forward | Parent design has stale `row.repr` wording in the Slice epsilon area. This slice implements `Explanation.repr` only; `EvaluateRow.repr` remains out of scope. Parent-design wording sync is deferred like η D7. |
+| 2026-06-03 | Step 4.3 PF-r2 — export scope lock | `walk_evidence(...)` defaults to protocol-layer helper exposure. No SDK `__all__` change is planned unless implementation discovers a concrete user-facing need. This preserves the export discipline validated in α/β/γ/ζ. |
 
 ## Cross-flip checkpoints (per [[feedback_audit_to_archive_cadence]] + Slice η D6 lock)
 
 - [x] Step 4.1 blueprint draft (Claude — Slice 4/5 default)
 - [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
-- [ ] Step 4.3 preflight on independent branch `v0.2.0-explanation-repr-walker-preflight-2026-06-03`
-- [ ] Step 4.4 preflight amendment
+- [x] Step 4.3 preflight on independent branch `v0.2.0-explanation-repr-walker-preflight-2026-06-03`
+- [x] Step 4.4 preflight amendment
 - [ ] Step 4.5 self-check
 - [ ] Step 4.6 scope freeze
 - [ ] Step 4.6.5 pre-impl grep
