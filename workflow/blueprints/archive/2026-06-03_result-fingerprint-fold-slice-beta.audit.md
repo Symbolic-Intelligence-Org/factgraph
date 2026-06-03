@@ -17,6 +17,7 @@
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran deletion/consumer grep across `src/factgraph`, `src/service`, `tests`, and active docs. No new N-findings beyond Step 4.4 scope; extra hits were `AcceptResult.run_id`, candidate wire docs, or already-scoped docs/tests. Status remains `scoped`. |
 | 2026-06-03 | scoped | Step 4.7 implementation | Implemented `ResultFingerprint` + `engine_meta` fold on `v0.2.0-impl-result-fingerprint-fold-2026-06-03`: application protocol DTO, SDK/service construction, service serializer, exports/tests, active SDK/service tests, and named docs cascade. Full verification passed with `2504 passed / 35 skipped / 1046 subtests`; Status remains `scoped` until Step 4.8 closure. |
 | 2026-06-03 | implemented | Step 4.8 closure | Status `scoped` → `implemented`; §10 Outcome filled with final commit `fe5138bc`, verification results, deviations, and Step 4.9 archive plan. |
+| 2026-06-03 | implemented | Step 4.9 archive | Archived blueprint pair to `workflow/blueprints/archive/`, archived Step 4.3 preflight artifact to `workflow/audit/archive/`, and updated archive inventory. |
 
 ## Decision Notes
 
