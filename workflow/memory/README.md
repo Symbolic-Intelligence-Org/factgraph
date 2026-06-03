@@ -34,6 +34,8 @@
   - Confidence / evidence meta release cleanup publish checkpoint.
 - [project_eval_row_bindings_port_map_slice_zeta_implemented.md](/Users/zhenzhili/hnsm-backend/workflow/memory/project_eval_row_bindings_port_map_slice_zeta_implemented.md)
   - Evaluate-result flatten Slice ζ checkpoint: `EvaluateRow.bindings` port-map shape implemented and archived.
+- [project_evidence_graph_3tier_slice_eta_implemented.md](/Users/zhenzhili/hnsm-backend/workflow/memory/project_evidence_graph_3tier_slice_eta_implemented.md)
+  - Evaluate-result flatten Slice η checkpoint: layered row-level `EvidenceGraph` vocabulary implemented and archived.
 - `session_handoffs/YYYY-MM-DD.md`
   - 按日期保留的 handoff 记录，用于回放某一工作日的 stopping point。
 
