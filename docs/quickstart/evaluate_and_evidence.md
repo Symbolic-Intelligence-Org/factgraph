@@ -43,13 +43,11 @@ fg.eval.evaluate(rule, head=rule)                    # single Rule
 fg.eval.evaluate(rule_expr, head=some_rule)          # RuleExpr: head can be in OR out of the expression
 ```
 
-Input-shape rejections:
+Input-shape rejections (full messages in §9.2):
 
-```
-SDKStoreError: evaluate(rule_expr, ...) requires head= Rule
-SDKStoreError: evaluate(rule_expr, ...) head= must be Rule    ← SDK DSL Rule / Inference / dict / str / inspect rejected
-WhereValidationError: target predicate not found: <id>        ← rule's id is not a known ledger predicate
-```
+- missing `head=`
+- `head=` is not a `Rule` (SDK DSL Rule, Inference, dict, str, inspect objects all rejected)
+- `rule.id` is not a known ledger predicate
 
 #### How `head=` connects to a `RuleExpr`
 
@@ -88,7 +86,7 @@ The constraint is one-way: `head.ports ⊆ every branch's ports`. Extras in bran
 | `head.ports` has a name not in *any* branch | ✗ | `head port '<name>' is not declared by the RuleExpr` |
 | Branches declare more ports than `head.ports` | ✓ | — (extras internal to `rule_expr`) |
 
-`Rule.projection(*port_names)` is the *literal* form of this mental model — a synthetic head declaring only port names, no body. It is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not** usable as an `evaluate` head in v0.2 — the runtime raises `WhereValidationError: target predicate not found: __factgraph_projection__<hash>` (per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, pass a real `Rule` whose ports are the projection you want.
+`Rule.projection(*port_names)` is the *literal* form of this mental model — a synthetic head declaring only port names, no body. It is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not** usable as an `evaluate` head in v0.2 — the runtime rejects the synthetic predicate id with a `WhereValidationError` (per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, pass a real `Rule` whose ports are the projection you want.
 
 Whether `head.id` happens to appear in the expression is incidental — both produce the same evaluation; the difference only surfaces in identity-validation errors:
 
@@ -97,13 +95,7 @@ Whether `head.id` happens to appear in the expression is incidental — both pro
 | **inline** | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | Different `version` on the same id+digest emits a `UserWarning` |
 | **external** | head's `id` does not appear in any occurrence | None |
 
-```
-RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest
-   ← id match but body differs — you redefined the rule, the expression holds the old reference
-
-RuleExprError: head rule '<id>' matches multiple expression occurrences with the same content digest
-   ← the same Rule appears twice without distinct .as_() aliases
-```
+Two identity-validation `RuleExprError`s — stale `content_digest` (same id, different body) and duplicate same-digest occurrences (same Rule appears twice without distinct `.as_()` aliases). Full messages in §9.2.
 
 ### 1.3 What comes back
 
