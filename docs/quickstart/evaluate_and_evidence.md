@@ -55,23 +55,49 @@ WhereValidationError: target predicate not found: <id>           ← rule's id i
 
 #### How `head=` connects to a `RuleExpr`
 
-The mental model: **`head.ports` is a projection-and-implicit-join spec over the `RuleExpr`.** Whatever the expression's branches compute, the SDK uses the names in `head.ports` to pick out and unify port values across operands — you do not write an explicit `.join_by_ports(...)` for the names that already appear as head ports. Anything you need joined beyond that, you join explicitly in the expression itself.
+The mental model — in one line:
 
-This is exactly what `Rule.projection(*port_names)` makes literal — a synthetic head that *only* declares port names and nothing else:
+> `fg.eval.evaluate(rule_expr, head=head_rule)` is equivalent to writing `(head_rule & rule_expr).join_by_ports(*head_rule.ports)` and projecting result rows onto `head_rule.ports`.
+
+You do not write the join yourself. The SDK derives it from `head_rule.ports`. The `.join_by_ports(...)` machinery is documented in [`rules.md`](rules.md) §3.3; `head=` is the implicit form.
+
+Port flow:
+
+```text
+         head_rule.ports = {user, region}                ← what you want in result rows
+                │            │
+                │ user       │ region
+                │ implicit   │ implicit
+                ▼ join       ▼ join
+        ┌────────────────────────────────────────┐
+        │   rule_expr        (e.g.  r_us | r_de)  │
+        │                                         │
+        │   Every branch / operand must declare   │
+        │   user AND region — every name in       │
+        │   head_rule.ports must be present in    │
+        │   every branch.                         │
+        └────────────────────────────────────────┘
+                       │
+                       ▼
+         result.rows: each row's bindings carry
+         {user, region} values from the matching branch,
+         projected onto head_rule.ports
+```
+
+`Rule.projection(*port_names)` is the *literal* form of this mental model — a synthetic head that only declares port names, no body:
 
 ```python
 proj = Rule.projection("user", "region")
-# id="__factgraph_projection__<hash>", body is a placeholder
-# Conceptually: "give me rows projected on user, region; figure out the joins"
+# Conceptually: "give me rows projected on user, region; SDK figures out the join"
 ```
 
-`Rule.projection(...)` is the explicit form of the mental model. It is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not currently usable as an `evaluate` head** in v0.2 — the runtime raises:
+`Rule.projection(...)` is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not currently usable as an `evaluate` head** in v0.2 — the runtime raises:
 
 ```
 WhereValidationError: target predicate not found: __factgraph_projection__<hash>
 ```
 
-(per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, supply a real `Rule` whose ports are the projection you want; the SDK does the same projection-and-join derivation from those ports.
+(per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, pass a real `Rule` whose ports are the projection you want — the SDK derives the same join from those ports.
 
 Two minor identity-bookkeeping flavors track whether the head's `id` happens to appear in the expression — both produce the same evaluation; the distinction only surfaces as error guards:
 
