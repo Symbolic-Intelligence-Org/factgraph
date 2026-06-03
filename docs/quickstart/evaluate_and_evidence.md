@@ -86,7 +86,7 @@ The constraint is one-way: `head.ports ⊆ every branch's ports`. Extras in bran
 | `head.ports` has a name not in *any* branch | ✗ | `head port '<name>' is not declared by the RuleExpr` |
 | Branches declare more ports than `head.ports` | ✓ | — (extras internal to `rule_expr`) |
 
-`Rule.projection(*port_names)` is the *literal* form of this mental model — a synthetic head declaring only port names, no body. It is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not** usable as an `evaluate` head in v0.2 — the runtime rejects the synthetic predicate id with a `WhereValidationError` (per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, pass a real `Rule` whose ports are the projection you want.
+[`Rule.projection(*port_names)`](rules.md#24-ruleprojectionport_names) is the literal form of this mental model, but it is **not** usable as an `evaluate` head in v0.2 — the runtime rejects the synthetic predicate id with a `WhereValidationError`. For evaluate, pass a real `Rule` whose ports are the projection you want.
 
 Whether `head.id` happens to appear in the expression is incidental — both produce the same evaluation; the difference only surfaces in identity-validation errors:
 
