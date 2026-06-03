@@ -556,9 +556,14 @@ result = sdk.eval.evaluate(inf, engine="native")
 
 ### 8.2 `EvaluateResult` key fields
 
-- `result_id`, `run_id`, and `result_digest` identify the evaluation envelope.
-- `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, and
-  `config_digest` are replay anchors.
+- `result_id` identifies the evaluation envelope.
+- `fingerprint.run_id` and `fingerprint.result_digest` identify the concrete
+  run and content-addressed result.
+- `fingerprint.expr_digest`, `fingerprint.rule_set_digest`,
+  `fingerprint.view_snapshot_digest`, and `fingerprint.config_digest` are
+  replay anchors.
+- `engine_meta["engine_version"]` and `engine_meta["adapter_version"]` carry
+  optional engine provenance.
 - `rows` is a tuple-like sequence of `EvaluateRow` values.
 - Each row exposes `bindings`, `claim`, `raw_kind`, `bound`, and an
   `EvidenceRef`.
@@ -569,9 +574,10 @@ result = sdk.eval.evaluate(inf, engine="native")
 `CandidateSet` remains an internal runtime artifact. Public code should use
 `EvaluateResult`, `EvaluateRow`, `row.explain()`, and `row.close()`.
 
-For the full envelope chain (all 13 `EvaluateResult` fields, `EvaluateRow`
-data + methods, `Claim` / `EvidenceRef` invariants, `Explanation` status /
-failure_class enum values, and runnable passed / failed examples), see
+For the full envelope chain (`EvaluateResult` direct fields plus
+`ResultFingerprint` / `engine_meta`, `EvaluateRow` data + methods, `Claim` /
+`EvidenceRef` invariants, `Explanation` status / failure_class enum values,
+and runnable passed / failed examples), see
 [`docs/official/kernel/quickstart/evidence.md`](../../../../docs/official/kernel/quickstart/evidence.md).
 
 ## 9. Temporal Boundary (Current Status)

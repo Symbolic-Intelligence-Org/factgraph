@@ -204,20 +204,33 @@ class EvaluateRow:
 
 
 @dataclass(frozen=True)
-class EvaluateResult:
-    result_id: str
-    run_id: str
-    rows: tuple[EvaluateRow, ...]
-    head: Rule
-    engine: str
-    engine_version: str | None
-    adapter_version: str | None
+class ResultFingerprint:
     expr_digest: str
     rule_set_digest: str
     view_snapshot_digest: str
     config_digest: str | None
-    evaluated_at: object
     result_digest: str
+    run_id: str
+
+    def __post_init__(self) -> None:
+        _require_sha256_token(self.expr_digest, field_name="ResultFingerprint.expr_digest")
+        _require_sha256_token(self.rule_set_digest, field_name="ResultFingerprint.rule_set_digest")
+        _require_sha256_token(self.view_snapshot_digest, field_name="ResultFingerprint.view_snapshot_digest")
+        if self.config_digest is not None:
+            _require_sha256_token(self.config_digest, field_name="ResultFingerprint.config_digest")
+        _require_sha256_token(self.result_digest, field_name="ResultFingerprint.result_digest")
+        _require_token_prefix(self.run_id, prefix=_RUN_ID_PREFIX, field_name="ResultFingerprint.run_id")
+
+
+@dataclass(frozen=True)
+class EvaluateResult:
+    result_id: str
+    rows: tuple[EvaluateRow, ...]
+    head: Rule
+    engine: str
+    evaluated_at: object
+    fingerprint: ResultFingerprint
+    engine_meta: Mapping[str, Any]
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
         default=None,
@@ -240,18 +253,16 @@ class EvaluateResult:
 
     def __post_init__(self) -> None:
         _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
-        _require_token_prefix(self.run_id, prefix=_RUN_ID_PREFIX, field_name="EvaluateResult.run_id")
         if not isinstance(self.head, Rule):
             raise ProtocolShapeError("EvaluateResult.head must be application protocol Rule")
         _require_non_empty_str(self.engine, field_name="EvaluateResult.engine")
-        _require_optional_non_empty_str(self.engine_version, field_name="EvaluateResult.engine_version")
-        _require_optional_non_empty_str(self.adapter_version, field_name="EvaluateResult.adapter_version")
-        _require_sha256_token(self.expr_digest, field_name="EvaluateResult.expr_digest")
-        _require_sha256_token(self.rule_set_digest, field_name="EvaluateResult.rule_set_digest")
-        _require_sha256_token(self.view_snapshot_digest, field_name="EvaluateResult.view_snapshot_digest")
-        if self.config_digest is not None:
-            _require_sha256_token(self.config_digest, field_name="EvaluateResult.config_digest")
-        _require_sha256_token(self.result_digest, field_name="EvaluateResult.result_digest")
+        if not isinstance(self.fingerprint, ResultFingerprint):
+            raise ProtocolShapeError("EvaluateResult.fingerprint must be ResultFingerprint")
+        object.__setattr__(
+            self,
+            "engine_meta",
+            _validate_engine_meta(self.engine_meta, field_name="EvaluateResult.engine_meta"),
+        )
         if self._row_close_builder is not None and not callable(self._row_close_builder):
             raise ProtocolShapeError("EvaluateResult._row_close_builder must be callable or None")
 
@@ -277,6 +288,46 @@ class EvaluateResult:
         object.__setattr__(self, "_row_support_artifacts", row_support_artifacts)
         object.__setattr__(self, "_row_provenance_envelopes", row_provenance_envelopes)
         object.__setattr__(self, "rows", tuple(bound_rows))
+
+    @property
+    def run_id(self) -> str:
+        _warn_deprecated_result_field("run_id", "EvaluateResult.fingerprint.run_id")
+        return self.fingerprint.run_id
+
+    @property
+    def engine_version(self) -> str | None:
+        _warn_deprecated_result_field("engine_version", "EvaluateResult.engine_meta['engine_version']")
+        return _engine_meta_optional_str(self.engine_meta, "engine_version")
+
+    @property
+    def adapter_version(self) -> str | None:
+        _warn_deprecated_result_field("adapter_version", "EvaluateResult.engine_meta['adapter_version']")
+        return _engine_meta_optional_str(self.engine_meta, "adapter_version")
+
+    @property
+    def expr_digest(self) -> str:
+        _warn_deprecated_result_field("expr_digest", "EvaluateResult.fingerprint.expr_digest")
+        return self.fingerprint.expr_digest
+
+    @property
+    def rule_set_digest(self) -> str:
+        _warn_deprecated_result_field("rule_set_digest", "EvaluateResult.fingerprint.rule_set_digest")
+        return self.fingerprint.rule_set_digest
+
+    @property
+    def view_snapshot_digest(self) -> str:
+        _warn_deprecated_result_field("view_snapshot_digest", "EvaluateResult.fingerprint.view_snapshot_digest")
+        return self.fingerprint.view_snapshot_digest
+
+    @property
+    def config_digest(self) -> str | None:
+        _warn_deprecated_result_field("config_digest", "EvaluateResult.fingerprint.config_digest")
+        return self.fingerprint.config_digest
+
+    @property
+    def result_digest(self) -> str:
+        _warn_deprecated_result_field("result_digest", "EvaluateResult.fingerprint.result_digest")
+        return self.fingerprint.result_digest
 
     def __iter__(self) -> Iterator[EvaluateRow]:
         return iter(self.rows)
@@ -483,6 +534,14 @@ def _warn_deprecated_claim_field(field_name: str, replacement: str) -> None:
 def _warn_deprecated_evidence_ref_field(field_name: str, replacement: str) -> None:
     warnings.warn(
         f"EvidenceRef.{field_name} is deprecated; use {replacement}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
+def _warn_deprecated_result_field(field_name: str, replacement: str) -> None:
+    warnings.warn(
+        f"EvaluateResult.{field_name} is deprecated; use {replacement}",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -1249,20 +1308,21 @@ def _evidence_metadata_for_row_result(row: EvaluateRow, result: EvaluateResult) 
 
 
 def _evidence_metadata_payload_for_row_result(row: EvaluateRow, result: EvaluateResult) -> dict[str, Any]:
+    fingerprint = result.fingerprint
     return {
         "result_id": result.result_id,
         "row_id": row.row_id,
         "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
         "claim_digest": row.claim.digest,
         "closed_head_digest": row.evidence_ref.closed_head_digest,
-        "expr_digest": result.expr_digest,
-        "rule_set_digest": result.rule_set_digest,
-        "view_snapshot_digest": result.view_snapshot_digest,
-        "config_digest": result.config_digest,
-        "result_digest": result.result_digest,
+        "expr_digest": fingerprint.expr_digest,
+        "rule_set_digest": fingerprint.rule_set_digest,
+        "view_snapshot_digest": fingerprint.view_snapshot_digest,
+        "config_digest": fingerprint.config_digest,
+        "result_digest": fingerprint.result_digest,
         "engine": result.engine,
-        "engine_version": result.engine_version,
-        "adapter_version": result.adapter_version,
+        "engine_version": _engine_meta_optional_str(result.engine_meta, "engine_version"),
+        "adapter_version": _engine_meta_optional_str(result.engine_meta, "adapter_version"),
         "evaluated_at": _metadata_value(result.evaluated_at),
     }
 
@@ -1335,18 +1395,19 @@ def _validate_row_provenance_envelopes(
 
 
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:
+    fingerprint = result.fingerprint
     return _freeze_mapping(
         {
-            "config_digest": result.config_digest,
+            "config_digest": fingerprint.config_digest,
             "semantics_source": "row_result",
-            "evaluate_config_digest": result.config_digest,
-            "explain_config_digest": result.config_digest,
+            "evaluate_config_digest": fingerprint.config_digest,
+            "explain_config_digest": fingerprint.config_digest,
             "semantics_match": True,
             "result_id": result.result_id,
             "row_id": row.row_id,
-            "expr_digest": result.expr_digest,
-            "rule_set_digest": result.rule_set_digest,
-            "view_snapshot_digest": result.view_snapshot_digest,
+            "expr_digest": fingerprint.expr_digest,
+            "rule_set_digest": fingerprint.rule_set_digest,
+            "view_snapshot_digest": fingerprint.view_snapshot_digest,
             "closed_head_digest": row.evidence_ref.closed_head_digest,
         },
         field_name="Explanation.checked_scope",
@@ -1388,6 +1449,22 @@ def _freeze_mapping(value: Mapping[str, Any], *, field_name: str) -> Mapping[str
         _require_non_empty_str(key, field_name=f"{field_name}.<key>")
         frozen[key] = item
     return MappingProxyType(dict(frozen))
+
+
+def _validate_engine_meta(value: Mapping[str, Any], *, field_name: str) -> Mapping[str, Any]:
+    frozen = dict(_freeze_mapping(value, field_name=field_name))
+    for key in ("engine_version", "adapter_version"):
+        if key not in frozen:
+            raise ProtocolShapeError(f"{field_name} must contain {key!r}")
+        _require_optional_non_empty_str(frozen[key], field_name=f"{field_name}[{key!r}]")
+    return MappingProxyType(frozen)
+
+
+def _engine_meta_optional_str(engine_meta: Mapping[str, Any], key: str) -> str | None:
+    if key not in engine_meta:
+        raise ProtocolShapeError(f"EvaluateResult.engine_meta must contain {key!r}")
+    value = engine_meta[key]
+    return _require_optional_non_empty_str(value, field_name=f"EvaluateResult.engine_meta[{key!r}]")
 
 
 def _validate_bound(value: tuple[float, float] | None) -> tuple[float, float]:
@@ -1508,6 +1585,7 @@ __all__ = [
     "new_run_id",
     "result_digest_for",
     "result_id_for",
+    "ResultFingerprint",
     "row_id_for",
     "rule_set_digest_for_entries",
     "config_digest_for",

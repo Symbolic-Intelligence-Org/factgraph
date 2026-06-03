@@ -112,17 +112,22 @@ Two identity-validation `RuleExprError`s — stale `content_digest` (same id, di
 
 ### 2.1 `EvaluateResult` — the frozen output of one evaluate call
 
-`EvaluateResult` is everything one `fg.eval.evaluate(...)` call produced: the matched rows plus the identifiers and digests that uniquely fingerprint *this evaluation* (engine, head, config, ledger snapshot). The digests answer "have I already run this exact evaluation?"; the row tuple is what you iterate to read the matches.
+`EvaluateResult` is everything one `fg.eval.evaluate(...)` call produced: the matched rows plus the identifiers and digests that uniquely fingerprint *this evaluation* (engine, head, config, ledger snapshot). The `fingerprint` sub-object answers "have I already run this exact evaluation?"; the row tuple is what you iterate to read the matches.
 
 ```text
 EvaluateResult (frozen)
   ├── rows: tuple[EvaluateRow, ...]
-  ├── result_id, run_id          ← stable identifiers ("evalr_v1:..." / "run_v1:...")
+  ├── result_id                  ← stable identifier ("evalr_v1:...")
   ├── head: Rule                 ← the head you passed
-  ├── engine, engine_version, adapter_version
-  ├── expr_digest, rule_set_digest, view_snapshot_digest, config_digest
+  ├── engine
   ├── evaluated_at
-  └── result_digest              ← content-addressed over everything above
+  ├── fingerprint: ResultFingerprint
+  │   ├── run_id                 ← stable run identifier ("run_v1:...")
+  │   ├── expr_digest, rule_set_digest, view_snapshot_digest, config_digest
+  │   └── result_digest          ← content-addressed over everything above
+  └── engine_meta: Mapping[str, Any]
+      ├── engine_version
+      └── adapter_version
 ```
 
 The 6 user-facing methods (all delegating to the `rows` tuple):
@@ -136,7 +141,7 @@ The 6 user-facing methods (all delegating to the `rows` tuple):
 | `result.exists()` | `bool` | "any rows?" shortcut |
 | `result.count()` | `int` | row count (same as `len(result)`) |
 
-The remaining fields (`result_id`, `engine`, the four digests) are for cache / audit / equivalence — they answer "is this the same evaluation we already ran?" Each digest fingerprints one input axis:
+The remaining fields (`result_id`, `engine`, `fingerprint`, and `engine_meta`) are for cache / audit / equivalence — they answer "is this the same evaluation we already ran?" Each `fingerprint` digest fingerprints one input axis:
 
 | Digest | Hash over | "Same digest" means |
 |---|---|---|
@@ -145,7 +150,7 @@ The remaining fields (`result_id`, `engine`, the four digests) are for cache / a
 | `view_snapshot_digest` | `(db_id, base_tx_id, schema_digest, sorted asrt_ids)` of the ledger snapshot used | Same ledger state — same facts, same schema, same head transaction |
 | `config_digest` | The full lowered `SemanticsProfile` (engine, all projections, fallback). `None` when no `config=` was passed | Same semantics config (or both ran without one) |
 
-Together they fingerprint every input the evaluator considered. `result_digest` hashes over all four plus head metadata — same `result_digest` ⇒ guaranteed same `rows`.
+Together they fingerprint every input the evaluator considered. `fingerprint.result_digest` hashes over all four plus head metadata — same `fingerprint.result_digest` ⇒ guaranteed same `rows`.
 
 ### 2.2 `EvaluateRow` — one match per row
 

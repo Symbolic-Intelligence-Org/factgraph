@@ -25,14 +25,16 @@ The rest of this page walks through each DTO in the chain.
 
 ## 1. `EvaluateResult` — the envelope
 
-`EvaluateResult` is a frozen dataclass with 13 fields and 7 row-access forms.
+`EvaluateResult` is a frozen dataclass with 7 direct public fields, one
+`ResultFingerprint` sub-object, one `engine_meta` mapping, and 7 row-access
+forms.
 The fields fall into four roles:
 
 | Role | Fields |
 | --- | --- |
-| Envelope identity | `result_id` (`evalr_v1:...`), `run_id` (`run_v1:...`), `result_digest` (`sha256:...`) |
-| Replay anchors | `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `config_digest` (or `None`) |
-| Engine provenance | `engine` (`"native"` / `"problog"` / `"pyreason"`), `engine_version` (or `None`), `adapter_version` (or `None`) |
+| Envelope identity | `result_id` (`evalr_v1:...`), `fingerprint.run_id` (`run_v1:...`), `fingerprint.result_digest` (`sha256:...`) |
+| Replay anchors | `fingerprint.expr_digest`, `fingerprint.rule_set_digest`, `fingerprint.view_snapshot_digest`, `fingerprint.config_digest` (or `None`) |
+| Engine provenance | `engine` (`"native"` / `"problog"` / `"pyreason"`), `engine_meta["engine_version"]` (or `None`), `engine_meta["adapter_version"]` (or `None`) |
 | Evaluation context | `head` (the closed application `Rule`), `evaluated_at` (`datetime` UTC), `rows` (`tuple[EvaluateRow, ...]`) |
 
 Row access:
@@ -51,14 +53,15 @@ for row in result:     # iteration over rows
 ```
 
 Identity and replay anchors are content-addressed digests. Two `EvaluateResult`
-values with matching `expr_digest`, `rule_set_digest`, `view_snapshot_digest`,
-and `config_digest` evaluated the same logical query against the same
+values with matching `fingerprint.expr_digest`,
+`fingerprint.rule_set_digest`, `fingerprint.view_snapshot_digest`, and
+`fingerprint.config_digest` evaluated the same logical query against the same
 snapshot under the same semantics — they are replay-equivalent regardless of
 when they ran.
 
 The evidence audit channel is sessionless. `run_id` identifies the evaluation
-envelope and stays on `EvaluateResult`; it is intentionally not copied into an
-`EvidenceGraph`. Passed row graphs keep a durable row/result metadata bridge
+envelope and lives at `EvaluateResult.fingerprint.run_id`; it is intentionally
+not copied into an `EvidenceGraph`. Passed row graphs keep a durable row/result metadata bridge
 instead: result id, row id, evidence ref id, claim and closed-head digests,
 expression/rule/view/semantics/result digests, engine identity/version, adapter
 version, and evaluated timestamp. Prefer the typed DTO fields above for
@@ -194,7 +197,7 @@ Protocol-enforced invariants:
 - `status in {"unsupported", "invalid_request"}` ⇒ `errors` is non-empty
 - `raw_kind is None` ⇒ `bound is None`
 
-All 13 fields:
+All 13 `Explanation` fields:
 
 | Field | Populated when | Purpose |
 | --- | --- | --- |

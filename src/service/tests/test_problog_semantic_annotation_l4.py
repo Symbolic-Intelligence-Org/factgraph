@@ -68,14 +68,15 @@ class ProbLogSemanticAnnotationParityTests(unittest.TestCase):
         sdk = self._make_sdk()
         mock_run.return_value = self._mock_output(sdk)
 
-        candidate = sdk.eval.evaluate(self._make_derivation(), engine="problog")[0]
+        row = sdk.eval.evaluate(self._make_derivation(), engine="problog")[0]
 
-        self.assertEqual(candidate.confidence, 0.42)
-        self.assertEqual(candidate.confidence_kind, "probability")
+        self.assertEqual(row.raw_kind, "probabilistic")
+        self.assertEqual(row.bound, (0.42, 0.42))
         pending_by_run = getattr(sdk.store, "_problog_pending_annotations", {})
-        self.assertIn(candidate.run_id, pending_by_run)
-        self.assertIn(candidate.candidate_id, pending_by_run[candidate.run_id])
-        template = pending_by_run[candidate.run_id][candidate.candidate_id][0]
+        self.assertEqual(len(pending_by_run), 1)
+        pending_by_candidate = next(iter(pending_by_run.values()))
+        self.assertEqual(len(pending_by_candidate), 1)
+        template = next(iter(pending_by_candidate.values()))[0]
         self.assertEqual(template["namespace"], "problog")
         self.assertEqual(template["key"], "probability")
         self.assertEqual(template["value"], 0.42)

@@ -39,6 +39,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.evaluate_result import (
     EvaluateResult,
+    ResultFingerprint,
     _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
     _candidate_set_to_evaluate_row,
@@ -2525,16 +2526,17 @@ class SDKStore:
             raise RuleExprError(f"manual explain head must be closed; unbound ports: {missing}")
 
     def _manual_explain_checked_scope(self, result: EvaluateResult, *, closed_head: ApplicationRule) -> Mapping[str, Any]:
+        fingerprint = result.fingerprint
         return {
-            "config_digest": result.config_digest,
+            "config_digest": fingerprint.config_digest,
             "semantics_source": "manual_standalone",
             "evaluate_config_digest": None,
-            "explain_config_digest": result.config_digest,
+            "explain_config_digest": fingerprint.config_digest,
             "semantics_match": None,
             "result_id": result.result_id,
-            "expr_digest": result.expr_digest,
-            "rule_set_digest": result.rule_set_digest,
-            "view_snapshot_digest": result.view_snapshot_digest,
+            "expr_digest": fingerprint.expr_digest,
+            "rule_set_digest": fingerprint.rule_set_digest,
+            "view_snapshot_digest": fingerprint.view_snapshot_digest,
             "closed_head_digest": closed_head_digest_for(closed_head),
         }
 
@@ -2718,20 +2720,22 @@ class SDKStore:
                 view_snapshot_digest=view_snapshot_digest,
                 config_digest=config_digest,
             )
-            return EvaluateResult(
-                result_id=result_id,
-                run_id=run_id,
-                rows=rows,
-                head=head,
-                engine=engine,
-                engine_version=None,
-                adapter_version=None,
+            fingerprint = ResultFingerprint(
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
                 config_digest=config_digest,
-                evaluated_at=datetime.now(timezone.utc),
                 result_digest=result_digest,
+                run_id=run_id,
+            )
+            return EvaluateResult(
+                result_id=result_id,
+                rows=rows,
+                head=head,
+                engine=engine,
+                evaluated_at=datetime.now(timezone.utc),
+                fingerprint=fingerprint,
+                engine_meta={"engine_version": None, "adapter_version": None},
                 _schema_index=self._application_schema_index,
                 _row_close_builder=self._close_evaluate_row,
                 _row_support_artifacts=row_support_artifacts,

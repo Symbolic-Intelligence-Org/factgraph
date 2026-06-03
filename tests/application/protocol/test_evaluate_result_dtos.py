@@ -13,6 +13,7 @@ from factgraph.application.protocol import (
     EvaluateRow,
     EvidenceRef,
     Explanation,
+    ResultFingerprint,
     Rule,
 )
 from factgraph.application.protocol.common import ProtocolShapeError
@@ -110,6 +111,61 @@ def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[st
     )
 
 
+def _fingerprint(
+    *,
+    run_id: str,
+    expr_digest: str,
+    rule_set_digest: str,
+    view_snapshot_digest: str,
+    config_digest: str | None,
+    result_digest: str,
+) -> ResultFingerprint:
+    return ResultFingerprint(
+        expr_digest=expr_digest,
+        rule_set_digest=rule_set_digest,
+        view_snapshot_digest=view_snapshot_digest,
+        config_digest=config_digest,
+        result_digest=result_digest,
+        run_id=run_id,
+    )
+
+
+def _evaluate_result(
+    *,
+    result_id: str,
+    run_id: str,
+    rows: tuple[EvaluateRow, ...],
+    head: Rule,
+    engine: str,
+    expr_digest: str,
+    rule_set_digest: str,
+    view_snapshot_digest: str,
+    config_digest: str | None,
+    result_digest: str,
+    evaluated_at: object = "2026-05-25T00:00:00Z",
+    engine_version: str | None = None,
+    adapter_version: str | None = None,
+    **kwargs: object,
+) -> EvaluateResult:
+    return EvaluateResult(
+        result_id=result_id,
+        rows=rows,
+        head=head,
+        engine=engine,
+        evaluated_at=evaluated_at,
+        fingerprint=_fingerprint(
+            run_id=run_id,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            config_digest=config_digest,
+            result_digest=result_digest,
+        ),
+        engine_meta={"engine_version": engine_version, "adapter_version": adapter_version},
+        **kwargs,
+    )
+
+
 def _evidence_ref_id(result_id: str, row: EvaluateRow) -> str:
     return evidence_ref_id_for(result_id, row.row_id, row.claim.digest, row.evidence_ref.closed_head_digest)
 
@@ -149,20 +205,17 @@ def _single_row_result(
     )
     row_support_artifacts = {row.row_id: support_artifact} if support_artifact is not None else None
     row_provenance_envelopes = {row.row_id: provenance_envelope} if provenance_envelope is not None else None
-    return EvaluateResult(
+    return _evaluate_result(
         result_id=result_id,
-        run_id=run_id,
         rows=(row,),
         head=head,
         engine=engine,
-        engine_version=None,
-        adapter_version=None,
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
         config_digest=config_digest,
-        evaluated_at="2026-05-25T00:00:00Z",
         result_digest=result_digest,
+        run_id=run_id,
         _row_support_artifacts=row_support_artifacts,
         _row_provenance_envelopes=row_provenance_envelopes,
     )
@@ -293,6 +346,51 @@ class EvaluateResultDTOTests(unittest.TestCase):
         with self.assertWarns(DeprecationWarning):
             self.assertEqual(row.evidence_ref.fact_digest, row.claim.digest)
 
+    def test_result_fingerprint_holds_folded_result_metadata(self) -> None:
+        result = _single_row_result()
+
+        self.assertEqual(
+            {field.name for field in fields(ResultFingerprint)},
+            {"expr_digest", "rule_set_digest", "view_snapshot_digest", "config_digest", "result_digest", "run_id"},
+        )
+        self.assertEqual(result.fingerprint.run_id, _result_parts()[0])
+        self.assertEqual(result.engine_meta["engine_version"], None)
+        self.assertEqual(result.engine_meta["adapter_version"], None)
+
+    def test_evaluate_result_deprecated_flat_fields_emit_warnings(self) -> None:
+        result = _single_row_result()
+
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.run_id, result.fingerprint.run_id)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.expr_digest, result.fingerprint.expr_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.rule_set_digest, result.fingerprint.rule_set_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.view_snapshot_digest, result.fingerprint.view_snapshot_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.config_digest, result.fingerprint.config_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.result_digest, result.fingerprint.result_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.engine_version, result.engine_meta["engine_version"])
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.adapter_version, result.engine_meta["adapter_version"])
+
+    def test_evaluate_result_engine_meta_requires_version_keys(self) -> None:
+        result = _single_row_result()
+
+        with self.assertRaisesRegex(ProtocolShapeError, "engine_version"):
+            EvaluateResult(
+                result_id=result.result_id,
+                rows=result.rows,
+                head=result.head,
+                engine=result.engine,
+                evaluated_at=result.evaluated_at,
+                fingerprint=result.fingerprint,
+                engine_meta={"adapter_version": None},
+            )
+
     def test_evaluate_result_container_binds_live_rows(self) -> None:
         (
             run_id,
@@ -322,20 +420,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             config_digest=config_digest,
         )
 
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         self.assertEqual(len(result), 1)
@@ -349,20 +444,20 @@ class EvaluateResultDTOTests(unittest.TestCase):
         row = result.rows[0]
 
         with self.assertRaisesRegex(ProtocolShapeError, "unknown row_id"):
-            EvaluateResult(
+            _evaluate_result(
                 result_id=result.result_id,
-                run_id=result.run_id,
                 rows=(row,),
                 head=result.head,
                 engine=result.engine,
-                engine_version=result.engine_version,
-                adapter_version=result.adapter_version,
-                expr_digest=result.expr_digest,
-                rule_set_digest=result.rule_set_digest,
-                view_snapshot_digest=result.view_snapshot_digest,
-                config_digest=result.config_digest,
+                expr_digest=result.fingerprint.expr_digest,
+                rule_set_digest=result.fingerprint.rule_set_digest,
+                view_snapshot_digest=result.fingerprint.view_snapshot_digest,
+                config_digest=result.fingerprint.config_digest,
                 evaluated_at=result.evaluated_at,
-                result_digest=result.result_digest,
+                result_digest=result.fingerprint.result_digest,
+                run_id=result.fingerprint.run_id,
+                engine_version=result.engine_meta["engine_version"],  # type: ignore[arg-type]
+                adapter_version=result.engine_meta["adapter_version"],  # type: ignore[arg-type]
                 _row_provenance_envelopes={"missing-row": _problog_provenance_envelope()},
             )
 
@@ -421,20 +516,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine="native",
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         closed = result[0].close()
@@ -472,20 +564,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         explanation = result[0].explain()
@@ -793,20 +882,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
         live_outside_row = EvaluateRow(
             row_id=outside_row.row_id,
@@ -852,20 +938,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         explanation = _explain_live_row(result[0], result, graph_builder=lambda _row, _result, _metadata: (_ for _ in ()).throw(ValueError("bad graph")))
@@ -896,7 +979,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         def _builder(row: EvaluateRow, build_result: EvaluateResult, metadata: object) -> EvidenceGraph:
             mutated = dict(metadata)  # type: ignore[arg-type]
-            mutated["run_id"] = build_result.run_id
+            mutated["run_id"] = build_result.fingerprint.run_id
             return _graph_with_metadata(row, build_result, mutated)
 
         explanation = _explain_live_row(result[0], result, graph_builder=_builder)
@@ -951,20 +1034,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ProtocolShapeError, "duplicate row_id"):
-            EvaluateResult(
+            _evaluate_result(
                 result_id=result_id,
-                run_id=run_id,
                 rows=(row, row),
                 head=head,
                 engine=engine,
-                engine_version=None,
-                adapter_version=None,
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
                 config_digest=config_digest,
-                evaluated_at="2026-05-25T00:00:00Z",
                 result_digest=result_digest,
+                run_id=run_id,
             )
 
     def test_candidate_set_conversion_harness_keeps_candidate_internal(self) -> None:

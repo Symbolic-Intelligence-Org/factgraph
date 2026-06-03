@@ -18,7 +18,7 @@ from factgraph.authoring.derivation_compile import (
     compile_authoring_derivation_v1,
 )
 from factgraph.authoring.rules import compile_authoring_rule_v1
-from factgraph.application.protocol import EvaluateResult, EvaluateRow
+from factgraph.application.protocol import EvaluateResult, EvaluateRow, ResultFingerprint
 from factgraph.application.protocol.evaluate_result import (
     _candidate_set_to_evaluate_row,
     _claim_arguments_for_row,
@@ -2378,20 +2378,22 @@ def _evaluate_result_from_candidates(
         view_snapshot_digest=view_snapshot_digest,
         config_digest=config_digest,
     )
-    return EvaluateResult(
-        result_id=result_id,
-        run_id=run_id,
-        rows=rows,
-        head=head,
-        engine=mode,
-        engine_version=None,
-        adapter_version=None,
+    fingerprint = ResultFingerprint(
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
         config_digest=config_digest,
-        evaluated_at=time_ns(),
         result_digest=result_digest,
+        run_id=run_id,
+    )
+    return EvaluateResult(
+        result_id=result_id,
+        rows=rows,
+        head=head,
+        engine=mode,
+        evaluated_at=time_ns(),
+        fingerprint=fingerprint,
+        engine_meta={"engine_version": None, "adapter_version": None},
     )
 
 
@@ -2444,20 +2446,21 @@ def _runtime_view_snapshot_digest(session: RuntimeSession) -> str:
 
 def _evaluate_result_to_dict(result: EvaluateResult, *, rows: tuple[EvaluateRow, ...] | None = None) -> dict[str, Any]:
     selected_rows = result.rows if rows is None else rows
+    fingerprint = result.fingerprint
     return {
         "result_id": result.result_id,
-        "run_id": result.run_id,
+        "run_id": fingerprint.run_id,
         "rows": [_evaluate_row_to_dict(row, result) for row in selected_rows],
         "head": _application_rule_to_dict(result.head),
         "engine": result.engine,
-        "engine_version": result.engine_version,
-        "adapter_version": result.adapter_version,
-        "expr_digest": result.expr_digest,
-        "rule_set_digest": result.rule_set_digest,
-        "view_snapshot_digest": result.view_snapshot_digest,
-        "config_digest": result.config_digest,
+        "engine_version": result.engine_meta["engine_version"],
+        "adapter_version": result.engine_meta["adapter_version"],
+        "expr_digest": fingerprint.expr_digest,
+        "rule_set_digest": fingerprint.rule_set_digest,
+        "view_snapshot_digest": fingerprint.view_snapshot_digest,
+        "config_digest": fingerprint.config_digest,
         "evaluated_at": _to_jsonable(result.evaluated_at),
-        "result_digest": result.result_digest,
+        "result_digest": fingerprint.result_digest,
         "row_count": len(result.rows),
     }
 
@@ -2492,7 +2495,7 @@ def _application_rule_to_dict(rule: ApplicationRule) -> dict[str, Any]:
         "desc": rule.desc,
         "content_digest": rule.content_digest,
         "ports": {name: var.name for name, var in rule.ports.items()},
-        "where": [repr(atom) for atom in rule.where],
+        "where": [repr(atom) for atom in rule.when],
     }
 
 

@@ -85,9 +85,9 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertNotIn("occurrence_map", result[0].bindings)
         self.assertNotIn("join_materializations", result[0].bindings)
         self.assertRegex(result.result_id, r"^evalr_v1:[0-9a-f]{64}$")
-        self.assertRegex(result.view_snapshot_digest, r"^sha256:[0-9a-f]{64}$")
-        self.assertRegex(result.result_digest, r"^sha256:[0-9a-f]{64}$")
-        self.assertIsNone(result.config_digest)
+        self.assertRegex(result.fingerprint.view_snapshot_digest, r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(result.fingerprint.result_digest, r"^sha256:[0-9a-f]{64}$")
+        self.assertIsNone(result.fingerprint.config_digest)
         self.assertFalse(hasattr(result[0], "candidate_id"))
         self.assertFalse(hasattr(result[0], "support_digest"))
         explanation = result[0].explain()
@@ -110,7 +110,10 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIsInstance(result, EvaluateResult)
         self.assertTrue(result)
         self.assertIn(encoded, str(result[0].bindings))
-        self.assertEqual(result.view_snapshot_digest, graph.eval.evaluate(rule, head=rule, engine="native").view_snapshot_digest)
+        self.assertEqual(
+            result.fingerprint.view_snapshot_digest,
+            graph.eval.evaluate(rule, head=rule, engine="native").fingerprint.view_snapshot_digest,
+        )
 
     def test_missing_head_uses_sdk_store_error(self) -> None:
         graph = _store()
@@ -334,7 +337,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertEqual(request.engine, "problog")
         self.assertEqual(request.semantics_profile.engine, "problog")
         self.assertEqual(request.semantics_profile.rule_projection, {})
-        self.assertIsNotNone(result.config_digest)
+        self.assertIsNotNone(result.fingerprint.config_digest)
 
     def test_application_rule_accepts_pyreason_semantics_wrapper(self) -> None:
         graph = _store()
@@ -442,7 +445,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             profile.rule_projection["sdk_rule_params"],
             [{"target": f"rule:{rule.id}", "kind": "rule_params", "value": {"label": "primary"}}],
         )
-        self.assertNotEqual(first.config_digest, second.config_digest)
+        self.assertNotEqual(first.fingerprint.config_digest, second.fingerprint.config_digest)
 
         with self.assertRaisesRegex(SDKStoreError, "unknown Rule.id 'missing'"):
             graph.eval.evaluate(rule, head=rule, config=sdk.ProbLogConfig(rule_params={"missing": {"label": "bad"}}))

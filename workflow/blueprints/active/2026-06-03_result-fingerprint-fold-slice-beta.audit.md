@@ -15,6 +15,7 @@
 | 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, G/N coverage, stale wording scan, named docs/test/service scope, and no abandonment blockers. No content amend required. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with PF-R1/PF-R2/PF-R3 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, 0 abandonment. |
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran deletion/consumer grep across `src/factgraph`, `src/service`, `tests`, and active docs. No new N-findings beyond Step 4.4 scope; extra hits were `AcceptResult.run_id`, candidate wire docs, or already-scoped docs/tests. Status remains `scoped`. |
+| 2026-06-03 | scoped | Step 4.7 implementation | Implemented `ResultFingerprint` + `engine_meta` fold on `v0.2.0-impl-result-fingerprint-fold-2026-06-03`: application protocol DTO, SDK/service construction, service serializer, exports/tests, active SDK/service tests, and named docs cascade. Full verification passed with `2504 passed / 35 skipped / 1046 subtests`; Status remains `scoped` until Step 4.8 closure. |
 
 ## Decision Notes
 

@@ -25,6 +25,7 @@ from .evaluate_result import (
     EvaluateRow,
     EvidenceRef,
     Explanation,
+    ResultFingerprint,
 )
 from .derivation_fact_overlay import (
     FactOverlay,
@@ -167,6 +168,7 @@ __all__ = [
     "EvaluateRow",
     "EvidenceRef",
     "Explanation",
+    "ResultFingerprint",
     "FactOverlay",
     "EvidenceEnvelope",
     "FactOverlayAction",

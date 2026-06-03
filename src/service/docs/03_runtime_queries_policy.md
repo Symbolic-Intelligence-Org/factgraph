@@ -1072,7 +1072,10 @@
 - 请求顶层使用 public `inference` vocabulary；嵌套的 `derivation_id`
   是 compiler-facing authoring payload 的 substrate key。
 - `evaluate` 返回 T5 `EvaluateResult` 表示，不返回 public CandidateSet。
-- `result_id` / `run_id` / digest 字段是 explain/replay anchors。
+- `result_id` / `run_id` / digest 字段是 explain/replay anchors。Wire
+  response keeps these fields flat for compatibility; internally they are
+  projected from `EvaluateResult.result_id`, `EvaluateResult.fingerprint.*`,
+  and `EvaluateResult.engine_meta`.
 - `rows[]` 是 public evaluation rows；每行包含 bindings、Claim、raw quantitative carrier 和 EvidenceRef。
 - CandidateSet payloads 只保留为 runtime/internal substrate，不再要求客户端 echo。
 - Souffle deterministic 路径内部仍可保留 `confidence_kind="none"`；
