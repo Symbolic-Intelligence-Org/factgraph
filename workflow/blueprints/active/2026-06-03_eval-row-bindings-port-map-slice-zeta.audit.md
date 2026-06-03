@@ -12,6 +12,8 @@
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-eval-row-bindings-port-map-2026-06-03` (fork from `0719ace6`). Hybrid cadence default per [[feedback_hybrid_cadence_sequential_mechanical_slices]] — ζ is mechanical surface-organization slice following β pattern. Escalation to tight gates reserved for Step 4.3 if novel concerns surface (byte-equal load-bearing / wire-compat wide / bit-stable ID dependencies). |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-1/P1-2/P1-3/P2-1/P2-2: explicit `head` context is required for port-name bindings; canonical bytes use v2 schema labels; service wire preserves legacy bindings envelope; provenance paths need legacy candidate payload helper; D19 wording clarified as algorithm-stable but schema-version-evolving. Status remains `draft`. |
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight `9d0e1186`: PF-R1 row-derived ProbLog provenance helper; PF-R2 construction sites that can pass `head`; PF-R3 exact v2 schema labels; PF-r1/PF-r2 transition helpers; PF-s1/PF-s2/PF-s3 carve-outs. Status remains `draft`; 0 abandonment. |
+| 2026-06-03 | draft | Step 4.5 self-check PASS | Verified G/N/acceptance consistency, removed stale draft wording, confirmed PF-R/PF-r/PF-s coverage, Q-PR1 0-diff, dirty baseline preservation, and 0 abandonment. |
+| 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with Step 4.2 locks, Step 4.4 PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2 + PF-s1/PF-s2/PF-s3, and hybrid cadence retained for Step 4.6.5/4.7. |
 
 ## Decision Notes
 
@@ -38,8 +40,8 @@
 - [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
 - [ ] Step 4.3 preflight on independent branch `v0.2.0-eval-row-bindings-port-map-preflight-2026-06-03`
 - [x] Step 4.4 preflight amendment
-- [ ] Step 4.5 self-check
-- [ ] Step 4.6 scope freeze
+- [x] Step 4.5 self-check
+- [x] Step 4.6 scope freeze
 - [ ] Step 4.6.5 pre-impl grep
 - [ ] Step 4.7 implementation on `v0.2.0-impl-eval-row-bindings-port-map-2026-06-03`
 - [ ] Step 4.8 closure

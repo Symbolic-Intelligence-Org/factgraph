@@ -1,8 +1,8 @@
 # Task Blueprint: Eval-row bindings port-map Slice ζ — `{port_name: term}` map shape
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
+- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]; hybrid cadence default per [[feedback_hybrid_cadence_sequential_mechanical_slices]] unless Step 4.3 surfaces novel concerns
 - Fork base: `0719ace6` (Slice γ Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.6 + §6 Slice ζ
@@ -84,7 +84,7 @@ Slice ζ is surface organization only — same data, different key/value layout.
 - `src/factgraph/application/protocol/evaluate_result.py:497` — service-bound bindings inclusion in row dict
 - `tests/application/protocol/test_evaluate_result_digests.py` — digest byte-equal fixtures (need decision on whether to update or layer)
 
-## 5. Proposed Shape (Draft, Not Yet Locked)
+## 5. Proposed Shape (Scoped)
 
 ### 5.1 New `_bindings_from_candidate(candidate, *, head)`
 
@@ -197,7 +197,7 @@ Step 4.3 preflight enumerates exact files.
   - wire-compat impact wider than Slice γ N-1 N-2 pattern
   - cross-process consumer enumeration finds bit-stable ID dependencies
 - Stage-0 source audit folded into this Step 4.1 draft per Slice α/β/γ precedent. No separate `workflow/audit/active/2026-06-03_eval-row-bindings-port-map-vs-shipped.md`.
-- §5.3 schema version bump and §5.4 legacy payload preservation are locked by Step 4.2 review; Step 4.3 verifies no additional consumers require a different path.
+- §5.3 schema version bump and §5.4 legacy payload preservation are locked by Step 4.2 review; Step 4.3 verified no additional consumers require a different path.
 
 ## 7. Acceptance Criteria (Draft)
 
