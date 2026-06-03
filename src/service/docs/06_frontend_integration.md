@@ -146,7 +146,7 @@ r = await post(`/v1/runtime/sessions/${sessionId}/inferences/evaluate`, {
 
 // 4. consume EvaluateResult rows
 for (const row of r.evaluation.rows) {
-  console.log(row.row_id, row.bindings, row.evidence_ref);
+  console.log(row.row_id, row.bindings, row["evidence_ref"].closed_head_digest);
 }
 ```
 

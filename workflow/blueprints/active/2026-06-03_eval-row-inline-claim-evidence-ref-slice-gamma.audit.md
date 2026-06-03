@@ -17,6 +17,7 @@
 | 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, G/N structure, open-question disposition, stale wording scan, Q-PR1/dirty invariants, and no abandonment blockers. One stale "unless Step 4.3" phrase normalized before scope freeze. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with PF-R1/PF-R2/PF-R3/PF-R4 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, 0 abandonment. |
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran mandatory deletion/accessor/Explanation grep over `src/factgraph`, `src/service`, `tests`, and active docs. No new production scope beyond Step 4.4 PF-R1/PF-R2/PF-R3/PF-R4; ledger `Claim` false positives bucketed per PF-r1; N-1 docs cascade additions folded into scoped blueprint. Status remains `scoped`; no code implementation started. |
+| 2026-06-03 | scoped | Step 4.7 implementation | Implemented wrapper removal on impl branch: row-owned `kind` / `digest` / `closed_head_digest`, direct `Explanation.row`, protocol/SDK export removal, service wire-compatible serializer, tests, and docs cascade. Status remains `scoped`; Step 4.8 closure will flip to `implemented`. |
 
 ## Decision Notes
 
@@ -40,6 +41,7 @@
 | 2026-06-03 | Step 4.4 PF-r2 — SDK export count pinned | Removing `Claim`, `EvidenceRef`, `DetachedClaimError`, and `DetachedEvidenceRefError` drops SDK `__all__` count from 65 to 61 unless implementation adds a deliberate replacement symbol. |
 | 2026-06-03 | Step 4.6.5 N-1 — docs cascade expanded | Pre-impl grep found additional active docs that mention protocol wrapper shape or service wire payloads: `docs/api/openapi.yaml`, `docs/official/kernel/quickstart/rules-and-inferences.md`, `src/factgraph/audit/docs/02_evidence_graph.md`, `src/factgraph/sdk/docs/01_concepts.en.md`, `src/factgraph/sdk/docs/04_api_surface.en.md`, and `src/service/docs/06_frontend_integration.md`. This is documentation cascade only; service wire compatibility and ledger Claim carve-outs remain unchanged. |
 | 2026-06-03 | Step 4.6.5 PF-r1 reconfirmed | Wide `Claim` grep produces many ledger-layer hits in core/store/write/walker/service candidate payloads and ledger docs. Those are excluded by §5.7 and must not be migrated as protocol-wrapper removals. |
+| 2026-06-03 | Step 4.7 PF-r2 correction — SDK `__all__` drops to 63 | Implementation confirmed the SDK exported only `Claim` and `EvidenceRef`; `DetachedClaimError` and `DetachedEvidenceRefError` were protocol exports only. The Step 4.4 PF-r2 count 65 → 61 was an overcount for SDK `__all__`; correct SDK count is 65 → 63 with protocol exports still removing all four names. |
 
 ## Step 4.2 Review Focus (Completed; Superseded by Step 4.4 Locks Where Applicable)
 
@@ -58,7 +60,7 @@
 - [x] Step 4.5 self-check
 - [x] Step 4.6 scoped anchor
 - [x] Step 4.6.5 pre-impl grep
-- [ ] Step 4.7 implementation on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`
+- [x] Step 4.7 implementation on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`
 - [ ] Step 4.8 closure
 - [ ] Step 4.9 archive
 

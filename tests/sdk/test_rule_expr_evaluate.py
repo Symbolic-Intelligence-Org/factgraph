@@ -222,10 +222,11 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         detached = row.__class__(
             row_id=row.row_id,
             bindings=row.bindings,
-            claim=row.claim,
+            kind=row.kind,
+            digest=row.digest,
+            closed_head_digest=row.closed_head_digest,
             raw_kind=row.raw_kind,
             bound=row.bound,
-            evidence_ref=row.evidence_ref,
         )
 
         with self.assertRaisesRegex(DetachedRowError, "detached"):
@@ -253,8 +254,9 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertEqual(explanation.checked_scope["semantics_source"], "manual_standalone")
         self.assertIsNone(explanation.checked_scope["evaluate_config_digest"])
         self.assertIsNone(explanation.checked_scope["semantics_match"])
-        self.assertIsNone(explanation.row_id)
-        self.assertIsNone(explanation.evidence_ref_id)
+        self.assertIsNotNone(explanation.row)
+        assert explanation.row is not None
+        self.assertEqual(dict(explanation.row.bindings), dict(result[0].bindings))
         self.assertEqual(explanation.checked_scope["closed_head_digest"], closed_head_digest_for(closed))
 
     def test_projection_undeclared_port_uses_ruleexpr_error(self) -> None:

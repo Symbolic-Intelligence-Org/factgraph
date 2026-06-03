@@ -17,13 +17,9 @@ from .derivation_diagnose import (
     DiagnoseStatus,
 )
 from .evaluate_result import (
-    Claim,
-    DetachedClaimError,
-    DetachedEvidenceRefError,
     DetachedRowError,
     EvaluateResult,
     EvaluateRow,
-    EvidenceRef,
     Explanation,
     ResultFingerprint,
 )
@@ -160,13 +156,9 @@ __all__ = [
     "EntityWritePlan",
     "EntityWriteResult",
     "ErrorDTO",
-    "Claim",
-    "DetachedClaimError",
-    "DetachedEvidenceRefError",
     "DetachedRowError",
     "EvaluateResult",
     "EvaluateRow",
-    "EvidenceRef",
     "Explanation",
     "ResultFingerprint",
     "FactOverlay",

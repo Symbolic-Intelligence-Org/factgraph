@@ -32,11 +32,9 @@ from .semantics import ProbLogConfig, PyReasonConfig
 from .store import FactGraph, SDKStore
 from factgraph.application.protocol import (
     ConditionDescriptor,
-    Claim,
     DetachedRowError,
     EvaluateResult,
     EvaluateRow,
-    EvidenceRef,
     Explanation,
     ResultFingerprint,
     ExplicitBoolError,
@@ -96,11 +94,9 @@ __all__ = [
     "Identity",
     "Relationship",
     "SemanticsProfile",
-    "Claim",
     "DetachedRowError",
     "EvaluateResult",
     "EvaluateRow",
-    "EvidenceRef",
     "Explanation",
     "ResultFingerprint",
     "ProbLogConfig",

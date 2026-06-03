@@ -29,6 +29,7 @@
   - [`src/factgraph/sdk/docs/01_concepts.en.md`](../../../src/factgraph/sdk/docs/01_concepts.en.md)
   - [`src/factgraph/sdk/docs/03_rules_and_inferences.en.md`](../../../src/factgraph/sdk/docs/03_rules_and_inferences.en.md)
   - [`src/factgraph/sdk/docs/04_api_surface.en.md`](../../../src/factgraph/sdk/docs/04_api_surface.en.md)
+  - [`src/factgraph/sdk/docs/06_what_if_and_proof.en.md`](../../../src/factgraph/sdk/docs/06_what_if_and_proof.en.md)
   - [`src/service/docs/03_runtime_queries_policy.md`](../../../src/service/docs/03_runtime_queries_policy.md)
   - [`src/service/docs/06_frontend_integration.md`](../../../src/service/docs/06_frontend_integration.md)
 - Audit Log:
@@ -189,7 +190,7 @@ Locked exported symbol change:
 
 - remove `Claim`, `EvidenceRef`, `DetachedClaimError`, and `DetachedEvidenceRefError` from protocol exports and SDK exports;
 - update SDK export tests to assert removal or absence;
-- update `tests/test_sdk_find_partial_identity.py` exact `__all__` count from 65 to 61 unless an intentional replacement symbol is introduced.
+- update `tests/test_sdk_find_partial_identity.py` exact `__all__` count from 65 to 63. Step 4.7 implementation corrected Step 4.4 PF-r2: the SDK only exported `Claim` and `EvidenceRef`; `DetachedClaimError` and `DetachedEvidenceRefError` were protocol exports only, so SDK count drops by 2, not 4.
 
 ### 5.7 Ledger Claim carve-outs (PF-r1)
 
@@ -209,7 +210,7 @@ Mandatory pre-impl grep confirmed no new production-code scope beyond Step 4.4 P
 - `docs/api/openapi.yaml` — service wire payload schema keeps nested `claim` / `evidence_ref` keys while data source changes.
 - `docs/official/kernel/quickstart/rules-and-inferences.md` — row/claim wording needs migration to row-owned fields.
 - `src/factgraph/audit/docs/02_evidence_graph.md` — EvidenceRef/ref-id wording needs migration to row-owned digest/closed-head digest language.
-- `src/factgraph/sdk/docs/01_concepts.en.md` and `src/factgraph/sdk/docs/04_api_surface.en.md` — SDK result-row surface needs wrapper-removal wording.
+- `src/factgraph/sdk/docs/01_concepts.en.md`, `src/factgraph/sdk/docs/04_api_surface.en.md`, and `src/factgraph/sdk/docs/06_what_if_and_proof.en.md` — SDK result-row surface needs wrapper-removal wording.
 - `src/service/docs/06_frontend_integration.md` — frontend integration sample keeps wire-compatible nested dictionaries but must not imply in-process wrappers remain.
 
 These docs are scoped as N-1 because they are documentation cascade only. They do not add implementation authority, do not change service wire compatibility, and do not alter PF-r1 ledger Claim carve-outs.
@@ -230,7 +231,7 @@ These docs are scoped as N-1 because they are documentation cascade only. They d
 - [ ] Production row construction no longer needs active `Claim(...)` or `EvidenceRef(...)` wrapper construction.
 - [ ] `Explanation` no longer requires `claim: Claim | None`; it directly holds `row: EvaluateRow | None` per parent design §4.1 and removes redundant direct `row_id` / `evidence_ref_id` / `raw_kind` / `bound` fields.
 - [ ] Service runtime reads row-owned fields directly, contains no `row.claim` / `row.evidence_ref` reads, and still emits wire-compatible nested `claim` / `evidence_ref` dictionaries.
-- [ ] SDK/protocol export tests reflect immediate wrapper removal; `sdk.__all__` expected count is 61 unless an intentional replacement symbol is added.
+- [ ] SDK/protocol export tests reflect immediate wrapper removal; `sdk.__all__` expected count is 63 after Step 4.7 corrected PF-r2's SDK export overcount.
 - [ ] Step 4.7 docs cascade updates all Related Docs including Step 4.6.5 N-1 additions, while preserving ledger-Claim docs outside protocol-wrapper scope.
 - [ ] D19/D17 identity checks pass: row digest, closed-head digest, and any compatibility `ref_id` formula remain stable where required.
 - [ ] Q-PR1 5 sacred paths remain 0-diff vs `4c472b50`.

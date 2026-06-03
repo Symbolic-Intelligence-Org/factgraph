@@ -460,7 +460,7 @@ is not part of the v0.2 public surface.
 The closed head has two invariants:
 
 1. **`head.id` must be a real predicate id.** The result exposes this as
-   `result.head.id`; `row.claim.name` remains a deprecated compatibility alias.
+   `result.head.id`; rows now expose claim identity through direct row fields such as `row.kind` and `row.digest`.
 2. **`len(head.ports)` must equal that predicate's `arg_specs` count.**
    Otherwise the runtime raises
    `WhereValidationError: head_vars length must match target arg_specs`.

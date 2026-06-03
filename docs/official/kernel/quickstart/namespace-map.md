@@ -176,7 +176,7 @@ persistence.
 
 Selected exports from `factgraph.sdk.__all__`, grouped by purpose. The intent
 of this table is to answer "what should I import for this task?" without
-scanning the whole module. The full `__all__` list has 64 entries and
+scanning the whole module. The full `__all__` list has 63 entries and
 includes additional error types, error codes, and protocol DTOs not
 duplicated in the per-purpose groups below.
 

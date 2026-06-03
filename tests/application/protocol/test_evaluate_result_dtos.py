@@ -4,14 +4,10 @@ from dataclasses import fields
 import unittest
 
 from factgraph.application.protocol import (
-    Claim,
-    DetachedClaimError,
-    DetachedEvidenceRefError,
     DetachedRowError,
     ErrorDTO,
     EvaluateResult,
     EvaluateRow,
-    EvidenceRef,
     Explanation,
     ResultFingerprint,
     Rule,
@@ -93,21 +89,14 @@ def _result_parts() -> tuple[str, str, str, str, str, str, str, str, str, Rule]:
 def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[str, object]) -> EvaluateRow:
     digest = claim_digest_for("fact_triple", "person_head", bindings)
     row_id = row_id_for(run_id, bindings)
-    claim = Claim(
-        kind="fact_triple",
-        repr="Person:exists(person)",
-        digest=digest,
-    )
-    evidence_ref = EvidenceRef(
-        closed_head_digest=closed_head_digest,
-    )
     return EvaluateRow(
         row_id=row_id,
         bindings=bindings,
-        claim=claim,
+        kind="fact_triple",
+        digest=digest,
+        closed_head_digest=closed_head_digest,
         raw_kind=None,
         bound=None,
-        evidence_ref=evidence_ref,
     )
 
 
@@ -167,7 +156,7 @@ def _evaluate_result(
 
 
 def _evidence_ref_id(result_id: str, row: EvaluateRow) -> str:
-    return evidence_ref_id_for(result_id, row.row_id, row.claim.digest, row.evidence_ref.closed_head_digest)
+    return evidence_ref_id_for(result_id, row.row_id, row.digest, row.closed_head_digest)
 
 
 def _single_row_result(
@@ -265,7 +254,7 @@ def _graph_with_metadata(
                 node_kind=NODE_CONCLUSION,
                 component="evaluate.row",
                 label=result.head.id,
-                value_summary=row.claim.repr,
+                value_summary=f"{result.head.id}{dict(row.bindings)!r}",
             ),
         ),
         edges=(),
@@ -275,76 +264,28 @@ def _graph_with_metadata(
 
 
 class EvaluateResultDTOTests(unittest.TestCase):
-    def test_claim_and_evidence_ref_redundant_names_are_not_dataclass_fields(self) -> None:
-        self.assertEqual({field.name for field in fields(Claim)}, {"kind", "repr", "digest", "_row_resolver"})
-        self.assertEqual({field.name for field in fields(EvidenceRef)}, {"closed_head_digest", "_row_resolver"})
+    def test_evaluate_row_holds_claim_and_evidence_fields_directly(self) -> None:
+        result = _single_row_result()
+        row = result[0]
 
-    def test_standalone_claim_without_resolver_raises_detached_error(self) -> None:
-        claim = Claim(
-            kind="fact_triple",
-            repr="Person:exists(person)",
-            digest=claim_digest_for("fact_triple", "person_head", {"person": "p1"}),
+        self.assertEqual(
+            {field.name for field in fields(EvaluateRow)},
+            {"row_id", "bindings", "kind", "digest", "closed_head_digest", "raw_kind", "bound", "_result_resolver"},
         )
+        self.assertEqual(row.kind, "fact_triple")
+        self.assertEqual(row.digest, claim_digest_for("fact_triple", result.head.id, row.bindings))
+        self.assertEqual(row.closed_head_digest, closed_head_digest_for(result.head))
+        self.assertFalse(hasattr(row, "claim"))
+        self.assertFalse(hasattr(row, "evidence_ref"))
 
-        with self.assertWarns(DeprecationWarning), self.assertRaises(DetachedClaimError):
-            _ = claim.name
-        with self.assertWarns(DeprecationWarning), self.assertRaises(DetachedClaimError):
-            _ = claim.arguments
-
-    def test_standalone_evidence_ref_without_resolver_raises_detached_error(self) -> None:
-        _run_id, _result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
-        evidence_ref = EvidenceRef(closed_head_digest=closed_head_digest)
-
-        with self.assertWarns(DeprecationWarning), self.assertRaises(DetachedEvidenceRefError):
-            _ = evidence_ref.row_id
-        with self.assertWarns(DeprecationWarning), self.assertRaises(DetachedEvidenceRefError):
-            _ = evidence_ref.result_id
-        with self.assertWarns(DeprecationWarning), self.assertRaises(DetachedEvidenceRefError):
-            _ = evidence_ref.ref_id
-        with self.assertWarns(DeprecationWarning), self.assertRaises(DetachedEvidenceRefError):
-            _ = evidence_ref.fact_digest
-
-    def test_claim_deprecated_name_emits_warning(self) -> None:
+    def test_evidence_ref_id_formula_uses_direct_row_fields(self) -> None:
         result = _single_row_result()
         row = result[0]
 
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(row.claim.name, result.head.id)
-
-    def test_claim_deprecated_arguments_emits_warning(self) -> None:
-        result = _single_row_result()
-        row = result[0]
-
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(dict(row.claim.arguments), dict(row.bindings))
-
-    def test_evidence_ref_deprecated_row_id_emits_warning(self) -> None:
-        result = _single_row_result()
-        row = result[0]
-
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(row.evidence_ref.row_id, row.row_id)
-
-    def test_evidence_ref_deprecated_result_id_emits_warning(self) -> None:
-        result = _single_row_result()
-        row = result[0]
-
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(row.evidence_ref.result_id, result.result_id)
-
-    def test_evidence_ref_deprecated_ref_id_byte_equal_to_pre_alpha(self) -> None:
-        result = _single_row_result()
-        row = result[0]
-
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(row.evidence_ref.ref_id, _evidence_ref_id(result.result_id, row))
-
-    def test_evidence_ref_deprecated_fact_digest_emits_warning(self) -> None:
-        result = _single_row_result()
-        row = result[0]
-
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(row.evidence_ref.fact_digest, row.claim.digest)
+        self.assertEqual(
+            evidence_ref_id_for(result.result_id, row.row_id, row.digest, row.closed_head_digest),
+            _evidence_ref_id(result.result_id, row),
+        )
 
     def test_result_fingerprint_holds_folded_result_metadata(self) -> None:
         result = _single_row_result()
@@ -581,12 +522,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         self.assertEqual(explanation.status, "passed")
         self.assertIsInstance(explanation.evidence, EvidenceGraph)
-        self.assertIs(explanation.claim, result[0].claim)
+        self.assertIs(explanation.row, result[0])
         self.assertEqual(explanation.result_id, result.result_id)
-        self.assertEqual(explanation.row_id, result[0].row_id)
-        self.assertEqual(explanation.evidence_ref_id, _evidence_ref_id(result_id, result[0]))
-        self.assertEqual(explanation.raw_kind, result[0].raw_kind)
-        self.assertEqual(explanation.bound, result[0].bound)
         self.assertEqual(explanation.failure_class, None)
         self.assertEqual(explanation.checked_scope["config_digest"], config_digest)
         self.assertEqual(explanation.checked_scope["semantics_source"], "row_result")
@@ -615,8 +552,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.evidence.metadata["result_id"], result.result_id)
         self.assertEqual(explanation.evidence.metadata["row_id"], result[0].row_id)
         self.assertEqual(explanation.evidence.metadata["evidence_ref_id"], _evidence_ref_id(result_id, result[0]))
-        self.assertEqual(explanation.evidence.metadata["claim_digest"], result[0].claim.digest)
-        self.assertEqual(explanation.evidence.metadata["closed_head_digest"], result[0].evidence_ref.closed_head_digest)
+        self.assertEqual(explanation.evidence.metadata["claim_digest"], result[0].digest)
+        self.assertEqual(explanation.evidence.metadata["closed_head_digest"], result[0].closed_head_digest)
         self.assertEqual(explanation.evidence.metadata["expr_digest"], expr_digest)
         self.assertEqual(explanation.evidence.metadata["rule_set_digest"], rule_set_digest)
         self.assertEqual(explanation.evidence.metadata["view_snapshot_digest"], view_snapshot_digest)
@@ -773,31 +710,25 @@ class EvaluateResultDTOTests(unittest.TestCase):
             Explanation(
                 status="passed",
                 evidence=None,
-                claim=row.claim,
+                row=row,
                 result_id=result_id,
-                row_id=row.row_id,
-                evidence_ref_id=_evidence_ref_id(result_id, row),
             )
         with self.assertRaisesRegex(ProtocolShapeError, "failure_class"):
             Explanation(
                 status="failed",
                 evidence=None,
-                claim=row.claim,
+                row=row,
                 result_id=result_id,
-                row_id=row.row_id,
-                evidence_ref_id=_evidence_ref_id(result_id, row),
             )
         with self.assertRaisesRegex(ProtocolShapeError, "errors"):
             Explanation(
                 status="unsupported",
                 evidence=None,
-                claim=row.claim,
+                row=row,
                 result_id=result_id,
-                row_id=row.row_id,
-                evidence_ref_id=_evidence_ref_id(result_id, row),
             )
 
-    def test_manual_passed_explanation_allows_no_row_back_reference(self) -> None:
+    def test_manual_explanation_uses_row_reference(self) -> None:
         run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
@@ -820,23 +751,18 @@ class EvaluateResultDTOTests(unittest.TestCase):
                 support_kind="evaluate_row",
                 metadata={},
             ),
-            claim=row.claim,
+            row=row,
             result_id=result_id,
-            row_id=None,
-            evidence_ref_id=None,
         )
 
         self.assertEqual(explanation.status, "passed")
-        self.assertIsNone(explanation.row_id)
-        self.assertIsNone(explanation.evidence_ref_id)
+        self.assertIs(explanation.row, row)
 
         failed = Explanation(
             status="failed",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result_id,
-            row_id=row.row_id,
-            evidence_ref_id=_evidence_ref_id(result_id, row),
             failure_class="no_matching_row",
             suggested_next_steps=("Retry with a closed head.",),
         )
@@ -845,10 +771,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         invalid = Explanation(
             status="invalid_request",
             evidence=None,
-            claim=None,
+            row=None,
             result_id=None,
-            row_id=None,
-            evidence_ref_id=None,
             errors=(ErrorDTO(code="INVALID_REQUEST", message="bad request"),),
         )
         self.assertEqual(invalid.errors[0].code, "INVALID_REQUEST")
@@ -897,10 +821,11 @@ class EvaluateResultDTOTests(unittest.TestCase):
         live_outside_row = EvaluateRow(
             row_id=outside_row.row_id,
             bindings=outside_row.bindings,
-            claim=outside_row.claim,
+            kind=outside_row.kind,
+            digest=outside_row.digest,
+            closed_head_digest=outside_row.closed_head_digest,
             raw_kind=outside_row.raw_kind,
             bound=outside_row.bound,
-            evidence_ref=outside_row.evidence_ref,
             _result_resolver=lambda: result,
         )
 
@@ -1076,8 +1001,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(row.raw_kind, "probabilistic")
         self.assertEqual(row.bound, (0.75, 0.75))
         self.assertFalse(hasattr(row, "candidate_id"))
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(row.evidence_ref.fact_digest, row.claim.digest)
+        self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
 
 
 if __name__ == "__main__":

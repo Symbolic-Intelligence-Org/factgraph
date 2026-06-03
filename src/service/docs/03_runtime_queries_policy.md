@@ -1076,7 +1076,7 @@
   response keeps these fields flat for compatibility; internally they are
   projected from `EvaluateResult.result_id`, `EvaluateResult.fingerprint.*`,
   and `EvaluateResult.engine_meta`.
-- `rows[]` 是 public evaluation rows；每行包含 bindings、Claim、raw quantitative carrier 和 EvidenceRef。
+- `rows[]` 是 public evaluation rows；每行包含 bindings、row-owned conclusion/evidence digests 和 raw quantitative carrier。HTTP JSON 为兼容仍保留 nested `claim` / `evidence_ref` dictionaries。
 - CandidateSet payloads 只保留为 runtime/internal substrate，不再要求客户端 echo。
 - Souffle deterministic 路径内部仍可保留 `confidence_kind="none"`；
   ProbLog / PyReason 路径可在 `CandidateSet` 上保留 adapter summary。

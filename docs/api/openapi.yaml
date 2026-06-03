@@ -607,8 +607,9 @@ paths:
       description: |
         Returns the T5 `EvaluateResult` representation: result metadata,
         digest anchors, a head Rule summary, and `rows[]` with bindings,
-        Claim metadata, raw uncertainty carrier fields, and EvidenceRef
-        metadata. CandidateSet payloads are internal runtime artifacts and
+        row-owned conclusion/evidence digest metadata, raw uncertainty carrier
+        fields, and compatibility `claim` / `evidence_ref` wire dictionaries.
+        CandidateSet payloads are internal runtime artifacts and
         are not exposed by this route.
       requestBody:
         required: true

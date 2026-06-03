@@ -70,16 +70,17 @@ branching surface.
 
 ## 2. `EvaluateRow` — one derived fact
 
-`EvaluateRow` is frozen with 6 data fields and 2 live methods:
+`EvaluateRow` is frozen with row-owned conclusion/evidence fields and 2 live methods:
 
 | Kind | Member | Purpose |
 | --- | --- | --- |
 | data | `row_id` (`run_v1:...`) | Stable id within `run_id` |
 | data | `bindings` | Frozen `Mapping[str, Any]` keyed by `pred_id` / `terms` |
-| data | `claim` | `Claim` describing what was derived |
+| data | `kind` | One of four row conclusion roles |
+| data | `digest` | `sha256:` digest of the row claim content |
+| data | `closed_head_digest` | Closed-head replay digest |
 | data | `raw_kind` | `"probabilistic"` / `"possibilistic"` / `None` |
 | data | `bound` | `(lower, upper)` tuple of floats, or `None` |
-| data | `evidence_ref` | `EvidenceRef` linking back to envelope |
 | method | `row.explain()` | Build `Explanation` for this row |
 | method | `row.close()` | Build closed-head application `Rule` |
 
@@ -106,8 +107,8 @@ head — see §5 below.
 
 `row.bindings` is keyed by `pred_id` + `terms`, not by `ports` directly.
 The bound port values live inside the `terms` list at positions matching the
-rule's port declaration; see `row.claim` and `row.close()` for richer
-projections.
+rule's port declaration; use `result.head.id`, `row.digest`, and `row.close()`
+for richer projections.
 
 `raw_kind` and `bound` carry quantitative uncertainty propagated from the
 ledger and engine adapters. The invariant `raw_kind is None ⇒ bound is None`
@@ -117,16 +118,11 @@ read-side projection of the same single-source contract documented at
 on the write side — same two fields, never duplicated, never normalized to
 a single number.
 
-## 3. `Claim` — what was asserted
-
-`Claim` describes the derived fact in a kind-agnostic shape:
+## 3. Row conclusion fields
 
 | Field | Purpose |
 | --- | --- |
 | `kind` | One of four `ClaimKind` values |
-| `name` | Predicate / rule / aggregate / projection name |
-| `arguments` | Frozen `Mapping[str, Any]` of the claim payload |
-| `repr` | Pre-rendered string form |
 | `digest` | `sha256:` digest of the claim content |
 
 The four `ClaimKind` values:
@@ -136,33 +132,33 @@ The four `ClaimKind` values:
 - `aggregate_result` — a Count / Sum / Min / Max / Mean result
 - `projection` — a port-projection over evaluation rows
 
-`claim.digest` is the row claim digest. `evidence_ref.fact_digest` remains as
-a deprecated compatibility alias on live rows.
+`row.digest` is the row claim digest. The old result-side `Claim` wrapper has
+been removed; ledger `Claim` records remain a separate persistence-layer type.
 
-## 4. `EvidenceRef` — durable identity
+## 4. Closed-head digest — durable evidence identity
 
-`EvidenceRef` is the durable handle that ties an evidence record to its
-envelope. 5 fields:
+`row.closed_head_digest` is the durable closed-head replay digest that ties a row
+to its explanation context. Service JSON may still expose an `evidence_ref`
+compatibility dictionary, but in-process rows no longer carry an `EvidenceRef`
+wrapper.
 
 | Field | Tied to |
 | --- | --- |
-| `closed_head_digest` | Active frozen field: digest of the closed head used for this row |
-| `ref_id` (`evref_v1:...`) | Deprecated compatibility property: this evidence reference |
-| `result_id` | Deprecated compatibility property: back-pointer to `EvaluateResult.result_id` |
-| `row_id` | Deprecated compatibility property: back-pointer to `EvaluateRow.row_id` |
-| `fact_digest` | Deprecated compatibility property: mirror of `EvaluateRow.claim.digest` |
+| `row_id` | Stable row id within the result |
+| `digest` | Row claim digest |
+| `closed_head_digest` | Digest of the closed head used for this row |
 
 Invariants on a live row:
 
 ```python
 assert row.row_id
-assert row.claim.digest
-assert row.evidence_ref.closed_head_digest
+assert row.digest
+assert row.closed_head_digest
 ```
 
-`EvidenceRef` is not the public explanation entry point. Use `row.explain()`
-on the live row; the ref is for row-local identity, stale detection, and
-durable audit linking only.
+The digest fields are not the public explanation entry point. Use
+`row.explain()` on the live row; row-local identity, stale detection, and durable
+audit linking use `row_id`, `digest`, and `closed_head_digest`.
 
 ## 5. `Explanation` — derivation analysis
 
@@ -203,11 +199,8 @@ All 13 `Explanation` fields:
 | --- | --- | --- |
 | `status` | always | One of the 4 values above |
 | `evidence` | `status == "passed"` | The `EvidenceGraph` derivation tree |
-| `claim` | `passed` (also possible on others) | The asserted `Claim` |
+| `row` | `passed` (also possible on others) | The `EvaluateRow` being explained |
 | `result_id` | always (required when passed) | Links to `EvaluateResult` |
-| `row_id` | live-row path | Links to source `EvaluateRow` |
-| `evidence_ref_id` | live-row path | Links to `EvidenceRef.ref_id` |
-| `raw_kind` / `bound` | when row has uncertainty | Propagated quantitative carriers |
 | `failure_class` | `status == "failed"` | Diagnostic class |
 | `checked_scope` | `failed` / `unsupported` | Replay context that was checked |
 | `suggested_next_steps` | typically `failed` / `unsupported` | UX hint strings |
@@ -223,7 +216,7 @@ e = row.explain()
 
 assert e.status == "passed"
 assert e.evidence is not None       # an EvidenceGraph
-assert e.claim is not None
+assert e.row is row
 assert e.failure_class is None
 assert e.errors == ()
 ```
@@ -556,7 +549,7 @@ Application `Rule` (built via `build_application_rule(...)`) plus
 `RuleExpr` composition is the **preferred read-pattern surface for new
 code** in v0.2. `Inference` and `Case` (legacy DSL) remain available as
 the **compatibility surface**: they produce the same `EvaluateResult` /
-`EvaluateRow` / `Claim` / `Explanation` shapes documented in §§1–5 and
+`EvaluateRow` / `Explanation` shapes documented in §§1–5 and
 share the same lower evaluation pipeline (`SemanticsProfile`, engine
 adapters, evidence runtime).
 

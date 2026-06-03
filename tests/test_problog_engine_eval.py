@@ -92,8 +92,7 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertTrue(mock_run.call_args.kwargs["trace"])
         explanation = candidates[0].explain()
         self.assertEqual(explanation.evidence.support_kind, PROBLOG_PROVENANCE_KIND)
-        with self.assertWarns(DeprecationWarning):
-            self.assertNotEqual(candidates[0].evidence_ref.ref_id, f"sha256:{'0' * 64}")
+        self.assertNotEqual(candidates[0].closed_head_digest, f"sha256:{'0' * 64}")
 
     def test_sdk_evaluate_rejects_engine_options_timeout(self) -> None:
         sdk = self._make_sdk()

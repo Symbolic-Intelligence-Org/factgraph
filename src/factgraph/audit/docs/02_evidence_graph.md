@@ -91,7 +91,7 @@ audit bridge keys:
 |---|---|
 | `result_id` | owning `EvaluateResult` id |
 | `row_id` | explained row id |
-| `evidence_ref_id` | row `EvidenceRef.ref_id` |
+| `evidence_ref_id` | compatibility evidence reference id derived from result id, row id, row digest, and closed-head digest |
 | `claim_digest` | row claim digest |
 | `closed_head_digest` | closed-head digest |
 | `expr_digest` | evaluated expression digest |

@@ -566,7 +566,7 @@ result = sdk.eval.evaluate(inf, engine="native")
   optional engine provenance.
 - `rows` is a tuple-like sequence of `EvaluateRow` values.
 - Each row exposes `bindings`, `claim`, `raw_kind`, `bound`, and an
-  `EvidenceRef`.
+  row-owned evidence fields.
 - `row.explain()` returns an `Explanation`.
 - `row.close()` returns a closed application `Rule` that can be passed to
   `fg.eval.explain(expr, head=closed_head, ...)`.
@@ -575,8 +575,8 @@ result = sdk.eval.evaluate(inf, engine="native")
 `EvaluateResult`, `EvaluateRow`, `row.explain()`, and `row.close()`.
 
 For the full envelope chain (`EvaluateResult` direct fields plus
-`ResultFingerprint` / `engine_meta`, `EvaluateRow` data + methods, `Claim` /
-`EvidenceRef` invariants, `Explanation` status / failure_class enum values,
+`ResultFingerprint` / `engine_meta`, `EvaluateRow` data + methods,
+row digest / closed-head digest invariants, `Explanation` status / failure_class enum values,
 and runnable passed / failed examples), see
 [`docs/official/kernel/quickstart/evidence.md`](../../../../docs/official/kernel/quickstart/evidence.md).
 

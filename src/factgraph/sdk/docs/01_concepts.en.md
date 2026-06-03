@@ -38,18 +38,18 @@ with vars("u",) as (u,):              # rule declaration
 ### Evaluation Row
 
 An *evaluation row* is an `EvaluateResult` row produced by
-`fg.eval.evaluate(...)`. Evaluation is read-only; rows carry bindings, a Claim,
-raw quantitative carriers, and an EvidenceRef.
+`fg.eval.evaluate(...)`. Evaluation is read-only; rows carry bindings,
+row-owned conclusion/evidence digests, and raw quantitative carriers.
 
 ```python
 result = fg.eval.evaluate(deriv)
 row = result.first()
 assert row is not None
 row.bindings
-row.claim.digest
+row.digest
 row.raw_kind
 row.bound
-row.evidence_ref.closed_head_digest
+row.closed_head_digest
 ```
 
 The supporting evidence is reachable through `row.explain()`. A row can also

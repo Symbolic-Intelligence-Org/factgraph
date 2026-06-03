@@ -41,14 +41,6 @@ class DetachedRowError(RuntimeError):
     """Raised when a live-only row operation is requested from a detached row."""
 
 
-class DetachedClaimError(RuntimeError):
-    """Raised when deprecated Claim fields are read without an owner row."""
-
-
-class DetachedEvidenceRefError(RuntimeError):
-    """Raised when deprecated EvidenceRef fields are read without an owner row."""
-
-
 ClaimKind = Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
 RawKind = Literal["probabilistic", "possibilistic"]
 ExplanationStatus = Literal["passed", "failed", "unsupported", "invalid_request"]
@@ -92,95 +84,23 @@ _FORM1_ROW_SUPPORT_KINDS = frozenset({_NATIVE_FORM1_SUPPORT_KIND, SOUFFLE_WITNES
 
 
 @dataclass(frozen=True)
-class Claim:
-    kind: ClaimKind
-    repr: str
-    digest: str
-    _row_resolver: Callable[[], "EvaluateRow"] | None = field(default=None, repr=False, compare=False, hash=False)
-
-    def __post_init__(self) -> None:
-        if self.kind not in _CLAIM_KINDS:
-            raise ProtocolShapeError("Claim.kind must be one of fact_triple, rule_head, aggregate_result, projection")
-        _require_non_empty_str(self.repr, field_name="Claim.repr")
-        _require_sha256_token(self.digest, field_name="Claim.digest")
-        if self._row_resolver is not None and not callable(self._row_resolver):
-            raise ProtocolShapeError("Claim._row_resolver must be callable or None")
-
-    @property
-    def name(self) -> str:
-        _warn_deprecated_claim_field("name", "EvaluateResult.head.id")
-        row = self._require_owner()
-        return _claim_name_for_row_result(row, row._require_live_result())
-
-    @property
-    def arguments(self) -> Mapping[str, Any]:
-        _warn_deprecated_claim_field("arguments", "EvaluateRow.bindings")
-        return _claim_arguments_for_row(self._require_owner())
-
-    def _require_owner(self) -> "EvaluateRow":
-        if self._row_resolver is None:
-            raise DetachedClaimError("Claim deprecated-field access requires owner EvaluateRow resolver")
-        return self._row_resolver()
-
-
-@dataclass(frozen=True)
-class EvidenceRef:
-    closed_head_digest: str
-    _row_resolver: Callable[[], "EvaluateRow"] | None = field(default=None, repr=False, compare=False, hash=False)
-
-    def __post_init__(self) -> None:
-        _require_sha256_token(self.closed_head_digest, field_name="EvidenceRef.closed_head_digest")
-        if self._row_resolver is not None and not callable(self._row_resolver):
-            raise ProtocolShapeError("EvidenceRef._row_resolver must be callable or None")
-
-    @property
-    def ref_id(self) -> str:
-        _warn_deprecated_evidence_ref_field("ref_id", "EvidenceRef.closed_head_digest plus EvaluateRow/EvaluateResult context")
-        row = self._require_owner()
-        return _evidence_ref_id_for_row_result(row, row._require_live_result())
-
-    @property
-    def result_id(self) -> str:
-        _warn_deprecated_evidence_ref_field("result_id", "EvaluateResult.result_id")
-        row = self._require_owner()
-        return _evidence_ref_result_id_for_row_result(row, row._require_live_result())
-
-    @property
-    def row_id(self) -> str:
-        _warn_deprecated_evidence_ref_field("row_id", "EvaluateRow.row_id")
-        return _evidence_ref_row_id_for_row(self._require_owner())
-
-    @property
-    def fact_digest(self) -> str:
-        _warn_deprecated_evidence_ref_field("fact_digest", "EvaluateRow.claim.digest")
-        return _evidence_ref_fact_digest_for_row(self._require_owner())
-
-    def _require_owner(self) -> "EvaluateRow":
-        if self._row_resolver is None:
-            raise DetachedEvidenceRefError("EvidenceRef deprecated-field access requires owner EvaluateRow resolver")
-        return self._row_resolver()
-
-
-@dataclass(frozen=True)
 class EvaluateRow:
     row_id: str
     bindings: Mapping[str, Any]
-    claim: Claim
+    kind: ClaimKind
+    digest: str
+    closed_head_digest: str
     raw_kind: RawKind | None
     bound: tuple[float, float] | None
-    evidence_ref: EvidenceRef
     _result_resolver: Callable[[], EvaluateResult] | None = field(default=None, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.row_id, field_name="EvaluateRow.row_id")
         object.__setattr__(self, "bindings", _freeze_mapping(self.bindings, field_name="EvaluateRow.bindings"))
-        if not isinstance(self.claim, Claim):
-            raise ProtocolShapeError("EvaluateRow.claim must be Claim")
-        if not isinstance(self.evidence_ref, EvidenceRef):
-            raise ProtocolShapeError("EvaluateRow.evidence_ref must be EvidenceRef")
-        row_self_ref: Callable[[], EvaluateRow] = lambda self_ref=self: self_ref
-        object.__setattr__(self, "claim", replace(self.claim, _row_resolver=row_self_ref))
-        object.__setattr__(self, "evidence_ref", replace(self.evidence_ref, _row_resolver=row_self_ref))
+        if self.kind not in _CLAIM_KINDS:
+            raise ProtocolShapeError("EvaluateRow.kind must be one of fact_triple, rule_head, aggregate_result, projection")
+        _require_sha256_token(self.digest, field_name="EvaluateRow.digest")
+        _require_sha256_token(self.closed_head_digest, field_name="EvaluateRow.closed_head_digest")
         if self.raw_kind is None:
             if self.bound is not None:
                 raise ProtocolShapeError("EvaluateRow.bound must be None when raw_kind is None")
@@ -352,12 +272,8 @@ class EvaluateResult:
 class Explanation:
     status: ExplanationStatus
     evidence: EvidenceGraph | None
-    claim: Claim | None
+    row: EvaluateRow | None
     result_id: str | None
-    row_id: str | None
-    evidence_ref_id: str | None
-    raw_kind: RawKind | None = None
-    bound: tuple[float, float] | None = None
     failure_class: ExplanationFailureClass | None = None
     checked_scope: Mapping[str, Any] | None = None
     suggested_next_steps: tuple[str, ...] = ()
@@ -371,20 +287,14 @@ class Explanation:
             raise ProtocolShapeError("Explanation.status='passed' iff Explanation.evidence is not None")
         if self.evidence is not None and not isinstance(self.evidence, EvidenceGraph):
             raise ProtocolShapeError("Explanation.evidence must be EvidenceGraph or None")
-        if self.claim is not None and not isinstance(self.claim, Claim):
-            raise ProtocolShapeError("Explanation.claim must be Claim or None")
+        if self.row is not None and not isinstance(self.row, EvaluateRow):
+            raise ProtocolShapeError("Explanation.row must be EvaluateRow or None")
 
         _require_optional_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="Explanation.result_id")
-        _require_optional_non_empty_str(self.row_id, field_name="Explanation.row_id")
-        _require_optional_token_prefix(
-            self.evidence_ref_id,
-            prefix=_EVIDENCE_REF_ID_PREFIX,
-            field_name="Explanation.evidence_ref_id",
-        )
 
         if self.status == "passed":
-            if self.claim is None:
-                raise ProtocolShapeError("Explanation.claim is required when status is passed")
+            if self.row is None:
+                raise ProtocolShapeError("Explanation.row is required when status is passed")
             _require_non_empty_str(self.result_id, field_name="Explanation.result_id")
         if self.status == "failed":
             if self.failure_class not in _EXPLANATION_FAILURE_CLASSES:
@@ -393,14 +303,6 @@ class Explanation:
             raise ProtocolShapeError("Explanation.failure_class must be None unless status is failed")
         if self.status in {"unsupported", "invalid_request"} and not self.errors:
             raise ProtocolShapeError("Explanation.errors must be non-empty when status is unsupported or invalid_request")
-
-        if self.raw_kind is None:
-            if self.bound is not None:
-                raise ProtocolShapeError("Explanation.bound must be None when raw_kind is None")
-        else:
-            if self.raw_kind not in _RAW_KINDS:
-                raise ProtocolShapeError("Explanation.raw_kind must be probabilistic, possibilistic, or None")
-            object.__setattr__(self, "bound", _validate_bound(self.bound))
 
         if self.checked_scope is not None:
             object.__setattr__(
@@ -523,22 +425,6 @@ def evidence_ref_id_for(result_id: str, row_id: str, fact_digest: str, closed_he
     return f"{_EVIDENCE_REF_ID_PREFIX}{digest}"
 
 
-def _warn_deprecated_claim_field(field_name: str, replacement: str) -> None:
-    warnings.warn(
-        f"Claim.{field_name} is deprecated; use {replacement}",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-
-def _warn_deprecated_evidence_ref_field(field_name: str, replacement: str) -> None:
-    warnings.warn(
-        f"EvidenceRef.{field_name} is deprecated; use {replacement}",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-
-
 def _warn_deprecated_result_field(field_name: str, replacement: str) -> None:
     warnings.warn(
         f"EvaluateResult.{field_name} is deprecated; use {replacement}",
@@ -561,6 +447,15 @@ def _claim_arguments_for_row(row: EvaluateRow) -> Mapping[str, Any]:
     return row.bindings
 
 
+def _claim_repr_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
+    return _claim_repr_for_row_name(row, _claim_name_for_row_result(row, result))
+
+
+def _claim_repr_for_row_name(row: EvaluateRow, claim_name: str) -> str:
+    _require_non_empty_str(claim_name, field_name="claim_name")
+    return f"{claim_name}{dict(_claim_arguments_for_row(row))!r}"
+
+
 def _evidence_ref_result_id_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
     if not isinstance(row, EvaluateRow):
         raise ProtocolShapeError("row must be EvaluateRow")
@@ -578,7 +473,7 @@ def _evidence_ref_row_id_for_row(row: EvaluateRow) -> str:
 def _evidence_ref_fact_digest_for_row(row: EvaluateRow) -> str:
     if not isinstance(row, EvaluateRow):
         raise ProtocolShapeError("row must be EvaluateRow")
-    return row.claim.digest
+    return row.digest
 
 
 def _evidence_ref_id_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
@@ -586,7 +481,7 @@ def _evidence_ref_id_for_row_result(row: EvaluateRow, result: EvaluateResult) ->
         _evidence_ref_result_id_for_row_result(row, result),
         _evidence_ref_row_id_for_row(row),
         _evidence_ref_fact_digest_for_row(row),
-        row.evidence_ref.closed_head_digest,
+        row.closed_head_digest,
     )
 
 
@@ -603,13 +498,13 @@ def _row_digest_for(row: EvaluateRow, *, result_id: str, claim_name: str) -> str
                 "bound": row.bound,
                 "claim": {
                     "arguments": _claim_arguments_for_row(row),
-                    "digest": row.claim.digest,
-                    "kind": row.claim.kind,
+                    "digest": row.digest,
+                    "kind": row.kind,
                     "name": claim_name,
-                    "repr": row.claim.repr,
+                    "repr": _claim_repr_for_row_name(row, claim_name),
                 },
                 "evidence_ref": {
-                    "closed_head_digest": row.evidence_ref.closed_head_digest,
+                    "closed_head_digest": row.closed_head_digest,
                     "fact_digest": _evidence_ref_fact_digest_for_row(row),
                     "result_id": result_id,
                     "row_id": _evidence_ref_row_id_for_row(row),
@@ -742,23 +637,16 @@ def _candidate_set_to_evaluate_row(
     bindings = _bindings_from_candidate(candidate)
     effective_claim_name = candidate.target if claim_name is None else claim_name
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
-    claim = Claim(
-        kind=claim_kind,
-        repr=f"{effective_claim_name}{dict(bindings)!r}",
-        digest=digest,
-    )
     row_id = row_id_for(run_id, bindings)
-    evidence_ref = EvidenceRef(
-        closed_head_digest=closed_head_digest,
-    )
     raw_kind, bound = _raw_kind_and_bound_from_candidate(candidate)
     return EvaluateRow(
         row_id=row_id,
         bindings=bindings,
-        claim=claim,
+        kind=claim_kind,
+        digest=digest,
+        closed_head_digest=closed_head_digest,
         raw_kind=raw_kind,
         bound=bound,
-        evidence_ref=evidence_ref,
     )
 
 
@@ -779,12 +667,8 @@ def _explain_live_row(
         return Explanation(
             status="failed",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result.result_id,
-            row_id=row.row_id,
-            evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
-            raw_kind=row.raw_kind,
-            bound=row.bound,
             failure_class="row_not_in_result",
             checked_scope=checked_scope,
             suggested_next_steps=("Re-evaluate the expression and explain a row from the returned result.",),
@@ -794,12 +678,8 @@ def _explain_live_row(
         return Explanation(
             status="failed",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result.result_id,
-            row_id=row.row_id,
-            evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
-            raw_kind=row.raw_kind,
-            bound=row.bound,
             failure_class="stale_row",
             checked_scope=checked_scope,
             suggested_next_steps=("Use a row from the current EvaluateResult before calling explain().",),
@@ -815,12 +695,8 @@ def _explain_live_row(
         return Explanation(
             status="unsupported",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result.result_id,
-            row_id=row.row_id,
-            evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
-            raw_kind=row.raw_kind,
-            bound=row.bound,
             checked_scope=checked_scope,
             errors=(
                 ErrorDTO(
@@ -834,12 +710,8 @@ def _explain_live_row(
     return Explanation(
         status="passed",
         evidence=evidence,
-        claim=row.claim,
+        row=row,
         result_id=result.result_id,
-        row_id=row.row_id,
-        evidence_ref_id=_evidence_ref_id_for_row_result(row, result),
-        raw_kind=row.raw_kind,
-        bound=row.bound,
         checked_scope=checked_scope,
     )
 
@@ -1001,9 +873,9 @@ def _entity_info_for_close(schema_index: object | None, entity_type: str) -> obj
 def _row_anchor_matches(left: EvaluateRow, right: EvaluateRow, result: EvaluateResult) -> bool:
     return (
         left.row_id == right.row_id
-        and left.claim.digest == right.claim.digest
+        and left.digest == right.digest
         and _evidence_ref_id_for_row_result(left, result) == _evidence_ref_id_for_row_result(right, result)
-        and left.evidence_ref.closed_head_digest == right.evidence_ref.closed_head_digest
+        and left.closed_head_digest == right.closed_head_digest
     )
 
 
@@ -1024,7 +896,7 @@ def _build_passed_row_evidence_graph(
         node_kind=NODE_CONCLUSION,
         component="evaluate.row",
         label=_claim_name_for_row_result(row, result),
-        value_summary=row.claim.repr,
+        value_summary=_claim_repr_for_row_result(row, result),
     )
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
@@ -1158,15 +1030,15 @@ def _build_form1_evidence_graph(
             node_kind=NODE_CONCLUSION,
             component=result.head.id,
             label=_claim_name_for_row_result(row, result),
-            value_summary=row.claim.repr,
+            value_summary=_claim_repr_for_row_result(row, result),
             engine_meta={
                 "rule_id": result.head.id,
                 "is_head": True,
                 "explained_claim_ref": {
                     "row_id": row.row_id,
                     "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
-                    "claim_digest": row.claim.digest,
-                    "claim_repr_cache": row.claim.repr,
+                    "claim_digest": row.digest,
+                    "claim_repr_cache": _claim_repr_for_row_result(row, result),
                 },
                 "quantitative_explanation": _quantitative_explanation_for_row(row),
                 "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
@@ -1313,8 +1185,8 @@ def _evidence_metadata_payload_for_row_result(row: EvaluateRow, result: Evaluate
         "result_id": result.result_id,
         "row_id": row.row_id,
         "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
-        "claim_digest": row.claim.digest,
-        "closed_head_digest": row.evidence_ref.closed_head_digest,
+        "claim_digest": row.digest,
+        "closed_head_digest": row.closed_head_digest,
         "expr_digest": fingerprint.expr_digest,
         "rule_set_digest": fingerprint.rule_set_digest,
         "view_snapshot_digest": fingerprint.view_snapshot_digest,
@@ -1408,7 +1280,7 @@ def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> M
             "expr_digest": fingerprint.expr_digest,
             "rule_set_digest": fingerprint.rule_set_digest,
             "view_snapshot_digest": fingerprint.view_snapshot_digest,
-            "closed_head_digest": row.evidence_ref.closed_head_digest,
+            "closed_head_digest": row.closed_head_digest,
         },
         field_name="Explanation.checked_scope",
     )
@@ -1568,14 +1440,10 @@ def _validate_tuple_of_type(value: object, item_type: type[Any], *, field_name: 
 
 
 __all__ = [
-    "Claim",
-    "DetachedClaimError",
-    "DetachedEvidenceRefError",
     "DetachedRowError",
     "Explanation",
     "EvaluateResult",
     "EvaluateRow",
-    "EvidenceRef",
     "canonical_bytes_for_evaluate",
     "claim_digest_for",
     "closed_head_digest_for",

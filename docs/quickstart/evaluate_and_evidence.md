@@ -154,16 +154,17 @@ Together they fingerprint every input the evaluator considered. `fingerprint.res
 
 ### 2.2 `EvaluateRow` — one match per row
 
-Each `EvaluateRow` is one match — one `(rule body, ledger fact-set)` binding that satisfied the body. The fields say what the body matched (`bindings`), what the rule's head looked like for this match (`claim`), what uncertainty the row carries from the source facts (`raw_kind` / `bound`), and where to find supporting evidence later (`evidence_ref`):
+Each `EvaluateRow` is one match — one `(rule body, ledger fact-set)` binding that satisfied the body. The fields say what the body matched (`bindings`), what the rule's head looked like for this match (`kind` / `digest`), what uncertainty the row carries from the source facts (`raw_kind` / `bound`), and what closed-head replay anchor supports it (`closed_head_digest`):
 
 ```text
 EvaluateRow (frozen)
   ├── row_id: str
   ├── bindings: Mapping[str, Any]   ← engine candidate payload (see below)
-  ├── claim: Claim                  ← see §2.3
+  ├── kind: ClaimKind               ← row conclusion role
+  ├── digest: str                   ← row claim digest
+  ├── closed_head_digest: str       ← stable replay input for this row
   ├── raw_kind: "probabilistic" | "possibilistic" | None
   ├── bound: tuple[float, float] | None
-  ├── evidence_ref: EvidenceRef     ← see §2.4
   └── _result_resolver              ← internal; powers row.explain()
 ```
 
@@ -173,9 +174,11 @@ row = result.first()
 row.row_id                    # str
 row.bindings                  # Mapping — engine candidate payload, NOT a {port: value} map (see below)
 result.head.id                # "user:region" — the head predicate that fired
+row.kind                      # "fact_triple" — row conclusion role
+row.digest                    # "sha256:..." — content digest for this row claim
 row.raw_kind                  # None (no uncertainty meta on the source claims)
 row.bound                     # None (paired with raw_kind, see engines_and_configs.md §2.1)
-row.evidence_ref.closed_head_digest  # "sha256:..." — stable replay input for this row
+row.closed_head_digest        # "sha256:..." — stable replay input for this row
 ```
 
 #### `bindings` — engine candidate payload (not a port→value map)
@@ -198,7 +201,7 @@ dict(row.bindings)
 
 Two parts to read:
 
-- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id`; `row.claim.name` remains a deprecated compatibility alias). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`. **Why does it look like `entity:field`?** Because `rule.id` is forced to match a known ledger predicate (see §1.2 input rejections — `target predicate not found: <id>`). A "normal" free-form id like `"find_us_users"` is rejected. The shipped design conflates rule identity with predicate identity; see [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) for the same family of cross-layer name occupation.
+- **`pred_id`** is the **head's own** predicate id (= `rule.id` = `result.head.id`). It identifies the rule head as a *single* predicate; it does **not** point at any one of the head's entity ports. Constant across every row. *Even when* the head declares multiple entity-typed ports (e.g. a relationship like `order:buyer(order_ref, user_ref)`), `pred_id` is still that one id — each entity ref lives in its own slot of `terms`. **Why does it look like `entity:field`?** Because `rule.id` is forced to match a known ledger predicate (see §1.2 input rejections — `target predicate not found: <id>`). A "normal" free-form id like `"find_us_users"` is rejected. The shipped design conflates rule identity with predicate identity; see [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) for the same family of cross-layer name occupation.
 - **`terms`** is the per-row port resolution — what *varies* row-to-row. `terms[i]` carries the value bound to the i-th port in `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two `entity_ref` terms — `terms[0]` for the order, `terms[1]` for the user.
 
 > **Shipped arity constraint.** `head.id` must match a known ledger predicate, and `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. You cannot declare "a synthetic head with three entity ports just because I want three columns of output"; the head's arity is bounded by the predicate id it claims. `Rule.projection(*names)` would express that idea but is not usable as an evaluate head in v0.2 (§1.2).
@@ -220,23 +223,18 @@ To map port names to values programmatically, walk `head.ports` in parallel with
 
 #### `row.close()` — derived closed-head `Rule` for this row
 
-`row.close()` returns the closed-head `Rule` for this specific row — the original head's `when` plus extra atoms pinning each port to the row's matched values. Its digest is `row.evidence_ref.closed_head_digest`, and it is the structural input that `fg.eval.explain(...)` / `fg.rules.inspect(...)` consume. The closed-head concept is covered in depth in §6.
+`row.close()` returns the closed-head `Rule` for this specific row — the original head's `when` plus extra atoms pinning each port to the row's matched values. Its digest is `row.closed_head_digest`, and it is the structural input that `fg.eval.explain(...)` / `fg.rules.inspect(...)` consume. The closed-head concept is covered in depth in §6.
 
-### 2.3 `Claim` DTO
+### 2.3 Row conclusion identity
 
-`Claim` describes the *thing concluded* on a row — its role (`kind`), a human-readable rendering (`repr`), and a content-addressed digest. It does not carry provenance; provenance lives in `EvidenceRef` (§2.4) and `EvidenceGraph` (§5). Four `kind` values distinguish what role the conclusion plays.
+The row itself describes the *thing concluded*: `kind` records the role and `digest` is the content-addressed row claim digest. Human-readable rendering is derived by explanation/rendering helpers; it is not a stored `EvaluateRow` field.
 
-`Claim.name` and `Claim.arguments` are deprecated compatibility properties. On a live row, `row.claim.name` resolves to `result.head.id`, and `row.claim.arguments` resolves to `row.bindings`. New code should use those active row/result fields directly.
-
-> **Name collision warning.** There are **two** classes named `Claim`. This section documents `factgraph.application.protocol.evaluate_result.Claim` — the *result-side projection* that `EvaluateRow.claim` exposes. It is **not** the on-disk ledger `Claim` (`factgraph.core.store.ledger.Claim` documented in [`data_model.md` §1](data_model.md), with `asrt_id` / `pred_id` / `e_ref` / `rest_terms`). The SDK's top-level `from factgraph.sdk import Claim` re-exports the protocol one, not the ledger one. Same name, two layers — same family as the `Rule` namespace ambiguity in [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md).
+The old result-side `Claim` wrapper is gone. Do not confuse that removed protocol wrapper with the on-disk ledger `Claim` (`factgraph.core.store.ledger.Claim`, documented in [`data_model.md` §1](data_model.md), with `asrt_id` / `pred_id` / `e_ref` / `rest_terms`). The ledger `Claim` remains a lower-layer persistence record; evaluation rows no longer expose a protocol `Claim` DTO.
 
 ```text
-Claim  (= factgraph.application.protocol.evaluate_result.Claim, frozen)
+EvaluateRow conclusion fields
   ├── kind: Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
-  ├── repr: str               ← human-readable rendering (e.g. "user:region(alice, US)")
-  ├── digest: str             ← "sha256:..." over the canonical claim form
-  ├── name: str               ← deprecated property; use result.head.id
-  └── arguments: Mapping[str, Any]    ← deprecated property; use row.bindings
+  └── digest: str             ← "sha256:..." over the canonical claim form
 ```
 
 The four `kind` values:
@@ -248,22 +246,20 @@ The four `kind` values:
 | `"aggregate_result"` | An aggregate (`agg_count` / `agg_sum` / ...) result |
 | `"projection"` | A `Rule.projection(...)` synthetic projection output |
 
-### 2.4 `EvidenceRef` DTO
+### 2.4 Closed-head digest and evidence identity
 
-`EvidenceRef` is the stable handle that lets you re-locate a row's evidence across re-evaluations or processes. It is **not** the evidence itself (that lives in `EvidenceGraph`, §5) — it is the pair of digests that let you ask "is this the same row we explained last time?" deterministically.
+`closed_head_digest` is the stable replay input for row-local evidence. It is **not** the evidence itself (that lives in `EvidenceGraph`, §5) — it is the digest that lets you ask "is this the same closed head we explained last time?" deterministically.
 
-Only `closed_head_digest` is an active frozen field in Slice α of the evaluate-result flattening design. The other fields below remain available as deprecated compatibility properties on live rows; new code should use `row.row_id`, `result.result_id`, `row.claim.digest`, and `row.explain()`/evidence metadata as the primary access paths.
+The old `EvidenceRef` wrapper is gone. Service JSON may still emit a nested `evidence_ref` dictionary for wire compatibility, but in-process SDK/protocol code uses direct row/result fields.
 
 ```text
-EvidenceRef (frozen)
-  ├── closed_head_digest: str      ← "sha256:..." over the closed-head Rule (§6)
-  ├── ref_id: str                  ← deprecated property; stable evidence handle
-  ├── result_id: str               ← deprecated property; use result.result_id
-  ├── row_id: str                  ← deprecated property; use row.row_id
-  └── fact_digest: str             ← deprecated property; use row.claim.digest
+EvaluateRow evidence fields
+  ├── row_id: str
+  ├── digest: str
+  └── closed_head_digest: str      ← "sha256:..." over the closed-head Rule (§6)
 ```
 
-Two evaluation runs over the same `(rule, head, engine, config, ledger snapshot)` produce the same `fact_digest` and `closed_head_digest`, even if `result_id` / `run_id` change.
+Two evaluation runs over the same `(rule, head, engine, config, ledger snapshot)` produce the same `row.digest` and `row.closed_head_digest`, even if `result_id` / `run_id` change.
 
 ## 3. `row.explain()` and `fg.eval.explain(...)` — two entries to `Explanation`
 
@@ -315,15 +311,10 @@ Explanation (frozen)
 │   ├── support_kind, layout_hint, metadata
 │   └── (see §5 for nested EvidenceNode / EvidenceEdge)
 │
-├── claim               : Claim | None                     ← required iff status == "passed"
-│   └── (see §2.3 for full Claim shape)
+├── row                 : EvaluateRow | None               ← required iff status == "passed"
+│   └── (see §2.2 for row fields)
 │
 ├── result_id           : str | None      ("evalr_v1:..." ; required iff status == "passed")
-├── row_id              : str | None
-├── evidence_ref_id     : str | None      ("evref_v1:...")
-│
-├── raw_kind            : Literal["probabilistic", "possibilistic"] | None
-├── bound               : tuple[float, float] | None       ← None iff raw_kind is None
 │
 ├── failure_class       : Literal[                         ← required iff status == "failed"
 │                            "no_matching_row",            │  0 rows matched
@@ -352,18 +343,17 @@ Explanation (frozen)
 
 | Invariant | Where checked |
 |---|---|
-| `status == "passed" iff evidence is not None` | line 276 |
-| `status == "passed" → claim is not None` | line 291–293 |
-| `status == "passed" → result_id is non-empty` | line 294 |
-| `failure_class is set iff status == "failed"` | line 295–299 |
-| `bound is None iff raw_kind is None` | line 303–309 |
-| `status ∈ {unsupported, invalid_request} → errors non-empty` | line 300–301 |
+| `status == "passed" iff evidence is not None` | `Explanation.__post_init__` |
+| `status == "passed" → row is not None` | `Explanation.__post_init__` |
+| `status == "passed" → result_id is non-empty` | `Explanation.__post_init__` |
+| `failure_class is set iff status == "failed"` | `Explanation.__post_init__` |
+| `status ∈ {unsupported, invalid_request} → errors non-empty` | `Explanation.__post_init__` |
 
 ### 4.3 The four `status` values and what each Explanation actually carries
 
-| status | When | `evidence` | `claim` | `failure_class` | `errors` | What you read |
+| status | When | `evidence` | `row` | `failure_class` | `errors` | What you read |
 |---|---|---|---|---|---|---|
-| `"passed"` | head fires on at least one row | ✓ EvidenceGraph | ✓ Claim | None | () | `evidence` for the path; `claim` for the head; `raw_kind`+`bound` for uncertainty |
+| `"passed"` | head fires on at least one row | ✓ EvidenceGraph | ✓ EvaluateRow | None | () | `evidence` for the path; `row` for bindings, digest, closed-head digest, and uncertainty |
 | `"failed"` | head doesn't fire / no match | None | None | ✓ one of 5 | () | `failure_class` to know *why*; `checked_scope` to see what was examined; `suggested_next_steps` for fixes |
 | `"unsupported"` | engine rejects the rule shape | None | None | None | ✓ non-empty | `errors[*].code` + `message` for what the engine didn't accept |
 | `"invalid_request"` | call shape is malformed | None | None | None | ✓ non-empty | Same as unsupported, but the problem is in your input, not the engine |
@@ -374,13 +364,13 @@ Explanation (frozen)
 |---|---|
 | `no_matching_row` | The body matches no facts at all |
 | `closed_head_false` | The body matches but the head bindings are not the ones you asked for |
-| `stale_row` | The row referenced by an `EvidenceRef` has been retracted / superseded since evaluation |
-| `row_not_in_result` | You passed an `EvidenceRef.row_id` that does not belong to this `result_id` |
+| `stale_row` | The row handle has been retracted / superseded since evaluation |
+| `row_not_in_result` | You passed a row whose `row_id` does not belong to this `result_id` |
 | `insufficient_closed_bindings` | Reserved literal — declared in the enum but no current code path emits it. The "head not closed" check on `fg.eval.explain(...)` short-circuits as `RuleExprError` (see §3.2) before an Explanation is built, so this value is currently unreachable |
 
 ### 4.5 `raw_kind` + `bound` carry-over
 
-When the source row has uncertainty meta (`raw_kind` + `bound`), the `Explanation` mirrors them at the top level. This is the read-side counterpart to the write-side pairing in `engines_and_configs.md` §2.1. The same invariant holds: `bound is None iff raw_kind is None`.
+When the source row has uncertainty meta (`raw_kind` + `bound`), the `Explanation.row` carries those fields. This is the read-side counterpart to the write-side pairing in `engines_and_configs.md` §2.1. The same invariant holds on the row: `bound is None iff raw_kind is None`.
 
 ## 5. `EvidenceGraph` DTO
 
@@ -484,7 +474,7 @@ Rule(
 |---|---|
 | `row.close()` (§2.2) | Produces the closed-head `Rule` for a given row |
 | `row.explain()` / `fg.eval.explain(...)` (§3) | Both internally close the head and check it against the row's bindings |
-| `EvidenceRef.closed_head_digest` (§2.4) | The stable `sha256:` digest of the closed head — same body & same bindings → same digest |
+| `row.closed_head_digest` (§2.4) | The stable `sha256:` digest of the closed head — same body & same bindings → same digest |
 | `fg.rules.inspect(...)` ([`rules.md`](rules.md) §4) | `RuleExprInspect.is_closed` / `unbound_ports` reports closure status of a non-row Rule |
 
 ### 6.3 `desc` carries through
@@ -527,8 +517,6 @@ from factgraph.sdk import FactGraph              # fg.eval.evaluate, fg.eval.exp
 
 # DTOs (frozen)
 from factgraph.sdk import (
-    Claim,           # row.claim (kind / repr / digest; name + arguments are deprecated properties)
-    EvidenceRef,     # row.evidence_ref (closed_head_digest; ref_id/result_id/row_id/fact_digest are deprecated properties)
     EvaluateResult,  # what fg.eval.evaluate returns
     EvaluateRow,     # in result.rows / result.first() / iter(result)
     Explanation,     # what fg.eval.explain / row.explain() returns
@@ -587,6 +575,6 @@ fg.audit.diff_proof_frames(...) -> ... # compare two recorded proof outcomes
 
 - [`rules.md`](rules.md) — `Rule` / `RuleExpr` / `head` declaration, and `fg.rules.inspect`
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=` / `config=` parameters consumed by `evaluate`
-- [`data_model.md`](data_model.md) §2.2 — the `raw_kind` + `bound` meta keys that surface on `EvaluateRow` and `Explanation`
+- [`data_model.md`](data_model.md) §2.2 — the `raw_kind` + `bound` meta keys that surface on `EvaluateRow`
 - [`assertions.md`](../official/kernel/quickstart/assertions.md) — assertion-level read APIs that `fg.audit.explain` / `conflicts` resolve against
 - [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §8
