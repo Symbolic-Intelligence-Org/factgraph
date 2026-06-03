@@ -1,8 +1,8 @@
 # Task Blueprint: Evaluate-result flatten Slice α — Claim/EvidenceRef redundant-field removal with deprecated property fallback
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6.5 pre-impl grep amendment)
+- Last Updated: 2026-06-03 (Step 4.8 closure)
 - Owner: Claude (blueprint) / Codex (impl) — cross-flip per `feedback_design_impl_branch_isolation`
 - Related Modules:
   - `src/factgraph/application/protocol/evaluate_result.py` (Claim / EvidenceRef / EvaluateRow definitions)
@@ -407,9 +407,82 @@ Codex implementation order (each step ends with targeted `python -m pytest tests
 
 ## 10. Outcome / Deviations
 
-To be filled at archive time:
+### 10.1 Final Result
 
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+Step 4.7 landed at `364d966c` on `v0.2.0-impl-eval-result-flatten-2026-06-03`.
+
+The implementation removed the six redundant frozen DTO fields from `Claim` and
+`EvidenceRef` while preserving the legacy access paths as resolver-backed
+deprecated properties:
+
+- `Claim.name` and `Claim.arguments` now delegate to `EvaluateResult.head.id` and
+  `EvaluateRow.bindings`.
+- `EvidenceRef.row_id`, `result_id`, `ref_id`, and `fact_digest` now delegate to
+  row/result context and preserve byte-equal values.
+- `evidence_ref_id_for(...)` remains the public ref-id formula.
+- `_row_digest_for(...)` now takes explicit `result_id` / `claim_name` context so
+  row/result digest generation does not call deprecated properties internally.
+- `src/service/runtime_v1.py` preserves the old JSON wire shape without warning-
+  emitting property reads.
+- SDK `__all__` remains unchanged; `Claim` / `EvidenceRef` stay exported, while
+  the new detached wrapper errors remain protocol-level exports.
+
+Commit footprint: 14 files, +332/-162.
+
+### 10.2 PF Alignment
+
+- **PF-R1 / PF-R2**: row digest compatibility and EvaluateResult binding-order
+  hazards were handled by explicit-context digesting and by removing the pre-bind
+  `row.evidence_ref.result_id` read.
+- **PF-R3**: `docs/quickstart/evaluate_and_evidence.md` now presents active
+  frozen fields separately from deprecated compatibility properties.
+- **PF-r1**: direct construction sites were updated in
+  `_candidate_set_to_evaluate_row(...)` and the protocol test fixtures.
+- **PF-r2**: construction, digesting, explaining, stale-row checks, and evidence
+  metadata now use direct row/result context helpers rather than deprecated
+  properties.
+- **N-1 / N-2 / N-3**: the service serializer, active docs consumers, and
+  engine-facing tests were updated within the Step 4.6.5 scoped boundary.
+
+### 10.3 Verification
+
+- Focused cohort:
+  `PYTHONPATH=src python -m pytest -p no:capture tests/application/protocol tests/sdk/test_evaluate_result_exports.py tests/test_pyreason_e2e.py tests/test_problog_engine_eval.py -q --no-header`
+  → 164 passed, 4 subtests passed.
+- Full suite:
+  `PYTHONPATH=src python -m pytest -p no:capture tests/ --tb=short -q --no-header`
+  → 2458 passed, 32 skipped, 1044 subtests passed.
+- Construction-site grep for `Claim(name=...)` / `Claim(arguments=...)` /
+  `EvidenceRef(ref_id/result_id/row_id/fact_digest=...)` returned zero scoped
+  hits.
+- Q-PR1 5-path diff vs `4c472b50` remained empty.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+- Dirty baseline entries were preserved and not staged.
+
+### 10.4 Cadence Locks
+
+The §5.4 deprecation strategy remained a local single-Q lock consolidated on
+this blueprint branch per §6.1. Stage-0 source audit remained folded into the
+parent design-point and this blueprint/preflight chain; no standalone Stage 1
+audit document was created.
+
+### 10.5 Deviations
+
+- **D1 — Step 4.7 cadence smudge**: commit `364d966c` included §7 acceptance
+  ticks and an `implemented` Event Log row before Step 4.8 formally flipped
+  `Status`. This did not change source behavior and did not flip `Status`.
+  Step 4.8 records it explicitly rather than rewriting history. Independent
+  review confirmed the implementation with construction-site grep 0 hits,
+  Q-PR1 5-path 0-diff, and a passing targeted cohort.
+- **D2 — SDK export catch**: the first full-suite run caught that exporting
+  `DetachedClaimError` / `DetachedEvidenceRefError` through `factgraph.sdk`
+  changed SDK `__all__` from 64 to 66. The implementation reverted the SDK
+  re-export and kept those error classes at the application protocol layer.
+- **D3 — local pytest capture**: as in earlier slices, standard pytest capture
+  can fail silently in this local environment. Verification used `-p no:capture`.
+
+### 10.6 Archive Plan
+
+Step 4.9 will archive the blueprint pair from `workflow/blueprints/active/` to
+`workflow/blueprints/archive/` and update the archive inventory in a separate
+commit.
