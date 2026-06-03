@@ -175,29 +175,37 @@ row.evidence_ref.ref_id       # "evref_v1:..." — stable handle for this eviden
 
 #### `bindings` — engine candidate payload (not a port→value map)
 
-`row.bindings` is **not** a `{port_name: value}` mapping; it is the raw payload the engine produced. For the native engine over a `PredAtom` body the shape is:
+`row.bindings` is **not** a `{port_name: value}` mapping; it is the raw payload the engine produced. Each row carries one binding of *all* the head's ports — the row is one *assignment* of port → value, not one matched fact and not necessarily tied to a single entity.
+
+For the native engine over a `PredAtom` head body, the payload shape is:
 
 ```python
 dict(row.bindings)
 # {
-#   "pred_id": "user:region",
-#   "terms": [
+#   "pred_id": "user:region",                                       ← head's predicate id;
+#                                                                     same across every row
+#   "terms": [                                                        ← per-row port values
 #     {"kind": "entity_ref", "value": "idref_v1:User:<digest>"},     # ← position 0 — port "user"
 #     {"kind": "literal", "tag": "string", "value": "US"},           # ← position 1 — port "region"
 #   ],
 # }
 ```
 
-Reading this concretely: the row reports `user = "idref_v1:User:<digest>"` and `region = "US"` — the resolved values for `head.ports` after the evaluator bound the body's `Var`s. The mapping is positional — `terms[0] → head.ports`'s first port (`user`), `terms[1] →` its second (`region`).
+Two parts to read:
 
-The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports`. Each term is a typed dict discriminated by `kind`:
+- **`pred_id`** is the **head's** predicate id — it identifies which predicate the rule head instantiates. It is constant across every row of the same `EvaluateResult`. It is *not* "the fact this row matched"; rows do not match a single ledger fact one-to-one. Reading `pred_id` per row is mostly redundant — same value as `row.claim.name` and `result.head.id`.
+- **`terms`** is the per-row port resolution — what *varies* row-to-row. `terms[i]` carries the value bound to the i-th port in `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`.
+
+The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports` (the `ports` `Mapping` preserves insertion order). Each term is a typed dict discriminated by `kind`:
 
 | Term type | Shape | When |
 |---|---|---|
 | `entity_ref` | `{"kind": "entity_ref", "value": "<idref_v1:...>"}` | The port resolved to an entity reference |
 | `literal` | `{"kind": "literal", "tag": "<type>", "value": <python_value>}` | The port resolved to a typed literal. `tag` ∈ `{string, int, bool, float64, bytes, time, uuid}` |
 
-To map port names to values, walk `head.ports` (an ordered `Mapping[str, Var]`) in parallel with `terms`. The application protocol exposes an internal helper `_binding_value_for_head_port(row, head, port_name)` that does the lookup, but it is not currently re-exported through the SDK.
+Reading the example concretely: the row reports `user = "idref_v1:User:<digest>"` and `region = "US"` — the resolved values for `head.ports`. A rule whose head ports are all value-typed produces rows with zero `entity_ref` terms; a rule with multiple entity-typed ports produces rows carrying multiple entity refs simultaneously.
+
+To map port names to values programmatically, walk `head.ports` in parallel with `terms`. The application protocol exposes an internal helper `_binding_value_for_head_port(row, head, port_name)` that does the lookup, but it is not currently re-exported through the SDK.
 
 #### `raw_kind` + `bound` — uncertainty carry-through
 
