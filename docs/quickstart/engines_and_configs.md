@@ -238,57 +238,31 @@ The default is `0`. Validation: must be non-negative `int`; `bool` rejected.
 
 `iteration_count` and any timestep count derived from `temporal_projection` (§4.8) must agree; passing both raises `Conflicting PyReason timesteps between SemanticsProfile.iteration_count and SemanticsProfile.temporal_projection.<mode>`.
 
-### 4.5 `derived_bound` and `head_bound` — head interval annotation
+### 4.5 Interval bounds — head / body atom / per-branch
 
-Both fields produce the same engine output: an interval `: [lo, hi]` after the head predicate.
-
-```
-derived_user_tag(U, T) : [0.8, 1.0]  <-2  user_tag_seed(U, T)
-```
-
-The interval `[0.8, 1.0]` says: *when the body matches, the head holds with certainty bounded below by `0.8` and above by `1.0`*. In PyReason's semantics this is the standard *annotated logic* lower/upper interval — the lower bound is the necessary degree of truth, the upper bound is the possible degree.
-
-| Field | When to use |
-|---|---|
-| `derived_bound: tuple[float, float] \| None` | The canonical name (matches `SemanticsProfile.rule_projection.pyreason[].derived_bound`) |
-| `head_bound: tuple[float, float] \| None` | Equivalent alias kept for ergonomic call sites |
-
-**Mutually exclusive** — passing both raises `PyReasonConfig.derived_bound conflicts with PyReasonConfig.head_bound`. Validation: `0 <= lo <= hi <= 1`.
-
-Default: `None` — no head bound annotation in the emitted rule (head holds at PyReason's default `[1, 1]` when the body matches).
-
-### 4.6 `atom_bounds` — body atom interval annotation
-
-`atom_bounds: dict[atom_id, (lo, hi)]` annotates *individual body atoms* with intervals. Keys use the canonical atom-id form `<rule_id>:atom_<index>`, where `<index>` is the position of the atom in the rule's `when` tuple (0-based):
-
-```python
-PyReasonConfig(
-    atom_bounds={
-        "adult_in_us:atom_1": (0.7, 1.0),    # atom #1 in rule "adult_in_us" must hold at >= 0.7
-        "adult_in_us:atom_2": (0.9, 1.0),    # atom #2 in same rule must hold at >= 0.9
-    },
-)
-```
-
-Engine output (for `adult_in_us` rule):
+PyReason's `: [lo, hi]` interval annotation can land at three positions in the emitted rule string. Four config fields supply them:
 
 ```
-derived(...) <-0 user:age(U, A) : [0.7, 1.0], user:region(U, R) : [0.9, 1.0]
+derived(...) : [head_lo, head_hi]  <-N  user:age(U, A) : [atom_lo, atom_hi], ...
+         ▲                                          ▲
+         head bound (derived_bound / head_bound)    body atom bound (atom_bounds)
+         or per-branch override (case_bounds)
 ```
 
-The position-based key is more precise than a pred-id-based one — the same predicate can appear multiple times in a body (different variable bindings) and each occurrence can be constrained independently. SDK rejects any key not matching `<rule_id>:atom_<digit>` with `PyReasonConfig.atom_bounds keys must use <rule_id>:atom_<index>`.
+| Field | Lands at | Key shape | Notes |
+|---|---|---|---|
+| `derived_bound: tuple[float, float] \| None` | head `: [lo, hi]` (single, all branches) | no key | Canonical name. Default `None` — no annotation (head at PyReason's `[1, 1]`) |
+| `head_bound: tuple[float, float] \| None` | head `: [lo, hi]` (single, all branches) | no key | Equivalent alias. **Mutually exclusive** with `derived_bound` — passing both raises `PyReasonConfig.derived_bound conflicts with PyReasonConfig.head_bound` |
+| `atom_bounds: dict[atom_id, (lo, hi)]` | body atom `: [lo, hi]` | `<rule_id>:atom_<index>` | Position-based key — same predicate at different positions is constrained independently. SDK rejects keys not matching the format |
+| `case_bounds: dict[branch_id, (lo, hi)]` | head `: [lo, hi]`, per OR branch | branch_id (same source as `case_probabilities`; see §3.2) | Overrides `derived_bound` / `head_bound` for that branch only. Use when different evidence paths carry different certainty |
 
-This is how you say "this rule only fires when these specific body atoms match *with sufficient certainty*". Atoms without an explicit bound are not annotated (PyReason treats them at default `[1, 1]`).
+All four require `0 <= lo <= hi <= 1`. Atoms / branches without an explicit bound are not annotated — PyReason treats them at the default `[1, 1]`.
 
-### 4.7 `case_bounds` — per-branch head interval
+Interpretation: in PyReason's annotated logic, the lower bound is the *necessary* degree of truth and the upper is the *possible* degree (the probability vs possibility distinction from §2.1 carries through to how `[lo, hi]` is read). `[1, 1]` = "definitely true", `[0, 0]` = "definitely false", `[0, 1]` = "unknown".
 
-`case_bounds: dict[branch_id, (lo, hi)]` overrides the head bound *per OR branch*. Same shape as ProbLog's `case_probabilities`: branch-id keys, interval values. The adapter looks up the branch's id in `case_bounds`; if found, that interval overrides `derived_bound` / `head_bound` for that branch only.
+### 4.6 `temporal_projection` — discretising the timeline
 
-Use this when different evidence paths to the same head carry different certainty (e.g. an authoritative source path with `[0.95, 1.0]` and a heuristic path with `[0.5, 0.8]`).
-
-### 4.8 `temporal_projection` — discretising the timeline
-
-`temporal_projection: dict` controls PyReason's timestep enumeration. The mode chooses *which timeline drives the discretisation* — pulling from the substrate meta keys covered in §2.2 (`valid_from`/`valid_to`) and §2.3 (`ingested_at`):
+`temporal_projection: dict` controls PyReason's timestep enumeration. The mode chooses *which timeline drives the discretisation* — pulling from the `valid_from`/`valid_to` substrate covered in §2.2:
 
 | Mode | Drives discretisation by | Required fields |
 |---|---|---|
@@ -302,7 +276,7 @@ Both `fact_boundaries` and `valid_time_boundaries` are valid-time-driven; the ad
 
 Validation pathing surfaces in error messages as `SemanticsProfile.temporal_projection.<mode>.<field>` so you can trace which projection rule rejected your config.
 
-### 4.9 `uncertainty_projection`, `rule_params`, `name`, `fallback`
+### 4.7 `uncertainty_projection`, `rule_params`, `name`, `fallback`
 
 - **`uncertainty_projection`** — same substrate as ProbLog's (§2.1, §3.3): projects `raw_kind`+`bound` into engine-native form. The full 7-policy enum:
 
@@ -316,7 +290,7 @@ Validation pathing surfaces in error messages as `SemanticsProfile.temporal_proj
 
   PyReason accepts all 7 because its native form is intervals. The point-collapse policies are still legal — sometimes you want to project away the interval width even on an interval engine.
 - **`rule_params: dict[rule_id, dict]`** — same role as on ProbLog: per-rule metadata, lowered into `SemanticsProfile.rule_projection["pyreason"]`. Forward-compatible slot.
-- **`name` / `fallback`** — same shape and semantics as on ProbLog (§3.5, §3.4).
+- **`name` / `fallback`** — same shape and semantics as on ProbLog (§3.3 / §3.4).
 
 ## 5. `SemanticsProfile` — the canonical DTO (advanced)
 
