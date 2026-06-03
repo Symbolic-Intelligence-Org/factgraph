@@ -13,6 +13,7 @@
 | 2026-06-03 | draft | Cadence path locks recorded (per user 2026-06-03) | (i) §5.4 deprecation strategy locked locally on blueprint branch via Step 4.2 review + Step 4.4 amendment fold (single-Q consolidation; no separate Q-decision doc). (ii) Other 6 §5 unlocked Qs deferred to before Slice γ. (iii) Stage 1 audit doc deferred per Slice 4/5 precedent ([`workflow/CADENCE.md`](../../CADENCE.md) L268); Stage-0 source audit folded into design-point + this blueprint draft; Step 4.2 reviewer verifies via Rule 1 fresh reads. Details in blueprint §6.1. |
 | 2026-06-03 | draft | Previous codex round-1 prompt withdrawn | The earlier prompt I drafted mislabeled the round-1 work as "audit" while structurally aligning with Stage 4.3 preflight, and put the work on a `codex/`-prefixed branch instead of either the blueprint branch (Step 4.2 review) or a canonical `v0.2.0-eval-result-flatten-preflight-2026-06-03` (Step 4.3). Withdrawn; new codex prompt issued for Step 4.2 draft review + tightening, executed directly on the blueprint branch. |
 | 2026-06-03 | draft | Step 4.2 draft review + tightening (Codex round 1) | Rule 1 fresh reads verified the folded Stage-0 claims and surfaced 4 polish findings: P1-1 row digest helper cannot call deprecated properties before owner binding; P1-2 EvaluateResult row-binding order currently reads `EvidenceRef.result_id` pre-bind; P2-1 tests/verification anchors used non-existent `tests/factgraph` path; P2-2 internal code must preserve byte-equal digests without emitting deprecation warnings. Blueprint updated in-place on the blueprint branch; §5.4 local Q fold remains below escalation threshold. |
+| 2026-06-03 | draft | Step 4.4 preflight amendment (PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2) | Applied Step 4.3 preflight findings from independent branch `v0.2.0-eval-result-flatten-preflight-2026-06-03` @ `50a2c53e`: locked PF-R1/PF-R2, added PF-R3 quickstart field-shape rewrite, narrowed construction-site scope per PF-r1, added internal compatibility inventory per PF-r2, reclassified PF-A1 as verified PF-v9 to keep 0 abandonment blockers. |
 
 ## Step 4.2 Review (Codex Round 1)
 
@@ -45,17 +46,30 @@ HEAD before tightening: `509b1f9e`
 
 Codex does **not** recommend escalating §5.4 to a standalone Q-decision doc at Step 4.2. The local policy (one-release-cycle `DeprecationWarning`, removal in Slice γ) remains scoped to Slice α compatibility and does not yet force a cross-slice public compatibility decision beyond what parent design already records. Escalation remains available if Step 4.3 preflight finds unresolved cross-process serialization or SDK export compatibility blockers.
 
+## Step 4.4 Preflight Amendment
+
+Applied on the blueprint branch per Slice 7B/7C cadence, not on the independent preflight branch.
+
+| ID | Bucket | Action |
+| --- | --- | --- |
+| PF-R1 | Required | Locked row digest compatibility; added the concrete `sdk/store.py:2705-2706` ordering callsite showing `_row_digest_for(row)` runs before `EvaluateResult(...)` owner binding. |
+| PF-R2 | Required | Locked EvaluateResult binding-order rewrite; existing Step 4.2 §5.3 / §7 / §8 tightening remains authoritative. |
+| PF-R3 | Required | Expanded quickstart docs scope from "one-line banner" to active-field / deprecated-property shape rewrite for §2.3, §2.4, and §9.1 import comments. |
+| PF-r1 | Recommended | Narrowed construction-site scope to one production pair and two protocol-test fixture pairs; adapter paths are indirect unless Step 4.6.5 finds drift. |
+| PF-r2 | Recommended | Added named internal compatibility inventory so normal construction, digesting, explaining, stale-row checks, and evidence metadata creation do not emit deprecation warnings. |
+| PF-v9 | Verified | Reclassified the preflight's PF-A1 label: "no standalone Stage 1 audit doc needed" is verified-affirmative, not an abandonment blocker. Healthy distribution becomes 3R / 2r / 9v / 2s / 0A. |
+
 ## Codex Pre-Impl Audit Tasks
 
 These tasks ground the blueprint in shipped truth before impl starts. Codex must record findings under "Codex Audit Findings" before any code edit.
 
-### Task A1 — Pin the `EvidenceRef.ref_id` derivation formula
+### Task A1 — Re-confirm the `EvidenceRef.ref_id` derivation formula
 
-**Goal:** Capture the exact shipped formula that produces `EvidenceRef.ref_id` so the new `_compute_evidence_ref_id(...)` helper is byte-equal.
+**Goal:** Re-confirm the exact shipped formula that produces `EvidenceRef.ref_id` so any wrapper/alias remains byte-equal. Step 4.3 PF-v4 confirmed the formula is already centralized as `evidence_ref_id_for(...)`; this task is now a preservation check, not a formula-discovery task.
 
 **Steps:**
-1. `grep -rn 'evidence_ref:[A-Za-z0-9]\+\|EvidenceRef(ref_id=\|_ref_id\|EVIDENCE_REF_ID' src/factgraph/`
-2. Locate the construction site(s) that compute `ref_id` (likely `evaluate_result.py` row-builder helper or an adapter `_build_*`)
+1. Re-read `src/factgraph/application/protocol/evaluate_result.py:413-429`.
+2. Re-read the production callsite at `evaluate_result.py:590-596`.
 3. Record:
    - Full path + line of the formula
    - Input set (which fields feed in, what order)
@@ -65,7 +79,7 @@ These tasks ground the blueprint in shipped truth before impl starts. Codex must
 **Expected output in audit log (§Codex Audit Findings A1):**
 ```
 - File: src/factgraph/application/protocol/evaluate_result.py:<line>
-- Function: <name>
+- Function: evidence_ref_id_for
 - Formula: ref_id = <PREFIX> + sha256( result_id | row_id | fact_digest | closed_head_digest ).hexdigest()
 - Worked example: <inputs> → <token>
 - Test reference (if any): tests/...
@@ -76,30 +90,36 @@ These tasks ground the blueprint in shipped truth before impl starts. Codex must
 **Goal:** Find every place where `Claim` or `EvidenceRef` is instantiated, so step 7 of the impl plan covers all sites.
 
 **Steps:**
-1. `grep -rn 'Claim(' src/factgraph/ tests/factgraph/ | grep -v 'class Claim\|@dataclass\|isinstance\|ProtocolShapeError\|# '`
-2. `grep -rn 'EvidenceRef(' src/factgraph/ tests/factgraph/ | grep -v 'class EvidenceRef\|@dataclass\|isinstance\|ProtocolShapeError\|# '`
+1. `rg -n 'Claim\\(|EvidenceRef\\(' src/factgraph/application/protocol/evaluate_result.py tests/application/protocol tests/sdk/test_evaluate_result_exports.py docs/quickstart/evaluate_and_evidence.md`
+2. Compare against Step 4.3 PF-r1 expected direct constructor pairs:
+   - `src/factgraph/application/protocol/evaluate_result.py:582-596`
+   - `tests/application/protocol/test_evaluate_result_dtos.py:92-105`
+   - `tests/application/protocol/test_evaluate_result_dtos.py:228-240`
 3. Bucket each hit into:
    - **Production** — `src/factgraph/` paths that build rows during evaluate
    - **Test fixture** — `tests/` paths constructing standalone DTOs
-   - **Module docs example** — markdown code blocks (these may need a note but not code edit if they're illustrative)
+   - **Quickstart docs shape** — markdown field tree / SDK import comments, which Step 4.3 PF-R3 requires updating
 
 **Expected output in audit log (§Codex Audit Findings A2):**
 - Production sites: file:line list, count
 - Test fixture sites: file:line list, count
-- Module-docs example sites: file:line list, count
+- Quickstart docs shape sites: file:line list, count
 - Any site that does NOT fit the above buckets → flag with `?` for review
 
-### Task A3 — Check whether `src/factgraph/application/protocol/docs/README.md` (or equivalent module docs) documents Claim / EvidenceRef field sets
+### Task A3 — Re-confirm module docs absence and quickstart docs shape
 
-**Goal:** Decide whether module docs need updating (§9 / §10 of blueprint).
+**Goal:** Decide whether module docs need updating (§9 / §10 of blueprint) and confirm the required quickstart field-shape rewrite scope.
 
 **Steps:**
 1. `ls src/factgraph/application/protocol/docs/ 2>/dev/null` — does a docs subtree exist for this module?
 2. `grep -rn 'Claim\|EvidenceRef' src/factgraph/application/protocol/docs/ 2>/dev/null` — are these classes mentioned?
+3. `nl -ba docs/quickstart/evaluate_and_evidence.md | sed -n '216,265p'` — confirm §2.3 / §2.4 field trees.
+4. `nl -ba docs/quickstart/evaluate_and_evidence.md | sed -n '512,528p'` — confirm §9.1 SDK import comments.
 
 **Expected output in audit log (§Codex Audit Findings A3):**
 - Module docs path (if exists): ...
 - Mentions of Claim / EvidenceRef field set: yes/no, with line refs
+- Quickstart field-shape update cells: ...
 
 ### Task A4 — Cross-flip pre-conditions
 
@@ -150,11 +170,12 @@ _(empty — to be filled by codex)_
 | 2026-06-03 | Slice α retains `Claim` / `EvidenceRef` wrapper classes themselves | Wrapper removal is Slice γ scope; α is field-only cleanup with backward compat |
 | 2026-06-03 | §5.4 deprecation strategy — local Q fold (no separate Q-decision doc at this point) | Per user lock 2026-06-03. §5.4 is the only §5 Q load-bearing for Slice α field-removal scope. Treat as local implementation policy on blueprint branch; consolidate via Step 4.2 review + Step 4.4 amendment. Escalation rule: if Step 4.2 surfaces public-compat or cross-slice impact for §5.4 (e.g., affects Slice β/γ deprecation contracts), upgrade to single Q-decision doc before scoped anchor. Closure §10 must record as `single-Q local lock consolidated on blueprint branch`. |
 | 2026-06-03 | Stage 1 audit doc deferred per Slice 4/5 precedent | Per user lock 2026-06-03. Stage-0 source audit considered folded into design-point [`evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) (§1-§4 friction + §8 file:line anchors) + this blueprint draft. No `workflow/audit/active/2026-06-03_eval-result-flatten-vs-shipped.md` produced. Step 4.2 reviewer must verify folded audit claims via Rule 1 fresh reads. Escalation rule: if source grounding insufficient at Step 4.2, supplement with preflight artifact at Step 4.3, do NOT regress to standalone Stage 1 doc. |
+| 2026-06-03 | Step 4.4 preflight amendment locks PF-R1/PF-R2/PF-R3 and reclassifies PF-A1 to PF-v9 | Step 4.3 preflight was sound but used the cadence "Abandonment" bucket for a positive deferral confirmation. Reclassifying to Verified restores healthy distribution (3R / 2r / 9v / 2s / 0A) without changing scope. PF-R3 expands docs work from banner-only to shape-truth rewrite because the quickstart currently lists removed fields as frozen DTO fields. |
 
 ## Cross-flip checkpoints (per `feedback_audit_to_archive_cadence`)
 
 - [ ] Audit findings A1-A4 recorded and user-reviewed before codex starts editing
 - [ ] User authorizes scope freeze with explicit "可以推进"
-- [ ] Per-step `pytest src/factgraph tests/factgraph -x` clean before next step
+- [ ] Per-step targeted `python -m pytest tests/application/protocol tests/sdk/test_evaluate_result_exports.py -x` clean before next step
 - [ ] Per-step grep verifies no construction site missed
 - [ ] User authorizes archive with explicit "可以归档"

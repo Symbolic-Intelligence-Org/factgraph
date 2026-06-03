@@ -12,13 +12,13 @@
   - `tests/sdk/test_evaluate_result_exports.py` (SDK export smoke tests)
 - Related Docs:
   - [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §6 Slice α (parent design)
-  - [`docs/quickstart/evaluate_and_evidence.md`](../../../docs/quickstart/evaluate_and_evidence.md) §2.3 / §2.4 (current Claim / EvidenceRef user-facing surface — will get a "deprecated" note added in this slice)
+  - [`docs/quickstart/evaluate_and_evidence.md`](../../../docs/quickstart/evaluate_and_evidence.md) §2.3 / §2.4 / §9.1 (current Claim / EvidenceRef user-facing surface — gets deprecation notes plus active-field / deprecated-property shape rewrite in this slice)
 - Audit Log:
   - [2026-06-03_eval-result-flatten-slice-alpha.audit.md](./2026-06-03_eval-result-flatten-slice-alpha.audit.md)
 
 ## 1. Problem
 
-Parent design-point §2.2 / §2.3 audit established that `Claim` (5 fields) and `EvidenceRef` (5 fields) carry 4 + 4 fields that are structurally redundant:
+Parent design-point §2.2 / §2.3 audit established that `Claim` (5 fields) and `EvidenceRef` (5 fields) carry 2 + 4 fields that are structurally redundant:
 
 - `Claim.name` == `EvaluateResult.head.id`
 - `Claim.arguments` ≈ `EvaluateRow.bindings`
@@ -36,7 +36,7 @@ Slice α is the lowest-risk slice (parent §6 ordering: α → β → γ → ζ 
 - G3 — Add deprecated `@property` for each removed field name (emit `DeprecationWarning` on access; resolve via owner resolver chain)
 - G4 — Update D17 invariant validation at `EvaluateRow.__post_init__` ([:135-138](../../../src/factgraph/application/protocol/evaluate_result.py)) — replace field-equality checks with no-op (the fields no longer exist as frozen state; the invariant is satisfied tautologically by the resolver chain)
 - G5 — Existing user code accessing `row.claim.name` / `row.claim.arguments` / `row.evidence_ref.row_id` / `.result_id` / `.ref_id` / `.fact_digest` continues to work (emits `DeprecationWarning`)
-- G6 — Construction sites in `evaluate_result.py` / adapter `_build_*` paths that currently pass these fields to `Claim(...)` / `EvidenceRef(...)` are updated to drop the redundant kwargs (and to inject the owner resolver instead)
+- G6 — Construction sites enumerated by Step 4.3 preflight (`evaluate_result.py:582-596`, `test_evaluate_result_dtos.py:92-105`, `test_evaluate_result_dtos.py:228-240`) are updated to drop the redundant kwargs (and to rely on resolver injection instead)
 - G7 — Test coverage updated for both the deprecated-property emission and the resolver wiring
 
 ## 3. Non-goals
@@ -156,10 +156,11 @@ class EvidenceRef:
     @property
     def ref_id(self) -> str:
         warnings.warn(...DeprecationWarning, stacklevel=2)
-        # Computed identically to the previous shipped formula (preserve byte-equality
-        # so cross-process consumers that compared ref_ids still see the same value)
+        # Computed identically to the shipped evidence_ref_id_for(...) formula
+        # (preserve byte-equality so cross-process consumers that compared ref_ids
+        # still see the same value)
         row = self._require_owner()
-        return _compute_evidence_ref_id(
+        return evidence_ref_id_for(
             result_id=row._require_live_result().result_id,
             row_id=row.row_id,
             fact_digest=row.claim.digest,
@@ -174,7 +175,7 @@ class EvidenceRef:
 
 Net field count: 5 → 1 frozen + 1 internal resolver.
 
-`_compute_evidence_ref_id(...)` extracts the existing ref-id derivation formula (audit will pin its exact shipped form before extraction).
+Step 4.3 preflight PF-v4 confirmed the ref-id derivation formula is already centralized as `evidence_ref_id_for(result_id, row_id, fact_digest, closed_head_digest)` in [`evaluate_result.py:413-429`](../../../src/factgraph/application/protocol/evaluate_result.py) and exported from the module. Slice α should preserve or wrap that shipped helper; it does **not** need to rediscover or extract a new formula.
 
 ### 5.3 EvaluateRow — invariant block reshape
 
@@ -248,28 +249,49 @@ def _row_digest_for(
 or another shape that supplies the same non-deprecated inputs. The byte payload must
 match shipped `evaluate_row_digest_v1` for equivalent rows; tests must verify byte
 equality against a pre-Slice-α fixture. This is separate from
-`_compute_evidence_ref_id(...)` because `result_digest_for(...)` consumes row digests
-before an `EvaluateResult` can bind row owner resolvers.
+`evidence_ref_id_for(...)` because `result_digest_for(...)` consumes row digests
+before an `EvaluateResult` can bind row owner resolvers. Step 4.3 PF-R1 also pinned the concrete ordering callsite at [`src/factgraph/sdk/store.py:2705-2706`](../../../src/factgraph/sdk/store.py), where `_row_digest_for(row)` is evaluated before `EvaluateResult(...)` construction.
 
 ### 5.5 Construction-site updates (codex impl scope)
 
-All `Claim(...)` and `EvidenceRef(...)` construction sites must drop the now-removed kwargs. Codex audit (§audit log Task A2) enumerates the full set; expected sites based on parent design §8 anchors:
+All `Claim(...)` and `EvidenceRef(...)` construction sites must drop the now-removed kwargs. Step 4.3 PF-r1 narrowed the direct protocol-constructor scope to the concrete pairs below:
 
-- `evaluate_result.py` internal helpers that build rows
-- Adapter `_build_*` paths (native / souffle / problog / pyreason)
-- Test fixtures that construct standalone Claim/EvidenceRef for unit testing — these need `_row_resolver` provided or assert `DetachedClaimError` / `DetachedEvidenceRefError` on deprecated-property access
+- Production: [`evaluate_result.py:582-596`](../../../src/factgraph/application/protocol/evaluate_result.py) (`_candidate_set_to_evaluate_row(...)`)
+- Test fixture: [`tests/application/protocol/test_evaluate_result_dtos.py:92-105`](../../../tests/application/protocol/test_evaluate_result_dtos.py)
+- Test fixture / invariant failure: [`tests/application/protocol/test_evaluate_result_dtos.py:228-240`](../../../tests/application/protocol/test_evaluate_result_dtos.py)
 - Digest tests under `tests/application/protocol/` — update all `_row_digest_for(...)` callsites to the explicit-context helper from §5.4
 
-### 5.6 Quickstart docs touch (in this slice)
+Adapter paths are indirect through `_candidate_set_to_evaluate_row(...)`; Step 4.7 should still grep for drift, but direct adapter `_build_*` constructor edits are not expected unless Step 4.6.5 finds new construction sites.
 
-`docs/quickstart/evaluate_and_evidence.md` §2.3 (Claim DTO) and §2.4 (EvidenceRef DTO) get a **one-line deprecation banner** at the top of each section pointing to the design-point. The full DTO rewrite belongs to Slice γ; this slice only adds the deprecation hint.
+### 5.6 Internal compatibility inventory (Step 4.3 PF-r2)
+
+Normal internal operations must not emit user-facing deprecation warnings merely because they need compatibility values. Step 4.7 must handle these internal access clusters using direct row/result context or helper functions rather than treating deprecated properties as normal internal APIs:
+
+- D17 checks: [`evaluate_result.py:135-138`](../../../src/factgraph/application/protocol/evaluate_result.py)
+- `EvaluateResult` pre-bind result check: [`evaluate_result.py:223-224`](../../../src/factgraph/application/protocol/evaluate_result.py)
+- Row digest payload: [`evaluate_result.py:442`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:445`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:450-452`](../../../src/factgraph/application/protocol/evaluate_result.py)
+- Explanation paths using `row.evidence_ref.ref_id`: [`evaluate_result.py:628`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:643`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:664`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:683`](../../../src/factgraph/application/protocol/evaluate_result.py)
+- Anchor comparison: [`evaluate_result.py:848-851`](../../../src/factgraph/application/protocol/evaluate_result.py)
+- Evidence graph labels / metadata: [`evaluate_result.py:872`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1006`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1013`](../../../src/factgraph/application/protocol/evaluate_result.py), [`:1160`](../../../src/factgraph/application/protocol/evaluate_result.py)
+- Existing protocol tests that intentionally assert old access paths: `tests/application/protocol/test_evaluate_result_dtos.py:455`, `:485`, `:647`, `:656`, `:665`, `:707`, `:956`
+
+### 5.7 Quickstart docs touch (in this slice)
+
+Step 4.3 PF-R3 confirmed a one-line banner is insufficient because `docs/quickstart/evaluate_and_evidence.md` currently lists the old complete frozen field shapes at §2.3 / §2.4 and in the §9.1 SDK import comments. Step 4.7 docs work must include:
+
+- A deprecation note at the top of §2.3 and §2.4.
+- A `Claim` field tree that shows active frozen fields as `kind`, `repr`, `digest`, with `name` and `arguments` explicitly labeled as deprecated compatibility properties.
+- An `EvidenceRef` field tree that shows active frozen field `closed_head_digest`, with `ref_id`, `result_id`, `row_id`, and `fact_digest` explicitly labeled as deprecated compatibility properties.
+- §9.1 SDK import comments updated so they no longer present the deprecated properties as frozen DTO fields.
+
+The full wrapper removal / row-level field rewrite remains Slice γ; this slice only makes the current compatibility shape truthful.
 
 ## 6. Boundaries And Invariants
 
 - Must preserve:
   - User-facing access paths `row.claim.name` / `.arguments` / `row.evidence_ref.row_id` / `.result_id` / `.ref_id` / `.fact_digest` all continue to return the **byte-equal value** they returned before (only with `DeprecationWarning` emitted)
   - Byte-equal `row_digest` and `result_digest` for equivalent rows; internal digest helpers must avoid deprecated-property access
-  - `EvidenceRef.ref_id` formula is preserved bit-for-bit — the shipped derivation logic is extracted to `_compute_evidence_ref_id` (audit Task A1 must confirm the formula before extraction)
+  - `EvidenceRef.ref_id` formula is preserved bit-for-bit via shipped `evidence_ref_id_for(...)`; Step 4.7 may keep the helper name, wrap it, or alias it, but must not change bytes
   - D17 invariant *semantics* (cross-field equality) — enforced now by structural property delegation instead of frozen-field equality assertions
   - INV-6 application-first — no edits outside `factgraph.application.protocol` (other than test updates)
   - Q-PR1 sacred 5-path 0-diff (`core/store/ledger.py` etc. untouched)
@@ -293,8 +315,9 @@ All `Claim(...)` and `EvidenceRef(...)` construction sites must drop the now-rem
 - [ ] D17 invariant block (`EvaluateRow.__post_init__` L135-138) replaced with resolver injection
 - [ ] `EvaluateResult.__post_init__` no longer reads deprecated `EvidenceRef.result_id` before owner binding; `result[0].evidence_ref.result_id` returns `result.result_id` with `DeprecationWarning`
 - [ ] `_row_digest_for` / replacement helper preserves byte-identical `evaluate_row_digest_v1` without reading deprecated properties internally
-- [ ] `_compute_evidence_ref_id(...)` helper extracted; shipped ref-id formula audited and pinned before extraction (audit Task A1)
-- [ ] All `Claim(...)` / `EvidenceRef(...)` construction sites in src + tests updated (audit Task A2 enumerates)
+- [ ] `evidence_ref_id_for(...)` shipped ref-id formula preserved byte-for-byte; any wrapper/alias decision keeps the existing public helper usable
+- [ ] All Step 4.3 enumerated `Claim(...)` / `EvidenceRef(...)` construction sites updated (`evaluate_result.py:582-596`, `test_evaluate_result_dtos.py:92-105`, `:228-240`); Step 4.6.5 grep confirms no drift
+- [ ] Internal compatibility paths listed in §5.6 do not emit deprecation warnings during normal construction, digesting, explaining, or evidence metadata creation
 - [ ] New tests:
   - [ ] `test_claim_deprecated_name_emits_warning`
   - [ ] `test_claim_deprecated_arguments_emits_warning`
@@ -305,31 +328,32 @@ All `Claim(...)` and `EvidenceRef(...)` construction sites must drop the now-rem
   - [ ] `test_standalone_claim_without_resolver_raises_detached_error`
   - [ ] `test_standalone_evidence_ref_without_resolver_raises_detached_error`
 - [ ] Existing test suite passes with `python -m pytest -W "ignore::DeprecationWarning::factgraph" tests/application/protocol tests/sdk/test_evaluate_result_exports.py` (warnings are emitted but tests don't assert against them unless new)
-- [ ] `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 deprecation banner added (1 line each)
-- [ ] `src/factgraph/application/protocol/docs/README.md` (or equivalent module-docs entry) — Claim/EvidenceRef field set updated
-- [ ] No edits outside `factgraph.application.protocol` (other than test updates + the quickstart doc banner)
+- [ ] `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 / §9.1 updated with deprecation notes plus active-field / deprecated-property shapes
+- [ ] No `src/factgraph/application/protocol/docs/README.md` update unless a module-docs subtree appears before Step 4.6.5 (Step 4.3 PF-v7 found none)
+- [ ] No edits outside `factgraph.application.protocol` (other than test updates + the quickstart docs field-shape rewrite)
 
 ## 8. Implementation Plan
 
 Codex implementation order (each step ends with targeted `python -m pytest tests/application/protocol tests/sdk/test_evaluate_result_exports.py -x` clean; run the broader suite only after the targeted cohort is green):
 
-1. **[audit pin]** Read shipped `Claim` / `EvidenceRef` / `EvaluateRow` definitions and locate the `EvidenceRef.ref_id` derivation formula (audit Task A1 — confirms the exact bytes); record the formula in the audit log
-2. **[audit pin]** Enumerate all `Claim(...)` / `EvidenceRef(...)` construction sites in `src/factgraph/` and `tests/` (audit Task A2); record full list in audit log
-3. **[helper extraction]** Add `_compute_evidence_ref_id(...)` to `evaluate_result.py` using the formula from step 1; **add a unit test** verifying byte-equal output against a hand-picked pre-Slice-α fixture (capture one before applying any other change)
+1. **[audit pin]** Re-read shipped `Claim` / `EvidenceRef` / `EvaluateRow` definitions and `evidence_ref_id_for(...)`; record that the ref-id formula is already centralized and exported
+2. **[audit pin]** Re-run construction-site grep for `Claim(...)` / `EvidenceRef(...)` in `src/factgraph/application/protocol/evaluate_result.py`, `tests/application/protocol/`, and `tests/sdk/`; compare against Step 4.3 PF-r1 before editing
+3. **[ref-id preservation]** Preserve shipped `evidence_ref_id_for(...)` byte output. If a private wrapper/alias is introduced for naming consistency, add a unit test verifying byte-equal output against a hand-picked pre-Slice-α fixture
 4. **[Claim refactor]** Replace `Claim` class definition with new shape (§5.1) — drop `name` / `arguments` frozen fields, add `_row_resolver` + 2 deprecated properties + `DetachedClaimError`
 5. **[EvidenceRef refactor]** Replace `EvidenceRef` class definition (§5.2) — drop `row_id` / `result_id` / `ref_id` / `fact_digest` frozen fields, add `_row_resolver` + 4 deprecated properties + `DetachedEvidenceRefError`
 6. **[EvaluateRow / EvaluateResult invariant reshape]** Update `EvaluateRow.__post_init__` (§5.3) and `EvaluateResult.__post_init__` (§5.3 Step 4.2 tightening) — remove L135-138 cross-field assertions, add row resolver injection, and remove the pre-bind `row.evidence_ref.result_id` read
 7. **[digest compatibility]** Update `_row_digest_for` or replacement helper per §5.4 so row/result digests preserve shipped bytes without using deprecated properties internally
 8. **[construction-site updates]** Update each site enumerated in step 2 to drop now-removed kwargs and rely on `EvaluateRow.__post_init__` / `EvaluateResult.__post_init__` for resolver wiring
-9. **[new tests]** Add the 8 acceptance tests listed in §7 plus row/result digest byte-equality coverage from §5.4
-10. **[docs banner]** Add 1-line deprecation banner to `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4
-11. **[module docs sync]** Update `src/factgraph/application/protocol/docs/README.md` Claim/EvidenceRef field set entry only if audit Task A3 confirms such an entry exists
-12. **[final verification]** Targeted pytest clean; manual grep `grep -nE 'Claim\(name=|EvidenceRef\((ref_id|result_id|row_id|fact_digest)=' src/ tests/` returns zero hits
+9. **[internal compatibility paths]** Update the §5.6 clusters so normal construction, digesting, explaining, stale-row checks, and evidence metadata creation use direct context/helpers rather than deprecated-property access
+10. **[new tests]** Add the 8 acceptance tests listed in §7 plus row/result digest byte-equality coverage from §5.4 and no-internal-warning coverage from §5.6
+11. **[quickstart docs rewrite]** Update `docs/quickstart/evaluate_and_evidence.md` §2.3 / §2.4 / §9.1 per §5.7
+12. **[module docs check]** Do not create `src/factgraph/application/protocol/docs/README.md`; only update module docs if a subtree appears before Step 4.6.5
+13. **[final verification]** Targeted pytest clean; manual grep `grep -nE 'Claim\(name=|EvidenceRef\((ref_id|result_id|row_id|fact_digest)=' src/ tests/` returns zero hits
 
 ## 9. Docs To Update
 
-- `docs/quickstart/evaluate_and_evidence.md` §2.3 + §2.4 (deprecation banner only — full rewrite is Slice γ)
-- `src/factgraph/application/protocol/docs/README.md` Claim / EvidenceRef field set entry (if present per audit Task A3)
+- `docs/quickstart/evaluate_and_evidence.md` §2.3 + §2.4 + §9.1 (deprecation notes plus active-field / deprecated-property shape rewrite)
+- `src/factgraph/application/protocol/docs/README.md` — no action expected because Step 4.3 PF-v7 found no module-docs subtree; revisit only if Step 4.6.5 finds drift
 - This blueprint's Outcome / Deviations section (filled at archive time)
 
 ## 10. Outcome / Deviations
