@@ -23,6 +23,7 @@ from .evaluate_result import (
     Explanation,
     ResultFingerprint,
 )
+from .explanation_render import walk_evidence
 from .derivation_fact_overlay import (
     FactOverlay,
     FactOverlayAction,
@@ -241,4 +242,5 @@ __all__ = [
     "WhyNotUniverseResult",
     "WriteValue",
     "aggregate_proof_frame_status",
+    "walk_evidence",
 ]

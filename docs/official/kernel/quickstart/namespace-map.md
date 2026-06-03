@@ -158,6 +158,11 @@ Different review surfaces with different boundaries.
 | `fg.eval` | `explain(expr, head=closed_head)` | Manual closed-head replay. |
 | `fg.audit` | `explain(asrt_id_or_record)`, `conflicts(record_or_entity_field)`, `diff_proof_frames(...)` | Persisted-fact explanation and cross-round proof-frame diff. |
 
+`row.explain()` and `fg.eval.explain(...)` return `Explanation`; read
+`Explanation.repr` for deterministic multi-line text over the layered
+`EvidenceGraph` when the explanation passed, or a failure summary when it did
+not.
+
 `fg.audit.explain(...)` is the user-facing bridge into evidence in the
 quickstart path: assertion ids first, then fact-level explanation. Durable
 cross-engine `EvidenceGraph` objects, rendered proof pages, and round-event

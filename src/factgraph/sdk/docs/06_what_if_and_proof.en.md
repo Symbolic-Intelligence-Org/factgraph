@@ -16,7 +16,8 @@ manual = fg.eval.explain(inference, head=closed_head)
 - `EvaluateResult` is the public evaluation envelope.
 - `EvaluateRow` carries bindings, row-owned conclusion/evidence digests, and
   raw quantitative carriers.
-- `row.explain()` returns an `Explanation`.
+- `row.explain()` returns an `Explanation`; read `explanation.repr` for
+  deterministic multi-line text when a rendered summary is needed.
 - `row.close()` returns a closed application `Rule` for manual replay.
 - `fg.eval.explain(expr, head=closed_head)` replays a closed-head explanation.
 

@@ -462,7 +462,8 @@ not accept frozen views or read policies as input.
 
 `EvaluateResult`, `EvaluateRow`, `ResultFingerprint`, and `Explanation`
 are exported from `factgraph.sdk`. Legacy check/diagnose/why-not DTOs are not
-SDK public result types.
+SDK public result types. `Explanation.repr` is a computed property; no
+additional SDK export is required for the protocol-layer evidence walker.
 
 ---
 

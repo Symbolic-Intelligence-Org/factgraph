@@ -16,6 +16,7 @@
 | 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, G/N consistency, stale wording cleanup, Step 4.6.5 grep plan, Q-PR1 boundary, and dirty-baseline preservation. No amendment required. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status changed `draft` → `scoped`. Scope frozen with PF-R1/PF-R2 confirmed, PF-r1/PF-r2 carry-forward/export locks, tight-gate D6 cadence, and no abandonment blockers. |
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Grepped `repr=` constructor usage, `_repr_cache`, `walk_evidence`, `Explanation(` callsites, and parent-design `row.repr` wording. No new N-findings; parent-design `row.repr` hits remain D4 carry-forward only. Status remains `scoped`; no implementation started. |
+| 2026-06-03 | scoped | Step 4.7 implementation | Added computed `Explanation.repr`, protocol-layer `walk_evidence(...)`, focused walker tests, and docs cascade. Focused protocol cohort and SDK export guard passed. Status remains `scoped` until Step 4.8 closure. |
 
 ## Decision Notes
 
@@ -45,7 +46,7 @@
 - [x] Step 4.5 self-check
 - [x] Step 4.6 scope freeze
 - [x] Step 4.6.5 pre-impl grep
-- [ ] Step 4.7 implementation on `v0.2.0-impl-explanation-repr-walker-2026-06-03` (individual report per D6)
+- [x] Step 4.7 implementation on `v0.2.0-impl-explanation-repr-walker-2026-06-03` (individual report per D6)
 - [ ] Step 4.8 closure (individual report per D6)
 - [ ] Step 4.9 archive
 

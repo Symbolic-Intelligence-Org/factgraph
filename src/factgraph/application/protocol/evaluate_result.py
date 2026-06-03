@@ -11,6 +11,7 @@ import uuid
 import warnings
 
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
+from factgraph.application.protocol.explanation_render import walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
@@ -284,6 +285,7 @@ class Explanation:
     suggested_next_steps: tuple[str, ...] = ()
     errors: tuple[ErrorDTO, ...] = ()
     warnings: tuple[WarningDTO, ...] = ()
+    _repr_cache: tuple[str, ...] | None = field(default=None, init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         if self.status not in _EXPLANATION_STATUSES:
@@ -326,6 +328,33 @@ class Explanation:
             "warnings",
             _validate_tuple_of_type(self.warnings, WarningDTO, field_name="Explanation.warnings"),
         )
+
+    @property
+    def repr(self) -> tuple[str, ...] | None:
+        if self.status in {"unsupported", "invalid_request"}:
+            return None
+        if self._repr_cache is not None:
+            return self._repr_cache
+        if self.status == "passed":
+            assert self.evidence is not None
+            lines = walk_evidence(self.evidence, row=self.row, status=self.status, failure_class=self.failure_class)
+        else:
+            lines = _failed_explanation_repr(self)
+        object.__setattr__(self, "_repr_cache", lines)
+        return lines
+
+
+def _failed_explanation_repr(explanation: Explanation) -> tuple[str, ...]:
+    lines = ["NOT concluded"]
+    if explanation.failure_class is not None:
+        lines.append(f"failure_class: {explanation.failure_class}")
+    if explanation.result_id is not None:
+        lines.append(f"result_id: {explanation.result_id}")
+    if explanation.row is not None:
+        lines.append(f"row_id: {explanation.row.row_id}")
+    for step in explanation.suggested_next_steps:
+        lines.append(f"next_step: {step}")
+    return tuple(lines)
 
 
 def canonical_bytes_for_evaluate(*items: Any) -> bytes:

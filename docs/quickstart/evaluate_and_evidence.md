@@ -328,8 +328,10 @@ Explanation (frozen)
 │       └── details     : dict[str, JSONValue]             ← non-empty iff status ∈
 │                                                            {"unsupported", "invalid_request"}
 │
-└── warnings            : tuple[WarningDTO, ...]
-    └── WarningDTO      (same shape as ErrorDTO)
+├── warnings            : tuple[WarningDTO, ...]
+│   └── WarningDTO      (same shape as ErrorDTO)
+│
+└── repr                : tuple[str, ...] | None            ← computed property, not a constructor field
 ```
 
 ### 4.2 6 invariants enforced in `__post_init__`
@@ -346,10 +348,15 @@ Explanation (frozen)
 
 | status | When | `evidence` | `row` | `failure_class` | `errors` | What you read |
 |---|---|---|---|---|---|---|
-| `"passed"` | head fires on at least one row | ✓ EvidenceGraph | ✓ EvaluateRow | None | () | `evidence` for the path; `row` for bindings, digest, closed-head digest, and uncertainty |
-| `"failed"` | head doesn't fire / no match | None | None | ✓ one of 5 | () | `failure_class` to know *why*; `checked_scope` to see what was examined; `suggested_next_steps` for fixes |
+| `"passed"` | head fires on at least one row | ✓ EvidenceGraph | ✓ EvaluateRow | None | () | `evidence` for the path; `repr` for rendered lines; `row` for bindings, digest, closed-head digest, and uncertainty |
+| `"failed"` | head doesn't fire / no match | None | None | ✓ one of 5 | () | `repr` summary, `failure_class`, `checked_scope`, and `suggested_next_steps` |
 | `"unsupported"` | engine rejects the rule shape | None | None | None | ✓ non-empty | `errors[*].code` + `message` for what the engine didn't accept |
 | `"invalid_request"` | call shape is malformed | None | None | None | ✓ non-empty | Same as unsupported, but the problem is in your input, not the engine |
+
+`Explanation.repr` is computed lazily. Passed explanations walk the layered
+`EvidenceGraph` into multi-line text. Failed explanations keep `evidence=None`
+by invariant and return a deterministic failure summary. Unsupported and invalid
+requests return `None`.
 
 ### 4.4 `failure_class` — the five reasons a `"failed"` Explanation gives
 
@@ -508,7 +515,7 @@ This chapter covers the shipped surface. Several user-facing capabilities are *d
 | PyReason multi-timestep timeline evidence | Deferred — current PyReason `EvidenceGraph` is single-conclusion fallback | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
 | Attribution / salience decomposition | Deferred (D6 / D7) | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.3 |
 | Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.5 (D20) |
-| Desc auto-render in `Explanation` payloads | Deferred — only `row.close().render_desc(...)` / `RuleExprInspect.render(...)` consume `desc` today (see §6.3) | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) |
+| Desc auto-render in `Explanation` payloads | Shipped as `Explanation.repr` multi-line rendering for passed/failed explanations; deeper PyReason timeline rendering remains deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) |
 
 ## 9. Reference
 

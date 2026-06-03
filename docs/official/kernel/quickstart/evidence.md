@@ -161,10 +161,11 @@ audit linking use `row_id`, `digest`, and `closed_head_digest`.
 
 ## 5. `Explanation` — derivation analysis
 
-`Explanation` is a frozen 13-field envelope describing whether and how a
+`Explanation` is a frozen envelope describing whether and how a
 row's claim is supported. It is **terminal**: an Explanation has data
 attributes only, no chainable `.explain()` method of its own. Read it by
-branching on `status`.
+branching on `status`, or read the computed `repr` property for deterministic
+multi-line text.
 
 The 4 `status` values:
 
@@ -192,7 +193,7 @@ Protocol-enforced invariants:
 - `status in {"unsupported", "invalid_request"}` ⇒ `errors` is non-empty
 - `raw_kind is None` ⇒ `bound is None`
 
-All 13 `Explanation` fields:
+`Explanation` fields and computed properties:
 
 | Field | Populated when | Purpose |
 | --- | --- | --- |
@@ -205,6 +206,7 @@ All 13 `Explanation` fields:
 | `suggested_next_steps` | typically `failed` / `unsupported` | UX hint strings |
 | `errors` | `unsupported` / `invalid_request` (non-empty) | `ErrorDTO` tuple with `.code` / `.message` |
 | `warnings` | any status | Non-blocking `WarningDTO` tuple |
+| `repr` | computed | Multi-line text for passed explanations and deterministic failed summaries; `None` for unsupported / invalid request |
 
 Passed example:
 
@@ -218,6 +220,7 @@ assert e.evidence is not None       # an EvidenceGraph
 assert e.row is row
 assert e.failure_class is None
 assert e.errors == ()
+assert e.repr is not None           # tuple[str, ...]
 ```
 
 Failed example (state changed between `evaluate` and `explain`):
@@ -238,6 +241,7 @@ e = fg.eval.explain(rule, head=closed_head)
 assert e.status == "failed"
 assert e.failure_class == "closed_head_false"
 assert e.evidence is None
+assert e.repr[0] == "NOT concluded"
 # UX hint for the caller
 assert e.suggested_next_steps == (
     "Re-evaluate with a closed head that matches at least one result row.",
