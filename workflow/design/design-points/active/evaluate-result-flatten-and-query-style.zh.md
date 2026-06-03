@@ -174,7 +174,7 @@ class ResultFingerprint:
 
 访问路径:`result.fingerprint.expr_digest` 等。所有 audit / provenance metadata snapshot 仍然能从这里取出,只是 EvaluateResult top-level 不被它们污染。
 
-### §3.3 EvaluateRow — 平铺 Claim/EvidenceRef 字段
+### §3.3 EvaluateRow — 平铺 Claim/EvidenceRef 字段,纯数据 DTO
 
 ```python
 @dataclass(frozen=True)
@@ -182,15 +182,23 @@ class EvaluateRow:
     row_id: str
     bindings: Mapping[str, object]              # {port_name: term} 直接 map(见 §3.6)
     kind: RowKind                                # 原 Claim.kind
-    repr: str                                    # 原 Claim.repr,改用 desc 渲染(§3.7)
     digest: str                                  # 原 Claim.digest
     closed_head_digest: str                      # 原 EvidenceRef.closed_head_digest
     raw_kind: Literal["probabilistic", "possibilistic"] | None
     bound: tuple[float, float] | None
     _result_resolver: Callable[[], EvaluateResult] | None
+
+    # 显式 render 方法(不存为字段):
+    def render_desc(self, head: Rule) -> str: ...
 ```
 
-净减:`row.claim` 整层 wrapper / `row.evidence_ref` 整层 wrapper 都消失;有用字段(kind/repr/digest/closed_head_digest)平铺到 row;冗余字段(name/arguments/fact_digest/row_id/ref_id/result_id)全部删除。
+净减:
+- `row.claim` 整层 wrapper / `row.evidence_ref` 整层 wrapper **都消失**
+- 有用字段(kind/digest/closed_head_digest)平铺到 row
+- 冗余字段(name/arguments/fact_digest/row_id/ref_id/result_id)全部删除
+- **`repr` 不在 row 上** —— 它是 view 字段,移到 `Explanation`(§4.1);user 想要 row label 时显式调 `row.render_desc(head)`
+
+EvaluateRow 现在是 **7 user-facing 字段 + 1 internal**,纯数据,无任何 view / presentation 字段。
 
 ### §3.4 `Claim` DTO — 删除
 
@@ -223,13 +231,27 @@ row.bindings = {
 
 User 直接 `row.bindings["user"]` 拿值,不用做 positional → port_name mental gymnastics。`pred_id` 从 bindings 删除(已经在 `EvaluateResult.head.id`)。term 内部仍是 `{kind, value, tag?}` typed dict(保持类型信息)。
 
-### §3.7 `row.repr` 用 desc 模板渲染(承接 D21)
+### §3.7 `Explanation.repr` 走 walking EvidenceGraph 的多行 NL(承接 D21)
 
-当前 `row.claim.repr` = `"user:region{'pred_id':'user:region','terms':[...]}"`(dict 打印,无用)。
+`repr` 是 **view concern**(展示用),不是 row 上的 data concern。当前 D17 把 `Claim.repr` eager 存在 row 上是错配 —— 渲染 / 展示是 `fg.eval.explain(...)` 的职责,应该住在 `Explanation` 上,且 lazy 求值。
 
-目标 `row.repr` = `head.desc` template 用本 row 的 bindings 渲染后的字符串。例如 head.desc = `"User %user is in %region"` + row.bindings = `{user: alice_ref, region: "US"}` → `row.repr = "User alice is in US"`。
+**关键洞察**:`repr` 不应该只是 "head 一行 desc 渲染",而应该 **walk EvidenceGraph 生成多行"因为... 所以..." NL** —— 这才是真正的 explanation。详见 §3.9(EvidenceGraph 3 层 hierarchy 重设计)+ §4.7(walker renderer)。
 
-这就是 [`explanation-completion-roadmap.zh.md`](explanation-completion-roadmap.zh.md) §6.6 (D21) 提议的 "Explanation.desc_lines 自动 populate" 的等价能力,放在 `row.repr` 这个位置自然落地。
+目标形态:
+
+```python
+@dataclass(frozen=True)
+class Explanation:
+    ...
+    repr: tuple[str, ...] | None    # ← multi-line NL, walked from evidence
+                                    #   passed: 走 EvidenceGraph 渲染 "因为... 所以..."
+                                    #   failed: 渲染 "为什么不"叙述
+                                    #   unsupported / invalid_request: None
+```
+
+走 EvidenceGraph 的 walker 在 explain 时 lazy 调用,每一行对应 graph 一层(L1 RuleExpr → L2 Rule → L3 Atom → seed)的 desc-rendered text;详细 walker 算法见 §4.7。
+
+这就是 [`explanation-completion-roadmap.zh.md`](explanation-completion-roadmap.zh.md) §6.6 (D21) 提议的 "Explanation.desc_lines 自动 populate" 的等价能力,但语义层级被收紧到"walk evidence hierarchy 而不是简单 head desc 渲染"。
 
 ### §3.8 query-style evaluate head — `head.id` 自由 + arity check opt-in
 
@@ -240,6 +262,96 @@ User 直接 `row.bindings["user"]` 拿值,不用做 positional → port_name men
 - 现 [`core/store/_evaluate.py:150-157`](../../../../src/factgraph/core/store/_evaluate.py) 的两条 raise 改为 opt-in 路径
 
 向后兼容:原先 `id="user:region"` 这种 match-predicate 风格仍然 work(走 opt-in 校验路径);新加 `id="adult_in_us"` 风格现在也 work(skip 校验)。
+
+### §3.9 EvidenceGraph 3 层 hierarchy 重设计
+
+**Root insight**:user 写 rule 是 hierarchical 的(`RuleExpr` 组合 `Rule` 组合 `Atom`),evaluate 时每个引擎也都按这个 hierarchy 跑;但当前 EvidenceGraph 把 3 层平铺成 flat DAG,丢了语义层级。
+
+#### §3.9.1 新 node_kind 枚举(5 类)
+
+```python
+NODE_CONCLUSION = "conclusion"     # 顶层结论(已存在,= head 渲染)
+NODE_RULE_EXPR  = "rule_expr"      # L1: RuleExpr 组合点(AND / OR / single)— 新增
+NODE_RULE       = "rule"           # L2: 一条参与的 Rule occurrence — 新增
+NODE_ATOM       = "atom"           # L3: 某 Rule body 内一个 atom — 新增
+NODE_SEED       = "seed"           # 底层 EDB fact / ledger claim(已存在)
+NODE_PREMISE    = "premise"        # 保留作 ProbLog derivation chain 中间 atom 使用(已存在)
+```
+
+L1/L2/L3 三个新节点类型 + 原有 conclusion/seed 共同形成 5-tier 层级。每层 node 携 layer-specific `engine_meta`:
+
+| Node | engine_meta 携 |
+|---|---|
+| `NODE_RULE_EXPR` | `ast_form: "and" / "or" / "single"`,`occurrence_count`, ... |
+| `NODE_RULE` | `rule_id`, `version`, `occurrence_alias`, ... |
+| `NODE_ATOM` | `atom_index`(在 rule body 里第几个), `atom_kind: "pred" / "cmp" / "not" / "in" / "builtin"`,`atom_status: "support" / "unsupport" / "not_visited" / "unknown"`, ... |
+| `NODE_SEED` | `pred_id`, `asrt_id`, ... |
+
+#### §3.9.2 新 edge_kind 枚举(语义化命名)
+
+```python
+EDGE_DERIVED_BY    = "derived_by"     # conclusion ← derived_by ← rule_expr
+EDGE_USES          = "uses"           # rule_expr  ← uses        ← rule
+EDGE_HAS_ATOM      = "has_atom"       # rule       ← has_atom    ← atom
+EDGE_SUPPORTED_BY  = "supported_by"   # atom       ← supported_by← seed
+EDGE_DERIVES       = "derives"        # 保留作 ProbLog provenance chain 中间步骤
+EDGE_UPDATES       = "updates"        # 保留作 PyReason timeline bound update
+```
+
+**边方向约定**:`from_node_id` 是**"被支持者" / "上游"**,`to_node_id` 是**"支持者" / "下游"**。但**语义读法**反向 —— 读时按 edge_kind 的语义动词构句("X is derived_by Y" 读作"X 被 Y 支持")。
+
+物理边方向例:
+- conclusion ← derived_by ← rule_expr:edge `from=conclusion, to=rule_expr, edge_kind=derived_by`
+- rule_expr ← uses ← rule:edge `from=rule_expr, to=rule, edge_kind=uses`
+- rule ← has_atom ← atom:edge `from=rule, to=atom, edge_kind=has_atom`
+- atom ← supported_by ← seed:edge `from=atom, to=seed, edge_kind=supported_by`
+
+**Walker traversal direction**:从 `root_node_id`(conclusion)出发,按 `from_node_id → to_node_id` 方向走(顺向 edge 物理方向),自然从 L0 conclusion 递归到 L1 rule_expr → L2 rule → L3 atom → seed,符合"自顶向下解释"的 user mental model。
+
+#### §3.9.3 完整例子 — 4-tier walk
+
+对于 rule `adult_in_us` evaluate alice 成立:
+
+```
+EvidenceGraph (5 nodes, 4 edges):
+
+  conclusion #u0  ─ derived_by ─→  rule_expr #ex1 (kind="single")
+                                        │
+                                        │ uses
+                                        ▼
+                                  rule #r0 (rule_id="adult_in_us")
+                                        │
+                                        │ has_atom (x3)
+            ┌───────────────────────────┼───────────────────────────┐
+            ▼                           ▼                           ▼
+   atom #a0                  atom #a1                  atom #a2
+   "User(u)" support         "User(u).age == age"      "age > 18"
+   pred_id="User:exists"      pred_id="user:age"        cmp_op="gt"
+            │                           │                   support (no seed)
+            │ supported_by              │ supported_by
+            ▼                           ▼
+      seed #s0                    seed #s1
+      "User:exists(alice)"        "user:age(alice, 25)"
+```
+
+#### §3.9.4 每引擎的 3-tier 填充能力
+
+| Engine | L1 RULE_EXPR | L2 RULE | L3 ATOM | SEED | Notes |
+|---|---|---|---|---|---|
+| native | ✓ | ✓ | ✓ (atom_status 4 种全) | ✓ | shipped binding witness 已携 atom-level 命中信息 |
+| souffle | ✓ | ✓ | ✓ | ✓ | `SOUFFLE_WITNESS_KIND` 跟 native 同走 Form 1 |
+| problog | ✓ | ✓ | ✓ | ✓ | proof_trace 最丰富,L3 可携完整 derivation chain |
+| pyreason | ✓ | ✓ | ⚠️ + timestep 维度 | ✓ | timeline / bound update 维度 deferred per D11 |
+
+### §3.10 EvidenceGraph.engine 列举(souffle omission fix)
+
+`EvidenceGraph.engine` 取自 `result.engine`([`evaluate_result.py:877`](../../../../src/factgraph/application/protocol/evaluate_result.py)),取值跟 `EvaluateResult.engine` 一致:
+
+```python
+engine: Literal["native", "souffle", "problog", "pyreason"]
+```
+
+`docs/quickstart/evaluate_and_evidence.md §5.1` 结构图当前漏列 `souffle`,需要一起 fix(纯 docs-vs-shipped drift,跟本设计可独立 commit)。
 
 ## §4 下游消费者的影响 & migration
 
@@ -263,36 +375,52 @@ class Explanation:
     warnings: ...
 ```
 
-目标:
+目标(修正版 — `row` 通过引用携带,`repr` 独立作 view 字段):
 ```python
 class Explanation:
     status: ExplanationStatus
-    evidence: EvidenceGraph | None
-    # claim 字段平铺:
-    row_kind: RowKind | None
-    row_bindings: Mapping[str, object] | None
-    row_repr: str | None
-    row_digest: str | None
-    closed_head_digest: str | None      # 原 evidence_ref.closed_head_digest
+
+    # passed 时携完整数据:
+    row: EvaluateRow | None              # ← 直接持完整 row(frozen,可序列化)
+    evidence: EvidenceGraph | None       # ← 3-tier layered graph(见 §3.9)
+    repr: tuple[str, ...] | None         # ← multi-line NL,walking evidence 渲染(见 §4.7)
+
+    # 跨 process 必备 anchors:
     result_id: str | None
-    row_id: str | None
-    # evidence_ref_id 删除(原本只是 self-reference,无独立用途)
-    raw_kind: RawKind | None
-    bound: ...
-    failure_class: ...
-    checked_scope: ...
-    suggested_next_steps: ...
-    errors: ...
-    warnings: ...
+
+    # 失败语义:
+    failure_class: ExplanationFailureClass | None
+    checked_scope: Mapping[str, Any] | None
+    suggested_next_steps: tuple[str, ...]
+
+    # 不支持 / 输入非法:
+    errors: tuple[ErrorDTO, ...]
+    warnings: tuple[WarningDTO, ...]
 ```
 
-`Explanation.status == "passed"` 时 `row_kind` / `row_bindings` / `row_repr` / `row_digest` 必非空;`failed` 时全部 None。
+关键变化(跟先前 flatten 提案对比):
+- **删除** `row_kind` / `row_bindings` / `row_digest` / `row_id` 等 `row_*` inline 字段 —— 通过 `row` 引用统一访问
+- **删除** `raw_kind` / `bound` —— 通过 `explanation.row.raw_kind` 取
+- **删除** `closed_head_digest` inline 字段 —— 通过 `explanation.row.closed_head_digest` 取
+- **新增** `repr: tuple[str, ...]` —— Explanation 的核心"输出",walking evidence 多行 NL
+- **删除** `evidence_ref_id` —— 无独立用途
+
+Net: Explanation 从 13 字段降到 **10 字段**,且每个字段都**真有独立语义**。
+
+`status == "passed"` 时 `row` / `evidence` / `repr` 必非空;`failed` 时 `failure_class` 必非空;`unsupported` / `invalid_request` 时 `errors` 必非空。
 
 ### §4.2 `EvidenceGraph` node label / value_summary
 
-当前:`label = row.claim.name`, `value_summary = row.claim.repr`
+当前 default fallback path 用 `label = row.claim.name`, `value_summary = row.claim.repr`([`evaluate_result.py:872-873`](../../../../src/factgraph/application/protocol/evaluate_result.py))。
 
-目标:`label = result.head.id`(rule id), `value_summary = row.repr`(desc 渲染)
+目标:跟 §3.9 hierarchy 重设计同步:
+- `NODE_CONCLUSION.label / value_summary` 用 head desc 模板渲染
+- `NODE_RULE_EXPR.label` 用 ast_form,`value_summary` 用 RuleExpr 的 repr
+- `NODE_RULE.label = rule.id`,`value_summary = rule.desc` 渲染
+- `NODE_ATOM.label` 用 atom kind/pred_id,`value_summary` 描述具体 binding
+- `NODE_SEED.label = pred_id`,`value_summary` 描述 ledger fact 内容
+
+这把当前 `Claim.repr` 的 dict 打印彻底替换为 desc-rendered 文本,每层都自洽。
 
 ### §4.3 `fg.eval.explain` 内部对 closed_head_digest 的读取路径
 
@@ -329,13 +457,65 @@ EvaluateRow 本身已经是 frozen + 字段都 serializable(除 `_result_resolve
 
 shipped tests 需要更新约 30-50 处 access path(grep 估计)。需要 backward-compat alias 期决定见 §5.4。
 
+### §4.7 `Explanation.repr` walker — walking 3-tier evidence 生成多行 NL
+
+承接 §3.7 提案 + §3.9 hierarchy。walker 算法:
+
+```
+walk(evidence_graph) -> tuple[str, ...]:
+    lines = []
+    visit(evidence_graph.root_node, depth=0)
+    return tuple(lines)
+
+visit(node, depth):
+    indent = "  " * depth
+    line = indent + render_node(node)        # 用 desc / engine_meta 渲染本节点
+    lines.append(line)
+    for edge in outgoing_edges(node):         # 顺向 from→to,即顶→底
+        connector = edge_kind_to_connector(edge.edge_kind)
+        # e.g. "derived_by" → "is derived by"
+        # e.g. "uses" → "uses"
+        # e.g. "has_atom" → "has atom"
+        # e.g. "supported_by" → "is supported by"
+        sub_line = (indent + "  ") + connector + " " + render_node_inline(edge.to_node)
+        # recursive descent
+        visit(edge.to_node, depth + 1)
+```
+
+**Walker output 例**(承接 §3.9.3 的 4-tier walk):
+
+```
+("User alice is adult",
+ "  is derived by RuleExpr(single)",
+ "    which uses Rule \"adult_in_us\"",
+ "      which has atom User(u) — support",
+ "        is supported by ledger fact User:exists(alice)",
+ "      which has atom User(u).age == age — support, bound age=25",
+ "        is supported by ledger fact user:age(alice, 25)",
+ "      which has atom age > 18 — support (25 > 18, no seed)")
+```
+
+**Failed case** 也走同 walker,但 root node 是 `NODE_CONCLUSION` with `failure_class` 注释,atom-level node 的 `atom_status = "unsupport"` 时 renderer 切换措辞:
+
+```
+("User alice is adult — NOT concluded",
+ "  failure_class: closed_head_false",
+ "  which uses Rule \"adult_in_us\"",
+ "    which has atom age > 18 — UNSUPPORT (age = 17, but required > 18)",
+ "      atoms before this succeeded:",
+ "        User(u) — support",
+ "        User(u).age == age — support, bound age=17")
+```
+
+**Walker 实现位置**:application protocol 层(`factgraph.application.protocol.explanation_render.walk_evidence(...)`),lazy 在 `Explanation.__post_init__` 之后第一次访问 `.repr` 时调用并 cache(frozen dataclass 用 `object.__setattr__` cache 在 internal field 即可)。SDK 直接读 `explanation.repr` 拿到 tuple。
+
+**桥接 D21**:这个 walker 就是 [`explanation-completion-roadmap.zh.md §6.6`](explanation-completion-roadmap.zh.md) 路径 C "`Explanation.desc_lines` 自动 populate" 的等价落地;D21 design-point 那条 deferred work 在本设计 Slice ε 一同关闭。
+
 ## §5 未锁问题(实施前需要决议)
 
 ### §5.1 `raw_kind` / `bound` 留在 row 还是上 Claim 等价物?
 
-Datalog 模型下 raw_kind/bound 描述"derived fact 的 uncertainty",概念上属 Claim。Query 模型下没有 Claim,raw_kind/bound 自然就在 row 上。本设计目前放 row 上。
-
-未锁:Explanation 上的 `raw_kind` / `bound` 是否要重命名 `row_raw_kind` / `row_bound`?
+Datalog 模型下 raw_kind/bound 描述"derived fact 的 uncertainty",概念上属 Claim。Query 模型下没有 Claim,raw_kind/bound 自然就在 row 上。本设计目前放 row 上,Explanation 不重复 inline 这两字段(通过 `explanation.row.raw_kind` 访问)。
 
 ### §5.2 `ResultFingerprint` sub-object 还是直接 `Mapping[str, str]`?
 
@@ -406,10 +586,11 @@ Datalog 模型下 raw_kind/bound 描述"derived fact 的 uncertainty",概念上�
 
 ### Slice γ — Claim / EvidenceRef wrapper 撤销 + 字段平铺
 
-- 把 `Claim.kind` / `Claim.repr` / `Claim.digest` 平铺到 `EvaluateRow.kind` / `.repr` / `.digest`
+- 把 `Claim.kind` / `Claim.digest` 平铺到 `EvaluateRow.kind` / `.digest`
 - 把 `EvidenceRef.closed_head_digest` 平铺到 `EvaluateRow.closed_head_digest`
+- **`Claim.repr` 不移到 row**(repr 是 view concern,归 Explanation,见 Slice ε)
 - `row.claim` / `row.evidence_ref` 保留作 deprecated property 一个 release cycle
-- `Explanation.claim` 平铺为 inline `row_kind` / `row_bindings` / 等字段
+- `Explanation.claim` 改为 `Explanation.row: EvaluateRow | None` 引用(详见 §4.1)
 
 ### Slice δ — query-style head decoupling(arity check opt-in)
 
@@ -418,18 +599,35 @@ Datalog 模型下 raw_kind/bound 描述"derived fact 的 uncertainty",概念上�
 - `WhereValidationError: target predicate not found` 改为 informational(query 风格自动 fallback)
 - `rule.id` 校验只保留 "non-empty string"
 
-### Slice ε — `row.repr` 用 desc 渲染(承接 D21)
-
-- row 构造时调用 `head.render_desc(row.bindings)` 填充 `row.repr`
-- `Claim.repr` deprecated property 路由到 `row.repr`
-- 实施 D21 design-point §6.6 路径 C(`Explanation.desc_lines` 自动 populate)的等价能力
-
 ### Slice ζ — `bindings` 形态简化
 
 - row 构造时把 `{pred_id, terms[]}` 形态转 `{port_name: term}` map
 - 旧形态保留作 deprecated 属性 1 个 cycle
 
-每个 slice 独立可上线 + 可独立回滚 + 不阻塞下游。推荐顺序:α → β → γ → ζ → ε → δ。δ 最后做因为它是范式转向,需要前面所有 slice 都已成熟。
+### Slice η — EvidenceGraph 3-tier hierarchy(配 §3.9)
+
+- 新增 `NODE_RULE_EXPR` / `NODE_RULE` / `NODE_ATOM` 3 个 node_kind(audit/evidence_graph.py)
+- 新增 `EDGE_DERIVED_BY` / `EDGE_USES` / `EDGE_HAS_ATOM` / `EDGE_SUPPORTED_BY` 4 个 edge_kind
+- 改造 `_build_passed_row_evidence_graph` / `_build_form1_evidence_graph` / `_build_problog_provenance_row_evidence_graph` 3 处 build path,各自产 3-tier 结构(per §3.9.4 表 — 每引擎能力)
+- 现有 NODE_CONCLUSION / NODE_SEED 保留兼容,作为 hierarchy 顶/底两端
+- node `engine_meta` 携 layer-specific 字段(rule_id / atom_index / atom_status / ...)
+
+### Slice ε — `Explanation.repr` walker(配 §3.7 / §4.7,承接 D21)
+
+- 实现 `factgraph.application.protocol.explanation_render.walk_evidence(graph) -> tuple[str, ...]`
+- Walker 从 `evidence.root_node_id` 出发,顺向 edge 方向 DFS,每节点按 desc 模板 + edge_kind connector 渲染一行 NL
+- failed Explanation 的 walker 切换措辞("UNSUPPORT" / "failure_class" 注释)
+- `Explanation.__post_init__` 之后第一次 `.repr` 访问时 lazy 调用 walker + cache
+- 关闭 D21 §6.6 路径 C deferred work
+- **依赖 Slice η**(walker 走的是 layered graph) —— 须在 η 之后实施
+
+每个 slice 独立可上线 + 可独立回滚 + 不阻塞下游。推荐顺序:**α → β → γ → ζ → η → ε → δ**。理由:
+- α(冗余字段删除)/ β(fingerprint 折叠)low-risk,先做
+- γ(wrapper 撤销)依赖 α / β 已经清理冗余,跟着做
+- ζ(bindings 形态)是纯 row-level cleanup,可独立做
+- η(EvidenceGraph 3-tier)是 evidence model 重设计,依赖前面 row/Claim 清理完成
+- ε(walker)依赖 η 的 layered graph
+- δ(query-style 范式)最后做,需要前面所有 slice 都已成熟
 
 ## §7 跟其他设计的耦合
 
