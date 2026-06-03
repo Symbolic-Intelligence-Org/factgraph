@@ -1,8 +1,8 @@
 # Task Blueprint: Query-style head Slice δ — `rule.id` decouple + arity opt-in
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
+- Last Updated: 2026-06-04 (Step 4.6 scope freeze)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default — δ relaxes a shipped strict invariant (`rule.id` must match schema predicate); preflight will surface cross-engine impact
 - Fork base: `dd65e776` (Slice ε Step 4.9 archive HEAD)

@@ -13,6 +13,8 @@
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-query-style-head-2026-06-03` (fork from `dd65e776`). Tight gates default — δ relaxes shipped strict invariant `rule.id` must match schema predicate. Cross-engine + backward compat scope must be enumerated at Step 4.3 preflight. Open Q G6 (arity mismatch severity Option A/B/C) was pending at draft and resolved by Step 4.2 Option A lock below. |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-P5: locked G6 to Option A strict reject for matched-predicate arity mismatch; recorded that native free-form heads need a distinct query-style candidate construction branch because `candidates_from_bindings(...)` is schema-bound; expanded cross-engine scope to Souffle/ProbLog strict lookup sites; added service/runtime compiled-plan compatibility surface; confirmed `Rule` DTO already accepts arbitrary non-empty ids. Status remains `draft`. |
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight findings from `v0.2.0-query-style-head-preflight-2026-06-03@46e179d3`: native/Souffle/ProbLog runtime/import strict lookup paths are in scope; query-style candidates require a distinct helper/branch; `candidate_kind="fact"` + fact-like payload remains the δ compatibility default; service/runtime `target_pred_id` / `head_vars` keys are preserved; PyReason fact-conversion and read/query lookups are carved out. Status remains `draft`. |
+| 2026-06-04 | draft | Step 4.5 self-check PASS | Verified PF-R1/PF-R2/PF-R3/PF-R4 + PF-r1/PF-r2/PF-r3 coverage across §5/§7/§8/§9; confirmed N9/N10 carve-outs, G6 Option A, CandidateSet compatibility payload, and service/runtime wire-key preservation are internally consistent. No stale blockers found; Q-PR1 and dirty-baseline boundaries remain preserved. |
+| 2026-06-04 | scoped | Step 4.6 scope freeze | Status flipped `draft` → `scoped`. Scope frozen with native/Souffle/ProbLog opt-in schema lookup, query-style candidate helper/branch, `candidate_kind="fact"` compatibility payload, service/runtime wire-key preservation, PyReason/read-query exclusions, and strict-error docs cascade. |
 
 ## Decision Notes
 
@@ -35,8 +37,8 @@
 - [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
 - [x] Step 4.3 preflight on independent branch `v0.2.0-query-style-head-preflight-2026-06-03`
 - [x] Step 4.4 preflight amendment
-- [ ] Step 4.5 self-check
-- [ ] Step 4.6 scope freeze
+- [x] Step 4.5 self-check
+- [x] Step 4.6 scope freeze
 - [ ] Step 4.6.5 pre-impl grep
 - [ ] Step 4.7 implementation on `v0.2.0-impl-query-style-head-2026-06-03` (individual report per D6)
 - [ ] Step 4.8 closure (individual report per D6) + note δ closes parent design chain
