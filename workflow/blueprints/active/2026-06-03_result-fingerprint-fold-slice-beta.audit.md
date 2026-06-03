@@ -14,6 +14,7 @@
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight findings from `348d4dc8`: PF-R1 service production construction, PF-R2 service construction/serializer split, PF-R3 named docs cascade, PF-r1 broader active-test coverage, PF-r2 refreshed metadata anchors. Status remains `draft`; no abandonment blockers. |
 | 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, G/N coverage, stale wording scan, named docs/test/service scope, and no abandonment blockers. No content amend required. |
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with PF-R1/PF-R2/PF-R3 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, 0 abandonment. |
+| 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran deletion/consumer grep across `src/factgraph`, `src/service`, `tests`, and active docs. No new N-findings beyond Step 4.4 scope; extra hits were `AcceptResult.run_id`, candidate wire docs, or already-scoped docs/tests. Status remains `scoped`. |
 
 ## Decision Notes
 
@@ -43,7 +44,7 @@
 - [x] Step 4.4 preflight amendment on this blueprint branch
 - [x] Step 4.5 self-check (doc-only, lightweight)
 - [x] Step 4.6 scoped anchor (Status: draft → scoped)
-- [ ] Step 4.6.5 pre-impl grep on this blueprint branch (Option 2 fold if N-findings appear)
+- [x] Step 4.6.5 pre-impl grep on this blueprint branch (Option 2 fold if N-findings appear)
 - [ ] Step 4.7 implementation on `v0.2.0-impl-result-fingerprint-fold-2026-06-03`
 - [ ] Step 4.8 closure (Status: scoped → implemented + §10 Outcome filled)
 - [ ] Step 4.9 archive (`active/` → `archive/` + INVENTORY.md entry)
