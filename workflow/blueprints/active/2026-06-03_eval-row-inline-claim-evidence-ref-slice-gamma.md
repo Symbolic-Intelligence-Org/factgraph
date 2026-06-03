@@ -1,8 +1,8 @@
 # Task Blueprint: Eval-row inline Claim/EvidenceRef Slice gamma — wrapper removal + row evidence fields
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
+- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
 - Owner: Claude/Codex cross-flip; tighter gates than Slice beta because this is a breaking SDK/protocol surface slice
 - Fork base: `e2f7f655` (Slice beta Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.3-§3.5 + §4.1 + §4.5 + §6 Slice gamma
@@ -161,7 +161,7 @@ Cross-process semantics: an `Explanation` remains standalone-serializable throug
 
 ### 5.4 Row digest and evidence identity
 
-The following identities must remain true unless Step 4.3 raises a Required contrary finding:
+The following identities remain locked after Step 4.4 preflight amendment:
 
 - `row.digest` == former `row.claim.digest`
 - `row.closed_head_digest` == former `row.evidence_ref.closed_head_digest`

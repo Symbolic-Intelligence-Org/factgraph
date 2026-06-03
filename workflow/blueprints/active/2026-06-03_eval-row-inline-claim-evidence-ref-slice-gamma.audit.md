@@ -14,6 +14,8 @@
 | 2026-06-03 | draft | Step 4.1 blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-eval-row-inline-claim-evidence-ref-2026-06-03` (fork from `e2f7f655`). Gamma treated as higher-risk breaking surface: SDK exports, protocol DTO shape, `Explanation`, service projection, and docs cascade all require Step 4.2/4.3 tightening before scope freeze. |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Folded reviewer P1-P5: C3 compatibility sub-shape must be locked or rejected by preflight; gamma must not add placeholder `Explanation.repr`; `Explanation.row` direct-reference shape is locked; ledger Claim name-friction cross-reference added; Explanation cross-process semantics recorded. Status remains `draft`. |
 | 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight `ef09030c`: PF-R1 no `EvaluateRow.repr`; PF-R2 C1 immediate wrapper removal; PF-R3 expanded `Explanation.row` cascade; PF-R4 service wire split; PF-r1 ledger Claim carve-outs; PF-r2 SDK/protocol export count. Status remains `draft`; no abandonment blockers. |
+| 2026-06-03 | draft | Step 4.5 self-check PASS | Verified PF coverage, G/N structure, open-question disposition, stale wording scan, Q-PR1/dirty invariants, and no abandonment blockers. One stale "unless Step 4.3" phrase normalized before scope freeze. |
+| 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with PF-R1/PF-R2/PF-R3/PF-R4 Required, PF-r1/PF-r2 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, 0 abandonment. |
 
 ## Decision Notes
 
@@ -50,8 +52,8 @@
 - [x] Step 4.2 review + tightening on blueprint branch
 - [x] Step 4.3 preflight on independent branch `v0.2.0-eval-row-inline-claim-evidence-ref-preflight-2026-06-03`
 - [x] Step 4.4 preflight amendment on blueprint branch
-- [ ] Step 4.5 self-check
-- [ ] Step 4.6 scoped anchor
+- [x] Step 4.5 self-check
+- [x] Step 4.6 scoped anchor
 - [ ] Step 4.6.5 pre-impl grep
 - [ ] Step 4.7 implementation on `v0.2.0-impl-eval-row-inline-claim-evidence-ref-2026-06-03`
 - [ ] Step 4.8 closure
