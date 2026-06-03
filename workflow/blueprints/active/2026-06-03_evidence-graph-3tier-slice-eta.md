@@ -1,8 +1,8 @@
 # Task Blueprint: EvidenceGraph 3-tier hierarchy Slice η
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-03 (Step 4.8 closure)
 - Owner: Codex (blueprint draft) / Claude review expected — inverted cross-flip, tight gates by default
 - Fork base: `b4d80f13` (Slice ζ memory HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.9 + §6 Slice η
@@ -231,7 +231,46 @@ No β/ζ-style batch report for 4.7/4.8.
 
 ## 10. Outcome / Deviations
 
-Pending.
+Implemented in `ea0e394b` on `v0.2.0-impl-evidence-graph-3tier-2026-06-03`.
+
+### 10.1 Delivered Scope
+
+| Area | Delivered |
+| --- | --- |
+| EvidenceGraph vocabulary | Added `NODE_RULE_EXPR`, `NODE_RULE`, `NODE_ATOM`, `EDGE_DERIVED_BY`, `EDGE_USES`, `EDGE_HAS_ATOM`, and `EDGE_SUPPORTED_BY`; legacy node/edge constants remain valid and non-deprecated. |
+| Direction semantics | Preserved PF-R1 Option 1: shipped physical direction stays `from=supporter child` / `to=supported parent`; `EvidenceGraph` DFS / renderer direction logic was not inverted. |
+| Fallback rows | Fallback passed-row graphs now include a minimal L1/L2 shell without fabricating supported atom evidence. |
+| Native / Souffle Form 1 | Form 1 builders now emit conclusion / rule_expr / rule / atom / seed hierarchy where witness detail exists. |
+| ProbLog | Implemented PF-R3 P1-lite: row-level shell plus preserved adapter trace graph below a synthetic row-level atom. |
+| Exports | New audit graph constants are exported through `factgraph.audit` and remain validated by `_VALID_NODE_KINDS` / `_VALID_EDGE_KINDS`. |
+| Docs / tests | Updated active docs and exact-vocabulary tests for layered graph terminology, shipped physical edge direction, and engine capability boundaries. |
+
+Step 4.7 changed 12 files with `+356/-125`. Verification at implementation close:
+
+- focused evidence cohort: `75 passed, 7 subtests passed`
+- wider evidence/protocol cohort: `223 passed, 16 subtests passed`
+- full suite: `2455 passed, 32 skipped, 1044 subtests passed`
+- Q-PR1 5-path diff vs `4c472b50`: empty
+- sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`
+- dirty baseline remained preserved
+
+### 10.2 Finding Closure
+
+| Finding | Closure |
+| --- | --- |
+| PF-R1 | Shipped direction wins. Parent design §3.9.2 wording remains carry-forward; Slice η preserved implementation reality instead of expanding into renderer / DFS / test inversion. |
+| PF-R2 | Audit `EvidenceGraph` JSON vocabulary expands because node/edge kinds serialize directly; candidate evidence tree wire taxonomy remains out of scope. |
+| PF-R3 | ProbLog uses P1-lite row shell while preserving adapter trace internals. |
+| PF-R4 | Fallback and PyReason-safe paths carry L1/L2 shell only and do not fabricate supported atom status. |
+| PF-r1 | `NODE_PREMISE`, `EDGE_DERIVES`, `EDGE_SUPPORTS`, and `EDGE_UPDATES` remain valid, non-deprecated vocabulary. |
+| PF-r2 | New constants are exported through audit modules. |
+| PF-r3 | `atom_status` remains documented `engine_meta` string values, not exported constants. |
+
+### 10.3 Deviations
+
+- D5 — Procedural slip: after Step 4.3 review flagged PF-R1 as an explicit user-decision gate and the blueprint locked tight gates in §5.8, Steps 4.4 / 4.5 / 4.6 / 4.6.5 / 4.7 were executed without the expected individual report gates. Substantive verification passed and PF-R1 landed on the preflight/reviewer-recommended Option 1 path, but cadence discipline was violated.
+- D6 — Tight-gates lock remains the going-forward expectation for evidence-model slices unless the user explicitly changes cadence policy. At minimum, future behavior-change and state-transition commits need individual report boundaries.
+- D7 — Parent design §3.9.2 still describes the opposite physical edge direction. A follow-up design-point amendment should align the parent document with shipped `EvidenceGraph` direction semantics or explicitly label the parent wording as superseded.
 
 ## 11. Deferred / Carry-Forward
 

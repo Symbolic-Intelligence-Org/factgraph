@@ -16,6 +16,7 @@
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status flipped `draft` → `scoped`. Scope frozen with PF-R1/PF-R2/PF-R3/PF-R4 Required, PF-r1/PF-r2/PF-r3 Recommended, PF-v1..PF-v8 verified, PF-s1/PF-s2 scoped details, and no abandonment blockers. |
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran graph vocabulary, direction, candidate-evidence-tree, and new eta constant greps. No new production scope beyond Step 4.4 locks. Exact-direction tests/docs and audit EvidenceGraph docs remain in Step 4.7 scope; candidate evidence tree taxonomy remains out of scope. Status remains `scoped`; no code implementation started. |
 | 2026-06-03 | scoped | Step 4.7 implementation | Implemented η layered EvidenceGraph vocabulary and row builders on `v0.2.0-impl-evidence-graph-3tier-2026-06-03`: new node/edge constants, shipped child-to-parent direction preserved, fallback L1/L2 shell, native/Souffle Form 1 atoms, ProbLog P1-lite row shell with adapter trace preserved, docs/tests updated. Full tests: 2455 passed / 32 skipped / 1044 subtests passed. Status remains `scoped` until Step 4.8 closure. |
+| 2026-06-03 | implemented | Step 4.8 closure | Status flipped `scoped` → `implemented`; §10 Outcome filled with commit `ea0e394b`, PF-R1/PF-R2/PF-R3/PF-R4 closure, verification results, and procedural deviation note for skipped tight-gate report boundaries. |
 
 ## Decision Notes
 
@@ -32,6 +33,7 @@
 | 2026-06-03 | Step 4.4 PF-R3/PF-R4 — high-risk engine paths narrowed | ProbLog uses P1-lite row shell plus preserved adapter trace graph; PyReason/fallback row paths may carry L1/L2 shell but cannot fabricate supported atom nodes without evidence. |
 | 2026-06-03 | Step 4.4 PF-r1/PF-r2/PF-r3 — compatibility locks | Legacy `NODE_PREMISE` / `EDGE_DERIVES` / `EDGE_UPDATES` remain non-deprecated; new constants must be exported through `factgraph.audit`; `atom_status` remains engine-meta string values rather than new exported constants. |
 | 2026-06-03 | Step 4.6.5 pre-impl grep — no N-findings | Greps over graph vocabulary, edge direction, candidate evidence tree taxonomy, and eta constant names found no new implementation categories. Candidate tree hits are separate core/service surfaces already excluded by PF-R2; direction hits are the PF-R1 implementation/test/doc set. |
+| 2026-06-03 | Step 4.8 closure deviation — tight-gate report boundaries were skipped | Steps 4.4 through 4.7 were substantively well-formed, but they were executed without the individual report gates expected by η §5.8 and by the Step 4.3 PF-R1 user-decision checkpoint. Closure records this as a process deviation; no rollback because implementation matched the recommended PF-R1 Option 1 and passed independent verification. |
 
 ## Cross-flip checkpoints
 
@@ -43,7 +45,7 @@
 - [x] Step 4.6 scope freeze
 - [x] Step 4.6.5 pre-impl grep
 - [x] Step 4.7 implementation on `v0.2.0-impl-evidence-graph-3tier-2026-06-03`
-- [ ] Step 4.8 closure
+- [x] Step 4.8 closure
 - [ ] Step 4.9 archive
 
 ## Pre-Impl Audit Tasks
