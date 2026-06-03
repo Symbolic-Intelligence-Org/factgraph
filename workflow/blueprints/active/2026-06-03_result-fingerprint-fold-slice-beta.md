@@ -12,6 +12,8 @@
   - `src/service/runtime_v1.py` (EvaluateResult JSON serialization — N-1 pattern from Slice α)
   - `tests/application/protocol/test_evaluate_result_dtos.py` (EvaluateResult invariant tests)
   - `tests/application/protocol/test_evaluate_result_digests.py` (digest helper byte-equal tests)
+  - `tests/sdk/test_evaluate_result_exports.py` (SDK re-export test)
+  - `tests/test_sdk_find_partial_identity.py` (SDK `__all__` count/surface guard — `ResultFingerprint` add must be intentional)
 - Related Docs:
   - [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.1 + §3.2 + §6 Slice β (parent design)
   - [`docs/quickstart/evaluate_and_evidence.md`](../../../docs/quickstart/evaluate_and_evidence.md) (EvaluateResult field-shape rewrite per Slice α PF-R3 pattern)
@@ -32,7 +34,7 @@ Slice β folds these 8 fields into 2 sub-objects (no behavior change, only surfa
 - **ResultFingerprint** (new frozen DTO): 6 fields (the 4 provenance digests + `result_digest` + `run_id`)
 - **`engine_meta: Mapping[str, Any]`** (new field on EvaluateResult): `engine_version` + `adapter_version` (extensible Mapping for future engine metadata)
 
-Slice β is the 2nd slice per parent design §6 ordering (α → **β** → γ → ζ → η → ε → δ) — low-risk, cosmetic surface organization, no semantic change. Wrapper classes (`EvaluateResult`) remain. Per parent design §3.1: EvaluateResult user-facing surface 13 → 7 fields + 2 sub-objects.
+Slice β is the 2nd slice per parent design §6 ordering (α → **β** → γ → ζ → η → ε → δ) — low-risk, cosmetic surface organization, no semantic change. Wrapper classes (`EvaluateResult`) remain. Per parent design §3.1: EvaluateResult user-facing surface 13 direct public fields → 7 direct public fields + 2 sub-objects.
 
 ## 2. Goals
 
@@ -45,6 +47,8 @@ Slice β is the 2nd slice per parent design §6 ordering (α → **β** → γ �
 - G7 — All `EvaluateResult(...)` construction sites updated to drop removed kwargs and pass `fingerprint=` + `engine_meta=`
 - G8 — Internal compatibility paths (digest helpers, service serializer, etc.) updated to use direct sub-object access, not deprecated properties
 - G9 — Test coverage for deprecated-property emission + sub-object access + byte-equal digest preservation
+- G10 — Result construction order remains valid: primitive inputs are used to compute `result_id`, row digests, and `result_digest` before constructing the complete `ResultFingerprint`; no digest helper may depend on deprecated `EvaluateResult` properties
+- G11 — `engine_meta` is normalized + validated, not a loose arbitrary Mapping: required keys `engine_version` / `adapter_version` are present with values `str | None` (extras allowed for future metadata)
 
 ## 3. Non-goals
 
@@ -65,7 +69,7 @@ Slice β is the 2nd slice per parent design §6 ordering (α → **β** → γ �
   - EvaluateResult `__post_init__`: [`:241-279`](../../../src/factgraph/application/protocol/evaluate_result.py) — currently validates 7 digest/id fields + 2 engine version fields directly
   - `result_digest_for(...)` helper: [`:565-612`](../../../src/factgraph/application/protocol/evaluate_result.py) — public symbol, takes 7 digest/id + 2 engine version inputs as kwargs, produces `evaluate_result_digest_v1` canonical bytes
   - SDK store construction site: [`src/factgraph/sdk/store.py:2697-2725`](../../../src/factgraph/sdk/store.py) area — Slice α already touched `_row_digest_for(...)` here
-  - Service serializer: TBD by Step 4.3 preflight — likely an `_evaluate_result_to_dict(...)` analog to Slice α's `_evaluate_row_to_dict(...)`
+  - Service serializer: [`src/service/runtime_v1.py:2445-2462`](../../../src/service/runtime_v1.py) `_evaluate_result_to_dict(...)` — required N-1 analog to Slice α service serializer preservation
 - Current known constraints:
   - D19 digest source-of-truth ([`workflow/design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md`](../../design/decisions/active/2026-05-25_t5-d19-digest-source-of-truth.md)) — digest **algorithm** unchanged; field **location** changes only (parent design §7.6 partial-supersede)
   - Q-PR1 sacred 5-path 0-diff vs `4c472b50` — must preserve through all Slice β commits (`evaluate_result.py` is **not** sacred path; safe to edit; ledger / write_protocol / pyreason adapter etc. untouched)
@@ -117,7 +121,7 @@ class EvaluateResult:
     # 4 internal plumbing fields unchanged: _schema_index, _row_close_builder, _row_support_artifacts, _row_provenance_envelopes
 ```
 
-Net field count: 13 → 7 user-facing + 4 internal. `__post_init__` validates `fingerprint` is ResultFingerprint instance + `engine_meta` is Mapping; sub-object `__post_init__` runs validation on the 6 digest/id fields.
+Net field count: 13 direct public fields → 7 direct public fields + 2 sub-objects + 4 internal fields. `__post_init__` validates `fingerprint` is a `ResultFingerprint` instance. It also normalizes `engine_meta` with `_freeze_mapping(...)` (or equivalent immutable copy) and validates at least the required keys `engine_version` and `adapter_version` are present with values `str | None`; extra keys are allowed for future engine metadata, but the two compatibility keys are not optional.
 
 ### 5.3 Deprecated `@property` for 8 removed fields
 
@@ -132,15 +136,15 @@ def expr_digest(self) -> str:
 @property
 def engine_version(self) -> str | None:
     _warn_deprecated_result_field("engine_version", 'EvaluateResult.engine_meta["engine_version"]')
-    return self.engine_meta.get("engine_version")
+    return _engine_meta_optional_str(self.engine_meta, "engine_version")
 
 @property
 def adapter_version(self) -> str | None:
     _warn_deprecated_result_field("adapter_version", 'EvaluateResult.engine_meta["adapter_version"]')
-    return self.engine_meta.get("adapter_version")
+    return _engine_meta_optional_str(self.engine_meta, "adapter_version")
 ```
 
-Simpler than Slice α's resolver pattern because EvaluateResult is itself the container — direct `self.fingerprint.X` / `self.engine_meta.X` access; no `_row_resolver` indirection; no `DetachedXError` case (standalone EvaluateResult always has its sub-object).
+Simpler than Slice α's resolver pattern because EvaluateResult is itself the container — direct `self.fingerprint.X` / validated `self.engine_meta[...]` access; no `_row_resolver` indirection; no `DetachedXError` case (standalone EvaluateResult always has its sub-object). Do **not** use raw `.get(...)` in deprecated properties because that would silently hide missing or invalid compatibility keys.
 
 ### 5.4 `result_digest_for(...)` helper — compatibility shape
 
@@ -151,7 +155,20 @@ Two options for Step 4.7:
 - **Option α-style explicit-context preservation**: keep the helper signature as-is (12 kwargs); Slice β's deprecated properties + sub-object access pattern remains internal to EvaluateResult construction. The helper continues to be the canonical digest-bytes builder. This is the lower-risk path.
 - **Option helper-renamed-to-sub-object-input**: refactor `result_digest_for(..., fingerprint_inputs: ResultFingerprintInputs, engine_meta: Mapping)` style. Higher refactor risk; recommends Step 4.4 evaluator preflight.
 
-Step 4.2 review chooses. Default lean: **Option α-style** — keep existing helper signature, add a thin wrapper `result_digest_for_fingerprint(...)` only if construction-site ergonomics demand.
+Step 4.2 review chooses. Default lock: **Option α-style** — keep existing helper signature. Implementation may add a thin wrapper only if construction-site ergonomics demand, but the public helper remains the canonical byte builder and its input validation remains source-of-truth.
+
+### 5.4.1 Construction-order lock (Step 4.2 P1)
+
+`ResultFingerprint` includes `result_digest`, and `result_digest_for(...)` requires `result_id`, `run_id`, row digests, engine versions, and the four provenance digests. Existing construction first computes primitive values, then `result_id`, rows/row digests, then `result_digest`, and only then can the complete container exist. Slice β must preserve this ordering:
+
+1. compute primitive digest/version values (`run_id`, provenance digests, engine versions, head identifiers);
+2. compute `result_id` with `result_id_for(...)`;
+3. construct rows and row digests using explicit context, not deprecated properties;
+4. compute `result_digest` with the unchanged `result_digest_for(...)`;
+5. construct `fingerprint=ResultFingerprint(..., result_digest=result_digest, run_id=run_id)`;
+6. construct `EvaluateResult(..., fingerprint=fingerprint, engine_meta=...)`.
+
+Do **not** require `ResultFingerprint` as an input to `result_id_for(...)` or `result_digest_for(...)`; that introduces a circular construction dependency and risks helper rewrites that would violate D19 byte-equal preservation.
 
 ### 5.5 Construction-site updates
 
@@ -160,6 +177,7 @@ All `EvaluateResult(...)` construction sites must drop the 8 now-removed kwargs 
 - Production: [`src/factgraph/sdk/store.py:2697-2725`](../../../src/factgraph/sdk/store.py) `_evaluate(...)` (already touched by Slice α PF-R1)
 - Test fixtures: `tests/application/protocol/test_evaluate_result_dtos.py` (Slice α touched 2 fixture pairs; β may have parallel sites)
 - Test digests: `tests/application/protocol/test_evaluate_result_digests.py` (byte-equal preservation tests)
+- SDK export guard: `tests/test_sdk_find_partial_identity.py` currently asserts `len(factgraph.sdk.__all__) == 64`; adding `ResultFingerprint` is an intentional public SDK surface expansion and must update this guard (and its positive membership assertion) rather than treating the count failure as drift.
 
 ### 5.6 Internal compatibility inventory (parallel to Slice α §5.6)
 
@@ -178,9 +196,9 @@ Normal internal operations must not emit user-facing deprecation warnings just b
 - New `ResultFingerprint` field tree added with its 6 fields
 - SDK import comments updated to reflect deprecated properties
 
-### 5.8 Service serializer (likely N-1 analog)
+### 5.8 Service serializer (N-1 analog)
 
-If `src/service/runtime_v1.py` has an `_evaluate_result_to_dict(...)` analog, it likely reads 7 digest/id + 2 engine version fields directly. Slice β must preserve the JSON wire shape (flat fields in JSON) while reading from sub-objects internally. Step 4.3 preflight + Step 4.6.5 grep confirm location + scope.
+`src/service/runtime_v1.py` has `_evaluate_result_to_dict(...)` at lines 2445-2462 and currently reads `result.run_id`, `result.engine_version`, `result.adapter_version`, the four provenance digests, and `result.result_digest` directly. Slice β must preserve the JSON wire shape (flat fields in JSON) while reading from sub-objects internally. Step 4.3 preflight + Step 4.6.5 grep confirm any additional service scope.
 
 ## 6. Boundaries And Invariants
 
@@ -194,6 +212,7 @@ If `src/service/runtime_v1.py` has an `_evaluate_result_to_dict(...)` analog, it
 - Explicitly NOT in this slice:
   - Wrapper class removal (Slice γ)
   - SDK re-export removal — `from factgraph.sdk import EvaluateResult` still works; **add** `from factgraph.sdk import ResultFingerprint` for user access to new sub-object
+  - Silent `engine_meta` drift — missing `engine_version` / `adapter_version` keys or non-`str | None` values are invalid protocol shape, not compatibility defaults
   - Changing canonical bytes schema name from `evaluate_result_digest_v1`
 - Compatibility constraints:
   - `DeprecationWarning` at `stacklevel=2` per Slice α precedent (user callsite is reported)
@@ -208,13 +227,15 @@ If `src/service/runtime_v1.py` has an `_evaluate_result_to_dict(...)` analog, it
 ## 7. Acceptance
 
 - [ ] New `ResultFingerprint` frozen DTO defined with 6 fields + `__post_init__` validation
-- [ ] `EvaluateResult` field set reorganized: 13 → 7 + `fingerprint: ResultFingerprint` + `engine_meta: Mapping[str, Any]`
+- [ ] `EvaluateResult` direct public field set reorganized: 13 → 7 + `fingerprint: ResultFingerprint` + `engine_meta: Mapping[str, Any]`
+- [ ] `engine_meta` normalized/validated: required keys `engine_version` and `adapter_version` present with `str | None` values; deprecated properties do not use raw `.get(...)`
 - [ ] 8 deprecated `@property` exist on `EvaluateResult` + emit `DeprecationWarning` + return byte-equal values
 - [ ] `result_digest_for(...)` shipped helper preserved byte-equal output (test against pre-Slice-β fixture)
 - [ ] `evaluate_result_digest_v1` canonical bytes unchanged for equivalent inputs (D19 contract)
+- [ ] Construction order preserves primitive → `result_id` → rows/row digests → `result_digest` → `ResultFingerprint` → `EvaluateResult`; no circular helper dependency
 - [ ] All `EvaluateResult(...)` construction sites updated (Step 4.3 enumerates) — drop 8 removed kwargs + pass `fingerprint=...` + `engine_meta=...`
 - [ ] Internal compatibility paths (metadata snapshot consumers in `evaluate_result.py` + `sdk/store.py`) do not emit deprecation warnings during normal `EvaluateResult` construction
-- [ ] Service serializer (if `_evaluate_result_to_dict(...)` exists) preserves JSON wire shape (flat digest fields) without internal warnings
+- [ ] Service serializer `_evaluate_result_to_dict(...)` preserves JSON wire shape (flat digest fields) without internal warnings
 - [ ] Quickstart docs updated with active-field / deprecated-property field tree + new `ResultFingerprint` tree
 - [ ] New tests:
   - [ ] `test_result_fingerprint_field_set`
@@ -230,6 +251,7 @@ If `src/service/runtime_v1.py` has an `_evaluate_result_to_dict(...)` analog, it
   - [ ] `test_evaluate_result_construction_with_fingerprint_kwarg`
 - [ ] Existing test suite passes with `PYTHONPATH=src python -m pytest -W "ignore::DeprecationWarning::factgraph" tests/application/protocol tests/sdk/test_evaluate_result_exports.py`
 - [ ] SDK `from factgraph.sdk import ResultFingerprint` works; SDK `__all__` includes `ResultFingerprint`
+- [ ] `tests/test_sdk_find_partial_identity.py` updated for the intentional SDK `__all__` count increase + positive `ResultFingerprint` membership assertion
 - [ ] No edits outside `factgraph.application.protocol` except (Step 4.3/4.6.5-enumerated) scoped service serializer, tests, and docs consumers
 - [ ] Q-PR1 5-path 0-diff vs `4c472b50` preserved (sacred contract)
 
@@ -240,14 +262,14 @@ Codex implementation order (each step ends with targeted `PYTHONPATH=src python 
 1. **[audit pin]** Re-read shipped `EvaluateResult` definition + `result_digest_for(...)` helper; confirm anchors match blueprint §4
 2. **[audit pin]** Enumerate all `EvaluateResult(...)` construction sites in `src/` + `tests/`; compare against Step 4.3 PF-r1 expectations
 3. **[ResultFingerprint definition]** Add `ResultFingerprint` frozen DTO + `__post_init__` validation; add unit test for field set; export from `application/protocol/__init__.py`
-4. **[EvaluateResult field reshape]** Replace `EvaluateResult` class definition with new shape (§5.2) — drop 8 frozen fields, add `fingerprint` + `engine_meta` fields, update `__post_init__` to validate new shape
+4. **[EvaluateResult field reshape]** Replace `EvaluateResult` class definition with new shape (§5.2) — drop 8 frozen fields, add `fingerprint` + validated immutable `engine_meta` fields, update `__post_init__` to validate new shape
 5. **[8 deprecated @property]** Add deprecated properties for `expr_digest` / `rule_set_digest` / `view_snapshot_digest` / `config_digest` / `result_digest` / `run_id` / `engine_version` / `adapter_version` per §5.3
-6. **[byte-equal preservation]** Verify `result_digest_for(...)` byte output unchanged via pre-Slice-β fixture test (capture before step 4)
-7. **[construction-site updates]** Update each site enumerated in step 2 — `sdk/store.py` `_evaluate(...)` + test fixtures + test digests
+6. **[construction order + byte-equal preservation]** Preserve §5.4.1 ordering and verify `result_digest_for(...)` byte output unchanged via pre-Slice-β fixture test (capture before step 4)
+7. **[construction-site updates]** Update each site enumerated in step 2 — `sdk/store.py` `_evaluate(...)` + test fixtures + test digests; construct `ResultFingerprint` only after `result_digest` is available
 8. **[internal compatibility paths]** Rewrite metadata snapshot consumers in `evaluate_result.py` + `sdk/store.py` to read from `self.fingerprint.X` / `self.engine_meta.X` directly
-9. **[service serializer]** Update `src/service/runtime_v1.py` `_evaluate_result_to_dict(...)` analog (if exists per Step 4.3/4.6.5 finding) per §5.8
+9. **[service serializer]** Update `src/service/runtime_v1.py` `_evaluate_result_to_dict(...)` per §5.8
 10. **[SDK + protocol re-export]** Add `ResultFingerprint` to `factgraph.application.protocol.__all__` + `factgraph.sdk.__all__`
-11. **[new tests]** Add the 11 acceptance tests listed in §7
+11. **[new tests]** Add the acceptance tests listed in §7, including engine-meta validation and SDK `__all__` guard updates
 12. **[quickstart docs rewrite]** Update `docs/quickstart/evaluate_and_evidence.md` per §5.7 (similar to Slice α PF-R3 pattern)
 13. **[docs cascade]** Any active docs consumers Step 4.6.5 finds (parallel to Slice α N-2)
 14. **[final verification]** Targeted pytest clean; manual grep `grep -nE 'EvaluateResult\((expr_digest|rule_set_digest|view_snapshot_digest|config_digest|result_digest|run_id|engine_version|adapter_version)=' src/ tests/` returns zero hits

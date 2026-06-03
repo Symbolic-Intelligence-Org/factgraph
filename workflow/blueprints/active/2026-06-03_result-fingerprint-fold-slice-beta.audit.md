@@ -10,6 +10,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Blueprint created | Initial scope recorded on `v0.2.0-blueprint-result-fingerprint-fold-2026-06-03` (fork from `64651454`). Reuses Slice α cadence pattern: §6.1 cadence path locks (§5.4 single-Q local fold + Stage 0 audit folded per Slice 4/5 precedent + §5.2 sub-object choice locked to Option A). |
+| 2026-06-03 | draft | Step 4.2 review + tightening | Codex Rule 1 spot-check found P1 construction-order risk (`ResultFingerprint.result_digest` cannot exist before `result_digest_for(...)` runs), P1 loose `engine_meta` validation risk, P2 SDK `__all__` guard impact, P2 service serializer concrete scope, and P3 direct-public-field count wording. Tightening landed on blueprint branch; Status remains `draft`. |
 
 ## Decision Notes
 
@@ -21,10 +22,15 @@
 | 2026-06-03 | `engine_meta` as `Mapping[str, Any]` (not a new named DTO) | Extensible for future engine metadata without proliferating named DTOs; aligns with parent design §3.1 wording. |
 | 2026-06-03 | §5.4 deprecation strategy — local Q fold (no separate Q-decision doc) | Per Slice α precedent. Slice β's deprecation cycle is local implementation policy; consolidate via Step 4.2 review + Step 4.4 amendment fold. Escalation rule: public-compat or cross-slice impact triggers upgrade to Q-decision doc before scoped anchor. |
 | 2026-06-03 | Stage 1 audit doc deferred per Slice 4/5 precedent | Per Slice α precedent. Stage-0 source audit folded into parent design + this blueprint draft. No separate `workflow/audit/active/2026-06-03_result-fingerprint-fold-vs-shipped.md`. Step 4.2 reviewer verifies via Rule 1 fresh reads. |
+| 2026-06-03 | Step 4.2 P1 — construction-order lock added | Shipped `result_digest_for(...)` needs `result_id`, `run_id`, row digests, engine versions, and provenance digests. Because `ResultFingerprint` itself includes `result_digest`, Step 4.7 must compute primitive values → `result_id` → row digests → `result_digest` before constructing `ResultFingerprint`; otherwise the slice creates a circular dependency or rewrites the D19 byte contract. |
+| 2026-06-03 | Step 4.2 P1 — `engine_meta` validation tightened | A raw Mapping with deprecated properties using `.get(...)` would silently turn missing or invalid `engine_version` / `adapter_version` values into compatibility defaults. Blueprint now requires immutable normalization plus required compatibility keys with `str | None` values; extra metadata keys remain allowed. |
+| 2026-06-03 | Step 4.2 P2 — SDK export guard made explicit | Adding `ResultFingerprint` is an intentional public SDK surface expansion. Existing `tests/test_sdk_find_partial_identity.py` asserts `len(factgraph.sdk.__all__) == 64`; implementation must update that guard and add a positive membership assertion instead of treating the count failure as unrelated drift. |
+| 2026-06-03 | Step 4.2 P2 — service serializer scope grounded | `src/service/runtime_v1.py:2445-2462` has `_evaluate_result_to_dict(...)` and reads the soon-deprecated flat fields directly. The blueprint now treats this as required N-1 service scope, not a hypothetical preflight discovery. |
+| 2026-06-03 | Step 4.2 P3 — public field-count wording clarified | The draft's "13 user-facing" shorthand could confuse direct fields with sub-object/public properties. Wording now says 13 direct public fields become 7 direct public fields plus 2 sub-objects. |
 
 ## Cross-flip checkpoints (per `feedback_audit_to_archive_cadence` + Slice α first-validation precedent)
 
-- [ ] Step 4.2 reviewer (Codex) flags polish list P1...PN; Claude (drafter) applies tightening
+- [x] Step 4.2 reviewer (Codex) flags polish list P1...PN; tightening applied on blueprint branch
 - [ ] Step 4.3 preflight on independent branch `v0.2.0-result-fingerprint-fold-preflight-2026-06-03`
 - [ ] Step 4.4 preflight amendment on this blueprint branch
 - [ ] Step 4.5 self-check (doc-only, lightweight)
