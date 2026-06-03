@@ -188,6 +188,8 @@ dict(row.bindings)
 # }
 ```
 
+Reading this concretely: this row matched `user:region(<alice>, "US")` — `user = "idref_v1:User:<digest>"` and `region = "US"`. The mapping from positions to port names is `terms[0] → head.ports`'s first port (`user`), `terms[1] →` its second (`region`).
+
 The `terms` list is **positional** — `terms[i]` corresponds to the i-th `Var` in the head's `PredAtom` terms, which maps to the i-th `port` in `head.ports`. Each term is a typed dict discriminated by `kind`:
 
 | Term type | Shape | When |
