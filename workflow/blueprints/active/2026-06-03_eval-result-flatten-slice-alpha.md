@@ -1,8 +1,8 @@
 # Task Blueprint: Evaluate-result flatten Slice α — Claim/EvidenceRef redundant-field removal with deprecated property fallback
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03
+- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
 - Owner: Claude (blueprint) / Codex (impl) — cross-flip per `feedback_design_impl_branch_isolation`
 - Related Modules:
   - `src/factgraph/application/protocol/evaluate_result.py` (Claim / EvidenceRef / EvaluateRow definitions)
