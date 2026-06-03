@@ -16,6 +16,7 @@
 | 2026-06-03 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`; scope frozen with Step 4.2 locks, Step 4.4 PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2 + PF-s1/PF-s2/PF-s3, and hybrid cadence retained for Step 4.6.5/4.7. |
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Re-ran constructor, `row.bindings`, legacy `pred_id`/`terms`, and v1/v2 canonical-label greps across `src/`, `tests/`, `docs/`, and `workflow/`. No new production N-findings beyond Step 4.4 scope: construction remains SDK/service/protocol-test; row-derived legacy payload users remain service wire + ProbLog row evidence graph; direct candidate-payload and ledger/core hits remain carve-outs. Status remains `scoped`; no implementation started. |
 | 2026-06-03 | scoped | Step 4.7 implementation | Implemented ζ port-map bindings on `v0.2.0-impl-eval-row-bindings-port-map-2026-06-03`: `_bindings_from_candidate(..., head=...)` now emits `{port_name: term}`; row/claim/row-digest canonical labels use v2; service wire + ProbLog row evidence graph reconstruct legacy `{pred_id, terms}` payloads through helpers; docs/tests updated. Full `tests/` cohort passed: 2454 passed / 32 skipped / 1044 subtests. Status remains `scoped` until Step 4.8 closure. |
+| 2026-06-03 | implemented | Step 4.8 closure | Status `scoped` → `implemented`; §10 Outcome filled with `dad98c12` implementation summary, verification, and deviations. Step 4.9 archive remains. |
 
 ## Decision Notes
 
@@ -46,7 +47,7 @@
 - [x] Step 4.6 scope freeze
 - [x] Step 4.6.5 pre-impl grep
 - [x] Step 4.7 implementation on `v0.2.0-impl-eval-row-bindings-port-map-2026-06-03`
-- [ ] Step 4.8 closure
+- [x] Step 4.8 closure
 - [ ] Step 4.9 archive
 
 ## Pre-Impl Audit Tasks (Step 4.3 to verify)

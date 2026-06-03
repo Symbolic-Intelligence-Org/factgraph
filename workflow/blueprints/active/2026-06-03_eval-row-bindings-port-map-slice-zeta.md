@@ -1,8 +1,8 @@
 # Task Blueprint: Eval-row bindings port-map Slice ζ — `{port_name: term}` map shape
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.7 implementation)
+- Last Updated: 2026-06-03 (Step 4.8 closure)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]; hybrid cadence default per [[feedback_hybrid_cadence_sequential_mechanical_slices]] unless Step 4.3 surfaces novel concerns
 - Fork base: `0719ace6` (Slice γ Step 4.9 archive HEAD)
 - Parent design: [`workflow/design/design-points/active/evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §3.6 + §6 Slice ζ
@@ -237,7 +237,30 @@ Step 4.3 preflight enumerates exact files.
 
 ## 10. Outcome / Deviations
 
-Pending.
+Implemented in `dad98c12` on `v0.2.0-impl-eval-row-bindings-port-map-2026-06-03`.
+
+### Outcome
+
+| Area | Result |
+| --- | --- |
+| In-process row shape | `EvaluateRow.bindings` now stores `{port_name: term}` mappings. `_candidate_set_to_evaluate_row(..., head=...)` receives explicit head context from SDK/service construction sites and maps candidate terms to head ports. |
+| Canonical ids/digests | `row_id_for`, `claim_digest_for`, and `_row_digest_for(...)` use `evaluate_row_id_v2`, `evaluate_claim_v2`, and `evaluate_row_digest_v2`; `evaluate_evidence_ref_v1` remains unchanged. |
+| Service/provenance compatibility | Service JSON wire `"bindings"` and ProbLog row evidence graph candidate payloads reconstruct the legacy `{pred_id, terms}` envelope through helper logic while in-process rows stay port-mapped. |
+| Transition helpers | `_binding_value_for_head_port(...)` unwraps typed terms; `_claim_arguments_for_row(row)` remains the named row-argument access point for this slice. |
+| Docs/tests | Active quickstart/official docs now describe port-map row bindings; protocol, SDK, service, PyReason, ProbLog, and provenance focused cohorts are covered. |
+
+### Verification
+
+- Full test suite: `PYTHONPATH=src python -m pytest -p no:capture tests/ -q` → `2454 passed, 32 skipped, 1044 subtests passed`.
+- Acceptance grep: no active `row.bindings["pred_id"]` / `row.bindings["terms"]`, no service/provenance `dict(row.bindings)` legacy-payload misuse, and no active v1 row/claim/row-digest labels in `src/`, `tests/`, or active user docs.
+- Q-PR1 5-path diff vs `4c472b50`: empty.
+- Sacred master `562c74195df43e933bed92a3ff25de94dd8ce666`: unchanged.
+- Dirty baseline preserved.
+
+### Deviations
+
+- PyReason candidates may contain more payload terms than application head ports because field-style candidates include a value term beyond the emitted head port. Step 4.7 maps the first `len(head.ports)` terms into row bindings and preserves the full legacy envelope only for service/provenance compatibility. This is within PF-R1/PF-s carve-out logic and was validated by `tests/test_pyreason_e2e.py`.
+- The legacy row payload helper is intentionally used for service JSON and ProbLog row evidence only. PyReason/core candidate provenance and service candidate evidence tree paths still consume original candidate payloads directly and remain out of row-derived migration scope.
 
 ## 11. Deferred / Carry-Forward
 
