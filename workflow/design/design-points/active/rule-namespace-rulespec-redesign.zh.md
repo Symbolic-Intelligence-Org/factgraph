@@ -3,10 +3,10 @@
 - Status: working / **current mode locked**(application `Rule` 占名 + SDK 必须用 `build_application_rule(...)`)/ **future direction open**(rename to `RuleSpec` + SDK shadow `Rule`)
 - Authority: candidate design / non-authoritative reference;现状描述属实,未来方向属设计空间
 - First draft: 2026-06-02
-- Last updated: 2026-06-03(加入 `Claim` 同名占用 instance)
-- Scope: `factgraph.application.protocol.Rule` 与 `factgraph.sdk.build_application_rule(...)` 之间的层级与命名分裂;user-facing SDK Rule namespace 的重设计;扩展覆盖 RuleExpr OR `branch_id` 匿名化与 `Claim` cross-layer 同名占用两类同源 ergonomic gap
+- Last updated: 2026-06-03(加入 `Claim` 同名占用 + `rule.id` 强制 predicate id 两类 instance)
+- Scope: `factgraph.application.protocol.Rule` 与 `factgraph.sdk.build_application_rule(...)` 之间的层级与命名分裂;user-facing SDK Rule namespace 的重设计;扩展覆盖 RuleExpr OR `branch_id` 匿名化、`Claim` cross-layer 同名占用、`rule.id` 强制为 ledger predicate id 三类同源 ergonomic gap
 - Parent: 与 [`schema-mutation-additive-only.zh.md`](schema-mutation-additive-only.zh.md) / [`fields-iterable-value-batch.zh.md`](fields-iterable-value-batch.zh.md) 同级;均属 SDK 用户面 ergonomic 设计空间
-- Design intent: 把"`Rule(when=[User(u), ...])` 直接构造不被支持,必须经 `build_application_rule(...)` 这条 lowering 显式可见"、"`RuleExpr` OR `branch_id` 是合成 `c{idx}`,丢失 Rule.id / occurrence alias 语义"、"`Claim` 在 `factgraph.core.store.ledger` 和 `factgraph.application.protocol.evaluate_result` 两层都存在但字段不同"三类同源 friction 从用户面文档(`docs/quickstart/rules.md` / `docs/quickstart/engines_and_configs.md` / `docs/quickstart/evaluate_and_evidence.md` / `docs/quickstart/data_model.md`)抽出来,作为 SDK 命名与层级重设计的 future direction 记录
+- Design intent: 把"`Rule(when=[User(u), ...])` 直接构造不被支持,必须经 `build_application_rule(...)` 这条 lowering 显式可见"、"`RuleExpr` OR `branch_id` 是合成 `c{idx}`,丢失 Rule.id / occurrence alias 语义"、"`Claim` 在 `factgraph.core.store.ledger` 和 `factgraph.application.protocol.evaluate_result` 两层都存在但字段不同"、"`rule.id` 被强制 match ledger predicate id,user 不能自由命名"四类同源 friction 从用户面文档(`docs/quickstart/rules.md` / `docs/quickstart/engines_and_configs.md` / `docs/quickstart/evaluate_and_evidence.md` / `docs/quickstart/data_model.md`)抽出来,作为 SDK 命名与层级重设计的 future direction 记录
 
 ---
 
@@ -144,6 +144,30 @@ isinstance(fg.ledger.find_claims()[0], Claim)  # False — that's ledger.Claim
 User 读到 `row.claim` 时无法仅凭名字判定是"on-disk Claim"还是"result-side projection";要看字段(`asrt_id` 在?还是 `kind` 在?)才能 disambiguate。这跟 §3.1-§3.3 `Rule` 命名占用**完全同源** —— application protocol 层占用了 user-facing 的"Claim"名,ledger 层另一个不同字段集的同名 class 与之共存。
 
 `Claim` 不同于 §3.4 branch_id 一类的 identity-derivation 问题,但跟 §3.1-§3.3 是**同一种 cross-layer naming 占用 friction**,候选 fix 也走同样的"重命名 application/internal 层 + 保留 user-facing 名给 SDK 那个"模式(见 §4.7)。
+
+### §3.6 第六次撞墙:`rule.id` 强制为 ledger predicate id
+
+构造一条 Rule 时直觉是 `rule.id` 是 rule 的自由命名(如别的 rule engine 习惯的 `"is_adult"` / `"find_us_users"` / `"discount_calc"`)。但 shipped 拒绝这种形态:
+
+```python
+rule = Rule(
+    id="find_us_users",       # ← 看起来很 normal 的 rule name
+    when=(PredAtom(pred_id="user:region", terms=[u, r]),),
+    ports={"user": u, "region": r},
+)
+fg.eval.evaluate(rule, head=rule)
+# WhereValidationError: target predicate not found: find_us_users
+```
+
+Shipped 强制要求 `rule.id` **必须 match 某个已知的 ledger predicate id**(`entity:field` 或 `Entity:exists` 形态),否则 evaluate 直接拒绝。**rule identity 跟 ledger predicate identity 被强制重合**。
+
+3 个具体问题:
+
+- **rule 命名不自由**:user 想给 rule 一个语义清晰的名字(`"is_adult"`)就被拒,只能用 `entity:field` 形态(`"user:adult_flag"`)
+- **观感泄露 internal 概念**:`row.bindings["pred_id"]` 永远长得像 `"user:region"`,user 误以为它"指某条 fact",其实那是 rule 自己的 id;同样 `EvaluateResult.head.id` / `row.claim.name` 都是这种形态
+- **同 predicate 多 rule 命名空间冲突**:两条逻辑不同但 head 落同一 predicate 的 rule(`"user:adult_flag"` 的两种算法)只能靠 `version` 区分,或不得不写到不同 predicate 下
+
+这第六次撞墙跟 §3.1-§3.3 `Rule` 命名占用、§3.5 `Claim` cross-layer 占名是同一家族 —— **shipped 把 user-facing identifier 强制绑到 internal layer 概念**。候选 fix 路径见 §4.7(配本节)。
 
 ## §4 未来设计空间:RuleSpec 重命名 + SDK 真 `Rule` shadow class
 
@@ -324,7 +348,41 @@ factgraph.sdk.Claim → ResultClaim   # 保留 user-facing "Claim" 名给最 use
 
 **Tier**: B(与本 design-point §4 RuleSpec 重命名同一 ergonomic 等级)。
 
-### §4.7 与其他设计的耦合
+### §4.7 子设计:`rule.id` 与 ledger predicate id 解耦(配 §3.6)
+
+**目标形态**:让 `rule.id` 是 rule 的**自由命名**,跟 head 落到哪个 predicate 解耦:
+
+```python
+rule = Rule(
+    id="find_us_users",                                # ← user-defined name
+    head_pred_id="user:is_us_user",                    # ← 显式 head target
+    when=[...],
+    ports={...},
+)
+fg.eval.evaluate(rule, head=rule)
+# OK — rule.id 跟 head_pred_id 分开,各司其职
+```
+
+**候选实施路径**:
+
+| 路径 | 描述 | 代价 |
+|---|---|---|
+| **τ. 加显式 `head_pred_id` 字段** | `Rule` 数据增加一字段,`evaluate` 用 `head_pred_id` 作 target,`rule.id` 自由 | 中等(Rule schema + evaluator 入口改)|
+| υ. 不动 Rule schema,在 SDK 层加 `Rule.build(id=..., head=...)` wrapper 帮 user 选择 | 兼容性强,但 user 仍需理解 internal "id == pred_id" 巧合 | 低 但 ergonomic 收益有限 |
+| φ. 让 `rule.id` 可以是任意字符串,evaluator 自动从 head 的 `PredAtom` 推 target pred_id | 不引入新字段,但隐式行为更多 | 低,但失去显式锚点 |
+| χ. 保留现状,显式文档化 `rule.id` 实际就是 head pred_id | 0 代码改动,长期 maintenance burden | 0 / 高 |
+
+**未锁设计问题**:
+
+1. **跟 `head.id == head_pred_id` 的一致性**:`evaluate(rule_expr, head=...)` 的 `head` 参数本质是"哪个 rule 的 head 是输出";head_pred_id 应该让 `head.head_pred_id` 是 reconciliation 的 key,而不是 `head.id`?
+2. **跟 `content_digest` 关系**:`content_digest` 当前 hash 包含 rule.id;如果 rule.id 解耦,digest 是否还稳定?
+3. **跟 `:exists` emission 关系** (cross-ref [`entity-exists-claim-emission-gap.zh.md`](entity-exists-claim-emission-gap.zh.md)):如果 Rule head 不再强制 entity:field 形态,`Entity:exists` 的 emission 路径是否要重新审视?
+4. **migration**:已有 user code 假定 `rule.id == pred_id`(参 `data_model.md §1` / `rules.md` 例子)是否平滑可改?
+5. **跟 RuleExpr `head=` reconciliation**(§3.4 / §4.5):`head_pred_id` 引入后,`head.id == occurrence.rule_id` 这条 inline 检测变成 `head.head_pred_id == occurrence.head_pred_id` 吗?
+
+**Tier**: B(与本 design-point §4 RuleSpec 重命名同一 ergonomic 等级;跟 D21 desc-explain / `fields-iterable-value-batch` 同类)。
+
+### §4.8 与其他设计的耦合
 
 - 与 [`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md):无直接耦合,Rule 重命名不影响 Identity 语义
 - 与 [`explanation-completion-roadmap.zh.md`](explanation-completion-roadmap.zh.md) D21 desc-driven explain:无直接耦合,但属同类"shipped 架构对,user mental model 体验有 friction"的 ergonomic gap
@@ -341,6 +399,7 @@ factgraph.sdk.Claim → ResultClaim   # 保留 user-facing "Claim" 名给最 use
 | SDK `Rule.build` / `.from_atoms` / `__new__` dispatch API 表面 | RuleExpr / RuleOccurrence / RulePortRef 的**类名**(那是另一个 redesign scope) |
 | RuleExpr OR `branch_id` 的派生 ergonomics(§3.4 / §4.5)| `branch_id` 在 evaluation 内部(non-config 路径)的用法 |
 | `Claim` cross-layer 同名占用(§3.5 / §4.6)— 重命名 application protocol Claim 为 `ResultClaim` | `:exists` Claim emission(在 [`entity-exists-claim-emission-gap.zh.md`](entity-exists-claim-emission-gap.zh.md));`ClaimKind` enum 重命名(future work,与 `Rule.projection` 冲突);ledger `Claim` class 名字本身(它就是 atomic row,叫 Claim 合适) |
+| `rule.id` ↔ ledger predicate id 强制重合(§3.6 / §4.7)— 引入 `head_pred_id` 或等价机制让 `rule.id` 自由 | 任意 rule lifecycle / versioning 语义重设计(那是另一个 redesign scope) |
 
 ## §6 关联代码锚点
 
@@ -356,6 +415,8 @@ factgraph.sdk.Claim → ResultClaim   # 保留 user-facing "Claim" 名给最 use
 - `src/factgraph/core/store/ledger.py:22` — ledger `Claim`(`asrt_id` / `pred_id` / `e_ref` / `rest_terms`,§3.5 cross-layer 占名的一边,**保留原名**)
 - `src/factgraph/application/protocol/evaluate_result.py:86` — application protocol `Claim`(`kind` / `name` / `arguments` / `repr` / `digest`,§3.5 cross-layer 占名的另一边,§4.6 重命名目标)
 - `src/factgraph/sdk/__init__.py:35` — `Claim` SDK re-export 当前指向 protocol Claim(§4.6 rename 后 alias / 同步重命名)
+- `src/factgraph/core/store/_evaluate.py:157` — `head_vars length must match target arg_specs` 校验(§3.6 head arity ↔ predicate id 强制 reflection 的入口)
+- `src/factgraph/core/rules/where_eval.py` — `WhereValidationError: target predicate not found: <id>` 抛出位置(§3.6 rule.id ↔ ledger predicate id 强制重合的 enforcement 点)
 
 ## §7 关联文档
 
