@@ -36,42 +36,37 @@ This is the canonical user-facing form: `build_application_rule(...)` with Entit
 
 ### 1.2 `head=` parameter
 
-`head=` is mandatory on every `fg.eval.evaluate(...)` call. It supplies the `Rule` whose `ports` shape the output rows:
+`head=` is mandatory and supplies the `Rule` whose `ports` shape the output rows:
 
 ```python
-fg.eval.evaluate(rule, head=rule)                    # single Rule: head=rule
+fg.eval.evaluate(rule, head=rule)                    # single Rule
 fg.eval.evaluate(rule_expr, head=some_rule)          # RuleExpr: head can be in OR out of the expression
 ```
 
-The relationship with `Rule.ports` (declaration-time output shape, see [`rules.md`](rules.md) §2.3): `Rule.ports` declares what each rule *exposes*; `head=` says "*this* port shape is the one I want for the answer rows".
-
-Rejected forms:
+Input-shape rejections:
 
 ```
 SDKStoreError: evaluate(rule_expr, ...) requires head= Rule
-SDKStoreError: evaluate(rule_expr, ...) head= must be Rule       ← SDK DSL Rule / Inference / dict / str / inspect objects all rejected
-WhereValidationError: target predicate not found: <id>           ← rule's id is not a known ledger predicate
+SDKStoreError: evaluate(rule_expr, ...) head= must be Rule    ← SDK DSL Rule / Inference / dict / str / inspect rejected
+WhereValidationError: target predicate not found: <id>        ← rule's id is not a known ledger predicate
 ```
 
 #### How `head=` connects to a `RuleExpr`
 
-The mental model — in one line:
+Mental model — `fg.eval.evaluate(rule_expr, head=head_rule)` is equivalent to:
 
-> `fg.eval.evaluate(rule_expr, head=head_rule)` is equivalent to writing
 ```python
 (head_rule & rule_expr).join_by_ports(*head_rule.ports)
 ```
-and projecting result rows onto `head_rule.ports`.
 
-You do not write the join yourself. The SDK derives it from `head_rule.ports`. The `.join_by_ports(...)` machinery is documented in [`rules.md`](rules.md) §3.3; `head=` is the implicit form.
+and projecting result rows onto `head_rule.ports`. The SDK derives the join from `head_rule.ports`; you do not write it. The underlying `.join_by_ports(...)` machinery is in [`rules.md`](rules.md) §3.3.
 
-Port flow — head asks for a *subset*, the join is by name:
+Port flow — head asks for a *subset*; the join is by name:
 
 ```text
                   ┌──────┬──────┬────────┬───────┐
 head_rule.ports   │ user │      │ region │       │   ← head asks for a subset
                   └──┬───┴──────┴───┬────┴───────┘
-                     │              │
                      │ implicit     │ implicit
                      │ join         │ join
                      │ by name      │ by name
@@ -79,53 +74,35 @@ head_rule.ports   │ user │      │ region │       │   ← head asks for
                   ┌──────┬──────┬────────┬───────┐
 rule_expr ports   │ user │ name │ region │ party │   ← extras (name, party)
                   └──────┴──────┴────────┴───────┘     stay internal to expr
-
                               │
                               ▼
-                  result.rows project on head_rule.ports
-                  → row.bindings = {"user": …, "region": …}
+                  result.rows.bindings = {"user": …, "region": …}
 ```
 
-The constraint is **one-way**: every port in `head_rule.ports` must be declared in every branch / operand of the `RuleExpr`. The reverse does **not** hold — the `RuleExpr` can declare ports that `head_rule` does not ask for, and those just stay internal to the expression's binding flow (they do not appear in result rows).
+The constraint is one-way: `head.ports ⊆ every branch's ports`. Extras in branches stay internal.
 
-| Relationship | Accepted? | Why |
+| Relationship | Accepted? | Error |
 |---|---|---|
-| `head.ports ⊆ every branch's ports` | ✓ | The join finds every head port in every branch |
-| `head.ports` has a name not present in *some* branches | ✗ — `head port '<name>' is only declared in some RuleExpr branches` | OR branches must each carry the head's port; can't union an absent port |
-| `head.ports` has a name not present in *any* branch | ✗ — `head port '<name>' is not declared by the RuleExpr` | No source to join from |
-| Branches declare more ports than `head.ports` | ✓ | Extras are internal to `rule_expr` |
+| `head.ports ⊆ every branch's ports` | ✓ | — |
+| `head.ports` has a name not in *some* branches | ✗ | `head port '<name>' is only declared in some RuleExpr branches` |
+| `head.ports` has a name not in *any* branch | ✗ | `head port '<name>' is not declared by the RuleExpr` |
+| Branches declare more ports than `head.ports` | ✓ | — (extras internal to `rule_expr`) |
 
-`Rule.projection(*port_names)` is the *literal* form of this mental model — a synthetic head that only declares port names, no body:
+`Rule.projection(*port_names)` is the *literal* form of this mental model — a synthetic head declaring only port names, no body. It is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not** usable as an `evaluate` head in v0.2 — the runtime raises `WhereValidationError: target predicate not found: __factgraph_projection__<hash>` (per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, pass a real `Rule` whose ports are the projection you want.
 
-```python
-proj = Rule.projection("user", "region")
-# Conceptually: "give me rows projected on user, region; SDK figures out the join"
-```
+Whether `head.id` happens to appear in the expression is incidental — both produce the same evaluation; the difference only surfaces in identity-validation errors:
 
-`Rule.projection(...)` is the natural template for `fg.entities.match(EntityCls, template, ...)` (see [`three_layer_api.md`](three_layer_api.md) §2). It is **not currently usable as an `evaluate` head** in v0.2 — the runtime raises:
-
-```
-WhereValidationError: target predicate not found: __factgraph_projection__<hash>
-```
-
-(per [`rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md) §"Rule.projection(*names) is not an evaluate head"). For evaluate, pass a real `Rule` whose ports are the projection you want — the SDK derives the same join from those ports.
-
-Two minor identity-bookkeeping flavors track whether the head's `id` happens to appear in the expression — both produce the same evaluation; the distinction only surfaces as error guards:
-
-| Identity flavor | Detected by | Why you care |
+| Identity flavor | Detected by | Side effect |
 |---|---|---|
-| **inline** | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | Different `version` on the same id+digest emits a `UserWarning` but evaluation proceeds |
-| **external** | head's `id` does not appear in any occurrence | No bookkeeping cost — head just provides the projection spec |
-
-Two more `RuleExprError`s come from head ↔ expression identity validation (in addition to the port-flow rejections in the table above):
+| **inline** | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | Different `version` on the same id+digest emits a `UserWarning` |
+| **external** | head's `id` does not appear in any occurrence | None |
 
 ```
-head rule '<id>' matches an expression occurrence with a different content digest
-   ← head and an occurrence share id but differ in body (you redefined the rule
-      but the expression still holds the old reference)
+RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest
+   ← id match but body differs — you redefined the rule, the expression holds the old reference
 
-head rule '<id>' matches multiple expression occurrences with the same content digest
-   ← the same Rule appears twice in the expression without distinct .as_() aliases
+RuleExprError: head rule '<id>' matches multiple expression occurrences with the same content digest
+   ← the same Rule appears twice without distinct .as_() aliases
 ```
 
 ### 1.3 What comes back
