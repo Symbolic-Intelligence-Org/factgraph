@@ -3,10 +3,10 @@
 - Status: working / **current mode locked**(application `Rule` 占名 + SDK 必须用 `build_application_rule(...)`)/ **future direction open**(rename to `RuleSpec` + SDK shadow `Rule`)
 - Authority: candidate design / non-authoritative reference;现状描述属实,未来方向属设计空间
 - First draft: 2026-06-02
-- Last updated: 2026-06-02
-- Scope: `factgraph.application.protocol.Rule` 与 `factgraph.sdk.build_application_rule(...)` 之间的层级与命名分裂;user-facing SDK Rule namespace 的重设计;并扩展覆盖 RuleExpr OR `branch_id` 匿名化的同源 ergonomic gap
+- Last updated: 2026-06-03(加入 `Claim` 同名占用 instance)
+- Scope: `factgraph.application.protocol.Rule` 与 `factgraph.sdk.build_application_rule(...)` 之间的层级与命名分裂;user-facing SDK Rule namespace 的重设计;扩展覆盖 RuleExpr OR `branch_id` 匿名化与 `Claim` cross-layer 同名占用两类同源 ergonomic gap
 - Parent: 与 [`schema-mutation-additive-only.zh.md`](schema-mutation-additive-only.zh.md) / [`fields-iterable-value-batch.zh.md`](fields-iterable-value-batch.zh.md) 同级;均属 SDK 用户面 ergonomic 设计空间
-- Design intent: 把"`Rule(when=[User(u), ...])` 直接构造不被支持,必须经 `build_application_rule(...)` 这条 lowering 显式可见"以及"`RuleExpr` OR `branch_id` 是合成 `c{idx}`,丢失 Rule.id / occurrence alias 语义"两类同源 friction 从用户面文档(`docs/quickstart/rules.md`、`docs/quickstart/engines_and_configs.md`)抽出来,作为 SDK 命名与层级重设计的 future direction 记录
+- Design intent: 把"`Rule(when=[User(u), ...])` 直接构造不被支持,必须经 `build_application_rule(...)` 这条 lowering 显式可见"、"`RuleExpr` OR `branch_id` 是合成 `c{idx}`,丢失 Rule.id / occurrence alias 语义"、"`Claim` 在 `factgraph.core.store.ledger` 和 `factgraph.application.protocol.evaluate_result` 两层都存在但字段不同"三类同源 friction 从用户面文档(`docs/quickstart/rules.md` / `docs/quickstart/engines_and_configs.md` / `docs/quickstart/evaluate_and_evidence.md` / `docs/quickstart/data_model.md`)抽出来,作为 SDK 命名与层级重设计的 future direction 记录
 
 ---
 
@@ -120,6 +120,30 @@ def _assign_branch_ids(branches: tuple[RuleExprLoweringBranch, ...]) -> tuple[..
 - **承接性缺失**:Inference 用 `Case([...], id="seed_path")` 让 branch_id 有显式 author-written 语义;RuleExpr 把这条 ergonomic 路径丢掉了
 
 这第四次撞墙跟前三次同类(shipped 架构 self-consistent,user mental model 撞硬边界),但跟 `Rule` 命名分裂是不同维度的 friction —— `Rule` 是声明层 namespace 问题,`branch_id` 是组合层 identity 派生问题。共同收纳在本 design-point 是因为两者:① 都属 RuleExpr / Rule 组合 surface 的同一族 SDK ergonomic gap,② 候选 fix 都不破坏 INV-6 application-first(只动 SDK 层 lowering 默认)。
+
+### §3.5 第五次撞墙:`Claim` cross-layer 同名占用
+
+两个**不同 module / 不同字段集**的 `Claim` class 都叫 `Claim`:
+
+| 路径 | Module | 字段 | user 在哪儿见到 |
+|---|---|---|---|
+| ledger Claim | `factgraph.core.store.ledger.Claim` | `asrt_id, pred_id, e_ref, rest_terms` | `fg.ledger.find_claims()` 返回(参见 [`data_model.md §1`](../../../../docs/quickstart/data_model.md)) |
+| protocol Claim | `factgraph.application.protocol.evaluate_result.Claim` | `kind, name, arguments, repr, digest` | `EvaluateRow.claim` 字段;SDK `from factgraph.sdk import Claim` re-export 的就是它(参见 [`evaluate_and_evidence.md §2.4`](../../../../docs/quickstart/evaluate_and_evidence.md)) |
+
+具体撞墙形态:
+
+```python
+from factgraph.sdk import Claim
+# user 期望:这是 ledger.Claim?还是 result-side?
+# 实证:是 protocol.evaluate_result.Claim,不是 ledger.Claim
+
+isinstance(row.claim, Claim)            # True — protocol Claim
+isinstance(fg.ledger.find_claims()[0], Claim)  # False — that's ledger.Claim
+```
+
+User 读到 `row.claim` 时无法仅凭名字判定是"on-disk Claim"还是"result-side projection";要看字段(`asrt_id` 在?还是 `kind` 在?)才能 disambiguate。这跟 §3.1-§3.3 `Rule` 命名占用**完全同源** —— application protocol 层占用了 user-facing 的"Claim"名,ledger 层另一个不同字段集的同名 class 与之共存。
+
+`Claim` 不同于 §3.4 branch_id 一类的 identity-derivation 问题,但跟 §3.1-§3.3 是**同一种 cross-layer naming 占用 friction**,候选 fix 也走同样的"重命名 application/internal 层 + 保留 user-facing 名给 SDK 那个"模式(见 §4.7)。
 
 ## §4 未来设计空间:RuleSpec 重命名 + SDK 真 `Rule` shadow class
 
@@ -243,11 +267,69 @@ INV-6 完全保留:`RuleSpec` 仍然不知道 SDK,所有 lowering 由 SDK `Rule`
 
 **Tier**: B(与本 design-point §4 RuleSpec 重命名同一 ergonomic 等级,跟 D21 desc-explain / `fields-iterable-value-batch` 同类)。
 
-### §4.6 与其他设计的耦合
+### §4.6 子设计:`Claim` 重命名(配 §3.5)
+
+**目标形态**:解决 `factgraph.core.store.ledger.Claim` 与 `factgraph.application.protocol.evaluate_result.Claim` 跨层同名占用。
+
+```
+factgraph/core/store/ledger.py
+    class Claim:              # ← 保留原名(就是 ledger row,叫 Claim 合适)
+        asrt_id: str
+        pred_id: str
+        e_ref: str
+        rest_terms: list[tuple[str, Any]]
+
+factgraph/application/protocol/evaluate_result.py
+    class ResultClaim:        # ← 重命名(原 Claim)
+        kind: ClaimKind
+        name: str
+        arguments: Mapping[str, Any]
+        repr: str
+        digest: str
+
+# SDK
+factgraph.sdk.Claim → ResultClaim   # 保留 user-facing "Claim" 名给最 user-visible 的那个
+                                     # 或保留 alias `Claim = ResultClaim` 一段时间
+```
+
+**命名候选评估**(application protocol 那个 class 的新名):
+
+| 候选 | 评价 | 决议 |
+|---|---|---|
+| **`ResultClaim`** | 紧凑;明示 "result-side projection";`row.claim: ResultClaim` 读得通顺;跟 ledger Claim 区别清楚 | preferred |
+| `EvaluateRowClaim` | 准确但过长;`row.claim: EvaluateRowClaim` 啰嗦 | 备选 |
+| `ClaimProjection` | "projection" 字眼在 `ClaimKind` 枚举里已经用作一个 kind 值(`Rule.projection(...)` 产出),易混淆 | rejected |
+| `EvalClaim` | 紧凑但 `EvalClaim` 跟 `fg.eval` namespace 风格不一致;太抽象 | rejected |
+| `DerivedClaim` | 误导 — 字段 `kind="fact_triple"` 时它源自 ledger fact,不是 "derived" | rejected |
+| `ProtocolClaim` | 暴露 internal layer 名;违反 SDK 隐藏层级原则 | rejected |
+| `ClaimDTO` | DTO 后缀在 codebase 内不一致(`Claim` / `EvidenceRef` / `Explanation` 都不带);引入新命名约定 | rejected |
+
+`ResultClaim` 与 §4.2 `RuleSpec` 是平行选择 — 都用 description-of-role 命名(Spec / Result),与 codebase 已有 `EmitSpec` / `EvaluateResult` 系列一致。
+
+**未锁设计问题**:
+
+1. **SDK re-export 策略**:`from factgraph.sdk import Claim` 是保留作 deprecated alias、还是直接换 `from factgraph.sdk import ResultClaim`?保留 alias 兼容性高但延长 ambiguity 期。
+2. **`EvaluateRow.claim` 字段 attribute 名**:保留 `.claim` 让 `row.claim` 写法不变(只是 type 改了)还是改成 `.result_claim`?保留更兼容,attribute 名跟 class 名解耦。
+3. **`Explanation.claim` 字段同步**:`Explanation.claim: Claim | None` 也用同一 class,rename 时一起改还是分开?一起改更一致。
+4. **跟 §3.5 ledger Claim 的关系**:ledger Claim 是否也要重命名(如 `LedgerRow` / `LedgerClaim`)?**不**建议 — ledger Claim 就是 atomic ledger row,叫 Claim 是描述性的,且 user 通常不直接接触(走 `fg.ledger.find_claims()` 才见)。
+5. **跟 `ClaimKind` enum 的关系**:enum 名是否也要改(`ResultClaimKind`?)?保留 `ClaimKind` 更紧凑,enum value `"projection"` 跟 `Rule.projection` 同名是另一个 confusing point(可选 future work)。
+
+**候选实施路径**:
+
+| 路径 | 描述 | 代价 |
+|---|---|---|
+| ε. rename + 保留 SDK `Claim` deprecated alias | 兼容现有 user code,平滑 migration;同步 rename `EvaluateRow.claim` type annotation | 中等 |
+| ζ. rename + 立即移除 alias | breaking change | 低改动,高兼容代价 |
+| η. 保留现状,文档显式标注两个 Claim 的区别(就像 `evaluate_and_evidence.md §2.4` 的 callout 那样)| 0 代码改动 | 0 / 长期 maintenance burden;不解决根本 friction |
+
+**Tier**: B(与本 design-point §4 RuleSpec 重命名同一 ergonomic 等级)。
+
+### §4.7 与其他设计的耦合
 
 - 与 [`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md):无直接耦合,Rule 重命名不影响 Identity 语义
 - 与 [`explanation-completion-roadmap.zh.md`](explanation-completion-roadmap.zh.md) D21 desc-driven explain:无直接耦合,但属同类"shipped 架构对,user mental model 体验有 friction"的 ergonomic gap
 - 与 archived [`rule-expression-and-proof-track-plan.zh.md`](../archive/rule-expression-and-proof-track-plan.zh.md) TPQ-1:本设计 supersede TPQ-1 当年选择的"application-first per 项目固定原则 + SDK alias `kernel.sdk.Rule`"决策,提议 SDK alias 升级为独立 shadow class
+- 与 [`entity-exists-claim-emission-gap.zh.md`](entity-exists-claim-emission-gap.zh.md):并列的 shipped-vs-intent friction;`Claim` 命名问题(§3.5 / §4.6)跟 `:exists` Claim 不 emit 问题都涉及 Claim 概念,但是不同维度 — 前者是 cross-layer 同名,后者是 emission 缺失
 
 ## §5 当前位置的边界
 
@@ -258,6 +340,7 @@ INV-6 完全保留:`RuleSpec` 仍然不知道 SDK,所有 lowering 由 SDK `Rule`
 | Inference 的 mental-model 承接性问题(§3.2) | Inference 本身的 legacy lifecycle(在 `docs/quickstart/rules.md` §6.1) |
 | SDK `Rule.build` / `.from_atoms` / `__new__` dispatch API 表面 | RuleExpr / RuleOccurrence / RulePortRef 的**类名**(那是另一个 redesign scope) |
 | RuleExpr OR `branch_id` 的派生 ergonomics(§3.4 / §4.5)| `branch_id` 在 evaluation 内部(non-config 路径)的用法 |
+| `Claim` cross-layer 同名占用(§3.5 / §4.6)— 重命名 application protocol Claim 为 `ResultClaim` | `:exists` Claim emission(在 [`entity-exists-claim-emission-gap.zh.md`](entity-exists-claim-emission-gap.zh.md));`ClaimKind` enum 重命名(future work,与 `Rule.projection` 冲突);ledger `Claim` class 名字本身(它就是 atomic row,叫 Claim 合适) |
 
 ## §6 关联代码锚点
 
@@ -270,11 +353,16 @@ INV-6 完全保留:`RuleSpec` 仍然不知道 SDK,所有 lowering 由 SDK `Rule`
 - `src/factgraph/application/protocol/rule_expr_lowering.py:720-723` — `_assign_branch_ids(...)` 当前合成 `c{idx}` 的入口(§3.4 / §4.5 修改目标)
 - `src/factgraph/sdk/store.py:3352-3360` — `case_probabilities` 校验拒 unknown branch_id 的位置
 - `src/factgraph/sdk/store.py:3562` — `case_indexes = {branch.branch_id: index for ...}`,reconciliation 实际使用 lowered `branch_id` 的位置
+- `src/factgraph/core/store/ledger.py:22` — ledger `Claim`(`asrt_id` / `pred_id` / `e_ref` / `rest_terms`,§3.5 cross-layer 占名的一边,**保留原名**)
+- `src/factgraph/application/protocol/evaluate_result.py:86` — application protocol `Claim`(`kind` / `name` / `arguments` / `repr` / `digest`,§3.5 cross-layer 占名的另一边,§4.6 重命名目标)
+- `src/factgraph/sdk/__init__.py:35` — `Claim` SDK re-export 当前指向 protocol Claim(§4.6 rename 后 alias / 同步重命名)
 
 ## §7 关联文档
 
 - 用户面 Rule 文档:[`docs/quickstart/rules.md`](../../../../docs/quickstart/rules.md) §2.6(直接 `Rule(...)` 构造的边界 + 与 `build_application_rule` 的 trade-off table)
 - 用户面 engine/config 文档:[`docs/quickstart/engines_and_configs.md`](../../../../docs/quickstart/engines_and_configs.md) §3.2(`case_probabilities` 的 branch_id 来源表 + RuleExpr 走 `c{idx}` 的 shipped 行为)
+- 用户面 evaluate 文档:[`docs/quickstart/evaluate_and_evidence.md`](../../../../docs/quickstart/evaluate_and_evidence.md) §2.4(`Claim` cross-layer name-collision warning callout)
+- 用户面 data model 文档:[`docs/quickstart/data_model.md`](../../../../docs/quickstart/data_model.md) §1(ledger `Claim` 4-tuple 的文档化)
 - 架构原则源:[`workflow/foundations/architecture_principles.md §2.1 Layer authority`](../../../foundations/architecture_principles.md)
 - INV-6 引用 ADRs(reject 反向依赖 SDK 案例):
   - [`workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md`](../../decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md) §3 / §4 reject reasons
