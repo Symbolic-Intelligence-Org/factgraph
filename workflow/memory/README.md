@@ -32,6 +32,8 @@
   - Additive non-identity schema field-add lifecycle publish checkpoint.
 - [project_confidence_evidence_meta_release_cleanup_implemented.md](/Users/zhenzhili/hnsm-backend/memory/project_confidence_evidence_meta_release_cleanup_implemented.md)
   - Confidence / evidence meta release cleanup publish checkpoint.
+- [project_eval_row_bindings_port_map_slice_zeta_implemented.md](/Users/zhenzhili/hnsm-backend/workflow/memory/project_eval_row_bindings_port_map_slice_zeta_implemented.md)
+  - Evaluate-result flatten Slice ζ checkpoint: `EvaluateRow.bindings` port-map shape implemented and archived.
 - `session_handoffs/YYYY-MM-DD.md`
   - 按日期保留的 handoff 记录，用于回放某一工作日的 stopping point。
 
