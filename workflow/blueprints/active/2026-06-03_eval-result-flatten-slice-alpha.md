@@ -233,6 +233,12 @@ All `Claim(...)` and `EvidenceRef(...)` construction sites must drop the now-rem
   - `DeprecationWarning` is emitted at `stacklevel=2` so the user's own callsite is the reported location
   - One full release cycle keeps the deprecated properties; removal scheduled in Slice γ per §5.4 of parent design
 
+### 6.1 Cadence path locks (per user 2026-06-03)
+
+- **§5.4 deprecation strategy — local Q fold**: locked on this blueprint branch via Step 4.2 review + Step 4.4 amendment, not via a separate Q-decision doc. The blueprint's draft answer (single-release-cycle DeprecationWarning, removal in Slice γ) is treated as the local implementation policy for Slice α. **Escalation rule**: if Step 4.2 reviewer surfaces public-compat or cross-slice impact tied to this Q, escalate to a single Q-decision doc (e.g., `workflow/design/decisions/active/2026-06-XX_q-eval-result-deprecation-strategy-decision.md`) before the scoped anchor. The closure §10 must record this consolidation as `single-Q local lock consolidated on blueprint branch`.
+- **Other 6 §5 Qs explicitly deferred**: §5.1 (raw_kind/bound row vs Claim placement), §5.2 (ResultFingerprint sub-object vs Mapping), §5.3 (query-style head arity check policy), §5.5 (closed_head_digest row vs EvidenceRef-lite tradeoff), §5.6 (`:exists` Claim vs RowKind), §5.7 (auto-prepend `:exists` coupling). None are load-bearing for Slice α field-removal scope. They will be addressed before Slice γ (parent design §6 ordering).
+- **Stage 1 audit doc deferred per Slice 4/5 precedent** ([`workflow/CADENCE.md`](../../CADENCE.md) L268). Stage-0 source audit is considered folded into the parent design-point ([`evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) §1-§4 friction analysis + §8 file:line anchors) and into this Step 4.1 draft. **No separate** `workflow/audit/active/2026-06-03_eval-result-flatten-vs-shipped.md` is produced at this time. **Step 4.2 reviewer responsibility**: verify the folded audit claims via Rule 1 fresh reads (file:line precision against shipped code). **Escalation rule**: if Step 4.2 finds source grounding insufficient, supplement with a preflight/audit artifact at Step 4.3 — do **not** regress to a formal standalone Stage 1 audit doc (per user lock 2026-06-03; tightening forward, not backward).
+
 ## 7. Acceptance
 
 - [ ] All 6 redundant fields removed from `Claim` / `EvidenceRef` frozen field set

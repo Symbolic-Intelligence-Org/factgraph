@@ -9,6 +9,9 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Blueprint created | Initial scope recorded on `v0.2.0-eval-result-flatten-adr-2026-06-03`. |
+| 2026-06-03 | draft | Cadence correction — branch renamed | `v0.2.0-eval-result-flatten-adr-2026-06-03` → `v0.2.0-blueprint-eval-result-flatten-2026-06-03` per [`workflow/AGENTS.md`](../../AGENTS.md):69 canonical blueprint naming convention. Original "-adr-" form was not one of the 5 canonical branch types (audit / decision / blueprint / preflight / impl). |
+| 2026-06-03 | draft | Cadence path locks recorded (per user 2026-06-03) | (i) §5.4 deprecation strategy locked locally on blueprint branch via Step 4.2 review + Step 4.4 amendment fold (single-Q consolidation; no separate Q-decision doc). (ii) Other 6 §5 unlocked Qs deferred to before Slice γ. (iii) Stage 1 audit doc deferred per Slice 4/5 precedent ([`workflow/CADENCE.md`](../../CADENCE.md) L268); Stage-0 source audit folded into design-point + this blueprint draft; Step 4.2 reviewer verifies via Rule 1 fresh reads. Details in blueprint §6.1. |
+| 2026-06-03 | draft | Previous codex round-1 prompt withdrawn | The earlier prompt I drafted mislabeled the round-1 work as "audit" while structurally aligning with Stage 4.3 preflight, and put the work on a `codex/`-prefixed branch instead of either the blueprint branch (Step 4.2 review) or a canonical `v0.2.0-eval-result-flatten-preflight-2026-06-03` (Step 4.3). Withdrawn; new codex prompt issued for Step 4.2 draft review + tightening, executed directly on the blueprint branch. |
 
 ## Codex Pre-Impl Audit Tasks
 
@@ -113,6 +116,8 @@ _(empty — to be filled by codex)_
 | 2026-06-03 | Blueprint draft uses owner-resolver pattern (mirror of `EvaluateRow._result_resolver`) for Claim / EvidenceRef deprecated property fallback | Standalone frozen DTO has no fallback source for removed fields without an owner reference; the resolver pattern is already validated by shipped EvaluateRow / DetachedRowError |
 | 2026-06-03 | D17 invariant equality assertions (L135-138) become structural tautology after Slice α | Deprecated properties literally return `row.row_id` / `row.claim.digest`; an explicit assertion would compare a value to itself |
 | 2026-06-03 | Slice α retains `Claim` / `EvidenceRef` wrapper classes themselves | Wrapper removal is Slice γ scope; α is field-only cleanup with backward compat |
+| 2026-06-03 | §5.4 deprecation strategy — local Q fold (no separate Q-decision doc at this point) | Per user lock 2026-06-03. §5.4 is the only §5 Q load-bearing for Slice α field-removal scope. Treat as local implementation policy on blueprint branch; consolidate via Step 4.2 review + Step 4.4 amendment. Escalation rule: if Step 4.2 surfaces public-compat or cross-slice impact for §5.4 (e.g., affects Slice β/γ deprecation contracts), upgrade to single Q-decision doc before scoped anchor. Closure §10 must record as `single-Q local lock consolidated on blueprint branch`. |
+| 2026-06-03 | Stage 1 audit doc deferred per Slice 4/5 precedent | Per user lock 2026-06-03. Stage-0 source audit considered folded into design-point [`evaluate-result-flatten-and-query-style.zh.md`](../../design/design-points/active/evaluate-result-flatten-and-query-style.zh.md) (§1-§4 friction + §8 file:line anchors) + this blueprint draft. No `workflow/audit/active/2026-06-03_eval-result-flatten-vs-shipped.md` produced. Step 4.2 reviewer must verify folded audit claims via Rule 1 fresh reads. Escalation rule: if source grounding insufficient at Step 4.2, supplement with preflight artifact at Step 4.3, do NOT regress to standalone Stage 1 doc. |
 
 ## Cross-flip checkpoints (per `feedback_audit_to_archive_cadence`)
 
