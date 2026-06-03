@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.1 draft)
+- Last Updated: 2026-06-03 (Step 4.2 review + tightening)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default — δ relaxes a shipped strict invariant (`rule.id` must match schema predicate); preflight will surface cross-engine impact
 - Fork base: `dd65e776` (Slice ε Step 4.9 archive HEAD)
@@ -62,10 +62,12 @@ Slice δ is the **last slice** in parent design §6 ordering(α → β → γ �
 - G3 — `rule.id` 校验只保留 "non-empty string"(不要求 ledger predicate match);现有 ledger predicate match 风格仍 work(opt-in path)
 - G4 — Backward compat:已 ship 的 `id="user:region"` style rules / tests / docs 全部 work without code change
 - G5 — Evaluator 用 `head.ports` 决定 result row 形态;`head.id` 仅作为 result label / display
-- G6 — Arity mismatch when `head.id` matches schema predicate:**rejection severity TBD** —— Step 4.2 P1 / Step 4.3 lock(parent §5.3 提了 reject / warn / silent skip 三选,parent draft 倾向 warn)
+- G6 — **LOCKED Option A**: arity mismatch when `head.id` matches a schema predicate remains a strict `WhereValidationError`. Query-style relaxation applies only when no schema predicate matches `head.id`; matched-predicate heads keep the shipped arity contract.
 - G7 — Tests:add `id="find_us_users"` style 新 tests + 保留 `id="user:region"` regression tests
 - G8 — Docs cascade:quickstart rules + evaluate_and_evidence + namespace-map + SDK docs;clarify `rule.id` 现在自由 + `result.head.id` 是 label
 - G9 — Sacred Q-PR1 5-path 0-diff preserved
+- G10 — Add a query-style candidate construction path. Shipped `candidates_from_bindings(...)` is schema-bound (`schema_pred`, `arg_specs`, `group_key_indexes`, target arg0 `entity_ref`, legacy fact payload). δ cannot simply pass `schema_pred=None`; it needs an explicit helper/branch that builds candidates from `head.ports` while preserving ζ port-map row bindings and required service/provenance compatibility envelopes.
+- G11 — Apply opt-in head lookup consistently across native + adapter engine heads. Souffle / ProbLog adapters currently repeat the same `find_schema_pred(...)` + arity strictness outside `_evaluate.py`; Step 4.7 must update those head paths or Step 4.3 must explicitly prove an engine-specific blocker.
 
 ## 3. Non-goals
 
@@ -100,8 +102,8 @@ if schema_pred is not None:
     if not isinstance(arg_specs, list) or not arg_specs:
         raise WhereValidationError("target predicate arg_specs must be non-empty list")
     if not isinstance(head_vars, list) or len(head_vars) != len(arg_specs):
-        # Step 4.2/4.3 must lock severity: reject / warn / silent skip
-        raise WhereValidationError("head_vars length must match target arg_specs")  # default: reject
+        # Step 4.2 locked Option A: matched-predicate arity mismatch still rejects.
+        raise WhereValidationError("head_vars length must match target arg_specs")
 else:
     # query-style path: rule.id does not match any schema predicate
     # head.ports shapes the result rows; no arity check
@@ -112,27 +114,65 @@ else:
 
 Only `_require_non_empty_str(rule.id)`;**no schema predicate lookup required** for δ to accept the rule。
 
-### 5.3 Arity mismatch severity — Open Q for Step 4.2 / 4.3
+### 5.3 Arity mismatch severity — Step 4.2 LOCK
 
 Parent §5.3 提了 3 选:
 - **Option A**(strict reject):保持现行,arity mismatch on matched-predicate path raise WhereValidationError
 - **Option B**(warn + go query-style):emit warning,仍走 query-style path(arity 自由)
 - **Option C**(silent skip):no warning,完全 query-style
 
-Parent draft 倾向 **B**(保留 schema 协调能力,但不强制)。Step 4.2 review locks one。Default draft bias:Option A(strict reject保 backward compat,降 silent breakage risk;Option B 推迟)。
+**Step 4.2 LOCK: Option A.** Matched-predicate heads preserve shipped arity rejection. This avoids silent behavior changes for existing `id="entity:field"` users and keeps the backward-compat path easy to reason about. Parent Option B/C remain future policy work only.
 
 ### 5.4 cross-engine impact
 
-`_evaluate.py:148-157` 是 `mode == "native"` path 入口(L146 check `mode != "native"`)。但 other engines(souffle / problog / pyreason)路径在 L142-145 处独立:engine_kwargs + engine_evaluate(...)。**Step 4.3 必须 verify** other engine paths 是否也 reference head schema lookup independently 或者 share L148-157。
+`_evaluate.py:148-157` 是 `mode == "native"` path 入口(L146 check `mode != "native"`)。Step 4.2 fresh read found non-native head strictness is **not** only shared through `_evaluate.py`:
 
-### 5.5 Result label semantics
+- `src/factgraph/adapters/souffle/engine_eval.py:118-127` repeats `find_schema_pred(...)` + arity reject.
+- `src/factgraph/adapters/problog/engine_eval.py:68-75` repeats `find_schema_pred(...)` + arity reject.
+- `src/factgraph/adapters/problog/problog_import.py:110-119` repeats import-time candidate construction strictness.
+- PyReason fact-to-candidate helpers at `pyreason/engine_eval.py:637-695` still require schema predicates for materialized graph facts; Step 4.3 must classify whether this is head validation or a distinct adapter fact-conversion substrate.
+
+**LOCKED scope direction**: δ targets public `fg.eval.evaluate(..., engine=...)` head semantics across supported engines where the engine can evaluate a query-style head. Native, Souffle, and ProbLog strict head-lookup paths are in scope unless Step 4.3 proves an engine-specific blocker. PyReason may remain row-level / schema-backed if preflight proves query-style head support is blocked by adapter substrate, but that must be an explicit PF finding.
+
+### 5.5 Query-style candidate construction
+
+Shipped `candidates_from_bindings(...)` cannot handle free-form `head.id` because it requires:
+
+- `schema_pred` for `read_group_key_indexes(...)`;
+- `arg_specs` to coerce values;
+- first tagged arg to be `entity_ref`;
+- legacy payload shape `{"pred_id": target_pred_id, "terms": ...}`.
+
+δ implementation therefore needs a separate query-style candidate branch/helper, rather than weakening this schema-bound helper in place. The query-style branch should:
+
+- derive ordered output values from `head.ports` / `head_vars` and binding rows;
+- preserve ζ in-process `EvaluateRow.bindings` as `{port_name: term}`;
+- keep deterministic candidate identity/digests using the locked δ schema/version labels from Step 4.3 if needed;
+- produce compatibility payloads only where service/provenance code still requires legacy envelopes.
+
+### 5.6 Result label semantics
 
 `result.head.id`(post-δ)可能是 `"find_us_users"` 等 free-form 字符串。Slice ε walker `NODE_CONCLUSION.label` reads from `_claim_name_for_row_result(row, result)` which derives from `result.head.id`。需要 verify walker output 在 free-form head.id 下仍 sensible(probably yes — walker just shows the string)。
 
-### 5.6 Cadence path locks
+### 5.7 Service/runtime compatibility
+
+Service and runtime protocol still carry `target_pred_id` in compiled plans, runtime recipes, and response metadata:
+
+- `service/runtime_v1.py:1002-1015` calls `store.evaluate(... target_pred_id=compiled["target_pred_id"], head_vars=..., head=compiled.get("head"))`.
+- `service/runtime_v1.py:1795-1803` caches `RuntimeDerivationRecipe(target_pred_id=..., head_vars=...)`.
+- `sdk/store.py:3839-3852` rebuilds `CompiledDerivationPlan` from compiled dicts with `target_pred_id` and `head_vars`.
+- `sdk/store.py:3885-3889` synthesizes an `ApplicationRule` from compiled plans using `id=head.target_pred_id`.
+
+δ must preserve these wire/key names for compatibility while changing their meaning from "must be schema predicate id" to "head/rule id label, optionally schema-backed". Step 4.3 must decide whether docs rename wording only, or whether an internal alias/helper is needed to avoid misleading future code.
+
+### 5.8 Rule DTO validation
+
+`Rule.__post_init__` already only requires `id` to be a non-empty string (`rule.py:62-63`). δ does not need to relax Rule DTO validation; the strictness lives in evaluate/adapters/builders and related docs/tests.
+
+### 5.9 Cadence path locks
 
 - **Tight gates default**:δ 改 shipped strict invariant(`rule.id` must match schema predicate),preflight 必须 surface cross-engine + backward compat scope
-- Step 4.2 review **必须 lock G6 arity mismatch severity**(Option A / B / C)
+- Step 4.2 review locked G6 arity mismatch severity to **Option A strict reject** for matched-predicate heads
 - Stage 0 source audit folded into this Step 4.1 draft + Step 4.3 preflight verifies
 - δ closes parent design chain — Step 4.9 archive 后 整个 evaluate-result-flatten parent design 7 slices 全部 implemented
 
@@ -140,6 +180,7 @@ Parent draft 倾向 **B**(保留 schema 协调能力,但不强制)。Step 4.2 re
 
 - Must preserve:
   - Backward compat: `id="user:region"` style rules continue to work(opt-in path)
+  - Matched-predicate arity mismatch continues to reject (G6 Option A)
   - Sacred Q-PR1 5-path 0-diff
   - Dirty baseline preserved
   - α-ε artifacts unchanged
@@ -155,16 +196,19 @@ Parent draft 倾向 **B**(保留 schema 协调能力,但不强制)。Step 4.2 re
 
 - Tight gates default — δ is semantics-relaxing slice with cross-engine impact
 - Step 4.7 + 4.8 individual report boundaries required per D6
-- Open Q G6(arity mismatch severity)must lock at Step 4.2 / 4.3 before scope freeze
+- G6 arity mismatch severity locked at Step 4.2:Option A strict reject for matched-predicate heads
 
 ## 7. Acceptance Criteria(Draft)
 
-- [ ] Step 4.2 has locked G6 arity severity(Option A / B / C)
+- [x] Step 4.2 has locked G6 arity severity:Option A strict reject for matched-predicate heads
 - [ ] Step 4.3 preflight enumerated cross-engine paths + backward compat test cohort
 - [ ] `_evaluate.py:148-157` rewrite per §5.1 — strict reject becomes opt-in
 - [ ] `rule.id = "find_us_users"` style rule passes `fg.eval.evaluate(rule, head=rule)` end-to-end
 - [ ] `rule.id = "user:region"` style rule continues to work(backward compat regression test)
 - [ ] Arity mismatch on matched-predicate path follows locked G6 severity
+- [ ] Query-style candidate branch/helper exists; implementation does not pass `schema_pred=None` into schema-bound `candidates_from_bindings(...)`
+- [ ] Native/Souffle/ProbLog head strictness follows the same opt-in schema lookup rule, or Step 4.3 records an explicit engine-specific blocker
+- [ ] Service/runtime compiled-plan fields remain wire-compatible while docs clarify `target_pred_id` / `head.id` now mean head label, optionally schema-backed
 - [ ] All α-ε regression tests pass
 - [ ] Walker output(per Slice ε)still sensible for free-form `head.id`
 - [ ] Service wire serializes free-form `head.id` without alteration
@@ -187,14 +231,15 @@ Parent draft 倾向 **B**(保留 schema 协调能力,但不强制)。Step 4.2 re
 
 ## 9. Pre-Impl Audit Tasks for Step 4.3
 
-- A1 — Cross-engine paths:does other engines(souffle / problog / pyreason)reference head schema lookup independently or share `_evaluate.py:148-157`?
+- A1 — Cross-engine paths:confirm native / Souffle / ProbLog / PyReason head strictness sites and classify which engines can share δ query-style head semantics. Fresh-read anchors include `_evaluate.py:148-157`, `souffle/engine_eval.py:118-127`, `problog/engine_eval.py:68-75`, `problog_import.py:110-119`, and PyReason fact conversion at `pyreason/engine_eval.py:637-695`.
 - A2 — Backward compat:enumerate all `id="entity:field"` style rules in src/ + tests/ + docs;ensure opt-in path covers
-- A3 — Walker compatibility:does Slice ε `walk_evidence(...)` + `_claim_name_for_row_result` handle free-form `head.id`?
-- A4 — Service wire:does service serializer reference `head.id` strict format?
-- A5 — `target predicate not found` error message users:tests / docs / SDK examples
-- A6 — Arity mismatch:current usage in `where` ast + RuleExpr validation paths
-- A7 — Docs cascade enum:quickstart rules + evaluate_and_evidence + SDK docs + service docs
-- A8 — D21 walker output for free-form `head.id`
+- A3 — Query-style candidate construction:verify builder/helper plan for free-form head rows;do not weaken `candidates_from_bindings(...)` in a way that breaks schema-backed candidates.
+- A4 — Walker compatibility:does Slice ε `walk_evidence(...)` + `_claim_name_for_row_result` handle free-form `head.id`?
+- A5 — Service/runtime wire:does service serializer / runtime recipe / compiled plan metadata treat `target_pred_id` as strict schema id or generic head label?
+- A6 — `target predicate not found` error message users:tests / docs / SDK examples
+- A7 — Arity mismatch:current usage in `where` ast + RuleExpr validation paths;matched-predicate mismatch must preserve strict reject
+- A8 — Docs cascade enum:quickstart rules + evaluate_and_evidence + SDK docs + service docs
+- A9 — D21 walker output for free-form `head.id`
 
 ## 10. Outcome / Deviations
 
