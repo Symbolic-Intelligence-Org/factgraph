@@ -4,9 +4,9 @@
 - Authority: candidate design / non-authoritative reference;现状描述属实,未来方向属设计空间
 - First draft: 2026-06-02
 - Last updated: 2026-06-02
-- Scope: `factgraph.application.protocol.Rule` 与 `factgraph.sdk.build_application_rule(...)` 之间的层级与命名分裂;user-facing SDK Rule namespace 的重设计
+- Scope: `factgraph.application.protocol.Rule` 与 `factgraph.sdk.build_application_rule(...)` 之间的层级与命名分裂;user-facing SDK Rule namespace 的重设计;并扩展覆盖 RuleExpr OR `branch_id` 匿名化的同源 ergonomic gap
 - Parent: 与 [`schema-mutation-additive-only.zh.md`](schema-mutation-additive-only.zh.md) / [`fields-iterable-value-batch.zh.md`](fields-iterable-value-batch.zh.md) 同级;均属 SDK 用户面 ergonomic 设计空间
-- Design intent: 把"`Rule(when=[User(u), ...])` 直接构造不被支持,必须经 `build_application_rule(...)` 这条 lowering 显式可见"这件事从用户面文档(`docs/quickstart/rules.md`)抽出来,作为 SDK 命名与层级重设计的 future direction 记录
+- Design intent: 把"`Rule(when=[User(u), ...])` 直接构造不被支持,必须经 `build_application_rule(...)` 这条 lowering 显式可见"以及"`RuleExpr` OR `branch_id` 是合成 `c{idx}`,丢失 Rule.id / occurrence alias 语义"两类同源 friction 从用户面文档(`docs/quickstart/rules.md`、`docs/quickstart/engines_and_configs.md`)抽出来,作为 SDK 命名与层级重设计的 future direction 记录
 
 ---
 
@@ -88,6 +88,38 @@ Inference(legacy)接受 `when=[Pred(...) / Case(...) / SDK DSL atoms]`,新 Rule 
 ### §3.3 第三次撞墙:命名分裂
 
 `fg.entities.create(...)` / `fg.fields.set(...)` / `fg.eval.evaluate(...)` 这些 user-facing API 都用 short ergonomic 名字。唯独 rule 构造要写 `build_application_rule(...)` 这种暴露 internal layer 名字的形态。
+
+### §3.4 第四次撞墙:RuleExpr OR `branch_id` 匿名化
+
+构造 RuleExpr OR 表达式时,user 自然期望分支用 operand 的 identity(Rule.id / occurrence alias)命名:
+
+```python
+r_us = build_application_rule(id="in_us", when=[...], ports={"user": u})
+r_de = build_application_rule(id="in_de", when=[...], ports={"user": u})
+expr = r_us | r_de
+
+fg.eval.evaluate(expr, head=..., config=ProbLogConfig(
+    case_probabilities={"in_us": 0.7, "in_de": 0.3}   # ← user intuition
+))
+# SDKStoreError: unknown branch id 'in_us' for ProbLogConfig.case_probabilities
+```
+
+Shipped 行为只接受 `{"c0": 0.7, "c1": 0.3}` —— branch_id 由 lowering 合成。Source([`src/factgraph/application/protocol/rule_expr_lowering.py:720-723`](../../../../src/factgraph/application/protocol/rule_expr_lowering.py)):
+
+```python
+def _assign_branch_ids(branches: tuple[RuleExprLoweringBranch, ...]) -> tuple[...]:
+    if not branches:
+        raise RuleExprError("RuleExpr lowering produced no branches")
+    return tuple(replace(branch, branch_id=f"c{idx}") for idx, branch in enumerate(branches))
+```
+
+3 个具体问题:
+
+- **匿名性**:`c0` / `c1` 不读取任何 user-written 信息(operand 的 Rule.id 是 `"in_us"` / `"in_de"`,occurrence alias 在 `RuleExprInspect.occurrences` 里可见,但 `branch_id` 全部丢弃)
+- **顺序敏感(silent fail)**:`r_us | r_de` 和 `r_de | r_us` 在 `case_probabilities` 视角是完全不同的(`c0` 和 `c1` 含义反转),但调用代码无任何 type-level 信号 —— `{"c0": 0.7, "c1": 0.3}` 在两种 expression 顺序下都不会报错,只是默默改变概率分配
+- **承接性缺失**:Inference 用 `Case([...], id="seed_path")` 让 branch_id 有显式 author-written 语义;RuleExpr 把这条 ergonomic 路径丢掉了
+
+这第四次撞墙跟前三次同类(shipped 架构 self-consistent,user mental model 撞硬边界),但跟 `Rule` 命名分裂是不同维度的 friction —— `Rule` 是声明层 namespace 问题,`branch_id` 是组合层 identity 派生问题。共同收纳在本 design-point 是因为两者:① 都属 RuleExpr / Rule 组合 surface 的同一族 SDK ergonomic gap,② 候选 fix 都不破坏 INV-6 application-first(只动 SDK 层 lowering 默认)。
 
 ## §4 未来设计空间:RuleSpec 重命名 + SDK 真 `Rule` shadow class
 
@@ -181,7 +213,37 @@ INV-6 完全保留:`RuleSpec` 仍然不知道 SDK,所有 lowering 由 SDK `Rule`
 5. **`Inference` 的承接**:Inference 是否也跟着 SDK shadow → RuleSpec-like canonical DTO 重构,还是保持 legacy 不动?
 6. **migration**:`from factgraph.sdk import Rule` 的语义改变,如何文档化 + warning + 兼容期?
 
-### §4.5 与其他设计的耦合
+### §4.5 子设计:RuleExpr `branch_id` 派生(配 §3.4)
+
+**目标形态**:RuleExpr OR lowering 默认从 operand 的 identity 派生 `branch_id`,而不是合成 `c{idx}`。让 `r_us | r_de` 在 `case_probabilities={"in_us": ..., "in_de": ...}` 下 just works。
+
+**候选派生优先级(precedence)**:
+
+```
+1. RuleOccurrence alias  (user 显式写 r.as_("alias") 时取 alias)
+2. Rule.id               (默认,operand 是 application Rule 时取它)
+3. fallback "c{idx}"     (派生冲突或 anonymous projection 时保留)
+```
+
+**未锁设计问题**:
+
+1. **嵌套 RuleExpr**:`(a|b)|c` flatten 后,内层 `a|b` 的 branch_id 派生策略 — 仍走 alias/Rule.id,还是 concat(如 `"a|b"`)?
+2. **同 rule 多次出现且无 alias**:`r|r` 时两个分支的 Rule.id 相同会冲突,如何 fallback(`r#0` / `r#1`?或强制要求 alias?)
+3. **跟 Inference `Case.id` 的兼容**:Inference 的 branch_id namespace 是用户面 explicit 字符串(`"seed_path"`);RuleExpr 派生后是否合并到同一 namespace?如果合并,Rule.id 跟 Case.id 同名冲突如何处理?
+4. **migration**:已经依赖 `c0` / `c1` 的 user 代码迁移(如果有)— 是否提供 backward-compat alias?
+5. **unknown branch_id 错误信息**:列出 known ids 时显示派生 alias 还是 `c{idx}`?(目前显示 lowered 形式,user 看到的是 `c0` 不是 `in_us`,即使他在配置里写的就是 `in_us`)
+
+**候选实施路径**:
+
+| 路径 | 描述 | 代价 |
+|---|---|---|
+| α. 完全替换:派生作 default,`c{idx}` 仅 fallback | 最干净 user mental model,但破坏现有 `c0`/`c1` 调用 | 中等(`_assign_branch_ids` 重写 + reconciliation 改造 + 测试更新) |
+| β. 双 namespace:同时接受派生 id 和 `c{idx}` | 兼容现有代码,user 新写可以用派生 | 低(reconciliation lookup 加 fallback 路径) |
+| γ. 显式 opt-in:加 `ProbLogConfig(case_probabilities=..., branch_id_strategy="derived")` kwarg | 安全保守,但增 API surface | 低 但 ergonomic 收益受限 |
+
+**Tier**: B(与本 design-point §4 RuleSpec 重命名同一 ergonomic 等级,跟 D21 desc-explain / `fields-iterable-value-batch` 同类)。
+
+### §4.6 与其他设计的耦合
 
 - 与 [`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md):无直接耦合,Rule 重命名不影响 Identity 语义
 - 与 [`explanation-completion-roadmap.zh.md`](explanation-completion-roadmap.zh.md) D21 desc-driven explain:无直接耦合,但属同类"shipped 架构对,user mental model 体验有 friction"的 ergonomic gap
@@ -194,7 +256,8 @@ INV-6 完全保留:`RuleSpec` 仍然不知道 SDK,所有 lowering 由 SDK `Rule`
 | application `Rule` 与 SDK 层 ergonomic shell 之间的命名/层级 friction | INV-6 application-first principle 本身(已锁,不在重设计 scope) |
 | `RuleSpec` 命名候选评估 + 路径 A/B/C 实施权衡 | `Rule.when` 内部 atom 类型(`PredAtom` / `CmpAtom` etc.)的形态 |
 | Inference 的 mental-model 承接性问题(§3.2) | Inference 本身的 legacy lifecycle(在 `docs/quickstart/rules.md` §6.1) |
-| SDK `Rule.build` / `.from_atoms` / `__new__` dispatch API 表面 | RuleExpr / RuleOccurrence / RulePortRef 的命名(那是另一个 redesign scope) |
+| SDK `Rule.build` / `.from_atoms` / `__new__` dispatch API 表面 | RuleExpr / RuleOccurrence / RulePortRef 的**类名**(那是另一个 redesign scope) |
+| RuleExpr OR `branch_id` 的派生 ergonomics(§3.4 / §4.5)| `branch_id` 在 evaluation 内部(non-config 路径)的用法 |
 
 ## §6 关联代码锚点
 
@@ -204,10 +267,14 @@ INV-6 完全保留:`RuleSpec` 仍然不知道 SDK,所有 lowering 由 SDK `Rule`
 - `src/factgraph/sdk/dsl/__init__.py:6-10` — `Pred` / `Not` / `agg_*` 等 SDK DSL atom factory
 - `src/factgraph/sdk/dsl/expr.py:181-211` — `ExistsAtom` / `PredAtom` (SDK DSL form) / `CompareExpr` 等 SDK 层 atom 表示
 - `src/factgraph/core/rules/where_ast.py:32-71` — `PredAtom` / `CmpAtom` / `InAtom` / `BuiltinAtom` / `NotAtom` 等 core atom 类型
+- `src/factgraph/application/protocol/rule_expr_lowering.py:720-723` — `_assign_branch_ids(...)` 当前合成 `c{idx}` 的入口(§3.4 / §4.5 修改目标)
+- `src/factgraph/sdk/store.py:3352-3360` — `case_probabilities` 校验拒 unknown branch_id 的位置
+- `src/factgraph/sdk/store.py:3562` — `case_indexes = {branch.branch_id: index for ...}`,reconciliation 实际使用 lowered `branch_id` 的位置
 
 ## §7 关联文档
 
 - 用户面 Rule 文档:[`docs/quickstart/rules.md`](../../../../docs/quickstart/rules.md) §2.6(直接 `Rule(...)` 构造的边界 + 与 `build_application_rule` 的 trade-off table)
+- 用户面 engine/config 文档:[`docs/quickstart/engines_and_configs.md`](../../../../docs/quickstart/engines_and_configs.md) §3.2(`case_probabilities` 的 branch_id 来源表 + RuleExpr 走 `c{idx}` 的 shipped 行为)
 - 架构原则源:[`workflow/foundations/architecture_principles.md §2.1 Layer authority`](../../../foundations/architecture_principles.md)
 - INV-6 引用 ADRs(reject 反向依赖 SDK 案例):
   - [`workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md`](../../decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md) §3 / §4 reject reasons
