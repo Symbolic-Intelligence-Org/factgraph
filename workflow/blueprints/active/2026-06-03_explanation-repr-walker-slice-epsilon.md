@@ -1,8 +1,8 @@
 # Task Blueprint: Explanation.repr walker Slice ε — layered EvidenceGraph → multi-line NL
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
+- Last Updated: 2026-06-03 (Step 4.6 scope freeze)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default per Slice η §10 D6 lock (evidence-model slices; behavior-change + state-transition commits require individual report boundaries)
 - Fork base: `77cf9762` (Slice η memory commit HEAD)
