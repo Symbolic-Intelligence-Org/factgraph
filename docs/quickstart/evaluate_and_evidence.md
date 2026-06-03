@@ -136,7 +136,16 @@ The 6 user-facing methods (all delegating to the `rows` tuple):
 | `result.exists()` | `bool` | "any rows?" shortcut |
 | `result.count()` | `int` | row count (same as `len(result)`) |
 
-The remaining fields (`result_id`, `engine`, the four digests) are for cache / audit / equivalence — they answer "is this the same evaluation we already ran?"
+The remaining fields (`result_id`, `engine`, the four digests) are for cache / audit / equivalence — they answer "is this the same evaluation we already ran?" Each digest fingerprints one input axis:
+
+| Digest | Hash over | "Same digest" means |
+|---|---|---|
+| `expr_digest` | The lowered `(rule_or_rule_expr, head)` combination — the canonical lowering plan | Same expression compiled to the same head |
+| `rule_set_digest` | Sorted `(rule_id, rule.content_digest)` pairs for every rule referenced by the expression | None of the rules involved changed body |
+| `view_snapshot_digest` | `(db_id, base_tx_id, schema_digest, sorted asrt_ids)` of the ledger snapshot used | Same ledger state — same facts, same schema, same head transaction |
+| `config_digest` | The full lowered `SemanticsProfile` (engine, all projections, fallback). `None` when no `config=` was passed | Same semantics config (or both ran without one) |
+
+Together they fingerprint every input the evaluator considered. `result_digest` hashes over all four plus head metadata — same `result_digest` ⇒ guaranteed same `rows`.
 
 ### 2.2 `EvaluateRow` — one match per row
 
