@@ -18,6 +18,7 @@
 | 2026-06-03 | scoped | Step 4.6.5 pre-impl grep PASS | Grepped `repr=` constructor usage, `_repr_cache`, `walk_evidence`, `Explanation(` callsites, and parent-design `row.repr` wording. No new N-findings; parent-design `row.repr` hits remain D4 carry-forward only. Status remains `scoped`; no implementation started. |
 | 2026-06-03 | scoped | Step 4.7 implementation | Added computed `Explanation.repr`, protocol-layer `walk_evidence(...)`, focused walker tests, and docs cascade. Focused protocol cohort and SDK export guard passed. Status remains `scoped` until Step 4.8 closure. |
 | 2026-06-03 | implemented | Step 4.8 closure | Status changed `scoped` → `implemented`; §10 Outcome filled. Closed D21 §6.6 path C via `Explanation.repr`, recorded verification (`154 passed, 4 subtests`) and no cadence/scope deviations. |
+| 2026-06-03 | implemented | Step 4.9 archive | Moved blueprint pair and Step 4.3 preflight artifact to archive; updated archive inventory. Status remains `implemented`; Slice ε lifecycle is closed. |
 
 ## Decision Notes
 
@@ -49,7 +50,7 @@
 - [x] Step 4.6.5 pre-impl grep
 - [x] Step 4.7 implementation on `v0.2.0-impl-explanation-repr-walker-2026-06-03` (individual report per D6)
 - [x] Step 4.8 closure (individual report per D6)
-- [ ] Step 4.9 archive
+- [x] Step 4.9 archive
 
 ## Pre-Impl Audit Tasks (Step 4.3 to verify)
 
