@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-03
-- Last Updated: 2026-06-03 (Step 4.2 review + tightening)
+- Last Updated: 2026-06-03 (Step 4.4 preflight amendment)
 - Owner: Claude (blueprint draft) / Codex (review + impl) — Slice 4/5 cross-flip per [[feedback_audit_to_archive_cadence]]
 - **Cadence**: tight gates default — δ relaxes a shipped strict invariant (`rule.id` must match schema predicate); preflight will surface cross-engine impact
 - Fork base: `dd65e776` (Slice ε Step 4.9 archive HEAD)
@@ -11,6 +11,10 @@
   - α / β / γ / ζ / η / ε (all archived) — DTO surface evolution + evidence model layered hierarchy + walker
 - Related Modules:
   - `src/factgraph/core/store/_evaluate.py:148-157` (shipped head lookup + arity check — δ rewrites these to opt-in)
+  - `src/factgraph/adapters/souffle/engine_eval.py:118-127` (same strict head lookup + arity check)
+  - `src/factgraph/adapters/problog/engine_eval.py:68-75` (same strict head lookup + arity check)
+  - `src/factgraph/adapters/problog/problog_import.py:110-119` (import-time strict head lookup + arity check)
+  - `src/factgraph/core/derivation/candidates.py:126-135` (`CandidateSet(candidate_kind="fact")` canonical payload requires `terms`)
   - `src/factgraph/core/rules/where_eval.py` (where evaluation may also reference head pred lookup)
   - `src/factgraph/application/protocol/evaluate_result.py` (head field on EvaluateResult + Rule)
   - `src/factgraph/sdk/store.py` (SDK `fg.eval.evaluate(...)` entry)
@@ -79,6 +83,8 @@ Slice δ is the **last slice** in parent design §6 ordering(α → β → γ �
 - N6 — Multiple rule version disambiguation redesign(future)
 - N7 — Sacred-path edits(Q-PR1 5-path)
 - N8 — Dirty baseline files
+- N9 — PyReason materialized graph fact conversion substrate (`pyreason/engine_eval.py:637-695`) is excluded unless Step 4.7 proves a safe adapter path. It is not public head validation.
+- N10 — Read/query helper lookups (`core/store/_queries.py` and `service/runtime_v1.py:2679`) are excluded; they are not derivation-head evaluation paths.
 
 ## 4. Current Source Anchors(Step 4.1 fresh read)
 
@@ -123,7 +129,7 @@ Parent §5.3 提了 3 选:
 
 **Step 4.2 LOCK: Option A.** Matched-predicate heads preserve shipped arity rejection. This avoids silent behavior changes for existing `id="entity:field"` users and keeps the backward-compat path easy to reason about. Parent Option B/C remain future policy work only.
 
-### 5.4 cross-engine impact
+### 5.4 cross-engine impact — PF-R1 / PF-r1 / PF-r2 LOCK
 
 `_evaluate.py:148-157` 是 `mode == "native"` path 入口(L146 check `mode != "native"`)。Step 4.2 fresh read found non-native head strictness is **not** only shared through `_evaluate.py`:
 
@@ -132,9 +138,14 @@ Parent §5.3 提了 3 选:
 - `src/factgraph/adapters/problog/problog_import.py:110-119` repeats import-time candidate construction strictness.
 - PyReason fact-to-candidate helpers at `pyreason/engine_eval.py:637-695` still require schema predicates for materialized graph facts; Step 4.3 must classify whether this is head validation or a distinct adapter fact-conversion substrate.
 
-**LOCKED scope direction**: δ targets public `fg.eval.evaluate(..., engine=...)` head semantics across supported engines where the engine can evaluate a query-style head. Native, Souffle, and ProbLog strict head-lookup paths are in scope unless Step 4.3 proves an engine-specific blocker. PyReason may remain row-level / schema-backed if preflight proves query-style head support is blocked by adapter substrate, but that must be an explicit PF finding.
+**Step 4.4 LOCK from preflight PF-R1**: Native, Souffle, ProbLog runtime, and ProbLog import are in scope for the same opt-in schema lookup rule.
 
-### 5.5 Query-style candidate construction
+**Step 4.4 carve-outs**:
+
+- PyReason fact-conversion lookups at `pyreason/engine_eval.py:637-695` are substrate conversion from materialized node/edge facts into FactGraph candidates, not public head validation. Do not rewrite them in δ unless implementation proves a safe adapter path.
+- `_queries.py` and service read-query lookups are read/query helpers, not derivation-head evaluation paths.
+
+### 5.5 Query-style candidate construction — PF-R2 / PF-R3 LOCK
 
 Shipped `candidates_from_bindings(...)` cannot handle free-form `head.id` because it requires:
 
@@ -147,14 +158,16 @@ Shipped `candidates_from_bindings(...)` cannot handle free-form `head.id` becaus
 
 - derive ordered output values from `head.ports` / `head_vars` and binding rows;
 - preserve ζ in-process `EvaluateRow.bindings` as `{port_name: term}`;
-- keep deterministic candidate identity/digests using the locked δ schema/version labels from Step 4.3 if needed;
-- produce compatibility payloads only where service/provenance code still requires legacy envelopes.
+- keep `candidate_kind="fact"` for δ unless Step 4.4 is explicitly amended again;
+- emit a compatibility fact-like payload `{"pred_id": head.id, "terms": ordered_terms}` because `CandidateSet(candidate_kind="fact")` canonical content requires `terms` (`candidates.py:126-135`);
+- keep deterministic candidate identity/digests with the existing `cand_v2` / `candk_v2` machinery;
+- keep row bindings as ζ port-map at `EvaluateRow` level even when candidate payload remains fact-like for compatibility.
 
 ### 5.6 Result label semantics
 
 `result.head.id`(post-δ)可能是 `"find_us_users"` 等 free-form 字符串。Slice ε walker `NODE_CONCLUSION.label` reads from `_claim_name_for_row_result(row, result)` which derives from `result.head.id`。需要 verify walker output 在 free-form head.id 下仍 sensible(probably yes — walker just shows the string)。
 
-### 5.7 Service/runtime compatibility
+### 5.7 Service/runtime compatibility — PF-R4 LOCK
 
 Service and runtime protocol still carry `target_pred_id` in compiled plans, runtime recipes, and response metadata:
 
@@ -163,7 +176,7 @@ Service and runtime protocol still carry `target_pred_id` in compiled plans, run
 - `sdk/store.py:3839-3852` rebuilds `CompiledDerivationPlan` from compiled dicts with `target_pred_id` and `head_vars`.
 - `sdk/store.py:3885-3889` synthesizes an `ApplicationRule` from compiled plans using `id=head.target_pred_id`.
 
-δ must preserve these wire/key names for compatibility while changing their meaning from "must be schema predicate id" to "head/rule id label, optionally schema-backed". Step 4.3 must decide whether docs rename wording only, or whether an internal alias/helper is needed to avoid misleading future code.
+δ must preserve these wire/key names for compatibility while changing their meaning from "must be schema predicate id" to "head/rule id label, optionally schema-backed". Do not rename runtime DTO keys in δ; update docs/meaning only.
 
 ### 5.8 Rule DTO validation
 
@@ -201,13 +214,15 @@ Service and runtime protocol still carry `target_pred_id` in compiled plans, run
 ## 7. Acceptance Criteria(Draft)
 
 - [x] Step 4.2 has locked G6 arity severity:Option A strict reject for matched-predicate heads
-- [ ] Step 4.3 preflight enumerated cross-engine paths + backward compat test cohort
+- [x] Step 4.3 preflight enumerated cross-engine paths + backward compat test cohort
 - [ ] `_evaluate.py:148-157` rewrite per §5.1 — strict reject becomes opt-in
 - [ ] `rule.id = "find_us_users"` style rule passes `fg.eval.evaluate(rule, head=rule)` end-to-end
 - [ ] `rule.id = "user:region"` style rule continues to work(backward compat regression test)
 - [ ] Arity mismatch on matched-predicate path follows locked G6 severity
 - [ ] Query-style candidate branch/helper exists; implementation does not pass `schema_pred=None` into schema-bound `candidates_from_bindings(...)`
-- [ ] Native/Souffle/ProbLog head strictness follows the same opt-in schema lookup rule, or Step 4.3 records an explicit engine-specific blocker
+- [ ] Native/Souffle/ProbLog runtime + ProbLog import head strictness follows the same opt-in schema lookup rule
+- [ ] PyReason fact-conversion substrate and read/query helper lookups remain excluded per PF-r1/PF-r2
+- [ ] Query-style candidates keep `candidate_kind="fact"` + fact-like `{"pred_id": head.id, "terms": ...}` compatibility payload unless a new PF explicitly expands scope
 - [ ] Service/runtime compiled-plan fields remain wire-compatible while docs clarify `target_pred_id` / `head.id` now mean head label, optionally schema-backed
 - [ ] All α-ε regression tests pass
 - [ ] Walker output(per Slice ε)still sensible for free-form `head.id`
@@ -224,16 +239,16 @@ Service and runtime protocol still carry `target_pred_id` in compiled plans, run
 3. Step 4.4 — Fold preflight findings
 4. Step 4.5 — Self-check
 5. Step 4.6 — Scope freeze
-6. Step 4.6.5 — Pre-impl grep(`find_schema_pred` callers / `target predicate not found` error msg / arity mismatch assertions in tests)
+6. Step 4.6.5 — Pre-impl grep(`find_schema_pred` callers / `target predicate not found` error msg / arity mismatch assertions in tests / CandidateSet fact payload users)
 7. Step 4.7 — Implementation on `v0.2.0-impl-query-style-head-2026-06-03`(individual report per D6)
 8. Step 4.8 — Closure(individual report per D6)+ **note δ closes parent design chain**
 9. Step 4.9 — Archive
 
 ## 9. Pre-Impl Audit Tasks for Step 4.3
 
-- A1 — Cross-engine paths:confirm native / Souffle / ProbLog / PyReason head strictness sites and classify which engines can share δ query-style head semantics. Fresh-read anchors include `_evaluate.py:148-157`, `souffle/engine_eval.py:118-127`, `problog/engine_eval.py:68-75`, `problog_import.py:110-119`, and PyReason fact conversion at `pyreason/engine_eval.py:637-695`.
+- A1 — Cross-engine paths:confirm native / Souffle / ProbLog / PyReason head strictness sites and classify which engines can share δ query-style head semantics. Fresh-read anchors include `_evaluate.py:148-157`, `souffle/engine_eval.py:118-127`, `problog/engine_eval.py:68-75`, `problog_import.py:110-119`, and PyReason fact conversion at `pyreason/engine_eval.py:637-695`. **Step 4.4 result**:native/Souffle/ProbLog in scope; PyReason fact conversion excluded unless implementation proves safe.
 - A2 — Backward compat:enumerate all `id="entity:field"` style rules in src/ + tests/ + docs;ensure opt-in path covers
-- A3 — Query-style candidate construction:verify builder/helper plan for free-form head rows;do not weaken `candidates_from_bindings(...)` in a way that breaks schema-backed candidates.
+- A3 — Query-style candidate construction:verify builder/helper plan for free-form head rows;do not weaken `candidates_from_bindings(...)` in a way that breaks schema-backed candidates. **Step 4.4 result**:new query-style helper/branch required; keep candidate_kind fact + fact-like payload by default.
 - A4 — Walker compatibility:does Slice ε `walk_evidence(...)` + `_claim_name_for_row_result` handle free-form `head.id`?
 - A5 — Service/runtime wire:does service serializer / runtime recipe / compiled plan metadata treat `target_pred_id` as strict schema id or generic head label?
 - A6 — `target predicate not found` error message users:tests / docs / SDK examples
@@ -252,3 +267,4 @@ Pending.
 - D3 — Parent design §3.7 `row.repr` wording sync(from ε D4)— not in δ scope
 - D4 — Parent design §3.9.2 direction wording sync(from η D7)— not in δ scope
 - **D5 — δ 完成后,evaluate-result-flatten parent design 7 slices(α-δ)全部 implemented + archived**;design-point 应可移到 archive 状态(per `design/README.md` 三条件)
+- D6 — `target_pred_id` wire/key rename to `head_id` / `rule_id` is deferred; δ preserves existing keys and updates semantics/docs only.

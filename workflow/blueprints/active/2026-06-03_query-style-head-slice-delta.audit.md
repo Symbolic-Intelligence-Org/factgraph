@@ -12,6 +12,7 @@
 | --- | --- | --- | --- |
 | 2026-06-03 | draft | Blueprint pair created | Initial scope recorded on `v0.2.0-blueprint-query-style-head-2026-06-03` (fork from `dd65e776`). Tight gates default — δ relaxes shipped strict invariant `rule.id` must match schema predicate. Cross-engine + backward compat scope must be enumerated at Step 4.3 preflight. Open Q G6 (arity mismatch severity Option A/B/C) was pending at draft and resolved by Step 4.2 Option A lock below. |
 | 2026-06-03 | draft | Step 4.2 review + tightening | Folded P1-P5: locked G6 to Option A strict reject for matched-predicate arity mismatch; recorded that native free-form heads need a distinct query-style candidate construction branch because `candidates_from_bindings(...)` is schema-bound; expanded cross-engine scope to Souffle/ProbLog strict lookup sites; added service/runtime compiled-plan compatibility surface; confirmed `Rule` DTO already accepts arbitrary non-empty ids. Status remains `draft`. |
+| 2026-06-03 | draft | Step 4.4 preflight amendment | Folded Step 4.3 preflight findings from `v0.2.0-query-style-head-preflight-2026-06-03@46e179d3`: native/Souffle/ProbLog runtime/import strict lookup paths are in scope; query-style candidates require a distinct helper/branch; `candidate_kind="fact"` + fact-like payload remains the δ compatibility default; service/runtime `target_pred_id` / `head_vars` keys are preserved; PyReason fact-conversion and read/query lookups are carved out. Status remains `draft`. |
 
 ## Decision Notes
 
@@ -24,13 +25,16 @@
 | 2026-06-03 | δ closes parent design chain | After δ implemented + archived, evaluate-result-flatten parent design 7 slices (α-δ) all complete. Per `design/README.md` 三条件 (all questions closed / all impl-eligible content shipped / no active blueprints depend), design-point candidate for archive. |
 | 2026-06-03 | Step 4.2 P2 — query-style candidates need a distinct builder branch | `candidates_from_bindings(...)` requires `schema_pred` / `arg_specs` / `group_key_indexes` and emits fact-shaped payloads. Free-form heads need a query-style branch derived from `head.ports` / `head_vars`; weakening the existing helper would risk schema-backed candidate regressions. |
 | 2026-06-03 | Step 4.2 P5 — Rule DTO already permits free-form ids | `Rule.__post_init__` only requires `id` be a non-empty string. δ implementation should not touch Rule validation unless Step 4.3 finds a separate issue. |
+| 2026-06-03 | Step 4.3 PF-R1 — cross-engine strict sites locked | Preflight confirmed native `_evaluate.py`, Souffle `engine_eval.py`, ProbLog runtime `engine_eval.py`, and ProbLog import `problog_import.py` all enforce strict schema lookup/arity. δ implementation scope includes all four. |
+| 2026-06-03 | Step 4.3 PF-R2/PF-R3 — compatibility payload default | Because `CandidateSet(candidate_kind="fact")` canonical content requires `terms`, δ keeps `candidate_kind="fact"` and fact-like `{"pred_id": head.id, "terms": ...}` payloads for query-style candidates. New candidate kinds are deferred unless a later PF expands scope. |
+| 2026-06-03 | Step 4.3 PF-r1/PF-r2 — exclusions | PyReason materialized fact conversion, `_queries.py`, and service read-query lookups are not derivation-head validation and stay out of scope unless implementation proves otherwise. |
 
 ## Cross-flip checkpoints (per [[feedback_audit_to_archive_cadence]] + Slice η D6 lock)
 
 - [x] Step 4.1 blueprint draft (Claude — Slice 4/5 default)
 - [x] Step 4.2 review + tightening (Codex per Slice 4/5 default)
-- [ ] Step 4.3 preflight on independent branch `v0.2.0-query-style-head-preflight-2026-06-03`
-- [ ] Step 4.4 preflight amendment
+- [x] Step 4.3 preflight on independent branch `v0.2.0-query-style-head-preflight-2026-06-03`
+- [x] Step 4.4 preflight amendment
 - [ ] Step 4.5 self-check
 - [ ] Step 4.6 scope freeze
 - [ ] Step 4.6.5 pre-impl grep
