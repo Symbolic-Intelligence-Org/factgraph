@@ -117,7 +117,7 @@ Two identity-validation `RuleExprError`s — stale `content_digest` (same id, di
 >     ports={"user": u, "region": r},
 > )
 > result = fg.eval.evaluate(region_rule, head=region_rule)
-> # result.count() == 1
+> # result yields one row per matching (user, region) fact in the ledger
 > ```
 >
 > The `EvaluateResult` / `EvaluateRow` / `Explanation` shapes documented from §2 onward apply identically to both paths; the workaround is only about *producing* rows in shipped today.
