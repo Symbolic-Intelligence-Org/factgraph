@@ -166,6 +166,7 @@ EvaluateRow (frozen)
 row = result.first()
 
 row.row_id                    # str
+row.bindings                  # Mapping — engine candidate payload, NOT a {port: value} map (see below)
 row.claim.name                # "user:region" — the head predicate that fired
 row.raw_kind                  # None (no uncertainty meta on the source claims)
 row.bound                     # None (paired with raw_kind, see engines_and_configs.md §2.1)
