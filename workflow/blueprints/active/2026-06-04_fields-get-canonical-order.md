@@ -1,8 +1,8 @@
 # Task Blueprint: `fg.fields.get` multi-cardinality canonical order alignment
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-04
-- Last Updated: 2026-06-04 (Step 4.7 implementation)
+- Last Updated: 2026-06-04 (Step 4.8 closure)
 - Related Modules:
   - `src/factgraph/sdk/store.py` (`_SDKFieldsManager.get` / `_active_claims_for_field`)
   - `src/factgraph/core/view/projector.py` (canonical fact sort key)
@@ -90,4 +90,19 @@ This guarantees `fields.get` multi order == snapshot order by construction (same
 
 ## 10. Outcome / Deviations
 
-任务完成后填写。
+**Outcome (Step 4.8 closure, 2026-06-04):** implemented as scoped, no deviations.
+
+- `core/view/projector.py`: extracted `canonical_fact_sort_key(fact)` (the prior inline `tuple(str(part) for part in ...)`); both `project_view_facts` (line 85) and `project_view_facts_with_witness` (line 160) now call it. Pure no-op for projector output (verified — 59 view/projector/witness/walker consumer tests unchanged green).
+- `sdk/store.py` `_SDKFieldsManager.get`: multi branch sorts active claims by `canonical_fact_sort_key(build_args_for_claim(self._sdk.ledger, claim))` before decode → matches snapshot canonical order by construction. **Single-cardinality branch unchanged** (`values[-1]`), per §3 non-goal.
+- `tests/test_sdk_fields_namespace.py`: line 124 `("red","blue")` → `("blue","red")`; line 125 tightened from `set(...)` to order-sensitive `fields.get(...) == entities.get(...).tags` (scalar `tags`, per PF-5).
+- Docs: `three_layer_api.md` §3 + `schema_definition.md` §1.3 each note that `fields.get` multi order == snapshot canonical order.
+
+**Deviations:** none. All §7 acceptance items met. Codex's two 4.2 tightenings (both projector paths; order-sensitive regression) honored.
+
+**Independent verification (Claude, Step 4.8):** `tests/test_sdk_fields_namespace.py` + `tests/sdk` + `tests/application/protocol` → 268 passed; view/projector/witness consumers (entity_view / walker_views / souffle witness / frozen_view / namespace_removal) → 59 passed. Projector refactor confirmed no-op. (Note: Codex's env returned no pytest output; Claude re-ran under a working pytest as the real gate.)
+
+**Sacred:** the 3 impl commits (`3ba06fa2` / `65def873` / `0898f902`) touch only `projector.py` / `store.py` / tests / docs / blueprint — none in the Q-PR1 5-path. Master unchanged.
+
+**Deferred follow-up:** single-cardinality `fields.get` alignment to `compute_chosen_for_predicate` (the "A2-full" option) remains out of scope — recorded in audit Decision Notes.
+
+**Archive note:** ready for Step 4.9 archive (git-mv blueprint pair to `workflow/blueprints/archive/` + INVENTORY entry) once user authorizes.

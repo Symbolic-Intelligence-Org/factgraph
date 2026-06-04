@@ -13,6 +13,7 @@
 | 2026-06-04 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`. Frozen scope: A2 multi-only shared canonical key, two projector callsites, scalar multi regression, minimal docs sync; single-cardinality unchanged. |
 | 2026-06-04 | scoped | Step 4.6.5 pre-impl grep PASS | Codex grep confirmed no additional multi-order test assertions beyond `test_sdk_fields_namespace.py`; projector still has the two known inline sort keys to replace; docs beyond the two planned quickstart pages are order-silent. No N-findings. |
 | 2026-06-04 | scoped | Step 4.7 implementation | Codex implemented shared `canonical_fact_sort_key(...)`, routed both projector paths and `fg.fields.get` multi through it, tightened scalar multi regression, and synced the two scoped quickstart docs. Status remains `scoped` pending Step 4.8 closure. |
+| 2026-06-04 | implemented | Step 4.8 closure | Claude reviewed Codex's impl against blueprint (all §7 acceptance met, no deviations) + **independent re-run** (Codex env had no pytest output): 268 passed (fields-get test + sdk + protocol) + 59 passed (view/projector/witness/walker consumers → projector refactor confirmed no-op). Status `scoped` → `implemented`; §10 Outcome filled. Sacred Q-PR1 5-path untouched; master unchanged. |
 
 ## Decision Notes
 
