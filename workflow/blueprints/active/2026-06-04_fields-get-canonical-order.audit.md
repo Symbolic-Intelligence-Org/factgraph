@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-06-04 | draft | Blueprint created (Step 4.1) | Claude draft. Scope = A2 multi-only: align `fg.fields.get` multi order to projector canonical sort via shared key; single-cardinality untouched. |
 | 2026-06-04 | draft | Step 4.2 review + tightening | Codex source-grounded review found one required scope tightening: `project_view_facts_with_witness(...)` has a second inline canonical sort key, so helper extraction must update both projector paths. Acceptance/pre-impl grep updated accordingly. |
+| 2026-06-04 | draft | Step 4.3 preflight (streamlined) | Claude. Read-only verification of both projector callsites, import-cycle, reuse, docs scope. **Verdict PASS — no blockers.** Streamlined (recorded here, no separate branch/doc) per small scope. 1 regression note (PF-5: assert on scalar multi field). |
 
 ## Decision Notes
 
@@ -46,3 +47,18 @@ Tightening applied:
 - **P1 Required** — The named helper extraction must update **both** projector paths (`project_view_facts` and `project_view_facts_with_witness`), not only the plain projection path. Otherwise `projector.py` would still carry a duplicate canonical key and the "single source of truth" goal would be false.
 - **P2 Recommended** — The consistency regression should be order-sensitive. Tightening existing line 125 from `set(snapshot.tags)` to direct tuple equality is the smallest regression because it asserts `fields.get(...) == entities.get(...).tags` at the same cell.
 - **P3 Recommended** — Step 4.6.5 should grep for remaining inline `tuple(str(part) for part in ...)` projector sort keys in addition to other `fields.get` order assertions.
+
+### 2026-06-04 — Step 4.3 preflight (Claude, streamlined, read-only)
+
+Scope decision: streamlined preflight recorded in this audit log (no separate `workflow/audit/` doc, no independent branch) — proportionate to the small slice (2 source files, 1 test update; bug-fix-in-established-surface + pure refactor). Standalone-preflight criteria (subtractive / cross-module protocol / namespace migration / historical-compat / pre-release) do not apply.
+
+Findings (all verified against shipped source):
+
+- **PF-1 (confirm Codex P1)** — Both projector sort callsites use the identical inline key over a `build_args_for_claim(...)` fact tuple: `projector.py:85` `key=lambda fact: tuple(str(part) for part in fact)`; `projector.py:156` `key=lambda row: tuple(str(part) for part in row.fact_tuple)`. A single `canonical_fact_sort_key(fact_tuple)` serves both (plain passes `fact`, witness passes `row.fact_tuple`; both are `build_args_for_claim` outputs).
+- **PF-2 (no circular import)** — `core/view/projector.py` imports only `core.policy.*` + `core.store._support` + `core.store.ledger`; it does **not** import `sdk`. So adding `from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key` to `sdk/store.py` is a safe one-directional sdk→core import.
+- **PF-3 (reuse OK)** — `build_args_for_claim(ledger, claim)` is module-level/exportable; `_SDKFieldsManager` already has `self._sdk.ledger`. Multi branch can sort active claims by `canonical_fact_sort_key(build_args_for_claim(self._sdk.ledger, claim))` then decode.
+- **PF-4 (refactor is pure no-op)** — Helper body == the existing lambda expression, so both projection outputs are byte-identical after extraction. Codex must confirm projector tests unchanged (no golden-order churn).
+- **PF-5 (regression must use a SCALAR multi field)** — Full-tuple equality `fg.fields.get(f, ref) == fg.entities.get(...).f` holds for scalar multi fields (e.g. `tags: list[str]`). For **entity_ref** multi fields, `fields.get` (`_decode_claim_value`) and snapshot (`_hydrate_value` → `EntityRef`) may differ in value **representation** even when ORDER matches — so the consistency regression must assert on a scalar multi field. Existing `test_sdk_fields_namespace.py:124-125` uses scalar `tags` → already satisfied.
+- **PF-6 (docs scope confirmed minimal)** — `three_layer_api.md:208` is type-accurate but order-silent; `schema_definition.md` §1.3 carries the dedup/tuple note. Each needs a one-line addition: "`fields.get` multi order == snapshot canonical order." No other doc references the multi read order.
+
+Verdict: **PASS, no blockers.** Plan in §5/§8 is accurate and implementable as written (with Codex's 4.2 tightenings). Ready for Step 4.5/4.6 self-check + scope freeze → 4.6.5 grep → 4.7 impl (Codex).
