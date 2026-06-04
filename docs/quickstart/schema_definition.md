@@ -44,6 +44,8 @@ A missing single-cardinality field reads back as `None`; a missing multi-cardina
 
 `fg.fields.get` and entity snapshots use the same canonical order for multi-cardinality values.
 
+The four multi-cardinality shapes are **interchangeable cardinality signals** — they do **not** impose their container's semantics. A multi-cardinality cell holds a *set of distinct values*: each `(field, value)` is one content-addressed claim, so adding the same value twice is idempotent (no duplicates are stored). Reads always return a `tuple` of the distinct values regardless of which shape you annotated (`fg.fields.get` returns a `tuple`; see [`three_layer_api.md`](three_layer_api.md) §3). Choosing `set[T]` vs `list[T]` vs `frozenset[T]` vs `tuple[T, ...]` is a typing-ergonomics choice with no runtime difference — the declared container type is not reconstructed on read.
+
 ### 1.4 Scalar types
 
 Each scalar annotation maps to a storage domain that the compiled schema IR records on the predicate. For multi-cardinality fields, the inner `T` in `list[T]` / `set[T]` / `frozenset[T]` / `tuple[T, ...]` follows the same table.
