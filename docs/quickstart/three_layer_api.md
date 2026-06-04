@@ -20,7 +20,7 @@ Each layer's primary API takes its own navigation key:
 | 2 | `fg.fields.*` | `Field descriptor + e_ref` (+ value, when writing) | field-cell mutations + current-value reads |
 | 3 | `fg.assertions.*` | `asrt_id` string (or iterable) | per-write introspection + targeted retract |
 
-Errors are part of the design. Passing an `asrt_id` to `fg.entities.get(...)` does not implicitly route through `fg.assertions.by_id(...)` — it raises an error telling you to use the correct layer. The same goes for passing a Field descriptor to `fg.entities.*` or an `EntityClass` to `fg.fields.*`. Each layer's mental model is distinct enough that silent fallback would mask programmer intent.
+Errors are part of the design. Passing an `asrt_id` to `fg.entities.get(...)` does not implicitly route through `fg.assertions.by_id(...)` — it raises an error telling you to use the correct layer. The same goes for passing a Field descriptor to `fg.entities.*` or an `EntityClass` to `fg.fields.*`. The rationale is in [ADR-API §4.1.1](../../workflow/design/decisions/active/2026-05-29_q-api-namespace-decision.md): each layer's mental model is distinct enough that silent fallback would mask programmer intent.
 
 ## 2. Layer 1 — Entities (`fg.entities.*`)
 
@@ -205,13 +205,13 @@ fg.fields.add(User.tags, alice, "reviewer")
 
 Passing `["engineer", "reviewer"]` as the value raises `SDKValueError` because `list` does not match the declared element type. The same rule applies to `set` (always one scalar) and `retract` (revoke one specific `(field, ref, value)` triple at a time).
 
-Reads work the opposite way: `fg.fields.get(field, ref)` returns one scalar for single-cardinality fields and a `tuple` of scalars for multi-cardinality fields (possibly empty `()`).
+Reads work the opposite way: `fg.fields.get(field, ref)` returns one scalar for single-cardinality fields and a `tuple` of scalars for multi-cardinality fields (possibly empty `()`). Multi-cardinality reads use the same canonical order as entity snapshots, so `fg.fields.get(User.tags, ref)` and `fg.entities.get(User, ...).tags` agree for the same field cell.
 
 ### 3.3 Identity descriptors at Layer 2
 
 Identity values can be **read** (via `snap.user_id` / `snap.identity[...]`) and **introspected** (via `fg.assertions.field(User.user_id)`), but never **mutated** — all four write methods (`set` / `add` / `retract` / `delete`) reject `Identity` descriptors with `SDKStoreError(code="INV_7C_IDENTITY_PROTECTED")`. Identity Claims are the immutable entity anchor per INV-7c.
 
-To "change" an identity, delete and recreate: `fg.entities.delete(old_ref)` + `fg.entities.create(EntityCls, **new_identity)`.
+To "change" an identity, delete and recreate: `fg.entities.delete(old_ref)` + `fg.entities.create(EntityCls, **new_identity)`. See [ADR-IC §4.1](../../workflow/design/decisions/active/2026-05-29_q-ic-identity-as-claim-decision.md).
 
 ## 4. Layer 3 — Assertions (`fg.assertions.*`)
 

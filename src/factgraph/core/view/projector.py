@@ -82,7 +82,7 @@ def _project_view_facts_impl(
                 audit.selected_by_pred[pred_id] = audit.selected_by_pred.get(pred_id, 0) + len(selected_claims)
 
         facts = [build_args_for_claim(ledger, claim) for claim in selected_claims]
-        output[pred_id] = sorted(facts, key=lambda fact: tuple(str(part) for part in fact))
+        output[pred_id] = sorted(facts, key=canonical_fact_sort_key)
 
     return output
 
@@ -112,6 +112,10 @@ def build_args_for_claim(ledger: Ledger, claim: Claim) -> tuple[Any, ...]:
             )
 
     return (claim.e_ref, *[row.val_atom for row in sorted_rows])
+
+
+def canonical_fact_sort_key(fact: tuple[Any, ...]) -> tuple[str, ...]:
+    return tuple(str(part) for part in fact)
 
 
 def project_view_facts(
@@ -153,7 +157,7 @@ def project_view_facts_with_witness(
             )
             for claim in selected_claims
         ]
-        output[pred_id] = sorted(projected, key=lambda row: tuple(str(part) for part in row.fact_tuple))
+        output[pred_id] = sorted(projected, key=lambda row: canonical_fact_sort_key(row.fact_tuple))
 
     return output
 

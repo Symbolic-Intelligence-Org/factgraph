@@ -42,6 +42,10 @@ Cardinality is taken from the type annotation. There is no `cardinality=` kwarg;
 
 A missing single-cardinality field reads back as `None`; a missing multi-cardinality field reads back as `()`.
 
+`fg.fields.get` and entity snapshots use the same canonical order for multi-cardinality values.
+
+The four multi-cardinality shapes are **interchangeable cardinality signals** — they do **not** impose their container's semantics. A multi-cardinality cell holds a *set of distinct values*: each `(field, value)` is one content-addressed claim, so adding the same value twice is idempotent (no duplicates are stored). Reads always return a `tuple` of the distinct values regardless of which shape you annotated (`fg.fields.get` returns a `tuple`; see [`three_layer_api.md`](three_layer_api.md) §3). Choosing `set[T]` vs `list[T]` vs `frozenset[T]` vs `tuple[T, ...]` is a typing-ergonomics choice with no runtime difference — the declared container type is not reconstructed on read.
+
 ### 1.4 Scalar types
 
 Each scalar annotation maps to a storage domain that the compiled schema IR records on the predicate. For multi-cardinality fields, the inner `T` in `list[T]` / `set[T]` / `frozenset[T]` / `tuple[T, ...]` follows the same table.
@@ -199,7 +203,7 @@ In normal use the `User` name is rebound to the new class by Python's import or 
 
 Destructive operations (`delete`, `update`, `migrate`, `deprecate`) are not part of the current `fg.schema.*` surface. If you need a non-additive change today — removing a field, changing identity, retyping, or anything that retracts schema state — create a new workspace with the new schema and re-ingest.
 
-This is the **current mode**. Broader schema evolution semantics (destructive operations, in-place migration, digest evolution) are an open design question.
+This is the **current mode**. Broader schema evolution semantics (destructive operations, in-place migration, digest evolution) are an open design question. The full rejection taxonomy and the design space sit in [`workflow/design/design-points/active/schema-mutation-additive-only.zh.md`](../../workflow/design/design-points/active/schema-mutation-additive-only.zh.md).
 
 ## 5. Reference
 
