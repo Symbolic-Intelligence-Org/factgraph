@@ -1390,6 +1390,27 @@ class _SDKAuditManager:
         return self._sdk._diff_proof_frames(*args, **kwargs)
 
 
+class _SDKMetaManager:
+    """Read-only namespace for runtime introspection.
+
+    Currently exposes `capabilities()` reporting which value-kinds,
+    scalar tags, and cardinalities the shipped runtime accepts. All
+    values are mirrored from shipped constants — see
+    `factgraph.application.capabilities`.
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.meta namespace is read-only")
+
+    def capabilities(self) -> Mapping[str, frozenset[str]]:
+        from factgraph.application.capabilities import compute_capabilities
+
+        return compute_capabilities()
+
+
 class _SDKPackageManager:
     """Read-only namespace manager for the `package` taxonomy group."""
 
@@ -1583,6 +1604,7 @@ class SDKStore:
         self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
         self._audit_manager = _SDKAuditManager(self)
+        self._meta_manager = _SDKMetaManager(self)
         self._package_manager = _SDKPackageManager(self)
         self._default_row_format = default_row_format
         # Read once at init time; do not re-read env on each run().
@@ -1879,6 +1901,11 @@ class SDKStore:
     def audit(self) -> _SDKAuditManager:
         """`audit` taxonomy namespace exposing ``explain`` / ``conflicts`` / ``diff_proof_frames``."""
         return self._audit_manager
+
+    @property
+    def meta(self) -> _SDKMetaManager:
+        """`meta` namespace exposing read-only runtime introspection (`capabilities()`)."""
+        return self._meta_manager
 
     @property
     def package(self) -> _SDKPackageManager:
