@@ -1,8 +1,8 @@
 # Task Blueprint: `fg.fields.get` multi-cardinality canonical order alignment
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-04
-- Last Updated: 2026-06-04 (Step 4.2 review + tightening)
+- Last Updated: 2026-06-04 (Step 4.6 scope freeze)
 - Related Modules:
   - `src/factgraph/sdk/store.py` (`_SDKFieldsManager.get` / `_active_claims_for_field`)
   - `src/factgraph/core/view/projector.py` (canonical fact sort key)

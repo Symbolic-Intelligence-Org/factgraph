@@ -9,6 +9,8 @@
 | 2026-06-04 | draft | Blueprint created (Step 4.1) | Claude draft. Scope = A2 multi-only: align `fg.fields.get` multi order to projector canonical sort via shared key; single-cardinality untouched. |
 | 2026-06-04 | draft | Step 4.2 review + tightening | Codex source-grounded review found one required scope tightening: `project_view_facts_with_witness(...)` has a second inline canonical sort key, so helper extraction must update both projector paths. Acceptance/pre-impl grep updated accordingly. |
 | 2026-06-04 | draft | Step 4.3 preflight (streamlined) | Claude. Read-only verification of both projector callsites, import-cycle, reuse, docs scope. **Verdict PASS — no blockers.** Streamlined (recorded here, no separate branch/doc) per small scope. 1 regression note (PF-5: assert on scalar multi field). |
+| 2026-06-04 | draft | Step 4.5 self-check PASS | Codex checked G/N/acceptance consistency after Step 4.3; no new findings, no stale blocker language, no scope expansion. |
+| 2026-06-04 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`. Frozen scope: A2 multi-only shared canonical key, two projector callsites, scalar multi regression, minimal docs sync; single-cardinality unchanged. |
 
 ## Decision Notes
 
