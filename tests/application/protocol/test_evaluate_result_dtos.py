@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import fields
 import unittest
 
 from factgraph.application.protocol import (
-    Claim,
     DetachedRowError,
     ErrorDTO,
     EvaluateResult,
     EvaluateRow,
-    EvidenceRef,
     Explanation,
+    ResultFingerprint,
     Rule,
 )
 from factgraph.application.protocol.common import ProtocolShapeError
@@ -25,11 +25,16 @@ from factgraph.application.protocol.evaluate_result import (
     row_id_for,
 )
 from factgraph.audit.evidence_graph import (
-    EDGE_SUPPORTS,
+    EDGE_DERIVED_BY,
+    EDGE_HAS_ATOM,
+    EDGE_SUPPORTED_BY,
+    EDGE_USES,
     EvidenceGraph,
     EvidenceNode,
+    NODE_ATOM,
     NODE_CONCLUSION,
-    NODE_PREMISE,
+    NODE_RULE,
+    NODE_RULE_EXPR,
     NODE_SEED,
 )
 from factgraph.core.derivation.candidates import CandidateSet
@@ -87,30 +92,76 @@ def _result_parts() -> tuple[str, str, str, str, str, str, str, str, str, Rule]:
 
 
 def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[str, object]) -> EvaluateRow:
-    digest = claim_digest_for("fact_triple", "Person:exists", bindings)
+    digest = claim_digest_for("fact_triple", "person_head", bindings)
     row_id = row_id_for(run_id, bindings)
-    claim = Claim(
-        kind="fact_triple",
-        name="Person:exists",
-        arguments=bindings,
-        repr="Person:exists(person)",
-        digest=digest,
-    )
-    evidence_ref = EvidenceRef(
-        ref_id=evidence_ref_id_for(result_id, row_id, digest, closed_head_digest),
-        result_id=result_id,
-        row_id=row_id,
-        fact_digest=digest,
-        closed_head_digest=closed_head_digest,
-    )
     return EvaluateRow(
         row_id=row_id,
         bindings=bindings,
-        claim=claim,
+        kind="fact_triple",
+        digest=digest,
+        closed_head_digest=closed_head_digest,
         raw_kind=None,
         bound=None,
-        evidence_ref=evidence_ref,
     )
+
+
+def _fingerprint(
+    *,
+    run_id: str,
+    expr_digest: str,
+    rule_set_digest: str,
+    view_snapshot_digest: str,
+    config_digest: str | None,
+    result_digest: str,
+) -> ResultFingerprint:
+    return ResultFingerprint(
+        expr_digest=expr_digest,
+        rule_set_digest=rule_set_digest,
+        view_snapshot_digest=view_snapshot_digest,
+        config_digest=config_digest,
+        result_digest=result_digest,
+        run_id=run_id,
+    )
+
+
+def _evaluate_result(
+    *,
+    result_id: str,
+    run_id: str,
+    rows: tuple[EvaluateRow, ...],
+    head: Rule,
+    engine: str,
+    expr_digest: str,
+    rule_set_digest: str,
+    view_snapshot_digest: str,
+    config_digest: str | None,
+    result_digest: str,
+    evaluated_at: object = "2026-05-25T00:00:00Z",
+    engine_version: str | None = None,
+    adapter_version: str | None = None,
+    **kwargs: object,
+) -> EvaluateResult:
+    return EvaluateResult(
+        result_id=result_id,
+        rows=rows,
+        head=head,
+        engine=engine,
+        evaluated_at=evaluated_at,
+        fingerprint=_fingerprint(
+            run_id=run_id,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            config_digest=config_digest,
+            result_digest=result_digest,
+        ),
+        engine_meta={"engine_version": engine_version, "adapter_version": adapter_version},
+        **kwargs,
+    )
+
+
+def _evidence_ref_id(result_id: str, row: EvaluateRow) -> str:
+    return evidence_ref_id_for(result_id, row.row_id, row.digest, row.closed_head_digest)
 
 
 def _single_row_result(
@@ -135,7 +186,7 @@ def _single_row_result(
     result_digest = result_digest_for(
         result_id=result_id,
         run_id=run_id,
-        row_digests=(_row_digest_for(row),),
+        row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
         head_id=head.id,
         head_content_digest=head_content_digest,
         engine=engine,
@@ -148,20 +199,17 @@ def _single_row_result(
     )
     row_support_artifacts = {row.row_id: support_artifact} if support_artifact is not None else None
     row_provenance_envelopes = {row.row_id: provenance_envelope} if provenance_envelope is not None else None
-    return EvaluateResult(
+    return _evaluate_result(
         result_id=result_id,
-        run_id=run_id,
         rows=(row,),
         head=head,
         engine=engine,
-        engine_version=None,
-        adapter_version=None,
         expr_digest=expr_digest,
         rule_set_digest=rule_set_digest,
         view_snapshot_digest=view_snapshot_digest,
         config_digest=config_digest,
-        evaluated_at="2026-05-25T00:00:00Z",
         result_digest=result_digest,
+        run_id=run_id,
         _row_support_artifacts=row_support_artifacts,
         _row_provenance_envelopes=row_provenance_envelopes,
     )
@@ -210,8 +258,8 @@ def _graph_with_metadata(
                 node_id=row.row_id,
                 node_kind=NODE_CONCLUSION,
                 component="evaluate.row",
-                label=row.claim.name,
-                value_summary=row.claim.repr,
+                label=result.head.id,
+                value_summary=f"{result.head.id}{dict(row.bindings)!r}",
             ),
         ),
         edges=(),
@@ -221,33 +269,72 @@ def _graph_with_metadata(
 
 
 class EvaluateResultDTOTests(unittest.TestCase):
-    def test_evidence_ref_fact_digest_must_equal_claim_digest(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
-        digest = claim_digest_for("fact_triple", "Person:exists", {"person": "p1"})
-        row_id = row_id_for(run_id, {"person": "p1"})
-        claim = Claim(
-            kind="fact_triple",
-            name="Person:exists",
-            arguments={"person": "p1"},
-            repr="Person:exists(person)",
-            digest=digest,
+    def test_evaluate_row_holds_claim_and_evidence_fields_directly(self) -> None:
+        result = _single_row_result()
+        row = result[0]
+
+        self.assertEqual(
+            {field.name for field in fields(EvaluateRow)},
+            {"row_id", "bindings", "kind", "digest", "closed_head_digest", "raw_kind", "bound", "_result_resolver"},
         )
-        evidence_ref = EvidenceRef(
-            ref_id=evidence_ref_id_for(result_id, row_id, _token("other"), closed_head_digest),
-            result_id=result_id,
-            row_id=row_id,
-            fact_digest=_token("other"),
-            closed_head_digest=closed_head_digest,
+        self.assertEqual(row.kind, "fact_triple")
+        self.assertEqual(row.digest, claim_digest_for("fact_triple", result.head.id, row.bindings))
+        self.assertEqual(row.closed_head_digest, closed_head_digest_for(result.head))
+        self.assertFalse(hasattr(row, "claim"))
+        self.assertFalse(hasattr(row, "evidence_ref"))
+
+    def test_evidence_ref_id_formula_uses_direct_row_fields(self) -> None:
+        result = _single_row_result()
+        row = result[0]
+
+        self.assertEqual(
+            evidence_ref_id_for(result.result_id, row.row_id, row.digest, row.closed_head_digest),
+            _evidence_ref_id(result.result_id, row),
         )
 
-        with self.assertRaisesRegex(ProtocolShapeError, "fact_digest"):
-            EvaluateRow(
-                row_id=row_id,
-                bindings={"person": "p1"},
-                claim=claim,
-                raw_kind=None,
-                bound=None,
-                evidence_ref=evidence_ref,
+    def test_result_fingerprint_holds_folded_result_metadata(self) -> None:
+        result = _single_row_result()
+
+        self.assertEqual(
+            {field.name for field in fields(ResultFingerprint)},
+            {"expr_digest", "rule_set_digest", "view_snapshot_digest", "config_digest", "result_digest", "run_id"},
+        )
+        self.assertEqual(result.fingerprint.run_id, _result_parts()[0])
+        self.assertEqual(result.engine_meta["engine_version"], None)
+        self.assertEqual(result.engine_meta["adapter_version"], None)
+
+    def test_evaluate_result_deprecated_flat_fields_emit_warnings(self) -> None:
+        result = _single_row_result()
+
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.run_id, result.fingerprint.run_id)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.expr_digest, result.fingerprint.expr_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.rule_set_digest, result.fingerprint.rule_set_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.view_snapshot_digest, result.fingerprint.view_snapshot_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.config_digest, result.fingerprint.config_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.result_digest, result.fingerprint.result_digest)
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.engine_version, result.engine_meta["engine_version"])
+        with self.assertWarns(DeprecationWarning):
+            self.assertEqual(result.adapter_version, result.engine_meta["adapter_version"])
+
+    def test_evaluate_result_engine_meta_requires_version_keys(self) -> None:
+        result = _single_row_result()
+
+        with self.assertRaisesRegex(ProtocolShapeError, "engine_version"):
+            EvaluateResult(
+                result_id=result.result_id,
+                rows=result.rows,
+                head=result.head,
+                engine=result.engine,
+                evaluated_at=result.evaluated_at,
+                fingerprint=result.fingerprint,
+                engine_meta={"adapter_version": None},
             )
 
     def test_evaluate_result_container_binds_live_rows(self) -> None:
@@ -267,7 +354,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         result_digest = result_digest_for(
             result_id=result_id,
             run_id=run_id,
-            row_digests=(_row_digest_for(row),),
+            row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
             head_id=head.id,
             head_content_digest=head_content_digest,
             engine=engine,
@@ -279,20 +366,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             config_digest=config_digest,
         )
 
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         self.assertEqual(len(result), 1)
@@ -306,20 +390,20 @@ class EvaluateResultDTOTests(unittest.TestCase):
         row = result.rows[0]
 
         with self.assertRaisesRegex(ProtocolShapeError, "unknown row_id"):
-            EvaluateResult(
+            _evaluate_result(
                 result_id=result.result_id,
-                run_id=result.run_id,
                 rows=(row,),
                 head=result.head,
                 engine=result.engine,
-                engine_version=result.engine_version,
-                adapter_version=result.adapter_version,
-                expr_digest=result.expr_digest,
-                rule_set_digest=result.rule_set_digest,
-                view_snapshot_digest=result.view_snapshot_digest,
-                config_digest=result.config_digest,
+                expr_digest=result.fingerprint.expr_digest,
+                rule_set_digest=result.fingerprint.rule_set_digest,
+                view_snapshot_digest=result.fingerprint.view_snapshot_digest,
+                config_digest=result.fingerprint.config_digest,
                 evaluated_at=result.evaluated_at,
-                result_digest=result.result_digest,
+                result_digest=result.fingerprint.result_digest,
+                run_id=result.fingerprint.run_id,
+                engine_version=result.engine_meta["engine_version"],  # type: ignore[arg-type]
+                adapter_version=result.engine_meta["adapter_version"],  # type: ignore[arg-type]
                 _row_provenance_envelopes={"missing-row": _problog_provenance_envelope()},
             )
 
@@ -335,7 +419,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             _single_row_result(provenance_envelope=bad_envelope)
 
     def test_detached_row_live_helper_raises(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaises(DetachedRowError):
@@ -367,7 +451,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         result_digest = result_digest_for(
             result_id=result_id,
             run_id=run_id,
-            row_digests=(_row_digest_for(row),),
+            row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
             head_id=head.id,
             head_content_digest=head.content_digest,
             engine="native",
@@ -378,20 +462,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine="native",
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         closed = result[0].close()
@@ -418,7 +499,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         result_digest = result_digest_for(
             result_id=result_id,
             run_id=run_id,
-            row_digests=(_row_digest_for(row),),
+            row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
             head_id=head.id,
             head_content_digest=head_content_digest,
             engine=engine,
@@ -429,32 +510,25 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         self.assertIsInstance(explanation.evidence, EvidenceGraph)
-        self.assertIs(explanation.claim, result[0].claim)
+        self.assertIs(explanation.row, result[0])
         self.assertEqual(explanation.result_id, result.result_id)
-        self.assertEqual(explanation.row_id, result[0].row_id)
-        self.assertEqual(explanation.evidence_ref_id, result[0].evidence_ref.ref_id)
-        self.assertEqual(explanation.raw_kind, result[0].raw_kind)
-        self.assertEqual(explanation.bound, result[0].bound)
         self.assertEqual(explanation.failure_class, None)
         self.assertEqual(explanation.checked_scope["config_digest"], config_digest)
         self.assertEqual(explanation.checked_scope["semantics_source"], "row_result")
@@ -482,9 +556,9 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertNotIn("run_id", explanation.evidence.metadata)
         self.assertEqual(explanation.evidence.metadata["result_id"], result.result_id)
         self.assertEqual(explanation.evidence.metadata["row_id"], result[0].row_id)
-        self.assertEqual(explanation.evidence.metadata["evidence_ref_id"], result[0].evidence_ref.ref_id)
-        self.assertEqual(explanation.evidence.metadata["claim_digest"], result[0].claim.digest)
-        self.assertEqual(explanation.evidence.metadata["closed_head_digest"], result[0].evidence_ref.closed_head_digest)
+        self.assertEqual(explanation.evidence.metadata["evidence_ref_id"], _evidence_ref_id(result_id, result[0]))
+        self.assertEqual(explanation.evidence.metadata["claim_digest"], result[0].digest)
+        self.assertEqual(explanation.evidence.metadata["closed_head_digest"], result[0].closed_head_digest)
         self.assertEqual(explanation.evidence.metadata["expr_digest"], expr_digest)
         self.assertEqual(explanation.evidence.metadata["rule_set_digest"], rule_set_digest)
         self.assertEqual(explanation.evidence.metadata["view_snapshot_digest"], view_snapshot_digest)
@@ -494,8 +568,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.evidence.metadata["engine_version"], None)
         self.assertEqual(explanation.evidence.metadata["adapter_version"], None)
         self.assertEqual(explanation.evidence.metadata["evaluated_at"], "2026-05-25T00:00:00Z")
-        self.assertEqual(len(explanation.evidence.nodes), 1)
-        self.assertEqual(explanation.evidence.edges, ())
+        self.assertEqual({node.node_kind for node in explanation.evidence.nodes}, {NODE_CONCLUSION, NODE_RULE_EXPR, NODE_RULE})
+        self.assertEqual({edge.edge_kind for edge in explanation.evidence.edges}, {EDGE_DERIVED_BY, EDGE_USES})
         self.assertEqual(explanation.evidence.support_kind, "evaluate_row")
 
     def test_live_row_explain_uses_native_form1_support_topology(self) -> None:
@@ -523,14 +597,19 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(root.engine_meta["explained_claim_ref"]["row_id"], result[0].row_id)
         self.assertEqual(root.engine_meta["quantitative_explanation"]["mode"], "not_applicable")
 
-        premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
+        rule_expr_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE_EXPR]
+        rule_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE]
+        atom_nodes = [node for node in graph.nodes if node.node_kind == NODE_ATOM]
         seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:c0.c0:Person:exists", "premise:c0.c1:eq"})
+        self.assertEqual(len(rule_expr_nodes), 1)
+        self.assertEqual(len(rule_nodes), 1)
+        self.assertEqual({node.node_id for node in atom_nodes}, {"atom:c0.c0:Person:exists", "atom:c0.c1:eq"})
+        self.assertTrue(all(node.engine_meta["atom_status"] == "support" for node in atom_nodes))
         self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:asrt-1"})
-        self.assertTrue(all(edge.edge_kind == EDGE_SUPPORTS for edge in graph.edges))
-        self.assertIn(("premise:c0.c0:Person:exists", result[0].row_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
+        self.assertEqual({EDGE_DERIVED_BY, EDGE_USES, EDGE_HAS_ATOM, EDGE_SUPPORTED_BY}, {edge.edge_kind for edge in graph.edges})
+        self.assertIn(("atom:c0.c0:Person:exists", rule_nodes[0].node_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
         self.assertIn(
-            ("seed:assertion:asrt-1", "premise:c0.c0:Person:exists"),
+            ("seed:assertion:asrt-1", "atom:c0.c0:Person:exists"),
             {(e.from_node_id, e.to_node_id) for e in graph.edges},
         )
 
@@ -551,7 +630,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:asrt-1"]
         self.assertEqual(
             {edge.to_node_id for edge in seed_edges},
-            {"premise:c0.c0:Person:exists", "premise:c0.c1:Person:active"},
+            {"atom:c0.c0:Person:exists", "atom:c0.c1:Person:active"},
         )
 
     def test_live_row_explain_uses_souffle_form1_support_topology(self) -> None:
@@ -599,16 +678,20 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(root.node_kind, NODE_CONCLUSION)
         self.assertEqual(root.engine_meta["alternative_paths"], {"mode": "winning_path_only", "omitted_count": None})
 
-        premise_nodes = [node for node in graph.nodes if node.node_kind == NODE_PREMISE]
+        rule_expr_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE_EXPR]
+        rule_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE]
+        atom_nodes = [node for node in graph.nodes if node.node_kind == NODE_ATOM]
         seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual({node.node_id for node in premise_nodes}, {"premise:c0.c0:Person:exists", "premise:c0.c1:eq"})
+        self.assertEqual(len(rule_expr_nodes), 1)
+        self.assertEqual(len(rule_nodes), 1)
+        self.assertEqual({node.node_id for node in atom_nodes}, {"atom:c0.c0:Person:exists", "atom:c0.c1:eq"})
         self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:souffle-asrt-1"})
         self.assertIn(
-            ("premise:c0.c0:Person:exists", result[0].row_id),
+            ("atom:c0.c0:Person:exists", rule_nodes[0].node_id),
             {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
         )
         self.assertIn(
-            ("seed:assertion:souffle-asrt-1", "premise:c0.c0:Person:exists"),
+            ("seed:assertion:souffle-asrt-1", "atom:c0.c0:Person:exists"),
             {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
         )
 
@@ -630,42 +713,36 @@ class EvaluateResultDTOTests(unittest.TestCase):
         seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:souffle-asrt-1"]
         self.assertEqual(
             {edge.to_node_id for edge in seed_edges},
-            {"premise:c0.c0:Person:exists", "premise:c0.c1:Person:active"},
+            {"atom:c0.c0:Person:exists", "atom:c0.c1:Person:active"},
         )
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
         with self.assertRaisesRegex(ProtocolShapeError, "iff"):
             Explanation(
                 status="passed",
                 evidence=None,
-                claim=row.claim,
+                row=row,
                 result_id=result_id,
-                row_id=row.row_id,
-                evidence_ref_id=row.evidence_ref.ref_id,
             )
         with self.assertRaisesRegex(ProtocolShapeError, "failure_class"):
             Explanation(
                 status="failed",
                 evidence=None,
-                claim=row.claim,
+                row=row,
                 result_id=result_id,
-                row_id=row.row_id,
-                evidence_ref_id=row.evidence_ref.ref_id,
             )
         with self.assertRaisesRegex(ProtocolShapeError, "errors"):
             Explanation(
                 status="unsupported",
                 evidence=None,
-                claim=row.claim,
+                row=row,
                 result_id=result_id,
-                row_id=row.row_id,
-                evidence_ref_id=row.evidence_ref.ref_id,
             )
 
-    def test_manual_passed_explanation_allows_no_row_back_reference(self) -> None:
+    def test_manual_explanation_uses_row_reference(self) -> None:
         run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
         row = _row(result_id, run_id, closed_head_digest, {"person": "p1"})
 
@@ -688,23 +765,18 @@ class EvaluateResultDTOTests(unittest.TestCase):
                 support_kind="evaluate_row",
                 metadata={},
             ),
-            claim=row.claim,
+            row=row,
             result_id=result_id,
-            row_id=None,
-            evidence_ref_id=None,
         )
 
         self.assertEqual(explanation.status, "passed")
-        self.assertIsNone(explanation.row_id)
-        self.assertIsNone(explanation.evidence_ref_id)
+        self.assertIs(explanation.row, row)
 
         failed = Explanation(
             status="failed",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result_id,
-            row_id=row.row_id,
-            evidence_ref_id=row.evidence_ref.ref_id,
             failure_class="no_matching_row",
             suggested_next_steps=("Retry with a closed head.",),
         )
@@ -713,10 +785,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         invalid = Explanation(
             status="invalid_request",
             evidence=None,
-            claim=None,
+            row=None,
             result_id=None,
-            row_id=None,
-            evidence_ref_id=None,
             errors=(ErrorDTO(code="INVALID_REQUEST", message="bad request"),),
         )
         self.assertEqual(invalid.errors[0].code, "INVALID_REQUEST")
@@ -739,7 +809,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         result_digest = result_digest_for(
             result_id=result_id,
             run_id=run_id,
-            row_digests=(_row_digest_for(row),),
+            row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
             head_id=head.id,
             head_content_digest=head_content_digest,
             engine=engine,
@@ -750,28 +820,26 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
         live_outside_row = EvaluateRow(
             row_id=outside_row.row_id,
             bindings=outside_row.bindings,
-            claim=outside_row.claim,
+            kind=outside_row.kind,
+            digest=outside_row.digest,
+            closed_head_digest=outside_row.closed_head_digest,
             raw_kind=outside_row.raw_kind,
             bound=outside_row.bound,
-            evidence_ref=outside_row.evidence_ref,
             _result_resolver=lambda: result,
         )
 
@@ -798,7 +866,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         result_digest = result_digest_for(
             result_id=result_id,
             run_id=run_id,
-            row_digests=(_row_digest_for(row),),
+            row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
             head_id=head.id,
             head_content_digest=head_content_digest,
             engine=engine,
@@ -809,20 +877,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
         )
-        result = EvaluateResult(
+        result = _evaluate_result(
             result_id=result_id,
-            run_id=run_id,
             rows=(row,),
             head=head,
             engine=engine,
-            engine_version=None,
-            adapter_version=None,
             expr_digest=expr_digest,
             rule_set_digest=rule_set_digest,
             view_snapshot_digest=view_snapshot_digest,
             config_digest=config_digest,
-            evaluated_at="2026-05-25T00:00:00Z",
             result_digest=result_digest,
+            run_id=run_id,
         )
 
         explanation = _explain_live_row(result[0], result, graph_builder=lambda _row, _result, _metadata: (_ for _ in ()).throw(ValueError("bad graph")))
@@ -853,7 +918,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         def _builder(row: EvaluateRow, build_result: EvaluateResult, metadata: object) -> EvidenceGraph:
             mutated = dict(metadata)  # type: ignore[arg-type]
-            mutated["run_id"] = build_result.run_id
+            mutated["run_id"] = build_result.fingerprint.run_id
             return _graph_with_metadata(row, build_result, mutated)
 
         explanation = _explain_live_row(result[0], result, graph_builder=_builder)
@@ -895,7 +960,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         result_digest = result_digest_for(
             result_id=result_id,
             run_id=run_id,
-            row_digests=(_row_digest_for(row), _row_digest_for(row)),
+            row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id), _row_digest_for(row, result_id=result_id, claim_name=head.id)),
             head_id=head.id,
             head_content_digest=head_content_digest,
             engine=engine,
@@ -908,24 +973,21 @@ class EvaluateResultDTOTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ProtocolShapeError, "duplicate row_id"):
-            EvaluateResult(
+            _evaluate_result(
                 result_id=result_id,
-                run_id=run_id,
                 rows=(row, row),
                 head=head,
                 engine=engine,
-                engine_version=None,
-                adapter_version=None,
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
                 config_digest=config_digest,
-                evaluated_at="2026-05-25T00:00:00Z",
                 result_digest=result_digest,
+                run_id=run_id,
             )
 
     def test_candidate_set_conversion_harness_keeps_candidate_internal(self) -> None:
-        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest = _result_parts()
+        run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
         candidate = CandidateSet(
             derivation_id="deriv",
             derivation_version="v1",
@@ -944,16 +1006,100 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         row = _candidate_set_to_evaluate_row(
             candidate,
+            head=head,
             result_id=result_id,
             run_id=run_id,
             closed_head_digest=closed_head_digest,
         )
 
-        self.assertEqual(dict(row.bindings), {"person": "p1"})
+        self.assertEqual(dict(row.bindings), {"person": {"kind": "const", "value": "p1"}})
         self.assertEqual(row.raw_kind, "probabilistic")
         self.assertEqual(row.bound, (0.75, 0.75))
         self.assertFalse(hasattr(row, "candidate_id"))
-        self.assertEqual(row.evidence_ref.fact_digest, row.claim.digest)
+        self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
+
+
+class RowConclusionNodeDescTests(unittest.TestCase):
+    """Conclusion node's value_summary must use Rule.render_desc when head has desc."""
+
+    def _build_result_with_head(self, head: Rule, row_bindings: dict[str, object]) -> tuple[EvaluateRow, EvaluateResult]:
+        run_id = "run_v1:" + "1" * 64
+        engine = "native"
+        expr_digest = _token("expr")
+        rule_set_digest = _token("rules")
+        view_snapshot_digest = _token("view")
+        config_digest = _token("config")
+        result_id = result_id_for(
+            run_id=run_id,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            config_digest=config_digest,
+            engine=engine,
+            head_id=head.id,
+            head_content_digest=head.content_digest,
+        )
+        closed_head_digest = closed_head_digest_for(head)
+        row = EvaluateRow(
+            row_id=row_id_for(run_id, row_bindings),
+            bindings=row_bindings,
+            kind="fact_triple",
+            digest=claim_digest_for("fact_triple", head.id, row_bindings),
+            closed_head_digest=closed_head_digest,
+            raw_kind=None,
+            bound=None,
+        )
+        result = EvaluateResult(
+            result_id=result_id,
+            rows=(row,),
+            head=head,
+            engine=engine,
+            evaluated_at="2026-06-04T00:00:00Z",
+            fingerprint=ResultFingerprint(
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                config_digest=config_digest,
+                result_digest=_token("result"),
+                run_id=run_id,
+            ),
+            engine_meta={"engine_version": "test", "adapter_version": "test"},
+        )
+        return row, result
+
+    def test_value_summary_uses_rendered_desc_when_head_has_desc(self) -> None:
+        from factgraph.application.protocol.evaluate_result import _row_conclusion_node
+
+        user_var = Var("$user")
+        head = Rule(
+            id="adults_in_us",
+            when=(PredAtom("user:region", [user_var, Const("US")]),),
+            ports={"user": user_var},
+            desc="Adult user %user lives in the US",
+        )
+        bindings = {"user": {"kind": "entity_ref", "value": "idref_v1:User:alice"}}
+        row, result = self._build_result_with_head(head, bindings)
+
+        node = _row_conclusion_node(row, result)
+
+        self.assertEqual(
+            node.value_summary,
+            "Adult user idref_v1:User:alice lives in the US",
+        )
+        self.assertEqual(node.engine_meta["desc_template"], "Adult user %user lives in the US")
+
+    def test_value_summary_falls_back_to_repr_when_head_has_no_desc(self) -> None:
+        from factgraph.application.protocol.evaluate_result import _row_conclusion_node
+
+        head = _head_rule()
+        bindings = {"person": {"kind": "entity_ref", "value": "idref_v1:Person:alice"}}
+        row, result = self._build_result_with_head(head, bindings)
+
+        node = _row_conclusion_node(row, result)
+
+        self.assertIsNone(node.engine_meta["desc_template"])
+        self.assertIn("person_head", node.value_summary)
+        self.assertNotIn("%", node.value_summary)
 
 
 if __name__ == "__main__":

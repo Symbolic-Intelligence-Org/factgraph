@@ -8,19 +8,26 @@ import math
 from types import MappingProxyType
 from typing import Any, Literal
 import uuid
+import warnings
 
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
+from factgraph.application.protocol.explanation_render import walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.audit.evidence_graph import (
-    EDGE_SUPPORTS,
+    EDGE_DERIVED_BY,
+    EDGE_HAS_ATOM,
+    EDGE_SUPPORTED_BY,
+    EDGE_USES,
     EvidenceEdge,
     EvidenceGraph,
     EvidenceNode,
+    NODE_ATOM,
     NODE_CONCLUSION,
-    NODE_PREMISE,
+    NODE_RULE,
+    NODE_RULE_EXPR,
     NODE_SEED,
 )
 from factgraph.core.derivation.candidates import CandidateSet
@@ -83,59 +90,23 @@ _FORM1_ROW_SUPPORT_KINDS = frozenset({_NATIVE_FORM1_SUPPORT_KIND, SOUFFLE_WITNES
 
 
 @dataclass(frozen=True)
-class Claim:
-    kind: ClaimKind
-    name: str
-    arguments: Mapping[str, Any]
-    repr: str
-    digest: str
-
-    def __post_init__(self) -> None:
-        if self.kind not in _CLAIM_KINDS:
-            raise ProtocolShapeError("Claim.kind must be one of fact_triple, rule_head, aggregate_result, projection")
-        _require_non_empty_str(self.name, field_name="Claim.name")
-        _require_non_empty_str(self.repr, field_name="Claim.repr")
-        _require_sha256_token(self.digest, field_name="Claim.digest")
-        object.__setattr__(self, "arguments", _freeze_mapping(self.arguments, field_name="Claim.arguments"))
-
-
-@dataclass(frozen=True)
-class EvidenceRef:
-    ref_id: str
-    result_id: str
-    row_id: str
-    fact_digest: str
-    closed_head_digest: str
-
-    def __post_init__(self) -> None:
-        _require_token_prefix(self.ref_id, prefix=_EVIDENCE_REF_ID_PREFIX, field_name="EvidenceRef.ref_id")
-        _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvidenceRef.result_id")
-        _require_non_empty_str(self.row_id, field_name="EvidenceRef.row_id")
-        _require_sha256_token(self.fact_digest, field_name="EvidenceRef.fact_digest")
-        _require_sha256_token(self.closed_head_digest, field_name="EvidenceRef.closed_head_digest")
-
-
-@dataclass(frozen=True)
 class EvaluateRow:
     row_id: str
     bindings: Mapping[str, Any]
-    claim: Claim
+    kind: ClaimKind
+    digest: str
+    closed_head_digest: str
     raw_kind: RawKind | None
     bound: tuple[float, float] | None
-    evidence_ref: EvidenceRef
     _result_resolver: Callable[[], EvaluateResult] | None = field(default=None, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.row_id, field_name="EvaluateRow.row_id")
         object.__setattr__(self, "bindings", _freeze_mapping(self.bindings, field_name="EvaluateRow.bindings"))
-        if not isinstance(self.claim, Claim):
-            raise ProtocolShapeError("EvaluateRow.claim must be Claim")
-        if not isinstance(self.evidence_ref, EvidenceRef):
-            raise ProtocolShapeError("EvaluateRow.evidence_ref must be EvidenceRef")
-        if self.evidence_ref.row_id != self.row_id:
-            raise ProtocolShapeError("EvaluateRow.evidence_ref.row_id must equal EvaluateRow.row_id")
-        if self.evidence_ref.fact_digest != self.claim.digest:
-            raise ProtocolShapeError("EvaluateRow.evidence_ref.fact_digest must equal EvaluateRow.claim.digest")
+        if self.kind not in _CLAIM_KINDS:
+            raise ProtocolShapeError("EvaluateRow.kind must be one of fact_triple, rule_head, aggregate_result, projection")
+        _require_sha256_token(self.digest, field_name="EvaluateRow.digest")
+        _require_sha256_token(self.closed_head_digest, field_name="EvaluateRow.closed_head_digest")
         if self.raw_kind is None:
             if self.bound is not None:
                 raise ProtocolShapeError("EvaluateRow.bound must be None when raw_kind is None")
@@ -159,20 +130,33 @@ class EvaluateRow:
 
 
 @dataclass(frozen=True)
-class EvaluateResult:
-    result_id: str
-    run_id: str
-    rows: tuple[EvaluateRow, ...]
-    head: Rule
-    engine: str
-    engine_version: str | None
-    adapter_version: str | None
+class ResultFingerprint:
     expr_digest: str
     rule_set_digest: str
     view_snapshot_digest: str
     config_digest: str | None
-    evaluated_at: object
     result_digest: str
+    run_id: str
+
+    def __post_init__(self) -> None:
+        _require_sha256_token(self.expr_digest, field_name="ResultFingerprint.expr_digest")
+        _require_sha256_token(self.rule_set_digest, field_name="ResultFingerprint.rule_set_digest")
+        _require_sha256_token(self.view_snapshot_digest, field_name="ResultFingerprint.view_snapshot_digest")
+        if self.config_digest is not None:
+            _require_sha256_token(self.config_digest, field_name="ResultFingerprint.config_digest")
+        _require_sha256_token(self.result_digest, field_name="ResultFingerprint.result_digest")
+        _require_token_prefix(self.run_id, prefix=_RUN_ID_PREFIX, field_name="ResultFingerprint.run_id")
+
+
+@dataclass(frozen=True)
+class EvaluateResult:
+    result_id: str
+    rows: tuple[EvaluateRow, ...]
+    head: Rule
+    engine: str
+    evaluated_at: object
+    fingerprint: ResultFingerprint
+    engine_meta: Mapping[str, Any]
     _schema_index: object | None = field(default=None, repr=False, compare=False, hash=False)
     _row_close_builder: Callable[[EvaluateRow, EvaluateResult], Rule] | None = field(
         default=None,
@@ -195,18 +179,16 @@ class EvaluateResult:
 
     def __post_init__(self) -> None:
         _require_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="EvaluateResult.result_id")
-        _require_token_prefix(self.run_id, prefix=_RUN_ID_PREFIX, field_name="EvaluateResult.run_id")
         if not isinstance(self.head, Rule):
             raise ProtocolShapeError("EvaluateResult.head must be application protocol Rule")
         _require_non_empty_str(self.engine, field_name="EvaluateResult.engine")
-        _require_optional_non_empty_str(self.engine_version, field_name="EvaluateResult.engine_version")
-        _require_optional_non_empty_str(self.adapter_version, field_name="EvaluateResult.adapter_version")
-        _require_sha256_token(self.expr_digest, field_name="EvaluateResult.expr_digest")
-        _require_sha256_token(self.rule_set_digest, field_name="EvaluateResult.rule_set_digest")
-        _require_sha256_token(self.view_snapshot_digest, field_name="EvaluateResult.view_snapshot_digest")
-        if self.config_digest is not None:
-            _require_sha256_token(self.config_digest, field_name="EvaluateResult.config_digest")
-        _require_sha256_token(self.result_digest, field_name="EvaluateResult.result_digest")
+        if not isinstance(self.fingerprint, ResultFingerprint):
+            raise ProtocolShapeError("EvaluateResult.fingerprint must be ResultFingerprint")
+        object.__setattr__(
+            self,
+            "engine_meta",
+            _validate_engine_meta(self.engine_meta, field_name="EvaluateResult.engine_meta"),
+        )
         if self._row_close_builder is not None and not callable(self._row_close_builder):
             raise ProtocolShapeError("EvaluateResult._row_close_builder must be callable or None")
 
@@ -220,8 +202,6 @@ class EvaluateResult:
             if row.row_id in seen:
                 raise ProtocolShapeError(f"EvaluateResult.rows contains duplicate row_id: {row.row_id!r}")
             seen.add(row.row_id)
-            if row.evidence_ref.result_id != self.result_id:
-                raise ProtocolShapeError("EvaluateRow.evidence_ref.result_id must equal EvaluateResult.result_id")
             bound_rows.append(replace(row, _result_resolver=lambda self_ref=self: self_ref))
         row_support_artifacts = _validate_row_support_artifacts(
             self._row_support_artifacts,
@@ -234,6 +214,46 @@ class EvaluateResult:
         object.__setattr__(self, "_row_support_artifacts", row_support_artifacts)
         object.__setattr__(self, "_row_provenance_envelopes", row_provenance_envelopes)
         object.__setattr__(self, "rows", tuple(bound_rows))
+
+    @property
+    def run_id(self) -> str:
+        _warn_deprecated_result_field("run_id", "EvaluateResult.fingerprint.run_id")
+        return self.fingerprint.run_id
+
+    @property
+    def engine_version(self) -> str | None:
+        _warn_deprecated_result_field("engine_version", "EvaluateResult.engine_meta['engine_version']")
+        return _engine_meta_optional_str(self.engine_meta, "engine_version")
+
+    @property
+    def adapter_version(self) -> str | None:
+        _warn_deprecated_result_field("adapter_version", "EvaluateResult.engine_meta['adapter_version']")
+        return _engine_meta_optional_str(self.engine_meta, "adapter_version")
+
+    @property
+    def expr_digest(self) -> str:
+        _warn_deprecated_result_field("expr_digest", "EvaluateResult.fingerprint.expr_digest")
+        return self.fingerprint.expr_digest
+
+    @property
+    def rule_set_digest(self) -> str:
+        _warn_deprecated_result_field("rule_set_digest", "EvaluateResult.fingerprint.rule_set_digest")
+        return self.fingerprint.rule_set_digest
+
+    @property
+    def view_snapshot_digest(self) -> str:
+        _warn_deprecated_result_field("view_snapshot_digest", "EvaluateResult.fingerprint.view_snapshot_digest")
+        return self.fingerprint.view_snapshot_digest
+
+    @property
+    def config_digest(self) -> str | None:
+        _warn_deprecated_result_field("config_digest", "EvaluateResult.fingerprint.config_digest")
+        return self.fingerprint.config_digest
+
+    @property
+    def result_digest(self) -> str:
+        _warn_deprecated_result_field("result_digest", "EvaluateResult.fingerprint.result_digest")
+        return self.fingerprint.result_digest
 
     def __iter__(self) -> Iterator[EvaluateRow]:
         return iter(self.rows)
@@ -258,17 +278,14 @@ class EvaluateResult:
 class Explanation:
     status: ExplanationStatus
     evidence: EvidenceGraph | None
-    claim: Claim | None
+    row: EvaluateRow | None
     result_id: str | None
-    row_id: str | None
-    evidence_ref_id: str | None
-    raw_kind: RawKind | None = None
-    bound: tuple[float, float] | None = None
     failure_class: ExplanationFailureClass | None = None
     checked_scope: Mapping[str, Any] | None = None
     suggested_next_steps: tuple[str, ...] = ()
     errors: tuple[ErrorDTO, ...] = ()
     warnings: tuple[WarningDTO, ...] = ()
+    _repr_cache: tuple[str, ...] | None = field(default=None, init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         if self.status not in _EXPLANATION_STATUSES:
@@ -277,20 +294,14 @@ class Explanation:
             raise ProtocolShapeError("Explanation.status='passed' iff Explanation.evidence is not None")
         if self.evidence is not None and not isinstance(self.evidence, EvidenceGraph):
             raise ProtocolShapeError("Explanation.evidence must be EvidenceGraph or None")
-        if self.claim is not None and not isinstance(self.claim, Claim):
-            raise ProtocolShapeError("Explanation.claim must be Claim or None")
+        if self.row is not None and not isinstance(self.row, EvaluateRow):
+            raise ProtocolShapeError("Explanation.row must be EvaluateRow or None")
 
         _require_optional_token_prefix(self.result_id, prefix=_RESULT_ID_PREFIX, field_name="Explanation.result_id")
-        _require_optional_non_empty_str(self.row_id, field_name="Explanation.row_id")
-        _require_optional_token_prefix(
-            self.evidence_ref_id,
-            prefix=_EVIDENCE_REF_ID_PREFIX,
-            field_name="Explanation.evidence_ref_id",
-        )
 
         if self.status == "passed":
-            if self.claim is None:
-                raise ProtocolShapeError("Explanation.claim is required when status is passed")
+            if self.row is None:
+                raise ProtocolShapeError("Explanation.row is required when status is passed")
             _require_non_empty_str(self.result_id, field_name="Explanation.result_id")
         if self.status == "failed":
             if self.failure_class not in _EXPLANATION_FAILURE_CLASSES:
@@ -299,14 +310,6 @@ class Explanation:
             raise ProtocolShapeError("Explanation.failure_class must be None unless status is failed")
         if self.status in {"unsupported", "invalid_request"} and not self.errors:
             raise ProtocolShapeError("Explanation.errors must be non-empty when status is unsupported or invalid_request")
-
-        if self.raw_kind is None:
-            if self.bound is not None:
-                raise ProtocolShapeError("Explanation.bound must be None when raw_kind is None")
-        else:
-            if self.raw_kind not in _RAW_KINDS:
-                raise ProtocolShapeError("Explanation.raw_kind must be probabilistic, possibilistic, or None")
-            object.__setattr__(self, "bound", _validate_bound(self.bound))
 
         if self.checked_scope is not None:
             object.__setattr__(
@@ -325,6 +328,33 @@ class Explanation:
             "warnings",
             _validate_tuple_of_type(self.warnings, WarningDTO, field_name="Explanation.warnings"),
         )
+
+    @property
+    def repr(self) -> tuple[str, ...] | None:
+        if self.status in {"unsupported", "invalid_request"}:
+            return None
+        if self._repr_cache is not None:
+            return self._repr_cache
+        if self.status == "passed":
+            assert self.evidence is not None
+            lines = walk_evidence(self.evidence, row=self.row, status=self.status, failure_class=self.failure_class)
+        else:
+            lines = _failed_explanation_repr(self)
+        object.__setattr__(self, "_repr_cache", lines)
+        return lines
+
+
+def _failed_explanation_repr(explanation: Explanation) -> tuple[str, ...]:
+    lines = ["NOT concluded"]
+    if explanation.failure_class is not None:
+        lines.append(f"failure_class: {explanation.failure_class}")
+    if explanation.result_id is not None:
+        lines.append(f"result_id: {explanation.result_id}")
+    if explanation.row is not None:
+        lines.append(f"row_id: {explanation.row.row_id}")
+    for step in explanation.suggested_next_steps:
+        lines.append(f"next_step: {step}")
+    return tuple(lines)
 
 
 def canonical_bytes_for_evaluate(*items: Any) -> bytes:
@@ -381,7 +411,7 @@ def result_id_for(
 def row_id_for(run_id: str, bindings: Mapping[str, Any]) -> str:
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
     frozen = _freeze_mapping(bindings, field_name="bindings")
-    digest = sha256_hex(canonical_bytes_for_evaluate("evaluate_row_id_v1", frozen))[:16]
+    digest = sha256_hex(canonical_bytes_for_evaluate("evaluate_row_id_v2", frozen))[:16]
     return f"{run_id}:{digest}"
 
 
@@ -390,7 +420,7 @@ def claim_digest_for(kind: ClaimKind, name: str, arguments: Mapping[str, Any]) -
         raise ProtocolShapeError("kind must be one of fact_triple, rule_head, aggregate_result, projection")
     _require_non_empty_str(name, field_name="name")
     frozen = _freeze_mapping(arguments, field_name="arguments")
-    return sha256_token(canonical_bytes_for_evaluate("evaluate_claim_v1", kind, name, frozen))
+    return sha256_token(canonical_bytes_for_evaluate("evaluate_claim_v2", kind, name, frozen))
 
 
 def closed_head_digest_for_parts(closed_head_id: str, closed_head_content_digest: str) -> str:
@@ -429,27 +459,110 @@ def evidence_ref_id_for(result_id: str, row_id: str, fact_digest: str, closed_he
     return f"{_EVIDENCE_REF_ID_PREFIX}{digest}"
 
 
-def _row_digest_for(row: EvaluateRow) -> str:
+def _warn_deprecated_result_field(field_name: str, replacement: str) -> None:
+    warnings.warn(
+        f"EvaluateResult.{field_name} is deprecated; use {replacement}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
+def _claim_name_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
     if not isinstance(row, EvaluateRow):
         raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+    return result.head.id
+
+
+def _claim_arguments_for_row(row: EvaluateRow) -> Mapping[str, Any]:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    return row.bindings
+
+
+def _legacy_candidate_payload_for_row_result(row: EvaluateRow, result: EvaluateResult) -> Mapping[str, Any]:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+    terms: list[Any] = []
+    for port_name in result.head.ports:
+        if port_name in row.bindings:
+            terms.append(row.bindings[port_name])
+            continue
+        legacy_terms = row.bindings.get("terms")
+        if isinstance(legacy_terms, Sequence):
+            port_names = tuple(result.head.ports)
+            idx = port_names.index(port_name)
+            if idx < len(legacy_terms):
+                terms.append(legacy_terms[idx])
+                continue
+        raise ProtocolShapeError(f"row binding is missing head port {port_name!r}")
+    return {"pred_id": result.head.id, "terms": terms}
+
+
+def _claim_repr_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
+    return _claim_repr_for_row_name(row, _claim_name_for_row_result(row, result))
+
+
+def _claim_repr_for_row_name(row: EvaluateRow, claim_name: str) -> str:
+    _require_non_empty_str(claim_name, field_name="claim_name")
+    return f"{claim_name}{dict(_claim_arguments_for_row(row))!r}"
+
+
+def _evidence_ref_result_id_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    if not isinstance(result, EvaluateResult):
+        raise ProtocolShapeError("result must be EvaluateResult")
+    return result.result_id
+
+
+def _evidence_ref_row_id_for_row(row: EvaluateRow) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    return row.row_id
+
+
+def _evidence_ref_fact_digest_for_row(row: EvaluateRow) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    return row.digest
+
+
+def _evidence_ref_id_for_row_result(row: EvaluateRow, result: EvaluateResult) -> str:
+    return evidence_ref_id_for(
+        _evidence_ref_result_id_for_row_result(row, result),
+        _evidence_ref_row_id_for_row(row),
+        _evidence_ref_fact_digest_for_row(row),
+        row.closed_head_digest,
+    )
+
+
+def _row_digest_for(row: EvaluateRow, *, result_id: str, claim_name: str) -> str:
+    if not isinstance(row, EvaluateRow):
+        raise ProtocolShapeError("row must be EvaluateRow")
+    _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
+    _require_non_empty_str(claim_name, field_name="claim_name")
     return sha256_token(
         canonical_bytes_for_evaluate(
-            "evaluate_row_digest_v1",
+            "evaluate_row_digest_v2",
             {
                 "bindings": row.bindings,
                 "bound": row.bound,
                 "claim": {
-                    "arguments": row.claim.arguments,
-                    "digest": row.claim.digest,
-                    "kind": row.claim.kind,
-                    "name": row.claim.name,
-                    "repr": row.claim.repr,
+                    "arguments": _claim_arguments_for_row(row),
+                    "digest": row.digest,
+                    "kind": row.kind,
+                    "name": claim_name,
+                    "repr": _claim_repr_for_row_name(row, claim_name),
                 },
                 "evidence_ref": {
-                    "closed_head_digest": row.evidence_ref.closed_head_digest,
-                    "fact_digest": row.evidence_ref.fact_digest,
-                    "result_id": row.evidence_ref.result_id,
-                    "row_id": row.evidence_ref.row_id,
+                    "closed_head_digest": row.closed_head_digest,
+                    "fact_digest": _evidence_ref_fact_digest_for_row(row),
+                    "result_id": result_id,
+                    "row_id": _evidence_ref_row_id_for_row(row),
                 },
                 "raw_kind": row.raw_kind,
                 "row_id": row.row_id,
@@ -565,6 +678,7 @@ def rule_set_digest_for_entries(entries: Iterable[tuple[str, str]]) -> str:
 def _candidate_set_to_evaluate_row(
     candidate: CandidateSet,
     *,
+    head: Rule,
     result_id: str,
     run_id: str,
     closed_head_digest: str,
@@ -573,35 +687,24 @@ def _candidate_set_to_evaluate_row(
 ) -> EvaluateRow:
     if not isinstance(candidate, CandidateSet):
         raise ProtocolShapeError("candidate must be CandidateSet")
+    if not isinstance(head, Rule):
+        raise ProtocolShapeError("head must be application protocol Rule")
     _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
     _require_token_prefix(run_id, prefix=_RUN_ID_PREFIX, field_name="run_id")
     _require_sha256_token(closed_head_digest, field_name="closed_head_digest")
-    bindings = _bindings_from_candidate(candidate)
+    bindings = _bindings_from_candidate(candidate, head=head)
     effective_claim_name = candidate.target if claim_name is None else claim_name
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
-    claim = Claim(
-        kind=claim_kind,
-        name=effective_claim_name,
-        arguments=bindings,
-        repr=f"{effective_claim_name}{dict(bindings)!r}",
-        digest=digest,
-    )
     row_id = row_id_for(run_id, bindings)
-    evidence_ref = EvidenceRef(
-        ref_id=evidence_ref_id_for(result_id, row_id, digest, closed_head_digest),
-        result_id=result_id,
-        row_id=row_id,
-        fact_digest=digest,
-        closed_head_digest=closed_head_digest,
-    )
     raw_kind, bound = _raw_kind_and_bound_from_candidate(candidate)
     return EvaluateRow(
         row_id=row_id,
         bindings=bindings,
-        claim=claim,
+        kind=claim_kind,
+        digest=digest,
+        closed_head_digest=closed_head_digest,
         raw_kind=raw_kind,
         bound=bound,
-        evidence_ref=evidence_ref,
     )
 
 
@@ -622,12 +725,8 @@ def _explain_live_row(
         return Explanation(
             status="failed",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result.result_id,
-            row_id=row.row_id,
-            evidence_ref_id=row.evidence_ref.ref_id,
-            raw_kind=row.raw_kind,
-            bound=row.bound,
             failure_class="row_not_in_result",
             checked_scope=checked_scope,
             suggested_next_steps=("Re-evaluate the expression and explain a row from the returned result.",),
@@ -637,12 +736,8 @@ def _explain_live_row(
         return Explanation(
             status="failed",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result.result_id,
-            row_id=row.row_id,
-            evidence_ref_id=row.evidence_ref.ref_id,
-            raw_kind=row.raw_kind,
-            bound=row.bound,
             failure_class="stale_row",
             checked_scope=checked_scope,
             suggested_next_steps=("Use a row from the current EvaluateResult before calling explain().",),
@@ -658,12 +753,8 @@ def _explain_live_row(
         return Explanation(
             status="unsupported",
             evidence=None,
-            claim=row.claim,
+            row=row,
             result_id=result.result_id,
-            row_id=row.row_id,
-            evidence_ref_id=row.evidence_ref.ref_id,
-            raw_kind=row.raw_kind,
-            bound=row.bound,
             checked_scope=checked_scope,
             errors=(
                 ErrorDTO(
@@ -677,12 +768,8 @@ def _explain_live_row(
     return Explanation(
         status="passed",
         evidence=evidence,
-        claim=row.claim,
+        row=row,
         result_id=result.result_id,
-        row_id=row.row_id,
-        evidence_ref_id=row.evidence_ref.ref_id,
-        raw_kind=row.raw_kind,
-        bound=row.bound,
         checked_scope=checked_scope,
     )
 
@@ -748,7 +835,7 @@ def _build_closed_head_from_row(
 
 def _binding_value_for_head_port(row: EvaluateRow, head: Rule, port_name: str) -> object:
     if port_name in row.bindings:
-        return row.bindings[port_name]
+        return _public_term_value(row.bindings[port_name])
     terms = row.bindings.get("terms")
     if isinstance(terms, Sequence):
         port_names = tuple(head.ports)
@@ -844,13 +931,110 @@ def _entity_info_for_close(schema_index: object | None, entity_type: str) -> obj
 def _row_anchor_matches(left: EvaluateRow, right: EvaluateRow, result: EvaluateResult) -> bool:
     return (
         left.row_id == right.row_id
-        and left.claim.digest == right.claim.digest
-        and left.evidence_ref.ref_id == right.evidence_ref.ref_id
-        and left.evidence_ref.result_id == result.result_id
-        and left.evidence_ref.row_id == left.row_id
-        and left.evidence_ref.fact_digest == left.claim.digest
-        and left.evidence_ref.closed_head_digest == right.evidence_ref.closed_head_digest
+        and left.digest == right.digest
+        and _evidence_ref_id_for_row_result(left, result) == _evidence_ref_id_for_row_result(right, result)
+        and left.closed_head_digest == right.closed_head_digest
     )
+
+
+def _layered_shell_ids(row: EvaluateRow, result: EvaluateResult) -> tuple[str, str, str]:
+    rule_expr_id = f"rule_expr:{row.row_id}"
+    rule_id = f"rule:{row.row_id}:{result.head.id}"
+    atom_prefix = f"atom:{row.row_id}"
+    return rule_expr_id, rule_id, atom_prefix
+
+
+def _row_conclusion_node(row: EvaluateRow, result: EvaluateResult, *, support_artifact: ProofReceipt | None = None) -> EvidenceNode:
+    public_bindings = {
+        port_name: _public_term_value(term)
+        for port_name, term in row.bindings.items()
+    }
+    rendered_desc = result.head.render_desc(public_bindings) if result.head.desc is not None else ""
+    engine_meta: dict[str, Any] = {
+        "rule_id": result.head.id,
+        "is_head": True,
+        "explained_claim_ref": {
+            "row_id": row.row_id,
+            "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
+            "claim_digest": row.digest,
+            "claim_repr_cache": _claim_repr_for_row_result(row, result),
+        },
+        "quantitative_explanation": _quantitative_explanation_for_row(row),
+        "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
+        "bindings": dict(row.bindings),
+        "desc_template": result.head.desc,
+        "content_digest": result.head.content_digest,
+        "version": result.head.version,
+        "raw_kind": row.raw_kind,
+        "bound": row.bound,
+    }
+    if support_artifact is not None:
+        engine_meta["support_root_result_kind"] = support_artifact.root_result_kind
+    return EvidenceNode(
+        node_id=row.row_id,
+        node_kind=NODE_CONCLUSION,
+        component=result.head.id,
+        label=_claim_name_for_row_result(row, result),
+        value_summary=rendered_desc or _claim_repr_for_row_result(row, result),
+        engine_meta=engine_meta,
+    )
+
+
+def _row_rule_expr_node(row: EvaluateRow, result: EvaluateResult) -> EvidenceNode:
+    rule_expr_id, _rule_id, _atom_prefix = _layered_shell_ids(row, result)
+    return EvidenceNode(
+        node_id=rule_expr_id,
+        node_kind=NODE_RULE_EXPR,
+        component=result.head.id,
+        label=f"RuleExpr {result.head.id}",
+        value_summary="single rule expression",
+        engine_meta={"ast_form": "single", "rule_id": result.head.id, "row_id": row.row_id},
+    )
+
+
+def _row_rule_node(row: EvaluateRow, result: EvaluateResult) -> EvidenceNode:
+    _rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
+    return EvidenceNode(
+        node_id=rule_id,
+        node_kind=NODE_RULE,
+        component=result.head.id,
+        label=f"Rule {result.head.id}",
+        value_summary=result.head.id,
+        engine_meta={
+            "rule_id": result.head.id,
+            "content_digest": result.head.content_digest,
+            "version": result.head.version,
+            "row_id": row.row_id,
+        },
+    )
+
+
+def _row_shell_nodes(row: EvaluateRow, result: EvaluateResult, *, support_artifact: ProofReceipt | None = None) -> list[EvidenceNode]:
+    return [
+        _row_conclusion_node(row, result, support_artifact=support_artifact),
+        _row_rule_expr_node(row, result),
+        _row_rule_node(row, result),
+    ]
+
+
+def _row_shell_edges(row: EvaluateRow, result: EvaluateResult) -> list[EvidenceEdge]:
+    rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
+    return [
+        EvidenceEdge(
+            edge_id=f"edge:{rule_expr_id}->{row.row_id}:derived_by",
+            from_node_id=rule_expr_id,
+            to_node_id=row.row_id,
+            edge_kind=EDGE_DERIVED_BY,
+            rule_label=result.head.id,
+        ),
+        EvidenceEdge(
+            edge_id=f"edge:{rule_id}->{rule_expr_id}:uses",
+            from_node_id=rule_id,
+            to_node_id=rule_expr_id,
+            edge_kind=EDGE_USES,
+            rule_label=result.head.id,
+        ),
+    ]
 
 
 def _build_passed_row_evidence_graph(
@@ -865,19 +1049,12 @@ def _build_passed_row_evidence_graph(
     support_artifact = result._row_support_artifacts.get(row.row_id)
     if support_artifact is not None:
         return _build_form1_evidence_graph(row, result, metadata, support_artifact)
-    node = EvidenceNode(
-        node_id=row.row_id,
-        node_kind=NODE_CONCLUSION,
-        component="evaluate.row",
-        label=row.claim.name,
-        value_summary=row.claim.repr,
-    )
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
         engine=result.engine,
         root_node_id=row.row_id,
-        nodes=(node,),
-        edges=(),
+        nodes=tuple(_row_shell_nodes(row, result)),
+        edges=tuple(_row_shell_edges(row, result)),
         support_kind="evaluate_row",
         metadata=metadata,
     )
@@ -898,13 +1075,13 @@ def _build_problog_provenance_row_evidence_graph(
     candidate_graph = problog_trace_to_evidence_graph(
         trace,
         candidate_id=provenance_envelope.candidate_id,
-        candidate_payload=dict(row.bindings),
+        candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
         support_kind=PROBLOG_PROVENANCE_KIND,
     )
     uncertainty_projection = _problog_uncertainty_projection_meta(payload)
     trace_summary = _problog_trace_summary(candidate_graph, uncertainty_projection)
 
-    nodes = tuple(
+    trace_nodes = tuple(
         EvidenceNode(
             node_id=node.node_id,
             node_kind=node.node_kind,
@@ -920,7 +1097,7 @@ def _build_problog_provenance_row_evidence_graph(
         )
         for node in candidate_graph.nodes
     )
-    edges = tuple(
+    trace_edges = tuple(
         EvidenceEdge(
             edge_id=edge.edge_id,
             from_node_id=edge.from_node_id,
@@ -931,12 +1108,51 @@ def _build_problog_provenance_row_evidence_graph(
         )
         for edge in candidate_graph.edges
     )
+    _rule_expr_id, rule_id, atom_prefix = _layered_shell_ids(row, result)
+    atom_id = f"{atom_prefix}:problog"
+    shell_nodes = _row_shell_nodes(row, result)
+    shell_nodes.append(
+        EvidenceNode(
+            node_id=atom_id,
+            node_kind=NODE_ATOM,
+            component=f"{result.head.id}:problog",
+            label="ProbLog proof trace",
+            value_summary="proof trace",
+            engine_meta={
+                "atom_kind": "problog_trace",
+                "atom_status": "support",
+                "atom_index": 0,
+                "parent_rule_id": result.head.id,
+                "trace_root_node_id": candidate_graph.root_node_id,
+            },
+        )
+    )
+    shell_edges = _row_shell_edges(row, result)
+    shell_edges.append(
+        EvidenceEdge(
+            edge_id=f"edge:{atom_id}->{rule_id}:has_atom",
+            from_node_id=atom_id,
+            to_node_id=rule_id,
+            edge_kind=EDGE_HAS_ATOM,
+            rule_label=result.head.id,
+        )
+    )
+    shell_edges.append(
+        EvidenceEdge(
+            edge_id=f"edge:{candidate_graph.root_node_id}->{atom_id}:supported_by",
+            from_node_id=candidate_graph.root_node_id,
+            to_node_id=atom_id,
+            edge_kind=EDGE_SUPPORTED_BY,
+            rule_label=result.head.id,
+            engine_meta={"problog": {"trace_bridge": True}},
+        )
+    )
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
         engine=result.engine,
-        root_node_id=candidate_graph.root_node_id,
-        nodes=nodes,
-        edges=edges,
+        root_node_id=row.row_id,
+        nodes=tuple((*shell_nodes, *trace_nodes)),
+        edges=tuple((*shell_edges, *trace_edges)),
         support_kind=PROBLOG_PROVENANCE_KIND,
         layout_hint=candidate_graph.layout_hint,
         metadata=metadata,
@@ -998,62 +1214,45 @@ def _build_form1_evidence_graph(
         supported = ", ".join(sorted(_FORM1_ROW_SUPPORT_KINDS))
         raise ValueError(f"Form 1 row evidence requires support kind in {{{supported}}}")
 
-    nodes: list[EvidenceNode] = [
-        EvidenceNode(
-            node_id=row.row_id,
-            node_kind=NODE_CONCLUSION,
-            component=result.head.id,
-            label=row.claim.name,
-            value_summary=row.claim.repr,
-            engine_meta={
-                "rule_id": result.head.id,
-                "is_head": True,
-                "explained_claim_ref": {
-                    "row_id": row.row_id,
-                    "evidence_ref_id": row.evidence_ref.ref_id,
-                    "claim_digest": row.claim.digest,
-                    "claim_repr_cache": row.claim.repr,
-                },
-                "quantitative_explanation": _quantitative_explanation_for_row(row),
-                "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
-                "bindings": dict(row.bindings),
-                "desc_template": None,
-                "content_digest": result.head.content_digest,
-                "version": result.head.version,
-                "raw_kind": row.raw_kind,
-                "bound": row.bound,
-                "support_root_result_kind": support_artifact.root_result_kind,
-            },
-        )
-    ]
-    edges: list[EvidenceEdge] = []
+    nodes = _row_shell_nodes(row, result, support_artifact=support_artifact)
+    edges = _row_shell_edges(row, result)
     seed_node_ids: set[str] = set()
+    _rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
 
-    def _append_edge(from_node_id: str, to_node_id: str, *, label: str | None, index: int) -> None:
+    def _append_edge(
+        from_node_id: str,
+        to_node_id: str,
+        *,
+        edge_kind: str,
+        label: str | None,
+        index: int,
+    ) -> None:
         edges.append(
             EvidenceEdge(
                 edge_id=f"edge:{from_node_id}->{to_node_id}:{index}",
                 from_node_id=from_node_id,
                 to_node_id=to_node_id,
-                edge_kind=EDGE_SUPPORTS,
+                edge_kind=edge_kind,
                 rule_label=label,
             )
         )
 
     edge_index = 0
     for witness in support_artifact.pred_witnesses:
-        premise_id = f"premise:{witness.pred_condition_key}"
+        atom_id = f"atom:{witness.pred_condition_key}"
         pred_id = _pred_id_from_atom_key(witness.pred_condition_key)
         nodes.append(
             EvidenceNode(
-                node_id=premise_id,
-                node_kind=NODE_PREMISE,
+                node_id=atom_id,
+                node_kind=NODE_ATOM,
                 component=witness.pred_condition_key,
                 label=f"Predicate witness {pred_id}",
                 value_summary="satisfied",
                 engine_meta={
                     "atom_id": witness.pred_condition_key,
                     "atom_kind": "pred",
+                    "atom_status": "support",
+                    "atom_index": _condition_index_from_key(witness.pred_condition_key),
                     "condition_index": _condition_index_from_key(witness.pred_condition_key),
                     "parent_rule_id": result.head.id,
                     "reason": {
@@ -1067,7 +1266,7 @@ def _build_form1_evidence_graph(
             )
         )
         edge_index += 1
-        _append_edge(premise_id, row.row_id, label=result.head.id, index=edge_index)
+        _append_edge(atom_id, rule_id, edge_kind=EDGE_HAS_ATOM, label=result.head.id, index=edge_index)
         for asrt_id in witness.asrt_ids:
             seed_id = f"seed:assertion:{asrt_id}"
             if seed_id not in seed_node_ids:
@@ -1083,20 +1282,23 @@ def _build_form1_evidence_graph(
                 )
                 seed_node_ids.add(seed_id)
             edge_index += 1
-            _append_edge(seed_id, premise_id, label=None, index=edge_index)
+            _append_edge(seed_id, atom_id, edge_kind=EDGE_SUPPORTED_BY, label=None, index=edge_index)
 
     for step in support_artifact.non_fact_steps:
-        premise_id = f"premise:{step.step_key}"
+        atom_id = f"atom:{step.step_key}"
+        atom_status = "support" if step.status == "satisfied" else "unknown"
         nodes.append(
             EvidenceNode(
-                node_id=premise_id,
-                node_kind=NODE_PREMISE,
+                node_id=atom_id,
+                node_kind=NODE_ATOM,
                 component=step.step_key,
                 label=f"{step.kind} check",
                 value_summary=step.status,
                 engine_meta={
                     "atom_id": step.step_key,
                     "atom_kind": step.kind,
+                    "atom_status": atom_status,
+                    "atom_index": _condition_index_from_key(step.step_key),
                     "condition_index": _condition_index_from_key(step.step_key),
                     "parent_rule_id": result.head.id,
                     "reason": {
@@ -1110,7 +1312,7 @@ def _build_form1_evidence_graph(
             )
         )
         edge_index += 1
-        _append_edge(premise_id, row.row_id, label=result.head.id, index=edge_index)
+        _append_edge(atom_id, rule_id, edge_kind=EDGE_HAS_ATOM, label=result.head.id, index=edge_index)
 
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
@@ -1154,20 +1356,21 @@ def _evidence_metadata_for_row_result(row: EvaluateRow, result: EvaluateResult) 
 
 
 def _evidence_metadata_payload_for_row_result(row: EvaluateRow, result: EvaluateResult) -> dict[str, Any]:
+    fingerprint = result.fingerprint
     return {
         "result_id": result.result_id,
         "row_id": row.row_id,
-        "evidence_ref_id": row.evidence_ref.ref_id,
-        "claim_digest": row.claim.digest,
-        "closed_head_digest": row.evidence_ref.closed_head_digest,
-        "expr_digest": result.expr_digest,
-        "rule_set_digest": result.rule_set_digest,
-        "view_snapshot_digest": result.view_snapshot_digest,
-        "config_digest": result.config_digest,
-        "result_digest": result.result_digest,
+        "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
+        "claim_digest": row.digest,
+        "closed_head_digest": row.closed_head_digest,
+        "expr_digest": fingerprint.expr_digest,
+        "rule_set_digest": fingerprint.rule_set_digest,
+        "view_snapshot_digest": fingerprint.view_snapshot_digest,
+        "config_digest": fingerprint.config_digest,
+        "result_digest": fingerprint.result_digest,
         "engine": result.engine,
-        "engine_version": result.engine_version,
-        "adapter_version": result.adapter_version,
+        "engine_version": _engine_meta_optional_str(result.engine_meta, "engine_version"),
+        "adapter_version": _engine_meta_optional_str(result.engine_meta, "adapter_version"),
         "evaluated_at": _metadata_value(result.evaluated_at),
     }
 
@@ -1240,19 +1443,20 @@ def _validate_row_provenance_envelopes(
 
 
 def _checked_scope_for_row_result(result: EvaluateResult, row: EvaluateRow) -> Mapping[str, Any]:
+    fingerprint = result.fingerprint
     return _freeze_mapping(
         {
-            "config_digest": result.config_digest,
+            "config_digest": fingerprint.config_digest,
             "semantics_source": "row_result",
-            "evaluate_config_digest": result.config_digest,
-            "explain_config_digest": result.config_digest,
+            "evaluate_config_digest": fingerprint.config_digest,
+            "explain_config_digest": fingerprint.config_digest,
             "semantics_match": True,
             "result_id": result.result_id,
             "row_id": row.row_id,
-            "expr_digest": result.expr_digest,
-            "rule_set_digest": result.rule_set_digest,
-            "view_snapshot_digest": result.view_snapshot_digest,
-            "closed_head_digest": row.evidence_ref.closed_head_digest,
+            "expr_digest": fingerprint.expr_digest,
+            "rule_set_digest": fingerprint.rule_set_digest,
+            "view_snapshot_digest": fingerprint.view_snapshot_digest,
+            "closed_head_digest": row.closed_head_digest,
         },
         field_name="Explanation.checked_scope",
     )
@@ -1266,9 +1470,19 @@ def _metadata_value(value: Any) -> Any:
     return str(value)
 
 
-def _bindings_from_candidate(candidate: CandidateSet) -> Mapping[str, Any]:
+def _bindings_from_candidate(candidate: CandidateSet, *, head: Rule) -> Mapping[str, Any]:
+    if not isinstance(head, Rule):
+        raise ProtocolShapeError("head must be application protocol Rule")
     payload = candidate.payload
-    maybe_bindings = payload.get("bindings") if isinstance(payload, Mapping) else None
+    if not isinstance(payload, Mapping):
+        raise ProtocolShapeError("candidate.payload must be mapping")
+    terms = payload.get("terms")
+    port_names = tuple(head.ports)
+    if isinstance(terms, Sequence) and not isinstance(terms, (str, bytes)):
+        if len(terms) < len(port_names):
+            raise ProtocolShapeError("candidate.payload.terms must align with head ports")
+        return _freeze_mapping(dict(zip(port_names, terms[: len(port_names)])), field_name="candidate.payload.terms")
+    maybe_bindings = payload.get("bindings")
     if isinstance(maybe_bindings, Mapping):
         return _freeze_mapping(maybe_bindings, field_name="candidate.payload.bindings")
     return _freeze_mapping(payload, field_name="candidate.payload")
@@ -1293,6 +1507,22 @@ def _freeze_mapping(value: Mapping[str, Any], *, field_name: str) -> Mapping[str
         _require_non_empty_str(key, field_name=f"{field_name}.<key>")
         frozen[key] = item
     return MappingProxyType(dict(frozen))
+
+
+def _validate_engine_meta(value: Mapping[str, Any], *, field_name: str) -> Mapping[str, Any]:
+    frozen = dict(_freeze_mapping(value, field_name=field_name))
+    for key in ("engine_version", "adapter_version"):
+        if key not in frozen:
+            raise ProtocolShapeError(f"{field_name} must contain {key!r}")
+        _require_optional_non_empty_str(frozen[key], field_name=f"{field_name}[{key!r}]")
+    return MappingProxyType(frozen)
+
+
+def _engine_meta_optional_str(engine_meta: Mapping[str, Any], key: str) -> str | None:
+    if key not in engine_meta:
+        raise ProtocolShapeError(f"EvaluateResult.engine_meta must contain {key!r}")
+    value = engine_meta[key]
+    return _require_optional_non_empty_str(value, field_name=f"EvaluateResult.engine_meta[{key!r}]")
 
 
 def _validate_bound(value: tuple[float, float] | None) -> tuple[float, float]:
@@ -1396,12 +1626,10 @@ def _validate_tuple_of_type(value: object, item_type: type[Any], *, field_name: 
 
 
 __all__ = [
-    "Claim",
     "DetachedRowError",
     "Explanation",
     "EvaluateResult",
     "EvaluateRow",
-    "EvidenceRef",
     "canonical_bytes_for_evaluate",
     "claim_digest_for",
     "closed_head_digest_for",
@@ -1411,6 +1639,7 @@ __all__ = [
     "new_run_id",
     "result_digest_for",
     "result_id_for",
+    "ResultFingerprint",
     "row_id_for",
     "rule_set_digest_for_entries",
     "config_digest_for",

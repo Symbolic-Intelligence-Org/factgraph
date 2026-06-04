@@ -39,6 +39,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.evaluate_result import (
     EvaluateResult,
+    ResultFingerprint,
     _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
     _candidate_set_to_evaluate_row,
@@ -1389,6 +1390,27 @@ class _SDKAuditManager:
         return self._sdk._diff_proof_frames(*args, **kwargs)
 
 
+class _SDKMetaManager:
+    """Read-only namespace for runtime introspection.
+
+    Currently exposes `capabilities()` reporting which value-kinds,
+    scalar tags, and cardinalities the shipped runtime accepts. All
+    values are mirrored from shipped constants — see
+    `factgraph.application.capabilities`.
+    """
+
+    def __init__(self, sdk: "SDKStore") -> None:
+        object.__setattr__(self, "_sdk", sdk)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenSnapshotError("FactGraph.meta namespace is read-only")
+
+    def capabilities(self) -> Mapping[str, frozenset[str]]:
+        from factgraph.application.capabilities import compute_capabilities
+
+        return compute_capabilities()
+
+
 class _SDKPackageManager:
     """Read-only namespace manager for the `package` taxonomy group."""
 
@@ -1582,6 +1604,7 @@ class SDKStore:
         self._inferences_manager = _SDKInferencesManager(self)
         self._eval_manager = _SDKEvalManager(self)
         self._audit_manager = _SDKAuditManager(self)
+        self._meta_manager = _SDKMetaManager(self)
         self._package_manager = _SDKPackageManager(self)
         self._default_row_format = default_row_format
         # Read once at init time; do not re-read env on each run().
@@ -1878,6 +1901,11 @@ class SDKStore:
     def audit(self) -> _SDKAuditManager:
         """`audit` taxonomy namespace exposing ``explain`` / ``conflicts`` / ``diff_proof_frames``."""
         return self._audit_manager
+
+    @property
+    def meta(self) -> _SDKMetaManager:
+        """`meta` namespace exposing read-only runtime introspection (`capabilities()`)."""
+        return self._meta_manager
 
     @property
     def package(self) -> _SDKPackageManager:
@@ -2492,10 +2520,8 @@ class SDKStore:
             return Explanation(
                 status="failed",
                 evidence=None,
-                claim=None,
+                row=None,
                 result_id=result.result_id,
-                row_id=None,
-                evidence_ref_id=None,
                 failure_class="closed_head_false",
                 checked_scope=checked_scope,
                 suggested_next_steps=("Re-evaluate with a closed head that matches at least one result row.",),
@@ -2505,12 +2531,8 @@ class SDKStore:
         return Explanation(
             status=row_explanation.status,
             evidence=row_explanation.evidence,
-            claim=row_explanation.claim,
+            row=row_explanation.row,
             result_id=result.result_id,
-            row_id=None,
-            evidence_ref_id=None,
-            raw_kind=row_explanation.raw_kind,
-            bound=row_explanation.bound,
             failure_class=row_explanation.failure_class,
             checked_scope=checked_scope,
             suggested_next_steps=row_explanation.suggested_next_steps,
@@ -2525,16 +2547,17 @@ class SDKStore:
             raise RuleExprError(f"manual explain head must be closed; unbound ports: {missing}")
 
     def _manual_explain_checked_scope(self, result: EvaluateResult, *, closed_head: ApplicationRule) -> Mapping[str, Any]:
+        fingerprint = result.fingerprint
         return {
-            "config_digest": result.config_digest,
+            "config_digest": fingerprint.config_digest,
             "semantics_source": "manual_standalone",
             "evaluate_config_digest": None,
-            "explain_config_digest": result.config_digest,
+            "explain_config_digest": fingerprint.config_digest,
             "semantics_match": None,
             "result_id": result.result_id,
-            "expr_digest": result.expr_digest,
-            "rule_set_digest": result.rule_set_digest,
-            "view_snapshot_digest": result.view_snapshot_digest,
+            "expr_digest": fingerprint.expr_digest,
+            "rule_set_digest": fingerprint.rule_set_digest,
+            "view_snapshot_digest": fingerprint.view_snapshot_digest,
             "closed_head_digest": closed_head_digest_for(closed_head),
         }
 
@@ -2694,15 +2717,17 @@ class SDKStore:
             rows = tuple(
                 _candidate_set_to_evaluate_row(
                     candidate,
+                    head=head,
                     result_id=result_id,
                     run_id=run_id,
                     closed_head_digest=closed_head_digest,
+                    claim_name=head.id,
                 )
                 for candidate in candidates
             )
             row_support_artifacts = self._row_support_artifacts_for_candidates(candidates, rows)
             row_provenance_envelopes = self._row_provenance_envelopes_for_candidates(candidates, rows)
-            row_digests = tuple(_row_digest_for(row) for row in rows)
+            row_digests = tuple(_row_digest_for(row, result_id=result_id, claim_name=head.id) for row in rows)
             result_digest = result_digest_for(
                 result_id=result_id,
                 run_id=run_id,
@@ -2717,20 +2742,22 @@ class SDKStore:
                 view_snapshot_digest=view_snapshot_digest,
                 config_digest=config_digest,
             )
-            return EvaluateResult(
-                result_id=result_id,
-                run_id=run_id,
-                rows=rows,
-                head=head,
-                engine=engine,
-                engine_version=None,
-                adapter_version=None,
+            fingerprint = ResultFingerprint(
                 expr_digest=expr_digest,
                 rule_set_digest=rule_set_digest,
                 view_snapshot_digest=view_snapshot_digest,
                 config_digest=config_digest,
-                evaluated_at=datetime.now(timezone.utc),
                 result_digest=result_digest,
+                run_id=run_id,
+            )
+            return EvaluateResult(
+                result_id=result_id,
+                rows=rows,
+                head=head,
+                engine=engine,
+                evaluated_at=datetime.now(timezone.utc),
+                fingerprint=fingerprint,
+                engine_meta={"engine_version": None, "adapter_version": None},
                 _schema_index=self._application_schema_index,
                 _row_close_builder=self._close_evaluate_row,
                 _row_support_artifacts=row_support_artifacts,

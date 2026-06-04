@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`fg.meta.capabilities()` runtime introspection** is shipped: new read-only
+  `fg.meta` namespace exposing `capabilities()` which returns a frozen
+  `MappingProxyType` of `frozenset[str]` reporting runtime-accepted
+  enumerations (`value_kinds`, `scalar_tags`, `cardinalities`) mirrored from
+  shipped constants. Application-layer source of truth at
+  `factgraph.application.capabilities.compute_capabilities`; SDK shell is a
+  thin lazy-import delegator. Documented in
+  [`docs/quickstart/capabilities.md`](docs/quickstart/capabilities.md).
 - **RuleExpr OR matching is shipped** for `fg.read.match(...)`, including
   mixed AND/OR rule expressions, distributed port constraints, cross-branch
   de-duplication, and limit-after-union behavior.
@@ -81,6 +89,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`Explanation.repr` conclusion line now auto-renders `Rule.desc`** when the
+  rule head sets `desc=` template. `_row_conclusion_node` calls
+  `head.render_desc(row.bindings)` and stores the rendered string as the
+  conclusion node's `value_summary`; falls back to `head.id + repr(bindings)`
+  when `head.desc is None`. The conclusion node's
+  `engine_meta["desc_template"]` now carries `head.desc` instead of being
+  hardcoded `None`. Closes the actual D21 §6.6 path C deferred-work item;
+  the wire from `_row_conclusion_node` to `Rule.render_desc` was missing
+  prior to this release.
 - **Adapter module docs are aligned with shipped semantics**: ProbLog adapter
   docs now cover C76 `uncertainty_projection`, raw `raw_kind` / `bound`
   projection, and T8-C-1 row provenance graphs; PyReason adapter docs now cover
