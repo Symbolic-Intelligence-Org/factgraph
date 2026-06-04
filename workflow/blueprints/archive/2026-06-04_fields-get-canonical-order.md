@@ -105,4 +105,4 @@ This guarantees `fields.get` multi order == snapshot order by construction (same
 
 **Deferred follow-up:** single-cardinality `fields.get` alignment to `compute_chosen_for_predicate` (the "A2-full" option) remains out of scope — recorded in audit Decision Notes.
 
-**Archive note:** ready for Step 4.9 archive (git-mv blueprint pair to `workflow/blueprints/archive/` + INVENTORY entry) once user authorizes.
+**Archive note:** archived 2026-06-04 (Step 4.9) — git-mv blueprint pair to `workflow/blueprints/archive/` + INVENTORY entry, in this commit. User-authorized archive + push + factgraph publish-branch sync.
