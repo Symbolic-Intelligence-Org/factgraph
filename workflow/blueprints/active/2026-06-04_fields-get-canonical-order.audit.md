@@ -11,6 +11,7 @@
 | 2026-06-04 | draft | Step 4.3 preflight (streamlined) | Claude. Read-only verification of both projector callsites, import-cycle, reuse, docs scope. **Verdict PASS — no blockers.** Streamlined (recorded here, no separate branch/doc) per small scope. 1 regression note (PF-5: assert on scalar multi field). |
 | 2026-06-04 | draft | Step 4.5 self-check PASS | Codex checked G/N/acceptance consistency after Step 4.3; no new findings, no stale blocker language, no scope expansion. |
 | 2026-06-04 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`. Frozen scope: A2 multi-only shared canonical key, two projector callsites, scalar multi regression, minimal docs sync; single-cardinality unchanged. |
+| 2026-06-04 | scoped | Step 4.6.5 pre-impl grep PASS | Codex grep confirmed no additional multi-order test assertions beyond `test_sdk_fields_namespace.py`; projector still has the two known inline sort keys to replace; docs beyond the two planned quickstart pages are order-silent. No N-findings. |
 
 ## Decision Notes
 
@@ -64,3 +65,17 @@ Findings (all verified against shipped source):
 - **PF-6 (docs scope confirmed minimal)** — `three_layer_api.md:208` is type-accurate but order-silent; `schema_definition.md` §1.3 carries the dedup/tuple note. Each needs a one-line addition: "`fields.get` multi order == snapshot canonical order." No other doc references the multi read order.
 
 Verdict: **PASS, no blockers.** Plan in §5/§8 is accurate and implementable as written (with Codex's 4.2 tightenings). Ready for Step 4.5/4.6 self-check + scope freeze → 4.6.5 grep → 4.7 impl (Codex).
+
+### 2026-06-04 — Step 4.6.5 pre-impl grep (Codex)
+
+Targets:
+- `fields.get(...)` / `.fields.get(...)` across `tests/`, `docs/`, and `src/factgraph`.
+- Remaining inline projector canonical sort keys (`tuple(str(part) for part in ...)`).
+- Docs mentions of multi-cardinality tuple reads and canonical order.
+
+Results:
+- Tests: only `tests/test_sdk_fields_namespace.py:124-125` carries the multi-order-sensitive regression target. `tests/test_sdk_namespace_removal.py:78/:82` are one-value/empty tuple checks and order-insensitive.
+- Projector: exactly two known inline canonical keys remain before implementation (`project_view_facts` and `project_view_facts_with_witness`), matching the scoped replacement target.
+- Docs: `docs/quickstart/schema_definition.md` and `docs/quickstart/three_layer_api.md` are the planned sync sites. `docs/official/kernel/quickstart/read-write.md` mentions `fields.get` current tuple reads but does not state an order, so it does not require scope expansion.
+
+Verdict: **PASS, no N-findings.** Proceed to Step 4.7 implementation.
