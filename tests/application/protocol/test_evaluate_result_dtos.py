@@ -1019,5 +1019,88 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
 
 
+class RowConclusionNodeDescTests(unittest.TestCase):
+    """Conclusion node's value_summary must use Rule.render_desc when head has desc."""
+
+    def _build_result_with_head(self, head: Rule, row_bindings: dict[str, object]) -> tuple[EvaluateRow, EvaluateResult]:
+        run_id = "run_v1:" + "1" * 64
+        engine = "native"
+        expr_digest = _token("expr")
+        rule_set_digest = _token("rules")
+        view_snapshot_digest = _token("view")
+        config_digest = _token("config")
+        result_id = result_id_for(
+            run_id=run_id,
+            expr_digest=expr_digest,
+            rule_set_digest=rule_set_digest,
+            view_snapshot_digest=view_snapshot_digest,
+            config_digest=config_digest,
+            engine=engine,
+            head_id=head.id,
+            head_content_digest=head.content_digest,
+        )
+        closed_head_digest = closed_head_digest_for(head)
+        row = EvaluateRow(
+            row_id=row_id_for(run_id, row_bindings),
+            bindings=row_bindings,
+            kind="fact_triple",
+            digest=claim_digest_for("fact_triple", head.id, row_bindings),
+            closed_head_digest=closed_head_digest,
+            raw_kind=None,
+            bound=None,
+        )
+        result = EvaluateResult(
+            result_id=result_id,
+            rows=(row,),
+            head=head,
+            engine=engine,
+            evaluated_at="2026-06-04T00:00:00Z",
+            fingerprint=ResultFingerprint(
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                config_digest=config_digest,
+                result_digest=_token("result"),
+                run_id=run_id,
+            ),
+            engine_meta={"engine_version": "test", "adapter_version": "test"},
+        )
+        return row, result
+
+    def test_value_summary_uses_rendered_desc_when_head_has_desc(self) -> None:
+        from factgraph.application.protocol.evaluate_result import _row_conclusion_node
+
+        user_var = Var("$user")
+        head = Rule(
+            id="adults_in_us",
+            when=(PredAtom("user:region", [user_var, Const("US")]),),
+            ports={"user": user_var},
+            desc="Adult user %user lives in the US",
+        )
+        bindings = {"user": {"kind": "entity_ref", "value": "idref_v1:User:alice"}}
+        row, result = self._build_result_with_head(head, bindings)
+
+        node = _row_conclusion_node(row, result)
+
+        self.assertEqual(
+            node.value_summary,
+            "Adult user idref_v1:User:alice lives in the US",
+        )
+        self.assertEqual(node.engine_meta["desc_template"], "Adult user %user lives in the US")
+
+    def test_value_summary_falls_back_to_repr_when_head_has_no_desc(self) -> None:
+        from factgraph.application.protocol.evaluate_result import _row_conclusion_node
+
+        head = _head_rule()
+        bindings = {"person": {"kind": "entity_ref", "value": "idref_v1:Person:alice"}}
+        row, result = self._build_result_with_head(head, bindings)
+
+        node = _row_conclusion_node(row, result)
+
+        self.assertIsNone(node.engine_meta["desc_template"])
+        self.assertIn("person_head", node.value_summary)
+        self.assertNotIn("%", node.value_summary)
+
+
 if __name__ == "__main__":
     unittest.main()

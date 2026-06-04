@@ -945,6 +945,11 @@ def _layered_shell_ids(row: EvaluateRow, result: EvaluateResult) -> tuple[str, s
 
 
 def _row_conclusion_node(row: EvaluateRow, result: EvaluateResult, *, support_artifact: ProofReceipt | None = None) -> EvidenceNode:
+    public_bindings = {
+        port_name: _public_term_value(term)
+        for port_name, term in row.bindings.items()
+    }
+    rendered_desc = result.head.render_desc(public_bindings) if result.head.desc is not None else ""
     engine_meta: dict[str, Any] = {
         "rule_id": result.head.id,
         "is_head": True,
@@ -957,7 +962,7 @@ def _row_conclusion_node(row: EvaluateRow, result: EvaluateResult, *, support_ar
         "quantitative_explanation": _quantitative_explanation_for_row(row),
         "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
         "bindings": dict(row.bindings),
-        "desc_template": None,
+        "desc_template": result.head.desc,
         "content_digest": result.head.content_digest,
         "version": result.head.version,
         "raw_kind": row.raw_kind,
@@ -970,7 +975,7 @@ def _row_conclusion_node(row: EvaluateRow, result: EvaluateResult, *, support_ar
         node_kind=NODE_CONCLUSION,
         component=result.head.id,
         label=_claim_name_for_row_result(row, result),
-        value_summary=_claim_repr_for_row_result(row, result),
+        value_summary=rendered_desc or _claim_repr_for_row_result(row, result),
         engine_meta=engine_meta,
     )
 
