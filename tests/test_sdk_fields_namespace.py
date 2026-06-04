@@ -121,8 +121,8 @@ def test_fields_add_delegates_to_shipped_add_and_get_multi_values():
     second = fg.fields.add(FieldsUser.tags, e_ref, "blue")
 
     assert isinstance(first, str) and isinstance(second, str)
-    assert fg.fields.get(FieldsUser.tags, e_ref) == ("red", "blue")
-    assert set(fg.entities.get(FieldsUser, user_id="alice", tenant_id="acme").tags) == {"red", "blue"}
+    assert fg.fields.get(FieldsUser.tags, e_ref) == ("blue", "red")
+    assert fg.fields.get(FieldsUser.tags, e_ref) == fg.entities.get(FieldsUser, user_id="alice", tenant_id="acme").tags
 
 
 def test_fields_get_returns_empty_shapes_when_no_active_field_claims():

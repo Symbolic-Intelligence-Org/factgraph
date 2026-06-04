@@ -92,6 +92,7 @@ from factgraph.core.store.database import (
 )
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
+from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key
 
 from .compile import compile_schema_from_classes
 from .dsl.branch import Case
@@ -855,9 +856,14 @@ class _SDKFieldsManager:
         """Return the current value for ``(field, e_ref)`` from active claims."""
         schema_pred = self._schema_pred_for_descriptor(field, method="get")
         claims = self._active_claims_for_field(schema_pred, e_ref)
-        values = [self._decode_claim_value(claim) for claim in claims]
         if str(schema_pred.get("cardinality", "single")) == "multi":
+            claims = sorted(
+                claims,
+                key=lambda claim: canonical_fact_sort_key(build_args_for_claim(self._sdk.ledger, claim)),
+            )
+            values = [self._decode_claim_value(claim) for claim in claims]
             return tuple(values)
+        values = [self._decode_claim_value(claim) for claim in claims]
         if not values:
             return None
         return values[-1]

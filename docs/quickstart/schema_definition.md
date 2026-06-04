@@ -42,6 +42,8 @@ Cardinality is taken from the type annotation. There is no `cardinality=` kwarg;
 
 A missing single-cardinality field reads back as `None`; a missing multi-cardinality field reads back as `()`.
 
+`fg.fields.get` and entity snapshots use the same canonical order for multi-cardinality values.
+
 ### 1.4 Scalar types
 
 Each scalar annotation maps to a storage domain that the compiled schema IR records on the predicate. For multi-cardinality fields, the inner `T` in `list[T]` / `set[T]` / `frozenset[T]` / `tuple[T, ...]` follows the same table.

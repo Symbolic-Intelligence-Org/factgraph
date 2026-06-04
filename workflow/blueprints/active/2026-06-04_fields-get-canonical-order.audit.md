@@ -12,6 +12,7 @@
 | 2026-06-04 | draft | Step 4.5 self-check PASS | Codex checked G/N/acceptance consistency after Step 4.3; no new findings, no stale blocker language, no scope expansion. |
 | 2026-06-04 | scoped | Step 4.6 scope freeze | Status `draft` → `scoped`. Frozen scope: A2 multi-only shared canonical key, two projector callsites, scalar multi regression, minimal docs sync; single-cardinality unchanged. |
 | 2026-06-04 | scoped | Step 4.6.5 pre-impl grep PASS | Codex grep confirmed no additional multi-order test assertions beyond `test_sdk_fields_namespace.py`; projector still has the two known inline sort keys to replace; docs beyond the two planned quickstart pages are order-silent. No N-findings. |
+| 2026-06-04 | scoped | Step 4.7 implementation | Codex implemented shared `canonical_fact_sort_key(...)`, routed both projector paths and `fg.fields.get` multi through it, tightened scalar multi regression, and synced the two scoped quickstart docs. Status remains `scoped` pending Step 4.8 closure. |
 
 ## Decision Notes
 

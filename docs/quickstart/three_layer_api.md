@@ -205,7 +205,7 @@ fg.fields.add(User.tags, alice, "reviewer")
 
 Passing `["engineer", "reviewer"]` as the value raises `SDKValueError` because `list` does not match the declared element type. The same rule applies to `set` (always one scalar) and `retract` (revoke one specific `(field, ref, value)` triple at a time).
 
-Reads work the opposite way: `fg.fields.get(field, ref)` returns one scalar for single-cardinality fields and a `tuple` of scalars for multi-cardinality fields (possibly empty `()`).
+Reads work the opposite way: `fg.fields.get(field, ref)` returns one scalar for single-cardinality fields and a `tuple` of scalars for multi-cardinality fields (possibly empty `()`). Multi-cardinality reads use the same canonical order as entity snapshots, so `fg.fields.get(User.tags, ref)` and `fg.entities.get(User, ...).tags` agree for the same field cell.
 
 ### 3.3 Identity descriptors at Layer 2
 
