@@ -9,11 +9,9 @@ This chapter has two halves stitched into one chapter because they share too muc
 ```python
 from factgraph.sdk import Entity, FactGraph, Field, Identity, build_application_rule, vars
 
-
 class User(Entity):
     user_id: str = Identity()
     region: str = Field()
-
 
 fg = FactGraph.create(schema_classes=[User])
 alice = fg.entities.create(User, user_id="u-1")
@@ -21,7 +19,7 @@ fg.fields.set(User.region, alice, "US")
 
 with vars("u", "r") as (u, r):
     region_rule = build_application_rule(
-        id="user:region",
+        id="user_region_lookup",
         version="v1",
         when=[User(u).region == r],
         ports={"user": u, "region": r},
@@ -32,22 +30,21 @@ result = fg.eval.evaluate(region_rule, head=region_rule)
 
 This is the canonical user-facing form: `build_application_rule(...)` with Entity-DSL atoms (see [`rules.md`](rules.md) §2.2).
 
-> **Current shipped status — known gap.** `build_application_rule(when=[User(u).field == v])` lowering auto-prepends `PredAtom("User:exists", [u])`. `fg.entities.create(...)` does not currently emit `User:exists` claims to the ledger, so the body above does not match anything and `result.count()` returns `0` today. The example shows the form you *should* write; the gap is tracked in [`entity-exists-claim-emission-gap.zh.md`](../../workflow/design/design-points/active/entity-exists-claim-emission-gap.zh.md). Until the gap closes, demonstrations later in this chapter that need live rows fall back to a direct `Rule(...)` + `PredAtom(...)` construction (see §2.1).
+> **Current shipped status — known gap.** `build_application_rule(when=[User(u).field == v])` lowering auto-prepends `PredAtom("User:exists", [u])`. `fg.entities.create(...)` does not currently emit `User:exists` claims to the ledger, so the body above does not match anything and `result.count()` returns `0` today. The example shows the form you *should* write. Until the gap closes, demonstrations later in this chapter that need live rows fall back to a direct `Rule(...)` + `PredAtom(...)` construction (see §2.1).
 
 ### 1.2 `head=` parameter
 
-`head=` is mandatory and supplies the `Rule` whose `ports` shape the output rows:
+`head=` is mandatory and supplies the `Rule` whose `ports` shape the output rows. `head.id` (= `rule.id`) is a free-form label — any non-empty string works; it does not need to match any schema predicate.
 
 ```python
 fg.eval.evaluate(rule, head=rule)                    # single Rule
 fg.eval.evaluate(rule_expr, head=some_rule)          # RuleExpr: head can be in OR out of the expression
 ```
 
-Input-shape rejections (full messages in §9.2):
+Input-shape rejections (full messages in §8.2):
 
 - missing `head=`
-- `head=` is not a `Rule` (SDK DSL Rule, Inference, dict, str, inspect objects all rejected)
-- schema-backed `rule.id` arity mismatch (free-form rule ids are valid query-style labels)
+- `head=` is not an **application-protocol** `Rule` (`factgraph.application.protocol.Rule`). The SDK DSL `Rule` (`factgraph.sdk.Rule`, the ergonomic authoring class — see [`rules.md`](rules.md) §2) is a different class and is rejected here; lower it via `build_application_rule(...)` first. `Inference`, `dict`, `str`, and inspect objects are also rejected.
 
 #### How `head=` connects to a `RuleExpr`
 
@@ -77,8 +74,6 @@ rule_expr ports   │ user │ name │ region │ party │   ← extras (name,
                   result.rows.bindings = {"user": …, "region": …}
 ```
 
-The constraint is one-way: `head.ports ⊆ every branch's ports`. Extras in branches stay internal.
-
 | Relationship | Accepted? | Error |
 |---|---|---|
 | `head.ports ⊆ every branch's ports` | ✓ | — |
@@ -93,11 +88,7 @@ Whether `head.id` happens to appear in the expression is incidental — both pro
 | **inline** | `head.id == occurrence.rule_id` AND `head.content_digest == occurrence.content_digest` for exactly one occurrence | Different `version` on the same id+digest emits a `UserWarning` |
 | **external** | head's `id` does not appear in any occurrence | None |
 
-Two identity-validation `RuleExprError`s — stale `content_digest` (same id, different body) and duplicate same-digest occurrences (same Rule appears twice without distinct `.as_()` aliases). Full messages in §9.2.
-
-### 1.3 What comes back
-
-`fg.eval.evaluate(...)` returns an `EvaluateResult` — covered in §2.
+Two identity-validation `RuleExprError`s — stale `content_digest` (same id, different body) and duplicate same-digest occurrences (same Rule appears twice without distinct `.as_()` aliases). Full messages in §8.2.
 
 ## 2. `EvaluateResult` navigation and `EvaluateRow`
 
@@ -116,11 +107,11 @@ Two identity-validation `RuleExprError`s — stale `content_digest` (same id, di
 
 ```text
 EvaluateResult (frozen)
+  ├── result_id: str             ← stable identifier ("evalr_v1:...")
   ├── rows: tuple[EvaluateRow, ...]
-  ├── result_id                  ← stable identifier ("evalr_v1:...")
   ├── head: Rule                 ← the head you passed
-  ├── engine
-  ├── evaluated_at
+  ├── engine: str                ← engine name, e.g. "native" / "souffle" / "problog" / "pyreason"
+  ├── evaluated_at: object       ← when this evaluate call ran (SDK constructs UTC datetime; type is loose by design)
   ├── fingerprint: ResultFingerprint
   │   ├── run_id                 ← stable run identifier ("run_v1:...")
   │   ├── expr_digest, rule_set_digest, view_snapshot_digest, config_digest
@@ -129,6 +120,8 @@ EvaluateResult (frozen)
       ├── engine_version
       └── adapter_version
 ```
+
+Field order above is the dataclass's constructor signature.
 
 The 6 user-facing methods (all delegating to the `rows` tuple):
 
@@ -173,7 +166,7 @@ row = result.first()
 
 row.row_id                    # str
 row.bindings                  # Mapping — port-name → typed term map
-result.head.id                # "user:region" — the head label (optionally a schema predicate id)
+result.head.id                # "user_region_lookup" — the head label
 row.kind                      # "fact_triple" — row conclusion role
 row.digest                    # "sha256:..." — content digest for this row claim
 row.raw_kind                  # None (no uncertainty meta on the source claims)
@@ -181,78 +174,59 @@ row.bound                     # None (paired with raw_kind, see engines_and_conf
 row.closed_head_digest        # "sha256:..." — stable replay input for this row
 ```
 
+#### `row_id` — stable per-row identifier
+
+Computed deterministically from `(run_id, bindings)` via `row_id_for(run_id, bindings)`. Same `run_id` + identical `bindings` → same `row_id`. The cross-process row handle is the pair `(result_id, row_id)`.
+
 #### `bindings` — port-name → typed term map
 
-`row.bindings` is keyed by the head's port names. Each row carries one binding of *all* the head's ports — the row is one *assignment* of port → typed term, not one matched fact and not necessarily tied to a single entity.
-
-For the native engine over a `PredAtom` head body, the row shape is:
-
-```python
-dict(row.bindings)
-# {
-#   "user": {"kind": "entity_ref", "value": "idref_v1:User:<digest>"},
-#   "region": {"kind": "literal", "tag": "string", "value": "US"},
-# }
-```
-
-`result.head.id` is the head label. It is constant across every row; the per-row variation lives in `row.bindings`. When that label matches a schema predicate id, evaluation keeps the predicate's arity validation. When it does not match a schema predicate, it is treated as a query-style label whose row shape comes from `head.ports`. With two rows over two users, the example above's row 1 has the alice idref + `"US"`; a sibling row 2 would carry the bob idref + `"DE"`. With a head like `order:buyer`, every row carries two entity-ref terms keyed by their declared port names.
-
-> **Schema-backed arity constraint.** If `head.id` matches a known ledger predicate, `len(head.ports)` must equal that predicate's argument count — otherwise evaluation raises `head_vars length must match target arg_specs`. If `head.id` does not match a schema predicate, the id is a query-style label and the row shape comes from `head.ports`.
+`row.bindings` is a frozen mapping keyed by `head.ports`. Each row is one *assignment* of all head ports to typed terms — not one matched fact, and not necessarily tied to a single entity.
 
 Each binding value is a typed term dict discriminated by `kind`:
 
-| Term type | Shape | When |
+| `kind` | Shape | Source |
 |---|---|---|
-| `entity_ref` | `{"kind": "entity_ref", "value": "<idref_v1:...>"}` | The port resolved to an entity reference |
-| `literal` | `{"kind": "literal", "tag": "<type>", "value": <python_value>}` | The port resolved to a typed literal. `tag` ∈ `{string, int, bool, float64, bytes, time, uuid}` |
+| `entity_ref` | `{"kind": "entity_ref", "value": "<idref_v1:...>"}` | Port resolved to an entity reference |
+| `literal` | `{"kind": "literal", "tag": "<type>", "value": <python_value>}` | Port resolved to a typed literal. `tag` ∈ `{string, int, bool, float64, bytes, time, uuid}` |
 
-Reading the example concretely: the row reports `user = "idref_v1:User:<digest>"` and `region = "US"` — the resolved values for `head.ports`. A rule whose head ports are all value-typed produces rows with zero `entity_ref` terms; a rule with multiple entity-typed ports produces rows carrying multiple entity refs simultaneously.
+Example — native engine over a `PredAtom` head body with `ports = {"user": …, "region": …}`:
 
-To map port names to public values programmatically, read `row.bindings[port_name]["value"]` for typed term dictionaries. The application protocol also has an internal helper `_binding_value_for_head_port(row, head, port_name)` that unwraps typed terms, but it is not currently re-exported through the SDK.
-
-#### `raw_kind` + `bound` — uncertainty carry-through
-
-`raw_kind` / `bound` carry through from the source assertion's `meta` (per `engines_and_configs.md` §2.1). They are `None` on rows whose source facts have no uncertainty annotation. The invariant from `data_model.md` §2.2 holds: `bound is None iff raw_kind is None`.
-
-#### `row.close()` — derived closed-head `Rule` for this row
-
-`row.close()` returns the closed-head `Rule` for this specific row — the original head's `when` plus extra atoms pinning each port to the row's matched values. Its digest is `row.closed_head_digest`, and it is the structural input that `fg.eval.explain(...)` / `fg.rules.inspect(...)` consume. The closed-head concept is covered in depth in §6.
-
-### 2.3 Row conclusion identity
-
-The row itself describes the *thing concluded*: `kind` records the role and `digest` is the content-addressed row claim digest. Human-readable rendering is derived by explanation/rendering helpers; it is not a stored `EvaluateRow` field.
-
-The old result-side `Claim` wrapper is gone. Do not confuse that removed protocol wrapper with the on-disk ledger `Claim` (`factgraph.core.store.ledger.Claim`, documented in [`data_model.md` §1](data_model.md), with `asrt_id` / `pred_id` / `e_ref` / `rest_terms`). The ledger `Claim` remains a lower-layer persistence record; evaluation rows no longer expose a protocol `Claim` DTO.
-
-```text
-EvaluateRow conclusion fields
-  ├── kind: Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
-  └── digest: str             ← "sha256:..." over the canonical claim form
+```python
+dict(row.bindings)
+{
+  "user":   {"kind": "entity_ref", "value": "idref_v1:User:<digest>"},   # user = "idref_v1:User:<digest>"
+  "region": {"kind": "literal", "tag": "string", "value": "US"},         # region = "US"
+}
 ```
 
-The four `kind` values:
+Per-row variation lives entirely in `bindings` (the head label `result.head.id` is constant across rows). Two rows over two users would carry alice's idref + `"US"` vs bob's idref + `"DE"`; a head like `order:buyer` whose ports are both entity-typed produces rows with multiple `entity_ref` terms keyed by their declared port names.
 
-| Kind | Meaning |
+Programmatic access: `row.bindings[port_name]["value"]` for both term kinds.
+
+#### `kind` and `digest` — what was concluded
+
+`kind` records the conclusion role; `digest` is the `sha256:` content-addressed digest over the canonical `(kind, head.id, bindings)` form for this row's claim, via `claim_digest_for(kind, head.id, bindings)`.
+
+| `kind` | Meaning |
 |---|---|
 | `"fact_triple"` | A ledger fact — `(pred_id, e_ref, value)` triple form |
 | `"rule_head"` | A derived head from rule evaluation |
 | `"aggregate_result"` | An aggregate (`agg_count` / `agg_sum` / ...) result |
 | `"projection"` | A `Rule.projection(...)` synthetic projection output |
 
-### 2.4 Closed-head digest and evidence identity
+The on-disk ledger has its own `Claim` record (`factgraph.core.store.ledger.Claim`, see [`data_model.md` §1](data_model.md)) at a lower layer — `EvaluateRow.kind` and `EvaluateRow.digest` are evaluation outputs, not ledger primary keys.
 
-`closed_head_digest` is the stable replay input for row-local evidence. It is **not** the evidence itself (that lives in `EvidenceGraph`, §5) — it is the digest that lets you ask "is this the same closed head we explained last time?" deterministically.
+#### `closed_head_digest` and `row.close()` — replay anchor
 
-The old `EvidenceRef` wrapper is gone. Service JSON may still emit a nested `evidence_ref` dictionary for wire compatibility, but in-process SDK/protocol code uses direct row/result fields.
+`row.close()` returns the **closed-head `Rule`** for this row — the original head's `when` plus extra atoms pinning every port to the row's matched values. It is the structural input that `fg.eval.explain(...)` / `fg.rules.inspect(...)` consume (concept depth in §5).
 
-```text
-EvaluateRow evidence fields
-  ├── row_id: str
-  ├── digest: str
-  └── closed_head_digest: str      ← "sha256:..." over the closed-head Rule (§6)
-```
+`row.closed_head_digest` is the `sha256:` digest of that closed-head Rule, computed as `closed_head_digest_for_parts(closed_head.id, closed_head.content_digest)`. It is **not** the evidence itself (evidence lives in `EvidenceGraph`, §4.4) — it is the deterministic answer to "is this the same closed head we explained last time?"
 
-Two evaluation runs over the same `(rule, head, engine, config, ledger snapshot)` produce the same `row.digest` and `row.closed_head_digest`, even if `result_id` / `run_id` change.
+Two evaluations over the same `(rule, head, engine, config, ledger snapshot)` produce the same `row.digest` and `row.closed_head_digest`, even if `result_id` / `run_id` change.
+
+#### `raw_kind` + `bound` — uncertainty carry-through
+
+`raw_kind` / `bound` carry through from the source assertion's `meta` (per [`engines_and_configs.md`](engines_and_configs.md) §2.1). They are `None` on rows whose source facts have no uncertainty annotation. Invariant from [`data_model.md`](../official/kernel/quickstart/data_model.md) §2.2: `bound is None iff raw_kind is None`.
 
 ## 3. `row.explain()` and `fg.eval.explain(...)` — two entries to `Explanation`
 
@@ -284,175 +258,256 @@ explanation = fg.eval.explain(rule, head=region_rule, engine="native")
 
 Otherwise both produce the same shape — see §4.
 
-## 4. `Explanation` DTO
+## 4. Explanation: the layered evidence model
 
-### 4.1 Complete nested structure
+`Explanation` is built around the same three reasoning tiers a human uses to read a derivation: *which rules combine into the conclusion*, *which conditions each rule needs*, and *what backs each condition*. Slices γ, η, and ε reshaped the DTO so those tiers are first-class — the rest of this section is a tour of that shape, from concept to wire fields to rendered text.
 
-```text
+### 4.1 The three tiers
+
+```
+head & RuleExpr   ─ tier 1: composition layer (single / and / or)
+       │
+       ▼
+     Rule         ─ tier 2: one rule occurrence with a linear body
+       │
+       ▼
+     Atom         ─ tier 3: one body condition + status + reason
+       │
+       ▼
+    [seed]              ledger fact backing the atom (when present)
+```
+
+**Concrete example.** Given this rule with three body atoms:
+
+```python
+from factgraph.application.protocol import Rule
+from factgraph.core.rules.where_ast import PredAtom, CmpAtom, Var
+
+u, age = Var("u"), Var("age")
+
+adults_in_us = Rule(
+    id="adults_in_us",
+    version="v1",
+    when=(
+        PredAtom("user:region", [u, "US"]),   # atom 0 — schema predicate match
+        PredAtom("user:age",    [u, age]),    # atom 1 — schema predicate match
+        CmpAtom(">", age, 18),                # atom 2 — computed check
+    ),
+    ports={"user": u},
+    desc="Adult user %user lives in the US",  # auto-rendered into Conclusion line
+)
+```
+
+…and ledger facts `user:region(alice, "US")` + `user:age(alice, 25)`, the matching row's `Explanation.evidence` is this layered graph:
+
+```
+NODE_CONCLUSION    adults_in_us(user=alice)  [row-1]
+       │
+       │ EDGE_DERIVED_BY                                              ← tier 1
+       ▼
+NODE_RULE_EXPR     engine_meta.ast_form = "single"
+       │
+       │ EDGE_USES                                                    ← tier 1 → 2
+       ▼
+NODE_RULE          engine_meta.rule_id = "adults_in_us"
+       │
+       │ EDGE_HAS_ATOM ×3                                             ← tier 2 → 3
+       ├──▶ NODE_ATOM[0]   atom_status="support"
+       │       │  EDGE_SUPPORTED_BY
+       │       ▼
+       │     NODE_SEED     ledger fact: user:region(alice, "US")
+       │
+       ├──▶ NODE_ATOM[1]   atom_status="support"
+       │       │  EDGE_SUPPORTED_BY
+       │       ▼
+       │     NODE_SEED     ledger fact: user:age(alice, 25)
+       │
+       └──▶ NODE_ATOM[2]   atom_status="support"
+                engine_meta.reason = {"kind": "cmp", "status": "satisfied", …}
+                (computed check — no seed)
+```
+
+Walking the tiers on this graph:
+
+- **Tier 1 (head & RuleExpr)** — one `NODE_RULE_EXPR` saying "this conclusion came from a rule expression". `ast_form="single"` because exactly one rule produces it. The wiring (`EDGE_USES` from rule_expr to ≥1 rule) is in place for future `and`/`or` composition, but `ast_form` is **currently hardcoded `"single"`** for every passed row; today every rule_expr points to exactly one rule.
+- **Tier 2 (Rule, linear)** — one `NODE_RULE` per rule with `engine_meta.rule_id` / `content_digest` / `version`, then `EDGE_HAS_ATOM` enumerating every body atom in declaration order. Tier 2 answers "which rule fired and what conditions did it require?" — here three atoms in the order they appear in `when=`.
+- **Tier 3 (Atom)** — one `NODE_ATOM` per body atom, each carrying `atom_status` (**binary today**: `"support"` if the atom held, `"unknown"` if not; no separate `"unsupport"` value). The two `PredAtom`s each link to a `NODE_SEED` (the actual ledger fact) via `EDGE_SUPPORTED_BY`; the `CmpAtom` carries its outcome in `engine_meta.reason = {kind, status, details}` instead because it's a computed check, not a ledger lookup. `reason` is populated for native non-fact steps (`cmp` / `not` / etc.); ProbLog and Souffle atom nodes don't currently carry it.
+
+The walker (§4.5) renders this graph DFS from the conclusion, one indented line per node, with the connector coming from each incoming `edge_kind`. Shipped native engine produces:
+
+```
+Conclusion: Adult user idref_v1:User:<digest> lives in the US [row-1]
+  is derived by RuleExpr(single)
+    which uses Rule "adults_in_us"
+      which has atom Atom[0]: satisfied — support
+        is supported by ledger fact: ledger assertion
+      which has atom Atom[1]: satisfied — support
+        is supported by ledger fact: ledger assertion
+      which has atom Atom[2]: satisfied — support
+```
+
+Each line is `<indent><connector> <render(node)>`. Two things to know about what's informative vs terse:
+
+- **Conclusion line** uses `head.render_desc(row.bindings)` to substitute each `%port` in the desc template with the row's binding value (entity_ref ports show their `idref_v1:` token, literal ports show the public value). If `head.desc is None`, the Conclusion line falls back to `head.id + repr(bindings)` form.
+- **Atom and seed lines are terse** — the engine populates `value_summary` with the status token (`"satisfied"`) for atoms and the literal string `"ledger assertion"` for seeds, not the atom expression or the underlying ledger triple. You can recover the original predicate / atom expression from the node's `label` field (e.g. `"Predicate witness user:region"` / `"cmp check"`), or `engine_meta.atom_kind` / `engine_meta.atom_id` / `engine_meta.reason`, but the walker doesn't surface them — atom-level NL render is future work.
+
+### 4.2 `Explanation` DTO
+
+```
 Explanation (frozen)
-│
-├── status              : Literal["passed", "failed", "unsupported", "invalid_request"]
-│                                  ↑
-│                                  └─── controls which other fields are required
-│                                       (see invariants below)
-│
-├── evidence            : EvidenceGraph | None             ← passed iff non-None
-│   │                                                        (full structure in §5)
-│   ├── graph_id, engine, root_node_id
-│   ├── nodes           : tuple[EvidenceNode, ...]
-│   ├── edges           : tuple[EvidenceEdge, ...]
-│   ├── support_kind, layout_hint, metadata
-│   └── (see §5 for nested EvidenceNode / EvidenceEdge)
-│
-├── row                 : EvaluateRow | None               ← required iff status == "passed"
-│   └── (see §2.2 for row fields)
-│
-├── result_id           : str | None      ("evalr_v1:..." ; required iff status == "passed")
-│
-├── failure_class       : Literal[                         ← required iff status == "failed"
-│                            "no_matching_row",            │  0 rows matched
-│                            "closed_head_false",          │  head false on every row
-│                            "stale_row",                  │  row evidence superseded
-│                            "row_not_in_result",          │  row id not from this result
-│                            "insufficient_closed_bindings"│  reserved; not currently emitted (§4.4)
-│                         ] | None                         └─ must be None when status != "failed"
-│
-├── checked_scope       : Mapping[str, Any] | None
-├── suggested_next_steps: tuple[str, ...]                  (default ())
-│
-├── errors              : tuple[ErrorDTO, ...]
-│   └── ErrorDTO
-│       ├── code        : str             (SCREAMING_SNAKE_CASE)
-│       ├── message     : str
-│       ├── path        : tuple[str, ...]
-│       └── details     : dict[str, JSONValue]             ← non-empty iff status ∈
-│                                                            {"unsupported", "invalid_request"}
-│
-├── warnings            : tuple[WarningDTO, ...]
-│   └── WarningDTO      (same shape as ErrorDTO)
-│
-└── repr                : tuple[str, ...] | None            ← computed property, not a constructor field
+├── status                 Literal["passed", "failed", "unsupported", "invalid_request"]
+├── evidence               EvidenceGraph | None             ← non-None iff status == "passed"
+├── row                    EvaluateRow | None               ← required iff status == "passed"
+├── result_id              str | None                       ← required iff status == "passed";
+│                                                            otherwise must start with "evalr_v1:" if set
+├── failure_class          ExplanationFailureClass | None = None   ← required iff status == "failed"
+├── checked_scope          Mapping[str, Any] | None = None
+├── suggested_next_steps   tuple[str, ...] = ()
+├── errors                 tuple[ErrorDTO, ...] = ()        ← non-empty iff status ∈ {unsupported, invalid_request}
+├── warnings               tuple[WarningDTO, ...] = ()
+└── repr  (@property)      tuple[str, ...] | None           ← lazy, cached in private _repr_cache;
+                                                              NOT a constructor field
 ```
 
-### 4.2 6 invariants enforced in `__post_init__`
+Field order above is the constructor's positional order (`status`, `evidence`, `row`, `result_id`, ...).
 
-| Invariant | Where checked |
-|---|---|
-| `status == "passed" iff evidence is not None` | `Explanation.__post_init__` |
-| `status == "passed" → row is not None` | `Explanation.__post_init__` |
-| `status == "passed" → result_id is non-empty` | `Explanation.__post_init__` |
-| `failure_class is set iff status == "failed"` | `Explanation.__post_init__` |
-| `status ∈ {unsupported, invalid_request} → errors non-empty` | `Explanation.__post_init__` |
+`ErrorDTO` / `WarningDTO` share one shape: `code: str` (SCREAMING_SNAKE_CASE), `message: str`, `path: tuple[str, ...]`, `details: dict[str, JSONValue]`.
 
-### 4.3 The four `status` values and what each Explanation actually carries
+Five invariants enforced in `Explanation.__post_init__`:
 
-| status | When | `evidence` | `row` | `failure_class` | `errors` | What you read |
+1. `status == "passed" iff evidence is not None`
+2. `status == "passed" → row is not None`
+3. `status == "passed" → result_id is non-empty`
+4. `failure_class is set iff status == "failed"`
+5. `status ∈ {"unsupported", "invalid_request"} → errors non-empty`
+
+Compose by reference, not by inline duplication. The pre-α flat fields (`claim` / `row_id` / `evidence_ref_id` / `raw_kind` / `bound`) are gone — read `explanation.row.bindings`, `explanation.row.raw_kind`, etc. Cross-process row handle is `(explanation.result_id, explanation.row.row_id)`.
+
+### 4.3 Status outcomes
+
+| status | When | `row` | `evidence` | `failure_class` | `errors` | `repr` |
 |---|---|---|---|---|---|---|
-| `"passed"` | head fires on at least one row | ✓ EvidenceGraph | ✓ EvaluateRow | None | () | `evidence` for the path; `repr` for rendered lines; `row` for bindings, digest, closed-head digest, and uncertainty |
-| `"failed"` | head doesn't fire / no match | None | None | ✓ one of 5 | () | `repr` summary, `failure_class`, `checked_scope`, and `suggested_next_steps` |
-| `"unsupported"` | engine rejects the rule shape | None | None | None | ✓ non-empty | `errors[*].code` + `message` for what the engine didn't accept |
-| `"invalid_request"` | call shape is malformed | None | None | None | ✓ non-empty | Same as unsupported, but the problem is in your input, not the engine |
+| `"passed"` | Head fires on a row | ✓ | ✓ | None | () | Walker-rendered multi-line tree |
+| `"failed"` | Head doesn't fire / row stale / row not in this result | None | None | one of 5 | () | Flat deterministic summary |
+| `"unsupported"` | Engine rejects the rule shape | None | None | None | ≥1 | None |
+| `"invalid_request"` | Call shape malformed | None | None | None | ≥1 | None |
 
-`Explanation.repr` is computed lazily. Passed explanations walk the layered
-`EvidenceGraph` into multi-line text. Failed explanations keep `evidence=None`
-by invariant and return a deterministic failure summary. Unsupported and invalid
-requests return `None`.
+Five `failure_class` literals:
 
-### 4.4 `failure_class` — the five reasons a `"failed"` Explanation gives
-
-| `failure_class` | Trigger |
+| failure_class | Trigger |
 |---|---|
-| `no_matching_row` | The body matches no facts at all |
-| `closed_head_false` | The body matches but the head bindings are not the ones you asked for |
-| `stale_row` | The row handle has been retracted / superseded since evaluation |
-| `row_not_in_result` | You passed a row whose `row_id` does not belong to this `result_id` |
-| `insufficient_closed_bindings` | Reserved literal — declared in the enum but no current code path emits it. The "head not closed" check on `fg.eval.explain(...)` short-circuits as `RuleExprError` (see §3.2) before an Explanation is built, so this value is currently unreachable |
+| `no_matching_row` | Body matched 0 facts |
+| `closed_head_false` | Body matched but head bindings differ from the one you asked about |
+| `stale_row` | Row handle retracted/superseded after evaluation |
+| `row_not_in_result` | Row's `row_id` doesn't belong to this `result_id` |
+| `insufficient_closed_bindings` | Reserved literal; not emitted today. The "head not closed" check on `fg.eval.explain(...)` short-circuits as `RuleExprError` (§3.2) before an Explanation is built |
 
-### 4.5 `raw_kind` + `bound` carry-over
+### 4.4 `EvidenceGraph` — the substrate for the three tiers
 
-When the source row has uncertainty meta (`raw_kind` + `bound`), the `Explanation.row` carries those fields. This is the read-side counterpart to the write-side pairing in `engines_and_configs.md` §2.1. The same invariant holds on the row: `bound is None iff raw_kind is None`.
+When `status == "passed"`, `Explanation.evidence` is an `EvidenceGraph` carrying the tier-1/2/3 nodes and edges as a frozen graph:
 
-## 5. `EvidenceGraph` DTO
-
-When `Explanation.status == "passed"`, `Explanation.evidence` is an `EvidenceGraph` — a cross-engine common representation of how the head was supported.
-
-### 5.1 Structure
-
-```text
+```
 EvidenceGraph (frozen)
-  ├── graph_id          : str
-  ├── engine            : str             ← "native" / "souffle" / "problog" / "pyreason"
-  ├── root_node_id      : str             ← the conclusion node id (must be in nodes)
-  ├── nodes             : tuple[EvidenceNode, ...]
-  ├── edges             : tuple[EvidenceEdge, ...]
-  ├── support_kind      : str             (e.g. "native_binding_v1")
-  ├── layout_hint       : Literal["tree", "timeline"]   (default "tree")
-  └── metadata          : Mapping[str, Any]
-
-EvidenceNode (frozen)
-  ├── node_id           : str
-  ├── node_kind         : Literal["conclusion", "premise", "seed", "rule_expr", "rule", "atom"]
-  ├── component         : str
-  ├── label             : str
-  ├── value_summary     : str
-  ├── timestamp         : int | None
-  └── engine_meta       : Mapping[str, Any]
-
-EvidenceEdge (frozen)
-  ├── edge_id           : str
-  ├── from_node_id      : str
-  ├── to_node_id        : str
-  ├── edge_kind         : Literal["supports", "derives", "updates", "derived_by", "uses", "has_atom", "supported_by"]
-  ├── rule_label        : str | None
-  └── engine_meta       : Mapping[str, Any]
+├── graph_id          str
+├── engine            str           ← "native" / "souffle" / "problog" / "pyreason"
+├── root_node_id      str           ← must be in nodes
+├── nodes             tuple[EvidenceNode, ...]
+│       └─ EvidenceNode (frozen):
+│              node_id: str, node_kind: str, component: str, label: str,
+│              value_summary: str, timestamp: int | None = None,
+│              engine_meta: Mapping[str, Any] = {}
+├── edges             tuple[EvidenceEdge, ...]
+│       └─ EvidenceEdge (frozen):
+│              edge_id: str, from_node_id: str, to_node_id: str, edge_kind: str,
+│              rule_label: str | None = None,
+│              engine_meta: Mapping[str, Any] = {}
+├── support_kind      str           ← e.g. "native_binding_v1"
+├── layout_hint       str = "tree"  ← "tree" | "timeline" (D11 timeline deferred)
+└── metadata          Mapping[str, Any] = {}
 ```
 
-### 5.2 `node_kind` and `edge_kind` semantics
+Graph-level validators (`EvidenceGraph.__post_init__`): node_ids unique, edge_ids unique, every edge endpoint in nodes, `root_node_id` in nodes, no cycles via DFS over the inverted adjacency.
 
-| `node_kind` | Meaning |
+**Node kinds** — which tier each maps to:
+
+| node_kind | Tier | Carries |
+|---|---|---|
+| `conclusion` | top of tree | The row claim; equals `root_node_id` |
+| `rule_expr` | tier 1 | `engine_meta.ast_form` (`"single"` today; reserved for `"and"`/`"or"`) |
+| `rule` | tier 2 | `engine_meta.rule_id`, `content_digest`, `version` |
+| `atom` | tier 3 | `engine_meta.atom_status` (`"support"` / `"unknown"`), `atom_kind`, `atom_index`, optional `reason` |
+| `seed` | beneath tier 3 | A ledger fact directly supporting an atom (no further derivation) |
+| `premise` | legacy | Intermediate derived fact (still used inside ProbLog adapter trace beneath the row atom) |
+
+**Edge kinds** — physical direction is `from_node` = supporter, `to_node` = supported:
+
+| edge_kind | Tier connection |
 |---|---|
-| `"conclusion"` | The derived head (one per graph; matches `root_node_id`) |
-| `"premise"` | An intermediate derived fact |
-| `"seed"` | An EDB fact directly from the ledger (no further derivation) |
-| `"rule_expr"` | A RuleExpr composition layer |
-| `"rule"` | A rule occurrence inside the RuleExpr |
-| `"atom"` | A single rule-body atom/check |
+| `derived_by` | rule_expr → conclusion |
+| `uses` | rule → rule_expr |
+| `has_atom` | atom → rule |
+| `supported_by` | seed → atom |
+| `supports` / `derives` / `updates` | Legacy adapter-internal flows beneath atoms (ProbLog provenance chain, PyReason temporal bound updates) |
 
-| `edge_kind` | Meaning |
+Read edge names semantically (`conclusion is derived by rule_expr`) — the physical arrow points the opposite way. The walker traverses each node's incoming edges from `root_node_id`, which is why reader-side traversal matches the rendered indentation.
+
+### 4.5 `Explanation.repr` — the rendered text
+
+`Explanation.repr` (a `tuple[str, ...] | None`) is a **computed property** added by slice ε. Lazy, cached in a private `_repr_cache` field, never settable via constructor (`Explanation(repr=...)` is rejected). Built by `factgraph.application.protocol.explanation_render.walk_evidence(graph, *, row, status, failure_class)`.
+
+**Passed — DFS walk of the layered graph.** Each line is `<indent><connector> <render(node)>`. The indent is `"  " * depth` (one level per tier). The connector is the natural-language form of each incoming edge's `edge_kind`. The per-node render formula is fixed:
+
+| Node kind | Rendered as | Reads |
+|---|---|---|
+| `NODE_CONCLUSION` | `Conclusion: <summary> [<row_id>]` (`NOT concluded: ...` when failed) | `value_summary` ← `head.render_desc(row.bindings)` from `_row_conclusion_node`, falls back to `head.id + repr(bindings)` when `head.desc is None` |
+| `NODE_RULE_EXPR` | `RuleExpr(<ast_form>)` | `engine_meta.ast_form` (hardcoded `"single"` today) |
+| `NODE_RULE` | `Rule "<rule_id>"` | `engine_meta.rule_id` |
+| `NODE_ATOM` | `Atom[<atom_index>]: <summary> — <atom_status>` | `engine_meta.atom_index` + `value_summary` (shipped: status token `"satisfied"`) + `engine_meta.atom_status` (`"support"` / `"unknown"`) |
+| `NODE_SEED` | `ledger fact: <summary>` | `value_summary` (shipped: `"ledger assertion"`) |
+
+Edge-connector mapping (`explanation_render.py:_EDGE_CONNECTORS`):
+
+| `edge_kind` | Connector |
 |---|---|
-| `"supports"` | from_node is a non-derived premise of to_node |
-| `"derives"` | from_node is a derivation step that produces to_node |
-| `"updates"` | from_node updates the bound on to_node (PyReason temporal) |
-| `"derived_by"` | a rule expression derives a conclusion |
-| `"uses"` | a rule is used by a rule expression |
-| `"has_atom"` | an atom belongs to a rule |
-| `"supported_by"` | a seed/proof node supports an atom |
+| `derived_by` | `is derived by` |
+| `uses` | `which uses` |
+| `has_atom` | `which has atom` |
+| `supported_by` / `supports` | `is supported by` |
+| `derives` | `derives` |
+| `updates` | `updates` |
 
-Edges keep the shipped physical direction: `from_node_id` is the supporting
-child/cause and `to_node_id` is the supported parent/conclusion. Read the new
-edge names as semantic relationships, not as parent-to-child arrows.
+§4.1 walks the `adults_in_us` rule through this machinery as a worked end-to-end example.
 
-### 5.3 `layout_hint` — `"tree"` vs `"timeline"`
+**Failed — deterministic flat summary** (no graph walk; `evidence is None` by invariant):
 
-| `layout_hint` | Used for |
-|---|---|
-| `"tree"` (default) | Static support graphs — Native Form 1, ProbLog Form 1, Souffle witnesses, etc. |
-| `"timeline"` | Temporal evidence — PyReason multi-timestep traces (deferred per [D11](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — not currently produced) |
+```
+NOT concluded
+failure_class: closed_head_false
+result_id: evalr_v1:...                  (when explanation.result_id is set)
+row_id: row-1                            (when explanation.row is set)
+next_step: ...                           (one line per suggested_next_steps entry)
+```
 
-### 5.4 Per-engine richness today
+**Unsupported / invalid_request** — `repr` is `None`. Read `errors[*].code` + `errors[*].message`.
 
-| Engine | EvidenceGraph fidelity |
-|---|---|
-| Native (`engine="native"`) | Layered Form 1 support graph — shipped |
-| Souffle | Layered Form 1 witness — shipped via `SOUFFLE_WITNESS_KIND` |
-| ProbLog | Row shell plus preserved provenance graph with `EDGE_DERIVES` trace detail — shipped |
-| PyReason | Minimal rule_expr/rule fallback shell — shipped. **Form 2 timeline (multi-timestep bound updates) deferred** — see [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.1 (D11) |
+### 4.6 Per-engine fidelity today
 
-## 6. The closed-head concept
+| Engine | tier 1 rule_expr | tier 2 rule | tier 3 atom | seed | Notes |
+|---|---|---|---|---|---|
+| Native | ✓ | ✓ | ✓ with `reason` for non-fact steps | ✓ | Full 4-tier walk |
+| Souffle | ✓ | ✓ | ✓ | ✓ | Full 4-tier walk via `SOUFFLE_WITNESS_KIND` |
+| ProbLog | ✓ | ✓ | ✓ (one synthetic `problog_trace` atom) | ✓ | Adapter `NODE_PREMISE` + `EDGE_DERIVES` chain remains beneath the row-level atom node |
+| PyReason | ✓ | ✓ | minimal (`atom_status="unknown"` or omitted) | — | L1/L2 shell only; Form 2 timeline (D11) deferred |
+
+### 4.7 `raw_kind` + `bound` carry-over
+
+When the source row has uncertainty meta (`raw_kind` + `bound`), `Explanation.row` carries those fields — read-side counterpart to the write-side pairing in [`engines_and_configs.md`](engines_and_configs.md) §2.1. Invariant on the row: `bound is None iff raw_kind is None`.
+
+## 5. The closed-head concept
 
 "Closed head" appears in several places in this chapter — it's the same idea each time, worth pulling out once.
 
-### 6.1 What a closed head is
+### 5.1 What a closed head is
 
 A `Rule` whose `when` *closes* every `port`: every port's `Var` is bound either by an existing atom in `when`, or by an additional atom appended at close-time that pins the port to a specific value.
 
@@ -479,7 +534,7 @@ Rule(
 )
 ```
 
-### 6.2 Where the closed head appears
+### 5.2 Where the closed head appears
 
 | Place | Closed-head role |
 |---|---|
@@ -488,11 +543,15 @@ Rule(
 | `row.closed_head_digest` (§2.4) | The stable `sha256:` digest of the closed head — same body & same bindings → same digest |
 | `fg.rules.inspect(...)` ([`rules.md`](rules.md) §4) | `RuleExprInspect.is_closed` / `unbound_ports` reports closure status of a non-row Rule |
 
-### 6.3 `desc` carries through
+### 5.3 `desc` carries through
 
-If the open head has a `desc` template (e.g. `"User %user is in %region"`, see [`rules.md`](rules.md) §2.5), the closed head receives the same template — letting downstream renderers walk the closed-head chain and produce per-row descriptions. The evaluation runtime does **not** auto-render this; rendering is the consumer's choice via `row.close().render_desc({"user": ..., "region": ...})` or the `RuleExprInspect.render(...)` path. See [`rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) for the open-design future where this surfaces automatically in `Explanation` payloads.
+If the open head has a `desc` template (e.g. `"User %user is in %region"`, see [`rules.md`](rules.md) §2.5), the closed head receives the same template — letting downstream renderers walk the closed-head chain and produce per-row descriptions.
 
-## 7. `fg.audit` — post-hoc per-cell inspection
+**Auto-rendered into `Explanation.repr`.** During layered-graph construction, `_row_conclusion_node` calls `head.render_desc(row.bindings)` and stores the rendered string as the conclusion node's `value_summary`. The walker (§4.5) then surfaces that as the first line of `Explanation.repr`. When `head.desc` is `None`, the conclusion line falls back to `head.id + repr(bindings)` so the field is always populated. The `Rule.desc` is also exposed verbatim on the conclusion node's `engine_meta["desc_template"]` for consumers that want the un-substituted template.
+
+**Manual escape hatches remain available.** `row.close().render_desc({"user": ..., "region": ...})` and the `RuleExprInspect.render(...)` path stay as low-level options when a consumer needs templated text outside the `Explanation.repr` walker output (for example, custom UI rendering that bypasses the layered graph traversal).
+
+## 6. `fg.audit` — post-hoc per-cell inspection
 
 `fg.audit` is a different surface from `fg.eval` — it works **per ledger cell** (the `(pred_id, e_ref, value)` triple) rather than per evaluation row. Three methods:
 
@@ -504,7 +563,7 @@ If the open head has a `desc` template (e.g. `"User %user is in %region"`, see [
 
 `target` for `explain` / `conflicts` can be an `AssertionRecord`, an `(EntityCls, identity_kwargs)` tuple resolving to a single cell, or any other object the SDK can resolve via `_resolve_record_asrt_id`. These are diagnostics — they neither write to the ledger nor trigger evaluation.
 
-## 8. What's deferred
+## 7. What's deferred
 
 This chapter covers the shipped surface. Several user-facing capabilities are *designed* but not yet exposed in the SDK:
 
@@ -517,9 +576,9 @@ This chapter covers the shipped surface. Several user-facing capabilities are *d
 | Match witness `as_assertions() / witnesses() / to_view()` | Deferred — `fg.entities.match` returns snapshots only today | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.5 (D20) |
 | Desc auto-render in `Explanation` payloads | Shipped as `Explanation.repr` multi-line rendering for passed/failed explanations; deeper PyReason timeline rendering remains deferred | [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) §6.6 (D21) |
 
-## 9. Reference
+## 8. Reference
 
-### 9.1 Types
+### 8.1 Types
 
 ```python
 # Runtime entry points
@@ -551,22 +610,22 @@ from factgraph.audit.evidence_graph import (
 )
 ```
 
-### 9.2 Errors
+### 8.2 Errors
 
 | Error | Raised by |
 |---|---|
 | `SDKStoreError: evaluate(rule_expr, ...) requires head= Rule` | `fg.eval.evaluate` without `head=` |
-| `SDKStoreError: evaluate(rule_expr, ...) head= must be Rule` | `head=` is a non-Rule value (SDK DSL Rule, Inference, dict, str, inspect object) |
+| `SDKStoreError: evaluate(rule_expr, ...) head= must be Rule` | `head=` is not an **application-protocol** `Rule` (`factgraph.application.protocol.Rule`). The shipped `EvaluateResult.__post_init__` check raises `ProtocolShapeError("EvaluateResult.head must be application protocol Rule")` at construction; the SDK shell surfaces it as `SDKStoreError`. SDK DSL `Rule`, `Inference`, dict, str, inspect objects all rejected here |
 | `SDKStoreError: eval.explain(...) head= must be Rule` | Same constraint on `fg.eval.explain` |
 | `RuleExprError: manual explain head must be closed; unbound ports: <names>` | `fg.eval.explain(head=...)` with a head whose `when` does not bind every port |
 | `RuleExprError: head rule '<id>' matches an expression occurrence with a different content digest` | RuleExpr with head whose id matches an occurrence but content differs (§1.2 stale binding) |
 | `RuleExprError: head rule '<id>' matches multiple expression occurrences with the same content digest` | The same Rule appears more than once in the RuleExpr without distinct `.as_()` aliases (§1.2) |
 | `RuleExprError: RuleExpr head validation failed: head port '<name>' is only declared in some RuleExpr branches` | OR expression where the head port is present in some branches but not all (§1.2 port-shape contract) |
-| `WhereValidationError: head_vars length must match target arg_specs` | Schema-backed `head.id` has a port count that does not match the predicate arity |
+| `WhereValidationError: head_vars length must match target arg_specs` | Rare: `rule.id` incidentally collides with a schema predicate id but the rule's port count doesn't match that predicate's arity. Pick a different `rule.id` (`head.id` is a free-form label per §1.2) to avoid this path |
 | `DetachedRowError` | `row.explain()` after the parent `EvaluateResult` has been garbage-collected |
-| `ProtocolShapeError` (various) | `Explanation` / `Claim` / `EvidenceGraph` invariant violations at construction |
+| `ProtocolShapeError` (various) | `Explanation` / `EvaluateRow` / `EvidenceGraph` invariant violations at construction (the in-process application-protocol `Claim` / `EvidenceRef` wrappers were removed in Slice γ; the ledger-layer `factgraph.core.store.ledger.Claim` is a separate persistence record covered in [`data_model.md` §1](data_model.md)) |
 
-### 9.3 Method signatures by namespace
+### 8.3 Method signatures by namespace
 
 ```python
 # fg.eval (evaluation surface — see also engines_and_configs.md for engine= / config=)
@@ -584,10 +643,10 @@ fg.audit.conflicts(target) -> dict     # conflict diagnostics for a cell
 fg.audit.diff_proof_frames(...) -> ... # compare two recorded proof outcomes
 ```
 
-### 9.4 Related chapters
+### 8.4 Related chapters
 
 - [`rules.md`](rules.md) — `Rule` / `RuleExpr` / `head` declaration, and `fg.rules.inspect`
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=` / `config=` parameters consumed by `evaluate`
 - [`data_model.md`](data_model.md) §2.2 — the `raw_kind` + `bound` meta keys that surface on `EvaluateRow`
 - [`assertions.md`](../official/kernel/quickstart/assertions.md) — assertion-level read APIs that `fg.audit.explain` / `conflicts` resolve against
-- [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §8
+- [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §7
