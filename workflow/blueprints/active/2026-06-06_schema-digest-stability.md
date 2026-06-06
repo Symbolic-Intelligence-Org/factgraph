@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-06
-- Last Updated: 2026-06-06 (Step 4.2 review + tightening)
+- Last Updated: 2026-06-06 (Step 4.4 preflight amendment)
 - Related Modules:
   - `src/factgraph/core/schema/schema_ir.py`
   - `src/factgraph/core/store/database.py`
@@ -119,11 +119,28 @@ Required behavior:
 - Validation must tolerate different `generated_at` values between saved schema object and freshly compiled schema IR.
 - Validation must still reject true structural mismatch.
 
-### 5.4 Legacy volatile-digest workspace boundary
+Implementation lock from Step 4.3 PF-R1 / PF-R2:
+
+- Add a parsed-object helper equivalent to `_schema_ir_from_canonical_bytes(schema_bytes)`:
+  - parse UTF-8 JSON bytes
+  - require root JSON object
+  - call `ensure_schema_ir(...)`
+  - raise `DatabaseError` with schema-object context on parse / validation failure
+- `_write_schema_object(...)` must validate the passed canonical bytes by parsing them and confirming `schema_digest(parsed_schema_ir) == schema_digest_arg`.
+- `_validate_schema_object(...)` should take `expected_schema_ir`, not `expected_bytes`.
+- `_validate_schema_object(...)` must:
+  - read and parse the stored object
+  - confirm `schema_digest(stored_schema_ir) == schema_digest_arg`
+  - confirm `schema_digest(expected_schema_ir) == schema_digest_arg`
+  - compare identity canonical bytes for stored vs expected schema IR
+  - not compare full canonical object bytes, because `generated_at` may differ
+- Full schema object bytes remain canonical full IR bytes, including `generated_at`.
+
+### 5.4 Legacy volatile-digest workspace / ledger boundary
 
 This slice fixes schema identity for workspaces / databases created or saved after the new digest policy lands.
 
-It does **not** silently migrate pre-fix workspaces whose manifest, ledger meta, tx objects, assertion digests, and schema object filenames were already anchored to the old full-object digest that included `generated_at`.
+It does **not** silently migrate pre-fix workspaces or ledger-only databases whose manifest, ledger meta, tx objects, assertion digests, and schema object filenames were already anchored to the old full-object digest that included `generated_at`.
 
 Reason:
 
@@ -137,7 +154,7 @@ Therefore an old volatile-digest workspace cannot be made compatible by a load-t
 Required user-facing behavior for this slice:
 
 - New save/load and attach flows are stable.
-- Existing old volatile-digest workspaces may continue to require same generated schema IR or a future migration tool.
+- Existing old volatile-digest workspaces and old ledger-only files may continue to require the old digest anchor or a future migration tool.
 - Docs must not imply this slice retroactively rewrites old workspace identity.
 
 ### 5.5 Test strategy
@@ -151,8 +168,11 @@ Add regression tests for:
 
 - `schema_digest` equality when only `generated_at` differs.
 - `schema_digest` inequality when a structural field changes.
+- `description` or entity `version` still changes digest in this slice, guarding the current narrow identity policy.
 - `FactGraph.save_workspace()` then `FactGraph.load_workspace(..., schema_classes=...)` succeeds when compiler timestamps differ.
 - `Database.create(schema_ir=...)` then `FactGraph.attach(db, schema_classes=...)` succeeds when compiler timestamps differ.
+- `schema_object_exists_for_workspace(...)` uses the stable identity digest path.
+- schema object bytes still include the full schema object metadata, including `generated_at`.
 - Schema object validation still rejects structural mismatch.
 
 ### 5.6 Docs
@@ -172,7 +192,7 @@ Docs must distinguish:
 - `pattern` and `enum_values` remain schema-identity fields because runtime value validation consumes them.
 - True structural schema mismatches still fail load / attach.
 - Existing workspace manifests continue using `schema_digest` as the schema identity token.
-- Existing pre-fix workspaces already anchored to a volatile full-object digest are not silently rewritten in this slice.
+- Existing pre-fix workspaces / ledgers already anchored to a volatile full-object digest are not silently rewritten in this slice.
 
 ## 7. Acceptance
 
@@ -183,8 +203,10 @@ Docs must distinguish:
 - [ ] `FactGraph.attach(db, schema_classes=...)` after a timestamp boundary succeeds for identical schema classes.
 - [ ] Schema object write / validate works with full schema object bytes while using identity digest filenames.
 - [ ] Schema object validation still rejects structural mismatch.
+- [ ] Schema object tests confirm object path uses stable identity digest while stored bytes still include `generated_at`.
+- [ ] Tests confirm `description` or `version` still changes digest in this slice.
 - [ ] Tests use explicit timestamp overrides or timestamp-source mocks rather than wall-clock sleeps where possible.
-- [ ] Legacy volatile-digest workspace migration is documented as out of scope.
+- [ ] Legacy volatile-digest workspace / ledger migration is documented as out of scope.
 - [ ] Docs explain schema object metadata vs schema identity digest.
 - [ ] Tests pass for schema, workspace, database attach, and affected SDK lifecycle surfaces.
 - [ ] No sacred Q-PR1 path changes.

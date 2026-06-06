@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 2026-06-06 | draft | Blueprint created | User-reported `generated_at` / schema digest instability reproduced; Stage 1 audit and Step 4.1 blueprint draft created. |
 | 2026-06-06 | draft | Step 4.2 review + tightening | Added P1 legacy volatile-digest workspace boundary, P2 schema object identity-validation precision, and P3 deterministic timestamp test strategy. |
+| 2026-06-06 | draft | Step 4.4 preflight amendment | Folded PF-R1/PF-R2 parsed schema object validation, PF-R3 legacy ledger boundary, and PF-r1/PF-r2 test locks. |
 
 ## Decision Notes
 
@@ -24,3 +25,10 @@
 - **P1 legacy volatile-digest boundary**: pre-fix workspaces have old full-object digests embedded in manifest, ledger meta, tx objects, assertion digests, and schema object filenames. A load-time fallback alone cannot safely convert those identities. This slice fixes new save/load and attach flows; old workspace migration is deferred.
 - **P2 schema object validation precision**: database schema object helpers must validate parsed schema identity digest, not hash full object bytes. The saved object may keep `generated_at`; the identity digest must ignore it.
 - **P3 deterministic tests**: prefer explicit `generated_at` values or timestamp-source mocking over wall-clock sleep. Wall-clock tests are slow and can be flaky.
+
+### Step 4.4 Preflight Amendment
+
+- **PF-R1 / PF-R2**: schema object helpers must parse canonical object bytes, validate schema IR, and compare identity canonical bytes. Public validation must pass `expected_schema_ir`, not full expected bytes.
+- **PF-R3**: legacy boundary includes old ledger-only files and Database legacy open paths, not only workspace schema objects.
+- **PF-r1**: tests must verify schema object path uses stable identity digest and stored bytes still include full metadata such as `generated_at`.
+- **PF-r2**: tests must guard narrow policy by proving `description` or `version` still changes digest in this slice.
