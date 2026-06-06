@@ -2,7 +2,7 @@
 
 - Status: scoped
 - Created: 2026-06-06
-- Last Updated: 2026-06-06 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-06 (Step 4.6.5 pre-impl grep)
 - Related Modules:
   - `src/factgraph/core/schema/schema_ir.py`
   - `src/factgraph/core/store/database.py`
@@ -12,6 +12,7 @@
   - [workflow/audit/active/2026-06-06_schema-digest-stability-vs-shipped.md](../../audit/active/2026-06-06_schema-digest-stability-vs-shipped.md)
   - [docs/quickstart/schema_definition.md](../../../docs/quickstart/schema_definition.md)
   - [docs/quickstart/load_and_save.md](../../../docs/quickstart/load_and_save.md)
+  - [docs/references/bridges/symir-blueprint-extraction.md](../../../docs/references/bridges/symir-blueprint-extraction.md)
 - Audit Log:
   - [2026-06-06_schema-digest-stability.audit.md](./2026-06-06_schema-digest-stability.audit.md)
 
@@ -183,6 +184,10 @@ Docs must distinguish:
 - schema identity digest: stable digest of structure-bearing schema fields, excluding volatile metadata
 - legacy boundary: pre-fix volatile-digest workspace migration is out of this slice.
 
+Step 4.6.5 N-1 docs cascade:
+
+- `docs/references/bridges/symir-blueprint-extraction.md` currently documents shipped `schema_digest` as hashing the whole schema IR including `generated_at`. Step 4.7 must update those current-behavior rows so the bridge note reflects the new policy: `generated_at` is excluded, while `description` / `tags` remain included in this slice.
+
 ## 6. Boundaries And Invariants
 
 - `master` and `v0.1-oss-prep` remain untouched.
@@ -208,6 +213,7 @@ Docs must distinguish:
 - [ ] Tests use explicit timestamp overrides or timestamp-source mocks rather than wall-clock sleeps where possible.
 - [ ] Legacy volatile-digest workspace / ledger migration is documented as out of scope.
 - [ ] Docs explain schema object metadata vs schema identity digest.
+- [ ] Bridge/reference docs no longer describe current `schema_digest` as hashing top-level `generated_at`.
 - [ ] Tests pass for schema, workspace, database attach, and affected SDK lifecycle surfaces.
 - [ ] No sacred Q-PR1 path changes.
 
@@ -219,15 +225,17 @@ Docs must distinguish:
 4. Add direct schema digest unit coverage for `generated_at` exclusion and structural mismatch.
 5. Update `docs/quickstart/schema_definition.md`.
 6. Update `docs/quickstart/load_and_save.md`.
-7. Run focused tests:
+7. Update `docs/references/bridges/symir-blueprint-extraction.md` current-behavior rows that mention `generated_at` in `schema_digest`.
+8. Run focused tests:
    - `PYTHONPATH=src python -m pytest tests/test_factgraph_workspace_lifecycle.py tests/test_db_identity_substrate.py tests/test_schema_mutation_lifecycle.py`
    - plus any directly added schema digest tests.
-8. Run sacred checks and dirty-baseline preservation checks.
+9. Run sacred checks and dirty-baseline preservation checks.
 
 ## 9. Docs To Update
 
 - `docs/quickstart/schema_definition.md`
 - `docs/quickstart/load_and_save.md`
+- `docs/references/bridges/symir-blueprint-extraction.md`
 
 No new durable docs entry is expected, so `docs/README.md` should not need an update.
 
