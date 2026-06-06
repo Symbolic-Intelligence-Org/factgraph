@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 import warnings
+from unittest.mock import patch
 
 # Slice 7C / Q6-A (a.2): FileAuthoringRegistry was removed. Test methods
 # that exercised the legacy adapter directly are skipped below.
@@ -239,6 +240,23 @@ class WorkspaceSaveTests(unittest.TestCase):
 
         self.assertEqual(first["schema_digest"], second["schema_digest"])
         self.assertEqual(first["components"], second["components"])
+        self.assertIsNotNone(loaded.entities.get(User, user_id="Alice"))
+
+    def test_load_workspace_accepts_same_schema_with_new_generated_at(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "workspace"
+            with patch(
+                "factgraph.authoring.schema_compile._utc_now_iso_z",
+                side_effect=("2026-06-06T00:00:00Z", "2026-06-06T00:00:01Z"),
+            ):
+                fg = _seed_fg(path=workspace)
+                fg.save_workspace()
+                manifest = _read_manifest(workspace)
+                loaded = FactGraph.load_workspace(workspace, schema_classes=[User])
+
+        self.assertEqual(schema_digest(fg.schema_ir), manifest["schema_digest"])
+        self.assertEqual(schema_digest(loaded.schema_ir), manifest["schema_digest"])
+        self.assertNotEqual(fg.schema_ir["generated_at"], loaded.schema_ir["generated_at"])
         self.assertIsNotNone(loaded.entities.get(User, user_id="Alice"))
 
     def test_save_to_other_path_uses_ledger_backup_and_binds_new_path(self) -> None:
