@@ -3,10 +3,17 @@ from __future__ import annotations
 import unittest
 
 from factgraph.audit import (
+    EDGE_DERIVED_BY,
+    EDGE_HAS_ATOM,
     EDGE_SUPPORTS,
+    EDGE_SUPPORTED_BY,
+    EDGE_USES,
     LAYOUT_TREE,
+    NODE_ATOM,
     NODE_CONCLUSION,
     NODE_PREMISE,
+    NODE_RULE,
+    NODE_RULE_EXPR,
     EvidenceEdge,
     EvidenceGraph,
     EvidenceNode,
@@ -56,6 +63,31 @@ class AuditEvidenceGraphTests(unittest.TestCase):
         self.assertEqual(graph.nodes[0].engine_meta["rule_number"], "R1")
         self.assertEqual(graph.edges[0].rule_label, "popular propagation")
         self.assertEqual(graph.metadata["confidence"], 1.0)
+
+    def test_graph_accepts_layered_eta_vocabulary(self) -> None:
+        graph = EvidenceGraph(
+            graph_id="eg:layered",
+            engine="native",
+            root_node_id="n:root",
+            nodes=(
+                EvidenceNode("n:root", NODE_CONCLUSION, "rule", "eligible", "true"),
+                EvidenceNode("n:expr", NODE_RULE_EXPR, "rule", "RuleExpr eligible", "single"),
+                EvidenceNode("n:rule", NODE_RULE, "rule", "Rule eligible", "eligible"),
+                EvidenceNode("n:atom", NODE_ATOM, "rule.c0", "age check", "support"),
+                EvidenceNode("n:seed", "seed", "ledger", "Assertion asrt-1", "ledger assertion"),
+            ),
+            edges=(
+                EvidenceEdge("e:derived", "n:expr", "n:root", EDGE_DERIVED_BY),
+                EvidenceEdge("e:uses", "n:rule", "n:expr", EDGE_USES),
+                EvidenceEdge("e:has-atom", "n:atom", "n:rule", EDGE_HAS_ATOM),
+                EvidenceEdge("e:supported", "n:seed", "n:atom", EDGE_SUPPORTED_BY),
+            ),
+            support_kind="native_binding_v1",
+        )
+
+        rebuilt = evidence_graph_from_dict(evidence_graph_to_dict(graph))
+
+        self.assertEqual(rebuilt, graph)
 
     def test_graph_rejects_duplicate_node_id(self) -> None:
         with self.assertRaisesRegex(ValueError, "duplicate node_id"):

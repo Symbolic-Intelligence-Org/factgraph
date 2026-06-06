@@ -663,7 +663,8 @@ The public evidence path is `EvaluateResult` plus `Explanation`:
 | `fg.eval.explain(expr, head=closed_head)` | Replay a closed-head explanation |
 
 Failed explanations use `Explanation(status="failed")` with
-`failure_class`. There is no public `.eval.why_not(...)` or `fg.what_if.*`
+`failure_class`; `Explanation.repr` returns a deterministic failure summary.
+There is no public `.eval.why_not(...)` or `fg.what_if.*`
 candidate-universe shell in T5.
 
 For native or Souffle passed rows, `row.explain().evidence` is a row-level Form
@@ -672,6 +673,8 @@ seeds, and `supports` edges. For ProbLog passed rows, it is a row-level
 provenance graph with `derives` edges and ProbLog trace / uncertainty projection
 details under `engine_meta["problog"]`. The graph metadata mirrors the
 row/result audit context; `run_id` stays on the `EvaluateResult` envelope.
+Read `row.explain().repr` for deterministic multi-line text walked from that
+graph. Unsupported and invalid request explanations return `None` for `repr`.
 Treat PyReason row-level graphs, aggregate contributor envelopes, failed-graph
 trees, and match witness output as future evidence tracks. The full DTO chain
 and boundaries are documented in the official

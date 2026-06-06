@@ -92,7 +92,21 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertTrue(mock_run.call_args.kwargs["trace"])
         explanation = candidates[0].explain()
         self.assertEqual(explanation.evidence.support_kind, PROBLOG_PROVENANCE_KIND)
-        self.assertNotEqual(candidates[0].evidence_ref.ref_id, f"sha256:{'0' * 64}")
+        self.assertNotEqual(candidates[0].closed_head_digest, f"sha256:{'0' * 64}")
+
+    @patch("factgraph.adapters.problog.engine_eval.run_problog")
+    def test_free_form_target_pred_id_uses_query_style_candidates(self, mock_run) -> None:
+        sdk = self._make_sdk()
+        mock_run.return_value = self._mock_output(sdk)
+        compiled = sdk._compile_derivation_input(self._make_derivation())[0]
+        compiled["target_pred_id"] = "find_user_tags"
+
+        candidates = sdk.eval.evaluate(compiled, engine="problog")
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates.head.id, "find_user_tags")
+        self.assertIn("u", candidates[0].bindings)
+        self.assertIn("tag", candidates[0].bindings)
 
     def test_sdk_evaluate_rejects_engine_options_timeout(self) -> None:
         sdk = self._make_sdk()

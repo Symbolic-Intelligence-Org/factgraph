@@ -40,16 +40,17 @@ three layers:
 
 Native and Souffle row explanations now use the same DTO family. For passed
 native or Souffle `EvaluateRow.explain()` calls, the row-level `EvidenceGraph`
-is populated as a Form 1 tree with a root `conclusion`, selected-branch
-`premise` nodes, assertion `seed` nodes, and `supports` edges. This is
+is populated as a layered Form 1 tree with a root `conclusion`, `rule_expr` /
+`rule` nodes, `atom` nodes, assertion `seed` nodes, and semantic layered edges. This is
 separate from the older candidate evidence tree and Souffle proof-tree readback
 APIs.
 
 ProbLog row explanations also use the same DTO family, but they remain
 provenance-row graphs rather than Form 1 graphs. For passed ProbLog rows,
 `EvaluateRow.explain()` wraps the adapter proof trace into row-result
-`EvidenceGraph` metadata, uses ProbLog trace topology, and keeps ProbLog-specific
-trace and uncertainty-projection details under `engine_meta["problog"]`.
+`EvidenceGraph` metadata, adds a row-level rule shell, keeps ProbLog trace
+topology below that shell, and keeps ProbLog-specific trace and
+uncertainty-projection details under `engine_meta["problog"]`.
 
 ## 2. Current data model
 
@@ -91,7 +92,7 @@ audit bridge keys:
 |---|---|
 | `result_id` | owning `EvaluateResult` id |
 | `row_id` | explained row id |
-| `evidence_ref_id` | row `EvidenceRef.ref_id` |
+| `evidence_ref_id` | compatibility evidence reference id derived from result id, row id, row digest, and closed-head digest |
 | `claim_digest` | row claim digest |
 | `closed_head_digest` | closed-head digest |
 | `expr_digest` | evaluated expression digest |
@@ -118,15 +119,24 @@ Only the minimal shared enumerations are frozen at v1:
   - `conclusion`
   - `premise`
   - `seed`
+  - `rule_expr`
+  - `rule`
+  - `atom`
 - `edge_kind`
   - `supports`
   - `derives`
   - `updates`
+  - `derived_by`
+  - `uses`
+  - `has_atom`
+  - `supported_by`
 
-Native and Souffle Form 1 row graphs use `supports` only. ProbLog row
-provenance graphs use `derives`. `updates` remains reserved for PyReason /
-temporal engine paths. The `dag` layout and the `rule_fire` node kind are not in
-v1 scope yet.
+Edges keep the shipped physical direction: `from_node_id` is the supporting
+child/cause and `to_node_id` is the supported parent/conclusion. Native and
+Souffle Form 1 row graphs use the layered edge kinds. ProbLog row provenance
+graphs use a layered row shell plus preserved `derives` trace edges. `updates`
+remains reserved for PyReason / temporal engine paths. The `dag` layout and the
+`rule_fire` node kind are not in v1 scope yet.
 
 ## 4. Validation and invariants
 

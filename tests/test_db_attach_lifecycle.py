@@ -253,7 +253,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
             self.assertEqual([row.name for row in matched], ["Ada"])
             self.assertEqual(evaluated.count(), 1)
-            self.assertEqual(evaluated.view_snapshot_digest, view.view_digest)
+            self.assertEqual(evaluated.fingerprint.view_snapshot_digest, view.view_digest)
             self.assertIn("Ada", str(evaluated[0].bindings))
             self.assertNotIn("Grace", str(evaluated[0].bindings))
 

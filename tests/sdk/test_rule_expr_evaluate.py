@@ -18,10 +18,11 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
-from factgraph.audit.evidence_graph import EDGE_SUPPORTS, NODE_PREMISE, NODE_SEED
+from factgraph.audit.evidence_graph import EDGE_HAS_ATOM, EDGE_SUPPORTED_BY, NODE_ATOM, NODE_RULE, NODE_RULE_EXPR, NODE_SEED
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
+from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
 
@@ -85,9 +86,9 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertNotIn("occurrence_map", result[0].bindings)
         self.assertNotIn("join_materializations", result[0].bindings)
         self.assertRegex(result.result_id, r"^evalr_v1:[0-9a-f]{64}$")
-        self.assertRegex(result.view_snapshot_digest, r"^sha256:[0-9a-f]{64}$")
-        self.assertRegex(result.result_digest, r"^sha256:[0-9a-f]{64}$")
-        self.assertIsNone(result.config_digest)
+        self.assertRegex(result.fingerprint.view_snapshot_digest, r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(result.fingerprint.result_digest, r"^sha256:[0-9a-f]{64}$")
+        self.assertIsNone(result.fingerprint.config_digest)
         self.assertFalse(hasattr(result[0], "candidate_id"))
         self.assertFalse(hasattr(result[0], "support_digest"))
         explanation = result[0].explain()
@@ -95,9 +96,12 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIsNotNone(explanation.evidence)
         assert explanation.evidence is not None
         self.assertEqual(explanation.evidence.support_kind, "native_binding_v1")
-        self.assertTrue(any(node.node_kind == NODE_PREMISE for node in explanation.evidence.nodes))
+        self.assertTrue(any(node.node_kind == NODE_RULE_EXPR for node in explanation.evidence.nodes))
+        self.assertTrue(any(node.node_kind == NODE_RULE for node in explanation.evidence.nodes))
+        self.assertTrue(any(node.node_kind == NODE_ATOM for node in explanation.evidence.nodes))
         self.assertTrue(any(node.node_kind == NODE_SEED for node in explanation.evidence.nodes))
-        self.assertTrue(all(edge.edge_kind == EDGE_SUPPORTS for edge in explanation.evidence.edges))
+        self.assertTrue(any(edge.edge_kind == EDGE_HAS_ATOM for edge in explanation.evidence.edges))
+        self.assertTrue(any(edge.edge_kind == EDGE_SUPPORTED_BY for edge in explanation.evidence.edges))
         self.assertIsInstance(result[0].close(), Rule)
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:
@@ -110,7 +114,36 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIsInstance(result, EvaluateResult)
         self.assertTrue(result)
         self.assertIn(encoded, str(result[0].bindings))
-        self.assertEqual(result.view_snapshot_digest, graph.eval.evaluate(rule, head=rule, engine="native").view_snapshot_digest)
+        self.assertEqual(
+            result.fingerprint.view_snapshot_digest,
+            graph.eval.evaluate(rule, head=rule, engine="native").fingerprint.view_snapshot_digest,
+        )
+
+    def test_free_form_head_id_evaluates_query_style_rows(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "query", region="us")
+        rule = _person_region_rule("find_us_users")
+
+        result = graph.eval.evaluate(rule, head=rule, engine="native")
+
+        self.assertEqual(result.head.id, "find_us_users")
+        self.assertEqual(result.count(), 1)
+        self.assertEqual(result[0].bindings["person"]["value"], encoded)
+        self.assertEqual(result[0].bindings["region"]["value"], "us")
+        self.assertEqual(result[0].kind, "fact_triple")
+
+    def test_schema_backed_head_id_still_rejects_arity_mismatch(self) -> None:
+        graph = _store()
+        _seed_person(graph, "arity")
+        person = Var("$person")
+        rule = Rule(
+            id="Person:exists",
+            when=(PredAtom("Person:exists", [person]),),
+            ports={"person": person, "extra": person},
+        )
+
+        with self.assertRaisesRegex(WhereValidationError, "head_vars length must match target arg_specs"):
+            graph.eval.evaluate(rule, head=rule, engine="native")
 
     def test_missing_head_uses_sdk_store_error(self) -> None:
         graph = _store()
@@ -219,10 +252,11 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         detached = row.__class__(
             row_id=row.row_id,
             bindings=row.bindings,
-            claim=row.claim,
+            kind=row.kind,
+            digest=row.digest,
+            closed_head_digest=row.closed_head_digest,
             raw_kind=row.raw_kind,
             bound=row.bound,
-            evidence_ref=row.evidence_ref,
         )
 
         with self.assertRaisesRegex(DetachedRowError, "detached"):
@@ -250,8 +284,9 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertEqual(explanation.checked_scope["semantics_source"], "manual_standalone")
         self.assertIsNone(explanation.checked_scope["evaluate_config_digest"])
         self.assertIsNone(explanation.checked_scope["semantics_match"])
-        self.assertIsNone(explanation.row_id)
-        self.assertIsNone(explanation.evidence_ref_id)
+        self.assertIsNotNone(explanation.row)
+        assert explanation.row is not None
+        self.assertEqual(dict(explanation.row.bindings), dict(result[0].bindings))
         self.assertEqual(explanation.checked_scope["closed_head_digest"], closed_head_digest_for(closed))
 
     def test_projection_undeclared_port_uses_ruleexpr_error(self) -> None:
@@ -334,7 +369,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertEqual(request.engine, "problog")
         self.assertEqual(request.semantics_profile.engine, "problog")
         self.assertEqual(request.semantics_profile.rule_projection, {})
-        self.assertIsNotNone(result.config_digest)
+        self.assertIsNotNone(result.fingerprint.config_digest)
 
     def test_application_rule_accepts_pyreason_semantics_wrapper(self) -> None:
         graph = _store()
@@ -442,7 +477,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             profile.rule_projection["sdk_rule_params"],
             [{"target": f"rule:{rule.id}", "kind": "rule_params", "value": {"label": "primary"}}],
         )
-        self.assertNotEqual(first.config_digest, second.config_digest)
+        self.assertNotEqual(first.fingerprint.config_digest, second.fingerprint.config_digest)
 
         with self.assertRaisesRegex(SDKStoreError, "unknown Rule.id 'missing'"):
             graph.eval.evaluate(rule, head=rule, config=sdk.ProbLogConfig(rule_params={"missing": {"label": "bad"}}))

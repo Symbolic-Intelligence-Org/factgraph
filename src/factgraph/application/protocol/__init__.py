@@ -16,7 +16,14 @@ from .derivation_diagnose import (
     DiagnoseResult,
     DiagnoseStatus,
 )
-from .evaluate_result import Claim, DetachedRowError, EvaluateResult, EvaluateRow, EvidenceRef, Explanation
+from .evaluate_result import (
+    DetachedRowError,
+    EvaluateResult,
+    EvaluateRow,
+    Explanation,
+    ResultFingerprint,
+)
+from .explanation_render import walk_evidence
 from .derivation_fact_overlay import (
     FactOverlay,
     FactOverlayAction,
@@ -150,12 +157,11 @@ __all__ = [
     "EntityWritePlan",
     "EntityWriteResult",
     "ErrorDTO",
-    "Claim",
     "DetachedRowError",
     "EvaluateResult",
     "EvaluateRow",
-    "EvidenceRef",
     "Explanation",
+    "ResultFingerprint",
     "FactOverlay",
     "EvidenceEnvelope",
     "FactOverlayAction",
@@ -236,4 +242,5 @@ __all__ = [
     "WhyNotUniverseResult",
     "WriteValue",
     "aggregate_proof_frame_status",
+    "walk_evidence",
 ]

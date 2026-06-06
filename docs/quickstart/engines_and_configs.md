@@ -110,7 +110,7 @@ fg.fields.add(
 
 The same keys are consumed in two places:
 
-- **Read-side time-travel**: `snap.field("role").at("2026-03-15T...")` filters assertions by their business-time interval
+- **Read-side time-travel**: `snap.field("role").at("2026-03-15T...")` filters assertions by their business-time interval (see [`assertions.md`](../official/kernel/quickstart/assertions.md))
 - **PyReason `temporal_projection.valid_time_boundaries` / `fact_boundaries` modes** (§4.8): both modes treat every assertion's business-time interval as a fragment of the timeline that PyReason's timestep enumeration discretises. `fact_boundaries` is the canonical spelling per the adapter docs; `valid_time_boundaries` is the input alias kept for legacy profiles. They share one code path.
 
 A ProbLog evaluation ignores these keys entirely — there is no time dimension in ProbLog's semantics. Writing `valid_from` / `valid_to` is safe regardless of which engine you later choose; only the temporal modes of `PyReasonConfig` read them.
@@ -348,7 +348,7 @@ SemanticsProfile(
 
 ### 5.3 Pattern parallel
 
-This split (`SemanticsProfile` canonical / `ProbLogConfig` + `PyReasonConfig` ergonomic) is the same SDK-shadow / application-DTO pattern documented at [`docs/quickstart/rules.md`](rules.md) §2.6 for Rule vs the lower-level data shape. The SemanticsProfile naming is benign — application takes a neutral name, SDK takes the user-facing engine-specific names.
+This split (`SemanticsProfile` canonical / `ProbLogConfig` + `PyReasonConfig` ergonomic) is the same SDK-shadow / application-DTO pattern documented at [`docs/quickstart/rules.md`](rules.md) §2.6 for Rule vs the lower-level data shape. The SemanticsProfile naming is benign — application takes a neutral name, SDK takes the user-facing engine-specific names. (Compare the deferred Rule-namespace redesign discussed in [`workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md`](../../workflow/design/design-points/active/rule-namespace-rulespec-redesign.zh.md) §2.2, where the same pattern is *not* yet applied.)
 
 ## 6. `fg.eval.preview_config(...)` — inspect-only
 

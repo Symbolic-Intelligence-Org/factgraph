@@ -92,7 +92,7 @@ A handful of meta keys are *canonical* — they're surfaced as typed slots on `A
 | `ingested_at` | nanosecond timestamp consumed by snapshot projection policies (e.g., active-view freshness) |
 | `version` | version label used by record-set filters (`_meta={"version": v}`) |
 | `valid_from`, `valid_to` | ISO-8601 business-time markers used by record-set business-time selection (`.at(t)`) |
-| `raw_kind` + `bound` | reasoning input — `ProbLog` and `PyReason` adapters consume these as uncertainty carriers (see [`engines_and_configs.md`](engines_and_configs.md) §2). Strict pairing: see §2.2. |
+| `raw_kind` + `bound` | reasoning input — `ProbLog` and `PyReason` adapters consume these as uncertainty carriers (see [`assertions.md`](../official/kernel/quickstart/assertions.md) and `semantics.md`). Strict pairing: see §2.2. |
 | `derived_rule_id`, `derived_rule_version` | identifies the rule and version that derived this assertion (set automatically when an inference engine writes back) |
 | `candidate_id`, `candidate_key`, `candidate_kind` | links a derived claim to its candidate origin (audit / explanation surface) |
 
@@ -183,7 +183,7 @@ FactGraph sits closest to Datomic (immutable assertion + retract-as-record) and 
 
 ### 4.3 In-flight design note
 
-The shipped 7-table layout is the current scope. A simpler shape (two data tables plus `ledger_meta`, with revokes collapsed into a `__system__.revokes` Claim category and `claim_args` / `annotation_rows` / `ingest_keys` removed) is under active design exploration; no implementation slice is scheduled yet. This chapter will be updated when the layout evolves.
+The shipped 7-table layout is the current scope. An active design — [`ledger-schema-specification.zh.md`](../../workflow/design/design-points/active/ledger-schema-specification.zh.md) — targets a simpler shape with two data tables (`claims` + `claim_meta`) plus `ledger_meta`, with revokes collapsed into a `__system__.revokes` Claim category and `claim_args` / `annotation_rows` / `ingest_keys` removed. Five related ADRs are adopted (`q-ic` / `q-api` / `q-sys-a` / `q-sys-b` / `q-inv-9`), but the implementation slice (`slice-3b-ledger-migration`) has not been scheduled yet; `core/store/ledger.py` is currently Q-PR1 sacred (no diffs allowed in v0.2.0 cycles). This chapter will be updated when the migration slice lands.
 
 ## 5. Reference
 
