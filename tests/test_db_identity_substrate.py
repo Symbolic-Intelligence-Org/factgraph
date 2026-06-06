@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 from factgraph.core.protocol.digests import sha256_hex
@@ -62,6 +63,12 @@ def _schema_ir() -> dict:
     }
 
 
+def _schema_ir_with_generated_at(value: str) -> dict:
+    out = deepcopy(_schema_ir())
+    out["generated_at"] = value
+    return out
+
+
 def _person_ref(value: str = "p1") -> str:
     return f"idref_v1:Person:{value}"
 
@@ -75,6 +82,15 @@ def _assertion(name: str, *, meta: tuple[MetaEntry, ...] = ()) -> AssertionInput
 
 
 class DatabaseIdentitySubstrateTests(unittest.TestCase):
+    def test_schema_digest_ignores_generated_at_only(self) -> None:
+        first = _schema_ir_with_generated_at("2026-05-20T00:00:00Z")
+        second = _schema_ir_with_generated_at("2026-05-21T00:00:00Z")
+        self.assertEqual(schema_digest(first), schema_digest(second))
+
+        changed_description = deepcopy(first)
+        changed_description["entities"][0]["description"] = "still identity-bearing in this slice"
+        self.assertNotEqual(schema_digest(first), schema_digest(changed_description))
+
     def test_canonical_protocol_prefixes_and_token_forms(self) -> None:
         data_bytes = canonical_bytes_dbdata_v1(("asrt:" + "0" * 64,))
         self.assertTrue(data_bytes.startswith(DBDATA_V1_PREFIX))
@@ -181,12 +197,13 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
     def test_schema_object_workspace_helpers_write_validate_and_check_existence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workspace"
-            schema_ir = _schema_ir()
+            schema_ir = _schema_ir_with_generated_at("2026-05-20T00:00:00Z")
+            recompiled_schema_ir = _schema_ir_with_generated_at("2026-05-21T00:00:00Z")
             digest = schema_digest(schema_ir)
 
             self.assertFalse(schema_object_exists_for_workspace(path, digest))
             written_digest = write_schema_object_for_workspace(path, schema_ir)
-            validated_digest = validate_schema_object_for_workspace(path, schema_ir)
+            validated_digest = validate_schema_object_for_workspace(path, recompiled_schema_ir)
 
             self.assertEqual(written_digest, digest)
             self.assertEqual(validated_digest, digest)
@@ -194,6 +211,12 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             paths = resolve_database_workspace_paths(path)
             schema_path = paths.schema_objects / f"{digest.removeprefix('sha256:')}.json"
             self.assertEqual(schema_path.read_bytes(), canonicalize_schema_ir_jcs(schema_ir))
+
+            mismatched_schema_ir = deepcopy(recompiled_schema_ir)
+            mismatched_schema_ir["entities"][0]["description"] = "different identity"
+            schema_path.write_bytes(canonicalize_schema_ir_jcs(mismatched_schema_ir))
+            with self.assertRaisesRegex(DatabaseError, "digest|identity"):
+                validate_schema_object_for_workspace(path, recompiled_schema_ir)
 
     def test_database_head_resolves_from_head_tx_object_not_ledger_meta(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

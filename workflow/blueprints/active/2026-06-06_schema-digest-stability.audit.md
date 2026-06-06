@@ -11,6 +11,7 @@
 | 2026-06-06 | draft | Step 4.4 preflight amendment | Folded PF-R1/PF-R2 parsed schema object validation, PF-R3 legacy ledger boundary, and PF-r1/PF-r2 test locks. |
 | 2026-06-06 | scoped | Step 4.6 scope freeze | Step 4.5 self-check passed; PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2 covered by `b785313e`. |
 | 2026-06-06 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran full-object digest / schema object validation / docs wording grep. No new production scope beyond PF-R1/PF-R2/PF-R3; N-1 bridge docs cascade folded. Status remains scoped; no implementation started. |
+| 2026-06-06 | scoped | Step 4.7 implementation | Implemented stable schema identity digest excluding only top-level `generated_at`; updated schema object validation, regression tests, and scoped docs. Status remains scoped until Step 4.8 closure. |
 
 ## Decision Notes
 
@@ -40,3 +41,10 @@
 - **Code grep result**: old schema object full-byte assumptions are confined to the already-scoped `database.py` helper rewrite (`expected_bytes`, `sha256_token(schema_bytes)`, `sha256_token(actual)`, and full byte compare). No additional production consumer requires scope expansion.
 - **N-1 docs cascade**: `docs/references/bridges/symir-blueprint-extraction.md` contains current-behavior rows that say `schema_digest` hashes the whole schema IR including `generated_at`. Step 4.7 must update those rows to the new policy while preserving the slice boundary that `description` / `tags` remain included.
 - **Dirty docs caution**: `docs/quickstart/load_and_save.md` is already dirty from unrelated edits. Step 4.7 must avoid staging unrelated hunks when adding the schema-digest documentation update.
+
+### Step 4.7 Implementation Notes
+
+- `schema_digest(...)` now hashes `canonicalize_schema_ir_identity_jcs(...)`, which excludes only top-level `generated_at`.
+- Schema object files still store full canonical schema IR bytes, but write / validate parse the object and compare schema identity rather than full-object byte hashes.
+- `FactGraph.load_workspace(...)` and `FactGraph.attach(...)` now tolerate recompiled identical schema classes with a different generated timestamp.
+- Pytest currently segfaults in local pytest capture initialization before test collection; focused verification used `unittest` for the same test modules.

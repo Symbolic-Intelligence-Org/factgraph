@@ -28,6 +28,7 @@ REQUIRED_TOP_LEVEL_KEYS = (
 )
 
 REQUIRED_PROTOCOL_KEYS = ("idref_v1", "tup_v1", "export_v1")
+SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS = frozenset({"generated_at"})
 
 
 class SchemaIRValidationError(Exception):
@@ -73,8 +74,27 @@ def canonicalize_schema_ir_jcs(schema_ir: dict) -> bytes:
         raise SchemaIRValidationError(f"failed to canonicalize schema_ir: {exc}") from exc
 
 
+def canonicalize_schema_ir_identity_jcs(schema_ir: dict) -> bytes:
+    validated = ensure_schema_ir(schema_ir)
+    identity = {
+        key: value
+        for key, value in validated.items()
+        if key not in SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS
+    }
+    _reject_floats(identity, "$")
+    try:
+        return json.dumps(
+            identity,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise SchemaIRValidationError(f"failed to canonicalize schema identity: {exc}") from exc
+
+
 def schema_digest(schema_ir: dict) -> str:
-    canonical = canonicalize_schema_ir_jcs(schema_ir)
+    canonical = canonicalize_schema_ir_identity_jcs(schema_ir)
     return sha256_token(canonical)
 
 

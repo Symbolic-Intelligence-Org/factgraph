@@ -5,6 +5,7 @@ import unittest
 import warnings
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from factgraph.sdk import (
     AssertionInput,
@@ -23,6 +24,7 @@ from factgraph.sdk import (
 )
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
+from factgraph.core.schema.schema_ir import schema_digest
 
 
 class User(Entity):
@@ -123,6 +125,20 @@ class DBAttachLifecycleTests(unittest.TestCase):
         other = Database.create(schema_ir=_schema_ir([Account]))
         with self.assertRaisesRegex(SDKStoreError, "schema mismatch"):
             FactGraph.attach(other, schema_classes=[User])
+
+    def test_attach_accepts_same_schema_with_new_generated_at(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "factgraph.authoring.schema_compile._utc_now_iso_z",
+                side_effect=("2026-06-06T00:00:00Z", "2026-06-06T00:00:01Z"),
+            ):
+                schema_ir = _schema_ir()
+                db = Database.create(Path(tmp) / "workspace", schema_ir=schema_ir)
+                fg = FactGraph.attach(db, schema_classes=[User])
+
+        self.assertEqual(schema_digest(schema_ir), db.schema_digest)
+        self.assertEqual(fg._schema_digest, db.schema_digest)
+        self.assertNotEqual(schema_ir["generated_at"], fg.schema_ir["generated_at"])
 
     def test_attach_rejects_unknown_and_constructor_style_kwargs(self) -> None:
         db = Database.create(schema_ir=_schema_ir())

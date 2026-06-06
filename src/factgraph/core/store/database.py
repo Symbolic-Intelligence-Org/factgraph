@@ -13,7 +13,10 @@ from typing import Any, Iterable, Sequence
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
 from factgraph.core.schema.schema_ir import (
+    SchemaIRValidationError,
+    canonicalize_schema_ir_identity_jcs,
     canonicalize_schema_ir_jcs,
+    ensure_schema_ir,
     schema_digest as compute_schema_digest,
 )
 from factgraph.core.store.ledger import Claim, ClaimArg, Ledger, META_KINDS, MetaRow
@@ -350,9 +353,8 @@ class Database:
 
     @classmethod
     def _open_workspace(cls, *, paths: DatabaseWorkspacePaths, schema_ir: dict[str, Any]) -> Database:
-        schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
         schema_token = compute_schema_digest(schema_ir)
-        _validate_schema_object(paths, schema_digest=schema_token, expected_bytes=schema_bytes)
+        _validate_schema_object(paths, schema_digest=schema_token, expected_schema_ir=schema_ir)
         meta = _read_database_meta(paths)
         db_id = _require_db_id(meta["db_id"])
         ledger = Ledger(path=paths.assertions)
@@ -585,9 +587,8 @@ def write_schema_object_for_workspace(path: str | Path, schema_ir: dict[str, Any
 def validate_schema_object_for_workspace(path: str | Path, schema_ir: dict[str, Any]) -> str:
     """Validate the canonical schema object for a workspace and return its digest."""
     paths = resolve_database_workspace_paths(path)
-    schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
     schema_token = compute_schema_digest(schema_ir)
-    _validate_schema_object(paths, schema_digest=schema_token, expected_bytes=schema_bytes)
+    _validate_schema_object(paths, schema_digest=schema_token, expected_schema_ir=schema_ir)
     return schema_token
 
 
@@ -638,7 +639,10 @@ def _write_schema_object(
     schema_bytes: bytes,
 ) -> None:
     schema_path = _schema_object_path(paths, schema_digest)
-    expected_digest = sha256_token(schema_bytes)
+    schema_ir = _schema_ir_from_canonical_bytes(schema_bytes)
+    if canonicalize_schema_ir_jcs(schema_ir) != schema_bytes:
+        raise DatabaseError("schema object bytes differ from canonical schema bytes")
+    expected_digest = compute_schema_digest(schema_ir)
     if expected_digest != _require_token(schema_digest, prefix="sha256:", field="schema_digest"):
         raise DatabaseError("schema object bytes do not match schema_digest")
     _write_once_bytes(schema_path, schema_bytes)
@@ -671,17 +675,36 @@ def _validate_schema_object(
     paths: DatabaseWorkspacePaths,
     *,
     schema_digest: str,
-    expected_bytes: bytes,
+    expected_schema_ir: dict[str, Any],
 ) -> None:
     schema_path = _schema_object_path(paths, schema_digest)
     if not schema_path.exists():
         raise DatabaseError(f"schema object missing: {schema_path}")
     actual = schema_path.read_bytes()
-    if actual != expected_bytes:
+    stored_schema_ir = _schema_ir_from_canonical_bytes(actual)
+    if canonicalize_schema_ir_jcs(stored_schema_ir) != actual:
         raise DatabaseError("schema object bytes differ from canonical schema bytes")
-    expected_digest = sha256_token(actual)
-    if expected_digest != _require_token(schema_digest, prefix="sha256:", field="schema_digest"):
+    expected_token = _require_token(schema_digest, prefix="sha256:", field="schema_digest")
+    if compute_schema_digest(stored_schema_ir) != expected_token:
         raise DatabaseError("schema object filename/content digest mismatch")
+    expected_schema_ir = ensure_schema_ir(expected_schema_ir)
+    if compute_schema_digest(expected_schema_ir) != expected_token:
+        raise DatabaseError("expected schema_ir does not match schema_digest")
+    if canonicalize_schema_ir_identity_jcs(stored_schema_ir) != canonicalize_schema_ir_identity_jcs(expected_schema_ir):
+        raise DatabaseError("schema object identity differs from expected schema identity")
+
+
+def _schema_ir_from_canonical_bytes(schema_bytes: bytes) -> dict[str, Any]:
+    try:
+        payload = json.loads(schema_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DatabaseError(f"invalid schema object bytes: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise DatabaseError("invalid schema object bytes: root must be JSON object")
+    try:
+        return ensure_schema_ir(payload)
+    except SchemaIRValidationError as exc:
+        raise DatabaseError(f"invalid schema object bytes: {exc}") from exc
 
 
 def _write_tx_object(

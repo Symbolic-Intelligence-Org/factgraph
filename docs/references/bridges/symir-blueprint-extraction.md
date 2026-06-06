@@ -452,7 +452,7 @@ class EmploymentEvent(Entity):
 
 | 思想 | 当前实现状态 |
 | --- | --- |
-| 结构指纹应建立在 canonical schema 上 | 当前已有 `schema_digest(...)`，但注意它 hash 的是**整份** `schema_ir`（含 `generated_at`、entity/predicate 内的 `description`/`tags`），并非旧文所想的"只由结构字段参与 hash"——见下方 §3.1 详述 |
+| 结构指纹应建立在 canonical schema 上 | 当前已有 `schema_digest(...)`；它排除顶层 `generated_at`，但仍包含 entity/predicate 内的 `description`/`tags`，因此仍不是旧文所想的"只由结构字段参与 hash"——见下方 §3.1 详述 |
 | 运行时不能依赖对象引用，必须落到稳定可序列化标识 | 当前已经统一到 `idref_v1`、registry JSON、compiled `schema_ir` |
 | key / identity 的顺序必须稳定 | `SchemaIndex.identity_fields` 保留声明顺序，`encode_idref_v1(...)` 依赖有序 identity tuples |
 
@@ -477,7 +477,7 @@ class EmploymentEvent(Entity):
 
 | 关注点 | 当前代码位置 | 说明 |
 | --- | --- | --- |
-| 全局 schema 指纹 | `schema_ir.py: schema_digest(...)` (L76) → `canonicalize_schema_ir_jcs()` (L62) | hash 对象是**整份** validated `schema_ir`（JCS 序列化后 SHA-256）。`schema_ir` 包含 `generated_at`、entity/predicate 内可选的 `description`/`tags`，因此同一结构重新编译会产生不同 digest——这与旧文"只由结构字段参与 hash"的目标有偏差 |
+| 全局 schema 指纹 | `schema_ir.py: schema_digest(...)` → `canonicalize_schema_ir_identity_jcs(...)` | hash 对象是 validated `schema_ir` 的 identity projection（JCS 序列化后 SHA-256）。它排除顶层 `generated_at`，但仍包含 entity/predicate 内可选的 `description`/`tags`；因此相同 schema 重新编译时 digest 稳定，但它仍不是旧文"只由结构字段参与 hash"的纯 structural digest |
 | SchemaIndex 持有指纹 | `schema_runtime.py: build_schema_index(...)` (L82, digest 赋值 L218) | 运行时只缓存全局 `schema_digest`，不缓存 entity/predicate 级局部 digest |
 | registry 使用 digest | `authoring/registry_fs.py: upsert_schema_ir()` (L44) | digest 作为 content-addressable 版本标识写入 manifest |
 | SDK store 使用 digest | `sdk/store.py` (L99 缓存, L130 校验) | 初始化时缓存 digest，后续与 ledger 中存储的 digest 比对，不匹配则拒绝打开 |
@@ -512,11 +512,11 @@ class EmploymentEvent(Entity):
 
 | 维度 | 旧文 `schema_id` | 当前 `schema_digest` |
 | --- | --- | --- |
-| hash 输入 | 只含结构字段（kind/name/signature/key_fields） | 整份 `schema_ir`（含 `generated_at`、entity/predicate 内可选的 `description`/`tags`） |
+| hash 输入 | 只含结构字段（kind/name/signature/key_fields） | `schema_ir` identity projection（排除顶层 `generated_at`，仍包含 entity/predicate 内可选的 `description`/`tags`） |
 | 粒度 | 每个 `Fact` / `Rel` 各自独立 | 全局唯一（整份 schema 一个 digest） |
-| 重编译稳定性 | 相同结构 → 相同 id | 相同结构重新编译 → `generated_at` 不同 → digest 不同 |
+| 重编译稳定性 | 相同结构 → 相同 id | 相同结构重新编译 → digest 稳定（顶层 `generated_at` 不参与） |
 
-如果将来需要"纯结构指纹"（例如 registry diff 或 graph export 的缓存键），需要另做一个排除 `generated_at`/`description`/`tags` 的 structural digest，而非直接复用当前 `schema_digest`。
+如果将来需要"纯结构指纹"（例如 registry diff 或 graph export 的缓存键），需要另做一个排除 `description`/`tags` 的 structural digest，而非直接复用当前 `schema_digest`。
 
 #### 4. 可执行优化建议
 
@@ -559,7 +559,7 @@ class EmploymentEvent(Entity):
 **更适合当前项目的吸收路径：**
 
 1. 保持 `entity_type` / `pred_id` / `primary_key` 主模型不变。
-2. 注意当前 `schema_digest` 并非"纯结构指纹"（含 `generated_at`/`description`/`tags`）；若需要 registry diff 或 graph export 的缓存键，应另做 structural digest。
+2. 注意当前 `schema_digest` 并非"纯结构指纹"（它排除顶层 `generated_at`，但仍包含 `description`/`tags`）；若需要 registry diff 或 graph export 的缓存键，应另做 structural digest。
 3. 若确有局部缓存需求，在 authoring/registry 层补充 entity/predicate 粒度的派生签名摘要。
 4. 在做 relationship projection 前，先把复合 key 的顺序语义收口成"声明顺序稳定"（`where_schema_lowering.py` L57 `sorted(set(...))` → `dict.fromkeys(...)`）。
 

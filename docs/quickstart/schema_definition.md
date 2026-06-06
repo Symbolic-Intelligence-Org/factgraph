@@ -122,7 +122,7 @@ schema_ir = compile_schema_from_classes([User])     # compile and return the IR
 schema_preflight_from_classes([User])               # validate only; does not return IR
 ```
 
-The `schema_digest` is the SHA-256 of the canonicalized schema IR (sorted-key JSON, UTF-8). Two workspaces created from the same set of `Entity` classes share the same digest; reopening with a different class set raises a mismatch error (see [load_and_save.md](load_and_save.md#65-schema-strong-correspondence)).
+The `schema_digest` is the SHA-256 of the canonicalized schema identity (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at` metadata, so recompiling the same `Entity` classes at a later time keeps the same digest. Other schema fields, including descriptions and versions, remain identity-bearing in this release. Reopening with a different class set raises a mismatch error (see [load_and_save.md](load_and_save.md)).
 
 ## 3. Runtime schema mutation
 
@@ -265,4 +265,4 @@ All schema errors inherit from `SDKStoreError`.
 
 ### 5.6 schema_digest
 
-`schema_digest(schema_ir)` returns `"sha256:<hex>"`. The canonicalization sorts dict keys and emits compact UTF-8 JSON (`json.dumps(..., sort_keys=True, separators=(",", ":"))`), then hashes the bytes with SHA-256.
+`schema_digest(schema_ir)` returns `"sha256:<hex>"`. The identity canonicalization sorts dict keys, emits compact UTF-8 JSON (`json.dumps(..., sort_keys=True, separators=(",", ":"))`), excludes only top-level `generated_at`, then hashes the bytes with SHA-256.

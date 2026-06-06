@@ -154,7 +154,7 @@ fg = FactGraph.load_workspace(
 )
 ```
 
-Load compiles `schema_classes`, computes its digest, and validates against the manifest. Mismatch:
+Load compiles `schema_classes`, computes its schema identity digest, and validates against the manifest. The digest excludes volatile top-level `generated_at`, so the same schema classes can be saved and loaded after a later recompilation timestamp. Mismatch:
 
 ```text
 WorkspaceRuntimeError: workspace schema_digest mismatch: manifest='sha256:...',
@@ -447,7 +447,7 @@ Mode B payload (from `core/store/database.py`):
 
 ### 6.5 Schema strong correspondence
 
-Two validation sites enforce `schema_digest(compile_schema_from_classes(schema_classes)) == workspace_schema_digest` but raise different error types and messages.
+Two validation sites enforce `schema_digest(compile_schema_from_classes(schema_classes)) == workspace_schema_digest` but raise different error types and messages. The comparison is schema-identity based: top-level `generated_at` metadata may differ between the stored schema object and the freshly compiled schema IR, while structural schema changes still fail.
 
 | Site | File | Compared against | Error type | Error message |
 |---|---|---|---|---|
