@@ -13,6 +13,7 @@
 | 2026-06-06 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran full-object digest / schema object validation / docs wording grep. No new production scope beyond PF-R1/PF-R2/PF-R3; N-1 bridge docs cascade folded. Status remains scoped; no implementation started. |
 | 2026-06-06 | scoped | Step 4.7 implementation | Implemented stable schema identity digest excluding only top-level `generated_at`; updated schema object validation, regression tests, and scoped docs. Status remains scoped until Step 4.8 closure. |
 | 2026-06-06 | implemented | Step 4.8 closure | Status changed scoped → implemented; §10 Outcome / Verification / Deviations filled. |
+| 2026-06-06 | implemented | Step 4.9 archive | Moved blueprint pair and audit artifacts from active to archive; updated archive inventory. |
 
 ## Decision Notes
 
@@ -54,3 +55,9 @@
 
 - Closure commit records implementation `52425c3f`, focused `unittest` verification, py_compile, direct save/load and attach reproductions, Q-PR1 0-diff, and sacred master preservation.
 - Dirty-doc handling is explicitly recorded: only schema-digest hunks from `docs/quickstart/load_and_save.md` were staged; unrelated pre-existing hunks remain unstaged.
+
+### Step 4.9 Archive
+
+- Archived blueprint pair under `workflow/blueprints/archive/`.
+- Archived Stage 1 audit and Step 4.3 preflight artifact under `workflow/audit/archive/`.
+- Updated `workflow/blueprints/archive/INVENTORY.md` with schema-digest-stability summary.
