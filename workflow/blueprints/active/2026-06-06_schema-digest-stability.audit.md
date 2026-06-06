@@ -12,6 +12,7 @@
 | 2026-06-06 | scoped | Step 4.6 scope freeze | Step 4.5 self-check passed; PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2 covered by `b785313e`. |
 | 2026-06-06 | scoped | Step 4.6.5 pre-impl grep amendment | Re-ran full-object digest / schema object validation / docs wording grep. No new production scope beyond PF-R1/PF-R2/PF-R3; N-1 bridge docs cascade folded. Status remains scoped; no implementation started. |
 | 2026-06-06 | scoped | Step 4.7 implementation | Implemented stable schema identity digest excluding only top-level `generated_at`; updated schema object validation, regression tests, and scoped docs. Status remains scoped until Step 4.8 closure. |
+| 2026-06-06 | implemented | Step 4.8 closure | Status changed scoped → implemented; §10 Outcome / Verification / Deviations filled. |
 
 ## Decision Notes
 
@@ -48,3 +49,8 @@
 - Schema object files still store full canonical schema IR bytes, but write / validate parse the object and compare schema identity rather than full-object byte hashes.
 - `FactGraph.load_workspace(...)` and `FactGraph.attach(...)` now tolerate recompiled identical schema classes with a different generated timestamp.
 - Pytest currently segfaults in local pytest capture initialization before test collection; focused verification used `unittest` for the same test modules.
+
+### Step 4.8 Closure
+
+- Closure commit records implementation `52425c3f`, focused `unittest` verification, py_compile, direct save/load and attach reproductions, Q-PR1 0-diff, and sacred master preservation.
+- Dirty-doc handling is explicitly recorded: only schema-digest hunks from `docs/quickstart/load_and_save.md` were staged; unrelated pre-existing hunks remain unstaged.

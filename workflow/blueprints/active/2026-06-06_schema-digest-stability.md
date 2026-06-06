@@ -1,8 +1,8 @@
 # Task Blueprint: Schema Digest Stability
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-06
-- Last Updated: 2026-06-06 (Step 4.6.5 pre-impl grep)
+- Last Updated: 2026-06-06 (Step 4.8 closure)
 - Related Modules:
   - `src/factgraph/core/schema/schema_ir.py`
   - `src/factgraph/core/store/database.py`
@@ -201,21 +201,21 @@ Step 4.6.5 N-1 docs cascade:
 
 ## 7. Acceptance
 
-- [ ] `schema_digest` ignores only `generated_at` among current schema IR fields.
-- [ ] Two schema IRs differing only by `generated_at` produce equal `schema_digest`.
-- [ ] Structural schema changes still produce unequal `schema_digest`.
-- [ ] Workspace reload after a timestamp boundary succeeds for identical schema classes.
-- [ ] `FactGraph.attach(db, schema_classes=...)` after a timestamp boundary succeeds for identical schema classes.
-- [ ] Schema object write / validate works with full schema object bytes while using identity digest filenames.
-- [ ] Schema object validation still rejects structural mismatch.
-- [ ] Schema object tests confirm object path uses stable identity digest while stored bytes still include `generated_at`.
-- [ ] Tests confirm `description` or `version` still changes digest in this slice.
-- [ ] Tests use explicit timestamp overrides or timestamp-source mocks rather than wall-clock sleeps where possible.
-- [ ] Legacy volatile-digest workspace / ledger migration is documented as out of scope.
-- [ ] Docs explain schema object metadata vs schema identity digest.
-- [ ] Bridge/reference docs no longer describe current `schema_digest` as hashing top-level `generated_at`.
-- [ ] Tests pass for schema, workspace, database attach, and affected SDK lifecycle surfaces.
-- [ ] No sacred Q-PR1 path changes.
+- [x] `schema_digest` ignores only `generated_at` among current schema IR fields.
+- [x] Two schema IRs differing only by `generated_at` produce equal `schema_digest`.
+- [x] Structural schema changes still produce unequal `schema_digest`.
+- [x] Workspace reload after a timestamp boundary succeeds for identical schema classes.
+- [x] `FactGraph.attach(db, schema_classes=...)` after a timestamp boundary succeeds for identical schema classes.
+- [x] Schema object write / validate works with full schema object bytes while using identity digest filenames.
+- [x] Schema object validation still rejects structural mismatch.
+- [x] Schema object tests confirm object path uses stable identity digest while stored bytes still include `generated_at`.
+- [x] Tests confirm `description` or `version` still changes digest in this slice.
+- [x] Tests use explicit timestamp overrides or timestamp-source mocks rather than wall-clock sleeps where possible.
+- [x] Legacy volatile-digest workspace / ledger migration is documented as out of scope.
+- [x] Docs explain schema object metadata vs schema identity digest.
+- [x] Bridge/reference docs no longer describe current `schema_digest` as hashing top-level `generated_at`.
+- [x] Tests pass for schema, workspace, database attach, and affected SDK lifecycle surfaces.
+- [x] No sacred Q-PR1 path changes.
 
 ## 8. Implementation Plan
 
@@ -241,4 +241,33 @@ No new durable docs entry is expected, so `docs/README.md` should not need an up
 
 ## 10. Outcome / Deviations
 
-To be filled in Step 4.8 closure.
+### Outcome
+
+Implemented in `52425c3f fix(schema): stabilize digest across generated timestamps`.
+
+Deliverables:
+
+- Added `canonicalize_schema_ir_identity_jcs(...)`; `schema_digest(...)` now hashes schema identity and excludes only top-level `generated_at`.
+- Kept `canonicalize_schema_ir_jcs(...)` as full-object canonicalization; schema object files still store full canonical schema IR bytes, including `generated_at`.
+- Updated database schema object write / validate to parse schema object bytes and compare identity canonical bytes instead of enforcing `sha256(full_schema_object_bytes) == schema_digest`.
+- Added deterministic timestamp-source tests for `FactGraph.load_workspace(...)` and `FactGraph.attach(...)` across different compile timestamps.
+- Added direct tests proving `generated_at` does not change `schema_digest`, while `description` remains identity-bearing in this slice.
+- Updated scoped docs in `docs/quickstart/schema_definition.md`, `docs/quickstart/load_and_save.md`, and `docs/references/bridges/symir-blueprint-extraction.md`.
+
+### Verification
+
+- `PYTHONPATH=src python -m unittest tests.test_db_identity_substrate tests.test_factgraph_workspace_lifecycle tests.test_db_attach_lifecycle tests.test_schema_mutation_lifecycle`
+  - Result: `Ran 97 tests ... OK (skipped=6)`.
+- `PYTHONPATH=src python -m py_compile src/factgraph/core/schema/schema_ir.py src/factgraph/core/store/database.py`
+- Direct reproduction checks:
+  - workspace save/load with two patched compiler timestamps returns the same schema digest
+  - Database create/attach with two patched compiler timestamps returns the same schema digest
+- `git diff --cached --check` clean before the implementation commit.
+- Q-PR1 sacred paths remained 0-diff vs `4c472b50`.
+- Sacred `master` remained `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+### Deviations
+
+- Local `pytest` currently segfaults during pytest capture initialization before test collection. The same focused modules were verified with `unittest`, and `py_compile` plus direct reproduction checks were run.
+- `docs/quickstart/load_and_save.md` had unrelated dirty hunks before this slice. Step 4.7 used partial staging to include only the two schema-digest documentation hunks; unrelated hunks remain unstaged.
+- Pre-fix volatile-digest workspace / ledger migration remains out of scope, as locked in §5.4.
