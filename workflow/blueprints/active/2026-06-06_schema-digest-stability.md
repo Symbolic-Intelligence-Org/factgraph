@@ -1,8 +1,8 @@
 # Task Blueprint: Schema Digest Stability
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-06
-- Last Updated: 2026-06-06 (Step 4.4 preflight amendment)
+- Last Updated: 2026-06-06 (Step 4.6 scope freeze)
 - Related Modules:
   - `src/factgraph/core/schema/schema_ir.py`
   - `src/factgraph/core/store/database.py`

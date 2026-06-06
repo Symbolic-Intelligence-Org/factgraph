@@ -9,6 +9,7 @@
 | 2026-06-06 | draft | Blueprint created | User-reported `generated_at` / schema digest instability reproduced; Stage 1 audit and Step 4.1 blueprint draft created. |
 | 2026-06-06 | draft | Step 4.2 review + tightening | Added P1 legacy volatile-digest workspace boundary, P2 schema object identity-validation precision, and P3 deterministic timestamp test strategy. |
 | 2026-06-06 | draft | Step 4.4 preflight amendment | Folded PF-R1/PF-R2 parsed schema object validation, PF-R3 legacy ledger boundary, and PF-r1/PF-r2 test locks. |
+| 2026-06-06 | scoped | Step 4.6 scope freeze | Step 4.5 self-check passed; PF-R1/PF-R2/PF-R3 + PF-r1/PF-r2 covered by `b785313e`. |
 
 ## Decision Notes
 
