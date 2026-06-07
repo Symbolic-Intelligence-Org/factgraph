@@ -38,7 +38,9 @@ layout lives under `db/`:
   and validates the full token.
 - `db/objects/schema/<64hex>.json` stores exact `canonicalize_schema_ir_jcs(...)`
   bytes. It does not reuse the authoring-registry presentation newline or
-  manifest envelope.
+  manifest envelope. Repeated writes at the same schema identity are
+  idempotent: the existing object is kept as the source of truth, including the
+  first writer's `generated_at`.
 - `db/refs/head.txt` stores the current head `tx_id`. `Database.head()` resolves
   `head.txt -> tx object -> DatabaseValue`; ledger metadata is only a
   compatibility cache for this head identity.
