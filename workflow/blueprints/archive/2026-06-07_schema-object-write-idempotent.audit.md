@@ -9,6 +9,7 @@
 | 2026-06-07 | draft | Blueprint created | Regression in parent slice `52425c3f` reproduced from `meander` shutdown save. Stage 1 root cause confirmed against shipped code; Step 4.1 draft scoped to identity-idempotent schema object write + missing save→recompile→save regression test. |
 | 2026-06-07 | implemented | Step 4.2 review + Step 4.7 implementation | Codex re-confirmed root cause and fix altitude: `_write_schema_object` is the correct single change point; validation must remain before the existence branch; `_write_once_bytes` remains unchanged for tx/view objects. Implemented identity-idempotent schema-object writes, focused regression tests, and core-store docs. |
 | 2026-06-07 | implemented | Step 4.8 closure | Verification passed: py_compile clean; focused unittest cohort 99 OK / 6 skipped; direct save → load/recompile → save smoke retained first schema-object bytes and no longer raised. |
+| 2026-06-07 | implemented | Step 4.9 archive | Independent verification by Claude: fix code at `database.py:642-654` matches §5.1; commit `832bddaa` touches only 6 files with no dirty-baseline contamination; re-ran focused cohort → `99 OK / 6 skipped`; remote push `ed054fd0` on `factgraph/feature/v0.2.0-factgraph-publish-2026-06-03` confirmed via `git ls-remote`; all 5 Q-PR1 sacred paths (§4.8.6) 0-diff vs `4c472b50`; sacred master `562c74195df43e933bed92a3ff25de94dd8ce666` unchanged. Moved blueprint pair active → archive; updated INVENTORY. |
 
 ## Decision Notes
 
@@ -29,10 +30,10 @@
 - **Team alternative — reconstruct schema classes from the stored IR instead of requiring `schema_classes` on load** (class-less / from-IR load): considered and **deferred**. It attacks the drift at the load layer (no recompile → no fresh `generated_at`), but (1) reverses an explicit, documented decision — `load_workspace` states "Class-less dynamic load is not supported" and hard-requires `schema_classes` (`store.py:1729`/`:1744`); (2) is a substantial feature, not a bugfix — the SDK object model binds to the caller's real Python classes (`entities.get(User, ...)`, `sdk_owner_cls`, `store.py:738`), which a runtime-synthesized class cannot satisfy; (3) only covers load, not `attach` (`store.py:1784`) or other recompile sites, so the write-once landmine persists. The write-idempotency fix closes the collision at the persistence boundary for all paths and is correct regardless of whether load later stops requiring classes.
 - **Strategic direction (separate design-point, not this slice)**: the principled long-term fix is to stop embedding address-excluded volatile metadata (`generated_at`) inside the content-addressed schema object — keep the addressed object equal to its canonical identity bytes and move `generated_at` to a manifest/sidecar, so "same filename / different bytes" becomes structurally impossible. To be captured as `workflow/design/design-points/active/schema-identity-and-loading.zh.md`. This slice stays the tactical stop-the-bleed; the design-point is the strategic follow-up. The two do not block each other.
 
-## Open Items (pre-scope-freeze)
+## Open Items (resolved)
 
-- **Branch decision**: current branch is `v0.2.0-impl-schema-digest-stability-2026-06-06` (the parent slice's impl branch, unpushed). Confirm whether to continue this bugfix on the same branch or seed a paired follow-up design/impl branch before Step 4.7 implementation. Default proposal: continue on the current branch since it is the same slice lineage and nothing is pushed.
-- **Codex handoff**: blueprint is drafted for Codex to take through the implementation cadence (Step 4.x). Codex review of §5.1 ordering (validation-before-existence-branch) and the test matrix is the next step.
+- **Branch decision** — RESOLVED: implemented on the current branch `v0.2.0-impl-schema-digest-stability-2026-06-06` (same slice lineage); local commit `832bddaa`, not pushed to origin (hnsm-backend norm). The fix is published on the factgraph remote via `feature/v0.2.0-factgraph-publish-2026-06-03` (`ed054fd0`).
+- **Codex handoff** — RESOLVED: Codex took the blueprint through Step 4.2/4.7/4.8; the §5.1 validation-before-existence ordering and the test matrix were confirmed and implemented. Claude performed independent verification and the Step 4.9 archive.
 
 ## Step 4.2 Review / Step 4.7 Implementation Notes
 
