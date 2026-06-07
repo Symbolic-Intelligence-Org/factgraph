@@ -639,13 +639,19 @@ def _write_schema_object(
     schema_bytes: bytes,
 ) -> None:
     schema_path = _schema_object_path(paths, schema_digest)
+    schema_token = _require_token(schema_digest, prefix="sha256:", field="schema_digest")
     schema_ir = _schema_ir_from_canonical_bytes(schema_bytes)
     if canonicalize_schema_ir_jcs(schema_ir) != schema_bytes:
         raise DatabaseError("schema object bytes differ from canonical schema bytes")
     expected_digest = compute_schema_digest(schema_ir)
-    if expected_digest != _require_token(schema_digest, prefix="sha256:", field="schema_digest"):
+    if expected_digest != schema_token:
         raise DatabaseError("schema object bytes do not match schema_digest")
-    _write_once_bytes(schema_path, schema_bytes)
+    if schema_path.exists():
+        stored_schema_ir = _schema_ir_from_canonical_bytes(schema_path.read_bytes())
+        if compute_schema_digest(stored_schema_ir) != schema_token:
+            raise DatabaseError("schema object filename/content digest mismatch")
+        return
+    _atomic_write_bytes(schema_path, schema_bytes)
 
 
 def _write_view_object(paths: DatabaseWorkspacePaths, view: FrozenAssertionSet) -> None:

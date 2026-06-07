@@ -218,6 +218,41 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             with self.assertRaisesRegex(DatabaseError, "digest|identity"):
                 validate_schema_object_for_workspace(path, recompiled_schema_ir)
 
+    def test_schema_object_write_is_identity_idempotent_for_generated_at(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            schema_ir = _schema_ir_with_generated_at("2026-05-20T00:00:00Z")
+            recompiled_schema_ir = _schema_ir_with_generated_at("2026-05-21T00:00:00Z")
+            digest = schema_digest(schema_ir)
+
+            written_digest = write_schema_object_for_workspace(path, schema_ir)
+            paths = resolve_database_workspace_paths(path)
+            schema_path = paths.schema_objects / f"{digest.removeprefix('sha256:')}.json"
+            first_bytes = schema_path.read_bytes()
+            rewritten_digest = write_schema_object_for_workspace(path, recompiled_schema_ir)
+
+            self.assertEqual(written_digest, digest)
+            self.assertEqual(rewritten_digest, digest)
+            self.assertEqual(schema_path.read_bytes(), first_bytes)
+            self.assertIn(b"2026-05-20T00:00:00Z", first_bytes)
+            self.assertNotIn(b"2026-05-21T00:00:00Z", schema_path.read_bytes())
+
+    def test_schema_object_write_rejects_existing_path_with_wrong_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            schema_ir = _schema_ir_with_generated_at("2026-05-20T00:00:00Z")
+            recompiled_schema_ir = _schema_ir_with_generated_at("2026-05-21T00:00:00Z")
+            digest = write_schema_object_for_workspace(path, schema_ir)
+            paths = resolve_database_workspace_paths(path)
+            schema_path = paths.schema_objects / f"{digest.removeprefix('sha256:')}.json"
+
+            mismatched_schema_ir = deepcopy(recompiled_schema_ir)
+            mismatched_schema_ir["entities"][0]["description"] = "different identity"
+            schema_path.write_bytes(canonicalize_schema_ir_jcs(mismatched_schema_ir))
+
+            with self.assertRaisesRegex(DatabaseError, "filename/content digest mismatch"):
+                write_schema_object_for_workspace(path, recompiled_schema_ir)
+
     def test_database_head_resolves_from_head_tx_object_not_ledger_meta(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workspace"

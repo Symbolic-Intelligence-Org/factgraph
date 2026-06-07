@@ -252,10 +252,17 @@ class WorkspaceSaveTests(unittest.TestCase):
                 fg = _seed_fg(path=workspace)
                 fg.save_workspace()
                 manifest = _read_manifest(workspace)
+                schema_object = _schema_object_file(workspace, manifest["schema_digest"])
+                first_schema_bytes = schema_object.read_bytes()
                 loaded = FactGraph.load_workspace(workspace, schema_classes=[User])
+                loaded.save_workspace()
+                resaved_manifest = _read_manifest(workspace)
+                resaved_schema_bytes = schema_object.read_bytes()
 
         self.assertEqual(schema_digest(fg.schema_ir), manifest["schema_digest"])
         self.assertEqual(schema_digest(loaded.schema_ir), manifest["schema_digest"])
+        self.assertEqual(resaved_manifest["schema_digest"], manifest["schema_digest"])
+        self.assertEqual(resaved_schema_bytes, first_schema_bytes)
         self.assertNotEqual(fg.schema_ir["generated_at"], loaded.schema_ir["generated_at"])
         self.assertIsNotNone(loaded.entities.get(User, user_id="Alice"))
 
