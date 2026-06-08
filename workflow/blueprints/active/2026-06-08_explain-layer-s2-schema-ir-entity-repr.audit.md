@@ -1,7 +1,7 @@
 # Audit Log: S2 — Schema IR Repr + Entity Repr Renderer
 
 - Blueprint: [2026-06-08_explain-layer-s2-schema-ir-entity-repr.md](./2026-06-08_explain-layer-s2-schema-ir-entity-repr.md)
-- Status: scoped
+- Status: implemented
 
 ---
 
@@ -13,6 +13,7 @@
 | 2026-06-08 | draft | Step 4.2 review + tightening | Source-read S1 impl lineage (`v0.2.0-impl-schema-repr-dsl-2026-06-08`) for SDK/source parser metadata producers. Tightened S1 test inversion, identity field-row repr placement, relationship field repr persistence, and S1-lineage fork requirement. |
 | 2026-06-08 | draft | Step 4.3 preflight PASS + Step 4.4 amendment | Preflight artifact found no abandonment. Folded PF-R4 schema mutation boundary, PF-R5 application export requirement, PF-r1 mapping input clarification, and PF-r2 grammar parity requirement. |
 | 2026-06-08 | scoped | Step 4.5 self-check + Step 4.6 scope freeze | Scope frozen: S1 lineage requirement, Schema IR repr persistence, runtime index, application export, mutation boundary, relationship repr, and entity renderer acceptance are locked. |
+| 2026-06-08 | implemented | Step 4.8 closure | Impl `f13841b1` persisted repr metadata into Schema IR/runtime index, added `render_entity_repr(...)`, updated mutation checks, tests, and docs. Focused tests and schema discovery passed. |
 
 ---
 

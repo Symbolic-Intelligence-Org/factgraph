@@ -93,7 +93,7 @@ Certainty   EvaluateRow.raw_kind + bound → Certainty 统一 — ✅ 已落地 
 ```
 S0  Rule.desc → Rule.repr rename — ✅ 已落地 @ eb79f1c5 (2026-06-08)
 S1  Schema DSL: Field(repr=)/Identity(repr=)/Meta.repr — ✅ 已落地 @ 6090eb05 (2026-06-08)
-S2  Schema IR + render_entity_repr 纯函数 — draft child blueprint opened(依赖 S1)
+S2  Schema IR + render_entity_repr 纯函数 — ✅ 已落地 @ f13841b1 (2026-06-08)
 S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — 独立子 blueprint(依赖 Certainty + S2)
 S4  渲染集成: repr_text 烘焙 + 渲染器默认表 — 独立子 blueprint(依赖 S3)
 S5  native 路径接通: Explanation.evidence non-None iff passed/failed — 独立子 blueprint(依赖 S3/S4)

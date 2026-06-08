@@ -1,8 +1,8 @@
 # Task Blueprint: S2 — Schema IR Repr + Entity Repr Renderer
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-08 (Step 4.8 closure)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Depends On:
   - S0 Rule.repr rename — implemented at `eb79f1c5`
@@ -171,23 +171,23 @@ Behavior:
 
 ## 7. Acceptance
 
-- [ ] SDK class schemas with `Meta.repr`, `Identity.repr`, and `Field.repr` compile into Schema IR with `repr` keys.
-- [ ] Source-file schema parser output compiles into the same Schema IR repr placement.
-- [ ] `ensure_schema_ir(...)` accepts valid entity/predicate `repr` metadata.
-- [ ] `ensure_schema_ir(...)` accepts valid identity field-row `repr` metadata and generated identity predicates carry the same template.
-- [ ] Relationship `Field(repr=...)` compiles into relationship predicate `repr`.
-- [ ] `ensure_schema_ir(...)` rejects empty/non-string repr metadata.
-- [ ] `ensure_schema_ir(...)` rejects invalid `Meta.repr` placeholders (`%ENT`, `%FLD`, unknown/non-identity field placeholders).
-- [ ] IR-level repr placeholder token parsing matches S1 runtime/source parser grammar.
-- [ ] `schema_digest(...)` changes when a persisted repr template changes.
-- [ ] `build_schema_index(...)` exposes `EntityTypeInfo.repr` and `PredicateInfo.repr`.
-- [ ] `render_entity_repr("User", {"user_id": "u-1"}, index=...)` renders the `Meta.repr` template.
-- [ ] `render_entity_repr(...)` uses the design fallback when `Meta.repr` is absent.
-- [ ] `render_entity_repr(...)` is exported from `factgraph.application` but not `factgraph.sdk`.
-- [ ] Repr changes on existing schema rows remain non-additive under schema mutation validation.
-- [ ] S1's `test_repr_metadata_does_not_persist_to_schema_ir_in_s1` is replaced or rewritten to assert S2 persistence.
-- [ ] Existing schema compile/runtime tests still pass.
-- [ ] Docs describe that S1 authoring `repr=` is persisted in Schema IR and usable by the renderer.
+- [x] SDK class schemas with `Meta.repr`, `Identity.repr`, and `Field.repr` compile into Schema IR with `repr` keys.
+- [x] Source-file schema parser output compiles into the same Schema IR repr placement.
+- [x] `ensure_schema_ir(...)` accepts valid entity/predicate `repr` metadata.
+- [x] `ensure_schema_ir(...)` accepts valid identity field-row `repr` metadata and generated identity predicates carry the same template.
+- [x] Relationship `Field(repr=...)` compiles into relationship predicate `repr`.
+- [x] `ensure_schema_ir(...)` rejects empty/non-string repr metadata.
+- [x] `ensure_schema_ir(...)` rejects invalid `Meta.repr` placeholders (`%ENT`, `%FLD`, unknown/non-identity field placeholders).
+- [x] IR-level repr placeholder token parsing matches S1 runtime/source parser grammar.
+- [x] `schema_digest(...)` changes when a persisted repr template changes.
+- [x] `build_schema_index(...)` exposes `EntityTypeInfo.repr` and `PredicateInfo.repr`.
+- [x] `render_entity_repr("User", {"user_id": "u-1"}, index=...)` renders the `Meta.repr` template.
+- [x] `render_entity_repr(...)` uses the design fallback when `Meta.repr` is absent.
+- [x] `render_entity_repr(...)` is exported from `factgraph.application` but not `factgraph.sdk`.
+- [x] Repr changes on existing schema rows remain non-additive under schema mutation validation.
+- [x] S1's `test_repr_metadata_does_not_persist_to_schema_ir_in_s1` is replaced or rewritten to assert S2 persistence.
+- [x] Existing schema compile/runtime tests still pass.
+- [x] Docs describe that S1 authoring `repr=` is persisted in Schema IR and usable by the renderer.
 
 ## 8. Implementation Plan
 
@@ -208,4 +208,22 @@ Behavior:
 
 ## 10. Outcome / Deviations
 
-Task completion fills this section.
+**Outcome**: S2 implemented at `f13841b1` on `v0.2.0-impl-schema-ir-entity-repr-2026-06-08`.
+
+Implementation summary:
+
+- Persisted `repr` metadata from authoring schema into canonical Schema IR entity rows, identity field rows, predicate rows, and relationship predicate rows.
+- Added IR-level repr placeholder validation in `core/schema/schema_ir.py`.
+- Added `EntityTypeInfo.repr`, `IdentityFieldInfo.repr`, `PredicateInfo.repr`, and `render_entity_repr(...)` in `application/schema_runtime.py`.
+- Exported `render_entity_repr(...)` from `factgraph.application`; no SDK export.
+- Kept repr changes canonical by adding entity/predicate repr checks to schema mutation validation.
+- Updated focused tests and schema docs.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.test_schema_repr_dsl tests.test_application_schema_runtime tests.test_relationship_schema tests.test_schema_mutation_lifecycle` → 73 tests OK, 3 skipped.
+- `PYTHONPATH=src python -m unittest discover -s tests -p '*schema*.py'` → 112 tests OK, 9 skipped.
+- `git diff --check` clean.
+- Sacred `master` unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+**Deviation D-4**: Preflight originally described schema mutation as direct row comparison. Implementation found `_predicate_stable_projection(...)` excluded metadata, so S2 explicitly added `repr` to stable predicate projection and added entity-level repr comparison. This is in-scope because S2 makes `repr` schema identity content.

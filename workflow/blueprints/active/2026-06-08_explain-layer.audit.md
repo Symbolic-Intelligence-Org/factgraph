@@ -14,6 +14,7 @@
 | 2026-06-08 | design docs committed @ `32c91983` | 8 files: `explain-layer-complete-design.zh.md` (new), `explanation-completion-roadmap.zh.md` (modified), 3 archived design-points (new/renamed), `rejected-alternatives-2026-06-08.md` (new), blueprint pair (new). Branch: `v0.2.0-blueprint-explain-layer-2026-06-08`. master unchanged @ `562c7419`. |
 | 2026-06-08 | §10.0 lineage correction | source-read confirmed α/β/γ/ζ/δ all pre-blueprint shipped. Corrected §10.0 to reflect actual state; added Cleanup-β + Certainty as real remaining DTO items; Q-A re-opened (ClaimKind still has `fact_triple`), Q-B closed (δ already live), Q-C partially resolved. |
 | 2026-06-08 | S2 child blueprint draft | Created `2026-06-08_explain-layer-s2-schema-ir-entity-repr.md` after source-read of schema compile, Schema IR validation, and runtime index code. S2 scope = canonical repr persistence + `render_entity_repr(...)`; atom rendering remains S4. |
+| 2026-06-08 | S2 implemented | S2 implemented at `f13841b1`, then closed as implemented. Parent §10.1 updated to mark S2 complete; S3 is now unblocked on S2. |
 
 ---
 
