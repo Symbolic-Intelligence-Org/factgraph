@@ -24,7 +24,7 @@
 
 ## Events
 
-*(实施阶段填入)*
+- **2026-06-08 scope-freeze**: Blueprint rev2 — Q-S4-A 决策修订：Option B（仅保底，不引入 S2 repr 增量）为推荐。新增 `_fact_fallback_repr` 保底路径（`BoundVar.value`）；`INV-reprtext-fact-always` 确立。Status → `scoped`。
 
 ---
 

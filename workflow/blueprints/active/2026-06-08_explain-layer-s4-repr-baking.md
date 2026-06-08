@@ -1,8 +1,8 @@
 # Task Blueprint: Explain Layer S4 — repr_text 烘焙 + 渲染器默认表
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (rev 2: 加入 Fact fallback 保底机制)
+- Last Updated: 2026-06-08 (rev 2: 加入 Fact fallback 保底机制，scope freeze)
 - Parent Blueprint: [`2026-06-08_explain-layer.md`](./2026-06-08_explain-layer.md)
 - Slice: S4 (depends on S3 ✅, S2 ✅)
 - Related Modules:
