@@ -1,6 +1,11 @@
 # 用户面 Explanation Completion Roadmap
 
-> **本文件状态**: draft (2026-05-28); 战略综合; 待 review / 多 session 修订
+ > **本文件状态**: draft (2026-05-28); 战略综合; **部分条目已被合并文档覆盖(见下)**
+>
+> **2026-06-08 更新**:以下条目的具体设计已在 [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) 中完成,本文件保留战略定位和未来条目(D5/D6/D7/D11/D15/D18/D20/D1):
+> - **D4 atom-complete probing** → 已设计为穷尽逐条件探查器(prober);见合并文档 §2-§8
+> - **D21 desc-driven NL explain** → Rule.desc→Rule.repr 已决(R7);见合并文档 §12
+> - **D11 PyReason Form 2 形态** → EvidenceTimeline 结构已决(R5);grounding parser 细节待定
 >
 > **权威边界 (per `workflow/design/design-points/README.md`)**:
 >
@@ -90,9 +95,10 @@
 | D16 ArithExpr operators (`%` / `**` / 位运算 / 字符串拼接) | 表达能力, 低 demand |
 | D17 Overflow/NaN protection | 数值正确性; 等用户撞到 |
 | D19 Aggregate target implicit cast | 类型转换便利性 |
-| **D2 / D3 / D4** (top-down regression / SAT why-provenance / atom-complete probing) | **作为 D5 的 implementation hints, 不独立** |
+| **D2 / D3** (top-down regression / SAT why-provenance) | 作为 D5 的 implementation hints,不独立 |
+| **D4** (atom-complete probing) | **已设计** → [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §2-§8;穷尽逐条件探查器(prober) |
 | D12 Eager / Lazy switching | 性能优化; evidence > 10MB 触发 |
-| **D21 Desc-driven deterministic NL explain** | author-controlled NL 模板 (`Rule.desc`) 已 ship 但 explain 不消费; 完全 deterministic + 零 LLM; **不等于 D9** (D9 是 LLM-driven, 已 Tier Z) |
+| **D21 Desc-driven deterministic NL explain** | **已决(R7)** → `Rule.desc → Rule.repr` 改名(deprecated alias 过渡);repr 渲染层见 [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §5/§12 |
 
 ### ❌ Tier Z — 不重要 / 没价值做 / 明示拒绝
 
@@ -225,21 +231,22 @@
 - 协议 gate 放开接受 PyReason envelope
 - 新增 `_build_pyreason_provenance_row_evidence_graph(...)` 对称 ProbLog
 
-### 6.2 Failure semantics — D5 + D1 (+ D2/D3/D4 as impl strategies)
+### 6.2 Failure semantics — D5 + D1 (+ D2/D3 as impl strategies)
 
-**Scope**: 用户面 "为什么没推出" 完整能力
+> **D4 已独立设计** → [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md);穷尽逐条件探查器作为 D5 的实现前提,不再是 D5 的 hint。
+
+**Scope**: 用户面 "为什么没推出" 完整能力(D5 + D1;D4 prober 是前提)
 
 **Layer 划分**:
-- **D5 (语义层)**: failed graph / why-not / counterfactual 各自的 user-facing contract
-- **D1 (接口层)**: `fg.diagnose(...)` SDK 公开 — 当前 application-layer 内部已 shipped, 仅 SDK 薄壳缺失
-- **D2/D3/D4 (实现策略)**:
-  - D2: top-down goal-regression (Bourhis-Lutz-Krötzsch 2024 / Elhalawati 2022)
+- **D5 (语义层)**: failed EvidenceGraph / why-not narrative / counterfactual 各自的 user-facing contract
+- **D1 (接口层)**: `fg.diagnose(...)` SDK 公开 — application-layer 内部已 shipped,仅 SDK 薄壳缺失
+- **D2/D3 (实现策略)**:
+  - D2: top-down goal-regression (Bourhis-Lutz-Krötzsch 2024)
   - D3: SAT-based why-provenance (minimal hitting set; research-grade)
-  - D4: atom-complete eager probing (cost-aware)
 
 **未锁设计问题**:
-- Why-not 是否构造 failed EvidenceGraph, 还是只给 failure path narrative
-- counterfactual 的 universe model (which alternative facts to consider)
+- Why-not 是否构造 failed EvidenceGraph(prober 已能产出),还是在此基础上再加 counterfactual narrative
+- counterfactual 的 universe model(which alternative facts to consider)
 - diagnose 的 cost / short-circuit policy
 
 ### 6.3 Attribution — D6 + D7
@@ -285,6 +292,8 @@
 
 ### 6.6 Desc-driven deterministic NL explain — D21
 
+> **2026-06-08:本小节历史内容已由合并文档覆盖。** `Rule.desc → Rule.repr` 改名(R7)和渲染层完整设计见 [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §5/§12。以下保留为历史问题陈述,其中 `desc_lines`/`row.repr` 等候选方案已被 `repr_text` 存储方案(R1)替代,`Rule.desc` canonical 命名已被 `Rule.repr`(R7)替代,不作为当前设计选项。
+
 **Scope**: 把 author-controlled `Rule.desc` 模板从 inspect-only 扩展到 evaluation / explain 路径, 让 author 写的 NL 模板在 user-facing explain 输出中**自动 surface**.
 
 **Source-back 现状**:
@@ -322,7 +331,7 @@ A + C 组合可能是最完整: row level 提供 ergonomic, Explanation level �
 **下游 blueprint candidate**:
 - `t8-x-desc-driven-explain-render` (gated on 上述 5 问题)
 
-**Tier**: B (作者控制的小型 ergonomic gap; demand 中等; 完全 backward-compatible — `desc` 字段 + render API 已 ship, 只是 explain 路径不消费)
+**Tier**: B — **已决(R7,2026-06-08)**:`Rule.desc → Rule.repr` 改名(deprecated alias 过渡),纳入本次 blueprint 周期。repr 渲染层完整设计见 [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §5/§12。
 
 ---
 

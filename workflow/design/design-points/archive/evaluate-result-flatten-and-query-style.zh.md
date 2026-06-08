@@ -10,6 +10,13 @@
 
 ---
 
+> **2026-06-08 状态更新**
+> - §3.1-§3.6(EvaluateResult/EvaluateRow/Claim/EvidenceRef DTO 重设计)和 §3.8(query-style head 解耦)的 DTO 接缝内容已合并入 [`explain-layer-complete-design.zh.md §3.1`](explain-layer-complete-design.zh.md)。
+> - §3.9(旧 EvidenceGraph 3-tier nodes/edges DAG:NODE_RULE_EXPR / NODE_RULE / NODE_ATOM)和 §4.7(DAG walker 算法)已被 [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §3/§4 的 `paths: EvidenceTree | EvidenceTimeline` 模型 **supersede**,不作为新实现目标。
+> - §5(未锁问题)、§6(实施切片 α-ζ)、§7-§9(耦合/代码锚点/关联文档)仍作为历史参考有效;其中 §6 的 η(EvidenceGraph 3-tier nodes/edges 构建)和 ε(walker)切片已被新主文档 supersede,仅作历史 implementation record。
+
+---
+
 ## §1 当前模式 — D17-T5.1 锁定的 Datalog-style + wrapper 嵌套
 
 ### §1.1 字段总览
