@@ -154,7 +154,7 @@ S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S
 - `src/factgraph/application/docs/README.md` — ✅ 更新索引 @ `b4df4b62`
 - `src/factgraph/application/docs/01_overview_en.md` — ✅ 补充 explain/ + evaluate_result.py 条目 @ `b4df4b62`
 - `src/factgraph/core/schema/docs/README.md` — repr DSL 新增(S1 时应更新，当前 deferred)
-- `docs/quickstart/evaluate_and_evidence.md` — ✅ D-6: §2.2 `raw_kind/bound` prose 对齐 Certainty
+- `docs/quickstart/evaluate_and_evidence.md` — ✅ D-6: §2.2 `raw_kind/bound` prose 对齐 Certainty @ `df536ddf`
 
 ## 10. Outcome / Deviations
 
