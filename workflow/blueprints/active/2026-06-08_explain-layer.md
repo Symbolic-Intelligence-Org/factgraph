@@ -97,11 +97,11 @@ S2  Schema IR + render_entity_repr 纯函数 — ✅ 已落地 @ f13841b1 (2026-
 S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — ✅ 已落地 @ 69593d36；S7 已并入 S3（Q-S3-A: 完全替换）
 S4  渲染集成: repr_text 烘焙 + 渲染器默认表 — ✅ 已落地 @ 83be07b9
 S5  native 路径接通: Explanation.evidence non-None iff passed/failed — ✅ 已落地 @ 9ba5f526
-S6  adapters 迁移: souffle/problog/pyreason rich explain — 独立子 blueprint(依赖 S5)
+S6  adapters 迁移: ProbLog/PyReason rich explain — ✅ 已落地 @ 57a86304
 S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S3 并随 S3 落地**
 ```
 
-**推荐下一个 implementable slice**: `S6`（souffle/problog/pyreason rich explain 迁移，依赖 S5）。
+**推荐下一个 implementable slice**: `Cleanup-β`（`EvaluateResult.expr_digest` deprecated property 删除）或后续 docs/test hardening slice。
 
 ### Program-level Questions — 状态校正
 

@@ -61,3 +61,4 @@
 | Stage | Event | Notes |
 |---|---|---|
 | scoped | Q-S6-A locked + scope freeze | User clarified local implementation does not need repeated authorization; Q-S6-A locked to Option B. Scope is now two shipped files: `evaluate_result.py` dead-code/rich-dispatch cleanup and `sdk/store.py` PyReason envelope collection. |
+| implemented | S6 implementation verified | Impl `57a86304` deletes old flat-DAG dead code, dispatches ProbLog/PyReason passed-row provenance to paths-model adapter graphs, collects PyReason envelopes, and preserves Option B fallback. Focused tests OK; full discover has only known unrelated `service.app_v1` import failure. |

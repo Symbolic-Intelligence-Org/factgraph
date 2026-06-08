@@ -4,7 +4,7 @@
 |---|---|
 | **ID** | explain-layer-s6-adapter-wiring |
 | **Date** | 2026-06-08 |
-| **Status** | scoped |
+| **Status** | implemented |
 | **Parent** | `workflow/blueprints/active/2026-06-08_explain-layer.md` (S6 child) |
 | **Branch** | `v0.2.0-blueprint-explain-layer-2026-06-08` (blueprint文档) |
 | **Impl branch** | `v0.2.0-impl-adapter-provenance-wiring-2026-06-08` (从S5 impl HEAD fork) |
@@ -359,4 +359,29 @@ if candidate.support_kind not in (PROBLOG_PROVENANCE_KIND, PYREASON_PROVENANCE_K
 
 ## 8. Outcome / Deviations
 
-_（实施完成后填写）_
+**Implemented**:
+- Impl branch: `v0.2.0-impl-adapter-provenance-wiring-2026-06-08`
+- Impl commit: `57a86304 feat(explain): wire adapter provenance graphs`
+- Files changed: `src/factgraph/application/protocol/evaluate_result.py`, `src/factgraph/sdk/store.py`, `tests/application/protocol/test_evaluate_result_dtos.py`
+
+**Landed changes**:
+- Deleted the old flat-DAG dead code path from `evaluate_result.py` (`EvidenceNode` / `EvidenceEdge` / `NODE_*` / `EDGE_*` references are gone).
+- Renamed `_legacy_candidate_payload_for_row_result(...)` to `_candidate_payload_for_row_result(...)`.
+- Split passed-row evidence construction into minimal fallback plus ProbLog/PyReason rich provenance dispatch.
+- ProbLog `proof_trace` and PyReason `event_log` envelopes now build adapter `EvidenceGraph(paths=...)` results when conversion succeeds.
+- Adapter conversion failures fall back to the minimal passed-row graph, preserving the S5 invariant that passed rows have evidence.
+- SDK provenance envelope collection now uses `_PROVENANCE_BEARING_SUPPORT_KINDS`, collecting both ProbLog and PyReason envelopes.
+- Protocol DTO validation now accepts ProbLog proof traces and PyReason event logs; unknown provenance envelopes remain rejected.
+
+**Verification**:
+- `PYTHONPATH=src python -m unittest tests.application.protocol.test_evaluate_result_dtos` → 29 OK.
+- `PYTHONPATH=src python -m unittest tests.test_problog_evidence_graph tests.test_pyreason_evidence_graph tests.test_problog_engine_eval tests.test_pyreason_engine_eval tests.test_pyreason_e2e` → 43 OK.
+- `PYTHONPATH=src python -m unittest tests.test_audit_evidence_graph tests.test_application_explain_prober tests.application.protocol.test_explanation_render tests.sdk.test_evaluate_result_exports` → 14 OK.
+- `PYTHONPATH=src python -m compileall -q src/factgraph tests` → clean.
+- `PYTHONPATH=src python -m unittest discover tests` → 1996 tests run, 32 skipped, one known unrelated `service.app_v1` import error.
+- `git diff --check` → clean.
+- Q-PR1 sacred path diff (`src/factgraph/core`, `src/factgraph/authoring`, `src/factgraph/mapping`, `src/factgraph/schema`, `docs/release`) → 0 lines.
+
+**Deviations**:
+- The implementation also updated `_validate_row_provenance_envelopes(...)` to accept PyReason `event_log` envelopes. This is required for the S6 SDK collection fix; otherwise collected PyReason envelopes would be rejected by `EvaluateResult` construction.
+- Added protocol-level regression coverage for PyReason rich timeline dispatch and Option B fallback behavior.
