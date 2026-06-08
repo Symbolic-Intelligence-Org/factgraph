@@ -1,8 +1,8 @@
 # Task Blueprint: S0 — Rule.repr Rename
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.7 impl branch cut)
+- Last Updated: 2026-06-08 (Step 4.8 closure)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Related Modules:
   - `src/factgraph/application/protocol/rule.py` (primary)
@@ -129,17 +129,17 @@ Because this is alpha, all known `desc`-named public/wire surfaces move in S0:
 
 ## 7. Acceptance
 
-- [ ] `Rule(repr="...")` works
-- [ ] `Rule(desc="...")` is no longer used by shipped tests or docs
-- [ ] `rule.render_repr({"x": "v"})` renders correctly
-- [ ] `render_desc` is no longer used by shipped tests or docs
-- [ ] `content_digest` unchanged for same `id/when/ports/version`
-- [ ] All shipped tests pass (updated to `repr=` / `render_repr()`)
-- [ ] `evaluate_result.py` emits `"repr_template"` and has no `"desc_template"` residual
-- [ ] `OccurrenceInspect` uses `repr_template` and has no `desc_template` residual
-- [ ] `service/runtime_v1.py` emits `"repr"` for rule template output and has no rule `"desc"` residual
-- [ ] `src/factgraph/application/docs/rule.md` updated
-- [ ] `docs/quickstart/rules.md` updated
+- [x] `Rule(repr="...")` works
+- [x] `Rule(desc="...")` is no longer used by shipped tests or docs
+- [x] `rule.render_repr({"x": "v"})` renders correctly
+- [x] `render_desc` is no longer used by shipped tests or docs
+- [x] `content_digest` unchanged for same `id/when/ports/version`
+- [x] All shipped tests pass (updated to `repr=` / `render_repr()`) — 133 tests OK
+- [x] `evaluate_result.py` emits `"repr_template"` and has no `"desc_template"` residual
+- [x] `OccurrenceInspect` uses `repr_template` and has no `desc_template` residual
+- [x] `service/runtime_v1.py` emits `"repr"` for rule template output and has no rule `"desc"` residual
+- [x] `src/factgraph/application/docs/rule.md` updated
+- [x] `docs/quickstart/rules.md` updated
 
 ## 8. Implementation Plan
 
@@ -159,4 +159,8 @@ Because this is alpha, all known `desc`-named public/wire surfaces move in S0:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写。
+**Outcome**: S0 implemented as scoped. 17 files changed, 133 tests pass. `Rule.desc`/`render_desc`/`desc_template`/`"desc"` wire keys fully replaced.
+
+**Deviation D-4**: `sdk/dsl/application_rule.py` (`build_application_rule(..., desc=...)`) was not in the original 17-symbol preflight triage table. Discovered during implementation. Handled inline per A-fallback Option strict-cite — direct consequence of the rename, zero scope expansion beyond the stated goal. Recorded in audit log D-4.
+
+**Deviation D-4 (branch basis)**: Impl branch was initially forked from `master @ 562c74195df43e933bed92a3ff25de94dd8ce666`, but master does not contain the scoped protocol files. Codex reset the impl branch to blueprint lineage `c9ba32f8` before implementation. Master remains untouched.

@@ -98,7 +98,7 @@
 | **D2 / D3** (top-down regression / SAT why-provenance) | 作为 D5 的 implementation hints,不独立 |
 | **D4** (atom-complete probing) | **已设计** → [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §2-§8;穷尽逐条件探查器(prober) |
 | D12 Eager / Lazy switching | 性能优化; evidence > 10MB 触发 |
-| **D21 Desc-driven deterministic NL explain** | **已决(R7)** → `Rule.desc → Rule.repr` 改名(deprecated alias 过渡);repr 渲染层见 [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §5/§12 |
+| **D21 Desc-driven deterministic NL explain** | **已落地(S0)** → `Rule.repr` canonical(直接 alpha rename,无 alias);impl `eb79f1c5` on `v0.2.0-impl-rule-repr-rename-2026-06-08`;repr 渲染层见 [`explain-layer-complete-design.zh.md`](explain-layer-complete-design.zh.md) §5/§12 |
 
 ### ❌ Tier Z — 不重要 / 没价值做 / 明示拒绝
 
