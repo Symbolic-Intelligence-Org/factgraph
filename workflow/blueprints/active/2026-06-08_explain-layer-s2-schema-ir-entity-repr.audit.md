@@ -1,7 +1,7 @@
 # Audit Log: S2 — Schema IR Repr + Entity Repr Renderer
 
 - Blueprint: [2026-06-08_explain-layer-s2-schema-ir-entity-repr.md](./2026-06-08_explain-layer-s2-schema-ir-entity-repr.md)
-- Status: draft
+- Status: scoped
 
 ---
 
@@ -12,6 +12,7 @@
 | 2026-06-08 | draft | Blueprint created | Source-read `schema_compile.py`, `schema_ir.py`, `schema_runtime.py`, parent design §5.2/§10.1, and S1 closure. Draft locks S2 as canonical Schema IR persistence + runtime index + entity renderer, with atom rendering deferred to S4. |
 | 2026-06-08 | draft | Step 4.2 review + tightening | Source-read S1 impl lineage (`v0.2.0-impl-schema-repr-dsl-2026-06-08`) for SDK/source parser metadata producers. Tightened S1 test inversion, identity field-row repr placement, relationship field repr persistence, and S1-lineage fork requirement. |
 | 2026-06-08 | draft | Step 4.3 preflight PASS + Step 4.4 amendment | Preflight artifact found no abandonment. Folded PF-R4 schema mutation boundary, PF-R5 application export requirement, PF-r1 mapping input clarification, and PF-r2 grammar parity requirement. |
+| 2026-06-08 | scoped | Step 4.5 self-check + Step 4.6 scope freeze | Scope frozen: S1 lineage requirement, Schema IR repr persistence, runtime index, application export, mutation boundary, relationship repr, and entity renderer acceptance are locked. |
 
 ---
 

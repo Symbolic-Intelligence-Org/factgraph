@@ -1,8 +1,8 @@
 # Task Blueprint: S2 — Schema IR Repr + Entity Repr Renderer
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.4 preflight amendment)
+- Last Updated: 2026-06-08 (Step 4.6 scope freeze)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Depends On:
   - S0 Rule.repr rename — implemented at `eb79f1c5`
