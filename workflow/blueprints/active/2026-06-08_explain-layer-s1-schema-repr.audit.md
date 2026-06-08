@@ -11,6 +11,7 @@
 |---|---|---|---|
 | 2026-06-08 | draft | Blueprint created | Source-read `sdk/schema.py` and design §5.1-§5.3. Draft locks S1 as SDK DSL acceptance + validation, with Schema IR persistence deferred to S2 unless preflight proves a thinner split is impossible. |
 | 2026-06-08 | draft | Step 4.2 review + tightening | Source-read `authoring/schema_dsl_parse.py`, `authoring/schema_compile.py`, `core/schema/schema_ir.py`, and `sdk/compile.py`. Tightened parser parity into scope, resolved Meta.repr `%CLS`-only as valid, and made S1/S2 boundary explicit: repr authoring keys may be ignored by schema compile until S2. |
+| 2026-06-08 | draft | Step 4.3 preflight PASS with amendment required | Wrote `workflow/audit/active/2026-06-08_explain-layer-s1-schema-repr-preflight.md`. Findings: PF-R1 parser parity required, PF-R2 schema compile boundary explicit, PF-R3 stale error/docs wording. No abandonment. |
 
 ---
 
