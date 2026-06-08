@@ -101,7 +101,7 @@ S6  adapters 迁移: ProbLog/PyReason rich explain — ✅ 已落地 @ 57a86304
 S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S3 并随 S3 落地**
 ```
 
-**推荐下一个 implementable slice**: docs/test hardening slice（implementation side S0-S6 + Cleanup-β 已完成）。
+**推荐下一个 implementable slice**: test hardening (S6 dispatch 专项测试) 或 push 授权。docs hardening ✅ @ `b4df4b62` (2026-06-08)。
 
 ### Program-level Questions — 状态校正
 
@@ -148,10 +148,13 @@ S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S
 
 ## 9. Docs To Update
 
-- `src/factgraph/application/protocol/docs/README.md` — EvaluateRow/Explanation 结构变更
-- `src/factgraph/application/explain/docs/README.md` — 新模块 docs(S3 时建)
-- `src/factgraph/core/schema/docs/README.md` — repr DSL 新增(S1 时更新)
-- `docs/quickstart/evaluate_and_evidence.md` — souffle 漏列 fix + 新 explain API
+- `src/factgraph/application/protocol/docs/README.md` — ✅ 新建 @ `b4df4b62`
+- `src/factgraph/application/explain/docs/README.md` — ✅ 新建 @ `b4df4b62`
+- `src/factgraph/audit/docs/02_evidence_graph.md` — ✅ 重写（旧 flat-DAG model → paths model）@ `b4df4b62`
+- `src/factgraph/application/docs/README.md` — ✅ 更新索引 @ `b4df4b62`
+- `src/factgraph/application/docs/01_overview_en.md` — ✅ 补充 explain/ + evaluate_result.py 条目 @ `b4df4b62`
+- `src/factgraph/core/schema/docs/README.md` — repr DSL 新增(S1 时应更新，当前 deferred)
+- `docs/quickstart/evaluate_and_evidence.md` — D-6: §2.2 `raw_kind/bound` prose 对齐 Certainty，当前 deferred
 
 ## 10. Outcome / Deviations
 
