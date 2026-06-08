@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.2 review + tightening)
+- Last Updated: 2026-06-08 (Step 4.4 preflight amendment)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Depends On:
   - S0 Rule.repr rename — implemented at `eb79f1c5`
@@ -20,6 +20,8 @@
   - `src/factgraph/sdk/docs/04_api_surface.en.md`
 - Audit Log:
   - [2026-06-08_explain-layer-s2-schema-ir-entity-repr.audit.md](./2026-06-08_explain-layer-s2-schema-ir-entity-repr.audit.md)
+- Preflight:
+  - [2026-06-08_explain-layer-s2-schema-ir-entity-repr-preflight.md](../../audit/active/2026-06-08_explain-layer-s2-schema-ir-entity-repr-preflight.md)
 
 ---
 
@@ -76,6 +78,15 @@ S2 must persist that metadata into canonical Schema IR and expose an application
 | Q-S2-D | Does `repr` affect `schema_digest`? | Yes. It is canonical Schema IR content and should change schema identity |
 | Q-S2-E | Default label when `Meta.repr` is absent | `"<EntityType> <first identity value>"` per design §5.2 |
 | Q-S2-F | How to render missing/extra identity keys | Reuse `materialize_identity(...)` semantics: missing/unknown/type mismatch raises `SchemaResolutionError` |
+
+**Step 4.3 preflight findings folded (2026-06-08)**:
+
+| ID | Finding | Blueprint response |
+|---|---|---|
+| PF-R4 | Schema mutation runtime compares entity/predicate dicts; `repr` changes should remain canonical schema changes, not additive no-ops | Added mutation-policy boundary and acceptance |
+| PF-R5 | `render_entity_repr(...)` must be exported consistently at application layer if S2 makes it the pure helper | Added application export requirement; no SDK export |
+| PF-r1 | Renderer should accept mapping-like identity input but normalize through existing validation | Clarified proposed behavior |
+| PF-r2 | IR-level placeholder grammar should match S1 token grammar | Added grammar parity requirement |
 
 ## 5. Proposed Shape
 
@@ -138,7 +149,7 @@ def render_entity_repr(
 
 Behavior:
 
-- Materialize/validate identity using existing `materialize_identity(...)`.
+- Accept mapping-like identity input, normalize to `dict(identity)`, then materialize/validate identity using existing `materialize_identity(...)`.
 - If `EntityTypeInfo.repr` is present, substitute `%CLS` and identity-field placeholders.
 - If absent, return `"{entity_type} {first_identity_value}"`.
 - Formatting is protocol-simple string conversion for now; S4 can refine value rendering for atom prose.
@@ -154,6 +165,9 @@ Behavior:
 - Relationship field `repr` persists on relationship predicate rows because S1 exposes the same `Field(repr=)` descriptor for relationships.
 - Missing `repr` remains valid; fallback rendering is deterministic.
 - S2 implementation must fork from the S1 impl lineage, not bare `master`, because the parent blueprint branch does not itself contain S1 code changes.
+- Existing `repr` changes on already-shipped entities/predicates remain schema changes under `schema_mutation_runtime`; S2 does not whitelist repr-only changes as additive.
+- `render_entity_repr(...)` is exported from `factgraph.application.schema_runtime` and `factgraph.application`; it is not re-exported from `factgraph.sdk` in S2.
+- Schema IR placeholder validation mirrors S1's `%([A-Za-z_][A-Za-z0-9_]*)` token grammar.
 
 ## 7. Acceptance
 
@@ -164,10 +178,13 @@ Behavior:
 - [ ] Relationship `Field(repr=...)` compiles into relationship predicate `repr`.
 - [ ] `ensure_schema_ir(...)` rejects empty/non-string repr metadata.
 - [ ] `ensure_schema_ir(...)` rejects invalid `Meta.repr` placeholders (`%ENT`, `%FLD`, unknown/non-identity field placeholders).
+- [ ] IR-level repr placeholder token parsing matches S1 runtime/source parser grammar.
 - [ ] `schema_digest(...)` changes when a persisted repr template changes.
 - [ ] `build_schema_index(...)` exposes `EntityTypeInfo.repr` and `PredicateInfo.repr`.
 - [ ] `render_entity_repr("User", {"user_id": "u-1"}, index=...)` renders the `Meta.repr` template.
 - [ ] `render_entity_repr(...)` uses the design fallback when `Meta.repr` is absent.
+- [ ] `render_entity_repr(...)` is exported from `factgraph.application` but not `factgraph.sdk`.
+- [ ] Repr changes on existing schema rows remain non-additive under schema mutation validation.
 - [ ] S1's `test_repr_metadata_does_not_persist_to_schema_ir_in_s1` is replaced or rewritten to assert S2 persistence.
 - [ ] Existing schema compile/runtime tests still pass.
 - [ ] Docs describe that S1 authoring `repr=` is persisted in Schema IR and usable by the renderer.

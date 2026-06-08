@@ -11,6 +11,7 @@
 |---|---|---|---|
 | 2026-06-08 | draft | Blueprint created | Source-read `schema_compile.py`, `schema_ir.py`, `schema_runtime.py`, parent design §5.2/§10.1, and S1 closure. Draft locks S2 as canonical Schema IR persistence + runtime index + entity renderer, with atom rendering deferred to S4. |
 | 2026-06-08 | draft | Step 4.2 review + tightening | Source-read S1 impl lineage (`v0.2.0-impl-schema-repr-dsl-2026-06-08`) for SDK/source parser metadata producers. Tightened S1 test inversion, identity field-row repr placement, relationship field repr persistence, and S1-lineage fork requirement. |
+| 2026-06-08 | draft | Step 4.3 preflight PASS + Step 4.4 amendment | Preflight artifact found no abandonment. Folded PF-R4 schema mutation boundary, PF-R5 application export requirement, PF-r1 mapping input clarification, and PF-r2 grammar parity requirement. |
 
 ---
 
@@ -57,3 +58,15 @@
 **Decision (Step 4.2)**: S2 implementation must fork from `v0.2.0-impl-schema-repr-dsl-2026-06-08`, not from the parent blueprint branch or bare master.
 
 **Reasoning**: The parent blueprint branch records S1 as archived but does not contain the S1 code changes. S2 depends on S1's runtime/source authoring metadata producers.
+
+### D-8: Repr changes are schema changes
+
+**Decision (Step 4.4)**: Existing schema rows with changed `repr` are not treated as additive schema extensions. S2 keeps `schema_mutation_runtime`'s direct row comparison behavior.
+
+**Reasoning**: S2 makes `repr` canonical schema identity content. A metadata-only repr edit changes explain-layer interpretation and `schema_digest`, so silently accepting it as additive would contradict the identity model.
+
+### D-9: Application export only
+
+**Decision (Step 4.4)**: Export `render_entity_repr(...)` through `factgraph.application.schema_runtime` and `factgraph.application`, but not through `factgraph.sdk`.
+
+**Reasoning**: S2's renderer is an application-layer helper for prober/runtime code. SDK user-facing rendering helpers can be designed after S3/S4 once atom rendering semantics are stable.
