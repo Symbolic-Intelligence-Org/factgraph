@@ -68,38 +68,48 @@
 
 ### Slice Program(执行顺序)
 
-**§10.0 DTO 前置切片**(EvaluateResult/EvaluateRow flatten,各自独立子 blueprint):
+**§10.0 DTO 前置切片 — 状态校正（2026-06-08 source-read）**
+
+> 2026-06-08 source-read 发现 §10.0 所有主要 slice 均已在此 blueprint 之前的历史实施中落地。
+> 无需重开 α/β/γ/ζ/δ 子 blueprint。剩余工作仅为两个小型 cleanup items（见下）。
+
+| Slice | 描述 | 当前状态 |
+|---|---|---|
+| α | Claim/EvidenceRef 冗余字段删除 | ✅ pre-blueprint 已落地（wrapper class 不存在） |
+| β | ResultFingerprint sub-object 折叠 | ✅ pre-blueprint 已落地（`EvaluateResult.fingerprint: ResultFingerprint`）；`expr_digest` deprecated property cleanup 仍 pending → **Cleanup-β** |
+| γ | Claim/EvidenceRef wrapper 撤销 + 字段平铺 | ✅ pre-blueprint 已落地（`EvaluateRow` 有 flat fields） |
+| ζ | bindings 形態簡化 {port_name: term} | ✅ pre-blueprint 已落地（`_bindings_from_candidate` 已产出 `{port_name: term}`） |
+| δ | query-style head decoupling | ✅ pre-blueprint 已落地（`_evaluate.py` 已实现 Option A：schema_pred is None → query-style；arity mismatch → reject） |
+
+**真实遗留 DTO cleanup（各可作 tiny slice 或合并）**:
 
 ```
-α  Claim/EvidenceRef 冗余字段删除 — 独立子 blueprint
-β  ResultFingerprint sub-object 折叠 — 独立子 blueprint
-γ  Claim/EvidenceRef wrapper 撤销 + 字段平铺 — 独立子 blueprint(依赖 α/β)
-ζ  bindings 形态简化 {port_name: term} — 独立子 blueprint(可与 γ 并行)
-δ  query-style head decoupling — 独立子 blueprint(依赖 γ 成熟)
+Cleanup-β   EvaluateResult.expr_digest deprecated property 删除 — tiny slice
+Certainty   EvaluateRow.raw_kind + bound → Certainty 统一 — 独立子 blueprint(已决待落地,见主设计文档 §9)
 ```
 
 **§10.1 Explain-layer 切片**(各自独立子 blueprint):
 
 ```
-S0  Rule.desc → Rule.repr alias migration — 独立子 blueprint(可与 α 并行,无依赖)
-S1  Schema DSL: Field(repr=)/Identity(repr=)/Meta.repr — 独立子 blueprint(依赖 S0)
+S0  Rule.desc → Rule.repr rename — ✅ 已落地 @ eb79f1c5 (2026-06-08)
+S1  Schema DSL: Field(repr=)/Identity(repr=)/Meta.repr — 独立子 blueprint(依赖 S0 ✅)
 S2  Schema IR + render_entity_repr 纯函数 — 独立子 blueprint(依赖 S1)
-S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — 独立子 blueprint(依赖 γ/ζ + S2)
+S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — 独立子 blueprint(依赖 Certainty + S2)
 S4  渲染集成: repr_text 烘焙 + 渲染器默认表 — 独立子 blueprint(依赖 S3)
 S5  native 路径接通: Explanation.evidence non-None iff passed/failed — 独立子 blueprint(依赖 S3/S4)
 S6  adapters 迁移: souffle/problog/pyreason — 独立子 blueprint(依赖 S5)
 S7  旧 nodes/edges/root_node_id/support_kind 字段删除 — 独立子 blueprint(依赖 S6 完成)
 ```
 
-**推荐第一个 implementable slice**: `S0`(Rule.repr alias migration)— 最小独立,无 DTO/Q 依赖。
+**推荐下一个 implementable slice**: `Certainty`（EvaluateRow.raw_kind+bound → Certainty 统一）或 `S1`（Schema DSL）— 两者互不依赖，可并行起草。
 
-### 未锁定 Program-level Questions(子 slice scoped 前各自解决)
+### Program-level Questions — 状态校正
 
-| ID | 影响 slice | 问题 |
-|---|---|---|
-| Q-A | α/γ | `RowKind` 在 query-style 下是否调整(删 `fact_triple`/加 `query_row`/promote `projection`) |
-| Q-B | δ | `build_application_rule` auto-prepend `:exists` 在 query-style 下是保留/opt-out/删除 |
-| Q-C | α/β/γ/ζ | deprecated alias 保留多长;`result.expr_digest` 等是否提供 `__getattr__` fallback |
+| ID | 原影响 slice | 问题 | 校正后状态 |
+|---|---|---|---|
+| Q-A | α/γ | `RowKind`/`ClaimKind` 在 query-style 下调整 | ⚠️ 仍 open：`ClaimKind` 含 `fact_triple`；query-style 路径已落地但 kind 未调整；影响 Certainty slice 前重新评估 |
+| Q-B | δ | `:exists` auto-prepend 在 query-style 下行为 | ✅ 已随 δ 落地解决（free-form head 不走 schema 路径） |
+| Q-C | α/β/γ/ζ | deprecated alias 保留多长；`expr_digest` fallback | 部分 resolved：alpha 无 alias（S0 实证）；`expr_digest` deprecated property cleanup = Cleanup-β |
 
 ### 设计来源
 
@@ -110,9 +120,9 @@ S7  旧 nodes/edges/root_node_id/support_kind 字段删除 — 独立子 bluepri
 - **INV-6 application-first**: 全部改动在 `factgraph.application.protocol` + `factgraph.sdk` + `application/explain/`;无 SDK 反向依赖,无 substrate 上移。
 - **Sacred branches**: `master`/`v0.1-oss-prep` 不可动。每个子 slice 在 `v0.2.0-impl-<slice-slug>-<date>` 分支上实施。
 - **Unrelated dirty files**: 当前 working tree 有 unrelated dirty/untracked 文件,所有子 slice 实施中必须精确 stage,不得 `git add .`。
-- **Deprecated alias 原则**: `Rule.desc`/`render_desc`、`row.claim`/`row.evidence_ref`、`result.expr_digest` 等首次 release 标 `DeprecationWarning`,下一 minor cycle 删除。
-- **Certainty 三路映射**: native→`Certainty(1,1,"boolean")`;problog→`Certainty(p,p,"probabilistic")`;pyreason→`Certainty(l,u,"possibilistic")`。γ slice acceptance 必须验证三路。
-- **Q-D 已决(Option A)**: matched schema predicate 端口数不符 → reject;free-form head → query-style。
+- **Alpha rename 原则**: 不保留旧名 alias（S0 已实证）；`result.expr_digest` deprecated property 由 Cleanup-β slice 清理。
+- **Certainty 三路映射**: native→`Certainty(1,1,"boolean")`;problog→`Certainty(p,p,"probabilistic")`;pyreason→`Certainty(l,u,"possibilistic")`。Certainty slice acceptance 必须验证三路。
+- **Q-D 已决(Option A)、δ 已落地**: matched schema predicate 端口数不符 → reject;free-form head → query-style。`_evaluate.py` 已实现。
 
 ## 7. Acceptance(Program Level)
 

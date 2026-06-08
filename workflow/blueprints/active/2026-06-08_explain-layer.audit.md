@@ -12,6 +12,7 @@
 | 2026-06-08 | blueprint created (draft) | Program blueprint created on `v0.2.0-blueprint-explain-layer-2026-06-08`. Design docs consolidated across 3 sessions into `explain-layer-complete-design.zh.md`. |
 | 2026-06-08 | Q-D closed: Option A | User confirmed: matched schema predicate + wrong arity → reject; free-form head → query-style. Backward-compatible, prevents typo-silent widening. |
 | 2026-06-08 | design docs committed @ `32c91983` | 8 files: `explain-layer-complete-design.zh.md` (new), `explanation-completion-roadmap.zh.md` (modified), 3 archived design-points (new/renamed), `rejected-alternatives-2026-06-08.md` (new), blueprint pair (new). Branch: `v0.2.0-blueprint-explain-layer-2026-06-08`. master unchanged @ `562c7419`. |
+| 2026-06-08 | §10.0 lineage correction | source-read confirmed α/β/γ/ζ/δ all pre-blueprint shipped. Corrected §10.0 to reflect actual state; added Cleanup-β + Certainty as real remaining DTO items; Q-A re-opened (ClaimKind still has `fact_triple`), Q-B closed (δ already live), Q-C partially resolved. |
 
 ---
 
