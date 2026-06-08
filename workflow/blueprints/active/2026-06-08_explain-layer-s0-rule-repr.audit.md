@@ -1,7 +1,7 @@
 # Audit Log: S0 — Rule.repr Rename
 
 - Blueprint: [2026-06-08_explain-layer-s0-rule-repr.md](./2026-06-08_explain-layer-s0-rule-repr.md)
-- Status: scoped
+- Status: implementing
 
 ---
 
@@ -12,6 +12,7 @@
 | 2026-06-08 | blueprint created (draft) | Preflight source-read of `rule.py` (629 lines) + blast-radius grep complete. 17 shipped symbols catalogued. 3 scope questions Q-S0-A/B/C identified, must resolve before `scoped`. |
 | 2026-06-08 | scope questions resolved (draft) | User clarified alpha-version policy: no historical compatibility required. Q-S0-A/B/C all resolve in-scope as direct rename (`desc_template` → `repr_template`, service `"desc"` → `"repr"`). Rule-level deprecated alias plan removed; S0 is direct `desc` → `repr` rename. |
 | 2026-06-08 | scoped | Step 4.6 scope freeze. S0 scope locked as direct alpha rename across Rule, evaluate-result template key, `OccurrenceInspect`, and service response; no compatibility aliases or old wire keys retained. |
+| 2026-06-08 | implementing | Step 4.7 impl branch cut: `v0.2.0-impl-rule-repr-rename-2026-06-08` forked from `master @ 562c74195df43e933bed92a3ff25de94dd8ce666`. Code implementation delegated to Codex per workflow division-of-labor. |
 
 ---
 

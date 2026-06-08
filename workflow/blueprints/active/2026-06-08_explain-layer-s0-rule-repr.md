@@ -1,8 +1,8 @@
 # Task Blueprint: S0 — Rule.repr Rename
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-08 (Step 4.7 impl branch cut)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Related Modules:
   - `src/factgraph/application/protocol/rule.py` (primary)
