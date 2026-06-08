@@ -28,7 +28,8 @@
 
 ## Events
 
-*(实施阶段填入)*
+- **2026-06-08 Q-S5-A 用户决策**：Option A 锁定。`stale_row`/`row_not_in_result` → `status="unsupported"`。理由：`failed` 语义 = 逻辑探查失败；协议层不满足 = `unsupported`。完整不变式：`{passed, failed} ↔ evidence is not None`；`{unsupported, invalid_request} ↔ evidence is None`。
+- **2026-06-08 scope-freeze**：Q-S5-B/C 委托 Codex。Status → `scoped`。
 
 ---
 

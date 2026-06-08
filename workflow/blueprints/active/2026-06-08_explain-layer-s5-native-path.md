@@ -1,8 +1,8 @@
 # Task Blueprint: Explain Layer S5 — native 路径接通
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-08
-- Last Updated: 2026-06-08
+- Last Updated: 2026-06-08 (Q-S5-A locked → scope freeze)
 - Parent Blueprint: [`2026-06-08_explain-layer.md`](./2026-06-08_explain-layer.md)
 - Slice: S5 (depends on S3 ✅, S4 ✅)
 - Related Modules:
@@ -71,13 +71,15 @@ if (self.status == "passed") != (self.evidence is not None):
     raise ProtocolShapeError("Explanation.status='passed' iff Explanation.evidence is not None")
 ```
 
-目标：
+目标（Q-S5-A Option A 已锁定）：
 ```python
 if (self.status in {"passed", "failed"}) != (self.evidence is not None):
-    raise ProtocolShapeError("Explanation.status must be passed or failed iff evidence is not None")
+    raise ProtocolShapeError(
+        "Explanation.status must be passed or failed iff evidence is not None"
+    )
 ```
 
-注意：变更后，`stale_row` / `row_not_in_result`（现为 `status="failed", evidence=None`）会立刻违反新不变式。**S5 需要处理这个冲突**（见 Q-S5-A）。
+**同时**：`stale_row`/`row_not_in_result` 分支将 `status` 从 `"failed"` 改为 `"unsupported"` — 从而与新不变式相容（`unsupported + evidence=None` 合法）。
 
 ### 4.3 `_build_passed_row_evidence_graph` 依赖旧 EvidenceGraph
 
@@ -122,16 +124,22 @@ if first is None:
 
 ### 5.1 关键设计问题
 
-#### Q-S5-A（不变式变更 + `stale_row`/`row_not_in_result` 兼容性）— **需用户决定**
+#### Q-S5-A（不变式变更 + `stale_row`/`row_not_in_result` 兼容性）— **✅ 已锁定 Option A**
 
-**情况**：不变式改为 `{passed, failed} iff evidence is not None` 后，两类"协议失败"（`stale_row`/`row_not_in_result`）需要处理：
+**决策**：`stale_row`/`row_not_in_result` 的 `status` 从 `"failed"` 改为 `"unsupported"`。
 
-| 选项 | 做法 | 优劣 |
-|---|---|---|
-| **Option A（推荐）**：协议失败改状态为 `unsupported` | 将 `stale_row`/`row_not_in_result` 的 `status` 从 `"failed"` 改为 `"unsupported"` | 最干净；protocol error ≠ logical failure；alpha 无历史兼容负担 |
-| Option B：不变式保留部分豁免 | 只放宽到 `status ∈ {passed, failed} → evidence is not None`（单向），允许 `failed+evidence=None` | 松散不变式，技术债持续 |
+**完整不变式（S5 后）**：
 
-推荐 Option A。`stale_row`/`row_not_in_result` 是协议层异常，语义上更接近 `unsupported`（"无法完成解释"）而非逻辑失败。
+```
+status ∈ {"passed", "failed"}  ↔  evidence is not None
+status ∈ {"unsupported", "invalid_request"}  ↔  evidence is None
+```
+
+**理由（用户确认）**：
+- `failed` 语义 = 规则/断言被实际探查过，结果不成立（有可解释的逻辑失败路径）
+- `stale_row`/`row_not_in_result` 是请求上下文不满足，无法构造解释，语义为"请求无法完成" → `unsupported`
+- Alpha 阶段无兼容负担，直接改语义比保留例外更干净
+- Test 语义更明确：`failed + EvidenceGraph(paths)` vs `unsupported + evidence=None`
 
 #### Q-S5-B（passed 路径 probe_native 接入方式）— 委托 Codex
 
@@ -193,10 +201,13 @@ if first is None:
 
 ## 6. Boundaries And Invariants
 
-- **INV-evidence-iff-passed-failed**（S5 后）: `Explanation.evidence is not None` iff `status ∈ {passed, failed}`。
-- **INV-no-problog-pyreason-touch**: souffle/ProbLog/PyReason adapter 的证据路径不在 S5 scope；S5 只改 native 路径。
+- **INV-evidence-iff-passed-failed**（S5 后，已锁定）:
+  - `status ∈ {"passed", "failed"}` ↔ `evidence is not None`
+  - `status ∈ {"unsupported", "invalid_request"}` ↔ `evidence is None`
+- **INV-stale-protocol-errors-unsupported**: `stale_row`/`row_not_in_result` 的 `status` 为 `"unsupported"`（非 `"failed"`）；`failure_class` 字段仅在 `status="failed"` 时存在。
+- **INV-probe-native-fallback**: `probe_native` 调用异常时，`Explanation` 回落到 `status="unsupported"`（不能产出 `failed+evidence=None`，因为新不变式禁止）。
+- **INV-no-problog-pyreason-touch**: souffle/ProbLog/PyReason adapter 证据路径不在 S5 scope。
 - **INV-zero-diff-diagnose**: `diagnose_runtime.py` 零改动。
-- **INV-probe-native-fallback**: `probe_native` 调用失败时不应让 `Explanation()` 抛出；fallback 为 `evidence=None`（如 Option A 生效，则 failed+None 是非法的 → 需要回落到 `unsupported` 状态）。
 - **INV-no-sdk-import-in-protocol**: `evaluate_result.py` 不直接 import SDK 层。
 
 ## 7. Acceptance
@@ -205,16 +216,17 @@ if first is None:
 - [ ] `explanation.evidence.paths` 包含至少一个 `EvidenceTree`，其中有 `Fails` 或 `NotReached` atom
 - [ ] `explanation.evidence.paths[0].rules[0].atoms[i].repr_text` 非 `None`（S4 烘焙已接通）
 - [ ] `fg.eval.explain(expr, head=closed_head)` 当 assertion PASSES 时：`status == "passed"` 且 `evidence is not None` 且 `evidence.paths` 非空
-- [ ] Option A：`stale_row`/`row_not_in_result` 的 `status` 为 `"unsupported"` 而非 `"failed"`（或 Codex 另有决定）
+- [ ] `stale_row`/`row_not_in_result` 返回 `status="unsupported", evidence=None`（**Q-S5-A Option A 已锁定**）
 - [ ] 不变式：`Explanation(status="failed", evidence=None)` 构造时抛出 `ProtocolShapeError`
+- [ ] 不变式：`Explanation(status="unsupported", evidence=<not None>)` 构造时抛出 `ProtocolShapeError`
 - [ ] 所有既有 S3/S4 prober 测试仍 pass
 - [ ] compileall + import sweep pass（含整合后的 feature branch 代码）
 - [ ] `diagnose_runtime.py` 0-diff
 
 ## 8. Implementation Plan
 
-1. **[Codex]** 用户确认 Q-S5-A（Option A 推荐：`stale_row`/`row_not_in_result` → `"unsupported"`）
-2. **[Codex]** 以 feature branch `ed054fd0` 为基，创建 S5 impl 分支
+1. **[已锁定 Q-S5-A Option A]** `stale_row`/`row_not_in_result` → `status="unsupported"`
+2. **[Codex]** 以 feature branch `ed054fd0` 为基，创建 S5 impl 分支（命名 `v0.2.0-impl-native-explain-path-2026-06-08`）
 3. **[Codex]** Cherry-pick/apply S3 改动（`audit/evidence_graph.py` thin re-export + `application/explain/` 新建文件集）；手工解决冲突
 4. **[Codex]** Cherry-pick/apply S4 改动（`prober.py` repr baking）
 5. **[Codex]** 修改 `evaluate_result.py`：不变式更新 + Option A status 迁移 + `_build_passed_row_evidence_graph` 更新（B2 或 B3）
