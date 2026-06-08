@@ -1,8 +1,8 @@
 # Task Blueprint: S3 — Prober Main Body (application/explain/ + EvidenceTree)
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-08
-- Last Updated: 2026-06-08
+- Last Updated: 2026-06-08 (Q-S3-A locked; Q-S3-B/C delegated to Codex)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md) (on v0.2.0-blueprint-explain-layer-2026-06-08)
 - Related Modules:
   - `src/factgraph/application/explain/` (新建 — 本 slice 主体)
@@ -37,13 +37,12 @@ S0-S2 已落地（`Rule.repr`、Schema DSL `repr=`、Schema IR repr 持久化）
 
 ## 3. Non-goals
 
-- **不修改** `src/factgraph/audit/evidence_graph.py`（旧 `EvidenceGraph` nodes/edges 结构）— S7 删除。
-- **不修改** `src/factgraph/application/protocol/evaluate_result.py`（`Explanation.evidence` 类型不变）— S5 wire-up。
 - **不烘焙** `EvidenceAtom.repr_text`（`None` 占位）— S4。
 - **不实施** souffle / problog / pyreason 探查路径 — S6。
 - **不通过 SDK 导出**新类型 — 维持 application-first。
 - **不修改** `diagnose_runtime.py` 源码（只 import，不重构）。
-- **不修改** `Explanation.evidence` 不变式（`passed iff evidence is not None`）— S5 放宽。
+- **不修改** `Explanation.evidence` 不变式 wire-up 细节 — S5（`Explanation.evidence` 由 S5 接通 native prober；S3 仅建立 prober 本体）。
+- **S7 已并入 S3**：不再单独存在。
 
 ## 4. Current Context
 
@@ -51,8 +50,8 @@ S0-S2 已落地（`Rule.repr`、Schema DSL `repr=`、Schema IR repr 持久化）
 
 | # | 文件 | 现状 | 与 S3 的关系 |
 |---|---|---|---|
-| 1 | `audit/evidence_graph.py` | `EvidenceGraph(graph_id,engine,root_node_id,nodes,edges,support_kind,layout_hint,metadata)` | S3 不修改；S7 删除 |
-| 2 | `evaluate_result.py:278` | `Explanation.evidence: EvidenceGraph \| None`；不变式 `passed iff evidence is not None` | S5 修改 |
+| 1 | `audit/evidence_graph.py` | `EvidenceGraph(graph_id,engine,root_node_id,nodes,edges,support_kind,layout_hint,metadata)` + `EvidenceNode/EvidenceEdge` + flat DAG 渲染 | **S3 完全替换**（Q-S3-A 锁定） |
+| 2 | `evaluate_result.py:278` | `Explanation.evidence: EvidenceGraph \| None`；不变式 `passed iff evidence is not None` | S5 wire-up（S3 仅建立新类型）|
 | 3 | `diagnose_runtime._extend_env_with_atom` | 已有 pred/eq/ne/gt/ge/lt/le/arith/not/in 求值器 | S3 import 复用 |
 | 4 | `diagnose_runtime._normalize_where` | 规范化 rule body → OR branches | S3 import 复用 |
 | 5 | `protocol/rule_expr_lowering.py` | `RuleExprLoweringPlan`（`branches`, `join_materializations`, `head_binding`）；`RuleExprJoinMaterialization(left_occurrence_alias, right_occurrence_alias, left_port, right_port)` | S3 作为 prober 输入类型 |
@@ -69,40 +68,21 @@ S0-S2 已落地（`Rule.repr`、Schema DSL `repr=`、Schema IR repr 持久化）
 
 ## 5. Proposed Shape
 
-### Q-S3-A: 新旧 EvidenceGraph 共存策略
+### Q-S3-A: 完全替换（已锁定）
 
-**决定**：在 `application/explain/evidence_tree.py` 定义新 `EvidenceGraph`，命名不变，模块路径不同。
-- 旧：`factgraph.audit.evidence_graph.EvidenceGraph`（`nodes/edges` flat DAG）— S7 前不动。
-- 新：`factgraph.application.explain.evidence_tree.EvidenceGraph`（`paths` 层级结构）。
-- S5 修改 `Explanation.evidence` 类型时，导入新类型；旧类型由 S7 删除。
-- Python 允许同名类在不同模块，不冲突。
+**决定**：S3 完全替换旧 `EvidenceGraph`，不保留双轨过渡。Alpha 版本无历史兼容性负担，以最干净的实现为准。
+- 旧 `audit/evidence_graph.EvidenceGraph(nodes, edges, root_node_id, support_kind)` 在 S3 中移除。
+- 旧 `EvidenceNode` / `EvidenceEdge` / flat DAG 渲染函数 / `evidence_graph_to_dict/from_dict` 一并清理。
+- 新 DTO 层（`EvidenceGraph(paths)` + `EvidenceTree` 全家族）接管 `audit/evidence_graph.py` 或迁移到 `application/explain/evidence_tree.py`——具体文件分布由 Codex 决策（Q-S3-B 相关）。
+- **S7 并入 S3**：原计划 S7（旧字段删除）不再独立 slice，本 S3 一次性完成。
+- Adapters（souffle/problog/pyreason）在 S6 前无法构造新 `EvidenceGraph`；`Explanation.evidence` 暂为 `None`，acceptable（alpha 阶段 native 先行）。
 
-### Q-S3-B: EvidenceProbeResult
+### Q-S3-B / Q-S3-C: 委托 Codex 决策
 
-`probe_native` 返回 `EvidenceProbeResult`（中间组装结果），而非直接返回 `EvidenceGraph`：
-
-```python
-@dataclass(frozen=True)
-class EvidenceProbeResult:
-    paths: tuple[EvidenceTree, ...]     # native: 只有 EvidenceTree
-    certainty: Certainty | None = None  # 原始行 certainty（由调用方传入）
-```
-
-`EvidenceGraph`（含 `graph_id / engine / layout_hint / subject_binding / metadata`）由 S5 wire-up 层在调用 `probe_native` 后组装。这使 prober 纯粹：只处理路径，不持有标识信息。
-
-### Q-S3-C: 获取 RuleExprLoweringPlan
-
-`probe_native` 接收已 lowered 的 `RuleExprLoweringPlan` 作为参数。调用方（S5）负责 lower rule → plan。S3 不调用 `lower_rule_expr`，避免引入 SDK 依赖或重复 lower。
-
-```python
-def probe_native(
-    plan: RuleExprLoweringPlan,
-    bindings: Mapping[str, Any],
-    view_facts: dict[str, list[tuple[Any, ...]]],
-    schema_index: SchemaIndex | None = None,
-) -> EvidenceProbeResult:
-    ...
-```
+`probe_native` 的返回值形状、`RuleExprLoweringPlan` 传参方式、`ProbeEnv` 内部接口由 Codex 在实施中决策。约束：
+- 结果必须能填充 `EvidenceTree(status, rules, joins)`
+- prober 为纯函数（不访问数据库）
+- `EvidenceAtom.repr_text = None`（S4 烘焙）
 
 ### EvidenceTree DTO 层（evidence_tree.py）
 
@@ -209,9 +189,10 @@ class ProbeEnv:
 
 ## 6. Boundaries And Invariants
 
+- **Q-S3-A 已锁：完全替换** — 旧 `audit/evidence_graph.EvidenceGraph(nodes, edges)` 及 `EvidenceNode/EvidenceEdge` 在 S3 中删除；S7 并入 S3。
+- **Adapter 路径暂为 None** — souffle/problog/pyreason 无法构造新 `EvidenceGraph` 直至 S6；`Explanation.evidence` 在这些路径暂为 `None`，alpha 阶段可接受。
 - **新代码 import 私有 helper 可接受**：`from factgraph.application.diagnose_runtime import _extend_env_with_atom`——新文件 import，不修改 `diagnose_runtime.py`。
-- **`audit/evidence_graph.py` 零修改**：旧 `EvidenceGraph` 及全部关联代码不动。
-- **`evaluate_result.py` 零修改**：`Explanation.evidence` 类型和不变式不动（S5 负责）。
+- **`evaluate_result.py` 的 wire-up 是 S5**：S3 可更新 `Explanation.evidence` 的类型注解以指向新 `EvidenceGraph`，但 prober 接通（实际填充 evidence）是 S5。
 - **Certainty import 路径**：`from factgraph.application.protocol.evaluate_result import Certainty`。
 - **prober 纯函数**：不访问数据库、不接触 SDK；view_facts 由调用方传入。
 - **repr_text = None**：S3 所有 `EvidenceAtom` 的 `repr_text` 保持 `None`；S4 负责烘焙。
@@ -228,9 +209,8 @@ class ProbeEnv:
 - [ ] native 路径 not_reached case：未绑定变量的 atom `verdict = NotReached(blocked_by=...)`
 - [ ] 三层 status 聚合规则正确（holds > fails > not_reached 优先级）
 - [ ] `EvidenceAtom.repr_text` 为 `None`（repr_text 烘焙不在 S3 scope）
-- [ ] `audit/evidence_graph.py` 零 diff（git diff 验证）
-- [ ] `evaluate_result.py` 零 diff（git diff 验证）
-- [ ] `diagnose_runtime.py` 零 diff（git diff 验证）
+- [ ] 旧 `EvidenceNode` / `EvidenceEdge` / `nodes` / `edges` / `root_node_id` / `support_kind` 字段从代码库中消除
+- [ ] `diagnose_runtime.py` 零 diff（只 import，不修改）
 - [ ] 所有 shipped tests 通过（prober 为新增，不影响旧 test baseline）
 - [ ] standalone prober tests（mock view_facts）覆盖 holds/fails/not_reached 三种路径
 
