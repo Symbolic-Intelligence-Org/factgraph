@@ -2,7 +2,7 @@
 
 - Blueprint: [`2026-06-08_explain-layer-s5-native-path.md`](./2026-06-08_explain-layer-s5-native-path.audit.md)
 - Created: 2026-06-08
-- Status: draft
+- Status: implemented
 
 ---
 
@@ -30,9 +30,13 @@
 
 - **2026-06-08 Q-S5-A 用户决策**：Option A 锁定。`stale_row`/`row_not_in_result` → `status="unsupported"`。理由：`failed` 语义 = 逻辑探查失败；协议层不满足 = `unsupported`。完整不变式：`{passed, failed} ↔ evidence is not None`；`{unsupported, invalid_request} ↔ evidence is None`。
 - **2026-06-08 scope-freeze**：Q-S5-B/C 委托 Codex。Status → `scoped`。
+- **2026-06-08 implementation**：Codex landed S5 implementation `9ba5f526` on `v0.2.0-impl-native-explain-path-2026-06-08`. Integrated S3/S4 paths model into feature lineage, updated `Explanation` invariant, migrated `stale_row`/`row_not_in_result` to `unsupported`, rewrote `walk_evidence(...)` for `EvidenceGraph(paths)`, and connected `closed_head_false` to `probe_native(...)`.
+- **2026-06-08 closure**：Blueprint Status → `implemented`. Focused verification: 120 + 224 + 46 tests OK; compileall clean; `git diff --check` clean. Full `unittest discover tests` has only unrelated `service` import failure.
 
 ---
 
 ## Deviations
 
-*(实施阶段填入)*
+- **D-1 passed-row path shape**：Q-S5-B landed as a lightweight row-head `EvidenceTree`, not full probe recompile. `EvaluateResult` lacks the source rule/body plan and `ProofReceipt` lacks `body_ir`, so this avoids inventing plan state while satisfying `passed + evidence.paths`.
+- **D-2 adapter converter integration**：S3/S4 adapter converter changes were integrated into S5 feature lineage for import/test coherence. Rich adapter explain remains S6.
+- **D-3 prober compare fallback**：`probe_native(...)` includes a local compare fallback because current `diagnose_runtime._extend_env_with_atom` calls `_eval_cmp_atom` with an incompatible signature. `diagnose_runtime.py` stayed 0-diff.

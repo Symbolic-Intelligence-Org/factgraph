@@ -1,8 +1,8 @@
 # Task Blueprint: Explain Layer S5 — native 路径接通
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Q-S5-A locked → scope freeze)
+- Last Updated: 2026-06-08 (Step 4.8 closure)
 - Parent Blueprint: [`2026-06-08_explain-layer.md`](./2026-06-08_explain-layer.md)
 - Slice: S5 (depends on S3 ✅, S4 ✅)
 - Related Modules:
@@ -44,11 +44,11 @@ if (self.status == "passed") != (self.evidence is not None):
 
 ## 3. Non-Goals
 
-- 不修改 souffle / problog / pyreason adapter 的证据路径（归 S6）。
+- 不实现 souffle / problog / pyreason adapter 的 rich explain path（归 S6）。
 - 不实现 `no_matching_row` / `stale_row` / `row_not_in_result` 的 evidence（这些协议层失败案例暂保持 `evidence=None`；只有 `closed_head_false` 接通）。
 - 不修改 `EvidenceAtom` / `EvidenceTree` / `EvidenceRule` DTO（S3/S4 已就绪）。
 - 不修改 `diagnose_runtime.py`（各 slice 均 0-diff）。
-- 不实现 `Explanation.repr_text` walker 的 S5 扩展（walker 已在 feature branch `explanation_render.py` 存在；如需更新留作 S5 后续 polish）。
+- 不实现 `Explanation.repr_text` walker；S5 仅将 feature-branch `Explanation.repr` walker 从旧 nodes/edges 迁移到新 paths model。
 
 ## 4. Preflight Source Read — 关键发现（2026-06-08）
 
@@ -212,16 +212,16 @@ if first is None:
 
 ## 7. Acceptance
 
-- [ ] `fg.eval.explain(expr, head=closed_head)` 当 `closed_head_false` 时：`explanation.status == "failed"` 且 `explanation.evidence is not None`
-- [ ] `explanation.evidence.paths` 包含至少一个 `EvidenceTree`，其中有 `Fails` 或 `NotReached` atom
-- [ ] `explanation.evidence.paths[0].rules[0].atoms[i].repr_text` 非 `None`（S4 烘焙已接通）
-- [ ] `fg.eval.explain(expr, head=closed_head)` 当 assertion PASSES 时：`status == "passed"` 且 `evidence is not None` 且 `evidence.paths` 非空
-- [ ] `stale_row`/`row_not_in_result` 返回 `status="unsupported", evidence=None`（**Q-S5-A Option A 已锁定**）
-- [ ] 不变式：`Explanation(status="failed", evidence=None)` 构造时抛出 `ProtocolShapeError`
-- [ ] 不变式：`Explanation(status="unsupported", evidence=<not None>)` 构造时抛出 `ProtocolShapeError`
-- [ ] 所有既有 S3/S4 prober 测试仍 pass
-- [ ] compileall + import sweep pass（含整合后的 feature branch 代码）
-- [ ] `diagnose_runtime.py` 0-diff
+- [x] `fg.eval.explain(expr, head=closed_head)` 当 `closed_head_false` 时：`explanation.status == "failed"` 且 `explanation.evidence is not None`
+- [x] `explanation.evidence.paths` 包含至少一个 `EvidenceTree`，其中有 `Fails` 或 `NotReached` atom
+- [x] `explanation.evidence.paths[0].rules[0].atoms[i].repr_text` 非 `None`（S4 烘焙已接通）
+- [x] `fg.eval.explain(expr, head=closed_head)` 当 assertion PASSES 时：`status == "passed"` 且 `evidence is not None` 且 `evidence.paths` 非空
+- [x] `stale_row`/`row_not_in_result` 返回 `status="unsupported", evidence=None`（**Q-S5-A Option A 已锁定**）
+- [x] 不变式：`Explanation(status="failed", evidence=None)` 构造时抛出 `ProtocolShapeError`
+- [x] 不变式：`Explanation(status="unsupported", evidence=<not None>)` 构造时抛出 `ProtocolShapeError`
+- [x] 所有既有 S3/S4 prober 测试仍 pass
+- [x] compileall + import sweep pass（含整合后的 feature branch 代码）
+- [x] `diagnose_runtime.py` 0-diff
 
 ## 8. Implementation Plan
 
@@ -241,4 +241,27 @@ if first is None:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写。
+Implemented at `9ba5f526` on `v0.2.0-impl-native-explain-path-2026-06-08`.
+
+Delivered:
+- Integrated the S3/S4 paths-model evidence layer into the feature branch lineage: `factgraph.application.explain`, `audit/evidence_graph.py` thin re-export, adapter provenance converters, and paths-model audit docs/tests.
+- Updated `Explanation` invariant to `{passed, failed} ↔ evidence is not None`.
+- Reclassified `row_not_in_result` and `stale_row` live-row protocol failures as `unsupported + evidence=None + ErrorDTO`.
+- Replaced passed live-row evidence construction with a paths-model `EvidenceGraph(paths=(EvidenceTree(...),))`.
+- Rewrote the feature-branch `walk_evidence(...)` renderer from old `nodes/edges/root_node_id` traversal to paths/tree/timeline traversal.
+- Wired SDK `_explain(...)` `closed_head_false` to `probe_native(...)`; prober failure falls back to `unsupported` and never produces `failed + evidence=None`.
+
+Verification:
+- `PYTHONPATH=src python -m unittest tests.application.protocol.test_evaluate_result_dtos tests.application.protocol.test_evaluate_result_digests tests.application.protocol.test_explanation_render tests.sdk.test_evaluate_result_exports tests.sdk.test_rule_expr_evaluate tests.sdk.test_ruleexpr_inspect tests.sdk.dsl.test_application_rule tests.test_application_explain_prober tests.test_audit_evidence_graph tests.test_problog_evidence_graph tests.test_pyreason_evidence_graph tests.test_souffle_evidence_graph` → 120 tests OK.
+- `PYTHONPATH=src python -m unittest tests.sdk.test_rule_expr_evaluate tests.sdk.test_t5_why_not_quarantine tests.test_sdk_why_not tests.test_sdk_diagnose tests.test_sdk_check tests.test_application_diagnose_protocol tests.test_application_check_protocol tests.test_application_why_not_protocol` → 224 tests OK.
+- `PYTHONPATH=src python -m unittest tests.test_problog_semantics_profile_migration tests.test_problog_engine_eval tests.test_pyreason_e2e` → 46 tests OK.
+- `PYTHONPATH=src python -m unittest discover tests` → 1996 tests run / 32 skipped; only remaining failure is unrelated environment import `ModuleNotFoundError: No module named 'service'` in `test_a20e_registry_final_removal.ServiceRouteRemovalTests.test_service_app_v1_drops_registry_routes`.
+- `PYTHONPATH=src python -m compileall -q src/factgraph tests` clean.
+- `git diff --check` clean.
+- Working diff on Q-PR1 sacred paths (`src/factgraph/core`, `src/factgraph/authoring`, `src/factgraph/mapping`, `src/factgraph/schema`, `docs/release`) is 0 lines.
+- `master` remains `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+Deviations:
+- Q-S5-B landed as a lightweight passed-row head evidence tree rather than a full probe recompile. Reason: `EvaluateResult` does not carry source rule/body plan, and `ProofReceipt` has no `body_ir`; the lightweight tree preserves `passed + evidence.paths` without inventing a plan.
+- S3/S4 adapter converter changes were integrated into the S5 lineage so paths-model imports/tests compile. Rich adapter explain behavior remains S6 scope.
+- `probe_native(...)` added a local compare-atom fallback because current `diagnose_runtime._extend_env_with_atom` calls `_eval_cmp_atom` with an incompatible signature; `diagnose_runtime.py` remains 0-diff.
