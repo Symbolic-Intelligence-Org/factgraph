@@ -39,8 +39,8 @@
 
 **本 program blueprint 不承诺实施内容**,只锁定 slice program 和设计边界。具体 non-goals 按子 slice 拆分:
 
-- 本 program 不承诺删除旧 `nodes/edges/root_node_id/support_kind` 字段(S7 defer,双轨过渡期)。
-- 不实施 Souffle / ProbLog / PyReason adapters 迁移(S6,后续子 slice)。
+- 旧 `nodes/edges/root_node_id/support_kind` flat DAG surface 已由 S3 完全替换；`support_kind` 仍可作为 candidate/support protocol metadata 存在。
+- 不实施 Souffle / ProbLog / PyReason rich prober 填充(S6,后续子 slice)。
 - 不实施 `Why-not / D5` counterfactual(路线图 Tier S,以本 prober 为前提但不在本 program 内)。
 - 不开 `fg.diagnose` SDK shell(D1,prober 稳定后)。
 - 不修改 `fg.audit`(与 ledger Claim 直接绑定,0 影响)。
@@ -94,14 +94,14 @@ Certainty   EvaluateRow.raw_kind + bound → Certainty 统一 — ✅ 已落地 
 S0  Rule.desc → Rule.repr rename — ✅ 已落地 @ eb79f1c5 (2026-06-08)
 S1  Schema DSL: Field(repr=)/Identity(repr=)/Meta.repr — ✅ 已落地 @ 6090eb05 (2026-06-08)
 S2  Schema IR + render_entity_repr 纯函数 — ✅ 已落地 @ f13841b1 (2026-06-08)
-S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — 子 blueprint scoped；S7 已并入 S3（Q-S3-A: 完全替换）
+S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — ✅ 已落地 @ 69593d36；S7 已并入 S3（Q-S3-A: 完全替换）
 S4  渲染集成: repr_text 烘焙 + 渲染器默认表 — 独立子 blueprint(依赖 S3)
 S5  native 路径接通: Explanation.evidence non-None iff passed/failed — 独立子 blueprint(依赖 S3/S4)
 S6  adapters 迁移: souffle/problog/pyreason — 独立子 blueprint(依赖 S5)
-S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S3**
+S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S3 并随 S3 落地**
 ```
 
-**推荐下一个 implementable slice**: `Certainty`（EvaluateRow.raw_kind+bound → Certainty 统一）或 `S1`（Schema DSL）— 两者互不依赖，可并行起草。
+**推荐下一个 implementable slice**: `S4`（repr_text 烘焙 + 渲染器默认表），依赖 S3 且当前已解锁。
 
 ### Program-level Questions — 状态校正
 
@@ -142,9 +142,9 @@ S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S
 6. **[ζ 子 blueprint]** bindings 形态简化
 7. **[S1-S2 子 blueprint]** Schema DSL + IR
 8. **[δ 子 blueprint]** query-style head decoupling(Q-B 锁定后)
-9. **[S3-S5 子 blueprint]** Prober 主体 + 渲染 + native 路径接通(依赖 γ/ζ + S1-S2)
+9. **[S3-S5 子 blueprint]** Prober 主体 + 渲染 + native 路径接通(依赖 γ/ζ + S1-S2；S3 已落地)
 10. **[S6 子 blueprint]** adapters 迁移
-11. **[S7 子 blueprint]** 旧字段删除
+11. **[S7]** 旧字段删除已并入 S3
 
 ## 9. Docs To Update
 

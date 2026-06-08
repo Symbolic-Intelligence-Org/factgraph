@@ -1,14 +1,14 @@
 # Task Blueprint: S3 — Prober Main Body (application/explain/ + EvidenceTree)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Q-S3-A locked; Q-S3-B/C delegated to Codex)
+- Last Updated: 2026-06-08 (Step 4.8 implemented)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md) (on v0.2.0-blueprint-explain-layer-2026-06-08)
 - Related Modules:
   - `src/factgraph/application/explain/` (新建 — 本 slice 主体)
   - `src/factgraph/application/diagnose_runtime.py` (atom 求值器复用，无修改)
   - `src/factgraph/application/protocol/rule_expr_lowering.py` (OccurrenceMap / Join 数据结构复用)
-  - `src/factgraph/audit/evidence_graph.py` (旧 EvidenceGraph — S7 前不修改)
+  - `src/factgraph/audit/evidence_graph.py` (旧 EvidenceGraph 完全替换；保留为新 paths model re-export/serialization 入口)
   - `src/factgraph/application/protocol/evaluate_result.py` (Explanation — S5 前不修改)
 - Related Docs:
   - [explain-layer-complete-design.zh.md §3/§4/§5/§6/§7/§8](../../design/design-points/active/explain-layer-complete-design.zh.md)
@@ -29,7 +29,7 @@ S0-S2 已落地（`Rule.repr`、Schema DSL `repr=`、Schema IR repr 持久化）
    - `evidence_tree.py`：所有新 DTO 数据类（`EvidenceGraph`（新）/ `EvidenceTree` / `EvidenceTimeline` / `EvidenceRule` / `EvidenceAtom` / `Fact` / `Compare` / `Builtin` / `Holds` / `Fails` / `NotReached` / `BoundVar` / `Const` / `Aggregate` / `Source` / `PortRef` / `EvidenceJoin` / `EvidenceProbeResult`）。
    - `prober.py`：`ProbeEnv` + native 路径穷尽探查器 `probe_native(...) -> EvidenceProbeResult`。
    - `__init__.py`：从 `evidence_tree.py` / `prober.py` 导出公开类型。
-2. 新 `EvidenceGraph`（含 `paths: tuple[EvidenceTree | EvidenceTimeline, ...]`）定义在 `evidence_tree.py`，与旧 `audit/evidence_graph.EvidenceGraph` 独立共存。
+2. 新 `EvidenceGraph`（含 `paths: tuple[EvidenceTree | EvidenceTimeline, ...]`）定义在 `application/explain/evidence_tree.py`；`audit/evidence_graph.py` re-export 新模型并删除旧 flat DAG implementation。
 3. `probe_native(rule, bindings, view_facts, schema_index) -> EvidenceProbeResult` 为纯函数：不访问数据库，不修改任何已有协议类型。
 4. `EvidenceAtom.repr_text = None` in S3（S4 负责烘焙，S3 不接触 Schema 渲染）。
 5. 复用 `diagnose_runtime._extend_env_with_atom`（import private helper — 新代码 import，非旧代码修改）。
@@ -38,7 +38,7 @@ S0-S2 已落地（`Rule.repr`、Schema DSL `repr=`、Schema IR repr 持久化）
 ## 3. Non-goals
 
 - **不烘焙** `EvidenceAtom.repr_text`（`None` 占位）— S4。
-- **不实施** souffle / problog / pyreason 探查路径 — S6。
+- **不实施** souffle / problog / pyreason 探查器 — S6。
 - **不通过 SDK 导出**新类型 — 维持 application-first。
 - **不修改** `diagnose_runtime.py` 源码（只 import，不重构）。
 - **不修改** `Explanation.evidence` 不变式 wire-up 细节 — S5（`Explanation.evidence` 由 S5 接通 native prober；S3 仅建立 prober 本体）。
@@ -62,7 +62,7 @@ S0-S2 已落地（`Rule.repr`、Schema DSL `repr=`、Schema IR repr 持久化）
 
 | ID | 问题 | 状态 |
 |---|---|---|
-| Q-S3-A | 新 `EvidenceGraph`（paths）与旧 `audit.EvidenceGraph` 如何共存？ | → 见 §5 决策 |
+| Q-S3-A | 新 `EvidenceGraph`（paths）与旧 `audit.EvidenceGraph` 如何共存？ | 已决：不共存，完全替换 |
 | Q-S3-B | `EvidenceProbeResult` 形状：仅包含 `paths` 还是也包含 `certainty`/`metadata`？ | → 见 §5 决策 |
 | Q-S3-C | `probe_native` 如何获取 `RuleExprLoweringPlan`？行内 lower vs 接收参数？ | → 见 §5 决策 |
 
@@ -190,7 +190,7 @@ class ProbeEnv:
 ## 6. Boundaries And Invariants
 
 - **Q-S3-A 已锁：完全替换** — 旧 `audit/evidence_graph.EvidenceGraph(nodes, edges)` 及 `EvidenceNode/EvidenceEdge` 在 S3 中删除；S7 并入 S3。
-- **Adapter 路径暂为 None** — souffle/problog/pyreason 无法构造新 `EvidenceGraph` 直至 S6；`Explanation.evidence` 在这些路径暂为 `None`，alpha 阶段可接受。
+- **Adapter converters 输出新 DTO** — souffle/problog/pyreason provenance converter 已改为输出新 `EvidenceGraph(paths)`；S6 仍负责更丰富的 engine-specific atom/rule 填充。
 - **新代码 import 私有 helper 可接受**：`from factgraph.application.diagnose_runtime import _extend_env_with_atom`——新文件 import，不修改 `diagnose_runtime.py`。
 - **`evaluate_result.py` 的 wire-up 是 S5**：S3 可更新 `Explanation.evidence` 的类型注解以指向新 `EvidenceGraph`，但 prober 接通（实际填充 evidence）是 S5。
 - **Certainty import 路径**：`from factgraph.application.protocol.evaluate_result import Certainty`。
@@ -200,19 +200,19 @@ class ProbeEnv:
 
 ## 7. Acceptance
 
-- [ ] `src/factgraph/application/explain/__init__.py` 存在并导出所有公开 DTO 类型
-- [ ] `EvidenceGraph`（新）/ `EvidenceTree` / `EvidenceRule` / `EvidenceAtom` 均为 frozen dataclass
-- [ ] `Holds` / `Fails` / `NotReached` verdict variants 存在
-- [ ] `probe_native(plan, bindings, view_facts) -> EvidenceProbeResult` 可调用
-- [ ] native 路径 holds case：`EvidenceTree.status == "holds"`，所有 atoms `verdict = Holds`
-- [ ] native 路径 fails case：`EvidenceTree.status == "fails"`，失败 atom `verdict = Fails`
-- [ ] native 路径 not_reached case：未绑定变量的 atom `verdict = NotReached(blocked_by=...)`
-- [ ] 三层 status 聚合规则正确（holds > fails > not_reached 优先级）
-- [ ] `EvidenceAtom.repr_text` 为 `None`（repr_text 烘焙不在 S3 scope）
-- [ ] 旧 `EvidenceNode` / `EvidenceEdge` / `nodes` / `edges` / `root_node_id` / `support_kind` 字段从代码库中消除
-- [ ] `diagnose_runtime.py` 零 diff（只 import，不修改）
-- [ ] 所有 shipped tests 通过（prober 为新增，不影响旧 test baseline）
-- [ ] standalone prober tests（mock view_facts）覆盖 holds/fails/not_reached 三种路径
+- [x] `src/factgraph/application/explain/__init__.py` 存在并导出所有公开 DTO 类型
+- [x] `EvidenceGraph`（新）/ `EvidenceTree` / `EvidenceRule` / `EvidenceAtom` 均为 frozen dataclass
+- [x] `Holds` / `Fails` / `NotReached` verdict variants 存在
+- [x] `probe_native(plan, bindings, view_facts) -> EvidenceProbeResult` 可调用
+- [x] native 路径 holds case：`EvidenceTree.status == "holds"`，所有 atoms `verdict = Holds`
+- [x] native 路径 fails case：`EvidenceTree.status == "fails"`，失败 atom `verdict = Fails`
+- [x] native 路径 not_reached case：未绑定变量的 atom `verdict = NotReached(blocked_by=...)`
+- [x] 三层 status 聚合规则正确（holds > fails > not_reached 优先级）
+- [x] `EvidenceAtom.repr_text` 为 `None`（repr_text 烘焙不在 S3 scope）
+- [x] 旧 `EvidenceNode` / `EvidenceEdge` / `nodes` / `edges` / `root_node_id` / flat DAG renderer 从代码库中消除
+- [x] `diagnose_runtime.py` 零 diff（只 import，不修改）
+- [x] Focused shipped tests 通过（prober + audit graph + adapter provenance + diagnose native）
+- [x] standalone prober tests（mock view_facts）覆盖 holds/fails/not_reached 三种路径
 
 ## 8. Implementation Plan
 
@@ -230,4 +230,29 @@ class ProbeEnv:
 
 ## 10. Outcome / Deviations
 
-任务完成后填写。
+Implemented in `69593d36` on `v0.2.0-impl-prober-evidence-tree-2026-06-08`.
+
+Summary:
+- Added `factgraph.application.explain` with the new frozen paths-model DTOs and `probe_native(...)`.
+- Replaced old `audit/evidence_graph.py` flat DAG implementation with a re-export/serialization bridge for `EvidenceGraph(paths)`.
+- Removed old `EvidenceNode` / `EvidenceEdge` / `root_node_id` / flat DAG renderer from the active audit surface.
+- Updated Souffle / ProbLog / PyReason provenance converters to emit `EvidenceGraph(paths)` using shallow tree/timeline atoms.
+- Updated static UI rendering to show the structured paths payload instead of old HTML DAG rendering.
+- Added standalone prober tests and rewrote audit/provenance graph tests for the new model.
+
+Implementation decisions:
+- Q-S3-B: `probe_native(...)` returns `EvidenceProbeResult(paths, certainty)`. `EvidenceGraph(...)` assembly remains a caller/S5 responsibility.
+- Q-S3-C: `probe_native(...)` accepts a lowering-plan-like input (`branches` / `body_ir`) or raw branch list; it does not call the database.
+- File layout: canonical DTO/prober code lives in `application/explain`; `audit/evidence_graph.py` remains as a compatibility import/serialization module for the new shape.
+
+Verification:
+- `PYTHONPATH=src python -m unittest tests.test_application_explain_prober tests.test_audit_evidence_graph tests.test_souffle_evidence_graph tests.test_problog_evidence_graph tests.test_pyreason_evidence_graph tests.test_application_diagnose_runtime_native` → 24 tests passed.
+- `PYTHONPATH=src python -m compileall -q src/factgraph/application/explain src/factgraph/audit src/factgraph/adapters/problog/provenance.py src/factgraph/adapters/souffle/provenance.py src/factgraph/adapters/pyreason/provenance.py src/service/static_ui.py src/service/runtime_v1` → passed.
+- Import sweep for `factgraph.audit`, `factgraph.application.explain`, adapter provenance modules, `service.static_ui`, and `service.runtime_v1` → passed.
+- `git diff --check` → clean.
+- `src/factgraph/application/diagnose_runtime.py` → zero diff.
+
+Deviations:
+- The impl branch was forked from sacred `master @ 562c7419`, so it does not contain later local DTO slices that introduced protocol-level `Certainty`; S3 defines a local `Certainty` in `application/explain/evidence_tree.py`.
+- Adapter converters were migrated in S3 to prevent active import/runtime breakage after complete flat-DAG removal. Rich engine-specific rule/atom fill remains S6 scope.
+- `support_kind` remains in candidate/support protocol and subject metadata; S3 removes it only as an old `EvidenceGraph` top-level field.
