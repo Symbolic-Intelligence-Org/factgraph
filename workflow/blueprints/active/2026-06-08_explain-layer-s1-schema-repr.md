@@ -1,8 +1,8 @@
 # Task Blueprint: S1 — Schema DSL Repr Templates
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.6 scope freeze)
+- Last Updated: 2026-06-08 (Step 4.8 closure)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Related Modules:
   - `src/factgraph/sdk/schema.py` (primary SDK DSL surface)
@@ -137,18 +137,18 @@ S1 stores repr templates in authoring metadata (`__sdk_entity_spec__` and the so
 
 ## 7. Acceptance
 
-- [ ] `Identity(repr="%ENT has id %FLD")` is accepted and stored in SDK declaration metadata.
-- [ ] `Field(repr="%ENT lives in %FLD")` is accepted and stored in SDK declaration metadata.
-- [ ] `class Meta: repr = "%CLS %user_id"` is accepted when `user_id` is an identity field.
-- [ ] Empty or non-string repr templates raise `SDKSchemaError`.
-- [ ] `Meta.repr` using `%ENT` or `%FLD` raises `SDKSchemaError`.
-- [ ] `Meta.repr` referencing a non-identity field raises `SDKSchemaError`.
-- [ ] `Field.repr` / `Identity.repr` using identity-field placeholders raises `SDKSchemaError`.
-- [ ] `Meta.repr = "%CLS"` is accepted.
-- [ ] `schema_dsl_parse.py` accepts and emits the same `repr` authoring metadata.
-- [ ] Compiling schema classes with `repr=` still succeeds even though S2 has not persisted repr into Schema IR yet.
-- [ ] Existing `description=` / `pattern=` tests still pass.
-- [ ] SDK schema docs mention `repr=` separately from `description=`.
+- [x] `Identity(repr="%ENT has id %FLD")` is accepted and stored in SDK declaration metadata.
+- [x] `Field(repr="%ENT lives in %FLD")` is accepted and stored in SDK declaration metadata.
+- [x] `class Meta: repr = "%CLS %user_id"` is accepted when `user_id` is an identity field.
+- [x] Empty or non-string repr templates raise `SDKSchemaError`.
+- [x] `Meta.repr` using `%ENT` or `%FLD` raises `SDKSchemaError`.
+- [x] `Meta.repr` referencing a non-identity field raises `SDKSchemaError`.
+- [x] `Field.repr` / `Identity.repr` using identity-field placeholders raises `SDKSchemaError`.
+- [x] `Meta.repr = "%CLS"` is accepted.
+- [x] `schema_dsl_parse.py` accepts and emits the same `repr` authoring metadata.
+- [x] Compiling schema classes with `repr=` still succeeds even though S2 has not persisted repr into Schema IR yet.
+- [x] Existing `description=` / `pattern=` tests still pass.
+- [x] SDK schema docs mention `repr=` separately from `description=`.
 
 ## 8. Implementation Plan
 
@@ -174,4 +174,24 @@ S1 stores repr templates in authoring metadata (`__sdk_entity_spec__` and the so
 
 ## 10. Outcome / Deviations
 
-To be filled at closure.
+**Outcome**: S1 implemented at `6090eb05` on `v0.2.0-impl-schema-repr-dsl-2026-06-08`.
+
+Implementation summary:
+
+- Added `repr=` to runtime SDK `Identity(...)` / `Field(...)`.
+- Added `Entity.Meta.repr` support with identity-only placeholder validation.
+- Added matching `repr` support to `src/factgraph/authoring/schema_dsl_parse.py`.
+- Added focused tests in `tests/test_schema_repr_dsl.py`.
+- Updated schema quickstart docs and SDK API docs.
+
+Verification:
+
+- `PYTHONPATH=src python -m unittest tests.test_schema_repr_dsl tests.test_sdk_schema_three_split tests.test_application_schema_runtime` → 18 tests OK.
+- `PYTHONPATH=src python -m unittest discover -s tests -p '*schema*.py'` → 104 tests OK, 9 skipped.
+- Stale wording grep for old `description= and pattern=` / old Meta allowlist → 0 hits.
+- `git diff --check` clean.
+- Sacred `master` unchanged at `562c74195df43e933bed92a3ff25de94dd8ce666`.
+
+**Deviation D-4**: `src/factgraph/core/schema/docs/README.md` was listed as a possible docs target, but that file does not exist on the S0 impl lineage. No-op.
+
+**Boundary retained**: S1 intentionally does not persist `repr` into canonical Schema IR. `compile_schema_from_classes(...)` succeeds with `repr=` declarations and the focused test confirms the compiled IR still omits `repr`. S2 owns canonical IR persistence and `render_entity_repr(...)`.

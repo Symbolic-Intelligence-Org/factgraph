@@ -1,7 +1,7 @@
 # Audit Log: S1 — Schema DSL Repr Templates
 
 - Blueprint: [2026-06-08_explain-layer-s1-schema-repr.md](./2026-06-08_explain-layer-s1-schema-repr.md)
-- Status: draft
+- Status: implemented
 
 ---
 
@@ -14,6 +14,7 @@
 | 2026-06-08 | draft | Step 4.3 preflight PASS with amendment required | Wrote `workflow/audit/active/2026-06-08_explain-layer-s1-schema-repr-preflight.md`. Findings: PF-R1 parser parity required, PF-R2 schema compile boundary explicit, PF-R3 stale error/docs wording. No abandonment. |
 | 2026-06-08 | draft | Step 4.4 preflight amendment | Folded PF-R1/PF-R2/PF-R3 and PF-r1/PF-r2 into blueprint metadata, §4 context, §7 acceptance, and §9 docs/error wording list. Status remains draft. |
 | 2026-06-08 | scoped | Step 4.5 self-check + Step 4.6 scope freeze | Self-check PASS: Q-S1-A/B/C/D locked, PF-R1/R2/R3 folded, no abandonment, `git diff --check` clean, master unchanged. Status `draft` → `scoped`. |
+| 2026-06-08 | implemented | Step 4.8 closure | Impl `6090eb05` on `v0.2.0-impl-schema-repr-dsl-2026-06-08`; runtime SDK DSL + source parser parity + docs landed. 18 focused tests OK; 104 schema tests OK. |
 
 ---
 
@@ -48,3 +49,9 @@
 **Decision (Step 4.2)**: S1 may add `repr` to `__sdk_entity_spec__` and source parser output while leaving `schema_compile.py` / canonical Schema IR unchanged. Tests should make the boundary explicit: classes with `repr=` compile successfully, but IR persistence is S2.
 
 **Reasoning**: `compile_schema_from_classes(...)` builds an authoring payload from `__sdk_entity_spec__`; `schema_compile.py` currently copies only `description`, `pattern`, and `enum_values` to predicates and entity-level metadata. That means S1 can safely stage authoring metadata without changing schema object identity/persistence.
+
+### D-6: S1 implementation closure
+
+**Decision (Step 4.8)**: Close S1 as implemented. The S1/S2 split remains intact: SDK/source authoring metadata carries `repr`, but canonical Schema IR still omits it.
+
+**Evidence**: Focused test `test_repr_metadata_does_not_persist_to_schema_ir_in_s1` covers the boundary. Schema parser parity is covered by source parser tests. Docs and stale wording grep are clean.
