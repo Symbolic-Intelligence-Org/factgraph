@@ -1,8 +1,8 @@
 # Task Blueprint: Explain + EvaluateResult Layer — Program Blueprint
 
-- Status: draft
+- Status: implemented
 - Created: 2026-06-08
-- Last Updated: 2026-06-08
+- Last Updated: 2026-06-08 (program closure + archive)
 - Related Modules:
   - `src/factgraph/application/protocol/` (EvaluateResult / EvaluateRow / Claim / EvidenceRef / Explanation)
   - `src/factgraph/application/protocol/rule.py` (Rule.desc → Rule.repr)
@@ -126,11 +126,11 @@ S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S
 
 ## 7. Acceptance(Program Level)
 
-- [ ] 设计文档 `explain-layer-complete-design.zh.md` 已 stage/commit 到 blueprint 分支
-- [ ] 归档 design-points(evidence-proof-model、entity-repr、evaluate-result、rejected-alternatives)已 stage
-- [ ] Slice program(§10.0 α/β/γ/ζ/δ + §10.1 S0-S7)已在 blueprint 中记录并有子 slice 顺序
-- [ ] Program-level open questions(Q-A/B/C)已记录,不阻塞 S0 启动
-- [ ] 所有子 slice 完成后:旧 nodes/edges 已删除,EvidenceGraph 全路径走新 paths 结构
+- [x] 设计文档 `explain-layer-complete-design.zh.md` 已 stage/commit 到 blueprint 分支
+- [x] 归档 design-points(evidence-proof-model、entity-repr、evaluate-result、rejected-alternatives)已 stage
+- [x] Slice program(§10.0 α/β/γ/ζ/δ + §10.1 S0-S7)已在 blueprint 中记录并有子 slice 顺序
+- [x] Program-level open questions(Q-A/B/C)已记录,不阻塞 S0 启动
+- [x] 所有子 slice 完成后:旧 nodes/edges 已删除,EvidenceGraph 全路径走新 paths 结构
 
 ## 8. Implementation Plan
 
@@ -158,4 +158,35 @@ S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S
 
 ## 10. Outcome / Deviations
 
-任务完成后填写。
+**Outcome**: explain-layer parent program completed and archived.
+
+Implemented / closed slices:
+
+| Item | Status | Evidence |
+|---|---|---|
+| S0 Rule.repr rename | ✅ implemented | impl `eb79f1c5`; archived `86cd8856` |
+| S1 Schema DSL repr | ✅ implemented | impl `6090eb05`; archived in INVENTORY |
+| S2 Schema IR + entity repr | ✅ implemented | impl `f13841b1`; archived in INVENTORY |
+| S3 Prober + paths model | ✅ implemented | impl `69593d36`; old flat DAG replaced |
+| S4 repr_text baking | ✅ implemented | impl `83be07b9` |
+| S5 native explain path | ✅ implemented | impl `9ba5f526` |
+| S6 adapter provenance wiring | ✅ implemented | impl `57a86304` |
+| Cleanup-β | ✅ implemented | impl `4b8ca05d`; `EvaluateResult.expr_digest` flat alias removed |
+| Docs hardening | ✅ complete | docs commit `b4df4b62` |
+| D-6 quickstart Certainty prose | ✅ complete | docs commit `df536ddf` |
+
+Program-level result:
+- `EvidenceGraph` active surface is the new paths model (`EvidenceGraph(paths)`), with S7 dissolved into S3.
+- `Rule.desc` has been renamed to `Rule.repr` per alpha rename policy.
+- schema repr authoring + Schema IR persistence + `render_entity_repr(...)` are implemented.
+- native `Explanation.evidence` is connected; ProbLog/PyReason adapter provenance dispatch is wired.
+- DTO cleanup completed for `Certainty` and `EvaluateResult.expr_digest`.
+
+Deferred / open:
+- `src/factgraph/core/schema/docs/README.md` repr DSL docs remains explicitly deferred.
+- Q-A (`ClaimKind` / `fact_triple` query-style naming) remains a future reassessment item before the next related DTO slice.
+- S6 dispatch-focused test hardening remains optional.
+
+Deviations:
+- Parent blueprint stayed in `active/` after all sub-slices were implemented; this closure commit fills §10 and archives the parent pair to restore active/ navigation hygiene.
+- `docs/quickstart/evaluate_and_evidence.md` still has an unrelated pre-existing `Const(...)` example hunk in the working tree; D-6 certainty prose was staged and committed independently.
