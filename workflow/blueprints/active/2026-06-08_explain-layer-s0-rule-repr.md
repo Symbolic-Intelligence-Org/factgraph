@@ -1,8 +1,8 @@
-# Task Blueprint: S0 — Rule.repr Alias Migration
+# Task Blueprint: S0 — Rule.repr Rename
 
 - Status: draft
 - Created: 2026-06-08
-- Last Updated: 2026-06-08
+- Last Updated: 2026-06-08 (scope questions resolved: alpha rename, no compatibility aliases)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Related Modules:
   - `src/factgraph/application/protocol/rule.py` (primary)
@@ -21,15 +21,19 @@
 
 `Rule.desc` / `Rule.render_desc()` 沿用了"description"语义命名，与本系统统一使用 `repr` 表示"authoring-time 渲染模板"的命名体系不一致。设计决策 R7（`explain-layer-complete-design.zh.md §9`）和 D21（`explanation-completion-roadmap.zh.md`）均已将 `Rule.repr` / `render_repr()` 列为已决待落地。
 
+This is an alpha release surface. S0 does **not** preserve historical `desc` compatibility aliases or old wire keys.
+
 ## 2. Goals
 
 1. `Rule.repr: str | None` 成为 canonical dataclass 字段（取代 `desc`）。
-2. `Rule.desc: str | None` 保留为 deprecated alias 字段（`repr=False, compare=False, hash=False`），在 `__post_init__` 中迁移值并发出 `DeprecationWarning`。
-3. `Rule.render_repr()` 成为 canonical 方法（取代 `render_desc()`）。
-4. `Rule.render_desc()` 成为 deprecated alias，发出 `DeprecationWarning` 后委托 `render_repr()`。
-5. 所有 internal callers 在 `src/` 内更新为 canonical `repr` / `render_repr()`。
-6. Shipped tests 更新到 `repr=` / `render_repr()`。
-7. Shipped docs 更新（`src/factgraph/application/docs/rule.md`、`docs/quickstart/rules.md` 等）。
+2. `Rule.desc` dataclass 字段移除；`Rule(desc=...)` 不再作为兼容构造路径保留。
+3. `Rule.render_repr()` 成为 canonical 方法（取代 `render_desc()`）；`render_desc()` 移除。
+4. 所有 internal callers 在 `src/` 内更新为 canonical `repr` / `render_repr()`。
+5. `OccurrenceInspect.desc_template` 改为 `repr_template`，不保留 alias。
+6. evaluate-result dict key `"desc_template"` 改为 `"repr_template"`。
+7. service response key `"desc"` 改为 `"repr"`。
+8. Shipped tests 更新到 `repr=` / `render_repr()` / `repr_template` / `"repr"`。
+9. Shipped docs 更新（`src/factgraph/application/docs/rule.md`、`docs/quickstart/rules.md` 等）。
 
 ## 3. Non-goals
 
@@ -63,13 +67,13 @@
 | 16 | `tests/test_application_rule.py:168,172-173` | `desc=`, `render_desc()` | Rule ctor + method in tests |
 | 17 | `tests/sdk/test_ruleexpr_inspect.py:44,54` | `desc="..."` | Rule ctor in tests |
 
-**Scope questions (must resolve before `scoped`)**:
+**Scope questions (resolved before `scoped`)**:
 
 | ID | Location | Question |
 |---|---|---|
-| Q-S0-A | `evaluate_result.py:965` `"desc_template"` dict key | wire format key — rename in S0 or defer? |
-| Q-S0-B | `OccurrenceInspect.desc_template` (public DTO field) | rename + deprecated alias in S0, or separate slice? |
-| Q-S0-C | `service/runtime_v1.py:2498` `"desc"` key | service response key — rename in S0 or defer? |
+| Q-S0-A | `evaluate_result.py:965` `"desc_template"` dict key | **Resolved in S0**: rename to `"repr_template"`; no old key retained. |
+| Q-S0-B | `OccurrenceInspect.desc_template` (public DTO field) | **Resolved in S0**: rename to `repr_template`; no deprecated alias retained. |
+| Q-S0-C | `service/runtime_v1.py:2498` `"desc"` key | **Resolved in S0**: rename to `"repr"`; no old key retained. |
 
 ## 5. Proposed Shape
 
@@ -82,50 +86,23 @@ class Rule:
     when: tuple[Atom, ...]
     ports: Mapping[str, Var]
     version: str | None = None
-    repr: str | None = None                          # NEW canonical (was: desc)
-    desc: str | None = field(default=None,           # DEPRECATED alias
-                             repr=False,
-                             compare=False,
-                             hash=False)
+    repr: str | None = None                          # canonical (was: desc)
 
     def __post_init__(self) -> None:
         # ... existing validation ...
-        # Deprecated desc migration:
-        if self.desc is not None:
-            import warnings
-            warnings.warn(
-                "Rule(desc=...) is deprecated; use Rule(repr=...) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if self.repr is not None:
-                raise RuleValidationError(
-                    "Rule: provide repr= or desc= (deprecated), not both"
-                )
-            object.__setattr__(self, "repr", self.desc)
         # Validate repr (was: validate desc):
         _validate_repr(self.repr, port_names=frozenset(frozen_ports))
         # ... rest unchanged ...
 ```
 
-### Method deprecation
+### Method rename
 
 ```python
 def render_repr(self, bindings: Mapping[str, Any] | None = None) -> str:
-    """Canonical replacement for render_desc()."""
+    """Render this rule's repr template."""
     if self.repr is None:
         return ""
     # ... same body as current render_desc ...
-
-def render_desc(self, bindings: Mapping[str, Any] | None = None) -> str:
-    """Deprecated. Use render_repr() instead."""
-    import warnings
-    warnings.warn(
-        "Rule.render_desc() is deprecated; use Rule.render_repr() instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return self.render_repr(bindings)
 ```
 
 ### Private helper renames (internal only)
@@ -133,42 +110,44 @@ def render_desc(self, bindings: Mapping[str, Any] | None = None) -> str:
 - `_validate_desc` → `_validate_repr`
 - `_DESC_PORT_RE` → `_REPR_PORT_RE`
 
-### `OccurrenceInspect.desc_template` (pending Q-S0-B)
+### Public / wire rename decisions
 
-If in scope: same pattern — `repr_template: str | None` canonical + `desc_template` deprecated property/field.
-
-### Internal callers (#6, #7, #10, #11, #12)
-
-All updated to canonical `repr` / `render_repr()` / `repr_template` once Q-S0-A/B/C resolved.
+Because this is alpha, all known `desc`-named public/wire surfaces move in S0:
+- `evaluate_result.py` emits `"repr_template"` instead of `"desc_template"`.
+- `OccurrenceInspect` exposes `repr_template` instead of `desc_template`.
+- `service/runtime_v1.py` emits `"repr"` instead of `"desc"`.
+- No deprecated alias fields or duplicate wire keys are retained.
 
 ## 6. Boundaries And Invariants
 
 - `content_digest` hashes `ports` + `when` only — unaffected.
-- `Rule.__eq__`/`__hash__` unaffected — `desc` field excluded via `compare=False, hash=False`.
+- `Rule.__eq__`/`__hash__` unaffected — renamed metadata field remains outside `content_digest`.
 - No new exported symbols; `__all__` unchanged.
-- `DeprecationWarning` is `stacklevel=2` so warning points at call site, not `rule.py`.
+- No historical compatibility path: tests and docs must use `repr` naming only.
 - **No src/ code edits without authorization** — implementation requires explicit go-ahead per session rule.
-- Branch for implementation: `v0.2.0-impl-rule-repr-alias-2026-06-08` (fork from master or blueprint branch per user decision).
+- Branch for implementation: `v0.2.0-impl-rule-repr-rename-2026-06-08` (fork from master or blueprint branch per user decision).
 
 ## 7. Acceptance
 
-- [ ] `Rule(repr="...")` works; `Rule(desc="...")` works (with DeprecationWarning)
-- [ ] `Rule(repr="...", desc="...")` raises `RuleValidationError`
+- [ ] `Rule(repr="...")` works
+- [ ] `Rule(desc="...")` is no longer used by shipped tests or docs
 - [ ] `rule.render_repr({"x": "v"})` renders correctly
-- [ ] `rule.render_desc(...)` delegates + issues DeprecationWarning
-- [ ] `content_digest` unchanged for same `id/when/ports/version/repr` regardless of deprecated `desc` path
+- [ ] `render_desc` is no longer used by shipped tests or docs
+- [ ] `content_digest` unchanged for same `id/when/ports/version`
 - [ ] All shipped tests pass (updated to `repr=` / `render_repr()`)
-- [ ] Q-S0-A/B/C resolved; their acceptance items added here at `scoped`
+- [ ] `evaluate_result.py` emits `"repr_template"` and has no `"desc_template"` residual
+- [ ] `OccurrenceInspect` uses `repr_template` and has no `desc_template` residual
+- [ ] `service/runtime_v1.py` emits `"repr"` for rule template output and has no rule `"desc"` residual
 - [ ] `src/factgraph/application/docs/rule.md` updated
 - [ ] `docs/quickstart/rules.md` updated
 
 ## 8. Implementation Plan
 
-1. Resolve Q-S0-A/B/C (scope freeze → status: scoped)
-2. Fork impl branch from master
-3. Edit `rule.py`: add `repr` field, deprecated `desc` field, `render_repr()`, deprecate `render_desc()`, rename private helpers
+1. Scope freeze → status: scoped
+2. Fork impl branch from master or scoped blueprint HEAD
+3. Edit `rule.py`: rename field/method/helper surface to `repr` / `render_repr()` / `_validate_repr()` / `_REPR_PORT_RE`
 4. Update internal callers: `evaluate_result.py`, `rule_expr_inspect.py`, `service/runtime_v1.py`
-5. Update `OccurrenceInspect` (if Q-S0-B in scope)
+5. Update `OccurrenceInspect` to `repr_template`
 6. Update all tests
 7. Update docs
 
