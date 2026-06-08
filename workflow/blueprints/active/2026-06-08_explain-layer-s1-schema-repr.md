@@ -15,6 +15,8 @@
   - `src/factgraph/core/schema/docs/README.md`
 - Audit Log:
   - [2026-06-08_explain-layer-s1-schema-repr.audit.md](./2026-06-08_explain-layer-s1-schema-repr.audit.md)
+- Preflight:
+  - [2026-06-08_explain-layer-s1-schema-repr-preflight.md](../../audit/active/2026-06-08_explain-layer-s1-schema-repr-preflight.md)
 
 ---
 
@@ -65,6 +67,16 @@ Without S1, S3/S4 can build evidence atoms but cannot render domain-specific fie
 | Q-S1-B | Should `Field.repr` / `Identity.repr` allow identity placeholders like `%user_id`? | No. Field/Identity templates allow only `%CLS`, `%ENT`, `%FLD`. |
 | Q-S1-C | Should `Meta.repr` require at least one identity placeholder? | Resolved in Step 4.2: no. `%CLS`-only is valid; referenced field placeholders remain identity-only. |
 | Q-S1-D | Does `authoring/schema_dsl_parse.py` need parallel support for source-file schema DSL? | Resolved in Step 4.2: yes. It has parallel `Identity`/`Field`/`Meta` allowlists and must stay in lockstep. |
+
+**Step 4.3 preflight findings folded (2026-06-08)**:
+
+| ID | Finding | Blueprint response |
+|---|---|---|
+| PF-R1 | Source-file parser parity is required | `schema_dsl_parse.py` is in Goals / Proposed Shape / Acceptance |
+| PF-R2 | Schema compile boundary must be explicit | S1 stores authoring metadata; S2 persists canonical IR |
+| PF-R3 | Public error wording and docs must include `repr` | Docs and error wording listed in §9 / Acceptance |
+| PF-r1 | `%field_name` syntax must be explicit | Placeholder table uses literal `%field_name` |
+| PF-r2 | `%CLS`-only `Meta.repr` should be valid | Q-S1-C resolved accordingly and acceptance added |
 
 ## 5. Proposed Shape
 
@@ -154,6 +166,11 @@ S1 stores repr templates in authoring metadata (`__sdk_entity_spec__` and the so
 - `docs/official/kernel/quickstart/schema.md`
 - `src/factgraph/core/schema/docs/README.md`
 - `src/factgraph/sdk/docs/04_api_surface.en.md` if preflight confirms API table coverage
+- Error wording sites:
+  - `src/factgraph/sdk/schema.py` (`Identity()` / `Field()` kwarg errors; `Entity.Meta` allowlist error)
+  - `src/factgraph/authoring/schema_dsl_parse.py` (same source-file parser errors)
+  - `docs/quickstart/schema_definition.md` unknown-kwarg table
+  - `docs/official/kernel/quickstart/schema.md` Meta allowlist prose
 
 ## 10. Outcome / Deviations
 
