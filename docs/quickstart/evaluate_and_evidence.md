@@ -147,7 +147,7 @@ Together they fingerprint every input the evaluator considered. `fingerprint.res
 
 ### 2.2 `EvaluateRow` — one match per row
 
-Each `EvaluateRow` is one match — one `(rule body, ledger fact-set)` binding that satisfied the body. The fields say what the body matched (`bindings`), what the rule's head looked like for this match (`kind` / `digest`), what uncertainty the row carries from the source facts (`raw_kind` / `bound`), and what closed-head replay anchor supports it (`closed_head_digest`):
+Each `EvaluateRow` is one match — one `(rule body, ledger fact-set)` binding that satisfied the body. The fields say what the body matched (`bindings`), what the rule's head looked like for this match (`kind` / `digest`), what certainty the row carries from the engine/source facts (`certainty`), and what closed-head replay anchor supports it (`closed_head_digest`):
 
 ```text
 EvaluateRow (frozen)
@@ -156,8 +156,7 @@ EvaluateRow (frozen)
   ├── kind: ClaimKind               ← row conclusion role
   ├── digest: str                   ← row claim digest
   ├── closed_head_digest: str       ← stable replay input for this row
-  ├── raw_kind: "probabilistic" | "possibilistic" | None
-  ├── bound: tuple[float, float] | None
+  ├── certainty: Certainty | None    ← lo/hi/kind carrier
   └── _result_resolver              ← internal; powers row.explain()
 ```
 
@@ -169,8 +168,7 @@ row.bindings                  # Mapping — port-name → typed term map
 result.head.id                # "user_region_lookup" — the head label
 row.kind                      # "fact_triple" — row conclusion role
 row.digest                    # "sha256:..." — content digest for this row claim
-row.raw_kind                  # None (no uncertainty meta on the source claims)
-row.bound                     # None (paired with raw_kind, see engines_and_configs.md §2.1)
+row.certainty                 # Certainty(lo=1.0, hi=1.0, kind="boolean") on native/souffle rows
 row.closed_head_digest        # "sha256:..." — stable replay input for this row
 ```
 
@@ -224,9 +222,9 @@ The on-disk ledger has its own `Claim` record (`factgraph.core.store.ledger.Clai
 
 Two evaluations over the same `(rule, head, engine, config, ledger snapshot)` produce the same `row.digest` and `row.closed_head_digest`, even if `result_id` / `run_id` change.
 
-#### `raw_kind` + `bound` — uncertainty carry-through
+#### `certainty` — uncertainty carry-through
 
-`raw_kind` / `bound` carry through from the source assertion's `meta` (per [`engines_and_configs.md`](engines_and_configs.md) §2.1). They are `None` on rows whose source facts have no uncertainty annotation. Invariant from [`data_model.md`](../official/kernel/quickstart/data_model.md) §2.2: `bound is None iff raw_kind is None`.
+`certainty` normalizes the source/engine certainty carrier into one frozen object: `Certainty(lo, hi, kind)`. Native and Souffle rows use `Certainty(1.0, 1.0, "boolean")`; ProbLog rows use `Certainty(p, p, "probabilistic")`; PyReason rows use `Certainty(lo, hi, "possibilistic")`. This replaces the older `raw_kind` / `bound` pair while preserving the same underlying uncertainty semantics described in [`engines_and_configs.md`](engines_and_configs.md) §2.1.
 
 ## 3. `row.explain()` and `fg.eval.explain(...)` — two entries to `Explanation`
 
@@ -381,7 +379,7 @@ Five invariants enforced in `Explanation.__post_init__`:
 4. `failure_class is set iff status == "failed"`
 5. `status ∈ {"unsupported", "invalid_request"} → errors non-empty`
 
-Compose by reference, not by inline duplication. The pre-α flat fields (`claim` / `row_id` / `evidence_ref_id` / `raw_kind` / `bound`) are gone — read `explanation.row.bindings`, `explanation.row.raw_kind`, etc. Cross-process row handle is `(explanation.result_id, explanation.row.row_id)`.
+Compose by reference, not by inline duplication. The pre-α flat fields (`claim` / `row_id` / `evidence_ref_id`) and the pre-Certainty `raw_kind` / `bound` pair are gone — read `explanation.row.bindings`, `explanation.row.certainty`, etc. Cross-process row handle is `(explanation.result_id, explanation.row.row_id)`.
 
 ### 4.3 Status outcomes
 
@@ -499,9 +497,9 @@ next_step: ...                           (one line per suggested_next_steps entr
 | ProbLog | ✓ | ✓ | ✓ (one synthetic `problog_trace` atom) | ✓ | Adapter `NODE_PREMISE` + `EDGE_DERIVES` chain remains beneath the row-level atom node |
 | PyReason | ✓ | ✓ | minimal (`atom_status="unknown"` or omitted) | — | L1/L2 shell only; Form 2 timeline (D11) deferred |
 
-### 4.7 `raw_kind` + `bound` carry-over
+### 4.7 `certainty` carry-over
 
-When the source row has uncertainty meta (`raw_kind` + `bound`), `Explanation.row` carries those fields — read-side counterpart to the write-side pairing in [`engines_and_configs.md`](engines_and_configs.md) §2.1. Invariant on the row: `bound is None iff raw_kind is None`.
+When the source row has uncertainty meta, `Explanation.row.certainty` carries the normalized `Certainty(lo, hi, kind)` value — read-side counterpart to the write-side uncertainty metadata in [`engines_and_configs.md`](engines_and_configs.md) §2.1. Native/Souffle rows use boolean certainty; ProbLog uses probabilistic certainty; PyReason uses possibilistic interval certainty.
 
 ## 5. The closed-head concept
 
@@ -647,6 +645,6 @@ fg.audit.diff_proof_frames(...) -> ... # compare two recorded proof outcomes
 
 - [`rules.md`](rules.md) — `Rule` / `RuleExpr` / `head` declaration, and `fg.rules.inspect`
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=` / `config=` parameters consumed by `evaluate`
-- [`data_model.md`](data_model.md) §2.2 — the `raw_kind` + `bound` meta keys that surface on `EvaluateRow`
+- [`data_model.md`](data_model.md) §2.2 — write-side uncertainty metadata that surfaces as `EvaluateRow.certainty`
 - [`assertions.md`](../official/kernel/quickstart/assertions.md) — assertion-level read APIs that `fg.audit.explain` / `conflicts` resolve against
 - [`explanation-completion-roadmap.zh.md`](../../workflow/design/design-points/active/explanation-completion-roadmap.zh.md) — the deferred capabilities listed in §7
