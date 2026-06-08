@@ -58,7 +58,7 @@
   - `src/factgraph/audit/evidence_graph.py`(旧 NodeKind/EdgeKind/nodes/edges)
 - 当前已知约束:
   - `master` @ `562c74195df43e933bed92a3ff25de94dd8ce666` — sacred,不可动
-  - shipped tests 中约 30-50 处 `row.claim.*`/`row.evidence_ref.*`/`result.expr_digest` access path 需更新
+  - shipped tests 中约 30-50 处 `row.claim.*`/`row.evidence_ref.*`/`result.expr_digest` access path 需更新（已由历史 DTO slices + Cleanup-β 收口）
   - `Rule.desc`/`render_desc` 已在公开 API;改名需 deprecated alias 过渡一个 minor cycle
   - `EvidenceGraph` nodes/edges 被 adapters/audit/`walk_evidence`/round events/大量测试引用
 - 当前相关历史蓝图:
@@ -76,7 +76,7 @@
 | Slice | 描述 | 当前状态 |
 |---|---|---|
 | α | Claim/EvidenceRef 冗余字段删除 | ✅ pre-blueprint 已落地（wrapper class 不存在） |
-| β | ResultFingerprint sub-object 折叠 | ✅ pre-blueprint 已落地（`EvaluateResult.fingerprint: ResultFingerprint`）；`expr_digest` deprecated property cleanup 仍 pending → **Cleanup-β** |
+| β | ResultFingerprint sub-object 折叠 | ✅ pre-blueprint 已落地（`EvaluateResult.fingerprint: ResultFingerprint`）；`expr_digest` deprecated property cleanup 已由 **Cleanup-β** 落地 @ `4b8ca05d` |
 | γ | Claim/EvidenceRef wrapper 撤销 + 字段平铺 | ✅ pre-blueprint 已落地（`EvaluateRow` 有 flat fields） |
 | ζ | bindings 形態簡化 {port_name: term} | ✅ pre-blueprint 已落地（`_bindings_from_candidate` 已产出 `{port_name: term}`） |
 | δ | query-style head decoupling | ✅ pre-blueprint 已落地（`_evaluate.py` 已实现 Option A：schema_pred is None → query-style；arity mismatch → reject） |
@@ -84,7 +84,7 @@
 **真实遗留 DTO cleanup（各可作 tiny slice 或合并）**:
 
 ```
-Cleanup-β   EvaluateResult.expr_digest deprecated property 删除 — tiny slice
+Cleanup-β   EvaluateResult.expr_digest deprecated property 删除 — ✅ 已落地 @ 4b8ca05d
 Certainty   EvaluateRow.raw_kind + bound → Certainty 统一 — ✅ 已落地 @ 26671525；archived @ c7502913
 ```
 
@@ -101,7 +101,7 @@ S6  adapters 迁移: ProbLog/PyReason rich explain — ✅ 已落地 @ 57a86304
 S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S3 并随 S3 落地**
 ```
 
-**推荐下一个 implementable slice**: `Cleanup-β`（`EvaluateResult.expr_digest` deprecated property 删除）或后续 docs/test hardening slice。
+**推荐下一个 implementable slice**: docs/test hardening slice（implementation side S0-S6 + Cleanup-β 已完成）。
 
 ### Program-level Questions — 状态校正
 
@@ -109,7 +109,7 @@ S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S
 |---|---|---|---|
 | Q-A | α/γ | `RowKind`/`ClaimKind` 在 query-style 下调整 | ⚠️ 仍 open：`ClaimKind` 含 `fact_triple`；query-style 路径已落地但 kind 未调整；影响 Certainty slice 前重新评估 |
 | Q-B | δ | `:exists` auto-prepend 在 query-style 下行为 | ✅ 已随 δ 落地解决（free-form head 不走 schema 路径） |
-| Q-C | α/β/γ/ζ | deprecated alias 保留多长；`expr_digest` fallback | 部分 resolved：alpha 无 alias（S0 实证）；`expr_digest` deprecated property cleanup = Cleanup-β |
+| Q-C | α/β/γ/ζ | deprecated alias 保留多长；`expr_digest` fallback | ✅ resolved：alpha 无 alias（S0 实证）；`expr_digest` deprecated property 已由 Cleanup-β 删除 |
 
 ### 设计来源
 
@@ -120,7 +120,7 @@ S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S
 - **INV-6 application-first**: 全部改动在 `factgraph.application.protocol` + `factgraph.sdk` + `application/explain/`;无 SDK 反向依赖,无 substrate 上移。
 - **Sacred branches**: `master`/`v0.1-oss-prep` 不可动。每个子 slice 在 `v0.2.0-impl-<slice-slug>-<date>` 分支上实施。
 - **Unrelated dirty files**: 当前 working tree 有 unrelated dirty/untracked 文件,所有子 slice 实施中必须精确 stage,不得 `git add .`。
-- **Alpha rename 原则**: 不保留旧名 alias（S0 已实证）；`result.expr_digest` deprecated property 由 Cleanup-β slice 清理。
+- **Alpha rename 原则**: 不保留旧名 alias（S0 已实证）；`result.expr_digest` deprecated property 已由 Cleanup-β 清理。
 - **Certainty 三路映射**: native→`Certainty(1,1,"boolean")`;problog→`Certainty(p,p,"probabilistic")`;pyreason→`Certainty(l,u,"possibilistic")`。Certainty slice acceptance 必须验证三路。
 - **Q-D 已决(Option A)、δ 已落地**: matched schema predicate 端口数不符 → reject;free-form head → query-style。`_evaluate.py` 已实现。
 
