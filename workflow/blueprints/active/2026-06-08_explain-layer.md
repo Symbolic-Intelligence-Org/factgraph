@@ -85,7 +85,7 @@
 
 ```
 Cleanup-β   EvaluateResult.expr_digest deprecated property 删除 — tiny slice
-Certainty   EvaluateRow.raw_kind + bound → Certainty 统一 — 子 blueprint scoped @ 37bb5061；impl branch: v0.2.0-impl-evaluate-row-certainty-2026-06-08
+Certainty   EvaluateRow.raw_kind + bound → Certainty 统一 — ✅ 已落地 @ 26671525；archived @ c7502913
 ```
 
 **§10.1 Explain-layer 切片**(各自独立子 blueprint):
