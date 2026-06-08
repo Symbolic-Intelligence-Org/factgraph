@@ -2,7 +2,7 @@
 
 - Status: draft
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.1 draft)
+- Last Updated: 2026-06-08 (Step 4.2 review + tightening)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Related Modules:
   - `src/factgraph/sdk/schema.py` (primary SDK DSL surface)
@@ -30,8 +30,9 @@ Without S1, S3/S4 can build evidence atoms but cannot render domain-specific fie
 2. Add `class Meta: repr = "..."` support for entity labels.
 3. Validate repr template placeholder grammar at schema class definition time.
 4. Store validated repr templates in SDK-level declaration metadata so S2 can compile them into schema IR.
-5. Keep `description=` semantics unchanged; `repr=` is wording for evidence rendering, not documentation text.
-6. Update SDK schema docs and focused tests.
+5. Keep the source-file authoring parser in lockstep with runtime SDK schema classes.
+6. Keep `description=` semantics unchanged; `repr=` is wording for evidence rendering, not documentation text.
+7. Update SDK schema docs and focused tests.
 
 ## 3. Non-goals
 
@@ -62,8 +63,8 @@ Without S1, S3/S4 can build evidence atoms but cannot render domain-specific fie
 |---|---|---|
 | Q-S1-A | Should S1 emit `repr` into `__sdk_entity_spec__` authoring dicts before Schema IR changes? | Yes. Store DSL metadata now; S2 decides canonical IR placement. |
 | Q-S1-B | Should `Field.repr` / `Identity.repr` allow identity placeholders like `%user_id`? | No. Field/Identity templates allow only `%CLS`, `%ENT`, `%FLD`. |
-| Q-S1-C | Should `Meta.repr` require at least one identity placeholder? | Open. Allowing `%CLS` only is less restrictive; preflight should decide. |
-| Q-S1-D | Does `authoring/schema_dsl_parse.py` need parallel support for source-file schema DSL? | Preflight must classify. If it parses `Identity(...)` / `Field(...)` authoring files, it should stay in lockstep. |
+| Q-S1-C | Should `Meta.repr` require at least one identity placeholder? | Resolved in Step 4.2: no. `%CLS`-only is valid; referenced field placeholders remain identity-only. |
+| Q-S1-D | Does `authoring/schema_dsl_parse.py` need parallel support for source-file schema DSL? | Resolved in Step 4.2: yes. It has parallel `Identity`/`Field`/`Meta` allowlists and must stay in lockstep. |
 
 ## 5. Proposed Shape
 
@@ -82,7 +83,7 @@ Allowed placeholders:
 | `%CLS` | Entity class name | `Identity.repr`, `Field.repr`, `Meta.repr` |
 | `%ENT` | Subject entity label rendered from its `Meta.repr` | `Identity.repr`, `Field.repr` only |
 | `%FLD` | Current field value; entity refs render through their `Meta.repr` | `Identity.repr`, `Field.repr` only |
-| `%<identity_field>` | Current entity identity field value | `Meta.repr` only |
+| `%field_name` | Current entity identity field value; angle brackets in design prose are metasyntax, not literal template characters | `Meta.repr` only |
 
 ### `Entity.Meta.repr`
 
@@ -94,13 +95,22 @@ class User(Entity):
         repr = "%CLS %user_id"
 ```
 
-`Meta.repr` is an identity-only entity label template. It forbids `%ENT`, forbids `%FLD`, and may only reference declared `Identity()` field names.
+`Meta.repr` is an identity-only entity label template. It forbids `%ENT`, forbids `%FLD`, and may only reference declared `Identity()` field names. It does not require an identity placeholder; `%CLS` alone is valid but less specific.
 
 ### S1/S2 split
 
 S1 owns authoring API acceptance and validation. S2 owns schema IR persistence, canonical schema validation, and `render_entity_repr(...)`.
 
-If implementation needs a minimal internal storage point in S1, use SDK declaration metadata (`__sdk_entity_spec__` and member authoring dicts), not core IR schema changes.
+S1 stores repr templates in authoring metadata (`__sdk_entity_spec__` and the source-file parser output). `compile_schema_from_classes(...)` / `compile_authoring_schema_v1(...)` may ignore those keys until S2; this is acceptable and should be tested so the boundary is explicit.
+
+### Source-file schema parser parity
+
+`src/factgraph/authoring/schema_dsl_parse.py` has the same shipped `Identity()` / `Field()` / `Meta` allowlists as `sdk/schema.py`. S1 must update both:
+
+- `_build_identity_from_kwargs(...)` accepts `repr=`.
+- `_build_field_from_kwargs(...)` accepts `repr=`.
+- `_apply_entity_meta_fields(...)` accepts `repr`.
+- The parser emits the same authoring metadata keys as runtime schema classes.
 
 ## 6. Boundaries And Invariants
 
@@ -111,6 +121,7 @@ If implementation needs a minimal internal storage point in S1, use SDK declarat
 - `Meta.repr` references only identity fields to avoid mutable-label drift.
 - S1 does not alter schema object digest behavior, schema IR required keys, or workspace persistence.
 - S1 does not touch `FactGraph` runtime, `EvaluateRow`, `EvidenceGraph`, or `Explanation`.
+- Unknown authoring keys in `schema_compile.py` are not a blocker for S1; S2 owns carrying repr keys through into canonical Schema IR.
 
 ## 7. Acceptance
 
@@ -121,8 +132,10 @@ If implementation needs a minimal internal storage point in S1, use SDK declarat
 - [ ] `Meta.repr` using `%ENT` or `%FLD` raises `SDKSchemaError`.
 - [ ] `Meta.repr` referencing a non-identity field raises `SDKSchemaError`.
 - [ ] `Field.repr` / `Identity.repr` using identity-field placeholders raises `SDKSchemaError`.
+- [ ] `Meta.repr = "%CLS"` is accepted.
+- [ ] `schema_dsl_parse.py` accepts and emits the same `repr` authoring metadata.
+- [ ] Compiling schema classes with `repr=` still succeeds even though S2 has not persisted repr into Schema IR yet.
 - [ ] Existing `description=` / `pattern=` tests still pass.
-- [ ] Source-file schema parser parity is either implemented or explicitly scoped out by preflight with evidence.
 - [ ] SDK schema docs mention `repr=` separately from `description=`.
 
 ## 8. Implementation Plan
