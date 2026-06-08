@@ -92,7 +92,7 @@ Certainty   EvaluateRow.raw_kind + bound → Certainty 统一 — ✅ 已落地 
 
 ```
 S0  Rule.desc → Rule.repr rename — ✅ 已落地 @ eb79f1c5 (2026-06-08)
-S1  Schema DSL: Field(repr=)/Identity(repr=)/Meta.repr — 独立子 blueprint(依赖 S0 ✅)
+S1  Schema DSL: Field(repr=)/Identity(repr=)/Meta.repr — draft child blueprint created(依赖 S0 ✅)
 S2  Schema IR + render_entity_repr 纯函数 — 独立子 blueprint(依赖 S1)
 S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — 独立子 blueprint(依赖 Certainty + S2)
 S4  渲染集成: repr_text 烘焙 + 渲染器默认表 — 独立子 blueprint(依赖 S3)
