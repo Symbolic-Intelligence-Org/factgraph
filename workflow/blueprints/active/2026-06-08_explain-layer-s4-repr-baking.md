@@ -1,8 +1,8 @@
 # Task Blueprint: Explain Layer S4 — repr_text 烘焙 + 渲染器默认表
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (rev 2: 加入 Fact fallback 保底机制，scope freeze)
+- Last Updated: 2026-06-08 (Step 4.8 implemented)
 - Parent Blueprint: [`2026-06-08_explain-layer.md`](./2026-06-08_explain-layer.md)
 - Slice: S4 (depends on S3 ✅, S2 ✅)
 - Related Modules:
@@ -201,16 +201,16 @@ Codex 参考 S2 impl `f13841b1:src/factgraph/application/schema_runtime.py:396-4
 
 ## 7. Acceptance
 
-- [ ] `EvidenceAtom(form=Compare(op="eq",...), ...)` 的 `repr_text` 非 `None`（默认表）
-- [ ] `EvidenceAtom(form=Builtin(op="in",...), ...)` 的 `repr_text` 非 `None`（默认表）
-- [ ] `EvidenceAtom(form=Fact(...), verdict=Holds(...), ...)` 的 `repr_text` 非 `None`（保底路径：`"predicate(val1, val2)"`）
-- [ ] `probe_native(..., schema_index=None)` 调用不报错；`Fact` atom `repr_text` 为保底文本（非 `None`）
-- [ ] `EvidenceAtom(form=Fact(...), verdict=NotReached(...), ...)` 的 `repr_text` 为变量名保底形式（`"predicate($Var1, $Var2)"`）
-- [ ] Option A 额外验证：对有 `Field.repr` 模板的谓词，`repr_text` 为模板渲染结果（非保底）
-- [ ] `diagnose_runtime.py` git diff 为 0 行
-- [ ] `evidence_tree.py` git diff 为 0 行
-- [ ] 所有既有 S3 prober 测试仍 pass
-- [ ] compileall + import sweep pass
+- [x] `EvidenceAtom(form=Compare(op="eq",...), ...)` 的 `repr_text` 非 `None`（默认表）
+- [x] `EvidenceAtom(form=Builtin(op="in",...), ...)` 的 `repr_text` 非 `None`（默认表）
+- [x] `EvidenceAtom(form=Fact(...), verdict=Holds(...), ...)` 的 `repr_text` 非 `None`（保底路径：`"predicate(val1, val2)"`）
+- [x] `probe_native(..., schema_index=None)` 调用不报错；`Fact` atom `repr_text` 为保底文本（非 `None`）
+- [x] `NotReached` consumer atom 的 `repr_text` 为变量名保底形式（例如 `"$age is more than 18"`）
+- [x] Option B locked: no S2 repr cherry-pick; schema-template rendering deferred until lineage merge
+- [x] `diagnose_runtime.py` git diff 为 0 行
+- [x] `evidence_tree.py` git diff 为 0 行
+- [x] 所有既有 S3 prober 测试仍 pass
+- [x] compileall + import sweep pass
 
 ## 8. Implementation Plan
 
@@ -229,4 +229,24 @@ Codex 参考 S2 impl `f13841b1:src/factgraph/application/schema_runtime.py:396-4
 
 ## 10. Outcome / Deviations
 
-任务完成后填写。
+Implemented in `83be07b9` on `v0.2.0-impl-repr-baking-2026-06-08`.
+
+Summary:
+- `probe_native(...)` no longer drops `schema_index`; every `EvidenceAtom(...)` construction bakes `repr_text`.
+- Added `_bake_repr_text(...)` with Compare/Builtin default renderers and Fact fallback rendering.
+- Fact fallback uses bound values when present and variable names when values are unavailable.
+- Added `application/explain/docs/README.md` documenting S4 fallback/default rendering.
+
+Q-S4-A decision:
+- Chose Option B. No S2 `PredicateInfo.repr` / `render_entity_repr` cherry-pick was added. Schema-template rendering remains a lineage-merge activation path; S4 guarantees readable fallback text without that dependency.
+
+Verification:
+- `PYTHONPATH=src python -m unittest tests.test_application_explain_prober tests.test_audit_evidence_graph tests.test_souffle_evidence_graph tests.test_problog_evidence_graph tests.test_pyreason_evidence_graph tests.test_application_diagnose_runtime_native` → 25 tests passed.
+- `PYTHONPATH=src python -m compileall -q src/factgraph/application/explain src/factgraph/audit src/factgraph/adapters/problog/provenance.py src/factgraph/adapters/souffle/provenance.py src/factgraph/adapters/pyreason/provenance.py src/service/static_ui.py src/service/runtime_v1` → passed.
+- Import sweep for `factgraph.application.explain` / `probe_native` → passed.
+- Stale `repr_text is None` / `del schema_index` grep → clean.
+- `git diff --check` → clean.
+- `src/factgraph/application/diagnose_runtime.py` and `src/factgraph/application/explain/evidence_tree.py` → zero diff.
+
+Deviation / correction:
+- The scoped acceptance originally mentioned `Fact + NotReached`. In current prober semantics, `pred` / `Fact` atoms are binders and do not naturally emit `NotReached`; `NotReached` is produced by downstream consumer atoms with missing dependencies. S4 therefore verifies NotReached fallback text on a `Compare` consumer atom and keeps predicate binding semantics unchanged.

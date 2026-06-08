@@ -95,13 +95,13 @@ S0  Rule.desc → Rule.repr rename — ✅ 已落地 @ eb79f1c5 (2026-06-08)
 S1  Schema DSL: Field(repr=)/Identity(repr=)/Meta.repr — ✅ 已落地 @ 6090eb05 (2026-06-08)
 S2  Schema IR + render_entity_repr 纯函数 — ✅ 已落地 @ f13841b1 (2026-06-08)
 S3  Prober 主体: application/explain/ + ProbeEnv + EvidenceTree 装配 — ✅ 已落地 @ 69593d36；S7 已并入 S3（Q-S3-A: 完全替换）
-S4  渲染集成: repr_text 烘焙 + 渲染器默认表 — 独立子 blueprint(依赖 S3)
+S4  渲染集成: repr_text 烘焙 + 渲染器默认表 — ✅ 已落地 @ 83be07b9
 S5  native 路径接通: Explanation.evidence non-None iff passed/failed — 独立子 blueprint(依赖 S3/S4)
 S6  adapters 迁移: souffle/problog/pyreason — 独立子 blueprint(依赖 S5)
 S7  ~~旧 nodes/edges/root_node_id/support_kind 字段删除~~ — **已并入 S3 并随 S3 落地**
 ```
 
-**推荐下一个 implementable slice**: `S4`（repr_text 烘焙 + 渲染器默认表），依赖 S3 且当前已解锁。
+**推荐下一个 implementable slice**: `S5`（native 路径接通 `Explanation.evidence`，依赖 S3/S4）。
 
 ### Program-level Questions — 状态校正
 
