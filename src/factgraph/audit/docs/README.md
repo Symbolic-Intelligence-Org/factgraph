@@ -12,10 +12,11 @@ delivery layer, not to the factgraph-only package.
   - audit module responsibilities, public entry points, audit
     workflow, round event log, and boundaries with runtime / registry.
 - `src/factgraph/audit/docs/02_evidence_graph.md`
-  - Unified explainability DTO and standalone renderer in the audit
-    layer: the role of `EvidenceGraph`, the minimal data model, JSON
-    round-trip helpers, the `evidence_graphs.jsonl` package contract,
-    HTML fragment renderer, and current boundaries.
+  - `factgraph.audit.evidence_graph` thin re-export façade: paths-model
+    `EvidenceGraph(paths=...)`, `EvidenceTree`, `EvidenceTimeline`,
+    serialization helpers, row-result `metadata` key set, layout constants.
+    Old flat-DAG types (`EvidenceNode`/`EvidenceEdge`) removed 2026-06-08.
+    Canonical type definitions live in `factgraph.application.explain`.
 - `src/factgraph/audit/docs/03_audit_package_contract.md`
   - Required / optional files of the audit package, the
     `round_events.jsonl` contract, query-derived surfaces, ECSS

@@ -1,7 +1,7 @@
 # Overview of the Application Module (`factgraph`)
 
 - Scope: `src/factgraph/application`
-- Last updated: 2026-05-12
+- Last updated: 2026-06-08
 - Target readers: developers who need to understand Python runtime authority, SDK adapter boundaries, and service/agent consumer constraints
 
 ## 1. Module Responsibilities
@@ -57,6 +57,10 @@ It is not responsible for:
   - `rule_literal_replace.py`: Rule Literal Replace protocol DTOs (`RuleLiteralReplaceRequest` / `RuleLiteralReplaceResult` / `RuleLiteralReplaceStatus`)
   - `rule_add_condition.py`: Rule Add Condition protocol DTOs (`RuleAddConditionRequest` / `RuleAddConditionResult` / `RuleAddConditionStatus`)
   - `derivation_why_not.py`: Why-not Universe Diagnose protocol DTOs (`WhyNotUniverseRequest` / `WhyNotUniverseResult` / `WhyNotFailedRow` / `WhyNotRowDiagnostic` / `WhyNotConditionLocator`)
+  - `evaluate_result.py`: `EvaluateRow` / `EvaluateResult` / `ResultFingerprint` / `Explanation` — evaluate-result envelope and explain surface; `EvaluateRow.explain()` dispatches to ProbLog/PyReason rich provenance graph or minimal head-atom placeholder; S5 invariant: `status ∈ {"passed","failed"} ↔ evidence is not None`. See `protocol/docs/README.md`.
+  - `explanation_render.py`: `walk_evidence(graph, ...)` — deterministic plain-text renderer over `EvidenceGraph(paths=...)` for `Explanation.repr`
+- `explain/`
+  - Paths-model evidence tree types and native prober. Contains `EvidenceGraph(paths=...)`, `EvidenceTree`, `EvidenceTimeline`, `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm` types (`Fact`/`Compare`/`Builtin`/`Aggregate`), `Verdict` types (`Holds`/`Fails`/`NotReached`), `BoundVar`/`Const`/`Source`/`PortRef`, `LAYOUT_TREE`/`LAYOUT_TIMELINE`, `evidence_graph_from_dict`/`evidence_graph_to_dict`, and `probe_native(plan, bindings, view_facts, schema_index=None)`. Canonical type site; `factgraph.audit.evidence_graph` re-exports from here. See `explain/docs/README.md`.
 - `schema_runtime.py`
   - schema index, identity materialization, ref encoding, field/type lookup
 - `capability_helpers/`
