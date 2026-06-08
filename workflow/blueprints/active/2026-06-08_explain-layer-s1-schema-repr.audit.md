@@ -13,6 +13,7 @@
 | 2026-06-08 | draft | Step 4.2 review + tightening | Source-read `authoring/schema_dsl_parse.py`, `authoring/schema_compile.py`, `core/schema/schema_ir.py`, and `sdk/compile.py`. Tightened parser parity into scope, resolved Meta.repr `%CLS`-only as valid, and made S1/S2 boundary explicit: repr authoring keys may be ignored by schema compile until S2. |
 | 2026-06-08 | draft | Step 4.3 preflight PASS with amendment required | Wrote `workflow/audit/active/2026-06-08_explain-layer-s1-schema-repr-preflight.md`. Findings: PF-R1 parser parity required, PF-R2 schema compile boundary explicit, PF-R3 stale error/docs wording. No abandonment. |
 | 2026-06-08 | draft | Step 4.4 preflight amendment | Folded PF-R1/PF-R2/PF-R3 and PF-r1/PF-r2 into blueprint metadata, §4 context, §7 acceptance, and §9 docs/error wording list. Status remains draft. |
+| 2026-06-08 | scoped | Step 4.5 self-check + Step 4.6 scope freeze | Self-check PASS: Q-S1-A/B/C/D locked, PF-R1/R2/R3 folded, no abandonment, `git diff --check` clean, master unchanged. Status `draft` → `scoped`. |
 
 ---
 

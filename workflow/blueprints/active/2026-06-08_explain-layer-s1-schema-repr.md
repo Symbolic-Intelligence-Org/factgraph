@@ -1,8 +1,8 @@
 # Task Blueprint: S1 — Schema DSL Repr Templates
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-08
-- Last Updated: 2026-06-08 (Step 4.2 review + tightening)
+- Last Updated: 2026-06-08 (Step 4.6 scope freeze)
 - Parent Blueprint: [2026-06-08_explain-layer.md](./2026-06-08_explain-layer.md)
 - Related Modules:
   - `src/factgraph/sdk/schema.py` (primary SDK DSL surface)
