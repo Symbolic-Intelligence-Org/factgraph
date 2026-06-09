@@ -29,6 +29,7 @@ from factgraph.application.explain.evidence_tree import (
     LAYOUT_TREE,
     Source,
 )
+from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -55,6 +56,7 @@ from factgraph.application.protocol.evaluate_result import (
     _build_closed_head_from_row,
     _build_minimal_row_evidence_graph,
     _candidate_set_to_evaluate_row,
+    _legacy_candidate_payload_for_row_result,
     _row_digest_for,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
@@ -2803,6 +2805,7 @@ class SDKStore:
                     engine=engine,
                     lowering_plan=lowering_plan,
                     row_support_artifacts=row_support_artifacts,
+                    row_provenance_envelopes=row_provenance_envelopes,
                 ),
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
@@ -2818,11 +2821,14 @@ class SDKStore:
         engine: str,
         lowering_plan: RuleExprLoweringPlan | None,
         row_support_artifacts: Mapping[str, ProofReceipt],
+        row_provenance_envelopes: Mapping[str, ProvenanceEnvelope],
     ):
         if engine == "native" and lowering_plan is not None:
             return self._row_graph_builder_for_lowering_plan(lowering_plan)
         if engine == "souffle":
             return self._souffle_row_graph_builder(row_support_artifacts)
+        if engine == "problog":
+            return self._problog_row_graph_builder(row_provenance_envelopes)
         return None
 
     def _row_graph_builder_for_lowering_plan(
@@ -2850,6 +2856,33 @@ class SDKStore:
                     row=row,
                     result=result,
                     metadata=metadata,
+                )
+            except Exception:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+
+        return _builder
+
+    def _problog_row_graph_builder(self, row_provenance_envelopes: Mapping[str, ProvenanceEnvelope]):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            envelope = row_provenance_envelopes.get(row.row_id)
+            if envelope is None or envelope.engine != "problog" or envelope.payload_type != "proof_trace":
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+            try:
+                trace = problog_trace_from_dict(envelope.payload)
+                graph = problog_trace_to_evidence_graph(
+                    trace,
+                    candidate_id=envelope.candidate_id,
+                    candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
+                    support_kind=PROBLOG_PROVENANCE_KIND,
+                )
+                return EvidenceGraph(
+                    graph_id=f"{result.result_id}:{row.row_id}",
+                    engine=result.engine,
+                    layout_hint=graph.layout_hint,
+                    subject_binding=graph.subject_binding,
+                    paths=graph.paths,
+                    certainty=graph.certainty,
+                    metadata=dict(metadata),
                 )
             except Exception:
                 return _build_minimal_row_evidence_graph(row, result, metadata)

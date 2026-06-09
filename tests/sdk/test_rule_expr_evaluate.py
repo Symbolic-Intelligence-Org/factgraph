@@ -18,11 +18,18 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
+from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store._support import PredWitness, ProofReceipt, SOUFFLE_WITNESS_KIND
+from factgraph.core.store._support import (
+    PROBLOG_PROVENANCE_KIND,
+    PredWitness,
+    ProofReceipt,
+    ProvenanceEnvelope,
+    SOUFFLE_WITNESS_KIND,
+)
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
 
@@ -432,6 +439,95 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         tree = explanation.evidence.paths[0]
         self.assertEqual(tree.metadata["fallback"], "minimal_row_evidence")
         self.assertEqual([rule.role for rule in tree.rules], ["head"])
+
+    def test_problog_row_explain_uses_provenance_envelope_paths(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "problog")
+        rule = _person_exists_rule()
+        trace = parse_problog_trace(
+            f"""
+ call Person:exists({encoded}) {{0.00010}} []
+  result Person:exists({encoded}) ({encoded},) {{{{}}}} {{0.00012}} []
+ complete Person:exists({encoded}) {{0.00013}} {{0.00003}} []
+
+Person:exists({encoded}):\t0.73
+""".strip()
+        )
+        support_digest = "sha256:" + ("f" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="problog-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("3" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PROBLOG_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+            confidence=0.73,
+            confidence_kind="probability",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:problog",
+            engine="problog",
+            payload_type="proof_trace",
+            payload=problog_trace_to_dict(trace),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.engine, "problog")
+        self.assertEqual(explanation.evidence.certainty.kind, "probabilistic")
+        self.assertEqual(explanation.evidence.certainty.lo, 0.73)
+        tree = explanation.evidence.paths[0]
+        self.assertEqual(tree.certainty.kind, "probabilistic")
+        self.assertEqual(tree.certainty.lo, 0.73)
+        self.assertEqual({rule.role for rule in tree.rules}, {"head"})
+        self.assertTrue(tree.rules[0].atoms)
+        self.assertEqual(tree.rules[0].atoms[0].repr_text, f"Person:exists({encoded})")
+
+    def test_problog_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "problog-fallback")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("9" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="problog-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("4" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PROBLOG_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:problog-bad",
+            engine="problog",
+            payload_type="proof_trace",
+            payload={"engine": "problog", "trace_type": "proof_trace", "events": [], "answers": []},
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
 
     def test_evaluate_rejects_public_engine_options_and_registry(self) -> None:
         graph = _store()
