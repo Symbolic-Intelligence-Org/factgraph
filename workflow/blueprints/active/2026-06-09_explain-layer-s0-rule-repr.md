@@ -1,6 +1,6 @@
 # Task Blueprint: S0 — Rule.desc → Rule.repr rename
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -94,4 +94,16 @@ design §12 (R7):统一 repr 命名体系 —— `Field.repr` / `Identity.repr` 
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl 分支 `v0.2.0-impl-explain-layer-v2-2026-06-09 @ 2c8f8c71`(基于 design HEAD `e662b54c`,单线性栈)。`master` 未动,未 push。
+
+**结果**:`Rule.repr` / `render_repr` / `_validate_repr` 落地;`evaluate_result.py`(carry-over `repr=head.repr` + `render_repr` + metadata key `repr_template`)、`rule_expr_inspect`、`sdk/dsl/application_rule.py(repr=)` 全同步;4 测试 + 4 docs 同步。
+
+**Gate(我独立验证)**:src 全树 desc/render_desc 残留 0;`content_digest` 不受 repr 影响断言已补并通过(`test_rule.py:137` + `:239`);S0 cohort **86 tests OK**(worktree 独立重跑);commit 12 文件全属 S0 范围,无 memory/无关 dirty 混入。
+
+**与蓝图的偏差(均良性)**:
+- §4 "待核" 解决:`rule_expr_inspect.desc_template` **确认源自 `Rule.desc`**(非独立),已随之改 `repr_template`。
+- Codex 多抓一处 preflight 漏列的 caller:`sdk/dsl/application_rule.py` `build_application_rule(..., repr=...)`。
+- metadata key 由 desc 系改为 `repr_template`(rename 的自然结果,无行为变化)。
+- 决策 hard-rename(无 alias)按 §5 执行。
+
+**归档**:暂留 active/,随程序里程碑批量归档(减少 per-slice churn)。

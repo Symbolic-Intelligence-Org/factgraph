@@ -34,6 +34,20 @@ Paired with [2026-06-09_explain-layer-s0-rule-repr.md](./2026-06-09_explain-laye
 - 纯改名零行为变化;`render_repr` 输出逐字符等于旧 `render_desc`。
 - content_digest 不变 → 无 rule_set_digest churn。
 
-## C. Deviations
+## C. Gate result (Claude 独立验证 2026-06-09)
 
-impl 进行中填写。
+impl `2c8f8c71`(parent = design HEAD `e662b54c`,干净线性栈;854d03b9 + e662b54c 均祖先)。
+
+- commit 12 文件全属 S0 范围(rule.py / evaluate_result.py / rule_expr_inspect.py / sdk/dsl/application_rule.py / 4 tests / 4 docs);**无** memory 迁移或既有 dirty 混入。
+- desc/render_desc 残留:src 全树 **0**。
+- repr 接通:`rule.py:60/115/239` + `evaluate_result.py:827/952/965` 确认。
+- content_digest 断言已补且通过(`test_rule.py:137` `same_with_repr` 等值 + `:239` alias-independent)。
+- cohort:**86 tests OK**(worktree `/tmp/wt-s0` 独立重跑,已清理)。
+
+裁决:**PASS**。
+
+## D. Deviations(良性)
+
+- 待核项解决:`rule_expr_inspect.desc_template` 源自 `Rule.desc`,已改 `repr_template`。
+- Codex 补漏:`sdk/dsl/application_rule.py build_application_rule(repr=)`(preflight 未列)。
+- metadata key → `repr_template`(rename 自然结果)。
