@@ -1,6 +1,6 @@
 # Task Blueprint: Explain v2 Bugfix — per-row native prober anchoring
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Type: bugfix slice
@@ -138,20 +138,20 @@ so adding one private helper import is acceptable for this targeted fix.
 
 ## 7. Acceptance
 
-- [ ] Multi-row native result: `row[0].explain()` and `row[1].explain()` anchor
+- [x] Multi-row native result: `row[0].explain()` and `row[1].explain()` anchor
   to their respective row bindings and do not mix entity facts.
-- [ ] The v1-style monotonic case still passes: adding an extra non-winning
+- [x] The v1-style monotonic case still passes: adding an extra non-winning
   witness must not flip a holds explanation to fails.
-- [ ] Multi-occurrence / join rule: every occurrence-local variable that maps to
+- [x] Multi-occurrence / join rule: every occurrence-local variable that maps to
   the same source variable is seeded; join evidence remains structurally present.
-- [ ] OR branch rule: each row explanation remains anchored to that row.
-- [ ] Typed values unwrap correctly for entity refs, strings, and ints.
-- [ ] `closed_head_false` still produces evidence and does not regress.
-- [ ] Souffle / ProbLog / PyReason dispatch tests remain green.
-- [ ] Explain cohort remains green.
-- [ ] `PYTHONPATH=src python examples/explain_layer_demo.py` runs and its
+- [x] OR branch rule: each row explanation remains anchored to that row.
+- [x] Typed values unwrap correctly for entity refs, strings, and ints.
+- [x] `closed_head_false` still produces evidence and does not regress.
+- [x] Souffle / ProbLog / PyReason dispatch tests remain green.
+- [x] Explain cohort remains green.
+- [x] `PYTHONPATH=src python examples/explain_layer_demo.py` runs and its
   explanation output is row-coherent.
-- [ ] `application/explain/prober.py` and
+- [x] `application/explain/prober.py` and
   `application/protocol/rule_expr_lowering.py` have no diff.
 
 ## 8. Implementation Plan
@@ -173,4 +173,33 @@ change.
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+**Implemented**: `e78d5a99` (`fix(explain-layer): anchor native row explanations`).
+
+**Code change**:
+
+- `src/factgraph/sdk/store.py:_initial_probe_bindings_for_row(...)` now seeds
+  lowered execution-local variables through `plan.occurrence_map` /
+  `RuleExprPortBinding.alias_local_execution_var`.
+- Row binding values are decoded through `_public_term_value(...)` before they
+  enter the prober seed.
+- `application/explain/prober.py`,
+  `application/protocol/rule_expr_lowering.py`, and
+  `application/protocol/evaluate_result.py` have no implementation diff.
+
+**Tests / gates**:
+
+- Focused: `PYTHONPATH=src python -m unittest tests.sdk.test_rule_expr_evaluate tests.application.explain.test_prober`
+  → 48 tests OK.
+- Explain cohort: 125 tests OK across protocol render, audit graph, prober,
+  Souffle, ProbLog, PyReason, rule expr, and EvaluateResult DTOs.
+- Demo: `PYTHONPATH=src python examples/explain_layer_demo.py` now produces a
+  row-coherent explanation: the passed row's user, region, age, and comparison
+  all anchor to the same result row.
+- Claude gate independently re-ran the focused suite, explain cohort, demo, and
+  boundary diff checks. Verdict: PASS.
+
+**Deferred**:
+
+- `%ENT` rendering for already-bound entity refs still shows raw `idref_v1:...`
+  in some paths. This remains a separate presentation bugfix and was not
+  expanded into this correctness slice.

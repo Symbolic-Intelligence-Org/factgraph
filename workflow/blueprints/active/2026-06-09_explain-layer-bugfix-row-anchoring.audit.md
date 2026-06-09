@@ -68,4 +68,36 @@ Claude review approved `draft → scoped` with three clarifications:
 
 ## F. Implementation Outcome
 
-Pending.
+Implemented by Codex in `e78d5a99`.
+
+Implementation facts:
+
+- Only shipped code file changed: `src/factgraph/sdk/store.py`.
+- Test file changed: `tests/sdk/test_rule_expr_evaluate.py`.
+- `_initial_probe_bindings_for_row(...)` now maps logical source vars to all
+  lowered execution-local vars through `plan.occurrence_map`.
+- `_public_term_value(...)` unwraps public row-binding values before seed use.
+- `application/explain/prober.py` and `application/protocol/rule_expr_lowering.py`
+  have zero diff.
+- `evaluate_result.py` was not edited; the private helper was imported directly.
+
+Codex verification:
+
+- Focused native/prober suite: 48 tests OK.
+- Explain cohort: 125 tests OK.
+- Demo command: `PYTHONPATH=src python examples/explain_layer_demo.py` produced
+  a coherent single-row explanation with one user, one region, one age, and a
+  matching comparison.
+
+Claude independent gate:
+
+- Re-read implementation and confirmed it matches the approved occurrence-map
+  multi-value seed shape.
+- Confirmed multi-row test has explicit negative assertions against cross-row
+  mixing.
+- Confirmed join/multi-occurrence, OR branch seed, typed-value unwrap,
+  `closed_head_false`, monotonic, and adapter dispatch coverage.
+- Re-ran focused 48 and explain cohort 125; both passed.
+- Re-ran demo and confirmed row-coherent output.
+
+Verdict: PASS. `%ENT` raw idref rendering remains deferred to a separate slice.
