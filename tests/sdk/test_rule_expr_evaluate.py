@@ -18,7 +18,6 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
-from factgraph.audit.evidence_graph import EDGE_HAS_ATOM, EDGE_SUPPORTED_BY, NODE_ATOM, NODE_RULE, NODE_RULE_EXPR, NODE_SEED
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
@@ -95,13 +94,11 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIsInstance(explanation, Explanation)
         self.assertIsNotNone(explanation.evidence)
         assert explanation.evidence is not None
-        self.assertEqual(explanation.evidence.support_kind, "native_binding_v1")
-        self.assertTrue(any(node.node_kind == NODE_RULE_EXPR for node in explanation.evidence.nodes))
-        self.assertTrue(any(node.node_kind == NODE_RULE for node in explanation.evidence.nodes))
-        self.assertTrue(any(node.node_kind == NODE_ATOM for node in explanation.evidence.nodes))
-        self.assertTrue(any(node.node_kind == NODE_SEED for node in explanation.evidence.nodes))
-        self.assertTrue(any(edge.edge_kind == EDGE_HAS_ATOM for edge in explanation.evidence.edges))
-        self.assertTrue(any(edge.edge_kind == EDGE_SUPPORTED_BY for edge in explanation.evidence.edges))
+        self.assertTrue(explanation.evidence.paths)
+        rules = explanation.evidence.paths[0].rules
+        self.assertTrue(any(rule.role == "head" for rule in rules))
+        self.assertTrue(any(rule.role == "body" for rule in rules))
+        self.assertTrue(any(atom.repr_text for rule in rules for atom in rule.atoms))
         self.assertIsInstance(result[0].close(), Rule)
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:

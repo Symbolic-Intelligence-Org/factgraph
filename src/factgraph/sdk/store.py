@@ -18,6 +18,7 @@ from factgraph.application.workspace_runtime import load_workspace as app_load_w
 from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
+from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -58,6 +59,7 @@ from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_exp
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
+    RuleExprLoweringPlan,
     _classify_pyreason_rule_expr_support,
     _lower_application_rule,
     _lower_rule_expr,
@@ -92,7 +94,7 @@ from factgraph.core.store.database import (
 )
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
-from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key
+from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
 
 from .compile import compile_schema_from_classes
 from .dsl.branch import Case
@@ -2523,9 +2525,21 @@ class SDKStore:
         checked_scope = self._manual_explain_checked_scope(result, closed_head=head)
         first = self._manual_explain_matching_row(result, closed_head=head)
         if first is None:
+            replay_plan = _lower_rule_expr(_coerce_rule_expr_operand(head.as_("head")), head=head)
+            evidence = self._probe_evidence_graph_for_lowering_plan(
+                replay_plan,
+                result=result,
+                row=None,
+                metadata={
+                    "result_id": result.result_id,
+                    "failure_class": "closed_head_false",
+                    "closed_head_digest": checked_scope["closed_head_digest"],
+                    "engine": result.engine,
+                },
+            )
             return Explanation(
                 status="failed",
-                evidence=None,
+                evidence=evidence,
                 row=None,
                 result_id=result.result_id,
                 failure_class="closed_head_false",
@@ -2689,6 +2703,7 @@ class SDKStore:
             head=head,
             engine=engine,
             semantics_profile=semantics_profile,
+            lowering_plan=plan if engine == "native" else None,
         )
 
     def _candidate_sets_to_evaluate_result(
@@ -2699,6 +2714,7 @@ class SDKStore:
         head: ApplicationRule,
         engine: str,
         semantics_profile: SemanticsProfile | None,
+        lowering_plan: RuleExprLoweringPlan | None = None,
     ) -> EvaluateResult:
         run_id = new_run_id()
         expr_digest = expr_digest_for_payload(
@@ -2766,6 +2782,11 @@ class SDKStore:
                 engine_meta={"engine_version": None, "adapter_version": None},
                 _schema_index=self._application_schema_index,
                 _row_close_builder=self._close_evaluate_row,
+                _row_graph_builder=(
+                    self._row_graph_builder_for_lowering_plan(lowering_plan)
+                    if engine == "native" and lowering_plan is not None
+                    else None
+                ),
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
             )
@@ -2773,6 +2794,48 @@ class SDKStore:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _row_graph_builder_for_lowering_plan(
+        self,
+        plan: RuleExprLoweringPlan,
+    ):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            return self._probe_evidence_graph_for_lowering_plan(
+                plan,
+                result=result,
+                row=row,
+                metadata=metadata,
+            )
+
+        return _builder
+
+    def _probe_evidence_graph_for_lowering_plan(
+        self,
+        plan: RuleExprLoweringPlan,
+        *,
+        result: EvaluateResult,
+        row: Any | None,
+        metadata: Mapping[str, Any],
+    ) -> EvidenceGraph:
+        view_facts = project_view_facts(self.ledger, self._schema_ir)
+        initial_bindings = _initial_probe_bindings_for_row(row, plan) if row is not None else {}
+        probed = probe_native(
+            plan,
+            initial_bindings,
+            view_facts,
+            schema_index=self._application_schema_index,
+        )
+        subject_binding = getattr(row, "bindings", {}) if row is not None else {}
+        row_id = getattr(row, "row_id", "closed_head_false")
+        return EvidenceGraph(
+            graph_id=f"{result.result_id}:{row_id}",
+            engine=result.engine,
+            layout_hint="tree",
+            subject_binding=subject_binding,
+            paths=probed.paths,
+            certainty=probed.certainty,
+            metadata=dict(metadata),
+        )
 
     def _row_support_artifacts_for_candidates(
         self,
@@ -3920,6 +3983,20 @@ def _head_rule_for_compiled_plans(plans: Sequence[CompiledDerivationPlan]) -> Ap
         when=(PredAtom(head.target_pred_id, list(vars_by_port)),),
         ports=ports,
     )
+
+
+def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dict[str, Any]:
+    row_bindings = getattr(row, "bindings", None)
+    if not isinstance(row_bindings, Mapping):
+        return {}
+    out: dict[str, Any] = {}
+    for port_name, var in plan.head.ports.items():
+        if port_name not in row_bindings:
+            continue
+        var_name = getattr(var, "name", None)
+        if isinstance(var_name, str) and var_name:
+            out[var_name] = row_bindings[port_name]
+    return out
 
 
 def _compiled_plan_digest_payload(plan: CompiledDerivationPlan) -> dict[str, Any]:

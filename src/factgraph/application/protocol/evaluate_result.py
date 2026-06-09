@@ -10,6 +10,12 @@ from typing import Any, Literal
 import uuid
 import warnings
 
+from factgraph.application.explain.evidence_tree import (
+    EvidenceGraph,
+    EvidenceRule,
+    EvidenceTree,
+    LAYOUT_TREE,
+)
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.explanation_render import walk_evidence
@@ -17,20 +23,6 @@ from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.schema_runtime import EntityRef
-from factgraph.audit.evidence_graph import (
-    EDGE_DERIVED_BY,
-    EDGE_HAS_ATOM,
-    EDGE_SUPPORTED_BY,
-    EDGE_USES,
-    EvidenceEdge,
-    EvidenceGraph,
-    EvidenceNode,
-    NODE_ATOM,
-    NODE_CONCLUSION,
-    NODE_RULE,
-    NODE_RULE_EXPR,
-    NODE_SEED,
-)
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
@@ -157,6 +149,12 @@ class EvaluateResult:
         compare=False,
         hash=False,
     )
+    _row_graph_builder: Callable[[EvaluateRow, EvaluateResult, Mapping[str, Any]], EvidenceGraph] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+        hash=False,
+    )
     _row_support_artifacts: Mapping[str, ProofReceipt] | None = field(
         default=None,
         repr=False,
@@ -184,6 +182,8 @@ class EvaluateResult:
         )
         if self._row_close_builder is not None and not callable(self._row_close_builder):
             raise ProtocolShapeError("EvaluateResult._row_close_builder must be callable or None")
+        if self._row_graph_builder is not None and not callable(self._row_graph_builder):
+            raise ProtocolShapeError("EvaluateResult._row_graph_builder must be callable or None")
 
         if not isinstance(self.rows, tuple):
             raise ProtocolShapeError("EvaluateResult.rows must be tuple[EvaluateRow, ...]")
@@ -283,8 +283,8 @@ class Explanation:
     def __post_init__(self) -> None:
         if self.status not in _EXPLANATION_STATUSES:
             raise ProtocolShapeError("Explanation.status must be one of passed, failed, unsupported, invalid_request")
-        if (self.status == "passed") != (self.evidence is not None):
-            raise ProtocolShapeError("Explanation.status='passed' iff Explanation.evidence is not None")
+        if (self.status in {"passed", "failed"}) != (self.evidence is not None):
+            raise ProtocolShapeError("Explanation.status in {passed, failed} iff Explanation.evidence is not None")
         if self.evidence is not None and not isinstance(self.evidence, EvidenceGraph):
             raise ProtocolShapeError("Explanation.evidence must be EvidenceGraph or None")
         if self.row is not None and not isinstance(self.row, EvaluateRow):
@@ -295,6 +295,8 @@ class Explanation:
         if self.status == "passed":
             if self.row is None:
                 raise ProtocolShapeError("Explanation.row is required when status is passed")
+            _require_non_empty_str(self.result_id, field_name="Explanation.result_id")
+        if self.status == "failed":
             _require_non_empty_str(self.result_id, field_name="Explanation.result_id")
         if self.status == "failed":
             if self.failure_class not in _EXPLANATION_FAILURE_CLASSES:
@@ -328,26 +330,10 @@ class Explanation:
             return None
         if self._repr_cache is not None:
             return self._repr_cache
-        if self.status == "passed":
-            assert self.evidence is not None
-            lines = walk_evidence(self.evidence, row=self.row, status=self.status, failure_class=self.failure_class)
-        else:
-            lines = _failed_explanation_repr(self)
+        assert self.evidence is not None
+        lines = walk_evidence(self.evidence, row=self.row, status=self.status, failure_class=self.failure_class)
         object.__setattr__(self, "_repr_cache", lines)
         return lines
-
-
-def _failed_explanation_repr(explanation: Explanation) -> tuple[str, ...]:
-    lines = ["NOT concluded"]
-    if explanation.failure_class is not None:
-        lines.append(f"failure_class: {explanation.failure_class}")
-    if explanation.result_id is not None:
-        lines.append(f"result_id: {explanation.result_id}")
-    if explanation.row is not None:
-        lines.append(f"row_id: {explanation.row.row_id}")
-    for step in explanation.suggested_next_steps:
-        lines.append(f"next_step: {step}")
-    return tuple(lines)
 
 
 def canonical_bytes_for_evaluate(*items: Any) -> bytes:
@@ -731,28 +717,40 @@ def _explain_live_row(
     matched = next((candidate for candidate in result.rows if candidate.row_id == row.row_id), None)
     if matched is None:
         return Explanation(
-            status="failed",
+            status="unsupported",
             evidence=None,
             row=row,
             result_id=result.result_id,
-            failure_class="row_not_in_result",
             checked_scope=checked_scope,
             suggested_next_steps=("Re-evaluate the expression and explain a row from the returned result.",),
+            errors=(
+                ErrorDTO(
+                    code="ROW_NOT_IN_RESULT",
+                    message="row is not present in the current EvaluateResult",
+                    details={"row_id": row.row_id},
+                ),
+            ),
         )
 
     if not _row_anchor_matches(matched, row, result):
         return Explanation(
-            status="failed",
+            status="unsupported",
             evidence=None,
             row=row,
             result_id=result.result_id,
-            failure_class="stale_row",
             checked_scope=checked_scope,
             suggested_next_steps=("Use a row from the current EvaluateResult before calling explain().",),
+            errors=(
+                ErrorDTO(
+                    code="STALE_ROW",
+                    message="row no longer matches the current EvaluateResult anchor",
+                    details={"row_id": row.row_id},
+                ),
+            ),
         )
 
     metadata = _evidence_metadata_for_row_result(row, result)
-    builder = _build_passed_row_evidence_graph if graph_builder is None else graph_builder
+    builder = graph_builder or result._row_graph_builder or _build_minimal_row_evidence_graph
     try:
         evidence = builder(row, result, metadata)
         if isinstance(evidence, EvidenceGraph):
@@ -945,413 +943,40 @@ def _row_anchor_matches(left: EvaluateRow, right: EvaluateRow, result: EvaluateR
     )
 
 
-def _layered_shell_ids(row: EvaluateRow, result: EvaluateResult) -> tuple[str, str, str]:
-    rule_expr_id = f"rule_expr:{row.row_id}"
-    rule_id = f"rule:{row.row_id}:{result.head.id}"
-    atom_prefix = f"atom:{row.row_id}"
-    return rule_expr_id, rule_id, atom_prefix
-
-
-def _row_conclusion_node(row: EvaluateRow, result: EvaluateResult, *, support_artifact: ProofReceipt | None = None) -> EvidenceNode:
-    public_bindings = {
-        port_name: _public_term_value(term)
-        for port_name, term in row.bindings.items()
-    }
-    rendered_repr = result.head.render_repr(public_bindings) if result.head.repr is not None else ""
-    engine_meta: dict[str, Any] = {
-        "rule_id": result.head.id,
-        "is_head": True,
-        "explained_claim_ref": {
-            "row_id": row.row_id,
-            "evidence_ref_id": _evidence_ref_id_for_row_result(row, result),
-            "claim_digest": row.digest,
-            "claim_repr_cache": _claim_repr_for_row_result(row, result),
-        },
-        "quantitative_explanation": _quantitative_explanation_for_row(row),
-        "alternative_paths": {"mode": "winning_path_only", "omitted_count": None},
-        "bindings": dict(row.bindings),
-        "repr_template": result.head.repr,
-        "content_digest": result.head.content_digest,
-        "version": result.head.version,
-        "certainty": _certainty_payload(row.certainty),
-    }
-    if support_artifact is not None:
-        engine_meta["support_root_result_kind"] = support_artifact.root_result_kind
-    return EvidenceNode(
-        node_id=row.row_id,
-        node_kind=NODE_CONCLUSION,
-        component=result.head.id,
-        label=_claim_name_for_row_result(row, result),
-        value_summary=rendered_repr or _claim_repr_for_row_result(row, result),
-        engine_meta=engine_meta,
-    )
-
-
-def _row_rule_expr_node(row: EvaluateRow, result: EvaluateResult) -> EvidenceNode:
-    rule_expr_id, _rule_id, _atom_prefix = _layered_shell_ids(row, result)
-    return EvidenceNode(
-        node_id=rule_expr_id,
-        node_kind=NODE_RULE_EXPR,
-        component=result.head.id,
-        label=f"RuleExpr {result.head.id}",
-        value_summary="single rule expression",
-        engine_meta={"ast_form": "single", "rule_id": result.head.id, "row_id": row.row_id},
-    )
-
-
-def _row_rule_node(row: EvaluateRow, result: EvaluateResult) -> EvidenceNode:
-    _rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
-    return EvidenceNode(
-        node_id=rule_id,
-        node_kind=NODE_RULE,
-        component=result.head.id,
-        label=f"Rule {result.head.id}",
-        value_summary=result.head.id,
-        engine_meta={
-            "rule_id": result.head.id,
-            "content_digest": result.head.content_digest,
-            "version": result.head.version,
-            "row_id": row.row_id,
-        },
-    )
-
-
-def _row_shell_nodes(row: EvaluateRow, result: EvaluateResult, *, support_artifact: ProofReceipt | None = None) -> list[EvidenceNode]:
-    return [
-        _row_conclusion_node(row, result, support_artifact=support_artifact),
-        _row_rule_expr_node(row, result),
-        _row_rule_node(row, result),
-    ]
-
-
-def _row_shell_edges(row: EvaluateRow, result: EvaluateResult) -> list[EvidenceEdge]:
-    rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
-    return [
-        EvidenceEdge(
-            edge_id=f"edge:{rule_expr_id}->{row.row_id}:derived_by",
-            from_node_id=rule_expr_id,
-            to_node_id=row.row_id,
-            edge_kind=EDGE_DERIVED_BY,
-            rule_label=result.head.id,
-        ),
-        EvidenceEdge(
-            edge_id=f"edge:{rule_id}->{rule_expr_id}:uses",
-            from_node_id=rule_id,
-            to_node_id=rule_expr_id,
-            edge_kind=EDGE_USES,
-            rule_label=result.head.id,
-        ),
-    ]
-
-
-def _build_passed_row_evidence_graph(
+def _build_minimal_row_evidence_graph(
     row: EvaluateRow,
     result: EvaluateResult,
     metadata: Mapping[str, Any],
 ) -> EvidenceGraph:
     _validate_evidence_metadata_for_row_result(metadata, row, result)
-    provenance_envelope = result._row_provenance_envelopes.get(row.row_id)
-    if provenance_envelope is not None:
-        return _build_problog_provenance_row_evidence_graph(row, result, metadata, provenance_envelope)
-    support_artifact = result._row_support_artifacts.get(row.row_id)
-    if support_artifact is not None:
-        return _build_form1_evidence_graph(row, result, metadata, support_artifact)
+    status: Literal["holds"] = "holds"
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
         engine=result.engine,
-        root_node_id=row.row_id,
-        nodes=tuple(_row_shell_nodes(row, result)),
-        edges=tuple(_row_shell_edges(row, result)),
-        support_kind="evaluate_row",
-        metadata=metadata,
-    )
-
-
-def _build_problog_provenance_row_evidence_graph(
-    row: EvaluateRow,
-    result: EvaluateResult,
-    metadata: Mapping[str, Any],
-    provenance_envelope: ProvenanceEnvelope,
-) -> EvidenceGraph:
-    from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
-
-    if provenance_envelope.engine != "problog" or provenance_envelope.payload_type != "proof_trace":
-        raise ValueError("ProbLog row evidence requires a problog proof_trace provenance envelope")
-    payload = provenance_envelope.payload
-    trace = problog_trace_from_dict(payload)
-    candidate_graph = problog_trace_to_evidence_graph(
-        trace,
-        candidate_id=provenance_envelope.candidate_id,
-        candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
-        support_kind=PROBLOG_PROVENANCE_KIND,
-    )
-    uncertainty_projection = _problog_uncertainty_projection_meta(payload)
-    trace_summary = _problog_trace_summary(candidate_graph, uncertainty_projection)
-
-    trace_nodes = tuple(
-        EvidenceNode(
-            node_id=node.node_id,
-            node_kind=node.node_kind,
-            component=node.component,
-            label=node.label,
-            value_summary=node.value_summary,
-            timestamp=node.timestamp,
-            engine_meta=_problog_node_engine_meta(
-                node.engine_meta,
-                trace_summary=trace_summary if node.node_id == candidate_graph.root_node_id else None,
-                uncertainty_projection=uncertainty_projection if node.node_id == candidate_graph.root_node_id else None,
+        layout_hint=LAYOUT_TREE,
+        subject_binding=row.bindings,
+        paths=(
+            EvidenceTree(
+                tree_id=row.row_id,
+                status=status,
+                rules=(
+                    EvidenceRule(
+                        occurrence_alias=result.head.id,
+                        rule_id=result.head.id,
+                        role="head",
+                        status=status,
+                        ports=row.bindings,
+                        atoms=(),
+                    ),
+                ),
+                joins=(),
+                certainty=row.certainty,
+                metadata={"fallback": "minimal_row_evidence"},
             ),
-        )
-        for node in candidate_graph.nodes
-    )
-    trace_edges = tuple(
-        EvidenceEdge(
-            edge_id=edge.edge_id,
-            from_node_id=edge.from_node_id,
-            to_node_id=edge.to_node_id,
-            edge_kind=edge.edge_kind,
-            rule_label=edge.rule_label,
-            engine_meta={"problog": {"trace_edge": dict(edge.engine_meta)}},
-        )
-        for edge in candidate_graph.edges
-    )
-    _rule_expr_id, rule_id, atom_prefix = _layered_shell_ids(row, result)
-    atom_id = f"{atom_prefix}:problog"
-    shell_nodes = _row_shell_nodes(row, result)
-    shell_nodes.append(
-        EvidenceNode(
-            node_id=atom_id,
-            node_kind=NODE_ATOM,
-            component=f"{result.head.id}:problog",
-            label="ProbLog proof trace",
-            value_summary="proof trace",
-            engine_meta={
-                "atom_kind": "problog_trace",
-                "atom_status": "support",
-                "atom_index": 0,
-                "parent_rule_id": result.head.id,
-                "trace_root_node_id": candidate_graph.root_node_id,
-            },
-        )
-    )
-    shell_edges = _row_shell_edges(row, result)
-    shell_edges.append(
-        EvidenceEdge(
-            edge_id=f"edge:{atom_id}->{rule_id}:has_atom",
-            from_node_id=atom_id,
-            to_node_id=rule_id,
-            edge_kind=EDGE_HAS_ATOM,
-            rule_label=result.head.id,
-        )
-    )
-    shell_edges.append(
-        EvidenceEdge(
-            edge_id=f"edge:{candidate_graph.root_node_id}->{atom_id}:supported_by",
-            from_node_id=candidate_graph.root_node_id,
-            to_node_id=atom_id,
-            edge_kind=EDGE_SUPPORTED_BY,
-            rule_label=result.head.id,
-            engine_meta={"problog": {"trace_bridge": True}},
-        )
-    )
-    return EvidenceGraph(
-        graph_id=f"{result.result_id}:{row.row_id}",
-        engine=result.engine,
-        root_node_id=row.row_id,
-        nodes=tuple((*shell_nodes, *trace_nodes)),
-        edges=tuple((*shell_edges, *trace_edges)),
-        support_kind=PROBLOG_PROVENANCE_KIND,
-        layout_hint=candidate_graph.layout_hint,
+        ),
+        certainty=row.certainty,
         metadata=metadata,
     )
-
-
-def _problog_trace_summary(
-    candidate_graph: EvidenceGraph,
-    uncertainty_projection: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    return {
-        "event_count": candidate_graph.metadata.get("event_count"),
-        "answer_count": candidate_graph.metadata.get("answer_count"),
-        "root_goal": candidate_graph.metadata.get("root_goal"),
-        "root_answer_probability": candidate_graph.metadata.get("answer_probability"),
-        "uncertainty_projection_decision_count": uncertainty_projection.get("decision_count"),
-    }
-
-
-def _problog_uncertainty_projection_meta(payload: Mapping[str, Any]) -> Mapping[str, Any]:
-    raw = payload.get("uncertainty_projections")
-    if not isinstance(raw, Mapping):
-        return {
-            "schema_version": 1,
-            "decision_count": 0,
-            "decisions_by_asrt_id": {},
-        }
-    raw_decisions = raw.get("decisions_by_asrt_id")
-    decisions = dict(raw_decisions) if isinstance(raw_decisions, Mapping) else {}
-    schema_version = raw.get("schema_version", 1)
-    return {
-        "schema_version": schema_version,
-        "decision_count": len(decisions),
-        "decisions_by_asrt_id": decisions,
-    }
-
-
-def _problog_node_engine_meta(
-    trace_meta: Mapping[str, Any],
-    *,
-    trace_summary: Mapping[str, Any] | None,
-    uncertainty_projection: Mapping[str, Any] | None,
-) -> Mapping[str, Any]:
-    problog_meta: dict[str, Any] = {"trace": dict(trace_meta)}
-    if trace_summary is not None:
-        problog_meta["trace_summary"] = dict(trace_summary)
-    if uncertainty_projection is not None:
-        problog_meta["uncertainty_projection"] = dict(uncertainty_projection)
-    return {"problog": problog_meta}
-
-
-def _build_form1_evidence_graph(
-    row: EvaluateRow,
-    result: EvaluateResult,
-    metadata: Mapping[str, Any],
-    support_artifact: ProofReceipt,
-) -> EvidenceGraph:
-    if support_artifact.kind not in _FORM1_ROW_SUPPORT_KINDS:
-        supported = ", ".join(sorted(_FORM1_ROW_SUPPORT_KINDS))
-        raise ValueError(f"Form 1 row evidence requires support kind in {{{supported}}}")
-
-    nodes = _row_shell_nodes(row, result, support_artifact=support_artifact)
-    edges = _row_shell_edges(row, result)
-    seed_node_ids: set[str] = set()
-    _rule_expr_id, rule_id, _atom_prefix = _layered_shell_ids(row, result)
-
-    def _append_edge(
-        from_node_id: str,
-        to_node_id: str,
-        *,
-        edge_kind: str,
-        label: str | None,
-        index: int,
-    ) -> None:
-        edges.append(
-            EvidenceEdge(
-                edge_id=f"edge:{from_node_id}->{to_node_id}:{index}",
-                from_node_id=from_node_id,
-                to_node_id=to_node_id,
-                edge_kind=edge_kind,
-                rule_label=label,
-            )
-        )
-
-    edge_index = 0
-    for witness in support_artifact.pred_witnesses:
-        atom_id = f"atom:{witness.pred_condition_key}"
-        pred_id = _pred_id_from_atom_key(witness.pred_condition_key)
-        nodes.append(
-            EvidenceNode(
-                node_id=atom_id,
-                node_kind=NODE_ATOM,
-                component=witness.pred_condition_key,
-                label=f"Predicate witness {pred_id}",
-                value_summary="satisfied",
-                engine_meta={
-                    "atom_id": witness.pred_condition_key,
-                    "atom_kind": "pred",
-                    "atom_status": "support",
-                    "atom_index": _condition_index_from_key(witness.pred_condition_key),
-                    "condition_index": _condition_index_from_key(witness.pred_condition_key),
-                    "parent_rule_id": result.head.id,
-                    "reason": {
-                        "kind": "predicate_witness",
-                        "pred_id": pred_id,
-                        "asrt_ids": witness.asrt_ids,
-                    },
-                    "certainty": _certainty_payload(row.certainty),
-                },
-            )
-        )
-        edge_index += 1
-        _append_edge(atom_id, rule_id, edge_kind=EDGE_HAS_ATOM, label=result.head.id, index=edge_index)
-        for asrt_id in witness.asrt_ids:
-            seed_id = f"seed:assertion:{asrt_id}"
-            if seed_id not in seed_node_ids:
-                nodes.append(
-                    EvidenceNode(
-                        node_id=seed_id,
-                        node_kind=NODE_SEED,
-                        component=f"ledger:{asrt_id}",
-                        label=f"Assertion {asrt_id}",
-                        value_summary="ledger assertion",
-                        engine_meta={"source": "assertion", "asrt_id": asrt_id},
-                    )
-                )
-                seed_node_ids.add(seed_id)
-            edge_index += 1
-            _append_edge(seed_id, atom_id, edge_kind=EDGE_SUPPORTED_BY, label=None, index=edge_index)
-
-    for step in support_artifact.non_fact_steps:
-        atom_id = f"atom:{step.step_key}"
-        atom_status = "support" if step.status == "satisfied" else "unknown"
-        nodes.append(
-            EvidenceNode(
-                node_id=atom_id,
-                node_kind=NODE_ATOM,
-                component=step.step_key,
-                label=f"{step.kind} check",
-                value_summary=step.status,
-                engine_meta={
-                    "atom_id": step.step_key,
-                    "atom_kind": step.kind,
-                    "atom_status": atom_status,
-                    "atom_index": _condition_index_from_key(step.step_key),
-                    "condition_index": _condition_index_from_key(step.step_key),
-                    "parent_rule_id": result.head.id,
-                    "reason": {
-                        "kind": step.kind,
-                        "status": step.status,
-                        "details": dict(step.details),
-                    },
-                    "certainty": _certainty_payload(row.certainty),
-                },
-            )
-        )
-        edge_index += 1
-        _append_edge(atom_id, rule_id, edge_kind=EDGE_HAS_ATOM, label=result.head.id, index=edge_index)
-
-    return EvidenceGraph(
-        graph_id=f"{result.result_id}:{row.row_id}",
-        engine=result.engine,
-        root_node_id=row.row_id,
-        nodes=tuple(nodes),
-        edges=tuple(edges),
-        support_kind=support_artifact.kind,
-        metadata=metadata,
-    )
-
-
-def _quantitative_explanation_for_row(row: EvaluateRow) -> Mapping[str, Any]:
-    if row.certainty is None:
-        mode = "not_applicable"
-    else:
-        mode = "engine_reported"
-    return {
-        "mode": mode,
-        "carrier": {"certainty": _certainty_payload(row.certainty)},
-        "decomposition": "not_available_v1",
-    }
-
-
-def _pred_id_from_atom_key(condition_key: str) -> str:
-    return condition_key.split(":", 1)[1] if ":" in condition_key else condition_key
-
-
-def _condition_index_from_key(condition_key: str) -> int | None:
-    prefix = condition_key.split(":", 1)[0]
-    for part in prefix.split("."):
-        if part.startswith("a") and part[1:].isdigit():
-            return int(part[1:])
-    return None
 
 
 def _evidence_metadata_for_row_result(row: EvaluateRow, result: EvaluateResult) -> Mapping[str, Any]:

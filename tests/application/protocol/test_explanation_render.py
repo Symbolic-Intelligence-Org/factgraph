@@ -4,6 +4,12 @@ import inspect
 import unittest
 
 from factgraph.application.protocol import BOOLEAN_CERTAINTY, ErrorDTO, EvaluateRow, Explanation, walk_evidence
+from factgraph.application.explain.evidence_tree import (
+    EvidenceGraph as PathsEvidenceGraph,
+    EvidenceRule,
+    EvidenceTree,
+    LAYOUT_TREE,
+)
 from factgraph.audit.evidence_graph import (
     EDGE_DERIVED_BY,
     EDGE_HAS_ATOM,
@@ -87,6 +93,32 @@ def _layered_graph() -> EvidenceGraph:
     )
 
 
+def _paths_graph(*, status: str = "holds") -> PathsEvidenceGraph:
+    return PathsEvidenceGraph(
+        graph_id="graph-1",
+        engine="native",
+        layout_hint=LAYOUT_TREE,
+        subject_binding={"person": "alice", "age": 25},
+        paths=(
+            EvidenceTree(
+                tree_id="row-1",
+                status=status,
+                rules=(
+                    EvidenceRule(
+                        occurrence_alias="adult_rule",
+                        rule_id="adult_rule",
+                        role="head",
+                        status=status,
+                        ports={"person": "alice", "age": 25},
+                        atoms=(),
+                    ),
+                ),
+            ),
+        ),
+        certainty=BOOLEAN_CERTAINTY,
+    )
+
+
 class ExplanationRenderTests(unittest.TestCase):
     def test_walk_evidence_renders_layered_graph_in_shipped_direction(self) -> None:
         lines = walk_evidence(_layered_graph(), row=_row())
@@ -106,7 +138,7 @@ class ExplanationRenderTests(unittest.TestCase):
         self.assertNotIn("repr", inspect.signature(Explanation).parameters)
         explanation = Explanation(
             status="passed",
-            evidence=_layered_graph(),
+            evidence=_paths_graph(),
             row=_row(),
             result_id="evalr_v1:" + "1" * 64,
         )
@@ -116,12 +148,12 @@ class ExplanationRenderTests(unittest.TestCase):
 
         self.assertIs(first, second)
         assert first is not None
-        self.assertEqual(first[0], "Conclusion: adult_rule(person=alice) [row-1]")
+        self.assertEqual(first[0], "Conclusion: row-1 [row-1]")
 
-    def test_failed_explanation_repr_uses_summary_without_evidence(self) -> None:
+    def test_failed_explanation_repr_uses_paths_evidence(self) -> None:
         explanation = Explanation(
             status="failed",
-            evidence=None,
+            evidence=_paths_graph(status="fails"),
             row=_row(),
             result_id="evalr_v1:" + "1" * 64,
             failure_class="closed_head_false",
@@ -131,11 +163,8 @@ class ExplanationRenderTests(unittest.TestCase):
         self.assertEqual(
             explanation.repr,
             (
-                "NOT concluded",
-                "failure_class: closed_head_false",
-                "result_id: evalr_v1:" + "1" * 64,
-                "row_id: row-1",
-                "next_step: Retry with a row returned by evaluate().",
+                "NOT concluded: row-1 [row-1] (closed_head_false)",
+                '  Rule "adult_rule": fails',
             ),
         )
 

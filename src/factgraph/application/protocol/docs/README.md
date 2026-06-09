@@ -1,7 +1,7 @@
 # Application Protocol — EvaluateResult & Explain Surface
 
 - Scope: `src/factgraph/application/protocol/evaluate_result.py` + `explanation_render.py`
-- Last updated: 2026-06-08
+- Last updated: 2026-06-09
 - Audience: SDK layer maintainers, adapter writers, and test authors
 
 This document covers the evaluate-result / explain slice of `protocol/`.
@@ -19,7 +19,7 @@ application overview doc at `src/factgraph/application/docs/01_overview_en.md`.
 - `ResultFingerprint` — immutable digest bundle for reproducibility
 - `Explanation` — the output of `EvaluateRow.explain()`
 - `explain_row(row, result)` dispatch logic (internal entry point `_explain_live_row`)
-- Evidence builder dispatch: minimal placeholder → ProbLog/PyReason rich adapter graph
+- Evidence builder dispatch: SDK prober graph builder → protocol fallback paths-model graph
 
 `explanation_render.py` owns:
 
@@ -136,7 +136,7 @@ class Explanation:
     warnings: tuple[WarningDTO, ...]
 ```
 
-**S5 evidence invariant** (locked 2026-06-08):
+**S5 evidence invariant** (locked 2026-06-09):
 
 ```
 status in {"passed", "failed"}  ↔  evidence is not None
@@ -150,7 +150,7 @@ Status semantics:
 | Status | Meaning |
 |---|---|
 | `"passed"` | Row passed; `evidence` is a complete `EvidenceGraph(paths=...)` |
-| `"failed"` | Row failed or could not be probed; `evidence` is a probe-result `EvidenceGraph` |
+| `"failed"` | Logical failure with probe evidence; `evidence` is a probe-result `EvidenceGraph` |
 | `"unsupported"` | Request context is invalid (stale row, protocol error); `evidence=None` |
 | `"invalid_request"` | Malformed input; `evidence=None` |
 
@@ -159,10 +159,10 @@ Status semantics:
 | Value | Trigger |
 |---|---|
 | `"closed_head_false"` | Derivation head does not hold; `probe_native` result attached |
-| `"no_matching_row"` | No row in result matches the head |
-| `"stale_row"` | Row anchor digest mismatch (use current result) |
-| `"row_not_in_result"` | Row belongs to a different result |
-| `"insufficient_closed_bindings"` | Head has unbound ports |
+
+Stale rows and rows that no longer belong to their result are protocol/request
+problems, not logical failures. They return `status="unsupported"`,
+`evidence=None`, and an `ErrorDTO` (`STALE_ROW` or `ROW_NOT_IN_RESULT`).
 
 `Explanation.repr` property returns text lines from `walk_evidence(...)` for
 `passed`/`failed` status; returns `None` for `unsupported`/`invalid_request`.
@@ -171,21 +171,27 @@ Status semantics:
 
 ### 2.5 Evidence builder dispatch
 
-`_explain_live_row` dispatches via `_build_passed_row_evidence_graph`:
+`_explain_live_row` is protocol-only. It does not import the store or the native
+prober directly. The SDK attaches a private row graph builder to native
+`EvaluateResult` objects; that builder closes over the lowering plan and
+projected view facts and calls `probe_native(...)`.
 
-1. **ProbLog row** (`result._row_provenance_envelopes[row.row_id].engine == "problog"`):
-   - Calls `problog_trace_to_evidence_graph(trace, ...)` from `adapters.problog.provenance`
-   - Returns full proof-tree `EvidenceGraph(paths=(EvidenceTree,), certainty=...)`
-   - Failure falls back to minimal placeholder
+1. **Native passed row**:
+   - `EvaluateRow.explain()` uses the SDK-attached graph builder.
+   - The builder returns the prober's paths-model `EvidenceGraph`, including
+     head/body rules, atom verdicts, joins, and baked `repr_text`.
 
-2. **PyReason row** (`result._row_provenance_envelopes[row.row_id].engine == "pyreason"`):
-   - Calls `pyreason_trace_to_evidence_graph(trace, ...)` from `adapters.pyreason.provenance`
-   - Returns timeline `EvidenceGraph(paths=(EvidenceTimeline,), certainty=...)`
-   - Failure falls back to minimal placeholder
+2. **Native closed-head false**:
+   - `fg.eval.explain(..., head=closed_head)` calls `probe_native(...)` even
+     when no result row matches.
+   - Returns `status="failed"` with `failure_class="closed_head_false"` and
+     non-empty probe evidence.
 
-3. **Native / Souffle Form 1 row** (or any row without provenance envelope):
-   - Minimal placeholder: single `EvidenceRule` with head atom only
-   - `EvidenceGraph(paths=(EvidenceTree(rules=(head_rule,), ...),), certainty=BOOLEAN_CERTAINTY)`
+3. **Protocol fallback**:
+   - If no SDK graph builder is attached, protocol builds a minimal paths-model
+     `EvidenceGraph` with a single head rule.
+   - This fallback preserves the evidence invariant without resurrecting the
+     removed flat-DAG model.
 
 All returned graphs have `metadata` matching the v1 row-result key set:
 `result_id`, `row_id`, `evidence_ref_id`, `claim_digest`, `closed_head_digest`,
@@ -216,10 +222,10 @@ Used by `Explanation.repr`. Each path in `graph.paths` is rendered recursively:
 ## 3. Non-responsibilities
 
 - `evaluate_result.py` does not own adapter converters (`problog_trace_to_evidence_graph` etc.)
-- `evaluate_result.py` does not own the prober (`probe_native`); it calls it for `closed_head_false` paths
+- `evaluate_result.py` does not own the prober (`probe_native`); SDK graph builders call it
 - `evaluate_result.py` does not own the SDK `EvaluateResult` → `fg.eval.evaluate()` wrapper
 - `explanation_render.py` does not produce HTML; it produces plain text
-- Souffle Form 1 / native `ProofReceipt` rich wiring is deferred; current S6 baseline uses the minimal placeholder for these engine paths
+- Adapter rich wiring is deferred to S6; S5 wires the native passed/failed paths
 
 ---
 
@@ -228,7 +234,7 @@ Used by `Explanation.repr`. Each path in `graph.paths` is rendered recursively:
 - The `expr_digest` flat property was **permanently removed** in Cleanup-β (2026-06-08).  
   All callers must migrate to `result.fingerprint.expr_digest`.
 - Other deprecated flat properties (`run_id`, `engine_version`, etc.) still exist but emit `DeprecationWarning`. They will be removed in a future slice.
-- Native/Souffle Form 1 rows return a minimal head-atom `EvidenceGraph` (no body atoms). Rich Form 1 wiring requires ProofReceipt → EvidenceAtom mapping, which is deferred because ProofReceipt does not store full atom expression data.
+- Native passed rows and native closed-head-false failures are backed by the prober. Adapter rich evidence wiring remains deferred to S6.
 - `_row_provenance_envelopes` and `_row_support_artifacts` are private fields and are not part of the stable contract for external callers.
 
 ---
@@ -252,8 +258,7 @@ python -m pytest tests/sdk/test_evaluate_result_exports.py
 
 ---
 
-## 6. Related Historical Blueprints
+## 6. Related Blueprints
 
-- `workflow/blueprints/archive/2026-06-08_explain-layer-s5-native-path.md` — S5 invariant + closed_head_false wiring + stale_row/row_not_in_result → unsupported
-- `workflow/blueprints/archive/2026-06-08_explain-layer-s6-adapter-wiring.md` — S6 ProbLog/PyReason rich dispatch + dead code removal
-- `workflow/blueprints/active/2026-06-08_explain-layer.md` — parent program
+- `workflow/blueprints/active/2026-06-09_explain-layer-s5-native-path.md` — S5 invariant + closed_head_false wiring + stale_row/row_not_in_result → unsupported
+- `workflow/blueprints/active/2026-06-09_explain-layer-v2.md` — parent program

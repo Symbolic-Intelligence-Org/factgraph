@@ -22,8 +22,6 @@ from .evidence_tree import (
     Source,
     Verdict,
 )
-from .prober import ProbeEnv, probe_native
-
 __all__ = [
     "Aggregate",
     "AtomForm",
@@ -48,3 +46,11 @@ __all__ = [
     "Verdict",
     "probe_native",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"ProbeEnv", "probe_native"}:
+        from .prober import ProbeEnv, probe_native
+
+        return {"ProbeEnv": ProbeEnv, "probe_native": probe_native}[name]
+    raise AttributeError(name)
