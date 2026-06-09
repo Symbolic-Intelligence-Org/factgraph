@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from factgraph.application.diagnose_runtime import _extend_env_with_atom
+from factgraph.application.entity_view import _recover_identity_from_predicates
 from factgraph.application import schema_runtime
 from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.application.protocol.rule_expr_lowering import (
@@ -16,6 +17,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_native_derivation_plan,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
+from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX
 
 from .evidence_tree import (
     BoundVar,
@@ -158,7 +160,7 @@ def _probe_atom(
             next_envs.append(ProbeEnv.from_bindings(next_env))
     deduped = _dedupe_envs(next_envs)
     form = _atom_form(atom, deduped or tuple(runnable_envs) or envs)
-    repr_text = _bake_repr_text(form, schema_index)
+    repr_text = _bake_repr_text(form, schema_index, view_facts=view_facts)
     if deduped:
         return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text), deduped
     if blocked_by is not None:
@@ -281,15 +283,25 @@ def _term_form(term: Any, env: Mapping[str, Any]) -> BoundVar | Const:
     return Const(term)
 
 
-def _bake_repr_text(form: Fact | Compare | Builtin, schema_index: object | None) -> str:
+def _bake_repr_text(
+    form: Fact | Compare | Builtin,
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
     if isinstance(form, Fact):
-        return _repr_fact(form, schema_index)
+        return _repr_fact(form, schema_index, view_facts=view_facts)
     if isinstance(form, Compare):
         return _repr_compare(form)
     return _repr_builtin(form)
 
 
-def _repr_fact(form: Fact, schema_index: object | None) -> str:
+def _repr_fact(
+    form: Fact,
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
     info = _predicate_info(schema_index, form.predicate)
     if info is None or info.repr is None:
         return _fact_fallback_repr(form)
@@ -298,7 +310,7 @@ def _repr_fact(form: Fact, schema_index: object | None) -> str:
     if "%FLD" in out:
         out = out.replace("%FLD", _term_display(form.terms[1]) if len(form.terms) > 1 else "")
     if "%ENT" in out:
-        out = out.replace("%ENT", _entity_repr_for_fact(schema_index, info.owner_type, form))
+        out = out.replace("%ENT", _entity_repr_for_fact(schema_index, info.owner_type, form, view_facts=view_facts))
     return out
 
 
@@ -311,7 +323,13 @@ def _predicate_info(schema_index: object | None, predicate: str) -> object | Non
     return predicates.get(predicate)
 
 
-def _entity_repr_for_fact(schema_index: object | None, entity_type: str, form: Fact) -> str:
+def _entity_repr_for_fact(
+    schema_index: object | None,
+    entity_type: str,
+    form: Fact,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
     subject = form.terms[0] if form.terms else None
     value = _term_value(subject)
     if schema_index is not None and isinstance(value, EntityRef):
@@ -327,6 +345,12 @@ def _entity_repr_for_fact(schema_index: object | None, entity_type: str, form: F
                 return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
             except Exception:
                 return _term_display(subject)
+    if schema_index is not None and isinstance(value, str) and value.startswith(ENTITY_REF_PREFIX):
+        try:
+            identity = _recover_identity_from_predicates(value, entity_type, view_facts=view_facts, index=schema_index)
+            return schema_runtime.render_entity_repr(schema_index, entity_type, identity)
+        except Exception:
+            return _term_display(subject)
     return _term_display(subject)
 
 

@@ -3,8 +3,9 @@ from __future__ import annotations
 import unittest
 
 import factgraph.application.explain.prober as prober_module
-from factgraph.application import build_schema_index
+from factgraph.application import build_schema_index, entity_info, field_predicate
 from factgraph.application.explain import EvidenceJoin, Holds, NotReached, probe_native
+from factgraph.application.schema_runtime import encode_entity_ref
 from factgraph.application.protocol import EntityRef, Rule
 from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
 from factgraph.core.rules.where_ast import CmpAtom, Const, InAtom, PredAtom, Var
@@ -127,6 +128,71 @@ class NativeProberTests(unittest.TestCase):
         atom = result.paths[0].rules[1].atoms[0]
         self.assertEqual(atom.repr_text, "User u-1 lives in US")
         self.assertEqual(calls, [("DisplayUser", {"user_id": "u-1"})])
+
+    def test_fact_repr_baking_recovers_bound_idref_identity_from_visible_facts(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "User %user_id"
+
+            user_id: str = Identity()
+            country: str = Field(repr="%ENT lives in %FLD")
+
+        user = Var("$user")
+        country = Var("$country")
+        rule = Rule(
+            id="user_country",
+            when=(PredAtom("display_user:country", [user, country]),),
+            ports={"user": user, "country": country},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
+
+        result = probe_native(
+            plan,
+            {},
+            {
+                identity_pred_id: [(user_ref, "u-1")],
+                country_pred_id: [(user_ref, "US")],
+            },
+            schema_index=schema_index,
+        )
+
+        atom = result.paths[0].rules[1].atoms[0]
+        self.assertEqual(atom.repr_text, "User u-1 lives in US")
+        self.assertNotIn(user_ref, atom.repr_text or "")
+
+    def test_fact_repr_baking_falls_back_when_bound_idref_identity_is_not_visible(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "User %user_id"
+
+            user_id: str = Identity()
+            country: str = Field(repr="%ENT lives in %FLD")
+
+        user = Var("$user")
+        country = Var("$country")
+        rule = Rule(
+            id="user_country",
+            when=(PredAtom("display_user:country", [user, country]),),
+            ports={"user": user, "country": country},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
+
+        result = probe_native(
+            plan,
+            {},
+            {country_pred_id: [(user_ref, "US")]},
+            schema_index=schema_index,
+        )
+
+        atom = result.paths[0].rules[1].atoms[0]
+        self.assertEqual(atom.repr_text, f"{user_ref} lives in US")
 
     def test_repr_baking_has_fallbacks_for_fact_compare_and_builtin(self) -> None:
         x = Var("$x")

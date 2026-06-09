@@ -48,9 +48,12 @@ class Person(Entity):
 
 
 class ExplainAnchorUser(Entity):
+    class Meta:
+        repr = "AnchorUser %user_id"
+
     user_id: str = Identity()
-    region: str = Field()
-    age: int = Field()
+    region: str = Field(repr="%ENT region %FLD")
+    age: int = Field(repr="%ENT age %FLD")
     tag: str = Field()
 
 
@@ -186,21 +189,21 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         rows_by_user = {str(_row_binding_value(row, "user")): row for row in result}
         first_text = _atom_repr_text(rows_by_user[u1])
         second_text = _atom_repr_text(rows_by_user[u2])
-        self.assertIn(u1, first_text)
-        self.assertIn(", us)", first_text)
-        self.assertIn(", 30)", first_text)
+        self.assertIn("AnchorUser u-1 region us", first_text)
+        self.assertIn("AnchorUser u-1 age 30", first_text)
         self.assertIn("30 >= 18", first_text)
-        self.assertNotIn(u2, first_text)
-        self.assertNotIn(", eu)", first_text)
-        self.assertNotIn(", 40)", first_text)
+        self.assertNotIn(u1, first_text)
+        self.assertNotIn("AnchorUser u-2", first_text)
+        self.assertNotIn("AnchorUser u-2 region eu", first_text)
+        self.assertNotIn("AnchorUser u-2 age 40", first_text)
         self.assertNotIn("40 >= 18", first_text)
-        self.assertIn(u2, second_text)
-        self.assertIn(", eu)", second_text)
-        self.assertIn(", 40)", second_text)
+        self.assertIn("AnchorUser u-2 region eu", second_text)
+        self.assertIn("AnchorUser u-2 age 40", second_text)
         self.assertIn("40 >= 18", second_text)
-        self.assertNotIn(u1, second_text)
-        self.assertNotIn(", us)", second_text)
-        self.assertNotIn(", 30)", second_text)
+        self.assertNotIn(u2, second_text)
+        self.assertNotIn("AnchorUser u-1", second_text)
+        self.assertNotIn("AnchorUser u-1 region us", second_text)
+        self.assertNotIn("AnchorUser u-1 age 30", second_text)
         self.assertNotIn("30 >= 18", second_text)
 
     def test_initial_probe_seed_uses_lowered_occurrence_vars_and_unwraps_values(self) -> None:
