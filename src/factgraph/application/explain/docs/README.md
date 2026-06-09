@@ -10,14 +10,14 @@
 
 `factgraph.application.explain` owns the paths-model evidence tree DTOs and the
 native prober. S3 introduces the model and the standalone `probe_native(...)`
-engine. `Explanation` wiring, adapter dispatch, and renderer baking are later
-slices.
+engine. S4 bakes `repr_text` for native Fact/Compare/Builtin atoms. `Explanation`
+wiring and adapter dispatch are later slices.
 
 Files:
 
 - `evidence_tree.py` — frozen DTO types for `EvidenceGraph`, `EvidenceTree`,
   `EvidenceRule`, `EvidenceAtom`, verdicts, atom forms, and joins
-- `prober.py` — `probe_native(...)` and `ProbeEnv`
+- `prober.py` — `probe_native(...)`, `ProbeEnv`, and native `repr_text` baking
 - `__init__.py` — re-export surface for application-layer callers and tests
 
 ---
@@ -32,7 +32,7 @@ The core tree types are:
 
 - `EvidenceTree(tree_id, status, rules, joins, certainty, metadata)`
 - `EvidenceRule(occurrence_alias, rule_id, role, status, ports, atoms)`
-- `EvidenceAtom(form, verdict, atom_id, repr_text=None, negated=False, timestep=None)`
+- `EvidenceAtom(form, verdict, atom_id, repr_text, negated=False, timestep=None)`
 - `EvidenceJoin(left, right, status, join_id)`
 
 `role` is either `"head"` or `"body"`. A tree produced by the native prober must
@@ -74,11 +74,17 @@ atoms expand every current environment; an atom holds if at least one next
 environment survives. This prevents the v1 bug where the first failing witness
 could hide a later successful witness.
 
+When `schema_index` is provided, Fact atoms use `PredicateInfo.repr` templates.
+`%ENT` is resolved through `render_entity_repr(...)`, `%FLD` uses the field
+value, and `%CLS` uses the predicate owner type. Without schema metadata the
+prober falls back to `predicate(term, ...)`. Compare and Builtin atoms use the
+default rendering table in `prober.py`, so Fact/Compare/Builtin atoms always
+carry non-`None` `repr_text`.
+
 ---
 
 ## 4. Slice Boundaries
 
-- S3 leaves `EvidenceAtom.repr_text` as `None`; S4 owns renderer baking.
 - S3 does not connect `Explanation.evidence`; S5 owns native passed/failed wiring.
 - S3 does not dispatch Souffle, ProbLog, or PyReason rich evidence; S6 owns that.
 - The legacy `factgraph.audit.evidence_graph` module is not rewritten in S3.
@@ -97,3 +103,5 @@ The focused S3 tests lock:
 - G2 shape preservation (head rule, real body occurrence aliases, non-empty joins)
 - OR branches are all returned as paths
 - `NotReached` is only emitted for unbound dependencies
+- S4 renderer baking calls `render_entity_repr(...)` for schema Fact templates
+  and keeps fallback `repr_text` for schema-less Fact/Compare/Builtin atoms

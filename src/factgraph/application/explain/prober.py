@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from factgraph.application.diagnose_runtime import _extend_env_with_atom
+from factgraph.application import schema_runtime
+from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
     RuleExprJoinMaterialization,
@@ -49,7 +51,6 @@ def probe_native(
     view_facts: Mapping[str, Sequence[tuple[Any, ...]]],
     schema_index: object | None = None,
 ) -> EvidenceProbeResult:
-    del schema_index
     if not isinstance(plan, RuleExprLoweringPlan):
         raise TypeError("plan must be RuleExprLoweringPlan")
     compiled, traces = _materialize_native_derivation_plan(plan)
@@ -64,6 +65,7 @@ def probe_native(
                 branch,
                 view_facts={key: list(value) for key, value in view_facts.items()},
                 initial_bindings=dict(bindings or {}),
+                schema_index=schema_index,
             )
         )
     return EvidenceProbeResult(paths=tuple(paths), certainty=BOOLEAN_CERTAINTY)
@@ -77,6 +79,7 @@ def _probe_branch(
     *,
     view_facts: dict[str, list[tuple[Any, ...]]],
     initial_bindings: dict[str, Any],
+    schema_index: object | None,
 ) -> EvidenceTree:
     envs = (ProbeEnv.from_bindings(initial_bindings),)
     atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]] = []
@@ -93,6 +96,7 @@ def _probe_branch(
                 view_facts=view_facts,
                 atom_id=f"{trace.branch_id}:materialized:{idx}",
                 failed_upstream=failed_upstream,
+                schema_index=schema_index,
             )
             if isinstance(evidence_atom.verdict, Fails):
                 failed_upstream = True
@@ -105,6 +109,7 @@ def _probe_branch(
             view_facts=view_facts,
             atom_id=f"{trace.branch_id}:atom:{idx}",
             failed_upstream=failed_upstream,
+            schema_index=schema_index,
         )
         if isinstance(evidence_atom.verdict, Fails):
             failed_upstream = True
@@ -131,6 +136,7 @@ def _probe_atom(
     view_facts: dict[str, list[tuple[Any, ...]]],
     atom_id: str,
     failed_upstream: bool,
+    schema_index: object | None,
 ) -> tuple[EvidenceAtom, tuple[ProbeEnv, ...]]:
     runnable_envs: list[ProbeEnv] = []
     blocked_by: str | None = None
@@ -152,11 +158,17 @@ def _probe_atom(
             next_envs.append(ProbeEnv.from_bindings(next_env))
     deduped = _dedupe_envs(next_envs)
     form = _atom_form(atom, deduped or tuple(runnable_envs) or envs)
+    repr_text = _bake_repr_text(form, schema_index)
     if deduped:
-        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id), deduped
+        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text), deduped
     if blocked_by is not None:
-        return EvidenceAtom(form=form, verdict=NotReached(blocked_by=blocked_by), atom_id=atom_id), ()
-    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id), ()
+        return EvidenceAtom(
+            form=form,
+            verdict=NotReached(blocked_by=blocked_by),
+            atom_id=atom_id,
+            repr_text=repr_text,
+        ), ()
+    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text), ()
 
 
 def _body_rules_for_branch(
@@ -267,6 +279,100 @@ def _term_form(term: Any, env: Mapping[str, Any]) -> BoundVar | Const:
     if isinstance(term, str) and term.startswith("$"):
         return BoundVar(name=term, value=env.get(term), bound_by=None)
     return Const(term)
+
+
+def _bake_repr_text(form: Fact | Compare | Builtin, schema_index: object | None) -> str:
+    if isinstance(form, Fact):
+        return _repr_fact(form, schema_index)
+    if isinstance(form, Compare):
+        return _repr_compare(form)
+    return _repr_builtin(form)
+
+
+def _repr_fact(form: Fact, schema_index: object | None) -> str:
+    info = _predicate_info(schema_index, form.predicate)
+    if info is None or info.repr is None:
+        return _fact_fallback_repr(form)
+
+    out = info.repr.replace("%CLS", info.owner_type)
+    if "%FLD" in out:
+        out = out.replace("%FLD", _term_display(form.terms[1]) if len(form.terms) > 1 else "")
+    if "%ENT" in out:
+        out = out.replace("%ENT", _entity_repr_for_fact(schema_index, info.owner_type, form))
+    return out
+
+
+def _predicate_info(schema_index: object | None, predicate: str) -> object | None:
+    if schema_index is None:
+        return None
+    predicates = getattr(schema_index, "predicates_by_id", None)
+    if not isinstance(predicates, Mapping):
+        return None
+    return predicates.get(predicate)
+
+
+def _entity_repr_for_fact(schema_index: object | None, entity_type: str, form: Fact) -> str:
+    subject = form.terms[0] if form.terms else None
+    value = _term_value(subject)
+    if schema_index is not None and isinstance(value, EntityRef):
+        try:
+            return schema_runtime.render_entity_repr(schema_index, value.entity_type, value.identity)
+        except Exception:
+            return _term_display(subject)
+    if schema_index is not None and isinstance(value, Mapping):
+        identity = value.get("identity")
+        ref_entity_type = value.get("entity_type", entity_type)
+        if isinstance(ref_entity_type, str) and isinstance(identity, Mapping):
+            try:
+                return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
+            except Exception:
+                return _term_display(subject)
+    return _term_display(subject)
+
+
+def _fact_fallback_repr(form: Fact) -> str:
+    return f"{form.predicate}({', '.join(_term_display(term) for term in form.terms)})"
+
+
+def _repr_compare(form: Compare) -> str:
+    left = _term_display(form.left)
+    right = _term_display(form.right)
+    labels = {
+        "eq": "equals",
+        "ne": "does not equal",
+        "gt": ">",
+        "ge": ">=",
+        "lt": "<",
+        "le": "<=",
+    }
+    op = labels.get(form.op, form.op)
+    return f"{left} {op} {right}"
+
+
+def _repr_builtin(form: Builtin) -> str:
+    terms = tuple(_term_display(term) for term in form.operands)
+    if form.kind == "in" and terms:
+        return f"{terms[0]} is in ({', '.join(terms[1:])})"
+    if form.kind == "not" and terms:
+        return f"not {terms[0]}"
+    return f"{form.kind}({', '.join(terms)})"
+
+
+def _term_display(term: BoundVar | Const | None) -> str:
+    value = _term_value(term)
+    if isinstance(value, EntityRef):
+        return value.encoded_ref or f"{value.entity_type}({', '.join(str(v) for v in value.identity.values())})"
+    if value is None and isinstance(term, BoundVar):
+        return term.name
+    return str(value)
+
+
+def _term_value(term: BoundVar | Const | None) -> Any:
+    if isinstance(term, BoundVar):
+        return term.value
+    if isinstance(term, Const):
+        return term.value
+    return None
 
 
 def _atom_can_bind(atom: tuple[Any, ...]) -> bool:

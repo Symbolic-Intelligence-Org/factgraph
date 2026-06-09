@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import unittest
 
+import factgraph.application.explain.prober as prober_module
+from factgraph.application import build_schema_index
 from factgraph.application.explain import EvidenceJoin, Holds, NotReached, probe_native
-from factgraph.application.protocol import Rule
+from factgraph.application.protocol import EntityRef, Rule
 from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
-from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
+from factgraph.core.rules.where_ast import CmpAtom, Const, InAtom, PredAtom, Var
+from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
 def _status(result: object) -> str:
@@ -84,6 +87,66 @@ class NativeProberTests(unittest.TestCase):
 
         self.assertEqual(tuple(path.status for path in result.paths), ("holds", "fails"))
         self.assertIsInstance(result.paths[0].rules[1].atoms[0].verdict, Holds)
+
+    def test_fact_repr_baking_uses_schema_template_and_entity_renderer(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "User %user_id"
+
+            user_id: str = Identity()
+            country: str = Field(repr="%ENT lives in %FLD")
+
+        user = Var("$user")
+        country = Var("$country")
+        rule = Rule(
+            id="user_country",
+            when=(PredAtom("display_user:country", [user, country]),),
+            ports={"user": user, "country": country},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+        user_ref = EntityRef("DisplayUser", {"user_id": "u-1"})
+        calls: list[tuple[str, dict[str, object]]] = []
+        original = prober_module.schema_runtime.render_entity_repr
+
+        def spy_render_entity_repr(index, entity_type, identity_values):  # type: ignore[no-untyped-def]
+            calls.append((entity_type, dict(identity_values)))
+            return original(index, entity_type, identity_values)
+
+        prober_module.schema_runtime.render_entity_repr = spy_render_entity_repr
+        try:
+            result = probe_native(
+                plan,
+                {},
+                {"display_user:country": [(user_ref, "US")]},
+                schema_index=schema_index,
+            )
+        finally:
+            prober_module.schema_runtime.render_entity_repr = original
+
+        atom = result.paths[0].rules[1].atoms[0]
+        self.assertEqual(atom.repr_text, "User u-1 lives in US")
+        self.assertEqual(calls, [("DisplayUser", {"user_id": "u-1"})])
+
+    def test_repr_baking_has_fallbacks_for_fact_compare_and_builtin(self) -> None:
+        x = Var("$x")
+        rule = Rule(
+            id="fallbacks",
+            when=(
+                PredAtom("p", [x]),
+                CmpAtom("gt", x, Const(1)),
+                InAtom(x, [Const(2), Const(3)]),
+            ),
+            ports={"x": x},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+
+        result = probe_native(plan, {}, {"p": [(2,)]}, schema_index=None)
+
+        atoms = result.paths[0].rules[1].atoms
+        self.assertEqual(atoms[0].repr_text, "p(2)")
+        self.assertEqual(atoms[1].repr_text, "2 > 1")
+        self.assertEqual(atoms[2].repr_text, "2 is in (2, 3)")
 
 
 if __name__ == "__main__":
