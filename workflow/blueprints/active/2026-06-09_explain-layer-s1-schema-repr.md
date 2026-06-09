@@ -1,6 +1,6 @@
 # Task Blueprint: S1 — Schema DSL repr (Field/Identity/Meta) surface + validation
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -98,4 +98,16 @@ validate_meta_repr_template(template, *, identity_field_names) -> None  # allowe
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `e6ff7940`(单线性栈 `… → 04aa2293(S1 蓝图) → e6ff7940(S1 code)`);master 未动,未 push。
+
+**结果**:新建共享 helper `core/schema/schema_repr.py`(`validate_member_repr_template` / `validate_meta_repr_template`),`sdk/schema.py` + `authoring/schema_dsl_parse.py` **两路复用同一 helper**。占位符矩阵按 design §5.2 锁定执行。`repr` 不入 compiled IR。
+
+**Gate(我独立验证)**:
+- repr 在 `schema_compile.py`/`schema_ir.py`/`sdk/compile.py` **0 路径**(不入 IR)。
+- `test_schema_repr_does_not_change_schema_digest_or_compiled_ir` 真测试(编译有/无 repr 两 schema 比 `schema_digest`)通过 → **INV-digest-stable 满足**。
+- 占位符矩阵实现正确:member 拒 `%<field>`(:28 仅 CLS/ENT/FLD);Meta 拒 `%ENT/%FLD`(:52)+ 非 identity `%<field>`(:54)。
+- cohort 33 tests OK(worktree 独立重跑);Codex 报 59 OK(更广 cohort);scope 10 文件全属 S1,无无关混入。
+
+**良性偏差**:Codex 额外把 Relationship `Field(repr=)` 纳入同一 member 校验,防旁路(蓝图未列,正向)。
+
+**归档**:暂留 active/,随里程碑批量归档。

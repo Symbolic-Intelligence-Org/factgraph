@@ -40,6 +40,15 @@ Codex 占位符建议有两处与 design §5.2 冲突,已按权威矩阵锁进�
 - Meta.repr `%<field>` 校验需 identity-field 集;确认 sdk 路径与 authoring 路径在校验时点都能取到 identity 字段名(类定义/解析序)。
 - 确认 repr 不被 `to_authoring`/`_apply_common_member_kwargs` 顺带发射进 compile→IR(digest no-change test 兜底)。
 
-## E. Gate result / Deviations
+## E. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `e6ff7940`(parent = S1 蓝图 `04aa2293`,线性栈)。**PASS**:
+- scope:10 文件全属 S1(helper / sdk / authoring / 2 tests / 4 docs),无 memory/无关混入。
+- ★INV-digest-stable:`repr` 在 schema_compile/schema_ir/sdk/compile **0 路径**;`test_schema_repr_does_not_change_schema_digest_or_compiled_ir` 通过(编译有/无 repr 比 digest 相等)。
+- 共享 helper:`schema_repr.py` 新增;sdk + authoring 两路均 import 同一 helper。
+- 占位符矩阵(实读 schema_repr.py):member 仅 {CLS,ENT,FLD} 拒 %<field>(:28);Meta 拒 %ENT/%FLD(:52)+ 非 identity %<field>(:54);reserved 撞名(:71)+ malformed %(:63)拒。**与纠正后 §5.2 矩阵一致**。
+- cohort:33 OK(独立)/ Codex 59 OK。
+
+## F. Deviations(良性)
+
+- Codex 额外覆盖 Relationship `Field(repr=)` 同一校验(防旁路)。

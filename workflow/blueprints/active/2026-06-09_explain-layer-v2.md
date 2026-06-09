@@ -118,7 +118,7 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
 > 每个 slice 一个可独立落地单元,在**同一条 impl 分支**顺序叠加。slice 启动前按 `feedback_preflight_code_audit_required` 做 shipped-vs-design 预审;按 `feedback_audit_to_archive_cadence` 走 draft→preflight→scoped→impl→闸→closure。
 
 1. **S0** ✅ **implemented @ `2c8f8c71`**(2026-06-09)— `Rule.desc → Rule.repr` + `render_repr`,hard-rename;gate PASS(86 tests OK,content_digest 不变,0 残留)。子蓝图已 implemented。
-2. **S1** schema DSL `Field(repr=)/Identity(repr=)/Meta.repr` + 占位符(`%CLS/%ENT/%FLD/%<field>`)类定义时校验 + 默认 label。
+2. **S1** ✅ **implemented @ `e6ff7940`**(2026-06-09)— schema DSL `Field/Identity/Meta repr` surface + 共享校验 helper(两路)；占位符矩阵按 §5.2 锁定;**repr 不入 IR / digest 不变**(gate PASS)。默认 label 归 S2。子蓝图已 implemented。
 3. **S2** schema IR repr 字段存储 + `render_entity_repr` 应用层纯函数(两遍渲染的解析遍基础)。
 4. **Certainty** `EvaluateRow.raw_kind+bound → certainty: Certainty|None`;三路映射;更新构造点 `_candidate_set_to_evaluate_row`。
 5. **S3** prober 主体 `application/explain/`:ProbeEnv + 穷尽遍历 + **G1 健全 witness 语义** + **G2 head/body/join 结构** + EvidenceTree/Atom/Verdict 类型。
