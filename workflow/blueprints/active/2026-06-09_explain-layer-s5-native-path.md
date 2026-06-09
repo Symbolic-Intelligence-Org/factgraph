@@ -1,6 +1,6 @@
 # Task Blueprint: S5 — native path wiring (G3) + old flat-DAG removal (S7)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -91,4 +91,22 @@ S3/S4 有了健全的 prober + 烘焙,但 `Explanation` 路径还没接上:passe
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `89de4a6c`(线性栈 `… → b7a6e9ea(S5蓝图) → 89de4a6c(S5 code)`);master 未动,未 push。
+
+**结果**:
+- 不变式改 `(status in {passed,failed}) != (evidence is not None)`(evaluate_result.py:286)。
+- prober 经 SDK 注入:`EvaluateResult._row_graph_builder`(:152,协议私有字段);`_explain_live_row` `builder = graph_builder or result._row_graph_builder or _build_minimal_row_evidence_graph`(:753)。SDK `_row_graph_builder_for_lowering_plan`(store.py:2798)调 `probe_native(view_facts=project_view_facts(ledger))`(:2820/2822)。
+- closed_head_false(store.py:2535)→ failed + probe paths 证据。
+- row_not_in_result/stale_row → `unsupported`(:720/737)。
+- 删旧 flat-DAG(evaluate_result.py -495 net):EvidenceNode/Edge imports + `_row_*_node`/`_row_shell_*`/`_build_passed_row_evidence_graph` 全删。
+- `Explanation.repr` walk evidence for passed+failed。
+
+**Gate(我独立验证)**:
+- ★G3 修复:`test_live_row_explain_returns_passed_explanation` 断言 passed native `evidence.paths` 非空(:651)+ `rules[0].role=="head"`(:685)—— v1 "minimal 占位" gap 修复。SDK 真调 probe_native(view_facts from ledger)。
+- 不变式 :286 = `{passed,failed}↔evidence`;协议层无 store import;旧 flat-DAG grep **0**(无双轨)。
+- closed_head_false → failed+paths;row_not_in_result/stale_row → unsupported(:925/973)。
+- cohort 71 OK(独立)/ Codex 89 OK。
+
+**Deviations(良性)**:`audit/evidence_graph.py` thin re-export 留 S6/docs(本片只切 evaluate_result 引用,符合 audit §D)。`_row_graph_builder` 私有字段是协议接缝(Codex #1)。
+
+**归档**:暂留 active/,随里程碑批量归档。

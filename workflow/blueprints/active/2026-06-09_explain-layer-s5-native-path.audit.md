@@ -31,6 +31,18 @@ Paired with [2026-06-09_explain-layer-s5-native-path.md](./2026-06-09_explain-la
 - `audit/evidence_graph.py` 是否本片改 thin re-export,还是留 S6/docs —— 建议 S5 只切 evaluate_result 引用,audit re-export 留后续(避免 S5 过大)。
 - closed_head_false 的 plan/view_facts 来源(复用 evaluate 路径的 lower + project_view_facts)。
 
-## E. Gate result / Deviations
+## E. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `89de4a6c`(parent = S5 蓝图 `b7a6e9ea`,线性栈)。**PASS**:
+- scope:8 文件(evaluate_result -495 net + explanation_render + explain/__init__ + sdk/store + docs + 3 tests);无 memory/无关混入。
+- ★不变式 :286 `{passed,failed}↔evidence`;旧 flat-DAG grep **0**;协议层无 store import(prober 经 `_row_graph_builder` :152 注入)。
+- ★G3:SDK `_row_graph_builder_for_lowering_plan`(store:2798)→ `probe_native(view_facts from ledger)`(:2820/2822);`test_live_row_explain_returns_passed` 断言 passed native paths 非空(:651)+ head rule(:685)。**v1 minimal 占位 gap 修复**。
+- closed_head_false → failed+paths;row_not_in_result/stale_row → unsupported(:925/973)。
+- cohort 71 OK(独立)/ Codex 89。
+
+裁决:**PASS**。
+
+## F. Deviations / 残留
+
+- `audit/evidence_graph.py` thin re-export 留 S6/docs(本片只切 evaluate_result 引用)。
+- `_row_graph_builder` 协议私有字段 = graph_builder 注入接缝(Codex #1)。
