@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import factgraph.sdk as sdk
@@ -18,6 +19,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
+from factgraph.application.protocol.rule_expr_lowering import _lower_rule_expr
 from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
 from factgraph.adapters.pyreason.provenance import (
     PyReasonTraceEventV0,
@@ -37,7 +39,7 @@ from factgraph.core.store._support import (
     SOUFFLE_WITNESS_KIND,
 )
 from factgraph.sdk import Entity, Field, Identity
-from factgraph.sdk.store import SDKStoreError
+from factgraph.sdk.store import SDKStoreError, _initial_probe_bindings_for_row
 
 
 class Person(Entity):
@@ -45,8 +47,19 @@ class Person(Entity):
     region: str = Field()
 
 
+class ExplainAnchorUser(Entity):
+    user_id: str = Identity()
+    region: str = Field()
+    age: int = Field()
+    tag: str = Field()
+
+
 def _store() -> sdk.SDKStore:
     return sdk.SDKStore([Person])
+
+
+def _anchor_store() -> sdk.SDKStore:
+    return sdk.SDKStore([ExplainAnchorUser])
 
 
 def _seed_person(graph: sdk.SDKStore, name: str, region: str = "us") -> str:
@@ -57,6 +70,19 @@ def _seed_person(graph: sdk.SDKStore, name: str, region: str = "us") -> str:
     set_field(graph.ledger, info.exists_predicate_id, encoded, [])
     set_field(graph.ledger, info.identity_predicates["name"].pred_id, encoded, [("string", name)])
     set_field(graph.ledger, field_predicate(index, "Person", "region").pred_id, encoded, [("string", region)])
+    return encoded
+
+
+def _seed_anchor_user(graph: sdk.SDKStore, user_id: str, *, region: str, age: int, tag: str) -> str:
+    index = build_schema_index(graph.schema_ir)
+    ref = resolve_selector(EntitySelector(entity_type="ExplainAnchorUser", identity={"user_id": user_id}), index=index)
+    info = entity_info(index, "ExplainAnchorUser")
+    encoded = ref.encoded_ref or ""
+    set_field(graph.ledger, info.exists_predicate_id, encoded, [])
+    set_field(graph.ledger, info.identity_predicates["user_id"].pred_id, encoded, [("string", user_id)])
+    set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "region").pred_id, encoded, [("string", region)])
+    set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "age").pred_id, encoded, [("int", age)])
+    set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "tag").pred_id, encoded, [("string", tag)])
     return encoded
 
 
@@ -81,6 +107,25 @@ def _aggregate_rule() -> Rule:
     order = Var("$order")
     aggregate = AggregateAtom("sum", amount, [PredAtom("OrderAmount", [order, amount])])
     return Rule(id="amount_sum", when=(CmpAtom("eq", total, aggregate),), ports={"total": total})
+
+
+def _atom_repr_text(row: object) -> str:
+    explanation = row.explain()  # type: ignore[attr-defined]
+    self_evidence = explanation.evidence
+    assert self_evidence is not None
+    return "\n".join(
+        atom.repr_text or ""
+        for path in self_evidence.paths
+        for rule in path.rules
+        for atom in rule.atoms
+    )
+
+
+def _row_binding_value(row: object, port_name: str) -> object:
+    value = row.bindings[port_name]  # type: ignore[attr-defined,index]
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
 
 
 class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
@@ -114,6 +159,118 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertTrue(any(rule.role == "body" for rule in rules))
         self.assertTrue(any(atom.repr_text for rule in rules for atom in rule.atoms))
         self.assertIsInstance(result[0].close(), Rule)
+
+    def test_row_explain_anchors_each_passed_row_to_its_own_bindings(self) -> None:
+        graph = _anchor_store()
+        u1 = _seed_anchor_user(graph, "u-1", region="us", age=30, tag="alpha")
+        u2 = _seed_anchor_user(graph, "u-2", region="eu", age=40, tag="beta")
+        index = build_schema_index(graph.schema_ir)
+        region_pred = field_predicate(index, "ExplainAnchorUser", "region").pred_id
+        age_pred = field_predicate(index, "ExplainAnchorUser", "age").pred_id
+        user = Var("$user")
+        region = Var("$region")
+        age = Var("$age")
+        rule = Rule(
+            id="adult_anchor",
+            when=(
+                PredAtom(region_pred, [user, region]),
+                PredAtom(age_pred, [user, age]),
+                CmpAtom("ge", age, Const(18)),
+            ),
+            ports={"user": user, "region": region, "age": age},
+        )
+
+        result = graph.eval.evaluate(rule, head=rule, engine="native")
+
+        self.assertEqual(result.count(), 2)
+        rows_by_user = {str(_row_binding_value(row, "user")): row for row in result}
+        first_text = _atom_repr_text(rows_by_user[u1])
+        second_text = _atom_repr_text(rows_by_user[u2])
+        self.assertIn(u1, first_text)
+        self.assertIn(", us)", first_text)
+        self.assertIn(", 30)", first_text)
+        self.assertIn("30 >= 18", first_text)
+        self.assertNotIn(u2, first_text)
+        self.assertNotIn(", eu)", first_text)
+        self.assertNotIn(", 40)", first_text)
+        self.assertNotIn("40 >= 18", first_text)
+        self.assertIn(u2, second_text)
+        self.assertIn(", eu)", second_text)
+        self.assertIn(", 40)", second_text)
+        self.assertIn("40 >= 18", second_text)
+        self.assertNotIn(u1, second_text)
+        self.assertNotIn(", us)", second_text)
+        self.assertNotIn(", 30)", second_text)
+        self.assertNotIn("30 >= 18", second_text)
+
+    def test_initial_probe_seed_uses_lowered_occurrence_vars_and_unwraps_values(self) -> None:
+        x = Var("$x")
+        region = Var("$region")
+        age = Var("$age")
+        left = Rule(id="left", when=(PredAtom("left_p", [x, region]),), ports={"x": x, "region": region})
+        right = Rule(id="right", when=(PredAtom("right_p", [x, age]),), ports={"x": x, "age": age})
+        head = Rule(
+            id="left_head",
+            when=(PredAtom("left_p", [x, region]), PredAtom("right_p", [x, age])),
+            ports={"x": x, "region": region, "age": age},
+        )
+        join_plan = _lower_rule_expr(
+            (left.as_("left") & right.as_("right")).join(left.as_("left").x.eq(right.as_("right").x)),
+            head=head,
+        )
+        row = SimpleNamespace(
+            bindings={
+                "x": {"kind": "entity_ref", "value": "idref_v1:User:u-1"},
+                "region": {"kind": "literal", "tag": "string", "value": "us"},
+                "age": {"kind": "literal", "tag": "int", "value": 30},
+            }
+        )
+
+        join_seed = _initial_probe_bindings_for_row(row, join_plan)
+
+        x_exec_vars = tuple(
+            binding.alias_local_execution_var.name
+            for occurrence in join_plan.occurrence_map
+            for binding in occurrence.port_bindings
+            if binding.source_var.name == "$x"
+        )
+        self.assertGreaterEqual(len(x_exec_vars), 2)
+        self.assertTrue(all(join_seed[name] == "idref_v1:User:u-1" for name in x_exec_vars))
+        self.assertTrue(any(value == "us" for value in join_seed.values()))
+        self.assertTrue(any(value == 30 for value in join_seed.values()))
+        self.assertTrue(all(not isinstance(value, dict) for value in join_seed.values()))
+
+        or_plan = _lower_rule_expr(left.as_("left") | right.as_("right"), head=head)
+        or_seed = _initial_probe_bindings_for_row(row, or_plan)
+        or_x_exec_vars = tuple(
+            binding.alias_local_execution_var.name
+            for occurrence in or_plan.occurrence_map
+            for binding in occurrence.port_bindings
+            if binding.source_var.name == "$x"
+        )
+        self.assertGreaterEqual(len(or_x_exec_vars), 2)
+        self.assertTrue(all(or_seed[name] == "idref_v1:User:u-1" for name in or_x_exec_vars))
+
+    def test_closed_head_false_still_produces_failed_evidence(self) -> None:
+        graph = _store()
+        _seed_person(graph, "closed-false", region="us")
+        index = build_schema_index(graph.schema_ir)
+        identity_pred_id = entity_info(index, "Person").identity_predicates["name"].pred_id
+        person = Var("$person")
+        body = _person_exists_rule()
+        closed = Rule(
+            id="Person:exists_closed_missing",
+            when=(PredAtom("Person:exists", [person]), PredAtom(identity_pred_id, [person, Const("missing")])),
+            ports={"person": person},
+        )
+
+        explanation = graph.eval.explain(body, head=closed, engine="native")
+
+        self.assertEqual(explanation.status, "failed")
+        self.assertEqual(explanation.failure_class, "closed_head_false")
+        self.assertIsNotNone(explanation.evidence)
+        assert explanation.evidence is not None
+        self.assertTrue(explanation.evidence.paths)
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:
         graph = _store()

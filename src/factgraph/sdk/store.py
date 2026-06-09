@@ -58,6 +58,7 @@ from factgraph.application.protocol.evaluate_result import (
     _build_minimal_row_evidence_graph,
     _candidate_set_to_evaluate_row,
     _legacy_candidate_payload_for_row_result,
+    _public_term_value,
     _row_digest_for,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
@@ -4100,13 +4101,19 @@ def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dic
     row_bindings = getattr(row, "bindings", None)
     if not isinstance(row_bindings, Mapping):
         return {}
+    exec_by_source: dict[str, list[str]] = {}
+    for occurrence in plan.occurrence_map:
+        for binding in occurrence.port_bindings:
+            exec_by_source.setdefault(binding.source_var.name, []).append(binding.alias_local_execution_var.name)
     out: dict[str, Any] = {}
     for port_name, var in plan.head.ports.items():
         if port_name not in row_bindings:
             continue
         var_name = getattr(var, "name", None)
         if isinstance(var_name, str) and var_name:
-            out[var_name] = row_bindings[port_name]
+            value = _public_term_value(row_bindings[port_name])
+            for exec_name in exec_by_source.get(var_name, ()):
+                out[exec_name] = value
     return out
 
 
