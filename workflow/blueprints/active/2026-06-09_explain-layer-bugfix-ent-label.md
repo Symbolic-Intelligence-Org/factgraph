@@ -1,6 +1,6 @@
 # Task Blueprint: Explain v2 Bugfix — `%ENT` entity label recovery
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Type: bugfix slice
@@ -124,6 +124,9 @@ reason to promote code.
   Fall back to the raw term display, matching the existing behavior.
 - **Demo**: update `examples/explain_layer_demo.py` note after implementation so
   it no longer claims `%ENT` is an active gap.
+- **Import-cycle fallback**: direct import from `entity_view` is the first path.
+  If a transitive cycle appears, promote the idref-to-identity helper into
+  `schema_runtime`, where `render_entity_repr(...)` already lives.
 
 ## 8. Acceptance
 

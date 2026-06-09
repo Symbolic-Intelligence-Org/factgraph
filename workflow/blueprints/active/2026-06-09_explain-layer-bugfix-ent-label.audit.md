@@ -38,7 +38,24 @@ Verdict: root cause accepted.
 - Do not alter adapter converters.
 - Keep this as a presentation bugfix.
 
-## D. Required Regression Tests
+## D. Scope Review (2026-06-09)
+
+Claude approved `draft → scoped` and independently checked three implementation
+risk points:
+
+1. `ENTITY_REF_PREFIX` is defined at `factgraph.core.protocol.tup_v1`.
+2. `entity_view` does not directly import `application.explain.prober`, so the
+   direct helper import has no known direct cycle.
+3. `_bake_repr_text → _repr_fact → _entity_repr_for_fact` is a single call
+   chain from `_probe_atom`, which already has `view_facts`.
+
+Additional scope notes:
+
+- If a transitive import cycle appears, promote the idref recovery helper into
+  `schema_runtime` rather than creating an unrelated new module.
+- Add a multi-entity `%ENT` regression, not only a single-entity case.
+
+## E. Required Regression Tests
 
 1. `%ENT` renders `Meta.repr` label for bare idref subject values.
 2. Multi-entity row explanations remain row-specific and labels match each row.
@@ -47,6 +64,6 @@ Verdict: root cause accepted.
 5. Demo output no longer describes `%ENT` as a known gap and shows friendly
    entity labels.
 
-## E. Implementation Outcome
+## F. Implementation Outcome
 
 Pending.
