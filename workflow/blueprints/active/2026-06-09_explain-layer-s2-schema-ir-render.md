@@ -1,6 +1,6 @@
 # Task Blueprint: S2 — Schema IR repr storage + render_entity_repr
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -96,4 +96,20 @@ render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Mappin
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `cd9b62fc`(线性栈 `… → 657e364c(cleanup收口) → cd9b62fc(S2)`);master 未动,未 push。
+
+**结果**:
+- emit:repr 从 sdk DSL + authoring AST 发射进 authoring payload。
+- compile + IR:entity `Meta.repr` + Identity/Field/Relationship-Field `repr` 写入 SchemaIR;`_validate_optional_repr` 校验。
+- **digest 机制 = (b) 递归剥离**:`_schema_identity_view`(schema_ir.py:97-105)在 identity canon 时递归去除任何 `repr` 键(+ generated_at);full IR 含 repr,identity digest 不含。
+- SchemaIndex:`EntityTypeInfo.meta_repr` + `PredicateInfo.repr` 暴露。
+- `render_entity_repr`:%CLS + %<id_field> 替换;默认 label `"<EntityCls> <first identity value>"`;缺值 → `SchemaResolutionError(MISSING_ENTITY_IDENTITY_VALUE)`;未知 entity → UNKNOWN_ENTITY_TYPE。
+
+**Gate(我独立验证)**:
+- ★`test_schema_repr_enters_compiled_ir_without_changing_schema_digest`:`schema_digest(without)==schema_digest(with)`(repr 不改 digest)+ `"repr"` 在 full IR(:63)、不在 without(:62)——**强非空测试,机制 (b) 正确**。
+- render_entity_repr 三路测试(默认 / meta 模板 / 缺值拒绝)全绿。
+- `_schema_identity_view` 仅剥 `repr`+`generated_at`,结构字段保留;schema cohort **58 tests OK**(独立,含 db identity / three-split digest 敏感区无破坏)。Codex 报 136 OK(skip 9)。
+
+**Deviations / 小建议**:无显式"结构变更仍改 digest"专项测试(由既有 digest cohort 间接覆盖 + 剥离逻辑仅针对 `repr`,过度剥离风险低);可在后续补一条专项。Codex 选机制 (b)(nested + canon 剥离),比 (a) 顶层区对 IR 结构侵入更小,合理。
+
+**归档**:暂留 active/,随里程碑批量归档。

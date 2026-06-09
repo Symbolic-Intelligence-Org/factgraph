@@ -26,6 +26,19 @@ Paired with [2026-06-09_explain-layer-s2-schema-ir-render.md](./2026-06-09_expla
 - `render_entity_repr` 签名最终形态(`(index, entity_type, identity_values)` 提案)+ identity 值缺失时行为(报错 vs 占位)。
 - `EntityTypeInfo.meta_repr` / `PredicateInfo.repr` 命名与填充点。
 
-## D. Gate result / Deviations
+## D. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `cd9b62fc`(parent = cleanup 收口 `657e364c`,线性栈)。**PASS**:
+- scope:14 文件(5 schema 逻辑 + __init__ 导出 + 3 测试 + 5 docs);无 memory/无关混入。
+- ★INV-digest-stable:`_schema_identity_view`(:97-105)递归剥 `repr`+generated_at;`test_schema_repr_enters_compiled_ir_without_changing_schema_digest` 证 `schema_digest(without)==schema_digest(with)`(:61)+ repr 在 full IR(:63)。机制 (b)。
+- render_entity_repr:三路测试(默认 label / meta 模板 / 缺值 MISSING_ENTITY_IDENTITY_VALUE)+ 逻辑实读正确(%CLS + %<id_field>,仅 identity 字段替换,S1 已保证有效性)。
+- SchemaIndex:`EntityTypeInfo.meta_repr` + `PredicateInfo.repr`。
+- cohort 58 OK(独立)/ Codex 136(skip 9)。
+
+裁决:**PASS**。
+
+## E. Open items resolved / Deviations
+
+- digest 机制:Codex 选 (b) nested + canon 递归剥离(对 IR 结构侵入小于 (a) 顶层区),合理。
+- render 缺值行为:抛 `MISSING_ENTITY_IDENTITY_VALUE`(子蓝图 open item 已定)。
+- 小建议:补"结构变更仍改 digest"专项测试(目前由既有 cohort 间接覆盖)。
