@@ -209,7 +209,7 @@ with vars("u") as (u,):
         id="active_user",
         when=[User(u), User(u).status == "active"],
         ports={"user": u},
-        desc="active user %user",
+        repr="active user %user",
     )
 
 with vars("u") as (u,):
@@ -217,7 +217,7 @@ with vars("u") as (u,):
         id="assigned_owner",
         when=[User(u), User(u).role == "owner"],
         ports={"user": u},
-        desc="assigned owner %user",
+        repr="assigned owner %user",
     )
 ```
 

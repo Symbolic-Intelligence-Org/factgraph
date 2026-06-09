@@ -41,7 +41,7 @@ def _application_rule(rule_id: str = "active_user", *, var_name: str = "u") -> A
             CmpAtom("eq", status, Const("active")),
         ),
         ports={"user": user, "status": status},
-        desc="User %user has status %status",
+        repr="User %user has status %status",
     )
 
 
@@ -51,7 +51,7 @@ def _other_rule() -> ApplicationRule:
         id="trusted_user",
         when=(PredAtom("User:exists", [user]),),
         ports={"user": user},
-        desc="Trusted %user",
+        repr="Trusted %user",
     )
 
 
@@ -129,7 +129,7 @@ class RuleExprInspectDTOTests(unittest.TestCase):
         occurrence = OccurrenceInspect(
             template_id="rule",
             alias="alias",
-            desc_template=None,
+            repr_template=None,
             ports=("user",),
             atoms=(atom,),
         )

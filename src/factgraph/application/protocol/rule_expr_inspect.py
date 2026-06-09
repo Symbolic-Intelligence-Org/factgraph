@@ -30,7 +30,7 @@ from .rule_expr import (
     _iter_rule_operands,
 )
 
-_DESC_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
+_REPR_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
 
 
 @dataclass(frozen=True)
@@ -71,15 +71,15 @@ class ConditionDescriptor:
 class OccurrenceInspect:
     template_id: str
     alias: str
-    desc_template: str | None
+    repr_template: str | None
     ports: tuple[str, ...]
     atoms: tuple[ConditionDescriptor, ...]
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.template_id, field_name="OccurrenceInspect.template_id")
         _require_non_empty_str(self.alias, field_name="OccurrenceInspect.alias")
-        if self.desc_template is not None and not isinstance(self.desc_template, str):
-            raise RuleExprError("OccurrenceInspect.desc_template must be string or None")
+        if self.repr_template is not None and not isinstance(self.repr_template, str):
+            raise RuleExprError("OccurrenceInspect.repr_template must be string or None")
         if not isinstance(self.ports, tuple) or any(not isinstance(port, str) or not port for port in self.ports):
             raise RuleExprError("OccurrenceInspect.ports must be tuple of non-empty strings")
         if not isinstance(self.atoms, tuple) or any(not isinstance(atom, ConditionDescriptor) for atom in self.atoms):
@@ -148,9 +148,9 @@ class RuleExprInspect:
             raise RuleExprError("RuleExprInspect.render bindings must be Mapping[str, object] or None")
         occurrence_lines = []
         for occurrence in self.occurrences:
-            rendered_desc = _render_desc_template(occurrence.desc_template, occurrence.alias, values)
+            rendered_repr = _render_repr_template(occurrence.repr_template, occurrence.alias, values)
             label = f"{occurrence.alias}:{occurrence.template_id}"
-            occurrence_lines.append(label if not rendered_desc else f"{label} {rendered_desc}")
+            occurrence_lines.append(label if not rendered_repr else f"{label} {rendered_repr}")
         pieces = ["RuleExprInspect", _render_ast_compact(self.ast), "; ".join(occurrence_lines)]
         if self.joins:
             pieces.append("joins " + ", ".join(_render_join(join) for join in self.joins))
@@ -299,7 +299,7 @@ def _inspect_rule_operand(operand: _RuleOperand) -> OccurrenceInspect:
     return OccurrenceInspect(
         template_id=rule.id,
         alias=operand.alias,
-        desc_template=rule.desc,
+        repr_template=rule.repr,
         ports=tuple(sorted(rule.ports)),
         atoms=tuple(_derive_atom_descriptor(atom, atom_ids[idx]) for idx, atom in enumerate(rule.when)),
     )
@@ -466,12 +466,12 @@ def _term_summary(term: Term) -> str:
     return repr(term)
 
 
-def _render_desc_template(
-    desc_template: str | None,
+def _render_repr_template(
+    repr_template: str | None,
     alias: str,
     bindings: Mapping[str, object],
 ) -> str:
-    if desc_template is None:
+    if repr_template is None:
         return ""
 
     def replace(match: re.Match[str]) -> str:
@@ -483,7 +483,7 @@ def _render_desc_template(
             return str(bindings[port_name])
         return f"<{port_name}>"
 
-    return _DESC_PORT_RE.sub(replace, desc_template)
+    return _REPR_PORT_RE.sub(replace, repr_template)
 
 
 def _render_ast_compact(ast: tuple[object, ...]) -> str:

@@ -1019,8 +1019,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
 
 
-class RowConclusionNodeDescTests(unittest.TestCase):
-    """Conclusion node's value_summary must use Rule.render_desc when head has desc."""
+class RowConclusionNodeReprTests(unittest.TestCase):
+    """Conclusion node's value_summary must use Rule.render_repr when head has repr."""
 
     def _build_result_with_head(self, head: Rule, row_bindings: dict[str, object]) -> tuple[EvaluateRow, EvaluateResult]:
         run_id = "run_v1:" + "1" * 64
@@ -1067,7 +1067,7 @@ class RowConclusionNodeDescTests(unittest.TestCase):
         )
         return row, result
 
-    def test_value_summary_uses_rendered_desc_when_head_has_desc(self) -> None:
+    def test_value_summary_uses_rendered_repr_when_head_has_repr(self) -> None:
         from factgraph.application.protocol.evaluate_result import _row_conclusion_node
 
         user_var = Var("$user")
@@ -1075,7 +1075,7 @@ class RowConclusionNodeDescTests(unittest.TestCase):
             id="adults_in_us",
             when=(PredAtom("user:region", [user_var, Const("US")]),),
             ports={"user": user_var},
-            desc="Adult user %user lives in the US",
+            repr="Adult user %user lives in the US",
         )
         bindings = {"user": {"kind": "entity_ref", "value": "idref_v1:User:alice"}}
         row, result = self._build_result_with_head(head, bindings)
@@ -1086,9 +1086,9 @@ class RowConclusionNodeDescTests(unittest.TestCase):
             node.value_summary,
             "Adult user idref_v1:User:alice lives in the US",
         )
-        self.assertEqual(node.engine_meta["desc_template"], "Adult user %user lives in the US")
+        self.assertEqual(node.engine_meta["repr_template"], "Adult user %user lives in the US")
 
-    def test_value_summary_falls_back_to_repr_when_head_has_no_desc(self) -> None:
+    def test_value_summary_falls_back_to_claim_repr_when_head_has_no_repr(self) -> None:
         from factgraph.application.protocol.evaluate_result import _row_conclusion_node
 
         head = _head_rule()
@@ -1097,7 +1097,7 @@ class RowConclusionNodeDescTests(unittest.TestCase):
 
         node = _row_conclusion_node(row, result)
 
-        self.assertIsNone(node.engine_meta["desc_template"])
+        self.assertIsNone(node.engine_meta["repr_template"])
         self.assertIn("person_head", node.value_summary)
         self.assertNotIn("%", node.value_summary)
 

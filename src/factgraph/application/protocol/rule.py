@@ -40,7 +40,7 @@ class PortType:
 
 
 _ALLOWED_ATOM_TYPES = (PredAtom, CmpAtom, InAtom, BuiltinAtom, NotAtom)
-_DESC_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
+_REPR_PORT_RE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)")
 _MALFORMED_PERCENT_RE = re.compile(r"%(?![A-Za-z_])")
 _OCCURRENCE_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 _PROJECTION_ID_PREFIX = "__factgraph_projection__"
@@ -57,14 +57,14 @@ class Rule:
     when: tuple[Atom, ...]
     ports: Mapping[str, Var]
     version: str | None = None
-    desc: str | None = None
+    repr: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.id, field_name="id")
         if self.version is not None:
             _require_non_empty_str(self.version, field_name="version")
-        if self.desc is not None:
-            _require_non_empty_str(self.desc, field_name="desc")
+        if self.repr is not None:
+            _require_non_empty_str(self.repr, field_name="repr")
         if not isinstance(self.when, tuple) or not self.when:
             raise RuleValidationError("when must be non-empty tuple[Atom, ...]")
         if not isinstance(self.ports, Mapping) or not self.ports:
@@ -91,7 +91,7 @@ class Rule:
                 raise RuleValidationError(f"ports[{key!r}] Var must appear in where")
             frozen_ports[key] = value
 
-        _validate_desc(self.desc, port_names=frozenset(frozen_ports))
+        _validate_repr(self.repr, port_names=frozenset(frozen_ports))
         object.__setattr__(self, "ports", MappingProxyType(dict(frozen_ports)))
         object.__setattr__(self, "_port_types", MappingProxyType(_infer_port_types(frozen_ports, self.when)))
 
@@ -112,8 +112,8 @@ class Rule:
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return sha256_hex(canonical)
 
-    def render_desc(self, bindings: Mapping[str, Any] | None = None) -> str:
-        if self.desc is None:
+    def render_repr(self, bindings: Mapping[str, Any] | None = None) -> str:
+        if self.repr is None:
             return ""
         values = {} if bindings is None else bindings
         if not isinstance(values, Mapping):
@@ -125,7 +125,7 @@ class Rule:
                 return str(values[name])
             return f"<{name}>"
 
-        return _DESC_PORT_RE.sub(replace, self.desc)
+        return _REPR_PORT_RE.sub(replace, self.repr)
 
     def as_(self, alias: str | None = None) -> RuleOccurrence:
         effective_alias = self.id if alias is None else alias
@@ -236,15 +236,15 @@ def _require_non_empty_str(value: Any, *, field_name: str) -> str:
     return value
 
 
-def _validate_desc(desc: str | None, *, port_names: frozenset[str]) -> None:
-    if desc is None:
+def _validate_repr(repr_template: str | None, *, port_names: frozenset[str]) -> None:
+    if repr_template is None:
         return
-    if _MALFORMED_PERCENT_RE.search(desc):
-        raise RuleValidationError("desc contains malformed percent port interpolation")
-    for match in _DESC_PORT_RE.finditer(desc):
+    if _MALFORMED_PERCENT_RE.search(repr_template):
+        raise RuleValidationError("repr contains malformed percent port interpolation")
+    for match in _REPR_PORT_RE.finditer(repr_template):
         name = match.group(1)
         if name not in port_names:
-            raise RuleValidationError(f"desc references undeclared port: {name}")
+            raise RuleValidationError(f"repr references undeclared port: {name}")
 
 
 def _validate_occurrence_alias(alias: Any) -> str:
