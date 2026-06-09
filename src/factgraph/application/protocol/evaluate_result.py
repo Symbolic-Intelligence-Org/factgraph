@@ -1066,8 +1066,10 @@ def _validate_row_provenance_envelopes(
             raise ProtocolShapeError("EvaluateResult._row_provenance_envelopes contains unknown row_id")
         if not isinstance(envelope, ProvenanceEnvelope):
             raise ProtocolShapeError("EvaluateResult._row_provenance_envelopes values must be ProvenanceEnvelope")
-        if envelope.engine != "problog" or envelope.payload_type != "proof_trace":
-            raise ProtocolShapeError("EvaluateResult._row_provenance_envelopes values must be ProbLog proof traces")
+        if (envelope.engine, envelope.payload_type) not in {("problog", "proof_trace"), ("pyreason", "event_log")}:
+            raise ProtocolShapeError(
+                "EvaluateResult._row_provenance_envelopes values must be adapter provenance envelopes"
+            )
         normalized[row_id] = envelope
     return MappingProxyType(normalized)
 

@@ -19,12 +19,18 @@ from factgraph.application.protocol import (
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
 from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
+from factgraph.adapters.pyreason.provenance import (
+    PyReasonTraceEventV0,
+    PyReasonTraceV0,
+    pyreason_trace_to_dict,
+)
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
+    PYREASON_PROVENANCE_KIND,
     PredWitness,
     ProofReceipt,
     ProvenanceEnvelope,
@@ -522,6 +528,103 @@ Person:exists({encoded}):\t0.73
         with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
             with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
                 result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
+
+    def test_pyreason_row_explain_uses_provenance_envelope_timeline(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "pyreason")
+        rule = _person_exists_rule()
+        trace = PyReasonTraceV0(
+            timesteps=2,
+            node_events=(
+                PyReasonTraceEventV0(
+                    time=1,
+                    fixpoint_op=1,
+                    component=encoded,
+                    component_type="node",
+                    label="exists",
+                    old_bound=(0.0, 1.0),
+                    new_bound=(0.84, 0.84),
+                    occurred_due_to="pyreason_rule",
+                    clause_groundings=("[pyreason]",),
+                ),
+            ),
+            edge_events=(),
+        )
+        support_digest = "sha256:" + ("a" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="pyreason-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("5" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PYREASON_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+            confidence=0.84,
+            confidence_kind="certainty",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:pyreason",
+            engine="pyreason",
+            payload_type="event_log",
+            payload=pyreason_trace_to_dict(trace),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.engine, "pyreason")
+        self.assertEqual(explanation.evidence.layout_hint, "timeline")
+        self.assertEqual(explanation.evidence.certainty.kind, "possibilistic")
+        self.assertEqual(explanation.evidence.certainty.lo, 0.84)
+        timeline = explanation.evidence.paths[0]
+        self.assertEqual(timeline.certainty.kind, "possibilistic")
+        self.assertEqual(timeline.events[0].timestep, 1)
+        self.assertEqual(timeline.events[0].form.predicate, "exists")
+        self.assertEqual(timeline.events[0].verdict.support[0].meta["clause_groundings"], ("[pyreason]",))
+
+    def test_pyreason_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "pyreason-fallback")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("b" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="pyreason-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("6" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PYREASON_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:pyreason-bad",
+            engine="pyreason",
+            payload_type="event_log",
+            payload={"engine": "pyreason", "trace_type": "event_log", "timesteps": 0, "node_events": [], "edge_events": []},
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
 
         explanation = result[0].explain()
 

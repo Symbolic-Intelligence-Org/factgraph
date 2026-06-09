@@ -528,7 +528,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             payload={},
         )
 
-        with self.assertRaisesRegex(ProtocolShapeError, "ProbLog proof traces"):
+        with self.assertRaisesRegex(ProtocolShapeError, "adapter provenance envelopes"):
             _single_row_result(provenance_envelope=bad_envelope)
 
     def test_detached_row_live_helper_raises(self) -> None:

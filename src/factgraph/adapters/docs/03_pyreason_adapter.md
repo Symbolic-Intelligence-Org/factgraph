@@ -614,28 +614,25 @@ Based on the two real samples (Souffle + PyReason):
    unified abstraction is frozen. Souffle is complete already;
    PyReason is still a spike, not enough to freeze.
 
-## 6A. Current EvidenceGraph converter (Step 2)
+## 6A. Current EvidenceGraph converter
 
 `pyreason_trace_to_evidence_graph(...)` currently implements a
-**candidate-anchored timeline converter**. This is an advanced adapter-level
-helper, not the main row-result quickstart path. Rich row-level PyReason
-temporal evidence is still deferred to a future Form 2 design / T8-C-2 bridge;
-current PyReason row evidence can still be the safe single-conclusion fallback
-described in the evidence quickstart.
+**candidate-anchored paths-model timeline converter**. Row-result
+PyReason evidence uses this converter through the SDK per-engine
+graph-builder bridge when a `pyreason_provenance_v1` envelope is
+available; converter failures still fall back to the safe minimal
+row-result graph.
 
 - Input:
   - `PyReasonTraceV0`
   - `candidate_id`
   - `candidate_payload` (currently consumes `pred_id + terms`)
 - Output:
-  - `EvidenceGraph(engine="pyreason",
-    layout_hint="timeline",
-    support_kind="pyreason_provenance_v1")`
-- Runtime export now materializes the graph into the audit
-  package:
-  - `audit/evidence_graphs.jsonl`
-  - `AuditQuery.get_candidate_evidence_graph(...)`
-  - Candidate static-page unified `EvidenceGraph` section
+  - `application.explain.EvidenceGraph(engine="pyreason",
+    layout_hint="timeline", paths=(EvidenceTimeline, ...))`
+  - `EvidenceTimeline.events` are `EvidenceAtom` rows with
+    `timestep=<trace row Time>`
+  - bounds become possibilistic `Certainty(lo, hi, "possibilistic")`
 
 Current mapping rules:
 
@@ -645,34 +642,33 @@ Current mapping rules:
     `label=<pred short name>`
   - edge candidate: `component=<from_ref->to_ref>` +
     `label=<pred short name>`
-- All trace events become graph nodes
-- Only consecutive events on the same
-  `(component_type, component, label)` chain produce edges of
-  `edge_kind="updates"`
+- All trace events become timeline `EvidenceAtom` entries.
 - `occurred_due_to`, `old_bound/new_bound`, and
-  `clause_groundings` are kept in `engine_meta`
+  `clause_groundings` are kept in support `Source.meta`.
+- Row-result graph metadata is the protocol row-result metadata
+  required by `Explanation` validation; adapter trace metadata stays
+  in timeline metadata and support source metadata.
 
 Deliberate non-goals at this version:
 
-- Does not fabricate cross-fact / cross-component causal edges
-- Does not forcibly interpret `clause_groundings` as a unified
-  body-atom dependency edge
-- Does not pretend a run-scoped event log is a lossless proof
-  tree
+- Does not fabricate cross-fact / cross-component causal links
+- Does not forcibly interpret `clause_groundings` as unified
+  body-atom dependencies
+- Does not pretend a run-scoped event log is a lossless proof tree
 
 The reason is that the current v0 carrier provides only
 grounding text and lacks stable anchors at the body-atom label /
 pred_id level; therefore the v1 converter promises only "an
-honest timeline + intra-fact update chain".
+honest timeline".
 
 ## 7. Current limitations
 
 - The shared evaluate surface and public `PyReasonConfig` wrapper are
   implemented for the canonical C78/C74/C77 lanes described above.
 - Candidate explain stores the runtime `explain_ref(kind="candidate")`
-  provenance envelope of `payload_type="event_log"`. Row-result rich temporal
-  evidence is not yet bridged into a Form 2 `EvidenceGraph`; unaligned
-  PyReason rows may still use the safe single-conclusion fallback.
+  provenance envelope of `payload_type="event_log"`. Row-result explain
+  consumes the same envelope to build paths-model temporal evidence;
+  missing or invalid envelopes still use the safe minimal fallback.
 - `session.annotation_templates` can already land in the Ledger
   via `accept_pyreason_session(...)`; however accept still
   relies on adapter-local synthetic `entity_ref` materialization
@@ -686,9 +682,8 @@ honest timeline + intra-fact update chain".
   compatibility; the local combination
   `numba==0.64.0` / `llvmlite==0.46.0` has not been validated
 - `PyReasonTraceEventV0` field shape is not frozen
-- `pyreason_trace_to_evidence_graph(...)` only builds the
-  `updates` chain within the same fact / edge; cross-fact causal
-  edges are deferred
+- `pyreason_trace_to_evidence_graph(...)` builds an honest timeline;
+  cross-fact causal links from Clause-N text remain deferred
 
 ## 8. Known issues (confirmed during 2026-03-29 walkthrough)
 

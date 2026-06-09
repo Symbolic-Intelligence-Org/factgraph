@@ -30,6 +30,7 @@ from factgraph.application.explain.evidence_tree import (
     Source,
 )
 from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
+from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict, pyreason_trace_to_evidence_graph
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -94,6 +95,7 @@ from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
 from factgraph.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
+    PYREASON_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
     ProvenanceEnvelope,
     ProofReceipt,
@@ -2829,6 +2831,8 @@ class SDKStore:
             return self._souffle_row_graph_builder(row_support_artifacts)
         if engine == "problog":
             return self._problog_row_graph_builder(row_provenance_envelopes)
+        if engine == "pyreason":
+            return self._pyreason_row_graph_builder(row_provenance_envelopes)
         return None
 
     def _row_graph_builder_for_lowering_plan(
@@ -2874,6 +2878,33 @@ class SDKStore:
                     candidate_id=envelope.candidate_id,
                     candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
                     support_kind=PROBLOG_PROVENANCE_KIND,
+                )
+                return EvidenceGraph(
+                    graph_id=f"{result.result_id}:{row.row_id}",
+                    engine=result.engine,
+                    layout_hint=graph.layout_hint,
+                    subject_binding=graph.subject_binding,
+                    paths=graph.paths,
+                    certainty=graph.certainty,
+                    metadata=dict(metadata),
+                )
+            except Exception:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+
+        return _builder
+
+    def _pyreason_row_graph_builder(self, row_provenance_envelopes: Mapping[str, ProvenanceEnvelope]):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            envelope = row_provenance_envelopes.get(row.row_id)
+            if envelope is None or envelope.engine != "pyreason" or envelope.payload_type != "event_log":
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+            try:
+                trace = pyreason_trace_from_dict(envelope.payload)
+                graph = pyreason_trace_to_evidence_graph(
+                    trace,
+                    candidate_id=envelope.candidate_id,
+                    candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
+                    support_kind=PYREASON_PROVENANCE_KIND,
                 )
                 return EvidenceGraph(
                     graph_id=f"{result.result_id}:{row.row_id}",
@@ -2938,7 +2969,7 @@ class SDKStore:
     ) -> Mapping[str, ProvenanceEnvelope]:
         out: dict[str, ProvenanceEnvelope] = {}
         for candidate, row in zip(candidates, rows):
-            if candidate.support_kind != PROBLOG_PROVENANCE_KIND:
+            if candidate.support_kind not in {PROBLOG_PROVENANCE_KIND, PYREASON_PROVENANCE_KIND}:
                 continue
             envelope = self._store._lookup_provenance_envelope(candidate.support_digest)
             if isinstance(envelope, ProvenanceEnvelope):

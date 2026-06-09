@@ -18,7 +18,10 @@ from factgraph.adapters.pyreason.provenance import (
     PyReasonTraceV0,
     parse_pyreason_trace,
     pyreason_trace_to_dict,
+    pyreason_trace_to_evidence_graph,
 )
+from factgraph.application.explain.evidence_tree import EvidenceGraph, EvidenceTimeline, LAYOUT_TIMELINE
+from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 
 
 @unittest.skipIf(pd is None, "pandas is unavailable; skipping PyReason provenance tests")
@@ -166,6 +169,59 @@ class PyReasonProvenanceV0Tests(unittest.TestCase):
         payload = pyreason_trace_to_dict(trace)
         self.assertEqual(payload["trace_type"], "event_log")
         self.assertNotEqual(payload["trace_type"], "proof_tree")
+
+    def test_converter_builds_timeline_from_trace(self) -> None:
+        trace = parse_pyreason_trace(
+            _synthetic_nodes_trace(),
+            _synthetic_edges_trace(),
+            timesteps=2,
+        )
+
+        graph = pyreason_trace_to_evidence_graph(
+            trace,
+            candidate_id="cand_v2:pyreason",
+            candidate_payload={
+                "pred_id": "Person:popular",
+                "terms": [{"kind": "entity_ref", "value": "Alice"}],
+            },
+        )
+
+        self.assertIsInstance(graph, EvidenceGraph)
+        self.assertEqual(graph.engine, "pyreason")
+        self.assertEqual(graph.layout_hint, LAYOUT_TIMELINE)
+        self.assertEqual(graph.metadata["support_kind"], PYREASON_PROVENANCE_KIND)
+        self.assertEqual(graph.certainty.kind, "possibilistic")
+        self.assertEqual(graph.certainty.lo, 1.0)
+        self.assertEqual(len(graph.paths), 1)
+        timeline = graph.paths[0]
+        self.assertIsInstance(timeline, EvidenceTimeline)
+        self.assertEqual(timeline.certainty.kind, "possibilistic")
+        self.assertEqual(timeline.metadata["root_label"], "popular")
+        self.assertEqual([event.timestep for event in timeline.events], [0, 1, 1])
+        self.assertEqual(timeline.events[0].form.predicate, "popular")
+        self.assertEqual(timeline.events[0].verdict.certainty.kind, "possibilistic")
+
+    def test_converter_keeps_clause_groundings_as_conservative_metadata(self) -> None:
+        trace = parse_pyreason_trace(
+            _synthetic_nodes_trace(),
+            _synthetic_edges_trace(),
+            timesteps=2,
+        )
+
+        graph = pyreason_trace_to_evidence_graph(
+            trace,
+            candidate_id="cand_v2:pyreason",
+            candidate_payload={
+                "pred_id": "Person:popular",
+                "terms": [{"kind": "entity_ref", "value": "Bob"}],
+            },
+        )
+
+        timeline = graph.paths[0]
+        bob_event = next(event for event in timeline.events if event.form.terms[0].value == "Bob")
+        source = bob_event.verdict.support[0]
+        self.assertEqual(source.meta["clause_groundings"], ("[Alice]", "[(Bob, Alice)]"))
+        self.assertEqual(source.meta["occurred_due_to"], "shared_pet_rule")
 
 
 if __name__ == "__main__":
