@@ -1,6 +1,6 @@
 # Task Blueprint: Cleanup — remove schema entity/field/Meta `description`
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Type: cleanup slice(subtractive;`feedback_cleanup_slice_cadence` 轻量格式)
@@ -64,4 +64,10 @@
 
 ## 7. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `f4300425`(线性栈 `… → fcd10b16(cleanup蓝图) → f4300425(cleanup code)`);master 未动,未 push。
+
+**结果**:schema entity/field/Meta `description` 从 sdk/authoring/compile/IR/runtime 全部移除;`PredicateInfo.description` 删除。`pattern=`(18)/`repr`(29,S1 成果)/`Rule/Inference.description`(独立)全部保留。两路新增拒绝测试 `test_schema_description_metadata_is_not_accepted`。docs(quickstart/authoring/core 契约/sdk api)同步。Codex 顺手同步了 S2 蓝图的 stale hook(`_copy_pattern_enum` / `version,tags` / digest 回归项)。
+
+**Gate(我独立验证)**:5 个 schema 逻辑文件 description 残留 **0**;保留项未误删;两路拒绝测试存在;schema cohort **55 tests OK**(独立,含 digest 敏感区,无 pinned-digest 破坏)。Codex 报 focused 61 / broader 133(skip 9)OK。
+
+**归档**:暂留 active/,随里程碑批量归档。
