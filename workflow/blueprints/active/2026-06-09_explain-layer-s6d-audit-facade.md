@@ -1,6 +1,6 @@
 # Task Blueprint: S6d — audit.evidence_graph thin re-export + final flat-DAG purge
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Type: cleanup slice(`feedback_cleanup_slice_cadence` 轻量;subtractive + facade)
@@ -79,4 +79,20 @@ S6a–c 后**无 production producer 再产旧 flat-DAG**(三 adapter + evaluate
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `aa713d9b`(线性栈 `… → dce5af78(S6d蓝图) → aa713d9b(S6d code)`);master 未动,未 push。
+
+**结果**:
+- `audit/evidence_graph.py` 693→**61 行 thin re-export**(`from factgraph.application.explain import` 全套 paths-model + LAYOUT_*)。
+- `explanation_render.walk_evidence` paths-only(-138 net,删死旧 nodes/edges 轨)。
+- `audit/__init__` 改导出新 paths/timeline DTO。
+- evidence_tree.py +390:补 paths-model dict roundtrip helpers(供 audit re-export 的 to_dict/from_dict)。
+- 删旧 flat renderer test `test_audit_evidence_graph_render.py`。
+
+**Gate(我独立验证)**:
+- ★**全树旧 flat-DAG symbol 归零**:`EvidenceNode/EvidenceEdge/NodeKind/EdgeKind/root_node_id/render_evidence_graph_html` 在 src/factgraph + tests **0 命中**(无双轨)。
+- audit/evidence_graph.py = 61 行 thin re-export(实读确认)。
+- **全 explain layer cohort 114 tests OK**(prober + evaluate_result dtos/digests + render + souffle/problog/pyreason + audit + rule_expr + schema 同跑回归绿)/ Codex 122。
+
+**里程碑**:**v2 explain 实现 9 设计片(S0–S6,S6 拆 a–d)+ cleanup 全部完成 + gate-pass**;旧 flat-DAG 彻底移除。
+
+**归档**:暂留 active/,随程序里程碑批量归档。

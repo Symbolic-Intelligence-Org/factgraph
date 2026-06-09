@@ -103,15 +103,17 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
 
 ## 7. Acceptance (Program Level)
 
-- [ ] G1 prober 健全性:多 witness + 下游 + 单调性测试通过,无 holds→fails 翻转
-- [ ] G2 结构保真:EvidenceTree 含 head rule + body rules(真 occurrence_alias)+ 非空 EvidenceJoin(有 join 时)
-- [ ] G3 双路径:passed native 行产出完整逐条件 body(非占位);failed 行产出三态全展开
-- [ ] G4 四引擎 dispatch:native/souffle/problog/pyreason passed 行各得对应富 evidence
-- [ ] G5 Certainty 三路映射验证
-- [ ] G6 repr 链路:prober 调 render_entity_repr;atom repr_text 用 schema 措辞;结论用 render_repr
-- [ ] G7 单线性栈:所有 slice 在一条 impl 分支;每片内容矩阵闸通过
-- [ ] 旧 nodes/edges flat-DAG 完全不复现;EvidenceGraph 全走 paths 模型
-- [ ] 受影响 module docs 同步;`docs/README.md` 如有新入口已更新
+- [x] G1 prober 健全性:monotonic witness test 通过(S3 `p=[(1,),(2,)]` holds,无 holds→fails 翻转)
+- [x] G2 结构保真:EvidenceTree 含 head rule + 真 occurrence_alias body + 非空 EvidenceJoin(S3 shape test)
+- [x] G3 双路径:passed native 产完整逐条件 body(S5,非占位);failed/closed_head_false 产 prober 树
+- [x] G4 四引擎 dispatch:native(S5 prober)/souffle(S6a tree)/problog(S6b 多 tree)/pyreason(S6c timeline)各得富 evidence
+- [x] G5 Certainty 三路映射验证(Certainty slice;native boolean/problog prob/pyreason poss)
+- [x] G6 repr 链路:prober 调 render_entity_repr(S4 spy test);atom repr_text 用 schema 措辞;`Rule.render_repr`(S0)
+- [x] G7 单线性栈:所有 slice 在一条 impl 分支 `v0.2.0-impl-explain-layer-v2-2026-06-09`;每片我独立 gate(grep + 独立测试 + 不变式)
+- [x] 旧 nodes/edges flat-DAG 完全不复现(S6d 全树 grep 0);EvidenceGraph 全走 paths 模型
+- [ ] 受影响 module docs 同步(各 slice 已同步;程序级 docs/quickstart §5.1 + parent 归档收尾中)
+
+**v2 实现 9 设计片(S0–S6,S6 拆 a–d)+ cleanup-description 全部 implemented + 独立 gate-pass @ `aa713d9b`。G1–G7 全满足。master 未动未 push。剩:§9 docs/quickstart 同步 + parent 归档 + push 授权。**
 
 ## 8. Implementation Plan
 
@@ -129,7 +131,7 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
    - **S6a Souffle** ✅ **implemented @ `d40538fc`** — converter→paths(head/body/atoms)+ per-engine dispatch(`_row_graph_builder_for_engine`)via `_row_support_artifacts` + Q-S6-A fallback;scope-limit 守住(problog/pyreason/audit 未碰)。gate PASS(71 tests OK)。
    - **S6b ProbLog** ✅ **implemented @ `0d48de22`** — converter→paths(多 answer→多 tree,probabilistic certainty + aggregate graph certainty)via `_row_provenance_envelopes`;scope-limit 守住。gate PASS(49 tests OK)。
    - **S6c PyReason** ✅ **implemented @ `0ba7a900`** — converter→`EvidenceTimeline`(timestep + possibilistic;Clause-N grounding 存 Source.meta,无因果臆造)via `_row_provenance_envelopes`;scope-limit 守住。gate PASS(60 tests OK)。**三 adapter 全 paths-model**。
-   - **S6d** `audit/evidence_graph.py` → thin re-export + 旧 flat-DAG 全树终清 + Q-S6-A 统一。
+   - **S6d** ✅ **implemented @ `aa713d9b`** — `audit/evidence_graph.py` 693→61 行 thin re-export + `walk_evidence` paths-only + **全树旧 flat-DAG symbol 归零** + 全 explain cohort 114 OK。gate PASS。**v2 实现收官**。
 9. **收口**:旧 flat-DAG 残留清零;module docs 同步;parent 填 §10 + 归档。
 
 > S7(旧字段删除)按 v1 经验并入 S3(paths 模型直接替换)。

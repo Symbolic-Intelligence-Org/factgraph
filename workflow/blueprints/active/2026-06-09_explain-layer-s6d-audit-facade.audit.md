@@ -29,6 +29,16 @@ S6a–c 后 production 旧 flat-DAG 残留(实测):
 - `render_evidence_graph_html` 确认无外部/test 消费者后删(preflight 显示仅 audit/__init__ re-export)。
 - walk_evidence 删旧轨后,确认 `_walk_paths_evidence` 覆盖所有 status(passed/failed)路径。
 
-## D. Gate result / Deviations
+## D. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `aa713d9b`(parent = S6d 蓝图 `dce5af78`,线性栈)。**PASS**:
+- ★全树旧 flat-DAG symbol(EvidenceNode/EvidenceEdge/NodeKind/EdgeKind/root_node_id/render_evidence_graph_html)在 src/factgraph + tests **0 命中**。
+- audit/evidence_graph.py = 61 行 thin re-export(`from factgraph.application.explain import` 全套)。
+- walk_evidence paths-only(删死旧轨);audit/__init__ 导出新 DTO。
+- **全 explain cohort 114 OK(独立)**:prober + evaluate_result + render + souffle/problog/pyreason + audit + rule_expr + schema / Codex 122。
+
+裁决:**PASS**。v2 实现收官。
+
+## E. 程序里程碑
+
+S0–S6(S6 拆 a–d)+ cleanup 全部 implemented + gate-pass。旧 flat-DAG 模型彻底移除,EvidenceGraph 全走 paths-model。G1–G7 + INV-baseline-monorepo + 单线性栈 + 每片集成闸 全部满足。
