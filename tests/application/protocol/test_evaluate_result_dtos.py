@@ -4,6 +4,8 @@ from dataclasses import fields
 import unittest
 
 from factgraph.application.protocol import (
+    BOOLEAN_CERTAINTY,
+    Certainty,
     DetachedRowError,
     ErrorDTO,
     EvaluateResult,
@@ -17,6 +19,7 @@ from factgraph.application.protocol.evaluate_result import (
     _candidate_set_to_evaluate_row,
     _explain_live_row,
     _row_digest_for,
+    canonical_bytes_for_evaluate,
     claim_digest_for,
     closed_head_digest_for,
     evidence_ref_id_for,
@@ -100,8 +103,7 @@ def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[st
         kind="fact_triple",
         digest=digest,
         closed_head_digest=closed_head_digest,
-        raw_kind=None,
-        bound=None,
+        certainty=BOOLEAN_CERTAINTY,
     )
 
 
@@ -162,6 +164,96 @@ def _evaluate_result(
 
 def _evidence_ref_id(result_id: str, row: EvaluateRow) -> str:
     return evidence_ref_id_for(result_id, row.row_id, row.digest, row.closed_head_digest)
+
+
+class CertaintyTests(unittest.TestCase):
+    def test_certainty_validates_probability_bounds(self) -> None:
+        self.assertEqual(Certainty(1, 1, "boolean"), BOOLEAN_CERTAINTY)
+        with self.assertRaisesRegex(ProtocolShapeError, "Certainty.lo"):
+            Certainty(-0.1, 1.0, "boolean")
+        with self.assertRaisesRegex(ProtocolShapeError, "Certainty.lo must be <= Certainty.hi"):
+            Certainty(0.8, 0.7, "probabilistic")
+        with self.assertRaisesRegex(ProtocolShapeError, "Certainty.kind"):
+            Certainty(0.0, 1.0, "unknown")  # type: ignore[arg-type]
+
+    def test_row_and_result_digests_preserve_legacy_uncertainty_payload(self) -> None:
+        (
+            run_id,
+            result_id,
+            expr_digest,
+            rule_set_digest,
+            view_snapshot_digest,
+            config_digest,
+            closed_head_digest,
+            head_content_digest,
+            engine,
+            head,
+        ) = _result_parts()
+        bindings = {"person": "p1"}
+        row = EvaluateRow(
+            row_id=row_id_for(run_id, bindings),
+            bindings=bindings,
+            kind="fact_triple",
+            digest=claim_digest_for("fact_triple", head.id, bindings),
+            closed_head_digest=closed_head_digest,
+            certainty=Certainty(0.75, 0.75, "probabilistic"),
+        )
+        expected_row_digest = sha256_token(
+            canonical_bytes_for_evaluate(
+                "evaluate_row_digest_v2",
+                {
+                    "bindings": row.bindings,
+                    "bound": (0.75, 0.75),
+                    "claim": {
+                        "arguments": row.bindings,
+                        "digest": row.digest,
+                        "kind": row.kind,
+                        "name": head.id,
+                        "repr": f"{head.id}{dict(row.bindings)!r}",
+                    },
+                    "evidence_ref": {
+                        "closed_head_digest": row.closed_head_digest,
+                        "fact_digest": row.digest,
+                        "result_id": result_id,
+                        "row_id": row.row_id,
+                    },
+                    "raw_kind": "probabilistic",
+                    "row_id": row.row_id,
+                },
+            )
+        )
+
+        self.assertEqual(_row_digest_for(row, result_id=result_id, claim_name=head.id), expected_row_digest)
+        self.assertEqual(
+            result_digest_for(
+                result_id=result_id,
+                run_id=run_id,
+                row_digests=(expected_row_digest,),
+                head_id=head.id,
+                head_content_digest=head_content_digest,
+                engine=engine,
+                engine_version=None,
+                adapter_version=None,
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                config_digest=config_digest,
+            ),
+            result_digest_for(
+                result_id=result_id,
+                run_id=run_id,
+                row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
+                head_id=head.id,
+                head_content_digest=head_content_digest,
+                engine=engine,
+                engine_version=None,
+                adapter_version=None,
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                config_digest=config_digest,
+            ),
+        )
 
 
 def _single_row_result(
@@ -275,7 +367,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         self.assertEqual(
             {field.name for field in fields(EvaluateRow)},
-            {"row_id", "bindings", "kind", "digest", "closed_head_digest", "raw_kind", "bound", "_result_resolver"},
+            {"row_id", "bindings", "kind", "digest", "closed_head_digest", "certainty", "_result_resolver"},
         )
         self.assertEqual(row.kind, "fact_triple")
         self.assertEqual(row.digest, claim_digest_for("fact_triple", result.head.id, row.bindings))
@@ -595,7 +687,11 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(root.component, result.head.id)
         self.assertEqual(root.engine_meta["alternative_paths"], {"mode": "winning_path_only", "omitted_count": None})
         self.assertEqual(root.engine_meta["explained_claim_ref"]["row_id"], result[0].row_id)
-        self.assertEqual(root.engine_meta["quantitative_explanation"]["mode"], "not_applicable")
+        self.assertEqual(root.engine_meta["quantitative_explanation"]["mode"], "engine_reported")
+        self.assertEqual(
+            root.engine_meta["quantitative_explanation"]["carrier"],
+            {"certainty": {"lo": 1.0, "hi": 1.0, "kind": "boolean"}},
+        )
 
         rule_expr_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE_EXPR]
         rule_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE]
@@ -838,8 +934,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             kind=outside_row.kind,
             digest=outside_row.digest,
             closed_head_digest=outside_row.closed_head_digest,
-            raw_kind=outside_row.raw_kind,
-            bound=outside_row.bound,
+            certainty=outside_row.certainty,
             _result_resolver=lambda: result,
         )
 
@@ -1013,10 +1108,53 @@ class EvaluateResultDTOTests(unittest.TestCase):
         )
 
         self.assertEqual(dict(row.bindings), {"person": {"kind": "const", "value": "p1"}})
-        self.assertEqual(row.raw_kind, "probabilistic")
-        self.assertEqual(row.bound, (0.75, 0.75))
+        self.assertEqual(row.certainty, Certainty(0.75, 0.75, "probabilistic"))
         self.assertFalse(hasattr(row, "candidate_id"))
         self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
+
+        native_row = _candidate_set_to_evaluate_row(
+            CandidateSet(
+                derivation_id="native",
+                derivation_version="v1",
+                run_id="legacy-run",
+                target="Person:exists",
+                key_tuple_digest=_token("native-key"),
+                tup_digest=None,
+                payload={"terms": [{"kind": "const", "value": "p1"}]},
+                support_digest=_token("native-support"),
+                support_kind="native",
+                generated_at=1,
+                state="candidate",
+            ),
+            head=head,
+            result_id=result_id,
+            run_id=run_id,
+            closed_head_digest=closed_head_digest,
+        )
+        pyreason_row = _candidate_set_to_evaluate_row(
+            CandidateSet(
+                derivation_id="pyreason",
+                derivation_version="v1",
+                run_id="legacy-run",
+                target="Person:exists",
+                key_tuple_digest=_token("pyreason-key"),
+                tup_digest=None,
+                payload={"terms": [{"kind": "const", "value": "p1"}]},
+                support_digest=_token("pyreason-support"),
+                support_kind="native",
+                generated_at=1,
+                state="candidate",
+                confidence=0.4,
+                confidence_kind="certainty",
+            ),
+            head=head,
+            result_id=result_id,
+            run_id=run_id,
+            closed_head_digest=closed_head_digest,
+        )
+
+        self.assertEqual(native_row.certainty, BOOLEAN_CERTAINTY)
+        self.assertEqual(pyreason_row.certainty, Certainty(0.4, 0.4, "possibilistic"))
 
 
 class RowConclusionNodeReprTests(unittest.TestCase):
@@ -1046,8 +1184,7 @@ class RowConclusionNodeReprTests(unittest.TestCase):
             kind="fact_triple",
             digest=claim_digest_for("fact_triple", head.id, row_bindings),
             closed_head_digest=closed_head_digest,
-            raw_kind=None,
-            bound=None,
+            certainty=BOOLEAN_CERTAINTY,
         )
         result = EvaluateResult(
             result_id=result_id,

@@ -42,8 +42,7 @@ class EvaluateRow:
     kind: ClaimKind                           # "fact_triple" | "rule_head" | "aggregate_result" | "projection"
     digest: str                               # sha256 claim digest
     closed_head_digest: str                   # sha256 closed-head digest
-    raw_kind: RawKind | None                  # "probabilistic" | "possibilistic" | None
-    bound: tuple[float, float] | None         # probability/possibility interval
+    certainty: Certainty | None               # boolean/probabilistic/possibilistic interval
 ```
 
 The `explain()` method returns an `Explanation` via `_explain_live_row(self, result)`.

@@ -11,6 +11,7 @@ import uuid
 import warnings
 
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
+from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.explanation_render import walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
@@ -48,7 +49,6 @@ class DetachedRowError(RuntimeError):
 
 
 ClaimKind = Literal["fact_triple", "rule_head", "aggregate_result", "projection"]
-RawKind = Literal["probabilistic", "possibilistic"]
 ExplanationStatus = Literal["passed", "failed", "unsupported", "invalid_request"]
 ExplanationFailureClass = Literal[
     "no_matching_row",
@@ -58,7 +58,6 @@ ExplanationFailureClass = Literal[
     "insufficient_closed_bindings",
 ]
 _CLAIM_KINDS = frozenset({"fact_triple", "rule_head", "aggregate_result", "projection"})
-_RAW_KINDS = frozenset({"probabilistic", "possibilistic"})
 _EXPLANATION_STATUSES = frozenset({"passed", "failed", "unsupported", "invalid_request"})
 _EXPLANATION_FAILURE_CLASSES = frozenset(
     {"no_matching_row", "closed_head_false", "stale_row", "row_not_in_result", "insufficient_closed_bindings"}
@@ -96,8 +95,7 @@ class EvaluateRow:
     kind: ClaimKind
     digest: str
     closed_head_digest: str
-    raw_kind: RawKind | None
-    bound: tuple[float, float] | None
+    certainty: Certainty | None
     _result_resolver: Callable[[], EvaluateResult] | None = field(default=None, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
@@ -107,13 +105,8 @@ class EvaluateRow:
             raise ProtocolShapeError("EvaluateRow.kind must be one of fact_triple, rule_head, aggregate_result, projection")
         _require_sha256_token(self.digest, field_name="EvaluateRow.digest")
         _require_sha256_token(self.closed_head_digest, field_name="EvaluateRow.closed_head_digest")
-        if self.raw_kind is None:
-            if self.bound is not None:
-                raise ProtocolShapeError("EvaluateRow.bound must be None when raw_kind is None")
-        else:
-            if self.raw_kind not in _RAW_KINDS:
-                raise ProtocolShapeError("EvaluateRow.raw_kind must be probabilistic, possibilistic, or None")
-            object.__setattr__(self, "bound", _validate_bound(self.bound))
+        if self.certainty is not None and not isinstance(self.certainty, Certainty):
+            raise ProtocolShapeError("EvaluateRow.certainty must be Certainty or None")
         if self._result_resolver is not None and not callable(self._result_resolver):
             raise ProtocolShapeError("EvaluateRow._result_resolver must be callable or None")
 
@@ -540,17 +533,33 @@ def _evidence_ref_id_for_row_result(row: EvaluateRow, result: EvaluateResult) ->
     )
 
 
+def _legacy_raw_kind_bound_for_certainty(
+    certainty: Certainty | None,
+) -> tuple[str | None, tuple[float, float] | None]:
+    if certainty is None or certainty.kind == "boolean":
+        return None, None
+    raw_kind = "probabilistic" if certainty.kind == "probabilistic" else "possibilistic"
+    return raw_kind, (certainty.lo, certainty.hi)
+
+
+def _certainty_payload(certainty: Certainty | None) -> Mapping[str, Any] | None:
+    if certainty is None:
+        return None
+    return {"lo": certainty.lo, "hi": certainty.hi, "kind": certainty.kind}
+
+
 def _row_digest_for(row: EvaluateRow, *, result_id: str, claim_name: str) -> str:
     if not isinstance(row, EvaluateRow):
         raise ProtocolShapeError("row must be EvaluateRow")
     _require_token_prefix(result_id, prefix=_RESULT_ID_PREFIX, field_name="result_id")
     _require_non_empty_str(claim_name, field_name="claim_name")
+    raw_kind, bound = _legacy_raw_kind_bound_for_certainty(row.certainty)
     return sha256_token(
         canonical_bytes_for_evaluate(
             "evaluate_row_digest_v2",
             {
                 "bindings": row.bindings,
-                "bound": row.bound,
+                "bound": bound,
                 "claim": {
                     "arguments": _claim_arguments_for_row(row),
                     "digest": row.digest,
@@ -564,7 +573,7 @@ def _row_digest_for(row: EvaluateRow, *, result_id: str, claim_name: str) -> str
                     "result_id": result_id,
                     "row_id": _evidence_ref_row_id_for_row(row),
                 },
-                "raw_kind": row.raw_kind,
+                "raw_kind": raw_kind,
                 "row_id": row.row_id,
             },
         )
@@ -696,15 +705,14 @@ def _candidate_set_to_evaluate_row(
     effective_claim_name = candidate.target if claim_name is None else claim_name
     digest = claim_digest_for(claim_kind, effective_claim_name, bindings)
     row_id = row_id_for(run_id, bindings)
-    raw_kind, bound = _raw_kind_and_bound_from_candidate(candidate)
+    certainty = _certainty_from_candidate(candidate)
     return EvaluateRow(
         row_id=row_id,
         bindings=bindings,
         kind=claim_kind,
         digest=digest,
         closed_head_digest=closed_head_digest,
-        raw_kind=raw_kind,
-        bound=bound,
+        certainty=certainty,
     )
 
 
@@ -965,8 +973,7 @@ def _row_conclusion_node(row: EvaluateRow, result: EvaluateResult, *, support_ar
         "repr_template": result.head.repr,
         "content_digest": result.head.content_digest,
         "version": result.head.version,
-        "raw_kind": row.raw_kind,
-        "bound": row.bound,
+        "certainty": _certainty_payload(row.certainty),
     }
     if support_artifact is not None:
         engine_meta["support_root_result_kind"] = support_artifact.root_result_kind
@@ -1260,8 +1267,7 @@ def _build_form1_evidence_graph(
                         "pred_id": pred_id,
                         "asrt_ids": witness.asrt_ids,
                     },
-                    "raw_kind": row.raw_kind,
-                    "bound": row.bound,
+                    "certainty": _certainty_payload(row.certainty),
                 },
             )
         )
@@ -1306,8 +1312,7 @@ def _build_form1_evidence_graph(
                         "status": step.status,
                         "details": dict(step.details),
                     },
-                    "raw_kind": row.raw_kind,
-                    "bound": row.bound,
+                    "certainty": _certainty_payload(row.certainty),
                 },
             )
         )
@@ -1326,13 +1331,13 @@ def _build_form1_evidence_graph(
 
 
 def _quantitative_explanation_for_row(row: EvaluateRow) -> Mapping[str, Any]:
-    if row.raw_kind is None:
+    if row.certainty is None:
         mode = "not_applicable"
     else:
         mode = "engine_reported"
     return {
         "mode": mode,
-        "carrier": {"raw_kind": row.raw_kind, "bound": row.bound},
+        "carrier": {"certainty": _certainty_payload(row.certainty)},
         "decomposition": "not_available_v1",
     }
 
@@ -1488,15 +1493,15 @@ def _bindings_from_candidate(candidate: CandidateSet, *, head: Rule) -> Mapping[
     return _freeze_mapping(payload, field_name="candidate.payload")
 
 
-def _raw_kind_and_bound_from_candidate(candidate: CandidateSet) -> tuple[RawKind | None, tuple[float, float] | None]:
+def _certainty_from_candidate(candidate: CandidateSet) -> Certainty | None:
     if candidate.confidence is None or candidate.confidence_kind is None:
-        return None, None
+        return BOOLEAN_CERTAINTY
     value = _require_finite_number(candidate.confidence, field_name="CandidateSet.confidence")
     if candidate.confidence_kind == "probability":
-        return "probabilistic", (value, value)
+        return Certainty(value, value, "probabilistic")
     if candidate.confidence_kind == "certainty":
-        return "possibilistic", (value, value)
-    return None, None
+        return Certainty(value, value, "possibilistic")
+    return None
 
 
 def _freeze_mapping(value: Mapping[str, Any], *, field_name: str) -> Mapping[str, Any]:
@@ -1523,16 +1528,6 @@ def _engine_meta_optional_str(engine_meta: Mapping[str, Any], key: str) -> str |
         raise ProtocolShapeError(f"EvaluateResult.engine_meta must contain {key!r}")
     value = engine_meta[key]
     return _require_optional_non_empty_str(value, field_name=f"EvaluateResult.engine_meta[{key!r}]")
-
-
-def _validate_bound(value: tuple[float, float] | None) -> tuple[float, float]:
-    if not isinstance(value, tuple) or len(value) != 2:
-        raise ProtocolShapeError("EvaluateRow.bound must be tuple[float, float] when raw_kind is set")
-    lower = _require_finite_number(value[0], field_name="EvaluateRow.bound[0]")
-    upper = _require_finite_number(value[1], field_name="EvaluateRow.bound[1]")
-    if lower > upper:
-        raise ProtocolShapeError("EvaluateRow.bound lower value must be <= upper value")
-    return (lower, upper)
 
 
 def _normalize_for_canonical(value: Any) -> Any:
@@ -1626,6 +1621,8 @@ def _validate_tuple_of_type(value: object, item_type: type[Any], *, field_name: 
 
 
 __all__ = [
+    "BOOLEAN_CERTAINTY",
+    "Certainty",
     "DetachedRowError",
     "Explanation",
     "EvaluateResult",

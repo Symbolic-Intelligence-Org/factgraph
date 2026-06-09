@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from factgraph.application.protocol import ErrorDTO, EvaluateRow, Explanation, walk_evidence
+from factgraph.application.protocol import BOOLEAN_CERTAINTY, ErrorDTO, EvaluateRow, Explanation, walk_evidence
 from factgraph.audit.evidence_graph import (
     EDGE_DERIVED_BY,
     EDGE_HAS_ATOM,
@@ -28,8 +28,7 @@ def _row() -> EvaluateRow:
         kind="fact_triple",
         digest=sha256_token(b"row-digest"),
         closed_head_digest=sha256_token(b"closed-head"),
-        raw_kind=None,
-        bound=None,
+        certainty=BOOLEAN_CERTAINTY,
     )
 
 

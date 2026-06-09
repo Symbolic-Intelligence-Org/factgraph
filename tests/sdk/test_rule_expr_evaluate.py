@@ -255,8 +255,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             kind=row.kind,
             digest=row.digest,
             closed_head_digest=row.closed_head_digest,
-            raw_kind=row.raw_kind,
-            bound=row.bound,
+            certainty=row.certainty,
         )
 
         with self.assertRaisesRegex(DetachedRowError, "detached"):

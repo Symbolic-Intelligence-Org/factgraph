@@ -47,8 +47,7 @@ row = result.first()
 assert row is not None
 row.bindings
 row.digest
-row.raw_kind
-row.bound
+row.certainty
 row.closed_head_digest
 ```
 
