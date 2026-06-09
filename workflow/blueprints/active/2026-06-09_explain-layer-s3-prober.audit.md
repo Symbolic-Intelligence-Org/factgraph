@@ -40,6 +40,23 @@ Paired with [2026-06-09_explain-layer-s3-prober.md](./2026-06-09_explain-layer-s
 - `Aggregate` form 在 S3 是否完整(v1 留 None repr);本片只需类型存在 + verdict。
 - candidate_envs 去重/上界(避免 env 爆炸)—— 实现策略你定,记录复杂度。
 
-## F. Gate result / Deviations
+## F. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `57c7c87e`(parent = S3 蓝图 `3ad3cb24`,线性栈)。**PASS**:
+- scope:6 文件(explain/__init__ + evidence_tree + prober + diagnose fix + docs + test);无 memory/无关混入。
+- ★**G1 健全性(逻辑实读 + 实测)**:`_probe_atom`(prober.py:131-159)对所有 candidate env 展开,deduped 非空 ⇒ Holds + 携全部存活;`test_monotonic_witness_backtracking` 证 `p=[(2,)]` 与 `p=[(1,),(2,)]` 都 holds —— **v1 翻转 bug 根除**。
+- ★**G2 结构**:`role="head"`(:207)+ body 真 occurrence 分组(:173)+ `EvidenceJoin` from materialization(:228);`test_structure_preserves...` 断言 head/{left,right}/join occurrence。
+- diagnose 共享改动安全:`_extend_env_with_atom` cmp/ne 补 view_facts;diagnose cohort 通过。
+- cohort 33 OK(独立)/ Codex 4 + 44。
+
+裁决:**PASS**(核心 prober + v1 bug 修复确认)。
+
+## G. metadata 充足以 G2(Codex #2 收口)
+
+G2 全程从既有 `RuleExprLoweringPlan` 重建(occurrence_map / RuleExprJoinMaterialization / head binding);**未加新 carrier**。Codex #2 的 gating 问题以"metadata 充足"收口。
+
+## H. Deviations(良性)
+
+- `repr_text` S3 = None(S4 烘焙)。
+- candidate_envs `_dedupe_envs` 防爆炸(我 open item 已被处理)。
+- diagnose `_extend_env_with_atom` 源头修复,消除 v1 prober 的 `_fallback_extend_env_with_atom` 绕坑需求。

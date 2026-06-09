@@ -1,6 +1,6 @@
 # Task Blueprint: S3 — exhaustive per-condition prober + evidence_tree types
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -91,4 +91,23 @@ frozen DTO 全套;`EvidenceGraph(graph_id, engine, layout_hint, subject_binding,
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `57c7c87e`(线性栈 `… → 3ad3cb24(S3蓝图) → 57c7c87e(S3 code)`);master 未动,未 push。
+
+**结果**:
+- 新建 `application/explain/`:`evidence_tree.py`(design §3 paths-model 全套)+ `prober.py`(`probe_native` + `ProbeEnv`)+ `__init__`。
+- **G1 candidate_envs backtracking**:`_probe_atom` 对所有 env 展开 `_extend_env_with_atom`,收集全部 next_envs;deduped 非空 ⇒ Holds 且携全部存活前进(:154-156);空+blocked ⇒ NotReached;空 ⇒ Fails。穷尽不短路。
+- **G2 结构**:从 `RuleExprLoweringPlan` 消费 —— `role="head"` rule(:207)+ body 按真实 occurrence_alias 分组(:173)+ `EvidenceJoin` 从 join materialization(:228,PortRef left/right occurrence)。
+- 共享 `diagnose_runtime._extend_env_with_atom` 修正:cmp/ne 补传 `view_facts`(源头修 v1 当年的 `_fallback` 绕坑)。
+
+**Gate(我独立验证)**:
+- ★**G1 v1 翻转复现已修**:`test_monotonic_witness_backtracking` —— `p=[(2,)]` 和 `p=[(1,),(2,)]` **都 holds**(v1 后者会 fails);逻辑实读确认携全部存活 env,根除单 witness 提交。
+- ★**G2 shape**:`test_structure_preserves...` —— head=`left_region`、body occurrence={left,right}(非 branch:N)、`EvidenceJoin` left/right occurrence(非 eq 退化)。
+- NotReached 仅未绑定触发 + OR branch 穷尽(holds/fails)均有测试。
+- diagnose 共享函数改动安全:diagnose cohort 通过。
+- cohort 33 OK(独立,含 prober + diagnose + lowering)。
+
+**metadata 充足验证**:G2 全程从既有 `RuleExprLoweringPlan`(occurrence_map + join_materializations + head binding)重建,**未加新 carrier**(Codex #2 gating 问题以"充足"收口)。
+
+**Deviations / open(良性)**:`repr_text` S3 给 None(S4 烘焙);candidate_envs 用 `_dedupe_envs` 防爆炸;Aggregate form 类型存在即可。
+
+**归档**:暂留 active/,随里程碑批量归档。
