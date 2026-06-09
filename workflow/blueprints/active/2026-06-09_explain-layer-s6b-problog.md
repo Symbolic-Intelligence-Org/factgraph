@@ -1,6 +1,6 @@
 # Task Blueprint: S6b — ProbLog adapter → paths-model + dispatch
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -75,4 +75,14 @@ S6 第二片(复用 S6a 的 per-engine dispatch + Q-S6-A fallback pattern)。迁
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `0d48de22`(线性栈 `… → 3e28bcf3(S6b蓝图) → 0d48de22(S6b code)`);master 未动,未 push。
+
+**结果**:problog converter 迁 paths(import `application.explain.evidence_tree`:10;`paths=trees`:239;per-answer EvidenceTree:288;`Certainty(probabilistic)`:385/398);多 answer→多 tree;聚合 → graph certainty。SDK `_problog_row_graph_builder`(store.py:2865)engine==problog dispatch via `_row_provenance_envelopes` + envelope→`problog_trace_from_dict`→converter;失败 minimal。
+
+**Gate(我独立验证)**:
+- scope-limit:pyreason/souffle/audit **未碰**。
+- `test_converter_maps_multiple_answers_to_multiple_trees`:`len(paths)==2`(多 answer→多 tree);graph+tree `certainty.kind=="probabilistic"`(:72/77)。
+- problog/provenance.py 不再 import audit;dispatch 非 minimal;fallback 不变式。
+- cohort 49 OK(独立)/ Codex 41 + 105。
+
+**归档**:暂留 active/,随里程碑批量归档。

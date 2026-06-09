@@ -127,7 +127,7 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
 7. **S5** ✅ **implemented @ `89de4a6c`**(2026-06-09)— 不变式 `{passed,failed}↔evidence`;**G3:passed(SDK 注入 _row_graph_builder→probe_native)+ failed(closed_head_false→probe)都走 prober**(v1 minimal 占位 gap 修复);stale_row/row_not_in_result → unsupported;旧 flat-DAG 整片删(grep 0,S7 并入);协议层纯。gate PASS(71 tests OK)。子蓝图已 implemented。
 8. **S6** adapters dispatch(G4)—— **拆 S6a–d**(逐引擎,adapter 先各自改 import,audit re-export 最后):
    - **S6a Souffle** ✅ **implemented @ `d40538fc`** — converter→paths(head/body/atoms)+ per-engine dispatch(`_row_graph_builder_for_engine`)via `_row_support_artifacts` + Q-S6-A fallback;scope-limit 守住(problog/pyreason/audit 未碰)。gate PASS(71 tests OK)。
-   - **S6b ProbLog** — converter→paths(多 proof→多 tree)via `_row_provenance_envelopes`。
+   - **S6b ProbLog** ✅ **implemented @ `0d48de22`** — converter→paths(多 answer→多 tree,probabilistic certainty + aggregate graph certainty)via `_row_provenance_envelopes`;scope-limit 守住。gate PASS(49 tests OK)。
    - **S6c PyReason** — converter→`EvidenceTimeline`(Clause-N/timestep;不足则 conservative shell)。
    - **S6d** `audit/evidence_graph.py` → thin re-export + 旧 flat-DAG 全树终清 + Q-S6-A 统一。
 9. **收口**:旧 flat-DAG 残留清零;module docs 同步;parent 填 §10 + 归档。

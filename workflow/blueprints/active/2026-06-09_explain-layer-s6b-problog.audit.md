@@ -23,6 +23,17 @@ Paired with [2026-06-09_explain-layer-s6b-problog.md](./2026-06-09_explain-layer
 - 聚合概率 → `EvidenceGraph.certainty` 的算法(多 answer 时取何值;design §6 "聚合存 EvidenceGraph.certainty",具体聚合你定/记录)。
 - repr_text 最小(schema 烘焙非重点)。
 
-## D. Gate result / Deviations
+## D. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `0d48de22`(parent = S6b 蓝图 `3e28bcf3`,线性栈)。**PASS**:
+- scope:5 文件(problog provenance + sdk/store + docs + 2 tests);**pyreason/souffle/audit 未碰**。
+- converter → paths:`paths=trees`(:239)、per-answer tree、`Certainty(probabilistic)`(:385/398);不再 import audit。
+- dispatch:`_problog_row_graph_builder`(store:2865)engine==problog via `_row_provenance_envelopes`。
+- `test_converter_maps_multiple_answers_to_multiple_trees`:`len(paths)==2`;probabilistic certainty(:72/77)。
+- cohort 49 OK(独立)/ Codex 41 + 105。
+
+裁决:**PASS**。
+
+## E. S6c 复用
+
+per-engine dispatch + Q-S6-A fallback pattern 已经 souffle + problog 双验证;S6c PyReason(timeline)复用同 pattern,经 `_row_provenance_envelopes`(PYREASON_PROVENANCE_KIND）。
