@@ -22,6 +22,7 @@ from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.core.store._support import PredWitness, ProofReceipt, SOUFFLE_WITNESS_KIND
 from factgraph.sdk import Entity, Field, Identity
 from factgraph.sdk.store import SDKStoreError
 
@@ -343,6 +344,94 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 request = evaluate.call_args.args[0]
                 self.assertEqual(request.engine, engine)
                 self.assertEqual(request.plans[0].engine_options, {})
+
+    def test_souffle_row_explain_uses_support_artifact_paths(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "souffle")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("d" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="souffle-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("1" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=SOUFFLE_WITNESS_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        artifact = ProofReceipt(
+            kind=SOUFFLE_WITNESS_KIND,
+            root_result_kind="fact",
+            binding_items=(("$person", encoded),),
+            pred_witnesses=(
+                PredWitness(
+                    pred_condition_key="c0.c0:Person:exists",
+                    asrt_ids=("asrt-souffle-person",),
+                ),
+            ),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
+                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        tree = explanation.evidence.paths[0]
+        self.assertEqual(tree.metadata["support_kind"], SOUFFLE_WITNESS_KIND)
+        self.assertEqual({rule.role for rule in tree.rules}, {"head", "body"})
+        body = next(rule for rule in tree.rules if rule.role == "body")
+        self.assertTrue(body.atoms)
+        self.assertIn("asrt-souffle-person", body.atoms[0].repr_text or "")
+
+    def test_souffle_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "souffle-fallback")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("e" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="souffle-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("2" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=SOUFFLE_WITNESS_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        artifact = ProofReceipt(
+            kind=SOUFFLE_WITNESS_KIND,
+            root_result_kind="fact",
+            binding_items=(("$person", encoded),),
+            pred_witnesses=(
+                PredWitness(
+                    pred_condition_key="c0.c0:Person:exists",
+                    asrt_ids=("asrt-souffle-person",),
+                ),
+            ),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
+                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
+            explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        tree = explanation.evidence.paths[0]
+        self.assertEqual(tree.metadata["fallback"], "minimal_row_evidence")
+        self.assertEqual([rule.role for rule in tree.rules], ["head"])
 
     def test_evaluate_rejects_public_engine_options_and_registry(self) -> None:
         graph = _store()

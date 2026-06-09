@@ -181,16 +181,23 @@ helper**:
     leaves of `node_type="subproof"` rather than raising
 - `souffle_proof_tree_to_evidence_graph(...)`
   - Consumes `SouffleProofTreeV0` directly
-  - Produces `EvidenceGraph(engine="souffle",
-    layout_hint="tree", support_kind="souffle_witness_v1")`
+  - Produces paths-model `EvidenceGraph(engine="souffle",
+    layout_hint="tree", paths=(EvidenceTree(...),))`
   - Current mapping conventions:
-    - root = `conclusion`
-    - `axiom` = `seed`
-    - `derived` / `negation` / `subproof` = `premise`
-    - Child nodes point at parent nodes via
-      `edge_kind="supports"`
-  - `rule-number` / `rule text` is preserved in `rule_label` +
-    `engine_meta`
+    - proof root = `EvidenceRule(role="head")`
+    - derived proof nodes = `EvidenceRule(role="body")`
+    - `axiom` / `negation` / `subproof` leaves = `EvidenceAtom`
+      with `Holds(..., support=(Source(...),))`
+  - `rule-number`, query metadata, and `support_kind="souffle_witness_v1"`
+    are preserved in graph/tree metadata
+
+Runtime note:
+
+- `Store.evaluate(mode="souffle")` persists the existing `ProofReceipt`
+  witness carrier, not raw `SouffleProofTreeV0`. SDK explain converts that
+  receipt into a paths-model graph with head/body rules and witness atoms.
+- The adapter-local `SouffleProofTreeV0` converter remains available for
+  direct `souffle -t explain` JSON proof streams.
 
 Boundaries:
 

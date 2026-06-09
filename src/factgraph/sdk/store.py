@@ -19,6 +19,16 @@ from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
 from factgraph.application.explain import EvidenceGraph, probe_native
+from factgraph.application.explain.evidence_tree import (
+    Const,
+    EvidenceAtom,
+    EvidenceRule,
+    EvidenceTree,
+    Fact,
+    Holds,
+    LAYOUT_TREE,
+    Source,
+)
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -43,6 +53,7 @@ from factgraph.application.protocol.evaluate_result import (
     ResultFingerprint,
     _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
+    _build_minimal_row_evidence_graph,
     _candidate_set_to_evaluate_row,
     _row_digest_for,
     canonical_bytes_for_evaluate,
@@ -79,7 +90,13 @@ from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
-from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND, ProvenanceEnvelope, ProofReceipt
+from factgraph.core.store._support import (
+    PROBLOG_PROVENANCE_KIND,
+    SOUFFLE_WITNESS_KIND,
+    ProvenanceEnvelope,
+    ProofReceipt,
+    binding_dict_from_items,
+)
 from factgraph.adapters.souffle.runner import run_package
 from factgraph.core.store.database import (
     AssertionInput,
@@ -2782,10 +2799,10 @@ class SDKStore:
                 engine_meta={"engine_version": None, "adapter_version": None},
                 _schema_index=self._application_schema_index,
                 _row_close_builder=self._close_evaluate_row,
-                _row_graph_builder=(
-                    self._row_graph_builder_for_lowering_plan(lowering_plan)
-                    if engine == "native" and lowering_plan is not None
-                    else None
+                _row_graph_builder=self._row_graph_builder_for_engine(
+                    engine=engine,
+                    lowering_plan=lowering_plan,
+                    row_support_artifacts=row_support_artifacts,
                 ),
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
@@ -2794,6 +2811,19 @@ class SDKStore:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _row_graph_builder_for_engine(
+        self,
+        *,
+        engine: str,
+        lowering_plan: RuleExprLoweringPlan | None,
+        row_support_artifacts: Mapping[str, ProofReceipt],
+    ):
+        if engine == "native" and lowering_plan is not None:
+            return self._row_graph_builder_for_lowering_plan(lowering_plan)
+        if engine == "souffle":
+            return self._souffle_row_graph_builder(row_support_artifacts)
+        return None
 
     def _row_graph_builder_for_lowering_plan(
         self,
@@ -2806,6 +2836,23 @@ class SDKStore:
                 row=row,
                 metadata=metadata,
             )
+
+        return _builder
+
+    def _souffle_row_graph_builder(self, row_support_artifacts: Mapping[str, ProofReceipt]):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            artifact = row_support_artifacts.get(row.row_id)
+            if artifact is None or artifact.kind != SOUFFLE_WITNESS_KIND:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+            try:
+                return _souffle_support_artifact_to_evidence_graph(
+                    artifact,
+                    row=row,
+                    result=result,
+                    metadata=metadata,
+                )
+            except Exception:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
 
         return _builder
 
@@ -3997,6 +4044,92 @@ def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dic
         if isinstance(var_name, str) and var_name:
             out[var_name] = row_bindings[port_name]
     return out
+
+
+def _souffle_support_artifact_to_evidence_graph(
+    artifact: ProofReceipt,
+    *,
+    row: Any,
+    result: EvaluateResult,
+    metadata: Mapping[str, Any],
+) -> EvidenceGraph:
+    body_atoms: list[EvidenceAtom] = []
+    for witness in artifact.pred_witnesses:
+        pred_id = _condition_pred_id(witness.pred_condition_key)
+        source = Source(
+            ref=f"souffle:{row.row_id}:{witness.pred_condition_key}",
+            value=tuple(witness.asrt_ids),
+            meta={"pred_condition_key": witness.pred_condition_key, "asrt_ids": witness.asrt_ids},
+        )
+        body_atoms.append(
+            EvidenceAtom(
+                form=Fact(predicate=pred_id, terms=()),
+                verdict=Holds(support=(source,)),
+                atom_id=f"souffle:{row.row_id}:{witness.pred_condition_key}",
+                repr_text=_souffle_witness_repr(pred_id, witness.asrt_ids),
+            )
+        )
+    for step in artifact.non_fact_steps:
+        source = Source(
+            ref=f"souffle:{row.row_id}:{step.step_key}",
+            value=step.status,
+            meta={"step_key": step.step_key, "kind": step.kind, "details": dict(step.details)},
+        )
+        body_atoms.append(
+            EvidenceAtom(
+                form=Fact(predicate=step.kind, terms=(Const(step.status),)),
+                verdict=Holds(support=(source,)),
+                atom_id=f"souffle:{row.row_id}:{step.step_key}",
+                repr_text=f"{step.kind}: {step.status}",
+            )
+        )
+
+    rules = (
+        EvidenceRule(
+            occurrence_alias=result.head.id,
+            rule_id=result.head.id,
+            role="head",
+            status="holds",
+            ports=getattr(row, "bindings", {}),
+            atoms=(),
+        ),
+        EvidenceRule(
+            occurrence_alias=f"souffle:{row.row_id}:body",
+            rule_id=result.head.id,
+            role="body",
+            status="holds",
+            ports=binding_dict_from_items(artifact.binding_items),
+            atoms=tuple(body_atoms),
+        ),
+    )
+    return EvidenceGraph(
+        graph_id=f"{result.result_id}:{row.row_id}",
+        engine=result.engine,
+        layout_hint=LAYOUT_TREE,
+        subject_binding=getattr(row, "bindings", {}),
+        paths=(
+            EvidenceTree(
+                tree_id=row.row_id,
+                status="holds",
+                rules=rules,
+                joins=(),
+                certainty=getattr(row, "certainty", None),
+                metadata={"support_kind": artifact.kind, "source": "souffle_proof_receipt"},
+            ),
+        ),
+        certainty=getattr(row, "certainty", None),
+        metadata=dict(metadata),
+    )
+
+
+def _condition_pred_id(condition_key: str) -> str:
+    return condition_key.split(":", 1)[1] if ":" in condition_key else condition_key
+
+
+def _souffle_witness_repr(pred_id: str, asrt_ids: Sequence[str]) -> str:
+    if not asrt_ids:
+        return f"{pred_id} supported by souffle witness"
+    return f"{pred_id} supported by {', '.join(asrt_ids)}"
 
 
 def _compiled_plan_digest_payload(plan: CompiledDerivationPlan) -> dict[str, Any]:
