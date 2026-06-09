@@ -40,6 +40,26 @@ Paired with [2026-06-09_explain-layer-certainty.md](./2026-06-09_explain-layer-c
 - `Certainty.__str__`(design §3 ✓/✗/0.73/[lo,hi])本片做 or 留 S4 渲染 —— 你定,非阻塞。
 - `certainty=None` 是否保留(detached/无 candidate 边界)vs 全行必有 certainty。
 
-## F. Gate result / Deviations
+## F. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `253423fd`(parent = Certainty 蓝图 `764074fc`,线性栈)。**PASS**:
+- scope:8 文件(certainty.py 新 + evaluate_result + __init__ + 2 docs + 3 tests);无 memory/无关混入。
+- Certainty 类型:0≤lo≤hi≤1 + kind 枚举 + 拒 bool + BOOLEAN_CERTAINTY(实读 certainty.py)。
+- 三路映射 + native 显式 boolean。
+- ★digest:**byte-equal 由构造保证** —— 见 §G preflight 修正;反投影正确,payload schema 不变。
+- cohort 36 OK(独立)/ Codex 73 + 146。
+
+裁决:**PASS**。
+
+## G. ★Preflight correction(诚实记录)
+
+我 §A preflight **误判**"raw_kind/bound 不在任何 digest"——只查了 `claim_digest_for` 和 `result_digest_for`,**漏了 `_row_digest_for`(:543)**:其 `evaluate_row_digest_v2` payload 含 `"bound"`/`"raw_kind"`,产 row_digest → 进 result_digest。
+
+Codex 正确识别此点,补 `_legacy_raw_kind_bound_for_certainty`(:536)反投影:`certainty is None or kind=="boolean" → (None,None)`;prob→`("probabilistic",(lo,hi))`;poss→`("possibilistic",(lo,hi))`。pre/post `_row_digest_for` payload schema(`evaluate_row_digest_v2`)+ key 完全一致 → 三引擎 row/result digest 逐字节兼容。
+
+教训:preflight 查 digest 时须穷举**所有** digest 函数(claim / row / result),不止入口两个。
+
+## H. Deviations / follow-up
+
+- 建议补 pinned-digest 钉值回归测试(byte-equal 现由构造保证,钉值防未来漂移)。
+- `Certainty.__str__` 留 S4;`certainty=None` 保留边界。

@@ -1,6 +1,6 @@
 # Task Blueprint: Certainty — EvaluateRow.raw_kind/bound → certainty: Certainty
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -97,4 +97,20 @@ BOOLEAN_CERTAINTY = Certainty(1.0, 1.0, "boolean")
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `253423fd`(线性栈 `… → 764074fc(Certainty蓝图) → 253423fd(Certainty code)`);master 未动,未 push。
+
+**结果**:
+- 新建 `protocol/certainty.py`:`Certainty(lo,hi,kind)`(校验 0≤lo≤hi≤1 + kind 枚举 + 拒 bool)+ `BOOLEAN_CERTAINTY`。
+- `EvaluateRow.raw_kind+bound → certainty`;`RawKind`/`_raw_kind_and_bound_from_candidate`/`_validate_bound` 移除。
+- 三路映射:native/souffle→`BOOLEAN_CERTAINTY`、problog→`Certainty(v,v,"probabilistic")`、pyreason→`Certainty(v,v,"possibilistic")`。
+
+**★preflight 修正(诚实记录)**:我 preflight 误判"raw_kind/bound 不在任何 digest"——**漏了 `_row_digest_for`(:543)的 `evaluate_row_digest_v2` payload 含 bound/raw_kind**(它产 row_digest → result_digest)。Codex 正确识别并补**反投影** `_legacy_raw_kind_bound_for_certainty`(certainty → 旧 raw_kind/bound;boolean→(None,None) 守卫),payload schema/key 不变 → digest 逐字节兼容。
+
+**Gate(我独立验证)**:
+- 反投影逻辑实读正确(boolean→None/None、prob/poss→(v,v));pre/post `_row_digest_for` payload schema 一致 → **digest byte-equal 由构造保证**(claim + result 双不变)。
+- 三路映射 + native 显式 boolean;`EvaluateRow` 侧 raw_kind/bound/RawKind 残留 0(内部 digest 兼容层保留旧 shape,by design)。
+- cohort 36 OK(独立)/ Codex 73 + 146 OK。
+
+**Deviations / 小建议**:无 pinned-digest 钉值回归测试——byte-equal 由构造正确,建议后续补一条钉值回归防漂移(非阻塞)。`Certainty.__str__`(design §3)Codex 暂未做,留 S4;`certainty=None` 保留给边界。
+
+**归档**:暂留 active/,随里程碑批量归档。

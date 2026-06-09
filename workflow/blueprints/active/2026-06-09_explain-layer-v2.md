@@ -121,7 +121,7 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
 2. **S1** ✅ **implemented @ `e6ff7940`**(2026-06-09)— schema DSL `Field/Identity/Meta repr` surface + 共享校验 helper(两路)；占位符矩阵按 §5.2 锁定;**repr 不入 IR / digest 不变**(gate PASS)。默认 label 归 S2。子蓝图已 implemented。
 2b. **CLEANUP-description** ✅ **implemented @ `f4300425`**(2026-06-09,`<user>` 决定)— 删除 schema entity/field/Meta `description`(repr 下位替代;零消费);保留 pattern/repr/Rule-Inference desc;两路拒绝测试;gate PASS(残留 0 + 55 tests OK,无 digest 破坏)。子蓝图已 implemented。
 3. **S2** ✅ **implemented @ `cd9b62fc`**(2026-06-09)— repr 入 SchemaIR(机制 b:identity canon 递归剥 repr → digest 不变,强测试坐实)+ `SchemaIndex.meta_repr/PredicateInfo.repr` + `render_entity_repr`(%CLS/%<id_field> + §5.2 默认 label + 缺值拒绝)。gate PASS(58 tests OK)。子蓝图已 implemented。
-4. **Certainty** `EvaluateRow.raw_kind+bound → certainty: Certainty|None`;三路映射;更新构造点 `_candidate_set_to_evaluate_row`。
+4. **Certainty** ✅ **implemented @ `253423fd`**(2026-06-09)— `protocol/certainty.py` `Certainty(lo,hi,kind)` + `EvaluateRow.raw_kind/bound → certainty`;三路映射(native 显式 boolean)。digest byte-equal:Codex 补 `_row_digest_for` 反投影(我 preflight 漏了该 digest 函数,已记 audit §G)。gate PASS(36 tests OK)。子蓝图已 implemented。
 5. **S3** prober 主体 `application/explain/`:ProbeEnv + 穷尽遍历 + **G1 健全 witness 语义** + **G2 head/body/join 结构** + EvidenceTree/Atom/Verdict 类型。
 6. **S4** repr_text 烘焙进 prober assembly:**调 render_entity_repr**(G6)+ 渲染器默认表;INV-reprtext-fact-always。
 7. **S5** native 路径接通:`Explanation.evidence non-None iff passed/failed`;**passed+failed 都走 prober**(G3);stale_row/row_not_in_result → unsupported。
