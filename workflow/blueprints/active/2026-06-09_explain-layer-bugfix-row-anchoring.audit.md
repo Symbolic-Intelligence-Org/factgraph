@@ -32,6 +32,11 @@ Verdict: root cause accepted.
 - Decode row binding values with `_public_term_value(...)`.
 - Keep adapter anchoring unchanged.
 - Keep `closed_head_false` behavior unchanged.
+- `application/explain/prober.py` and `application/protocol/rule_expr_lowering.py`
+  are read-only context for this slice; the code edit target is `sdk/store.py`
+  unless helper placement requires a small `evaluate_result.py` adjustment.
+- If no lowered execution variable maps to a head port source variable, leave
+  that port unseeded. This safe under-seed fallback is preferable to guessing.
 
 ## C. Split-Out Findings
 
@@ -51,6 +56,16 @@ Verdict: root cause accepted.
 5. `closed_head_false` still yields evidence.
 6. Existing prober monotonic and adapter dispatch tests remain green.
 
-## E. Implementation Outcome
+## E. Scope Review (2026-06-09)
+
+Claude review approved `draft → scoped` with three clarifications:
+
+1. `sdk/store.py` is the primary edit target; prober/lowering files are
+   read-only context.
+2. Missing source-var mappings degrade by under-seeding, not by guessing.
+3. The original demo command must be rerun as an integration gate:
+   `PYTHONPATH=src python examples/explain_layer_demo.py`.
+
+## F. Implementation Outcome
 
 Pending.

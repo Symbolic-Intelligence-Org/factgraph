@@ -1,15 +1,15 @@
 # Task Blueprint: Explain v2 Bugfix — per-row native prober anchoring
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Type: bugfix slice
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
 - Related Modules:
-  - `src/factgraph/sdk/store.py`
-  - `src/factgraph/application/protocol/evaluate_result.py`
-  - `src/factgraph/application/explain/prober.py`
-  - `src/factgraph/application/protocol/rule_expr_lowering.py`
+  - `src/factgraph/sdk/store.py` (edit target)
+  - `src/factgraph/application/protocol/evaluate_result.py` (helper context; edit only if helper is promoted)
+  - `src/factgraph/application/explain/prober.py` (read-only context)
+  - `src/factgraph/application/protocol/rule_expr_lowering.py` (read-only context)
 - Audit Log:
   - [2026-06-09_explain-layer-bugfix-row-anchoring.audit.md](./2026-06-09_explain-layer-bugfix-row-anchoring.audit.md)
 
@@ -53,6 +53,9 @@ exposed by multi-entity demos.
 ## 3. Non-goals
 
 - Do not change prober witness semantics; S3 G1 remains unchanged.
+- Do not edit `application/explain/prober.py` or
+  `application/protocol/rule_expr_lowering.py`; they are read-only context for
+  the occurrence-map metadata contract.
 - Do not change paths-model DTOs, adapter dispatch, or audit facade.
 - Do not alter Souffle / ProbLog / PyReason row anchoring; they already use
   row-id keyed support artifacts or provenance envelopes.
@@ -126,6 +129,10 @@ so adding one private helper import is acceptable for this targeted fix.
 - A typed row binding must be unwrapped before comparison with view facts.
 - `closed_head_false` remains unanchored unless a row is supplied.
 - Adapter engines keep row-id based anchoring.
+- If a head port's source variable does not appear in any lowered occurrence,
+  the fix may leave that port unseeded. This is a safe under-seed fallback:
+  it can leave a value free for the prober, but it does not seed an incorrect
+  value from another row.
 - INV-single-stack remains in force: this bugfix lands on top of the v2 linear
   stack after S6d.
 
@@ -142,6 +149,10 @@ so adding one private helper import is acceptable for this targeted fix.
 - [ ] `closed_head_false` still produces evidence and does not regress.
 - [ ] Souffle / ProbLog / PyReason dispatch tests remain green.
 - [ ] Explain cohort remains green.
+- [ ] `PYTHONPATH=src python examples/explain_layer_demo.py` runs and its
+  explanation output is row-coherent.
+- [ ] `application/explain/prober.py` and
+  `application/protocol/rule_expr_lowering.py` have no diff.
 
 ## 8. Implementation Plan
 
