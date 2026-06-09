@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from datetime import datetime
-import inspect
 import re
 import reprlib
 from types import UnionType
@@ -65,10 +64,8 @@ class _AnnotationPlan:
 
 
 class _DataMember(_DeclaredMember):
-    def __init__(self, *, description: str | None = None, pattern: str | None = None, repr: str | None = None) -> None:
+    def __init__(self, *, pattern: str | None = None, repr: str | None = None) -> None:
         super().__init__()
-        if description is not None and (not isinstance(description, str) or not description):
-            raise SDKSchemaError("description must be a non-empty string when provided")
         if pattern is not None:
             if not isinstance(pattern, str) or not pattern:
                 raise SDKSchemaError("pattern must be a non-empty string when provided")
@@ -78,13 +75,10 @@ class _DataMember(_DeclaredMember):
                 raise SDKSchemaError(f"pattern must be a valid regular expression: {exc}") from exc
         if repr is not None and (not isinstance(repr, str) or not repr):
             raise SDKSchemaError("repr must be a non-empty string when provided")
-        self.description = description
         self.pattern = pattern
         self.repr = repr
 
     def _add_common_authoring(self, out: dict[str, Any], *, plan: _AnnotationPlan) -> None:
-        if self.description is not None:
-            out["description"] = self.description
         if self.pattern is not None:
             if plan.type_domain != "string":
                 raise SDKSchemaError("pattern= is only supported for string-typed Identity/Field members")
@@ -99,7 +93,6 @@ class Identity(_DataMember):
     complete immutable identity bundle.
 
     Args:
-        description: Optional human-readable field description for schema IR.
         pattern: Optional regular-expression constraint for string identity
             values.
         repr: Optional explain-layer representation template. S1 validates
@@ -109,7 +102,6 @@ class Identity(_DataMember):
     def __init__(
         self,
         *,
-        description: str | None = None,
         pattern: str | None = None,
         repr: str | None = None,
         **legacy_kwargs: Any,
@@ -117,12 +109,12 @@ class Identity(_DataMember):
         if legacy_kwargs:
             legacy = ", ".join(sorted(legacy_kwargs))
             raise SDKSchemaError(
-                "Identity() only accepts description=, pattern=, and repr= in Form I; "
+                "Identity() only accepts pattern= and repr= in Form I; "
                 f"unsupported argument(s): {legacy}. "
                 "Remove primary_key/default/default_factory. All Identity fields are immutable "
                 "anchor members, and callers must provide the complete identity bundle explicitly."
             )
-        super().__init__(description=description, pattern=pattern, repr=repr)
+        super().__init__(pattern=pattern, repr=repr)
 
     def to_authoring(self, *, plan: _AnnotationPlan) -> dict[str, Any]:
         if plan.cardinality != "single":
@@ -145,7 +137,6 @@ class Field(_DataMember):
     multi fields.
 
     Args:
-        description: Optional human-readable field description for schema IR.
         pattern: Optional regular-expression constraint for string fields.
         repr: Optional explain-layer representation template. S1 validates
             this metadata but does not compile it into Schema IR.
@@ -154,7 +145,6 @@ class Field(_DataMember):
     def __init__(
         self,
         *,
-        description: str | None = None,
         pattern: str | None = None,
         repr: str | None = None,
         **legacy_kwargs: Any,
@@ -162,13 +152,13 @@ class Field(_DataMember):
         if legacy_kwargs:
             legacy = ", ".join(sorted(legacy_kwargs))
             raise SDKSchemaError(
-                "Field() only accepts description=, pattern=, and repr= in Form I; "
+                "Field() only accepts pattern= and repr= in Form I; "
                 f"unsupported argument(s): {legacy}. "
                 "Replace Field(cardinality='single') with a scalar annotation and Field(), "
                 "or Field(cardinality='multi') with list[T]/set[T]/frozenset[T]/tuple[T, ...] "
                 "and Field()."
             )
-        super().__init__(description=description, pattern=pattern, repr=repr)
+        super().__init__(pattern=pattern, repr=repr)
         self._inferred_cardinality: str | None = None
 
     @property
@@ -245,9 +235,6 @@ class EntityMeta(type):
             getattr(cls, "Meta", None),
             identity_field_names=tuple(name for name, _member, _annotation in identity_fields),
         )
-        description = declaration_fields.pop("description", None)
-        if description is None:
-            description = _extract_entity_docstring(cls)
         spec = {
             "entity_type": name,
             "identity_fields": [
@@ -261,8 +248,6 @@ class EntityMeta(type):
         }
         if "version" in declaration_fields:
             spec["version"] = declaration_fields["version"]
-        if description is not None:
-            spec["description"] = description
         if "tags" in declaration_fields:
             spec["tags"] = declaration_fields["tags"]
         cls.__sdk_entity_spec__ = spec
@@ -422,7 +407,7 @@ class _UnsetFieldValue:
 def _extract_entity_declaration_fields(meta_cls: Any, *, identity_field_names: tuple[str, ...]) -> dict[str, Any]:
     if meta_cls is None:
         return {}
-    allowed = {"version", "description", "tags", "repr"}
+    allowed = {"version", "tags", "repr"}
     raw: dict[str, Any] = {}
     for key, value in vars(meta_cls).items():
         if key.startswith("__"):
@@ -431,7 +416,7 @@ def _extract_entity_declaration_fields(meta_cls: Any, *, identity_field_names: t
             continue
         if key not in allowed:
             raise SDKSchemaError(
-                f"Entity.Meta only supports version, description, tags, and repr; got unsupported key: {key}"
+                f"Entity.Meta only supports version, tags, and repr; got unsupported key: {key}"
             )
         raw[key] = value
     out: dict[str, Any] = {}
@@ -440,11 +425,6 @@ def _extract_entity_declaration_fields(meta_cls: Any, *, identity_field_names: t
         if not isinstance(version, str) or not version:
             raise SDKSchemaError("Entity.Meta.version must be non-empty string")
         out["version"] = version
-    if "description" in raw:
-        description = raw["description"]
-        if not isinstance(description, str) or not description:
-            raise SDKSchemaError("Entity.Meta.description must be non-empty string")
-        out["description"] = description
     if "tags" in raw:
         tags = raw["tags"]
         if not isinstance(tags, list):
@@ -468,14 +448,6 @@ def _validate_member_repr_for_sdk(member: _DataMember, *, field_name: str) -> No
         validate_member_repr_template(member.repr, field_name=field_name)
     except SchemaReprTemplateError as exc:
         raise SDKSchemaError(str(exc)) from exc
-
-
-def _extract_entity_docstring(entity_cls: type) -> str | None:
-    raw_doc = entity_cls.__dict__.get("__doc__")
-    if not isinstance(raw_doc, str):
-        return None
-    out = inspect.cleandoc(raw_doc).strip()
-    return out or None
 
 
 def _is_sdk_dsl_value(value: Any) -> bool:

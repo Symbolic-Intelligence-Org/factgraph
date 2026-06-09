@@ -59,7 +59,11 @@ For the "managerial" declarative metadata of schema / rule /
 derivation, authoring currently converges to the following
 boundaries:
 
-- schema / derivation:
+- schema:
+  - `version`
+  - `tags`
+  - `repr`
+- derivation:
   - `version`
   - `description`
   - `tags`
@@ -75,9 +79,7 @@ Boundary constraints:
   - `entity_type` comes directly from the class name; no separate
     `schema_id` is declared
   - In the schema DSL, `class Meta:` provides
-    `version / description / tags / repr`
-  - `Meta.description` takes precedence; the class docstring is used
-    only as a fallback when `description` is not provided
+    `version / tags / repr`
   - `Meta.repr` is validated for explain-layer use but is not compiled
     into Schema IR in S1
   - `Meta` is not an open dictionary; any other key raises an error
@@ -109,11 +111,8 @@ candidate generation, or accept semantics.
 
 ```python
 class EmploymentEvent(Entity):
-    """Used as description fallback only when Meta.description is absent."""
-
     class Meta:
         version = "v1"
-        description = "Employment event"
         tags = ["employment", "event"]
 
     event_id: str = Identity()
@@ -298,9 +297,9 @@ the migration CLI for legacy workspaces.
 - `core`
   - `authoring` calls core's `SchemaIR`, rule compilation, and
     runtime contract, but does not own runtime facts
-  - Declarative metadata such as `version / description / tags` is
-    validated and preserved here; core itself assigns them no
-    execution semantics
+  - Declarative metadata such as schema `version / tags` and
+    rule/derivation `version / description / tags` is validated and
+    preserved here; core itself assigns them no execution semantics
   - Schema `repr` templates are validated here but remain out of
     compiled Schema IR until the render layer consumes them
 - `sdk`

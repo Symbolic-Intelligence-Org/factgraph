@@ -119,13 +119,6 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
     )
     if version is not None:
         entity_out["version"] = version
-    description = _compile_optional_description(
-        entity_raw.get("description"),
-        path=f"$.entities[{entity_index}].description",
-        label=f"entities[{entity_index}].description",
-    )
-    if description is not None:
-        entity_out["description"] = description
     tags = _compile_optional_tags(
         entity_raw.get("tags"),
         path=f"$.entities[{entity_index}].tags",
@@ -255,7 +248,7 @@ def _compile_identity_predicate(
         "py_field_name": field_name,
         "is_identity_field": True,
     }
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=identity_field,
         predicate=predicate,
         type_domain=type_domain,
@@ -283,7 +276,7 @@ def _compile_identity_field(field_raw: Any, entity_index: int, id_index: int) ->
             path=f"$.entities[{entity_index}].identity_fields[{id_index}].type_domain",
         )
     out = {"name": name, "type_domain": type_domain}
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=field_raw,
         predicate=out,
         type_domain=type_domain,
@@ -356,7 +349,7 @@ def _compile_field(
     }
 
     predicate["py_field_name"] = py_name
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=field_raw,
         predicate=predicate,
         type_domain=value_type,
@@ -427,7 +420,7 @@ def _compile_relationship_field(
         "to_entity_type": to_entity_type,
         "py_field_name": py_name,
     }
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=field_raw,
         predicate=predicate,
         type_domain=value_type,
@@ -436,19 +429,13 @@ def _compile_relationship_field(
     return predicate
 
 
-def _copy_description_pattern_enum(
+def _copy_pattern_enum(
     *,
     source: dict[str, Any],
     predicate: dict[str, Any],
     type_domain: Any,
     path: str,
 ) -> None:
-    description = source.get("description")
-    if description is not None:
-        if not isinstance(description, str) or not description:
-            raise _compile_error(f"{path}.description must be non-empty string", path=f"{path}.description")
-        predicate["description"] = description
-
     pattern = source.get("pattern")
     if pattern is not None:
         if type_domain != "string":
@@ -561,14 +548,6 @@ def _compile_error(message: str, *, path: str) -> AuthoringSchemaCompileError:
 
 
 def _compile_optional_version(value: Any, *, path: str, label: str) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value:
-        raise _compile_error(f"{label} must be non-empty string", path=path)
-    return value
-
-
-def _compile_optional_description(value: Any, *, path: str, label: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value:

@@ -86,9 +86,6 @@ def _parse_entity_class(*, node: ast.ClassDef, entity_index: int) -> dict[str, A
         "identity_fields": [],
         "fields": [],
     }
-    description = ast.get_docstring(node)
-    if isinstance(description, str) and description:
-        entity["description"] = description
     meta: dict[str, Any] = {}
 
     for body_index, item in enumerate(node.body):
@@ -136,7 +133,7 @@ def _parse_meta_class(*, item: ast.ClassDef, path: str) -> dict[str, Any]:
 
 
 def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], path: str) -> None:
-    allowed = {"version", "description", "tags", "repr"}
+    allowed = {"version", "tags", "repr"}
     _reject_unknown_keys(meta, allowed, path=path)
 
     if "version" in meta:
@@ -144,12 +141,6 @@ def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], p
         if not isinstance(version, str) or not version:
             raise _parse_error("Meta.version must be non-empty string", path=f"{path}.version")
         entity["version"] = version
-
-    if "description" in meta:
-        description = meta["description"]
-        if not isinstance(description, str) or not description:
-            raise _parse_error("Meta.description must be non-empty string", path=f"{path}.description")
-        entity["description"] = description
 
     if "tags" in meta:
         tags = meta["tags"]
@@ -207,13 +198,13 @@ def _build_identity_from_kwargs(
 ) -> dict[str, Any]:
     if annotation_plan.cardinality != "single":
         raise _parse_error("Identity fields must use a single-value annotation", path=f"{path}.annotation")
-    allowed = {"description", "pattern", "repr"}
+    allowed = {"pattern", "repr"}
     _reject_unknown_keys(
         kwargs,
         allowed,
         path=f"{path}.Identity",
         message=(
-            "Identity() only accepts description=, pattern=, and repr= in Form I; "
+            "Identity() only accepts pattern= and repr= in Form I; "
             "remove primary_key/default/default_factory and provide all identity values explicitly"
         ),
     )
@@ -236,13 +227,13 @@ def _build_field_from_kwargs(
     entity_name: str,
 ) -> dict[str, Any]:
     del entity_name
-    allowed = {"description", "pattern", "repr"}
+    allowed = {"pattern", "repr"}
     _reject_unknown_keys(
         kwargs,
         allowed,
         path=f"{path}.Field",
         message=(
-            "Field() only accepts description=, pattern=, and repr= in Form I; "
+            "Field() only accepts pattern= and repr= in Form I; "
             "replace cardinality= with scalar or collection type annotations"
         ),
     )
@@ -268,11 +259,6 @@ def _apply_common_member_kwargs(
     annotation_plan: _AnnotationPlan,
     path: str,
 ) -> None:
-    if "description" in kwargs:
-        value = kwargs["description"]
-        if not isinstance(value, str) or not value:
-            raise _parse_error("description must be non-empty string", path=f"{path}.description")
-        out["description"] = value
     if "pattern" in kwargs:
         value = kwargs["pattern"]
         if annotation_plan.type_domain != "string":

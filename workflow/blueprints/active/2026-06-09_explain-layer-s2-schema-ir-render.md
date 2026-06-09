@@ -37,9 +37,9 @@ S1 在 DSL 层接收/校验了 `repr`,但**故意不入 IR**。S2 把 repr 流�
 
 ## 4. Current Context(preflight 已完成)
 
-- **digest**:`SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS = {"generated_at"}`(schema_ir.py:31);嵌套 `description` 在 digest 内。故 repr 入 IR 默认改 digest → 必须显式排除。
-- **render target**:`schema_runtime.py` — `IdentityFieldInfo(name,type_domain)`、`PredicateInfo(... description,pattern)`、`EntityTypeInfo(entity_type, identity_fields, exists_predicate_id, identity_predicates)`、`SchemaIndex(schema_ir, schema_digest, entities, ...)`。repr 需经 IR → 这些 info 类。
-- **compile**:`entity_out`(:113-135 version/description/tags)+ `_copy_description_pattern_enum`(:439)是 repr 存储 hook 点。
+- **digest**:`SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS = {"generated_at"}`(schema_ir.py:31);S2 若把 `repr` 作为嵌套字段写进 IR,默认会进入 identity digest → 必须显式排除。Schema `description` 已由前置 cleanup slice 删除。
+- **render target**:`schema_runtime.py` — `IdentityFieldInfo(name,type_domain)`、`PredicateInfo(... pattern)`、`EntityTypeInfo(entity_type, identity_fields, exists_predicate_id, identity_predicates)`、`SchemaIndex(schema_ir, schema_digest, entities, ...)`。repr 需经 IR → 这些 info 类。
+- **compile**:`entity_out`(version/tags)+ `_copy_pattern_enum` 是 repr 存储 hook 点。
 - **S1 现状**:repr 校验在 `schema_repr.py`(已复用),但 sdk `_add_common_authoring` / authoring `_apply_common_member_kwargs` 不发射 repr;S2 需让它们发射(或新增 repr 专门发射路径)。
 
 ## 5. Proposed Shape
@@ -77,7 +77,7 @@ render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Mappin
 - [ ] `SchemaIndex` 暴露 repr:`EntityTypeInfo.meta_repr` + `PredicateInfo.repr`(或等价)非空可读
 - [ ] `render_entity_repr`:有 Meta.repr → 正确替换 `%CLS`/`%<id_field>`;无 → §5.2 默认 label;**红/绿覆盖两路**
 - [ ] default label 边界:多 identity 字段时取第一个;identity 值缺失的处理(明确定义)
-- [ ] `description` digest 行为回归不变(原 schema digest 不受 S2 影响)
+- [ ] `version` 等结构字段仍影响 digest,`repr` 不影响 digest
 - [ ] 受影响 docs(schema IR / runtime)同步
 
 ## 8. Implementation Plan
@@ -87,7 +87,7 @@ render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Mappin
 3. IR + digest:`schema_ir` 允许 repr 键;按 §6 机制把 repr 排除出 identity canon(digest no-change test 驱动)。
 4. SchemaIndex:`EntityTypeInfo`/`PredicateInfo` 加 repr 字段 + 构建逻辑填充。
 5. `render_entity_repr`:解析遍 + 默认 label(纯函数)。
-6. 测试:IR 存储 + digest no-change + render 两路 + description 回归;Step 4.7/4.8。
+6. 测试:IR 存储 + digest no-change + render 两路 + structural digest 回归;Step 4.7/4.8。
 
 ## 9. Docs To Update
 

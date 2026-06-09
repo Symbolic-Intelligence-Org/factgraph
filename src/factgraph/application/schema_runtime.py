@@ -24,7 +24,6 @@ class PredicateInfo:
     value_type_domain: str | None
     is_entity_exists: bool = False
     is_identity_field: bool = False
-    description: str | None = None
     enum_values: tuple[Any, ...] | None = None
     pattern: str | None = None
 
@@ -165,7 +164,6 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
             value_type_domain=value_type_domain,
             is_entity_exists=bool(pred.get("is_entity_exists", False)),
             is_identity_field=bool(pred.get("is_identity_field", False)),
-            description=pred.get("description") if isinstance(pred.get("description"), str) else None,
             enum_values=tuple(pred["enum_values"]) if isinstance(pred.get("enum_values"), list) else None,
             pattern=pred.get("pattern") if isinstance(pred.get("pattern"), str) else None,
         )

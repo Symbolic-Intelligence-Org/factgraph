@@ -153,11 +153,8 @@ authoring asset and is read by `fg.schema.*` and `fg.audit.*` consumers.
 
 ```python
 class EmploymentEvent(Entity):
-    """Used as description fallback only when Meta.description is absent."""
-
     class Meta:
         version = "v1"
-        description = "Employment event"
         tags = ["employment", "event"]
 
     event_id: str = Identity()
@@ -165,13 +162,13 @@ class EmploymentEvent(Entity):
 ```
 
 Only three keys are accepted; passing anything else raises
-`SDKSchemaError("Entity.Meta only supports version, description, and tags; ...")`.
+`SDKSchemaError("Entity.Meta only supports version, tags, and repr; ...")`.
 
 | Key | Type | Notes |
 | --- | --- | --- |
 | `version` | non-empty `str` | Schema-level version tag (independent of any rule/inference `version=`). |
-| `description` | non-empty `str` | Takes precedence over the class docstring. The class docstring is used only as a fallback when `description` is absent. |
 | `tags` | `list[str]` of non-empty strings | Free-form tags surfaced by `fg.audit.*` and authoring inspection. |
+| `repr` | non-empty `str` | Explain-layer representation template. It is presentation metadata and does not participate in schema identity. |
 
 `class Meta:` is optional. Most teaching examples in this quickstart omit it
 for brevity; production schemas frequently declare it to anchor versioning

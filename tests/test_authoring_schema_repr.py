@@ -105,6 +105,39 @@ class User(Entity):
 """
             )
 
+    def test_schema_description_metadata_is_not_accepted(self) -> None:
+        for source in (
+            """
+class User(Entity):
+    user_id: str = Identity(description="legacy description")
+""",
+            """
+class User(Entity):
+    user_id: str = Identity()
+    display_name: str = Field(description="legacy description")
+""",
+            """
+class User(Entity):
+    class Meta:
+        description = "legacy description"
+
+    user_id: str = Identity()
+""",
+        ):
+            with self.subTest(source=source):
+                with self.assertRaises(AuthoringSchemaDSLParseError):
+                    _parse(source)
+
+        parsed = _parse(
+            """
+class User(Entity):
+    \"\"\"This docstring is no longer schema metadata.\"\"\"
+
+    user_id: str = Identity()
+"""
+        )
+        self.assertNotIn("description", parsed["entities"][0])
+
 
 if __name__ == "__main__":
     unittest.main()

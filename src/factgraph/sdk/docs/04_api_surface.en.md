@@ -81,7 +81,7 @@ from factgraph.sdk import Entity, Field, Identity
 
 
 class User(Entity):
-    tenant_id: str = Identity(description="tenant")
+    tenant_id: str = Identity(repr="%FLD")
     user_id: str = Identity(pattern=r"^u-[0-9]+$")
     display_name: str = Field()
     status: Literal["active", "inactive"] = Field()

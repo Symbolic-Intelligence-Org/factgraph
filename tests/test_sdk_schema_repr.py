@@ -88,6 +88,28 @@ class SDKSchemaReprTests(unittest.TestCase):
         with self.assertRaises(SDKSchemaError):
             Field(label="%FLD")
 
+    def test_schema_description_metadata_is_not_accepted(self) -> None:
+        with self.assertRaises(SDKSchemaError):
+            Identity(description="legacy description")
+        with self.assertRaises(SDKSchemaError):
+            Field(description="legacy description")
+
+        with self.assertRaises(SDKSchemaError):
+
+            class _BadMetaDescription(Entity):
+                class Meta:
+                    description = "legacy description"
+
+                user_id: str = Identity()
+
+        class _DocstringIgnored(Entity):
+            """This docstring is no longer schema metadata."""
+
+            user_id: str = Identity()
+
+        authoring = build_authoring_schema_from_classes([_DocstringIgnored])
+        self.assertFalse(_contains_key(authoring, "description"))
+
     def test_reserved_identity_name_collisions_are_rejected_when_meta_repr_is_used(self) -> None:
         with self.assertRaises(SDKSchemaError):
 

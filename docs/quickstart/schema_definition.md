@@ -63,7 +63,7 @@ Each scalar annotation maps to a storage domain that the compiled schema IR reco
 
 ### 1.5 Value constraints
 
-`Identity()` and `Field()` accept only three keyword arguments: `description=` (human-readable doc string), `pattern=` (regex constraint, valid only for string-typed fields), and `repr=` (explain-layer representation template, validated at class definition time but not compiled into Schema IR in this slice). Passing other kwargs (`primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
+`Identity()` and `Field()` accept only two keyword arguments: `pattern=` (regex constraint, valid only for string-typed fields) and `repr=` (explain-layer representation template, validated at class definition time but not compiled into Schema IR in this slice). Passing other kwargs (`description=`, `primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
 
 Enum-style constraints use `Literal[...]` in the annotation:
 
@@ -92,18 +92,15 @@ Each `Entity` subclass may declare an optional inner `class Meta:` block to atta
 
 ```python
 class EmploymentEvent(Entity):
-    """Used as description fallback only when Meta.description is absent."""
-
     class Meta:
         version = "v1"
-        description = "Employment event"
         tags = ["employment", "event"]
 
     event_id: str = Identity()
     company: str = Field()
 ```
 
-Only three keys are accepted: `version`, `description`, `tags`. Unsupported keys raise `SDKSchemaError` at class definition time. Detailed semantics of each Meta field is covered in the next chapter.
+Only three keys are accepted: `version`, `tags`, `repr`. Unsupported keys raise `SDKSchemaError` at class definition time. Detailed semantics of each Meta field is covered in the next chapter.
 
 ## 2. Compiling a schema and using it with FactGraph
 
@@ -122,7 +119,7 @@ schema_ir = compile_schema_from_classes([User])     # compile and return the IR
 schema_preflight_from_classes([User])               # validate only; does not return IR
 ```
 
-The `schema_digest` is the SHA-256 of the canonicalized schema identity (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at` metadata, so recompiling the same `Entity` classes at a later time keeps the same digest. Other schema fields, including descriptions and versions, remain identity-bearing in this release. Reopening with a different class set raises a mismatch error (see [load_and_save.md](load_and_save.md)).
+The `schema_digest` is the SHA-256 of the canonicalized schema identity (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at` metadata, so recompiling the same `Entity` classes at a later time keeps the same digest. Schema `repr` templates are presentation metadata and do not participate in the identity digest. Structural schema fields, including versions, remain identity-bearing in this release. Reopening with a different class set raises a mismatch error (see [load_and_save.md](load_and_save.md)).
 
 ## 3. Runtime schema mutation
 
@@ -214,10 +211,10 @@ class Entity(metaclass=EntityMeta):
     """Subclass to declare an entity type. Must have at least one Identity() field."""
 
 class Identity(_DataMember):
-    def __init__(self, *, description: str | None = None, pattern: str | None = None): ...
+    def __init__(self, *, pattern: str | None = None, repr: str | None = None): ...
 
 class Field(_DataMember):
-    def __init__(self, *, description: str | None = None, pattern: str | None = None): ...
+    def __init__(self, *, pattern: str | None = None, repr: str | None = None): ...
 ```
 
 `pattern=` is valid only for string-typed fields; passing it to a non-string field raises `SDKSchemaError` at class definition time.
@@ -252,7 +249,7 @@ class SchemaAddResult:
 
 | Raised by | Type | Code | Message template |
 |---|---|---|---|
-| `Identity(...)` / `Field(...)` with unknown kwarg | `SDKSchemaError` | — | `Identity() only accepts description=, pattern=, and repr= in Form I; ...` |
+| `Identity(...)` / `Field(...)` with unknown kwarg | `SDKSchemaError` | — | `Identity() only accepts pattern= and repr= in Form I; ...` |
 | `Field(pattern="...")` on non-string field | `SDKSchemaError` | — | `pattern= is only supported for string-typed Identity/Field members` |
 | `Field(pattern="...")` with invalid regex | `SDKSchemaError` | — | `pattern must be a valid regular expression: ...` |
 | `Entity` subclass with no `Identity()` | `SDKSchemaError` | — | (raised by `EntityMeta`) |
