@@ -61,9 +61,9 @@ EvidenceAtom
 
 For timeline paths (PyReason), `paths` contains `EvidenceTimeline` instances.
 
-**Removed in S3 (2026-06-08)**: `EvidenceNode`, `EvidenceEdge`, `root_node_id`,
-`nodes`, `edges`, `support_kind`. These no longer exist anywhere in the codebase.
-The old node-kind and edge-kind enumeration constants are also gone.
+**Removed in S6d (2026-06-09)**: the previous flat graph shape, its node/edge
+DTOs, root pointer, and node-kind / edge-kind enumeration constants. The audit
+surface now exposes only the paths model shown above.
 
 ## 3. `metadata` for row-result explanations
 
@@ -123,8 +123,8 @@ Round-trip helpers for durable storage. These are canonical at
 
 - `factgraph.audit.evidence_graph` is now a re-export façade only; all type
   implementations are in `factgraph.application.explain`.
-- The old HTML renderer (`render_evidence_graph_html`) was not part of
-  `factgraph.audit`; it lives in domain packages.
+- HTML rendering is outside `factgraph.audit`; delivery-specific renderers live
+  in domain or service packages.
 - `AuditQuery.get_candidate_evidence_graph` is a domain-layer API
   (`src/domains/`), not part of the kernel audit package.
 - Engine-native provenance carriers (`SouffleProofTreeV0`, `ProbLogTraceV0`,

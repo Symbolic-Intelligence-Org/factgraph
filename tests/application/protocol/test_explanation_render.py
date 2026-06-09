@@ -5,24 +5,10 @@ import unittest
 
 from factgraph.application.protocol import BOOLEAN_CERTAINTY, ErrorDTO, EvaluateRow, Explanation, walk_evidence
 from factgraph.application.explain.evidence_tree import (
-    EvidenceGraph as PathsEvidenceGraph,
+    EvidenceGraph,
     EvidenceRule,
     EvidenceTree,
     LAYOUT_TREE,
-)
-from factgraph.audit.evidence_graph import (
-    EDGE_DERIVED_BY,
-    EDGE_HAS_ATOM,
-    EDGE_SUPPORTED_BY,
-    EDGE_USES,
-    EvidenceEdge,
-    EvidenceGraph,
-    EvidenceNode,
-    NODE_ATOM,
-    NODE_CONCLUSION,
-    NODE_RULE,
-    NODE_RULE_EXPR,
-    NODE_SEED,
 )
 from factgraph.core.protocol.digests import sha256_token
 
@@ -38,63 +24,8 @@ def _row() -> EvaluateRow:
     )
 
 
-def _layered_graph() -> EvidenceGraph:
+def _paths_graph(*, status: str = "holds") -> EvidenceGraph:
     return EvidenceGraph(
-        graph_id="graph-1",
-        engine="native",
-        root_node_id="row-1",
-        nodes=(
-            EvidenceNode(
-                node_id="row-1",
-                node_kind=NODE_CONCLUSION,
-                component="adult_rule",
-                label="adult_rule",
-                value_summary="adult_rule(person=alice)",
-            ),
-            EvidenceNode(
-                node_id="rule_expr-1",
-                node_kind=NODE_RULE_EXPR,
-                component="adult_rule",
-                label="single",
-                value_summary="single",
-                engine_meta={"ast_form": "single"},
-            ),
-            EvidenceNode(
-                node_id="rule-1",
-                node_kind=NODE_RULE,
-                component="adult_rule",
-                label="adult_rule",
-                value_summary="adult_rule",
-                engine_meta={"rule_id": "adult_rule"},
-            ),
-            EvidenceNode(
-                node_id="atom-1",
-                node_kind=NODE_ATOM,
-                component="adult_rule",
-                label="age_check",
-                value_summary="age > 18",
-                engine_meta={"atom_index": 0, "atom_status": "support"},
-            ),
-            EvidenceNode(
-                node_id="seed-1",
-                node_kind=NODE_SEED,
-                component="person:age",
-                label="person:age",
-                value_summary="person:age(alice, 25)",
-            ),
-        ),
-        edges=(
-            EvidenceEdge("e1", from_node_id="rule_expr-1", to_node_id="row-1", edge_kind=EDGE_DERIVED_BY),
-            EvidenceEdge("e2", from_node_id="rule-1", to_node_id="rule_expr-1", edge_kind=EDGE_USES),
-            EvidenceEdge("e3", from_node_id="atom-1", to_node_id="rule-1", edge_kind=EDGE_HAS_ATOM),
-            EvidenceEdge("e4", from_node_id="seed-1", to_node_id="atom-1", edge_kind=EDGE_SUPPORTED_BY),
-        ),
-        support_kind="native_binding_v1",
-    )
-
-
-def _paths_graph(*, status: str = "holds") -> PathsEvidenceGraph:
-    return PathsEvidenceGraph(
         graph_id="graph-1",
         engine="native",
         layout_hint=LAYOUT_TREE,
@@ -120,20 +51,6 @@ def _paths_graph(*, status: str = "holds") -> PathsEvidenceGraph:
 
 
 class ExplanationRenderTests(unittest.TestCase):
-    def test_walk_evidence_renders_layered_graph_in_shipped_direction(self) -> None:
-        lines = walk_evidence(_layered_graph(), row=_row())
-
-        self.assertEqual(
-            lines,
-            (
-                "Conclusion: adult_rule(person=alice) [row-1]",
-                "  is derived by RuleExpr(single)",
-                '    which uses Rule "adult_rule"',
-                "      which has atom Atom[0]: age > 18 — support",
-                "        is supported by ledger fact: person:age(alice, 25)",
-            ),
-        )
-
     def test_explanation_repr_is_computed_property_and_cached(self) -> None:
         self.assertNotIn("repr", inspect.signature(Explanation).parameters)
         explanation = Explanation(

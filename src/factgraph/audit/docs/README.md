@@ -15,7 +15,7 @@ delivery layer, not to the factgraph-only package.
   - `factgraph.audit.evidence_graph` thin re-export façade: paths-model
     `EvidenceGraph(paths=...)`, `EvidenceTree`, `EvidenceTimeline`,
     serialization helpers, row-result `metadata` key set, layout constants.
-    Old flat-DAG types (`EvidenceNode`/`EvidenceEdge`) removed 2026-06-08.
+    The old flat-DAG DTOs were removed in S6d.
     Canonical type definitions live in `factgraph.application.explain`.
 - `src/factgraph/audit/docs/03_audit_package_contract.md`
   - Required / optional files of the audit package, the

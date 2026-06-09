@@ -1,294 +1,145 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from factgraph.audit import (
-    EDGE_DERIVED_BY,
-    EDGE_HAS_ATOM,
-    EDGE_SUPPORTS,
-    EDGE_SUPPORTED_BY,
-    EDGE_USES,
-    LAYOUT_TREE,
-    NODE_ATOM,
-    NODE_CONCLUSION,
-    NODE_PREMISE,
-    NODE_RULE,
-    NODE_RULE_EXPR,
-    EvidenceEdge,
+    BoundVar,
+    Const,
+    EvidenceAtom,
     EvidenceGraph,
-    EvidenceNode,
+    EvidenceRule,
+    EvidenceTimeline,
+    EvidenceTree,
+    Fact,
+    Holds,
+    LAYOUT_TIMELINE,
+    LAYOUT_TREE,
+    Source,
     evidence_graph_from_dict,
     evidence_graph_to_dict,
 )
+from factgraph.audit.reader import AuditReadError, _read_evidence_graphs
+from factgraph.application.protocol import BOOLEAN_CERTAINTY, Certainty
 
 
 class AuditEvidenceGraphTests(unittest.TestCase):
-    def test_graph_accepts_valid_tree_graph(self) -> None:
+    def test_audit_facade_reexports_paths_model_graph(self) -> None:
         graph = EvidenceGraph(
             graph_id="eg:candidate-1",
             engine="souffle",
-            root_node_id="n:root",
-            nodes=(
-                EvidenceNode(
-                    node_id="n:root",
-                    node_kind=NODE_CONCLUSION,
-                    component="bob",
-                    label="popular",
-                    value_summary="true",
-                    engine_meta={"rule_number": "R1"},
-                ),
-                EvidenceNode(
-                    node_id="n:p1",
-                    node_kind=NODE_PREMISE,
-                    component="alice",
-                    label="popular",
-                    value_summary="true",
-                ),
-            ),
-            edges=(
-                EvidenceEdge(
-                    edge_id="e:1",
-                    from_node_id="n:p1",
-                    to_node_id="n:root",
-                    edge_kind=EDGE_SUPPORTS,
-                    rule_label="popular propagation",
-                ),
-            ),
-            support_kind="souffle_witness_v1",
             layout_hint=LAYOUT_TREE,
-            metadata={"confidence": 1.0},
-        )
-
-        self.assertEqual(graph.root_node_id, "n:root")
-        self.assertEqual(graph.nodes[0].engine_meta["rule_number"], "R1")
-        self.assertEqual(graph.edges[0].rule_label, "popular propagation")
-        self.assertEqual(graph.metadata["confidence"], 1.0)
-
-    def test_graph_accepts_layered_eta_vocabulary(self) -> None:
-        graph = EvidenceGraph(
-            graph_id="eg:layered",
-            engine="native",
-            root_node_id="n:root",
-            nodes=(
-                EvidenceNode("n:root", NODE_CONCLUSION, "rule", "eligible", "true"),
-                EvidenceNode("n:expr", NODE_RULE_EXPR, "rule", "RuleExpr eligible", "single"),
-                EvidenceNode("n:rule", NODE_RULE, "rule", "Rule eligible", "eligible"),
-                EvidenceNode("n:atom", NODE_ATOM, "rule.c0", "age check", "support"),
-                EvidenceNode("n:seed", "seed", "ledger", "Assertion asrt-1", "ledger assertion"),
-            ),
-            edges=(
-                EvidenceEdge("e:derived", "n:expr", "n:root", EDGE_DERIVED_BY),
-                EvidenceEdge("e:uses", "n:rule", "n:expr", EDGE_USES),
-                EvidenceEdge("e:has-atom", "n:atom", "n:rule", EDGE_HAS_ATOM),
-                EvidenceEdge("e:supported", "n:seed", "n:atom", EDGE_SUPPORTED_BY),
-            ),
-            support_kind="native_binding_v1",
-        )
-
-        rebuilt = evidence_graph_from_dict(evidence_graph_to_dict(graph))
-
-        self.assertEqual(rebuilt, graph)
-
-    def test_graph_rejects_duplicate_node_id(self) -> None:
-        with self.assertRaisesRegex(ValueError, "duplicate node_id"):
-            EvidenceGraph(
-                graph_id="eg:dup-node",
-                engine="souffle",
-                root_node_id="n:root",
-                nodes=(
-                    EvidenceNode("n:root", NODE_CONCLUSION, "bob", "popular", "true"),
-                    EvidenceNode("n:root", NODE_PREMISE, "alice", "popular", "true"),
-                ),
-                edges=(),
-                support_kind="souffle_witness_v1",
-            )
-
-    def test_graph_rejects_duplicate_edge_id(self) -> None:
-        with self.assertRaisesRegex(ValueError, "duplicate edge_id"):
-            EvidenceGraph(
-                graph_id="eg:dup-edge",
-                engine="souffle",
-                root_node_id="n:root",
-                nodes=(
-                    EvidenceNode("n:root", NODE_CONCLUSION, "bob", "popular", "true"),
-                    EvidenceNode("n:p1", NODE_PREMISE, "alice", "popular", "true"),
-                ),
-                edges=(
-                    EvidenceEdge("e:1", "n:p1", "n:root", EDGE_SUPPORTS),
-                    EvidenceEdge("e:1", "n:p1", "n:root", EDGE_SUPPORTS),
-                ),
-                support_kind="souffle_witness_v1",
-            )
-
-    def test_graph_rejects_missing_root(self) -> None:
-        with self.assertRaisesRegex(ValueError, "root_node_id 'n:missing' not in nodes"):
-            EvidenceGraph(
-                graph_id="eg:missing-root",
-                engine="souffle",
-                root_node_id="n:missing",
-                nodes=(EvidenceNode("n:root", NODE_CONCLUSION, "bob", "popular", "true"),),
-                edges=(),
-                support_kind="souffle_witness_v1",
-            )
-
-    def test_graph_rejects_edge_endpoint_not_in_nodes(self) -> None:
-        with self.assertRaisesRegex(ValueError, "edge from_node_id 'n:p1' not in nodes"):
-            EvidenceGraph(
-                graph_id="eg:bad-edge",
-                engine="souffle",
-                root_node_id="n:root",
-                nodes=(EvidenceNode("n:root", NODE_CONCLUSION, "bob", "popular", "true"),),
-                edges=(EvidenceEdge("e:1", "n:p1", "n:root", EDGE_SUPPORTS),),
-                support_kind="souffle_witness_v1",
-            )
-
-    def test_graph_rejects_unsupported_layout(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unsupported layout_hint: dag"):
-            EvidenceGraph(
-                graph_id="eg:bad-layout",
-                engine="souffle",
-                root_node_id="n:root",
-                nodes=(EvidenceNode("n:root", NODE_CONCLUSION, "bob", "popular", "true"),),
-                edges=(),
-                support_kind="souffle_witness_v1",
-                layout_hint="dag",
-            )
-
-    def test_node_rejects_unsupported_kind(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unsupported node_kind: rule_fire"):
-            EvidenceNode("n:1", "rule_fire", "Mary", "popular", "[0.85, 0.95]")
-
-    def test_edge_rejects_unsupported_kind(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unsupported edge_kind: propagates"):
-            EvidenceEdge("e:1", "n:1", "n:2", "propagates")
-
-    def test_shallow_freeze_wraps_mapping_fields(self) -> None:
-        graph = EvidenceGraph(
-            graph_id="eg:freeze",
-            engine="pyreason",
-            root_node_id="n:root",
-            nodes=(
-                EvidenceNode(
-                    node_id="n:root",
-                    node_kind=NODE_CONCLUSION,
-                    component="Justin",
-                    label="popular",
-                    value_summary="[1.0, 1.0]",
-                    engine_meta={"old_bound": [0, 1]},
+            subject_binding={"person": "alice"},
+            paths=(
+                EvidenceTree(
+                    tree_id="row-1",
+                    status="holds",
+                    rules=(
+                        EvidenceRule(
+                            occurrence_alias="head",
+                            rule_id="popular",
+                            role="head",
+                            status="holds",
+                            ports={"person": "alice"},
+                            atoms=(
+                                EvidenceAtom(
+                                    form=Fact("popular", (BoundVar("$person", "alice"),)),
+                                    verdict=Holds(
+                                        certainty=BOOLEAN_CERTAINTY,
+                                        support=(Source(ref="asrt-1", value="popular(alice)"),),
+                                    ),
+                                    atom_id="atom-1",
+                                    repr_text="popular(alice)",
+                                ),
+                            ),
+                        ),
+                    ),
+                    metadata={"support_kind": "souffle_witness_v1"},
                 ),
             ),
-            edges=(),
-            support_kind="pyreason_provenance_v1",
-            metadata={"timesteps": 2},
-        )
-
-        with self.assertRaises(TypeError):
-            graph.metadata["timesteps"] = 3  # type: ignore[index]
-        with self.assertRaises(TypeError):
-            graph.nodes[0].engine_meta["old_bound"] = [1, 1]  # type: ignore[index]
-
-    def test_graph_round_trips_through_json_friendly_dict(self) -> None:
-        graph = EvidenceGraph(
-            graph_id="eg:roundtrip",
-            engine="pyreason",
-            root_node_id="n:root",
-            nodes=(
-                EvidenceNode(
-                    node_id="n:root",
-                    node_kind=NODE_CONCLUSION,
-                    component="Alice",
-                    label="popular",
-                    value_summary="[0.8, 0.9]",
-                    engine_meta={"old_bound": (0.0, 0.0), "clause_groundings": ("seed",)},
-                ),
-                EvidenceNode(
-                    node_id="n:p1",
-                    node_kind=NODE_PREMISE,
-                    component="Alice",
-                    label="name",
-                    value_summary="Alice",
-                ),
-            ),
-            edges=(
-                EvidenceEdge(
-                    edge_id="e:1",
-                    from_node_id="n:p1",
-                    to_node_id="n:root",
-                    edge_kind=EDGE_SUPPORTS,
-                    engine_meta={"groundings": ("g1", "g2")},
-                ),
-            ),
-            support_kind="pyreason_provenance_v1",
-            metadata={"timesteps": 2, "anchor": ("Alice",)},
+            certainty=BOOLEAN_CERTAINTY,
+            metadata={"row_id": "row-1"},
         )
 
         rebuilt = evidence_graph_from_dict(evidence_graph_to_dict(graph))
 
         self.assertEqual(rebuilt, graph)
-        self.assertEqual(rebuilt.nodes[0].engine_meta["clause_groundings"], ("seed",))
-        self.assertEqual(rebuilt.metadata["anchor"], ("Alice",))
+        self.assertEqual(rebuilt.paths[0].rules[0].atoms[0].repr_text, "popular(alice)")
+        self.assertFalse(hasattr(rebuilt, "nodes"))
 
-
-    # --- F-EG-1: cycle detection ---
-
-    def test_cycle_detection_raises_on_cyclic_graph(self) -> None:
-        """F-EG-1: __post_init__ must reject graphs containing cycles."""
-        with self.assertRaises(ValueError) as ctx:
-            EvidenceGraph(
-                graph_id="eg:cycle",
-                engine="test",
-                root_node_id="n:a",
-                nodes=(
-                    EvidenceNode(node_id="n:a", node_kind=NODE_CONCLUSION, component="x", label="A", value_summary="v"),
-                    EvidenceNode(node_id="n:b", node_kind=NODE_PREMISE, component="x", label="B", value_summary="v"),
-                ),
-                edges=(
-                    EvidenceEdge(edge_id="e:1", from_node_id="n:b", to_node_id="n:a", edge_kind=EDGE_SUPPORTS),
-                    EvidenceEdge(edge_id="e:2", from_node_id="n:a", to_node_id="n:b", edge_kind=EDGE_SUPPORTS),
-                ),
-                support_kind="test",
-            )
-        self.assertIn("cycle detected", str(ctx.exception))
-
-    def test_acyclic_graph_passes_validation(self) -> None:
-        """F-EG-1: a valid DAG must pass cycle detection without error."""
+    def test_timeline_graph_round_trips_through_json_friendly_dict(self) -> None:
         graph = EvidenceGraph(
-            graph_id="eg:dag",
-            engine="test",
-            root_node_id="n:root",
-            nodes=(
-                EvidenceNode(node_id="n:root", node_kind=NODE_CONCLUSION, component="x", label="R", value_summary="v"),
-                EvidenceNode(node_id="n:c1", node_kind=NODE_PREMISE, component="x", label="C1", value_summary="v"),
-                EvidenceNode(node_id="n:c2", node_kind=NODE_PREMISE, component="x", label="C2", value_summary="v"),
+            graph_id="eg:timeline",
+            engine="pyreason",
+            layout_hint=LAYOUT_TIMELINE,
+            subject_binding={"term_0": "alice"},
+            paths=(
+                EvidenceTimeline(
+                    timeline_id="timeline-1",
+                    status="holds",
+                    events=(
+                        EvidenceAtom(
+                            form=Fact("popular", (Const("alice"),)),
+                            verdict=Holds(
+                                certainty=Certainty(0.8, 0.9, "possibilistic"),
+                                support=(Source(ref="trace:1", meta={"clause_groundings": ("seed",)}),),
+                            ),
+                            atom_id="event-1",
+                            repr_text="popular(alice) = [0.8, 0.9]",
+                            timestep=1,
+                        ),
+                    ),
+                    certainty=Certainty(0.8, 0.9, "possibilistic"),
+                    metadata={"timesteps": 2},
+                ),
             ),
-            edges=(
-                EvidenceEdge(edge_id="e:1", from_node_id="n:c1", to_node_id="n:root", edge_kind=EDGE_SUPPORTS),
-                EvidenceEdge(edge_id="e:2", from_node_id="n:c2", to_node_id="n:root", edge_kind=EDGE_SUPPORTS),
-            ),
-            support_kind="test",
+            certainty=Certainty(0.8, 0.9, "possibilistic"),
+            metadata={"support_kind": "pyreason_provenance_v1"},
         )
-        self.assertEqual(len(graph.nodes), 3)
 
-    # --- F-EG-3: duplicate candidate_id in reader ---
+        row = evidence_graph_to_dict(graph)
+        rebuilt = evidence_graph_from_dict(json.loads(json.dumps(row)))
+
+        self.assertEqual(rebuilt, graph)
+        timeline = rebuilt.paths[0]
+        self.assertIsInstance(timeline, EvidenceTimeline)
+        self.assertEqual(timeline.events[0].timestep, 1)
+        self.assertEqual(timeline.events[0].verdict.support[0].meta["clause_groundings"], ("seed",))
+
+    def test_from_dict_rejects_missing_paths(self) -> None:
+        with self.assertRaisesRegex(ValueError, "row.paths must be list"):
+            evidence_graph_from_dict(
+                {
+                    "graph_id": "eg:bad",
+                    "engine": "native",
+                    "layout_hint": LAYOUT_TREE,
+                    "subject_binding": {},
+                }
+            )
 
     def test_read_evidence_graphs_rejects_duplicate_candidate_id(self) -> None:
-        """F-EG-3: duplicate candidate_id in evidence_graphs.jsonl must raise."""
-        import json
-        import tempfile
-        from pathlib import Path
-
-        from factgraph.audit.reader import AuditReadError, _read_evidence_graphs
-
         graph_dict = evidence_graph_to_dict(
             EvidenceGraph(
                 graph_id="eg:dup",
                 engine="test",
-                root_node_id="n:root",
-                nodes=(
-                    EvidenceNode(node_id="n:root", node_kind=NODE_CONCLUSION, component="x", label="L", value_summary="v"),
+                layout_hint=LAYOUT_TREE,
+                subject_binding={},
+                paths=(
+                    EvidenceTree(
+                        tree_id="row-1",
+                        status="holds",
+                        rules=(
+                            EvidenceRule(
+                                occurrence_alias="head",
+                                rule_id="rule",
+                                role="head",
+                                status="holds",
+                            ),
+                        ),
+                    ),
                 ),
-                edges=(),
-                support_kind="test",
             )
         )
         rows = [
@@ -297,7 +148,7 @@ class AuditEvidenceGraphTests(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as tmp:
             jsonl_path = Path(tmp) / "evidence_graphs.jsonl"
-            jsonl_path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+            jsonl_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
             mapping = {"evidence_graphs": "evidence_graphs.jsonl"}
             with self.assertRaises(AuditReadError) as ctx:
                 _read_evidence_graphs(Path(tmp), mapping)
