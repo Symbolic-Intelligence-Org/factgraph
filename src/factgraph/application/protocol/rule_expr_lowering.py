@@ -454,6 +454,67 @@ def _declared_ports_for_rule_expr_plan(plan: RuleExprLoweringPlan) -> tuple[Rule
     return declared_ports
 
 
+def probe_seed_vars_by_head_port(plan: RuleExprLoweringPlan) -> dict[str, tuple[str, ...]]:
+    """Return every lowered variable that should receive each result-row head value."""
+    if not isinstance(plan, RuleExprLoweringPlan):
+        raise RuleExprError("plan must be RuleExprLoweringPlan")
+
+    out: dict[str, list[str]] = {port_name: [] for port_name in plan.head.ports}
+
+    def add(port_name: str, var_name: str) -> None:
+        if port_name not in out:
+            return
+        if var_name not in out[port_name]:
+            out[port_name].append(var_name)
+
+    for port_name, var_name in zip(plan.head.ports, _head_var_names(plan), strict=True):
+        add(port_name, var_name)
+
+    for port_name in plan.head.ports:
+        for branch in plan.branches:
+            source = _branch_declared_port_source_for_name(branch, plan.occurrence_map, port_name)
+            if source is not None:
+                add(port_name, source.alias_local_execution_var.name)
+    for branch in plan.branches:
+        for alias in branch.occurrence_aliases:
+            occurrence = _occurrence_binding(plan.occurrence_map, alias)
+            for binding in occurrence.port_bindings:
+                if binding.port_name in plan.head.ports:
+                    add(binding.port_name, binding.alias_local_execution_var.name)
+
+    for port_name, head_var in plan.head.ports.items():
+        source_name = head_var.name
+        for occurrence in plan.occurrence_map:
+            for binding in occurrence.port_bindings:
+                if binding.source_var.name == source_name:
+                    add(port_name, binding.alias_local_execution_var.name)
+
+    return {port_name: tuple(var_names) for port_name, var_names in out.items()}
+
+
+def _branch_declared_port_source_for_name(
+    branch: RuleExprLoweringBranch,
+    occurrence_map: tuple[RuleExprOccurrenceBinding, ...],
+    name: str,
+) -> RuleExprDeclaredPortBranchSource | None:
+    bindings = [
+        binding
+        for alias in branch.occurrence_aliases
+        for binding in _occurrence_binding(occurrence_map, alias).port_bindings
+        if binding.port_name == name
+    ]
+    if not bindings:
+        return None
+    if len(bindings) == 1:
+        return _branch_source(branch.branch_id, bindings[0])
+    if any(binding.port_type != bindings[0].port_type for binding in bindings):
+        raise RuleExprError(f"declared port {name!r} has incompatible same-name port types")
+    if not _same_name_bindings_are_joined(name, bindings, branch.pending_joins, occurrence_map):
+        aliases = ", ".join(sorted(binding.occurrence_alias for binding in bindings))
+        raise RuleExprError(f"declared port {name!r} is ambiguous across occurrences: {aliases}")
+    return _branch_source(branch.branch_id, sorted(bindings, key=_binding_sort_key)[0])
+
+
 def _declared_port_state_for_rule_expr_plan(
     plan: RuleExprLoweringPlan,
 ) -> tuple[tuple[RuleExprDeclaredPort, ...], frozenset[str]]:

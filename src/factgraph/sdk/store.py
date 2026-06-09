@@ -80,6 +80,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _lower_rule_expr,
     _materialize_adapter_derivation_plan,
     _validate_rule_expr_head_foundation,
+    probe_seed_vars_by_head_port,
 )
 from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
@@ -4101,19 +4102,15 @@ def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dic
     row_bindings = getattr(row, "bindings", None)
     if not isinstance(row_bindings, Mapping):
         return {}
-    exec_by_source: dict[str, list[str]] = {}
-    for occurrence in plan.occurrence_map:
-        for binding in occurrence.port_bindings:
-            exec_by_source.setdefault(binding.source_var.name, []).append(binding.alias_local_execution_var.name)
+    seed_names_by_port = probe_seed_vars_by_head_port(plan)
     out: dict[str, Any] = {}
-    for port_name, var in plan.head.ports.items():
-        if port_name not in row_bindings:
+    for port_name, value in row_bindings.items():
+        seed_names = seed_names_by_port.get(port_name, ())
+        if not seed_names:
             continue
-        var_name = getattr(var, "name", None)
-        if isinstance(var_name, str) and var_name:
-            value = _public_term_value(row_bindings[port_name])
-            for exec_name in exec_by_source.get(var_name, ()):
-                out[exec_name] = value
+        public_value = _public_term_value(value)
+        for seed_name in seed_names:
+            out[seed_name] = public_value
     return out
 
 
