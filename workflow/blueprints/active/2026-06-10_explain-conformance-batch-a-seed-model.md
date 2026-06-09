@@ -1,15 +1,16 @@
 # Task Blueprint: Explain Conformance Batch A — native row seed model
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
 - Parent: [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conformance-rework.md)
 - Related Modules:
-  - `src/factgraph/sdk/store.py` (primary edit target)
-  - `src/factgraph/application/protocol/rule_expr_lowering.py` (metadata contract; read-only unless helper export is explicitly chosen)
+  - `src/factgraph/sdk/store.py` (seed consumer; edit target)
+  - `src/factgraph/application/protocol/rule_expr_lowering.py` (seed-name helper source of truth; edit target)
   - `tests/sdk/test_rule_expr_evaluate.py` (existing evaluate→explain tests)
   - `tests/sdk/test_explain_conformance_native.py` (new native conformance battery, proposed)
+  - `tests/application/protocol/test_rule_expr_lowering.py` (helper contract tests)
 - Audit Log:
   - [2026-06-10_explain-conformance-batch-a-seed-model.audit.md](./2026-06-10_explain-conformance-batch-a-seed-model.audit.md)
 
@@ -133,17 +134,14 @@ def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dic
    - This is required for OR branch row anchoring, because each branch can have a
      different source alias-local var.
 
-Implementation options for deriving helpers:
+**Scope-review lock**: add one public helper in `rule_expr_lowering.py`, for
+example `probe_seed_vars_by_head_port(plan) -> Mapping[str, tuple[str, ...]]`.
+This helper is the single source of truth for head-port seed variable names.
+`sdk/store.py` must consume it and must not duplicate lowering structure logic.
 
-- **Option A (preferred if import boundary stays clean)**: import private
-  lowering helpers into `sdk/store.py`:
-  `_declared_port_state_for_rule_expr_plan` and `_head_alias_var_map`, or expose
-  a small protocol-level helper if the private import is judged too brittle.
-- **Option B**: implement a small local equivalent in `sdk/store.py` using
-  `plan.branches` + `plan.occurrence_map`. This avoids broadening
-  `rule_expr_lowering.py` but risks duplicating subtle declared-port logic.
-
-Scope-review should choose Option A or B before implementation.
+Rationale: the root defect is an evaluate→explain seam drift where the SDK seed
+builder held a partial copy of lowering variable knowledge. Keeping the mapping
+where lowering mints the variables prevents future drift.
 
 ## 6. Boundaries And Invariants
 
@@ -176,16 +174,22 @@ Scope-review should choose Option A or B before implementation.
 
 ## 8. Implementation Plan
 
-1. Choose helper boundary: import/expose lowering helper(s) or implement a local
-   seed-name derivation helper in `sdk/store.py`.
-2. Add a native conformance test battery file or section with fixtures for:
+1. Add `probe_seed_vars_by_head_port(plan)` in `rule_expr_lowering.py`, combining:
+   head-side vars via `_head_var_names(plan)`, branch source aliases via
+   `_declared_port_state_for_rule_expr_plan(plan)`, and inline multi-occurrence
+   aliases via existing occurrence `source_var → alias_local_execution_var`
+   mapping.
+2. Add lowering-level helper tests for inline / projection / external / OR /
+   join seed-name maps.
+3. Add a native conformance test battery file or section with fixtures for:
    inline, projection, external, OR, join/multi-occurrence, and multi-row cases.
-3. Add failing tests first for projection and external head row anchoring.
-4. Replace `_initial_probe_bindings_for_row(...)` with the port-centric
-   seed-name collection.
-5. Run focused native conformance tests, existing `test_rule_expr_evaluate`,
+4. Add failing tests first for projection and external head row anchoring.
+5. Replace `_initial_probe_bindings_for_row(...)` with the port-centric
+   seed-name collection; `store.py` should only call the lowering helper and
+   unwrap row values with `_public_term_value(...)`.
+6. Run focused native conformance tests, existing `test_rule_expr_evaluate`,
    prober tests, and adapter dispatch regressions.
-6. Report any seed-name derivation gaps back to the blueprint before widening
+7. Report any seed-name derivation gaps back to the blueprint before widening
    implementation beyond `sdk/store.py`.
 
 ## 9. Docs To Update

@@ -61,20 +61,35 @@ Codex recommendation: prefer Option A or a tiny exported helper, because
 declared-port derivation is subtle (same-name join validation, partial branches,
 branch source selection). Duplicating that logic in `sdk/store.py` is riskier.
 
-Claude scope-review should lock this before code implementation.
+Claude scope-review locked the boundary:
+
+- Add a single public helper in `rule_expr_lowering.py`, such as
+  `probe_seed_vars_by_head_port(plan) -> Mapping[str, tuple[str, ...]]`.
+- The helper combines the three authoritative seed-name sources:
+  `_head_var_names(plan)`, `_declared_port_state_for_rule_expr_plan(plan)`, and
+  occurrence `source_var → alias_local_execution_var` mappings.
+- `sdk/store.py` becomes a thin consumer: call the helper, unwrap public row
+  values through `_public_term_value(...)`, and seed all returned names.
+- Rationale: the seam drift happened because SDK carried a partial copy of
+  lowering variable knowledge. Seed-name derivation belongs where lowering mints
+  the variables.
+
+Decision: approved `draft → scoped`.
 
 ## D. Required Tests
 
 Batch A implementation must include tests that fail on the current seed model:
 
-1. Projection head, two result rows, each `row.explain()` uses its own projected
+1. Lowering helper contract tests for inline, projection, external, OR, and
+   join seed-name maps.
+2. Projection head, two result rows, each `row.explain()` uses its own projected
    values.
-2. External head, two result rows, each `row.explain()` uses its own head/body
+3. External head, two result rows, each `row.explain()` uses its own head/body
    values.
-3. OR branch head, branch-specific source aliases seeded per row.
-4. Join / multi-occurrence, shared source variables seed every alias-local var.
-5. Typed public row bindings unwrap to bare values.
-6. Existing monotonic and adapter dispatch tests stay green.
+4. OR branch head, branch-specific source aliases seeded per row.
+5. Join / multi-occurrence, shared source variables seed every alias-local var.
+6. Typed public row bindings unwrap to bare values.
+7. Existing monotonic and adapter dispatch tests stay green.
 
 ## E. Implementation Outcome
 
