@@ -1,6 +1,6 @@
 # Task Blueprint: S6c — PyReason adapter → paths-model timeline + dispatch
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -78,4 +78,15 @@ S6 第三片(复用 S6a/b dispatch + Q-S6-A pattern)。迁 pyreason converter �
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `0ba7a900`(线性栈 `… → b4ddebc5(S6c蓝图) → 0ba7a900(S6c code)`);master 未动,未 push。
+
+**结果**:pyreason converter 迁 `EvidenceTimeline`(import `application.explain`:21/24;events=`EvidenceAtom(timestep)`;`Certainty(possibilistic)`;`LAYOUT_TIMELINE`);Clause-N grounding 存 `Source.meta`,**不臆造因果**(conservative)。SDK `engine=="pyreason"` dispatch(store.py:2834)via `_row_provenance_envelopes`;provenance 校验扩 `("pyreason","event_log")`(evaluate_result.py:1069)。失败 minimal。
+
+**Gate(我独立验证)**:
+- scope-limit:souffle/problog/audit **未碰**(evaluate_result +6 仅 provenance 校验加 pyreason,不改 problog 行为)。
+- converter → timeline,无 audit import;test_pyreason_provenance_v0 用新 EvidenceTimeline/LAYOUT_TIMELINE;timeline+timestep+interval+roundtrip 测试。
+- **60 tests OK(独立)**:souffle+problog+pyreason+prober 全 adapter 同跑回归绿 / Codex 76+96+204。
+
+**里程碑**:**三个 adapter 全部 paths-model**(souffle tree / problog 多 tree / pyreason timeline)。
+
+**归档**:暂留 active/,随里程碑批量归档。
