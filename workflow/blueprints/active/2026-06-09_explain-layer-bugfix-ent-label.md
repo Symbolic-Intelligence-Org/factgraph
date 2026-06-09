@@ -1,6 +1,6 @@
 # Task Blueprint: Explain v2 Bugfix — `%ENT` entity label recovery
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Type: bugfix slice
@@ -130,17 +130,17 @@ reason to promote code.
 
 ## 8. Acceptance
 
-- [ ] `%ENT` for a bound or enumerated entity-ref subject renders a friendly
+- [x] `%ENT` for a bound or enumerated entity-ref subject renders a friendly
   entity label from `Meta.repr` (for example, `User u-1`) instead of raw idref.
-- [ ] Multi-entity native explanations remain row-anchored and each row's
+- [x] Multi-entity native explanations remain row-anchored and each row's
   `%ENT` label matches that row's identity.
-- [ ] Identity-unavailable fallback returns raw idref and does not raise.
-- [ ] `%FLD`, Compare, Builtin, and fallback fact repr behavior remains
+- [x] Identity-unavailable fallback returns raw idref and does not raise.
+- [x] `%FLD`, Compare, Builtin, and fallback fact repr behavior remains
   unchanged.
-- [ ] Existing prober monotonic / join / OR / row-anchoring tests remain green.
-- [ ] `PYTHONPATH=src python examples/explain_layer_demo.py` renders `User u-1`
+- [x] Existing prober monotonic / join / OR / row-anchoring tests remain green.
+- [x] `PYTHONPATH=src python examples/explain_layer_demo.py` renders `User u-1`
   in the relevant atom text.
-- [ ] Explain cohort remains green.
+- [x] Explain cohort remains green.
 
 ## 9. Implementation Plan
 
@@ -160,4 +160,26 @@ reason to promote code.
 
 ## 11. Outcome / Deviations
 
-To be filled after implementation.
+Implemented in `50bf72a2` (`fix(explain-layer): recover entity labels in repr baking`).
+
+Implementation summary:
+
+- `prober.py` now threads `view_facts` through the repr-baking call chain.
+- Bare `idref_v1:` subject values in `%ENT` templates recover identity values
+  through `_recover_identity_from_predicates(...)` and render through
+  `schema_runtime.render_entity_repr(...)`.
+- Lookup/render failures gracefully fall back to raw idref text.
+- The demo note was updated and `examples/explain_layer_demo.py` is now tracked
+  as the user-visible validation entry.
+
+Independent gate record:
+
+- Demo renders `User u-1 is in region us` and `User u-1 is 30 years old`.
+- Focused tests: `50 OK`.
+- Explain cohort: `127 OK`.
+- Direct import from `entity_view` did not create an import cycle; no helper
+  promotion was needed.
+- Edit boundary stayed narrow: `prober.py` plus focused tests and demo; Bug 1
+  seed logic, DTOs, schema runtime, and adapter converters were not changed.
+
+Deviations: none.
