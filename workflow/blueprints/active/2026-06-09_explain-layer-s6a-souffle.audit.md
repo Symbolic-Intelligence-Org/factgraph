@@ -28,6 +28,21 @@ S6a Souffle(tree,最简,验证 dispatch 模式)→ S6b ProbLog(多 proof→多 t
 - souffle proof tree node→EvidenceRule 映射(root=head;rule node=body;axiom=atom/Source);多分支 proof 是否产多 tree(souffle 通常单 proof)。
 - repr_text 本片给最小(atom_text);schema 烘焙非重点。
 
-## E. Gate result / Deviations
+## E. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `d40538fc`(parent = S6a 蓝图 `869934f3`,线性栈)。**PASS**:
+- scope:5 文件(souffle provenance + sdk/store + souffle docs + 2 tests);**problog/pyreason/audit 未碰**(scope-limit 守住)。
+- souffle converter → paths(import `application.explain.evidence_tree`:11;`paths=(EvidenceTree...)`:80);无 audit/nodes/edges。
+- dispatch per-engine 重构(`_row_graph_builder_for_engine`:2815)。
+- `test_converter_builds_tree_from_recursive_proof`:paths 1、`{role}=={head,body}`、head + 4 body atoms + negation;souffle row 非 minimal。
+- cohort 71 OK(独立)/ Codex 99。
+
+裁决:**PASS**。
+
+## F. Open item 收口
+
+ProofReceipt → SouffleProofTreeV0:runtime 存 ProofReceipt,SDK 从 ProofReceipt 直接产 paths;SouffleProofTreeV0 converter 迁移+测试供直接 proof stream。两路都 paths-model。
+
+## G. S6b/c 复用
+
+per-engine dispatch(`_row_graph_builder_for_engine`)+ Q-S6-A minimal fallback pattern 已建,S6b(problog via `_row_provenance_envelopes`)/ S6c(pyreason timeline)复用。

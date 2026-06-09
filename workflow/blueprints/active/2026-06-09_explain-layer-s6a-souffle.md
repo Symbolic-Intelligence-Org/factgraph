@@ -1,6 +1,6 @@
 # Task Blueprint: S6a — Souffle adapter → paths-model + dispatch
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -77,4 +77,20 @@ S5 把 native explain 接到 prober(paths-model),但 adapter converter 还是旧
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `d40538fc`(线性栈 `… → 869934f3(S6a蓝图) → d40538fc(S6a code)`);master 未动,未 push。
+
+**结果**:
+- `souffle_proof_tree_to_evidence_graph` 迁 paths-model(import `application.explain.evidence_tree`:11,产 `paths=(EvidenceTree...)`:80);不再 import `audit.evidence_graph`。
+- SDK dispatch 重构 per-engine:`_row_graph_builder_for_engine`(store.py:2815;native→plan、souffle→`_souffle_row_graph_builder(row_support_artifacts)`)。
+- souffle row 产 head/body rules + witness atoms;converter/support 失败 → minimal paths(保不变式)。
+
+**实现说明(Codex,合理)**:runtime souffle 存 `ProofReceipt`(非 raw `SouffleProofTreeV0`),故 SDK dispatch 从 ProofReceipt 直接产 paths;adapter 的 `SouffleProofTreeV0` converter 也迁移+测试(供直接 `souffle -t explain` JSON proof stream)。→ S6a open item(ProofReceipt→SouffleProofTree)以"两路并存、都 paths"收口。
+
+**Gate(我独立验证)**:
+- ★scope-limit:problog/pyreason/audit **未碰**(commit stat 确认)。
+- souffle converter → paths,无 audit/nodes/edges import。
+- `test_converter_builds_tree_from_recursive_proof`:paths 1、`{role}=={head,body}`、head atom + 4 body atoms + negation —— souffle row 真 paths 非 minimal。
+- per-engine dispatch 重构(S6b/c 可复用)。
+- cohort 71 OK(独立)/ Codex 99 OK。
+
+**归档**:暂留 active/,随里程碑批量归档。

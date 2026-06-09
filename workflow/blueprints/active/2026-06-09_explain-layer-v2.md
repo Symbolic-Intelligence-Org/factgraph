@@ -126,7 +126,7 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
 6. **S4** ✅ **implemented @ `80d4069d`**(2026-06-09)— prober assembly 烘焙 `repr_text`;**G6 实证**:`_entity_repr_for_fact` 真调 `render_entity_repr`(spy 测试断言)+ §5.7 默认表;INV-reprtext-fact-always;G1/G2 未动(回归绿)。gate PASS(20 tests OK)。子蓝图已 implemented。
 7. **S5** ✅ **implemented @ `89de4a6c`**(2026-06-09)— 不变式 `{passed,failed}↔evidence`;**G3:passed(SDK 注入 _row_graph_builder→probe_native)+ failed(closed_head_false→probe)都走 prober**(v1 minimal 占位 gap 修复);stale_row/row_not_in_result → unsupported;旧 flat-DAG 整片删(grep 0,S7 并入);协议层纯。gate PASS(71 tests OK)。子蓝图已 implemented。
 8. **S6** adapters dispatch(G4)—— **拆 S6a–d**(逐引擎,adapter 先各自改 import,audit re-export 最后):
-   - **S6a Souffle**(scoped)— converter→paths + dispatch via `_row_support_artifacts` + Q-S6-A fallback。子蓝图 `2026-06-09_explain-layer-s6a-souffle.md`。
+   - **S6a Souffle** ✅ **implemented @ `d40538fc`** — converter→paths(head/body/atoms)+ per-engine dispatch(`_row_graph_builder_for_engine`)via `_row_support_artifacts` + Q-S6-A fallback;scope-limit 守住(problog/pyreason/audit 未碰)。gate PASS(71 tests OK)。
    - **S6b ProbLog** — converter→paths(多 proof→多 tree)via `_row_provenance_envelopes`。
    - **S6c PyReason** — converter→`EvidenceTimeline`(Clause-N/timestep;不足则 conservative shell)。
    - **S6d** `audit/evidence_graph.py` → thin re-export + 旧 flat-DAG 全树终清 + Q-S6-A 统一。
