@@ -32,7 +32,7 @@ S1 在 DSL 层接收/校验了 `repr`,但**故意不入 IR**。S2 把 repr 流�
 
 - prober 烘焙 / 渲染遍 / atom repr_text(S4)。
 - `Rule.repr` 结论渲染(S0 已改名;结论行接通在 S4/S5)。
-- 改 `description` 的 digest 行为(维持现状进 digest;S2 只处理 repr)。
+- `description` 处理 —— 已由前置 cleanup slice 2b **删除**;S2 不涉及 description(仅处理 repr)。
 - 两遍渲染的"渲染遍"(S4);S2 只做"解析遍"(entity label)。
 
 ## 4. Current Context(preflight 已完成)
@@ -65,7 +65,7 @@ render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Mappin
   - 机制(Codex S2 preflight 选其一,锁不变式不锁机制):
     - (a) repr 存入**顶层 excluded 区**(新顶层 key 加进 `SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS`,同步 REQUIRED/allowed 顶层校验);或
     - (b) repr 嵌套在 fields/entity,但 `canonicalize_schema_ir_identity_jcs` 在 canon 前**剥离 nested repr**。
-- `description` digest 行为不变(不在 S2 动)。
+- `description` 已由前置 cleanup slice 2b 删除;S2 digest 排除仅针对 repr。
 - `render_entity_repr` 是**纯函数**(无 IO,只读 SchemaIndex + 入参)。
 - 占位符替换严格按 §5.2(Meta 只 `%CLS` + identity 字段);S1 已在定义时校验,S2 渲染时可信任。
 - INV-6 application-first;单线性栈(S1 之上)。

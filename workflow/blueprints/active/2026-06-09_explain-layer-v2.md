@@ -119,7 +119,8 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
 
 1. **S0** ✅ **implemented @ `2c8f8c71`**(2026-06-09)— `Rule.desc → Rule.repr` + `render_repr`,hard-rename;gate PASS(86 tests OK,content_digest 不变,0 残留)。子蓝图已 implemented。
 2. **S1** ✅ **implemented @ `e6ff7940`**(2026-06-09)— schema DSL `Field/Identity/Meta repr` surface + 共享校验 helper(两路)；占位符矩阵按 §5.2 锁定;**repr 不入 IR / digest 不变**(gate PASS)。默认 label 归 S2。子蓝图已 implemented。
-3. **S2** schema IR repr 字段存储 + `render_entity_repr` 应用层纯函数(两遍渲染的解析遍基础)。
+2b. **CLEANUP-description**(scoped,`<user>` 决定 2026-06-09)— 删除 schema entity/field/Meta `description`(repr 下位替代;preflight 实证零消费 / 0 测试 / 0 example;Rule/Inference description 不动)。排在 S2 前,使 S2 digest 排除只管 repr。子蓝图 `2026-06-09_explain-layer-cleanup-schema-description.md`。
+3. **S2** schema IR repr 存储(**排除出 identity digest**,已锁 — repr 是纯呈现模板,不应使 schema identity 失效)+ `render_entity_repr` 纯函数 + §5.2 默认 label。description 已由 2b 删除,S2 digest 排除仅针对 repr。
 4. **Certainty** `EvaluateRow.raw_kind+bound → certainty: Certainty|None`;三路映射;更新构造点 `_candidate_set_to_evaluate_row`。
 5. **S3** prober 主体 `application/explain/`:ProbeEnv + 穷尽遍历 + **G1 健全 witness 语义** + **G2 head/body/join 结构** + EvidenceTree/Atom/Verdict 类型。
 6. **S4** repr_text 烘焙进 prober assembly:**调 render_entity_repr**(G6)+ 渲染器默认表;INV-reprtext-fact-always。
