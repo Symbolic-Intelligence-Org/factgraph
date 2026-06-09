@@ -7,6 +7,7 @@ from factgraph.application import (
     build_schema_index,
     field_predicate,
     field_value_type,
+    render_entity_repr,
     resolve_selector,
 )
 from factgraph.application.protocol import EntitySelector
@@ -145,6 +146,37 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
         self.assertEqual(ref.entity_type, "Session")
         self.assertEqual(ref.identity, {"session_id": "session-1"})
         self.assertTrue(str(ref.encoded_ref).startswith("idref_v1:Session:"))
+
+    def test_render_entity_repr_uses_default_first_identity_label(self) -> None:
+        index = _schema_index()
+
+        self.assertEqual(
+            render_entity_repr(index, "User", {"name": "alice", "locale": "en"}),
+            "User alice",
+        )
+
+    def test_render_entity_repr_uses_meta_template_and_indexes_predicate_repr(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "%CLS %user_id"
+
+            user_id: str = Identity(repr="%CLS %ENT %FLD")
+            display_name: str = Field(repr="%CLS %ENT %FLD")
+
+        index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+
+        self.assertEqual(render_entity_repr(index, "DisplayUser", {"user_id": "u-1"}), "DisplayUser u-1")
+        self.assertEqual(index.entities["DisplayUser"].meta_repr, "%CLS %user_id")
+        self.assertEqual(index.entities["DisplayUser"].identity_predicates["user_id"].repr, "%CLS %ENT %FLD")
+        self.assertEqual(field_predicate(index, "DisplayUser", "display_name").repr, "%CLS %ENT %FLD")
+
+    def test_render_entity_repr_rejects_missing_identity_value(self) -> None:
+        index = _schema_index()
+
+        with self.assertRaises(SchemaResolutionError) as ctx:
+            render_entity_repr(index, "User", {"locale": "en"})
+
+        self.assertEqual(ctx.exception.code, "MISSING_ENTITY_IDENTITY_VALUE")
 
 
 if __name__ == "__main__":

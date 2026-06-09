@@ -12,7 +12,7 @@ def _parse(source: str) -> dict:
 
 
 class AuthoringSchemaReprTests(unittest.TestCase):
-    def test_member_and_meta_repr_are_accepted_but_not_authored(self) -> None:
+    def test_member_and_meta_repr_are_authored(self) -> None:
         parsed = _parse(
             """
 class User(Entity):
@@ -25,11 +25,11 @@ class User(Entity):
         )
 
         self.assertEqual(parsed["entities"][0]["entity_type"], "User")
-        self.assertNotIn("repr", parsed["entities"][0])
-        self.assertNotIn("repr", parsed["entities"][0]["identity_fields"][0])
-        self.assertNotIn("repr", parsed["entities"][0]["fields"][0])
+        self.assertEqual(parsed["entities"][0]["repr"], "%CLS %user_id")
+        self.assertEqual(parsed["entities"][0]["identity_fields"][0]["repr"], "%CLS %ENT %FLD")
+        self.assertEqual(parsed["entities"][0]["fields"][0]["repr"], "%CLS %ENT %FLD")
 
-    def test_repr_does_not_change_schema_digest_or_compiled_ir(self) -> None:
+    def test_repr_enters_compiled_ir_without_changing_schema_digest(self) -> None:
         without_repr = _parse(
             """
 class User(Entity):
@@ -52,7 +52,8 @@ class User(Entity):
         with_ir = compile_authoring_schema_v1(with_repr, generated_at="2026-06-09T00:00:00Z")
 
         self.assertEqual(schema_digest(without_ir), schema_digest(with_ir))
-        self.assertNotIn("repr", str(with_ir))
+        self.assertNotIn("repr", str(without_ir))
+        self.assertIn("repr", str(with_ir))
 
     def test_member_repr_rejects_sibling_and_unknown_placeholders(self) -> None:
         for template in ("%display_name", "%UNKNOWN"):

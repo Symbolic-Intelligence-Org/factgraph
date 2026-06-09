@@ -163,6 +163,7 @@ def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], p
             validate_meta_repr_template(meta["repr"], identity_field_names=identity_field_names)
         except SchemaReprTemplateError as exc:
             raise _parse_error(str(exc), path=f"{path}.repr") from exc
+        entity["repr"] = meta["repr"]
 
 
 def _parse_entity_member_annassign(*, item: ast.AnnAssign, path: str, entity_name: str) -> dict[str, Any]:
@@ -272,6 +273,8 @@ def _apply_common_member_kwargs(
         except re.error as exc:
             raise _parse_error(f"pattern must be valid regex: {exc}", path=f"{path}.pattern")
         out["pattern"] = value
+    if "repr" in kwargs:
+        out["repr"] = kwargs["repr"]
 
 
 def _validate_authoring_member_repr(kwargs: dict[str, Any], *, field_name: str, path: str) -> None:
@@ -281,6 +284,9 @@ def _validate_authoring_member_repr(kwargs: dict[str, Any], *, field_name: str, 
         validate_member_repr_template(kwargs["repr"], field_name=field_name)
     except SchemaReprTemplateError as exc:
         raise _parse_error(str(exc), path=f"{path}.repr") from exc
+    kwargs_repr = kwargs["repr"]
+    if not isinstance(kwargs_repr, str) or not kwargs_repr:
+        raise _parse_error("repr must be non-empty string", path=f"{path}.repr")
 
 
 def _call_name(func: ast.expr) -> str | None:

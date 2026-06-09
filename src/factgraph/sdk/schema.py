@@ -83,6 +83,8 @@ class _DataMember(_DeclaredMember):
             if plan.type_domain != "string":
                 raise SDKSchemaError("pattern= is only supported for string-typed Identity/Field members")
             out["pattern"] = self.pattern
+        if self.repr is not None:
+            out["repr"] = self.repr
 
 
 class Identity(_DataMember):
@@ -95,8 +97,8 @@ class Identity(_DataMember):
     Args:
         pattern: Optional regular-expression constraint for string identity
             values.
-        repr: Optional explain-layer representation template. S1 validates
-            this metadata but does not compile it into Schema IR.
+        repr: Optional explain-layer representation template. This metadata is
+            validated and compiled into Schema IR without affecting schema identity.
     """
 
     def __init__(
@@ -138,8 +140,8 @@ class Field(_DataMember):
 
     Args:
         pattern: Optional regular-expression constraint for string fields.
-        repr: Optional explain-layer representation template. S1 validates
-            this metadata but does not compile it into Schema IR.
+        repr: Optional explain-layer representation template. This metadata is
+            validated and compiled into Schema IR without affecting schema identity.
     """
 
     def __init__(
@@ -248,6 +250,8 @@ class EntityMeta(type):
         }
         if "version" in declaration_fields:
             spec["version"] = declaration_fields["version"]
+        if "repr" in declaration_fields:
+            spec["repr"] = declaration_fields["repr"]
         if "tags" in declaration_fields:
             spec["tags"] = declaration_fields["tags"]
         cls.__sdk_entity_spec__ = spec
@@ -440,6 +444,7 @@ def _extract_entity_declaration_fields(meta_cls: Any, *, identity_field_names: t
             validate_meta_repr_template(raw["repr"], identity_field_names=identity_field_names)
         except SchemaReprTemplateError as exc:
             raise SDKSchemaError(str(exc)) from exc
+        out["repr"] = raw["repr"]
     return out
 
 

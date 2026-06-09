@@ -10,9 +10,9 @@ templates. Both schema declaration paths use these helpers:
 - runtime SDK declarations in `factgraph.sdk.schema`
 - source/AST declarations in `factgraph.authoring.schema_dsl_parse`
 
-S1 only accepts and validates explicit templates. It does not compile them into
-Schema IR, so `schema_digest(...)` remains unchanged when a caller adds or
-removes `repr=` metadata.
+`repr=` templates are stored in Schema IR as presentation metadata, but
+`schema_digest(...)` excludes them from schema identity. Adding or changing a
+template therefore leaves the schema identity stable.
 
 ## Placeholder Matrix
 
@@ -30,6 +30,6 @@ token.
 
 ## Layer Boundary
 
-`repr=` is authoring metadata for the explain layer. S1 deliberately keeps it
-out of authoring payloads and compiled Schema IR. S2 is responsible for deciding
-how templates become runtime render inputs for `render_entity_repr(...)`.
+`repr=` is authoring metadata for the explain layer. It flows through authoring
+payloads into Schema IR so runtime code can call `render_entity_repr(...)`, but
+identity canonicalization strips `repr` before digesting.

@@ -63,7 +63,7 @@ Each scalar annotation maps to a storage domain that the compiled schema IR reco
 
 ### 1.5 Value constraints
 
-`Identity()` and `Field()` accept only two keyword arguments: `pattern=` (regex constraint, valid only for string-typed fields) and `repr=` (explain-layer representation template, validated at class definition time but not compiled into Schema IR in this slice). Passing other kwargs (`description=`, `primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
+`Identity()` and `Field()` accept only two keyword arguments: `pattern=` (regex constraint, valid only for string-typed fields) and `repr=` (explain-layer representation template, validated at class definition time and stored in Schema IR as presentation metadata). Passing other kwargs (`description=`, `primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
 
 Enum-style constraints use `Literal[...]` in the annotation:
 

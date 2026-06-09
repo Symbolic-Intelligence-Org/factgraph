@@ -22,7 +22,7 @@ authoring preflight, publish, and registry workflows.
 - The persisted declarative metadata contract is schema `version / tags`
   plus rule/derivation `version / description / tags` and rule-scoped
   `condition_weights`; schema `repr` templates are validated for
-  explain-layer use but remain out of compiled Schema IR in S1:
+  explain-layer use, stored in Schema IR, and excluded from schema identity:
   - schema DSL goes through `Entity.Meta`
   - rule / derivation DSL goes through top-level constructor
     parameters

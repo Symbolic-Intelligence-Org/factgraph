@@ -18,7 +18,7 @@ def _contains_key(value: object, key: str) -> bool:
 
 
 class SDKSchemaReprTests(unittest.TestCase):
-    def test_field_identity_and_meta_repr_are_accepted_but_not_authored(self) -> None:
+    def test_field_identity_and_meta_repr_are_authored(self) -> None:
         class ReprUser(Entity):
             class Meta:
                 repr = "%CLS %user_id"
@@ -30,9 +30,12 @@ class SDKSchemaReprTests(unittest.TestCase):
         self.assertEqual(ReprUser.display_name.repr, "%CLS %ENT %FLD")
 
         authoring = build_authoring_schema_from_classes([ReprUser])
-        self.assertFalse(_contains_key(authoring, "repr"))
+        entity = authoring["entities"][0]
+        self.assertEqual(entity["repr"], "%CLS %user_id")
+        self.assertEqual(entity["identity_fields"][0]["repr"], "%CLS %ENT %FLD")
+        self.assertEqual(entity["fields"][0]["repr"], "%CLS %ENT %FLD")
 
-    def test_schema_repr_does_not_change_schema_digest_or_compiled_ir(self) -> None:
+    def test_schema_repr_enters_compiled_ir_without_changing_schema_digest(self) -> None:
         DigestUser = type(
             "DigestUser",
             (Entity,),
@@ -56,7 +59,13 @@ class SDKSchemaReprTests(unittest.TestCase):
         with_repr = compile_schema_from_classes([DigestUserWithRepr], generated_at="2026-06-09T00:00:00Z")
 
         self.assertEqual(schema_digest(without_repr), schema_digest(with_repr))
-        self.assertNotIn('"repr"', json.dumps(with_repr, sort_keys=True))
+        self.assertNotIn('"repr"', json.dumps(without_repr, sort_keys=True))
+        self.assertIn('"repr"', json.dumps(with_repr, sort_keys=True))
+
+        changed_version = dict(without_repr)
+        changed_version["entities"] = [dict(row) for row in without_repr["entities"]]
+        changed_version["entities"][0]["version"] = "v2"
+        self.assertNotEqual(schema_digest(without_repr), schema_digest(changed_version))
 
     def test_member_repr_rejects_sibling_and_unknown_placeholders(self) -> None:
         for template in ("%display_name", "%UNKNOWN"):

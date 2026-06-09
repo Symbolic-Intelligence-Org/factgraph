@@ -80,8 +80,8 @@ Boundary constraints:
     `schema_id` is declared
   - In the schema DSL, `class Meta:` provides
     `version / tags / repr`
-  - `Meta.repr` is validated for explain-layer use but is not compiled
-    into Schema IR in S1
+  - `Meta.repr` is validated for explain-layer use, compiled into
+    Schema IR, and excluded from schema identity
   - `Meta` is not an open dictionary; any other key raises an error
     during parse / SDK declaration
 - `Rule`
@@ -300,8 +300,8 @@ the migration CLI for legacy workspaces.
   - Declarative metadata such as schema `version / tags` and
     rule/derivation `version / description / tags` is validated and
     preserved here; core itself assigns them no execution semantics
-  - Schema `repr` templates are validated here but remain out of
-    compiled Schema IR until the render layer consumes them
+  - Schema `repr` templates are validated here, compiled into Schema IR,
+    and excluded from schema identity
 - `sdk`
   - graph-bound `fg.rules.inspect(...)` is the only remaining `fg.rules.*`
     surface after Q8 Phase 2 (Slice 6); `fg.inferences.*` is an empty
