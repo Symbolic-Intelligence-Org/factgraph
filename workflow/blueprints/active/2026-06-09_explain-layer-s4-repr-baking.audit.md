@@ -24,6 +24,18 @@ Paired with [2026-06-09_explain-layer-s4-repr-baking.md](./2026-06-09_explain-la
 - Aggregate repr_text:§5.7 给默认 or None,你定(非阻塞)。
 - `_bake_repr_text` 是否可复用 v1 prober 的 `_repr_compare`/`_repr_builtin` 形态(结构 OK,补 render_entity_repr)。
 
-## D. Gate result / Deviations
+## D. Gate result (Claude 独立验证 2026-06-09)
 
-impl + gate 后填写。
+impl `80d4069d`(parent = S4 蓝图 `e3c34728`,线性栈)。**PASS**:
+- scope:3 文件(prober + test + docs);无无关混入。
+- ★G6:`_entity_repr_for_fact`(prober.py:319/327)真调 `render_entity_repr`;spy 测试(test:110-125)断言被调用。
+- fallback:`_fact_fallback_repr`/`_repr_compare`/`_repr_builtin`;INV-reprtext-fact-always。
+- ★G1/G2 回归:`_probe_atom` diff 仅加 `repr_text=`,核心未动;S3 monotonic+shape 同 cohort 仍绿。
+- cohort 20 OK(独立)/ Codex 58。
+
+裁决:**PASS**。
+
+## E. Deviations(良性)
+
+- 复用 v1 `_repr_compare`/`_repr_builtin` 形态 + G6 接 render_entity_repr。
+- entity-ref term 解析 %ENT(标量 term 退化 fallback)。

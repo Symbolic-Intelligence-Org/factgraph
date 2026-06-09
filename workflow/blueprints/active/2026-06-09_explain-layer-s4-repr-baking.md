@@ -1,6 +1,6 @@
 # Task Blueprint: S4 — repr_text baking in prober assembly (G6)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-09
 - Last Updated: 2026-06-09
 - Parent: [2026-06-09_explain-layer-v2.md](./2026-06-09_explain-layer-v2.md)
@@ -82,4 +82,19 @@ S3 prober 产出结构 + 三态,但 `EvidenceAtom.repr_text=None`、`schema_inde
 
 ## 10. Outcome / Deviations
 
-实施后填写。
+**落地**:impl `80d4069d`(线性栈 `… → e3c34728(S4蓝图) → 80d4069d(S4 code)`);master 未动,未 push。
+
+**结果**:
+- `probe_native` 接通 `schema_index`(:52,不再 del),沿 branch→atom 传入。
+- `_bake_repr_text`(:284):Fact → `_repr_fact`(schema 模板 + `%ENT` 经 `_entity_repr_for_fact`→`render_entity_repr`,:319/327)、无 schema → `_fact_fallback_repr`;Compare → `_repr_compare`(§5.7);Builtin → `_repr_builtin`。
+- atom 构造写 `repr_text`(:163/169/171)。
+
+**Gate(我独立验证)**:
+- ★**G6 link 实证**:`_entity_repr_for_fact`(:319/327)真调 `render_entity_repr`;spy 测试(test_prober.py:110-125)替换并断言被调用。repr 链路真正接通。
+- fallback 齐全(schema-less Fact + Compare/Builtin);INV-reprtext-fact-always。
+- **G1/G2 回归安全**:diff 仅加 `repr_text=`,prober 核心(candidate_envs/deduped/三态/结构)未动;S3 monotonic+shape 测试同 cohort 仍绿。
+- cohort 20 OK(独立)/ Codex 58 OK。
+
+**Deviations(良性)**:`_repr_compare`/`_repr_builtin` 复用 v1 形态 + 接 render_entity_repr(G6 增量);entity-ref term → identity bundle 解析 %ENT,标量 term 退化 fallback。
+
+**归档**:暂留 active/,随里程碑批量归档。

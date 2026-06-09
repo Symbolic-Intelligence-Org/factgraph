@@ -123,7 +123,7 @@ v2 在干净 monorepo 种子 `854d03b9` 上,作为**单条线性栈**重新实�
 3. **S2** ✅ **implemented @ `cd9b62fc`**(2026-06-09)— repr 入 SchemaIR(机制 b:identity canon 递归剥 repr → digest 不变,强测试坐实)+ `SchemaIndex.meta_repr/PredicateInfo.repr` + `render_entity_repr`(%CLS/%<id_field> + §5.2 默认 label + 缺值拒绝)。gate PASS(58 tests OK)。子蓝图已 implemented。
 4. **Certainty** ✅ **implemented @ `253423fd`**(2026-06-09)— `protocol/certainty.py` `Certainty(lo,hi,kind)` + `EvaluateRow.raw_kind/bound → certainty`;三路映射(native 显式 boolean)。digest byte-equal:Codex 补 `_row_digest_for` 反投影(我 preflight 漏了该 digest 函数,已记 audit §G)。gate PASS(36 tests OK)。子蓝图已 implemented。
 5. **S3** ✅ **implemented @ `57c7c87e`**(2026-06-09)— `application/explain/`(evidence_tree + prober);**G1 candidate_envs backtracking(v1 翻转 bug 根除,monotonic test 证)** + **G2 head/真 occurrence/EvidenceJoin from RuleExprLoweringPlan metadata**(无新 carrier);diagnose `_extend_env_with_atom` 源头修 cmp/ne view_facts。gate PASS(33 tests OK)。子蓝图已 implemented。
-6. **S4** repr_text 烘焙进 prober assembly:**调 render_entity_repr**(G6)+ 渲染器默认表;INV-reprtext-fact-always。
+6. **S4** ✅ **implemented @ `80d4069d`**(2026-06-09)— prober assembly 烘焙 `repr_text`;**G6 实证**:`_entity_repr_for_fact` 真调 `render_entity_repr`(spy 测试断言)+ §5.7 默认表;INV-reprtext-fact-always;G1/G2 未动(回归绿)。gate PASS(20 tests OK)。子蓝图已 implemented。
 7. **S5** native 路径接通:`Explanation.evidence non-None iff passed/failed`;**passed+failed 都走 prober**(G3);stale_row/row_not_in_result → unsupported。
 8. **S6** adapters dispatch:problog/pyreason/souffle **四引擎全接**(G4);adapter graph → paths-model;转换失败的回退策略在 audit 里定。
 9. **收口**:旧 flat-DAG 残留清零;module docs 同步;parent 填 §10 + 归档。
