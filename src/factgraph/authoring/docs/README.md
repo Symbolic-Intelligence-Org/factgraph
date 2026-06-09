@@ -19,8 +19,10 @@ authoring preflight, publish, and registry workflows.
 - If `authoring` continues into a second-phase consolidation, prefer
   updating the "recommended entry points" and "compatibility lane"
   sections in `01_overview.md` first.
-- The declarative metadata contract is unified to `version /
-  description / tags`, plus rule-scoped `condition_weights`:
+- The persisted declarative metadata contract is unified to `version /
+  description / tags`, plus rule-scoped `condition_weights`; schema
+  `repr` templates are validated for explain-layer use but remain out of
+  compiled Schema IR in S1:
   - schema DSL goes through `Entity.Meta`
   - rule / derivation DSL goes through top-level constructor
     parameters

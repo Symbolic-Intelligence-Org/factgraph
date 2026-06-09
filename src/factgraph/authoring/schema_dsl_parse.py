@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from factgraph.core.schema.schema_ir import CANONICAL_TAGS
+from factgraph.core.schema.schema_repr import (
+    SchemaReprTemplateError,
+    validate_member_repr_template,
+    validate_meta_repr_template,
+)
 
 
 _BUILTIN_TAG_MAP = {
@@ -131,7 +136,7 @@ def _parse_meta_class(*, item: ast.ClassDef, path: str) -> dict[str, Any]:
 
 
 def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], path: str) -> None:
-    allowed = {"version", "description", "tags"}
+    allowed = {"version", "description", "tags", "repr"}
     _reject_unknown_keys(meta, allowed, path=path)
 
     if "version" in meta:
@@ -156,6 +161,17 @@ def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], p
                 raise _parse_error("Meta.tags items must be non-empty string", path=f"{path}.tags[{index}]")
             normalized_tags.append(tag)
         entity["tags"] = normalized_tags
+
+    if "repr" in meta:
+        identity_field_names = tuple(
+            field.get("name")
+            for field in entity.get("identity_fields", ())
+            if isinstance(field, dict) and isinstance(field.get("name"), str)
+        )
+        try:
+            validate_meta_repr_template(meta["repr"], identity_field_names=identity_field_names)
+        except SchemaReprTemplateError as exc:
+            raise _parse_error(str(exc), path=f"{path}.repr") from exc
 
 
 def _parse_entity_member_annassign(*, item: ast.AnnAssign, path: str, entity_name: str) -> dict[str, Any]:
@@ -191,13 +207,13 @@ def _build_identity_from_kwargs(
 ) -> dict[str, Any]:
     if annotation_plan.cardinality != "single":
         raise _parse_error("Identity fields must use a single-value annotation", path=f"{path}.annotation")
-    allowed = {"description", "pattern"}
+    allowed = {"description", "pattern", "repr"}
     _reject_unknown_keys(
         kwargs,
         allowed,
         path=f"{path}.Identity",
         message=(
-            "Identity() only accepts description= and pattern= in Form I; "
+            "Identity() only accepts description=, pattern=, and repr= in Form I; "
             "remove primary_key/default/default_factory and provide all identity values explicitly"
         ),
     )
@@ -207,6 +223,7 @@ def _build_identity_from_kwargs(
         "type_domain": annotation_plan.type_domain,
     }
     _apply_common_member_kwargs(out=out, kwargs=kwargs, annotation_plan=annotation_plan, path=f"{path}.Identity")
+    _validate_authoring_member_repr(kwargs, field_name=field_name, path=f"{path}.Identity")
     return out
 
 
@@ -219,13 +236,13 @@ def _build_field_from_kwargs(
     entity_name: str,
 ) -> dict[str, Any]:
     del entity_name
-    allowed = {"description", "pattern"}
+    allowed = {"description", "pattern", "repr"}
     _reject_unknown_keys(
         kwargs,
         allowed,
         path=f"{path}.Field",
         message=(
-            "Field() only accepts description= and pattern= in Form I; "
+            "Field() only accepts description=, pattern=, and repr= in Form I; "
             "replace cardinality= with scalar or collection type annotations"
         ),
     )
@@ -240,6 +257,7 @@ def _build_field_from_kwargs(
         out["enum_values"] = list(annotation_plan.enum_values)
 
     _apply_common_member_kwargs(out=out, kwargs=kwargs, annotation_plan=annotation_plan, path=f"{path}.Field")
+    _validate_authoring_member_repr(kwargs, field_name=field_name, path=f"{path}.Field")
     return out
 
 
@@ -268,6 +286,15 @@ def _apply_common_member_kwargs(
         except re.error as exc:
             raise _parse_error(f"pattern must be valid regex: {exc}", path=f"{path}.pattern")
         out["pattern"] = value
+
+
+def _validate_authoring_member_repr(kwargs: dict[str, Any], *, field_name: str, path: str) -> None:
+    if "repr" not in kwargs:
+        return
+    try:
+        validate_member_repr_template(kwargs["repr"], field_name=field_name)
+    except SchemaReprTemplateError as exc:
+        raise _parse_error(str(exc), path=f"{path}.repr") from exc
 
 
 def _call_name(func: ast.expr) -> str | None:

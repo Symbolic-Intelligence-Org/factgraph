@@ -75,9 +75,11 @@ Boundary constraints:
   - `entity_type` comes directly from the class name; no separate
     `schema_id` is declared
   - In the schema DSL, `class Meta:` provides
-    `version / description / tags`
+    `version / description / tags / repr`
   - `Meta.description` takes precedence; the class docstring is used
     only as a fallback when `description` is not provided
+  - `Meta.repr` is validated for explain-layer use but is not compiled
+    into Schema IR in S1
   - `Meta` is not an open dictionary; any other key raises an error
     during parse / SDK declaration
 - `Rule`
@@ -299,6 +301,8 @@ the migration CLI for legacy workspaces.
   - Declarative metadata such as `version / description / tags` is
     validated and preserved here; core itself assigns them no
     execution semantics
+  - Schema `repr` templates are validated here but remain out of
+    compiled Schema IR until the render layer consumes them
 - `sdk`
   - graph-bound `fg.rules.inspect(...)` is the only remaining `fg.rules.*`
     surface after Q8 Phase 2 (Slice 6); `fg.inferences.*` is an empty

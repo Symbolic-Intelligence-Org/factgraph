@@ -93,6 +93,8 @@ Every Identity field is part of the immutable entity coordinate and must be
 provided explicitly when constructing a ref. `Field()` has no `cardinality`
 keyword. Cardinality is inferred from the annotation: scalar `T` is single,
 `list[T]`, `tuple[T, ...]`, `set[T]`, and `frozenset[T]` are multi.
+Both descriptors accept `repr=` explain-layer templates; S1 validates those
+templates but keeps them out of compiled Schema IR.
 
 `Literal[...]` annotations become schema enum constraints. `pattern=` is a
 regular-expression constraint available on both `Identity` and `Field`, but

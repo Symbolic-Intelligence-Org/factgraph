@@ -63,7 +63,7 @@ Each scalar annotation maps to a storage domain that the compiled schema IR reco
 
 ### 1.5 Value constraints
 
-`Identity()` and `Field()` accept only two keyword arguments: `description=` (human-readable doc string) and `pattern=` (regex constraint, valid only for string-typed fields). Passing other kwargs (`primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
+`Identity()` and `Field()` accept only three keyword arguments: `description=` (human-readable doc string), `pattern=` (regex constraint, valid only for string-typed fields), and `repr=` (explain-layer representation template, validated at class definition time but not compiled into Schema IR in this slice). Passing other kwargs (`primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
 
 Enum-style constraints use `Literal[...]` in the annotation:
 
@@ -252,7 +252,7 @@ class SchemaAddResult:
 
 | Raised by | Type | Code | Message template |
 |---|---|---|---|
-| `Identity(...)` / `Field(...)` with unknown kwarg | `SDKSchemaError` | — | `Identity() only accepts description= and pattern= in Form I; ...` |
+| `Identity(...)` / `Field(...)` with unknown kwarg | `SDKSchemaError` | — | `Identity() only accepts description=, pattern=, and repr= in Form I; ...` |
 | `Field(pattern="...")` on non-string field | `SDKSchemaError` | — | `pattern= is only supported for string-typed Identity/Field members` |
 | `Field(pattern="...")` with invalid regex | `SDKSchemaError` | — | `pattern must be a valid regular expression: ...` |
 | `Entity` subclass with no `Identity()` | `SDKSchemaError` | — | (raised by `EntityMeta`) |
