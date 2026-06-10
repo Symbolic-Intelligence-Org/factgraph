@@ -77,6 +77,8 @@ class NativeProberTests(unittest.TestCase):
         atom = result.paths[0].rules[1].atoms[0]
         self.assertIsInstance(atom.verdict, NotReached)
         self.assertEqual(atom.verdict.blocked_by, "$needs_x__x")
+        self.assertNotIn("$needs_x__x", atom.repr_text or "")
+        self.assertIn("<unbound>", atom.repr_text or "")
 
     def test_downstream_check_after_failed_upstream_can_hold_from_prefix_anchor(self) -> None:
         x = Var("$x")
@@ -260,6 +262,167 @@ class NativeProberTests(unittest.TestCase):
         self.assertEqual(atoms[0].repr_text, "p(2)")
         self.assertEqual(atoms[1].repr_text, "2 > 1")
         self.assertEqual(atoms[2].repr_text, "2 is in (2, 3)")
+
+    def test_fact_field_entity_ref_uses_shared_renderer_for_cross_type_label(self) -> None:
+        class Dept(Entity):
+            class Meta:
+                repr = "Dept %dept_id"
+
+            dept_id: str = Identity()
+
+        class Employee(Entity):
+            class Meta:
+                repr = "Employee %emp_id"
+
+            emp_id: str = Identity()
+            dept: Dept = Field(repr="%ENT dept %FLD")
+
+        employee = Var("$employee")
+        dept = Var("$dept")
+        schema_index = build_schema_index(compile_schema_from_classes([Dept, Employee]))
+        employee_ref = encode_entity_ref(EntityRef("Employee", {"emp_id": "e-1"}), index=schema_index)
+        dept_ref = encode_entity_ref(EntityRef("Dept", {"dept_id": "d-1"}), index=schema_index)
+        employee_info = entity_info(schema_index, "Employee")
+        dept_info = entity_info(schema_index, "Dept")
+        dept_pred_id = field_predicate(schema_index, "Employee", "dept").pred_id
+        rule = Rule(id="employee_dept", when=(PredAtom(dept_pred_id, [employee, dept]),), ports={"employee": employee, "dept": dept})
+        plan = _lower_application_rule(rule, head=rule)
+
+        result = probe_native(
+            plan,
+            {},
+            {
+                employee_info.identity_predicates["emp_id"].pred_id: [(employee_ref, "e-1")],
+                dept_info.identity_predicates["dept_id"].pred_id: [(dept_ref, "d-1")],
+                dept_pred_id: [(employee_ref, dept_ref)],
+            },
+            schema_index=schema_index,
+        )
+
+        atom = result.paths[0].rules[1].atoms[0]
+        self.assertEqual(atom.repr_text, "Employee e-1 dept Dept d-1")
+        self.assertNotIn(employee_ref, atom.repr_text or "")
+        self.assertNotIn(dept_ref, atom.repr_text or "")
+
+    def test_compare_entity_refs_use_shared_renderer(self) -> None:
+        class Dept(Entity):
+            class Meta:
+                repr = "Dept %dept_id"
+
+            dept_id: str = Identity()
+
+        class Employee(Entity):
+            emp_id: str = Identity()
+            dept: Dept = Field()
+
+        employee = Var("$employee")
+        dept = Var("$dept")
+        schema_index = build_schema_index(compile_schema_from_classes([Dept, Employee]))
+        employee_ref = encode_entity_ref(EntityRef("Employee", {"emp_id": "e-1"}), index=schema_index)
+        dept_ref = encode_entity_ref(EntityRef("Dept", {"dept_id": "d-1"}), index=schema_index)
+        dept_info = entity_info(schema_index, "Dept")
+        dept_pred_id = field_predicate(schema_index, "Employee", "dept").pred_id
+        rule = Rule(
+            id="employee_dept_check",
+            when=(PredAtom(dept_pred_id, [employee, dept]), CmpAtom("eq", dept, Const(dept_ref))),
+            ports={"employee": employee, "dept": dept},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+
+        result = probe_native(
+            plan,
+            {},
+            {
+                dept_info.identity_predicates["dept_id"].pred_id: [(dept_ref, "d-1")],
+                dept_pred_id: [(employee_ref, dept_ref)],
+            },
+            schema_index=schema_index,
+        )
+
+        atom = result.paths[0].rules[1].atoms[1]
+        self.assertEqual(atom.repr_text, "Dept d-1 equals Dept d-1")
+        self.assertNotIn(dept_ref, atom.repr_text or "")
+
+    def test_float64_hex_uses_display_text_in_fact_and_compare(self) -> None:
+        class Measurement(Entity):
+            sensor_id: str = Identity()
+            reading: float = Field(repr="reading %FLD")
+
+        sensor = Var("$sensor")
+        reading = Var("$reading")
+        schema_index = build_schema_index(compile_schema_from_classes([Measurement]))
+        sensor_ref = encode_entity_ref(EntityRef("Measurement", {"sensor_id": "s-1"}), index=schema_index)
+        reading_pred_id = field_predicate(schema_index, "Measurement", "reading").pred_id
+        rule = Rule(
+            id="measurement_reading",
+            when=(PredAtom(reading_pred_id, [sensor, reading]), CmpAtom("eq", reading, Const("0x3ff8000000000000"))),
+            ports={"sensor": sensor, "reading": reading},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+
+        result = probe_native(
+            plan,
+            {},
+            {reading_pred_id: [(sensor_ref, "0x3ff8000000000000")]},
+            schema_index=schema_index,
+        )
+
+        atoms = result.paths[0].rules[1].atoms
+        self.assertEqual(atoms[0].repr_text, "reading 1.5")
+        self.assertEqual(atoms[1].repr_text, "1.5 equals 1.5")
+
+    def test_string_field_that_looks_like_float64_hex_is_not_decoded(self) -> None:
+        class Label(Entity):
+            label_id: str = Identity()
+            code: str = Field(repr="code %FLD")
+
+        subject = Var("$subject")
+        code = Var("$code")
+        schema_index = build_schema_index(compile_schema_from_classes([Label]))
+        subject_ref = encode_entity_ref(EntityRef("Label", {"label_id": "l-1"}), index=schema_index)
+        code_pred_id = field_predicate(schema_index, "Label", "code").pred_id
+        rule = Rule(id="label_code", when=(PredAtom(code_pred_id, [subject, code]),), ports={"subject": subject, "code": code})
+        plan = _lower_application_rule(rule, head=rule)
+
+        result = probe_native(
+            plan,
+            {},
+            {code_pred_id: [(subject_ref, "0x3ff8000000000000")]},
+            schema_index=schema_index,
+        )
+
+        atom = result.paths[0].rules[1].atoms[0]
+        self.assertEqual(atom.repr_text, "code 0x3ff8000000000000")
+
+    def test_fact_repr_does_not_reinterpret_field_values_as_placeholders(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "User %user_id"
+
+            user_id: str = Identity()
+            note: str = Field(repr="%FLD / %ENT")
+
+        user = Var("$user")
+        note = Var("$note")
+        schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        user_info = entity_info(schema_index, "DisplayUser")
+        note_pred_id = field_predicate(schema_index, "DisplayUser", "note").pred_id
+        rule = Rule(id="user_note", when=(PredAtom(note_pred_id, [user, note]),), ports={"user": user, "note": note})
+        plan = _lower_application_rule(rule, head=rule)
+
+        result = probe_native(
+            plan,
+            {},
+            {
+                user_info.identity_predicates["user_id"].pred_id: [(user_ref, "u-1")],
+                note_pred_id: [(user_ref, "%ENT")],
+            },
+            schema_index=schema_index,
+        )
+
+        atom = result.paths[0].rules[1].atoms[0]
+        self.assertEqual(atom.repr_text, "%ENT / User u-1")
 
 
 if __name__ == "__main__":

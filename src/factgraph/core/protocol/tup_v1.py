@@ -98,6 +98,14 @@ def _float64_bits(value: Any) -> int:
     return bits
 
 
+def display_float64_value(value: Any) -> str:
+    """Return display text for a canonical finite float64 value."""
+
+    bits = _float64_bits(value)
+    as_float = struct.unpack(">d", bits.to_bytes(8, "big"))[0]
+    return str(as_float)
+
+
 def _encode_bool(value: Any) -> bytes:
     if not isinstance(value, bool):
         raise ValueError("bool value must be bool")

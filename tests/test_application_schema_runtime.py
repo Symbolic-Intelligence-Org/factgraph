@@ -7,9 +7,11 @@ from factgraph.application import (
     build_schema_index,
     field_predicate,
     field_value_type,
+    materialize_identity,
     render_entity_repr,
     resolve_selector,
 )
+from factgraph.application.schema_runtime import EntityTypeInfo, IdentityFieldInfo, SchemaIndex
 from factgraph.application.protocol import EntitySelector
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
@@ -177,6 +179,73 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
             render_entity_repr(index, "User", {"locale": "en"})
 
         self.assertEqual(ctx.exception.code, "MISSING_ENTITY_IDENTITY_VALUE")
+
+    def test_render_entity_repr_uses_single_pass_replacement(self) -> None:
+        class OrgUnit(Entity):
+            class Meta:
+                repr = "%org/%org_unit"
+
+            org: str = Identity()
+            org_unit: str = Identity()
+
+        index = build_schema_index(compile_schema_from_classes([OrgUnit]))
+
+        self.assertEqual(
+            render_entity_repr(index, "OrgUnit", {"org": "acme", "org_unit": "sales"}),
+            "acme/sales",
+        )
+
+    def test_render_entity_repr_preserves_unknown_runtime_placeholders(self) -> None:
+        index = SchemaIndex(
+            schema_ir={},
+            schema_digest="test",
+            entities={
+                "RuntimeOnly": EntityTypeInfo(
+                    entity_type="RuntimeOnly",
+                    identity_fields=(IdentityFieldInfo(name="known", type_domain="string"),),
+                    exists_predicate_id="RuntimeOnly:exists",
+                    identity_predicates={},
+                    meta_repr="%known/%unknown",
+                )
+            },
+            field_predicates={},
+            predicates_by_id={},
+            identity_pred_ids=frozenset(),
+            exists_pred_ids=frozenset(),
+        )
+
+        self.assertEqual(render_entity_repr(index, "RuntimeOnly", {"known": "value"}), "value/%unknown")
+
+    def test_render_entity_repr_does_not_reinterpret_identity_values(self) -> None:
+        class OrgUnit(Entity):
+            class Meta:
+                repr = "%org %org_unit"
+
+            org: str = Identity()
+            org_unit: str = Identity()
+
+        index = build_schema_index(compile_schema_from_classes([OrgUnit]))
+
+        self.assertEqual(
+            render_entity_repr(index, "OrgUnit", {"org": "%org_unit", "org_unit": "sales"}),
+            "%org_unit sales",
+        )
+
+    def test_render_entity_repr_decodes_float64_for_display_only(self) -> None:
+        class FloatIdentity(Entity):
+            class Meta:
+                repr = "Float %value"
+
+            value: float = Identity()
+
+        index = build_schema_index(compile_schema_from_classes([FloatIdentity]))
+        canonical = "0x3ff8000000000000"
+
+        self.assertEqual(render_entity_repr(index, "FloatIdentity", {"value": canonical}), "Float 1.5")
+        self.assertEqual(
+            materialize_identity("FloatIdentity", {"value": canonical}, index=index),
+            {"value": canonical},
+        )
 
 
 if __name__ == "__main__":

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Mapping
+from dataclasses import dataclass
+import re
 from typing import Any, Literal
 
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
+from factgraph.core.protocol.tup_v1 import display_float64_value
 from factgraph.core.schema.schema_ir import ensure_schema_ir, schema_digest
 
 from .protocol import EntityRef, EntitySelector, ErrorDTO
+
+_REPR_PLACEHOLDER_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*")
 
 
 @dataclass(frozen=True)
@@ -286,20 +290,36 @@ def render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Ma
                 path=("entities", entity_type, "identity_fields"),
             )
         first_identity = entity.identity_fields[0].name
-        return f"{entity_type} {_identity_value_text(identity_values, entity_type=entity_type, field_name=first_identity)}"
+        field = entity.identity_fields[0]
+        return f"{entity_type} {_identity_value_text(identity_values, entity_type=entity_type, field_name=field.name, type_domain=field.type_domain)}"
 
-    out = entity.meta_repr.replace("%CLS", entity_type)
-    for field in entity.identity_fields:
-        placeholder = f"%{field.name}"
-        if placeholder in out:
-            out = out.replace(
-                placeholder,
-                _identity_value_text(identity_values, entity_type=entity_type, field_name=field.name),
+    placeholder_values = {
+        "%CLS": entity_type,
+        **{
+            f"%{field.name}": _identity_value_text(
+                identity_values,
+                entity_type=entity_type,
+                field_name=field.name,
+                type_domain=field.type_domain,
             )
-    return out
+            for field in entity.identity_fields
+        },
+    }
+
+    def replace_placeholder(match: re.Match[str]) -> str:
+        token = match.group(0)
+        return placeholder_values.get(token, token)
+
+    return _REPR_PLACEHOLDER_RE.sub(replace_placeholder, entity.meta_repr)
 
 
-def _identity_value_text(identity_values: Mapping[str, Any], *, entity_type: str, field_name: str) -> str:
+def _identity_value_text(
+    identity_values: Mapping[str, Any],
+    *,
+    entity_type: str,
+    field_name: str,
+    type_domain: str,
+) -> str:
     if field_name not in identity_values:
         raise SchemaResolutionError(
             f"missing identity value for {entity_type}.{field_name}",
@@ -307,7 +327,13 @@ def _identity_value_text(identity_values: Mapping[str, Any], *, entity_type: str
             path=("entities", entity_type, "identity_fields", field_name),
             details={"entity_type": entity_type, "field_name": field_name},
         )
-    return str(identity_values[field_name])
+    value = identity_values[field_name]
+    if type_domain == "float64":
+        try:
+            return display_float64_value(value)
+        except Exception:
+            return str(value)
+    return str(value)
 
 
 def entity_info(index: SchemaIndex, entity_type: str) -> EntityTypeInfo:

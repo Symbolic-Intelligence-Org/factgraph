@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from factgraph.application.diagnose_runtime import _extend_env_with_atom
@@ -17,7 +18,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_native_derivation_plan,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
-from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX
+from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
 
 from .evidence_tree import (
     BoundVar,
@@ -36,6 +37,8 @@ from .evidence_tree import (
     PortRef,
     TreeStatus,
 )
+
+_REPR_PLACEHOLDER_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*")
 
 
 @dataclass(frozen=True)
@@ -321,8 +324,8 @@ def _bake_repr_text(
     if isinstance(form, Fact):
         return _repr_fact(form, schema_index, view_facts=view_facts)
     if isinstance(form, Compare):
-        return _repr_compare(form)
-    return _repr_builtin(form)
+        return _repr_compare(form, schema_index, view_facts=view_facts)
+    return _repr_builtin(form, schema_index, view_facts=view_facts)
 
 
 def _repr_fact(
@@ -333,14 +336,26 @@ def _repr_fact(
 ) -> str:
     info = _predicate_info(schema_index, form.predicate)
     if info is None or info.repr is None:
-        return _fact_fallback_repr(form)
+        return _fact_fallback_repr(form, schema_index, view_facts=view_facts, predicate_info=info)
 
-    out = info.repr.replace("%CLS", info.owner_type)
-    if "%FLD" in out:
-        out = out.replace("%FLD", _term_display(form.terms[1]) if len(form.terms) > 1 else "")
-    if "%ENT" in out:
-        out = out.replace("%ENT", _entity_repr_for_fact(schema_index, info.owner_type, form, view_facts=view_facts))
-    return out
+    placeholder_values = {
+        "%CLS": info.owner_type,
+        "%FLD": _render_term_value(
+            form.terms[1],
+            schema_index=schema_index,
+            view_facts=view_facts,
+            decode_float64=info.value_type_domain == "float64",
+        )
+        if len(form.terms) > 1
+        else "",
+        "%ENT": _entity_repr_for_fact(schema_index, info.owner_type, form, view_facts=view_facts),
+    }
+
+    def replace_placeholder(match: re.Match[str]) -> str:
+        token = match.group(0)
+        return placeholder_values.get(token, token)
+
+    return _REPR_PLACEHOLDER_RE.sub(replace_placeholder, info.repr)
 
 
 def _predicate_info(schema_index: object | None, predicate: str) -> object | None:
@@ -365,7 +380,7 @@ def _entity_repr_for_fact(
         try:
             return schema_runtime.render_entity_repr(schema_index, value.entity_type, value.identity)
         except Exception:
-            return _term_display(subject)
+            return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     if schema_index is not None and isinstance(value, Mapping):
         identity = value.get("identity")
         ref_entity_type = value.get("entity_type", entity_type)
@@ -373,23 +388,43 @@ def _entity_repr_for_fact(
             try:
                 return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
             except Exception:
-                return _term_display(subject)
+                return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
     if schema_index is not None and isinstance(value, str) and value.startswith(ENTITY_REF_PREFIX):
         try:
             identity = _recover_identity_from_predicates(value, entity_type, view_facts=view_facts, index=schema_index)
             return schema_runtime.render_entity_repr(schema_index, entity_type, identity)
         except Exception:
-            return _term_display(subject)
-    return _term_display(subject)
+            return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
+    return _render_term_value(subject, schema_index=schema_index, view_facts=view_facts)
 
 
-def _fact_fallback_repr(form: Fact) -> str:
-    return f"{form.predicate}({', '.join(_term_display(term) for term in form.terms)})"
+def _fact_fallback_repr(
+    form: Fact,
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    predicate_info: object | None,
+) -> str:
+    terms = tuple(
+        _render_term_value(
+            term,
+            schema_index=schema_index,
+            view_facts=view_facts,
+            decode_float64=idx > 0 and getattr(predicate_info, "value_type_domain", None) == "float64",
+        )
+        for idx, term in enumerate(form.terms)
+    )
+    return f"{form.predicate}({', '.join(terms)})"
 
 
-def _repr_compare(form: Compare) -> str:
-    left = _term_display(form.left)
-    right = _term_display(form.right)
+def _repr_compare(
+    form: Compare,
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
+    left = _render_term_value(form.left, schema_index=schema_index, view_facts=view_facts, decode_float64=True)
+    right = _render_term_value(form.right, schema_index=schema_index, view_facts=view_facts, decode_float64=True)
     labels = {
         "eq": "equals",
         "ne": "does not equal",
@@ -402,8 +437,16 @@ def _repr_compare(form: Compare) -> str:
     return f"{left} {op} {right}"
 
 
-def _repr_builtin(form: Builtin) -> str:
-    terms = tuple(_term_display(term) for term in form.operands)
+def _repr_builtin(
+    form: Builtin,
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
+    terms = tuple(
+        _render_term_value(term, schema_index=schema_index, view_facts=view_facts, decode_float64=True)
+        for term in form.operands
+    )
     if form.kind == "in" and terms:
         return f"{terms[0]} is in ({', '.join(terms[1:])})"
     if form.kind == "not" and terms:
@@ -411,13 +454,51 @@ def _repr_builtin(form: Builtin) -> str:
     return f"{form.kind}({', '.join(terms)})"
 
 
-def _term_display(term: BoundVar | Const | None) -> str:
+def _render_term_value(
+    term: BoundVar | Const | None,
+    *,
+    schema_index: object | None,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    decode_float64: bool = False,
+) -> str:
     value = _term_value(term)
     if isinstance(value, EntityRef):
-        return value.encoded_ref or f"{value.entity_type}({', '.join(str(v) for v in value.identity.values())})"
+        fallback = value.encoded_ref or f"{value.entity_type}({', '.join(str(v) for v in value.identity.values())})"
+        try:
+            return schema_runtime.render_entity_repr(schema_index, value.entity_type, value.identity) if schema_index is not None else fallback
+        except Exception:
+            return fallback
+    if schema_index is not None and isinstance(value, Mapping):
+        identity = value.get("identity")
+        ref_entity_type = value.get("entity_type")
+        if isinstance(ref_entity_type, str) and isinstance(identity, Mapping):
+            try:
+                return schema_runtime.render_entity_repr(schema_index, ref_entity_type, identity)
+            except Exception:
+                pass
+    if schema_index is not None and isinstance(value, str) and value.startswith(ENTITY_REF_PREFIX):
+        entity_type = _entity_type_from_ref(value)
+        if entity_type is not None:
+            try:
+                identity = _recover_identity_from_predicates(value, entity_type, view_facts=view_facts, index=schema_index)
+                return schema_runtime.render_entity_repr(schema_index, entity_type, identity)
+            except Exception:
+                pass
+    if decode_float64 and isinstance(value, str):
+        try:
+            return display_float64_value(value)
+        except Exception:
+            pass
     if value is None and isinstance(term, BoundVar):
-        return term.name
+        return "<unbound>"
     return str(value)
+
+
+def _entity_type_from_ref(value: str) -> str | None:
+    parts = value.split(":", 2)
+    if len(parts) != 3 or parts[0] != ENTITY_REF_PREFIX[:-1] or not parts[1]:
+        return None
+    return parts[1]
 
 
 def _term_value(term: BoundVar | Const | None) -> Any:
