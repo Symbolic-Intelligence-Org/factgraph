@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Layer — Conformance Rework Program (post-v2 structural fixes)
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: program (multi-batch structural rework; 子 batch 各自 scoped + gate)
@@ -138,7 +138,8 @@ Batch F `86437ccc` repaired the aggregate explain path; reviewer-gate
 remediation `f2df0e89` fixed `count` over field-predicate filters by using
 canonical aggregate filter binding data. Aggregate-local vars no longer block
 missing-variable preflight, correlated outer vars remain real dependencies, and
-aggregate operands render with friendly text such as `sum of amount`.
+aggregate operands render with friendly text such as `sum of amount`. Final
+reviewer gate passed, so the post-D2 reopen is closed.
 
 Outcome:
 

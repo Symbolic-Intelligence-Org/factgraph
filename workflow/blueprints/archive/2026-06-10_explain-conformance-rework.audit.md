@@ -220,3 +220,16 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
   hardened count coverage to use a field-predicate filter.
 - Status: remediation complete; awaiting reviewer independent gate and post-F
   design/doc alignment before archive.
+
+## K. Batch F Reviewer Gate And Archive Readiness (2026-06-10)
+
+- Reviewer gate: PASS after remediation `f2df0e89`.
+- Independent reviewer verified `count(None, [amount($order, $amount)])` over a
+  field-predicate filter now reports `Holds`, not `NotReached`.
+- Correlated aggregate tests cover both states: bound correlation vars evaluate
+  normally, while missing correlation vars stay `NotReached` and do not
+  free-compute or leak unrelated facts.
+- Reviewer confirmed canonical aggregate filter binding reuse closes the drift
+  that caused the original `count` miss.
+- Reviewer broader cohort: `198 OK`.
+- Program status returns to `implemented`; ready for archive.
