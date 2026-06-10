@@ -125,8 +125,8 @@ Round-trip helpers for durable storage. These are canonical at
   implementations are in `factgraph.application.explain`.
 - HTML rendering is outside `factgraph.audit`; delivery-specific renderers live
   in domain or service packages.
-- `AuditQuery.get_candidate_evidence_graph` is a domain-layer API
-  (`src/domains/`), not part of the kernel audit package.
+- `AuditQuery.get_candidate_evidence_graph` is a domain-layer (host application)
+  API, not part of the kernel audit package.
 - Engine-native provenance carriers (`SouffleProofTreeV0`, `ProbLogTraceV0`,
   `PyReasonTraceV0`) are not replaced by `EvidenceGraph`; they are converter
   inputs that produce `EvidenceGraph` output.
