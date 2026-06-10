@@ -1,6 +1,6 @@
 # Rules: declaring queries and composing them
 
-This chapter covers how to *declare* rules and *compose* them. Executing a rule (engine choice, semantics, returned rows) is the next chapter (`evaluation.md`); the shape of result rows and explanations is the chapter after (`evidence.md`).
+This chapter covers how to *declare* rules and *compose* them. Executing a rule (engine choice, semantics) is [`engines_and_configs.md`](engines_and_configs.md); the shape of result rows and explanations is [`evaluate_and_evidence.md`](evaluate_and_evidence.md).
 
 Two assets carry the work in this chapter:
 
@@ -147,7 +147,7 @@ adult_in_us.port_types["age"]    # PortType(kind="value", entity_type=None)
 
 `ports` is also the surface that `fg.entities.match(...)` and `RuleExpr.join_by_ports(...)` consume.
 
-**Declaration-time ports vs evaluation-time `head=`**. `Rule.ports` declares *what this rule exposes*. When the rule is executed through a `RuleExpr` with multiple occurrences, the evaluator additionally needs to know *which occurrence's ports are the output answer* — that selection is made at call time via `fg.eval.evaluate(rule_expr, head=<Rule>)`. The `head=` parameter is covered in `evaluation.md` (next chapter); for a single-rule `evaluate(rule, head=rule)` it is trivial, but `RuleExpr` composition makes it load-bearing.
+**Declaration-time ports vs evaluation-time `head=`**. `Rule.ports` declares *what this rule exposes*. When the rule is executed through a `RuleExpr` with multiple occurrences, the evaluator additionally needs to know *which occurrence's ports are the output answer* — that selection is made at call time via `fg.eval.evaluate(rule_expr, head=<Rule>)`. The `head=` parameter is covered in [`evaluate_and_evidence.md`](evaluate_and_evidence.md) §1.2; for a single-rule `evaluate(rule, head=rule)` it is trivial, but `RuleExpr` composition makes it load-bearing.
 
 ### 2.4 `Rule.projection(*port_names)`
 
@@ -184,7 +184,7 @@ Behavior reference:
 - **No `%` escape**. A `%` followed by anything other than an identifier start is `RuleValidationError: repr contains malformed percent port interpolation`. This means `repr="50% off for %user"` is rejected (the `%5` is malformed), and there is **no `%%` escape** for a literal percent sign — `repr="100%% literal"` raises the same error.
 - **`render_repr(bindings)`**: `bindings` may be `None` (treated as `{}`) or a `Mapping[str, Any]`. Placeholders without a binding render as `<portname>`. Extra keys not referenced by any placeholder are silently ignored.
 
-**Where `repr` is consumed.** `repr` is an author-controlled label — the evaluation runtime does **not** automatically render it. It does **not** appear in `EvaluateRow` or `Explanation` payloads (those are covered in `evidence.md`). Four actual consumption points:
+**Where `repr` is consumed.** `repr` is an author-controlled label — the evaluation runtime does **not** automatically render it. It does **not** appear in `EvaluateRow` or `Explanation` payloads (those are covered in [`evaluate_and_evidence.md`](evaluate_and_evidence.md); the *schema* `repr` templates that drive explanation atom text are a separate feature, [`schema_definition.md`](schema_definition.md) §1.8). Four actual consumption points:
 
 1. `rule.render_repr(bindings)` — the per-rule render shown above.
 2. `fg.rules.inspect(rule_or_expr).render(bindings)` — `RuleExprInspect.render(...)` composes the AST, each occurrence's rendered repr, and the joins into a one-line summary. With more than one occurrence of the same rule, use `alias.portname` qualified keys to disambiguate same-named ports:
@@ -400,10 +400,10 @@ When passing an application `Rule` whose `id` contains characters disallowed in 
 
 `Rule` and `RuleExpr` are *inputs* to the evaluator. The execution surface lives in the next chapters:
 
-- `fg.eval.evaluate(rule_or_expr_or_inference, ...)` — execution entry, returning `EvaluateResult` (see `evaluation.md`)
-- `engine=` and `semantics=` (`ProbLogSemantics` / `PyReasonSemantics`) — see `evaluation.md`
-- `EvaluateRow` / `Explanation` / `Claim` shapes — see `evidence.md`
-- Candidate-fact accept path (Inference only) — see `evaluation.md`
+- `fg.eval.evaluate(rule_or_expr_or_inference, ...)` — execution entry, returning `EvaluateResult` (see [`evaluate_and_evidence.md`](evaluate_and_evidence.md))
+- `engine=` and `semantics=` (`ProbLogSemantics` / `PyReasonSemantics`) — see [`engines_and_configs.md`](engines_and_configs.md)
+- `EvaluateRow` / `Explanation` shapes — see [`evaluate_and_evidence.md`](evaluate_and_evidence.md)
+- Candidate-fact accept path (Inference only) — see [`evaluate_and_evidence.md`](evaluate_and_evidence.md)
 
 ## 6. History note: `Inference` and `Query`
 
@@ -506,6 +506,6 @@ Indirect types reached through methods:
 - [`schema_definition.md`](schema_definition.md) — Entity / Identity / Field declarations that rule bodies reference
 - [`data_model.md`](data_model.md) — the Claim / MetaRow shape that rule matches read from
 - [`three_layer_api.md`](three_layer_api.md) — `fg.entities.match(...)` (Query's successor)
-- `evaluation.md` *(next chapter)* — `fg.eval.evaluate` / `explain`, `engine=`, `semantics=`
-- `evidence.md` *(later chapter)* — `EvaluateRow` / `Explanation` shapes
+- [`engines_and_configs.md`](engines_and_configs.md) — `engine=`, `semantics=`, config
+- [`evaluate_and_evidence.md`](evaluate_and_evidence.md) — `fg.eval.evaluate` / `explain`, `EvaluateRow` / `Explanation` shapes
 - Legacy long-form Rule / Inference reference: [`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md)
