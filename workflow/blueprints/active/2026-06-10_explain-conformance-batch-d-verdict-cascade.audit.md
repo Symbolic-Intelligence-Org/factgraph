@@ -56,6 +56,20 @@ Codex read these shipped anchors before drafting:
    `terminal_envs` is empty. This is already the right shape for row-anchored
    failed explanations. Scope review should confirm no change is needed.
 
+Scope-review decisions:
+
+- Use **last non-empty prefix envs** as verdict-only anchors after upstream
+  failure, falling back to the initial row seed when no prefix survived. This is
+  more faithful than row-seed-only anchors for downstream check atoms whose
+  variables were bound by an earlier holding atom.
+- Preserve no-resurrection: verdict-only anchors must never be returned as the
+  branch candidate env tuple.
+- Keep `NotReached` direct-only: bind-producing atoms or check atoms with
+  missing direct variables under the selected verdict anchors return
+  `NotReached`, not free enumeration.
+- Edit target remains `prober.py` plus tests; seed builder, DTOs, adapters, and
+  support-capture stay out of scope.
+
 ## D. Required Tests
 
 Batch D implementation must include tests that fail on the current cascade:

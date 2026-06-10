@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch D — prober verdict cascade semantics
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -100,8 +100,9 @@ evidence_atom, envs = _probe_atom(
 Inside `_probe_atom(...)`:
 
 1. If `envs` is non-empty, keep the existing G1 path.
-2. If `envs` is empty and `failed_upstream` is true, use `anchor_envs` only to
-   decide this atom's verdict and form rendering.
+2. If `envs` is empty and `failed_upstream` is true, use the last non-empty
+   prefix env tuple as verdict-only anchors. If the first atom failed and no
+   prefix survived, fall back to the row's initial anchor env.
 3. In that verdict-only mode, do **not** free-enumerate bind-producing atoms
    from an empty anchor. The atom should be runnable only if its direct
    variables are bound in the anchor env. If variables are missing, return
@@ -112,6 +113,12 @@ Inside `_probe_atom(...)`:
 6. Return the original empty `envs` to the caller when in verdict-only upstream
    failure mode, so downstream atoms are also checked against the row anchor but
    the branch candidate chain is not resurrected.
+
+The chosen Batch D semantics are **last-non-empty prefix anchors** rather than
+row-seed-only anchors. This is more faithful for downstream check atoms whose
+variables were bound by a previously holding body atom. It still cannot
+resurrect the branch, because verdict-only evaluation never returns the anchor
+envs as candidate envs.
 
 The exact helper names are open to implementation, but the semantic split must
 be explicit: **verdict envs** can use row anchors after upstream failure;
