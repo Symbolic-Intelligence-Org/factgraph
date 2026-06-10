@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Layer — Conformance Rework Program (post-v2 structural fixes)
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: program (multi-batch structural rework; 子 batch 各自 scoped + gate)
@@ -90,7 +90,7 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 - [x] Batch A:非 mock 端到端 `.evaluate().row.explain()` 覆盖 inline / projection / external head + OR branch + join/multi-occurrence + 多行各自锚定无串行;Bug 10 + Bug 4 关闭。
 - [x] Batch E:5 种 aggregate kind native evaluate + explain 端到端通过;Bug 12 关闭。
 - [x] Batch D:下游 atom verdict 反映自身真值(或 NotReached),不再空 env 误判 Fails;对齐 `explain/docs/README.md`;Bug 11 关闭。
-- [ ] Batch D2:对齐设计 §307-308;前序 `Fails` 后仍穷尽推进 explanation track,依赖已绑定的下游 atom 得到 `Holds/Fails`,仅真未绑定依赖得到 `NotReached`;分支 candidate track 不复活。
+- [x] Batch D2:对齐设计 §307-308;前序 `Fails` 后仍穷尽推进 explanation track,依赖已绑定的下游 atom 得到 `Holds/Fails`,仅真未绑定依赖得到 `NotReached`;分支 candidate track 不复活。
 - [x] Batch B:`%FLD` / compare / builtin 的 entity-ref 显友好标签、float64 显十进制、`render_entity_repr` 单遍替换无碰撞/注入;Bug 8/3/9/7 关闭。
 - [x] Batch C:NotAtom 友好渲染(实体标签 + 无 `$`var + 无 tuple,`negated=True`),对齐 souffle 契约;Bug 6 关闭。
 - [x] final:native prober 忠实度测试电池齐全(对标 souffle);6 忠实度判据全覆盖;全 explain cohort 绿。
@@ -117,15 +117,13 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 
 ## 10. Outcome / Deviations
 
-Reopened after final closure. Design verification found a residual deviation
-from `explain-layer-complete-design.zh.md` §307-308: Batch D computes downstream
-verdicts from a frozen last-prefix environment after upstream failure, but it
-does not keep advancing the explanation track. D2 is split out to align code and
-docs with the exhaustive semantics before this parent can be archived.
+Implemented after post-closure D2.
 
-Previously implemented on the single linear stack ending at `e48f99c4` plus
-final program closure. That closure remains historical evidence, but the active
-program state is now `implementing` until D2 passes gate.
+Design verification found a residual deviation from
+`explain-layer-complete-design.zh.md` §307-308 after the original final closure:
+Batch D computed downstream verdicts from a frozen last-prefix environment
+after upstream failure, but it did not keep advancing the explanation track.
+Batch D2 `d4747a88` aligned the code and docs with the exhaustive semantics.
 
 Outcome:
 
@@ -143,6 +141,10 @@ Outcome:
 - Module docs were synchronized for final paths-model behavior.
 - Final reviewer gate passed with a broader explain cohort (`190 OK`) and a
   coherent demo run.
+- Post-closure D2 `d4747a88`: §307-308 verdict exhaustiveness is now satisfied.
+  Candidate envs stay failed/no-resurrection, while explanation envs continue
+  row-anchored advancement after upstream failure; key-unbound predicates return
+  `NotReached` without free-enumerating.
 
 Deviations / follow-up:
 

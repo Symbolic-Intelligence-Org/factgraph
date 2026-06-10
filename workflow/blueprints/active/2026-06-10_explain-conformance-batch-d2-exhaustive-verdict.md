@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch D2 — exhaustive verdict track after upstream failure
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework post-closure correction
@@ -178,22 +178,22 @@ Both should report the same verdicts for `region_pred` and `region == us`.
 
 ## 7. Acceptance
 
-- [ ] Upstream failed filter followed by dependency-bound downstream predicate
+- [x] Upstream failed filter followed by dependency-bound downstream predicate
   yields `Holds` or `Fails`, not `NotReached`.
-- [ ] Senior demo shape: `age >= 65` returns `Fails`, then
+- [x] Senior demo shape: `age >= 65` returns `Fails`, then
   `User u-1 is in region us` returns `Holds`, then `us equals us` returns
   `Holds`.
-- [ ] Equivalent rule orders produce the same downstream verdicts.
-- [ ] A truly unbound downstream dependency still returns
+- [x] Equivalent rule orders produce the same downstream verdicts.
+- [x] A truly unbound downstream dependency still returns
   `NotReached(blocked_by=...)`.
-- [ ] A failed branch remains `status="fails"` after downstream `Holds`.
-- [ ] Multi-entity tests show no cross-entity leakage after upstream failure.
-- [ ] G1 monotonic witness regression remains green.
-- [ ] Batch A seed conformance, Batch B rendering, Batch C NotAtom, and Batch E
+- [x] A failed branch remains `status="fails"` after downstream `Holds`.
+- [x] Multi-entity tests show no cross-entity leakage after upstream failure.
+- [x] G1 monotonic witness regression remains green.
+- [x] Batch A seed conformance, Batch B rendering, Batch C NotAtom, and Batch E
   aggregate tests remain green.
-- [ ] `src/factgraph/application/explain/docs/README.md` describes exhaustive
+- [x] `src/factgraph/application/explain/docs/README.md` describes exhaustive
   explanation-track advancement.
-- [ ] No seed, DTO, adapter, or support-capture implementation diff.
+- [x] No seed, DTO, adapter, or support-capture implementation diff.
 
 ## 8. Implementation Plan
 
@@ -216,4 +216,33 @@ Both should report the same verdicts for `region_pred` and `region == us`.
 
 ## 10. Outcome / Deviations
 
-Pending.
+Implemented in `d4747a88`.
+
+Outcome:
+
+- `_probe_branch(...)` now carries an explicit explanation verdict track in
+  addition to the candidate track.
+- `_probe_atom(...)` returns candidate envs and explanation envs separately.
+  After upstream failure, candidate envs remain empty while explanation envs can
+  keep advancing through row-anchored atoms.
+- The no-free-enumeration guard is unified with the `NotReached` dependency
+  check: bind-producing predicate atoms require the subject/key position
+  (`term0`) to be bound before they may call `_extend_env_with_atom(...)`.
+- The module docs now describe exhaustive explanation-track advancement after
+  upstream failure.
+
+Reviewer gate passed:
+
+- §308 senior path now reports `30 >= 65` as `Fails`, then
+  `User u-1 is in region us` as `Holds`, then `us equals us` as `Holds`.
+- Equivalent atom orders produce the same downstream verdicts.
+- Key-unbound predicate atoms after failure remain `NotReached` and do not leak
+  other entities.
+- Failed branches stay `status="fails"`.
+- G1 monotonic and Batch A/B/C/E regressions remained green.
+
+Deviation:
+
+- `examples/explain_layer_demo.py` already had pre-existing local changes. The
+  implementation commit intentionally did not stage that file; the demo was
+  still run and showed the expected exhaustive senior-path output.

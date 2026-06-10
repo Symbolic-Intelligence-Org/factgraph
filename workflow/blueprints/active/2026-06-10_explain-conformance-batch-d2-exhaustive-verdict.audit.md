@@ -105,4 +105,39 @@ Reviewer gate must include:
 
 ## G. Implementation Outcome
 
-Pending.
+Implemented in `d4747a88`.
+
+Implementation choices:
+
+- `_probe_atom(...)` returns `(evidence_atom, candidate_envs,
+  explanation_envs)`. This makes the dual-track split explicit.
+- Candidate envs remain empty after an upstream failure, preserving
+  no-resurrection.
+- Explanation envs advance exhaustively when `_extend_env_with_atom(...)`
+  succeeds, remain at the previous envs after a pinned `Fails`, and remain
+  unchanged after `NotReached`.
+- `_missing_verdict_dependencies(...)` implements the unified §305 / leakage
+  guard. Predicate atoms check the subject/key position (`term0`) in
+  failed-upstream verdict mode; an unbound key returns `NotReached` rather than
+  scanning all facts.
+
+Tests / verification:
+
+- Codex focused: `tests.application.explain.test_prober` → `21 OK`.
+- Codex focused + native conformance:
+  `tests.application.explain.test_prober tests.sdk.test_explain_conformance_native`
+  → `31 OK`.
+- Codex broader cohort including protocol/digest/schema/adapters/aggregate and
+  rule-expr tests → `166 OK`.
+- Demo run showed the senior path as `Fails → Holds → Holds`.
+
+Reviewer gate:
+
+- §308 senior repro passed: `30 >= 65` Fails, then region predicate Holds, then
+  region comparison Holds.
+- Order-independence probe passed.
+- True unbound dependency remains `NotReached`.
+- Key-unbound predicate no-leak probe passed; no unrelated entity facts leaked.
+- No-resurrection passed; failed branch remains `status="fails"`.
+- G1 monotonic and Batch A/B/C/E regressions passed.
+- Design conformance for §307-308 is now satisfied.

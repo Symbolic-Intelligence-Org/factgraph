@@ -165,3 +165,19 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
   envs after failure. Only true unbound dependencies may produce `NotReached`.
 - Child blueprint:
   [2026-06-10_explain-conformance-batch-d2-exhaustive-verdict.md](./2026-06-10_explain-conformance-batch-d2-exhaustive-verdict.md).
+
+## H. Batch D2 Gate Record (2026-06-10)
+
+- Impl commit: `d4747a88`.
+- Closed deviation: residual mismatch with design §307-308 after Batch D.
+- Boundary: `prober.py`, `test_prober.py`, and
+  `application/explain/docs/README.md`; seed builder, DTOs, adapters, and
+  support-capture untouched.
+- Tests: Codex focused `21 OK`; Codex focused+native conformance `31 OK`;
+  Codex broader cohort `166 OK`; demo showed senior path `Fails → Holds →
+  Holds`.
+- Reviewer gate: senior path, order independence, true-unbound `NotReached`,
+  no branch resurrection, key-unbound no-leak, G1 monotonic, and Batch A/B/C/E
+  regressions all passed.
+- Design status: §307-308 conformance is now satisfied. Program status returns
+  to `implemented`.
