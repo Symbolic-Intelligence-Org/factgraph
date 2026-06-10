@@ -134,10 +134,11 @@ missing-variable preflight descends into aggregate-internal variables, and the
 aggregate operand repr falls back to raw tuple text. Batch F is split out before
 archive.
 
-Batch F `86437ccc` repaired the aggregate explain path: aggregate-local vars no
-longer block missing-variable preflight, correlated outer vars remain real
-dependencies, and aggregate operands render with friendly text such as `sum of
-amount`.
+Batch F `86437ccc` repaired the aggregate explain path; reviewer-gate
+remediation `f2df0e89` fixed `count` over field-predicate filters by using
+canonical aggregate filter binding data. Aggregate-local vars no longer block
+missing-variable preflight, correlated outer vars remain real dependencies, and
+aggregate operands render with friendly text such as `sum of amount`.
 
 Outcome:
 

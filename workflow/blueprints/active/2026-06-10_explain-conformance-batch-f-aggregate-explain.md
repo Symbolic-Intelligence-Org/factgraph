@@ -186,7 +186,7 @@ a way that should be documented in `application/explain/docs/README.md`.
 
 ## 10. Outcome / Deviations
 
-Implemented in `86437ccc`.
+Implemented in `86437ccc`; reviewer-gate remediation in `f2df0e89`.
 
 Outcome:
 
@@ -197,6 +197,10 @@ Outcome:
 - Correlated aggregate filters preserve outer dependencies: bound correlation
   vars evaluate normally; missing correlation vars produce `NotReached` and do
   not free-compute over unrelated facts.
+- Reviewer gate found `count(None, [amount($order, $amount)])` still blocked on
+  the value-position filter variable. The follow-up `f2df0e89` switched the
+  local-var calculation to use canonical aggregate filter binding data and
+  hardened the count test to use a field-predicate filter.
 
 Tests:
 
@@ -206,11 +210,20 @@ Tests:
 - Aggregate DSL/eval/adapter cohort: `50 OK`.
 - `examples/explain_layer_demo.py` runs coherently.
 
+Post-remediation tests:
+
+- Native aggregate explain: `8 OK`.
+- Prober + native conformance: `33 OK`.
+- Broader explain/schema/adapter cohort: `143 OK`.
+- Aggregate DSL/eval/adapter cohort: `50 OK`.
+- `examples/explain_layer_demo.py` runs coherently.
+
 Deviation:
 
 - The runtime lowered form does not preserve source `AggregateAtom` nodes, so
-  the implementation uses the lowered aggregate convention: predicate subject
-  terms and aggregate target vars are aggregate-local, `$agg...` vars are
-  aggregate-local, and value-position vars that are not local remain correlated
-  outer dependencies. This keeps the scope local to `prober.py` without changing
-  `where_eval` or lowering metadata.
+  the implementation combines lowered aggregate conventions with canonical
+  aggregate filter binding data. Predicate subject terms and aggregate target
+  vars are aggregate-local; value-position vars are aggregate-local only when
+  canonical filter data says the filter binds them and the var has lowered-local
+  shape. Plain correlation vars remain outer dependencies. This keeps the scope
+  local to `prober.py` without changing `where_eval` or lowering metadata.

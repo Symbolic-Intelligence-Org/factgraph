@@ -200,19 +200,23 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
 
 ## J. Batch F Implementation Record (2026-06-10)
 
-- Impl commit: `86437ccc`.
+- Impl commits: `86437ccc`, with remediation `f2df0e89`.
 - Closed defect: Bug 13 aggregate explain verdict/repr.
 - Boundary: `prober.py` plus native aggregate conformance tests; no
   `where_eval`, diagnose, support-capture, seed builder, DTO, or adapter
   implementation diff.
-- Tests: native aggregate explain `8 OK`; prober + native conformance `33 OK`;
-  broader explain/schema/adapter cohort `143 OK`; aggregate DSL/eval/adapter
-  cohort `50 OK`; demo coherent.
+- Tests after remediation: native aggregate explain `8 OK`; prober + native
+  conformance `33 OK`; broader explain/schema/adapter cohort `143 OK`;
+  aggregate DSL/eval/adapter cohort `50 OK`; demo coherent.
 - Semantics: aggregate-local target/filter vars no longer block outer
   missing-variable preflight; correlated outer vars remain dependencies and
   missing correlation vars produce `NotReached` rather than free-computing the
   aggregate.
 - Repr: aggregate operands render as `count` / `<kind> of <field>` instead of
   raw tuple text.
-- Status: implementation-side PASS; awaiting reviewer independent gate and
-  post-F design/doc alignment before archive.
+- Reviewer gate found `count(None, [amount($order, $amount)])` still blocked on
+  the field value-position var in `86437ccc`. Remediation `f2df0e89` switched
+  local-var classification to canonical aggregate filter binding data and
+  hardened count coverage to use a field-predicate filter.
+- Status: remediation complete; awaiting reviewer independent gate and post-F
+  design/doc alignment before archive.

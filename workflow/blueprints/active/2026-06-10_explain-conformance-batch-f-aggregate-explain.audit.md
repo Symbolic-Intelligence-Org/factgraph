@@ -108,7 +108,7 @@ are the same check.
 
 ## G. Implementation Outcome (2026-06-10)
 
-Implementation commit: `86437ccc`.
+Implementation commits: `86437ccc`, with reviewer-gate remediation `f2df0e89`.
 
 Code boundary:
 
@@ -126,6 +126,12 @@ Implementation notes:
   treated as aggregate-local.
 - Non-local value-position vars remain correlated outer dependencies; if absent
   from the row/prefix env, the atom is `NotReached`.
+- Reviewer gate found the first implementation did not handle `count` over a
+  field-predicate filter (`count(None, [amount($order, $amount)])`): the
+  value-position filter-bound var was incorrectly treated as an outer
+  dependency. `f2df0e89` now uses canonical aggregate filter binding data from
+  `where_ast_validate._aggregate_filter_bound_vars(...)` to distinguish
+  filter-bound locals from correlated outer dependencies.
 - Repr rendering recognizes aggregate terms and emits stable friendly text such
   as `sum of amount`.
 
@@ -137,4 +143,12 @@ Evidence:
 - Aggregate DSL/eval/adapter cohort: `50 OK`.
 - `examples/explain_layer_demo.py` runs coherently.
 
-Gate status: implementation-side PASS; ready for reviewer independent gate.
+Post-remediation evidence:
+
+- Native aggregate explain: `8 OK`.
+- Prober + native conformance: `33 OK`.
+- Broader explain/schema/adapter cohort: `143 OK`.
+- Aggregate DSL/eval/adapter cohort: `50 OK`.
+- `examples/explain_layer_demo.py` runs coherently.
+
+Gate status: remediation complete; ready for reviewer independent gate.
