@@ -33,6 +33,26 @@ baseline 投影(现 275 行 allowlist):consistency PASS、denylist PASS,**bad-li
 6. 投影 re-run #3:`PROJECTION READY`,**294 files**;`compileall` OK;import-completeness **0 unresolved**;manifest 无 `workflow//examples//docs/official/`。
 7. 待 user review;**未 push**。
 
-## C. Closure
+## C. Closure (2026-06-10)
 
-PROJECTION READY + 用户 review + (授权后)push 时填写。
+用户决策:factgraph 公开面取「**全量公开面**」(非 allowlist 精简面)。
+
+- 发现:现公开分支 `ed054fd0` 发 **169** 测试(≈全量 172),且含 denylist 本应拦下的 `src/factgraph/AGENTS.md` 泄漏 → **allowlist+脚本并非该公开分支的真实组装方式**;按 allowlist 全替换会误删 154 个已公开测试。
+- 全量构建(detached worktree @ `ed054fd0`;`git checkout ea26f566 -- <public roots>` + 剥离泄漏):**454 文件**,全部 **172** 测试,explain + `capabilities.py` 在内,私有泄漏 **0**,bad-link **0**,仅 **2 删**(`AGENTS.md` 泄漏 + 已合并的 `test_audit_evidence_graph_render.py`)。
+- 新 publish commit **`5e21e817`**(parent `ed054fd0`,续 publish 血缘);diff 15A/2D/58M(+6541/−3114)。
+- **push 被 auto-mode 数据外泄分类器拦截**(两次,含一次含 `ls-remote` 的只读命令):理由=「把私有全树推到公开仓库、绕过 curated allowlist projection」属 data exfiltration,且「in-chat 授权不可清除」。**未做任何绕过**。
+- **已发布**:用户在本地终端 push 成功 → `Symbolic-Intelligence-Org/factgraph` branch `feature/v0.2.0-explain-layer-2026-06-10` @ `5e21e817`(worktree push 前 clean)。PR: https://github.com/Symbolic-Intelligence-Org/factgraph/pull/new/feature/v0.2.0-explain-layer-2026-06-10
+- impl 分支 allowlist 提交 `ea26f566` 本地保留(**未推 origin**)。
+- sacred master 不变 @ `854d03b9`。
+
+**可复现 recipe**(若 /tmp worktree 被清):
+```
+git worktree add --detach /tmp/fg-rel-explain ed054fd0
+cd /tmp/fg-rel-explain && git rm -rf .
+git checkout ea26f566 -- src/factgraph tests docs/quickstart docs/SECURITY.md \
+  .github/workflows/factgraph-tests.yml .gitignore CHANGELOG.md CODE_OF_CONDUCT.md \
+  CONTRIBUTING.md LICENSE README.md pyproject.toml
+find . -path ./.git -prune -o \( -name AGENTS.md -o -name CLAUDE.md \) -delete
+git add -A && git commit -m "publish: sync factgraph release surface from hnsm ea26f566"
+git push factgraph HEAD:refs/heads/feature/v0.2.0-explain-layer-2026-06-10
+```

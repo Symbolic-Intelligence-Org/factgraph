@@ -4,10 +4,11 @@
 
 ## Inventory
 
-最后更新：2026-06-10 (explain-layer v2 + conformance rework archived)
+最后更新：2026-06-10 (factgraph explain release-surface published + archived)
 
 | Date | Blueprint | Status | Summary |
 |------|-----------|--------|---------|
+| 2026-06-10 | factgraph-explain-release-surface | implemented | Published the explain-layer v2 + conformance work to the public factgraph repo. Pivoted from allowlist projection to full public surface after finding the live publish ships ~all 172 tests (the allowlist's 21-test section is not how the publish assembles tests) and had leaked `src/factgraph/AGENTS.md`. Allowlist gained the explain surface + `application/capabilities.py` parity plus one bad-link doc fix (`ea26f566`); built publish commit `5e21e817` on the publish lineage (`ed054fd0`) = 454 files / full 172 tests / explain + capabilities / AGENTS.md leak removed / only 2 deletions; user pushed to factgraph `feature/v0.2.0-explain-layer-2026-06-10` (auto-mode data-exfiltration guard blocked the agent's own push). |
 | 2026-06-10 | explain-conformance-rework | implemented | Post-v2 explain conformance parent program. Closed audit-confirmed defects through batches A/E/D/B/C/final plus post-closure D2 (§307-308 exhaustive verdict conformance) and F (aggregate explain); quickstart rewrite remains a follow-up outside this archive batch. |
 | 2026-06-10 | explain-conformance-batch-a-seed-model | implemented | Fixed row seed model for inline/projection/external head vars via lowering-owned `probe_seed_vars_by_head_port`; projection/external/OR/join multi-row anchoring covered. |
 | 2026-06-10 | explain-conformance-batch-e-aggregate-resolver | implemented | Support-capture aggregate resolver now uses aggregate-aware eval term resolution for eq/ne/cmp/arith; five aggregate kinds no longer crash. |

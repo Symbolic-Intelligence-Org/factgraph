@@ -1,6 +1,6 @@
 # Task Blueprint: factgraph release surface — explain-layer v2 + conformance
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: release-surface slice (`feedback_cleanup_slice_cadence` 轻量;narrative scope-freeze + 通用验收)
@@ -72,7 +72,7 @@ tests(curated:仅 kernel/protocol/sdk 纯 python,匹配既有"不发引擎测试
 - [x] import-completeness:投影内无 shipped→non-shipped factgraph import(0 unresolved)+ `compileall` OK。✅
 - [x] 3 个 `docs/quickstart` bad-link 干净(sync 时手工加)。✅ 预扫确认
 - [x] 投影内无 `workflow/` / `examples/` / `docs/official`。✅
-- [ ] (review 后)仅在显式授权后才推分支。← 待
+- [x] 仅在显式授权后才推分支。✅ 全量公开面构建后由**用户本地 push**(in-chat 授权无法过 auto-mode 数据外泄闸)
 
 ## 6. Outcome / Deviations
 
@@ -83,4 +83,10 @@ staged build 完成(**未 push**):
 - 偏差①:`test_audit_evidence_graph_render.py`(range 内删除文件)剔除测试面(10→9)。
 - 偏差②:`application/capabilities.py` pre-existing parity gap 折入(非 explain 引入;现有发布投影已含,其依赖 `tup_v1` 已发布)。
 - DEFER 测试 8(引擎运行时 / 非 explain 范围)。
-- 待:user review 投影清单 → 显式授权后 sync + push `feature/v0.2.0-explain-layer-2026-06-10`(基于现有 factgraph publish 血缘)+ 手工加 3 个 `docs/quickstart`。
+**最终(全量公开面 pivot + 已发布)**:user review 时确认 allowlist 精简面会误删 154 个已公开测试 → 决策改取**全量公开面**。
+- 构建:detached worktree @ `ed054fd0`,`git checkout ea26f566 -- <public roots>` + 剥离 `AGENTS.md`/`CLAUDE.md` 泄漏 → **454 文件 / 全 172 测试 / explain + capabilities 在内 / 私有泄漏 0 / bad-link 0 / 仅 2 删**(`AGENTS.md` 泄漏 + 已合并的 render 测试)。
+- publish commit `5e21e817`(parent `ed054fd0`);diff 15A/2D/58M(+6541/−3114)。
+- push 两度被 auto-mode 数据外泄闸拦(in-chat 授权不可清除)→ **由用户本地终端 push 成功**。
+  - Repo `Symbolic-Intelligence-Org/factgraph` · Branch `feature/v0.2.0-explain-layer-2026-06-10` · Commit `5e21e817`
+  - PR: https://github.com/Symbolic-Intelligence-Org/factgraph/pull/new/feature/v0.2.0-explain-layer-2026-06-10
+- 遗留(待用户定):impl 分支 allowlist 提交 `ea26f566` 是否推 origin;本蓝图是否归档。
