@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Layer — Conformance Rework Program (post-v2 structural fixes)
 
-- Status: implemented
+- Status: implementing
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: program (multi-batch structural rework; 子 batch 各自 scoped + gate)
@@ -64,6 +64,7 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 | **A** | Bug 10 + Bug 4 | 正确性(最高) | 重写 seed builder 覆盖 inline/projection/external 三类 head var |
 | **E** | Bug 12 | 崩溃 | support-capture 用 aggregate-aware resolver(evaluate 路径;可并行准备) |
 | **D** | Bug 11 | 正确性 | 修下游 verdict 空 env 级联语义 |
+| **D2** | §308 post-closure deviation | 正确性 | 前序 Fails 后 explanation track 继续穷尽推进;仅真未绑定触发 NotReached |
 | **B** | Bug 8 + 3 + 9 + 7 | 呈现为主 | 统一值渲染(`_term_display` + `render_entity_repr` + float64 解码) |
 | **C** | Bug 6 | 呈现 | NotAtom 友好渲染(依赖 B 的 value renderer) |
 | **final** | — | 收口 | native 忠实度测试电池统一命名 + 文档 + 跑 full matrix |
@@ -89,6 +90,7 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 - [x] Batch A:非 mock 端到端 `.evaluate().row.explain()` 覆盖 inline / projection / external head + OR branch + join/multi-occurrence + 多行各自锚定无串行;Bug 10 + Bug 4 关闭。
 - [x] Batch E:5 种 aggregate kind native evaluate + explain 端到端通过;Bug 12 关闭。
 - [x] Batch D:下游 atom verdict 反映自身真值(或 NotReached),不再空 env 误判 Fails;对齐 `explain/docs/README.md`;Bug 11 关闭。
+- [ ] Batch D2:对齐设计 §307-308;前序 `Fails` 后仍穷尽推进 explanation track,依赖已绑定的下游 atom 得到 `Holds/Fails`,仅真未绑定依赖得到 `NotReached`;分支 candidate track 不复活。
 - [x] Batch B:`%FLD` / compare / builtin 的 entity-ref 显友好标签、float64 显十进制、`render_entity_repr` 单遍替换无碰撞/注入;Bug 8/3/9/7 关闭。
 - [x] Batch C:NotAtom 友好渲染(实体标签 + 无 `$`var + 无 tuple,`negated=True`),对齐 souffle 契约;Bug 6 关闭。
 - [x] final:native prober 忠实度测试电池齐全(对标 souffle);6 忠实度判据全覆盖;全 explain cohort 绿。
@@ -104,6 +106,7 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 4. **Batch B**(Bug 8+3+9+7)— value renderer 统一 + `render_entity_repr` 单遍替换 + float64 解码。
 5. **Batch C**(Bug 6)— NotAtom 友好渲染。排 B 后(依赖 value renderer)。
 6. **final** — 测试电池收口 + 文档 + full matrix。
+7. **Batch D2**(post-closure §308)— exhaustive verdict advance after upstream failure; candidate track remains failed.
 
 ## 9. Docs To Update
 
@@ -114,8 +117,15 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 
 ## 10. Outcome / Deviations
 
-Implemented on the single linear stack ending at `e48f99c4` plus final program
-closure.
+Reopened after final closure. Design verification found a residual deviation
+from `explain-layer-complete-design.zh.md` §307-308: Batch D computes downstream
+verdicts from a frozen last-prefix environment after upstream failure, but it
+does not keep advancing the explanation track. D2 is split out to align code and
+docs with the exhaustive semantics before this parent can be archived.
+
+Previously implemented on the single linear stack ending at `e48f99c4` plus
+final program closure. That closure remains historical evidence, but the active
+program state is now `implementing` until D2 passes gate.
 
 Outcome:
 

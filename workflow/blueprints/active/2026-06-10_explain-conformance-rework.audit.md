@@ -147,3 +147,21 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
     dedicated rewrite for the removed flat-DAG model.
   - Program status: implemented. All audit-confirmed conformance defects are
     closed and independently gate-passed.
+
+## G. Post-Closure D2 Reopen (2026-06-10)
+
+- Trigger: design-doc verification found a residual deviation from
+  `workflow/design/design-points/active/explain-layer-complete-design.zh.md`
+  §307-308 after the final closeout.
+- Decision: reopen the parent program from `implemented` to `implementing` and
+  split a new scoped child, Batch D2, rather than patching the already-closed
+  Batch D record.
+- Reason: Batch D fixed the "empty env becomes downstream Fails" bug, but its
+  last-prefix verdict env freezes after upstream failure. That still violates
+  §308, which requires exhaustive downstream evaluation whenever dependencies
+  are bound.
+- Locked D2 objective: preserve candidate-track failure/no-resurrection, while
+  allowing a separate explanation track to keep advancing row-anchored verdict
+  envs after failure. Only true unbound dependencies may produce `NotReached`.
+- Child blueprint:
+  [2026-06-10_explain-conformance-batch-d2-exhaustive-verdict.md](./2026-06-10_explain-conformance-batch-d2-exhaustive-verdict.md).
