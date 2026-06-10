@@ -19,6 +19,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
+from factgraph.core.rules.where_ast import _AGGREGATE_KINDS
 
 from .evidence_tree import (
     BoundVar,
@@ -553,6 +554,8 @@ def _render_term_value(
     decode_float64: bool = False,
 ) -> str:
     value = _term_value(term)
+    if _is_aggregate_term(value):
+        return _render_aggregate_term(value)
     if isinstance(value, EntityRef):
         fallback = value.encoded_ref or f"{value.entity_type}({', '.join(str(v) for v in value.identity.values())})"
         try:
@@ -585,6 +588,44 @@ def _render_term_value(
     return str(value)
 
 
+def _render_aggregate_term(value: tuple[Any, ...]) -> str:
+    kind = str(value[0])
+    target = value[1] if len(value) > 1 else None
+    if kind == "count":
+        return "count"
+    label = _aggregate_target_label(target, value[2] if len(value) > 2 else ())
+    return f"{kind} of {label}"
+
+
+def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
+    target_vars = set(_vars_in_atom_tuple(target))
+    if target_vars and isinstance(filter_atoms, list):
+        for atom in filter_atoms:
+            if not _is_atom_tuple(atom) or atom[0] != "pred" or len(atom) < 3:
+                continue
+            pred_id = atom[1]
+            terms = atom[2]
+            if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)):
+                continue
+            if target_vars & set(_vars_in_atom_tuple(terms)):
+                if isinstance(pred_id, str) and ":" in pred_id:
+                    return pred_id.rsplit(":", 1)[1]
+    if target_vars:
+        return _clean_var_label(sorted(target_vars)[0])
+    return "value"
+
+
+def _clean_var_label(var_name: str) -> str:
+    label = var_name[1:] if var_name.startswith("$") else var_name
+    if "__" in label:
+        label = label.rsplit("__", 1)[1]
+    if label.startswith("_agg"):
+        label = label[4:]
+    if label.startswith("agg"):
+        label = label[3:]
+    return label or "value"
+
+
 def _entity_type_from_ref(value: str) -> str | None:
     parts = value.split(":", 2)
     if len(parts) != 3 or parts[0] != ENTITY_REF_PREFIX[:-1] or not parts[1]:
@@ -609,7 +650,7 @@ def _is_not_atom(atom: tuple[Any, ...]) -> bool:
 
 
 def _missing_variables(atom: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
-    return tuple(var for var in _vars_in_atom_tuple(atom) if var not in env)
+    return tuple(var for var in _vars_for_missing_check(atom) if var not in env)
 
 
 def _missing_verdict_dependencies(atom: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
@@ -617,8 +658,79 @@ def _missing_verdict_dependencies(atom: tuple[Any, ...], env: Mapping[str, Any])
         terms = atom[2] if len(atom) > 2 else ()
         if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or not terms:
             return _missing_variables(atom, env)
-        return tuple(var for var in _vars_in_atom_tuple(terms[0]) if var not in env)
+        return tuple(var for var in _vars_for_missing_check(terms[0]) if var not in env)
     return _missing_variables(atom, env)
+
+
+def _vars_for_missing_check(atom: Any) -> tuple[str, ...]:
+    found: list[str] = []
+    if isinstance(atom, str) and atom.startswith("$"):
+        return (atom,)
+    if _is_aggregate_term(atom):
+        found.extend(_aggregate_required_outer_vars(atom))
+    elif isinstance(atom, (list, tuple)):
+        for item in atom:
+            found.extend(_vars_for_missing_check(item))
+    return tuple(dict.fromkeys(found))
+
+
+def _is_aggregate_term(value: object) -> bool:
+    return (
+        isinstance(value, tuple)
+        and len(value) == 3
+        and isinstance(value[0], str)
+        and value[0] in _AGGREGATE_KINDS
+        and isinstance(value[2], list)
+    )
+
+
+def _aggregate_required_outer_vars(aggregate_term: tuple[Any, ...]) -> tuple[str, ...]:
+    _kind, target, filter_atoms = aggregate_term
+    all_vars = set(_vars_in_atom_tuple(target))
+    all_vars |= set(_vars_in_atom_tuple(filter_atoms))
+    local_vars = _aggregate_local_vars(target, filter_atoms)
+    return tuple(var for var in _vars_in_atom_tuple((target, filter_atoms)) if var in all_vars - local_vars)
+
+
+def _aggregate_local_vars(target: Any, filter_atoms: Any) -> set[str]:
+    target_vars = set(_vars_in_atom_tuple(target))
+    local = set(target_vars)
+    if not isinstance(filter_atoms, list):
+        return local
+
+    pred_atoms = [atom for atom in filter_atoms if _is_atom_tuple(atom) and atom[0] == "pred" and len(atom) >= 3]
+    vars_used_outside_pred_value: set[str] = set(target_vars)
+    for atom in filter_atoms:
+        if atom in pred_atoms:
+            terms = atom[2]
+            if isinstance(terms, Sequence) and not isinstance(terms, (str, bytes)) and terms:
+                vars_used_outside_pred_value |= set(_vars_in_atom_tuple(terms[0]))
+            continue
+        vars_used_outside_pred_value |= set(_vars_in_atom_tuple(atom))
+
+    changed = True
+    while changed:
+        changed = False
+        for atom in pred_atoms:
+            terms = atom[2]
+            if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or not terms:
+                continue
+            subject_vars = set(_vars_in_atom_tuple(terms[0]))
+            for var in subject_vars:
+                if var not in local:
+                    local.add(var)
+                    changed = True
+            for term in terms[1:]:
+                for var in _vars_in_atom_tuple(term):
+                    if (
+                        var in target_vars
+                        or var.startswith("$agg")
+                        or var.startswith("$_agg")
+                        or var in vars_used_outside_pred_value
+                    ) and var not in local:
+                        local.add(var)
+                        changed = True
+    return local
 
 
 def _vars_in_atom_tuple(atom: Any) -> tuple[str, ...]:

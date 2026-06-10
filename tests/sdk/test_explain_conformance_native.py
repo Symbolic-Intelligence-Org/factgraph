@@ -5,7 +5,10 @@ import unittest
 import factgraph.sdk as sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
 from factgraph.application.protocol import EntitySelector, Rule
+from factgraph.application.explain.evidence_tree import Holds, NotReached
+from factgraph.application.explain.prober import ProbeEnv, _probe_atom
 from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.view.projector import project_view_facts
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.sdk import Entity, Field, Identity
@@ -24,6 +27,7 @@ class NativeExplainUser(Entity):
 class NativeAggregateOrder(Entity):
     order_id: str = Identity()
     amount: int = Field()
+    buyer: str = Field()
 
 
 def _store() -> sdk.SDKStore:
@@ -47,7 +51,7 @@ def _seed_user(graph: sdk.SDKStore, user_id: str, *, region: str, age: int, tag:
     return encoded
 
 
-def _seed_order(graph: sdk.SDKStore, order_id: str, *, amount: int) -> str:
+def _seed_order(graph: sdk.SDKStore, order_id: str, *, amount: int, buyer: str = "all") -> str:
     index = build_schema_index(graph.schema_ir)
     ref = resolve_selector(EntitySelector(entity_type="NativeAggregateOrder", identity={"order_id": order_id}), index=index)
     info = entity_info(index, "NativeAggregateOrder")
@@ -55,6 +59,7 @@ def _seed_order(graph: sdk.SDKStore, order_id: str, *, amount: int) -> str:
     set_field(graph.ledger, info.exists_predicate_id, encoded, [])
     set_field(graph.ledger, info.identity_predicates["order_id"].pred_id, encoded, [("string", order_id)])
     set_field(graph.ledger, field_predicate(index, "NativeAggregateOrder", "amount").pred_id, encoded, [("int", amount)])
+    set_field(graph.ledger, field_predicate(index, "NativeAggregateOrder", "buyer").pred_id, encoded, [("string", buyer)])
     return encoded
 
 
@@ -123,11 +128,47 @@ def _aggregate_rule(graph: sdk.SDKStore, kind: str) -> Rule:
     return Rule(id=f"order_{kind}", when=(CmpAtom("eq", total, aggregate),), ports={"total": total})
 
 
+def _correlated_aggregate_rule(graph: sdk.SDKStore) -> Rule:
+    index = build_schema_index(graph.schema_ir)
+    amount_pred = field_predicate(index, "NativeAggregateOrder", "amount").pred_id
+    buyer_pred = field_predicate(index, "NativeAggregateOrder", "buyer").pred_id
+    outer_order = Var("$outer_order")
+    order = Var("$order")
+    amount = Var("$amount")
+    buyer = Var("$buyer")
+    total = Var("$total")
+    aggregate = AggregateAtom(
+        "sum",
+        amount,
+        [
+            PredAtom(buyer_pred, [order, buyer]),
+            PredAtom(amount_pred, [order, amount]),
+        ],
+    )
+    return Rule(
+        id="buyer_order_sum",
+        when=(PredAtom(buyer_pred, [outer_order, buyer]), CmpAtom("eq", total, aggregate)),
+        ports={"buyer": buyer, "total": total},
+    )
+
+
 def _row_public_value(row: object, port_name: str) -> object:
     value = row.bindings[port_name]  # type: ignore[attr-defined,index]
     if isinstance(value, dict) and "value" in value:
         return value["value"]
     return value
+
+
+def _evidence_atoms(row: object) -> tuple[object, ...]:
+    explanation = row.explain()  # type: ignore[attr-defined]
+    evidence = explanation.evidence
+    assert evidence is not None
+    return tuple(
+        atom
+        for path in evidence.paths
+        for rule in path.rules
+        for atom in rule.atoms
+    )
 
 
 class NativeAggregateExplainConformanceTests(unittest.TestCase):
@@ -180,6 +221,77 @@ class NativeAggregateExplainConformanceTests(unittest.TestCase):
         self.assertIsNotNone(explanation.evidence)
         assert explanation.evidence is not None
         self.assertTrue(explanation.evidence.paths)
+        atom_text = "\n".join(atom.repr_text or "" for atom in _evidence_atoms(result[0]))
+        self.assertNotIn("$", atom_text)
+        self.assertNotIn("('", atom_text)
+        self.assertNotIn("[(", atom_text)
+        self.assertIn("count" if kind == "count" else f"{kind} of amount", atom_text)
+        aggregate_atoms = [
+            atom
+            for atom in _evidence_atoms(result[0])
+            if atom.repr_text and ("count" in atom.repr_text or f"{kind} of amount" in atom.repr_text)
+        ]
+        self.assertTrue(aggregate_atoms)
+        self.assertTrue(any(isinstance(atom.verdict, Holds) for atom in aggregate_atoms))
+
+    def test_correlated_aggregate_explain_holds_when_outer_var_is_bound(self) -> None:
+        graph = _aggregate_store()
+        _seed_order(graph, "o-1", amount=10, buyer="u-1")
+        _seed_order(graph, "o-2", amount=20, buyer="u-1")
+        _seed_order(graph, "o-3", amount=5, buyer="u-2")
+
+        result = graph.eval.evaluate(_correlated_aggregate_rule(graph), head=_correlated_aggregate_rule(graph), engine="native")
+
+        rows_by_buyer = {str(_row_public_value(row, "buyer")): row for row in result}
+        self.assertEqual(_row_public_value(rows_by_buyer["u-1"], "total"), 30)
+        self.assertEqual(_row_public_value(rows_by_buyer["u-2"], "total"), 5)
+        first_text = "\n".join(atom.repr_text or "" for atom in _evidence_atoms(rows_by_buyer["u-1"]))
+        second_text = "\n".join(atom.repr_text or "" for atom in _evidence_atoms(rows_by_buyer["u-2"]))
+        self.assertIn("30 equals sum of amount", first_text)
+        self.assertIn("5 equals sum of amount", second_text)
+        first_aggregate_atoms = [atom for atom in _evidence_atoms(rows_by_buyer["u-1"]) if atom.repr_text == "30 equals sum of amount"]
+        second_aggregate_atoms = [atom for atom in _evidence_atoms(rows_by_buyer["u-2"]) if atom.repr_text == "5 equals sum of amount"]
+        self.assertTrue(first_aggregate_atoms)
+        self.assertTrue(second_aggregate_atoms)
+        self.assertTrue(all(isinstance(atom.verdict, Holds) for atom in first_aggregate_atoms + second_aggregate_atoms))
+
+    def test_correlated_aggregate_missing_outer_var_is_not_reached_without_leaking(self) -> None:
+        graph = _aggregate_store()
+        _seed_order(graph, "o-1", amount=10, buyer="u-1")
+        _seed_order(graph, "o-2", amount=20, buyer="u-2")
+        index = build_schema_index(graph.schema_ir)
+        amount_pred = field_predicate(index, "NativeAggregateOrder", "amount").pred_id
+        buyer_pred = field_predicate(index, "NativeAggregateOrder", "buyer").pred_id
+        atom = (
+            "eq",
+            "$total",
+            (
+                "sum",
+                "$_agg_amount",
+                [
+                    ("pred", buyer_pred, ["$_agg_order", "$buyer"]),
+                    ("pred", amount_pred, ["$_agg_order", "$_agg_amount"]),
+                ],
+            ),
+        )
+
+        evidence_atom, candidate_envs, verdict_envs = _probe_atom(
+            atom,
+            (ProbeEnv.from_bindings({"$total": 30}),),
+            verdict_envs=(ProbeEnv.from_bindings({"$total": 30}),),
+            view_facts={key: list(value) for key, value in project_view_facts(graph.ledger, graph.schema_ir).items()},
+            atom_id="aggregate:correlated:missing",
+            failed_upstream=False,
+            schema_index=index,
+        )
+
+        self.assertIsInstance(evidence_atom.verdict, NotReached)
+        self.assertIn("$buyer", evidence_atom.verdict.blocked_by)
+        self.assertEqual(evidence_atom.repr_text, "30 equals sum of amount")
+        self.assertNotIn("u-1", evidence_atom.repr_text or "")
+        self.assertNotIn("u-2", evidence_atom.repr_text or "")
+        self.assertEqual(candidate_envs, ())
+        self.assertEqual(verdict_envs, (ProbeEnv.from_bindings({"$total": 30}),))
 
 
 class NativeExplainConformanceTests(unittest.TestCase):
