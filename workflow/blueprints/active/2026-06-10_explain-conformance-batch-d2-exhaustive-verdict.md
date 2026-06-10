@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch D2 — exhaustive verdict track after upstream failure
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework post-closure correction
@@ -139,6 +139,16 @@ Recommended implementation shape:
 The exact key heuristic is implementation-owned but must be justified in the
 audit. The expected common case is field predicates where the first argument is
 the entity key already seeded by Batch A.
+
+Scope-review lock: this is not a second notion of "missing". The no-free-
+enumeration guard and design §305 `NotReached` are the same dependency check.
+If the atom's input dependency is bound, run a pinned `_extend_env_with_atom`.
+If the dependency is not bound, return `NotReached(blocked_by=...)`.
+
+For predicate atoms, the operational key is the entity subject position
+(`term0`) for field/identity/exists-style predicates. If that subject variable
+is unbound in failed-upstream explanation mode, return `NotReached` instead of
+free-enumerating. Unknown predicate shapes should fail closed to `NotReached`.
 
 ### 5.4 Order independence
 

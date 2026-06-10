@@ -71,7 +71,25 @@ Non-targets:
 These are implementation-shape questions, not scope blockers. The semantic
 requirements are locked by blueprint §5-§7.
 
-## E. Required Gate Evidence
+## E. Scope Review (2026-06-10)
+
+Verdict: APPROVED; moved to `scoped`.
+
+Reviewer locks:
+
+1. The leakage guard and design §305 `NotReached` must be implemented as one
+   dependency check, not two competing concepts. Input dependency bound means
+   the atom may be evaluated with pinned row-anchored envs. Input dependency
+   unbound means `NotReached(blocked_by=...)`.
+2. Predicate free-enumeration risk is the subject/key position. For
+   field/identity/exists-style predicates, `term0` is the entity subject. If
+   that subject variable is unbound after upstream failure, return
+   `NotReached`, not an unconstrained fact scan.
+3. Unknown predicate shapes must fail closed to `NotReached`.
+4. Dual-track semantics remain locked: candidate envs stay empty after failure;
+   explanation envs may advance exhaustively.
+
+## F. Required Gate Evidence
 
 Reviewer gate must include:
 
@@ -85,6 +103,6 @@ Reviewer gate must include:
 - Batch A/B/C/E regression cohort;
 - docs updated to exhaustive wording.
 
-## F. Implementation Outcome
+## G. Implementation Outcome
 
 Pending.
