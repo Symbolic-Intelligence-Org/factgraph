@@ -58,6 +58,22 @@ Codex read these shipped anchors before drafting:
    not an exception. Scope review should decide whether defensive fallback text
    should still use the `!` prefix.
 
+Scope-review decisions:
+
+- Not-body prose style approved: `!a` for one atom, `!(a && b)` for
+  conjunction, and `!((a && b) || c)` for OR-of-AND. Tests should lock one
+  stable syntax. `and` / `or` wording is not required.
+- OR-of-AND rendering must be source-verified before implementation. The
+  single-AND case is confirmed as a flat list of inner atoms. If OR lowered
+  structure differs from the expected two-level branch list, implementation
+  should degrade to readable non-throwing fallback instead of inventing
+  semantics.
+- The outer form may remain `Builtin(kind="not", ...)`; public DTO shape must
+  not change. The acceptance criteria are the `negated=True` flag, friendly
+  repr, and verdict stability.
+- Defensive fallback should preserve a visible negation marker (`!`) where
+  possible.
+
 ## D. Required Tests
 
 Batch C implementation must include tests that fail on current native prober

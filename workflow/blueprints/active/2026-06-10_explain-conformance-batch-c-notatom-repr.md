@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch C — NotAtom repr and negation flag
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -100,7 +100,11 @@ repr machinery used by normal atoms:
 - conjunction: `!(<a> && <b>)`;
 - disjunction of conjunctions: `!((<a> && <b>) || (<c>))`.
 
-Exact whitespace is not important, but tests should lock one stable format.
+Scope review accepted this code-like format family. Exact whitespace is not
+important, but tests should lock one stable format. Implementation must verify
+the actual lowered OR-of-AND shape before emitting `||`; if the structure is
+not the expected two-level branch list, it should degrade to readable fallback
+text rather than guess.
 
 Required properties:
 
@@ -110,6 +114,9 @@ Required properties:
 - true-unbound values use Batch B's `<unbound>` behavior;
 - unknown/unsupported inner form falls back gracefully to readable text, not an
   exception.
+
+Defensive fallback text should still keep the negation surface obvious, using a
+`!` prefix where possible.
 
 ### 5.3 Verdict boundary
 
