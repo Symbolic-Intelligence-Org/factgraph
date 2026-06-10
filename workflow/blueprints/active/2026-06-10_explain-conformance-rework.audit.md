@@ -104,3 +104,20 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
     explanation.
   - Carry-forward: remaining true-unbound `$...` repr text belongs to Batch B
     with unified value rendering.
+- **Batch B — unified repr value rendering**: PASS.
+  - Impl commit: `587057f6`.
+  - Closed defects: Bug 7, Bug 8, Bug 3, Bug 9, and carry-forward Bug 5.
+  - Boundary: prober repr rendering, schema-runtime display, a `tup_v1`
+    display helper, and tests changed; seed builder, verdict semantics,
+    support-capture, DTOs, and adapter converters untouched.
+  - Tests: Codex focused `31 OK`; Codex broader conformance cohort `316 OK`;
+    reviewer reran digest-sensitive and broader Batch A/D/E + adapter cohorts
+    successfully.
+  - Correctness construction: float64 decoding is display-only. Semantic
+    normalization and digest feed paths (`_normalize_identity_value`,
+    `materialize_identity`, `encode_value_bytes`, `_float64_bits`, and digest
+    functions) were not changed by the implementation commit.
+  - Independent reviewer probes confirmed entity-ref labels in `%FLD` and
+    compare atoms, float64 field and identity display, prefix-collision and
+    value-injection fixes, `<unbound>` for true-unbound variables, string
+    hex-like misfire protection, and scalar repr regression stability.

@@ -126,4 +126,50 @@ Batch B implementation must include tests that fail on current rendering:
 
 ## E. Implementation Outcome
 
-Pending.
+Implemented in `587057f6`.
+
+Implementation notes:
+
+- `prober.py` now has a private context-aware value renderer used by `%FLD`,
+  compare atoms, builtin atoms, and fact fallback text.
+- `%ENT` remains subject-aware but delegates fallback/idref behavior through the
+  same rendering path.
+- `render_entity_repr(...)` now performs one-pass placeholder substitution.
+- `schema_runtime._identity_value_text(...)` decodes float64 only for display.
+- `tup_v1.display_float64_value(...)` centralizes canonical float64 display
+  decoding without touching canonical bytes or digest paths.
+- True-unbound `BoundVar(value=None)` renders as `<unbound>`.
+
+Reviewer gate:
+
+- PASS.
+- Reviewer independently verified these fixed surfaces:
+  - prefix-collision placeholders;
+  - identity value injection;
+  - `%FLD` entity-ref rendering, including cross-type `Employee.dept: Dept`;
+  - compare-atom entity-ref rendering;
+  - float64 field display;
+  - float64 identity display;
+  - true-unbound `<unbound>` display.
+- Reviewer verified string values that look like float64 hex are not decoded
+  when schema says they are strings.
+- Reviewer verified ordinary scalar text rendering remains stable.
+- Reviewer verified `INV-display-only` structurally: `_normalize_identity_value`,
+  `materialize_identity`, `encode_value_bytes`, `_float64_bits`, and digest
+  functions were not modified by the implementation commit.
+- Reviewer verified `INV-display-only` empirically with digest-sensitive tests.
+- Broader conformance and Batch A/D/E cohorts remained green.
+
+Closed defects:
+
+- Bug 7 prefix-collision/value-injection in `render_entity_repr`.
+- Bug 8 / Bug 3 encoded idref and float64 display leaks in native prober repr.
+- Bug 9 float64 identity display leak.
+- Bug 5 true-unbound internal `$...` display in NotReached repr.
+
+Boundary:
+
+- Implementation touched only prober rendering, schema runtime display,
+  `tup_v1` display helper, and tests.
+- Seed builder, verdict semantics, support-capture, DTOs, and adapter converters
+  were untouched.

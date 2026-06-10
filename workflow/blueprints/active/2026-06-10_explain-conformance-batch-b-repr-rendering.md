@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch B — unified repr value rendering
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -213,24 +213,24 @@ human-readable.
 
 ## 7. Acceptance
 
-- [ ] `%FLD` entity-ref values render friendly entity labels, not raw
+- [x] `%FLD` entity-ref values render friendly entity labels, not raw
   `idref_v1:...`, including cross-type fields such as `Employee.dept: Dept`.
-- [ ] Compare atoms with entity-ref operands render friendly entity labels.
-- [ ] Fact fallback and builtin operands use the same renderer behavior.
-- [ ] Canonical `float64` hex renders as numeric text in `%FLD` and compare /
+- [x] Compare atoms with entity-ref operands render friendly entity labels.
+- [x] Fact fallback and builtin operands use the same renderer behavior.
+- [x] Canonical `float64` hex renders as numeric text in `%FLD` and compare /
   builtin text.
-- [ ] Float64 identity values render as numeric text through
+- [x] Float64 identity values render as numeric text through
   `render_entity_repr(...)`, while `materialize_identity(...)` still returns the
   existing normalized identity representation.
-- [ ] `render_entity_repr(...)` handles prefix-collision placeholders such as
+- [x] `render_entity_repr(...)` handles prefix-collision placeholders such as
   `%org` / `%org_unit` and value-injection cases where identity values contain
   `%...` text.
-- [ ] True-unbound `NotReached` repr text no longer exposes raw internal `$...`
+- [x] True-unbound `NotReached` repr text no longer exposes raw internal `$...`
   variable names.
-- [ ] Non-entity and non-float repr output remains stable.
-- [ ] Batch A row-anchoring, Batch D cascade, aggregate Batch E, and adapter
+- [x] Non-entity and non-float repr output remains stable.
+- [x] Batch A row-anchoring, Batch D cascade, aggregate Batch E, and adapter
   dispatch cohorts remain green.
-- [ ] No implementation diff in seed builder, verdict semantics,
+- [x] No implementation diff in seed builder, verdict semantics,
   support-capture, DTOs, or adapter converters.
 
 ## 8. Implementation Plan
@@ -260,4 +260,38 @@ cleanup may summarize the native repr fidelity battery.
 
 ## 10. Outcome / Deviations
 
-Pending.
+Implemented in `587057f6`.
+
+Batch B closed the repr value-rendering seam by routing native prober display
+through one private renderer in `prober.py`, while keeping schema identity and
+canonical value normalization untouched.
+
+Implementation summary:
+
+- Added `display_float64_value(...)` to `tup_v1.py` as a display-only helper
+  that reuses canonical float64 bit validation.
+- Converted `render_entity_repr(...)` to single-pass placeholder substitution.
+- Moved float64 identity decoding to `_identity_value_text(...)`, the display
+  edge for entity labels.
+- Threaded `schema_index` and `view_facts` through prober repr paths so `%FLD`,
+  compare atoms, builtin atoms, and fact fallback text share one value renderer.
+- Kept float64 field decoding schema-tag-gated so string fields that look like
+  canonical float64 hex are not decoded.
+- Replaced true-unbound internal `$...` display with `<unbound>`, closing the
+  Batch A/D carry-forward Bug 5 surface.
+
+Reviewer gate passed:
+
+- Independent probes confirmed prefix-collision and value-injection fixes in
+  `render_entity_repr(...)`.
+- Independent probes confirmed entity-ref `%FLD`, cross-type entity-ref display,
+  compare-atom entity refs, float64 field display, and float64 identity display.
+- Misfire guard confirmed string fields containing `0x...` remain unchanged.
+- Scalar non-entity/non-float repr remained stable.
+- `materialize_identity(...)`, `_normalize_identity_value(...)`,
+  `encode_value_bytes(...)`, and digest feed paths were not changed.
+- Digest byte-equality / digest-sensitive cohorts remained green.
+- Broader Batch A/D/E and adapter cohorts remained green.
+
+No deviations from scope. NotAtom structural rendering remains assigned to
+Batch C.
