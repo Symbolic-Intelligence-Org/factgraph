@@ -126,6 +126,12 @@ def _probe_branch(
             failed_upstream = True
         atom_results.append((idx, atom, evidence_atom, envs))
 
+    atom_results = _rebake_atom_results_from_terminal(
+        atom_results,
+        terminal_envs=envs,
+        view_facts=view_facts,
+        schema_index=schema_index,
+    )
     body_rules = _body_rules_for_branch(plan, lowered_branch, trace, atom_results, terminal_envs=envs)
     joins = _joins_for_trace(trace, atom_results)
     status = _tree_status((*body_rules,)) if body_rules else "fails"
@@ -257,6 +263,53 @@ def _body_rules_for_branch(
         )
         for alias, atoms in grouped.items()
     )
+
+
+def _atom_var_names(atom: tuple[Any, ...]) -> set[str]:
+    out: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str) and value.startswith("$"):
+            out.add(value)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                walk(item)
+
+    walk(atom)
+    return out
+
+
+def _rebake_atom_results_from_terminal(
+    atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]],
+    *,
+    terminal_envs: tuple[ProbeEnv, ...],
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    schema_index: object | None,
+) -> list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]]:
+    if not terminal_envs:
+        return atom_results
+    terminal_bindings = terminal_envs[0].bindings
+    rebaked: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]] = []
+    for idx, atom, evidence_atom, envs_after in atom_results:
+        if not evidence_atom.negated:
+            names = _atom_var_names(atom)
+            if names and all(terminal_bindings.get(name) is not None for name in names):
+                original_bindings = envs_after[0].bindings if envs_after else {}
+                if all(original_bindings.get(name) == terminal_bindings.get(name) for name in names):
+                    rebaked.append((idx, atom, evidence_atom, envs_after))
+                    continue
+                form = _atom_form(atom, terminal_envs)
+                repr_text = _bake_repr_text(form, schema_index, view_facts=view_facts)
+                evidence_atom = EvidenceAtom(
+                    form=form,
+                    verdict=evidence_atom.verdict,
+                    atom_id=evidence_atom.atom_id,
+                    repr_text=repr_text,
+                    negated=evidence_atom.negated,
+                    timestep=evidence_atom.timestep,
+                )
+        rebaked.append((idx, atom, evidence_atom, envs_after))
+    return rebaked
 
 
 def _head_rule_for_plan(
