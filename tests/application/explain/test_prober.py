@@ -8,7 +8,7 @@ from factgraph.application.explain import EvidenceJoin, Fails, Holds, NotReached
 from factgraph.application.schema_runtime import encode_entity_ref
 from factgraph.application.protocol import EntityRef, Rule
 from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
-from factgraph.core.rules.where_ast import CmpAtom, Const, InAtom, PredAtom, Var
+from factgraph.core.rules.where_ast import AndExpr, CmpAtom, Const, InAtom, NotAtom, OrExpr, PredAtom, Var
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -16,6 +16,17 @@ def _status(result: object) -> str:
     paths = getattr(result, "paths")
     assert len(paths) == 1
     return paths[0].status
+
+
+def _negated_atoms(result: object) -> tuple[object, ...]:
+    paths = getattr(result, "paths")
+    return tuple(
+        atom
+        for path in paths
+        for rule in path.rules
+        for atom in rule.atoms
+        if atom.negated
+    )
 
 
 class NativeProberTests(unittest.TestCase):
@@ -242,6 +253,171 @@ class NativeProberTests(unittest.TestCase):
 
         atom = result.paths[0].rules[1].atoms[0]
         self.assertEqual(atom.repr_text, f"{user_ref} lives in US")
+
+    def test_not_atom_single_inner_renders_friendly_negated_repr_and_preserves_verdict(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "User %user_id"
+
+            user_id: str = Identity()
+            country: str = Field(repr="%ENT lives in %FLD")
+            blocked: str = Field(repr="%ENT is blocked for %FLD")
+
+        user = Var("$user")
+        country = Var("$country")
+        rule = Rule(
+            id="unblocked_user",
+            when=(
+                PredAtom("display_user:country", [user, country]),
+                NotAtom(AndExpr([PredAtom("display_user:blocked", [user, Const("yes")])])),
+            ),
+            ports={"user": user, "country": country},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
+        blocked_pred_id = field_predicate(schema_index, "DisplayUser", "blocked").pred_id
+
+        base_facts = {
+            identity_pred_id: [(user_ref, "u-1")],
+            country_pred_id: [(user_ref, "US")],
+        }
+        holds_result = probe_native(
+            plan,
+            {},
+            {**base_facts, blocked_pred_id: []},
+            schema_index=schema_index,
+        )
+        fails_result = probe_native(
+            plan,
+            {},
+            {**base_facts, blocked_pred_id: [(user_ref, "yes")]},
+            schema_index=schema_index,
+        )
+
+        holds_atom = _negated_atoms(holds_result)[0]
+        fails_atom = _negated_atoms(fails_result)[0]
+        self.assertIsInstance(holds_atom.verdict, Holds)
+        self.assertIsInstance(fails_atom.verdict, Fails)
+        self.assertEqual(holds_atom.repr_text, "!User u-1 is blocked for yes")
+        self.assertEqual(fails_atom.repr_text, "!User u-1 is blocked for yes")
+        self.assertNotIn("[", holds_atom.repr_text or "")
+        self.assertNotIn("$", holds_atom.repr_text or "")
+
+    def test_not_atom_and_body_groups_inner_repr_without_raw_tuple_text(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "User %user_id"
+
+            user_id: str = Identity()
+            age: int = Field(repr="%ENT is age %FLD")
+            blocked: str = Field(repr="%ENT is blocked for %FLD")
+
+        user = Var("$user")
+        age = Var("$age")
+        rule = Rule(
+            id="not_blocked_adult",
+            when=(
+                PredAtom("display_user:age", [user, age]),
+                NotAtom(
+                    AndExpr(
+                        [
+                            PredAtom("display_user:blocked", [user, Const("yes")]),
+                            CmpAtom("ge", age, Const(18)),
+                        ]
+                    )
+                ),
+            ),
+            ports={"user": user, "age": age},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        age_pred_id = field_predicate(schema_index, "DisplayUser", "age").pred_id
+        blocked_pred_id = field_predicate(schema_index, "DisplayUser", "blocked").pred_id
+
+        result = probe_native(
+            plan,
+            {},
+            {
+                identity_pred_id: [(user_ref, "u-1")],
+                age_pred_id: [(user_ref, 20)],
+                blocked_pred_id: [],
+            },
+            schema_index=schema_index,
+        )
+
+        atom = _negated_atoms(result)[0]
+        self.assertIsInstance(atom.verdict, Holds)
+        self.assertEqual(atom.repr_text, "!(User u-1 is blocked for yes && 20 >= 18)")
+        self.assertNotIn("[", atom.repr_text or "")
+        self.assertNotIn("'", atom.repr_text or "")
+        self.assertNotIn("$", atom.repr_text or "")
+
+    def test_not_atom_or_of_and_body_renders_stable_grouped_repr(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "User %user_id"
+
+            user_id: str = Identity()
+            country: str = Field(repr="%ENT lives in %FLD")
+            blocked: str = Field(repr="%ENT is blocked for %FLD")
+            flag: str = Field(repr="%ENT has flag %FLD")
+
+        user = Var("$user")
+        country = Var("$country")
+        rule = Rule(
+            id="not_blocked_or_flagged",
+            when=(
+                PredAtom("display_user:country", [user, country]),
+                NotAtom(
+                    OrExpr(
+                        [
+                            AndExpr(
+                                [
+                                    PredAtom("display_user:blocked", [user, Const("yes")]),
+                                    PredAtom("display_user:flag", [user, Const("review")]),
+                                ]
+                            ),
+                            AndExpr([PredAtom("display_user:blocked", [user, Const("no")])]),
+                        ]
+                    )
+                ),
+            ),
+            ports={"user": user, "country": country},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        schema_index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+        user_ref = encode_entity_ref(EntityRef("DisplayUser", {"user_id": "u-1"}), index=schema_index)
+        identity_pred_id = entity_info(schema_index, "DisplayUser").identity_predicates["user_id"].pred_id
+        country_pred_id = field_predicate(schema_index, "DisplayUser", "country").pred_id
+        blocked_pred_id = field_predicate(schema_index, "DisplayUser", "blocked").pred_id
+        flag_pred_id = field_predicate(schema_index, "DisplayUser", "flag").pred_id
+
+        result = probe_native(
+            plan,
+            {},
+            {
+                identity_pred_id: [(user_ref, "u-1")],
+                country_pred_id: [(user_ref, "US")],
+                blocked_pred_id: [],
+                flag_pred_id: [],
+            },
+            schema_index=schema_index,
+        )
+
+        atom = _negated_atoms(result)[0]
+        self.assertIsInstance(atom.verdict, Holds)
+        self.assertEqual(
+            atom.repr_text,
+            "!((User u-1 is blocked for yes && User u-1 has flag review) || User u-1 is blocked for no)",
+        )
+        self.assertNotIn("[", atom.repr_text or "")
+        self.assertNotIn("'", atom.repr_text or "")
+        self.assertNotIn("$", atom.repr_text or "")
 
     def test_repr_baking_has_fallbacks_for_fact_compare_and_builtin(self) -> None:
         x = Var("$x")

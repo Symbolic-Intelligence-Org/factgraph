@@ -180,29 +180,37 @@ def _probe_atom(
         for next_env in _extend_env_with_atom(view_facts, dict(env.bindings), atom):
             next_envs.append(ProbeEnv.from_bindings(next_env))
     deduped = _dedupe_envs(next_envs)
-    form = _atom_form(atom, deduped or tuple(runnable_envs) or envs or verdict_envs)
-    repr_text = _bake_repr_text(form, schema_index, view_facts=view_facts)
+    form_envs = deduped or tuple(runnable_envs) or envs or verdict_envs
+    form = _atom_form(atom, form_envs)
+    negated = _is_not_atom(atom)
+    repr_text = (
+        _repr_not_atom(atom, form_envs, schema_index, view_facts=view_facts)
+        if negated
+        else _bake_repr_text(form, schema_index, view_facts=view_facts)
+    )
     if verdict_only:
         if deduped:
-            return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text), candidate_envs
+            return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated), candidate_envs
         if blocked_by is not None and not runnable_envs:
             return EvidenceAtom(
                 form=form,
                 verdict=NotReached(blocked_by=blocked_by),
                 atom_id=atom_id,
                 repr_text=repr_text,
+                negated=negated,
             ), candidate_envs
-        return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text), candidate_envs
+        return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated), candidate_envs
     if deduped:
-        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text), deduped
+        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated), deduped
     if blocked_by is not None:
         return EvidenceAtom(
             form=form,
             verdict=NotReached(blocked_by=blocked_by),
             atom_id=atom_id,
             repr_text=repr_text,
+            negated=negated,
         ), ()
-    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text), ()
+    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated), ()
 
 
 def _body_rules_for_branch(
@@ -301,6 +309,8 @@ def _atom_form(atom: tuple[Any, ...], envs: tuple[ProbeEnv, ...]) -> Fact | Comp
         return Fact(predicate=str(atom[1]), terms=tuple(_term_form(term, env) for term in atom[2]))
     if kind in {"eq", "ne", "gt", "ge", "lt", "le"}:
         return Compare(op=str(kind), left=_term_form(atom[1], env), right=_term_form(atom[2], env))
+    if kind == "not":
+        return Builtin(kind="not", operands=())
     operands: tuple[BoundVar | Const, ...]
     if kind in {"in"}:
         operands = (_term_form(atom[1], env), *tuple(_term_form(term, env) for term in atom[2]))
@@ -326,6 +336,75 @@ def _bake_repr_text(
     if isinstance(form, Compare):
         return _repr_compare(form, schema_index, view_facts=view_facts)
     return _repr_builtin(form, schema_index, view_facts=view_facts)
+
+
+def _repr_not_atom(
+    atom: tuple[Any, ...],
+    envs: tuple[ProbeEnv, ...],
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
+    branches = _not_body_branches(atom)
+    if not branches:
+        return "!<not>"
+    branch_texts = tuple(
+        _repr_not_branch(branch, envs, schema_index, view_facts=view_facts)
+        for branch in branches
+    )
+    if len(branch_texts) == 1:
+        text = branch_texts[0]
+        return f"!{text}" if not text.startswith("(") else f"!{text}"
+    return "!(" + " || ".join(branch_texts) + ")"
+
+
+def _repr_not_branch(
+    branch: tuple[tuple[Any, ...], ...],
+    envs: tuple[ProbeEnv, ...],
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
+    atom_texts = tuple(
+        _repr_inner_not_atom(inner_atom, envs, schema_index, view_facts=view_facts)
+        for inner_atom in branch
+    )
+    if not atom_texts:
+        return "<empty>"
+    if len(atom_texts) == 1:
+        return atom_texts[0]
+    return "(" + " && ".join(atom_texts) + ")"
+
+
+def _repr_inner_not_atom(
+    atom: tuple[Any, ...],
+    envs: tuple[ProbeEnv, ...],
+    schema_index: object | None,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> str:
+    if _is_not_atom(atom):
+        return _repr_not_atom(atom, envs, schema_index, view_facts=view_facts)
+    form = _atom_form(atom, envs)
+    return _bake_repr_text(form, schema_index, view_facts=view_facts)
+
+
+def _not_body_branches(atom: tuple[Any, ...]) -> tuple[tuple[tuple[Any, ...], ...], ...]:
+    if not _is_not_atom(atom):
+        return ()
+    not_body = atom[1]
+    if not isinstance(not_body, list) or not not_body:
+        return ()
+    if all(_is_atom_tuple(item) for item in not_body):
+        return (tuple(not_body),)  # type: ignore[return-value]
+    if all(isinstance(item, list) for item in not_body):
+        branches: list[tuple[tuple[Any, ...], ...]] = []
+        for branch in not_body:
+            if not branch or not all(_is_atom_tuple(inner) for inner in branch):
+                return ()
+            branches.append(tuple(branch))  # type: ignore[arg-type]
+        return tuple(branches)
+    return ()
 
 
 def _repr_fact(
@@ -511,6 +590,10 @@ def _term_value(term: BoundVar | Const | None) -> Any:
 
 def _atom_can_bind(atom: tuple[Any, ...]) -> bool:
     return bool(atom) and atom[0] == "pred"
+
+
+def _is_not_atom(atom: tuple[Any, ...]) -> bool:
+    return bool(atom) and atom[0] == "not" and len(atom) == 2
 
 
 def _missing_variables(atom: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
