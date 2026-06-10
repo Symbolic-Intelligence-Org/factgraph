@@ -122,7 +122,7 @@ def _aggregate_rule(graph: sdk.SDKStore, kind: str) -> Rule:
     amount = Var("$amount")
     total = Var("$total")
     if kind == "count":
-        aggregate = AggregateAtom("count", None, [PredAtom(info.exists_predicate_id, [order])])
+        aggregate = AggregateAtom("count", None, [PredAtom(amount_pred, [order, amount])])
     else:
         aggregate = AggregateAtom(kind, amount, [PredAtom(amount_pred, [order, amount])])
     return Rule(id=f"order_{kind}", when=(CmpAtom("eq", total, aggregate),), ports={"total": total})

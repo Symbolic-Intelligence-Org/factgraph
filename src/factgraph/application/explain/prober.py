@@ -19,7 +19,8 @@ from factgraph.application.protocol.rule_expr_lowering import (
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
-from factgraph.core.rules.where_ast import _AGGREGATE_KINDS
+from factgraph.core.rules.where_ast import _AGGREGATE_KINDS, _parse_term, AggregateAtom
+from factgraph.core.rules.where_ast_validate import _aggregate_filter_bound_vars
 
 from .evidence_tree import (
     BoundVar,
@@ -650,7 +651,7 @@ def _is_not_atom(atom: tuple[Any, ...]) -> bool:
 
 
 def _missing_variables(atom: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
-    return tuple(var for var in _vars_for_missing_check(atom) if var not in env)
+    return tuple(var for var in _vars_for_missing_check(atom, env) if var not in env)
 
 
 def _missing_verdict_dependencies(atom: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
@@ -658,19 +659,19 @@ def _missing_verdict_dependencies(atom: tuple[Any, ...], env: Mapping[str, Any])
         terms = atom[2] if len(atom) > 2 else ()
         if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or not terms:
             return _missing_variables(atom, env)
-        return tuple(var for var in _vars_for_missing_check(terms[0]) if var not in env)
+        return tuple(var for var in _vars_for_missing_check(terms[0], env) if var not in env)
     return _missing_variables(atom, env)
 
 
-def _vars_for_missing_check(atom: Any) -> tuple[str, ...]:
+def _vars_for_missing_check(atom: Any, env: Mapping[str, Any]) -> tuple[str, ...]:
     found: list[str] = []
     if isinstance(atom, str) and atom.startswith("$"):
         return (atom,)
     if _is_aggregate_term(atom):
-        found.extend(_aggregate_required_outer_vars(atom))
+        found.extend(_aggregate_required_outer_vars(atom, env))
     elif isinstance(atom, (list, tuple)):
         for item in atom:
-            found.extend(_vars_for_missing_check(item))
+            found.extend(_vars_for_missing_check(item, env))
     return tuple(dict.fromkeys(found))
 
 
@@ -684,29 +685,23 @@ def _is_aggregate_term(value: object) -> bool:
     )
 
 
-def _aggregate_required_outer_vars(aggregate_term: tuple[Any, ...]) -> tuple[str, ...]:
+def _aggregate_required_outer_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
     _kind, target, filter_atoms = aggregate_term
     all_vars = set(_vars_in_atom_tuple(target))
     all_vars |= set(_vars_in_atom_tuple(filter_atoms))
-    local_vars = _aggregate_local_vars(target, filter_atoms)
+    local_vars = _aggregate_local_vars(aggregate_term, env)
     return tuple(var for var in _vars_in_atom_tuple((target, filter_atoms)) if var in all_vars - local_vars)
 
 
-def _aggregate_local_vars(target: Any, filter_atoms: Any) -> set[str]:
+def _aggregate_local_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> set[str]:
+    _kind, target, filter_atoms = aggregate_term
     target_vars = set(_vars_in_atom_tuple(target))
     local = set(target_vars)
     if not isinstance(filter_atoms, list):
         return local
 
+    canonically_bound = _canonical_aggregate_filter_bound_vars(aggregate_term, env)
     pred_atoms = [atom for atom in filter_atoms if _is_atom_tuple(atom) and atom[0] == "pred" and len(atom) >= 3]
-    vars_used_outside_pred_value: set[str] = set(target_vars)
-    for atom in filter_atoms:
-        if atom in pred_atoms:
-            terms = atom[2]
-            if isinstance(terms, Sequence) and not isinstance(terms, (str, bytes)) and terms:
-                vars_used_outside_pred_value |= set(_vars_in_atom_tuple(terms[0]))
-            continue
-        vars_used_outside_pred_value |= set(_vars_in_atom_tuple(atom))
 
     changed = True
     while changed:
@@ -724,13 +719,28 @@ def _aggregate_local_vars(target: Any, filter_atoms: Any) -> set[str]:
                 for var in _vars_in_atom_tuple(term):
                     if (
                         var in target_vars
-                        or var.startswith("$agg")
-                        or var.startswith("$_agg")
-                        or var in vars_used_outside_pred_value
+                        or (_is_lowered_aggregate_local_var(var) and var in canonically_bound)
                     ) and var not in local:
                         local.add(var)
                         changed = True
     return local
+
+
+def _canonical_aggregate_filter_bound_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> set[str]:
+    try:
+        parsed = _parse_term(aggregate_term, path="$.aggregate")
+    except Exception:
+        return set()
+    if not isinstance(parsed, AggregateAtom):
+        return set()
+    try:
+        return set(_aggregate_filter_bound_vars(parsed, set(env))) - set(env)
+    except Exception:
+        return set()
+
+
+def _is_lowered_aggregate_local_var(var_name: str) -> bool:
+    return var_name.startswith("$agg") or var_name.startswith("$_agg") or "__" in var_name
 
 
 def _vars_in_atom_tuple(atom: Any) -> tuple[str, ...]:
