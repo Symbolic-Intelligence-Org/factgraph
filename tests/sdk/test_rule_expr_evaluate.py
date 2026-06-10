@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import factgraph.sdk as sdk
@@ -18,13 +19,27 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
-from factgraph.audit.evidence_graph import EDGE_HAS_ATOM, EDGE_SUPPORTED_BY, NODE_ATOM, NODE_RULE, NODE_RULE_EXPR, NODE_SEED
+from factgraph.application.protocol.rule_expr_lowering import _lower_rule_expr
+from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
+from factgraph.adapters.pyreason.provenance import (
+    PyReasonTraceEventV0,
+    PyReasonTraceV0,
+    pyreason_trace_to_dict,
+)
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.core.store._support import (
+    PROBLOG_PROVENANCE_KIND,
+    PYREASON_PROVENANCE_KIND,
+    PredWitness,
+    ProofReceipt,
+    ProvenanceEnvelope,
+    SOUFFLE_WITNESS_KIND,
+)
 from factgraph.sdk import Entity, Field, Identity
-from factgraph.sdk.store import SDKStoreError
+from factgraph.sdk.store import SDKStoreError, _initial_probe_bindings_for_row
 
 
 class Person(Entity):
@@ -32,8 +47,22 @@ class Person(Entity):
     region: str = Field()
 
 
+class ExplainAnchorUser(Entity):
+    class Meta:
+        repr = "AnchorUser %user_id"
+
+    user_id: str = Identity()
+    region: str = Field(repr="%ENT region %FLD")
+    age: int = Field(repr="%ENT age %FLD")
+    tag: str = Field()
+
+
 def _store() -> sdk.SDKStore:
     return sdk.SDKStore([Person])
+
+
+def _anchor_store() -> sdk.SDKStore:
+    return sdk.SDKStore([ExplainAnchorUser])
 
 
 def _seed_person(graph: sdk.SDKStore, name: str, region: str = "us") -> str:
@@ -44,6 +73,19 @@ def _seed_person(graph: sdk.SDKStore, name: str, region: str = "us") -> str:
     set_field(graph.ledger, info.exists_predicate_id, encoded, [])
     set_field(graph.ledger, info.identity_predicates["name"].pred_id, encoded, [("string", name)])
     set_field(graph.ledger, field_predicate(index, "Person", "region").pred_id, encoded, [("string", region)])
+    return encoded
+
+
+def _seed_anchor_user(graph: sdk.SDKStore, user_id: str, *, region: str, age: int, tag: str) -> str:
+    index = build_schema_index(graph.schema_ir)
+    ref = resolve_selector(EntitySelector(entity_type="ExplainAnchorUser", identity={"user_id": user_id}), index=index)
+    info = entity_info(index, "ExplainAnchorUser")
+    encoded = ref.encoded_ref or ""
+    set_field(graph.ledger, info.exists_predicate_id, encoded, [])
+    set_field(graph.ledger, info.identity_predicates["user_id"].pred_id, encoded, [("string", user_id)])
+    set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "region").pred_id, encoded, [("string", region)])
+    set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "age").pred_id, encoded, [("int", age)])
+    set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "tag").pred_id, encoded, [("string", tag)])
     return encoded
 
 
@@ -68,6 +110,25 @@ def _aggregate_rule() -> Rule:
     order = Var("$order")
     aggregate = AggregateAtom("sum", amount, [PredAtom("OrderAmount", [order, amount])])
     return Rule(id="amount_sum", when=(CmpAtom("eq", total, aggregate),), ports={"total": total})
+
+
+def _atom_repr_text(row: object) -> str:
+    explanation = row.explain()  # type: ignore[attr-defined]
+    self_evidence = explanation.evidence
+    assert self_evidence is not None
+    return "\n".join(
+        atom.repr_text or ""
+        for path in self_evidence.paths
+        for rule in path.rules
+        for atom in rule.atoms
+    )
+
+
+def _row_binding_value(row: object, port_name: str) -> object:
+    value = row.bindings[port_name]  # type: ignore[attr-defined,index]
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
 
 
 class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
@@ -95,14 +156,124 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIsInstance(explanation, Explanation)
         self.assertIsNotNone(explanation.evidence)
         assert explanation.evidence is not None
-        self.assertEqual(explanation.evidence.support_kind, "native_binding_v1")
-        self.assertTrue(any(node.node_kind == NODE_RULE_EXPR for node in explanation.evidence.nodes))
-        self.assertTrue(any(node.node_kind == NODE_RULE for node in explanation.evidence.nodes))
-        self.assertTrue(any(node.node_kind == NODE_ATOM for node in explanation.evidence.nodes))
-        self.assertTrue(any(node.node_kind == NODE_SEED for node in explanation.evidence.nodes))
-        self.assertTrue(any(edge.edge_kind == EDGE_HAS_ATOM for edge in explanation.evidence.edges))
-        self.assertTrue(any(edge.edge_kind == EDGE_SUPPORTED_BY for edge in explanation.evidence.edges))
+        self.assertTrue(explanation.evidence.paths)
+        rules = explanation.evidence.paths[0].rules
+        self.assertTrue(any(rule.role == "head" for rule in rules))
+        self.assertTrue(any(rule.role == "body" for rule in rules))
+        self.assertTrue(any(atom.repr_text for rule in rules for atom in rule.atoms))
         self.assertIsInstance(result[0].close(), Rule)
+
+    def test_row_explain_anchors_each_passed_row_to_its_own_bindings(self) -> None:
+        graph = _anchor_store()
+        u1 = _seed_anchor_user(graph, "u-1", region="us", age=30, tag="alpha")
+        u2 = _seed_anchor_user(graph, "u-2", region="eu", age=40, tag="beta")
+        index = build_schema_index(graph.schema_ir)
+        region_pred = field_predicate(index, "ExplainAnchorUser", "region").pred_id
+        age_pred = field_predicate(index, "ExplainAnchorUser", "age").pred_id
+        user = Var("$user")
+        region = Var("$region")
+        age = Var("$age")
+        rule = Rule(
+            id="adult_anchor",
+            when=(
+                PredAtom(region_pred, [user, region]),
+                PredAtom(age_pred, [user, age]),
+                CmpAtom("ge", age, Const(18)),
+            ),
+            ports={"user": user, "region": region, "age": age},
+        )
+
+        result = graph.eval.evaluate(rule, head=rule, engine="native")
+
+        self.assertEqual(result.count(), 2)
+        rows_by_user = {str(_row_binding_value(row, "user")): row for row in result}
+        first_text = _atom_repr_text(rows_by_user[u1])
+        second_text = _atom_repr_text(rows_by_user[u2])
+        self.assertIn("AnchorUser u-1 region us", first_text)
+        self.assertIn("AnchorUser u-1 age 30", first_text)
+        self.assertIn("30 >= 18", first_text)
+        self.assertNotIn(u1, first_text)
+        self.assertNotIn("AnchorUser u-2", first_text)
+        self.assertNotIn("AnchorUser u-2 region eu", first_text)
+        self.assertNotIn("AnchorUser u-2 age 40", first_text)
+        self.assertNotIn("40 >= 18", first_text)
+        self.assertIn("AnchorUser u-2 region eu", second_text)
+        self.assertIn("AnchorUser u-2 age 40", second_text)
+        self.assertIn("40 >= 18", second_text)
+        self.assertNotIn(u2, second_text)
+        self.assertNotIn("AnchorUser u-1", second_text)
+        self.assertNotIn("AnchorUser u-1 region us", second_text)
+        self.assertNotIn("AnchorUser u-1 age 30", second_text)
+        self.assertNotIn("30 >= 18", second_text)
+
+    def test_initial_probe_seed_uses_lowered_occurrence_vars_and_unwraps_values(self) -> None:
+        x = Var("$x")
+        region = Var("$region")
+        age = Var("$age")
+        left = Rule(id="left", when=(PredAtom("left_p", [x, region]),), ports={"x": x, "region": region})
+        right = Rule(id="right", when=(PredAtom("right_p", [x, age]),), ports={"x": x, "age": age})
+        head = Rule(
+            id="left_head",
+            when=(PredAtom("left_p", [x, region]), PredAtom("right_p", [x, age])),
+            ports={"x": x, "region": region, "age": age},
+        )
+        join_plan = _lower_rule_expr(
+            (left.as_("left") & right.as_("right")).join(left.as_("left").x.eq(right.as_("right").x)),
+            head=head,
+        )
+        row = SimpleNamespace(
+            bindings={
+                "x": {"kind": "entity_ref", "value": "idref_v1:User:u-1"},
+                "region": {"kind": "literal", "tag": "string", "value": "us"},
+                "age": {"kind": "literal", "tag": "int", "value": 30},
+            }
+        )
+
+        join_seed = _initial_probe_bindings_for_row(row, join_plan)
+
+        x_exec_vars = tuple(
+            binding.alias_local_execution_var.name
+            for occurrence in join_plan.occurrence_map
+            for binding in occurrence.port_bindings
+            if binding.source_var.name == "$x"
+        )
+        self.assertGreaterEqual(len(x_exec_vars), 2)
+        self.assertTrue(all(join_seed[name] == "idref_v1:User:u-1" for name in x_exec_vars))
+        self.assertTrue(any(value == "us" for value in join_seed.values()))
+        self.assertTrue(any(value == 30 for value in join_seed.values()))
+        self.assertTrue(all(not isinstance(value, dict) for value in join_seed.values()))
+
+        or_plan = _lower_rule_expr(left.as_("left") | right.as_("right"), head=head)
+        or_seed = _initial_probe_bindings_for_row(row, or_plan)
+        or_x_exec_vars = tuple(
+            binding.alias_local_execution_var.name
+            for occurrence in or_plan.occurrence_map
+            for binding in occurrence.port_bindings
+            if binding.source_var.name == "$x"
+        )
+        self.assertGreaterEqual(len(or_x_exec_vars), 2)
+        self.assertTrue(all(or_seed[name] == "idref_v1:User:u-1" for name in or_x_exec_vars))
+
+    def test_closed_head_false_still_produces_failed_evidence(self) -> None:
+        graph = _store()
+        _seed_person(graph, "closed-false", region="us")
+        index = build_schema_index(graph.schema_ir)
+        identity_pred_id = entity_info(index, "Person").identity_predicates["name"].pred_id
+        person = Var("$person")
+        body = _person_exists_rule()
+        closed = Rule(
+            id="Person:exists_closed_missing",
+            when=(PredAtom("Person:exists", [person]), PredAtom(identity_pred_id, [person, Const("missing")])),
+            ports={"person": person},
+        )
+
+        explanation = graph.eval.explain(body, head=closed, engine="native")
+
+        self.assertEqual(explanation.status, "failed")
+        self.assertEqual(explanation.failure_class, "closed_head_false")
+        self.assertIsNotNone(explanation.evidence)
+        assert explanation.evidence is not None
+        self.assertTrue(explanation.evidence.paths)
 
     def test_application_rule_input_uses_c35_single_rule_coercion(self) -> None:
         graph = _store()
@@ -255,8 +426,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             kind=row.kind,
             digest=row.digest,
             closed_head_digest=row.closed_head_digest,
-            raw_kind=row.raw_kind,
-            bound=row.bound,
+            certainty=row.certainty,
         )
 
         with self.assertRaisesRegex(DetachedRowError, "detached"):
@@ -347,6 +517,280 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 request = evaluate.call_args.args[0]
                 self.assertEqual(request.engine, engine)
                 self.assertEqual(request.plans[0].engine_options, {})
+
+    def test_souffle_row_explain_uses_support_artifact_paths(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "souffle")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("d" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="souffle-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("1" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=SOUFFLE_WITNESS_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        artifact = ProofReceipt(
+            kind=SOUFFLE_WITNESS_KIND,
+            root_result_kind="fact",
+            binding_items=(("$person", encoded),),
+            pred_witnesses=(
+                PredWitness(
+                    pred_condition_key="c0.c0:Person:exists",
+                    asrt_ids=("asrt-souffle-person",),
+                ),
+            ),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
+                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        tree = explanation.evidence.paths[0]
+        self.assertEqual(tree.metadata["support_kind"], SOUFFLE_WITNESS_KIND)
+        self.assertEqual({rule.role for rule in tree.rules}, {"head", "body"})
+        body = next(rule for rule in tree.rules if rule.role == "body")
+        self.assertTrue(body.atoms)
+        self.assertIn("asrt-souffle-person", body.atoms[0].repr_text or "")
+
+    def test_souffle_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "souffle-fallback")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("e" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="souffle-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("2" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=SOUFFLE_WITNESS_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        artifact = ProofReceipt(
+            kind=SOUFFLE_WITNESS_KIND,
+            root_result_kind="fact",
+            binding_items=(("$person", encoded),),
+            pred_witnesses=(
+                PredWitness(
+                    pred_condition_key="c0.c0:Person:exists",
+                    asrt_ids=("asrt-souffle-person",),
+                ),
+            ),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
+                result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
+            explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        tree = explanation.evidence.paths[0]
+        self.assertEqual(tree.metadata["fallback"], "minimal_row_evidence")
+        self.assertEqual([rule.role for rule in tree.rules], ["head"])
+
+    def test_problog_row_explain_uses_provenance_envelope_paths(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "problog")
+        rule = _person_exists_rule()
+        trace = parse_problog_trace(
+            f"""
+ call Person:exists({encoded}) {{0.00010}} []
+  result Person:exists({encoded}) ({encoded},) {{{{}}}} {{0.00012}} []
+ complete Person:exists({encoded}) {{0.00013}} {{0.00003}} []
+
+Person:exists({encoded}):\t0.73
+""".strip()
+        )
+        support_digest = "sha256:" + ("f" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="problog-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("3" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PROBLOG_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+            confidence=0.73,
+            confidence_kind="probability",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:problog",
+            engine="problog",
+            payload_type="proof_trace",
+            payload=problog_trace_to_dict(trace),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.engine, "problog")
+        self.assertEqual(explanation.evidence.certainty.kind, "probabilistic")
+        self.assertEqual(explanation.evidence.certainty.lo, 0.73)
+        tree = explanation.evidence.paths[0]
+        self.assertEqual(tree.certainty.kind, "probabilistic")
+        self.assertEqual(tree.certainty.lo, 0.73)
+        self.assertEqual({rule.role for rule in tree.rules}, {"head"})
+        self.assertTrue(tree.rules[0].atoms)
+        self.assertEqual(tree.rules[0].atoms[0].repr_text, f"Person:exists({encoded})")
+
+    def test_problog_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "problog-fallback")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("9" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="problog-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("4" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PROBLOG_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:problog-bad",
+            engine="problog",
+            payload_type="proof_trace",
+            payload={"engine": "problog", "trace_type": "proof_trace", "events": [], "answers": []},
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
+
+    def test_pyreason_row_explain_uses_provenance_envelope_timeline(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "pyreason")
+        rule = _person_exists_rule()
+        trace = PyReasonTraceV0(
+            timesteps=2,
+            node_events=(
+                PyReasonTraceEventV0(
+                    time=1,
+                    fixpoint_op=1,
+                    component=encoded,
+                    component_type="node",
+                    label="exists",
+                    old_bound=(0.0, 1.0),
+                    new_bound=(0.84, 0.84),
+                    occurred_due_to="pyreason_rule",
+                    clause_groundings=("[pyreason]",),
+                ),
+            ),
+            edge_events=(),
+        )
+        support_digest = "sha256:" + ("a" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="pyreason-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("5" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PYREASON_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+            confidence=0.84,
+            confidence_kind="certainty",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:pyreason",
+            engine="pyreason",
+            payload_type="event_log",
+            payload=pyreason_trace_to_dict(trace),
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.engine, "pyreason")
+        self.assertEqual(explanation.evidence.layout_hint, "timeline")
+        self.assertEqual(explanation.evidence.certainty.kind, "possibilistic")
+        self.assertEqual(explanation.evidence.certainty.lo, 0.84)
+        timeline = explanation.evidence.paths[0]
+        self.assertEqual(timeline.certainty.kind, "possibilistic")
+        self.assertEqual(timeline.events[0].timestep, 1)
+        self.assertEqual(timeline.events[0].form.predicate, "exists")
+        self.assertEqual(timeline.events[0].verdict.support[0].meta["clause_groundings"], ("[pyreason]",))
+
+    def test_pyreason_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "pyreason-fallback")
+        rule = _person_exists_rule()
+        support_digest = "sha256:" + ("b" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="pyreason-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("6" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PYREASON_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:pyreason-bad",
+            engine="pyreason",
+            payload_type="event_log",
+            payload={"engine": "pyreason", "trace_type": "event_log", "timesteps": 0, "node_events": [], "edge_events": []},
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="pyreason")
+
+        explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
 
     def test_evaluate_rejects_public_engine_options_and_registry(self) -> None:
         graph = _store()

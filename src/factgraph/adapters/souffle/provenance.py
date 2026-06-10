@@ -8,16 +8,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from factgraph.audit.evidence_graph import (
-    EDGE_SUPPORTS,
-    LAYOUT_TREE,
-    NODE_CONCLUSION,
-    NODE_PREMISE,
-    NODE_SEED,
-    EvidenceEdge,
+from factgraph.application.explain.evidence_tree import (
+    Const,
+    EvidenceAtom,
     EvidenceGraph,
-    EvidenceNode,
+    EvidenceRule,
+    EvidenceTree,
+    Fact,
+    Holds,
+    LAYOUT_TREE,
+    Source,
 )
+from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.core.store._support import SOUFFLE_WITNESS_KIND
 
 
@@ -55,85 +57,100 @@ def souffle_proof_tree_to_evidence_graph(
     if not isinstance(candidate_id, str) or not candidate_id:
         raise ValueError("candidate_id must be non-empty string")
 
-    nodes: list[EvidenceNode] = []
-    edges: list[EvidenceEdge] = []
-    node_counter = 0
-    edge_counter = 0
+    rules: list[EvidenceRule] = []
 
-    def _visit(node: SouffleProofNodeV0, *, is_root: bool) -> str:
-        nonlocal node_counter, edge_counter
-
-        node_id = f"souffle:{candidate_id}:node:{node_counter}"
-        node_counter += 1
-        atom_text = _proof_node_atom_text(node)
-        rule_text = proof_tree.rules.get(node.rule_number or "")
-        component, value_summary = _proof_node_component_and_value(node)
-
-        if is_root:
-            node_kind = NODE_CONCLUSION
-        elif node.node_type == "axiom":
-            node_kind = NODE_SEED
-        else:
-            node_kind = NODE_PREMISE
-
-        nodes.append(
-            EvidenceNode(
-                node_id=node_id,
-                node_kind=node_kind,
-                component=component,
-                label=node.relation,
-                value_summary=value_summary,
-                timestamp=None,
-                engine_meta={
-                    "goal": atom_text,
-                    "event_status": node.node_type,
-                    "relation": node.relation,
-                    "args": node.args,
-                    "rule_number": node.rule_number,
-                    "rule_text": rule_text,
-                    "occurred_due_to": rule_text or node.rule_number,
-                    "child_count": len(node.children),
-                },
-            )
+    root = proof_tree.root
+    rules.append(
+        EvidenceRule(
+            occurrence_alias="head",
+            rule_id=root.rule_number or root.relation,
+            role="head",
+            status="holds",
+            ports={},
+            atoms=(_evidence_atom_for_proof_node(root, candidate_id=candidate_id, role="head"),),
         )
+    )
+    _append_body_rules(root, proof_tree=proof_tree, candidate_id=candidate_id, rules=rules)
 
-        for child in node.children:
-            child_node_id = _visit(child, is_root=False)
-            edge_counter += 1
-            edges.append(
-                EvidenceEdge(
-                    edge_id=f"souffle:{candidate_id}:edge:{edge_counter}",
-                    from_node_id=child_node_id,
-                    to_node_id=node_id,
-                    edge_kind=EDGE_SUPPORTS,
-                    rule_label=node.rule_number,
-                    engine_meta={
-                        "parent_atom": atom_text,
-                        "parent_rule_number": node.rule_number,
-                        "parent_rule_text": rule_text,
-                        "parent_node_type": node.node_type,
-                        "child_node_type": child.node_type,
-                    },
-                )
-            )
-
-        return node_id
-
-    root_node_id = _visit(proof_tree.root, is_root=True)
     return EvidenceGraph(
         graph_id=f"eg:{candidate_id}",
         engine="souffle",
-        root_node_id=root_node_id,
-        nodes=tuple(nodes),
-        edges=tuple(edges),
-        support_kind=support_kind,
         layout_hint=LAYOUT_TREE,
+        subject_binding={},
+        paths=(
+            EvidenceTree(
+                tree_id=candidate_id,
+                status="holds",
+                rules=tuple(rules),
+                joins=(),
+                certainty=BOOLEAN_CERTAINTY,
+                metadata={"support_kind": support_kind},
+            ),
+        ),
+        certainty=BOOLEAN_CERTAINTY,
         metadata={
             "query": proof_tree.query,
             "rule_count": len(proof_tree.rules),
             "root_relation": proof_tree.root.relation,
             "root_rule_number": proof_tree.root.rule_number,
+            "support_kind": support_kind,
         },
+    )
+
+
+def _append_body_rules(
+    node: SouffleProofNodeV0,
+    *,
+    proof_tree: SouffleProofTreeV0,
+    candidate_id: str,
+    rules: list[EvidenceRule],
+) -> None:
+    if node.children:
+        rule_number = node.rule_number or node.relation
+        rules.append(
+            EvidenceRule(
+                occurrence_alias=f"souffle:{rule_number}",
+                rule_id=rule_number,
+                role="body",
+                status="holds",
+                ports={},
+                atoms=tuple(
+                    _evidence_atom_for_proof_node(child, candidate_id=candidate_id, role="body")
+                    for child in node.children
+                ),
+            )
+        )
+    for child in node.children:
+        _append_body_rules(child, proof_tree=proof_tree, candidate_id=candidate_id, rules=rules)
+
+
+def _evidence_atom_for_proof_node(
+    node: SouffleProofNodeV0,
+    *,
+    candidate_id: str,
+    role: str,
+) -> EvidenceAtom:
+    atom_text = _proof_node_atom_text(node)
+    source = Source(
+        ref=f"souffle:{candidate_id}:{role}:{atom_text}",
+        value=atom_text,
+        meta={
+            "event_status": node.node_type,
+            "relation": node.relation,
+            "args": node.args,
+            "rule_number": node.rule_number,
+            "child_count": len(node.children),
+        },
+    )
+    return EvidenceAtom(
+        form=Fact(
+            predicate=node.relation,
+            terms=tuple(Const(arg) for arg in node.args),
+        ),
+        verdict=Holds(certainty=BOOLEAN_CERTAINTY, support=(source,)),
+        atom_id=f"souffle:{candidate_id}:{role}:{atom_text}",
+        repr_text=atom_text,
+        negated=node.node_type == "negation",
     )
 
 

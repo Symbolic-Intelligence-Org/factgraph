@@ -81,7 +81,7 @@ from factgraph.sdk import Entity, Field, Identity
 
 
 class User(Entity):
-    tenant_id: str = Identity(description="tenant")
+    tenant_id: str = Identity(repr="%FLD")
     user_id: str = Identity(pattern=r"^u-[0-9]+$")
     display_name: str = Field()
     status: Literal["active", "inactive"] = Field()
@@ -93,6 +93,8 @@ Every Identity field is part of the immutable entity coordinate and must be
 provided explicitly when constructing a ref. `Field()` has no `cardinality`
 keyword. Cardinality is inferred from the annotation: scalar `T` is single,
 `list[T]`, `tuple[T, ...]`, `set[T]`, and `frozenset[T]` are multi.
+Both descriptors accept `repr=` explain-layer templates. The templates are
+validated, stored in compiled Schema IR, and excluded from schema identity.
 
 `Literal[...]` annotations become schema enum constraints. `pattern=` is a
 regular-expression constraint available on both `Identity` and `Field`, but

@@ -7,16 +7,18 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from factgraph.adapters.problog._parsing import _split_top_level_args
-from factgraph.audit.evidence_graph import (
-    EDGE_DERIVES,
-    LAYOUT_TREE,
-    NODE_CONCLUSION,
-    NODE_PREMISE,
-    NODE_SEED,
-    EvidenceEdge,
+from factgraph.application.explain.evidence_tree import (
+    Const,
+    EvidenceAtom,
     EvidenceGraph,
-    EvidenceNode,
+    EvidenceRule,
+    EvidenceTree,
+    Fact,
+    Holds,
+    LAYOUT_TREE,
+    Source,
 )
+from factgraph.application.protocol.certainty import Certainty
 from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 
 _TRACE_CALL_RE = re.compile(
@@ -211,90 +213,189 @@ def problog_trace_to_evidence_graph(
     if root_frame_id is None:
         raise ValueError("candidate anchor not found in ProbLog trace")
 
-    frame_order = _collect_frame_subtree(frames, root_frame_id)
-    nodes: list[EvidenceNode] = []
-    edges: list[EvidenceEdge] = []
-    node_id_by_frame_id: dict[str, str] = {}
-
-    for idx, frame_id in enumerate(frame_order):
-        frame = frames[frame_id]
-        goal_name, goal_args = _parse_goal_expr(frame.call_event.goal)
-        node_id = f"problog:{candidate_id}:frame:{idx}"
-        node_id_by_frame_id[frame_id] = node_id
-
-        if frame_id == root_frame_id:
-            node_kind = NODE_CONCLUSION
-            label = candidate_info["label"]
-            component = candidate_info["component"]
-            value_summary = _format_probability(matched_answer.probability) if matched_answer else _frame_value_summary(frame)
-        else:
-            label = goal_name
-            component = _goal_component(goal_args)
-            value_summary = _frame_value_summary(frame)
-            node_kind = NODE_SEED if not frame.child_frame_ids else NODE_PREMISE
-
-        nodes.append(
-            EvidenceNode(
-                node_id=node_id,
-                node_kind=node_kind,
-                component=component,
-                label=label,
-                value_summary=value_summary,
-                timestamp=None,
-                engine_meta={
-                    "goal": frame.call_event.goal,
-                    "goal_name": goal_name,
-                    "goal_args": goal_args,
-                    "call_started_seconds": frame.call_event.started_seconds,
-                    "location": frame.call_event.location,
-                    "result_terms": frame.result_event.result_terms if frame.result_event else (),
-                    "bindings_text": frame.result_event.bindings_text if frame.result_event else None,
-                    "elapsed_seconds": frame.complete_event.elapsed_seconds if frame.complete_event else None,
-                    "event_status": _frame_status(frame),
-                    "synthetic_goal": _is_synthetic_goal_name(goal_name),
-                    "answer_probability": matched_answer.probability if frame_id == root_frame_id and matched_answer else None,
-                },
-            )
+    tree_specs = _tree_specs_for_answers(
+        trace=trace,
+        frames=frames,
+        root_frame_id=root_frame_id,
+        matched_answer=matched_answer,
+    )
+    trees = tuple(
+        _evidence_tree_for_frame(
+            frames=frames,
+            root_frame_id=tree_root_frame_id,
+            candidate_id=candidate_id,
+            answer=answer,
+            tree_index=idx,
         )
-
-    edge_counter = 0
-    for frame_id in frame_order:
-        parent_frame = frames[frame_id]
-        for child_frame_id in parent_frame.child_frame_ids:
-            if child_frame_id not in node_id_by_frame_id:
-                continue
-            edge_counter += 1
-            child_frame = frames[child_frame_id]
-            edges.append(
-                EvidenceEdge(
-                    edge_id=f"problog:{candidate_id}:edge:{edge_counter}",
-                    from_node_id=node_id_by_frame_id[child_frame_id],
-                    to_node_id=node_id_by_frame_id[frame_id],
-                    edge_kind=EDGE_DERIVES,
-                    rule_label=None,
-                    engine_meta={
-                        "parent_goal": parent_frame.call_event.goal,
-                        "child_goal": child_frame.call_event.goal,
-                        "parent_location": parent_frame.call_event.location,
-                    },
-                )
-            )
+        for idx, (tree_root_frame_id, answer) in enumerate(tree_specs)
+    )
+    graph_certainty = _graph_certainty_for_answers(trace.answers, matched_answer)
 
     return EvidenceGraph(
         graph_id=f"eg:{candidate_id}",
         engine="problog",
-        root_node_id=node_id_by_frame_id[root_frame_id],
-        nodes=tuple(nodes),
-        edges=tuple(edges),
-        support_kind=support_kind,
         layout_hint=LAYOUT_TREE,
+        subject_binding=_candidate_binding_from_payload(candidate_payload),
+        paths=trees,
+        certainty=graph_certainty,
         metadata={
             "event_count": len(trace.events),
             "answer_count": len(trace.answers),
             "root_goal": frames[root_frame_id].call_event.goal,
             "answer_probability": matched_answer.probability if matched_answer else None,
+            "support_kind": support_kind,
         },
     )
+
+
+def _tree_specs_for_answers(
+    *,
+    trace: ProbLogTraceV0,
+    frames: Mapping[str, _ProbLogCallFrame],
+    root_frame_id: str,
+    matched_answer: ProbLogAnswerV0 | None,
+) -> tuple[tuple[str, ProbLogAnswerV0 | None], ...]:
+    specs: list[tuple[str, ProbLogAnswerV0 | None]] = []
+    seen: set[tuple[str, str | None]] = set()
+    for answer in trace.answers:
+        frame_id = _frame_id_for_goal(frames, answer.query)
+        if frame_id is None:
+            continue
+        key = (frame_id, answer.query)
+        if key in seen:
+            continue
+        specs.append((frame_id, answer))
+        seen.add(key)
+    if specs:
+        return tuple(specs)
+    return ((root_frame_id, matched_answer),)
+
+
+def _frame_id_for_goal(frames: Mapping[str, _ProbLogCallFrame], goal: str) -> str | None:
+    for frame_id, frame in frames.items():
+        if frame.call_event.goal == goal:
+            return frame_id
+    return None
+
+
+def _evidence_tree_for_frame(
+    *,
+    frames: Mapping[str, _ProbLogCallFrame],
+    root_frame_id: str,
+    candidate_id: str,
+    answer: ProbLogAnswerV0 | None,
+    tree_index: int,
+) -> EvidenceTree:
+    frame_order = _collect_frame_subtree(frames, root_frame_id)
+    root_frame = frames[root_frame_id]
+    certainty = _certainty_for_answer(answer)
+    head_atom = _evidence_atom_for_frame(
+        root_frame,
+        candidate_id=candidate_id,
+        certainty=certainty,
+        role="head",
+        ordinal=0,
+    )
+    body_atoms = tuple(
+        _evidence_atom_for_frame(
+            frames[frame_id],
+            candidate_id=candidate_id,
+            certainty=certainty,
+            role="body",
+            ordinal=idx,
+        )
+        for idx, frame_id in enumerate(frame_order[1:], start=1)
+    )
+    rules = [
+        EvidenceRule(
+            occurrence_alias="head",
+            rule_id=_goal_rule_id(root_frame),
+            role="head",
+            status="holds",
+            ports={},
+            atoms=(head_atom,),
+        )
+    ]
+    if body_atoms:
+        rules.append(
+            EvidenceRule(
+                occurrence_alias=f"problog:{candidate_id}:body:{tree_index}",
+                rule_id=_goal_rule_id(root_frame),
+                role="body",
+                status="holds",
+                ports={},
+                atoms=body_atoms,
+            )
+        )
+    return EvidenceTree(
+        tree_id=f"{candidate_id}:answer:{tree_index}",
+        status="holds",
+        rules=tuple(rules),
+        joins=(),
+        certainty=certainty,
+        metadata={
+            "answer_query": answer.query if answer is not None else root_frame.call_event.goal,
+            "answer_probability": answer.probability if answer is not None else None,
+        },
+    )
+
+
+def _evidence_atom_for_frame(
+    frame: _ProbLogCallFrame,
+    *,
+    candidate_id: str,
+    certainty: Certainty,
+    role: str,
+    ordinal: int,
+) -> EvidenceAtom:
+    goal_name, goal_args = _parse_goal_expr(frame.call_event.goal)
+    source = Source(
+        ref=f"problog:{candidate_id}:{role}:{ordinal}",
+        value=frame.call_event.goal,
+        meta={
+            "goal": frame.call_event.goal,
+            "goal_name": goal_name,
+            "goal_args": goal_args,
+            "location": frame.call_event.location,
+            "event_status": _frame_status(frame),
+            "result_terms": frame.result_event.result_terms if frame.result_event else (),
+            "bindings_text": frame.result_event.bindings_text if frame.result_event else None,
+            "elapsed_seconds": frame.complete_event.elapsed_seconds if frame.complete_event else None,
+            "synthetic_goal": _is_synthetic_goal_name(goal_name),
+        },
+    )
+    return EvidenceAtom(
+        form=Fact(
+            predicate=goal_name,
+            terms=tuple(Const(_normalize_goal_token(arg)) for arg in goal_args),
+        ),
+        verdict=Holds(certainty=certainty, support=(source,)),
+        atom_id=f"problog:{candidate_id}:{role}:{ordinal}",
+        repr_text=frame.call_event.goal,
+    )
+
+
+def _goal_rule_id(frame: _ProbLogCallFrame) -> str:
+    goal_name, _goal_args = _parse_goal_expr(frame.call_event.goal)
+    return goal_name
+
+
+def _certainty_for_answer(answer: ProbLogAnswerV0 | None) -> Certainty:
+    probability = answer.probability if answer is not None else 1.0
+    return Certainty(lo=float(probability), hi=float(probability), kind="probabilistic")
+
+
+def _graph_certainty_for_answers(
+    answers: tuple[ProbLogAnswerV0, ...],
+    matched_answer: ProbLogAnswerV0 | None,
+) -> Certainty:
+    if answers:
+        probability = max(float(answer.probability) for answer in answers)
+    elif matched_answer is not None:
+        probability = float(matched_answer.probability)
+    else:
+        probability = 1.0
+    return Certainty(lo=probability, hi=probability, kind="probabilistic")
 
 
 def problog_trace_to_candidate_evidence_tree(
@@ -512,6 +613,11 @@ def _resolve_candidate_info(candidate_payload: Mapping[str, Any]) -> dict[str, A
     entity_refs: list[str] = []
     for term in terms:
         if not isinstance(term, dict):
+            normalized = _normalize_goal_token(term)
+            if normalized:
+                normalized_terms.append(normalized)
+                if normalized.startswith("idref_v1:"):
+                    entity_refs.append(normalized)
             continue
         kind = term.get("kind")
         if kind == "entity_ref":

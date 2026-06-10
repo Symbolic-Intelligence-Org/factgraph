@@ -27,6 +27,16 @@ compatibility.
 - `src/factgraph/application/docs/rule.md`
   - Application-layer Rule DTO contract. Stores core rule AST atoms directly
     and remains below SDK ergonomic authoring.
+- `src/factgraph/application/explain/docs/README.md`
+  - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
+    `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and
+    native prober (`probe_native`). Canonical type site for the explain layer;
+    `factgraph.audit.evidence_graph` re-exports from here.
+- `src/factgraph/application/protocol/docs/README.md`
+  - `EvaluateResult` / `EvaluateRow` / `Explanation` / `ResultFingerprint`
+    protocol contract; `EvaluateRow.explain()` dispatch; S5 evidence invariant
+    (`{passed,failed} ↔ evidence is not None`); ProbLog/PyReason rich evidence
+    builder dispatch; `walk_evidence` text renderer.
 - `src/factgraph/application/walker/docs/README.md`
   - Current implementation contract for the application-layer walker
     module.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .common import ErrorDTO, JSONValue, ProtocolShapeError, WarningDTO
+from .certainty import BOOLEAN_CERTAINTY, Certainty
 from .derivation import (
     CompiledDerivationPlan,
     CompiledHeadCall,
@@ -128,6 +129,8 @@ from .schema_runtime import EntityRef, EntitySelector, FieldPath, IdentityValue,
 __all__ = [
     "AppliedOpResultDTO",
     "AssertionRecordDTO",
+    "BOOLEAN_CERTAINTY",
+    "Certainty",
     "ConditionDescriptor",
     "CheckRequest",
     "CheckResult",

@@ -9,10 +9,8 @@ from unittest.mock import patch
 import factgraph.application as application  # noqa: F401
 from factgraph.adapters.problog.problog_export import ProbLogExportError, _claim_probability
 from factgraph.adapters.problog.rule_ext import ProbLogRuleExt, resolve_problog_engine_ext
-from factgraph.audit import EDGE_DERIVES, EDGE_HAS_ATOM, EDGE_SUPPORTED_BY
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.semantics import SemanticsProfile
-from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 from factgraph.sdk.dsl import vars as sdk_vars
 from factgraph.sdk.dsl import EmitSpec, Inference, Pred
 from factgraph.sdk.schema import Entity, Field, Identity
@@ -327,12 +325,8 @@ class ProbLogConfigProfileCoreEvaluateTests(unittest.TestCase):
         graph = explanation.evidence
         self.assertIsNotNone(graph)
         assert graph is not None
-        self.assertEqual(graph.support_kind, PROBLOG_PROVENANCE_KIND)
         self.assertEqual(graph.engine, "problog")
-        self.assertGreater(len(graph.nodes), 1)
-        self.assertTrue(any(edge.edge_kind == EDGE_DERIVES for edge in graph.edges))
-        self.assertTrue(any(edge.edge_kind == EDGE_HAS_ATOM for edge in graph.edges))
-        self.assertTrue(any(edge.edge_kind == EDGE_SUPPORTED_BY for edge in graph.edges))
+        self.assertGreater(len(graph.paths), 0)
         self.assertEqual(
             set(graph.metadata),
             {
@@ -352,23 +346,13 @@ class ProbLogConfigProfileCoreEvaluateTests(unittest.TestCase):
                 "evaluated_at",
             },
         )
-        self.assertNotIn("event_count", graph.metadata)
-        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
-        self.assertNotIn("goal", root.engine_meta)
-        trace_root = next(node for node in graph.nodes if "problog" in node.engine_meta)
-        problog_meta = trace_root.engine_meta["problog"]
-        self.assertEqual(problog_meta["trace_summary"]["event_count"], 12)
-        self.assertEqual(problog_meta["trace_summary"]["answer_count"], 1)
-        self.assertEqual(problog_meta["trace_summary"]["root_answer_probability"], 0.42)
-        uncertainty = problog_meta["uncertainty_projection"]
-        self.assertEqual(uncertainty["schema_version"], 1)
-        self.assertEqual(uncertainty["decision_count"], 1)
-        decision = next(iter(uncertainty["decisions_by_asrt_id"].values()))
-        self.assertEqual(decision["source"], "uncertainty_projection")
-        self.assertEqual(decision["raw_kind"], "probabilistic")
-        self.assertEqual(decision["bound"], [0.2, 0.8])
-        self.assertEqual(decision["policy"], "midpoint")
-        self.assertEqual(decision["resolved_probability"], 0.5)
+        tree = graph.paths[0]
+        self.assertEqual(tree.metadata["answer_probability"], 0.42)
+        self.assertEqual({rule.role for rule in tree.rules}, {"head", "body"})
+        body_atoms = tuple(atom for rule in tree.rules if rule.role == "body" for atom in rule.atoms)
+        self.assertGreater(len(body_atoms), 0)
+        self.assertEqual(graph.certainty.kind, "probabilistic")
+        self.assertEqual(graph.certainty.lo, 0.42)
         self.assertEqual(compiled["target_pred_id"], "user:tag")
 
 

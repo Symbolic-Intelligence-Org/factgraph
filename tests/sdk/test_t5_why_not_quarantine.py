@@ -74,7 +74,10 @@ class T5WhyNotQuarantineTests(unittest.TestCase):
         self.assertNotIsInstance(explanation, WhyNotUniverseResult)
         self.assertEqual(explanation.status, "failed")
         self.assertEqual(explanation.failure_class, "closed_head_false")
-        self.assertIsNone(explanation.evidence)
+        self.assertIsNotNone(explanation.evidence)
+        assert explanation.evidence is not None
+        self.assertTrue(explanation.evidence.paths)
+        self.assertEqual(explanation.evidence.paths[0].status, "fails")
         self.assertEqual(explanation.errors, ())
         for legacy_field in (
             "requested_universe",

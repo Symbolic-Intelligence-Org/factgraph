@@ -105,6 +105,7 @@ from .schema_runtime import (
     field_predicate,
     field_value_type,
     materialize_identity,
+    render_entity_repr,
     resolve_selector,
 )
 from .authoring_runtime import AuthoringRuntimeError
@@ -191,6 +192,7 @@ __all__ = [
     "plan_delete_command",
     "plan_write_command",
     "recheck_proof_frame",
+    "render_entity_repr",
     "render_proof_frame_narrative",
     "resolve_workspace_paths",
     "save_workspace",

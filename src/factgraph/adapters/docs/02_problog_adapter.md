@@ -24,7 +24,7 @@ It is responsible for:
 - Projecting shared raw uncertainty (`raw_kind` + `bound`) into
   ProbLog point probabilities only when an explicit
   `uncertainty_projection` policy is configured
-- Building row-level ProbLog provenance graphs for passed rows when
+- Building row-level ProbLog provenance paths for passed rows when
   proof-trace data is available
 - Persisting accepted ProbLog candidates' probabilities into the
   Annotation Store as `problog/semantic/probability` (via the
@@ -143,37 +143,37 @@ Explainability addendum:
   - Runtime `explain_ref(kind="candidate")` returns the
     engine-native provenance envelope
 - This provenance is not forcibly converted into a `ProofReceipt`.
-- Row-result evidence now has a separate protocol bridge: for passed
+- Row-result evidence has a separate protocol bridge: for passed
   ProbLog rows, `EvaluateRow.explain().evidence` materializes a
-  row-level `EvidenceGraph` from the proof trace instead of falling
-  back to a single conclusion node.
-- The row graph uses:
-  - `support_kind="problog_provenance_v1"`
-  - `edge_kind="derives"`
-  - namespaced `engine_meta["problog"]` trace summary and, when
-    present, uncertainty projection metadata
-- Lower-level candidate / static export surfaces may still use the
-  adapter converter directly. Treat those as adapter-level surfaces,
-  not the primary public row-result evidence path.
+  paths-model `EvidenceGraph` from the proof trace instead of falling
+  back to a minimal row-result graph.
+- The row bridge consumes the candidate provenance envelope, converts
+  the trace to paths, and then wraps the result with the exact
+  row-result metadata required by `Explanation` validation. Converter
+  metadata stays adapter-local; row-result graph metadata remains the
+  protocol row-result key set.
+- Lower-level candidate / static export surfaces may still consume the
+  adapter provenance envelope directly. Treat those as adapter-level
+  surfaces, not the primary public row-result evidence path.
 
 EvidenceGraph addendum:
 
-- `problog_trace_to_evidence_graph(...)` currently implements a
-  candidate-anchored tree converter:
+- `problog_trace_to_evidence_graph(...)` implements a
+  candidate-anchored paths-model converter:
   - Input: `ProbLogTraceV0 + candidate_id + candidate_payload`
   - Output:
-    `EvidenceGraph(engine="problog", layout_hint="tree", support_kind="problog_provenance_v1")`
-- Runtime export now materializes the converter result into:
-  - `audit/evidence_graphs.jsonl`
-  - `AuditQuery.get_candidate_evidence_graph(...)`
-  - Candidate static-page unified `EvidenceGraph` section
-- The converter normalizes the trace as a **call-frame tree**
-  rather than a flat per-event list:
-  - Each `call goal(...)` frame becomes one `EvidenceNode`
-  - `result / complete / fail` is kept in the node's
-    `engine_meta`
-  - Child call frames point at the parent frame via
-    `edge_kind="derives"`
+    `application.explain.EvidenceGraph(engine="problog",
+    layout_hint="tree", paths=(EvidenceTree, ...))`
+- The converter normalizes the trace as **one call-frame tree per
+  answer** rather than a flat per-event list:
+  - Each selected answer becomes an `EvidenceTree`
+  - The root call frame becomes the head `EvidenceRule`
+  - Child call frames become body `EvidenceAtom` entries
+  - `result / complete / fail` details are kept in atom support
+    `Source.meta`
+  - Each answer tree carries point probabilistic certainty
+    `Certainty(p, p, "probabilistic")`; the graph certainty is the
+    adapter-level aggregate of answer probabilities.
 - Root anchoring follows a best-effort rule:
   - Prefer matching the final answer / query line against the
     exact goal of a call frame
@@ -185,16 +185,16 @@ EvidenceGraph addendum:
     component` is still derived from the candidate payload
     semantics
 - Non-goals at this layer:
-  - Does not promote every `result/complete/fail` event into its
-    own `EvidenceNode`
+  - Does not promote every `result/complete/fail` event into its own
+    `EvidenceAtom`
   - Does not forcibly translate a synthetic `answer(...)` back
     into a complete rule-level semantic tree
-  - Does not recover richer rule labels here; `location` remains
-    in `engine_meta`
-- The row-result bridge wraps converter nodes / edges so ProbLog
-  trace details remain namespaced under `engine_meta["problog"]`.
-  The root node also carries a trace summary and uncertainty
-  projection decision summary when present.
+  - Does not recover richer rule labels here; `location` remains in
+    support `Source.meta`
+- The row-result bridge reuses converter paths while replacing graph
+  metadata with protocol row-result metadata. This keeps
+  `Explanation.evidence` validation stable while preserving the rich
+  ProbLog tree under `EvidenceGraph.paths`.
 
 Semantic-delivery addendum:
 

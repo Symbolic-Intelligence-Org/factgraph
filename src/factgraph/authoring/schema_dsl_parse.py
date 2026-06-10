@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from factgraph.core.schema.schema_ir import CANONICAL_TAGS
+from factgraph.core.schema.schema_repr import (
+    SchemaReprTemplateError,
+    validate_member_repr_template,
+    validate_meta_repr_template,
+)
 
 
 _BUILTIN_TAG_MAP = {
@@ -81,9 +86,6 @@ def _parse_entity_class(*, node: ast.ClassDef, entity_index: int) -> dict[str, A
         "identity_fields": [],
         "fields": [],
     }
-    description = ast.get_docstring(node)
-    if isinstance(description, str) and description:
-        entity["description"] = description
     meta: dict[str, Any] = {}
 
     for body_index, item in enumerate(node.body):
@@ -131,7 +133,7 @@ def _parse_meta_class(*, item: ast.ClassDef, path: str) -> dict[str, Any]:
 
 
 def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], path: str) -> None:
-    allowed = {"version", "description", "tags"}
+    allowed = {"version", "tags", "repr"}
     _reject_unknown_keys(meta, allowed, path=path)
 
     if "version" in meta:
@@ -139,12 +141,6 @@ def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], p
         if not isinstance(version, str) or not version:
             raise _parse_error("Meta.version must be non-empty string", path=f"{path}.version")
         entity["version"] = version
-
-    if "description" in meta:
-        description = meta["description"]
-        if not isinstance(description, str) or not description:
-            raise _parse_error("Meta.description must be non-empty string", path=f"{path}.description")
-        entity["description"] = description
 
     if "tags" in meta:
         tags = meta["tags"]
@@ -156,6 +152,18 @@ def _apply_entity_meta_fields(*, entity: dict[str, Any], meta: dict[str, Any], p
                 raise _parse_error("Meta.tags items must be non-empty string", path=f"{path}.tags[{index}]")
             normalized_tags.append(tag)
         entity["tags"] = normalized_tags
+
+    if "repr" in meta:
+        identity_field_names = tuple(
+            field.get("name")
+            for field in entity.get("identity_fields", ())
+            if isinstance(field, dict) and isinstance(field.get("name"), str)
+        )
+        try:
+            validate_meta_repr_template(meta["repr"], identity_field_names=identity_field_names)
+        except SchemaReprTemplateError as exc:
+            raise _parse_error(str(exc), path=f"{path}.repr") from exc
+        entity["repr"] = meta["repr"]
 
 
 def _parse_entity_member_annassign(*, item: ast.AnnAssign, path: str, entity_name: str) -> dict[str, Any]:
@@ -191,13 +199,13 @@ def _build_identity_from_kwargs(
 ) -> dict[str, Any]:
     if annotation_plan.cardinality != "single":
         raise _parse_error("Identity fields must use a single-value annotation", path=f"{path}.annotation")
-    allowed = {"description", "pattern"}
+    allowed = {"pattern", "repr"}
     _reject_unknown_keys(
         kwargs,
         allowed,
         path=f"{path}.Identity",
         message=(
-            "Identity() only accepts description= and pattern= in Form I; "
+            "Identity() only accepts pattern= and repr= in Form I; "
             "remove primary_key/default/default_factory and provide all identity values explicitly"
         ),
     )
@@ -207,6 +215,7 @@ def _build_identity_from_kwargs(
         "type_domain": annotation_plan.type_domain,
     }
     _apply_common_member_kwargs(out=out, kwargs=kwargs, annotation_plan=annotation_plan, path=f"{path}.Identity")
+    _validate_authoring_member_repr(kwargs, field_name=field_name, path=f"{path}.Identity")
     return out
 
 
@@ -219,13 +228,13 @@ def _build_field_from_kwargs(
     entity_name: str,
 ) -> dict[str, Any]:
     del entity_name
-    allowed = {"description", "pattern"}
+    allowed = {"pattern", "repr"}
     _reject_unknown_keys(
         kwargs,
         allowed,
         path=f"{path}.Field",
         message=(
-            "Field() only accepts description= and pattern= in Form I; "
+            "Field() only accepts pattern= and repr= in Form I; "
             "replace cardinality= with scalar or collection type annotations"
         ),
     )
@@ -240,6 +249,7 @@ def _build_field_from_kwargs(
         out["enum_values"] = list(annotation_plan.enum_values)
 
     _apply_common_member_kwargs(out=out, kwargs=kwargs, annotation_plan=annotation_plan, path=f"{path}.Field")
+    _validate_authoring_member_repr(kwargs, field_name=field_name, path=f"{path}.Field")
     return out
 
 
@@ -250,11 +260,6 @@ def _apply_common_member_kwargs(
     annotation_plan: _AnnotationPlan,
     path: str,
 ) -> None:
-    if "description" in kwargs:
-        value = kwargs["description"]
-        if not isinstance(value, str) or not value:
-            raise _parse_error("description must be non-empty string", path=f"{path}.description")
-        out["description"] = value
     if "pattern" in kwargs:
         value = kwargs["pattern"]
         if annotation_plan.type_domain != "string":
@@ -268,6 +273,20 @@ def _apply_common_member_kwargs(
         except re.error as exc:
             raise _parse_error(f"pattern must be valid regex: {exc}", path=f"{path}.pattern")
         out["pattern"] = value
+    if "repr" in kwargs:
+        out["repr"] = kwargs["repr"]
+
+
+def _validate_authoring_member_repr(kwargs: dict[str, Any], *, field_name: str, path: str) -> None:
+    if "repr" not in kwargs:
+        return
+    try:
+        validate_member_repr_template(kwargs["repr"], field_name=field_name)
+    except SchemaReprTemplateError as exc:
+        raise _parse_error(str(exc), path=f"{path}.repr") from exc
+    kwargs_repr = kwargs["repr"]
+    if not isinstance(kwargs_repr, str) or not kwargs_repr:
+        raise _parse_error("repr must be non-empty string", path=f"{path}.repr")
 
 
 def _call_name(func: ast.expr) -> str | None:

@@ -76,11 +76,7 @@ def canonicalize_schema_ir_jcs(schema_ir: dict) -> bytes:
 
 def canonicalize_schema_ir_identity_jcs(schema_ir: dict) -> bytes:
     validated = ensure_schema_ir(schema_ir)
-    identity = {
-        key: value
-        for key, value in validated.items()
-        if key not in SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS
-    }
+    identity = _schema_identity_view(validated)
     _reject_floats(identity, "$")
     try:
         return json.dumps(
@@ -96,6 +92,18 @@ def canonicalize_schema_ir_identity_jcs(schema_ir: dict) -> bytes:
 def schema_digest(schema_ir: dict) -> str:
     canonical = canonicalize_schema_ir_identity_jcs(schema_ir)
     return sha256_token(canonical)
+
+
+def _schema_identity_view(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _schema_identity_view(child)
+            for key, child in value.items()
+            if key not in SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS and key != "repr"
+        }
+    if isinstance(value, list):
+        return [_schema_identity_view(child) for child in value]
+    return value
 
 
 def _validate_top_level(schema_ir: dict) -> None:
@@ -140,6 +148,7 @@ def _validate_entities(entities: Any) -> None:
             raise SchemaIRValidationError(
                 f"entities[{index}].entity_type must be non-empty string"
             )
+        _validate_optional_repr(entity, f"entities[{index}]")
         identity_fields = entity.get("identity_fields")
         if not isinstance(identity_fields, list):
             raise SchemaIRValidationError(
@@ -154,6 +163,7 @@ def _validate_entities(entities: Any) -> None:
                 raise SchemaIRValidationError(
                     f"entities[{index}].identity_fields[{id_index}].name must be non-empty string"
                 )
+            _validate_optional_repr(field, f"entities[{index}].identity_fields[{id_index}]")
             domain = field.get("type_domain")
             if domain not in CANONICAL_TAGS:
                 raise SchemaIRValidationError(
@@ -172,6 +182,7 @@ def _validate_predicates(predicates: Any) -> None:
             raise SchemaIRValidationError(
                 f"predicates[{index}].pred_id must be non-empty string"
             )
+        _validate_optional_repr(predicate, f"predicates[{index}]")
         arg_specs = predicate.get("arg_specs")
         if not isinstance(arg_specs, list) or len(arg_specs) == 0:
             raise SchemaIRValidationError(
@@ -232,6 +243,14 @@ def _validate_projection(projection: Any) -> None:
             raise SchemaIRValidationError(f"projection missing key: {key}")
         if not isinstance(projection[key], list):
             raise SchemaIRValidationError(f"projection.{key} must be list")
+
+
+def _validate_optional_repr(row: dict[str, Any], ctx: str) -> None:
+    if "repr" not in row:
+        return
+    value = row["repr"]
+    if not isinstance(value, str) or not value:
+        raise SchemaIRValidationError(f"{ctx}.repr must be non-empty string")
 
 
 def _reject_floats(value: Any, path: str) -> None:

@@ -473,7 +473,7 @@ Invalid `row_format` or incompatible head raises
 
 ### Rule + run
 
-An application `Rule(id, where, ports, version=..., desc=...)` is the
+An application `Rule(id, where, ports, version=..., repr=...)` is the
 canonical reusable read pattern. Required: `id`, `ports`, `where` (all
 non-empty); `version` is optional. Use the `build_application_rule(...)`
 SDK bridge to construct one from Entity-DSL atoms; direct `Rule(...)`

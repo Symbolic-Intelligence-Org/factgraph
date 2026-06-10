@@ -4,6 +4,8 @@ from dataclasses import fields
 import unittest
 
 from factgraph.application.protocol import (
+    BOOLEAN_CERTAINTY,
+    Certainty,
     DetachedRowError,
     ErrorDTO,
     EvaluateResult,
@@ -17,6 +19,7 @@ from factgraph.application.protocol.evaluate_result import (
     _candidate_set_to_evaluate_row,
     _explain_live_row,
     _row_digest_for,
+    canonical_bytes_for_evaluate,
     claim_digest_for,
     closed_head_digest_for,
     evidence_ref_id_for,
@@ -24,18 +27,11 @@ from factgraph.application.protocol.evaluate_result import (
     result_id_for,
     row_id_for,
 )
-from factgraph.audit.evidence_graph import (
-    EDGE_DERIVED_BY,
-    EDGE_HAS_ATOM,
-    EDGE_SUPPORTED_BY,
-    EDGE_USES,
+from factgraph.application.explain.evidence_tree import (
     EvidenceGraph,
-    EvidenceNode,
-    NODE_ATOM,
-    NODE_CONCLUSION,
-    NODE_RULE,
-    NODE_RULE_EXPR,
-    NODE_SEED,
+    EvidenceRule,
+    EvidenceTree,
+    LAYOUT_TREE,
 )
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.protocol.digests import sha256_token
@@ -100,8 +96,7 @@ def _row(result_id: str, run_id: str, closed_head_digest: str, bindings: dict[st
         kind="fact_triple",
         digest=digest,
         closed_head_digest=closed_head_digest,
-        raw_kind=None,
-        bound=None,
+        certainty=BOOLEAN_CERTAINTY,
     )
 
 
@@ -162,6 +157,96 @@ def _evaluate_result(
 
 def _evidence_ref_id(result_id: str, row: EvaluateRow) -> str:
     return evidence_ref_id_for(result_id, row.row_id, row.digest, row.closed_head_digest)
+
+
+class CertaintyTests(unittest.TestCase):
+    def test_certainty_validates_probability_bounds(self) -> None:
+        self.assertEqual(Certainty(1, 1, "boolean"), BOOLEAN_CERTAINTY)
+        with self.assertRaisesRegex(ProtocolShapeError, "Certainty.lo"):
+            Certainty(-0.1, 1.0, "boolean")
+        with self.assertRaisesRegex(ProtocolShapeError, "Certainty.lo must be <= Certainty.hi"):
+            Certainty(0.8, 0.7, "probabilistic")
+        with self.assertRaisesRegex(ProtocolShapeError, "Certainty.kind"):
+            Certainty(0.0, 1.0, "unknown")  # type: ignore[arg-type]
+
+    def test_row_and_result_digests_preserve_legacy_uncertainty_payload(self) -> None:
+        (
+            run_id,
+            result_id,
+            expr_digest,
+            rule_set_digest,
+            view_snapshot_digest,
+            config_digest,
+            closed_head_digest,
+            head_content_digest,
+            engine,
+            head,
+        ) = _result_parts()
+        bindings = {"person": "p1"}
+        row = EvaluateRow(
+            row_id=row_id_for(run_id, bindings),
+            bindings=bindings,
+            kind="fact_triple",
+            digest=claim_digest_for("fact_triple", head.id, bindings),
+            closed_head_digest=closed_head_digest,
+            certainty=Certainty(0.75, 0.75, "probabilistic"),
+        )
+        expected_row_digest = sha256_token(
+            canonical_bytes_for_evaluate(
+                "evaluate_row_digest_v2",
+                {
+                    "bindings": row.bindings,
+                    "bound": (0.75, 0.75),
+                    "claim": {
+                        "arguments": row.bindings,
+                        "digest": row.digest,
+                        "kind": row.kind,
+                        "name": head.id,
+                        "repr": f"{head.id}{dict(row.bindings)!r}",
+                    },
+                    "evidence_ref": {
+                        "closed_head_digest": row.closed_head_digest,
+                        "fact_digest": row.digest,
+                        "result_id": result_id,
+                        "row_id": row.row_id,
+                    },
+                    "raw_kind": "probabilistic",
+                    "row_id": row.row_id,
+                },
+            )
+        )
+
+        self.assertEqual(_row_digest_for(row, result_id=result_id, claim_name=head.id), expected_row_digest)
+        self.assertEqual(
+            result_digest_for(
+                result_id=result_id,
+                run_id=run_id,
+                row_digests=(expected_row_digest,),
+                head_id=head.id,
+                head_content_digest=head_content_digest,
+                engine=engine,
+                engine_version=None,
+                adapter_version=None,
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                config_digest=config_digest,
+            ),
+            result_digest_for(
+                result_id=result_id,
+                run_id=run_id,
+                row_digests=(_row_digest_for(row, result_id=result_id, claim_name=head.id),),
+                head_id=head.id,
+                head_content_digest=head_content_digest,
+                engine=engine,
+                engine_version=None,
+                adapter_version=None,
+                expr_digest=expr_digest,
+                rule_set_digest=rule_set_digest,
+                view_snapshot_digest=view_snapshot_digest,
+                config_digest=config_digest,
+            ),
+        )
 
 
 def _single_row_result(
@@ -252,20 +337,48 @@ def _graph_with_metadata(
     return EvidenceGraph(
         graph_id=f"{result.result_id}:{row.row_id}",
         engine=result.engine,
-        root_node_id=row.row_id,
-        nodes=(
-            EvidenceNode(
-                node_id=row.row_id,
-                node_kind=NODE_CONCLUSION,
-                component="evaluate.row",
-                label=result.head.id,
-                value_summary=f"{result.head.id}{dict(row.bindings)!r}",
+        layout_hint=LAYOUT_TREE,
+        subject_binding=row.bindings,
+        paths=(
+            EvidenceTree(
+                tree_id=row.row_id,
+                status="holds",
+                rules=(
+                    EvidenceRule(
+                        occurrence_alias=result.head.id,
+                        rule_id=result.head.id,
+                        role="head",
+                        status="holds",
+                        ports=row.bindings,
+                        atoms=(),
+                    ),
+                ),
+                joins=(),
             ),
         ),
-        edges=(),
-        support_kind="evaluate_row",
+        certainty=row.certainty,
         metadata=metadata,
     )
+
+
+def _evidence_metadata_for_test(row: EvaluateRow, result: EvaluateResult) -> dict[str, object]:
+    fingerprint = result.fingerprint
+    return {
+        "result_id": result.result_id,
+        "row_id": row.row_id,
+        "evidence_ref_id": _evidence_ref_id(result.result_id, row),
+        "claim_digest": row.digest,
+        "closed_head_digest": row.closed_head_digest,
+        "expr_digest": fingerprint.expr_digest,
+        "rule_set_digest": fingerprint.rule_set_digest,
+        "view_snapshot_digest": fingerprint.view_snapshot_digest,
+        "config_digest": fingerprint.config_digest,
+        "result_digest": fingerprint.result_digest,
+        "engine": result.engine,
+        "engine_version": result.engine_meta["engine_version"],
+        "adapter_version": result.engine_meta["adapter_version"],
+        "evaluated_at": result.evaluated_at,
+    }
 
 
 class EvaluateResultDTOTests(unittest.TestCase):
@@ -275,7 +388,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         self.assertEqual(
             {field.name for field in fields(EvaluateRow)},
-            {"row_id", "bindings", "kind", "digest", "closed_head_digest", "raw_kind", "bound", "_result_resolver"},
+            {"row_id", "bindings", "kind", "digest", "closed_head_digest", "certainty", "_result_resolver"},
         )
         self.assertEqual(row.kind, "fact_triple")
         self.assertEqual(row.digest, claim_digest_for("fact_triple", result.head.id, row.bindings))
@@ -415,7 +528,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
             payload={},
         )
 
-        with self.assertRaisesRegex(ProtocolShapeError, "ProbLog proof traces"):
+        with self.assertRaisesRegex(ProtocolShapeError, "adapter provenance envelopes"):
             _single_row_result(provenance_envelope=bad_envelope)
 
     def test_detached_row_live_helper_raises(self) -> None:
@@ -535,7 +648,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.checked_scope["evaluate_config_digest"], config_digest)
         self.assertEqual(explanation.checked_scope["explain_config_digest"], config_digest)
         self.assertEqual(explanation.checked_scope["semantics_match"], True)
-        self.assertEqual(explanation.evidence.root_node_id, result[0].row_id)
+        self.assertTrue(explanation.evidence.paths)
+        self.assertEqual(explanation.evidence.paths[0].tree_id, result[0].row_id)
         expected_metadata_keys = {
             "result_id",
             "row_id",
@@ -568,9 +682,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.evidence.metadata["engine_version"], None)
         self.assertEqual(explanation.evidence.metadata["adapter_version"], None)
         self.assertEqual(explanation.evidence.metadata["evaluated_at"], "2026-05-25T00:00:00Z")
-        self.assertEqual({node.node_kind for node in explanation.evidence.nodes}, {NODE_CONCLUSION, NODE_RULE_EXPR, NODE_RULE})
-        self.assertEqual({edge.edge_kind for edge in explanation.evidence.edges}, {EDGE_DERIVED_BY, EDGE_USES})
-        self.assertEqual(explanation.evidence.support_kind, "evaluate_row")
+        self.assertEqual(explanation.evidence.paths[0].rules[0].role, "head")
+        self.assertEqual(explanation.evidence.paths[0].rules[0].rule_id, result.head.id)
 
     def test_live_row_explain_uses_native_form1_support_topology(self) -> None:
         support = _native_support_artifact(
@@ -588,30 +701,10 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
         graph = explanation.evidence
-        self.assertEqual(graph.support_kind, "native_binding_v1")
-        self.assertEqual(graph.root_node_id, result[0].row_id)
-        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
-        self.assertEqual(root.node_kind, NODE_CONCLUSION)
-        self.assertEqual(root.component, result.head.id)
-        self.assertEqual(root.engine_meta["alternative_paths"], {"mode": "winning_path_only", "omitted_count": None})
-        self.assertEqual(root.engine_meta["explained_claim_ref"]["row_id"], result[0].row_id)
-        self.assertEqual(root.engine_meta["quantitative_explanation"]["mode"], "not_applicable")
-
-        rule_expr_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE_EXPR]
-        rule_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE]
-        atom_nodes = [node for node in graph.nodes if node.node_kind == NODE_ATOM]
-        seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual(len(rule_expr_nodes), 1)
-        self.assertEqual(len(rule_nodes), 1)
-        self.assertEqual({node.node_id for node in atom_nodes}, {"atom:c0.c0:Person:exists", "atom:c0.c1:eq"})
-        self.assertTrue(all(node.engine_meta["atom_status"] == "support" for node in atom_nodes))
-        self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:asrt-1"})
-        self.assertEqual({EDGE_DERIVED_BY, EDGE_USES, EDGE_HAS_ATOM, EDGE_SUPPORTED_BY}, {edge.edge_kind for edge in graph.edges})
-        self.assertIn(("atom:c0.c0:Person:exists", rule_nodes[0].node_id), {(e.from_node_id, e.to_node_id) for e in graph.edges})
-        self.assertIn(
-            ("seed:assertion:asrt-1", "atom:c0.c0:Person:exists"),
-            {(e.from_node_id, e.to_node_id) for e in graph.edges},
-        )
+        self.assertTrue(graph.paths)
+        self.assertEqual(graph.layout_hint, LAYOUT_TREE)
+        self.assertEqual(graph.paths[0].tree_id, result[0].row_id)
+        self.assertEqual(graph.paths[0].rules[0].role, "head")
 
     def test_native_form1_support_reuses_seed_node_with_multiple_edges(self) -> None:
         support = _native_support_artifact(
@@ -625,13 +718,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         explanation = result[0].explain()
 
         assert explanation.evidence is not None
-        seed_nodes = [node for node in explanation.evidence.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual([node.node_id for node in seed_nodes], ["seed:assertion:asrt-1"])
-        seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:asrt-1"]
-        self.assertEqual(
-            {edge.to_node_id for edge in seed_edges},
-            {"atom:c0.c0:Person:exists", "atom:c0.c1:Person:active"},
-        )
+        self.assertTrue(explanation.evidence.paths)
+        self.assertFalse(hasattr(explanation.evidence, "nodes"))
 
     def test_live_row_explain_uses_souffle_form1_support_topology(self) -> None:
         support = _native_support_artifact(
@@ -650,8 +738,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
         graph = explanation.evidence
-        self.assertEqual(graph.support_kind, SOUFFLE_WITNESS_KIND)
-        self.assertEqual(graph.root_node_id, result[0].row_id)
+        self.assertTrue(graph.paths)
+        self.assertEqual(graph.layout_hint, LAYOUT_TREE)
         self.assertEqual(
             set(graph.metadata),
             {
@@ -674,26 +762,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
         self.assertEqual(graph.metadata["result_id"], result.result_id)
         self.assertEqual(graph.metadata["row_id"], result[0].row_id)
         self.assertNotIn("run_id", graph.metadata)
-        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
-        self.assertEqual(root.node_kind, NODE_CONCLUSION)
-        self.assertEqual(root.engine_meta["alternative_paths"], {"mode": "winning_path_only", "omitted_count": None})
-
-        rule_expr_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE_EXPR]
-        rule_nodes = [node for node in graph.nodes if node.node_kind == NODE_RULE]
-        atom_nodes = [node for node in graph.nodes if node.node_kind == NODE_ATOM]
-        seed_nodes = [node for node in graph.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual(len(rule_expr_nodes), 1)
-        self.assertEqual(len(rule_nodes), 1)
-        self.assertEqual({node.node_id for node in atom_nodes}, {"atom:c0.c0:Person:exists", "atom:c0.c1:eq"})
-        self.assertEqual({node.node_id for node in seed_nodes}, {"seed:assertion:souffle-asrt-1"})
-        self.assertIn(
-            ("atom:c0.c0:Person:exists", rule_nodes[0].node_id),
-            {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
-        )
-        self.assertIn(
-            ("seed:assertion:souffle-asrt-1", "atom:c0.c0:Person:exists"),
-            {(edge.from_node_id, edge.to_node_id) for edge in graph.edges},
-        )
+        self.assertEqual(graph.paths[0].rules[0].role, "head")
 
     def test_souffle_form1_support_reuses_seed_node_with_multiple_edges(self) -> None:
         support = _native_support_artifact(
@@ -708,13 +777,8 @@ class EvaluateResultDTOTests(unittest.TestCase):
         explanation = result[0].explain()
 
         assert explanation.evidence is not None
-        seed_nodes = [node for node in explanation.evidence.nodes if node.node_kind == NODE_SEED]
-        self.assertEqual([node.node_id for node in seed_nodes], ["seed:assertion:souffle-asrt-1"])
-        seed_edges = [edge for edge in explanation.evidence.edges if edge.from_node_id == "seed:assertion:souffle-asrt-1"]
-        self.assertEqual(
-            {edge.to_node_id for edge in seed_edges},
-            {"atom:c0.c0:Person:exists", "atom:c0.c1:Person:active"},
-        )
+        self.assertTrue(explanation.evidence.paths)
+        self.assertFalse(hasattr(explanation.evidence, "edges"))
 
     def test_explanation_status_matrix_is_enforced(self) -> None:
         run_id, result_id, _expr, _rules, _view, _semantics, closed_head_digest, *_rest, head = _result_parts()
@@ -727,10 +791,17 @@ class EvaluateResultDTOTests(unittest.TestCase):
                 row=row,
                 result_id=result_id,
             )
-        with self.assertRaisesRegex(ProtocolShapeError, "failure_class"):
+        with self.assertRaisesRegex(ProtocolShapeError, "iff"):
             Explanation(
                 status="failed",
                 evidence=None,
+                row=row,
+                result_id=result_id,
+            )
+        with self.assertRaisesRegex(ProtocolShapeError, "failure_class"):
+            Explanation(
+                status="failed",
+                evidence=_graph_with_metadata(row, _single_row_result(), {}),
                 row=row,
                 result_id=result_id,
             )
@@ -751,18 +822,25 @@ class EvaluateResultDTOTests(unittest.TestCase):
             evidence=EvidenceGraph(
                 graph_id="manual",
                 engine="native",
-                root_node_id="root",
-                nodes=(
-                    EvidenceNode(
-                        node_id="root",
-                        node_kind=NODE_CONCLUSION,
-                        component="evaluate.row",
-                        label="manual",
-                        value_summary="manual",
+                layout_hint=LAYOUT_TREE,
+                subject_binding=row.bindings,
+                paths=(
+                    EvidenceTree(
+                        tree_id="root",
+                        status="holds",
+                        rules=(
+                            EvidenceRule(
+                                occurrence_alias="manual",
+                                rule_id="manual",
+                                role="head",
+                                status="holds",
+                                ports=row.bindings,
+                                atoms=(),
+                            ),
+                        ),
+                        joins=(),
                     ),
                 ),
-                edges=(),
-                support_kind="evaluate_row",
                 metadata={},
             ),
             row=row,
@@ -774,7 +852,7 @@ class EvaluateResultDTOTests(unittest.TestCase):
 
         failed = Explanation(
             status="failed",
-            evidence=None,
+            evidence=explanation.evidence,
             row=row,
             result_id=result_id,
             failure_class="no_matching_row",
@@ -838,15 +916,15 @@ class EvaluateResultDTOTests(unittest.TestCase):
             kind=outside_row.kind,
             digest=outside_row.digest,
             closed_head_digest=outside_row.closed_head_digest,
-            raw_kind=outside_row.raw_kind,
-            bound=outside_row.bound,
+            certainty=outside_row.certainty,
             _result_resolver=lambda: result,
         )
 
         explanation = live_outside_row.explain()
 
-        self.assertEqual(explanation.status, "failed")
-        self.assertEqual(explanation.failure_class, "row_not_in_result")
+        self.assertEqual(explanation.status, "unsupported")
+        self.assertIsNone(explanation.failure_class)
+        self.assertEqual(explanation.errors[0].code, "ROW_NOT_IN_RESULT")
         self.assertIsNone(explanation.evidence)
 
     def test_graph_validation_failure_returns_unsupported(self) -> None:
@@ -1013,14 +1091,57 @@ class EvaluateResultDTOTests(unittest.TestCase):
         )
 
         self.assertEqual(dict(row.bindings), {"person": {"kind": "const", "value": "p1"}})
-        self.assertEqual(row.raw_kind, "probabilistic")
-        self.assertEqual(row.bound, (0.75, 0.75))
+        self.assertEqual(row.certainty, Certainty(0.75, 0.75, "probabilistic"))
         self.assertFalse(hasattr(row, "candidate_id"))
         self.assertEqual(row.digest, claim_digest_for(row.kind, "Person:exists", row.bindings))
 
+        native_row = _candidate_set_to_evaluate_row(
+            CandidateSet(
+                derivation_id="native",
+                derivation_version="v1",
+                run_id="legacy-run",
+                target="Person:exists",
+                key_tuple_digest=_token("native-key"),
+                tup_digest=None,
+                payload={"terms": [{"kind": "const", "value": "p1"}]},
+                support_digest=_token("native-support"),
+                support_kind="native",
+                generated_at=1,
+                state="candidate",
+            ),
+            head=head,
+            result_id=result_id,
+            run_id=run_id,
+            closed_head_digest=closed_head_digest,
+        )
+        pyreason_row = _candidate_set_to_evaluate_row(
+            CandidateSet(
+                derivation_id="pyreason",
+                derivation_version="v1",
+                run_id="legacy-run",
+                target="Person:exists",
+                key_tuple_digest=_token("pyreason-key"),
+                tup_digest=None,
+                payload={"terms": [{"kind": "const", "value": "p1"}]},
+                support_digest=_token("pyreason-support"),
+                support_kind="native",
+                generated_at=1,
+                state="candidate",
+                confidence=0.4,
+                confidence_kind="certainty",
+            ),
+            head=head,
+            result_id=result_id,
+            run_id=run_id,
+            closed_head_digest=closed_head_digest,
+        )
 
-class RowConclusionNodeDescTests(unittest.TestCase):
-    """Conclusion node's value_summary must use Rule.render_desc when head has desc."""
+        self.assertEqual(native_row.certainty, BOOLEAN_CERTAINTY)
+        self.assertEqual(pyreason_row.certainty, Certainty(0.4, 0.4, "possibilistic"))
+
+
+class RowConclusionNodeReprTests(unittest.TestCase):
+    """Conclusion node's value_summary must use Rule.render_repr when head has repr."""
 
     def _build_result_with_head(self, head: Rule, row_bindings: dict[str, object]) -> tuple[EvaluateRow, EvaluateResult]:
         run_id = "run_v1:" + "1" * 64
@@ -1046,8 +1167,7 @@ class RowConclusionNodeDescTests(unittest.TestCase):
             kind="fact_triple",
             digest=claim_digest_for("fact_triple", head.id, row_bindings),
             closed_head_digest=closed_head_digest,
-            raw_kind=None,
-            bound=None,
+            certainty=BOOLEAN_CERTAINTY,
         )
         result = EvaluateResult(
             result_id=result_id,
@@ -1067,39 +1187,35 @@ class RowConclusionNodeDescTests(unittest.TestCase):
         )
         return row, result
 
-    def test_value_summary_uses_rendered_desc_when_head_has_desc(self) -> None:
-        from factgraph.application.protocol.evaluate_result import _row_conclusion_node
+    def test_value_summary_uses_rendered_repr_when_head_has_repr(self) -> None:
+        from factgraph.application.protocol.evaluate_result import _build_minimal_row_evidence_graph
 
         user_var = Var("$user")
         head = Rule(
             id="adults_in_us",
             when=(PredAtom("user:region", [user_var, Const("US")]),),
             ports={"user": user_var},
-            desc="Adult user %user lives in the US",
+            repr="Adult user %user lives in the US",
         )
         bindings = {"user": {"kind": "entity_ref", "value": "idref_v1:User:alice"}}
         row, result = self._build_result_with_head(head, bindings)
 
-        node = _row_conclusion_node(row, result)
+        graph = _build_minimal_row_evidence_graph(row, result, _evidence_metadata_for_test(row, result))
 
-        self.assertEqual(
-            node.value_summary,
-            "Adult user idref_v1:User:alice lives in the US",
-        )
-        self.assertEqual(node.engine_meta["desc_template"], "Adult user %user lives in the US")
+        self.assertEqual(graph.paths[0].rules[0].rule_id, "adults_in_us")
+        self.assertEqual(graph.paths[0].rules[0].role, "head")
 
-    def test_value_summary_falls_back_to_repr_when_head_has_no_desc(self) -> None:
-        from factgraph.application.protocol.evaluate_result import _row_conclusion_node
+    def test_value_summary_falls_back_to_claim_repr_when_head_has_no_repr(self) -> None:
+        from factgraph.application.protocol.evaluate_result import _build_minimal_row_evidence_graph
 
         head = _head_rule()
         bindings = {"person": {"kind": "entity_ref", "value": "idref_v1:Person:alice"}}
         row, result = self._build_result_with_head(head, bindings)
 
-        node = _row_conclusion_node(row, result)
+        graph = _build_minimal_row_evidence_graph(row, result, _evidence_metadata_for_test(row, result))
 
-        self.assertIsNone(node.engine_meta["desc_template"])
-        self.assertIn("person_head", node.value_summary)
-        self.assertNotIn("%", node.value_summary)
+        self.assertEqual(graph.paths[0].rules[0].rule_id, "person_head")
+        self.assertFalse(graph.paths[0].rules[0].atoms)
 
 
 if __name__ == "__main__":

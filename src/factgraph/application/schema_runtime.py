@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+import re
 from typing import Any, Literal
 
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
+from factgraph.core.protocol.tup_v1 import display_float64_value
 from factgraph.core.schema.schema_ir import ensure_schema_ir, schema_digest
 
 from .protocol import EntityRef, EntitySelector, ErrorDTO
+
+_REPR_PLACEHOLDER_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*")
 
 
 @dataclass(frozen=True)
@@ -24,9 +29,9 @@ class PredicateInfo:
     value_type_domain: str | None
     is_entity_exists: bool = False
     is_identity_field: bool = False
-    description: str | None = None
     enum_values: tuple[Any, ...] | None = None
     pattern: str | None = None
+    repr: str | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,7 @@ class EntityTypeInfo:
     identity_fields: tuple[IdentityFieldInfo, ...]
     exists_predicate_id: str
     identity_predicates: dict[str, PredicateInfo]
+    meta_repr: str | None = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +128,7 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
             identity_fields=tuple(identity_fields),
             exists_predicate_id="",
             identity_predicates={},
+            meta_repr=entity.get("repr") if isinstance(entity.get("repr"), str) else None,
         )
 
     predicates_by_id: dict[str, PredicateInfo] = {}
@@ -165,9 +172,9 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
             value_type_domain=value_type_domain,
             is_entity_exists=bool(pred.get("is_entity_exists", False)),
             is_identity_field=bool(pred.get("is_identity_field", False)),
-            description=pred.get("description") if isinstance(pred.get("description"), str) else None,
             enum_values=tuple(pred["enum_values"]) if isinstance(pred.get("enum_values"), list) else None,
             pattern=pred.get("pattern") if isinstance(pred.get("pattern"), str) else None,
+            repr=pred.get("repr") if isinstance(pred.get("repr"), str) else None,
         )
         if not info.is_entity_exists and info.py_field_name is not None and info.value_type_domain is None:
             raise SchemaResolutionError(
@@ -228,6 +235,7 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
             identity_fields=info.identity_fields,
             exists_predicate_id=exists_predicate_id,
             identity_predicates=identity_predicates,
+            meta_repr=info.meta_repr,
         )
 
     # Per ADR-IC §4.3.1 + Slice 2 SF1/SF9:
@@ -249,6 +257,83 @@ def build_schema_index(schema_ir: dict[str, Any]) -> SchemaIndex:
         identity_pred_ids=identity_pred_ids,
         exists_pred_ids=exists_pred_ids,
     )
+
+
+def render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Mapping[str, Any]) -> str:
+    """Render the display label for an entity identity bundle.
+
+    `Entity.Meta.repr` templates may reference `%CLS` and identity placeholders
+    such as `%user_id`. Without a template, the fallback label is
+    `"<EntityCls> <first identity value>"`.
+    """
+
+    if not isinstance(identity_values, Mapping):
+        raise SchemaResolutionError(
+            "identity_values must be a mapping",
+            code="INVALID_ENTITY_REPR_INPUT",
+            path=("entities", entity_type, "repr"),
+        )
+    try:
+        entity = index.entities[entity_type]
+    except KeyError as exc:
+        raise SchemaResolutionError(
+            f"unknown entity_type: {entity_type}",
+            code="UNKNOWN_ENTITY_TYPE",
+            path=("entities", entity_type),
+        ) from exc
+
+    if entity.meta_repr is None:
+        if not entity.identity_fields:
+            raise SchemaResolutionError(
+                f"entity_type has no identity fields: {entity_type}",
+                code="INVALID_ENTITY_IDENTITY",
+                path=("entities", entity_type, "identity_fields"),
+            )
+        first_identity = entity.identity_fields[0].name
+        field = entity.identity_fields[0]
+        return f"{entity_type} {_identity_value_text(identity_values, entity_type=entity_type, field_name=field.name, type_domain=field.type_domain)}"
+
+    placeholder_values = {
+        "%CLS": entity_type,
+        **{
+            f"%{field.name}": _identity_value_text(
+                identity_values,
+                entity_type=entity_type,
+                field_name=field.name,
+                type_domain=field.type_domain,
+            )
+            for field in entity.identity_fields
+        },
+    }
+
+    def replace_placeholder(match: re.Match[str]) -> str:
+        token = match.group(0)
+        return placeholder_values.get(token, token)
+
+    return _REPR_PLACEHOLDER_RE.sub(replace_placeholder, entity.meta_repr)
+
+
+def _identity_value_text(
+    identity_values: Mapping[str, Any],
+    *,
+    entity_type: str,
+    field_name: str,
+    type_domain: str,
+) -> str:
+    if field_name not in identity_values:
+        raise SchemaResolutionError(
+            f"missing identity value for {entity_type}.{field_name}",
+            code="MISSING_ENTITY_IDENTITY_VALUE",
+            path=("entities", entity_type, "identity_fields", field_name),
+            details={"entity_type": entity_type, "field_name": field_name},
+        )
+    value = identity_values[field_name]
+    if type_domain == "float64":
+        try:
+            return display_float64_value(value)
+        except Exception:
+            return str(value)
+    return str(value)
 
 
 def entity_info(index: SchemaIndex, entity_type: str) -> EntityTypeInfo:

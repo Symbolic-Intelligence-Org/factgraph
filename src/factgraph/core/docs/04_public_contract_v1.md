@@ -60,18 +60,18 @@ The unified declarative metadata across the SDK and authoring
 schema DSL is:
 
 - `version`
-- `description`
 - `tags`
+- `repr`
 
 Stable points:
 
 - `entity_type` is derived from the `Entity` class name; no
   separate `schema_id` is required
-- `Entity.Meta` allows only `version / description / tags`
-- `description` precedence: `Meta.description > class docstring
-  fallback`
-- The compiler validates and preserves these fields in the schema
-  compile output
+- `Entity.Meta` allows only `version / tags / repr`
+- `repr` is presentation metadata for explain rendering and is not a
+  schema identity input
+- The compiler validates and preserves schema `version / tags`; schema
+  `description` metadata is no longer part of the public contract
 
 ### 2.2 Rule / Derivation
 

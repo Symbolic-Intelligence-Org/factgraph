@@ -63,7 +63,7 @@ Each scalar annotation maps to a storage domain that the compiled schema IR reco
 
 ### 1.5 Value constraints
 
-`Identity()` and `Field()` accept only two keyword arguments: `description=` (human-readable doc string) and `pattern=` (regex constraint, valid only for string-typed fields). Passing other kwargs (`primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
+`Identity()` and `Field()` accept only two keyword arguments: `pattern=` (regex constraint, valid only for string-typed fields) and `repr=` (explain-layer representation template, validated at class definition time and stored in Schema IR as presentation metadata; syntax in §1.8). Passing other kwargs (`description=`, `primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
 
 Enum-style constraints use `Literal[...]` in the annotation:
 
@@ -92,18 +92,42 @@ Each `Entity` subclass may declare an optional inner `class Meta:` block to atta
 
 ```python
 class EmploymentEvent(Entity):
-    """Used as description fallback only when Meta.description is absent."""
-
     class Meta:
         version = "v1"
-        description = "Employment event"
         tags = ["employment", "event"]
 
     event_id: str = Identity()
     company: str = Field()
 ```
 
-Only three keys are accepted: `version`, `description`, `tags`. Unsupported keys raise `SDKSchemaError` at class definition time. Detailed semantics of each Meta field is covered in the next chapter.
+Only three keys are accepted: `version`, `tags`, `repr`. Unsupported keys raise `SDKSchemaError` at class definition time. `Meta.repr` is the entity-label template — its syntax is covered in §1.8 below.
+
+### 1.8 `repr` templates — explain-layer rendering
+
+`repr=` on `Field()` / `Identity()` and `repr` inside `class Meta` are **presentation templates** for the explain layer. They are validated at class-definition time, stored in Schema IR as metadata, and **excluded from `schema_digest`** (presentation only — adding or editing a template keeps schema identity stable, §5.6). They feed `row.explain()`: the atom and conclusion text in [`evaluate_and_evidence.md`](evaluate_and_evidence.md) §4 is rendered from these templates.
+
+```python
+class User(Entity):
+    user_id: str = Identity(repr="%ENT has id %FLD")
+    region: str = Field(repr="%ENT is in region %FLD")
+    age: int = Field(repr="%ENT is %FLD years old")
+
+    class Meta:
+        repr = "%CLS %user_id"           # entity label, e.g. "User u-1"
+```
+
+**Placeholders** are validated per context; unknown placeholders are rejected at class-definition time:
+
+| Placeholder | Meaning | `Field.repr` / `Identity.repr` | `Meta.repr` |
+|---|---|---|---|
+| `%CLS` | entity class name (e.g. `User`) | ✓ | ✓ |
+| `%ENT` | the entity, rendered via its `Meta.repr` label | ✓ | ✗ |
+| `%FLD` | the current field's value | ✓ (this field only) | ✗ |
+| `%<identity_field>` | a named identity field's value (e.g. `%user_id`) | ✗ | ✓ (identity fields only) |
+
+- A `Field` / `Identity` template describes one fact atom: `%ENT` resolves to the subject's entity label (its `Meta.repr`), `%FLD` to that field's value. Example render: `User u-1 is in region us`.
+- A `Meta.repr` template is the entity **label** and may reference only `%CLS` + identity-field placeholders (the identity-only constraint).
+- A field whose name collides with a reserved token (`CLS` / `ENT` / `FLD`) is rejected when a `repr` template is in use.
 
 ## 2. Compiling a schema and using it with FactGraph
 
@@ -122,7 +146,7 @@ schema_ir = compile_schema_from_classes([User])     # compile and return the IR
 schema_preflight_from_classes([User])               # validate only; does not return IR
 ```
 
-The `schema_digest` is the SHA-256 of the canonicalized schema identity (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at` metadata, so recompiling the same `Entity` classes at a later time keeps the same digest. Other schema fields, including descriptions and versions, remain identity-bearing in this release. Reopening with a different class set raises a mismatch error (see [load_and_save.md](load_and_save.md)).
+The `schema_digest` is the SHA-256 of the canonicalized schema identity (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at` metadata, so recompiling the same `Entity` classes at a later time keeps the same digest. Schema `repr` templates are presentation metadata and do not participate in the identity digest. Structural schema fields, including versions, remain identity-bearing in this release. Reopening with a different class set raises a mismatch error (see [load_and_save.md](load_and_save.md)).
 
 ## 3. Runtime schema mutation
 
@@ -214,10 +238,10 @@ class Entity(metaclass=EntityMeta):
     """Subclass to declare an entity type. Must have at least one Identity() field."""
 
 class Identity(_DataMember):
-    def __init__(self, *, description: str | None = None, pattern: str | None = None): ...
+    def __init__(self, *, pattern: str | None = None, repr: str | None = None): ...
 
 class Field(_DataMember):
-    def __init__(self, *, description: str | None = None, pattern: str | None = None): ...
+    def __init__(self, *, pattern: str | None = None, repr: str | None = None): ...
 ```
 
 `pattern=` is valid only for string-typed fields; passing it to a non-string field raises `SDKSchemaError` at class definition time.
@@ -252,7 +276,7 @@ class SchemaAddResult:
 
 | Raised by | Type | Code | Message template |
 |---|---|---|---|
-| `Identity(...)` / `Field(...)` with unknown kwarg | `SDKSchemaError` | — | `Identity() only accepts description= and pattern= in Form I; ...` |
+| `Identity(...)` / `Field(...)` with unknown kwarg | `SDKSchemaError` | — | `Identity() only accepts pattern= and repr= in Form I; ...` |
 | `Field(pattern="...")` on non-string field | `SDKSchemaError` | — | `pattern= is only supported for string-typed Identity/Field members` |
 | `Field(pattern="...")` with invalid regex | `SDKSchemaError` | — | `pattern must be a valid regular expression: ...` |
 | `Entity` subclass with no `Identity()` | `SDKSchemaError` | — | (raised by `EntityMeta`) |

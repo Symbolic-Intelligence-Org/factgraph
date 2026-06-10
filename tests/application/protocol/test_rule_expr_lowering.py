@@ -15,6 +15,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _lower_application_rule,
     _lower_rule_expr,
     _materialize_native_derivation_plan,
+    probe_seed_vars_by_head_port,
 )
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
@@ -263,6 +264,68 @@ class RuleExprJoinMaterializationTests(unittest.TestCase):
             tuple(link.head_port_name for link in traces[0].head_port_link_materializations),
             ("person", "region"),
         )
+
+    def test_probe_seed_vars_cover_inline_head_vars(self) -> None:
+        rule = _person_region_rule()
+        plan = _lower_application_rule(rule, head=rule)
+
+        seed_vars = probe_seed_vars_by_head_port(plan)
+
+        self.assertEqual(seed_vars["person"], ("$person_region__p",))
+        self.assertEqual(seed_vars["region"], ("$person_region__region",))
+
+    def test_probe_seed_vars_cover_projection_head_and_branch_sources(self) -> None:
+        body = _person_region_rule()
+        plan = _lower_application_rule(body, head=Rule.projection("region", "person"))
+
+        seed_vars = probe_seed_vars_by_head_port(plan)
+
+        self.assertEqual(seed_vars["region"], ("$__projection_0", "$person_region__region"))
+        self.assertEqual(seed_vars["person"], ("$__projection_1", "$person_region__p"))
+
+    def test_probe_seed_vars_cover_external_head_and_branch_sources(self) -> None:
+        source = Rule(id="source", when=(PredAtom("Person:exists", [Var("$p")]),), ports={"person": Var("$p")})
+        head = Rule(id="head", when=(PredAtom("Person:exists", [Var("$different")]),), ports={"person": Var("$different")})
+        plan = _lower_application_rule(source, head=head)
+
+        seed_vars = probe_seed_vars_by_head_port(plan)
+
+        self.assertEqual(seed_vars["person"], ("$__head__different", "$source__p"))
+
+    def test_probe_seed_vars_cover_or_branch_sources(self) -> None:
+        x = Var("$x")
+        left = Rule(id="left", when=(PredAtom("left_p", [x]),), ports={"x": x})
+        right = Rule(id="right", when=(PredAtom("right_p", [x]),), ports={"x": x})
+        plan = _lower_rule_expr(left.as_("left") | right.as_("right"), head=Rule.projection("x"))
+
+        seed_vars = probe_seed_vars_by_head_port(plan)
+
+        self.assertEqual(seed_vars["x"], ("$__projection_0", "$left__x", "$right__x"))
+
+    def test_probe_seed_vars_cover_joined_same_name_occurrences(self) -> None:
+        left_person = Var("$p")
+        right_person = Var("$p")
+        left_region = Var("$region")
+        right_region = Var("$region")
+        left = Rule(
+            id="left_region",
+            when=(PredAtom("Person:region", [left_person, left_region]),),
+            ports={"person": left_person, "region": left_region},
+        )
+        right = Rule(
+            id="right_region",
+            when=(PredAtom("Person:region", [right_person, right_region]),),
+            ports={"person": right_person, "region": right_region},
+        )
+        expr = (left.as_("left") & right.as_("right")).join_by_ports("person")
+        head = Rule.projection("person")
+        plan = _lower_rule_expr(expr, head=head)
+
+        seed_vars = probe_seed_vars_by_head_port(plan)
+
+        self.assertIn("$__projection_0", seed_vars["person"])
+        self.assertIn("$left__p", seed_vars["person"])
+        self.assertIn("$right__p", seed_vars["person"])
 
     def test_aggregate_atom_survives_native_materialization(self) -> None:
         amount = Var("$amount")

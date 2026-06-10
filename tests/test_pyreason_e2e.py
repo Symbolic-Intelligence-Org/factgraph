@@ -135,12 +135,15 @@ class PyReasonExecutionSurfaceE2ETests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         candidate = candidates[0]
         explanation = candidate.explain()
-        self.assertEqual(explanation.evidence.support_kind, "evaluate_row")
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.engine, "pyreason")
+        self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
         self.assertEqual(candidate.kind, "fact_triple")
         claim_arguments = candidate.bindings
         self.assertEqual(set(claim_arguments), {"u"})
         self.assertEqual(claim_arguments["u"]["value"], sdk.entities.ref(User, user_id="Alice"))
-        self.assertIsNone(candidate.bound)
+        self.assertIsNone(candidate.certainty)
         mock_run.assert_called_once()
 
     @patch("factgraph.adapters.pyreason.engine_eval.run_pyreason", side_effect=_mock_run_pyreason)

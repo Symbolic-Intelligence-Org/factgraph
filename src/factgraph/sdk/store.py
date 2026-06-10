@@ -18,6 +18,19 @@ from factgraph.application.workspace_runtime import load_workspace as app_load_w
 from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
+from factgraph.application.explain import EvidenceGraph, probe_native
+from factgraph.application.explain.evidence_tree import (
+    Const,
+    EvidenceAtom,
+    EvidenceRule,
+    EvidenceTree,
+    Fact,
+    Holds,
+    LAYOUT_TREE,
+    Source,
+)
+from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
+from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict, pyreason_trace_to_evidence_graph
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -42,7 +55,10 @@ from factgraph.application.protocol.evaluate_result import (
     ResultFingerprint,
     _FORM1_ROW_SUPPORT_KINDS,
     _build_closed_head_from_row,
+    _build_minimal_row_evidence_graph,
     _candidate_set_to_evaluate_row,
+    _legacy_candidate_payload_for_row_result,
+    _public_term_value,
     _row_digest_for,
     canonical_bytes_for_evaluate,
     closed_head_digest_for,
@@ -58,11 +74,13 @@ from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_exp
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
+    RuleExprLoweringPlan,
     _classify_pyreason_rule_expr_support,
     _lower_application_rule,
     _lower_rule_expr,
     _materialize_adapter_derivation_plan,
     _validate_rule_expr_head_foundation,
+    probe_seed_vars_by_head_port,
 )
 from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
@@ -77,7 +95,14 @@ from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
 from factgraph.core.rules.rule_ir import RuleRegistry, RuleSpec
 from factgraph.core.store._artifact_sidecar import FileArtifactSidecar
-from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND, ProvenanceEnvelope, ProofReceipt
+from factgraph.core.store._support import (
+    PROBLOG_PROVENANCE_KIND,
+    PYREASON_PROVENANCE_KIND,
+    SOUFFLE_WITNESS_KIND,
+    ProvenanceEnvelope,
+    ProofReceipt,
+    binding_dict_from_items,
+)
 from factgraph.adapters.souffle.runner import run_package
 from factgraph.core.store.database import (
     AssertionInput,
@@ -92,7 +117,7 @@ from factgraph.core.store.database import (
 )
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
-from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key
+from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
 
 from .compile import compile_schema_from_classes
 from .dsl.branch import Case
@@ -2523,9 +2548,21 @@ class SDKStore:
         checked_scope = self._manual_explain_checked_scope(result, closed_head=head)
         first = self._manual_explain_matching_row(result, closed_head=head)
         if first is None:
+            replay_plan = _lower_rule_expr(_coerce_rule_expr_operand(head.as_("head")), head=head)
+            evidence = self._probe_evidence_graph_for_lowering_plan(
+                replay_plan,
+                result=result,
+                row=None,
+                metadata={
+                    "result_id": result.result_id,
+                    "failure_class": "closed_head_false",
+                    "closed_head_digest": checked_scope["closed_head_digest"],
+                    "engine": result.engine,
+                },
+            )
             return Explanation(
                 status="failed",
-                evidence=None,
+                evidence=evidence,
                 row=None,
                 result_id=result.result_id,
                 failure_class="closed_head_false",
@@ -2689,6 +2726,7 @@ class SDKStore:
             head=head,
             engine=engine,
             semantics_profile=semantics_profile,
+            lowering_plan=plan if engine == "native" else None,
         )
 
     def _candidate_sets_to_evaluate_result(
@@ -2699,6 +2737,7 @@ class SDKStore:
         head: ApplicationRule,
         engine: str,
         semantics_profile: SemanticsProfile | None,
+        lowering_plan: RuleExprLoweringPlan | None = None,
     ) -> EvaluateResult:
         run_id = new_run_id()
         expr_digest = expr_digest_for_payload(
@@ -2766,6 +2805,12 @@ class SDKStore:
                 engine_meta={"engine_version": None, "adapter_version": None},
                 _schema_index=self._application_schema_index,
                 _row_close_builder=self._close_evaluate_row,
+                _row_graph_builder=self._row_graph_builder_for_engine(
+                    engine=engine,
+                    lowering_plan=lowering_plan,
+                    row_support_artifacts=row_support_artifacts,
+                    row_provenance_envelopes=row_provenance_envelopes,
+                ),
                 _row_support_artifacts=row_support_artifacts,
                 _row_provenance_envelopes=row_provenance_envelopes,
             )
@@ -2773,6 +2818,137 @@ class SDKStore:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(f"failed to build EvaluateResult: {exc}") from exc
+
+    def _row_graph_builder_for_engine(
+        self,
+        *,
+        engine: str,
+        lowering_plan: RuleExprLoweringPlan | None,
+        row_support_artifacts: Mapping[str, ProofReceipt],
+        row_provenance_envelopes: Mapping[str, ProvenanceEnvelope],
+    ):
+        if engine == "native" and lowering_plan is not None:
+            return self._row_graph_builder_for_lowering_plan(lowering_plan)
+        if engine == "souffle":
+            return self._souffle_row_graph_builder(row_support_artifacts)
+        if engine == "problog":
+            return self._problog_row_graph_builder(row_provenance_envelopes)
+        if engine == "pyreason":
+            return self._pyreason_row_graph_builder(row_provenance_envelopes)
+        return None
+
+    def _row_graph_builder_for_lowering_plan(
+        self,
+        plan: RuleExprLoweringPlan,
+    ):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            return self._probe_evidence_graph_for_lowering_plan(
+                plan,
+                result=result,
+                row=row,
+                metadata=metadata,
+            )
+
+        return _builder
+
+    def _souffle_row_graph_builder(self, row_support_artifacts: Mapping[str, ProofReceipt]):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            artifact = row_support_artifacts.get(row.row_id)
+            if artifact is None or artifact.kind != SOUFFLE_WITNESS_KIND:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+            try:
+                return _souffle_support_artifact_to_evidence_graph(
+                    artifact,
+                    row=row,
+                    result=result,
+                    metadata=metadata,
+                )
+            except Exception:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+
+        return _builder
+
+    def _problog_row_graph_builder(self, row_provenance_envelopes: Mapping[str, ProvenanceEnvelope]):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            envelope = row_provenance_envelopes.get(row.row_id)
+            if envelope is None or envelope.engine != "problog" or envelope.payload_type != "proof_trace":
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+            try:
+                trace = problog_trace_from_dict(envelope.payload)
+                graph = problog_trace_to_evidence_graph(
+                    trace,
+                    candidate_id=envelope.candidate_id,
+                    candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
+                    support_kind=PROBLOG_PROVENANCE_KIND,
+                )
+                return EvidenceGraph(
+                    graph_id=f"{result.result_id}:{row.row_id}",
+                    engine=result.engine,
+                    layout_hint=graph.layout_hint,
+                    subject_binding=graph.subject_binding,
+                    paths=graph.paths,
+                    certainty=graph.certainty,
+                    metadata=dict(metadata),
+                )
+            except Exception:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+
+        return _builder
+
+    def _pyreason_row_graph_builder(self, row_provenance_envelopes: Mapping[str, ProvenanceEnvelope]):
+        def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            envelope = row_provenance_envelopes.get(row.row_id)
+            if envelope is None or envelope.engine != "pyreason" or envelope.payload_type != "event_log":
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+            try:
+                trace = pyreason_trace_from_dict(envelope.payload)
+                graph = pyreason_trace_to_evidence_graph(
+                    trace,
+                    candidate_id=envelope.candidate_id,
+                    candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
+                    support_kind=PYREASON_PROVENANCE_KIND,
+                )
+                return EvidenceGraph(
+                    graph_id=f"{result.result_id}:{row.row_id}",
+                    engine=result.engine,
+                    layout_hint=graph.layout_hint,
+                    subject_binding=graph.subject_binding,
+                    paths=graph.paths,
+                    certainty=graph.certainty,
+                    metadata=dict(metadata),
+                )
+            except Exception:
+                return _build_minimal_row_evidence_graph(row, result, metadata)
+
+        return _builder
+
+    def _probe_evidence_graph_for_lowering_plan(
+        self,
+        plan: RuleExprLoweringPlan,
+        *,
+        result: EvaluateResult,
+        row: Any | None,
+        metadata: Mapping[str, Any],
+    ) -> EvidenceGraph:
+        view_facts = project_view_facts(self.ledger, self._schema_ir)
+        initial_bindings = _initial_probe_bindings_for_row(row, plan) if row is not None else {}
+        probed = probe_native(
+            plan,
+            initial_bindings,
+            view_facts,
+            schema_index=self._application_schema_index,
+        )
+        subject_binding = getattr(row, "bindings", {}) if row is not None else {}
+        row_id = getattr(row, "row_id", "closed_head_false")
+        return EvidenceGraph(
+            graph_id=f"{result.result_id}:{row_id}",
+            engine=result.engine,
+            layout_hint="tree",
+            subject_binding=subject_binding,
+            paths=probed.paths,
+            certainty=probed.certainty,
+            metadata=dict(metadata),
+        )
 
     def _row_support_artifacts_for_candidates(
         self,
@@ -2795,7 +2971,7 @@ class SDKStore:
     ) -> Mapping[str, ProvenanceEnvelope]:
         out: dict[str, ProvenanceEnvelope] = {}
         for candidate, row in zip(candidates, rows):
-            if candidate.support_kind != PROBLOG_PROVENANCE_KIND:
+            if candidate.support_kind not in {PROBLOG_PROVENANCE_KIND, PYREASON_PROVENANCE_KIND}:
                 continue
             envelope = self._store._lookup_provenance_envelope(candidate.support_digest)
             if isinstance(envelope, ProvenanceEnvelope):
@@ -3920,6 +4096,108 @@ def _head_rule_for_compiled_plans(plans: Sequence[CompiledDerivationPlan]) -> Ap
         when=(PredAtom(head.target_pred_id, list(vars_by_port)),),
         ports=ports,
     )
+
+
+def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dict[str, Any]:
+    row_bindings = getattr(row, "bindings", None)
+    if not isinstance(row_bindings, Mapping):
+        return {}
+    seed_names_by_port = probe_seed_vars_by_head_port(plan)
+    out: dict[str, Any] = {}
+    for port_name, value in row_bindings.items():
+        seed_names = seed_names_by_port.get(port_name, ())
+        if not seed_names:
+            continue
+        public_value = _public_term_value(value)
+        for seed_name in seed_names:
+            out[seed_name] = public_value
+    return out
+
+
+def _souffle_support_artifact_to_evidence_graph(
+    artifact: ProofReceipt,
+    *,
+    row: Any,
+    result: EvaluateResult,
+    metadata: Mapping[str, Any],
+) -> EvidenceGraph:
+    body_atoms: list[EvidenceAtom] = []
+    for witness in artifact.pred_witnesses:
+        pred_id = _condition_pred_id(witness.pred_condition_key)
+        source = Source(
+            ref=f"souffle:{row.row_id}:{witness.pred_condition_key}",
+            value=tuple(witness.asrt_ids),
+            meta={"pred_condition_key": witness.pred_condition_key, "asrt_ids": witness.asrt_ids},
+        )
+        body_atoms.append(
+            EvidenceAtom(
+                form=Fact(predicate=pred_id, terms=()),
+                verdict=Holds(support=(source,)),
+                atom_id=f"souffle:{row.row_id}:{witness.pred_condition_key}",
+                repr_text=_souffle_witness_repr(pred_id, witness.asrt_ids),
+            )
+        )
+    for step in artifact.non_fact_steps:
+        source = Source(
+            ref=f"souffle:{row.row_id}:{step.step_key}",
+            value=step.status,
+            meta={"step_key": step.step_key, "kind": step.kind, "details": dict(step.details)},
+        )
+        body_atoms.append(
+            EvidenceAtom(
+                form=Fact(predicate=step.kind, terms=(Const(step.status),)),
+                verdict=Holds(support=(source,)),
+                atom_id=f"souffle:{row.row_id}:{step.step_key}",
+                repr_text=f"{step.kind}: {step.status}",
+            )
+        )
+
+    rules = (
+        EvidenceRule(
+            occurrence_alias=result.head.id,
+            rule_id=result.head.id,
+            role="head",
+            status="holds",
+            ports=getattr(row, "bindings", {}),
+            atoms=(),
+        ),
+        EvidenceRule(
+            occurrence_alias=f"souffle:{row.row_id}:body",
+            rule_id=result.head.id,
+            role="body",
+            status="holds",
+            ports=binding_dict_from_items(artifact.binding_items),
+            atoms=tuple(body_atoms),
+        ),
+    )
+    return EvidenceGraph(
+        graph_id=f"{result.result_id}:{row.row_id}",
+        engine=result.engine,
+        layout_hint=LAYOUT_TREE,
+        subject_binding=getattr(row, "bindings", {}),
+        paths=(
+            EvidenceTree(
+                tree_id=row.row_id,
+                status="holds",
+                rules=rules,
+                joins=(),
+                certainty=getattr(row, "certainty", None),
+                metadata={"support_kind": artifact.kind, "source": "souffle_proof_receipt"},
+            ),
+        ),
+        certainty=getattr(row, "certainty", None),
+        metadata=dict(metadata),
+    )
+
+
+def _condition_pred_id(condition_key: str) -> str:
+    return condition_key.split(":", 1)[1] if ":" in condition_key else condition_key
+
+
+def _souffle_witness_repr(pred_id: str, asrt_ids: Sequence[str]) -> str:
+    if not asrt_ids:
+        return f"{pred_id} supported by souffle witness"
+    return f"{pred_id} supported by {', '.join(asrt_ids)}"
 
 
 def _compiled_plan_digest_payload(plan: CompiledDerivationPlan) -> dict[str, Any]:

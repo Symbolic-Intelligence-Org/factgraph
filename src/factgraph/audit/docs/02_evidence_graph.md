@@ -1,101 +1,83 @@
 # EvidenceGraph (audit)
 
 - Scope: `src/factgraph/audit/evidence_graph.py`
-- Last updated: 2026-05-27
-- Audience: developers implementing cross-engine explainability
-  consumers in the audit layer
+- Last updated: 2026-06-08 (rewritten — old flat-DAG model removed)
+- Audience: developers implementing cross-engine explainability consumers
 
 ## 1. Role
 
-`EvidenceGraph` is the unified explainability DTO of the `audit`
-layer.
+`factgraph.audit.evidence_graph` is a **thin re-export** of the canonical
+paths-model types from `factgraph.application.explain`.
 
-Its responsibilities are:
+It exports:
 
-- Hold the shared skeleton produced by converters from engine-native
-  provenance carriers
-- Provide a unified node / edge / layout entry point for downstream
-  renderers
-- Give Souffle / ProbLog / PyReason a single consumption abstraction
-  without rewriting any engine truth
+```python
+from factgraph.audit.evidence_graph import (
+    EvidenceGraph,
+    EvidenceTimeline,
+    EvidenceTree,
+    LAYOUT_TIMELINE,
+    LAYOUT_TREE,
+    evidence_graph_from_dict,
+    evidence_graph_to_dict,
+)
+```
 
-It currently does not:
-
-- Replace each engine's own provenance carrier
-- Replace Souffle's existing `CandidateEvidenceTree`
-- Replace `service.static_ui`'s full-page templates
-- Act as a user session transcript or cryptographic provenance channel
-
-The v1 audit contract is **sessionless**. An audit record is carried by
-three layers:
-
-- `EvaluateResult`: the result envelope with `run_id`, engine identity,
-  view/semantics digests, row ids, and result digest
-- `Explanation`: the row-bound status envelope returned by `row.explain()`
-- `EvidenceGraph.metadata`: a durable graph-local copy of the row/result
-  context for passed rows
-
-`run_id` remains envelope-level. It is intentionally not duplicated into
-`EvidenceGraph.metadata`; graph-only run grouping is a future design.
-
-Native and Souffle row explanations now use the same DTO family. For passed
-native or Souffle `EvaluateRow.explain()` calls, the row-level `EvidenceGraph`
-is populated as a layered Form 1 tree with a root `conclusion`, `rule_expr` /
-`rule` nodes, `atom` nodes, assertion `seed` nodes, and semantic layered edges. This is
-separate from the older candidate evidence tree and Souffle proof-tree readback
-APIs.
-
-ProbLog row explanations also use the same DTO family, but they remain
-provenance-row graphs rather than Form 1 graphs. For passed ProbLog rows,
-`EvaluateRow.explain()` wraps the adapter proof trace into row-result
-`EvidenceGraph` metadata, adds a row-level rule shell, keeps ProbLog trace
-topology below that shell, and keeps ProbLog-specific trace and
-uncertainty-projection details under `engine_meta["problog"]`.
+All canonical type definitions and prober types live in
+`src/factgraph/application/explain/evidence_tree.py`.
+See `src/factgraph/application/explain/docs/README.md` for the full type reference.
 
 ## 2. Current data model
 
-The current v1 exposes three frozen dataclasses:
+The v1 paths model uses a nested tree structure in place of the old flat
+node/edge DAG:
 
-- `EvidenceNode`
-  - `node_id`
-  - `node_kind`
-  - `component`
-  - `label`
-  - `value_summary`
-  - `timestamp`
-  - `engine_meta`
-- `EvidenceEdge`
-  - `edge_id`
-  - `from_node_id`
-  - `to_node_id`
-  - `edge_kind`
-  - `rule_label`
-  - `engine_meta`
-- `EvidenceGraph`
-  - `graph_id`
-  - `engine`
-  - `root_node_id`
-  - `nodes`
-  - `edges`
-  - `support_kind`
-  - `layout_hint`
-  - `metadata`
+```
+EvidenceGraph
+  paths: tuple[EvidenceTree | EvidenceTimeline, ...]
+  certainty: Certainty | None
+  metadata: Mapping[str, Any]
 
-`component` is a renderer-facing subject key; it is not guaranteed to
-correspond to a single entity identity. Relational expressions such
-as `alice→bob` are also allowed as a `component`.
+EvidenceTree
+  rules: tuple[EvidenceRule, ...]
+  joins: tuple[EvidenceJoin, ...]     # reserved, always () in practice
+  status: str                         # "holds" | "fails" | "not_reached"
+  certainty: Certainty | None
 
-For row-sourced passed explanations, `metadata` carries the current v1
-audit bridge keys:
+EvidenceRule
+  occurrence_alias: str
+  rule_id: str
+  role: str                           # "head" | "body"
+  status: str
+  ports: Mapping[str, Any]            # {port_name: bound_value}
+  atoms: tuple[EvidenceAtom, ...]
+
+EvidenceAtom
+  form: Fact | Compare | Builtin | Aggregate
+  verdict: Holds | Fails | NotReached
+  atom_id: str
+  repr_text: str | None
+```
+
+For timeline paths (PyReason), `paths` contains `EvidenceTimeline` instances.
+
+**Removed in S6d (2026-06-09)**: the previous flat graph shape, its node/edge
+DTOs, root pointer, and node-kind / edge-kind enumeration constants. The audit
+surface now exposes only the paths model shown above.
+
+## 3. `metadata` for row-result explanations
+
+When an `EvidenceGraph` is produced by `EvaluateRow.explain()`, its `metadata`
+carries the v1 row-result audit bridge keys:
 
 | Key | Meaning |
 |---|---|
-| `result_id` | owning `EvaluateResult` id |
-| `row_id` | explained row id |
-| `evidence_ref_id` | compatibility evidence reference id derived from result id, row id, row digest, and closed-head digest |
+| `result_id` | owning `EvaluateResult.result_id` |
+| `row_id` | explained `EvaluateRow.row_id` |
+| `evidence_ref_id` | compatibility reference id derived from result, row, claim, and closed-head digests |
 | `claim_digest` | row claim digest |
 | `closed_head_digest` | closed-head digest |
-| `expr_digest` | evaluated expression digest |
+| `expr_digest` | evaluated expression digest (from `ResultFingerprint.expr_digest`) |
 | `rule_set_digest` | rule set digest |
 | `view_snapshot_digest` | database/view snapshot digest |
 | `config_digest` | semantics profile digest, or `None` |
@@ -105,170 +87,54 @@ audit bridge keys:
 | `adapter_version` | adapter version, or `None` |
 | `evaluated_at` | JSON-safe evaluated timestamp |
 
-Future metadata keys need an owning blueprint that names the producer,
-consumer, and compatibility impact.
+Graphs produced by adapter converters (`problog_trace_to_evidence_graph`,
+`pyreason_trace_to_evidence_graph`, etc.) have adapter-specific metadata shapes.
+The row-result keys above apply only to graphs returned by `EvaluateRow.explain()`.
 
-## 3. Frozen enumerations
+## 4. Layout hints
 
-Only the minimal shared enumerations are frozen at v1:
+| Constant | Value | Used by |
+|---|---|---|
+| `LAYOUT_TREE` | `"tree"` | Native, Souffle, ProbLog |
+| `LAYOUT_TIMELINE` | `"timeline"` | PyReason |
 
-- `layout_hint`
-  - `tree`
-  - `timeline`
-- `node_kind`
-  - `conclusion`
-  - `premise`
-  - `seed`
-  - `rule_expr`
-  - `rule`
-  - `atom`
-- `edge_kind`
-  - `supports`
-  - `derives`
-  - `updates`
-  - `derived_by`
-  - `uses`
-  - `has_atom`
-  - `supported_by`
+## 5. Serialization
 
-Edges keep the shipped physical direction: `from_node_id` is the supporting
-child/cause and `to_node_id` is the supported parent/conclusion. Native and
-Souffle Form 1 row graphs use the layered edge kinds. ProbLog row provenance
-graphs use a layered row shell plus preserved `derives` trace edges. `updates`
-remains reserved for PyReason / temporal engine paths. The `dag` layout and the
-`rule_fire` node kind are not in v1 scope yet.
+```python
+evidence_graph_to_dict(graph: EvidenceGraph) -> dict[str, Any]
+evidence_graph_from_dict(d: dict[str, Any]) -> EvidenceGraph
+```
 
-## 4. Validation and invariants
+Round-trip helpers for durable storage. These are canonical at
+`factgraph.application.explain` and re-exported here for compatibility.
 
-`EvidenceGraph` performs minimal structural validation in
-`__post_init__`:
+## 6. Validation
 
-- `layout_hint` must be `tree` or `timeline`
-- `root_node_id` must exist in `nodes`
-- `node_id` must be unique
-- `edge_id` must be unique
-- Each edge's endpoints must reference existing nodes
+`EvidenceGraph.__post_init__` performs:
 
-`engine_meta` and `metadata` are shallow-frozen via `MappingProxyType`
-to prevent consumers from mutating the shared DTO during rendering.
+- `layout_hint` must be `LAYOUT_TREE` or `LAYOUT_TIMELINE`
+- `paths` must be a non-empty tuple
+- `graph_id`, `engine` must be non-empty strings
+- `subject_binding` and `metadata` are shallow-frozen via `MappingProxyType`
 
-Durable or external graph dictionaries should be reconstructed through
-`evidence_graph_from_dict(...)` before rendering. The reference renderer
-accepts constructed `EvidenceGraph` instances, not raw dictionaries or
-duck-typed stand-ins.
+`evidence_graph_from_dict` performs structural shape validation only.
 
-## 5. Current renderer
+## 7. Boundaries
 
-`audit/evidence_graph.py` currently implements:
+- `factgraph.audit.evidence_graph` is now a re-export façade only; all type
+  implementations are in `factgraph.application.explain`.
+- HTML rendering is outside `factgraph.audit`; delivery-specific renderers live
+  in domain or service packages.
+- `AuditQuery.get_candidate_evidence_graph` is a domain-layer (host application)
+  API, not part of the kernel audit package.
+- Engine-native provenance carriers (`SouffleProofTreeV0`, `ProbLogTraceV0`,
+  `PyReasonTraceV0`) are not replaced by `EvidenceGraph`; they are converter
+  inputs that produce `EvidenceGraph` output.
+- Rich adapter topology population for native/Souffle Form 1 rows is deferred.
+  Current baseline returns a minimal head-atom tree for these paths.
 
-- `render_evidence_graph_html(graph)`
-  - Dispatches by `layout_hint` to:
-    - tree renderer
-    - timeline renderer
-- tree renderer
-  - Entry at `root_node_id`
-  - By the current edge `from -> to` child-to-parent convention,
-    incoming edges are rendered as child branches
-- timeline renderer
-  - Currently uses a CSS-grid form:
-    - column = timestep
-    - row = component
-    - cell = stacked event cards
+## 8. Related documents
 
-The renderer produces a **standalone HTML fragment**, not a full HTML
-page. It is designed to be embedded later by
-`service.static_ui`'s candidate evidence page.
-
-The renderer is a reference diagnostic utility. It should be truthful and
-boring: display graph data that already exists, never infer missing
-provenance, and never invent placeholder nodes for invalid inputs.
-
-Large graph guidance follows the active evidence design:
-
-- more than `250` nodes or more than `500` edges emits a warning banner
-- the reference renderer still renders the graph
-- the renderer does not truncate solely because the graph is large
-- product UIs should provide folding, search, virtualization, or
-  progressive disclosure for repeated inspection
-
-## 6. Current boundaries
-
-`EvidenceGraph` is no longer just an in-memory DTO:
-
-- `audit/evidence_graph.py` now provides:
-  - the frozen dataclass DTO
-  - the standalone HTML fragment renderer
-  - `evidence_graph_to_dict(...)` / `evidence_graph_from_dict(...)`
-    round-trip helpers
-- The audit package can optionally write
-  `audit/evidence_graphs.jsonl`
-  - One line per `{candidate_id, evidence_graph}`
-  - Materialized at export time by the runtime exporter:
-    - `souffle`: rebuilt from the proof tree in
-      `provenance_trees.jsonl`
-    - `pyreason`: converted from the event log in
-      `ProvenanceEnvelope.payload`
-    - `problog`: converted from the proof trace in
-      `ProvenanceEnvelope.payload`
-  - `native` and `souffle` row explanations produce live row-level Form 1
-    graphs; `problog` row explanations produce live row-level provenance graphs
-    using `derives` edges and namespaced `engine_meta["problog"]`; native
-    candidate readback still keeps the candidate evidence tree / summary /
-    narrative DTOs, and Souffle / ProbLog proof-tree readback still uses the
-    adapter proof-tree converters
-- `AuditQuery.get_candidate_evidence_graph(...)` reads the durable
-  graph
-- `service.static_ui`'s candidate evidence page now prefers rendering
-  the durable `EvidenceGraph`, keeping the Souffle proof-tree
-  fallback only for older packages
-
-Boundaries that still hold:
-
-- `EvidenceGraph` is an engine-bound adapter provenance artifact, not
-  an explain surface that every candidate must have
-- Runtime live `explain-tree` / `explain-summary` /
-  `explain-narrative` / `explain-nl` still do not directly support
-  `pyreason_provenance_v1`
-- `EvidenceGraph` still does not replace engine-native provenance
-  carriers; the durable package writes only the converter output
-  without flattening engine truth
-- The candidate evidence page still keeps the existing Souffle
-  provenance-tree section; `EvidenceGraph` is an additional unified
-  explain block, not a replacement for the older tree viewer
-- Rich adapter topology population and engine-specific enrichment belong
-  to future T8 slices
-- Witness/assertion-returning match output is a future match/evidence
-  seam; this module does not define `.as_assertions()`, `.witnesses()`,
-  or view-creation APIs
-
-## 7. Known Issues (confirmed during 2026-03-29 walkthrough)
-
-### ~~F-EG-1 No cycle detection at construction (severity: low)~~ — RESOLVED
-
-Fixed: `EvidenceGraph.__post_init__` adds DFS cycle detection after
-endpoint reference validation. Graphs containing cycles raise
-`ValueError("cycle detected in EvidenceGraph involving node ...")` at
-construction. The render-time `if node_id in ancestry` cut-off
-remains as defense in depth.
-
-### ~~F-EG-2 Timeline renderer doesn't render edges (severity: low)~~ — RESOLVED
-
-Fixed: `_render_timeline_card` accepts `incoming_edges` and
-`node_by_id` parameters and renders an incoming-edge annotation at
-the bottom of each card (`← {edge_kind} · {rule_label} from
-{source_label}`). When no edges are present, no edge-note div is
-emitted.
-
-### ~~F-EG-3 `evidence_graphs.jsonl` silently overwrites duplicate candidate_id (severity: low)~~ — RESOLVED
-
-Fixed: `reader._read_evidence_graphs()` checks `candidate_id in
-result` before assignment and raises `AuditReadError("duplicate
-candidate_id in evidence_graphs: ...")` on duplicates.
-
-### ~~F-EG-4 `static_ui._try_build_evidence_graph_from_provenance` bare Exception catch (severity: low)~~ — RESOLVED
-
-Fixed: `except Exception:` narrowed to `except (ValueError, KeyError,
-TypeError):`, covering the known failure modes of
-`souffle_proof_tree_from_dict` and
-`souffle_proof_tree_to_evidence_graph`. Unexpected exceptions such as
-`ImportError` and `AttributeError` propagate normally.
+- `src/factgraph/application/explain/docs/README.md` — full type reference
+- `src/factgraph/application/protocol/docs/README.md` — `EvaluateRow.explain()` contract
+- `workflow/blueprints/archive/2026-06-08_explain-layer-s3-prober.md` — S3 paths model origin

@@ -7,7 +7,7 @@ from factgraph.adapters.pyreason.provenance import (
     PyReasonTraceV0,
     pyreason_trace_to_evidence_graph,
 )
-from factgraph.audit import EDGE_UPDATES, LAYOUT_TIMELINE
+from factgraph.application.explain.evidence_tree import EvidenceTimeline, LAYOUT_TIMELINE
 from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 
 
@@ -72,35 +72,37 @@ class PyReasonEvidenceGraphTests(unittest.TestCase):
                 "pred_id": "user:popular",
                 "terms": [
                     {"kind": "entity_ref", "value": "Justin"},
-                    {"kind": "literal", "tag": "string", "value": "true"},
                 ],
             },
         )
 
         self.assertEqual(graph.engine, "pyreason")
         self.assertEqual(graph.layout_hint, LAYOUT_TIMELINE)
-        self.assertEqual(graph.support_kind, PYREASON_PROVENANCE_KIND)
+        self.assertEqual(graph.metadata["support_kind"], PYREASON_PROVENANCE_KIND)
         self.assertEqual(graph.metadata["timesteps"], 3)
         self.assertEqual(graph.metadata["node_event_count"], 3)
         self.assertEqual(graph.metadata["edge_event_count"], 1)
-        self.assertEqual(len(graph.nodes), 4)
-        self.assertEqual(len(graph.edges), 1)
+        self.assertEqual(len(graph.paths), 1)
+        timeline = graph.paths[0]
+        self.assertIsInstance(timeline, EvidenceTimeline)
+        self.assertEqual(len(timeline.events), 4)
+        self.assertEqual(timeline.metadata["root_component"], "Justin")
+        self.assertEqual(timeline.metadata["root_label"], "popular")
+        self.assertEqual(timeline.metadata["root_event_index"], 3)
 
-        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
-        self.assertEqual(root.component, "Justin")
-        self.assertEqual(root.label, "popular")
-        self.assertEqual(root.timestamp, 2)
-        self.assertEqual(root.node_kind, "conclusion")
-        self.assertEqual(root.engine_meta["occurred_due_to"], "converged_rule")
+        root = timeline.events[timeline.metadata["root_event_index"]]
+        self.assertEqual(root.form.terms[0].value, "Justin")
+        self.assertEqual(root.form.predicate, "popular")
+        self.assertEqual(root.timestep, 2)
+        self.assertEqual(root.verdict.support[0].meta["occurred_due_to"], "converged_rule")
 
-        mary = next(node for node in graph.nodes if node.component == "Mary")
-        self.assertEqual(mary.node_kind, "seed")
-        self.assertEqual(mary.value_summary, "[0.85, 0.95]")
+        mary = next(event for event in timeline.events if event.form.terms[0].value == "Mary")
+        self.assertEqual(mary.repr_text, "popular(Mary) = [0.85, 0.95]")
+        self.assertEqual(mary.verdict.support[0].meta["seed_event"], True)
 
-        update_edge = graph.edges[0]
-        self.assertEqual(update_edge.edge_kind, EDGE_UPDATES)
-        self.assertEqual(update_edge.rule_label, "converged_rule")
-        self.assertEqual(update_edge.engine_meta["clause_groundings"], ("[Mary]",))
+        self.assertTrue(
+            any(event.verdict.support[0].meta["clause_groundings"] == ("[Mary]",) for event in timeline.events)
+        )
 
     def test_converter_normalizes_edge_components_for_edge_candidate(self) -> None:
         trace = PyReasonTraceV0(
@@ -145,12 +147,14 @@ class PyReasonEvidenceGraphTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(len(graph.nodes), 2)
-        self.assertEqual(len(graph.edges), 1)
-        self.assertTrue(all(node.component == "Alice->Bob" for node in graph.nodes))
-        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
-        self.assertEqual(root.timestamp, 1)
-        self.assertEqual(root.value_summary, "[0.9, 0.9]")
+        self.assertEqual(len(graph.paths), 1)
+        timeline = graph.paths[0]
+        self.assertEqual(len(timeline.events), 2)
+        self.assertTrue(all(event.form.terms[0].value == "Alice" for event in timeline.events))
+        self.assertTrue(all(event.form.terms[1].value == "Bob" for event in timeline.events))
+        root = timeline.events[timeline.metadata["root_event_index"]]
+        self.assertEqual(root.timestep, 1)
+        self.assertEqual(root.repr_text, "trust_score(Alice->Bob) = [0.9, 0.9]")
 
     def test_converter_rejects_missing_candidate_anchor(self) -> None:
         trace = PyReasonTraceV0(

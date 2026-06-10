@@ -7,8 +7,11 @@ from factgraph.application import (
     build_schema_index,
     field_predicate,
     field_value_type,
+    materialize_identity,
+    render_entity_repr,
     resolve_selector,
 )
+from factgraph.application.schema_runtime import EntityTypeInfo, IdentityFieldInfo, SchemaIndex
 from factgraph.application.protocol import EntitySelector
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
@@ -145,6 +148,104 @@ class ApplicationSchemaRuntimeTests(unittest.TestCase):
         self.assertEqual(ref.entity_type, "Session")
         self.assertEqual(ref.identity, {"session_id": "session-1"})
         self.assertTrue(str(ref.encoded_ref).startswith("idref_v1:Session:"))
+
+    def test_render_entity_repr_uses_default_first_identity_label(self) -> None:
+        index = _schema_index()
+
+        self.assertEqual(
+            render_entity_repr(index, "User", {"name": "alice", "locale": "en"}),
+            "User alice",
+        )
+
+    def test_render_entity_repr_uses_meta_template_and_indexes_predicate_repr(self) -> None:
+        class DisplayUser(Entity):
+            class Meta:
+                repr = "%CLS %user_id"
+
+            user_id: str = Identity(repr="%CLS %ENT %FLD")
+            display_name: str = Field(repr="%CLS %ENT %FLD")
+
+        index = build_schema_index(compile_schema_from_classes([DisplayUser]))
+
+        self.assertEqual(render_entity_repr(index, "DisplayUser", {"user_id": "u-1"}), "DisplayUser u-1")
+        self.assertEqual(index.entities["DisplayUser"].meta_repr, "%CLS %user_id")
+        self.assertEqual(index.entities["DisplayUser"].identity_predicates["user_id"].repr, "%CLS %ENT %FLD")
+        self.assertEqual(field_predicate(index, "DisplayUser", "display_name").repr, "%CLS %ENT %FLD")
+
+    def test_render_entity_repr_rejects_missing_identity_value(self) -> None:
+        index = _schema_index()
+
+        with self.assertRaises(SchemaResolutionError) as ctx:
+            render_entity_repr(index, "User", {"locale": "en"})
+
+        self.assertEqual(ctx.exception.code, "MISSING_ENTITY_IDENTITY_VALUE")
+
+    def test_render_entity_repr_uses_single_pass_replacement(self) -> None:
+        class OrgUnit(Entity):
+            class Meta:
+                repr = "%org/%org_unit"
+
+            org: str = Identity()
+            org_unit: str = Identity()
+
+        index = build_schema_index(compile_schema_from_classes([OrgUnit]))
+
+        self.assertEqual(
+            render_entity_repr(index, "OrgUnit", {"org": "acme", "org_unit": "sales"}),
+            "acme/sales",
+        )
+
+    def test_render_entity_repr_preserves_unknown_runtime_placeholders(self) -> None:
+        index = SchemaIndex(
+            schema_ir={},
+            schema_digest="test",
+            entities={
+                "RuntimeOnly": EntityTypeInfo(
+                    entity_type="RuntimeOnly",
+                    identity_fields=(IdentityFieldInfo(name="known", type_domain="string"),),
+                    exists_predicate_id="RuntimeOnly:exists",
+                    identity_predicates={},
+                    meta_repr="%known/%unknown",
+                )
+            },
+            field_predicates={},
+            predicates_by_id={},
+            identity_pred_ids=frozenset(),
+            exists_pred_ids=frozenset(),
+        )
+
+        self.assertEqual(render_entity_repr(index, "RuntimeOnly", {"known": "value"}), "value/%unknown")
+
+    def test_render_entity_repr_does_not_reinterpret_identity_values(self) -> None:
+        class OrgUnit(Entity):
+            class Meta:
+                repr = "%org %org_unit"
+
+            org: str = Identity()
+            org_unit: str = Identity()
+
+        index = build_schema_index(compile_schema_from_classes([OrgUnit]))
+
+        self.assertEqual(
+            render_entity_repr(index, "OrgUnit", {"org": "%org_unit", "org_unit": "sales"}),
+            "%org_unit sales",
+        )
+
+    def test_render_entity_repr_decodes_float64_for_display_only(self) -> None:
+        class FloatIdentity(Entity):
+            class Meta:
+                repr = "Float %value"
+
+            value: float = Identity()
+
+        index = build_schema_index(compile_schema_from_classes([FloatIdentity]))
+        canonical = "0x3ff8000000000000"
+
+        self.assertEqual(render_entity_repr(index, "FloatIdentity", {"value": canonical}), "Float 1.5")
+        self.assertEqual(
+            materialize_identity("FloatIdentity", {"value": canonical}, index=index),
+            {"value": canonical},
+        )
 
 
 if __name__ == "__main__":

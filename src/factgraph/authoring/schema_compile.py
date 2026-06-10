@@ -5,6 +5,11 @@ import re
 from typing import Any
 
 from factgraph.core.schema.schema_ir import CANONICAL_TAGS, ensure_schema_ir
+from factgraph.core.schema.schema_repr import (
+    SchemaReprTemplateError,
+    validate_member_repr_template,
+    validate_meta_repr_template,
+)
 
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -119,13 +124,13 @@ def _compile_entity(entity_raw: Any, entity_index: int) -> tuple[dict[str, Any],
     )
     if version is not None:
         entity_out["version"] = version
-    description = _compile_optional_description(
-        entity_raw.get("description"),
-        path=f"$.entities[{entity_index}].description",
-        label=f"entities[{entity_index}].description",
+    repr_template = _compile_optional_meta_repr(
+        entity_raw.get("repr"),
+        identity_field_names=tuple(field["name"] for field in identity_fields),
+        path=f"$.entities[{entity_index}].repr",
     )
-    if description is not None:
-        entity_out["description"] = description
+    if repr_template is not None:
+        entity_out["repr"] = repr_template
     tags = _compile_optional_tags(
         entity_raw.get("tags"),
         path=f"$.entities[{entity_index}].tags",
@@ -255,11 +260,12 @@ def _compile_identity_predicate(
         "py_field_name": field_name,
         "is_identity_field": True,
     }
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=identity_field,
         predicate=predicate,
         type_domain=type_domain,
         path="$.entities[].identity_fields[]",
+        field_name=field_name,
     )
     return predicate
 
@@ -283,11 +289,12 @@ def _compile_identity_field(field_raw: Any, entity_index: int, id_index: int) ->
             path=f"$.entities[{entity_index}].identity_fields[{id_index}].type_domain",
         )
     out = {"name": name, "type_domain": type_domain}
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=field_raw,
         predicate=out,
         type_domain=type_domain,
         path=f"$.entities[{entity_index}].identity_fields[{id_index}]",
+        field_name=name,
     )
     return out
 
@@ -356,11 +363,12 @@ def _compile_field(
     }
 
     predicate["py_field_name"] = py_name
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=field_raw,
         predicate=predicate,
         type_domain=value_type,
         path=f"$.entities[{entity_index}].fields[{field_index}]",
+        field_name=py_name,
     )
     return predicate
 
@@ -427,28 +435,24 @@ def _compile_relationship_field(
         "to_entity_type": to_entity_type,
         "py_field_name": py_name,
     }
-    _copy_description_pattern_enum(
+    _copy_pattern_enum(
         source=field_raw,
         predicate=predicate,
         type_domain=value_type,
         path=f"$.relationships[{rel_index}].fields[{field_index}]",
+        field_name=py_name,
     )
     return predicate
 
 
-def _copy_description_pattern_enum(
+def _copy_pattern_enum(
     *,
     source: dict[str, Any],
     predicate: dict[str, Any],
     type_domain: Any,
     path: str,
+    field_name: str,
 ) -> None:
-    description = source.get("description")
-    if description is not None:
-        if not isinstance(description, str) or not description:
-            raise _compile_error(f"{path}.description must be non-empty string", path=f"{path}.description")
-        predicate["description"] = description
-
     pattern = source.get("pattern")
     if pattern is not None:
         if type_domain != "string":
@@ -460,6 +464,14 @@ def _copy_description_pattern_enum(
         except re.error as exc:
             raise _compile_error(f"{path}.pattern must be valid regex: {exc}", path=f"{path}.pattern")
         predicate["pattern"] = pattern
+
+    repr_template = source.get("repr")
+    if repr_template is not None:
+        try:
+            validate_member_repr_template(repr_template, field_name=field_name)
+        except SchemaReprTemplateError as exc:
+            raise _compile_error(str(exc), path=f"{path}.repr") from exc
+        predicate["repr"] = repr_template
 
     enum_values = source.get("enum_values")
     if enum_values is not None:
@@ -568,11 +580,13 @@ def _compile_optional_version(value: Any, *, path: str, label: str) -> str | Non
     return value
 
 
-def _compile_optional_description(value: Any, *, path: str, label: str) -> str | None:
+def _compile_optional_meta_repr(value: Any, *, identity_field_names: tuple[str, ...], path: str) -> str | None:
     if value is None:
         return None
-    if not isinstance(value, str) or not value:
-        raise _compile_error(f"{label} must be non-empty string", path=path)
+    try:
+        validate_meta_repr_template(value, identity_field_names=identity_field_names)
+    except SchemaReprTemplateError as exc:
+        raise _compile_error(str(exc), path=path) from exc
     return value
 
 

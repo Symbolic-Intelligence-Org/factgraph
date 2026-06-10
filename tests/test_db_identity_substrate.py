@@ -87,9 +87,9 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
         second = _schema_ir_with_generated_at("2026-05-21T00:00:00Z")
         self.assertEqual(schema_digest(first), schema_digest(second))
 
-        changed_description = deepcopy(first)
-        changed_description["entities"][0]["description"] = "still identity-bearing in this slice"
-        self.assertNotEqual(schema_digest(first), schema_digest(changed_description))
+        changed_version = deepcopy(first)
+        changed_version["entities"][0]["version"] = "v2"
+        self.assertNotEqual(schema_digest(first), schema_digest(changed_version))
 
     def test_canonical_protocol_prefixes_and_token_forms(self) -> None:
         data_bytes = canonical_bytes_dbdata_v1(("asrt:" + "0" * 64,))
@@ -213,7 +213,7 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             self.assertEqual(schema_path.read_bytes(), canonicalize_schema_ir_jcs(schema_ir))
 
             mismatched_schema_ir = deepcopy(recompiled_schema_ir)
-            mismatched_schema_ir["entities"][0]["description"] = "different identity"
+            mismatched_schema_ir["entities"][0]["version"] = "v2"
             schema_path.write_bytes(canonicalize_schema_ir_jcs(mismatched_schema_ir))
             with self.assertRaisesRegex(DatabaseError, "digest|identity"):
                 validate_schema_object_for_workspace(path, recompiled_schema_ir)
@@ -247,7 +247,7 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             schema_path = paths.schema_objects / f"{digest.removeprefix('sha256:')}.json"
 
             mismatched_schema_ir = deepcopy(recompiled_schema_ir)
-            mismatched_schema_ir["entities"][0]["description"] = "different identity"
+            mismatched_schema_ir["entities"][0]["version"] = "v2"
             schema_path.write_bytes(canonicalize_schema_ir_jcs(mismatched_schema_ir))
 
             with self.assertRaisesRegex(DatabaseError, "filename/content digest mismatch"):

@@ -14,16 +14,17 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from factgraph.adapters.pyreason._helpers import _parse_edge_component, _pred_short_name
-from factgraph.audit.evidence_graph import (
-    EDGE_UPDATES,
-    LAYOUT_TIMELINE,
-    NODE_CONCLUSION,
-    NODE_PREMISE,
-    NODE_SEED,
-    EvidenceEdge,
+from factgraph.application.explain.evidence_tree import (
+    Const,
+    EvidenceAtom,
     EvidenceGraph,
-    EvidenceNode,
+    EvidenceTimeline,
+    Fact,
+    Holds,
+    LAYOUT_TIMELINE,
+    Source,
 )
+from factgraph.application.protocol.certainty import Certainty
 from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 
 @dataclass(frozen=True)
@@ -117,13 +118,7 @@ def pyreason_trace_to_evidence_graph(
     candidate_payload: Mapping[str, Any],
     support_kind: str = PYREASON_PROVENANCE_KIND,
 ) -> EvidenceGraph:
-    """Convert a PyReason event log into an EvidenceGraph timeline.
-
-    The current carrier is a run-scoped event log, not a lossless proof graph.
-    v1 therefore keeps all timeline events, roots the graph at the candidate's
-    matching event, and only materializes intra-fact update chains. Clause
-    groundings stay in ``engine_meta`` until a richer causal mapping is available.
-    """
+    """Convert a PyReason event log into a paths-model EvidenceGraph timeline."""
     if not isinstance(candidate_id, str) or not candidate_id:
         raise ValueError("candidate_id must be non-empty string")
 
@@ -141,10 +136,6 @@ def pyreason_trace_to_evidence_graph(
     if not ordered_events:
         raise ValueError("PyReason trace has no events")
 
-    node_specs: list[tuple[PyReasonTraceEventV0, str]] = []
-    root_node_id: str | None = None
-    chains: dict[tuple[str, str, str], list[tuple[int, str, PyReasonTraceEventV0]]] = {}
-
     matching_positions = [
         idx
         for idx, event in enumerate(ordered_events)
@@ -158,82 +149,40 @@ def pyreason_trace_to_evidence_graph(
             f"{component_type} {root_component} {root_label}"
         )
     root_position = matching_positions[-1]
+    root_event = ordered_events[root_position]
 
-    for idx, event in enumerate(ordered_events):
-        component_key = _normalize_component_key(event)
-        node_id = f"pyreason:{candidate_id}:event:{idx}"
-        node_specs.append((event, node_id))
-        if idx == root_position:
-            root_node_id = node_id
-        chain_key = (event.component_type, component_key, event.label)
-        chains.setdefault(chain_key, []).append((idx, node_id, event))
-
-    if root_node_id is None:  # pragma: no cover - guarded by matching_positions
-        raise ValueError("failed to resolve root node for PyReason evidence graph")
-
-    nodes: list[EvidenceNode] = []
-    edges: list[EvidenceEdge] = []
-    first_positions_by_chain = {chain_key: chain[0][0] for chain_key, chain in chains.items()}
-
-    for idx, (event, node_id) in enumerate(node_specs):
-        component_key = _normalize_component_key(event)
-        chain_key = (event.component_type, component_key, event.label)
-        if idx == root_position:
-            node_kind = NODE_CONCLUSION
-        elif first_positions_by_chain[chain_key] == idx and _is_seed_event(event):
-            node_kind = NODE_SEED
-        else:
-            node_kind = NODE_PREMISE
-        nodes.append(
-            EvidenceNode(
-                node_id=node_id,
-                node_kind=node_kind,
-                component=component_key,
-                label=event.label,
-                value_summary=_format_bound_summary(event.new_bound),
-                timestamp=event.time,
-                engine_meta={
-                    "component_type": event.component_type,
-                    "fixpoint_op": event.fixpoint_op,
-                    "occurred_due_to": event.occurred_due_to,
-                    "old_bound": event.old_bound,
-                    "new_bound": event.new_bound,
-                    "clause_groundings": event.clause_groundings,
-                    "raw_component": event.component,
-                },
-            )
+    atoms = tuple(
+        _evidence_atom_for_event(
+            event,
+            candidate_id=candidate_id,
+            ordinal=idx,
+            role="root" if idx == root_position else "event",
         )
-
-    edge_counter = 0
-    for chain_key in sorted(chains):
-        chain = sorted(chains[chain_key], key=lambda item: item[0])
-        for previous, current in zip(chain, chain[1:]):
-            edge_counter += 1
-            _, previous_node_id, _previous_event = previous
-            _, current_node_id, current_event = current
-            edges.append(
-                EvidenceEdge(
-                    edge_id=f"pyreason:{candidate_id}:edge:{edge_counter}",
-                    from_node_id=previous_node_id,
-                    to_node_id=current_node_id,
-                    edge_kind=EDGE_UPDATES,
-                    rule_label=current_event.occurred_due_to,
-                    engine_meta={
-                        "component_type": current_event.component_type,
-                        "fixpoint_op": current_event.fixpoint_op,
-                        "clause_groundings": current_event.clause_groundings,
-                    },
-                )
-            )
+        for idx, event in enumerate(ordered_events)
+    )
+    graph_certainty = _certainty_from_bound(root_event.new_bound)
+    timeline = EvidenceTimeline(
+        timeline_id=f"{candidate_id}:timeline",
+        status="holds",
+        events=atoms,
+        certainty=graph_certainty,
+        metadata={
+            "support_kind": support_kind,
+            "root_event_index": root_position,
+            "root_component_type": component_type,
+            "root_component": root_component,
+            "root_label": root_label,
+            "timesteps": trace.timesteps,
+        },
+    )
 
     return EvidenceGraph(
         graph_id=f"eg:{candidate_id}",
         engine="pyreason",
-        root_node_id=root_node_id,
-        nodes=tuple(nodes),
-        edges=tuple(edges),
-        support_kind=support_kind,
         layout_hint=LAYOUT_TIMELINE,
+        subject_binding=_candidate_binding_from_payload(candidate_payload),
+        paths=(timeline,),
+        certainty=graph_certainty,
         metadata={
             "timesteps": trace.timesteps,
             "node_event_count": len(trace.node_events),
@@ -241,8 +190,66 @@ def pyreason_trace_to_evidence_graph(
             "root_component_type": component_type,
             "root_component": root_component,
             "root_label": root_label,
+            "support_kind": support_kind,
         },
     )
+
+
+def _evidence_atom_for_event(
+    event: PyReasonTraceEventV0,
+    *,
+    candidate_id: str,
+    ordinal: int,
+    role: str,
+) -> EvidenceAtom:
+    component_key = _normalize_component_key(event)
+    certainty = _certainty_from_bound(event.new_bound)
+    source = Source(
+        ref=f"pyreason:{candidate_id}:{role}:{ordinal}",
+        value=event.component,
+        meta={
+            "component_type": event.component_type,
+            "fixpoint_op": event.fixpoint_op,
+            "occurred_due_to": event.occurred_due_to,
+            "old_bound": event.old_bound,
+            "new_bound": event.new_bound,
+            "clause_groundings": event.clause_groundings,
+            "raw_component": event.component,
+            "seed_event": _is_seed_event(event),
+        },
+    )
+    return EvidenceAtom(
+        form=Fact(predicate=event.label, terms=_terms_for_event(event, component_key)),
+        verdict=Holds(certainty=certainty, support=(source,)),
+        atom_id=f"pyreason:{candidate_id}:event:{ordinal}",
+        repr_text=f"{event.label}({component_key}) = {_format_bound_summary(event.new_bound)}",
+        timestep=event.time,
+    )
+
+
+def _terms_for_event(event: PyReasonTraceEventV0, component_key: str) -> tuple[Const, ...]:
+    if event.component_type == "edge":
+        parsed = _parse_edge_component(event.component)
+        if parsed is not None:
+            return (Const(parsed[0]), Const(parsed[1]))
+    return (Const(component_key),)
+
+
+def _certainty_from_bound(bound: tuple[float, float]) -> Certainty:
+    return Certainty(lo=float(bound[0]), hi=float(bound[1]), kind="possibilistic")
+
+
+def _candidate_binding_from_payload(candidate_payload: Mapping[str, Any]) -> dict[str, Any]:
+    terms = candidate_payload.get("terms")
+    if not isinstance(terms, list):
+        return {}
+    out: dict[str, Any] = {}
+    for idx, term in enumerate(terms):
+        if isinstance(term, Mapping):
+            out[f"term_{idx}"] = term.get("value")
+        else:
+            out[f"term_{idx}"] = term
+    return out
 
 
 def _parse_trace_df(df: Any, component_type: str) -> list[PyReasonTraceEventV0]:
@@ -344,19 +351,26 @@ def _resolve_candidate_anchor(candidate_payload: Mapping[str, Any]) -> tuple[str
     if not isinstance(terms, list):
         raise ValueError("candidate_payload.terms must be list")
 
-    entity_refs = [
-        str(term.get("value"))
-        for term in terms
-        if isinstance(term, dict)
-        and term.get("kind") == "entity_ref"
-        and isinstance(term.get("value"), str)
-        and term.get("value")
-    ]
+    entity_refs = [_candidate_term_value(term) for term in terms]
+    entity_refs = [term for term in entity_refs if term]
     if len(entity_refs) == 1:
         return ("node", entity_refs[0], _pred_short_name(pred_id))
     if len(entity_refs) >= 2:
         return ("edge", f"{entity_refs[0]}->{entity_refs[1]}", _pred_short_name(pred_id))
     raise ValueError("candidate_payload must include at least one entity_ref term")
+
+
+def _candidate_term_value(term: Any) -> str | None:
+    if isinstance(term, Mapping):
+        value = term.get("value")
+        if isinstance(value, str) and value:
+            return value
+        if value is not None:
+            return str(value)
+        return None
+    if term is None:
+        return None
+    return str(term)
 
 
 def _normalize_component_key(event: PyReasonTraceEventV0) -> str:

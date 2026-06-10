@@ -1,6 +1,6 @@
 # Rules: declaring queries and composing them
 
-This chapter covers how to *declare* rules and *compose* them. Executing a rule (engine choice, semantics, returned rows) is the next chapter (`evaluation.md`); the shape of result rows and explanations is the chapter after (`evidence.md`).
+This chapter covers how to *declare* rules and *compose* them. Executing a rule (engine choice, semantics) is [`engines_and_configs.md`](engines_and_configs.md); the shape of result rows and explanations is [`evaluate_and_evidence.md`](evaluate_and_evidence.md).
 
 Two assets carry the work in this chapter:
 
@@ -147,7 +147,7 @@ adult_in_us.port_types["age"]    # PortType(kind="value", entity_type=None)
 
 `ports` is also the surface that `fg.entities.match(...)` and `RuleExpr.join_by_ports(...)` consume.
 
-**Declaration-time ports vs evaluation-time `head=`**. `Rule.ports` declares *what this rule exposes*. When the rule is executed through a `RuleExpr` with multiple occurrences, the evaluator additionally needs to know *which occurrence's ports are the output answer* — that selection is made at call time via `fg.eval.evaluate(rule_expr, head=<Rule>)`. The `head=` parameter is covered in `evaluation.md` (next chapter); for a single-rule `evaluate(rule, head=rule)` it is trivial, but `RuleExpr` composition makes it load-bearing.
+**Declaration-time ports vs evaluation-time `head=`**. `Rule.ports` declares *what this rule exposes*. When the rule is executed through a `RuleExpr` with multiple occurrences, the evaluator additionally needs to know *which occurrence's ports are the output answer* — that selection is made at call time via `fg.eval.evaluate(rule_expr, head=<Rule>)`. The `head=` parameter is covered in [`evaluate_and_evidence.md`](evaluate_and_evidence.md) §1.2; for a single-rule `evaluate(rule, head=rule)` it is trivial, but `RuleExpr` composition makes it load-bearing.
 
 ### 2.4 `Rule.projection(*port_names)`
 
@@ -161,7 +161,7 @@ proj = Rule.projection("user", "tag")
 
 This is used by callers like `fg.entities.match(EntityCls, template, ...)` when the template is just "give me snapshots projected on these ports" — see [`three_layer_api.md`](three_layer_api.md) §2.
 
-### 2.5 `desc` and `render_desc`
+### 2.5 `repr` and `render_repr`
 
 A rule can carry a human-readable description with `%portname` placeholders:
 
@@ -170,24 +170,24 @@ rule = build_application_rule(
     id="adult_in_us",
     when=[User(u), User(u).age == age, age > 18],
     ports={"user": u, "age": age},
-    desc="User %user is %age years old",
+    repr="User %user is %age years old",
 )
 
-rule.render_desc({"user": "alice", "age": 25})
+rule.render_repr({"user": "alice", "age": 25})
 # → "User alice is 25 years old"
 ```
 
 Behavior reference:
 
-- **Default**: `desc=None`. `render_desc()` on a rule with no `desc` returns `""`.
-- **Placeholder syntax**: `%<identifier>` where `<identifier>` matches `[A-Za-z_][A-Za-z0-9_]*`. Every placeholder name must reference a declared port — `desc="%foo ..."` with `foo` not in `ports` raises `RuleValidationError: desc references undeclared port: foo` at construction time.
-- **No `%` escape**. A `%` followed by anything other than an identifier start is `RuleValidationError: desc contains malformed percent port interpolation`. This means `desc="50% off for %user"` is rejected (the `%5` is malformed), and there is **no `%%` escape** for a literal percent sign — `desc="100%% literal"` raises the same error.
-- **`render_desc(bindings)`**: `bindings` may be `None` (treated as `{}`) or a `Mapping[str, Any]`. Placeholders without a binding render as `<portname>`. Extra keys not referenced by any placeholder are silently ignored.
+- **Default**: `repr=None`. `render_repr()` on a rule with no `repr` returns `""`.
+- **Placeholder syntax**: `%<identifier>` where `<identifier>` matches `[A-Za-z_][A-Za-z0-9_]*`. Every placeholder name must reference a declared port — `repr="%foo ..."` with `foo` not in `ports` raises `RuleValidationError: repr references undeclared port: foo` at construction time.
+- **No `%` escape**. A `%` followed by anything other than an identifier start is `RuleValidationError: repr contains malformed percent port interpolation`. This means `repr="50% off for %user"` is rejected (the `%5` is malformed), and there is **no `%%` escape** for a literal percent sign — `repr="100%% literal"` raises the same error.
+- **`render_repr(bindings)`**: `bindings` may be `None` (treated as `{}`) or a `Mapping[str, Any]`. Placeholders without a binding render as `<portname>`. Extra keys not referenced by any placeholder are silently ignored.
 
-**Where `desc` is consumed.** `desc` is an author-controlled label — the evaluation runtime does **not** automatically render it. It does **not** appear in `EvaluateRow` or `Explanation` payloads (those are covered in `evidence.md`). Four actual consumption points:
+**Where `repr` is consumed.** `repr` is an author-controlled label — the evaluation runtime does **not** automatically render it. It does **not** appear in `EvaluateRow` or `Explanation` payloads (those are covered in [`evaluate_and_evidence.md`](evaluate_and_evidence.md); the *schema* `repr` templates that drive explanation atom text are a separate feature, [`schema_definition.md`](schema_definition.md) §1.8). Four actual consumption points:
 
-1. `rule.render_desc(bindings)` — the per-rule render shown above.
-2. `fg.rules.inspect(rule_or_expr).render(bindings)` — `RuleExprInspect.render(...)` composes the AST, each occurrence's rendered desc, and the joins into a one-line summary. With more than one occurrence of the same rule, use `alias.portname` qualified keys to disambiguate same-named ports:
+1. `rule.render_repr(bindings)` — the per-rule render shown above.
+2. `fg.rules.inspect(rule_or_expr).render(bindings)` — `RuleExprInspect.render(...)` composes the AST, each occurrence's rendered repr, and the joins into a one-line summary. With more than one occurrence of the same rule, use `alias.portname` qualified keys to disambiguate same-named ports:
    ```python
    info = fg.rules.inspect((adult.as_("a") & adult.as_("b")).join_by_ports("user"))
    info.render({"a.user": "alice", "a.age": 25, "b.user": "alice", "b.age": 30})
@@ -196,12 +196,12 @@ Behavior reference:
    #    | joins a.user = b.user'
    ```
    Bare `portname` keys also work for single-occurrence expressions; the renderer falls back to bare names when no qualified key matches.
-3. `RuleExprInspect.render_compact()` — emits only the AST short form (e.g. `'adult'` or `'(a:adult & b:adult).join(1)'`). Does not consume `desc`.
-4. Internal carry-over: each closed-head `Rule` produced per evaluation row copies `desc=head.desc` ([`evaluate_result.py:740`](../../src/factgraph/application/protocol/evaluate_result.py)). This is data plumbing — it propagates the template along the closed-head chain but does not surface it to user-visible output on its own.
+3. `RuleExprInspect.render_compact()` — emits only the AST short form (e.g. `'adult'` or `'(a:adult & b:adult).join(1)'`). Does not consume `repr`.
+4. Internal carry-over: each closed-head `Rule` produced per evaluation row copies `repr=head.repr` ([`evaluate_result.py:740`](../../src/factgraph/application/protocol/evaluate_result.py)). This is data plumbing — it propagates the template along the closed-head chain but does not surface it to user-visible output on its own.
 
 ### 2.6 Direct `Rule(id, when=tuple, ports=...)` — advanced
 
-`Rule` is a frozen dataclass at `factgraph.application.protocol.Rule`. Constructing it directly is supported and produces a fully usable rule (same `port_types` inference, same `render_desc`, same `fg.rules.inspect(...)`, same `RuleExpr` composition). The only difference from `build_application_rule(...)` is that `when` takes already-canonical *core* atoms instead of Entity-DSL forms.
+`Rule` is a frozen dataclass at `factgraph.application.protocol.Rule`. Constructing it directly is supported and produces a fully usable rule (same `port_types` inference, same `render_repr`, same `fg.rules.inspect(...)`, same `RuleExpr` composition). The only difference from `build_application_rule(...)` is that `when` takes already-canonical *core* atoms instead of Entity-DSL forms.
 
 ```python
 Rule(
@@ -209,7 +209,7 @@ Rule(
     when: tuple[Atom, ...],      # core-level atoms only
     ports: Mapping[str, Var],
     version: str | None = None,
-    desc: str | None = None,
+    repr: str | None = None,
 )
 ```
 
@@ -242,7 +242,7 @@ adult_in_us_core = Rule(
     ),
     ports={"user": u, "age": age},
     version="v1",
-    desc="User %user is %age years old",
+    repr="User %user is %age years old",
 )
 ```
 
@@ -380,11 +380,11 @@ When passing an application `Rule` whose `id` contains characters disallowed in 
 .ports                    -> PortInspect-typed view of port shapes
 .is_closed                -> bool: every port is bound by the body
 .unbound_ports            -> tuple[str, ...] of names still open
-.render(bindings=None)    -> str: AST + occurrences (with rendered desc) + joins
-.render_compact()         -> str: AST short form only (no desc)
+.render(bindings=None)    -> str: AST + occurrences (with rendered repr) + joins
+.render_compact()         -> str: AST short form only (no repr)
 ```
 
-`.render(bindings)` is the multi-occurrence consumer for `desc` (see §2.5). `.render_compact()` is the AST-only view useful for debugging composition shape.
+`.render(bindings)` is the multi-occurrence consumer for `repr` (see §2.5). `.render_compact()` is the AST-only view useful for debugging composition shape.
 
 `is_closed` is the key signal for "is this expression ready to be a closed-head evaluation input" — an open port means there is a `value` port not pinned to a constant in `when`, or an `entity_ref` port without an identifying atom path. Evaluation typically requires a closed head.
 
@@ -400,10 +400,10 @@ When passing an application `Rule` whose `id` contains characters disallowed in 
 
 `Rule` and `RuleExpr` are *inputs* to the evaluator. The execution surface lives in the next chapters:
 
-- `fg.eval.evaluate(rule_or_expr_or_inference, ...)` — execution entry, returning `EvaluateResult` (see `evaluation.md`)
-- `engine=` and `semantics=` (`ProbLogSemantics` / `PyReasonSemantics`) — see `evaluation.md`
-- `EvaluateRow` / `Explanation` / `Claim` shapes — see `evidence.md`
-- Candidate-fact accept path (Inference only) — see `evaluation.md`
+- `fg.eval.evaluate(rule_or_expr_or_inference, ...)` — execution entry, returning `EvaluateResult` (see [`evaluate_and_evidence.md`](evaluate_and_evidence.md))
+- `engine=` and `semantics=` (`ProbLogSemantics` / `PyReasonSemantics`) — see [`engines_and_configs.md`](engines_and_configs.md)
+- `EvaluateRow` / `Explanation` shapes — see [`evaluate_and_evidence.md`](evaluate_and_evidence.md)
+- Candidate-fact accept path (Inference only) — see [`evaluate_and_evidence.md`](evaluate_and_evidence.md)
 
 ## 6. History note: `Inference` and `Query`
 
@@ -457,7 +457,7 @@ There is no separate Query chapter; the `match` surface absorbs the read-project
 
 ```python
 from factgraph.sdk import (
-    Rule,                # frozen dataclass: id, when, ports, version, desc
+    Rule,                # frozen dataclass: id, when, ports, version, repr
     RuleExpr,            # composition surface (.all / .any / & / |)
     RuleJoinConstraint,  # join descriptor: left, right, op="eq"
     Pred,                # raw predicate-atom factory (legacy; rejected in build_application_rule when)
@@ -490,7 +490,7 @@ Indirect types reached through methods:
 |---|---|
 | `DSLToApplicationRuleError` | `build_application_rule` lowering or validation failure (raw `Pred` in `when`, OR branch lists, `Case`, bare `AttrRef`, port not in body, ...) |
 | `RuleExprError` | `RuleExpr` construction (`.join` on OR group, alias conflict, unknown port name, joins not reachable on AND spine, ...) |
-| `RuleValidationError` | Direct `Rule(...)` construction failures (empty `when`, port `Var` not in body, malformed `desc` placeholder, ...) |
+| `RuleValidationError` | Direct `Rule(...)` construction failures (empty `when`, port `Var` not in body, malformed `repr` placeholder, ...) |
 | `ExplicitBoolError` | `bool(rule)` / `bool(rule_expr)` — i.e. using Python `and` / `or` |
 
 ### 7.3 `fg.rules` and `fg.inferences` namespaces
@@ -506,6 +506,6 @@ Indirect types reached through methods:
 - [`schema_definition.md`](schema_definition.md) — Entity / Identity / Field declarations that rule bodies reference
 - [`data_model.md`](data_model.md) — the Claim / MetaRow shape that rule matches read from
 - [`three_layer_api.md`](three_layer_api.md) — `fg.entities.match(...)` (Query's successor)
-- `evaluation.md` *(next chapter)* — `fg.eval.evaluate` / `explain`, `engine=`, `semantics=`
-- `evidence.md` *(later chapter)* — `EvaluateRow` / `Explanation` shapes
+- [`engines_and_configs.md`](engines_and_configs.md) — `engine=`, `semantics=`, config
+- [`evaluate_and_evidence.md`](evaluate_and_evidence.md) — `fg.eval.evaluate` / `explain`, `EvaluateRow` / `Explanation` shapes
 - Legacy long-form Rule / Inference reference: [`docs/official/kernel/quickstart/rules-and-inferences.md`](../official/kernel/quickstart/rules-and-inferences.md)

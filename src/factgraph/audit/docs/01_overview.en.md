@@ -55,12 +55,13 @@ It is not responsible for:
     `db/audit/authoring_apply_events.jsonl` with legacy
     `registry/authoring_apply_events.jsonl` fallback, while audit package
     inputs keep the historical package-local path
-- `EvidenceGraph` / `EvidenceNode` / `EvidenceEdge`
-  - the audit-layer unified explainability DTO
-  - `render_evidence_graph_html(...)` standalone HTML fragment renderer
+- `EvidenceGraph(paths=...)`
+  - the audit-layer unified explainability DTO, re-exported from
+    `factgraph.application.explain`
+  - tree and timeline paths for native, Souffle, ProbLog, and PyReason evidence
   - `evidence_graphs.jsonl` export in audit package (Souffle / PyReason / ProbLog)
   - `AuditQuery.get_candidate_evidence_graph()` query-layer access
-  - the static candidate evidence page renders the durable `EvidenceGraph` with a Souffle fallback
+  - the static candidate evidence page renders durable evidence with adapter fallbacks
 
 Backing modules:
 

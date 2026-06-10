@@ -8,7 +8,7 @@ from factgraph.adapters.problog.provenance import (
     parse_problog_trace,
     problog_trace_to_evidence_graph,
 )
-from factgraph.audit import EDGE_DERIVES, LAYOUT_TREE
+from factgraph.application.explain.evidence_tree import EvidenceGraph, LAYOUT_TREE
 from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 
 
@@ -40,6 +40,18 @@ _ANSWER_TRACE = """
 answer("vip","idref_v1:User:Alice"):\t0.42
 """.strip()
 
+_MULTI_ANSWER_TRACE = """
+ call d(alice) {0.00010} []
+  result d(alice) (alice,) {{}} {0.00012} []
+ complete d(alice) {0.00013} {0.00003} []
+ call d(bob) {0.00020} []
+  result d(bob) (bob,) {{}} {0.00022} []
+ complete d(bob) {0.00023} {0.00003} []
+
+d(alice):\t0.2
+d(bob):\t0.7
+""".strip()
+
 
 class ProbLogEvidenceGraphTests(unittest.TestCase):
     def test_converter_builds_tree_from_nested_call_trace(self) -> None:
@@ -52,28 +64,26 @@ class ProbLogEvidenceGraphTests(unittest.TestCase):
             },
         )
 
+        self.assertIsInstance(graph, EvidenceGraph)
         self.assertEqual(graph.engine, "problog")
         self.assertEqual(graph.layout_hint, LAYOUT_TREE)
-        self.assertEqual(graph.support_kind, PROBLOG_PROVENANCE_KIND)
+        self.assertEqual(graph.metadata["support_kind"], PROBLOG_PROVENANCE_KIND)
         self.assertEqual(graph.metadata["answer_probability"], 0.35)
-        self.assertEqual(len(graph.nodes), 3)
-        self.assertEqual(len(graph.edges), 2)
+        self.assertEqual(graph.certainty.kind, "probabilistic")
+        self.assertEqual(graph.certainty.lo, 0.35)
+        self.assertEqual(len(graph.paths), 1)
 
-        root = next(node for node in graph.nodes if node.node_id == graph.root_node_id)
-        self.assertEqual(root.label, "c")
-        self.assertEqual(root.component, "alice")
-        self.assertEqual(root.value_summary, "0.35")
-        self.assertEqual(root.node_kind, "conclusion")
-        self.assertEqual(root.engine_meta["goal"], "c(alice)")
-        self.assertEqual(root.engine_meta["event_status"], "result")
-
-        leaf_labels = {node.label: node for node in graph.nodes if node.node_id != graph.root_node_id}
-        self.assertEqual(leaf_labels["a"].node_kind, "seed")
-        self.assertEqual(leaf_labels["b"].node_kind, "seed")
-        self.assertEqual(leaf_labels["a"].value_summary, "true")
-
-        self.assertTrue(all(edge.edge_kind == EDGE_DERIVES for edge in graph.edges))
-        self.assertEqual({edge.to_node_id for edge in graph.edges}, {graph.root_node_id})
+        tree = graph.paths[0]
+        self.assertEqual(tree.certainty.kind, "probabilistic")
+        self.assertEqual(tree.certainty.lo, 0.35)
+        self.assertEqual(tree.metadata["answer_probability"], 0.35)
+        self.assertEqual({rule.role for rule in tree.rules}, {"head", "body"})
+        head = next(rule for rule in tree.rules if rule.role == "head")
+        self.assertEqual(head.rule_id, "c")
+        self.assertEqual(head.atoms[0].repr_text, "c(alice)")
+        body_atoms = tuple(atom for rule in tree.rules if rule.role == "body" for atom in rule.atoms)
+        self.assertEqual({atom.form.predicate for atom in body_atoms}, {"a", "b"})
+        self.assertTrue(all(type(atom.verdict).__name__ == "Holds" for atom in body_atoms))
 
     def test_converter_anchors_synthetic_answer_goal_with_reordered_terms(self) -> None:
         graph = problog_trace_to_evidence_graph(
@@ -88,15 +98,30 @@ class ProbLogEvidenceGraphTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(len(graph.nodes), 1)
-        self.assertEqual(len(graph.edges), 0)
-        root = graph.nodes[0]
-        self.assertEqual(root.node_id, graph.root_node_id)
-        self.assertEqual(root.label, "tag")
-        self.assertEqual(root.component, "idref_v1:User:Alice")
-        self.assertEqual(root.value_summary, "0.42")
-        self.assertTrue(root.engine_meta["synthetic_goal"])
-        self.assertEqual(root.engine_meta["goal"], 'answer("vip","idref_v1:User:Alice")')
+        self.assertEqual(len(graph.paths), 1)
+        tree = graph.paths[0]
+        head = next(rule for rule in tree.rules if rule.role == "head")
+        atom = head.atoms[0]
+        self.assertEqual(atom.form.predicate, "answer")
+        self.assertEqual(atom.repr_text, 'answer("vip","idref_v1:User:Alice")')
+        self.assertTrue(atom.verdict.support[0].meta["synthetic_goal"])
+        self.assertEqual(tree.certainty.lo, 0.42)
+
+    def test_converter_maps_multiple_answers_to_multiple_trees(self) -> None:
+        graph = problog_trace_to_evidence_graph(
+            parse_problog_trace(_MULTI_ANSWER_TRACE),
+            candidate_id="cand_v2:multi",
+            candidate_payload={
+                "pred_id": "d",
+                "terms": [{"kind": "literal", "tag": "string", "value": "alice"}],
+            },
+        )
+
+        self.assertEqual(len(graph.paths), 2)
+        self.assertEqual(graph.certainty.kind, "probabilistic")
+        self.assertEqual(graph.certainty.lo, 0.7)
+        self.assertEqual([tree.certainty.lo for tree in graph.paths], [0.2, 0.7])
+        self.assertEqual([tree.metadata["answer_query"] for tree in graph.paths], ["d(alice)", "d(bob)"])
 
     def test_converter_rejects_missing_candidate_anchor(self) -> None:
         with self.assertRaisesRegex(ValueError, "candidate anchor not found"):

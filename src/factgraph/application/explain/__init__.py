@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from .evidence_tree import (
+    Aggregate,
+    AtomForm,
+    BoundVar,
+    Builtin,
+    Certainty,
+    Compare,
+    Const,
+    EvidenceAtom,
+    EvidenceGraph,
+    EvidenceJoin,
+    EvidenceProbeResult,
+    EvidenceRule,
+    EvidenceTimeline,
+    EvidenceTree,
+    Fact,
+    Fails,
+    Holds,
+    LAYOUT_TIMELINE,
+    LAYOUT_TREE,
+    LayoutHint,
+    NotReached,
+    PortRef,
+    RuleRole,
+    Source,
+    TreeStatus,
+    Verdict,
+    evidence_graph_from_dict,
+    evidence_graph_to_dict,
+)
+__all__ = [
+    "Aggregate",
+    "AtomForm",
+    "BoundVar",
+    "Builtin",
+    "Certainty",
+    "Compare",
+    "Const",
+    "EvidenceAtom",
+    "EvidenceGraph",
+    "EvidenceJoin",
+    "EvidenceProbeResult",
+    "EvidenceRule",
+    "EvidenceTimeline",
+    "EvidenceTree",
+    "Fact",
+    "Fails",
+    "Holds",
+    "LAYOUT_TIMELINE",
+    "LAYOUT_TREE",
+    "LayoutHint",
+    "NotReached",
+    "PortRef",
+    "ProbeEnv",
+    "RuleRole",
+    "Source",
+    "TreeStatus",
+    "Verdict",
+    "evidence_graph_from_dict",
+    "evidence_graph_to_dict",
+    "probe_native",
+]
+
+
+def __getattr__(name: str):
+    if name in {"ProbeEnv", "probe_native"}:
+        from .prober import ProbeEnv, probe_native
+
+        return {"ProbeEnv": ProbeEnv, "probe_native": probe_native}[name]
+    raise AttributeError(name)

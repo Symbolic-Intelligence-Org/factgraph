@@ -1,0 +1,61 @@
+# Ignore all files at repository root by default.
+/*
+# Keep root directories so nested project files remain trackable.
+!/*/
+# Keep required root files.
+!/README.md
+!/AGENTS.md
+!/CHANGELOG.md
+!/CODE_OF_CONDUCT.md
+!/CONTRIBUTING.md
+!/LICENSE
+!/pyproject.toml
+!/.gitignore
+!/.gitmodules
+
+.DS_Store
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+.env
+/out/
+/archive/
+/hnsm-frontend-master/
+
+# Third-party Claude skills (installed, not project-owned)
+.claude/skills/gstack/
+.claude/skills/gstack.bak/
+.claude/skills/browse
+.claude/skills/careful
+.claude/skills/codex
+.claude/skills/design-consultation
+.claude/skills/design-review
+.claude/skills/document-release
+.claude/skills/freeze
+.claude/skills/gstack-upgrade
+.claude/skills/guard
+.claude/skills/investigate
+.claude/skills/office-hours
+.claude/skills/plan-ceo-review
+.claude/skills/plan-design-review
+.claude/skills/plan-eng-review
+.claude/skills/qa
+.claude/skills/qa-only
+.claude/skills/retro
+.claude/skills/review
+.claude/skills/setup-browser-cookies
+.claude/skills/ship
+.claude/skills/unfreeze
+esa_demo_output/
+dora_demo_output/
+
+# workflow/working/ is a temporary work area; ignore contents but keep the dir tracked.
+workflow/working/*
+!workflow/working/.gitkeep
+!workflow/working/README.md

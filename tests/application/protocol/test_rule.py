@@ -92,26 +92,26 @@ class PortValidationTests(unittest.TestCase):
         self.assertEqual(rule.port_types["status"], PortType(kind="value"))
 
 
-class DescRenderTests(unittest.TestCase):
-    def test_render_desc_uses_placeholders_for_unbound_ports(self) -> None:
+class ReprRenderTests(unittest.TestCase):
+    def test_render_repr_uses_placeholders_for_unbound_ports(self) -> None:
         u = Var("u")
         rule = Rule(
             id="r1",
             when=(PredAtom("User:exists", [u]),),
             ports={"user": u},
-            desc="user %user is active",
+            repr="user %user is active",
         )
-        self.assertEqual(rule.render_desc(), "user <user> is active")
-        self.assertEqual(rule.render_desc({"user": "u-1"}), "user u-1 is active")
+        self.assertEqual(rule.render_repr(), "user <user> is active")
+        self.assertEqual(rule.render_repr({"user": "u-1"}), "user u-1 is active")
 
-    def test_desc_rejects_undeclared_port(self) -> None:
+    def test_repr_rejects_undeclared_port(self) -> None:
         u = Var("u")
         with self.assertRaises(RuleValidationError):
             Rule(
                 id="r1",
                 when=(PredAtom("User:exists", [u]),),
                 ports={"user": u},
-                desc="user %missing",
+                repr="user %missing",
             )
 
 
@@ -131,8 +131,10 @@ class RuleIdentityTests(unittest.TestCase):
         b = CmpAtom("eq", u, Const("u-1"))
         first = Rule(id="r1", when=(a, b), ports={"user": u})
         same = Rule(id="r2", when=(a, b), ports={"user": u})
+        same_with_repr = Rule(id="r1", when=(a, b), ports={"user": u}, repr="user %user")
         reordered = Rule(id="r1", when=(b, a), ports={"user": u})
         self.assertEqual(first.content_digest, same.content_digest)
+        self.assertEqual(first.content_digest, same_with_repr.content_digest)
         self.assertNotEqual(first.content_digest, reordered.content_digest)
 
 

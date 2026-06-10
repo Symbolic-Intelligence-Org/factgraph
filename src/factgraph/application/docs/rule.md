@@ -14,7 +14,7 @@ The DTO has five fields:
   `factgraph.core.rules.where_ast`.
 - `ports`: explicit mapping from public port names to core `Var` objects.
 - `version`: optional non-empty version string.
-- `desc`: optional description template using `%port_name` interpolation.
+- `repr`: optional representation template using `%port_name` interpolation.
 
 The accepted `when` atoms are `PredAtom`, `CmpAtom`, `InAtom`, `BuiltinAtom`,
 and `NotAtom`. `RuleRefAtom` is rejected because the new paradigm composes
@@ -39,16 +39,16 @@ and lowers that syntax into the core AST shape consumed here through
 
 Construction validates the DTO shape:
 
-- `id`, optional `version`, and optional `desc` are non-empty strings.
+- `id`, optional `version`, and optional `repr` are non-empty strings.
 - `when` is a non-empty tuple.
 - `ports` is a non-empty mapping from string names to core `Var` objects.
 - Every port variable appears somewhere in `when`.
-- `desc` may only reference declared ports.
+- `repr` may only reference declared ports.
 - Unsupported atom kinds raise `RuleValidationError`.
 
 The DTO provides positional `atom_ids` using `<rule_id>:atom_<index>`, a
 deterministic `content_digest`, shallow container immutability, and
-`render_desc(...)` for template rendering.
+`render_repr(...)` for template rendering.
 
 ## Ports and Occurrence Aliases
 
@@ -105,7 +105,7 @@ with vars("u") as (u,):
         id="active_user",
         when=[User(u).status == "active"],
         ports={"user": u},
-        desc="active user %user",
+        repr="active user %user",
     )
 ```
 

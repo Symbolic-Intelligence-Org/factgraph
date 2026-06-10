@@ -49,7 +49,7 @@ def build_application_rule(
     when: list[Any],
     ports: Mapping[str, Any],
     version: str | None = None,
-    desc: str | None = None,
+    repr: str | None = None,
 ) -> ApplicationRule:
     """Build an application-layer Rule from SDK DSL when atoms and ports."""
 
@@ -76,7 +76,7 @@ def build_application_rule(
     return ApplicationRule(
         id=id,
         version=version,
-        desc=desc,
+        repr=repr,
         when=tuple(when_expr.atoms),
         ports=converted_ports,
     )

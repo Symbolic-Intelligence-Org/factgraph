@@ -159,18 +159,18 @@ class BuildApplicationRuleRejectTests(unittest.TestCase):
 
 
 class BuildApplicationRuleIdentityTests(unittest.TestCase):
-    def test_content_digest_and_desc_render_are_available(self) -> None:
+    def test_content_digest_and_repr_render_are_available(self) -> None:
         with vars("u") as (u,):
             rule = build_application_rule(
                 id="active_user",
                 when=[User(u).status == "active"],
                 ports={"user": u},
-                desc="active user %user",
+                repr="active user %user",
             )
 
         self.assertIsInstance(rule.content_digest, str)
-        self.assertEqual(rule.render_desc(), "active user <user>")
-        self.assertEqual(rule.render_desc({"user": "u-1"}), "active user u-1")
+        self.assertEqual(rule.render_repr(), "active user <user>")
+        self.assertEqual(rule.render_repr({"user": "u-1"}), "active user u-1")
 
     def test_application_rule_from_bridge_supports_occurrence_alias(self) -> None:
         with vars("u") as (u,):
