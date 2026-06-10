@@ -68,15 +68,44 @@ Non-targets:
    - alter `_vars_in_atom_tuple(...)` directly; or
    - add a more specific helper used only by missing checks.
 
-## E. Required Gate Evidence
+## E. Scope Review (2026-06-10)
+
+Status: approved; blueprint moved to `scoped`.
+
+Planner review accepted the root cause and local `prober.py` repair, with one
+critical refinement:
+
+- Do not treat aggregate terms as fully opaque for missing-variable checks.
+- Exclude only aggregate-local lowered variables from the outer missing set.
+- Preserve correlated outer variables referenced by aggregate filters as real
+  dependencies.
+
+Runtime lowered aggregate terms carry aggregate-local vars in the `$agg...`
+namespace. The implementation may use that namespace as the lowered-IR marker
+for the source-level distinction handled by `where_ast_validate`:
+
+- `$agg__...` / `$_agg...` target and filter-bound vars are local to aggregate
+  computation and must not block the outer compare atom;
+- non-`$agg` vars referenced by the aggregate filter are correlated outer
+  dependencies and must be present in the row/prefix environment;
+- if a correlated outer var is missing, the atom must be `NotReached` and must
+  not free-compute the aggregate over all facts.
+
+This preserves the D2 no-leak invariant: missing dependency and no-free-enumerate
+are the same check.
+
+## F. Required Gate Evidence
 
 - 5 aggregate kinds show `Holds` on passed explain rows.
 - Aggregate repr has no raw tuple/list text and no `$agg__`.
+- Correlated aggregate with bound correlation var shows `Holds`.
+- Correlated aggregate with missing correlation var shows `NotReached` and does
+  not leak unrelated facts.
 - Non-aggregate missing-variable behavior remains green.
 - D2 no-free-enumeration and order-independence remain green.
 - Batch A/B/C/E regressions remain green.
 - No non-prober runtime implementation diff.
 
-## F. Implementation Outcome
+## G. Implementation Outcome
 
 Pending.

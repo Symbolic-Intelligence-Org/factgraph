@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch F — aggregate explain verdict and repr
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework post-D2 correction
@@ -37,8 +37,8 @@ Two defects:
 
 1. Let prober aggregate compare atoms reach the aggregate-aware evaluation path
    (`_extend_env_with_atom → where_eval._eval_eq_atom/_eval_cmp_atom`).
-2. Treat aggregate terms as self-contained during missing-variable preflight;
-   do not count aggregate-internal variables as outer atom dependencies.
+2. Treat aggregate-local variables as self-contained during missing-variable
+   preflight while preserving correlated outer variables as real dependencies.
 3. Render aggregate operands with friendly text such as `sum of amount`, not
    raw tuple text.
 4. Add tests proving all five aggregate kinds explain with `Holds` and friendly
@@ -86,16 +86,31 @@ self-contained values.
 Expected behavior:
 
 - outer compare atom vars are still checked;
-- aggregate-internal target/filter vars are not considered missing outer
+- aggregate-local target/filter vars are not considered missing outer
   dependencies;
+- correlated outer vars referenced by the aggregate filter remain dependencies;
 - the atom then reaches `_extend_env_with_atom(...)`, which computes aggregate
   values through the existing `where_eval` aggregate-aware resolver.
 
 Implementation options:
 
-- teach `_vars_in_atom_tuple(...)` to stop descending when it sees an aggregate
-  term; or
-- add a dedicated `_vars_in_eval_atom(...)` used by missing checks.
+- add a dedicated missing-check variable scanner used by `_missing_variables`
+  and `_missing_verdict_dependencies`;
+- detect lowered aggregate terms `(kind, target, filter_atoms)`;
+- exclude aggregate-local variables from the missing set, but keep correlated
+  outer variables.
+
+The runtime lowered form uses aggregate-local variables in the `$agg...`
+namespace. That namespace is the implementation-level carrier for the
+source-level distinction described by `where_ast_validate`:
+
+- local target/filter variables such as `$agg__amt` / `$_agg1` are internal to
+  aggregate computation and must not block the outer atom;
+- non-aggregate-prefixed variables referenced by the aggregate filter are
+  correlated outer dependencies and must still be present in the row-anchored
+  environment;
+- if such correlated vars are missing, the atom is `NotReached` rather than
+  free-computing the aggregate over all facts.
 
 The code should not reimplement aggregate evaluation.
 
@@ -128,6 +143,9 @@ how to compute aggregate terms.
   unchanged.
 - **INV-D2-no-leak**: verdict-mode key-unbound predicates still return
   `NotReached` rather than free-enumerating.
+- **INV-correlated-aggregate-no-leak**: correlated aggregate filter variables
+  that are not bound by the row/prefix environment remain missing dependencies;
+  the prober must not free-compute a correlated aggregate.
 - **INV-render-no-internal-vars**: aggregate repr must not contain raw tuple
   text or `$agg__` internal variables.
 - **INV-no-scope-creep**: no support-capture / seed / DTO / adapter diff.
@@ -138,6 +156,10 @@ how to compute aggregate terms.
   rows are `Holds`, not `NotReached`.
 - [ ] Aggregate repr text is friendly and contains no raw tuple/list text and no
   `$agg__` variables.
+- [ ] Correlated aggregate with its correlation variable bound evaluates to
+  `Holds` when the aggregate value matches.
+- [ ] Correlated aggregate with its correlation variable unbound is
+  `NotReached`, does not free-compute, and does not leak unrelated facts.
 - [ ] Existing aggregate row values remain correct.
 - [ ] Non-aggregate compare missing-variable tests remain green.
 - [ ] D2 senior / order-independence / no-leak regressions remain green.
@@ -152,7 +174,7 @@ how to compute aggregate terms.
 2. Add any targeted prober-level regression if the SDK test is not precise
    enough for repr shape.
 3. Update prober missing-variable scanning to treat aggregate terms as
-   self-contained.
+   local-self-contained while preserving correlated outer dependencies.
 4. Add aggregate display support to the prober rendering path.
 5. Run aggregate conformance, prober, native conformance, Batch D2, and broader
    explain cohort.
