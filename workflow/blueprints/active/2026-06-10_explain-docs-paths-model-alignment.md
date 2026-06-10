@@ -17,18 +17,19 @@ explain 层 v2 + conformance rework 已收官,但**公开文档(docs/)仍残留�
 
 ## 2. Scope(scope-freeze)
 
-**改写(当前真相·公开文档,~9)**:
-- `docs/quickstart/evaluate_and_evidence.md`(重:§5.1 flat-DAG 全段)
-- `docs/official/kernel/quickstart/evidence.md`(重:官方 evidence 篇)
-- `docs/api/openapi.yaml`(重:explain/evidence schema)
-- `docs/quickstart/data_model.md`(中:旧 DTO)
-- `docs/quickstart/engines_and_configs.md`(中:旧 DTO/引擎)
-- `docs/official/kernel/quickstart/semantics.md`(中)
-- `docs/official/kernel/quickstart/assertions.md`(中-轻)
-- `docs/official/kernel/quickstart/read-write.md`(中-轻)
-- `docs/official/kernel/quickstart/namespace-map.md`(轻:术语)
+**改写**:
+- `docs/quickstart/evaluate_and_evidence.md`(§4 flat-DAG → paths-model;不变式 `{passed,failed}↔evidence`;desc→repr;import)— ✅ done `3381fafd`
+- `docs/quickstart/schema_definition.md`(**gap-fill**:补 §1.8 repr DSL 语法 —— 占位符矩阵 + 例子;原只提"repr= 存在")— ✅ done `142ae405`
 
-**不改(历史/工作参考,external-only)**:`docs/references/working/*`(product-readiness-audit / rule-replay-line-redesign-input / load-test 等)—— 历史 material,不重写历史(同 heritage 原则)。
+**核实为非-stale(跳过,假阳性)**:
+- `docs/quickstart/data_model.md` / `engines_and_configs.md` —— 命中的 `raw_kind`/`bound` 是**当前写侧 meta keys**(shipped write protocol 仍持久化 `shared/semantic/raw_kind`+`bound`;只有**读侧** `EvaluateRow` 合并为 `certainty`)。非 explain-stale。
+
+**待定**:
+- `docs/api/openapi.yaml` —— 无 EvidenceGraph/Node/Edge schema;提及 `claim`/`evidence_ref` compat wire dicts 属 **HTTP API wire 层**(与 SDK explain paths-model 是两个表面)。是否纳入待用户定。
+
+**不改**:
+- `docs/official/*` —— **已弃用目录**(用户确认 2026-06-10)。
+- `docs/references/working/*` —— external-only 历史(同 heritage)。
 
 ## 3. Non-goals
 
