@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch E — support-capture aggregate resolver
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -102,8 +102,12 @@ Apply the same resolver to:
 - `eq`;
 - `ne`;
 - `gt` / `ge` / `lt` / `le`;
-- arithmetic atoms (`add`, `sub`, `neg`, `addc`, `mulc`);
-- `in` if aggregate or resolved terms appear in its operands.
+- arithmetic atoms (`add`, `sub`, `neg`, `addc`, `mulc`).
+
+Do **not** change `_in_atom_satisfies(...)` in this batch. It does not call
+`_resolve(...)`; it directly checks `binding[var] in set(values)`, matching
+`where_eval._eval_in_atom(...)`, which is not aggregate-aware and does not
+receive `view_facts`.
 
 This keeps support-capture's recheck aligned with evaluation without changing
 row generation.
@@ -147,8 +151,8 @@ row generation.
 3. Thread `view_facts` into affected atom helpers.
 4. Replace bare `_resolve(...)` calls in eq/ne/cmp/arith support-capture
    helpers with `_resolve_eval_term(...)`.
-5. Decide whether `_in_atom_satisfies(...)` needs aggregate-aware value
-   resolution based on the shipped IR validator and add coverage if yes.
+5. Leave `_in_atom_satisfies(...)` unchanged; this mirrors evaluate's
+   non-aggregate `in` semantics.
 6. Run focused aggregate tests, support-capture tests, native explain
    conformance, and the broader explain/conformance cohort.
 7. Report any behavior change in evaluated rows back to the blueprint before

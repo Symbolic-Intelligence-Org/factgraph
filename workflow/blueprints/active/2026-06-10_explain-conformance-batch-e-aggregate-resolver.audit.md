@@ -73,6 +73,16 @@ Codex read these shipped anchors before drafting:
    review finds a caller-specific gate state is required, that should be locked
    before implementation.
 
+Scope-review decisions:
+
+- `_in_atom_satisfies(...)` is out of scope. It does not use `_resolve(...)`
+  and mirrors evaluate's non-aggregate `in` path.
+- `ast_gate_on` must mirror `where_eval._where_ast_gate_enabled()` from inside
+  `find_winning_case_index(...)`; do not duplicate environment parsing or widen
+  public support-capture entrypoint signatures.
+- The edit target is `_support_capture.py` plus aggregate end-to-end tests.
+  Prober, DTO, adapter, and explain rendering code remain out of scope.
+
 ## D. Required Tests
 
 Batch E implementation must include tests that fail on the current support
