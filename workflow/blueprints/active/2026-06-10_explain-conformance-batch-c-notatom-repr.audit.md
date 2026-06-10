@@ -90,4 +90,39 @@ behavior:
 
 ## E. Implementation Outcome
 
-To be filled after implementation and gate.
+Implemented in `ad37f290`.
+
+Implementation notes:
+
+- Native prober now routes lowered NotAtom display through a dedicated
+  recursive renderer instead of the generic builtin/list stringification path.
+- The renderer handles single atoms, AND bodies, and OR-of-AND bodies with the
+  scope-reviewed `!` / `&&` / `||` format.
+- `EvidenceAtom.negated=True` is set for native NotAtom evidence across Holds,
+  Fails, and NotReached return paths.
+- Verdict evaluation still comes from the existing prober / where-eval path;
+  Batch C did not alter not truth semantics.
+
+Reviewer gate:
+
+- PASS.
+- Reviewer independently verified:
+  - negation holds: `!17 >= 18`, `negated=True`, `Holds`;
+  - negation fails: `!30 >= 18`, `negated=True`, `Fails`;
+  - AND body: `!(17 >= 18 && eu equals us)`;
+  - no raw tuple/list text and no avoidable `$...` variable leakage.
+- Focused prober tests passed (`18 OK`).
+- Broader reviewer subset passed (`99 OK`); Codex broader cohort passed
+  (`115 OK`).
+
+Closed defect:
+
+- Bug 6: native NotAtom no longer renders raw lowered tuple/list text and now
+  sets the existing `EvidenceAtom.negated` flag, aligned with the Souffle
+  negation contract.
+
+Boundary:
+
+- Implementation touched `prober.py` and focused native prober tests only.
+- DTOs, adapters, support-capture, seed builder, and verdict semantics were
+  untouched.

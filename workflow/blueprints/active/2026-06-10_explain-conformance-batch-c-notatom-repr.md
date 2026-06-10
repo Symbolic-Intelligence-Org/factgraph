@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch C — NotAtom repr and negation flag
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -143,20 +143,20 @@ Tests should include both sides:
 
 ## 7. Acceptance
 
-- [ ] Native NotAtom with a single inner atom renders as `!<friendly inner>`.
-- [ ] Native NotAtom with multi-atom AND body renders a stable grouped form,
+- [x] Native NotAtom with a single inner atom renders as `!<friendly inner>`.
+- [x] Native NotAtom with multi-atom AND body renders a stable grouped form,
   e.g. `!(a && b)`, with friendly inner terms.
-- [ ] Native NotAtom with OR-of-AND body renders a stable grouped form, e.g.
+- [x] Native NotAtom with OR-of-AND body renders a stable grouped form, e.g.
   `!((a && b) || c)`.
-- [ ] Native NotAtom sets `EvidenceAtom.negated=True`.
-- [ ] Native NotAtom verdicts remain unchanged for both holding and failing
+- [x] Native NotAtom sets `EvidenceAtom.negated=True`.
+- [x] Native NotAtom verdicts remain unchanged for both holding and failing
   negation cases.
-- [ ] Repr text has no raw Python tuple/list dumps and no avoidable internal
+- [x] Repr text has no raw Python tuple/list dumps and no avoidable internal
   `$...` variable names.
-- [ ] Entity-ref and float64 values inside NotAtom body use Batch B rendering.
-- [ ] Existing G1 monotonic, Batch A seed, Batch D verdict cascade, Batch E
+- [x] Entity-ref and float64 values inside NotAtom body use Batch B rendering.
+- [x] Existing G1 monotonic, Batch A seed, Batch D verdict cascade, Batch E
   aggregate, Batch B repr, and adapter cohorts remain green.
-- [ ] No implementation diff in DTOs, seed builder, support-capture, or adapter
+- [x] No implementation diff in DTOs, seed builder, support-capture, or adapter
   converters.
 
 ## 8. Implementation Plan
@@ -184,4 +184,34 @@ that native and Souffle negation evidence now share the `negated=True` /
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation and gate.
+Implemented in `ad37f290`.
+
+Implementation:
+
+- `prober.py` now detects native lowered `("not", body)` atoms, renders the
+  inner body recursively through the existing Batch B repr path, and sets
+  `EvidenceAtom.negated=True` on every verdict return path.
+- Native NotAtom display uses the approved stable formats:
+  - `!a`;
+  - `!(a && b)`;
+  - `!((a && b) || c)`.
+- `_atom_form(...)` now returns a clean `Builtin(kind="not", operands=())` for
+  native NotAtom instead of storing raw not-body lists as `Const(list)`.
+
+Verification:
+
+- Codex focused test run: `tests.application.explain.test_prober` → `18 OK`.
+- Codex broader explain/conformance cohort → `115 OK`.
+- Reviewer independent probe confirmed:
+  - negation holding path: `!17 >= 18`, `negated=True`, `Holds`;
+  - negation failing path: `!30 >= 18`, `negated=True`, `Fails`;
+  - multi-atom AND body: `!(17 >= 18 && eu equals us)`;
+  - no raw tuple/list text and no internal `$...` leakage.
+- Reviewer broader subset → `99 OK`.
+
+Boundary:
+
+- Code implementation touched only `src/factgraph/application/explain/prober.py`
+  and `tests/application/explain/test_prober.py`.
+- DTOs, seed builder, support-capture, adapters, and verdict semantics were not
+  changed.

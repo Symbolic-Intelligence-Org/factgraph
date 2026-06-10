@@ -121,3 +121,18 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
     compare atoms, float64 field and identity display, prefix-collision and
     value-injection fixes, `<unbound>` for true-unbound variables, string
     hex-like misfire protection, and scalar repr regression stability.
+- **Batch C — native NotAtom repr and negation flag**: PASS.
+  - Impl commit: `ad37f290`.
+  - Closed defect: Bug 6 native NotAtom raw tuple/list repr and missing
+    `EvidenceAtom.negated` flag.
+  - Boundary: only native prober NotAtom rendering and focused prober tests
+    changed; DTOs, adapters, support-capture, seed builder, and verdict
+    semantics untouched.
+  - Tests: Codex focused prober `18 OK`; Codex broader explain/conformance
+    cohort `115 OK`; reviewer broader subset `99 OK`.
+  - Independent reviewer probes confirmed holding and failing negation cases
+    keep their verdicts while rendering friendly `!<inner>` text and
+    `negated=True`; AND body rendering produced `!(17 >= 18 && eu equals us)`
+    with no raw tuples/lists or internal `$...` leakage.
+  - Program status: all conformance defects from the audit are now closed by
+    Batch A/E/D/B/C. Remaining work is final battery/docs/matrix cleanup.
