@@ -690,7 +690,7 @@ def sdk_find(
     for dto in response.items:
         if identity_filters and not _dto_matches_identity_filters(dto, identity_filters):
             continue
-        known_identity_values = dict(dto.ref.identity) if identity_filters else None
+        known_identity_values = dict(dto.ref.identity)
         snap = _dto_to_sdk_snapshot(
             dto,
             sdk=sdk,
