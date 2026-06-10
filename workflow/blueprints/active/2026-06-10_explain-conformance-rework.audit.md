@@ -181,3 +181,19 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
   regressions all passed.
 - Design status: §307-308 conformance is now satisfied. Program status returns
   to `implemented`.
+
+## I. Post-D2 Batch F Reopen (2026-06-10)
+
+- Trigger: focused design-conformance review after D2 found Bug 13 in native
+  aggregate explanations.
+- Defect: aggregate compare atoms on passed rows can be marked `NotReached`
+  because prober missing-variable preflight descends into aggregate-internal
+  variables before the atom reaches the aggregate-aware `where_eval` path. The
+  aggregate operand repr also falls back to raw tuple text and leaks `$agg__`
+  internal variables.
+- Decision: reopen parent program from `implemented` to `implementing` and split
+  Batch F.
+- Locked scope: local prober fix plus aggregate explain tests; no `where_eval`,
+  diagnose, support-capture, seed, DTO, or adapter changes.
+- Child blueprint:
+  [2026-06-10_explain-conformance-batch-f-aggregate-explain.md](./2026-06-10_explain-conformance-batch-f-aggregate-explain.md).
