@@ -4,7 +4,7 @@ import unittest
 
 import factgraph.application.explain.prober as prober_module
 from factgraph.application import build_schema_index, entity_info, field_predicate
-from factgraph.application.explain import EvidenceJoin, Holds, NotReached, probe_native
+from factgraph.application.explain import EvidenceJoin, Fails, Holds, NotReached, probe_native
 from factgraph.application.schema_runtime import encode_entity_ref
 from factgraph.application.protocol import EntityRef, Rule
 from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
@@ -77,6 +77,53 @@ class NativeProberTests(unittest.TestCase):
         atom = result.paths[0].rules[1].atoms[0]
         self.assertIsInstance(atom.verdict, NotReached)
         self.assertEqual(atom.verdict.blocked_by, "$needs_x__x")
+
+    def test_downstream_check_after_failed_upstream_can_hold_from_prefix_anchor(self) -> None:
+        x = Var("$x")
+        rule = Rule(
+            id="cascade",
+            when=(PredAtom("missing", [x]), CmpAtom("eq", x, Const(2))),
+            ports={"x": x},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        seed_name = plan.occurrence_map[0].port_bindings[0].alias_local_execution_var.name
+
+        result = probe_native(plan, {seed_name: 2}, {"missing": []})
+
+        path = result.paths[0]
+        atoms = path.rules[1].atoms
+        self.assertEqual(path.status, "fails")
+        self.assertIsInstance(atoms[0].verdict, Fails)
+        self.assertIsInstance(atoms[1].verdict, Holds)
+
+    def test_downstream_bind_atom_after_failed_upstream_is_not_reached_when_unbound(self) -> None:
+        x = Var("$x")
+        y = Var("$y")
+        rule = Rule(
+            id="cascade_bind",
+            when=(PredAtom("missing", [x]), PredAtom("q", [y])),
+            ports={"x": x, "y": y},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        x_seed_name = next(
+            binding.alias_local_execution_var.name
+            for binding in plan.occurrence_map[0].port_bindings
+            if binding.port_name == "x"
+        )
+        y_seed_name = next(
+            binding.alias_local_execution_var.name
+            for binding in plan.occurrence_map[0].port_bindings
+            if binding.port_name == "y"
+        )
+
+        result = probe_native(plan, {x_seed_name: 1}, {"missing": [], "q": [(2,)]})
+
+        path = result.paths[0]
+        atoms = path.rules[1].atoms
+        self.assertEqual(path.status, "fails")
+        self.assertIsInstance(atoms[0].verdict, Fails)
+        self.assertIsInstance(atoms[1].verdict, NotReached)
+        self.assertEqual(atoms[1].verdict.blocked_by, y_seed_name)
 
     def test_or_branches_are_exhaustive_paths(self) -> None:
         x = Var("$x")
