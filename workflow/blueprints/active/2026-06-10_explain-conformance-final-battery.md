@@ -134,15 +134,15 @@ Run the final conformance/explain matrix, including at least:
 
 ## 7. Acceptance
 
-- [ ] Battery inventory maps conformance surfaces to concrete tests.
-- [ ] Any uncovered high-risk cells are either covered by new passing tests or
+- [x] Battery inventory maps conformance surfaces to concrete tests.
+- [x] Any uncovered high-risk cells are either covered by new passing tests or
   explicitly deferred with rationale.
-- [ ] `application/explain/docs/README.md` describes final current behavior.
-- [ ] `application/protocol/docs/README.md` no longer says adapter rich evidence
+- [x] `application/explain/docs/README.md` describes final current behavior.
+- [x] `application/protocol/docs/README.md` no longer says adapter rich evidence
   is deferred, if that stale line still exists.
-- [ ] Quickstart legacy flat-DAG content is classified: tiny patch or follow-up.
-- [ ] Final matrix passes and commands are recorded.
-- [ ] No source behavior changes are made unless a new batch is created.
+- [x] Quickstart legacy flat-DAG content is classified: tiny patch or follow-up.
+- [x] Final matrix passes and commands are recorded.
+- [x] No source behavior changes are made unless a new batch is created.
 
 ## 8. Implementation Plan
 
@@ -163,4 +163,18 @@ Run the final conformance/explain matrix, including at least:
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation and gate.
+Ready for reviewer gate.
+
+Completed in this cleanup:
+
+- native conformance battery inventory;
+- `application/explain/docs/README.md` current-state rewrite;
+- narrow `application/protocol/docs/README.md` stale adapter dispatch cleanup;
+- final matrix run (`144 OK`);
+- demo run showing row-anchored friendly evidence.
+
+Deviation / follow-up:
+
+- `docs/quickstart/evaluate_and_evidence.md` still contains broad legacy
+  flat-DAG content. It is explicitly deferred to a dedicated quickstart rewrite
+  rather than patched piecemeal in this cleanup slice.

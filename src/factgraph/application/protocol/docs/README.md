@@ -1,7 +1,7 @@
 # Application Protocol — EvaluateResult & Explain Surface
 
 - Scope: `src/factgraph/application/protocol/evaluate_result.py` + `explanation_render.py`
-- Last updated: 2026-06-09
+- Last updated: 2026-06-10
 - Audience: SDK layer maintainers, adapter writers, and test authors
 
 This document covers the evaluate-result / explain slice of `protocol/`.
@@ -193,6 +193,12 @@ projected view facts and calls `probe_native(...)`.
    - This fallback preserves the evidence invariant without resurrecting the
      removed flat-DAG model.
 
+4. **Adapter rich rows**:
+   - Souffle, ProbLog, and PyReason rows use SDK-attached builders over
+     `_row_support_artifacts` / `_row_provenance_envelopes`.
+   - Those builders return the same paths-model evidence graph shape as native
+     explain paths.
+
 All returned graphs have `metadata` matching the v1 row-result key set:
 `result_id`, `row_id`, `evidence_ref_id`, `claim_digest`, `closed_head_digest`,
 `expr_digest`, `rule_set_digest`, `view_snapshot_digest`, `config_digest`,
@@ -225,7 +231,8 @@ Used by `Explanation.repr`. Each path in `graph.paths` is rendered recursively:
 - `evaluate_result.py` does not own the prober (`probe_native`); SDK graph builders call it
 - `evaluate_result.py` does not own the SDK `EvaluateResult` → `fg.eval.evaluate()` wrapper
 - `explanation_render.py` does not produce HTML; it produces plain text
-- Adapter rich wiring is deferred to S6; S5 wires the native passed/failed paths
+- Adapter converters are outside this module; SDK graph builders dispatch to
+  them and pass paths-model graphs back through the protocol surface.
 
 ---
 
@@ -234,7 +241,9 @@ Used by `Explanation.repr`. Each path in `graph.paths` is rendered recursively:
 - The `expr_digest` flat property was **permanently removed** in Cleanup-β (2026-06-08).  
   All callers must migrate to `result.fingerprint.expr_digest`.
 - Other deprecated flat properties (`run_id`, `engine_version`, etc.) still exist but emit `DeprecationWarning`. They will be removed in a future slice.
-- Native passed rows and native closed-head-false failures are backed by the prober. Adapter rich evidence wiring remains deferred to S6.
+- Native passed rows and native closed-head-false failures are backed by the
+  prober. Souffle, ProbLog, and PyReason rich evidence is wired through
+  adapter-specific SDK builders.
 - `_row_provenance_envelopes` and `_row_support_artifacts` are private fields and are not part of the stable contract for external callers.
 
 ---
@@ -248,9 +257,10 @@ python -m pytest tests/application/protocol/test_evaluate_result_dtos.py
 # walk_evidence renderer
 python -m pytest tests/application/protocol/test_explanation_render.py
 
-# Adapter dispatch (ProbLog / PyReason rich provenance)
-python -m pytest tests/test_problog_evidence_graph.py
-python -m pytest tests/test_pyreason_evidence_graph.py
+# Adapter dispatch (Souffle / ProbLog / PyReason rich provenance)
+python -m pytest tests/test_souffle_evidence_graph.py
+python -m pytest tests/test_problog_provenance_v0.py
+python -m pytest tests/test_pyreason_provenance_v0.py
 
 # SDK exports / fingerprint
 python -m pytest tests/sdk/test_evaluate_result_exports.py
