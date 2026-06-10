@@ -309,7 +309,7 @@ shipped tests 需更新约 30-50 处 access path。兼容 alias 策略:首次 re
 - **三层 holds 对称**:每层显式 status,消费者无需 walk 子层推断上层。
 - **Builtin 是计算非判定**:结果落 `Builtin.result`,verdict 用 `Holds`(算出)或 `NotReached`(参数未绑定);不设 `Computed` 变体。
 - **compare 中性**:`Compare(op, lhs, rhs)`;操作数自带 value;"required/actual" 是 repr 解读层的事。
-- **negation**:`negated: bool` 处理单原子 `\+`;多原子 `Not([..])` v1 不富解释。
+- **negation**:`negated: bool` 标记;**单原子与多原子 `Not([..])` 均富解释**(Batch C 对齐 souffle 契约):单原子 `!<body>`,多原子 `!(a && b)` / `!((a && b) || c)`,实体/float 内层经统一渲染器,无 `$` 内部 var、无 raw tuple。〔原"多原子 v1 不富解释"已被实现超越,2026-06-10 更新〕
 - **head 也是 rule**:用 `EvidenceRule(role="head")`。
 - **多路径**:`paths` 里多个 `EvidenceTree`;holds ⟺ 任一路径 holds。
 - **v1 无内联派生**:ruleref 被禁 → 无递归无环;`support` 只到 `Source`,无子图。
@@ -413,16 +413,19 @@ class User(Entity):
 
 ### §5.7 渲染器级默认表
 
-| Atom 类型 | 默认措辞 |
+> **措辞已对齐 shipped(2026-06-10 conformance rework)**:实现选择了更简洁/运算符化措辞 + souffle 对齐的 `!` 否定;下表反映实际渲染,非早期提案。
+
+| Atom 类型 | 默认措辞(shipped) |
 |---|---|
-| `<Type>:exists(x)` | "%ENT exists" / "%ENT is a {Type}" |
-| `eq` | "%1 is %2" |
-| `ne` | "%1 is not %2" |
-| `ge` / `gt` / `le` / `lt` | "at least" / "more than" / "at most" / "less than" |
-| 聚合 `max/min/count/sum/...` | "%agg of %target {where ...}" |
-| `in` | "%x is one of {...}" |
-| `not(body)` | "it is not the case that {body}" |
-| `BuiltinAtom` / arithmetic | 各自默认短语 |
+| `<Type>:exists(x)` | `<pred_id>(<entity label>)`(通用谓词回落,无特化措辞) |
+| `eq` | "%1 equals %2" |
+| `ne` | "%1 does not equal %2" |
+| `ge` / `gt` / `le` / `lt` | "%1 >= %2" / "%1 > %2" / "%1 <= %2" / "%1 < %2" |
+| 聚合 `max/min/sum/mean` | "%agg of %target"(如 "sum of amount") |
+| 聚合 `count` | "count" |
+| `in` | "%1 is in (%2, …)" |
+| `not(body)` | 单原子 `!<body>`;AND `!(a && b)`;OR-of-AND `!((a && b) \|\| c)`(对齐 souffle 契约;`EvidenceAtom.negated=True`) |
+| `BuiltinAtom` / arithmetic | `<kind>(<operands…>)` 回落 |
 | identity atom(出现在 Meta.repr 中) | **折叠**(与 label 冗余) |
 
 ---
@@ -496,7 +499,7 @@ class User(Entity):
 
 0. **★必改不变式**:`Explanation.evidence non-None` 放宽到 `iff status ∈ {passed, failed}`。
 1. **旧 `nodes/edges` 完全删除**:目标是完全删除;执行节奏:native 先 → adapters → 删字段。
-2. **多原子 `Not([..])` v1 不富解释**:范围声明。
+2. ~~**多原子 `Not([..])` v1 不富解释**:范围声明。~~ 〔2026-06-10 已超越:Batch C 对多原子 Not 富解释,见 §4 negation / §5.7〕
 3. **v1 环护栏不触发**:ruleref 禁 → 无递归无环。
 
 **已知爆炸半径**:旧 `EvidenceGraph/Node/Edge` 被 adapters、audit、`walk_evidence`、round events、大量测试引用 — 换 body 需逐个安置。
