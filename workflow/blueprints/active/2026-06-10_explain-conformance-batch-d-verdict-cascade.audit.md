@@ -84,4 +84,39 @@ Batch D implementation must include tests that fail on the current cascade:
 
 ## E. Implementation Outcome
 
-Pending.
+Implemented in `9b3c912f`.
+
+Implementation notes:
+
+- `_probe_branch(...)` now tracks `last_non_empty_envs` alongside the true
+  candidate env chain.
+- `_probe_atom(...)` receives `verdict_envs` and enters verdict-only mode when
+  `failed_upstream and not envs`.
+- Verdict-only mode checks direct variable availability with
+  `_missing_variables(...)`; missing variables produce `NotReached`, while
+  runnable atoms are evaluated against the prefix anchor.
+- Verdict-only `Holds` never returns the verdict anchors as candidate envs, so
+  the branch cannot resurrect after an earlier failed atom.
+
+Added tests:
+
+- `test_downstream_check_after_failed_upstream_can_hold_from_prefix_anchor`
+- `test_downstream_bind_atom_after_failed_upstream_is_not_reached_when_unbound`
+
+Reviewer gate:
+
+- PASS.
+- Reviewer independently confirmed the more faithful prefix-anchor semantics:
+  after `30 >= 65` failed, downstream `region(u-1, us)` and `us equals us`
+  reported `Holds`, while the tree status remained `fails`.
+- Reviewer confirmed the same probe had zero `u-2` leakage, preserving Batch A
+  row anchoring.
+- Reviewer confirmed direct missing variables still produce `NotReached`.
+- Reviewer reran the G1 monotonic regression and broader explain/conformance
+  cohort successfully.
+
+Boundary:
+
+- Only `prober.py` and `test_prober.py` changed in the implementation commit.
+- DTO, adapter, support-capture, seed-builder, and lowering implementation
+  paths were untouched.

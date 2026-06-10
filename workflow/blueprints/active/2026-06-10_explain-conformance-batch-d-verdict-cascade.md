@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch D — prober verdict cascade semantics
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -139,17 +139,17 @@ be explicit: **verdict envs** can use row anchors after upstream failure;
 
 ## 7. Acceptance
 
-- [ ] Repro: upstream atom fails, downstream atom is independently true under
+- [x] Repro: upstream atom fails, downstream atom is independently true under
   row anchors, downstream verdict is `Holds`, not `Fails`.
-- [ ] Repro: upstream atom fails, downstream atom has a direct missing variable,
+- [x] Repro: upstream atom fails, downstream atom has a direct missing variable,
   downstream verdict is `NotReached(blocked_by=...)`.
-- [ ] A branch with an earlier failed atom remains `status="fails"` even when
+- [x] A branch with an earlier failed atom remains `status="fails"` even when
   a downstream atom holds independently.
-- [ ] Existing `test_monotonic_witness_backtracking_keeps_later_successful_env`
+- [x] Existing `test_monotonic_witness_backtracking_keeps_later_successful_env`
   remains green.
-- [ ] Passed-row native conformance remains green.
-- [ ] Batch A projection/external/OR/join row anchoring tests remain green.
-- [ ] No DTO, adapter, support-capture, or seed-builder implementation diff.
+- [x] Passed-row native conformance remains green.
+- [x] Batch A projection/external/OR/join row anchoring tests remain green.
+- [x] No DTO, adapter, support-capture, or seed-builder implementation diff.
 
 ## 8. Implementation Plan
 
@@ -171,4 +171,36 @@ No docs expected unless implementation discovers drift from
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+Implemented in `9b3c912f`.
+
+Batch D chose the more faithful **last-non-empty prefix anchor** semantics from
+scope review. `_probe_branch(...)` tracks the last non-empty candidate env
+tuple and passes it as verdict-only context after upstream failure. `_probe_atom`
+uses those verdict envs only to decide the current atom's own verdict, and
+returns the original empty candidate env tuple in verdict-only mode. This keeps
+the branch failed and prevents resurrection while allowing downstream atoms
+whose variables are fully bound by the prefix anchor to report `Holds`.
+
+Implementation scope was intentionally narrow:
+
+- `src/factgraph/application/explain/prober.py`
+- `tests/application/explain/test_prober.py`
+
+No DTO, adapter, support-capture, seed-builder, or lowering implementation was
+changed.
+
+Reviewer gate passed:
+
+- Independent probe confirmed an upstream failure followed by
+  `region(u-1, us)` / `us equals us` now reports downstream `Holds`, while the
+  tree remains `fails`.
+- The same probe confirmed no cross-entity leakage after Batch A; `u-2` data did
+  not appear in the row-anchored failed explanation.
+- Directly unbound downstream atoms return `NotReached(blocked_by=...)`.
+- G1 monotonic witness regression remained green.
+- Broader explain/conformance cohort remained green.
+
+Carry-forward: Batch D reduced the surface of Bug 5 by giving many failed-path
+atoms anchored values, but true unbound `NotReached` repr text can still expose
+internal `$...` variable names. That remains assigned to Batch B's unified value
+rendering work.

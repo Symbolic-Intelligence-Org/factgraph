@@ -87,3 +87,20 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
   - Independent reviewer probes validated `count`, `sum`, `min`, `max`, and
     `mean`, including fractional mean handling and unchanged mean/int-comparison
     rejection.
+- **Batch D — prober verdict cascade semantics**: PASS.
+  - Impl commit: `9b3c912f`.
+  - Closed defect: Bug 11 verdict cascade after upstream failure.
+  - Boundary: only `prober.py` plus focused prober tests changed; DTO, adapter,
+    support-capture, seed-builder, and lowering implementation paths untouched.
+  - Tests: Codex focused `10 OK`; Codex broader explain/conformance cohort
+    `295 OK`; reviewer reran G1 monotonic and broader conformance successfully.
+  - Semantics: selected the more faithful last-non-empty-prefix anchor approach.
+    Verdict-only evaluation can report downstream `Holds` from anchored prefix
+    envs, but returns the original empty candidate env tuple so failed branches
+    cannot resurrect.
+  - Independent reviewer probe confirmed downstream `region(u-1, us)` and
+    `us equals us` now report `Holds` after an earlier failed age check, the
+    tree remains `fails`, and no `u-2` data leaks into the row-anchored failed
+    explanation.
+  - Carry-forward: remaining true-unbound `$...` repr text belongs to Batch B
+    with unified value rendering.
