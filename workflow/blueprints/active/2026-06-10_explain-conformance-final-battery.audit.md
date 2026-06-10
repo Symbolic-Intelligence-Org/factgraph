@@ -126,7 +126,7 @@ labels:
 
 ## E. Implementation Outcome
 
-Ready for reviewer gate.
+Implemented in `e48f99c4`.
 
 Implementation notes:
 
@@ -140,3 +140,17 @@ Implementation notes:
   quickstart docs slice rather than patched piecemeal here.
 
 No runtime source behavior was changed in this final cleanup.
+
+Reviewer gate:
+
+- PASS.
+- Boundary: docs/blueprints only; no runtime source changes.
+- Reviewer reran a broader explain cohort: `190 OK`.
+- Reviewer reran the demo: coherent row-anchored friendly evidence.
+- Reviewer spot-checked module docs for truthfulness:
+  - NotReached semantics and Batch D prefix-anchor behavior are accurately
+    documented;
+  - Batch B `<unbound>` / unified rendering behavior is documented;
+  - Batch C `negated=True` and `!a` / `!(a && b)` / `!((a && b) || c)` are
+    documented as display metadata;
+  - quickstart legacy flat-DAG content is honestly classified as follow-up.

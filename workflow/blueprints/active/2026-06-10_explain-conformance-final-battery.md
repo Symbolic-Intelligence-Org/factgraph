@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Final — native battery, docs, and full matrix
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance cleanup / closeout
@@ -163,7 +163,7 @@ Run the final conformance/explain matrix, including at least:
 
 ## 10. Outcome / Deviations
 
-Ready for reviewer gate.
+Implemented in `e48f99c4`.
 
 Completed in this cleanup:
 
@@ -172,6 +172,7 @@ Completed in this cleanup:
 - narrow `application/protocol/docs/README.md` stale adapter dispatch cleanup;
 - final matrix run (`144 OK`);
 - demo run showing row-anchored friendly evidence.
+- reviewer final gate: `190 OK` explain cohort and demo coherent.
 
 Deviation / follow-up:
 

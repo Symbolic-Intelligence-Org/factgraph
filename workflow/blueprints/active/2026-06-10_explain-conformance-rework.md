@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Layer — Conformance Rework Program (post-v2 structural fixes)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: program (multi-batch structural rework; 子 batch 各自 scoped + gate)
@@ -86,13 +86,13 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 
 ## 7. Acceptance (Program Level)
 
-- [ ] Batch A:非 mock 端到端 `.evaluate().row.explain()` 覆盖 inline / projection / external head + OR branch + join/multi-occurrence + 多行各自锚定无串行;Bug 10 + Bug 4 关闭。
-- [ ] Batch E:5 种 aggregate kind native evaluate + explain 端到端通过;Bug 12 关闭。
-- [ ] Batch D:下游 atom verdict 反映自身真值(或 NotReached),不再空 env 误判 Fails;对齐 `explain/docs/README.md`;Bug 11 关闭。
-- [ ] Batch B:`%FLD` / compare / builtin 的 entity-ref 显友好标签、float64 显十进制、`render_entity_repr` 单遍替换无碰撞/注入;Bug 8/3/9/7 关闭。
-- [ ] Batch C:NotAtom 友好渲染(实体标签 + 无 `$`var + 无 tuple,`negated=True`),对齐 souffle 契约;Bug 6 关闭。
-- [ ] final:native prober 忠实度测试电池齐全(对标 souffle);6 忠实度判据全覆盖;全 explain cohort 绿。
-- [ ] 受影响 module docs 同步。
+- [x] Batch A:非 mock 端到端 `.evaluate().row.explain()` 覆盖 inline / projection / external head + OR branch + join/multi-occurrence + 多行各自锚定无串行;Bug 10 + Bug 4 关闭。
+- [x] Batch E:5 种 aggregate kind native evaluate + explain 端到端通过;Bug 12 关闭。
+- [x] Batch D:下游 atom verdict 反映自身真值(或 NotReached),不再空 env 误判 Fails;对齐 `explain/docs/README.md`;Bug 11 关闭。
+- [x] Batch B:`%FLD` / compare / builtin 的 entity-ref 显友好标签、float64 显十进制、`render_entity_repr` 单遍替换无碰撞/注入;Bug 8/3/9/7 关闭。
+- [x] Batch C:NotAtom 友好渲染(实体标签 + 无 `$`var + 无 tuple,`negated=True`),对齐 souffle 契约;Bug 6 关闭。
+- [x] final:native prober 忠实度测试电池齐全(对标 souffle);6 忠实度判据全覆盖;全 explain cohort 绿。
+- [x] 受影响 module docs 同步。
 
 ## 8. Implementation Plan
 
@@ -114,4 +114,29 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 
 ## 10. Outcome / Deviations
 
-逐 batch 完成后累计填写;全部 gate-pass + 测试电池齐全后程序收口。
+Implemented on the single linear stack ending at `e48f99c4` plus final program
+closure.
+
+Outcome:
+
+- Closed all confirmed conformance defects from the audit:
+  - Batch A `a31892ca`: Bug 10 + Bug 4 row anchoring / seed-model defects.
+  - Batch E `1a23ae87`: Bug 12 aggregate support-capture crash.
+  - Batch D `9b3c912f`: Bug 11 verdict cascade semantics.
+  - Batch B `587057f6`: Bug 8 + Bug 3 + Bug 9 + Bug 7 + Bug 5 value rendering.
+  - Batch C `ad37f290`: Bug 6 NotAtom repr / `negated=True`.
+- Addressed the three structural seams:
+  - seed model now follows lowering-owned seed var mapping;
+  - repr value rendering is unified and display-only;
+  - verdict/support-capture resolver semantics now match evaluation intent.
+- Native conformance battery is documented and covers the audit matrix surfaces.
+- Module docs were synchronized for final paths-model behavior.
+- Final reviewer gate passed with a broader explain cohort (`190 OK`) and a
+  coherent demo run.
+
+Deviations / follow-up:
+
+- `docs/quickstart/evaluate_and_evidence.md` still contains broad legacy
+  flat-DAG content. It is deferred to a dedicated quickstart rewrite rather
+  than patched piecemeal in the final cleanup slice.
+- No branch push was performed in this program.

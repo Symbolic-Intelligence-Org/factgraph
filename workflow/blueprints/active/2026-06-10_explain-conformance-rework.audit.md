@@ -136,3 +136,14 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
     with no raw tuples/lists or internal `$...` leakage.
   - Program status: all conformance defects from the audit are now closed by
     Batch A/E/D/B/C. Remaining work is final battery/docs/matrix cleanup.
+- **Final — native battery, docs, and full matrix**: PASS.
+  - Impl/docs commit: `e48f99c4`.
+  - Boundary: docs and blueprint/audit records only; no runtime source changes.
+  - Tests: Codex final matrix `144 OK`; reviewer broader explain cohort
+    `190 OK`; demo coherent.
+  - Deliverables: native conformance battery inventory, module docs sync,
+    protocol docs stale adapter-dispatch correction, final matrix record.
+  - Follow-up: `docs/quickstart/evaluate_and_evidence.md` still needs a
+    dedicated rewrite for the removed flat-DAG model.
+  - Program status: implemented. All audit-confirmed conformance defects are
+    closed and independently gate-passed.
