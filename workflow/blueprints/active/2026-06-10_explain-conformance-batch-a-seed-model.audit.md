@@ -93,4 +93,51 @@ Batch A implementation must include tests that fail on the current seed model:
 
 ## E. Implementation Outcome
 
-Pending.
+Implemented in commit `a31892ca`.
+
+Implementation summary:
+
+- Added `probe_seed_vars_by_head_port(plan)` in
+  `src/factgraph/application/protocol/rule_expr_lowering.py` as the single
+  lowering-owned seed-name authority.
+- Updated `src/factgraph/sdk/store.py` so
+  `_initial_probe_bindings_for_row(...)` only consumes the lowering helper and
+  unwraps row values with `_public_term_value(...)`.
+- Added lowering helper contract tests for inline, projection, external, OR,
+  and joined same-name occurrence cases.
+- Added `tests/sdk/test_explain_conformance_native.py` as the native
+  evaluate→explain conformance battery seed file.
+
+Implementation verification run by Codex:
+
+- `PYTHONPATH=src python -m unittest tests.application.protocol.test_rule_expr_lowering tests.sdk.test_explain_conformance_native tests.sdk.test_rule_expr_evaluate tests.application.explain.test_prober`
+  → `74 tests OK`.
+- Broader explain/conformance cohort across protocol, prober, SDK, audit, and
+  adapter evidence tests → `207 tests OK`.
+- `PYTHONPATH=src python examples/explain_layer_demo.py` produced coherent
+  `User u-1` evidence.
+- `git diff --check` clean.
+
+## F. Reviewer Gate (2026-06-10)
+
+Reviewer gate verdict: **PASS**.
+
+Independent checks:
+
+- Confirmed implementation matches the approved helper boundary:
+  `rule_expr_lowering.py` owns `probe_seed_vars_by_head_port(...)`, and
+  `store.py` is a thin consumer with no duplicated lowering internals.
+- Confirmed `application/explain/prober.py` has zero implementation diff and
+  DTO/adapter paths were untouched.
+- Ran independent projection, external-head, OR, and join probes with multiple
+  entities. Result: zero cross-entity leakage.
+- Confirmed Holds atoms contain no internal `$` variables.
+- Re-ran focused cohort: `74 tests OK`.
+- Re-ran broader reviewer cohort: `212 tests OK`.
+- Re-ran demo: coherent row-specific explanation.
+
+Carry-forward:
+
+- Failed OR branches can still show an internal `$` variable. This is existing
+  Bug 5 (`_term_display` on unbound `BoundVar`) and should be handled in Batch
+  B with the unified value-rendering work. It is not a Batch A regression.

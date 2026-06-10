@@ -60,3 +60,17 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
 ## F. Per-Batch Gate Records
 
 逐 batch gate-pass 后追加(impl commit / 测试数 / 边界 / 独立验证 / 裁决)。
+
+- **Batch A — native row seed model**: PASS.
+  - Impl commit: `a31892ca`.
+  - Closed defects: Bug 10 projection-head row anchoring and Bug 4
+    external/projection head seed leakage.
+  - Boundary: lowering owns `probe_seed_vars_by_head_port(...)`; `store.py`
+    is a thin consumer; `prober.py` / DTO / adapter paths untouched.
+  - Tests: Codex focused `74 OK`; Codex broader `207 OK`; reviewer focused
+    `74 OK`; reviewer broader `212 OK`; demo coherent.
+  - Independent reviewer probes confirmed projection, external, OR, and join
+    multi-entity rows have zero cross-entity leakage and Holds atoms have no
+    internal `$` variables.
+  - Carry-forward: existing Bug 5 internal `$` on failed OR branches moves to
+    Batch B with `_term_display` / value-rendering work.

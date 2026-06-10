@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch A — native row seed model
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -199,4 +199,36 @@ coverage work. Batch final may summarize the conformance battery.
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+Implemented in commit `a31892ca`.
+
+Batch A moved native row seeding to a lowering-owned helper,
+`probe_seed_vars_by_head_port(plan)`, so the SDK no longer carries a partial
+copy of lowering variable-name knowledge. The helper seeds all supported
+head-port shapes:
+
+- inline head variables via `_head_var_names(plan)`;
+- projection and external head variables;
+- branch-specific declared source aliases for projection/external heads; and
+- joined same-name occurrence aliases for multi-occurrence rows.
+
+`sdk/store.py` now consumes that helper, unwraps public row binding values with
+`_public_term_value(...)`, and seeds every returned lowered variable name. The
+prober implementation and DTO/adapter paths were not changed.
+
+Verification:
+
+- Focused Batch A cohort: `74 tests OK`.
+- Broader explain/conformance cohort: `212 tests OK` in reviewer gate.
+- Demo remains coherent and renders the expected row-specific explanation.
+- Reviewer independent probes confirmed projection, external, OR, and join
+  head rows have zero cross-entity leakage, and Holds atoms have no internal
+  `$` variables.
+
+Deviation / carry-forward:
+
+- Helper implementation avoids whole-plan declared-port validation when only a
+  subset of head ports is needed. This prevents unrelated ambiguous non-head
+  ports from blocking seed construction.
+- Reviewer observed failed OR branches can still show an internal `$` variable;
+  that is existing Bug 5 and is carried into Batch B with the unified
+  `_term_display` work.
