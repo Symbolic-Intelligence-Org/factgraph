@@ -63,7 +63,7 @@ Each scalar annotation maps to a storage domain that the compiled schema IR reco
 
 ### 1.5 Value constraints
 
-`Identity()` and `Field()` accept only two keyword arguments: `pattern=` (regex constraint, valid only for string-typed fields) and `repr=` (explain-layer representation template, validated at class definition time and stored in Schema IR as presentation metadata). Passing other kwargs (`description=`, `primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
+`Identity()` and `Field()` accept only two keyword arguments: `pattern=` (regex constraint, valid only for string-typed fields) and `repr=` (explain-layer representation template, validated at class definition time and stored in Schema IR as presentation metadata; syntax in §1.8). Passing other kwargs (`description=`, `primary_key=`, `default=`, `cardinality=`, etc.) raises `SDKSchemaError` at class definition time.
 
 Enum-style constraints use `Literal[...]` in the annotation:
 
@@ -100,7 +100,34 @@ class EmploymentEvent(Entity):
     company: str = Field()
 ```
 
-Only three keys are accepted: `version`, `tags`, `repr`. Unsupported keys raise `SDKSchemaError` at class definition time. Detailed semantics of each Meta field is covered in the next chapter.
+Only three keys are accepted: `version`, `tags`, `repr`. Unsupported keys raise `SDKSchemaError` at class definition time. `Meta.repr` is the entity-label template — its syntax is covered in §1.8 below.
+
+### 1.8 `repr` templates — explain-layer rendering
+
+`repr=` on `Field()` / `Identity()` and `repr` inside `class Meta` are **presentation templates** for the explain layer. They are validated at class-definition time, stored in Schema IR as metadata, and **excluded from `schema_digest`** (presentation only — adding or editing a template keeps schema identity stable, §5.6). They feed `row.explain()`: the atom and conclusion text in [`evaluate_and_evidence.md`](evaluate_and_evidence.md) §4 is rendered from these templates.
+
+```python
+class User(Entity):
+    user_id: str = Identity(repr="%ENT has id %FLD")
+    region: str = Field(repr="%ENT is in region %FLD")
+    age: int = Field(repr="%ENT is %FLD years old")
+
+    class Meta:
+        repr = "%CLS %user_id"           # entity label, e.g. "User u-1"
+```
+
+**Placeholders** are validated per context; unknown placeholders are rejected at class-definition time:
+
+| Placeholder | Meaning | `Field.repr` / `Identity.repr` | `Meta.repr` |
+|---|---|---|---|
+| `%CLS` | entity class name (e.g. `User`) | ✓ | ✓ |
+| `%ENT` | the entity, rendered via its `Meta.repr` label | ✓ | ✗ |
+| `%FLD` | the current field's value | ✓ (this field only) | ✗ |
+| `%<identity_field>` | a named identity field's value (e.g. `%user_id`) | ✗ | ✓ (identity fields only) |
+
+- A `Field` / `Identity` template describes one fact atom: `%ENT` resolves to the subject's entity label (its `Meta.repr`), `%FLD` to that field's value. Example render: `User u-1 is in region us`.
+- A `Meta.repr` template is the entity **label** and may reference only `%CLS` + identity-field placeholders (the identity-only constraint).
+- A field whose name collides with a reserved token (`CLS` / `ENT` / `FLD`) is rejected when a `repr` template is in use.
 
 ## 2. Compiling a schema and using it with FactGraph
 
