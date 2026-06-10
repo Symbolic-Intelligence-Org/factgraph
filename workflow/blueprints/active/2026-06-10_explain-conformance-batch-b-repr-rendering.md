@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch B — unified repr value rendering
 
-- Status: draft
+- Status: scoped
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -99,8 +99,8 @@ Confirmed source facts:
 
 ### 5.1 Unified prober renderer
 
-Replace the narrow `_term_display(term)` function with a context-aware renderer,
-for example:
+Replace the narrow `_term_display(term)` function with a private context-aware
+renderer in `prober.py`, for example:
 
 ```python
 def _render_term_value(
@@ -135,13 +135,17 @@ Rendering behavior:
   human text for true-unbound `NotReached` atoms.
 - other values: keep current string behavior.
 
-`_entity_repr_for_fact(...)` may become a thin wrapper around the shared
+`_entity_repr_for_fact(...)` may become a thin wrapper around this private
 renderer with an explicit entity-type hint, or it may stay separate as long as
-all idref/entity/float display logic is centralized and reused.
+all idref/entity/float display logic is centralized and reused. Do not create a
+new application-level shared renderer in this batch; prober is the only current
+consumer, and the private renderer can compose the existing shared authorities
+(`_recover_identity_from_predicates(...)`, `render_entity_repr(...)`, and the
+`tup_v1` float display helper).
 
 ### 5.2 Float64 display helper
 
-Expose a small helper from `core/protocol/tup_v1.py`, for example:
+Expose a single display-only helper from `core/protocol/tup_v1.py`:
 
 ```python
 def display_float64_value(value: Any) -> str:
@@ -151,7 +155,8 @@ def display_float64_value(value: Any) -> str:
 It should reuse the existing canonical float validation / bit normalization.
 For canonical hex input, decode to a finite Python float and return display
 text. For native float input, preserve finite float behavior. Avoid duplicating
-`struct.unpack(...)` logic outside `tup_v1`.
+`struct.unpack(...)` logic outside `tup_v1`. The helper returns display text,
+not a semantic normalized identity value.
 
 The helper is display-only. It must not change `encode_value_bytes(...)`,
 `_val_atom_for_claim_arg(...)`, `_normalize_identity_value(...)`, or any
@@ -170,11 +175,12 @@ Required semantics:
 - `%CLS` renders the entity type.
 - `%<identity field>` renders the corresponding identity value with
   `_identity_value_text(...)`.
-- field values containing `%...` text are emitted literally and are not
+- identity values containing `%...` text are emitted literally and are not
   reprocessed as placeholders.
 - shared prefixes such as `%org` and `%org_unit` cannot corrupt each other.
-- unknown placeholders remain unchanged or follow the existing template
-  validation assumptions; do not widen template syntax in this batch.
+- unknown placeholders remain unchanged. Schema authoring validation should
+  prevent unknown placeholders, but Batch B does not add runtime reject/strip
+  behavior.
 
 ### 5.4 Display-only identity float decode
 
@@ -198,6 +204,12 @@ human-readable.
   facts, display falls back to the original token and does not raise.
 - **INV-Batch-A/D**: row anchoring and verdict cascade semantics remain green.
 - **INV-Batch-C-boundary**: NotAtom structural rendering remains out of scope.
+- **INV-unbound-display**: true-unbound display uses `<unbound>` and never raw
+  internal `$...` names. If a future implementation wants a named placeholder,
+  it must use a clean logical name, not lowered internal variables such as
+  `$__head__...` or `$left__...`.
+- **INV-time-out-of-scope**: epoch-nanos `time` values remain integer display in
+  this batch. Human timestamp formatting is a separate display-policy decision.
 
 ## 7. Acceptance
 

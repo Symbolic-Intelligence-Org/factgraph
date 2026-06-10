@@ -87,6 +87,28 @@ Codex read these shipped anchors before drafting:
    no locked time display policy. Draft keeps current integer rendering and
    leaves friendly timestamp formatting to a future design if needed.
 
+Scope-review decisions:
+
+- Renderer placement: keep the unified value renderer private to
+  `prober.py`. Prober is the only current consumer, and the renderer should
+  compose existing shared authorities rather than introduce a new application
+  helper prematurely.
+- Float64 helper: expose one display-only helper from `tup_v1.py`, named
+  `display_float64_value(value) -> str` unless implementation finds a stronger
+  local naming convention. It must reuse canonical float64 validation/bit logic
+  and must not touch canonical bytes or identity normalization.
+- Unbound placeholder: use `<unbound>`. Raw lowered `$...` variable names must
+  not appear in human repr text.
+- Unknown placeholders: preserve unknown placeholder text literally. Batch B
+  fixes replacement mechanics; it does not add runtime template rejection.
+- Time display: out of scope. Epoch-nanos values are integer protocol values,
+  not encoded hex leakage. Friendly timestamp formatting needs a separate
+  display-policy decision.
+- Gate emphasis: reviewer will verify `INV-display-only` with digest
+  byte-equality and `materialize_identity(...)` behavior checks, plus probes for
+  idref labels, float64 display, prefix collision, value injection, and
+  non-entity/non-float regression.
+
 ## D. Required Tests
 
 Batch B implementation must include tests that fail on current rendering:
