@@ -100,4 +100,52 @@ capture path:
 
 ## E. Implementation Outcome
 
-Pending.
+Implemented in commit `1a23ae87`.
+
+Implementation summary:
+
+- Imported `AggregateNoValue`, `_resolve_eval_term`, and
+  `_where_ast_gate_enabled` from `where_eval`.
+- `find_winning_case_index(...)` now obtains `ast_gate_on` through
+  `_where_ast_gate_enabled()` and threads it with `view_facts` into the
+  selected-branch recheck path.
+- `_eq_atom_satisfies`, `_ne_atom_satisfies`, `_cmp_atom_satisfies`, and
+  `_arith_atom_satisfies` now resolve operands through `_resolve_eval_term(...)`.
+- `_in_atom_satisfies(...)` remains unchanged per scope-review.
+- Added native SDK evaluate→explain aggregate tests for `count`, `sum`, `min`,
+  `max`, and `mean`, plus a guard that `mean` through integer comparison still
+  rejects.
+
+Implementation verification run by Codex:
+
+- `PYTHONPATH=src python -m unittest tests.sdk.test_explain_conformance_native tests.core.rules.test_aggregate_eval tests.sdk.dsl.test_aggregate_ergonomic tests.sdk.test_rule_expr_evaluate`
+  → `67 tests OK`.
+- Broader support/evaluate/explain cohort including protocol, SDK, prober,
+  audit, adapter, aggregate, diagnose, and check tests → `293 tests OK`.
+- `git diff --check` clean.
+
+## F. Reviewer Gate (2026-06-10)
+
+Reviewer gate verdict: **PASS**.
+
+Independent checks:
+
+- Confirmed edit boundary: only `_support_capture.py` plus aggregate
+  conformance tests changed; prober, DTO, adapter, and explain rendering paths
+  have zero implementation diff.
+- Confirmed correctness construction:
+  `_resolve_eval_term(...)` returns `_resolve(...)` for non-aggregate terms, so
+  non-aggregate support-capture recheck behavior remains equivalent.
+- Confirmed aggregate rechecks use the evaluation path's own
+  `_resolve_aggregate_term_for_env(...)`, so support-capture computes the same
+  aggregate values as evaluate.
+- Independently validated `count=3`, `sum=60`, `min=10`, `max=30`,
+  `mean=20.0`, and fractional mean handling.
+- Confirmed `mean` through integer comparison still rejects rather than
+  truncating or broadening evaluate semantics.
+- Re-ran reviewer cohorts: aggregate subset `52 OK`; broader subset `218 OK`.
+
+Note:
+
+- An initial reviewer `count` probe used an invalid non-`None` count target; the
+  validator rejected it correctly. The corrected `target=None` probe passed.

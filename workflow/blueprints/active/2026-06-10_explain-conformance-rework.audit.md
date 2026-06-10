@@ -74,3 +74,16 @@ Paired with [2026-06-10_explain-conformance-rework.md](./2026-06-10_explain-conf
     internal `$` variables.
   - Carry-forward: existing Bug 5 internal `$` on failed OR branches moves to
     Batch B with `_term_display` / value-rendering work.
+- **Batch E — support-capture aggregate resolver**: PASS.
+  - Impl commit: `1a23ae87`.
+  - Closed defect: Bug 12 aggregate support-capture crash.
+  - Boundary: only `_support_capture.py` plus aggregate conformance tests
+    changed; prober / DTO / adapter / explain rendering paths untouched.
+  - Tests: Codex focused `67 OK`; Codex broader `293 OK`; reviewer aggregate
+    subset `52 OK`; reviewer broader subset `218 OK`.
+  - Correctness construction: `_resolve_eval_term(...)` falls back to
+    `_resolve(...)` for non-aggregate terms, while aggregate terms use
+    evaluation's own `_resolve_aggregate_term_for_env(...)`.
+  - Independent reviewer probes validated `count`, `sum`, `min`, `max`, and
+    `mean`, including fractional mean handling and unchanged mean/int-comparison
+    rejection.

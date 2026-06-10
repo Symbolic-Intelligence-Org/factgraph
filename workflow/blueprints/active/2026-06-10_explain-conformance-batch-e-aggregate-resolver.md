@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch E — support-capture aggregate resolver
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework batch
@@ -165,4 +165,29 @@ correctness fix. Final conformance docs may summarize aggregate coverage.
 
 ## 10. Outcome / Deviations
 
-To be filled after implementation.
+Implemented in commit `1a23ae87`.
+
+Batch E made support-capture branch rechecks aggregate-aware without changing
+evaluate row generation. `find_winning_case_index(...)` now mirrors
+`where_eval` by taking `ast_gate_on` from `_where_ast_gate_enabled()` and
+threading `view_facts + ast_gate_on` through eq/ne/cmp/arith recheck helpers.
+Those helpers now resolve operands with `_resolve_eval_term(...)`, the same
+resolver family used by evaluation. `_in_atom_satisfies(...)` remains unchanged
+per scope-review because evaluate's `in` path is not aggregate-aware.
+
+Verification:
+
+- Focused aggregate/evaluate cohort: `67 tests OK`.
+- Broader support/evaluate/explain cohort: `293 tests OK`.
+- Reviewer independently validated all five aggregate kinds:
+  `count=3`, `sum=60`, `min=10`, `max=30`, `mean=20.0`.
+- Reviewer also validated fractional mean handling (`20.333...`) and confirmed
+  integer comparison still rejects mean aggregates instead of coercing them.
+
+Deviation / note:
+
+- The initial reviewer count probe used an invalid `count` target; the
+  validator correctly rejected it. The corrected `target=None` count probe
+  passed.
+- No public API signatures changed. Prober, DTO, adapter, and explain rendering
+  paths were not touched.
