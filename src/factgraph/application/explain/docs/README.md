@@ -51,9 +51,12 @@ rule and one body rule per real `RuleExpr` occurrence.
 - `NotReached(blocked_by=...)`
 
 `NotReached` is reserved for direct unbound-variable dependencies. It is not a
-generic "previous atom failed" marker. After an upstream failure, the prober may
-still compute downstream verdicts from the last row-anchored prefix
-environment, but it does not resurrect the failed branch's candidate envs.
+generic "previous atom failed" marker. After an upstream failure, the prober
+keeps two tracks: the branch candidate envs stay empty so the failed branch does
+not resurrect, while a row-anchored explanation track continues advancing
+exhaustively. Later atoms whose input dependencies are bound still report their
+own `Holds` or `Fails`; only genuinely unbound dependencies report
+`NotReached`.
 
 ---
 

@@ -138,6 +138,112 @@ class NativeProberTests(unittest.TestCase):
         self.assertIsInstance(atoms[1].verdict, NotReached)
         self.assertEqual(atoms[1].verdict.blocked_by, y_seed_name)
 
+    def test_exhaustive_verdict_advances_bind_atom_after_failed_filter(self) -> None:
+        user = Var("$user")
+        age = Var("$age")
+        region = Var("$region")
+        rule = Rule(
+            id="senior_region",
+            when=(
+                PredAtom("age", [user, age]),
+                CmpAtom("ge", age, Const(65)),
+                PredAtom("region", [user, region]),
+                CmpAtom("eq", region, Const("us")),
+            ),
+            ports={"user": user, "age": age, "region": region},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        user_seed_name = next(
+            binding.alias_local_execution_var.name
+            for binding in plan.occurrence_map[0].port_bindings
+            if binding.port_name == "user"
+        )
+
+        result = probe_native(
+            plan,
+            {user_seed_name: "u-1"},
+            {"age": [("u-1", 30), ("u-2", 70)], "region": [("u-1", "us"), ("u-2", "eu")]},
+        )
+
+        path = result.paths[0]
+        atoms = path.rules[1].atoms
+        self.assertEqual(path.status, "fails")
+        self.assertIsInstance(atoms[0].verdict, Holds)
+        self.assertIsInstance(atoms[1].verdict, Fails)
+        self.assertIsInstance(atoms[2].verdict, Holds)
+        self.assertIsInstance(atoms[3].verdict, Holds)
+        text = "\n".join(atom.repr_text or "" for atom in atoms)
+        self.assertIn("region(u-1, us)", text)
+        self.assertIn("us equals us", text)
+        self.assertNotIn("u-2", text)
+        self.assertNotIn("eu", text)
+
+    def test_exhaustive_verdict_is_order_independent_after_failed_filter(self) -> None:
+        user = Var("$user")
+        age = Var("$age")
+        region = Var("$region")
+        facts = {"age": [("u-1", 30)], "region": [("u-1", "us")]}
+
+        before_fail = Rule(
+            id="region_before_fail",
+            when=(
+                PredAtom("age", [user, age]),
+                PredAtom("region", [user, region]),
+                CmpAtom("ge", age, Const(65)),
+                CmpAtom("eq", region, Const("us")),
+            ),
+            ports={"user": user, "age": age, "region": region},
+        )
+        after_fail = Rule(
+            id="region_after_fail",
+            when=(
+                PredAtom("age", [user, age]),
+                CmpAtom("ge", age, Const(65)),
+                PredAtom("region", [user, region]),
+                CmpAtom("eq", region, Const("us")),
+            ),
+            ports={"user": user, "age": age, "region": region},
+        )
+
+        def run(rule: Rule) -> tuple[type[object], type[object], str]:
+            plan = _lower_application_rule(rule, head=rule)
+            user_seed_name = next(
+                binding.alias_local_execution_var.name
+                for binding in plan.occurrence_map[0].port_bindings
+                if binding.port_name == "user"
+            )
+            result = probe_native(plan, {user_seed_name: "u-1"}, facts)
+            atoms = result.paths[0].rules[1].atoms
+            region_atom = next(atom for atom in atoms if atom.repr_text == "region(u-1, us)")
+            eq_atom = next(atom for atom in atoms if atom.repr_text == "us equals us")
+            return type(region_atom.verdict), type(eq_atom.verdict), result.paths[0].status
+
+        self.assertEqual(run(before_fail), (Holds, Holds, "fails"))
+        self.assertEqual(run(after_fail), (Holds, Holds, "fails"))
+
+    def test_exhaustive_verdict_does_not_free_enumerate_key_unbound_predicate(self) -> None:
+        user = Var("$user")
+        region = Var("$region")
+        rule = Rule(
+            id="key_unbound_after_fail",
+            when=(
+                CmpAtom("eq", Const("no"), Const("yes")),
+                PredAtom("region", [user, region]),
+            ),
+            ports={"user": user, "region": region},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+
+        result = probe_native(plan, {}, {"region": [("u-1", "us"), ("u-2", "eu")]})
+
+        path = result.paths[0]
+        atoms = path.rules[1].atoms
+        self.assertEqual(path.status, "fails")
+        self.assertIsInstance(atoms[0].verdict, Fails)
+        self.assertIsInstance(atoms[1].verdict, NotReached)
+        self.assertNotIn("u-1", atoms[1].repr_text or "")
+        self.assertNotIn("u-2", atoms[1].repr_text or "")
+
     def test_or_branches_are_exhaustive_paths(self) -> None:
         x = Var("$x")
         left = Rule(id="left", when=(PredAtom("left_p", [x]),), ports={"x": x})

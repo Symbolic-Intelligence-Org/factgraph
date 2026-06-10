@@ -88,7 +88,7 @@ def _probe_branch(
 ) -> EvidenceTree:
     anchor_envs = (ProbeEnv.from_bindings(initial_bindings),)
     envs = anchor_envs
-    last_non_empty_envs = anchor_envs
+    verdict_envs = anchor_envs
     atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]] = []
     failed_upstream = False
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
@@ -97,33 +97,29 @@ def _probe_branch(
     for idx, atom in enumerate(atoms):
         before_envs = envs
         if idx in join_indexes or idx in head_link_indexes:
-            evidence_atom, envs = _probe_atom(
+            evidence_atom, envs, verdict_envs = _probe_atom(
                 atom,
                 before_envs,
-                verdict_envs=last_non_empty_envs,
+                verdict_envs=verdict_envs,
                 view_facts=view_facts,
                 atom_id=f"{trace.branch_id}:materialized:{idx}",
                 failed_upstream=failed_upstream,
                 schema_index=schema_index,
             )
-            if envs:
-                last_non_empty_envs = envs
             if isinstance(evidence_atom.verdict, Fails):
                 failed_upstream = True
             atom_results.append((idx, atom, evidence_atom, envs))
             continue
 
-        evidence_atom, envs = _probe_atom(
+        evidence_atom, envs, verdict_envs = _probe_atom(
             atom,
             before_envs,
-            verdict_envs=last_non_empty_envs,
+            verdict_envs=verdict_envs,
             view_facts=view_facts,
             atom_id=f"{trace.branch_id}:atom:{idx}",
             failed_upstream=failed_upstream,
             schema_index=schema_index,
         )
-        if envs:
-            last_non_empty_envs = envs
         if isinstance(evidence_atom.verdict, Fails):
             failed_upstream = True
         atom_results.append((idx, atom, evidence_atom, envs))
@@ -151,14 +147,14 @@ def _probe_atom(
     atom_id: str,
     failed_upstream: bool,
     schema_index: object | None,
-) -> tuple[EvidenceAtom, tuple[ProbeEnv, ...]]:
+) -> tuple[EvidenceAtom, tuple[ProbeEnv, ...], tuple[ProbeEnv, ...]]:
     runnable_envs: list[ProbeEnv] = []
     blocked_by: str | None = None
     verdict_only = failed_upstream and not envs
     candidate_envs = envs
     if verdict_only:
         for env in verdict_envs:
-            missing = _missing_variables(atom, env.bindings)
+            missing = _missing_verdict_dependencies(atom, env.bindings)
             if missing:
                 blocked_by = blocked_by or missing[0]
                 continue
@@ -190,27 +186,43 @@ def _probe_atom(
     )
     if verdict_only:
         if deduped:
-            return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated), candidate_envs
+            return (
+                EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated),
+                candidate_envs,
+                deduped,
+            )
         if blocked_by is not None and not runnable_envs:
-            return EvidenceAtom(
+            return (
+                EvidenceAtom(
+                    form=form,
+                    verdict=NotReached(blocked_by=blocked_by),
+                    atom_id=atom_id,
+                    repr_text=repr_text,
+                    negated=negated,
+                ),
+                candidate_envs,
+                verdict_envs,
+            )
+        return (
+            EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated),
+            candidate_envs,
+            tuple(runnable_envs) or verdict_envs,
+        )
+    if deduped:
+        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated), deduped, deduped
+    if blocked_by is not None:
+        return (
+            EvidenceAtom(
                 form=form,
                 verdict=NotReached(blocked_by=blocked_by),
                 atom_id=atom_id,
                 repr_text=repr_text,
                 negated=negated,
-            ), candidate_envs
-        return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated), candidate_envs
-    if deduped:
-        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated), deduped
-    if blocked_by is not None:
-        return EvidenceAtom(
-            form=form,
-            verdict=NotReached(blocked_by=blocked_by),
-            atom_id=atom_id,
-            repr_text=repr_text,
-            negated=negated,
-        ), ()
-    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated), ()
+            ),
+            (),
+            envs or verdict_envs,
+        )
+    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated), (), envs or verdict_envs
 
 
 def _body_rules_for_branch(
@@ -598,6 +610,15 @@ def _is_not_atom(atom: tuple[Any, ...]) -> bool:
 
 def _missing_variables(atom: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(var for var in _vars_in_atom_tuple(atom) if var not in env)
+
+
+def _missing_verdict_dependencies(atom: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
+    if _atom_can_bind(atom):
+        terms = atom[2] if len(atom) > 2 else ()
+        if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or not terms:
+            return _missing_variables(atom, env)
+        return tuple(var for var in _vars_in_atom_tuple(terms[0]) if var not in env)
+    return _missing_variables(atom, env)
 
 
 def _vars_in_atom_tuple(atom: Any) -> tuple[str, ...]:
