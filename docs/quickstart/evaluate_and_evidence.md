@@ -316,7 +316,7 @@ Reading the layers:
 `Explanation.repr` (§4.5) walks the paths into an indented tree, one line per rule/atom. Shipped native engine produces:
 
 ```
-Conclusion: adults_in_us [row-1]
+Conclusion: c0 [run_v1:<digest>:<row>]
   Rule "adults_in_us": holds
   Body "adults_in_us": holds
     Atom: User alice is in region US — holds
@@ -327,7 +327,7 @@ Conclusion: adults_in_us [row-1]
 Two things to know about the rendered text:
 
 - **Atom text is schema-authored.** `repr_text` is rendered from `Field.repr` / `Identity.repr` templates (`%ENT` / `%FLD` / `%CLS`); a bound entity-ref resolves to its `Meta.repr` label ("User alice"), not a raw `idref_v1:` token. Compare / builtin / negation atoms use the renderer's default phrasing (`25 > 18`, `!(a && b)`, …). A truly-unbound value renders as `<unbound>`, never an internal `$var`.
-- **Conclusion line** uses the head rule's `repr` template with the row's port bindings; when no template is set it falls back to the head `id`.
+- **Conclusion line** is the path/candidate id (e.g. `c0`) plus the run id. `Rule.repr` (the rule-level conclusion template) is **not** auto-rendered into `Explanation` — it only carries through the per-row closed head as data plumbing (see [`rules.md`](rules.md) §2.5). The schema-authored *atom* text above is the part `repr` drives in the explanation.
 
 ### 4.2 `Explanation` DTO
 
@@ -430,7 +430,7 @@ PyReason paths are `EvidenceTimeline` instead of `EvidenceTree` — events organ
 
 | Element | Rendered as |
 |---|---|
-| Conclusion | `Conclusion: <head id / rendered head repr> [<row_id>]` |
+| Conclusion | `Conclusion: <path/candidate id> [<run id>]` (e.g. `Conclusion: c0 [run_v1:…]`) |
 | `EvidenceRule` (role="head") | `Rule "<occurrence_alias>": <holds\|fails\|not_reached>` |
 | `EvidenceRule` (role="body") | `Body "<occurrence_alias>": <status>` |
 | `EvidenceAtom` | `Atom: <repr_text> — <holds\|fails\|not reached>` |
@@ -500,9 +500,7 @@ Rule(
 
 If the open head has a `repr` template (e.g. `"User %user is in %region"`, see [`rules.md`](rules.md) §2.5), the closed head receives the same template — letting downstream renderers produce per-row descriptions.
 
-**Rendered into `Explanation.repr`.** When the paths-model evidence is built, the head `EvidenceRule` carries the head's `repr` rendered with the row's port bindings; the walker (§4.5) surfaces it as the Conclusion line. When the head has no `repr` template, the Conclusion line falls back to the head `id`.
-
-**Manual escape hatches remain available.** `row.close()` + the `RuleExprInspect.render(...)` path ([`rules.md`](rules.md) §4) stay as low-level options when a consumer needs templated text outside the `Explanation.repr` walker output.
+**`Rule.repr` is not auto-surfaced in `Explanation`.** The carry-through is data plumbing only — the conclusion line of `Explanation.repr` is a path/candidate id (§4.5), **not** the rendered `Rule.repr`. To render the rule-level label, call `rule.render_repr(bindings)` explicitly (or `RuleExprInspect.render(...)`, [`rules.md`](rules.md) §4). The templates that *are* rendered automatically into the explanation are the **schema** `repr` templates (`Field` / `Identity` / `Meta`, [`schema_definition.md`](schema_definition.md) §1.8) — into the atom text.
 
 ## 6. `fg.audit` — post-hoc per-cell inspection
 
