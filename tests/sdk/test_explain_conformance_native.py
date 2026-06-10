@@ -6,7 +6,8 @@ import factgraph.sdk as sdk
 from factgraph.application import build_schema_index, entity_info, field_predicate, resolve_selector
 from factgraph.application.protocol import EntitySelector, Rule
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom, Var
+from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
+from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.sdk import Entity, Field, Identity
 
 
@@ -20,8 +21,17 @@ class NativeExplainUser(Entity):
     tag: str = Field(repr="%ENT tag %FLD")
 
 
+class NativeAggregateOrder(Entity):
+    order_id: str = Identity()
+    amount: int = Field()
+
+
 def _store() -> sdk.SDKStore:
     return sdk.SDKStore([NativeExplainUser])
+
+
+def _aggregate_store() -> sdk.SDKStore:
+    return sdk.SDKStore([NativeAggregateOrder])
 
 
 def _seed_user(graph: sdk.SDKStore, user_id: str, *, region: str, age: int, tag: str) -> str:
@@ -34,6 +44,17 @@ def _seed_user(graph: sdk.SDKStore, user_id: str, *, region: str, age: int, tag:
     set_field(graph.ledger, field_predicate(index, "NativeExplainUser", "region").pred_id, encoded, [("string", region)])
     set_field(graph.ledger, field_predicate(index, "NativeExplainUser", "age").pred_id, encoded, [("int", age)])
     set_field(graph.ledger, field_predicate(index, "NativeExplainUser", "tag").pred_id, encoded, [("string", tag)])
+    return encoded
+
+
+def _seed_order(graph: sdk.SDKStore, order_id: str, *, amount: int) -> str:
+    index = build_schema_index(graph.schema_ir)
+    ref = resolve_selector(EntitySelector(entity_type="NativeAggregateOrder", identity={"order_id": order_id}), index=index)
+    info = entity_info(index, "NativeAggregateOrder")
+    encoded = ref.encoded_ref or ""
+    set_field(graph.ledger, info.exists_predicate_id, encoded, [])
+    set_field(graph.ledger, info.identity_predicates["order_id"].pred_id, encoded, [("string", order_id)])
+    set_field(graph.ledger, field_predicate(index, "NativeAggregateOrder", "amount").pred_id, encoded, [("int", amount)])
     return encoded
 
 
@@ -86,6 +107,79 @@ def _atom_text(row: object) -> str:
         for rule in path.rules
         for atom in rule.atoms
     )
+
+
+def _aggregate_rule(graph: sdk.SDKStore, kind: str) -> Rule:
+    index = build_schema_index(graph.schema_ir)
+    info = entity_info(index, "NativeAggregateOrder")
+    amount_pred = field_predicate(index, "NativeAggregateOrder", "amount").pred_id
+    order = Var("$order")
+    amount = Var("$amount")
+    total = Var("$total")
+    if kind == "count":
+        aggregate = AggregateAtom("count", None, [PredAtom(info.exists_predicate_id, [order])])
+    else:
+        aggregate = AggregateAtom(kind, amount, [PredAtom(amount_pred, [order, amount])])
+    return Rule(id=f"order_{kind}", when=(CmpAtom("eq", total, aggregate),), ports={"total": total})
+
+
+def _row_public_value(row: object, port_name: str) -> object:
+    value = row.bindings[port_name]  # type: ignore[attr-defined,index]
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+
+class NativeAggregateExplainConformanceTests(unittest.TestCase):
+    def test_aggregate_count_evaluate_and_explain(self) -> None:
+        self._assert_aggregate_result("count", 3)
+
+    def test_aggregate_sum_evaluate_and_explain(self) -> None:
+        self._assert_aggregate_result("sum", 60)
+
+    def test_aggregate_min_evaluate_and_explain(self) -> None:
+        self._assert_aggregate_result("min", 10)
+
+    def test_aggregate_max_evaluate_and_explain(self) -> None:
+        self._assert_aggregate_result("max", 30)
+
+    def test_aggregate_mean_evaluate_and_explain(self) -> None:
+        self._assert_aggregate_result("mean", 20.0)
+
+    def test_mean_aggregate_still_rejects_int_comparison(self) -> None:
+        graph = _aggregate_store()
+        _seed_order(graph, "o-1", amount=10)
+        _seed_order(graph, "o-2", amount=20)
+        _seed_order(graph, "o-3", amount=30)
+        index = build_schema_index(graph.schema_ir)
+        amount_pred = field_predicate(index, "NativeAggregateOrder", "amount").pred_id
+        order = Var("$order")
+        amount = Var("$amount")
+        aggregate = AggregateAtom("mean", amount, [PredAtom(amount_pred, [order, amount])])
+        rule = Rule(
+            id="order_mean_cmp",
+            when=(PredAtom(amount_pred, [order, amount]), CmpAtom("ge", aggregate, Const(20))),
+            ports={"order": order},
+        )
+
+        with self.assertRaisesRegex(WhereValidationError, "ge supports only int/time values"):
+            graph.eval.evaluate(rule, head=rule, engine="native")
+
+    def _assert_aggregate_result(self, kind: str, expected: object) -> None:
+        graph = _aggregate_store()
+        _seed_order(graph, "o-1", amount=10)
+        _seed_order(graph, "o-2", amount=20)
+        _seed_order(graph, "o-3", amount=30)
+
+        result = graph.eval.evaluate(_aggregate_rule(graph, kind), head=_aggregate_rule(graph, kind), engine="native")
+
+        self.assertEqual(result.count(), 1)
+        self.assertEqual(_row_public_value(result[0], "total"), expected)
+        explanation = result[0].explain()
+        self.assertEqual(explanation.status, "passed")
+        self.assertIsNotNone(explanation.evidence)
+        assert explanation.evidence is not None
+        self.assertTrue(explanation.evidence.paths)
 
 
 class NativeExplainConformanceTests(unittest.TestCase):

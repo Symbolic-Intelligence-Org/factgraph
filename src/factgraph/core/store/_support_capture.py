@@ -4,6 +4,7 @@ from typing import Any
 
 from factgraph.core.rules.ruleref_types import NativeRuleRefResolution
 from factgraph.core.rules.where_eval import (
+    AggregateNoValue,
     WhereValidationError,
     _cmp_holds,
     _coerce_arith_int,
@@ -11,6 +12,8 @@ from factgraph.core.rules.where_eval import (
     _exists_not_body,
     _normalize_not_body,
     _resolve,
+    _resolve_eval_term,
+    _where_ast_gate_enabled,
 )
 from factgraph.core.store._support import (
     NonFactStep,
@@ -152,6 +155,7 @@ def find_winning_case_index(
     branches = _normalize_where_branches(where)
     resolution_by_key = {row.ruleref_condition_key: row for row in rule_ref_resolutions}
     view_facts = _view_facts_from_witness_facts(witness_facts)
+    ast_gate_on = _where_ast_gate_enabled()
 
     for case_index, branch in enumerate(branches):
         if _branch_satisfies(
@@ -161,6 +165,7 @@ def find_winning_case_index(
             witness_facts=witness_facts,
             view_facts=view_facts,
             resolution_by_key=resolution_by_key,
+            ast_gate_on=ast_gate_on,
         ):
             return case_index
 
@@ -245,6 +250,7 @@ def _branch_satisfies(
     witness_facts: dict[str, list[ProjectedFact]],
     view_facts: dict[str, list[tuple[Any, ...]]],
     resolution_by_key: dict[str, NativeRuleRefResolution],
+    ast_gate_on: bool,
 ) -> bool:
     for condition_index, atom in enumerate(branch):
         if not _atom_satisfies(
@@ -255,6 +261,7 @@ def _branch_satisfies(
             witness_facts=witness_facts,
             view_facts=view_facts,
             resolution_by_key=resolution_by_key,
+            ast_gate_on=ast_gate_on,
         ):
             return False
     return True
@@ -269,6 +276,7 @@ def _atom_satisfies(
     witness_facts: dict[str, list[ProjectedFact]],
     view_facts: dict[str, list[tuple[Any, ...]]],
     resolution_by_key: dict[str, NativeRuleRefResolution],
+    ast_gate_on: bool,
 ) -> bool:
     kind = atom[0]
     if kind == "pred":
@@ -282,15 +290,15 @@ def _atom_satisfies(
             resolution_by_key=resolution_by_key,
         )
     if kind == "eq":
-        return _eq_atom_satisfies(atom=atom, binding=binding)
+        return _eq_atom_satisfies(atom=atom, binding=binding, view_facts=view_facts, ast_gate_on=ast_gate_on)
     if kind == "in":
         return _in_atom_satisfies(atom=atom, binding=binding)
     if kind == "ne":
-        return _ne_atom_satisfies(atom=atom, binding=binding)
+        return _ne_atom_satisfies(atom=atom, binding=binding, view_facts=view_facts, ast_gate_on=ast_gate_on)
     if kind in {"gt", "ge", "lt", "le"}:
-        return _cmp_atom_satisfies(atom=atom, binding=binding)
+        return _cmp_atom_satisfies(atom=atom, binding=binding, view_facts=view_facts, ast_gate_on=ast_gate_on)
     if kind in {"add", "sub", "neg", "addc", "mulc"}:
-        return _arith_atom_satisfies(atom=atom, binding=binding)
+        return _arith_atom_satisfies(atom=atom, binding=binding, view_facts=view_facts, ast_gate_on=ast_gate_on)
     if kind == "not":
         return _not_atom_satisfies(atom=atom, binding=binding, view_facts=view_facts)
     raise WhereValidationError(f"unsupported atom kind in support capture: {kind}")
@@ -334,10 +342,18 @@ def _ruleref_atom_satisfies(
     return len(matches) == 1
 
 
-def _eq_atom_satisfies(*, atom: tuple[Any, ...], binding: dict[str, Any]) -> bool:
+def _eq_atom_satisfies(
+    *,
+    atom: tuple[Any, ...],
+    binding: dict[str, Any],
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    ast_gate_on: bool,
+) -> bool:
     _, lhs, rhs = atom
-    lhs_known, lhs_value = _resolve(binding, lhs)
-    rhs_known, rhs_value = _resolve(binding, rhs)
+    lhs_known, lhs_value = _resolve_eval_term(binding, lhs, view_facts, ast_gate_on=ast_gate_on)
+    rhs_known, rhs_value = _resolve_eval_term(binding, rhs, view_facts, ast_gate_on=ast_gate_on)
+    if lhs_value is AggregateNoValue or rhs_value is AggregateNoValue:
+        return False
     return lhs_known and rhs_known and lhs_value == rhs_value
 
 
@@ -348,17 +364,33 @@ def _in_atom_satisfies(*, atom: tuple[Any, ...], binding: dict[str, Any]) -> boo
     return isinstance(var, str) and var in binding and binding[var] in set(values)
 
 
-def _ne_atom_satisfies(*, atom: tuple[Any, ...], binding: dict[str, Any]) -> bool:
+def _ne_atom_satisfies(
+    *,
+    atom: tuple[Any, ...],
+    binding: dict[str, Any],
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    ast_gate_on: bool,
+) -> bool:
     _, lhs, rhs = atom
-    lhs_known, lhs_value = _resolve(binding, lhs)
-    rhs_known, rhs_value = _resolve(binding, rhs)
+    lhs_known, lhs_value = _resolve_eval_term(binding, lhs, view_facts, ast_gate_on=ast_gate_on)
+    rhs_known, rhs_value = _resolve_eval_term(binding, rhs, view_facts, ast_gate_on=ast_gate_on)
+    if lhs_value is AggregateNoValue or rhs_value is AggregateNoValue:
+        return False
     return lhs_known and rhs_known and lhs_value != rhs_value
 
 
-def _cmp_atom_satisfies(*, atom: tuple[Any, ...], binding: dict[str, Any]) -> bool:
+def _cmp_atom_satisfies(
+    *,
+    atom: tuple[Any, ...],
+    binding: dict[str, Any],
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    ast_gate_on: bool,
+) -> bool:
     kind, lhs, rhs = atom
-    lhs_known, lhs_value_raw = _resolve(binding, lhs)
-    rhs_known, rhs_value_raw = _resolve(binding, rhs)
+    lhs_known, lhs_value_raw = _resolve_eval_term(binding, lhs, view_facts, ast_gate_on=ast_gate_on)
+    rhs_known, rhs_value_raw = _resolve_eval_term(binding, rhs, view_facts, ast_gate_on=ast_gate_on)
+    if lhs_value_raw is AggregateNoValue or rhs_value_raw is AggregateNoValue:
+        return False
     if not lhs_known or not rhs_known:
         return False
     lhs_value = _coerce_cmp_int(lhs_value_raw, kind)
@@ -366,7 +398,13 @@ def _cmp_atom_satisfies(*, atom: tuple[Any, ...], binding: dict[str, Any]) -> bo
     return _cmp_holds(kind, lhs_value, rhs_value)
 
 
-def _arith_atom_satisfies(*, atom: tuple[Any, ...], binding: dict[str, Any]) -> bool:
+def _arith_atom_satisfies(
+    *,
+    atom: tuple[Any, ...],
+    binding: dict[str, Any],
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    ast_gate_on: bool,
+) -> bool:
     kind = atom[0]
     z = atom[1]
     if not isinstance(z, str) or z not in binding:
@@ -374,33 +412,33 @@ def _arith_atom_satisfies(*, atom: tuple[Any, ...], binding: dict[str, Any]) -> 
 
     if kind == "add":
         _, _, x, y = atom
-        xv = _resolved_arith_value(binding, x, kind)
-        yv = _resolved_arith_value(binding, y, kind)
+        xv = _resolved_arith_value(binding, x, kind, view_facts=view_facts, ast_gate_on=ast_gate_on)
+        yv = _resolved_arith_value(binding, y, kind, view_facts=view_facts, ast_gate_on=ast_gate_on)
         if xv is None or yv is None:
             return False
         result = xv + yv
     elif kind == "sub":
         _, _, x, y = atom
-        xv = _resolved_arith_value(binding, x, kind)
-        yv = _resolved_arith_value(binding, y, kind)
+        xv = _resolved_arith_value(binding, x, kind, view_facts=view_facts, ast_gate_on=ast_gate_on)
+        yv = _resolved_arith_value(binding, y, kind, view_facts=view_facts, ast_gate_on=ast_gate_on)
         if xv is None or yv is None:
             return False
         result = xv - yv
     elif kind == "neg":
         _, _, x = atom
-        xv = _resolved_arith_value(binding, x, kind)
+        xv = _resolved_arith_value(binding, x, kind, view_facts=view_facts, ast_gate_on=ast_gate_on)
         if xv is None:
             return False
         result = -xv
     elif kind == "addc":
         _, _, x, c = atom
-        xv = _resolved_arith_value(binding, x, kind)
+        xv = _resolved_arith_value(binding, x, kind, view_facts=view_facts, ast_gate_on=ast_gate_on)
         if xv is None:
             return False
         result = xv + _coerce_arith_int(c, kind)
     elif kind == "mulc":
         _, _, x, c = atom
-        xv = _resolved_arith_value(binding, x, kind)
+        xv = _resolved_arith_value(binding, x, kind, view_facts=view_facts, ast_gate_on=ast_gate_on)
         if xv is None:
             return False
         result = xv * _coerce_arith_int(c, kind)
@@ -421,8 +459,17 @@ def _not_atom_satisfies(
     return not _exists_not_body(view_facts, dict(binding), not_branches, ast_gate_on=True)
 
 
-def _resolved_arith_value(binding: dict[str, Any], term: Any, kind: str) -> int | None:
-    known, value = _resolve(binding, term)
+def _resolved_arith_value(
+    binding: dict[str, Any],
+    term: Any,
+    kind: str,
+    *,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+    ast_gate_on: bool,
+) -> int | None:
+    known, value = _resolve_eval_term(binding, term, view_facts, ast_gate_on=ast_gate_on)
+    if value is AggregateNoValue:
+        return None
     if not known:
         return None
     return _coerce_arith_int(value, kind)
