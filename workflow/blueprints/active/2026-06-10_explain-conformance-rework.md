@@ -92,7 +92,7 @@ v2 explain 层在 demo 中连续暴露 Bug 1–6 后,用户质疑是否为整体
 - [x] Batch E:5 种 aggregate kind native evaluate + explain 端到端通过;Bug 12 关闭。
 - [x] Batch D:下游 atom verdict 反映自身真值(或 NotReached),不再空 env 误判 Fails;对齐 `explain/docs/README.md`;Bug 11 关闭。
 - [x] Batch D2:对齐设计 §307-308;前序 `Fails` 后仍穷尽推进 explanation track,依赖已绑定的下游 atom 得到 `Holds/Fails`,仅真未绑定依赖得到 `NotReached`;分支 candidate track 不复活。
-- [ ] Batch F:aggregate compare atom explain verdict 正确(`Holds/Fails`,非误 `NotReached`)且 aggregate repr 友好,无原始 tuple / `$agg__` 内部变量泄漏。
+- [x] Batch F:aggregate compare atom explain verdict 正确(`Holds/Fails`,非误 `NotReached`)且 aggregate repr 友好,无原始 tuple / `$agg__` 内部变量泄漏。
 - [x] Batch B:`%FLD` / compare / builtin 的 entity-ref 显友好标签、float64 显十进制、`render_entity_repr` 单遍替换无碰撞/注入;Bug 8/3/9/7 关闭。
 - [x] Batch C:NotAtom 友好渲染(实体标签 + 无 `$`var + 无 tuple,`negated=True`),对齐 souffle 契约;Bug 6 关闭。
 - [x] final:native prober 忠实度测试电池齐全(对标 souffle);6 忠实度判据全覆盖;全 explain cohort 绿。
@@ -133,6 +133,11 @@ atoms in explanations are incorrectly marked `NotReached` because prober
 missing-variable preflight descends into aggregate-internal variables, and the
 aggregate operand repr falls back to raw tuple text. Batch F is split out before
 archive.
+
+Batch F `86437ccc` repaired the aggregate explain path: aggregate-local vars no
+longer block missing-variable preflight, correlated outer vars remain real
+dependencies, and aggregate operands render with friendly text such as `sum of
+amount`.
 
 Outcome:
 

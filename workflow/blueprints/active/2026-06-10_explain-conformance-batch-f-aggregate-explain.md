@@ -1,6 +1,6 @@
 # Task Blueprint: Explain Conformance Batch F — aggregate explain verdict and repr
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-10
 - Last Updated: 2026-06-10
 - Type: conformance rework post-D2 correction
@@ -152,19 +152,19 @@ how to compute aggregate terms.
 
 ## 7. Acceptance
 
-- [ ] `count`, `sum`, `min`, `max`, and `mean` aggregate explain atoms on passed
+- [x] `count`, `sum`, `min`, `max`, and `mean` aggregate explain atoms on passed
   rows are `Holds`, not `NotReached`.
-- [ ] Aggregate repr text is friendly and contains no raw tuple/list text and no
+- [x] Aggregate repr text is friendly and contains no raw tuple/list text and no
   `$agg__` variables.
-- [ ] Correlated aggregate with its correlation variable bound evaluates to
+- [x] Correlated aggregate with its correlation variable bound evaluates to
   `Holds` when the aggregate value matches.
-- [ ] Correlated aggregate with its correlation variable unbound is
+- [x] Correlated aggregate with its correlation variable unbound is
   `NotReached`, does not free-compute, and does not leak unrelated facts.
-- [ ] Existing aggregate row values remain correct.
-- [ ] Non-aggregate compare missing-variable tests remain green.
-- [ ] D2 senior / order-independence / no-leak regressions remain green.
-- [ ] Batch A/B/C/E and adapter cohorts remain green.
-- [ ] No `where_eval`, `diagnose_runtime`, support-capture, seed, DTO, or
+- [x] Existing aggregate row values remain correct.
+- [x] Non-aggregate compare missing-variable tests remain green.
+- [x] D2 senior / order-independence / no-leak regressions remain green.
+- [x] Batch A/B/C/E and adapter cohorts remain green.
+- [x] No `where_eval`, `diagnose_runtime`, support-capture, seed, DTO, or
   adapter implementation diff.
 
 ## 8. Implementation Plan
@@ -186,4 +186,31 @@ a way that should be documented in `application/explain/docs/README.md`.
 
 ## 10. Outcome / Deviations
 
-Pending.
+Implemented in `86437ccc`.
+
+Outcome:
+
+- Native aggregate compare atoms now pass missing-variable preflight and reach
+  the existing aggregate-aware `where_eval` resolver.
+- Aggregate operands render as friendly text (`count`, `sum of amount`,
+  `min of amount`, `max of amount`, `mean of amount`) instead of raw tuples.
+- Correlated aggregate filters preserve outer dependencies: bound correlation
+  vars evaluate normally; missing correlation vars produce `NotReached` and do
+  not free-compute over unrelated facts.
+
+Tests:
+
+- `NativeAggregateExplainConformanceTests`: `8 OK`.
+- `tests.application.explain.test_prober` + native conformance: `33 OK`.
+- Broader explain/schema/adapter cohort: `143 OK`.
+- Aggregate DSL/eval/adapter cohort: `50 OK`.
+- `examples/explain_layer_demo.py` runs coherently.
+
+Deviation:
+
+- The runtime lowered form does not preserve source `AggregateAtom` nodes, so
+  the implementation uses the lowered aggregate convention: predicate subject
+  terms and aggregate target vars are aggregate-local, `$agg...` vars are
+  aggregate-local, and value-position vars that are not local remain correlated
+  outer dependencies. This keeps the scope local to `prober.py` without changing
+  `where_eval` or lowering metadata.

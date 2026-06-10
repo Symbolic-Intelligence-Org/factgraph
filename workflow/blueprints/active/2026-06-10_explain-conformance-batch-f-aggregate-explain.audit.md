@@ -106,6 +106,35 @@ are the same check.
 - Batch A/B/C/E regressions remain green.
 - No non-prober runtime implementation diff.
 
-## G. Implementation Outcome
+## G. Implementation Outcome (2026-06-10)
 
-Pending.
+Implementation commit: `86437ccc`.
+
+Code boundary:
+
+- Edited `src/factgraph/application/explain/prober.py`.
+- Added conformance coverage in `tests/sdk/test_explain_conformance_native.py`.
+- No `where_eval`, `diagnose_runtime`, support-capture, seed builder, DTO, or
+  adapter implementation diff.
+
+Implementation notes:
+
+- Missing-variable checks now use a dedicated scanner instead of the structural
+  `_vars_in_atom_tuple(...)` scanner.
+- Aggregate terms are recognized in lowered tuple form.
+- Aggregate target vars, predicate subject iterator vars, and `$agg...` vars are
+  treated as aggregate-local.
+- Non-local value-position vars remain correlated outer dependencies; if absent
+  from the row/prefix env, the atom is `NotReached`.
+- Repr rendering recognizes aggregate terms and emits stable friendly text such
+  as `sum of amount`.
+
+Evidence:
+
+- `NativeAggregateExplainConformanceTests`: `8 OK`.
+- `tests.application.explain.test_prober` + native conformance: `33 OK`.
+- Broader explain/schema/adapter cohort: `143 OK`.
+- Aggregate DSL/eval/adapter cohort: `50 OK`.
+- `examples/explain_layer_demo.py` runs coherently.
+
+Gate status: implementation-side PASS; ready for reviewer independent gate.
