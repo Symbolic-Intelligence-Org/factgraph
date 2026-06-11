@@ -289,7 +289,6 @@ def render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Ma
                 code="INVALID_ENTITY_IDENTITY",
                 path=("entities", entity_type, "identity_fields"),
             )
-        first_identity = entity.identity_fields[0].name
         field = entity.identity_fields[0]
         return f"{entity_type} {_identity_value_text(identity_values, entity_type=entity_type, field_name=field.name, type_domain=field.type_domain)}"
 

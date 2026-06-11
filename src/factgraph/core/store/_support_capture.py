@@ -11,7 +11,6 @@ from factgraph.core.rules.where_eval import (
     _coerce_cmp_int,
     _exists_not_body,
     _normalize_not_body,
-    _resolve,
     _resolve_eval_term,
     _where_ast_gate_enabled,
 )

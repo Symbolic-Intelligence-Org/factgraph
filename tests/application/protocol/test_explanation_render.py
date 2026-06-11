@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from factgraph.application.protocol import BOOLEAN_CERTAINTY, ErrorDTO, EvaluateRow, Explanation, walk_evidence
+from factgraph.application.protocol import BOOLEAN_CERTAINTY, ErrorDTO, EvaluateRow, Explanation
 from factgraph.application.explain.evidence_tree import (
     EvidenceGraph,
     EvidenceRule,

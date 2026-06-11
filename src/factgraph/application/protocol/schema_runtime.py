@@ -6,6 +6,7 @@ from typing import TypeAlias
 from .common import (
     JSONValue,
     ProtocolShapeError,
+    _require_bool,
     _require_non_empty_str,
     _require_optional_non_empty_str,
     _validate_json_mapping,

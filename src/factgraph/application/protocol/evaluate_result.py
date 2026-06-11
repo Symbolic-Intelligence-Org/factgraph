@@ -29,7 +29,6 @@ from factgraph.core.rules.where_ast import CmpAtom, Const, PredAtom
 from factgraph.core.semantics.profile import SemanticsProfile
 from factgraph.core.store.database import view_digest_for
 from factgraph.core.store._support import (
-    PROBLOG_PROVENANCE_KIND,
     SOUFFLE_WITNESS_KIND,
     ProvenanceEnvelope,
     ProofReceipt,
