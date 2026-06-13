@@ -575,6 +575,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 self.assertEqual(request.engine, engine)
                 self.assertEqual(request.plans[0].engine_options, {})
 
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
     def test_souffle_row_explain_uses_diagnostic_projection_before_support_artifact(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "souffle")
@@ -806,6 +807,7 @@ Person:exists({encoded}):\t0.73
         assert explanation.evidence is not None
         self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
 
+    @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
     def test_problog_row_explain_uses_diagnostic_projection_before_trace_converter(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "problog-projection")
