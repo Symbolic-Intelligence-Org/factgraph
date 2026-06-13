@@ -245,6 +245,21 @@ def _bound_from_fact_text(fact_text: str) -> tuple[float, float] | None:
         return None
 
 
+def _validate_pyreason_fact_components(fact_text: str) -> None:
+    open_idx = fact_text.find("(")
+    close_idx = fact_text.find(")", open_idx + 1)
+    if open_idx < 0 or close_idx < 0:
+        return
+    raw_components = fact_text[open_idx + 1:close_idx]
+    for component in (part.strip() for part in raw_components.split(",")):
+        if ":" in component:
+            raise ValueError(
+                "PyReason adapter cannot register fact components containing ':' "
+                f"({component!r}); encoded idref_v1 values conflict with PyReason fact syntax. "
+                "Use a Form 2/PyReason-safe projection without colon-bearing idrefs."
+            )
+
+
 def _bounded_node_seed_descriptors(
     session: PyReasonSession,
     *,
@@ -388,6 +403,7 @@ def run_pyreason(
                 pr.add_rule(pr.Rule(body_str, name_str))
 
             for fact_text, name_str, start_time, end_time in all_facts:
+                _validate_pyreason_fact_components(fact_text)
                 pr.add_fact(pr.Fact(fact_text, name_str, start_time, end_time))
 
             pr.settings.atom_trace = config.atom_trace

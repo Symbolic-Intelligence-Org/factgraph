@@ -18,7 +18,7 @@ from factgraph.application.explain.evidence_tree import (
 )
 from factgraph.application.protocol.common import ErrorDTO, ProtocolShapeError, WarningDTO
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
-from factgraph.application.protocol.explanation_render import walk_evidence
+from factgraph.application.protocol.explanation_render import narrate_evidence, walk_evidence
 from factgraph.application.protocol.rule import Rule, _is_projection_rule
 from factgraph.application.protocol.rule_expr import RuleExprError
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
@@ -278,6 +278,7 @@ class Explanation:
     errors: tuple[ErrorDTO, ...] = ()
     warnings: tuple[WarningDTO, ...] = ()
     _repr_cache: tuple[str, ...] | None = field(default=None, init=False, repr=False, compare=False, hash=False)
+    _narrate_cache: tuple[str, ...] | None = field(default=None, init=False, repr=False, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         if self.status not in _EXPLANATION_STATUSES:
@@ -332,6 +333,16 @@ class Explanation:
         assert self.evidence is not None
         lines = walk_evidence(self.evidence, row=self.row, status=self.status, failure_class=self.failure_class)
         object.__setattr__(self, "_repr_cache", lines)
+        return lines
+
+    def narrate(self) -> tuple[str, ...] | None:
+        if self.status in {"unsupported", "invalid_request"}:
+            return None
+        if self._narrate_cache is not None:
+            return self._narrate_cache
+        assert self.evidence is not None
+        lines = narrate_evidence(self.evidence, row=self.row, status=self.status, failure_class=self.failure_class)
+        object.__setattr__(self, "_narrate_cache", lines)
         return lines
 
 

@@ -117,6 +117,7 @@ class EvidenceRule:
     rule_id: str
     role: RuleRole
     status: TreeStatus
+    repr_text: str | None = None
     ports: Mapping[str, Any] = dc_field(default_factory=dict)
     atoms: tuple[EvidenceAtom, ...] = ()
 
@@ -263,6 +264,7 @@ def _rule_to_dict(rule: EvidenceRule) -> dict[str, Any]:
         "rule_id": rule.rule_id,
         "role": rule.role,
         "status": rule.status,
+        "repr_text": rule.repr_text,
         "ports": _to_jsonable(rule.ports),
         "atoms": [_atom_to_dict(atom) for atom in rule.atoms],
     }
@@ -279,6 +281,7 @@ def _rule_from_dict(row: Any) -> EvidenceRule:
         rule_id=_require_str(row.get("rule_id"), "rule.rule_id"),
         role=_require_role(row.get("role")),
         status=_require_tree_status(row.get("status"), "rule.status"),
+        repr_text=_optional_str(row.get("repr_text"), "rule.repr_text"),
         ports=_require_mapping(row.get("ports", {}), "rule.ports"),
         atoms=tuple(_atom_from_dict(atom) for atom in raw_atoms),
     )

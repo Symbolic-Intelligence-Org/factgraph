@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from itertools import combinations
+from itertools import combinations, product
 from typing import Iterable, Literal, NoReturn
 
 from factgraph._sdk_errors import SDKDSLError
@@ -112,7 +112,10 @@ class _AndGroup(_RuleExpr):
 
     def join_by_ports(self, *explicit_names: str) -> _AndGroup:
         constraints = _expand_join_by_ports(self, explicit_names)
-        return self.join(*constraints)
+        _validate_join_constraint_shapes(constraints)
+        merged = _normalize_join_constraints((*self.joins, *constraints))
+        _validate_join_reach(self, merged)
+        return _AndGroup(self.children, merged)
 
 
 @dataclass(frozen=True, eq=False)
@@ -254,30 +257,57 @@ def _validate_join_by_port_names(explicit_names: tuple[str, ...]) -> None:
 
 def _expand_join_by_ports(group: _AndGroup, explicit_names: tuple[str, ...]) -> tuple[RuleJoinConstraint, ...]:
     _validate_join_by_port_names(explicit_names)
-    reachable = tuple(_reachable_operands(group).values())
     issues: list[str] = []
     constraints: list[RuleJoinConstraint] = []
 
     for name in explicit_names:
-        refs = tuple(_port_refs_for_name(reachable, name))
-        if not refs:
+        child_ref_branches = tuple(_port_ref_branches_for_name(child, name) for child in group.children)
+        participating = tuple(
+            branches for branches in child_ref_branches if branches and all(branch for branch in branches)
+        )
+        any_refs = any(branch for branches in child_ref_branches for branch in branches)
+        if not any_refs:
             issues.append(f"port {name!r} is not present on any direct AND occurrence")
-        elif len(refs) == 1:
+        elif len(participating) < 2:
             issues.append(f"port {name!r} is present on fewer than two direct AND occurrences")
         else:
-            constraints.extend(left.eq(right) for left, right in combinations(refs, 2))
+            constraints.extend(_join_constraints_for_port_ref_branches(participating))
 
     if issues:
         raise RuleExprError("RuleExpr.join_by_ports validation failed: " + "; ".join(sorted(issues)))
     return tuple(constraints)
 
 
-def _port_refs_for_name(operands: tuple[_RuleOperand, ...], name: str) -> tuple[RulePortRef, ...]:
-    refs: list[RulePortRef] = []
-    for operand in operands:
-        if name in operand.rule.ports:
-            refs.append(operand.rule.as_(operand.alias).port(name))
-    return tuple(refs)
+def _join_constraints_for_port_ref_branches(
+    participating: tuple[tuple[tuple[RulePortRef, ...], ...], ...],
+) -> tuple[RuleJoinConstraint, ...]:
+    constraints: list[RuleJoinConstraint] = []
+    for branch_product in product(*participating):
+        for left_refs, right_refs in combinations(branch_product, 2):
+            constraints.extend(left.eq(right) for left in left_refs for right in right_refs)
+    return tuple(_normalize_join_constraints(constraints))
+
+
+def _port_ref_branches_for_name(expr: _RuleExpr, name: str) -> tuple[tuple[RulePortRef, ...], ...]:
+    if isinstance(expr, _RuleOperand):
+        if name in expr.rule.ports:
+            return ((expr.rule.as_(expr.alias).port(name),),)
+        return ((),)
+    if isinstance(expr, _AndGroup):
+        child_branches = tuple(_port_ref_branches_for_name(child, name) for child in expr.children)
+        branches: list[tuple[RulePortRef, ...]] = []
+        for branch_product in product(*child_branches):
+            refs: list[RulePortRef] = []
+            for branch in branch_product:
+                refs.extend(branch)
+            branches.append(tuple(refs))
+        return tuple(branches)
+    if isinstance(expr, _OrGroup):
+        branches: list[tuple[RulePortRef, ...]] = []
+        for child in expr.children:
+            branches.extend(_port_ref_branches_for_name(child, name))
+        return tuple(branches)
+    return ((),)
 
 
 def _validate_join_constraint_shapes(constraints: tuple[RuleJoinConstraint, ...]) -> None:
@@ -310,8 +340,8 @@ def _validate_join_reach(group: _AndGroup, constraints: tuple[RuleJoinConstraint
 def _reachable_operands(group: _AndGroup) -> dict[tuple[str, str], _RuleOperand]:
     reachable: dict[tuple[str, str], _RuleOperand] = {}
     for child in group.children:
-        if isinstance(child, _RuleOperand):
-            reachable[(child.alias, child.rule.id)] = child
+        for operand in _iter_rule_operands(child):
+            reachable[(operand.alias, operand.rule.id)] = operand
     return reachable
 
 

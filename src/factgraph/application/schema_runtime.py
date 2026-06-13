@@ -312,6 +312,49 @@ def render_entity_repr(index: SchemaIndex, entity_type: str, identity_values: Ma
     return _REPR_PLACEHOLDER_RE.sub(replace_placeholder, entity.meta_repr)
 
 
+def display_value(
+    index: SchemaIndex | None,
+    value: Any,
+    *,
+    entity_identity_resolver: object | None = None,
+) -> Any:
+    """Return the presentation value for schema-aware bindings.
+
+    Entity refs are rendered through ``render_entity_repr`` when their identity
+    can be recovered. Non-entity values are returned unchanged so digest and
+    evaluation surfaces never depend on this display helper.
+    """
+
+    if index is None:
+        return value
+    if isinstance(value, EntityRef):
+        try:
+            return render_entity_repr(index, value.entity_type, value.identity)
+        except Exception:
+            return value.encoded_ref or value
+    if isinstance(value, Mapping):
+        identity = value.get("identity")
+        entity_type = value.get("entity_type")
+        if isinstance(entity_type, str) and isinstance(identity, Mapping):
+            try:
+                return render_entity_repr(index, entity_type, identity)
+            except Exception:
+                return value
+    if isinstance(value, str):
+        entity_type = entity_type_from_ref(value)
+        if entity_type is None:
+            return value
+        resolver = entity_identity_resolver
+        if callable(resolver):
+            try:
+                identity = resolver(entity_type, value, index)
+                if isinstance(identity, Mapping):
+                    return render_entity_repr(index, entity_type, identity)
+            except Exception:
+                return value
+    return value
+
+
 def _identity_value_text(
     identity_values: Mapping[str, Any],
     *,
@@ -563,6 +606,7 @@ __all__ = [
     "encode_entity_ref",
     "entity_info",
     "entity_type_from_ref",
+    "display_value",
     "field_predicate",
     "field_value_type",
     "materialize_identity",

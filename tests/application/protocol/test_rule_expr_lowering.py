@@ -155,6 +155,71 @@ class RuleExprLoweringPlanTests(unittest.TestCase):
         self.assertEqual(tuple(branch.branch_id for branch in plan.branches), ("c0", "c1"))
         self.assertEqual(tuple(branch.occurrence_aliases for branch in plan.branches), (("a", "b"), ("c",)))
 
+    def test_nested_and_or_normalizes_to_dnf_with_branch_local_aliases_and_joins(self) -> None:
+        a = Rule(id="a", when=(PredAtom("A", [Var("$u")]),), ports={"user": Var("$u")})
+        b = Rule(id="b", when=(PredAtom("B", [Var("$u")]),), ports={"user": Var("$u")})
+        c = Rule(id="c", when=(PredAtom("C", [Var("$u")]),), ports={"user": Var("$u")})
+        d = Rule(id="d", when=(PredAtom("D", [Var("$u")]),), ports={"user": Var("$u")})
+        expr = (((a.as_("a") & b.as_("b")).join_by_ports("user") | c.as_("c")) & d.as_("d")).join_by_ports(
+            "user"
+        )
+
+        plan = _lower_rule_expr(expr, head=Rule.projection("user"))
+
+        self.assertEqual(tuple(branch.branch_id for branch in plan.branches), ("c0", "c1"))
+        self.assertEqual(
+            tuple(branch.occurrence_aliases for branch in plan.branches),
+            (("a", "b", "d__c0"), ("c", "d__c1")),
+        )
+        self.assertEqual(tuple(occ.alias for occ in plan.occurrence_map), ("a", "b", "c", "d__c0", "d__c1"))
+        joins = [
+            {(join.left.occurrence_alias, join.right.occurrence_alias) for join in branch.pending_joins}
+            for branch in plan.branches
+        ]
+        self.assertEqual(joins[0], {("a", "b"), ("a", "d__c0"), ("b", "d__c0")})
+        self.assertEqual(joins[1], {("c", "d__c1")})
+
+    def test_nested_cross_product_normalizes_to_four_branches(self) -> None:
+        rules = [
+            Rule(id=name, when=(PredAtom(name, [Var("$u")]),), ports={"user": Var("$u")})
+            for name in ("x", "y", "z", "w")
+        ]
+        x, y, z, w = rules
+        expr = (x.as_("x") | y.as_("y")) & (z.as_("z") | w.as_("w"))
+
+        plan = _lower_rule_expr(expr, head=Rule.projection("user"))
+
+        self.assertEqual(len(plan.branches), 4)
+        self.assertEqual(
+            {frozenset(branch.occurrence_aliases) for branch in plan.branches},
+            {
+                frozenset(("x__c0", "z__c0")),
+                frozenset(("x__c1", "w__c1")),
+                frozenset(("y__c2", "z__c2")),
+                frozenset(("y__c3", "w__c3")),
+            },
+        )
+
+    def test_nested_dnf_branch_limit_reports_expansion_size(self) -> None:
+        expr = None
+        for idx in range(6):
+            left = Rule(
+                id=f"left_{idx}",
+                when=(PredAtom(f"L{idx}", [Var("$u")]),),
+                ports={"user": Var("$u")},
+            )
+            right = Rule(
+                id=f"right_{idx}",
+                when=(PredAtom(f"R{idx}", [Var("$u")]),),
+                ports={"user": Var("$u")},
+            )
+            pair = left.as_(f"left_{idx}") | right.as_(f"right_{idx}")
+            expr = pair if expr is None else expr & pair
+        assert expr is not None
+
+        with self.assertRaisesRegex(RuleExprError, "produced 33 branches; maximum supported is 32"):
+            _lower_rule_expr(expr, head=Rule.projection("user"))
+
 
 class RuleExprJoinMaterializationTests(unittest.TestCase):
     def test_join_materializes_to_eq_atom_after_body_atoms(self) -> None:

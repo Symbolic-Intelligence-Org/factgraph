@@ -160,6 +160,7 @@ def export_package(
             schema_ir=store.schema_ir,
             where=where,
             query_rel=query_rel,
+            query_variables=query.get("query_variables"),
             include_pred_witness_columns=bool(query.get("include_pred_witness_columns")),
             registry=registry,
         )
