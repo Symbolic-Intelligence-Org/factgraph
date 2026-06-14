@@ -47,7 +47,7 @@ skip_empty = true
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["osx-arm64"]
+platforms = ["osx-arm64", "linux-64"]
 
 [tool.pixi.pypi-dependencies]
 factgraph = { path = ".", editable = true }
