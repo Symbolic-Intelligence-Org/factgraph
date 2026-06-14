@@ -1,158 +1,52 @@
-# factgraph
+# FactGraph
 
-**Append-only fact substrate and auditable reasoning kernel.**
+FactGraph is a Python library for building auditable, explainable knowledge and reasoning systems.
 
-The v0.2 open-source / PyPI surface is the `factgraph` package. It provides:
+It provides a structured way to store entities, facts, assertions, rules, provenance, and derived conclusions in a versioned graph. The goal is to make AI-assisted reasoning inspectable: what was known, what was inferred, which rule produced a result, and what evidence supports it.
 
-- an append-only fact ledger and field/assertion write semantics
-- the canonical Python runtime authority: `factgraph.application`
-- the Python product surface: `factgraph.sdk`
-- rule / inference authoring, evaluation, and runtime adapters
-- audit package reader, query, DTO, and evidence graph surfaces
-
-The v0.2 public source and PyPI wheel are scoped to the FactGraph package
-surface. LLM extraction, HTTP delivery, domain bundles, and other companion
-surfaces are not part of the `factgraph` release.
-
-> **Package rename in v0.2.0-rc.1**
->
-> The PyPI package was renamed from `factpy-kernel` to `factgraph`. The Python
-> import path is already `factgraph.*`, so user code imports do not change.
-> Migrate an existing environment with:
->
-> ```bash
-> pip uninstall factpy-kernel
-> pip install factgraph
-> ```
-
-For implementation architecture, see the module documentation links below.
-
-## Install
-
-After release:
+## Installation
 
 ```bash
 pip install factgraph
 ```
 
-Use the kernel from source:
-
-```bash
-git clone <repo-url>
-cd hnsm-backend
-pip install -e .
-```
-
-## Quickstart
+## Basic usage
 
 ```python
-from factgraph.sdk import Entity, Field, Identity, FactGraph
+from factgraph.sdk import Entity, FactGraph
 
 
-class User(Entity):
-    user_id: str = Identity(primary_key=True)
-    name: str = Field(cardinality="single")
+class Person(Entity):
+    person_id: str
+    mother: tuple[str, ...] = ()
+    father: tuple[str, ...] = ()
 
 
-fg = FactGraph.create(schema_classes=[User])
+fg = FactGraph.create(
+    path="workspace",
+    schema_classes=[Person],
+)
 
-alice = fg.read.ref(User, user_id="u-1")
-fg.write.set(User.name, alice, "Alice")
+ann = fg.entities.create(Person, person_id="ann")
+fg.fields.add(Person.mother, ann, "amy")
 
-snapshot = fg.read.get(User, user_id="u-1")
-print(snapshot.name)  # Alice
+fg.save_workspace()
 ```
 
-`FactGraph` is the v0.2 SDK top-level entrypoint. Its taxonomy namespaces
-(`schema` / `read` / `write` / `rules` / `inferences` / `eval` / `audit` /
-`package` / `views`) teach the conceptual layering at first contact.
+## Core ideas
 
-`factgraph.sdk` is the user-facing Python product surface. Runtime authority
-lives in `factgraph.application`; the SDK adapts ergonomic APIs, schema/DSL
-authoring, snapshots, batches, editors, and compatibility errors into the
-application runtime contract.
+FactGraph is built around a few core concepts:
 
-## Choose Your Layer
+* entities: typed objects in the graph
+* assertions: auditable claims about entities
+* provenance: where a claim came from
+* rules: logic used to derive new claims
+* explanations: evidence for why a result holds
 
-| Scenario | Recommended entry | Why |
-|---|---|---|
-| Human-authored Python product code defining `Entity` / `Field` and evaluating rules | `factgraph.sdk` | Provides descriptors, DSL sugar, snapshots, batches, editors, and user-facing exceptions |
-| Automation process / wire protocol receiving JSON-like requests | `factgraph.application` protocol + executor | Accepts SDK-independent DTOs and does not require SDK `Field` descriptors or Python DSL objects |
-| Lowest-level ledger / evidence / rule primitives | `factgraph.core` | Intended for runtime implementers, not as the normal user entrypoint |
-| Reading an exported audit package | `factgraph.audit` | Offline reader/query/DTO/evidence consumer surface |
+## Status
 
-## v0.2 Public Boundary
+FactGraph is under active development. APIs may still change before a stable 1.0 release.
 
-| Tier | Surface | Commitment |
-|---|---|---|
-| Product public | `factgraph.sdk` | Ergonomic API and outward compatibility surface for human-authored Python product code. |
-| Advanced importable | `factgraph.application`, `factgraph.audit` | Runtime/query authority for automation, wire bridges, and audit consumers; importable directly, but not an SDK ergonomic facade. |
-| Out of v0.2 package | service, agent, domains, internal workflow docs, tutorials, notebooks | Not part of the `factgraph` v0.2 wheel or public source surface. |
-
-T5/T11 narrowed the v0.2 product surface around `FactGraph`, `Rule` /
-`RuleExpr`, `EvaluateResult`, evidence/explanation envelopes, Database attach,
-durable views, and property-style assertion records. Legacy candidate accept,
-direct check/diagnose/why-not shells, and method-level `view=` are not part of
-the v0.2 public SDK path.
-
-## Kernel Surface
-
-| Area | Entry | Notes |
-|---|---|---|
-| SDK product API | `factgraph.sdk` | Entity / Field / Identity / FactGraph / Rule / RuleExpr / Inference / Database user entrypoints |
-| Runtime authority | `factgraph.application` | read/write/evaluate protocol DTOs and executors |
-| Core primitives | `factgraph.core` | ledger, rules, evidence, store, Database/view identity, low-level semantics |
-| Authoring | `factgraph.authoring` | rule/schema authoring helpers and validation surfaces |
-| Adapters | `factgraph.adapters` | optional engine integration surfaces, depending on installed third-party engines |
-| Audit | `factgraph.audit` | exported audit package reader/query/DTO/evidence graph consumer contract |
-
-Current implementation docs:
-
-- [src/factgraph/sdk/docs/README.md](src/factgraph/sdk/docs/README.md)
-- [src/factgraph/application/docs/README.md](src/factgraph/application/docs/README.md)
-- [src/factgraph/core/docs/01_architecture.en.md](src/factgraph/core/docs/01_architecture.en.md)
-- [src/factgraph/audit/docs/README.md](src/factgraph/audit/docs/README.md)
-- [src/factgraph/adapters/docs/README.md](src/factgraph/adapters/docs/README.md)
-- [src/factgraph/authoring/docs/README.md](src/factgraph/authoring/docs/README.md)
-
-## Audit And Optional Domains
-
-`factgraph.audit` reads exported audit packages and provides offline queries for
-runs, candidates, rule traces, evidence graphs, and related DTOs.
-
-Domain packages are not required capabilities of the `factgraph` wheel. Optional
-domain integrations remain outside the release surface.
-
-## Tests
-
-Release-focused G7 preservation gate:
-
-```bash
-PYTHONPATH=src python -m unittest \
-  tests.application.protocol.test_rule \
-  tests.application.protocol.test_rule_expr \
-  tests.sdk.test_ruleexpr_inspect \
-  tests.sdk.test_rule_naming \
-  tests.application.protocol.test_rule_aggregate \
-  tests.test_branch_identity_rule_inspect \
-  tests.application.protocol.test_rule_expr_lowering \
-  tests.application.protocol.test_rule_expr_lowering_adapter \
-  tests.sdk.test_rule_expr_evaluate \
-  tests.application.protocol.test_rule_expr_head_validation
-```
-
-Focused assertion-access gate:
-
-```bash
-PYTHONPATH=src python -m unittest tests.test_sdk_assertion_record_set_view_filters
-```
-
-The current release suite baseline is tracked by CI and blueprint audit records;
-local environments may show additional environment-only errors for optional
-adapters or cold-start import order.
-
-## License And Security
+## License
 
 This project is licensed under the Apache License 2.0; see [LICENSE](LICENSE).
-
-Secret handling and API key rotation: [docs/SECURITY.md](docs/SECURITY.md).
