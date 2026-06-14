@@ -20,9 +20,8 @@ jobs:
 
             - uses: prefix-dev/setup-pixi@v0.9.5
               with:
-                  cache: false # just for testing
-                  # environments: >-
-                  #   release
+                manifest-path: pyproject.toml
+                cache: false
 
             - run: pixi run build
 
