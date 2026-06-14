@@ -184,7 +184,7 @@ Behavior reference:
 - **No `%` escape**. A `%` followed by anything other than an identifier start is `RuleValidationError: repr contains malformed percent port interpolation`. This means `repr="50% off for %user"` is rejected (the `%5` is malformed), and there is **no `%%` escape** for a literal percent sign — `repr="100%% literal"` raises the same error.
 - **`render_repr(bindings)`**: `bindings` may be `None` (treated as `{}`) or a `Mapping[str, Any]`. Placeholders without a binding render as `<portname>`. Extra keys not referenced by any placeholder are silently ignored.
 
-**Where `repr` is consumed.** `repr` is an author-controlled label — the evaluation runtime does **not** automatically render it. It does **not** appear in `EvaluateRow` or `Explanation` payloads (those are covered in [`evaluate_and_evidence.md`](evaluate_and_evidence.md); the *schema* `repr` templates that drive explanation atom text are a separate feature, [`schema_definition.md`](schema_definition.md) §1.8). Four actual consumption points:
+**Where `repr` is consumed.** `repr` is an author-controlled label — the evaluation runtime does **not** automatically render it. It does **not** appear in `EvaluateRow` or in the structured `Explanation.repr` (those are covered in [`evaluate_and_evidence.md`](evaluate_and_evidence.md)) — though the additive `Explanation.narrate()` surface *does* render head/rule `repr` (see `evaluate_and_evidence.md` §4.5); the *schema* `repr` templates that drive explanation atom text are a separate feature, [`schema_definition.md`](schema_definition.md) §1.8. Four actual consumption points:
 
 1. `rule.render_repr(bindings)` — the per-rule render shown above.
 2. `fg.rules.inspect(rule_or_expr).render(bindings)` — `RuleExprInspect.render(...)` composes the AST, each occurrence's rendered repr, and the joins into a one-line summary. With more than one occurrence of the same rule, use `alias.portname` qualified keys to disambiguate same-named ports:
@@ -286,7 +286,21 @@ RuleExpr.all(r1, r2, r3)         # AND factory (≥ 2 operands)
 RuleExpr.any(r1, r2, r3)         # OR factory  (≥ 2 operands)
 ```
 
-The result of any of these is again a `RuleExpr`, so the operators chain.
+The result of any of these is again a `RuleExpr`, so the operators chain. Nested
+composition is accepted: before evaluation, the application lowers nested
+`AND`/`OR` trees to an OR-of-AND normal form. For example, `(a | b) & (c | d)`
+evaluates as the four branches `(a & c) | (a & d) | (b & c) | (b & d)`.
+Native, ProbLog, and Souffle evaluation all project adapter answers to the
+declared `head=` ports; branch-local variables from sibling OR branches are
+existential implementation detail, not result columns.
+
+The normalizer has two guardrails:
+
+- If the same occurrence would be copied into multiple expanded branches, the
+  copied aliases are made branch-local automatically. User-authored duplicate
+  aliases that already collide before normalization still raise `RuleExprError`.
+- Expansion is capped at 32 branches. Larger products raise `RuleExprError`
+  instead of silently generating a very large query.
 
 ### 3.2 Occurrence + alias
 
@@ -326,15 +340,17 @@ Pieces:
 - `_AndGroup.join(*constraints)` attaches one or more constraints to the AND group
 - `_AndGroup.join_by_ports(*names)` is the same but binds every named port across all occurrences in the group
 
-`_OrGroup` rejects `.join(...)` and `.join_by_ports(...)`. Distribute the join into each branch:
+`_OrGroup` rejects `.join(...)` and `.join_by_ports(...)`. Put the join on an
+`AND` expression. If that `AND` contains nested `OR` children, the normalizer
+carries the join into each expanded branch as long as every branch exposes the
+joined port.
 
 ```python
 # Wrong — RuleExprError:
-((r1.as_("a") | r2.as_("b")) & r3).join(constraint)
+((r1.as_("a") | r2.as_("b"))).join(constraint)
 
-# Right — join inside each AND:
-(((r1.as_("a") & r3).join(constraint))
- | ((r2.as_("b") & r3).join(constraint)))
+# Right — join on the surrounding AND; normalization distributes it:
+((r1.as_("a") | r2.as_("b")) & r3).join_by_ports("user")
 ```
 
 ### 3.4 `ExplicitBoolError`

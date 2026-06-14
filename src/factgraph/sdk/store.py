@@ -19,6 +19,8 @@ from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
 from factgraph.application.explain import EvidenceGraph, probe_native
+from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
+from factgraph.application.explain.diagnostic_projection import build_companion_program
 from factgraph.application.explain.evidence_tree import (
     Const,
     EvidenceAtom,
@@ -29,8 +31,15 @@ from factgraph.application.explain.evidence_tree import (
     LAYOUT_TREE,
     Source,
 )
-from factgraph.adapters.problog.provenance import problog_trace_from_dict, problog_trace_to_evidence_graph
+from factgraph.adapters.problog.provenance import (
+    ProbLogEvidenceContext,
+    problog_trace_from_dict,
+    problog_trace_to_evidence_graph,
+)
+from factgraph.adapters.problog.diagnostic_emit import emit_diagnostic_problog, run_diagnostic_problog
+from factgraph.adapters.problog.engine_eval import resolve_problog_timeout
 from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict, pyreason_trace_to_evidence_graph
+from factgraph.adapters.souffle.diagnostic_emit import run_diagnostic_souffle
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -50,6 +59,7 @@ from factgraph.application.protocol import (
     Rule as ApplicationRule,
     RuleExprError,
 )
+from factgraph.application.protocol.certainty import Certainty
 from factgraph.application.protocol.evaluate_result import (
     EvaluateResult,
     ResultFingerprint,
@@ -70,7 +80,7 @@ from factgraph.application.protocol.evaluate_result import (
     config_digest_for,
     view_snapshot_digest_for_parts,
 )
-from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
+from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand, _iter_rule_operands
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
@@ -82,7 +92,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _validate_rule_expr_head_foundation,
     probe_seed_vars_by_head_port,
 )
-from factgraph.application.schema_runtime import build_schema_index, entity_type_from_ref
+from factgraph.application.schema_runtime import build_schema_index, display_value, entity_type_from_ref
 from factgraph.authoring.derivations import compile_authoring_derivation_v1
 from factgraph.authoring.rules import compile_authoring_rule_v1
 from factgraph.core.derivation.candidates import CandidateSet
@@ -2696,6 +2706,7 @@ class SDKStore:
             raise SDKStoreError("evaluate(rule_expr, ...) expects application Rule or RuleExpr input")
 
         _validate_rule_expr_head_foundation(plan)
+        rules_by_id = _rule_expr_rules_by_id(source, head=head)
         engine, semantics_profile = self._resolve_public_engine_and_semantics(
             raw_engine,
             raw_config,
@@ -2726,7 +2737,8 @@ class SDKStore:
             head=head,
             engine=engine,
             semantics_profile=semantics_profile,
-            lowering_plan=plan if engine == "native" else None,
+            lowering_plan=plan if engine in {"native", "problog", "souffle"} else None,
+            lowering_rules_by_id=rules_by_id if engine in {"native", "problog", "souffle"} else None,
         )
 
     def _candidate_sets_to_evaluate_result(
@@ -2738,6 +2750,7 @@ class SDKStore:
         engine: str,
         semantics_profile: SemanticsProfile | None,
         lowering_plan: RuleExprLoweringPlan | None = None,
+        lowering_rules_by_id: Mapping[str, ApplicationRule] | None = None,
     ) -> EvaluateResult:
         run_id = new_run_id()
         expr_digest = expr_digest_for_payload(
@@ -2808,6 +2821,8 @@ class SDKStore:
                 _row_graph_builder=self._row_graph_builder_for_engine(
                     engine=engine,
                     lowering_plan=lowering_plan,
+                    lowering_rules_by_id=lowering_rules_by_id,
+                    semantics_profile=semantics_profile,
                     row_support_artifacts=row_support_artifacts,
                     row_provenance_envelopes=row_provenance_envelopes,
                 ),
@@ -2824,15 +2839,26 @@ class SDKStore:
         *,
         engine: str,
         lowering_plan: RuleExprLoweringPlan | None,
+        lowering_rules_by_id: Mapping[str, ApplicationRule] | None,
+        semantics_profile: SemanticsProfile | None,
         row_support_artifacts: Mapping[str, ProofReceipt],
         row_provenance_envelopes: Mapping[str, ProvenanceEnvelope],
     ):
         if engine == "native" and lowering_plan is not None:
-            return self._row_graph_builder_for_lowering_plan(lowering_plan)
+            return self._row_graph_builder_for_lowering_plan(lowering_plan, rules_by_id=lowering_rules_by_id or {})
         if engine == "souffle":
-            return self._souffle_row_graph_builder(row_support_artifacts)
+            return self._souffle_row_graph_builder(
+                row_support_artifacts,
+                lowering_plan=lowering_plan,
+                rules_by_id=lowering_rules_by_id or {},
+            )
         if engine == "problog":
-            return self._problog_row_graph_builder(row_provenance_envelopes)
+            return self._problog_row_graph_builder(
+                row_provenance_envelopes,
+                lowering_plan=lowering_plan,
+                rules_by_id=lowering_rules_by_id or {},
+                semantics_profile=semantics_profile,
+            )
         if engine == "pyreason":
             return self._pyreason_row_graph_builder(row_provenance_envelopes)
         return None
@@ -2840,6 +2866,8 @@ class SDKStore:
     def _row_graph_builder_for_lowering_plan(
         self,
         plan: RuleExprLoweringPlan,
+        *,
+        rules_by_id: Mapping[str, ApplicationRule],
     ):
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
             return self._probe_evidence_graph_for_lowering_plan(
@@ -2847,12 +2875,30 @@ class SDKStore:
                 result=result,
                 row=row,
                 metadata=metadata,
+                rules_by_id=rules_by_id,
             )
 
         return _builder
 
-    def _souffle_row_graph_builder(self, row_support_artifacts: Mapping[str, ProofReceipt]):
+    def _souffle_row_graph_builder(
+        self,
+        row_support_artifacts: Mapping[str, ProofReceipt],
+        *,
+        lowering_plan: RuleExprLoweringPlan | None,
+        rules_by_id: Mapping[str, ApplicationRule],
+    ):
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            if lowering_plan is not None:
+                try:
+                    return self._souffle_diagnostic_projection_graph(
+                        row=row,
+                        result=result,
+                        metadata=metadata,
+                        plan=lowering_plan,
+                        rules_by_id=rules_by_id,
+                    )
+                except Exception:
+                    pass
             artifact = row_support_artifacts.get(row.row_id)
             if artifact is None or artifact.kind != SOUFFLE_WITNESS_KIND:
                 return _build_minimal_row_evidence_graph(row, result, metadata)
@@ -2868,18 +2914,73 @@ class SDKStore:
 
         return _builder
 
-    def _problog_row_graph_builder(self, row_provenance_envelopes: Mapping[str, ProvenanceEnvelope]):
+    def _souffle_diagnostic_projection_graph(
+        self,
+        *,
+        row: Any,
+        result: EvaluateResult,
+        metadata: Mapping[str, Any],
+        plan: RuleExprLoweringPlan,
+        rules_by_id: Mapping[str, ApplicationRule],
+    ) -> EvidenceGraph:
+        companion = build_companion_program(plan, _public_bindings_for_row(row))
+        diagnostic_result = run_diagnostic_souffle(self._store, companion)
+        view_facts = project_view_facts(self.ledger, self._schema_ir)
+        display_bindings = self._display_bindings_for_row(row)
+        return diagnostic_problog_result_to_evidence_graph(
+            diagnostic_result,
+            plan=plan,
+            companion=companion,
+            graph_id=f"{result.result_id}:{row.row_id}",
+            engine=result.engine,
+            view_facts=view_facts,
+            schema_index=self._application_schema_index,
+            rules_by_id=rules_by_id or {plan.head.id: plan.head},
+            subject_binding=display_bindings,
+            metadata=metadata,
+            graph_certainty=row.certainty,
+            probabilistic=False,
+        )
+
+    def _problog_row_graph_builder(
+        self,
+        row_provenance_envelopes: Mapping[str, ProvenanceEnvelope],
+        *,
+        lowering_plan: RuleExprLoweringPlan | None,
+        rules_by_id: Mapping[str, ApplicationRule],
+        semantics_profile: SemanticsProfile | None,
+    ):
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
+            if lowering_plan is not None:
+                try:
+                    return self._problog_diagnostic_projection_graph(
+                        row=row,
+                        result=result,
+                        metadata=metadata,
+                        plan=lowering_plan,
+                        rules_by_id=rules_by_id,
+                        semantics_profile=semantics_profile,
+                    )
+                except Exception:
+                    pass
             envelope = row_provenance_envelopes.get(row.row_id)
             if envelope is None or envelope.engine != "problog" or envelope.payload_type != "proof_trace":
                 return _build_minimal_row_evidence_graph(row, result, metadata)
             try:
                 trace = problog_trace_from_dict(envelope.payload)
+                display_bindings = self._display_bindings_for_row(row)
                 graph = problog_trace_to_evidence_graph(
                     trace,
                     candidate_id=envelope.candidate_id,
                     candidate_payload=_legacy_candidate_payload_for_row_result(row, result),
                     support_kind=PROBLOG_PROVENANCE_KIND,
+                    context=ProbLogEvidenceContext(
+                        head_rule_id=result.head.id,
+                        head_repr_text=result.head.render_repr(display_bindings) or None,
+                        head_ports=display_bindings,
+                        subject_binding=display_bindings,
+                        input_certainty_for_goal=self._problog_input_certainty_for_goal,
+                    ),
                 )
                 return EvidenceGraph(
                     graph_id=f"{result.result_id}:{row.row_id}",
@@ -2894,6 +2995,78 @@ class SDKStore:
                 return _build_minimal_row_evidence_graph(row, result, metadata)
 
         return _builder
+
+    def _problog_diagnostic_projection_graph(
+        self,
+        *,
+        row: Any,
+        result: EvaluateResult,
+        metadata: Mapping[str, Any],
+        plan: RuleExprLoweringPlan,
+        rules_by_id: Mapping[str, ApplicationRule],
+        semantics_profile: SemanticsProfile | None,
+    ) -> EvidenceGraph:
+        companion = build_companion_program(plan, _public_bindings_for_row(row))
+        program_text = emit_diagnostic_problog(
+            self._store,
+            plan,
+            companion,
+            uncertainty_projection=None
+            if semantics_profile is None
+            else dict(semantics_profile.uncertainty_projection),
+        )
+        timeout = resolve_problog_timeout(None if semantics_profile is None else semantics_profile.engine_options)
+        diagnostic_result = run_diagnostic_problog(program_text, timeout=timeout)
+        view_facts = project_view_facts(self.ledger, self._schema_ir)
+        display_bindings = self._display_bindings_for_row(row)
+        graph = diagnostic_problog_result_to_evidence_graph(
+            diagnostic_result,
+            plan=plan,
+            companion=companion,
+            graph_id=f"{result.result_id}:{row.row_id}",
+            engine=result.engine,
+            view_facts=view_facts,
+            schema_index=self._application_schema_index,
+            rules_by_id=rules_by_id or {plan.head.id: plan.head},
+            subject_binding=display_bindings,
+            metadata=metadata,
+            graph_certainty=row.certainty,
+            input_certainty_for_goal=self._problog_input_certainty_for_goal,
+        )
+        return graph
+
+    def _display_bindings_for_row(self, row: Any) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for key, value in _public_bindings_for_row(row).items():
+            out[key] = self._display_binding_value(value)
+        return out
+
+    def _display_binding_value(self, value: Any) -> Any:
+        return display_value(
+            self._application_schema_index,
+            value,
+            entity_identity_resolver=self._identity_for_entity_ref_binding,
+        )
+
+    def _problog_input_certainty_for_goal(self, goal_name: str, goal_args: tuple[Any, ...]) -> Certainty | None:
+        if goal_name != "edb_fact" or len(goal_args) < 4:
+            return None
+        pred_id = _normalize_problog_goal_value(goal_args[1])
+        e_ref = _normalize_problog_goal_value(goal_args[2])
+        rest_values = tuple(_normalize_problog_goal_value(arg) for arg in goal_args[3:])
+        if not pred_id or not e_ref:
+            return None
+        for claim in reversed(self.ledger.find_claims(pred_id=pred_id, e_ref=e_ref)):
+            if self.ledger.has_active_revocation(claim.asrt_id):
+                continue
+            if not _claim_rest_terms_match_values(claim.rest_terms, rest_values):
+                continue
+            raw_kind = _claim_meta_value(self.ledger, claim.asrt_id, "raw_kind")
+            bound = _claim_meta_value(self.ledger, claim.asrt_id, "bound")
+            if raw_kind != "probabilistic" or not isinstance(bound, list) or len(bound) != 2:
+                return None
+            return Certainty(lo=float(bound[0]), hi=float(bound[1]), kind="probabilistic")
+        return None
 
     def _pyreason_row_graph_builder(self, row_provenance_envelopes: Mapping[str, ProvenanceEnvelope]):
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
@@ -2929,22 +3102,25 @@ class SDKStore:
         result: EvaluateResult,
         row: Any | None,
         metadata: Mapping[str, Any],
+        rules_by_id: Mapping[str, ApplicationRule] | None = None,
     ) -> EvidenceGraph:
         view_facts = project_view_facts(self.ledger, self._schema_ir)
         initial_bindings = _initial_probe_bindings_for_row(row, plan) if row is not None else {}
+        display_bindings = self._display_bindings_for_row(row) if row is not None else {}
         probed = probe_native(
             plan,
             initial_bindings,
             view_facts,
             schema_index=self._application_schema_index,
+            rules_by_id=rules_by_id or {plan.head.id: plan.head},
+            subject_binding=display_bindings,
         )
-        subject_binding = getattr(row, "bindings", {}) if row is not None else {}
         row_id = getattr(row, "row_id", "closed_head_false")
         return EvidenceGraph(
             graph_id=f"{result.result_id}:{row_id}",
             engine=result.engine,
             layout_hint="tree",
-            subject_binding=subject_binding,
+            subject_binding=display_bindings,
             paths=probed.paths,
             certainty=probed.certainty,
             metadata=dict(metadata),
@@ -4111,6 +4287,49 @@ def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dic
         public_value = _public_term_value(value)
         for seed_name in seed_names:
             out[seed_name] = public_value
+    return out
+
+
+def _public_bindings_for_row(row: Any) -> dict[str, Any]:
+    row_bindings = getattr(row, "bindings", None)
+    if not isinstance(row_bindings, Mapping):
+        return {}
+    return {str(port_name): _public_term_value(value) for port_name, value in row_bindings.items()}
+
+
+def _normalize_problog_goal_value(value: Any) -> str:
+    text = str(value).strip()
+    if len(text) >= 2 and ((text[0] == "'" and text[-1] == "'") or (text[0] == '"' and text[-1] == '"')):
+        return text[1:-1]
+    return text
+
+
+def _claim_rest_terms_match_values(rest_terms: Sequence[tuple[str, Any]], values: Sequence[str]) -> bool:
+    if len(rest_terms) != len(values):
+        return False
+    for (_tag, value), expected in zip(rest_terms, values, strict=True):
+        if str(value) != str(expected):
+            return False
+    return True
+
+
+def _claim_meta_value(ledger: Ledger, asrt_id: str, key: str) -> Any:
+    rows = ledger.find_meta(asrt_id=asrt_id, key=key)
+    if not rows:
+        return None
+    return rows[-1].value
+
+
+def _rule_expr_rules_by_id(source: Any, *, head: ApplicationRule) -> dict[str, ApplicationRule]:
+    out: dict[str, ApplicationRule] = {head.id: head}
+    try:
+        expr = _coerce_rule_expr_operand(source)
+    except RuleExprError:
+        if isinstance(source, ApplicationRule):
+            out[source.id] = source
+        return out
+    for operand in _iter_rule_operands(expr):
+        out[operand.rule.id] = operand.rule
     return out
 
 

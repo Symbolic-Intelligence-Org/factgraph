@@ -24,7 +24,7 @@ from factgraph.core.rules.where_ast import (
 from factgraph.core.store import Store
 
 from .derivation import CompiledDerivationPlan, CompiledHeadCall, DerivationEvaluateRequest
-from .rule import PortType, Rule, _is_projection_rule
+from .rule import PortType, Rule, RulePortRef, _is_projection_rule
 from .rule_expr import (
     RuleExprError,
     RuleJoinConstraint,
@@ -34,10 +34,18 @@ from .rule_expr import (
     _RuleOperand,
     _canonical_join_constraint,
     _coerce_rule_expr_operand,
+    _normalize_join_constraints,
 )
 
 RuleExprAdapterEngine = Literal["native", "souffle", "problog"]
 RuleExprAdapterRejectionSource = Literal["ruleexpr-join", "source-rule-grammar", "aggregate", "branch-shape"]
+_DNF_BRANCH_LIMIT = 32
+
+
+@dataclass(frozen=True)
+class _DNFBranch:
+    operands: tuple[_RuleOperand, ...]
+    joins: tuple[RuleJoinConstraint, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -309,6 +317,7 @@ def _lower_application_rule(rule: Rule, *, head: Rule) -> RuleExprLoweringPlan:
 def _lower_rule_expr(expr: _RuleExpr, *, head: Rule) -> RuleExprLoweringPlan:
     if not isinstance(expr, _RuleExpr):
         raise RuleExprError("expr must be RuleExpr")
+    expr = _normalize_to_dnf(expr)
     return _build_lowering_plan(expr, head=head, source_kind="rule_expr")
 
 
@@ -653,6 +662,122 @@ def _evaluate_rule_expr_native_for_tests(
     plan = _lower_rule_expr(expr, head=head)
     compiled, _traces = _materialize_native_derivation_plan(plan)
     return evaluate_derivation_plans(DerivationEvaluateRequest(plans=(compiled,), engine="native"), store=store)
+
+
+def _normalize_to_dnf(expr: _RuleExpr) -> _RuleExpr:
+    branches = _rewrite_dnf_aliases(_dnf_branches(expr))
+    if len(branches) == 1:
+        return _branch_to_expr(branches[0])
+    return _OrGroup(tuple(_branch_to_expr(branch) for branch in branches))
+
+
+def _dnf_branches(expr: _RuleExpr) -> tuple[_DNFBranch, ...]:
+    if isinstance(expr, _RuleOperand):
+        return (_DNFBranch(operands=(expr,)),)
+    if isinstance(expr, _OrGroup):
+        branches: list[_DNFBranch] = []
+        for child in expr.children:
+            branches.extend(_dnf_branches(child))
+            _validate_dnf_branch_count(len(branches))
+        return tuple(branches)
+    if isinstance(expr, _AndGroup):
+        child_branch_sets = tuple(_dnf_branches(child) for child in expr.children)
+        branches: list[_DNFBranch] = []
+        for branch_product in product(*child_branch_sets):
+            operands: list[_RuleOperand] = []
+            joins: list[RuleJoinConstraint] = []
+            for branch in branch_product:
+                operands.extend(branch.operands)
+                joins.extend(branch.joins)
+            aliases = {operand.alias for operand in operands}
+            joins.extend(_join for _join in expr.joins if _join_applies_to_aliases(_join, aliases))
+            branches.append(_DNFBranch(operands=tuple(operands), joins=_normalize_join_constraints(joins)))
+            _validate_dnf_branch_count(len(branches))
+        return tuple(branches)
+    raise RuleExprError(f"unsupported RuleExpr node: {type(expr).__name__}")
+
+
+def _validate_dnf_branch_count(count: int) -> None:
+    if count > _DNF_BRANCH_LIMIT:
+        raise RuleExprError(
+            f"RuleExpr DNF normalization produced {count} branches; maximum supported is {_DNF_BRANCH_LIMIT}"
+        )
+
+
+def _join_applies_to_aliases(join: RuleJoinConstraint, aliases: set[str]) -> bool:
+    return join.left.occurrence_alias in aliases and join.right.occurrence_alias in aliases
+
+
+def _rewrite_dnf_aliases(branches: tuple[_DNFBranch, ...]) -> tuple[_DNFBranch, ...]:
+    alias_counts: dict[str, int] = {}
+    for branch in branches:
+        for operand in branch.operands:
+            alias_counts[operand.alias] = alias_counts.get(operand.alias, 0) + 1
+    repeated = {alias for alias, count in alias_counts.items() if count > 1}
+    if not repeated:
+        return branches
+
+    used_aliases = {operand.alias for branch in branches for operand in branch.operands}
+    rewritten: list[_DNFBranch] = []
+    for branch_index, branch in enumerate(branches):
+        alias_map: dict[str, str] = {}
+        operands: list[_RuleOperand] = []
+        for operand in branch.operands:
+            alias = operand.alias
+            if alias in repeated:
+                alias = _generated_branch_alias(operand.alias, branch_index, used_aliases)
+                alias_map[operand.alias] = alias
+            operands.append(
+                _RuleOperand(
+                    rule=operand.rule,
+                    alias=alias,
+                    explicit_alias=True if operand.alias in repeated else operand.explicit_alias,
+                )
+            )
+        joins = tuple(_rewrite_join_aliases(join, alias_map) for join in branch.joins)
+        rewritten.append(_DNFBranch(operands=tuple(operands), joins=_normalize_join_constraints(joins)))
+    return tuple(rewritten)
+
+
+def _generated_branch_alias(alias: str, branch_index: int, used_aliases: set[str]) -> str:
+    candidate = f"{alias}__c{branch_index}"
+    if candidate not in used_aliases:
+        used_aliases.add(candidate)
+        return candidate
+    suffix = 1
+    while True:
+        alternate = f"{candidate}_{suffix}"
+        if alternate not in used_aliases:
+            used_aliases.add(alternate)
+            return alternate
+        suffix += 1
+
+
+def _rewrite_join_aliases(join: RuleJoinConstraint, alias_map: dict[str, str]) -> RuleJoinConstraint:
+    return RuleJoinConstraint(
+        left=_rewrite_join_endpoint(join.left, alias_map),
+        right=_rewrite_join_endpoint(join.right, alias_map),
+        op=join.op,
+    )
+
+
+def _rewrite_join_endpoint(ref: RulePortRef, alias_map: dict[str, str]) -> RulePortRef:
+    alias = alias_map.get(ref.occurrence_alias)
+    if alias is None:
+        return ref
+    return RulePortRef(
+        occurrence_alias=alias,
+        rule_id=ref.rule_id,
+        port_name=ref.port_name,
+        var=ref.var,
+        port_type=ref.port_type,
+    )
+
+
+def _branch_to_expr(branch: _DNFBranch) -> _RuleExpr:
+    if len(branch.operands) == 1 and not branch.joins:
+        return branch.operands[0]
+    return _AndGroup(children=branch.operands, joins=branch.joins)
 
 
 def _build_lowering_plan(expr: _RuleExpr, *, head: Rule, source_kind: Literal["rule", "rule_expr"]) -> RuleExprLoweringPlan:

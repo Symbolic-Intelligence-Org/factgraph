@@ -70,10 +70,7 @@ def export_problog(
     except ValueError as exc:
         raise ProbLogExportError(str(exc)) from exc
 
-    try:
-        query_vars = extract_where_variables(where)
-    except Exception as exc:
-        raise ProbLogExportError(f"failed to extract query variables: {exc}") from exc
+    query_vars = _query_vars_for_rule_spec(rule_spec, where=where)
 
     ctx = _CompileContext()
     compiled_bodies = [_compile_body(body, ctx=ctx) for body in bodies]
@@ -127,6 +124,27 @@ def export_problog(
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8", newline="\n")
+
+
+def _query_vars_for_rule_spec(rule_spec: dict[str, Any], *, where: list[Any]) -> list[str]:
+    raw = rule_spec.get("query_vars")
+    if raw is None:
+        raw = rule_spec.get("head_vars")
+    if raw is None:
+        try:
+            return extract_where_variables(where)
+        except Exception as exc:
+            raise ProbLogExportError(f"failed to extract query variables: {exc}") from exc
+    if not isinstance(raw, list):
+        raise ProbLogExportError("rule_spec.query_vars must be list")
+    out: list[str] = []
+    for item in raw:
+        if not isinstance(item, str) or not item.startswith("$"):
+            raise ProbLogExportError("rule_spec.query_vars must contain variable tokens")
+        out.append(item)
+    if not out:
+        raise ProbLogExportError("rule_spec.query_vars must be non-empty")
+    return out
 
 
 def _normalize_where_bodies(where: list[Any]) -> list[list[Any]]:
