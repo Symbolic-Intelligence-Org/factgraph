@@ -195,13 +195,13 @@ class ProbLogConfigProfileCoreEvaluateTests(unittest.TestCase):
         return "\n".join(
             [
                 " call query(X1,X2) {0.00000} []",
-                f'  result query(X1,X2) ("vip","{alice_ref}") {{{{}}}} {{0.00012}} []',
+                f'  result query(X1,X2) ("{alice_ref}","vip") {{{{}}}} {{0.00012}} []',
                 " complete query(X1,X2) {0.00013} {0.00013} []",
-                f' call answer("vip","{alice_ref}") {{0.00019}} [at 4:7]',
-                f'  result answer("vip","{alice_ref}") ("vip","{alice_ref}") {{{{}}}} {{0.00060}} []',
-                f' complete answer("vip","{alice_ref}") {{0.00061}} {{0.00042}} []',
+                f' call answer("{alice_ref}","vip") {{0.00019}} [at 4:7]',
+                f'  result answer("{alice_ref}","vip") ("{alice_ref}","vip") {{{{}}}} {{0.00060}} []',
+                f' complete answer("{alice_ref}","vip") {{0.00061}} {{0.00042}} []',
                 "",
-                f'answer("vip","{alice_ref}"):\t0.42',
+                f'answer("{alice_ref}","vip"):\t0.42',
             ]
         )
 
@@ -210,19 +210,19 @@ class ProbLogConfigProfileCoreEvaluateTests(unittest.TestCase):
         return "\n".join(
             [
                 " call query(X1,X2) {0.00000} []",
-                f'  result query(X1,X2) ("vip","{alice_ref}") {{{{}}}} {{0.00012}} []',
+                f'  result query(X1,X2) ("{alice_ref}","vip") {{{{}}}} {{0.00012}} []',
                 " complete query(X1,X2) {0.00013} {0.00013} []",
-                f' call answer("vip","{alice_ref}") {{0.00019}} [at 4:7]',
-                f'  call rule_body_0("vip","{alice_ref}") {{0.00020}} [at 3:1]',
+                f' call answer("{alice_ref}","vip") {{0.00019}} [at 4:7]',
+                f'  call rule_body_0("{alice_ref}","vip") {{0.00020}} [at 3:1]',
                 f'   call edb_fact(_, "user:tag_seed", "{alice_ref}", "vip") {{0.00021}} [at 2:1]',
                 f'    result edb_fact(_, "user:tag_seed", "{alice_ref}", "vip") ("{alice_ref}","vip") {{{{}}}} {{0.00022}} []',
                 f'   complete edb_fact(_, "user:tag_seed", "{alice_ref}", "vip") {{0.00023}} {{0.00002}} []',
-                f'   result rule_body_0("vip","{alice_ref}") ("vip","{alice_ref}") {{{{}}}} {{0.00024}} []',
-                f'  complete rule_body_0("vip","{alice_ref}") {{0.00025}} {{0.00005}} []',
-                f'  result answer("vip","{alice_ref}") ("vip","{alice_ref}") {{{{}}}} {{0.00060}} []',
-                f' complete answer("vip","{alice_ref}") {{0.00061}} {{0.00042}} []',
+                f'   result rule_body_0("{alice_ref}","vip") ("{alice_ref}","vip") {{{{}}}} {{0.00024}} []',
+                f'  complete rule_body_0("{alice_ref}","vip") {{0.00025}} {{0.00005}} []',
+                f'  result answer("{alice_ref}","vip") ("{alice_ref}","vip") {{{{}}}} {{0.00060}} []',
+                f' complete answer("{alice_ref}","vip") {{0.00061}} {{0.00042}} []',
                 "",
-                f'answer("vip","{alice_ref}"):\t0.42',
+                f'answer("{alice_ref}","vip"):\t0.42',
             ]
         )
 

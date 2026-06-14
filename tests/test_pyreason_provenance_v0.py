@@ -20,6 +20,7 @@ from factgraph.adapters.pyreason.provenance import (
     pyreason_trace_to_dict,
     pyreason_trace_to_evidence_graph,
 )
+from factgraph.adapters.pyreason.runner import _validate_pyreason_fact_components
 from factgraph.application.explain.evidence_tree import EvidenceGraph, EvidenceTimeline, LAYOUT_TIMELINE
 from factgraph.core.store._support import PYREASON_PROVENANCE_KIND
 
@@ -169,6 +170,12 @@ class PyReasonProvenanceV0Tests(unittest.TestCase):
         payload = pyreason_trace_to_dict(trace)
         self.assertEqual(payload["trace_type"], "event_log")
         self.assertNotEqual(payload["trace_type"], "proof_tree")
+
+    def test_pyreason_fact_guard_rejects_colon_bearing_idrefs(self) -> None:
+        with self.assertRaisesRegex(ValueError, "idref_v1.*Form 2"):
+            _validate_pyreason_fact_components("exists(idref_v1:User:u-1) : [1.0, 1.0]")
+
+        _validate_pyreason_fact_components("exists(User_u_1) : [1.0, 1.0]")
 
     def test_converter_builds_timeline_from_trace(self) -> None:
         trace = parse_pyreason_trace(

@@ -54,18 +54,6 @@ def evaluate_store_engine(
     from factgraph.adapters.souffle.runner import run_package
 
     query_rel = query_rel_for_where(where)
-    query_support_rows = _run_query_and_read_support_rows(
-        store=store,
-        out_dir_factory=lambda tmpdir: Path(tmpdir) / "engine_eval_pkg",
-        where=where,
-        query_rel=query_rel,
-        export_options=ExportOptions(),
-        run_package=run_package,
-        export_package=export_package,
-        root_result_kind="entity"
-        if isinstance(head, dict) and head.get("callee_kind") == "entity_type"
-        else "fact",
-    )
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         entity_spec = store_builders.entity_spec_from_head(
@@ -74,6 +62,7 @@ def evaluate_store_engine(
             head=head,
         )
         where_variables = extract_where_variables(where)
+        query_variables = list(entity_spec["head_vars"])
         missing_vars = [
             value
             for value in entity_spec["head_vars"]
@@ -82,6 +71,17 @@ def evaluate_store_engine(
         if missing_vars:
             raise WhereValidationError(f"head entity vars reference unbound where variables: {missing_vars}")
 
+        query_support_rows = _run_query_and_read_support_rows(
+            store=store,
+            out_dir_factory=lambda tmpdir: Path(tmpdir) / "engine_eval_pkg",
+            where=where,
+            query_variables=query_variables,
+            query_rel=query_rel,
+            export_options=ExportOptions(),
+            run_package=run_package,
+            export_package=export_package,
+            root_result_kind="entity",
+        )
         if query_support_rows is None:
             with tempfile.TemporaryDirectory() as tmpdir:
                 out_dir = Path(tmpdir) / "engine_eval_pkg"
@@ -89,7 +89,7 @@ def evaluate_store_engine(
                     store=store,
                     out_dir=out_dir,
                     where=where,
-                    where_variables=where_variables,
+                    query_variables=query_variables,
                     query_rel=query_rel,
                     export_options=ExportOptions(),
                     run_package=run_package,
@@ -127,6 +127,7 @@ def evaluate_store_engine(
         raise WhereValidationError("head_vars must be non-empty list")
 
     where_variables = extract_where_variables(where)
+    query_variables = list(head_vars)
     missing_vars = [
         value
         for value in head_vars
@@ -135,6 +136,17 @@ def evaluate_store_engine(
     if missing_vars:
         raise WhereValidationError(f"head_vars reference unbound where variables: {missing_vars}")
 
+    query_support_rows = _run_query_and_read_support_rows(
+        store=store,
+        out_dir_factory=lambda tmpdir: Path(tmpdir) / "engine_eval_pkg",
+        where=where,
+        query_variables=query_variables,
+        query_rel=query_rel,
+        export_options=ExportOptions(),
+        run_package=run_package,
+        export_package=export_package,
+        root_result_kind="fact",
+    )
     if query_support_rows is None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "engine_eval_pkg"
@@ -142,7 +154,7 @@ def evaluate_store_engine(
                 store=store,
                 out_dir=out_dir,
                 where=where,
-                where_variables=where_variables,
+                query_variables=query_variables,
                 query_rel=query_rel,
                 export_options=ExportOptions(),
                 run_package=run_package,
@@ -198,13 +210,14 @@ def _run_query_and_read_support_rows(
     store: Any,
     out_dir_factory: Any,
     where: list[Any],
+    query_variables: list[str],
     query_rel: str,
     export_options: Any,
     export_package: Any,
     run_package: Any,
     root_result_kind: str,
 ) -> list[BindingSupportCapture] | None:
-    witness_layout = build_query_witness_layout(where)
+    witness_layout = build_query_witness_layout(where, query_variables=query_variables)
     if not witness_layout.pred_witness_columns:
         return None
 
@@ -217,6 +230,7 @@ def _run_query_and_read_support_rows(
             query={
                 "where": where,
                 "query_rel": query_rel,
+                "query_variables": query_variables,
                 "include_pred_witness_columns": True,
             },
         )
@@ -250,7 +264,7 @@ def _run_query_and_read_bindings(
     store: Any,
     out_dir: Path,
     where: list[Any],
-    where_variables: list[str],
+    query_variables: list[str],
     query_rel: str,
     export_options: Any,
     export_package: Any,
@@ -263,6 +277,7 @@ def _run_query_and_read_bindings(
         query={
             "where": where,
             "query_rel": query_rel,
+            "query_variables": query_variables,
         },
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -281,7 +296,7 @@ def _run_query_and_read_bindings(
         raise WhereValidationError(f"engine evaluate failed with non-zero exit_code: {exit_code}")
 
     out_path = out_dir / "outputs" / f"{query_rel}.out.facts"
-    return _read_query_bindings(out_path, where_variables)
+    return _read_query_bindings(out_path, query_variables)
 
 
 def _read_query_bindings(out_path: Path, variables: list[str]) -> list[dict[str, Any]]:
@@ -396,6 +411,7 @@ def _build_support_rows_from_witness_rows(
         key=lambda row: row[0],
     ):
         artifact = _build_souffle_support_artifact(
+            store=store,
             where=where,
             binding_items=binding_items,
             root_result_kind=root_result_kind,
@@ -417,6 +433,7 @@ def _build_support_rows_from_witness_rows(
 
 def _build_souffle_support_artifact(
     *,
+    store: Any,
     where: list[Any],
     binding_items: BindingItems,
     root_result_kind: str,
@@ -425,14 +442,21 @@ def _build_souffle_support_artifact(
 ) -> ProofReceipt:
     binding = binding_dict_from_items(binding_items)
     witness_facts = _build_synthetic_witness_facts(
+        store=store,
         where=where,
         binding=binding,
         selected_case_index=selected_case_index,
         witness_ids_by_atom_key=witness_ids_by_atom_key,
     )
-    native_like = build_support_artifact_for_binding(
+    support_binding = _extend_binding_from_witness_facts(
         where=where,
         binding=binding,
+        selected_case_index=selected_case_index,
+        witness_facts=witness_facts,
+    )
+    native_like = build_support_artifact_for_binding(
+        where=where,
+        binding=support_binding,
         witness_facts=witness_facts,
         root_result_kind=root_result_kind,
         selected_case_index=selected_case_index,
@@ -451,6 +475,7 @@ def _build_souffle_support_artifact(
 
 def _build_synthetic_witness_facts(
     *,
+    store: Any,
     where: list[Any],
     binding: dict[str, Any],
     selected_case_index: int,
@@ -471,12 +496,80 @@ def _build_synthetic_witness_facts(
         asrt_ids = witness_ids_by_atom_key.get(pred_condition_key)
         if not asrt_ids:
             raise WhereValidationError(f"missing witness ids for selected predicate atom: {pred_condition_key}")
-        grounded_terms = _ground_terms(terms, binding)
         for asrt_id in sorted(asrt_ids):
+            projected = _projected_fact_from_claim(store, pred_id=pred_id, asrt_id=asrt_id)
+            if projected is None:
+                projected = ProjectedFact(
+                    asrt_id=asrt_id,
+                    fact_tuple=_ground_terms(terms, binding),
+                )
             witness_facts.setdefault(pred_id, []).append(
-                ProjectedFact(asrt_id=asrt_id, fact_tuple=grounded_terms)
+                projected
             )
     return witness_facts
+
+
+def _extend_binding_from_witness_facts(
+    *,
+    where: list[Any],
+    binding: dict[str, Any],
+    selected_case_index: int,
+    witness_facts: dict[str, list[ProjectedFact]],
+) -> dict[str, Any]:
+    branches = _normalize_where_branches(where)
+    try:
+        branch = branches[selected_case_index]
+    except IndexError as exc:
+        raise WhereValidationError(f"selected witness branch out of range: {selected_case_index}") from exc
+
+    out = dict(binding)
+    for atom in branch:
+        if not isinstance(atom, tuple) or not atom or atom[0] != "pred":
+            continue
+        _, pred_id, terms = atom
+        facts = witness_facts.get(pred_id)
+        if not facts:
+            continue
+        _bind_terms_from_fact(terms, facts[0].fact_tuple, out)
+    return out
+
+
+def _bind_terms_from_fact(terms: Any, fact_tuple: tuple[Any, ...], binding: dict[str, Any]) -> None:
+    if not isinstance(terms, list):
+        raise WhereValidationError("pred atom terms must be list")
+    if len(terms) != len(fact_tuple):
+        raise WhereValidationError(
+            f"witness fact arity mismatch: expected {len(terms)}, got {len(fact_tuple)}"
+        )
+    for term, value in zip(terms, fact_tuple):
+        if not isinstance(term, str) or not term.startswith("$"):
+            if term != value:
+                raise WhereValidationError(f"witness fact constant mismatch: expected {term}, got {value}")
+            continue
+        existing = binding.get(term)
+        if existing is not None and existing != value:
+            raise WhereValidationError(f"witness fact binding conflict for {term}")
+        binding[term] = value
+
+
+def _projected_fact_from_claim(store: Any, *, pred_id: str, asrt_id: str) -> ProjectedFact | None:
+    ledger = getattr(store, "ledger", None)
+    get_claim = getattr(ledger, "get_claim", None)
+    if not callable(get_claim):
+        return None
+    claim = get_claim(asrt_id)
+    if claim is None:
+        return None
+    if getattr(claim, "pred_id", None) != pred_id:
+        raise WhereValidationError(
+            f"witness claim predicate mismatch for {asrt_id}: expected {pred_id}, got {claim.pred_id}"
+        )
+    values = [claim.e_ref]
+    for term in claim.rest_terms:
+        if not isinstance(term, tuple) or len(term) != 2:
+            raise WhereValidationError(f"malformed rest term for witness claim: {asrt_id}")
+        values.append(term[1])
+    return ProjectedFact(asrt_id=asrt_id, fact_tuple=tuple(values))
 
 
 def _normalize_where_branches(where: list[Any]) -> list[list[tuple[Any, ...]]]:

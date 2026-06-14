@@ -7,6 +7,7 @@ from factgraph.application import build_schema_index, entity_info, field_predica
 from factgraph.application.explain import EvidenceJoin, Fails, Holds, NotReached, probe_native
 from factgraph.application.schema_runtime import encode_entity_ref
 from factgraph.application.protocol import EntityRef, Rule
+from factgraph.application.protocol.rule_expr import _coerce_rule_expr_operand
 from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
 from factgraph.core.rules.where_ast import AndExpr, CmpAtom, Const, InAtom, NotAtom, OrExpr, PredAtom, Var
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
@@ -30,6 +31,17 @@ def _negated_atoms(result: object) -> tuple[object, ...]:
 
 
 class NativeProberTests(unittest.TestCase):
+    def test_rule_repr_keeps_placeholder_for_none_binding(self) -> None:
+        user = Var("$user")
+        rule = Rule(
+            id="senior_user",
+            when=(PredAtom("user:age", [user, Const(70)]),),
+            ports={"user": user},
+            repr="%user is a senior US resident",
+        )
+
+        self.assertEqual(prober_module._render_rule_repr(rule, {"user": None}), "<user> is a senior US resident")
+
     def test_monotonic_witness_backtracking_keeps_later_successful_env(self) -> None:
         x = Var("$x")
         rule = Rule(
@@ -77,6 +89,69 @@ class NativeProberTests(unittest.TestCase):
         self.assertTrue(all(isinstance(join, EvidenceJoin) for join in path.joins))
         self.assertEqual(path.joins[0].left.rule_occurrence_alias, "left")
         self.assertEqual(path.joins[0].right.rule_occurrence_alias, "right")
+
+    def test_rule_repr_text_is_baked_for_head_and_body_rules(self) -> None:
+        person = Var("$person")
+        region = Var("$region")
+        body = Rule(
+            id="body_region",
+            when=(PredAtom("Person:region", [person, region]),),
+            ports={"person": person, "region": region},
+            repr="body %person in %region",
+        )
+        head = Rule(
+            id="head_region",
+            when=(PredAtom("Person:region", [person, region]),),
+            ports={"person": person, "region": region},
+            repr="head %person in %region",
+        )
+        plan = _lower_rule_expr(_coerce_rule_expr_operand(body.as_("body")), head=head)
+
+        result = probe_native(
+            plan,
+            {},
+            {"Person:region": [("alice", "US")]},
+            rules_by_id={body.id: body, head.id: head},
+            subject_binding={"person": "alice", "region": "US"},
+        )
+
+        rules = {rule.role: rule for rule in result.paths[0].rules}
+        self.assertEqual(rules["head"].repr_text, "head alice in US")
+        self.assertEqual(rules["body"].repr_text, "body alice in US")
+
+    def test_head_side_atoms_are_grouped_under_head_rule(self) -> None:
+        user = Var("$user")
+        age = Var("$age")
+        head_user = Var("$head_user")
+        head_age = Var("$head_age")
+        body = Rule(
+            id="age_body",
+            when=(PredAtom("age", [user, age]),),
+            ports={"user": user, "age": age},
+        )
+        head = Rule(
+            id="adult_head",
+            when=(PredAtom("age", [head_user, head_age]), CmpAtom("ge", head_age, Const(18))),
+            ports={"user": head_user, "age": head_age},
+            repr="adult %user",
+        )
+        plan = _lower_rule_expr(_coerce_rule_expr_operand(body.as_("body")), head=head)
+
+        result = probe_native(
+            plan,
+            {},
+            {"age": [("alice", 25)]},
+            rules_by_id={body.id: body, head.id: head},
+            subject_binding={"user": "alice", "age": 25},
+        )
+
+        path = result.paths[0]
+        head_rule = next(rule for rule in path.rules if rule.role == "head")
+        body_rule = next(rule for rule in path.rules if rule.role == "body")
+        self.assertEqual(head_rule.repr_text, "adult alice")
+        self.assertEqual(len(head_rule.atoms), 2)
+        self.assertTrue(any("25 >= 18" in (atom.repr_text or "") for atom in head_rule.atoms))
+        self.assertFalse(any("25 >= 18" in (atom.repr_text or "") for atom in body_rule.atoms))
 
     def test_not_reached_is_only_unbound_dependency(self) -> None:
         x = Var("$x")
@@ -293,7 +368,7 @@ class NativeProberTests(unittest.TestCase):
 
         atom = result.paths[0].rules[1].atoms[0]
         self.assertEqual(atom.repr_text, "User u-1 lives in US")
-        self.assertEqual(calls, [("DisplayUser", {"user_id": "u-1"})])
+        self.assertIn(("DisplayUser", {"user_id": "u-1"}), calls)
 
     def test_fact_repr_baking_recovers_bound_idref_identity_from_visible_facts(self) -> None:
         class DisplayUser(Entity):

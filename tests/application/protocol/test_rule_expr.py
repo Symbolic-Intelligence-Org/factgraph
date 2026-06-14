@@ -326,14 +326,15 @@ class RuleExprJoinTests(unittest.TestCase):
         self.assertEqual(len(left.children), 3)
         self.assertEqual(len(left.joins), 1)
 
-    def test_join_reach_rejects_or_branch_endpoints(self) -> None:
+    def test_join_reach_accepts_nested_or_branch_endpoints_for_dnf_lowering(self) -> None:
         a = _rule("a").as_("a")
         b = _rule("b", var_name="b").as_("b")
         c = _rule("c", var_name="c").as_("c")
 
-        with self.assertRaisesRegex(RuleExprError, "not reachable"):
-            (a & (b | c)).join(a.user.eq(b.user))
+        joined = (a & (b | c)).join(a.user.eq(b.user))
 
+        self.assertIsInstance(joined, _AndGroup)
+        self.assertEqual(joined.joins, (a.user.eq(b.user),))
         self.assertIsInstance((a & b).join(a.user.eq(b.user)) | c, _OrGroup)
 
     def test_join_is_and_only(self) -> None:
@@ -423,13 +424,15 @@ class RuleExprJoinByPortsTests(unittest.TestCase):
         self.assertFalse(hasattr(_rule("r"), "join_by_ports"))
         self.assertFalse(hasattr(a, "join_by_ports"))
 
-    def test_join_by_ports_does_not_reach_into_or_branches(self) -> None:
+    def test_join_by_ports_reaches_nested_or_branches_for_dnf_lowering(self) -> None:
         a = _rule("a").as_("a")
         b = _rule("b", var_name="b").as_("b")
         c = _rule("c", var_name="c").as_("c")
 
-        with self.assertRaisesRegex(RuleExprError, "fewer than two"):
-            (a & (b | c)).join_by_ports("user")
+        joined = (a & (b | c)).join_by_ports("user")
+
+        self.assertIsInstance(joined, _AndGroup)
+        self.assertEqual(set(joined.joins), {a.user.eq(b.user), a.user.eq(c.user)})
 
     def test_join_by_ports_preserves_export_scope(self) -> None:
         self.assertNotIn("join_by_ports", sdk.__all__)

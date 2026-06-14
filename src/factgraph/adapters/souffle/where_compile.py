@@ -55,6 +55,7 @@ def compile_where_to_query_dl(
     schema_ir: dict,
     where: list[Any],
     query_rel: str,
+    query_variables: list[str] | tuple[str, ...] | None = None,
     include_pred_witness_columns: bool = False,
     registry: Any | None = None,
 ) -> str:
@@ -98,12 +99,15 @@ def compile_where_to_query_dl(
             )
         )
 
-    query_variables = extract_where_variables(expanded.rewritten_where)
+    if query_variables is None:
+        relation_variables = extract_where_variables(expanded.rewritten_where)
+    else:
+        relation_variables = _normalize_query_variables(query_variables)
     relation_blocks.append(
         _compile_relation_to_dl_block(
             relation_name=query_rel,
             where=expanded.rewritten_where,
-            relation_variables=query_variables,
+            relation_variables=relation_variables,
             pred_arities=pred_arities,
             pred_type_domains=pred_type_domains,
             in_rel_values=in_rel_values,
@@ -204,6 +208,21 @@ def extract_where_variables(where: list[Any]) -> list[str]:
     return sorted(found)
 
 
+def _normalize_query_variables(query_variables: list[str] | tuple[str, ...]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in query_variables:
+        if not isinstance(item, str) or not item.startswith("$"):
+            raise WhereValidationError("query variables must be variable tokens")
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    if not out:
+        raise WhereValidationError("query variables must be non-empty")
+    return out
+
+
 def query_rel_for_where(where: list[Any]) -> str:
     # Protocol behavior (hard contract):
     # 1) Internal query results must be addressed by outputs_map["__query__"].
@@ -223,8 +242,16 @@ def canonical_where_json_bytes(where: list[Any]) -> bytes:
     ).encode("utf-8")
 
 
-def build_query_witness_layout(where: list[Any]) -> QueryWitnessLayout:
-    variables = tuple(extract_where_variables(where))
+def build_query_witness_layout(
+    where: list[Any],
+    *,
+    query_variables: list[str] | tuple[str, ...] | None = None,
+) -> QueryWitnessLayout:
+    variables = (
+        tuple(extract_where_variables(where))
+        if query_variables is None
+        else tuple(_normalize_query_variables(query_variables))
+    )
     bodies = _normalize_where_subset(where)
     pred_witness_columns: list[PredWitnessColumnSpec] = []
     for case_index, body in enumerate(bodies):
@@ -262,9 +289,12 @@ def _compile_relation_to_dl_block(
 ) -> list[str]:
     bodies = _normalize_where_subset(where)
     if include_pred_witness_columns:
-        witness_layout = build_query_witness_layout(where)
+        witness_layout = build_query_witness_layout(where, query_variables=relation_variables)
         head_relation_variables = list(witness_layout.query_variables)
         all_variables = list(witness_layout.query_variables)
+        for var in extract_where_variables(where):
+            if var not in all_variables:
+                all_variables.append(var)
     else:
         witness_layout = None
         head_relation_variables = list(relation_variables)
