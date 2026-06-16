@@ -1337,6 +1337,14 @@ class _SDKEvalManager:
         """Evaluate an `Inference`, application `Rule`, or RuleExpr."""
         return self._sdk._evaluate(*args, **kwargs)
 
+    def evaluate_candidates(self, *args: Any, **kwargs: Any) -> Any:
+        """Evaluate an Inference/derivation and return its raw CandidateSets.
+
+        Read-only: candidates are hypothetical until accepted on a writing
+        surface; this method never writes to the ledger.
+        """
+        return self._sdk._evaluate_candidates(*args, **kwargs)
+
     def explain(self, *args: Any, **kwargs: Any) -> Any:
         """Explain a closed-head evaluation replay."""
         return self._sdk._explain(*args, **kwargs)
@@ -2440,6 +2448,39 @@ class SDKStore:
             raise SDKStoreError("SDK public semantics require Rule, RuleExpr, or Inference object input")
         return (engine, _lower_public_semantics(raw_config, derivation=derivation))
 
+    def _candidates_for_derivation(
+        self, derivation: Any, *, raw_engine: Any, raw_config: Any
+    ) -> tuple[list[CandidateSet], list[dict[str, Any]], str, "SemanticsProfile | None"]:
+        """Erzeugt die rohen CandidateSets für eine Inference oder ein Derivation-Dict.
+
+        Gemeinsamer Kern von _evaluate und _evaluate_candidates: engine/semantics
+        auflösen, bei einer Inference zusätzlich die runtime registry, kompilieren,
+        evaluieren. Kein Wrap in EvaluateResult, kein Schreiben. Verhaltenswahrend
+        gegenüber den zwei bisherigen _evaluate-Zweigen — der einzige Unterschied
+        (registry-Auflösung und derivation= nur für eine Inference) hängt an
+        `to_authoring_payload`.
+        """
+        is_inference = hasattr(derivation, "to_authoring_payload")
+        engine, semantics_profile = self._resolve_public_engine_and_semantics(
+            raw_engine,
+            raw_config,
+            derivation=derivation if is_inference else None,
+            api_path="evaluate()",
+        )
+        runtime_registry = (
+            self._resolve_runtime_registry(derivation, explicit_registry=None)
+            if is_inference
+            else None
+        )
+        compiled_plans = self._compile_derivation_input(derivation)
+        candidates = self._evaluate_compiled_derivation_plans(
+            compiled_plans,
+            mode=engine,
+            registry=runtime_registry,
+            semantics_profile=semantics_profile,
+        )
+        return candidates, compiled_plans, engine, semantics_profile
+
     def _evaluate(self, *args: Any, **kwargs: Any) -> EvaluateResult:
         if "view" in kwargs:
             raise SDKStoreError(
@@ -2476,20 +2517,10 @@ class SDKStore:
                 raw_config=raw_config,
             )
         if args and hasattr(args[0], "to_authoring_payload"):
-            derivation = args[0]
-            engine, semantics_profile = self._resolve_public_engine_and_semantics(
-                raw_engine,
-                raw_config,
-                derivation=derivation,
-                api_path="evaluate()",
-            )
-            runtime_registry = self._resolve_runtime_registry(derivation, explicit_registry=None)
-            compiled_plans = self._compile_derivation_input(derivation)
-            candidates = self._evaluate_compiled_derivation_plans(
-                compiled_plans,
-                mode=engine,
-                registry=runtime_registry,
-                semantics_profile=semantics_profile,
+            candidates, compiled_plans, engine, semantics_profile = (
+                self._candidates_for_derivation(
+                    args[0], raw_engine=raw_engine, raw_config=raw_config
+                )
             )
             app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
             head = _head_rule_for_compiled_plans(app_plans)
@@ -2501,18 +2532,10 @@ class SDKStore:
                 semantics_profile=semantics_profile,
             )
         if args and isinstance(args[0], dict) and ("derivation_id" in args[0] or "target_pred_id" in args[0] or "head" in args[0]):
-            engine, semantics_profile = self._resolve_public_engine_and_semantics(
-                raw_engine,
-                raw_config,
-                derivation=None,
-                api_path="evaluate()",
-            )
-            compiled_plans = self._compile_derivation_input(args[0])
-            candidates = self._evaluate_compiled_derivation_plans(
-                compiled_plans,
-                mode=engine,
-                registry=None,
-                semantics_profile=semantics_profile,
+            candidates, compiled_plans, engine, semantics_profile = (
+                self._candidates_for_derivation(
+                    args[0], raw_engine=raw_engine, raw_config=raw_config
+                )
             )
             app_plans = _application_plans_from_compiled_dicts(compiled_plans, mode=engine)
             head = _head_rule_for_compiled_plans(app_plans)
@@ -2527,6 +2550,57 @@ class SDKStore:
             "direct Store.evaluate-style calls are not supported by SDK evaluate() after the T5 result-envelope "
             "hard-cut; use an application Rule/RuleExpr with head=, an Inference object, or a structured "
             "derivation dict"
+        )
+
+    def _evaluate_candidates(self, *args: Any, **kwargs: Any) -> list[CandidateSet]:
+        if "view" in kwargs:
+            raise SDKStoreError(
+                "method-level view= is not supported by evaluate_candidates(); use FactGraph.attach(db, view=view) instead"
+            )
+        if "policy" in kwargs:
+            raise SDKStoreError("policy= was removed for read APIs and is not accepted for inference evaluation")
+        if "semantics_profile" in kwargs:
+            raise SDKStoreError("evaluate_candidates() does not accept semantics_profile= in SDK; use config=")
+        if "mode" in kwargs:
+            raise SDKStoreError("evaluate_candidates() does not accept mode=; use engine=")
+        if "temporal_view" in kwargs:
+            raise SDKStoreError("temporal_view is removed from evaluate_candidates(); use active/history views on read APIs")
+        registry = kwargs.pop("registry", None)
+        engine_options = kwargs.pop("engine_options", None)
+        if registry is not None:
+            raise SDKStoreError("evaluate_candidates() does not accept registry=; register dependencies on the inference object")
+        if engine_options is not None:
+            raise SDKStoreError("evaluate_candidates() does not accept engine_options=; use config= or engine-specific configuration")
+        raw_engine = kwargs.pop("engine", None)
+        raw_config = kwargs.pop("config", None)
+        if args and isinstance(args[0], str):
+            raise SDKStoreError(
+                "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
+            )
+        if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
+            raise SDKStoreError(
+                "evaluate_candidates() is for Inference/derivation inputs; application Rules/RuleExpr do not "
+                "produce derivation candidate sets"
+            )
+        if args and (
+            hasattr(args[0], "to_authoring_payload")
+            or (
+                isinstance(args[0], dict)
+                and (
+                    "derivation_id" in args[0]
+                    or "target_pred_id" in args[0]
+                    or "head" in args[0]
+                )
+            )
+        ):
+            candidates, _compiled_plans, _engine, _semantics = (
+                self._candidates_for_derivation(
+                    args[0], raw_engine=raw_engine, raw_config=raw_config
+                )
+            )
+            return candidates
+        raise SDKStoreError(
+            "evaluate_candidates() requires an Inference object or a structured derivation dict"
         )
 
     def _explain(self, *args: Any, **kwargs: Any) -> Explanation:
