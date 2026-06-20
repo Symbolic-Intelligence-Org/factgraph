@@ -57,6 +57,9 @@ def probe_native(
     bindings: Mapping[str, Any] | None,
     view_facts: Mapping[str, Sequence[tuple[Any, ...]]],
     schema_index: object | None = None,
+    *,
+    rules_by_id: Mapping[str, Any] | None = None,
+    subject_binding: Mapping[str, Any] | None = None,
 ) -> EvidenceProbeResult:
     if not isinstance(plan, RuleExprLoweringPlan):
         raise TypeError("plan must be RuleExprLoweringPlan")
@@ -73,6 +76,8 @@ def probe_native(
                 view_facts={key: list(value) for key, value in view_facts.items()},
                 initial_bindings=dict(bindings or {}),
                 schema_index=schema_index,
+                rules_by_id=rules_by_id or {},
+                subject_binding=subject_binding or {},
             )
         )
     return EvidenceProbeResult(paths=tuple(paths), certainty=BOOLEAN_CERTAINTY)
@@ -87,6 +92,8 @@ def _probe_branch(
     view_facts: dict[str, list[tuple[Any, ...]]],
     initial_bindings: dict[str, Any],
     schema_index: object | None,
+    rules_by_id: Mapping[str, Any],
+    subject_binding: Mapping[str, Any],
 ) -> EvidenceTree:
     anchor_envs = (ProbeEnv.from_bindings(initial_bindings),)
     envs = anchor_envs
@@ -132,10 +139,30 @@ def _probe_branch(
         view_facts=view_facts,
         schema_index=schema_index,
     )
-    body_rules = _body_rules_for_branch(plan, lowered_branch, trace, atom_results, terminal_envs=envs)
+    display_terminal_envs = _display_envs(envs, schema_index=schema_index, view_facts=view_facts)
+    head_atom_indexes = _head_atom_indexes_for_branch(lowered_branch, trace, atom_results)
+    head_atoms = tuple(evidence_atom for idx, _atom, evidence_atom, _envs in atom_results if idx in head_atom_indexes)
+    body_rules = _body_rules_for_branch(
+        plan,
+        lowered_branch,
+        trace,
+        atom_results,
+        terminal_envs=display_terminal_envs,
+        head_atom_indexes=head_atom_indexes,
+        rules_by_id=rules_by_id,
+    )
     joins = _joins_for_trace(trace, atom_results)
-    status = _tree_status((*body_rules,)) if body_rules else "fails"
-    head_rule = _head_rule_for_plan(plan, status=status, terminal_envs=envs, initial_bindings=initial_bindings)
+    body_status = _tree_status((*body_rules,)) if body_rules else "holds"
+    head_status = _atom_status(head_atoms) if head_atoms else body_status
+    head_rule = _head_rule_for_plan(
+        plan,
+        status=head_status,
+        terminal_envs=display_terminal_envs,
+        initial_bindings=initial_bindings,
+        atoms=head_atoms,
+        subject_binding=subject_binding,
+    )
+    status = _tree_status((head_rule, *body_rules))
     return EvidenceTree(
         tree_id=trace.branch_id,
         status=status,
@@ -240,6 +267,8 @@ def _body_rules_for_branch(
     atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]],
     *,
     terminal_envs: tuple[ProbeEnv, ...],
+    head_atom_indexes: set[int],
+    rules_by_id: Mapping[str, Any],
 ) -> tuple[EvidenceRule, ...]:
     occurrence_by_alias = {occ.alias: occ for occ in plan.occurrence_map}
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
@@ -247,22 +276,46 @@ def _body_rules_for_branch(
     grouped: dict[str, list[EvidenceAtom]] = {alias: [] for alias in lowered_branch.occurrence_aliases}
     fallback_alias = lowered_branch.occurrence_aliases[0] if lowered_branch.occurrence_aliases else ""
     for idx, atom, evidence_atom, _envs in atom_results:
-        if idx in join_indexes or idx in head_link_indexes:
+        if idx in join_indexes or idx in head_link_indexes or idx in head_atom_indexes:
             continue
         alias = _alias_for_atom(atom, lowered_branch.occurrence_aliases) or fallback_alias
         grouped.setdefault(alias, []).append(evidence_atom)
 
-    return tuple(
-        EvidenceRule(
-            occurrence_alias=alias,
-            rule_id=occurrence_by_alias[alias].rule_id if alias in occurrence_by_alias else alias,
-            role="body",
-            status=_atom_status(tuple(atoms)),
-            ports=_ports_for_occurrence(occurrence_by_alias.get(alias), terminal_envs),
-            atoms=tuple(atoms),
+    rules: list[EvidenceRule] = []
+    for alias, atoms in grouped.items():
+        occurrence = occurrence_by_alias.get(alias)
+        ports = _ports_for_occurrence(occurrence, terminal_envs)
+        rule_id = occurrence.rule_id if occurrence is not None else alias
+        rules.append(
+            EvidenceRule(
+                occurrence_alias=alias,
+                rule_id=rule_id,
+                role="body",
+                status=_atom_status(tuple(atoms)),
+                repr_text=_render_rule_repr(rules_by_id.get(rule_id), ports),
+                ports=ports,
+                atoms=tuple(atoms),
+            )
         )
-        for alias, atoms in grouped.items()
-    )
+    return tuple(rules)
+
+
+def _head_atom_indexes_for_branch(
+    lowered_branch: RuleExprLoweringBranch,
+    trace: RuleExprEvaluationTrace,
+    atom_results: list[tuple[int, tuple[Any, ...], EvidenceAtom, tuple[ProbeEnv, ...]]],
+) -> set[int]:
+    join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
+    head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
+    out: set[int] = set()
+    for idx, atom, _evidence_atom, _envs in atom_results:
+        if idx in join_indexes or idx in head_link_indexes:
+            continue
+        if _alias_for_atom(atom, lowered_branch.occurrence_aliases) is not None:
+            continue
+        if any(name.startswith("$__head__") for name in _atom_var_names(atom)):
+            out.add(idx)
+    return out
 
 
 def _atom_var_names(atom: tuple[Any, ...]) -> set[str]:
@@ -318,6 +371,8 @@ def _head_rule_for_plan(
     status: TreeStatus,
     terminal_envs: tuple[ProbeEnv, ...],
     initial_bindings: Mapping[str, Any],
+    atoms: tuple[EvidenceAtom, ...],
+    subject_binding: Mapping[str, Any],
 ) -> EvidenceRule:
     env = dict(terminal_envs[0].bindings) if terminal_envs else dict(initial_bindings)
     ports = {
@@ -329,9 +384,50 @@ def _head_rule_for_plan(
         rule_id=plan.head.id,
         role="head",
         status=status,
+        repr_text=_render_rule_repr(plan.head, subject_binding or ports),
         ports=ports,
-        atoms=(),
+        atoms=atoms,
     )
+
+
+def _render_rule_repr(rule: Any, bindings: Mapping[str, Any]) -> str | None:
+    render = getattr(rule, "render_repr", None)
+    if not callable(render):
+        return None
+    try:
+        text = render({key: value for key, value in bindings.items() if value is not None})
+    except Exception:
+        return None
+    return text if isinstance(text, str) and text else None
+
+
+def _display_envs(
+    envs: tuple[ProbeEnv, ...],
+    *,
+    schema_index: object | None,
+    view_facts: dict[str, list[tuple[Any, ...]]],
+) -> tuple[ProbeEnv, ...]:
+    if schema_index is None:
+        return envs
+
+    def resolve(entity_type: str, value: object, index: object | None) -> Mapping[str, Any]:
+        return _recover_identity_from_predicates(str(value), entity_type, view_facts=view_facts, index=index)
+
+    out: list[ProbeEnv] = []
+    for env in envs:
+        out.append(
+            ProbeEnv.from_bindings(
+                {
+                    key: schema_runtime.display_value(
+                        schema_index,
+                        value,
+                        entity_identity_resolver=resolve,
+                    )
+                    for key, value in env.bindings.items()
+                }
+            )
+        )
+    return tuple(out)
 
 
 def _joins_for_trace(
@@ -551,6 +647,19 @@ def _fact_fallback_repr(
     view_facts: dict[str, list[tuple[Any, ...]]],
     predicate_info: object | None,
 ) -> str:
+    if predicate_info is not None and getattr(predicate_info, "is_entity_exists", False):
+        return f"{_entity_repr_for_fact(schema_index, str(getattr(predicate_info, 'owner_type', '')), form, view_facts=view_facts)} exists"
+    field_name = getattr(predicate_info, "py_field_name", None) if predicate_info is not None else None
+    owner_type = getattr(predicate_info, "owner_type", None) if predicate_info is not None else None
+    if isinstance(field_name, str) and field_name and isinstance(owner_type, str) and len(form.terms) > 1:
+        entity = _entity_repr_for_fact(schema_index, owner_type, form, view_facts=view_facts)
+        value = _render_term_value(
+            form.terms[1],
+            schema_index=schema_index,
+            view_facts=view_facts,
+            decode_float64=getattr(predicate_info, "value_type_domain", None) == "float64",
+        )
+        return f"{entity} has {field_name} {value}"
     terms = tuple(
         _render_term_value(
             term,

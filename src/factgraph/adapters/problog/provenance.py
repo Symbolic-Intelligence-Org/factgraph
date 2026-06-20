@@ -4,10 +4,11 @@ from __future__ import annotations
 from collections import Counter
 import re
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from factgraph.adapters.problog._parsing import _split_top_level_args
 from factgraph.application.explain.evidence_tree import (
+    BOOLEAN_CERTAINTY,
     Const,
     EvidenceAtom,
     EvidenceGraph,
@@ -59,6 +60,15 @@ class ProbLogAnswerV0:
 class ProbLogTraceV0:
     events: tuple[ProbLogTraceEventV0, ...]
     answers: tuple[ProbLogAnswerV0, ...]
+
+
+@dataclass(frozen=True)
+class ProbLogEvidenceContext:
+    head_rule_id: str | None = None
+    head_repr_text: str | None = None
+    head_ports: Mapping[str, Any] = field(default_factory=dict)
+    subject_binding: Mapping[str, Any] = field(default_factory=dict)
+    input_certainty_for_goal: Callable[[str, tuple[str, ...]], Certainty | None] | None = None
 
 
 @dataclass
@@ -192,6 +202,7 @@ def problog_trace_to_evidence_graph(
     candidate_id: str,
     candidate_payload: Mapping[str, Any],
     support_kind: str = PROBLOG_PROVENANCE_KIND,
+    context: ProbLogEvidenceContext | None = None,
 ) -> EvidenceGraph:
     """Convert a ProbLog proof trace into a candidate-anchored EvidenceGraph tree."""
     if not isinstance(candidate_id, str) or not candidate_id:
@@ -226,6 +237,7 @@ def problog_trace_to_evidence_graph(
             candidate_id=candidate_id,
             answer=answer,
             tree_index=idx,
+            context=context,
         )
         for idx, (tree_root_frame_id, answer) in enumerate(tree_specs)
     )
@@ -235,7 +247,7 @@ def problog_trace_to_evidence_graph(
         graph_id=f"eg:{candidate_id}",
         engine="problog",
         layout_hint=LAYOUT_TREE,
-        subject_binding=_candidate_binding_from_payload(candidate_payload),
+        subject_binding=dict(context.subject_binding) if context is not None else _candidate_binding_from_payload(candidate_payload),
         paths=trees,
         certainty=graph_certainty,
         metadata={
@@ -285,6 +297,7 @@ def _evidence_tree_for_frame(
     candidate_id: str,
     answer: ProbLogAnswerV0 | None,
     tree_index: int,
+    context: ProbLogEvidenceContext | None,
 ) -> EvidenceTree:
     frame_order = _collect_frame_subtree(frames, root_frame_id)
     root_frame = frames[root_frame_id]
@@ -292,27 +305,30 @@ def _evidence_tree_for_frame(
     head_atom = _evidence_atom_for_frame(
         root_frame,
         candidate_id=candidate_id,
-        certainty=certainty,
         role="head",
         ordinal=0,
+        tree_index=tree_index,
+        context=context,
     )
     body_atoms = tuple(
         _evidence_atom_for_frame(
             frames[frame_id],
             candidate_id=candidate_id,
-            certainty=certainty,
             role="body",
             ordinal=idx,
+            tree_index=tree_index,
+            context=context,
         )
         for idx, frame_id in enumerate(frame_order[1:], start=1)
     )
     rules = [
         EvidenceRule(
             occurrence_alias="head",
-            rule_id=_goal_rule_id(root_frame),
+            rule_id=context.head_rule_id if context is not None and context.head_rule_id else _goal_rule_id(root_frame),
             role="head",
             status="holds",
-            ports={},
+            repr_text=context.head_repr_text if context is not None else None,
+            ports=dict(context.head_ports) if context is not None else {},
             atoms=(head_atom,),
         )
     ]
@@ -328,12 +344,13 @@ def _evidence_tree_for_frame(
             )
         )
     return EvidenceTree(
-        tree_id=f"{candidate_id}:answer:{tree_index}",
+        tree_id=f"c{tree_index}",
         status="holds",
         rules=tuple(rules),
         joins=(),
         certainty=certainty,
         metadata={
+            "candidate_id": candidate_id,
             "answer_query": answer.query if answer is not None else root_frame.call_event.goal,
             "answer_probability": answer.probability if answer is not None else None,
         },
@@ -344,13 +361,15 @@ def _evidence_atom_for_frame(
     frame: _ProbLogCallFrame,
     *,
     candidate_id: str,
-    certainty: Certainty,
     role: str,
     ordinal: int,
+    tree_index: int,
+    context: ProbLogEvidenceContext | None,
 ) -> EvidenceAtom:
     goal_name, goal_args = _parse_goal_expr(frame.call_event.goal)
+    certainty = _input_certainty_for_goal(context, goal_name, goal_args)
     source = Source(
-        ref=f"problog:{candidate_id}:{role}:{ordinal}",
+        ref=f"problog:{candidate_id}:c{tree_index}:{role}:{ordinal}",
         value=frame.call_event.goal,
         meta={
             "goal": frame.call_event.goal,
@@ -370,9 +389,20 @@ def _evidence_atom_for_frame(
             terms=tuple(Const(_normalize_goal_token(arg)) for arg in goal_args),
         ),
         verdict=Holds(certainty=certainty, support=(source,)),
-        atom_id=f"problog:{candidate_id}:{role}:{ordinal}",
+        atom_id=f"c{tree_index}:{role}:{ordinal}",
         repr_text=frame.call_event.goal,
     )
+
+
+def _input_certainty_for_goal(
+    context: ProbLogEvidenceContext | None,
+    goal_name: str,
+    goal_args: tuple[str, ...],
+) -> Certainty:
+    if context is None or context.input_certainty_for_goal is None:
+        return BOOLEAN_CERTAINTY
+    certainty = context.input_certainty_for_goal(goal_name, goal_args)
+    return certainty if certainty is not None else BOOLEAN_CERTAINTY
 
 
 def _goal_rule_id(frame: _ProbLogCallFrame) -> str:
@@ -889,6 +919,7 @@ def _candidate_binding_from_payload(candidate_payload: Mapping[str, Any]) -> dic
 
 __all__ = [
     "ProbLogAnswerV0",
+    "ProbLogEvidenceContext",
     "ProbLogProvenanceError",
     "ProbLogTraceEventV0",
     "ProbLogTraceV0",

@@ -51,8 +51,8 @@ class SDKFacadeApplicationDelegateTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].ref, user_a)
         self.assertEqual(rows[0].tag, ("vip",))
-        self.assertFalse(rows[0].identity_available)
-        self.assertEqual(rows[0].identity, {})
+        self.assertTrue(rows[0].identity_available)
+        self.assertEqual(rows[0].identity, {"user_id": "u-a", "locale": "zh"})
 
     def test_sdk_find_identity_filters_return_identity_enabled_snapshot(self) -> None:
         sdk = SDKStore([Country, User])

@@ -437,6 +437,8 @@ PyReason paths are `EvidenceTimeline` instead of `EvidenceTree` — events organ
 
 The atom line's `repr_text` is the schema-authored / default-rendered text (§4.1): entity-ref labels resolved, no internal `$var`, negation as `!(...)`, unbound values as `<unbound>`.
 
+**`Explanation.narrate()` — rich narrative (additive sibling).** `narrate()` (a separate computed surface, lazy-cached like `.repr`, `tuple[str, ...] | None`) walks the *same* `EvidenceGraph` into a human-facing form: the head `Rule.repr` rendered as the **conclusion headline** — with `[<head rule_id> · <run id> · <candidate id>]  <status>` as a trailing reference tag — then a `produces:` line of the closed head's bound ports, a `Derivation:  head <= ( rule_id AND … )` DNF composition with `join:` lines, then per-rule `Rule.repr` blocks and per-atom `✓/✗/○` verdicts. Multi-path OR explanations show one global DNF line such as `head <= ( a AND b ) OR ( c AND d )`; each path block keeps its own `join:` lines. Non-boolean certainty is rendered in narrative text as `holds with probability 0.4` or `holds with bound [lo, hi]`, while atom/rule probability details stay local to the relevant rule or atom line. It does **not** change `.repr` (the structured tree above stays as-is): `Rule.repr` is surfaced **only** through `narrate()`, never through `.repr` (whose conclusion line remains the candidate id).
+
 §4.1 walks the `adults_in_us` rule through this machinery as a worked end-to-end example.
 
 **Failed** walks its prober failure tree the same way (a failed `Explanation` carries an `EvidenceGraph`, §4.2 invariant 1): the conditions that failed show `Fails`, dependency-bound siblings still show their own verdict, and `failure_class` + `suggested_next_steps` are read off the `Explanation` (they are not nodes inside the tree).
@@ -448,8 +450,8 @@ The atom line's `repr_text` is the schema-authored / default-rendered text (§4.
 | Engine | layout | paths | Notes |
 |---|---|---|---|
 | Native | tree | exhaustive prober tree(s) | head + body `EvidenceRule`s; per-atom `Holds`/`Fails`/`NotReached`; schema-authored `repr_text` |
-| Souffle | tree | support-artifact → tree | converter maps the witness to head/body atoms via `SOUFFLE_WITNESS_KIND` |
-| ProbLog | tree | one tree per proof (answer) | probabilistic `Certainty` per tree; aggregate probability on `EvidenceGraph.certainty` |
+| Souffle | tree | diagnostic projection → tree; witness converter fallback | native-grade head/body/atom shape; boolean certainty |
+| ProbLog | tree | diagnostic projection → tree; trace converter fallback | native-grade head/body/atom shape plus probabilistic `Certainty` at row/tree/atom levels |
 | PyReason | timeline | `EvidenceTimeline` | events by `timestep`, possibilistic `Certainty`; reuses `EvidenceAtom` leaves |
 
 ### 4.7 `certainty` carry-over
@@ -500,7 +502,7 @@ Rule(
 
 If the open head has a `repr` template (e.g. `"User %user is in %region"`, see [`rules.md`](rules.md) §2.5), the closed head receives the same template — letting downstream renderers produce per-row descriptions.
 
-**`Rule.repr` is not auto-surfaced in `Explanation`.** The carry-through is data plumbing only — the conclusion line of `Explanation.repr` is a path/candidate id (§4.5), **not** the rendered `Rule.repr`. To render the rule-level label, call `rule.render_repr(bindings)` explicitly (or `RuleExprInspect.render(...)`, [`rules.md`](rules.md) §4). The templates that *are* rendered automatically into the explanation are the **schema** `repr` templates (`Field` / `Identity` / `Meta`, [`schema_definition.md`](schema_definition.md) §1.8) — into the atom text.
+**Structured `.repr` vs narrative `narrate()`.** The carry-through is data plumbing for the structured `.repr`: the conclusion line of `Explanation.repr` is a path/candidate id (§4.5), **not** the rendered `Rule.repr`. The richer `Explanation.narrate()` surface does render head/body `Rule.repr` labels. Schema `repr` templates (`Field` / `Identity` / `Meta`, [`schema_definition.md`](schema_definition.md) §1.8) render atom text in both surfaces.
 
 ## 6. `fg.audit` — post-hoc per-cell inspection
 

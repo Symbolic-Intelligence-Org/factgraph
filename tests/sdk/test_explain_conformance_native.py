@@ -116,7 +116,6 @@ def _atom_text(row: object) -> str:
 
 def _aggregate_rule(graph: sdk.SDKStore, kind: str) -> Rule:
     index = build_schema_index(graph.schema_ir)
-    info = entity_info(index, "NativeAggregateOrder")
     amount_pred = field_predicate(index, "NativeAggregateOrder", "amount").pred_id
     order = Var("$order")
     amount = Var("$amount")

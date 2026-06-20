@@ -50,6 +50,7 @@ def evaluate_problog(
 
     timeout = resolve_problog_timeout(engine_options)
     where_variables = extract_where_variables(where)
+    query_vars: list[Any]
 
     if isinstance(head, dict) and head.get("callee_kind") == "entity_type":
         entity_spec = store_builders.entity_spec_from_head(
@@ -57,6 +58,7 @@ def evaluate_problog(
             entity_type=target_pred_id,
             head=head,
         )
+        query_vars = list(entity_spec["head_vars"])
         missing_vars = [
             value
             for value in entity_spec["head_vars"]
@@ -74,6 +76,7 @@ def evaluate_problog(
                 raise WhereValidationError("head_vars length must match target arg_specs")
         elif not isinstance(head_vars, list) or not head_vars:
             raise WhereValidationError("head_vars must be non-empty list")
+        query_vars = list(head_vars)
         missing_vars = [
             value
             for value in head_vars
@@ -90,7 +93,7 @@ def evaluate_problog(
         "where": where,
         "head": head,
         "engine_ext": resolved_engine_ext,
-        "query_vars": where_variables,
+        "query_vars": query_vars,
         "query_pred": "answer",
     }
     with tempfile.TemporaryDirectory() as tmpdir:

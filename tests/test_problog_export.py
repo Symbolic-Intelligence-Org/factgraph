@@ -31,12 +31,18 @@ class ProbLogExportTests(unittest.TestCase):
         )
         return sdk
 
-    def _export_program(self, sdk: SDKStore, where: list[object] | None = None) -> str:
+    def _export_program(
+        self,
+        sdk: SDKStore,
+        where: list[object] | None = None,
+        *,
+        head_vars: list[str] | None = None,
+    ) -> str:
         rule_spec = {
             "derivation_id": "drv.problog_export",
             "version": "v1",
             "target_pred_id": "user:name",
-            "head_vars": ["$u", "$name"],
+            "head_vars": head_vars or ["$u", "$name"],
             "where": where or [("pred", "user:name", ["$u", "$name"])],
             "query_pred": "answer",
         }
@@ -254,7 +260,7 @@ class ProbLogExportTests(unittest.TestCase):
 
         self.assertIn("\\+(V_STATUS = 'blocked')", compiled)
 
-    def test_export_aggregate_includes_lists_import_and_keeps_query_vars_outer_only(self) -> None:
+    def test_export_aggregate_includes_lists_import_and_projects_head_vars_only(self) -> None:
         sdk = self._make_sdk()
 
         program = self._export_program(
@@ -277,9 +283,27 @@ class ProbLogExportTests(unittest.TestCase):
         )
 
         self.assertIn(":- use_module(library(lists)).", program)
-        self.assertIn('% query_vars=["$name","$total","$u"]', program)
-        self.assertIn("rule_body_0(V_NAME, V_TOTAL, V_U)", program)
+        self.assertIn('% query_vars=["$u","$name"]', program)
+        self.assertIn("rule_body_0(V_U, V_NAME)", program)
         self.assertNotIn("V_O)", program.split(":-", 1)[0])
+
+    def test_export_or_branches_project_to_head_vars_only(self) -> None:
+        sdk = self._make_sdk()
+
+        program = self._export_program(
+            sdk,
+            where=[
+                [("pred", "user:name", ["$u", "$name"])],
+                [("pred", "user:region", ["$u", "$region"])],
+            ],
+            head_vars=["$u"],
+        )
+
+        self.assertIn('% query_vars=["$u"]', program)
+        self.assertIn("rule_body_0(V_U) :- edb_fact(_, 'user:name', V_U, V_NAME).", program)
+        self.assertIn("rule_body_1(V_U) :- edb_fact(_, 'user:region', V_U, V_REGION).", program)
+        self.assertIn("answer(V_U) :- rule_body_0(V_U).", program)
+        self.assertIn("answer(V_U) :- rule_body_1(V_U).", program)
 
     def test_export_non_aggregate_omits_lists_import(self) -> None:
         sdk = self._make_sdk()

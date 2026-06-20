@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import warnings
+import shutil
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -21,6 +22,7 @@ from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_hea
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
 from factgraph.application.protocol.rule_expr_lowering import _lower_rule_expr
 from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
+from factgraph.adapters.souffle.runner import find_souffle_binary
 from factgraph.adapters.pyreason.provenance import (
     PyReasonTraceEventV0,
     PyReasonTraceV0,
@@ -30,6 +32,7 @@ from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
+from factgraph.core.store.ledger import AnnotationRow
 from factgraph.core.store._support import (
     PROBLOG_PROVENANCE_KIND,
     PYREASON_PROVENANCE_KIND,
@@ -131,6 +134,13 @@ def _row_binding_value(row: object, port_name: str) -> object:
     return value
 
 
+def _narrate_atom_lines(row: object) -> tuple[str, ...]:
+    explanation = row.explain()  # type: ignore[attr-defined]
+    lines = explanation.narrate()
+    assert lines is not None
+    return tuple(line for line in lines if line.strip().startswith("✓"))
+
+
 class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
     def test_ruleexpr_native_evaluate_returns_evaluate_result(self) -> None:
         graph = _store()
@@ -162,6 +172,53 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertTrue(any(rule.role == "body" for rule in rules))
         self.assertTrue(any(atom.repr_text for rule in rules for atom in rule.atoms))
         self.assertIsInstance(result[0].close(), Rule)
+
+    def test_nested_ruleexpr_evaluates_like_manual_dnf(self) -> None:
+        graph = _store()
+        _seed_person(graph, "alice", region="us")
+        _seed_person(graph, "bob", region="eu")
+        exists = _person_exists_rule("exists_rule")
+        region = _person_region_rule("region_rule")
+        copy = _person_exists_rule("copy_rule")
+        marker = _person_exists_rule("marker_rule")
+        nested = (
+            ((exists.as_("exists") & region.as_("region")).join_by_ports("person") | copy.as_("copy"))
+            & marker.as_("marker")
+        ).join_by_ports("person")
+        manual = (
+            (exists.as_("exists") & region.as_("region") & marker.as_("marker__c0")).join_by_ports("person")
+            | (copy.as_("copy") & marker.as_("marker__c1")).join_by_ports("person")
+        )
+        head = Rule.projection("person")
+
+        nested_result = graph.eval.evaluate(nested, head=head, engine="native")
+        manual_result = graph.eval.evaluate(manual, head=head, engine="native")
+
+        self.assertEqual(nested_result.fingerprint.expr_digest, manual_result.fingerprint.expr_digest)
+        self.assertEqual(sorted(row.digest for row in nested_result), sorted(row.digest for row in manual_result))
+        nested_lines = sorted(_narrate_atom_lines(row) for row in nested_result)
+        manual_lines = sorted(_narrate_atom_lines(row) for row in manual_result)
+        self.assertEqual(nested_lines, manual_lines)
+
+    def test_native_explain_narrate_uses_head_and_body_rule_repr(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "alice")
+        person = Var("$person")
+        region = Var("$region")
+        rule = Rule(
+            id="narrate_region",
+            when=(PredAtom("Person:exists", [person]), PredAtom("person:region", [person, region])),
+            ports={"person": person, "region": region},
+            repr="region %person is %region",
+        )
+
+        row = graph.eval.evaluate(rule, head=rule, engine="native")[0]
+        narrative = row.explain().narrate()
+
+        assert narrative is not None
+        text = "\n".join(narrative)
+        self.assertIn("region Person alice is us", text)
+        self.assertNotIn(encoded, text)
 
     def test_row_explain_anchors_each_passed_row_to_its_own_bindings(self) -> None:
         graph = _anchor_store()
@@ -518,7 +575,8 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 self.assertEqual(request.engine, engine)
                 self.assertEqual(request.plans[0].engine_options, {})
 
-    def test_souffle_row_explain_uses_support_artifact_paths(self) -> None:
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_row_explain_uses_diagnostic_projection_before_support_artifact(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "souffle")
         rule = _person_exists_rule()
@@ -557,11 +615,14 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
         tree = explanation.evidence.paths[0]
-        self.assertEqual(tree.metadata["support_kind"], SOUFFLE_WITNESS_KIND)
+        self.assertEqual(tree.metadata["branch_id"], "c0")
+        self.assertEqual(tree.certainty.kind, "boolean")
         self.assertEqual({rule.role for rule in tree.rules}, {"head", "body"})
         body = next(rule for rule in tree.rules if rule.role == "body")
         self.assertTrue(body.atoms)
-        self.assertIn("asrt-souffle-person", body.atoms[0].repr_text or "")
+        self.assertEqual(body.atoms[0].verdict.certainty.kind, "boolean")
+        self.assertIn("Person souffle", body.atoms[0].repr_text or "")
+        self.assertNotIn("asrt-souffle-person", body.atoms[0].repr_text or "")
 
     def test_souffle_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
         graph = _store()
@@ -597,8 +658,9 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
                 result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
-            explanation = result[0].explain()
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=ValueError("projection bad")):
+            with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
+                explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
@@ -606,13 +668,43 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertEqual(tree.metadata["fallback"], "minimal_row_evidence")
         self.assertEqual([rule.role for rule in tree.rules], ["head"])
 
+    @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_native_problog_and_souffle_projection_atom_lines_match(self) -> None:
+        graph = _store()
+        _seed_person(graph, "tri-engine", "us")
+        rule = _person_region_rule("tri_engine_region")
+
+        native = graph.eval.evaluate(rule, head=rule, engine="native")
+        problog = graph.eval.evaluate(rule, head=rule, engine="problog")
+        souffle = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        self.assertEqual(_narrate_atom_lines(problog[0]), _narrate_atom_lines(native[0]))
+        self.assertEqual(_narrate_atom_lines(souffle[0]), _narrate_atom_lines(native[0]))
+
     def test_problog_row_explain_uses_provenance_envelope_paths(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "problog")
-        rule = _person_exists_rule()
+        index = build_schema_index(graph.schema_ir)
+        set_field(
+            graph.ledger,
+            field_predicate(index, "Person", "region").pred_id,
+            encoded,
+            [("string", "us")],
+            meta={"source": "problog-test", "raw_kind": "probabilistic", "bound": [0.4, 0.4]},
+        )
+        rule = Rule(
+            id="Person:exists",
+            when=(PredAtom("person:region", [Var("$person"), Const("us")]),),
+            ports={"person": Var("$person")},
+            repr="person %person exists",
+        )
         trace = parse_problog_trace(
             f"""
  call Person:exists({encoded}) {{0.00010}} []
+  call edb_fact(X1,'person:region','{encoded}','us') {{0.00011}} []
+   result edb_fact(X1,'person:region','{encoded}','us') ({encoded},us) {{{{}}}} {{0.000115}} []
+  complete edb_fact(X1,'person:region','{encoded}','us') {{0.000116}} {{0.000006}} []
   result Person:exists({encoded}) ({encoded},) {{{{}}}} {{0.00012}} []
  complete Person:exists({encoded}) {{0.00013}} {{0.00003}} []
 
@@ -656,9 +748,28 @@ Person:exists({encoded}):\t0.73
         tree = explanation.evidence.paths[0]
         self.assertEqual(tree.certainty.kind, "probabilistic")
         self.assertEqual(tree.certainty.lo, 0.73)
-        self.assertEqual({rule.role for rule in tree.rules}, {"head"})
+        self.assertEqual(tree.tree_id, "c0")
+        self.assertEqual(tree.metadata["candidate_id"], "cand_v2:problog")
+        self.assertEqual(explanation.evidence.subject_binding["person"], "Person problog")
+        self.assertEqual({rule.role for rule in tree.rules}, {"head", "body"})
         self.assertTrue(tree.rules[0].atoms)
-        self.assertEqual(tree.rules[0].atoms[0].repr_text, f"Person:exists({encoded})")
+        head = next(rule for rule in tree.rules if rule.role == "head")
+        body = next(rule for rule in tree.rules if rule.role == "body")
+        self.assertEqual(head.rule_id, "Person:exists")
+        self.assertEqual(head.repr_text, "person Person problog exists")
+        self.assertEqual(head.ports["person"], "Person problog")
+        narrative = explanation.narrate()
+        assert narrative is not None
+        self.assertIn("person Person problog exists", "\n".join(narrative))
+        self.assertNotIn(f"person {encoded} exists", "\n".join(narrative))
+        self.assertEqual(head.atoms[0].atom_id, "c0:head:0")
+        self.assertEqual(head.atoms[0].verdict.certainty.kind, "boolean")
+        status_atom = body.atoms[0]
+        self.assertEqual(status_atom.atom_id, "c0:body:1")
+        self.assertEqual(status_atom.form.predicate, "edb_fact")
+        self.assertEqual(status_atom.verdict.certainty.kind, "probabilistic")
+        self.assertEqual(status_atom.verdict.certainty.lo, 0.4)
+        self.assertEqual(status_atom.verdict.certainty.hi, 0.4)
 
     def test_problog_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
         graph = _store()
@@ -689,11 +800,84 @@ Person:exists({encoded}):\t0.73
             with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
                 result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
-        explanation = result[0].explain()
+        with patch("factgraph.sdk.store.run_diagnostic_problog", side_effect=ValueError("projection bad")):
+            explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
         self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
+
+    @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
+    def test_problog_row_explain_uses_diagnostic_projection_before_trace_converter(self) -> None:
+        graph = _store()
+        encoded = _seed_person(graph, "problog-projection")
+        index = build_schema_index(graph.schema_ir)
+        region_pred = field_predicate(index, "Person", "region").pred_id
+        claim = next(claim for claim in graph.ledger.find_claims(pred_id=region_pred, e_ref=encoded))
+        graph.ledger.append_annotations(
+            [
+                AnnotationRow(
+                    asrt_id=claim.asrt_id,
+                    namespace="problog",
+                    category="semantic",
+                    key="probability",
+                    kind="float",
+                    value=0.4,
+                    origin="derived",
+                    derivation="problog-projection",
+                )
+            ]
+        )
+        rule = Rule(
+            id="Person:exists",
+            when=(PredAtom("Person:exists", [Var("$person")]),),
+            ports={"person": Var("$person")},
+            repr="person %person exists",
+        )
+        support_digest = "sha256:" + ("b" * 64)
+        candidate = CandidateSet(
+            derivation_id="Person:exists",
+            derivation_version="1.0",
+            run_id="problog-run",
+            target="Person:exists",
+            key_tuple_digest="sha256:" + ("6" * 64),
+            tup_digest=None,
+            payload={"terms": [encoded]},
+            support_digest=support_digest,
+            support_kind=PROBLOG_PROVENANCE_KIND,
+            generated_at=0,
+            state="generated",
+            confidence=0.4,
+            confidence_kind="probability",
+        )
+        envelope = ProvenanceEnvelope(
+            candidate_id="cand_v2:problog-projection",
+            engine="problog",
+            payload_type="proof_trace",
+            payload={"engine": "problog", "trace_type": "proof_trace", "events": [], "answers": []},
+        )
+
+        with patch("factgraph.sdk.store.evaluate_derivation_plans", return_value=[candidate]):
+            with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
+                result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        with patch("factgraph.sdk.store.problog_trace_to_evidence_graph", side_effect=AssertionError("trace should not run")):
+            explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        tree = explanation.evidence.paths[0]
+        self.assertEqual(tree.tree_id, "c0")
+        self.assertIn("branch_probability", tree.metadata)
+        self.assertTrue(any(rule.role == "body" and rule.atoms for rule in tree.rules))
+        narrative = explanation.narrate()
+        assert narrative is not None
+        self.assertFalse(any(line.startswith("      probability:") for line in narrative))
+        self.assertFalse(any(line.startswith("  Derivation:") for line in narrative))
+        self.assertFalse(any(" [head] ── " in line for line in narrative))
+        self.assertIn("  Person:exists  [holds]", narrative)
+        self.assertFalse(any('Person:exists ── "person Person problog-projection exists"' in line for line in narrative))
+        self.assertTrue(any("Person problog-projection exists" in line for line in narrative))
 
     def test_pyreason_row_explain_uses_provenance_envelope_timeline(self) -> None:
         graph = _store()

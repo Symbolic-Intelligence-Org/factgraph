@@ -9,7 +9,6 @@ from unittest.mock import patch
 import factgraph.adapters.problog  # noqa: F401
 from factgraph.adapters.problog.engine_eval import evaluate_problog
 from factgraph.adapters.problog.rule_ext import ProbLogRuleExt
-from factgraph.core.store._support import PROBLOG_PROVENANCE_KIND
 from factgraph.core.store.runtime import get_engine_evaluator
 from factgraph.core.store.types import EngineExtBase
 from factgraph.core.evidence.write_protocol import set_field
@@ -66,13 +65,13 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         return "\n".join(
             [
                 " call query(X1,X2) {0.00000} []",
-                f'  result query(X1,X2) ("vip","{alice_ref}") {{{{}}}} {{0.00012}} []',
+                f'  result query(X1,X2) ("{alice_ref}","vip") {{{{}}}} {{0.00012}} []',
                 " complete query(X1,X2) {0.00013} {0.00013} []",
-                f' call answer("vip","{alice_ref}") {{0.00019}} [at 4:7]',
-                f'  result answer("vip","{alice_ref}") ("vip","{alice_ref}") {{{{}}}} {{0.00060}} []',
-                f' complete answer("vip","{alice_ref}") {{0.00061}} {{0.00042}} []',
+                f' call answer("{alice_ref}","vip") {{0.00019}} [at 4:7]',
+                f'  result answer("{alice_ref}","vip") ("{alice_ref}","vip") {{{{}}}} {{0.00060}} []',
+                f' complete answer("{alice_ref}","vip") {{0.00061}} {{0.00042}} []',
                 "",
-                f'answer("vip","{alice_ref}"):\t0.42',
+                f'answer("{alice_ref}","vip"):\t0.42',
             ]
         )
 
@@ -91,7 +90,10 @@ class ProbLogEngineEvalTests(unittest.TestCase):
         self.assertEqual(mock_run.call_args.kwargs["timeout"], 30)
         self.assertTrue(mock_run.call_args.kwargs["trace"])
         explanation = candidates[0].explain()
-        self.assertEqual(explanation.evidence.support_kind, PROBLOG_PROVENANCE_KIND)
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.status, "passed")
+        self.assertTrue(explanation.evidence.paths)
+        self.assertIn("candidate_id", explanation.evidence.paths[0].metadata)
         self.assertNotEqual(candidates[0].closed_head_digest, f"sha256:{'0' * 64}")
 
     @patch("factgraph.adapters.problog.engine_eval.run_problog")

@@ -77,13 +77,18 @@ class ProbLogEvidenceGraphTests(unittest.TestCase):
         self.assertEqual(tree.certainty.kind, "probabilistic")
         self.assertEqual(tree.certainty.lo, 0.35)
         self.assertEqual(tree.metadata["answer_probability"], 0.35)
+        self.assertEqual(tree.tree_id, "c0")
+        self.assertEqual(tree.metadata["candidate_id"], "cand_v2:problog")
         self.assertEqual({rule.role for rule in tree.rules}, {"head", "body"})
         head = next(rule for rule in tree.rules if rule.role == "head")
         self.assertEqual(head.rule_id, "c")
         self.assertEqual(head.atoms[0].repr_text, "c(alice)")
+        self.assertEqual(head.atoms[0].atom_id, "c0:head:0")
+        self.assertEqual(head.atoms[0].verdict.certainty.kind, "boolean")
         body_atoms = tuple(atom for rule in tree.rules if rule.role == "body" for atom in rule.atoms)
         self.assertEqual({atom.form.predicate for atom in body_atoms}, {"a", "b"})
         self.assertTrue(all(type(atom.verdict).__name__ == "Holds" for atom in body_atoms))
+        self.assertTrue(all(atom.verdict.certainty.kind == "boolean" for atom in body_atoms))
 
     def test_converter_anchors_synthetic_answer_goal_with_reordered_terms(self) -> None:
         graph = problog_trace_to_evidence_graph(
@@ -121,6 +126,7 @@ class ProbLogEvidenceGraphTests(unittest.TestCase):
         self.assertEqual(graph.certainty.kind, "probabilistic")
         self.assertEqual(graph.certainty.lo, 0.7)
         self.assertEqual([tree.certainty.lo for tree in graph.paths], [0.2, 0.7])
+        self.assertEqual([tree.tree_id for tree in graph.paths], ["c0", "c1"])
         self.assertEqual([tree.metadata["answer_query"] for tree in graph.paths], ["d(alice)", "d(bob)"])
 
     def test_converter_rejects_missing_candidate_anchor(self) -> None:
