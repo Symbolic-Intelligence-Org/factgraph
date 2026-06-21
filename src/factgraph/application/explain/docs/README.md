@@ -130,11 +130,14 @@ flag and repr text are display metadata.
 - **Souffle** uses a dedicated reach-chain row explain path for supported
   lowered rule expressions. The static lowering plan supplies branch and
   condition structure; the Souffle reach output supplies row-specific witness
-  bindings, predicate assertion ids, and failure values. Unsupported S1 shapes
+  bindings and failure values. Unsupported S1 shapes
   such as `ruleref`, recursion, and aggregates degrade to the existing
   ProofReceipt/minimal row paths rather than the shared diagnostic companion.
-- **ProbLog** converters produce one `EvidenceTree` per answer/proof path and
-  probabilistic certainty.
+- **ProbLog** uses a dedicated reach-chain row explain path for supported
+  lowered rule expressions. The reach program queries each branch prefix to
+  recover per-condition weighted model counts, row-specific witness bindings,
+  and failure values. Candidate proof-trace conversion remains as a fallback
+  and adapter-level provenance surface.
 - **PyReason** converters produce `EvidenceTimeline` paths with timestep-aware
   events and possibilistic certainty.
 

@@ -19,8 +19,6 @@ from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
 from factgraph.application.explain import EvidenceGraph, probe_native
-from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
-from factgraph.application.explain.diagnostic_projection import build_companion_program
 from factgraph.application.explain.evidence_tree import (
     Const,
     EvidenceAtom,
@@ -38,7 +36,6 @@ from factgraph.adapters.problog.provenance import (
 )
 from factgraph.adapters.problog.reach_explain import problog_reach_explain_to_evidence_graph
 from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict, pyreason_trace_to_evidence_graph
-from factgraph.adapters.souffle.diagnostic_emit import run_diagnostic_souffle
 from factgraph.adapters.souffle.reach_explain import souffle_reach_explain_to_evidence_graph
 from factgraph.application.retract_guard import (
     RetractGuardError,
@@ -2992,34 +2989,6 @@ class SDKStore:
                 return _build_minimal_row_evidence_graph(row, result, metadata)
 
         return _builder
-
-    def _souffle_diagnostic_projection_graph(
-        self,
-        *,
-        row: Any,
-        result: EvaluateResult,
-        metadata: Mapping[str, Any],
-        plan: RuleExprLoweringPlan,
-        rules_by_id: Mapping[str, ApplicationRule],
-    ) -> EvidenceGraph:
-        companion = build_companion_program(plan, _public_bindings_for_row(row))
-        diagnostic_result = run_diagnostic_souffle(self._store, companion)
-        view_facts = project_view_facts(self.ledger, self._schema_ir)
-        display_bindings = self._display_bindings_for_row(row)
-        return diagnostic_problog_result_to_evidence_graph(
-            diagnostic_result,
-            plan=plan,
-            companion=companion,
-            graph_id=f"{result.result_id}:{row.row_id}",
-            engine=result.engine,
-            view_facts=view_facts,
-            schema_index=self._application_schema_index,
-            rules_by_id=rules_by_id or {plan.head.id: plan.head},
-            subject_binding=display_bindings,
-            metadata=metadata,
-            graph_certainty=row.certainty,
-            probabilistic=False,
-        )
 
     def _problog_row_graph_builder(
         self,

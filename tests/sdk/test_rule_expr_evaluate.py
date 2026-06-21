@@ -639,8 +639,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
                 result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-            explanation = result[0].explain()
+        explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
@@ -684,8 +683,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         result = graph.eval.evaluate(expr, head=Rule.projection("user"), engine="souffle")
         row = next(row for row in result if _row_binding_value(row, "user") == eve)
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-            explanation = row.explain()
+        explanation = row.explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
@@ -727,8 +725,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         result = graph.eval.evaluate(rule, head=rule, engine="souffle")
         row = next(row for row in result if _row_binding_value(row, "txn") == eo)
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-            explanation = row.explain()
+        explanation = row.explain()
 
         self.assertEqual(explanation.status, "passed")
         text = "\n".join(explanation.narrate() or ())
@@ -775,8 +772,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         result = graph.eval.evaluate(expr, head=Rule.projection("user"), engine="souffle")
         row = next(row for row in result if _row_binding_value(row, "user") == eve)
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-            explanation = row.explain()
+        explanation = row.explain()
 
         self.assertEqual(explanation.status, "passed")
         text = "\n".join(explanation.narrate() or ())
@@ -812,8 +808,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         result = graph.eval.evaluate(rule, head=rule, engine="souffle")
         row = next(row for row in result if _row_binding_value(row, "user") == eve)
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-            explanation = row.explain()
+        explanation = row.explain()
 
         self.assertEqual(explanation.status, "passed")
         text = "\n".join(explanation.narrate() or ())
@@ -923,8 +918,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             return path
 
         with patch("factgraph.adapters.souffle.reach_explain.run_package", side_effect=fake_run_package):
-            with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-                explanation = result[0].explain()
+            explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         text = "\n".join(explanation.narrate() or ())
@@ -949,8 +943,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
 
         result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-            narrative = result[0].explain().narrate()
+        narrative = result[0].explain().narrate()
 
         assert narrative is not None
         text = "\n".join(narrative)
@@ -978,8 +971,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
 
         result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-            narrative = result[0].explain().narrate()
+        narrative = result[0].explain().narrate()
 
         assert narrative is not None
         text = "\n".join(narrative)
@@ -1023,9 +1015,8 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
         with patch("factgraph.sdk.store.souffle_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")):
-            with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
-                with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
-                    explanation = result[0].explain()
+            with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
+                explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None

@@ -235,7 +235,8 @@ Runtime note:
   witness atoms, then falls back to minimal row evidence if receipt conversion
   fails.
 - Souffle row explain no longer routes `lowering_plan` rows through the shared
-  diagnostic companion. That companion remains for ProbLog.
+  diagnostic companion. ProbLog now uses its own reach-chain row explain path,
+  so the old shared companion emitter is retired.
 - The adapter-local `SouffleProofTreeV0` converter remains available for
   direct `souffle -t explain` JSON proof streams.
 
