@@ -250,6 +250,49 @@ class DiagnosticProjectionTests(unittest.TestCase):
         narrative = narrate_evidence(graph, status="passed")
         self.assertIn("  language_for_user  [holds]  (p = 0.9 × 0.85 × 1 = 0.765)", narrative)
 
+    def test_assembly_not_reached_without_witness_does_not_render_unbound_terms(self) -> None:
+        user = Var("$user")
+        country = Var("$country")
+        language = Var("$language")
+        rule = Rule(
+            id="language_for_user",
+            when=(
+                PredAtom("user:country", [user, country]),
+                PredAtom("country:language", [country, language]),
+            ),
+            ports={"user": user},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        program = build_companion_program(plan, {"user": "u-1"})
+        branch_id = program.branches[0].branch_id
+        result = DiagnosticProbLogResult(
+            atom_probabilities=(
+                DiagnosticAtomProbability(branch_id, 0, "holds", 1.0),
+                DiagnosticAtomProbability(branch_id, 1, "not_reached", 1.0, blocked_by="upstream"),
+            ),
+            witnesses=(
+                DiagnosticWitnessProbability(branch_id, 0, ("u-1", "US"), 1.0),
+            ),
+            branch_probabilities={branch_id: 1.0},
+        )
+
+        graph = diagnostic_problog_result_to_evidence_graph(
+            result,
+            plan=plan,
+            companion=program,
+            graph_id="graph",
+            engine="souffle",
+            view_facts={},
+            schema_index=None,
+            rules_by_id={rule.id: rule},
+            subject_binding={"user": "u-1"},
+            probabilistic=False,
+        )
+
+        narrative = "\n".join(narrate_evidence(graph, status="passed"))
+        self.assertIn("country:language not reached", narrative)
+        self.assertNotIn("<unbound>", narrative)
+
 
 if __name__ == "__main__":
     unittest.main()

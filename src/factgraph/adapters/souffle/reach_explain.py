@@ -15,8 +15,8 @@ from factgraph.adapters.problog.diagnostic_emit import (
 from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.runner import run_package
-from factgraph.adapters.souffle.souffle_view_gen import witness_rel_name
 from factgraph.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
+from factgraph.adapters.souffle.where_compile import SOUFFLE_MAX_SUPPORTED_ARITY
 from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
 from factgraph.application.explain.diagnostic_projection import BranchCompanion, CompanionProgram
 from factgraph.application.explain.evidence_tree import EvidenceGraph
@@ -45,7 +45,6 @@ class _ReachRelation:
     atom_index: int
     columns: tuple[str, ...]
     var_columns: tuple[str, ...]
-    witness_columns: Mapping[int, str]
 
 
 @dataclass(frozen=True)
@@ -53,6 +52,10 @@ class _BranchReachPlan:
     branch_id: str
     atoms: tuple[tuple[Any, ...], ...]
     reaches: tuple[_ReachRelation, ...]
+    seed_vars: tuple[str, ...]
+    seed_values: Mapping[str, Any]
+    truncated_at: int | None = None
+    truncated_arity: int | None = None
 
 
 @dataclass(frozen=True)
@@ -116,22 +119,21 @@ def _build_reach_program(plan: RuleExprLoweringPlan, row_bindings: Mapping[str, 
     branches = _normalize_compiled_body(compiled.body_ir)
     if len(branches) != len(plan.branches):
         raise SouffleReachExplainError("materialized branch count does not match lowering plan")
-    seed_values = _seed_values_for_row(plan, row_bindings)
-    if not seed_values:
+    global_seed_values = _seed_values_for_row(plan, row_bindings)
+    if not global_seed_values:
         raise SouffleReachExplainUnsupported("souffle reach explain requires at least one row seed binding")
-    seed_vars = tuple(sorted(seed_values))
     lines: list[str] = []
-    seed_cols = ", ".join(f"{_col(var)}:symbol" for var in seed_vars)
-    seed_args = ", ".join(_symbol(str(seed_values[var])) for var in seed_vars)
-    lines.append(f".decl fg_reach_seed({seed_cols})")
-    lines.append(f"fg_reach_seed({seed_args}).")
-    lines.append("")
 
     branch_plans: list[_BranchReachPlan] = []
     entrypoints: list[str] = []
     for branch_index, atoms in enumerate(branches):
         branch_id = plan.branches[branch_index].branch_id
-        branch_plan, branch_lines = _emit_branch_reaches(branch_id=branch_id, atoms=tuple(atoms), seed_vars=seed_vars)
+        branch_seed_values = _branch_seed_values(global_seed_values, atoms)
+        branch_plan, branch_lines = _emit_branch_reaches(
+            branch_id=branch_id,
+            atoms=tuple(atoms),
+            seed_values=branch_seed_values,
+        )
         branch_plans.append(branch_plan)
         lines.extend(branch_lines)
         entrypoints.extend(reach.name for reach in branch_plan.reaches)
@@ -139,8 +141,8 @@ def _build_reach_program(plan: RuleExprLoweringPlan, row_bindings: Mapping[str, 
         text="\n".join(lines).rstrip() + "\n",
         branches=tuple(branch_plans),
         entrypoints=tuple(entrypoints),
-        seed_vars=seed_vars,
-        seed_values=seed_values,
+        seed_vars=tuple(sorted(global_seed_values)),
+        seed_values=global_seed_values,
     )
 
 
@@ -148,36 +150,46 @@ def _emit_branch_reaches(
     *,
     branch_id: str,
     atoms: tuple[tuple[Any, ...], ...],
-    seed_vars: tuple[str, ...],
+    seed_values: Mapping[str, Any],
 ) -> tuple[_BranchReachPlan, list[str]]:
     if not atoms:
         raise SouffleReachExplainUnsupported("reach explain requires non-empty branch bodies")
     lines: list[str] = []
     reaches: list[_ReachRelation] = []
+    seed_vars = tuple(sorted(seed_values))
     bound_vars: list[str] = list(seed_vars)
-    witness_columns: dict[int, str] = {}
-    previous_relation = "fg_reach_seed"
+    previous_relation = f"fg_reach_seed_{_safe_suffix(branch_id)}"
     previous_args = [_var(var) for var in seed_vars]
+    seed_cols = ", ".join(f"{_col(var)}:symbol" for var in seed_vars)
+    seed_args = ", ".join(_symbol(str(seed_values[var])) for var in seed_vars)
+
+    lines.append(f".decl {previous_relation}({seed_cols})")
+    lines.append(f"{previous_relation}({seed_args}).")
+    lines.append("")
 
     for atom_index, atom in enumerate(atoms):
         _ensure_supported_atom(atom)
         next_bound_vars = list(bound_vars)
-        witness_column = f"__witness_{atom_index}" if atom[0] == "pred" else None
         atom_clause = _compile_reach_atom(
             atom,
             bound_vars=set(bound_vars),
             next_bound_vars=next_bound_vars,
-            witness_column=witness_column,
         )
-        if witness_column is not None:
-            witness_columns[atom_index] = witness_column
         rel_name = f"fg_reach_{_safe_suffix(branch_id)}_{atom_index}"
         var_columns = tuple(next_bound_vars)
-        witness_column_names = tuple(witness_columns[index] for index in sorted(witness_columns))
-        columns = (*var_columns, *witness_column_names)
+        columns = var_columns
+        if len(columns) > SOUFFLE_MAX_SUPPORTED_ARITY:
+            return _BranchReachPlan(
+                branch_id=branch_id,
+                atoms=atoms,
+                reaches=tuple(reaches),
+                seed_vars=seed_vars,
+                seed_values=dict(seed_values),
+                truncated_at=atom_index,
+                truncated_arity=len(columns),
+            ), lines
         decl_cols = ", ".join(f"{_col(col)}:symbol" for col in columns)
         head_args = [_var(var) for var in var_columns]
-        head_args.extend(_var(col) for col in witness_column_names)
         body_terms = [f"{previous_relation}({', '.join(previous_args)})", atom_clause]
         lines.append(f".decl {rel_name}({decl_cols})")
         lines.append(f".output {rel_name}")
@@ -190,14 +202,21 @@ def _emit_branch_reaches(
                 atom_index=atom_index,
                 columns=columns,
                 var_columns=var_columns,
-                witness_columns=dict(witness_columns),
             )
         )
         bound_vars = next_bound_vars
         previous_relation = rel_name
         previous_args = head_args
 
-    return _BranchReachPlan(branch_id=branch_id, atoms=atoms, reaches=tuple(reaches)), lines
+    return _BranchReachPlan(
+        branch_id=branch_id,
+        atoms=atoms,
+        reaches=tuple(reaches),
+        seed_vars=seed_vars,
+        seed_values=dict(seed_values),
+        truncated_at=None,
+        truncated_arity=None,
+    ), lines
 
 
 def _compile_reach_atom(
@@ -205,22 +224,19 @@ def _compile_reach_atom(
     *,
     bound_vars: set[str],
     next_bound_vars: list[str],
-    witness_column: str | None,
 ) -> str:
     kind = atom[0]
     if kind == "pred":
         if len(atom) != 3 or not isinstance(atom[2], list):
             raise SouffleReachExplainUnsupported("pred atom must be ('pred', pred_id, [terms...])")
-        if witness_column is None:
-            raise SouffleReachExplainUnsupported("pred atom requires witness output column")
         _kind, pred_id, terms = atom
-        rel_name = witness_rel_name(normalize_pred_id(str(pred_id)))
+        rel_name = normalize_pred_id(str(pred_id))
         args: list[str] = []
         for term in terms:
             args.append(_term_for_relation(term))
             if _is_var(term) and term not in next_bound_vars:
                 next_bound_vars.append(term)
-        return f"{rel_name}({', '.join([*args, _var(witness_column)])})"
+        return f"{rel_name}({', '.join(args)})"
     if kind in {"eq", "ne", "gt", "ge", "lt", "le"}:
         return _compile_compare(kind, atom[1], atom[2], bound_vars=bound_vars, next_bound_vars=next_bound_vars)
     if kind == "not":
@@ -284,7 +300,7 @@ def _run_reach_program(store: Any, program: _ReachProgram) -> DiagnosticProbLogR
                 "where": query_where,
                 "query_rel": "fg_reach_bootstrap",
                 "query_variables": query_variables,
-                "include_pred_witness_columns": True,
+                "include_pred_witness_columns": False,
             },
         )
         idb_path = package_dir / "rules" / "idb.dl"
@@ -312,13 +328,13 @@ def _parse_reach_outputs(outputs_dir: Path, program: _ReachProgram) -> Diagnosti
     witnesses: list[DiagnosticWitnessProbability] = []
     branches: dict[str, float] = {}
     for branch in program.branches:
-        previous_rows: list[dict[str, str]] = [_seed_row(program)]
+        previous_rows: list[dict[str, str]] = [_seed_row(branch.seed_values)]
         reach_matches: dict[int, list[dict[str, str]]] = {}
         failed_at: int | None = None
         failure_row: dict[str, str] | None = None
         for reach in branch.reaches:
             rows = [_row_to_mapping(reach.columns, row) for row in _read_output(outputs_dir, reach.name)]
-            matching = _matching_rows(rows, program.seed_values)
+            matching = _matching_rows(rows, branch.seed_values)
             if matching:
                 reach_matches[reach.atom_index] = matching
                 previous_rows = matching
@@ -330,6 +346,13 @@ def _parse_reach_outputs(outputs_dir: Path, program: _ReachProgram) -> Diagnosti
             failed_at = reach.atom_index
             failure_row = None
             break
+
+        if failed_at is None and branch.truncated_at is not None:
+            raise SouffleReachExplainUnsupported(
+                "souffle reach relation arity exceeds supported limit before branch outcome was known: "
+                f"branch {branch.branch_id} atom {branch.truncated_at} "
+                f"arity={branch.truncated_arity}, limit={SOUFFLE_MAX_SUPPORTED_ARITY}"
+            )
 
         if failed_at is None and branch.reaches:
             terminal_rows = reach_matches.get(branch.reaches[-1].atom_index, ())
@@ -347,31 +370,31 @@ def _parse_reach_outputs(outputs_dir: Path, program: _ReachProgram) -> Diagnosti
             continue
 
         prefix_row = failure_row
-        for reach in branch.reaches:
-            if failed_at is not None and reach.atom_index < failed_at:
-                atoms.append(DiagnosticAtomProbability(reach.branch_id, reach.atom_index, "holds", 1.0))
+        for atom_index, atom in enumerate(branch.atoms):
+            if failed_at is not None and atom_index < failed_at:
+                atoms.append(DiagnosticAtomProbability(branch.branch_id, atom_index, "holds", 1.0))
                 _append_witness(
                     witnesses,
-                    branch_id=reach.branch_id,
-                    atom_index=reach.atom_index,
-                    atom=branch.atoms[reach.atom_index],
+                    branch_id=branch.branch_id,
+                    atom_index=atom_index,
+                    atom=atom,
                     row=prefix_row,
                 )
                 continue
-            if failed_at is not None and reach.atom_index == failed_at:
-                atoms.append(DiagnosticAtomProbability(reach.branch_id, reach.atom_index, "fails", 1.0))
+            if failed_at is not None and atom_index == failed_at:
+                atoms.append(DiagnosticAtomProbability(branch.branch_id, atom_index, "fails", 1.0))
                 _append_witness(
                     witnesses,
-                    branch_id=reach.branch_id,
-                    atom_index=reach.atom_index,
-                    atom=branch.atoms[reach.atom_index],
+                    branch_id=branch.branch_id,
+                    atom_index=atom_index,
+                    atom=atom,
                     row=prefix_row,
                 )
                 continue
             atoms.append(
                 DiagnosticAtomProbability(
-                    reach.branch_id,
-                    reach.atom_index,
+                    branch.branch_id,
+                    atom_index,
                     "not_reached",
                     1.0,
                     blocked_by="upstream",
@@ -427,8 +450,8 @@ def _resolve_term(term: Any, row: Mapping[str, str]) -> Any:
     return term
 
 
-def _seed_row(program: _ReachProgram) -> dict[str, str]:
-    return {key: str(value) for key, value in program.seed_values.items()}
+def _seed_row(seed_values: Mapping[str, Any]) -> dict[str, str]:
+    return {key: str(value) for key, value in seed_values.items()}
 
 
 def _row_to_mapping(columns: Sequence[str], row: Sequence[str]) -> dict[str, str]:
@@ -465,6 +488,16 @@ def _seed_values_for_row(plan: RuleExprLoweringPlan, row_bindings: Mapping[str, 
     for port_name, value in row_bindings.items():
         for seed_name in seed_names_by_port.get(str(port_name), ()):
             out[seed_name] = _public_value(value)
+    return out
+
+
+def _branch_seed_values(seed_values: Mapping[str, Any], atoms: Sequence[tuple[Any, ...]]) -> dict[str, Any]:
+    branch_vars: set[str] = set()
+    for atom in atoms:
+        branch_vars.update(_vars_in_atom(atom))
+    out = {seed_var: value for seed_var, value in seed_values.items() if seed_var in branch_vars}
+    if not out:
+        raise SouffleReachExplainUnsupported("reach explain branch has no row seed variable")
     return out
 
 

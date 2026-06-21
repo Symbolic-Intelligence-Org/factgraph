@@ -22,7 +22,7 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
 from factgraph.application.protocol.evaluate_result import closed_head_digest_for
-from factgraph.application.protocol.rule_expr_lowering import _lower_rule_expr
+from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
 from factgraph.adapters.problog.provenance import parse_problog_trace, problog_trace_to_dict
 from factgraph.adapters.souffle.runner import find_souffle_binary
 from factgraph.adapters.pyreason.provenance import (
@@ -739,6 +739,118 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertNotIn("Txn M2a exists", text)
         self.assertNotIn("Txn E1 is by C-EVE", text)
         self.assertNotIn("Txn M2a is by C-EVE", text)
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_explain_keeps_wide_failed_branch_rich_without_unbound(self) -> None:
+        graph = _anchor_store()
+        eve = _seed_anchor_user(graph, "eve", region="us", age=2000, tag="risk")
+        _seed_anchor_user(graph, "mallory", region="eu", age=30, tag="risk")
+        user = Var("$user")
+        age = Var("$age")
+        holding = Rule(
+            id="wide_holding",
+            when=(
+                PredAtom("explain_anchor_user:region", [user, Const("us")]),
+                PredAtom("explain_anchor_user:tag", [user, Const("risk")]),
+            ),
+            ports={"user": user},
+            repr="holding %user",
+        )
+        wide_tail = tuple(
+            PredAtom("explain_anchor_user:tag", [Var(f"$other{index}"), Var(f"$tag{index}")])
+            for index in range(10)
+        )
+        failed_wide = Rule(
+            id="wide_failed",
+            when=(
+                PredAtom("explain_anchor_user:age", [user, age]),
+                CmpAtom("lt", age, Const(90)),
+                *wide_tail,
+            ),
+            ports={"user": user},
+            repr="failed wide %user",
+        )
+        expr = holding.as_("hold") | failed_wide.as_("wide")
+
+        result = graph.eval.evaluate(expr, head=Rule.projection("user"), engine="souffle")
+        row = next(row for row in result if _row_binding_value(row, "user") == eve)
+
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+            explanation = row.explain()
+
+        self.assertEqual(explanation.status, "passed")
+        text = "\n".join(explanation.narrate() or ())
+        self.assertIn("AnchorUser eve region us", text)
+        self.assertIn("AnchorUser eve has tag risk", text)
+        self.assertIn("AnchorUser eve age 2000", text)
+        self.assertIn("2000 < 90", text)
+        self.assertIn("[c0:atom:0]", text)
+        self.assertIn("[c1:atom:1]", text)
+        self.assertNotIn("<unbound>", text)
+        self.assertNotIn("souffle:", text)
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_explain_keeps_wide_holding_branch_rich_after_dropping_dead_witness_columns(self) -> None:
+        graph = _anchor_store()
+        eve = _seed_anchor_user(graph, "eve", region="us", age=42, tag="risk")
+        _seed_anchor_user(graph, "mallory", region="eu", age=30, tag="risk")
+        user = Var("$user")
+        repeated_tag_atoms = tuple(
+            PredAtom("explain_anchor_user:tag", [user, Var(f"$tag{index}")])
+            for index in range(13)
+        )
+        rule = Rule(
+            id="wide_holding_without_witness_columns",
+            when=(
+                PredAtom("explain_anchor_user:region", [user, Const("us")]),
+                *repeated_tag_atoms,
+            ),
+            ports={"user": user},
+            repr="wide holding %user",
+        )
+
+        result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+        row = next(row for row in result if _row_binding_value(row, "user") == eve)
+
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+            explanation = row.explain()
+
+        self.assertEqual(explanation.status, "passed")
+        text = "\n".join(explanation.narrate() or ())
+        self.assertIn("AnchorUser eve region us", text)
+        self.assertIn("AnchorUser eve has tag risk", text)
+        self.assertIn("[c0:atom:13]", text)
+        self.assertNotIn("<unbound>", text)
+        self.assertNotIn("souffle:", text)
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_reports_unknown_overwide_branch_before_runner_crash(self) -> None:
+        from factgraph.adapters.souffle.reach_explain import (
+            SouffleReachExplainUnsupported,
+            _build_reach_program,
+            _run_reach_program,
+        )
+
+        graph = _anchor_store()
+        eve = _seed_anchor_user(graph, "eve", region="us", age=2000, tag="risk")
+        user = Var("$user")
+        rule = Rule(
+            id="overwide_reach_holding",
+            when=tuple(PredAtom("explain_anchor_user:tag", [user, Var(f"$tag{index}")]) for index in range(24)),
+            ports={"user": user},
+        )
+        plan = _lower_application_rule(rule, head=rule)
+        program = _build_reach_program(plan, {"user": eve})
+
+        with self.assertRaisesRegex(
+            SouffleReachExplainUnsupported,
+            "souffle reach relation arity exceeds supported limit before branch outcome was known",
+        ) as ctx:
+            _run_reach_program(graph._store, program)
+
+        message = str(ctx.exception)
+        self.assertIn("arity=", message)
+        self.assertIn("limit=22", message)
 
     @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
     def test_souffle_eval_builds_proof_receipt_from_per_branch_witness_rows(self) -> None:

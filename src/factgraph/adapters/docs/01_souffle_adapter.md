@@ -111,11 +111,20 @@ Explainability addendum:
       `RuleExprLoweringPlan` body after Souffle-specific join/head links have
       been lowered to comparison atoms
     - Each branch emits chained `reach_i` relations. A row seed anchors the
-      subject binding; each level carries accumulated variable bindings and
-      predicate witness assertion ids
+      subject binding; each level carries accumulated variable bindings. Reach
+      explain intentionally does not carry predicate assertion ids, because
+      rich labels are rebaked from row-specific term bindings and the extra
+      assertion columns would widen Souffle relations without being consumed.
+    - The seed is branch-local: each branch carries only row seed variables
+      referenced by that materialized branch, so unrelated OR-branch aliases do
+      not widen every reach relation
     - `holds` means the row seed reaches that condition; `fails` means the
       previous reach was non-empty but the next condition did not pass; later
       conditions can remain `not_reached`
+    - If a branch would exceed Souffle's current arity ceiling after an earlier
+      failure has already been localized, later atoms are reported as
+      `not_reached`; if the branch outcome is still unknown at the first
+      overwide relation, reach explain degrades to the receipt/minimal path
     - S1 supports materialized `pred`, `eq`, `ne`, `gt`, `ge`, `lt`, `le`, and
       simple `not(pred|compare)` atoms. `ruleref`, recursion, aggregates, and
       unsupported atoms degrade to the receipt/minimal paths below

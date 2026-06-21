@@ -97,11 +97,14 @@ def diagnostic_problog_result_to_evidence_graph(
             form_envs = envs or known_envs
             form = _atom_form(atom, form_envs)
             negated = _is_not_atom(atom)
-            repr_text = (
-                _repr_not_atom(atom, form_envs, schema_index, view_facts=view)
-                if negated
-                else _bake_repr_text(form, schema_index, view_facts=view)
-            )
+            if isinstance(verdict, NotReached) and not envs:
+                repr_text = _not_reached_repr(atom)
+            else:
+                repr_text = (
+                    _repr_not_atom(atom, form_envs, schema_index, view_facts=view)
+                    if negated
+                    else _bake_repr_text(form, schema_index, view_facts=view)
+                )
             atom_id = f"{branch_id}:atom:{idx}"
             evidence_atom = EvidenceAtom(
                 form=form,
@@ -172,6 +175,17 @@ def diagnostic_problog_result_to_evidence_graph(
         certainty=graph_certainty,
         metadata=dict(metadata or {}),
     )
+
+
+def _not_reached_repr(atom: tuple[Any, ...]) -> str:
+    kind = atom[0] if atom else "atom"
+    if kind == "pred" and len(atom) > 1:
+        return f"{atom[1]} not reached"
+    if kind in {"eq", "ne", "gt", "ge", "lt", "le"}:
+        return f"{kind} not reached"
+    if kind == "not":
+        return "not-body not reached"
+    return f"{kind} not reached"
 
 
 def _probabilities_by_atom(
