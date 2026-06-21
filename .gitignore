@@ -11,6 +11,7 @@
 !/LICENSE
 !/pyproject.toml
 !/.gitignore
+!/.gitattributes
 !/.gitmodules
 
 .DS_Store

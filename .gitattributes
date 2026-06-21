@@ -1,0 +1,16 @@
+# factgraph sync — surface files: keep hnsm's version when merging factgraph/main.
+# Requires (run once per clone):  git config merge.ours.driver true
+# Rationale: workflow/factgraph_sync.md (these files intentionally differ per repo).
+
+README.md            merge=ours
+pyproject.toml       merge=ours
+CHANGELOG.md         merge=ours
+CODE_OF_CONDUCT.md   merge=ours
+CONTRIBUTING.md      merge=ours
+LICENSE              merge=ours
+pixi.lock            merge=ours
+.github/**           merge=ours
+
+# module docs = hnsm implementation truth (not carried to factgraph)
+src/factgraph/**/docs/**  merge=ours
+src/factgraph/**/*.md     merge=ours
