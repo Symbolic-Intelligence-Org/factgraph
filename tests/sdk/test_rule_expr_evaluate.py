@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 import unittest
 import warnings
 import shutil
@@ -30,7 +32,7 @@ from factgraph.adapters.pyreason.provenance import (
 )
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.rules.where_ast import AggregateAtom, CmpAtom, Const, PredAtom, Var
+from factgraph.core.rules.where_ast import AggregateAtom, AndExpr, CmpAtom, Const, NotAtom, PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store.ledger import AnnotationRow
 from factgraph.core.store._support import (
@@ -60,12 +62,26 @@ class ExplainAnchorUser(Entity):
     tag: str = Field()
 
 
+class ExplainTxn(Entity):
+    class Meta:
+        repr = "Txn %txn_id"
+
+    txn_id: str = Identity()
+    customer: str = Field(repr="%ENT is by %FLD")
+    direction: str = Field(repr="%ENT direction %FLD")
+    amount: int = Field(repr="%ENT amount %FLD")
+
+
 def _store() -> sdk.SDKStore:
     return sdk.SDKStore([Person])
 
 
 def _anchor_store() -> sdk.SDKStore:
     return sdk.SDKStore([ExplainAnchorUser])
+
+
+def _txn_store() -> sdk.SDKStore:
+    return sdk.SDKStore([ExplainTxn])
 
 
 def _seed_person(graph: sdk.SDKStore, name: str, region: str = "us") -> str:
@@ -89,6 +105,19 @@ def _seed_anchor_user(graph: sdk.SDKStore, user_id: str, *, region: str, age: in
     set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "region").pred_id, encoded, [("string", region)])
     set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "age").pred_id, encoded, [("int", age)])
     set_field(graph.ledger, field_predicate(index, "ExplainAnchorUser", "tag").pred_id, encoded, [("string", tag)])
+    return encoded
+
+
+def _seed_txn(graph: sdk.SDKStore, txn_id: str, *, customer: str, direction: str, amount: int) -> str:
+    index = build_schema_index(graph.schema_ir)
+    ref = resolve_selector(EntitySelector(entity_type="ExplainTxn", identity={"txn_id": txn_id}), index=index)
+    info = entity_info(index, "ExplainTxn")
+    encoded = ref.encoded_ref or ""
+    set_field(graph.ledger, info.exists_predicate_id, encoded, [])
+    set_field(graph.ledger, info.identity_predicates["txn_id"].pred_id, encoded, [("string", txn_id)])
+    set_field(graph.ledger, field_predicate(index, "ExplainTxn", "customer").pred_id, encoded, [("string", customer)])
+    set_field(graph.ledger, field_predicate(index, "ExplainTxn", "direction").pred_id, encoded, [("string", direction)])
+    set_field(graph.ledger, field_predicate(index, "ExplainTxn", "amount").pred_id, encoded, [("int", amount)])
     return encoded
 
 
@@ -576,7 +605,7 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
                 self.assertEqual(request.plans[0].engine_options, {})
 
     @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
-    def test_souffle_row_explain_uses_diagnostic_projection_before_support_artifact(self) -> None:
+    def test_souffle_row_explain_uses_reach_chain_before_support_artifact(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "souffle")
         rule = _person_exists_rule()
@@ -610,7 +639,8 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
                 result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        explanation = result[0].explain()
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+            explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None
@@ -623,6 +653,228 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertEqual(body.atoms[0].verdict.certainty.kind, "boolean")
         self.assertIn("Person souffle", body.atoms[0].repr_text or "")
         self.assertNotIn("asrt-souffle-person", body.atoms[0].repr_text or "")
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_explain_preserves_row_bindings_and_failure_value(self) -> None:
+        graph = _anchor_store()
+        eve = _seed_anchor_user(graph, "eve", region="us", age=2000, tag="risk")
+        _seed_anchor_user(graph, "mallory", region="eu", age=30, tag="risk")
+        user = Var("$user")
+        age = Var("$age")
+        region_us = Rule(
+            id="region_us",
+            when=(PredAtom("explain_anchor_user:region", [user, Const("us")]),),
+            ports={"user": user},
+            repr="region us %user",
+        )
+        tag_risk = Rule(
+            id="tag_risk",
+            when=(PredAtom("explain_anchor_user:tag", [user, Const("risk")]),),
+            ports={"user": user},
+            repr="risk tag %user",
+        )
+        young = Rule(
+            id="young_u",
+            when=(PredAtom("explain_anchor_user:age", [user, age]), CmpAtom("lt", age, Const(90))),
+            ports={"user": user, "age": age},
+            repr="young %user age %age",
+        )
+        expr = ((region_us.as_("r") & tag_risk.as_("t")).join_by_ports("user") | young.as_("y"))
+
+        result = graph.eval.evaluate(expr, head=Rule.projection("user"), engine="souffle")
+        row = next(row for row in result if _row_binding_value(row, "user") == eve)
+
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+            explanation = row.explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.certainty, row.certainty)
+        text = "\n".join(explanation.narrate() or ())
+        self.assertIn("AnchorUser eve region us", text)
+        self.assertIn("AnchorUser eve has tag risk", text)
+        self.assertIn("young AnchorUser eve age 2000", text)
+        self.assertIn("2000 < 90", text)
+        self.assertNotIn("AnchorUser mallory age 30", text)
+        self.assertIn("[c0:atom:0]", text)
+        self.assertIn("[c1:atom:1]", text)
+        self.assertNotIn("souffle_proof_receipt", text)
+        paths_by_id = {path.tree_id: path for path in explanation.evidence.paths}
+        self.assertEqual(paths_by_id["c0"].metadata["branch_probability"], 1.0)
+        self.assertIsNone(paths_by_id["c1"].metadata["branch_probability"])
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_explain_rebakes_holding_branch_witnesses_from_terminal_row(self) -> None:
+        graph = _txn_store()
+        _seed_txn(graph, "M2a", customer="C-MALLORY", direction="out", amount=27000)
+        _seed_txn(graph, "E1", customer="C-EVE", direction="in", amount=12000)
+        eo = _seed_txn(graph, "Eo", customer="C-EVE", direction="out", amount=28000)
+        txn = Var("$txn")
+        amount = Var("$amount")
+        rule = Rule(
+            id="txn_forwards_out",
+            when=(
+                PredAtom("ExplainTxn:exists", [txn]),
+                PredAtom("explain_txn:customer", [txn, Const("C-EVE")]),
+                PredAtom("explain_txn:direction", [txn, Const("out")]),
+                PredAtom("explain_txn:amount", [txn, amount]),
+                CmpAtom("gt", amount, Const(20000)),
+            ),
+            ports={"txn": txn},
+            repr="%txn forwards out",
+        )
+
+        result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+        row = next(row for row in result if _row_binding_value(row, "txn") == eo)
+
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+            explanation = row.explain()
+
+        self.assertEqual(explanation.status, "passed")
+        text = "\n".join(explanation.narrate() or ())
+        self.assertIn("Txn Eo exists", text)
+        self.assertIn("Txn Eo is by C-EVE", text)
+        self.assertIn("Txn Eo direction out", text)
+        self.assertIn("Txn Eo amount 28000", text)
+        self.assertNotIn("Txn M2a exists", text)
+        self.assertNotIn("Txn E1 is by C-EVE", text)
+        self.assertNotIn("Txn M2a is by C-EVE", text)
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_eval_builds_proof_receipt_from_per_branch_witness_rows(self) -> None:
+        graph = _anchor_store()
+        eve = _seed_anchor_user(graph, "eve", region="us", age=42, tag="risk")
+        _seed_anchor_user(graph, "mallory", region="eu", age=30, tag="risk")
+        user = Var("$user")
+        region_eu = Rule(
+            id="branch_region_eu",
+            when=(PredAtom("explain_anchor_user:region", [user, Const("eu")]),),
+            ports={"user": user},
+        )
+        region_us = Rule(
+            id="branch_region_us",
+            when=(PredAtom("explain_anchor_user:region", [user, Const("us")]),),
+            ports={"user": user},
+        )
+        tag_risk = Rule(
+            id="branch_tag_risk",
+            when=(PredAtom("explain_anchor_user:tag", [user, Const("risk")]),),
+            ports={"user": user},
+        )
+        expr = region_eu.as_("eu") | (region_us.as_("us") & tag_risk.as_("tag")).join_by_ports("user")
+
+        result = graph.eval.evaluate(expr, head=Rule.projection("user"), engine="souffle")
+        row = next(row for row in result if _row_binding_value(row, "user") == eve)
+
+        artifact = result._row_support_artifacts[row.row_id]  # type: ignore[index]
+        self.assertEqual(artifact.kind, SOUFFLE_WITNESS_KIND)
+        witness_keys = {witness.pred_condition_key for witness in artifact.pred_witnesses}
+        self.assertEqual(witness_keys, {"c0.c0:explain_anchor_user:region", "c0.c1:explain_anchor_user:tag"})
+        witness_ids = {asrt_id for witness in artifact.pred_witnesses for asrt_id in witness.asrt_ids}
+        self.assertEqual(len(witness_ids), 2)
+        self.assertTrue(all("mallory" not in asrt_id for asrt_id in witness_ids))
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_eval_rejects_overwide_branch_witness_relation_before_runner(self) -> None:
+        graph = _anchor_store()
+        _seed_anchor_user(graph, "eve", region="us", age=42, tag="risk")
+        user = Var("$user")
+        when = tuple(PredAtom("explain_anchor_user:region", [user, Var(f"$region{index}")]) for index in range(22))
+        rule = Rule(id="overwide_witness_branch", when=when, ports={"user": user})
+
+        with self.assertRaisesRegex(
+            WhereValidationError,
+            "souffle witness relation arity exceeds supported limit",
+        ) as ctx:
+            graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        message = str(ctx.exception)
+        self.assertIn("arity=23", message)
+        self.assertIn("limit=22", message)
+        self.assertIn("witness_predicates=22", message)
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_explain_falls_back_when_runner_fails(self) -> None:
+        graph = _anchor_store()
+        _seed_anchor_user(graph, "eve", region="us", age=42, tag="risk")
+        user = Var("$user")
+        rule = Rule(
+            id="runner_failure_fallback",
+            when=(PredAtom("explain_anchor_user:region", [user, Const("us")]),),
+            ports={"user": user},
+        )
+        result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        def fake_run_package(package_dir: object, entrypoints: object, *, engine: str) -> Path:
+            path = Path(package_dir) / "fake_run_manifest.json"
+            path.write_text(json.dumps({"engine_mode": "souffle", "exit_code": 1}), encoding="utf-8")
+            return path
+
+        with patch("factgraph.adapters.souffle.reach_explain.run_package", side_effect=fake_run_package):
+            with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+                explanation = result[0].explain()
+
+        self.assertEqual(explanation.status, "passed")
+        text = "\n".join(explanation.narrate() or ())
+        self.assertIn("souffle:", text)
+        self.assertNotIn("<unbound>", text)
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_explain_keeps_ne_rich(self) -> None:
+        graph = _anchor_store()
+        _seed_anchor_user(graph, "eve", region="us", age=2000, tag="risk")
+        mallory = _seed_anchor_user(graph, "mallory", region="eu", age=30, tag="risk")
+        user = Var("$user")
+        rule = Rule(
+            id="ne_rule",
+            when=(
+                PredAtom("explain_anchor_user:region", [user, Const("us")]),
+                CmpAtom("ne", user, Const(mallory)),
+            ),
+            ports={"user": user},
+            repr="ne %user",
+        )
+
+        result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+            narrative = result[0].explain().narrate()
+
+        assert narrative is not None
+        text = "\n".join(narrative)
+        self.assertIn("AnchorUser eve does not equal AnchorUser mallory", text)
+        self.assertIn("[c0:atom:1]", text)
+        self.assertNotIn("edb_fact", text)
+        self.assertNotIn("c0:head:0", text)
+
+    @unittest.skipIf(find_souffle_binary() is None, "souffle binary is not available")
+    def test_souffle_reach_chain_explain_keeps_not_pred_and_compare_rich(self) -> None:
+        graph = _anchor_store()
+        _seed_anchor_user(graph, "eve", region="us", age=2000, tag="risk")
+        user = Var("$user")
+        age = Var("$age")
+        rule = Rule(
+            id="not_and_compare_rule",
+            when=(
+                PredAtom("explain_anchor_user:age", [user, age]),
+                CmpAtom("ge", age, Const(100)),
+                NotAtom(AndExpr([PredAtom("explain_anchor_user:tag", [user, Const("blocked")])])),
+            ),
+            ports={"user": user},
+            repr="not compare %user",
+        )
+
+        result = graph.eval.evaluate(rule, head=rule, engine="souffle")
+
+        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+            narrative = result[0].explain().narrate()
+
+        assert narrative is not None
+        text = "\n".join(narrative)
+        self.assertIn("2000 >= 100", text)
+        self.assertIn("!AnchorUser eve has tag blocked", text)
+        self.assertIn("[c0:atom:2]", text)
+        self.assertNotIn("souffle_proof_receipt", text)
 
     def test_souffle_row_explain_falls_back_to_minimal_paths_on_converter_error(self) -> None:
         graph = _store()
@@ -658,9 +910,10 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             with patch.object(graph._store, "_lookup_support_artifact", return_value=artifact):
                 result = graph.eval.evaluate(rule, head=rule, engine="souffle")
 
-        with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=ValueError("projection bad")):
-            with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
-                explanation = result[0].explain()
+        with patch("factgraph.sdk.store.souffle_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")):
+            with patch("factgraph.sdk.store.run_diagnostic_souffle", side_effect=AssertionError("old companion should not run")):
+                with patch("factgraph.sdk.store._souffle_support_artifact_to_evidence_graph", side_effect=ValueError("bad")):
+                    explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
         assert explanation.evidence is not None

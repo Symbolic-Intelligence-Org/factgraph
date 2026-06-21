@@ -1,7 +1,7 @@
 # Application Explain Module
 
 - Scope: `src/factgraph/application/explain`
-- Last updated: 2026-06-10
+- Last updated: 2026-06-21
 - Audience: developers building explain consumers, adapter writers, SDK layer maintainers, and test authors
 
 ---
@@ -127,8 +127,12 @@ flag and repr text are display metadata.
 
 - **Native** uses `probe_native(...)` for passed rows and closed-head-false
   failures.
-- **Souffle** converters produce `EvidenceTree` paths with head/body rules and
-  atom support.
+- **Souffle** uses a dedicated reach-chain row explain path for supported
+  lowered rule expressions. The static lowering plan supplies branch and
+  condition structure; the Souffle reach output supplies row-specific witness
+  bindings, predicate assertion ids, and failure values. Unsupported S1 shapes
+  such as `ruleref`, recursion, and aggregates degrade to the existing
+  ProofReceipt/minimal row paths rather than the shared diagnostic companion.
 - **ProbLog** converters produce one `EvidenceTree` per answer/proof path and
   probabilistic certainty.
 - **PyReason** converters produce `EvidenceTimeline` paths with timestep-aware

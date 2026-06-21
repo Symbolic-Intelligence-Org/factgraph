@@ -40,6 +40,7 @@ from factgraph.adapters.problog.diagnostic_emit import emit_diagnostic_problog, 
 from factgraph.adapters.problog.engine_eval import resolve_problog_timeout
 from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict, pyreason_trace_to_evidence_graph
 from factgraph.adapters.souffle.diagnostic_emit import run_diagnostic_souffle
+from factgraph.adapters.souffle.reach_explain import souffle_reach_explain_to_evidence_graph
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -2964,12 +2965,17 @@ class SDKStore:
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
             if lowering_plan is not None:
                 try:
-                    return self._souffle_diagnostic_projection_graph(
-                        row=row,
-                        result=result,
-                        metadata=metadata,
+                    return souffle_reach_explain_to_evidence_graph(
+                        self._store,
                         plan=lowering_plan,
-                        rules_by_id=rules_by_id,
+                        row_bindings=_public_bindings_for_row(row),
+                        graph_id=f"{result.result_id}:{row.row_id}",
+                        engine=result.engine,
+                        schema_index=self._application_schema_index,
+                        rules_by_id=rules_by_id or {lowering_plan.head.id: lowering_plan.head},
+                        subject_binding=self._display_bindings_for_row(row),
+                        metadata=metadata,
+                        graph_certainty=row.certainty,
                     )
                 except Exception:
                     pass

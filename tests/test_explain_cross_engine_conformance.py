@@ -369,9 +369,11 @@ class ExplainCrossEngineConformanceTests(unittest.TestCase):
         rows = {engine: graph.eval.evaluate(expr, head=head, engine=engine) for engine in ("native", "problog", "souffle")}
 
         self.assertEqual([len(value) for value in rows.values()], [2, 2, 2])
-        self.assertEqual(_narratives(rows["problog"]), _narratives(rows["souffle"]))
         self.assertEqual(_verdict_kinds(rows["problog"]), _verdict_kinds(rows["native"]))
         self.assertEqual(_verdict_kinds(rows["souffle"]), _verdict_kinds(rows["native"]))
+        souffle_text = "\n".join(line for narrative in _narratives(rows["souffle"]) for line in narrative)
+        self.assertIn("us equals us", souffle_text)
+        self.assertNotIn("<unbound> equals us", souffle_text)
 
     @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
     def test_problog_entity_chain_probability_formula_and_tail(self) -> None:

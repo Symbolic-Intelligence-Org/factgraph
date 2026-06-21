@@ -7,6 +7,7 @@ from unittest.mock import patch
 from factgraph.adapters.souffle.pred_norm import normalize_pred_id
 from factgraph.adapters.souffle.where_compile import (
     build_query_witness_layout,
+    compile_where_to_per_branch_witness_dl,
     compile_where_to_query_dl,
 )
 from factgraph.core.rules.ruleref_common import internal_rule_pred_id
@@ -46,6 +47,47 @@ class SouffleWitnessWhereCompileV1Tests(unittest.TestCase):
         self.assertIn(".output query__test", dl)
         self.assertIn('query__test(C0, C1, W0, W1) :- p_user_name_w(C0, C1, W0), W1 = "".', dl)
         self.assertIn('query__test(C0, C1, W0, W1) :- p_user_status_w(C0, C1, W1), W0 = "".', dl)
+
+    def test_compile_where_to_per_branch_witness_dl_keeps_branch_outputs_narrow(self) -> None:
+        where = [
+            [("pred", "user:name", ["$e", "$value"])],
+            [("pred", "user:status", ["$e", "$value"])],
+        ]
+
+        program = compile_where_to_per_branch_witness_dl(
+            schema_ir=_schema_ir(),
+            where=where,
+            query_rel="query__test",
+            query_variables=["$e"],
+        )
+
+        self.assertIn(".decl query__test(C0:symbol)", program.text)
+        self.assertIn(".decl query__test__b0_w(C0:symbol, W0:symbol)", program.text)
+        self.assertIn(".decl query__test__b1_w(C0:symbol, W0:symbol)", program.text)
+        self.assertNotIn(".decl query__test(C0:symbol, W0:symbol, W1:symbol)", program.text)
+        self.assertEqual([rel.case_index for rel in program.branch_relations], [0, 1])
+        self.assertEqual(
+            [rel.layout.pred_witness_columns[0].pred_condition_key for rel in program.branch_relations],
+            ["c0.c0:user:name", "c1.c0:user:status"],
+        )
+
+    def test_compile_where_to_per_branch_witness_dl_rejects_overwide_branch(self) -> None:
+        branch = [("pred", "user:name", ["$e", f"v{index}"]) for index in range(22)]
+
+        with self.assertRaises(WhereValidationError) as ctx:
+            compile_where_to_per_branch_witness_dl(
+                schema_ir=_schema_ir(),
+                where=branch,
+                query_rel="query__wide",
+                query_variables=["$e"],
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("souffle witness relation arity exceeds supported limit", message)
+        self.assertIn("branch c0", message)
+        self.assertIn("arity=23", message)
+        self.assertIn("limit=22", message)
+        self.assertIn("witness_predicates=22", message)
 
     def test_compile_where_to_query_dl_keeps_legacy_shape_by_default(self) -> None:
         where = [
