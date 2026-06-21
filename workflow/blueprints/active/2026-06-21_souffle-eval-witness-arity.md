@@ -1,6 +1,6 @@
 # Task Blueprint: Souffle eval witness — per-branch capture + arity diagnostic (decouple from monolithic)
 
-- Status: draft
+- Status: implemented
 - Created: 2026-06-21
 - Last Updated: 2026-06-21
 - Branch: `v0.2.0-souffle-reach-chain-explain`
@@ -91,9 +91,7 @@ ProofReceipt **承重**(已核实消费者:`support_digest→ProofReceipt` sidec
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- 最终落地结果：eval 逐分支 witness 关系 + arity 诊断(`where_compile.py`/`engine_eval.py`);全 SAR souffle eval 通(4 行,不再 SIGABRT);commit `359b2ed8`。
+- 与 blueprint 不同的地方：Phase 3(`:exists` 折叠)未做(非必需);explain 侧的 reach arity 由后续 branch-local-seed 单解决。
+- 为什么会有这些调整:eval arity 已达;explain 侧 arity 是独立残留,另立单。
+- 归档说明:已实现并提交;保留 active/ 作 problog 参照,后续一并归档。

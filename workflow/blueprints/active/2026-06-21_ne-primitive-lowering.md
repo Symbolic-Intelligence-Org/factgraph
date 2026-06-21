@@ -1,6 +1,6 @@
 # Task Blueprint: Lower `!=` to the `ne` primitive (root fix, supersedes `not(eq)`)
 
-- Status: draft
+- Status: implemented
 - Created: 2026-06-21
 - Last Updated: 2026-06-21
 - Branch: `v0.2.0-souffle-reach-chain-explain` (or a sibling; decide at scope-freeze)
@@ -95,9 +95,7 @@ if expr.op in {"gt","ge","lt","le"}: out.append((expr.op, left, right))
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- 最终落地结果：`expr.py` 两处 `ne` 改为直接 `("ne", …)` 原语;commit `cad6cf6e`。修复原 problog `!=` explain 退化 + souffle `!=` 简单 eval;消除 `not(eq)` 跨引擎地雷。
+- 与 blueprint 不同的地方：无(按 §5 落地)。
+- 为什么会有这些调整：—
+- 归档说明：已实现并提交;souffle 线整组验证通过,保留 active/ 作 problog 参照,后续与同组一并归档。

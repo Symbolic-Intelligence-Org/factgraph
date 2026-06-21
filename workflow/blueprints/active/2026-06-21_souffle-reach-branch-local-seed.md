@@ -1,6 +1,6 @@
 # Task Blueprint: Souffle reach-chain wide-branch arity — drop dead `__witness_N` columns (+ branch-local seed)
 
-- Status: draft
+- Status: implemented
 - Created: 2026-06-21
 - Last Updated: 2026-06-21
 - Branch: `v0.2.0-souffle-reach-chain-explain`
@@ -89,9 +89,7 @@ reach 的每个 pred 都挂一个 `__witness_N`(asrt)列,但**装配从不读它
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- 最终落地结果：reach 收窄 arity = **drop 死 `__witness_N`(主杠杆)+ branch-local seed(互补)**;宽分支/mule 现在 rich(设备环展开);`not_reached` 不再泄漏 `<unbound>`;commit `fb3044c5`。
+- 与 blueprint 不同的地方：gate 中发现 branch-local seed 单独不足,真 lever 是 drop 装配从不读的死 `__witness_N` 列(§5.1,gate 后补)。
+- 为什么会有这些调整：`__witness_N` 是装配从不读的死列(13/ring),drop 它才把宽分支降到 22 以下、mule 也 rich。
+- 归档说明：已实现并提交;保留 active/ 作 problog 参照,后续一并归档。

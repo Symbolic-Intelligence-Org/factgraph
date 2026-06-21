@@ -1,6 +1,6 @@
 # Task Blueprint: Souffle dedicated reach-chain explain (engine separation — step 1 / S1)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-21
 - Last Updated: 2026-06-21
 - Branch: `v0.2.0-souffle-reach-chain-explain`
@@ -129,9 +129,7 @@ S1 遇到 `ruleref`/递归/aggregate **直接降级**(不做半吊子 explain)�
 
 ## 10. Outcome / Deviations
 
-任务完成后填写：
-
-- 最终落地结果：
-- 与 blueprint 不同的地方：
-- 为什么会有这些调整：
-- 归档说明：
+- 最终落地结果：`reach_explain.py` 专属 reach-chain explain;souffle lowering_plan 不再走旧 companion(`_souffle_diagnostic_projection_graph` 死路);commit `359b2ed8`(+ `fb3044c5` 收窄宽分支 arity)。
+- 与 blueprint 不同的地方：装配复用共享 `diagnostic_problog_result_to_evidence_graph`(喂 reach 解析结果),非全新装配器;新增 runner-exit 安全检查防"空输出假 rich"。
+- 为什么会有这些调整：复用已验证装配器更稳;安全检查防止 souffle 崩/假 rich。
+- 归档说明：已实现并提交;保留 active/ 作 problog 参照(同模式),后续与同组一并归档。
