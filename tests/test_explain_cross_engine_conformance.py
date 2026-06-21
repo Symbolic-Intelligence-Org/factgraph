@@ -403,6 +403,31 @@ class ExplainCrossEngineConformanceTests(unittest.TestCase):
         self.assertIn("▸ Path c1  [holds] (p = 0.4)", lines)
 
     @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
+    def test_problog_reach_chain_keeps_shared_fact_wmc_not_noisy_or(self) -> None:
+        graph = _probabilistic_or_store(via_a=0.5, via_b=0.4)
+        route = Var("$route")
+        left = Rule(
+            id="shared_via_a_left",
+            when=(PredAtom("ce_prob_route:via_a", [route, WhereConst("yes")]),),
+            ports={"route": route},
+            repr="%route qualifies via shared A left",
+        )
+        right = Rule(
+            id="shared_via_a_right",
+            when=(PredAtom("ce_prob_route:via_a", [route, WhereConst("yes")]),),
+            ports={"route": route},
+            repr="%route qualifies via shared A right",
+        )
+
+        row = graph.eval.evaluate(left.as_("left") | right.as_("right"), head=Rule.projection("route"), engine="problog")[0]
+        lines = _narrative(row)
+
+        self.assertEqual(row.certainty.lo, 0.5)
+        self.assertIn("holds with probability 0.5", "\n".join(lines))
+        self.assertIn("      probability:  0.5", lines)
+        self.assertNotIn("      probability:  1 − (1−0.5) × (1−0.5) = 0.75", lines)
+
+    @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
     def test_problog_probabilistic_or_skips_failing_branch_in_noisy_or_formula(self) -> None:
         graph = _probabilistic_or_store(via_a=0.8, via_b=0.63, include_missing_branch=True)
         via_a, via_b, via_c = _probabilistic_or_rules()

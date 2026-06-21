@@ -1,7 +1,7 @@
 # ProbLog Adapter overview (factgraph)
 
 - Scope: `src/factgraph/adapters/problog`
-- Last updated: 2026-05-28
+- Last updated: 2026-06-21
 - Audience: developers who need to understand the ProbLog export,
   execution, and result-readback path
 
@@ -25,7 +25,7 @@ It is responsible for:
   ProbLog point probabilities only when an explicit
   `uncertainty_projection` policy is configured
 - Building row-level ProbLog provenance paths for passed rows when
-  proof-trace data is available
+  reach-chain explain can localize the row's rule conditions
 - Persisting accepted ProbLog candidates' probabilities into the
   Annotation Store as `problog/semantic/probability` (via the
   post-accept binder)
@@ -61,6 +61,12 @@ It is not responsible for:
 - `problog_engine.py`
   - `run_problog(...)`: invokes the ProbLog CLI (the shared
     evaluate path defaults to passing `--trace`)
+- `reach_explain.py`
+  - Row-result explain for `RuleExprLoweringPlan` rows
+  - Emits a ProbLog reach-chain query program with one reach relation
+    per branch prefix
+  - Reads each queried prefix's weighted model count back into the
+    shared explain assembler
 - `problog_import.py`
   - `parse_problog_output(...)`: parses output and constructs
     `CandidateSet`
@@ -134,7 +140,34 @@ Main flow of `evaluate_problog(...)`:
     `persist_problog_annotations(...)` to bind real `asrt_id`s
     into the Annotation Store
 
-Explainability addendum:
+Reach-chain explain addendum:
+
+- Passed row-result explain for lowered rules now uses
+  `reach_explain.py` before the proof-trace converter:
+  - The adapter emits all active ledger claims as `edb_fact/4`, plus
+    the guard clause `edb_fact(_, _, _, _) :- fail.` so zero-fact
+    programs do not fail with an unknown predicate.
+  - Each branch starts from the row's public seed binding and emits
+    `reach_i :- reach_{i-1}, atom_i` for the materialized where atoms.
+  - The adapter queries every `reach_i`; each answer probability is the
+    prefix weighted model count.
+  - Witness rows are filtered back to the explained row before terms
+    are handed to the shared `diagnostic_problog_result_to_evidence_graph`
+    assembler.
+- This path keeps the total row probability from the original
+  `EvaluateRow.certainty`, so shared probabilistic facts keep ProbLog's
+  true WMC instead of being reinterpreted as independent branch evidence.
+- Failure localization uses the last non-empty reach row:
+  comparisons can render concrete failed values such as `2000 < 90`,
+  while later atoms are marked not reached.
+- The initial M2 surface supports materialized predicate atoms,
+  `eq/ne/gt/ge/lt/le`, and simple negation over already-bound atoms.
+  Aggregates and recursive/ruleref conditions fall back to the older
+  candidate/proof or minimal row evidence surfaces.
+- The program still exports all active facts for M2. Subject-neighborhood
+  fact scoping is a future performance slice.
+
+Proof-trace provenance addendum:
 
 - The current ProbLog adapter wires CLI `--trace` output into
   runtime candidate explain:
@@ -143,15 +176,12 @@ Explainability addendum:
   - Runtime `explain_ref(kind="candidate")` returns the
     engine-native provenance envelope
 - This provenance is not forcibly converted into a `ProofReceipt`.
-- Row-result evidence has a separate protocol bridge: for passed
-  ProbLog rows, `EvaluateRow.explain().evidence` materializes a
-  paths-model `EvidenceGraph` from the proof trace instead of falling
-  back to a minimal row-result graph.
-- The row bridge consumes the candidate provenance envelope, converts
-  the trace to paths, and then wraps the result with the exact
-  row-result metadata required by `Explanation` validation. Converter
-  metadata stays adapter-local; row-result graph metadata remains the
-  protocol row-result key set.
+- Row-result evidence falls back to this proof-trace bridge when
+  reach-chain explain is unavailable for a row. The bridge consumes the
+  candidate provenance envelope, converts the trace to paths, and then
+  wraps the result with the exact row-result metadata required by
+  `Explanation` validation. Converter metadata stays adapter-local;
+  row-result graph metadata remains the protocol row-result key set.
 - Lower-level candidate / static export surfaces may still consume the
   adapter provenance envelope directly. Treat those as adapter-level
   surfaces, not the primary public row-result evidence path.

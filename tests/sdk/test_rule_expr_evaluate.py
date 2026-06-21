@@ -1165,7 +1165,7 @@ Person:exists({encoded}):\t0.73
             with patch.object(graph._store, "_lookup_provenance_envelope", return_value=envelope):
                 result = graph.eval.evaluate(rule, head=rule, engine="problog")
 
-        with patch("factgraph.sdk.store.run_diagnostic_problog", side_effect=ValueError("projection bad")):
+        with patch("factgraph.sdk.store.problog_reach_explain_to_evidence_graph", side_effect=ValueError("reach bad")):
             explanation = result[0].explain()
 
         self.assertEqual(explanation.status, "passed")
@@ -1173,7 +1173,7 @@ Person:exists({encoded}):\t0.73
         self.assertEqual(explanation.evidence.paths[0].metadata["fallback"], "minimal_row_evidence")
 
     @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
-    def test_problog_row_explain_uses_diagnostic_projection_before_trace_converter(self) -> None:
+    def test_problog_row_explain_uses_reach_chain_before_trace_converter(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "problog-projection")
         index = build_schema_index(graph.schema_ir)
@@ -1243,6 +1243,103 @@ Person:exists({encoded}):\t0.73
         self.assertIn("  Person:exists  [holds]", narrative)
         self.assertFalse(any('Person:exists ── "person Person problog-projection exists"' in line for line in narrative))
         self.assertTrue(any("Person problog-projection exists" in line for line in narrative))
+
+    @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
+    def test_problog_reach_chain_explain_preserves_row_bindings_and_failure_value(self) -> None:
+        graph = _anchor_store()
+        eve = _seed_anchor_user(graph, "eve", region="us", age=2000, tag="risk")
+        _seed_anchor_user(graph, "mallory", region="eu", age=30, tag="risk")
+        user = Var("$user")
+        age = Var("$age")
+        region_us = Rule(
+            id="problog_region_us",
+            when=(PredAtom("explain_anchor_user:region", [user, Const("us")]),),
+            ports={"user": user},
+            repr="region us %user",
+        )
+        tag_risk = Rule(
+            id="problog_tag_risk",
+            when=(PredAtom("explain_anchor_user:tag", [user, Const("risk")]),),
+            ports={"user": user},
+            repr="risk tag %user",
+        )
+        young = Rule(
+            id="problog_young",
+            when=(PredAtom("explain_anchor_user:age", [user, age]), CmpAtom("lt", age, Const(90))),
+            ports={"user": user, "age": age},
+            repr="young %user age %age",
+        )
+        expr = (region_us.as_("r") & tag_risk.as_("t")).join_by_ports("user") | young.as_("y")
+
+        result = graph.eval.evaluate(expr, head=Rule.projection("user"), engine="problog")
+        row = next(row for row in result if _row_binding_value(row, "user") == eve)
+
+        with patch("factgraph.sdk.store.problog_trace_to_evidence_graph", side_effect=AssertionError("trace should not run")):
+            explanation = row.explain()
+
+        self.assertEqual(explanation.status, "passed")
+        assert explanation.evidence is not None
+        self.assertEqual(explanation.evidence.certainty, row.certainty)
+        text = "\n".join(explanation.narrate() or ())
+        self.assertIn("AnchorUser eve region us", text)
+        self.assertIn("AnchorUser eve has tag risk", text)
+        self.assertIn("young AnchorUser eve age 2000", text)
+        self.assertIn("2000 < 90", text)
+        self.assertNotIn("AnchorUser mallory age 30", text)
+        self.assertNotIn("<unbound>", text)
+        self.assertIn("[c0:atom:0]", text)
+        self.assertIn("[c1:atom:1]", text)
+        paths_by_id = {path.tree_id: path for path in explanation.evidence.paths}
+        self.assertEqual(paths_by_id["c0"].metadata["branch_probability"], 1.0)
+        self.assertIsNone(paths_by_id["c1"].metadata["branch_probability"])
+
+    @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
+    def test_problog_reach_chain_explain_keeps_ne_rich(self) -> None:
+        graph = _anchor_store()
+        _seed_anchor_user(graph, "eve", region="us", age=2000, tag="risk")
+        mallory = _seed_anchor_user(graph, "mallory", region="eu", age=30, tag="risk")
+        user = Var("$user")
+        rule = Rule(
+            id="problog_ne_rule",
+            when=(
+                PredAtom("explain_anchor_user:region", [user, Const("us")]),
+                CmpAtom("ne", user, Const(mallory)),
+            ),
+            ports={"user": user},
+            repr="ne %user",
+        )
+
+        result = graph.eval.evaluate(rule, head=rule, engine="problog")
+
+        with patch("factgraph.sdk.store.problog_trace_to_evidence_graph", side_effect=AssertionError("trace should not run")):
+            narrative = result[0].explain().narrate()
+
+        assert narrative is not None
+        text = "\n".join(narrative)
+        self.assertIn("AnchorUser eve does not equal AnchorUser mallory", text)
+        self.assertIn("[c0:atom:1]", text)
+        self.assertNotIn("edb_fact", text)
+        self.assertNotIn("c0:head:0", text)
+
+    @unittest.skipIf(shutil.which("problog") is None, "problog CLI is not available")
+    def test_problog_reach_chain_guard_handles_zero_fact_program(self) -> None:
+        from factgraph.adapters.problog.reach_explain import _build_reach_program, _run_reach_program
+
+        graph = _store()
+        rule = _person_exists_rule("person_exists_guard")
+        plan = _lower_application_rule(rule, head=rule)
+        program = _build_reach_program(
+            graph._store,
+            plan,
+            {"person": "Person missing"},
+            uncertainty_projection=None,
+        )
+
+        self.assertIn("edb_fact(_, _, _, _) :- fail.", program.text)
+        result = _run_reach_program(program, timeout=30)
+
+        self.assertEqual(len(result.atom_probabilities), 1)
+        self.assertEqual(result.atom_probabilities[0].verdict, "fails")
 
     def test_pyreason_row_explain_uses_provenance_envelope_timeline(self) -> None:
         graph = _store()

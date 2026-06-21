@@ -36,3 +36,22 @@ scoped → Codex 落地(`codex落地代码,你主要计划`,但切实讨论)→ 
 
 ### 待 Codex 落地前确认(Plan step 1)
 `export_problog` 的 where→edb_fact 体编译能否按原子拆解、逐步串入 reach(fact-lookup / 比较 / ne 三类),以及 plan 能否拿到逐分支原子序 + subject 锚。**拿不到干净就停下回报,不硬凑。**
+
+## 2026-06-21 — Claude gate:PASS(独立核验)
+
+### Codex 落地(Step 1 确认通过)
+`_materialize_adapter_derivation_plan(plan, engine="problog")` 给逐分支 materialized atom 序;`probe_seed_vars_by_head_port` 给 subject seed;`export_problog` helpers 复用。改动文件:新 `reach_explain.py`、`store.py`(改向 + 删 `_problog_diagnostic_projection_graph` + SDK 不再 import diagnostic_emit)、`02_problog_adapter.md`、`test_rule_expr_evaluate.py`、`test_explain_cross_engine_conformance.py`。
+
+### 独立 gate(我自己复现,不只信 BAD_TOKENS)
+- **肉眼全量 narrate**:C-EVE c0/c1 全 **Eo**(非 M2a/US)、c1 `✗ 2000 < 90 fails`(真实失败值非 `<unbound>`)、shared_device 干净 not_reached;C-M1 mule c0 全 M1o、c1 设备环 rich(`C-M1`+`C-M2` 同 D-1 + `✓ C-M1 does not equal C-M2`)。
+- **conformance 11 OK**:逐节点 WMC(`p = 0.9 × 0.85 × 1 = 0.765`、`(p=0.9)`)+ 共享事实忠实(`0.5` 非 noisy-OR `0.75`)+ failing-branch skip。
+- **companion 退役**:`_problog_diagnostic_projection_graph` 0 引用、SDK 0 caller。
+- **零回归**:souffle full BAD=[];test_rule_expr_evaluate 59 + problog suites 41 + 全套 2053(仅 1 预存无关 `render_evidence_graph_html`)绿。
+- **性能**:narrate 0.15–0.22s(SCALE=10 仍 0.22s),有界。
+
+### gate note(非 M2 blocker)
+1. **not_reached 渲染原始**(`customer:device not reached`、`ne not reached`、大小写不一):**共享装配器行为,souffle 与 problog 完全一致**(已比对)。跨引擎预存 polish,非本单引入。
+2. **native prober 全 SAR 预存不相干(重要)**:native C-EVE c1 forwards_out 引用 `Txn M2a`(应 Eo)、not_reached 显示 `<unbound>`。`git status` 确认 M2 未碰 native/shared → 预存。**推翻"native 正确"旧前提**;souffle/problog 的 reach-chain 比 native prober 更准。**候选下一单**(native reach-chain 或修 prober),独立于本单。
+
+### 判定
+**PASS**。demo 经 user 基本测试运行正常。→ commit M2 实现 + 蓝图 Outcome/implemented → user merge。

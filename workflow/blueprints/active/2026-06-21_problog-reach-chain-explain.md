@@ -1,6 +1,6 @@
 # Task Blueprint: ProbLog reach-chain explain — engine-own method (per-node WMC + faithful labels, retire companion)
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-06-21
 - Last Updated: 2026-06-21
 - Branch: `v0.2.0-problog-reach-chain-explain`
@@ -117,9 +117,7 @@ problog 是**最后一个仍走共享(坏)companion** 的引擎(native=prober、
 
 ## 10. Outcome / Deviations
 
-任务完成后填写:
-
-- 最终落地结果:
-- 与 blueprint 不同的地方:
-- 为什么会有这些调整:
-- 归档说明:
+- 最终落地结果:新 `adapters/problog/reach_explain.py`(逐分支 reach-chain + 逐节点 `query` + 复用 `export_problog` 的 `edb_fact` 发射 + 一条 `edb_fact(_,_,_,_):-fail` 守卫 + 终态回灌相干 + 失败值);`_problog_row_graph_builder` 改向、退役 companion(`_problog_diagnostic_projection_graph` 删除、SDK 不再 import `diagnostic_emit`)。**per-engine 分治完成**(native/souffle/problog/pyreason 各自独立)。gate PASS、demo 验过。
+- 与 blueprint 不同的地方:装配复用共享 `diagnostic_problog_result_to_evidence_graph`(喂合成 `CompanionProgram` anchor + reach 解析出的 atom/witness/branch/occurrence 概率),非全新装配器(同 souffle 先例)。
+- 为什么会有这些调整:复用已验证装配器更稳、改动面更小。
+- 归档说明:已实现 + gate PASS;待 user merge;保留 active/ 与 souffle 组一并归档。**另:gate 发现 native prober 在全 SAR 上预存不相干(见 audit),独立于本单。**
