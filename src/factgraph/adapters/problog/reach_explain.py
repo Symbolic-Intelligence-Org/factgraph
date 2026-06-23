@@ -383,10 +383,21 @@ def _parse_reach_answers(answers: Sequence[_AnswerRow], program: _ReachProgram) 
                 )
             if terminal_prob is not None:
                 branches[branch.branch_id] = terminal_prob
-            for alias, atom_index in branch.occurrence_last_atoms.items():
-                probability = _best_probability(reach_matches.get(atom_index, ()))
-                if probability is not None:
-                    occurrences[(branch.branch_id, alias)] = probability
+            # Per-occurrence OWN marginal. The reach query yields the CUMULATIVE
+            # path-prefix WMC at each occurrence's last atom; divide by the prior
+            # occurrence's cumulative so each occurrence reports only its own
+            # contribution (own_1 × own_2 × … = the branch WMC) instead of the
+            # running product of every occurrence before it. A shared probabilistic
+            # fact, already counted upstream, leaves the later occurrence at a 1.0
+            # marginal (it adds nothing new). Occurrences are visited in atom order.
+            prev_cumulative = 1.0
+            for alias, atom_index in sorted(branch.occurrence_last_atoms.items(), key=lambda item: item[1]):
+                cumulative = _best_probability(reach_matches.get(atom_index, ()))
+                if cumulative is None:
+                    continue
+                own = cumulative / prev_cumulative if prev_cumulative else cumulative
+                occurrences[(branch.branch_id, alias)] = own
+                prev_cumulative = cumulative
             continue
 
         prefix_row = failure_row
