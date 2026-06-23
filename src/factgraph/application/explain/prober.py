@@ -231,6 +231,7 @@ def _probe_atom(
     )
     _holds_source = fact_source_for_atom(form, atom_id, engine="native", repr_text=repr_text)
     holds_support = (_holds_source,) if _holds_source is not None else ()
+    fails_support = refuting_sources_for_atom(form, atom_id, view_facts, engine="native")
     if verdict_only:
         if deduped:
             return (
@@ -257,7 +258,7 @@ def _probe_atom(
                 verdict_envs,
             )
         return (
-            EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated),
+            EvidenceAtom(form=form, verdict=Fails(support=fails_support), atom_id=atom_id, repr_text=repr_text, negated=negated),
             candidate_envs,
             tuple(runnable_envs) or verdict_envs,
         )
@@ -285,7 +286,7 @@ def _probe_atom(
             (),
             envs or verdict_envs,
         )
-    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated), (), envs or verdict_envs
+    return EvidenceAtom(form=form, verdict=Fails(support=fails_support), atom_id=atom_id, repr_text=repr_text, negated=negated), (), envs or verdict_envs
 
 
 def _body_rules_for_branch(
@@ -521,6 +522,44 @@ def fact_source_for_atom(form: Any, atom_id: str, *, engine: str, repr_text: str
         ref=f"{engine}:{atom_id}",
         value=repr_text,
         meta={"engine": engine, "predicate": form.predicate},
+    )
+
+
+def refuting_sources_for_atom(
+    form: Any,
+    atom_id: str,
+    view_facts: Mapping[str, Sequence[tuple[Any, ...]]],
+    *,
+    engine: str,
+) -> tuple[Source, ...]:
+    """Refuting ``Source``(s) for a *failing* Fact atom — the actual EDB fact(s)
+    that share the atom's owner key but carry a different value (e.g.
+    ``project:active(P1, False)`` behind a failed ``== True``, or ``assignment:user
+    (AP1, Alice)`` behind a failed ``== Carol``). Returns ``()`` for non-Fact /
+    unary forms, an unbound owner, or a pure absence (no fact for that owner)."""
+    if not isinstance(form, Fact) or len(form.terms) < 2:
+        return ()
+    owner = form.terms[0]
+    owner_value = getattr(owner, "value", None)  # Const.value or a bound BoundVar.value
+    if owner_value is None:
+        return ()
+    rows = [
+        row
+        for row in view_facts.get(form.predicate, ())
+        if row and str(row[0]) == str(owner_value)
+    ]
+    return tuple(
+        Source(
+            ref=f"{engine}:{atom_id}:refuting:{index}",
+            value=f"{form.predicate}(" + ", ".join(str(term) for term in row) + ")",
+            meta={
+                "engine": engine,
+                "predicate": form.predicate,
+                "role": "refuting",
+                "actual": tuple(str(term) for term in row),
+            },
+        )
+        for index, row in enumerate(rows)
     )
 
 

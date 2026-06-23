@@ -54,8 +54,14 @@ rule and one body rule per real `RuleExpr` occurrence.
 (souffle/problog via `diagnostic_assemble`) and native (`prober`) paths populate
 it for holding **Fact** atoms — one `Source` per matched EDB fact (a stable `ref`,
 a readable `value`, and `{engine, predicate}` `meta`). Compare / Builtin / Aggregate
-atoms have no backing fact, so their support stays empty. (`Fails` / `NotReached`
-carry no support.)
+atoms have no backing fact, so their support stays empty.
+
+`Fails.support` symmetrically carries the *refuting* fact(s) for a failing Fact
+atom — the actual EDB fact(s) that share the atom's owner key but carry a different
+value (`meta["role"]="refuting"`, `meta["actual"]` = the actual terms); e.g.
+`project:active(P1, False)` behind a failed `== True`, or `assignment:user(AP1,
+Alice)` behind a failed `== Carol`. A pure absence (no fact for that owner) and
+unary existence facts keep empty support. `NotReached` carries none.
 
 `NotReached` is reserved for direct unbound-variable dependencies. It is not a
 generic "previous atom failed" marker. After an upstream failure, the prober

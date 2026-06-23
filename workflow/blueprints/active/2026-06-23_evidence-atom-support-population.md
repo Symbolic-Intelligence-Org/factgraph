@@ -77,3 +77,15 @@ non-Fact forms) so both paths build identical Sources.
 Deviation from §3 slicing: reach + native + helper landed together (one coherent
 change) rather than three separate slices. pyreason untouched (its provenance
 trace already populates support).
+
+**Follow-on (same session): fail-support.** At the user's request, `Fails` gained
+a symmetric `support` field (+ serialization round-trip in `evidence_tree`).
+`prober.refuting_sources_for_atom(form, atom_id, view_facts, *, engine)` returns
+the *refuting* fact(s) for a failing Fact atom — the actual EDB fact(s) that share
+the atom's owner key (term0) but carry a different value (`meta["role"]="refuting"`,
+`meta["actual"]` = the actual terms). Wired into native `_probe_atom` (both Fails
+returns) and the reach assembler (`elif isinstance(verdict, Fails)`). Unary
+existence / pure absence (no fact for the owner) → empty support. Verified native +
+problog: `assignment:user(AP1, Carol)` fail → `actual=(AP1, Alice)`;
+`project:active(P1, True)` fail → `actual=(P1, False)`. `test_explain_atom_support.py`
+extended to 4 cases (holds + fails, native + problog). Regression **629 passed**.
