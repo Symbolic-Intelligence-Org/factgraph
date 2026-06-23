@@ -25,6 +25,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprLoweringPlan,
     _materialize_adapter_derivation_plan,
     probe_seed_vars_by_head_port,
+    transitively_expand_seed,
 )
 from factgraph.core.rules.where_ast import Const
 from factgraph.core.view.projector import project_view_facts
@@ -120,6 +121,7 @@ def _build_reach_program(plan: RuleExprLoweringPlan, row_bindings: Mapping[str, 
     if len(branches) != len(plan.branches):
         raise SouffleReachExplainError("materialized branch count does not match lowering plan")
     global_seed_values = _seed_values_for_row(plan, row_bindings)
+    global_seed_values = transitively_expand_seed(global_seed_values, branches)
     if not global_seed_values:
         raise SouffleReachExplainUnsupported("souffle reach explain requires at least one row seed binding")
     lines: list[str] = []
@@ -590,6 +592,12 @@ def _is_var(value: Any) -> bool:
 def _term_for_relation(term: Any) -> str:
     if _is_var(term):
         return _var(term)
+    if isinstance(term, bool):
+        # Match the canonical EDB literal encoding (where_compile._literal_to_text):
+        # a bool field value is stored as the symbol "true"/"false", NOT Python
+        # str(True)="True" — otherwise a bool relation atom (e.g. project:active(p, True))
+        # matches zero EDB rows and reports a false culprit.
+        return _symbol("true" if term else "false")
     return _symbol(str(term))
 
 

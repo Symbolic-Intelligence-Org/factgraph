@@ -16,6 +16,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprLoweringPlan,
     RuleExprOccurrenceBinding,
     _materialize_native_derivation_plan,
+    transitively_expand_seed,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
@@ -65,6 +66,14 @@ def probe_native(
         raise TypeError("plan must be RuleExprLoweringPlan")
     compiled, traces = _materialize_native_derivation_plan(plan)
     branches = _normalize_compiled_body(compiled.body_ir)
+    # Scope every occurrence-local var that is transitively pinned by the seed over
+    # the join / head-link eq-atoms (the same expansion the souffle/problog reach
+    # builders apply). Without it a pin/row seed reaches only the head-exposing
+    # occurrence, so for a NON-holding subject the prober (which threads envs while
+    # joins materialize last) can mis-attribute the culprit to a head-link instead
+    # of the failing occurrence atom. On a holding row every join holds, so the
+    # expansion is an identity extension and the result is unchanged.
+    seed = transitively_expand_seed(dict(bindings or {}), branches)
     paths: list[EvidenceTree] = []
     for branch, trace, lowered_branch in zip(branches, traces, plan.branches, strict=True):
         paths.append(
@@ -74,7 +83,7 @@ def probe_native(
                 trace,
                 branch,
                 view_facts={key: list(value) for key, value in view_facts.items()},
-                initial_bindings=dict(bindings or {}),
+                initial_bindings=seed,
                 schema_index=schema_index,
                 rules_by_id=rules_by_id or {},
                 subject_binding=subject_binding or {},
@@ -162,7 +171,7 @@ def _probe_branch(
         atoms=head_atoms,
         subject_binding=subject_binding,
     )
-    status = _tree_status((head_rule, *body_rules))
+    status = _fold_join_status(_tree_status((head_rule, *body_rules)), joins)
     return EvidenceTree(
         tree_id=trace.branch_id,
         status=status,
@@ -979,6 +988,38 @@ def _tree_status(rules: tuple[EvidenceRule, ...]) -> TreeStatus:
     if any(status == "fails" for status in statuses):
         return "fails"
     return "not_reached"
+
+
+def _fold_join_status(status: TreeStatus, joins: tuple[EvidenceJoin, ...]) -> TreeStatus:
+    """Fold cross-occurrence JOIN verdicts into the branch status.
+
+    Joins are materialized OUTSIDE the rule list, so ``_tree_status(rules)`` never
+    sees them: a join that Fails — e.g. a same-project constraint
+    ``$wa__pa = $wb__pb`` whose two project vars are both existential (neither pinned
+    by the head) and bind to different projects — would otherwise be invisible and
+    the branch wrongly reported ``holds``. A join is an AND-conjunct of the branch,
+    so this can only DOWNGRADE the status (any failing join => fails; a not_reached
+    join blocks a would-be holds), never upgrade a failing or blocked branch. On a
+    holding row every join holds, so the fold is a no-op there (no regression).
+
+    Head-port links (``trace.head_port_link_materializations``) are a SEPARATE
+    materialization and are NOT present in ``joins`` here, so they are not folded.
+    Under the consistent head-port seed (``probe_seed_vars_by_head_port`` plus the
+    transitive seed expander seed both endpoints of every head-link to the same
+    value, and head-links materialize last), a head-link holds by construction
+    whenever the rules and joins hold — so it can never be a *sole* culprit; its
+    failure always co-occurs with an upstream rule/join failure the fold already
+    catches. If that seed invariant is ever broken (e.g. a projection / external
+    head whose seed does not reach the source-occurrence var), head-link verdicts
+    would need to be folded — and surfaced — here too.
+    """
+    if not joins:
+        return status
+    if any(join.status == "fails" for join in joins):
+        return "fails"
+    if status == "holds" and any(join.status == "not_reached" for join in joins):
+        return "not_reached"
+    return status
 
 
 def _join_id(join: RuleExprJoinMaterialization) -> str:

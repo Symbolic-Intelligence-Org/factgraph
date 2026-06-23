@@ -29,6 +29,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprLoweringPlan,
     _materialize_adapter_derivation_plan,
     probe_seed_vars_by_head_port,
+    transitively_expand_seed,
 )
 from factgraph.core.rules.where_ast import Const
 from factgraph.core.view.projector import project_view_facts
@@ -143,6 +144,7 @@ def _build_reach_program(
     if len(branches) != len(plan.branches):
         raise ProbLogReachExplainError("materialized branch count does not match lowering plan")
     seed_values = _seed_values_for_row(plan, row_bindings)
+    seed_values = transitively_expand_seed(seed_values, branches)
     if not seed_values:
         raise ProbLogReachExplainUnsupported("problog reach explain requires at least one row seed binding")
 

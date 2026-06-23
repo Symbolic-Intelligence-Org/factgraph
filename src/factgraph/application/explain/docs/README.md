@@ -1,7 +1,7 @@
 # Application Explain Module
 
 - Scope: `src/factgraph/application/explain`
-- Last updated: 2026-06-21
+- Last updated: 2026-06-22
 - Audience: developers building explain consumers, adapter writers, SDK layer maintainers, and test authors
 
 ---
@@ -68,6 +68,9 @@ def probe_native(
     bindings: Mapping[str, Any] | None,
     view_facts: Mapping[str, Sequence[tuple[Any, ...]]],
     schema_index: object | None = None,
+    *,
+    rules_by_id: Mapping[str, Any] | None = None,
+    subject_binding: Mapping[str, Any] | None = None,
 ) -> EvidenceProbeResult:
 ```
 
@@ -90,6 +93,15 @@ the same lowering plan. This covers inline, projection, and external heads, plus
 branch-specific aliases for OR and join-heavy rule expressions. The seed builder
 lives outside this module, but `probe_native(...)` depends on receiving the
 lowered variable names it actually evaluates.
+
+The seed (a row's port bindings, or a closed head's pins on the failure path) is
+expanded **transitively** over the branch join / head-link eq-atoms before
+probing (`transitively_expand_seed`): an occurrence-local variable reached only
+through a cross-occurrence join is pinned to the value its join partner carries,
+so a non-holding subject's culprit is attributed to the failing occurrence atom
+rather than to a head-link the prober reaches last. Purely existential joins
+(neither endpoint seeded) stay free. On a holding row the expansion is an
+identity extension, so the holding result is unchanged.
 
 ---
 
@@ -146,11 +158,56 @@ builder left in this layer.
 
 ---
 
-## 6. Test Entry Points
+## 6. Closed-Head-False (Full-Coverage Failure Explain)
+
+When `fg.eval.explain(expr, head=closed_head)` matches no result row (the closed
+head's pinned subject does not hold), the SDK does NOT fall back to a head-only
+probe. It lowers the FULL expr body against the closed head, extracts the head
+pins as a seed (`pin_specs_for_closed_head` → `SDKStore._pin_bindings_for_closed_head`,
+minting entity idrefs via the same `_ref` path the EDB uses, so the seed is
+byte-identical to engine facts — seed-parity), and routes that pin-seeded body
+plan through the same per-engine evidence builders the holding path uses:
+
+- **souffle / problog** → the engine-own reach-chain builder
+  (`*_reach_explain_to_evidence_graph`), seeded by the pins. Cross-occurrence join
+  failures are folded into each branch's tree status (`_fold_join_status`), so a
+  composite that fails only on a join — e.g. a same-project constraint where every
+  occurrence holds individually — is reported `fails`, not `holds`. OR composites
+  yield one tree per branch; the graph aggregates (all branches fail → failed).
+- **native / pyreason / reach-unsupported fallback** → the pin-seeded native
+  prober (never the minimal head-only graph, which would drop body coverage).
+
+The probe is labelled `probe_kind="structural_reachability"`: a non-holding
+conclusion has no derived weighted-model-count, so the verdicts are the objective
+structural reachability of each atom/join, not a fabricated probabilistic score.
+`Explanation.status="failed"` always carries a non-empty evidence graph
+(enforced by `Explanation.__post_init__`).
+
+Known limits / per-engine nuances:
+
+- **souffle large composites**: `fg.eval.explain(...)` first runs the
+  witness-building souffle evaluate, which raises when a witness relation arity
+  exceeds the souffle limit (22). This is pre-existing — it constrains HOLDING
+  souffle explain of large composites too — and independent of this path; large
+  composites are explained under problog/native.
+- **native vs reach downstream display**: after the culprit atom fails, the native
+  prober shows the occurrence's remaining atoms with their threaded per-atom
+  verdicts (often `Holds`), whereas the reach engines show them `NotReached`
+  (derivation-flow). Culprit attribution is identical on both.
+- **head-port links** hold by construction under the consistent pin seed and are
+  not folded into tree status (see `prober._fold_join_status`); a broken seed
+  invariant would need them folded + surfaced.
+- **bare single-rule heads** route via `head.as_("head")` (a single rule's body is
+  the head structurally); the full-body lowering applies to `RuleExpr` composites.
+
+---
+
+## 7. Test Entry Points
 
 ```bash
 PYTHONPATH=src python -m unittest tests.application.explain.test_prober
 PYTHONPATH=src python -m unittest tests.sdk.test_explain_conformance_native
+PYTHONPATH=src python -m pytest tests/sdk/test_explain_composite_closed_head_false.py
 ```
 
 The focused native prober tests lock:
