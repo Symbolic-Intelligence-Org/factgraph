@@ -22,6 +22,7 @@ from factgraph.application.explain.evidence_tree import (
 )
 from factgraph.application.explain.prober import (
     ProbeEnv,
+    fact_source_for_atom,
     _atom_form,
     _atom_status,
     _bake_repr_text,
@@ -107,6 +108,10 @@ def diagnostic_problog_result_to_evidence_graph(
                     else _bake_repr_text(form, schema_index, view_facts=view)
                 )
             atom_id = f"{branch_id}:atom:{idx}"
+            if isinstance(verdict, Holds):
+                source = fact_source_for_atom(form, atom_id, engine=engine, repr_text=repr_text)
+                if source is not None:
+                    verdict = Holds(certainty=verdict.certainty, support=(source,))
             evidence_atom = EvidenceAtom(
                 form=form,
                 verdict=verdict,

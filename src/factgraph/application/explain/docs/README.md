@@ -50,6 +50,13 @@ rule and one body rule per real `RuleExpr` occurrence.
 - `Fails(certainty=BOOLEAN_CERTAINTY)`
 - `NotReached(blocked_by=...)`
 
+`Holds.support` carries the provenance `Source`(s) backing the atom. The reach
+(souffle/problog via `diagnostic_assemble`) and native (`prober`) paths populate
+it for holding **Fact** atoms — one `Source` per matched EDB fact (a stable `ref`,
+a readable `value`, and `{engine, predicate}` `meta`). Compare / Builtin / Aggregate
+atoms have no backing fact, so their support stays empty. (`Fails` / `NotReached`
+carry no support.)
+
 `NotReached` is reserved for direct unbound-variable dependencies. It is not a
 generic "previous atom failed" marker. After an upstream failure, the prober
 keeps two tracks: the branch candidate envs stay empty so the failed branch does

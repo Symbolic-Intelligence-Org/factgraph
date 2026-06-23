@@ -38,6 +38,7 @@ from .evidence_tree import (
     Holds,
     NotReached,
     PortRef,
+    Source,
     TreeStatus,
 )
 
@@ -228,10 +229,18 @@ def _probe_atom(
         if negated
         else _bake_repr_text(form, schema_index, view_facts=view_facts)
     )
+    _holds_source = fact_source_for_atom(form, atom_id, engine="native", repr_text=repr_text)
+    holds_support = (_holds_source,) if _holds_source is not None else ()
     if verdict_only:
         if deduped:
             return (
-                EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated),
+                EvidenceAtom(
+                    form=form,
+                    verdict=Holds(support=holds_support),
+                    atom_id=atom_id,
+                    repr_text=repr_text,
+                    negated=negated,
+                ),
                 candidate_envs,
                 deduped,
             )
@@ -253,7 +262,17 @@ def _probe_atom(
             tuple(runnable_envs) or verdict_envs,
         )
     if deduped:
-        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated), deduped, deduped
+        return (
+            EvidenceAtom(
+                form=form,
+                verdict=Holds(support=holds_support),
+                atom_id=atom_id,
+                repr_text=repr_text,
+                negated=negated,
+            ),
+            deduped,
+            deduped,
+        )
     if blocked_by is not None:
         return (
             EvidenceAtom(
@@ -489,6 +508,20 @@ def _atom_form(atom: tuple[Any, ...], envs: tuple[ProbeEnv, ...]) -> Fact | Comp
     else:
         operands = tuple(_term_form(term, env) for term in atom[1:])
     return Builtin(kind=str(kind), operands=operands)
+
+
+def fact_source_for_atom(form: Any, atom_id: str, *, engine: str, repr_text: str | None = None) -> Source | None:
+    """Provenance ``Source`` for a holding *Fact* atom — the matched EDB fact behind
+    a holds verdict. Returns ``None`` for Compare / Builtin / Aggregate forms (no
+    backing fact), so those keep empty ``support``. Mirrors the souffle-provenance
+    Source shape: a stable ``ref`` id, the readable ``value``, engine ``meta``."""
+    if not isinstance(form, Fact):
+        return None
+    return Source(
+        ref=f"{engine}:{atom_id}",
+        value=repr_text,
+        meta={"engine": engine, "predicate": form.predicate},
+    )
 
 
 def _term_form(term: Any, env: Mapping[str, Any]) -> BoundVar | Const:
