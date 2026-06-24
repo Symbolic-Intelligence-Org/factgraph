@@ -22,10 +22,13 @@ from factgraph.application.explain.evidence_tree import (
 )
 from factgraph.application.explain.prober import (
     ProbeEnv,
+    fact_source_for_atom,
+    refuting_sources_for_atom,
     _atom_form,
     _atom_status,
     _bake_repr_text,
     _body_rules_for_branch,
+    _fold_join_status,
     _head_atom_indexes_for_branch,
     _head_rule_for_plan,
     _is_not_atom,
@@ -97,12 +100,23 @@ def diagnostic_problog_result_to_evidence_graph(
             form_envs = envs or known_envs
             form = _atom_form(atom, form_envs)
             negated = _is_not_atom(atom)
-            repr_text = (
-                _repr_not_atom(atom, form_envs, schema_index, view_facts=view)
-                if negated
-                else _bake_repr_text(form, schema_index, view_facts=view)
-            )
+            if isinstance(verdict, NotReached) and not envs:
+                repr_text = _not_reached_repr(atom)
+            else:
+                repr_text = (
+                    _repr_not_atom(atom, form_envs, schema_index, view_facts=view)
+                    if negated
+                    else _bake_repr_text(form, schema_index, view_facts=view)
+                )
             atom_id = f"{branch_id}:atom:{idx}"
+            if isinstance(verdict, Holds):
+                source = fact_source_for_atom(form, atom_id, engine=engine, repr_text=repr_text)
+                if source is not None:
+                    verdict = Holds(certainty=verdict.certainty, support=(source,))
+            elif isinstance(verdict, Fails):
+                refuting = refuting_sources_for_atom(form, atom_id, view, engine=engine)
+                if refuting:
+                    verdict = Fails(certainty=verdict.certainty, support=refuting)
             evidence_atom = EvidenceAtom(
                 form=form,
                 verdict=verdict,
@@ -139,7 +153,8 @@ def diagnostic_problog_result_to_evidence_graph(
             subject_binding=subject_binding,
         )
         rules = (head_rule, *body_rules)
-        tree_status = _tree_status(rules)
+        joins = _joins_for_trace(trace, atom_results)
+        tree_status = _fold_join_status(_tree_status(rules), joins)
         branch_probability = result.branch_probabilities.get(branch_id)
         head_probability = result.head_probabilities.get(branch_id)
         occ_probabilities = {
@@ -152,7 +167,7 @@ def diagnostic_problog_result_to_evidence_graph(
                 tree_id=branch_id,
                 status=tree_status,
                 rules=rules,
-                joins=_joins_for_trace(trace, atom_results),
+                joins=joins,
                 certainty=_probabilistic_certainty(branch_probability, probabilistic=probabilistic),
                 metadata={
                     "branch_id": branch_id,
@@ -172,6 +187,17 @@ def diagnostic_problog_result_to_evidence_graph(
         certainty=graph_certainty,
         metadata=dict(metadata or {}),
     )
+
+
+def _not_reached_repr(atom: tuple[Any, ...]) -> str:
+    kind = atom[0] if atom else "atom"
+    if kind == "pred" and len(atom) > 1:
+        return f"{atom[1]} not reached"
+    if kind in {"eq", "ne", "gt", "ge", "lt", "le"}:
+        return f"{kind} not reached"
+    if kind == "not":
+        return "not-body not reached"
+    return f"{kind} not reached"
 
 
 def _probabilities_by_atom(

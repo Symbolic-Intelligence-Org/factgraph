@@ -83,6 +83,7 @@ class Holds:
 @dataclass(frozen=True)
 class Fails:
     certainty: Certainty = BOOLEAN_CERTAINTY
+    support: tuple[Source, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -421,7 +422,11 @@ def _verdict_to_dict(verdict: Verdict) -> dict[str, Any]:
             "support": [_source_to_dict(source) for source in verdict.support],
         }
     if isinstance(verdict, Fails):
-        return {"kind": "fails", "certainty": _certainty_to_dict(verdict.certainty)}
+        return {
+            "kind": "fails",
+            "certainty": _certainty_to_dict(verdict.certainty),
+            "support": [_source_to_dict(source) for source in verdict.support],
+        }
     if isinstance(verdict, NotReached):
         return {"kind": "not_reached", "blocked_by": verdict.blocked_by}
     raise ValueError("unsupported verdict")
@@ -437,7 +442,10 @@ def _verdict_from_dict(row: Any) -> Verdict:
             support=tuple(_source_from_dict(source) for source in _require_list(row.get("support", []), "verdict.support")),
         )
     if kind == "fails":
-        return Fails(certainty=_certainty_from_dict(row.get("certainty")) or BOOLEAN_CERTAINTY)
+        return Fails(
+            certainty=_certainty_from_dict(row.get("certainty")) or BOOLEAN_CERTAINTY,
+            support=tuple(_source_from_dict(source) for source in _require_list(row.get("support", []), "verdict.support")),
+        )
     if kind == "not_reached":
         return NotReached(blocked_by=_optional_str(row.get("blocked_by"), "verdict.blocked_by"))
     raise ValueError("verdict.kind must be holds, fails, or not_reached")

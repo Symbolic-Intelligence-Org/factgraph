@@ -501,6 +501,59 @@ def probe_seed_vars_by_head_port(plan: RuleExprLoweringPlan) -> dict[str, tuple[
     return {port_name: tuple(var_names) for port_name, var_names in out.items()}
 
 
+def transitively_expand_seed(
+    valued: dict[str, object],
+    branches: list[list[tuple[object, ...]]],
+) -> dict[str, object]:
+    """Expand a base ``{var: value}`` reach seed over the eq-atom graph.
+
+    ``probe_seed_vars_by_head_port`` seeds only vars whose occurrence exposes a
+    *head* port (the head var + the head-exposing occurrence, e.g. ``colleagues``).
+    An occurrence-local var reached only through a cross-occurrence join (e.g.
+    ``works_b``'s subject, joined to the head via ``colleagues.B = works_b.Ub``)
+    is NOT seeded by the base probe — and because lowering appends the join /
+    head-link eq-atoms *after* the occurrence bodies, such a var runs free in the
+    linear reach chain, producing unfaithful per-atom verdicts for a non-holding
+    subject (a false culprit, or a masked culprit bound to the wrong entity).
+
+    This propagates each seeded value along the eq-atoms that link two lowered
+    vars (the join + head-link equalities the materialized body already carries),
+    to a fixpoint, so every var transitively pinned by a head port is scoped. An
+    eq-atom whose two endpoints are both unseeded (a purely existential join,
+    e.g. ``works_a.Pa = works_b.Pb`` with neither project pinned) stays dormant —
+    both vars remain free for the engine to search. The base seed is only
+    extended, never narrowed; both-seeded endpoints are left untouched (they
+    derive from the same head port and so already agree).
+    """
+    expanded: dict[str, object] = dict(valued)
+    edges: list[tuple[str, str]] = []
+    for atoms in branches:
+        for atom in atoms:
+            if (
+                isinstance(atom, tuple)
+                and len(atom) == 3
+                and atom[0] == "eq"
+                and isinstance(atom[1], str)
+                and atom[1].startswith("$")
+                and isinstance(atom[2], str)
+                and atom[2].startswith("$")
+            ):
+                edges.append((atom[1], atom[2]))
+    changed = True
+    while changed:
+        changed = False
+        for lhs, rhs in edges:
+            lhs_seeded = lhs in expanded
+            rhs_seeded = rhs in expanded
+            if lhs_seeded and not rhs_seeded:
+                expanded[rhs] = expanded[lhs]
+                changed = True
+            elif rhs_seeded and not lhs_seeded:
+                expanded[lhs] = expanded[rhs]
+                changed = True
+    return expanded
+
+
 def _branch_declared_port_source_for_name(
     branch: RuleExprLoweringBranch,
     occurrence_map: tuple[RuleExprOccurrenceBinding, ...],

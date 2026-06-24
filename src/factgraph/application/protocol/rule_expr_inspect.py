@@ -254,6 +254,92 @@ def _has_entity_identity_literal(var: Var, pred_id: str, atoms: tuple[Atom, ...]
     return False
 
 
+_NO_PIN = object()
+
+
+def pin_specs_for_closed_head(rule: Rule, *, schema_index: object | None) -> dict[str, tuple[Any, ...]]:
+    """Recover each CLOSED-head port's pinned value from ``rule.when``.
+
+    The head must already be closed (see ``_inspect_closed_head`` / the explain
+    guard). Returns ``{port_name: pin_spec}`` where ``pin_spec`` is:
+      - ``("value", const_value)`` — a value port pinned by ``port == const``;
+      - ``("entity", entity_type, {identity_field: const_value})`` — an entity-ref
+        port pinned by its identity-predicate literals.
+    The caller mints the entity idref token from the identity values (via the same
+    ``_ref`` path the EDB / view facts use) so the failure-explain seed is
+    byte-identical to engine facts (seed-parity). This is the value-returning twin
+    of ``_value_port_is_closed`` / ``_entity_ref_port_is_closed``."""
+    out: dict[str, tuple[Any, ...]] = {}
+    for name, var in rule.ports.items():
+        port_type = rule.port_types[name]
+        if port_type.kind == "value":
+            value = _value_port_pin_value(var, rule.when)
+            if value is _NO_PIN:
+                raise RuleExprError(f"closed-head value port {name!r} has no '== const' pin")
+            out[name] = ("value", value)
+            continue
+        fields = _entity_ref_port_pin_values(var, port_type.entity_type, rule.when, schema_index)
+        if fields is None:
+            raise RuleExprError(f"closed-head entity-ref port {name!r} has no recoverable identity pins")
+        out[name] = ("entity", port_type.entity_type, fields)
+    return out
+
+
+def _value_port_pin_value(var: Var, atoms: tuple[Atom, ...]) -> Any:
+    for atom in atoms:
+        if not isinstance(atom, CmpAtom) or atom.op != "eq":
+            continue
+        if atom.lhs == var and isinstance(atom.rhs, Const):
+            return atom.rhs.value
+        if atom.rhs == var and isinstance(atom.lhs, Const):
+            return atom.lhs.value
+    return _NO_PIN
+
+
+def _entity_ref_port_pin_values(
+    var: Var,
+    entity_type: str | None,
+    atoms: tuple[Atom, ...],
+    schema_index: object | None,
+) -> dict[str, Any] | None:
+    if not entity_type or schema_index is None:
+        return None
+    entities = getattr(schema_index, "entities", None)
+    if not isinstance(entities, Mapping):
+        return None
+    entity = entities.get(entity_type)
+    if entity is None:
+        return None
+    identity_fields = getattr(entity, "identity_fields", None)
+    identity_predicates = getattr(entity, "identity_predicates", None)
+    if not isinstance(identity_fields, tuple) or not isinstance(identity_predicates, Mapping) or not identity_fields:
+        return None
+    out: dict[str, Any] = {}
+    for field_info in identity_fields:
+        field_name = getattr(field_info, "name", None)
+        if not isinstance(field_name, str) or not field_name:
+            return None
+        predicate = identity_predicates.get(field_name)
+        pred_id = getattr(predicate, "pred_id", None)
+        if not isinstance(pred_id, str) or not pred_id:
+            return None
+        value = _entity_identity_literal_value(var, pred_id, atoms)
+        if value is _NO_PIN:
+            return None
+        out[field_name] = value
+    return out
+
+
+def _entity_identity_literal_value(var: Var, pred_id: str, atoms: tuple[Atom, ...]) -> Any:
+    for atom in atoms:
+        if not isinstance(atom, PredAtom) or atom.pred_id != pred_id:
+            continue
+        terms = tuple(atom.terms)
+        if len(terms) == 2 and terms[0] == var and isinstance(terms[1], Const):
+            return terms[1].value
+    return _NO_PIN
+
+
 def _inspect_rule_expr(expr: _RuleExpr) -> RuleExprInspect:
     if not isinstance(expr, _RuleExpr):
         raise RuleExprError("inspect(rule_expr) requires RuleExpr value")

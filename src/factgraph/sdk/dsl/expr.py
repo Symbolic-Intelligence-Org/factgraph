@@ -445,7 +445,7 @@ def _lower_compare(expr: CompareExpr, bindings: dict[LogicVar, str], *, temp_seq
     pre_right, right = _lower_expr_term(expr.right, temp_seq=temp_seq)
     out = [*pre_left, *pre_right]
     if expr.op == "ne":
-        out.append(("not", [("eq", left, right)]))
+        out.append(("ne", left, right))
         return out
     if expr.op == "eq":
         out.append(("eq", left, right))
@@ -473,7 +473,7 @@ def _lower_compare_with_aggregate(
         else lower_term(expr.right, in_where=True)
     )
     if expr.op == "ne":
-        return [("not", [("eq", left, right)])]
+        return [("ne", left, right)]
     if expr.op in {"eq", "gt", "ge", "lt", "le"}:
         return [(expr.op, left, right)]
     raise SDKDSLError(f"unsupported compare op: {expr.op}")

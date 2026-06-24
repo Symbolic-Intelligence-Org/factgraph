@@ -16,6 +16,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprLoweringPlan,
     RuleExprOccurrenceBinding,
     _materialize_native_derivation_plan,
+    transitively_expand_seed,
 )
 from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY
 from factgraph.core.protocol.tup_v1 import ENTITY_REF_PREFIX, display_float64_value
@@ -37,6 +38,7 @@ from .evidence_tree import (
     Holds,
     NotReached,
     PortRef,
+    Source,
     TreeStatus,
 )
 
@@ -65,6 +67,14 @@ def probe_native(
         raise TypeError("plan must be RuleExprLoweringPlan")
     compiled, traces = _materialize_native_derivation_plan(plan)
     branches = _normalize_compiled_body(compiled.body_ir)
+    # Scope every occurrence-local var that is transitively pinned by the seed over
+    # the join / head-link eq-atoms (the same expansion the souffle/problog reach
+    # builders apply). Without it a pin/row seed reaches only the head-exposing
+    # occurrence, so for a NON-holding subject the prober (which threads envs while
+    # joins materialize last) can mis-attribute the culprit to a head-link instead
+    # of the failing occurrence atom. On a holding row every join holds, so the
+    # expansion is an identity extension and the result is unchanged.
+    seed = transitively_expand_seed(dict(bindings or {}), branches)
     paths: list[EvidenceTree] = []
     for branch, trace, lowered_branch in zip(branches, traces, plan.branches, strict=True):
         paths.append(
@@ -74,7 +84,7 @@ def probe_native(
                 trace,
                 branch,
                 view_facts={key: list(value) for key, value in view_facts.items()},
-                initial_bindings=dict(bindings or {}),
+                initial_bindings=seed,
                 schema_index=schema_index,
                 rules_by_id=rules_by_id or {},
                 subject_binding=subject_binding or {},
@@ -162,7 +172,7 @@ def _probe_branch(
         atoms=head_atoms,
         subject_binding=subject_binding,
     )
-    status = _tree_status((head_rule, *body_rules))
+    status = _fold_join_status(_tree_status((head_rule, *body_rules)), joins)
     return EvidenceTree(
         tree_id=trace.branch_id,
         status=status,
@@ -219,10 +229,19 @@ def _probe_atom(
         if negated
         else _bake_repr_text(form, schema_index, view_facts=view_facts)
     )
+    _holds_source = fact_source_for_atom(form, atom_id, engine="native", repr_text=repr_text)
+    holds_support = (_holds_source,) if _holds_source is not None else ()
+    fails_support = refuting_sources_for_atom(form, atom_id, view_facts, engine="native")
     if verdict_only:
         if deduped:
             return (
-                EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated),
+                EvidenceAtom(
+                    form=form,
+                    verdict=Holds(support=holds_support),
+                    atom_id=atom_id,
+                    repr_text=repr_text,
+                    negated=negated,
+                ),
                 candidate_envs,
                 deduped,
             )
@@ -239,12 +258,22 @@ def _probe_atom(
                 verdict_envs,
             )
         return (
-            EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated),
+            EvidenceAtom(form=form, verdict=Fails(support=fails_support), atom_id=atom_id, repr_text=repr_text, negated=negated),
             candidate_envs,
             tuple(runnable_envs) or verdict_envs,
         )
     if deduped:
-        return EvidenceAtom(form=form, verdict=Holds(), atom_id=atom_id, repr_text=repr_text, negated=negated), deduped, deduped
+        return (
+            EvidenceAtom(
+                form=form,
+                verdict=Holds(support=holds_support),
+                atom_id=atom_id,
+                repr_text=repr_text,
+                negated=negated,
+            ),
+            deduped,
+            deduped,
+        )
     if blocked_by is not None:
         return (
             EvidenceAtom(
@@ -257,7 +286,7 @@ def _probe_atom(
             (),
             envs or verdict_envs,
         )
-    return EvidenceAtom(form=form, verdict=Fails(), atom_id=atom_id, repr_text=repr_text, negated=negated), (), envs or verdict_envs
+    return EvidenceAtom(form=form, verdict=Fails(support=fails_support), atom_id=atom_id, repr_text=repr_text, negated=negated), (), envs or verdict_envs
 
 
 def _body_rules_for_branch(
@@ -480,6 +509,58 @@ def _atom_form(atom: tuple[Any, ...], envs: tuple[ProbeEnv, ...]) -> Fact | Comp
     else:
         operands = tuple(_term_form(term, env) for term in atom[1:])
     return Builtin(kind=str(kind), operands=operands)
+
+
+def fact_source_for_atom(form: Any, atom_id: str, *, engine: str, repr_text: str | None = None) -> Source | None:
+    """Provenance ``Source`` for a holding *Fact* atom — the matched EDB fact behind
+    a holds verdict. Returns ``None`` for Compare / Builtin / Aggregate forms (no
+    backing fact), so those keep empty ``support``. Mirrors the souffle-provenance
+    Source shape: a stable ``ref`` id, the readable ``value``, engine ``meta``."""
+    if not isinstance(form, Fact):
+        return None
+    return Source(
+        ref=f"{engine}:{atom_id}",
+        value=repr_text,
+        meta={"engine": engine, "predicate": form.predicate},
+    )
+
+
+def refuting_sources_for_atom(
+    form: Any,
+    atom_id: str,
+    view_facts: Mapping[str, Sequence[tuple[Any, ...]]],
+    *,
+    engine: str,
+) -> tuple[Source, ...]:
+    """Refuting ``Source``(s) for a *failing* Fact atom — the actual EDB fact(s)
+    that share the atom's owner key but carry a different value (e.g.
+    ``project:active(P1, False)`` behind a failed ``== True``, or ``assignment:user
+    (AP1, Alice)`` behind a failed ``== Carol``). Returns ``()`` for non-Fact /
+    unary forms, an unbound owner, or a pure absence (no fact for that owner)."""
+    if not isinstance(form, Fact) or len(form.terms) < 2:
+        return ()
+    owner = form.terms[0]
+    owner_value = getattr(owner, "value", None)  # Const.value or a bound BoundVar.value
+    if owner_value is None:
+        return ()
+    rows = [
+        row
+        for row in view_facts.get(form.predicate, ())
+        if row and str(row[0]) == str(owner_value)
+    ]
+    return tuple(
+        Source(
+            ref=f"{engine}:{atom_id}:refuting:{index}",
+            value=f"{form.predicate}(" + ", ".join(str(term) for term in row) + ")",
+            meta={
+                "engine": engine,
+                "predicate": form.predicate,
+                "role": "refuting",
+                "actual": tuple(str(term) for term in row),
+            },
+        )
+        for index, row in enumerate(rows)
+    )
 
 
 def _term_form(term: Any, env: Mapping[str, Any]) -> BoundVar | Const:
@@ -979,6 +1060,38 @@ def _tree_status(rules: tuple[EvidenceRule, ...]) -> TreeStatus:
     if any(status == "fails" for status in statuses):
         return "fails"
     return "not_reached"
+
+
+def _fold_join_status(status: TreeStatus, joins: tuple[EvidenceJoin, ...]) -> TreeStatus:
+    """Fold cross-occurrence JOIN verdicts into the branch status.
+
+    Joins are materialized OUTSIDE the rule list, so ``_tree_status(rules)`` never
+    sees them: a join that Fails — e.g. a same-project constraint
+    ``$wa__pa = $wb__pb`` whose two project vars are both existential (neither pinned
+    by the head) and bind to different projects — would otherwise be invisible and
+    the branch wrongly reported ``holds``. A join is an AND-conjunct of the branch,
+    so this can only DOWNGRADE the status (any failing join => fails; a not_reached
+    join blocks a would-be holds), never upgrade a failing or blocked branch. On a
+    holding row every join holds, so the fold is a no-op there (no regression).
+
+    Head-port links (``trace.head_port_link_materializations``) are a SEPARATE
+    materialization and are NOT present in ``joins`` here, so they are not folded.
+    Under the consistent head-port seed (``probe_seed_vars_by_head_port`` plus the
+    transitive seed expander seed both endpoints of every head-link to the same
+    value, and head-links materialize last), a head-link holds by construction
+    whenever the rules and joins hold — so it can never be a *sole* culprit; its
+    failure always co-occurs with an upstream rule/join failure the fold already
+    catches. If that seed invariant is ever broken (e.g. a projection / external
+    head whose seed does not reach the source-occurrence var), head-link verdicts
+    would need to be folded — and surfaced — here too.
+    """
+    if not joins:
+        return status
+    if any(join.status == "fails" for join in joins):
+        return "fails"
+    if status == "holds" and any(join.status == "not_reached" for join in joins):
+        return "not_reached"
+    return status
 
 
 def _join_id(join: RuleExprJoinMaterialization) -> str:

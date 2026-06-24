@@ -8,8 +8,10 @@ from typing import Any
 
 from factgraph.adapters.souffle.tsv_v1 import tsv_cell_v1_decode
 from factgraph.adapters.souffle.where_compile import (
+    BranchWitnessRelationSpec,
     QueryWitnessLayout,
     build_query_witness_layout,
+    compile_where_to_per_branch_witness_dl,
     extract_where_variables,
     query_rel_for_where,
 )
@@ -234,10 +236,19 @@ def _run_query_and_read_support_rows(
                 "include_pred_witness_columns": True,
             },
         )
+        witness_program = compile_where_to_per_branch_witness_dl(
+            schema_ir=store.schema_ir,
+            where=where,
+            query_rel=query_rel,
+            query_variables=query_variables,
+        )
+        (out_dir / "rules" / "idb.dl").write_text(witness_program.text, encoding="utf-8", newline="\n")
+        _rewrite_query_outputs_map(manifest_path, [query_rel, *(rel.relation_name for rel in witness_program.branch_relations)])
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         outputs_map = manifest.get("outputs_map", {})
         query_outputs = outputs_map.get("__query__") if isinstance(outputs_map, dict) else None
-        if query_outputs != [query_rel]:
+        expected_outputs = [query_rel, *(rel.relation_name for rel in witness_program.branch_relations)]
+        if query_outputs != expected_outputs:
             raise WhereValidationError("query outputs_map is missing or invalid")
 
         run_manifest_path = run_package(out_dir, ["__query__"], engine="souffle")
@@ -249,8 +260,7 @@ def _run_query_and_read_support_rows(
         if exit_code != 0:
             raise WhereValidationError(f"engine evaluate failed with non-zero exit_code: {exit_code}")
 
-        out_path = out_dir / "outputs" / f"{query_rel}.out.facts"
-        parsed_rows = _read_query_witness_rows(out_path, witness_layout)
+        parsed_rows = _read_branch_witness_rows(out_dir / "outputs", witness_program.branch_relations)
         return _build_support_rows_from_witness_rows(
             store=store,
             where=where,
@@ -297,6 +307,22 @@ def _run_query_and_read_bindings(
 
     out_path = out_dir / "outputs" / f"{query_rel}.out.facts"
     return _read_query_bindings(out_path, query_variables)
+
+
+def _rewrite_query_outputs_map(manifest_path: Path, query_outputs: list[str]) -> None:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    outputs_map = manifest.get("outputs_map")
+    if not isinstance(outputs_map, dict):
+        raise WhereValidationError("query outputs_map is missing or invalid")
+    outputs_map["__query__"] = list(query_outputs)
+    entrypoints = manifest.get("entrypoints")
+    if isinstance(entrypoints, list) and "__query__" not in entrypoints:
+        entrypoints.append("__query__")
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def _read_query_bindings(out_path: Path, variables: list[str]) -> list[dict[str, Any]]:
@@ -384,6 +410,24 @@ def _read_query_witness_rows(
         )
     )
     return rows
+
+
+def _read_branch_witness_rows(
+    outputs_dir: Path,
+    branch_relations: tuple[BranchWitnessRelationSpec, ...],
+) -> list[_ParsedWitnessRow]:
+    parsed: list[_ParsedWitnessRow] = []
+    for relation in branch_relations:
+        out_path = outputs_dir / f"{relation.relation_name}.out.facts"
+        parsed.extend(_read_query_witness_rows(out_path, relation.layout))
+    parsed.sort(
+        key=lambda row: (
+            row.binding_items,
+            row.selected_case_index,
+            row.witness_atoms,
+        )
+    )
+    return parsed
 
 
 def _build_support_rows_from_witness_rows(
