@@ -19,8 +19,6 @@ from factgraph.application.workspace_runtime import resolve_workspace_paths
 from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
 from factgraph.application.explain import EvidenceGraph, probe_native
-from factgraph.application.explain.diagnostic_assemble import diagnostic_problog_result_to_evidence_graph
-from factgraph.application.explain.diagnostic_projection import build_companion_program
 from factgraph.application.explain.evidence_tree import (
     Const,
     EvidenceAtom,
@@ -36,10 +34,9 @@ from factgraph.adapters.problog.provenance import (
     problog_trace_from_dict,
     problog_trace_to_evidence_graph,
 )
-from factgraph.adapters.problog.diagnostic_emit import emit_diagnostic_problog, run_diagnostic_problog
-from factgraph.adapters.problog.engine_eval import resolve_problog_timeout
+from factgraph.adapters.problog.reach_explain import problog_reach_explain_to_evidence_graph
 from factgraph.adapters.pyreason.provenance import pyreason_trace_from_dict, pyreason_trace_to_evidence_graph
-from factgraph.adapters.souffle.diagnostic_emit import run_diagnostic_souffle
+from factgraph.adapters.souffle.reach_explain import souffle_reach_explain_to_evidence_graph
 from factgraph.application.retract_guard import (
     RetractGuardError,
     check_retract_allowed,
@@ -59,7 +56,7 @@ from factgraph.application.protocol import (
     Rule as ApplicationRule,
     RuleExprError,
 )
-from factgraph.application.protocol.certainty import Certainty
+from factgraph.application.protocol.certainty import BOOLEAN_CERTAINTY, Certainty
 from factgraph.application.protocol.evaluate_result import (
     EvaluateResult,
     ResultFingerprint,
@@ -81,7 +78,7 @@ from factgraph.application.protocol.evaluate_result import (
     view_snapshot_digest_for_parts,
 )
 from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand, _iter_rule_operands
-from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head
+from factgraph.application.protocol.rule_expr_inspect import _inspect_closed_head, pin_specs_for_closed_head
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprAdapterSupport,
     RuleExprLoweringPlan,
@@ -2632,17 +2629,21 @@ class SDKStore:
         checked_scope = self._manual_explain_checked_scope(result, closed_head=head)
         first = self._manual_explain_matching_row(result, closed_head=head)
         if first is None:
-            replay_plan = _lower_rule_expr(_coerce_rule_expr_operand(head.as_("head")), head=head)
-            evidence = self._probe_evidence_graph_for_lowering_plan(
-                replay_plan,
+            # Faithful full-coverage failure explain: lower the FULL expr body
+            # against the closed head (NOT just head.as_("head"), which probed the
+            # head alone), then route the head pins as the seed through the same
+            # per-engine evidence builders the holding path uses. A bare single-rule
+            # input has no separate body (it IS the head structurally), so lower the
+            # closed head as one occurrence — which also sidesteps the bare-Rule
+            # auto-alias coercion error for non-identifier rule ids.
+            body_source = args[0] if isinstance(args[0], _RuleExpr) else head.as_("head")
+            body_plan = _lower_rule_expr(_coerce_rule_expr_operand(body_source), head=head)
+            pin_bindings = self._pin_bindings_for_closed_head(head)
+            evidence = self._closed_head_false_evidence_graph(
+                body_plan,
+                pin_bindings,
                 result=result,
-                row=None,
-                metadata={
-                    "result_id": result.result_id,
-                    "failure_class": "closed_head_false",
-                    "closed_head_digest": checked_scope["closed_head_digest"],
-                    "engine": result.engine,
-                },
+                checked_scope=checked_scope,
             )
             return Explanation(
                 status="failed",
@@ -2964,12 +2965,17 @@ class SDKStore:
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
             if lowering_plan is not None:
                 try:
-                    return self._souffle_diagnostic_projection_graph(
-                        row=row,
-                        result=result,
-                        metadata=metadata,
+                    return souffle_reach_explain_to_evidence_graph(
+                        self._store,
                         plan=lowering_plan,
-                        rules_by_id=rules_by_id,
+                        row_bindings=_public_bindings_for_row(row),
+                        graph_id=f"{result.result_id}:{row.row_id}",
+                        engine=result.engine,
+                        schema_index=self._application_schema_index,
+                        rules_by_id=rules_by_id or {lowering_plan.head.id: lowering_plan.head},
+                        subject_binding=self._display_bindings_for_row(row),
+                        metadata=metadata,
+                        graph_certainty=row.certainty,
                     )
                 except Exception:
                     pass
@@ -2988,34 +2994,6 @@ class SDKStore:
 
         return _builder
 
-    def _souffle_diagnostic_projection_graph(
-        self,
-        *,
-        row: Any,
-        result: EvaluateResult,
-        metadata: Mapping[str, Any],
-        plan: RuleExprLoweringPlan,
-        rules_by_id: Mapping[str, ApplicationRule],
-    ) -> EvidenceGraph:
-        companion = build_companion_program(plan, _public_bindings_for_row(row))
-        diagnostic_result = run_diagnostic_souffle(self._store, companion)
-        view_facts = project_view_facts(self.ledger, self._schema_ir)
-        display_bindings = self._display_bindings_for_row(row)
-        return diagnostic_problog_result_to_evidence_graph(
-            diagnostic_result,
-            plan=plan,
-            companion=companion,
-            graph_id=f"{result.result_id}:{row.row_id}",
-            engine=result.engine,
-            view_facts=view_facts,
-            schema_index=self._application_schema_index,
-            rules_by_id=rules_by_id or {plan.head.id: plan.head},
-            subject_binding=display_bindings,
-            metadata=metadata,
-            graph_certainty=row.certainty,
-            probabilistic=False,
-        )
-
     def _problog_row_graph_builder(
         self,
         row_provenance_envelopes: Mapping[str, ProvenanceEnvelope],
@@ -3027,13 +3005,22 @@ class SDKStore:
         def _builder(row: Any, result: EvaluateResult, metadata: Mapping[str, Any]) -> EvidenceGraph:
             if lowering_plan is not None:
                 try:
-                    return self._problog_diagnostic_projection_graph(
-                        row=row,
-                        result=result,
-                        metadata=metadata,
+                    return problog_reach_explain_to_evidence_graph(
+                        self._store,
                         plan=lowering_plan,
-                        rules_by_id=rules_by_id,
-                        semantics_profile=semantics_profile,
+                        row_bindings=_public_bindings_for_row(row),
+                        graph_id=f"{result.result_id}:{row.row_id}",
+                        engine=result.engine,
+                        schema_index=self._application_schema_index,
+                        rules_by_id=rules_by_id or {lowering_plan.head.id: lowering_plan.head},
+                        subject_binding=self._display_bindings_for_row(row),
+                        metadata=metadata,
+                        graph_certainty=row.certainty,
+                        uncertainty_projection=None
+                        if semantics_profile is None
+                        else dict(semantics_profile.uncertainty_projection),
+                        engine_options=None if semantics_profile is None else dict(semantics_profile.engine_options),
+                        input_certainty_for_goal=self._problog_input_certainty_for_goal,
                     )
                 except Exception:
                     pass
@@ -3069,45 +3056,6 @@ class SDKStore:
                 return _build_minimal_row_evidence_graph(row, result, metadata)
 
         return _builder
-
-    def _problog_diagnostic_projection_graph(
-        self,
-        *,
-        row: Any,
-        result: EvaluateResult,
-        metadata: Mapping[str, Any],
-        plan: RuleExprLoweringPlan,
-        rules_by_id: Mapping[str, ApplicationRule],
-        semantics_profile: SemanticsProfile | None,
-    ) -> EvidenceGraph:
-        companion = build_companion_program(plan, _public_bindings_for_row(row))
-        program_text = emit_diagnostic_problog(
-            self._store,
-            plan,
-            companion,
-            uncertainty_projection=None
-            if semantics_profile is None
-            else dict(semantics_profile.uncertainty_projection),
-        )
-        timeout = resolve_problog_timeout(None if semantics_profile is None else semantics_profile.engine_options)
-        diagnostic_result = run_diagnostic_problog(program_text, timeout=timeout)
-        view_facts = project_view_facts(self.ledger, self._schema_ir)
-        display_bindings = self._display_bindings_for_row(row)
-        graph = diagnostic_problog_result_to_evidence_graph(
-            diagnostic_result,
-            plan=plan,
-            companion=companion,
-            graph_id=f"{result.result_id}:{row.row_id}",
-            engine=result.engine,
-            view_facts=view_facts,
-            schema_index=self._application_schema_index,
-            rules_by_id=rules_by_id or {plan.head.id: plan.head},
-            subject_binding=display_bindings,
-            metadata=metadata,
-            graph_certainty=row.certainty,
-            input_certainty_for_goal=self._problog_input_certainty_for_goal,
-        )
-        return graph
 
     def _display_bindings_for_row(self, row: Any) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -3177,10 +3125,20 @@ class SDKStore:
         row: Any | None,
         metadata: Mapping[str, Any],
         rules_by_id: Mapping[str, ApplicationRule] | None = None,
+        pin_bindings: Mapping[str, Any] | None = None,
     ) -> EvidenceGraph:
         view_facts = project_view_facts(self.ledger, self._schema_ir)
-        initial_bindings = _initial_probe_bindings_for_row(row, plan) if row is not None else {}
-        display_bindings = self._display_bindings_for_row(row) if row is not None else {}
+        if pin_bindings is not None:
+            # closed_head_false: seed from the head pins (probe_native then expands
+            # the seed transitively over the join / head-link eq-atoms).
+            initial_bindings = _initial_probe_bindings_from_port_values(pin_bindings, plan)
+            display_bindings = self._display_pin_bindings(pin_bindings)
+        elif row is not None:
+            initial_bindings = _initial_probe_bindings_for_row(row, plan)
+            display_bindings = self._display_bindings_for_row(row)
+        else:
+            initial_bindings = {}
+            display_bindings = {}
         probed = probe_native(
             plan,
             initial_bindings,
@@ -3198,6 +3156,108 @@ class SDKStore:
             paths=probed.paths,
             certainty=probed.certainty,
             metadata=dict(metadata),
+        )
+
+    def _pin_bindings_for_closed_head(self, head: ApplicationRule) -> dict[str, Any]:
+        """Recover ``{port_name: idref|scalar}`` pins from a CLOSED explain head.
+
+        Entity-ref pins are minted into idref tokens via ``_ref`` — the same path
+        the EDB / view facts use — so the failure-explain seed is byte-identical to
+        engine facts (seed-parity). Value pins pass through as the raw public scalar
+        (the reach builder / native prober encode them per engine)."""
+        specs = pin_specs_for_closed_head(head, schema_index=self._application_schema_index)
+        cls_by_type = {
+            spec["entity_type"]: cls
+            for cls, spec in self._entity_spec_by_class.items()
+            if isinstance(spec.get("entity_type"), str)
+        }
+        out: dict[str, Any] = {}
+        for port_name, pin in specs.items():
+            if pin[0] == "value":
+                out[port_name] = pin[1]
+                continue
+            _kind, entity_type, fields = pin
+            entity_cls = cls_by_type.get(entity_type)
+            if entity_cls is None:
+                raise SDKStoreError(
+                    f"closed-head port {port_name!r} references unregistered entity type {entity_type!r}"
+                )
+            out[port_name] = self._ref(entity_cls, **fields)
+        return out
+
+    def _display_pin_bindings(self, pin_bindings: Mapping[str, Any]) -> dict[str, Any]:
+        return {key: self._display_binding_value(value) for key, value in pin_bindings.items()}
+
+    def _closed_head_false_evidence_graph(
+        self,
+        plan: RuleExprLoweringPlan,
+        pin_bindings: Mapping[str, Any],
+        *,
+        result: EvaluateResult,
+        checked_scope: Mapping[str, Any],
+    ) -> EvidenceGraph:
+        """Build the full-coverage evidence graph for a non-holding closed head.
+
+        Routes the FULL expr-body plan (head = closed head) seeded by the head pins
+        through the engine-own reach-chain explainer (souffle / problog) — the same
+        builders the holding path uses, only seeded by the closed-head pins instead
+        of a result row. native / pyreason / a reach-unsupported fallback all use
+        the pin-seeded native prober (never the minimal head-only graph, which would
+        lose body coverage). The probe is structural (a non-holding conclusion has
+        no derived WMC), so it is labelled accordingly."""
+        metadata = {
+            "result_id": result.result_id,
+            "failure_class": "closed_head_false",
+            "closed_head_digest": checked_scope["closed_head_digest"],
+            "engine": result.engine,
+            "probe_kind": "structural_reachability",
+        }
+        graph_id = f"{result.result_id}:closed_head_false"
+        rules_by_id = {plan.head.id: plan.head}
+        subject_binding = self._display_pin_bindings(pin_bindings)
+        engine = result.engine
+        if engine == "souffle":
+            try:
+                return souffle_reach_explain_to_evidence_graph(
+                    self._store,
+                    plan=plan,
+                    row_bindings=pin_bindings,
+                    graph_id=graph_id,
+                    engine=engine,
+                    schema_index=self._application_schema_index,
+                    rules_by_id=rules_by_id,
+                    subject_binding=subject_binding,
+                    metadata=metadata,
+                    graph_certainty=BOOLEAN_CERTAINTY,
+                )
+            except Exception:
+                pass
+        elif engine == "problog":
+            try:
+                return problog_reach_explain_to_evidence_graph(
+                    self._store,
+                    plan=plan,
+                    row_bindings=pin_bindings,
+                    graph_id=graph_id,
+                    engine=engine,
+                    schema_index=self._application_schema_index,
+                    rules_by_id=rules_by_id,
+                    subject_binding=subject_binding,
+                    metadata=metadata,
+                    graph_certainty=BOOLEAN_CERTAINTY,
+                    uncertainty_projection=None,
+                    engine_options=None,
+                    input_certainty_for_goal=self._problog_input_certainty_for_goal,
+                )
+            except Exception:
+                pass
+        return self._probe_evidence_graph_for_lowering_plan(
+            plan,
+            result=result,
+            row=None,
+            metadata=metadata,
+            rules_by_id=rules_by_id,
+            pin_bindings=pin_bindings,
         )
 
     def _row_support_artifacts_for_candidates(
@@ -4361,6 +4421,22 @@ def _initial_probe_bindings_for_row(row: Any, plan: RuleExprLoweringPlan) -> dic
         public_value = _public_term_value(value)
         for seed_name in seed_names:
             out[seed_name] = public_value
+    return out
+
+
+def _initial_probe_bindings_from_port_values(
+    port_values: Mapping[str, Any], plan: RuleExprLoweringPlan
+) -> dict[str, Any]:
+    """Base native seed ``{seed_var: value}`` from a ``{port_name: public_value}``
+    pin map — the closed_head_false twin of ``_initial_probe_bindings_for_row``.
+    Pin values are already public idref/scalar tokens (minted via ``_ref`` for
+    seed-parity), so no ``_public_term_value`` coercion is applied. ``probe_native``
+    expands this base seed transitively over the join / head-link eq-atoms."""
+    seed_names_by_port = probe_seed_vars_by_head_port(plan)
+    out: dict[str, Any] = {}
+    for port_name, value in port_values.items():
+        for seed_name in seed_names_by_port.get(str(port_name), ()):
+            out[seed_name] = value
     return out
 
 

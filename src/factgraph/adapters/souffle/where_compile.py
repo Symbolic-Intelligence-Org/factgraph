@@ -22,6 +22,12 @@ from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store._support import make_pred_condition_key
 
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
+# Souffle's interpreter aborts (SIGABRT, "Requested arity not yet supported")
+# on any relation whose arity exceeds 22 — verified on Souffle 2.5 (23+ all
+# crash). `_raise_if_relation_arity_too_large` pre-flight-checks against this so
+# an over-wide witness relation fails with a named WhereValidationError before
+# Souffle is invoked, instead of an opaque rc=134 crash.
+SOUFFLE_MAX_SUPPORTED_ARITY = 22
 # T2.3c: min/max/mean require `count : {same_body} > 0` guard prefix per
 # blueprint §2.5 v2 lock to honor C101 AggregateNoValue via branch-not-firing.
 # count/sum empty=0 is a legal C101 value and needs no guard.
@@ -41,6 +47,21 @@ class PredWitnessColumnSpec:
 class QueryWitnessLayout:
     query_variables: tuple[str, ...]
     pred_witness_columns: tuple[PredWitnessColumnSpec, ...]
+
+
+@dataclass(frozen=True)
+class BranchWitnessRelationSpec:
+    relation_name: str
+    case_index: int
+    layout: QueryWitnessLayout
+
+
+@dataclass(frozen=True)
+class PerBranchWitnessProgram:
+    text: str
+    query_rel: str
+    query_variables: tuple[str, ...]
+    branch_relations: tuple[BranchWitnessRelationSpec, ...]
 
 
 @dataclass(frozen=True)
@@ -146,6 +167,152 @@ def compile_where_to_query_dl(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def compile_where_to_per_branch_witness_dl(
+    *,
+    schema_ir: dict,
+    where: list[Any],
+    query_rel: str,
+    query_variables: list[str] | tuple[str, ...],
+    registry: Any | None = None,
+) -> PerBranchWitnessProgram:
+    ast_gate_on = _where_ast_gate_enabled()
+    if not isinstance(schema_ir, dict):
+        raise WhereValidationError("schema_ir must be dict")
+    if not isinstance(query_rel, str) or not query_rel:
+        raise WhereValidationError("query_rel must be non-empty string")
+    if ast_gate_on:
+        try:
+            ast = parse_where_ir_to_ast(where)
+            validate_where_ast(ast, mode="souffle")
+        except (WhereASTError, WhereASTValidationError) as exc:
+            raise _adapt_where_ast_error(exc) from exc
+
+    pred_type_domains = _schema_pred_type_domains(schema_ir)
+    expanded = _expand_ruleref_relations_for_query_export(
+        where=where,
+        registry=registry,
+        pred_type_domains=pred_type_domains,
+    )
+    pred_arities = {pred_id: len(arg_types) for pred_id, arg_types in pred_type_domains.items()}
+    relation_variables = _normalize_query_variables(query_variables)
+    bodies = _normalize_where_subset(expanded.rewritten_where)
+    _raise_if_relation_arity_too_large(
+        relation_name=query_rel,
+        case_index=None,
+        query_variables=relation_variables,
+        pred_witness_columns=(),
+    )
+
+    in_rel_values: dict[str, tuple[str, ...]] = {}
+    not_rel_defs: dict[str, tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]] = {}
+    relation_blocks: list[list[str]] = []
+    for rel_name in sorted(expanded.relation_specs):
+        spec = expanded.relation_specs[rel_name]
+        relation_blocks.append(
+            _compile_relation_to_dl_block(
+                relation_name=normalize_pred_id(rel_name),
+                where=spec.where,
+                relation_variables=list(spec.select_vars),
+                pred_arities=pred_arities,
+                pred_type_domains=pred_type_domains,
+                in_rel_values=in_rel_values,
+                not_rel_defs=not_rel_defs,
+                ast_gate_on=ast_gate_on,
+                include_pred_witness_columns=False,
+                emit_output=False,
+                not_rel_namespace=rel_name,
+            )
+        )
+
+    relation_blocks.append(
+        _compile_relation_to_dl_block(
+            relation_name=query_rel,
+            where=expanded.rewritten_where,
+            relation_variables=relation_variables,
+            pred_arities=pred_arities,
+            pred_type_domains=pred_type_domains,
+            in_rel_values=in_rel_values,
+            not_rel_defs=not_rel_defs,
+            ast_gate_on=ast_gate_on,
+            include_pred_witness_columns=False,
+            emit_output=True,
+            not_rel_namespace=None,
+        )
+    )
+
+    branch_relations: list[BranchWitnessRelationSpec] = []
+    for case_index, body in enumerate(bodies):
+        branch_rel = f"{query_rel}__b{case_index}_w"
+        branch_where = list(body)
+        layout = build_query_witness_layout(
+            branch_where,
+            query_variables=relation_variables,
+            case_index_base=case_index,
+        )
+        if not layout.pred_witness_columns:
+            continue
+        _raise_if_relation_arity_too_large(
+            relation_name=branch_rel,
+            case_index=case_index,
+            query_variables=relation_variables,
+            pred_witness_columns=layout.pred_witness_columns,
+        )
+        relation_blocks.append(
+            _compile_relation_to_dl_block(
+                relation_name=branch_rel,
+                where=branch_where,
+                relation_variables=relation_variables,
+                pred_arities=pred_arities,
+                pred_type_domains=pred_type_domains,
+                in_rel_values=in_rel_values,
+                not_rel_defs=not_rel_defs,
+                ast_gate_on=ast_gate_on,
+                include_pred_witness_columns=True,
+                emit_output=True,
+                not_rel_namespace=f"{query_rel}__b{case_index}",
+                case_index_base=case_index,
+            )
+        )
+        branch_relations.append(
+            BranchWitnessRelationSpec(
+                relation_name=branch_rel,
+                case_index=case_index,
+                layout=layout,
+            )
+        )
+
+    lines: list[str] = []
+    for rel_name in sorted(in_rel_values):
+        values = in_rel_values[rel_name]
+        lines.append(f'.decl {rel_name}(V:symbol)')
+        for text in values:
+            lines.append(f'{rel_name}({_text_to_symbol(text)}).')
+        lines.append("")
+
+    for rel_name in sorted(not_rel_defs):
+        key_args, body_term_groups = not_rel_defs[rel_name]
+        if key_args:
+            key_decl_cols = ", ".join(f"K{i}:symbol" for i in range(len(key_args)))
+            head_args = ", ".join(key_args)
+            lines.append(f".decl {rel_name}({key_decl_cols})")
+            for body_terms in body_term_groups:
+                lines.append(f'{rel_name}({head_args}) :- {", ".join(body_terms)}.')
+        else:
+            lines.append(f".decl {rel_name}()")
+            for body_terms in body_term_groups:
+                lines.append(f'{rel_name}() :- {", ".join(body_terms)}.')
+        lines.append("")
+
+    for block in relation_blocks:
+        lines.extend(block)
+    return PerBranchWitnessProgram(
+        text="\n".join(lines).rstrip() + "\n",
+        query_rel=query_rel,
+        query_variables=tuple(relation_variables),
+        branch_relations=tuple(branch_relations),
+    )
+
+
 def _where_ast_gate_enabled() -> bool:
     raw = os.environ.get("FACTPY_WHERE_AST_VALIDATE", "1")
     return raw not in {"0", "false", "False", "off", "OFF"}
@@ -246,6 +413,7 @@ def build_query_witness_layout(
     where: list[Any],
     *,
     query_variables: list[str] | tuple[str, ...] | None = None,
+    case_index_base: int = 0,
 ) -> QueryWitnessLayout:
     variables = (
         tuple(extract_where_variables(where))
@@ -254,7 +422,8 @@ def build_query_witness_layout(
     )
     bodies = _normalize_where_subset(where)
     pred_witness_columns: list[PredWitnessColumnSpec] = []
-    for case_index, body in enumerate(bodies):
+    for local_case_index, body in enumerate(bodies):
+        case_index = case_index_base + local_case_index
         for condition_index, atom in enumerate(body):
             if atom[0] != "pred":
                 continue
@@ -273,6 +442,30 @@ def build_query_witness_layout(
     )
 
 
+def _raise_if_relation_arity_too_large(
+    *,
+    relation_name: str,
+    case_index: int | None,
+    query_variables: list[str],
+    pred_witness_columns: tuple[PredWitnessColumnSpec, ...],
+) -> None:
+    arity = len(query_variables) + len(pred_witness_columns)
+    if arity <= SOUFFLE_MAX_SUPPORTED_ARITY:
+        return
+    contributors = ", ".join(
+        f"{spec.pred_condition_key}:{spec.pred_id}" for spec in pred_witness_columns
+    )
+    branch_text = "result relation" if case_index is None else f"branch c{case_index}"
+    raise WhereValidationError(
+        "souffle witness relation arity exceeds supported limit: "
+        f"{relation_name} ({branch_text}) arity={arity}, "
+        f"query_columns={len(query_variables)}, "
+        f"witness_predicates={len(pred_witness_columns)}, "
+        f"limit={SOUFFLE_MAX_SUPPORTED_ARITY}; "
+        f"contributors=[{contributors}]"
+    )
+
+
 def _compile_relation_to_dl_block(
     *,
     relation_name: str,
@@ -286,10 +479,15 @@ def _compile_relation_to_dl_block(
     include_pred_witness_columns: bool,
     emit_output: bool,
     not_rel_namespace: str | None,
+    case_index_base: int = 0,
 ) -> list[str]:
     bodies = _normalize_where_subset(where)
     if include_pred_witness_columns:
-        witness_layout = build_query_witness_layout(where, query_variables=relation_variables)
+        witness_layout = build_query_witness_layout(
+            where,
+            query_variables=relation_variables,
+            case_index_base=case_index_base,
+        )
         head_relation_variables = list(witness_layout.query_variables)
         all_variables = list(witness_layout.query_variables)
         for var in extract_where_variables(where):
@@ -318,7 +516,8 @@ def _compile_relation_to_dl_block(
             relation_decl_cols.append(f"{witness_symbol}:symbol")
 
     rule_lines: list[str] = []
-    for case_index, body in enumerate(bodies):
+    for local_case_index, body in enumerate(bodies):
+        case_index = case_index_base + local_case_index
         bound_vars: set[str] = set()
         var_type_domains = _infer_var_type_domains(body, pred_type_domains)
         body_terms: list[str] = []
