@@ -17,7 +17,10 @@ Git ignore rules are a property of a **tree**, not a remote. So the surface spli
 **② surface files — each repo keeps its own (`merge=ours` on pull; not carried on publish):**
 - root: `README.md` `pyproject.toml` `CHANGELOG.md` `CODE_OF_CONDUCT.md` `CONTRIBUTING.md` `LICENSE` `pixi.lock` `.github/`
 - module docs: `src/factgraph/**/docs/`  `src/factgraph/**/*.md`  (hnsm = implementation truth)
-- `.gitattributes` (hnsm-only). `.gitignore` is currently identical in both → let it merge normally.
+- `.gitattributes` (hnsm-only; whitelisted in hnsm `.gitignore` via `!/.gitattributes`, absent on factgraph).
+  `.gitignore` differs ONLY by that one line — pure hnsm-side addition, merges cleanly. The root-whitelist
+  (`/*` + `!/*/`) keeps ALL root dirs trackable, so it does NOT ignore hnsm-only dirs — the surface split
+  has no `.gitignore` safety net; the surgical publish (what it carries) is the only guard.
 
 **③ hnsm-only — never carried to factgraph:**
 - `workflow/ examples/ tools/ tutorials/ scripts/ requirements/ third_party/ .claude/ .tmp_backend_preview/ AGENTS.md .gitmodules`
