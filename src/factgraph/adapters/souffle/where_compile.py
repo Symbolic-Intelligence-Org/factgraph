@@ -22,6 +22,11 @@ from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store._support import make_pred_condition_key
 
 _ARITH_KINDS = {"add", "sub", "neg", "addc", "mulc"}
+# Souffle's interpreter aborts (SIGABRT, "Requested arity not yet supported")
+# on any relation whose arity exceeds 22 — verified on Souffle 2.5 (23+ all
+# crash). `_raise_if_relation_arity_too_large` pre-flight-checks against this so
+# an over-wide witness relation fails with a named WhereValidationError before
+# Souffle is invoked, instead of an opaque rc=134 crash.
 SOUFFLE_MAX_SUPPORTED_ARITY = 22
 # T2.3c: min/max/mean require `count : {same_body} > 0` guard prefix per
 # blueprint §2.5 v2 lock to honor C101 AggregateNoValue via branch-not-firing.
