@@ -451,6 +451,48 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
         self.assertIn(alice, str(result[0].bindings))
         self.assertNotIn("bob", str(result[0].bindings))
 
+    def test_evaluate_candidates_rule_expr_returns_candidates_matching_evaluate(self) -> None:
+        # evaluate_candidates(rule_expr, head=) yields the SAME CandidateSets that
+        # evaluate(rule_expr, head=) wraps into its narratable EvaluateResult — the
+        # write leg of the RuleExpr path. Same lowering, same evaluation: the candidate
+        # to accept is exactly the one whose row explain()/narrate() describes.
+        graph = _store()
+        alice = _seed_person(graph, "alice", region="eu")
+        bob = _seed_person(graph, "bob", region="us")
+        body = _person_region_rule("body_region")
+        person = Var("$person")
+        region = Var("$region")
+        external_head = Rule(
+            id="person:region",
+            when=(
+                PredAtom("Person:exists", [person]),
+                PredAtom("person:region", [person, region]),
+                CmpAtom("eq", region, Const("eu")),
+            ),
+            ports={"person": person, "region": region},
+        )
+
+        candidates = graph.eval.evaluate_candidates(body, head=external_head, engine="native")
+        result = graph.eval.evaluate(body, head=external_head, engine="native")
+
+        # one firing (alice, eu) on both legs
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(len(candidates), result.count())
+        # the candidate emits the head predicate (target = head.id) with support
+        self.assertEqual(candidates[0].target, "person:region")
+        self.assertTrue(candidates[0].support_digest.startswith("sha256:"))
+        # the emitted terms reference alice's entity, not bob's
+        terms_str = str(candidates[0].payload.get("terms"))
+        self.assertIn(alice, terms_str)
+        self.assertNotIn(bob, terms_str)
+
+    def test_evaluate_candidates_rule_expr_requires_head(self) -> None:
+        graph = _store()
+        _seed_person(graph, "alice", region="eu")
+        body = _person_region_rule("body_region")
+        with self.assertRaisesRegex(SDKStoreError, "head="):
+            graph.eval.evaluate_candidates(body, engine="native")
+
     def test_projection_head_evaluates_and_preserves_argument_order(self) -> None:
         graph = _store()
         encoded = _seed_person(graph, "erin", region="apac")
@@ -569,8 +611,16 @@ class RuleExprEvaluatePublicDispatchTests(unittest.TestCase):
             result = graph.eval.evaluate(rule, head=head, engine="native")
 
         self.assertTrue(result)
-        self.assertEqual(len(caught), 1)
-        self.assertIn("different version", str(caught[0].message))
+        # Assert the specific version-mismatch warning fired exactly once. Filter by
+        # category/message rather than counting all caught warnings: under
+        # simplefilter("always") unrelated GC ResourceWarnings (leaked sqlite
+        # connections from other tests) are nondeterministically caught here too and
+        # would otherwise make this count brittle.
+        version_warnings = [
+            w for w in caught
+            if issubclass(w.category, UserWarning) and "different version" in str(w.message)
+        ]
+        self.assertEqual(len(version_warnings), 1)
 
     def test_same_id_different_digest_uses_ruleexpr_error(self) -> None:
         graph = _store()
