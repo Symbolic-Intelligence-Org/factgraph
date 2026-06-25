@@ -36,6 +36,11 @@ class AcceptOptions:
     note: str | None = None
     dry_run: bool = False
     identity_override: dict[str, Any] | None = None
+    # Caller-supplied business/actor provenance attached to every written derived
+    # assertion. Persisted as ordinary meta rows; never overwrites protocol/system
+    # meta keys. Used by callers (e.g. an authenticated write boundary) to record
+    # who triggered a derivation, in which tenant, under which request.
+    actor_meta: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +63,7 @@ class AcceptRequest:
     identity_override: dict[str, Any] | None = None
     approved_by: str | None = None
     note: str | None = None
+    actor_meta: dict[str, Any] | None = None
 
 
 def _diag_item(
@@ -203,6 +209,7 @@ def accept_many_candidate_sets(
             note=req.note,
             dry_run=False,
             identity_override=req.identity_override,
+            actor_meta=req.actor_meta,
         )
         try:
             result = accept_candidate_set(
@@ -334,12 +341,16 @@ def _normalize_accept_requests(
             raise WriteProtocolError(f"requests[{idx}].approved_by must be string when provided")
         if note is not None and not isinstance(note, str):
             raise WriteProtocolError(f"requests[{idx}].note must be string when provided")
+        actor_meta = item.get("actor_meta")
+        if actor_meta is not None and not isinstance(actor_meta, dict):
+            raise WriteProtocolError(f"requests[{idx}].actor_meta must be object when provided")
         out.append(
             AcceptRequest(
                 candidate_set=candidate_raw,
                 identity_override=dict(identity_override) if isinstance(identity_override, dict) else None,
                 approved_by=approved_by,
                 note=note,
+                actor_meta=dict(actor_meta) if isinstance(actor_meta, dict) else None,
             )
         )
     return out
@@ -540,13 +551,15 @@ def _accept_fact_claim(
     )
     write_meta["subject_e_ref"] = e_ref
 
+    actor_meta_keys = frozenset(options.actor_meta or {})
     existing_written = _find_existing_claim_assertions_v2(
         ledger=ledger,
         pred_id=pred_id,
         e_ref=e_ref,
         rest_terms=rest_terms,
         key_tuple_digest=candidate_set.key_tuple_digest,
-        business_meta=_filter_business_meta(write_meta),
+        business_meta=_filter_business_meta(write_meta, actor_meta_keys),
+        actor_meta_keys=actor_meta_keys,
     )
     if existing_written:
         _assert_duplicate_meta_compatible(ledger=ledger, written_assertions=existing_written, options=options)
@@ -697,13 +710,15 @@ def _accept_entity_candidate_v2(
     if override:
         write_meta["identity_override_digest"] = _digest_json(override)
 
+    actor_meta_keys = frozenset(options.actor_meta or {})
     existing_written = _find_existing_claim_assertions_v2(
         ledger=ledger,
         pred_id=exists_pred_id,
         e_ref=entity_ref,
         rest_terms=[],
         key_tuple_digest=candidate_set.key_tuple_digest,
-        business_meta=_filter_business_meta(write_meta),
+        business_meta=_filter_business_meta(write_meta, actor_meta_keys),
+        actor_meta_keys=actor_meta_keys,
     )
     if existing_written:
         _assert_duplicate_meta_compatible(ledger=ledger, written_assertions=existing_written, options=options)
@@ -777,7 +792,31 @@ def _build_base_write_meta(
         write_meta["accepted_by"] = options.approved_by
     if options.note is not None:
         write_meta["note"] = options.note
+    _merge_actor_meta(write_meta, options.actor_meta)
     return write_meta
+
+
+# Meta keys the write protocol manages itself; actor meta must never carry them.
+_ACTOR_META_FORBIDDEN = {"ingested_at", "ingest_key", "revoked_asrt_id"}
+
+
+def _merge_actor_meta(write_meta: dict[str, Any], actor_meta: dict[str, Any] | None) -> None:
+    """Merge caller actor/business meta into the derived-assertion write meta.
+
+    Additive only: protocol/system keys already present win and are never
+    overwritten, and the write-protocol-managed keys are rejected outright — so
+    actor provenance can ride a derived fact without corrupting its semantic meta.
+    """
+    if not actor_meta:
+        return
+    for key, value in actor_meta.items():
+        if not isinstance(key, str) or not key:
+            raise WriteProtocolError("actor_meta keys must be non-empty strings")
+        if key in _ACTOR_META_FORBIDDEN:
+            raise WriteProtocolError(f"actor_meta[{key}] is reserved and write-protocol-managed")
+        if key in write_meta:
+            continue  # never overwrite protocol/derivation meta
+        write_meta[key] = value
 
 
 def _resolve_fact_terms(
@@ -923,6 +962,7 @@ def _find_existing_claim_assertions_v2(
     rest_terms: list[tuple[str, Any]],
     key_tuple_digest: str,
     business_meta: dict[str, Any],
+    actor_meta_keys: frozenset[str] = frozenset(),
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for claim in ledger.find_claims(pred_id=pred_id, e_ref=e_ref):
@@ -930,7 +970,7 @@ def _find_existing_claim_assertions_v2(
             continue
         if claim.rest_terms != rest_terms:
             continue
-        if _business_meta_for_duplicate(ledger, claim.asrt_id) != business_meta:
+        if _business_meta_for_duplicate(ledger, claim.asrt_id, actor_meta_keys) != business_meta:
             continue
         rows.append(
             {
@@ -943,13 +983,20 @@ def _find_existing_claim_assertions_v2(
     return rows
 
 
-def _business_meta_for_duplicate(ledger: Ledger, asrt_id: str) -> dict[str, Any]:
+def _business_meta_for_duplicate(
+    ledger: Ledger, asrt_id: str, actor_meta_keys: frozenset[str] = frozenset()
+) -> dict[str, Any]:
     meta = {row.key: row.value for row in ledger.find_meta(asrt_id=asrt_id)}
-    return _filter_business_meta(meta)
+    return _filter_business_meta(meta, actor_meta_keys)
 
 
-def _filter_business_meta(meta: dict[str, Any]) -> dict[str, Any]:
-    exclude = _META_PRIMARY_KEYS | _SYSTEM_MANAGED_META_KEYS
+def _filter_business_meta(
+    meta: dict[str, Any], actor_meta_keys: frozenset[str] = frozenset()
+) -> dict[str, Any]:
+    # Actor/annotation provenance is NEVER part of a claim's business identity:
+    # excluding it (on both sides of the duplicate comparison) keeps derived facts
+    # content-addressed/idempotent even when the actor or request varies per accept.
+    exclude = _META_PRIMARY_KEYS | _SYSTEM_MANAGED_META_KEYS | set(actor_meta_keys)
     return {
         key: value
         for key, value in meta.items()
