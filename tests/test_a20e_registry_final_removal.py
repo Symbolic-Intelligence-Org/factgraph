@@ -11,7 +11,9 @@ Replaces the Slice 7B ``test_a20e_registry_final_exit.py`` file. Validates:
 4. Migration CLI output classes: dry-run / migrated / noop / error
    (PF-5 amendment).
 5. ``FactGraph.load_workspace(...)`` loudly rejects legacy ``registry/`` markers.
-6. Service registry routes are gone (PF-6 amendment).
+6. Service registry routes are gone (PF-6 amendment) — and the whole
+   ``service`` layer was later carved out of the release surface, so its
+   route host module no longer imports.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
@@ -206,17 +209,28 @@ class MigrationCLIOutputTests(unittest.TestCase):
             self.assertFalse((Path(tmp_dir) / "registry").exists())
             archives = list(Path(tmp_dir).glob("registry.legacy.*"))
             self.assertEqual(len(archives), 1)
-            # Subsequent load should succeed now.
+            # Subsequent load should succeed now. Compare schema *identity*
+            # (digest) rather than the raw schema_ir dict: the volatile
+            # ``generated_at`` timestamp is excluded from schema identity
+            # (SCHEMA_IDENTITY_EXCLUDED_TOP_LEVEL_KEYS) and is re-stamped when
+            # the migrated workspace is reloaded, so a full-dict equality is
+            # wall-clock-flaky (passes only when both stamps land in the same
+            # second). Digest comparison matches the repo-wide convention.
             fg2 = FactGraph.load_workspace(tmp_dir, schema_classes=[_UserForA20E])
-            self.assertEqual(fg2.schema_ir, fg.schema_ir)
+            self.assertEqual(schema_digest(fg2.schema_ir), schema_digest(fg.schema_ir))
 
 
 class ServiceRouteRemovalTests(unittest.TestCase):
-    def test_service_app_v1_drops_registry_routes(self) -> None:
-        from service.app_v1 import app
-
-        registry_routes = [r for r in app.routes if "/v1/registry" in getattr(r, "path", "")]
-        self.assertEqual(registry_routes, [])
+    def test_service_app_v1_module_is_gone(self) -> None:
+        # The registry routes (PF-6 amendment) lived in ``service/app_v1.py``.
+        # The entire ``service`` layer was subsequently dropped from the
+        # published release surface (commit e4dc9f12 "publish: factgraph
+        # release surface — src/factgraph + tests"), so the routes are gone a
+        # fortiori. Assert the host module's absence in the same style as the
+        # sibling ``SDKSurfaceAbsenceTests`` rather than importing routes from a
+        # module that no longer exists.
+        with self.assertRaises(ImportError):
+            importlib.import_module("service.app_v1")
 
 
 class ApplyLogReadbackTests(unittest.TestCase):
