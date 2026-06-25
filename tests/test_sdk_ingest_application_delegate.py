@@ -53,7 +53,9 @@ class IngestCacheHitPathTests(unittest.TestCase):
         expected_pred = field_predicate(sdk._application_schema_index, "User", "name").pred_id
         self.assertEqual(_claim_pred_id(sdk, result.written_assertion_ids[0]), expected_pred)
         user_exists = entity_info(sdk._application_schema_index, "User").exists_predicate_id
-        self.assertEqual(_active_claim_count(sdk, pred_id=user_exists, e_ref=user_ref), 0)
+        # create() co-emits exactly one :exists; the cache-hit ingest set adds
+        # no NEW :exists side-effect (count stays at the one from create).
+        self.assertEqual(_active_claim_count(sdk, pred_id=user_exists, e_ref=user_ref), 1)
 
     def test_add_cache_hit_delegates_to_application(self) -> None:
         sdk = _build_sdk()
@@ -98,7 +100,8 @@ class IngestCacheHitPathTests(unittest.TestCase):
         self.assertEqual(len(result.written_assertion_ids), 1)
         self.assertEqual(_claim_pred_id(sdk, result.written_assertion_ids[0]), expected_pred)
         country_exists = entity_info(sdk._application_schema_index, "Country").exists_predicate_id
-        self.assertEqual(_active_claim_count(sdk, pred_id=country_exists, e_ref=country_ref), 0)
+        # create() co-emits exactly one :exists; the cache-hit ingest adds none.
+        self.assertEqual(_active_claim_count(sdk, pred_id=country_exists, e_ref=country_ref), 1)
 
 
 class IngestCacheMissFallbackTests(unittest.TestCase):
