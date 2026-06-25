@@ -74,8 +74,15 @@ class RuleExprHeadValidationTests(unittest.TestCase):
 
         self.assertEqual(validation.identity_state, "version-warning")
         self.assertTrue(validation.version_warning_emitted)
-        self.assertEqual(len(caught), 1)
-        self.assertIn("different version", str(caught[0].message))
+        # Filter by category/message rather than counting all caught warnings:
+        # under simplefilter("always") unrelated GC ResourceWarnings (leaked
+        # sqlite connections from other tests) are nondeterministically caught
+        # here too and would otherwise make this count brittle.
+        version_warnings = [
+            w for w in caught
+            if issubclass(w.category, UserWarning) and "different version" in str(w.message)
+        ]
+        self.assertEqual(len(version_warnings), 1)
 
     def test_same_id_different_digest_rejects_before_external_head_path(self) -> None:
         body = _person_exists_rule()

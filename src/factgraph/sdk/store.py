@@ -2570,14 +2570,34 @@ class SDKStore:
             raise SDKStoreError("evaluate_candidates() does not accept engine_options=; use config= or engine-specific configuration")
         raw_engine = kwargs.pop("engine", None)
         raw_config = kwargs.pop("config", None)
+        head = kwargs.pop("head", None)
         if args and isinstance(args[0], str):
             raise SDKStoreError(
                 "string derivation DSL is not supported in SDK v1; use Inference object or structured derivation dict"
             )
         if args and isinstance(args[0], (ApplicationRule, _RuleExpr)):
+            # RuleExpr/Rule candidates come from the SAME lowering + evaluation as
+            # evaluate(rule_expr, head=): the returned CandidateSets are exactly the
+            # ones whose EvaluateResult rows explain()/narrate(). This is the write
+            # leg of the RuleExpr path (feed accept_derivation_candidate_set), with no
+            # second evaluator and no recompute outside the FactGraph evaluation.
+            if not isinstance(head, ApplicationRule):
+                raise SDKStoreError(
+                    "evaluate_candidates(rule_expr, head=) requires a closed application Rule head "
+                    "(same head you would pass to evaluate(rule_expr, head=))"
+                )
+            candidates, *_rest = self._rule_expr_candidates_core(
+                args[0],
+                head=head,
+                raw_engine=raw_engine,
+                raw_config=raw_config,
+                api_path="evaluate_candidates(rule_expr)",
+            )
+            return candidates
+        if head is not None:
             raise SDKStoreError(
-                "evaluate_candidates() is for Inference/derivation inputs; application Rules/RuleExpr do not "
-                "produce derivation candidate sets"
+                "head= is only accepted by evaluate_candidates(rule_expr, head=); "
+                "Inference / derivation-dict inputs declare their head on the input object"
             )
         if args and (
             hasattr(args[0], "to_authoring_payload")
@@ -2769,7 +2789,43 @@ class SDKStore:
                 "legacy SDK Rule, Inference, dict, string, and inspect objects are not accepted"
             )
 
-        source = args[0]
+        candidates, compiled, plan, rules_by_id, engine, semantics_profile = (
+            self._rule_expr_candidates_core(
+                args[0],
+                head=head,
+                raw_engine=raw_engine,
+                raw_config=raw_config,
+                api_path="evaluate(rule_expr)",
+            )
+        )
+        return self._candidate_sets_to_evaluate_result(
+            candidates,
+            compiled_plans=[compiled],
+            head=head,
+            engine=engine,
+            semantics_profile=semantics_profile,
+            lowering_plan=plan if engine in {"native", "problog", "souffle"} else None,
+            lowering_rules_by_id=rules_by_id if engine in {"native", "problog", "souffle"} else None,
+        )
+
+    def _rule_expr_candidates_core(
+        self,
+        source: Any,
+        *,
+        head: Any,
+        raw_engine: Any,
+        raw_config: Any,
+        api_path: str,
+    ) -> tuple[list[CandidateSet], Any, Any, Any, str, Any]:
+        """Lower a RuleExpr/Rule (+ closed head) and evaluate it to CandidateSets.
+
+        The single shared RuleExpr evaluation path. ``evaluate(rule_expr)`` wraps the
+        returned candidates into an EvaluateResult (whose rows ``explain()``/``narrate()``);
+        ``evaluate_candidates(rule_expr, head=)`` returns the same candidates raw (for
+        ``accept_derivation_candidate_set``). Identical lowering + identical
+        ``evaluate_derivation_plans`` call, so the accepted CandidateSet is exactly the
+        one the narration explains — no second evaluator.
+        """
         if isinstance(source, ApplicationRule):
             if _RULE_EXPR_DEFAULT_ALIAS_RE.fullmatch(source.id):
                 plan = _lower_application_rule(source, head=head)
@@ -2778,7 +2834,7 @@ class SDKStore:
         elif isinstance(source, _RuleExpr):
             plan = _lower_rule_expr(source, head=head)
         else:  # pragma: no cover - guarded by caller classification
-            raise SDKStoreError("evaluate(rule_expr, ...) expects application Rule or RuleExpr input")
+            raise SDKStoreError(f"{api_path} expects application Rule or RuleExpr input")
 
         _validate_rule_expr_head_foundation(plan)
         rules_by_id = _rule_expr_rules_by_id(source, head=head)
@@ -2786,7 +2842,7 @@ class SDKStore:
             raw_engine,
             raw_config,
             derivation=_semantics_context_for_ruleexpr_plan(source, head=head, plan=plan),
-            api_path="evaluate(rule_expr)",
+            api_path=api_path,
         )
 
         if engine == "pyreason":
@@ -2806,15 +2862,7 @@ class SDKStore:
             store=self._store,
             registry=None,
         )
-        return self._candidate_sets_to_evaluate_result(
-            candidates,
-            compiled_plans=[compiled],
-            head=head,
-            engine=engine,
-            semantics_profile=semantics_profile,
-            lowering_plan=plan if engine in {"native", "problog", "souffle"} else None,
-            lowering_rules_by_id=rules_by_id if engine in {"native", "problog", "souffle"} else None,
-        )
+        return candidates, compiled, plan, rules_by_id, engine, semantics_profile
 
     def _candidate_sets_to_evaluate_result(
         self,

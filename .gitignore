@@ -59,3 +59,6 @@ dora_demo_output/
 workflow/working/*
 !workflow/working/.gitkeep
 !workflow/working/README.md
+# pixi environments
+.pixi/*
+!.pixi/config.toml

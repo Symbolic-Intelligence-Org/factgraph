@@ -45,6 +45,7 @@ class EmissionUser(Entity):
 PRED_USER_ID = "emission_user:user_id"
 PRED_TENANT_ID = "emission_user:tenant_id"
 PRED_NAME = "emission_user:name"
+PRED_EXISTS = "EmissionUser:exists"
 PRED_TAGS = "emission_user:tags"
 
 
@@ -76,12 +77,13 @@ def test_emission_8_1_fg_ref_plus_fg_set_atomic_emits_n_identity_field():
 
     fg.fields.set(EmissionUser.name, e_ref, "Alice")
 
-    # 3 Claims atomically emitted per Q-EXISTS §4.4:
-    # 2 Identity Claims (user_id + tenant_id) + 1 Field (name).
+    # 4 Claims atomically emitted per Q-EXISTS §4.4:
+    # 2 Identity Claims (user_id + tenant_id) + the co-emitted :exists + 1 Field (name).
     counts = _claim_counts(fg, e_ref)
     assert counts == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
+        PRED_EXISTS: 1,
         PRED_NAME: 1,
     })
 
