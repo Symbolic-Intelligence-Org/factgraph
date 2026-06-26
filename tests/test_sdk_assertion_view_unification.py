@@ -77,7 +77,12 @@ def test_assertion_view_history_alias_defaults_to_no_warning(monkeypatch):
         warnings.simplefilter("always")
         history = snap.field("name").history
 
-    assert caught == []
+    # Filter to the deprecation category under test rather than asserting the
+    # whole caught list is empty: under simplefilter("always") unrelated GC
+    # ResourceWarnings (leaked sqlite connections from other tests) are
+    # nondeterministically caught here too and would otherwise make this brittle.
+    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert deprecations == []
     assert [record.asrt_id for record in history] == [name_asrt]
 
 

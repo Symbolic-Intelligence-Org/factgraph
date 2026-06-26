@@ -78,16 +78,17 @@ def _write_legacy_exists_claim(fg: FactGraph, e_ref: str) -> str:
 def test_delete_form_a_revokes_all_active_claims():
     """`delete(e_ref: str)` revokes all Active Claims under that e_ref atomically。"""
     fg, e_ref = _make_materialized_fg()
-    # Pre: 4 Active Claims (2 Identity + 2 Field); no new user-path :exists.
+    # Pre: 5 Active Claims (2 Identity + co-emitted :exists + 2 Field).
     assert _active_claim_counts(fg, e_ref) == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
+        PRED_EXISTS: 1,
         PRED_NAME: 1,
         PRED_STATUS: 1,
     })
 
     revoked = fg.entities.delete(e_ref)
-    assert revoked == 4
+    assert revoked == 5
     # Post: 0 Active Claims
     assert _active_claim_counts(fg, e_ref) == Counter()
 
@@ -141,7 +142,7 @@ def test_delete_form_a_rejects_identity_kwargs():
 def test_delete_form_b_revokes_all_active_claims():
     fg, e_ref = _make_materialized_fg()
     revoked = fg.entities.delete(DelUser, user_id="alice", tenant_id="acme")
-    assert revoked == 4
+    assert revoked == 5  # 2 Identity + co-emitted :exists + 2 Field
     assert _active_claim_counts(fg, e_ref) == Counter()
 
 
@@ -219,11 +220,12 @@ def test_recreate_with_same_identity_after_delete_succeeds():
     e_ref_recreated = fg.entities.create(DelUser, user_id="alice", tenant_id="acme")
     # Deterministic e_ref: idref_v1 is content-derived, so same identity → same e_ref
     assert e_ref_recreated == e_ref
-    # New Identity Claims emitted(in addition to old revoked ones in ledger history)
+    # New Identity + co-emitted :exists Claims (in addition to old revoked ones in history)
     active_after = _active_claim_counts(fg, e_ref_recreated)
     assert active_after == Counter({
         PRED_USER_ID: 1,
         PRED_TENANT_ID: 1,
+        PRED_EXISTS: 1,
     })
 
 
@@ -379,8 +381,8 @@ def test_application_delete_planner_direct_invocation():
         index=fg._application_schema_index,
     )
     assert plan.can_apply
-    # 4 retract ops: 2 Identity + 2 Field
-    assert len(plan.planned_retracts) == 4
+    # 5 retract ops: 2 Identity + co-emitted :exists + 2 Field
+    assert len(plan.planned_retracts) == 5
 
     result = apply_delete_plan(
         plan,
@@ -388,7 +390,7 @@ def test_application_delete_planner_direct_invocation():
         index=fg._application_schema_index,
     )
     assert result.errors == ()
-    assert len(result.applied) == 4
+    assert len(result.applied) == 5
     assert all(applied.status == "applied" for applied in result.applied)
 
 

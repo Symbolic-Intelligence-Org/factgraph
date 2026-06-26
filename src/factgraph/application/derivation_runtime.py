@@ -175,6 +175,9 @@ def accept_derivation_candidate_set(
             if accept_request.identity_override is not None
             else None
         ),
+        # Forward the caller's actor/business provenance onto the derived assertions
+        # (DerivationAcceptRequest.meta -> AcceptOptions.actor_meta -> write meta).
+        actor_meta=dict(accept_request.meta) if accept_request.meta else None,
     )
     return accept_candidate_set(
         store.ledger,
