@@ -24,7 +24,19 @@ class Const:
     value: Any
 
 
-StructureTerm: TypeAlias = FreeVar | Const
+@dataclass(frozen=True)
+class Aggregate:
+    kind: str
+    body_terms: tuple[StructureTerm, ...] = ()
+    head_terms: tuple[StructureTerm, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_non_empty_str(self.kind, field_name="Aggregate.kind")
+        _require_structure_terms(self.body_terms, field_name="Aggregate.body_terms")
+        _require_structure_terms(self.head_terms, field_name="Aggregate.head_terms")
+
+
+StructureTerm: TypeAlias = FreeVar | Const | Aggregate
 
 
 @dataclass(frozen=True)
@@ -34,7 +46,7 @@ class Fact:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.predicate, field_name="Fact.predicate")
-        _require_tuple(self.terms, field_name="Fact.terms", item_type=(FreeVar, Const))
+        _require_structure_terms(self.terms, field_name="Fact.terms")
 
 
 @dataclass(frozen=True)
@@ -45,8 +57,8 @@ class Compare:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.op, field_name="Compare.op")
-        _require_instance(self.left, field_name="Compare.left", item_type=(FreeVar, Const))
-        _require_instance(self.right, field_name="Compare.right", item_type=(FreeVar, Const))
+        _require_structure_term(self.left, field_name="Compare.left")
+        _require_structure_term(self.right, field_name="Compare.right")
 
 
 @dataclass(frozen=True)
@@ -56,19 +68,7 @@ class Builtin:
 
     def __post_init__(self) -> None:
         _require_non_empty_str(self.kind, field_name="Builtin.kind")
-        _require_tuple(self.operands, field_name="Builtin.operands", item_type=(FreeVar, Const))
-
-
-@dataclass(frozen=True)
-class Aggregate:
-    kind: str
-    body_terms: tuple[StructureTerm, ...] = ()
-    head_terms: tuple[StructureTerm, ...] = ()
-
-    def __post_init__(self) -> None:
-        _require_non_empty_str(self.kind, field_name="Aggregate.kind")
-        _require_tuple(self.body_terms, field_name="Aggregate.body_terms", item_type=(FreeVar, Const))
-        _require_tuple(self.head_terms, field_name="Aggregate.head_terms", item_type=(FreeVar, Const))
+        _require_structure_terms(self.operands, field_name="Builtin.operands")
 
 
 StructureAtomForm: TypeAlias = Fact | Compare | Builtin | Aggregate
@@ -106,6 +106,7 @@ class StructureAtom:
     atom_id: str
     kind: str
     form: StructureAtomForm | None = None
+    repr_text: str | None = None
     subject: str | None = None
     entity_type: str | None = None
     field: str | None = None
@@ -119,6 +120,7 @@ class StructureAtom:
         _require_non_empty_str(self.kind, field_name="StructureAtom.kind")
         if self.form is not None and not isinstance(self.form, (Fact, Compare, Builtin, Aggregate)):
             raise RuleExprError("StructureAtom.form must be Fact, Compare, Builtin, Aggregate, or None")
+        _require_optional_str(self.repr_text, field_name="StructureAtom.repr_text")
         _require_optional_str(self.subject, field_name="StructureAtom.subject")
         _require_optional_str(self.entity_type, field_name="StructureAtom.entity_type")
         _require_optional_str(self.field, field_name="StructureAtom.field")
@@ -305,6 +307,8 @@ class RuleStructure:
         return () if self.head_closure is None else self.head_closure.unbound_ports
 
     def render(self, bindings: Mapping[str, object] | None = None) -> str:
+        if not self.ast:
+            return ""
         values = {} if bindings is None else bindings
         if not isinstance(values, Mapping):
             raise RuleExprError("RuleStructure.render bindings must be Mapping[str, object] or None")
@@ -319,7 +323,14 @@ class RuleStructure:
         return " | ".join(piece for piece in pieces if piece)
 
     def render_compact(self) -> str:
+        if not self.ast:
+            return ""
         return _render_ast_compact(self.ast)
+
+    def narrate(self) -> tuple[str, ...]:
+        from .structure_render import narrate_structure
+
+        return narrate_structure(self)
 
 
 def _require_non_empty_str(value: object, *, field_name: str) -> str:
@@ -338,6 +349,16 @@ def _require_instance(value: object, *, field_name: str, item_type: type | tuple
     if not isinstance(value, item_type):
         name = getattr(item_type, "__name__", repr(item_type))
         raise RuleExprError(f"{field_name} must be {name}")
+
+
+def _require_structure_term(value: object, *, field_name: str) -> None:
+    if not isinstance(value, (FreeVar, Const, Aggregate)):
+        raise RuleExprError(f"{field_name} must be FreeVar, Const, or Aggregate")
+
+
+def _require_structure_terms(value: object, *, field_name: str) -> None:
+    if not isinstance(value, tuple) or any(not isinstance(item, (FreeVar, Const, Aggregate)) for item in value):
+        raise RuleExprError(f"{field_name} must be tuple[StructureTerm, ...]")
 
 
 def _require_tuple(value: object, *, field_name: str, item_type: type | tuple[type, ...]) -> None:

@@ -430,7 +430,16 @@ On top of the inspect floor, `RuleStructure` carries the explain-aligned tree:
 .head_closure    -> HeadClosure(is_closed, unbound_ports) when a schema is present, else None
 ```
 
-The `Structure*` node types are importable from `factgraph.sdk`; `FreeVar` / `Const` / `HeadClosure` live in `factgraph.application.protocol` (you usually read them off the structure rather than import them).
+The `Structure*` node types, `FreeVar`, `Const`, and `HeadClosure` are importable from `factgraph.sdk` (you usually read them off the structure rather than import them).
+
+`RuleStructure.narrate()` gives the static, display-side twin of `Explanation.narrate()`:
+
+```python
+for line in structure.narrate():
+    print(line)
+```
+
+It uses the same branch / occurrence / atom / join ordering as explain narrate and keeps the identity anchors (`[atom_id]`, join expressions, `[head]`). Because it is static, it omits verdicts, icons, certainty/probability, context run tokens, and `produces:` lines; atom terms render as naked variables (`%port` when a port name is known) rather than executed values.
 
 **Alignment with `explain` (对位).** `RuleStructure` and `fg.eval.explain(...).evidence` are **node-identical** on their identity keys — `branch_id ↔ tree_id`, `occurrence_alias`, `atom_id`, `join_id` — because both are projections of the *same* lowering plan (a single source, so they cannot drift). The structure side carries naked variables (`FreeVar`); the explain side carries executed values + verdicts:
 
