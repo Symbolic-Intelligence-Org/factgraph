@@ -192,7 +192,9 @@ Structural RuleExpr inspect carries default fields for shape consistency but
 does not define closed-head semantics.
 `fg.rules.structure(...)` returns the engine-neutral `RuleStructure`: the same
 authored inspect floor plus DNF branches whose branch, occurrence, atom, and join
-keys align with `fg.eval.explain(...).evidence`.
+keys align with `fg.eval.explain(...).evidence`. Its `narrate()` method renders
+the static prose counterpart to `Explanation.narrate()` without runtime verdicts
+or executed values.
 
 ---
 

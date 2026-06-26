@@ -84,6 +84,7 @@ from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .rule_expr_inspect import ConditionDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
 from .rule_structure import (
+    Const,
     FreeVar,
     HeadClosure,
     RuleStructure,
@@ -144,6 +145,7 @@ __all__ = [
     "BOOLEAN_CERTAINTY",
     "Certainty",
     "ConditionDescriptor",
+    "Const",
     "CheckRequest",
     "CheckResult",
     "CheckStatus",

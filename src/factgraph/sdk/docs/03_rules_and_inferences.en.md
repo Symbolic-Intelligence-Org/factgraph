@@ -370,6 +370,12 @@ plan-derived identity keys. Those branch keys line up with explain evidence:
 `join_id`. Runtime-only fields such as verdicts, certainty, support, and
 timestep stay on `EvidenceGraph`, not `RuleStructure`.
 
+`RuleStructure.narrate()` renders the same tree as static prose aligned to
+`Explanation.narrate()`. It keeps branch, join, head, and atom identity anchors
+but omits runtime verdict/status/probability/context/`produces:` text. Atom
+terms are naked variables (`FreeVar`, rendered as `%port` when available) rather
+than executed values.
+
 ### RuleExpr execution
 
 `fg.eval.evaluate(...)` also accepts application `Rule` and RuleExpr values

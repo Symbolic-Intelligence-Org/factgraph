@@ -209,6 +209,12 @@ DNF remains in `RuleStructure.branches`. If no authored `rule_expr` is supplied,
 `ast` is empty because the lowering plan does not retain enough source shape to
 reconstruct `RuleExprInspect.ast` verbatim.
 
+`RuleStructure.narrate()` is the static prose twin of
+`Explanation.narrate()`. It mirrors the same tree ordering and identity anchors
+but has no runtime verdicts, icons, certainty/probability, context token, or
+`produces:` line. Atom text uses naked variables (`FreeVar.name`, or `%port`
+when a port name is known) instead of executed `BoundVar.value` terms.
+
 `HeadClosure` is schema-gated. With a schema index, `head_closure` records the
 same closed-head result as `_inspect_closed_head`; without schema it is `None`.
 Compatibility properties expose `is_closed=False` and `unbound_ports=()` when

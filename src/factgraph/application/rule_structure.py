@@ -25,6 +25,7 @@ from factgraph.application.protocol.rule_expr_lowering import (
     _materialize_adapter_derivation_plan,
 )
 from factgraph.application.protocol.rule_structure import (
+    Aggregate,
     Builtin,
     Compare,
     Const,
@@ -42,6 +43,8 @@ from factgraph.application.protocol.rule_structure import (
     StructurePortRef,
     StructureTerm,
 )
+
+_AGGREGATE_KINDS = frozenset({"count", "sum", "min", "max", "mean"})
 
 
 def assemble_static_structure(
@@ -73,6 +76,7 @@ def assemble_static_structure(
             occurrence_by_alias=occurrence_by_alias,
             var_port_names=var_port_names,
             repr_by_alias=repr_by_alias,
+            schema_index=schema_index,
         )
         for lowered_branch, trace, atoms in zip(plan.branches, traces, materialized_branches, strict=True)
     )
@@ -104,6 +108,7 @@ def _structure_branch(
     occurrence_by_alias: Mapping[str, RuleExprOccurrenceBinding],
     var_port_names: Mapping[str, str],
     repr_by_alias: Mapping[str, str | None],
+    schema_index: object | None,
 ) -> StructureBranch:
     join_indexes = {join.materialized_condition_index for join in trace.join_materializations}
     head_link_indexes = {link.materialized_condition_index for link in trace.head_port_link_materializations}
@@ -118,6 +123,7 @@ def _structure_branch(
             atom,
             atom_id=atom_id_for_condition(trace.branch_id, index),
             var_port_names=var_port_names,
+            schema_index=schema_index,
         )
         if is_head_atom(atom, lowered_branch.occurrence_aliases):
             head_atoms.append(structure_atom)
@@ -214,6 +220,7 @@ def _structure_atom(
     *,
     atom_id: str,
     var_port_names: Mapping[str, str],
+    schema_index: object | None,
 ) -> StructureAtom:
     kind = str(atom[0])
     form = _atom_form(atom, var_port_names)
@@ -222,6 +229,7 @@ def _structure_atom(
         atom_id=atom_id,
         kind=descriptor["kind"],
         form=form,
+        repr_text=_atom_repr_text(form, schema_index=schema_index),
         subject=descriptor.get("subject"),
         entity_type=descriptor.get("entity_type"),
         field=descriptor.get("field"),
@@ -253,9 +261,57 @@ def _atom_form(atom: tuple[Any, ...], var_port_names: Mapping[str, str]) -> Stru
 
 
 def _term_form(term: Any, var_port_names: Mapping[str, str]) -> StructureTerm:
+    aggregate = _aggregate_form(term, var_port_names)
+    if aggregate is not None:
+        return aggregate
     if isinstance(term, str) and term.startswith("$"):
         return FreeVar(name=term, port_name=var_port_names.get(term))
     return Const(term)
+
+
+def _aggregate_form(value: Any, var_port_names: Mapping[str, str]) -> Aggregate | None:
+    if not _is_aggregate_tuple(value):
+        return None
+    kind = str(value[0])
+    target = value[1]
+    filter_atoms = value[2]
+    head_terms = () if target is None else (_term_form(target, var_port_names),)
+    return Aggregate(
+        kind=kind,
+        body_terms=_aggregate_body_terms(filter_atoms, var_port_names),
+        head_terms=head_terms,
+    )
+
+
+def _is_aggregate_tuple(value: object) -> bool:
+    return (
+        isinstance(value, tuple)
+        and len(value) == 3
+        and isinstance(value[0], str)
+        and value[0] in _AGGREGATE_KINDS
+        and isinstance(value[2], list)
+    )
+
+
+def _aggregate_body_terms(filter_atoms: object, var_port_names: Mapping[str, str]) -> tuple[StructureTerm, ...]:
+    if not isinstance(filter_atoms, list):
+        return ()
+    terms: list[StructureTerm] = []
+    seen: set[str] = set()
+    for atom in filter_atoms:
+        if not isinstance(atom, tuple) or len(atom) < 3:
+            continue
+        raw_terms = atom[2]
+        if not isinstance(raw_terms, Sequence) or isinstance(raw_terms, (str, bytes)):
+            continue
+        for raw_term in raw_terms:
+            term = _term_form(raw_term, var_port_names)
+            key = repr(term)
+            if key in seen:
+                continue
+            seen.add(key)
+            terms.append(term)
+    return tuple(terms)
 
 
 def _atom_descriptor(atom: tuple[Any, ...], *, atom_id: str) -> dict[str, object]:
@@ -311,13 +367,110 @@ def _atom_descriptor(atom: tuple[Any, ...], *, atom_id: str) -> dict[str, object
 
 
 def _term_summary(term: Any) -> str:
+    if _is_aggregate_tuple(term):
+        return _aggregate_tuple_summary(term)
     if isinstance(term, str) and term.startswith("$"):
         return term
     return repr(term)
 
 
+def _aggregate_tuple_summary(value: tuple[Any, ...]) -> str:
+    kind = str(value[0])
+    if kind == "count":
+        return "count(...)"
+    target = value[1] if len(value) > 1 else None
+    if target is None:
+        return f"{kind}(...)"
+    return f"{kind}({_term_summary(target)})"
+
+
 def _pred_summary(pred_id: str, terms: tuple[Any, ...]) -> str:
     return f"{pred_id}({', '.join(_term_summary(term) for term in terms)})"
+
+
+def _atom_repr_text(form: StructureAtomForm | None, *, schema_index: object | None) -> str | None:
+    if isinstance(form, Fact):
+        info = _predicate_info(schema_index, form.predicate)
+        if info is not None and getattr(info, "repr", None) is not None:
+            placeholder_values = {
+                "%CLS": str(getattr(info, "owner_type", "")),
+                "%FLD": _term_repr_text(form.terms[1]) if len(form.terms) > 1 else "",
+                "%ENT": _static_entity_repr_for_fact(form, info),
+            }
+            rendered = str(getattr(info, "repr"))
+            for token, value in placeholder_values.items():
+                rendered = rendered.replace(token, value)
+            return rendered
+        return _fact_fallback_repr(form, predicate_info=info)
+    if isinstance(form, Compare):
+        labels = {
+            "eq": "equals",
+            "ne": "does not equal",
+            "gt": ">",
+            "ge": ">=",
+            "lt": "<",
+            "le": "<=",
+        }
+        return f"{_term_repr_text(form.left)} {labels.get(form.op, form.op)} {_term_repr_text(form.right)}"
+    if isinstance(form, Builtin):
+        if form.kind == "in" and form.operands:
+            subject, *values = form.operands
+            return f"{_term_repr_text(subject)} is in ({', '.join(_term_repr_text(value) for value in values)})"
+        if form.kind == "not":
+            return "not(...)"
+        return f"{form.kind}({', '.join(_term_repr_text(term) for term in form.operands)})"
+    if isinstance(form, Aggregate):
+        return _aggregate_repr_text(form)
+    return None
+
+
+def _term_repr_text(term: StructureTerm) -> str:
+    if isinstance(term, FreeVar):
+        return f"%{term.port_name}" if term.port_name else term.name
+    if isinstance(term, Const):
+        return str(term.value)
+    if isinstance(term, Aggregate):
+        return _aggregate_repr_text(term)
+    return type(term).__name__
+
+
+def _aggregate_repr_text(form: Aggregate) -> str:
+    if form.kind == "count":
+        return "count(...)"
+    terms = form.head_terms or form.body_terms
+    if terms:
+        return f"{form.kind}({', '.join(_term_repr_text(term) for term in terms)})"
+    return f"{form.kind}(...)"
+
+
+def _predicate_info(schema_index: object | None, predicate: str) -> object | None:
+    if schema_index is None:
+        return None
+    predicates = getattr(schema_index, "predicates_by_id", None)
+    if not isinstance(predicates, Mapping):
+        return None
+    return predicates.get(predicate)
+
+
+def _fact_fallback_repr(form: Fact, *, predicate_info: object | None) -> str:
+    if predicate_info is not None and getattr(predicate_info, "is_entity_exists", False):
+        return f"{_static_entity_repr_for_fact(form, predicate_info)} exists"
+    field_name = getattr(predicate_info, "py_field_name", None) if predicate_info is not None else None
+    owner_type = getattr(predicate_info, "owner_type", None) if predicate_info is not None else None
+    if isinstance(field_name, str) and field_name and isinstance(owner_type, str) and len(form.terms) > 1:
+        entity = _static_entity_repr_for_fact(form, predicate_info)
+        return f"{entity} has {field_name} {_term_repr_text(form.terms[1])}"
+    return f"{form.predicate}({', '.join(_term_repr_text(term) for term in form.terms)})"
+
+
+def _static_entity_repr_for_fact(form: Fact, predicate_info: object) -> str:
+    subject = form.terms[0] if form.terms else None
+    owner_type = getattr(predicate_info, "owner_type", None)
+    if isinstance(owner_type, str) and owner_type and isinstance(subject, FreeVar):
+        return f"{owner_type} {_term_repr_text(subject)}"
+    if isinstance(subject, StructureTerm):
+        return _term_repr_text(subject)
+    return ""
 
 
 def _sequence(value: Any) -> tuple[Any, ...]:
@@ -384,6 +537,7 @@ def _floor_atom(atom: ConditionDescriptor) -> StructureAtom:
         field=atom.field,
         op=atom.op,
         value=atom.value,
+        repr_text=atom.summary or type(atom).__name__,
         summary=atom.summary,
     )
 
