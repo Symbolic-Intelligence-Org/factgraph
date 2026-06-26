@@ -11,7 +11,6 @@ from factgraph.application import schema_runtime
 from factgraph.application.protocol.schema_runtime import EntityRef
 from factgraph.application.protocol.rule_expr_lowering import (
     RuleExprEvaluationTrace,
-    RuleExprJoinMaterialization,
     RuleExprLoweringBranch,
     RuleExprLoweringPlan,
     RuleExprOccurrenceBinding,
@@ -41,6 +40,7 @@ from .evidence_tree import (
     Source,
     TreeStatus,
 )
+from .structure_keys import alias_for_atom, atom_id_for_condition, join_id_for_materialization, vars_in_atom_tuple
 
 _REPR_PLACEHOLDER_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*")
 
@@ -121,7 +121,7 @@ def _probe_branch(
                 before_envs,
                 verdict_envs=verdict_envs,
                 view_facts=view_facts,
-                atom_id=f"{trace.branch_id}:materialized:{idx}",
+                atom_id=atom_id_for_condition(trace.branch_id, idx, materialized=True),
                 failed_upstream=failed_upstream,
                 schema_index=schema_index,
             )
@@ -135,7 +135,7 @@ def _probe_branch(
             before_envs,
             verdict_envs=verdict_envs,
             view_facts=view_facts,
-            atom_id=f"{trace.branch_id}:atom:{idx}",
+            atom_id=atom_id_for_condition(trace.branch_id, idx),
             failed_upstream=failed_upstream,
             schema_index=schema_index,
         )
@@ -307,7 +307,7 @@ def _body_rules_for_branch(
     for idx, atom, evidence_atom, _envs in atom_results:
         if idx in join_indexes or idx in head_link_indexes or idx in head_atom_indexes:
             continue
-        alias = _alias_for_atom(atom, lowered_branch.occurrence_aliases) or fallback_alias
+        alias = alias_for_atom(atom, lowered_branch.occurrence_aliases) or fallback_alias
         grouped.setdefault(alias, []).append(evidence_atom)
 
     rules: list[EvidenceRule] = []
@@ -340,7 +340,7 @@ def _head_atom_indexes_for_branch(
     for idx, atom, _evidence_atom, _envs in atom_results:
         if idx in join_indexes or idx in head_link_indexes:
             continue
-        if _alias_for_atom(atom, lowered_branch.occurrence_aliases) is not None:
+        if alias_for_atom(atom, lowered_branch.occurrence_aliases) is not None:
             continue
         if any(name.startswith("$__head__") for name in _atom_var_names(atom)):
             out.add(idx)
@@ -475,7 +475,7 @@ def _joins_for_trace(
                 left=PortRef(join.left_occurrence_alias, join.left_port_name),
                 right=PortRef(join.right_occurrence_alias, join.right_port_name),
                 status=status,
-                join_id=_join_id(join),
+                join_id=join_id_for_materialization(join),
             )
         )
     return tuple(joins)
@@ -842,7 +842,7 @@ def _render_aggregate_term(value: tuple[Any, ...]) -> str:
 
 
 def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
-    target_vars = set(_vars_in_atom_tuple(target))
+    target_vars = set(vars_in_atom_tuple(target))
     if target_vars and isinstance(filter_atoms, list):
         for atom in filter_atoms:
             if not _is_atom_tuple(atom) or atom[0] != "pred" or len(atom) < 3:
@@ -851,7 +851,7 @@ def _aggregate_target_label(target: Any, filter_atoms: Any) -> str:
             terms = atom[2]
             if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)):
                 continue
-            if target_vars & set(_vars_in_atom_tuple(terms)):
+            if target_vars & set(vars_in_atom_tuple(terms)):
                 if isinstance(pred_id, str) and ":" in pred_id:
                     return pred_id.rsplit(":", 1)[1]
     if target_vars:
@@ -930,15 +930,15 @@ def _is_aggregate_term(value: object) -> bool:
 
 def _aggregate_required_outer_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> tuple[str, ...]:
     _kind, target, filter_atoms = aggregate_term
-    all_vars = set(_vars_in_atom_tuple(target))
-    all_vars |= set(_vars_in_atom_tuple(filter_atoms))
+    all_vars = set(vars_in_atom_tuple(target))
+    all_vars |= set(vars_in_atom_tuple(filter_atoms))
     local_vars = _aggregate_local_vars(aggregate_term, env)
-    return tuple(var for var in _vars_in_atom_tuple((target, filter_atoms)) if var in all_vars - local_vars)
+    return tuple(var for var in vars_in_atom_tuple((target, filter_atoms)) if var in all_vars - local_vars)
 
 
 def _aggregate_local_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any]) -> set[str]:
     _kind, target, filter_atoms = aggregate_term
-    target_vars = set(_vars_in_atom_tuple(target))
+    target_vars = set(vars_in_atom_tuple(target))
     local = set(target_vars)
     if not isinstance(filter_atoms, list):
         return local
@@ -953,13 +953,13 @@ def _aggregate_local_vars(aggregate_term: tuple[Any, ...], env: Mapping[str, Any
             terms = atom[2]
             if not isinstance(terms, Sequence) or isinstance(terms, (str, bytes)) or not terms:
                 continue
-            subject_vars = set(_vars_in_atom_tuple(terms[0]))
+            subject_vars = set(vars_in_atom_tuple(terms[0]))
             for var in subject_vars:
                 if var not in local:
                     local.add(var)
                     changed = True
             for term in terms[1:]:
-                for var in _vars_in_atom_tuple(term):
+                for var in vars_in_atom_tuple(term):
                     if (
                         var in target_vars
                         or (_is_lowered_aggregate_local_var(var) and var in canonically_bound)
@@ -984,25 +984,6 @@ def _canonical_aggregate_filter_bound_vars(aggregate_term: tuple[Any, ...], env:
 
 def _is_lowered_aggregate_local_var(var_name: str) -> bool:
     return var_name.startswith("$agg") or var_name.startswith("$_agg") or "__" in var_name
-
-
-def _vars_in_atom_tuple(atom: Any) -> tuple[str, ...]:
-    found: list[str] = []
-    if isinstance(atom, str) and atom.startswith("$"):
-        return (atom,)
-    if isinstance(atom, (list, tuple)):
-        for item in atom:
-            found.extend(_vars_in_atom_tuple(item))
-    return tuple(dict.fromkeys(found))
-
-
-def _alias_for_atom(atom: tuple[Any, ...], aliases: tuple[str, ...]) -> str | None:
-    variables = _vars_in_atom_tuple(atom)
-    for alias in aliases:
-        prefix = f"${alias}__"
-        if any(var.startswith(prefix) for var in variables):
-            return alias
-    return None
 
 
 def _normalize_compiled_body(body_ir: object) -> list[list[tuple[Any, ...]]]:
@@ -1092,13 +1073,6 @@ def _fold_join_status(status: TreeStatus, joins: tuple[EvidenceJoin, ...]) -> Tr
     if status == "holds" and any(join.status == "not_reached" for join in joins):
         return "not_reached"
     return status
-
-
-def _join_id(join: RuleExprJoinMaterialization) -> str:
-    return (
-        f"{join.branch_id}:{join.left_occurrence_alias}.{join.left_port_name}"
-        f"={join.right_occurrence_alias}.{join.right_port_name}"
-    )
 
 
 __all__ = ["ProbeEnv", "probe_native"]

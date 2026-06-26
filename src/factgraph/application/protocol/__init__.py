@@ -83,6 +83,18 @@ from .rule_literal_replace import (
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .rule_expr_inspect import ConditionDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
+from .rule_structure import (
+    FreeVar,
+    HeadClosure,
+    RuleStructure,
+    StructureAtom,
+    StructureBranch,
+    StructureHeadLink,
+    StructureJoin,
+    StructureOccurrence,
+    StructurePort,
+    StructurePortRef,
+)
 from .entity_read import (
     AssertionRecordDTO,
     EntityReadRequest,
@@ -178,6 +190,8 @@ __all__ = [
     "FieldPath",
     "FieldValue",
     "FieldValueDTO",
+    "FreeVar",
+    "HeadClosure",
     "IdentityValue",
     "IngestAddItem",
     "IngestItem",
@@ -228,9 +242,17 @@ __all__ = [
     "RuleExprError",
     "RuleExprInspect",
     "RuleJoinConstraint",
+    "RuleStructure",
     "RuleValidationError",
     "ExplicitBoolError",
     "SchemaCapability",
+    "StructureAtom",
+    "StructureBranch",
+    "StructureHeadLink",
+    "StructureJoin",
+    "StructureOccurrence",
+    "StructurePort",
+    "StructurePortRef",
     "WarningDTO",
     "WhereIR",
     "WhyNotConditionLocator",
