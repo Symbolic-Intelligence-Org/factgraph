@@ -30,8 +30,10 @@ compatibility.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and
-    native prober (`probe_native`). Canonical type site for the explain layer;
-    `factgraph.audit.evidence_graph` re-exports from here.
+    native prober (`probe_native`), plus the `RuleStructure` static projection
+    contract and node-identity alignment with `EvidenceGraph`. Canonical type
+    site for the explain layer; `factgraph.audit.evidence_graph` re-exports
+    from here.
 - `src/factgraph/application/protocol/docs/README.md`
   - `EvaluateResult` / `EvaluateRow` / `Explanation` / `ResultFingerprint`
     protocol contract; `EvaluateRow.explain()` dispatch; S5 evidence invariant

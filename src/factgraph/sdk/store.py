@@ -1303,6 +1303,10 @@ class _SDKRulesManager:
         """
         return self._sdk._inspect_rule(*args, **kwargs)
 
+    def structure(self, *args: Any, **kwargs: Any) -> Any:
+        """Return the RuleStructure static projection for a Rule or RuleExpr."""
+        return self._sdk._structure_rule(*args, **kwargs)
+
 
 class _SDKInferencesManager:
     """Read-only namespace manager for Inference (post-Q8 Phase 2: empty namespace).
@@ -2355,6 +2359,35 @@ class SDKStore:
         if isinstance(obj, _RuleExpr):
             return _inspect_rule_expr(obj)
         return _inspect_rule_or_inference(obj)
+
+    def _structure_rule(self, obj: Any, **kwargs: Any) -> Any:
+        from factgraph.application.protocol import Rule as ApplicationRule
+        from factgraph.application.protocol.rule import _is_projection_rule
+        from factgraph.application.protocol.rule_expr import _RuleExpr, _coerce_rule_expr_operand
+        from factgraph.application.protocol.rule_expr_lowering import _lower_application_rule, _lower_rule_expr
+        from factgraph.application.rule_structure import assemble_static_structure
+
+        if isinstance(obj, ApplicationRule):
+            if kwargs:
+                unknown = ", ".join(sorted(kwargs))
+                raise SDKStoreError(f"rules.structure(rule) got unknown keyword(s): {unknown}")
+            source_expr = (
+                _coerce_rule_expr_operand(obj.as_("head"))
+                if _is_projection_rule(obj)
+                else _coerce_rule_expr_operand(obj)
+            )
+            plan = _lower_rule_expr(source_expr, head=obj) if _is_projection_rule(obj) else _lower_application_rule(obj, head=obj)
+            return assemble_static_structure(plan, schema_index=self._application_schema_index, rule_expr=source_expr)
+        if isinstance(obj, _RuleExpr):
+            head = kwargs.pop("head", None)
+            if kwargs:
+                unknown = ", ".join(sorted(kwargs))
+                raise SDKStoreError(f"rules.structure(rule_expr, ...) got unknown keyword(s): {unknown}")
+            if not isinstance(head, ApplicationRule):
+                raise SDKStoreError("rules.structure(rule_expr, ...) requires head= Rule")
+            plan = _lower_rule_expr(obj, head=head)
+            return assemble_static_structure(plan, schema_index=self._application_schema_index, rule_expr=obj)
+        raise SDKStoreError("rules.structure(...) expects application Rule or RuleExpr input")
 
     def save_workspace(self, path: str | Path | None = None) -> dict[str, Any]:
         """Persist this graph as a FactGraph workspace.

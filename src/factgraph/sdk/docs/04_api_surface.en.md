@@ -143,9 +143,11 @@ exported from `factgraph.sdk`.
 | `RuleExprError` (← `SDKDSLError`) | Raised when RuleExpr authoring input violates the expression contract |
 | `RuleJoinConstraint` | Immutable RuleExpr join constraint produced by `occurrence.port.eq(other_port)` / `occurrence.port_name.eq(other.port_name)`; initial joins use explicit `.eq(...)`, not Python `==` |
 | `RuleExprInspect` | Immutable object returned by `fg.rules.inspect(application_rule_or_rule_expr)`; exposes `ast`, `occurrences`, `joins`, `unjoined_same_name_ports`, `render()`, and `render_compact()` |
+| `RuleStructure` | Immutable object returned by `fg.rules.structure(application_rule_or_rule_expr, head=...)`; exposes the authored inspect floor plus DNF branches keyed to explain evidence |
 | `OccurrenceInspect` | Immutable occurrence descriptor used by `RuleExprInspect.occurrences`; exposes alias, template id, port names, and atom descriptors |
 | `ConditionDescriptor` | Immutable authoring-time atom descriptor used by `OccurrenceInspect.atoms`; exposes structured fields plus a display `summary` |
 | `PortInspect` | Immutable rich port descriptor used by `RuleExprInspect.ports`; exposes port name, kind, entity type, field, and value type |
+| `StructureBranch`, `StructureOccurrence`, `StructureAtom`, `StructureJoin`, `StructurePort` | Immutable `RuleStructure` node DTOs; branch/occurrence/atom/join keys align with tree evidence keys but carry no runtime verdicts |
 | `ExplicitBoolError` (← `RuleExprError`) | Raised when application `Rule` or RuleExpr values are used in Python boolean contexts; use `&` / `|`, not `and` / `or` |
 
 The application Rule bridge additionally exposes aggregate helpers from

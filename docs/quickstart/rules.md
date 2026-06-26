@@ -21,7 +21,7 @@ The rest of this chapter is structured as:
 
 - §2 — how to write one `Rule`
 - §3 — how to compose Rules into a `RuleExpr`
-- §4 — `fg.rules.inspect(...)` for structural debugging
+- §4 — `fg.rules.inspect(...)` and `fg.rules.structure(...)` for structural debugging
 - §5 — one-line pointer to the evaluation chapter
 - §6 — history note for `Inference` and `Query`
 
@@ -370,7 +370,7 @@ The short reason: Python's `and` / `or` short-circuit and return *one operand*, 
 
 ## 4. `fg.rules.inspect` — read-only structural view
 
-`fg.rules` is a frozen namespace that exposes exactly one method:
+`fg.rules` is a frozen namespace that exposes two read-only views — `inspect` (this section) and `structure` (§4.5):
 
 ```python
 info = fg.rules.inspect(rule_or_expr_or_inference)
@@ -405,6 +405,45 @@ When passing an application `Rule` whose `id` contains characters disallowed in 
 `is_closed` is the key signal for "is this expression ready to be a closed-head evaluation input" — an open port means there is a `value` port not pinned to a constant in `when`, or an `entity_ref` port without an identifying atom path. Evaluation typically requires a closed head.
 
 `fg.rules.inspect` is read-only — it does not execute the rule and does not touch the ledger.
+
+### 4.5 `fg.rules.structure` — the structure aligned with `explain`
+
+`fg.rules.structure(...)` is the second read-only view. Where `inspect` returns the authored-shape `RuleExprInspect`, `structure` returns a **`RuleStructure`**: the same static structure projected into the **same node shape as the `EvidenceGraph`** that `fg.eval.explain(...)` produces — so the two line up node-for-node.
+
+```python
+structure = fg.rules.structure(rule)                  # an application Rule
+structure = fg.rules.structure(rule_expr, head=head)  # a RuleExpr needs a closed Rule head
+```
+
+It is **engine-neutral** (runs no engine, reads no facts) and a **superset of `inspect`** — it carries the same `.ast` / `.render(bindings)` / `.render_compact()` / `.occurrences` / `.joins` / `.ports` / `.templates` / `.is_closed` / `.unbound_ports`.
+
+On top of the inspect floor, `RuleStructure` carries the explain-aligned tree:
+
+```text
+.branches        -> StructureBranch per DNF branch (branch_id "c0", "c1", ...)
+  .occurrences   -> StructureOccurrence (occurrence_alias, rule_id, role, atoms)
+    .atoms       -> StructureAtom (atom_id, kind, summary, form)
+                    form: Fact | Compare | Builtin | Aggregate;
+                    terms are FreeVar(name, port_name) | Const  (a FreeVar is a *naked* variable)
+  .joins         -> StructureJoin (join_id, left/right StructurePortRef)
+  .head_links    -> StructureHeadLink
+.head_closure    -> HeadClosure(is_closed, unbound_ports) when a schema is present, else None
+```
+
+The `Structure*` node types are importable from `factgraph.sdk`; `FreeVar` / `Const` / `HeadClosure` live in `factgraph.application.protocol` (you usually read them off the structure rather than import them).
+
+**Alignment with `explain` (对位).** `RuleStructure` and `fg.eval.explain(...).evidence` are **node-identical** on their identity keys — `branch_id ↔ tree_id`, `occurrence_alias`, `atom_id`, `join_id` — because both are projections of the *same* lowering plan (a single source, so they cannot drift). The structure side carries naked variables (`FreeVar`); the explain side carries executed values + verdicts:
+
+```python
+structure = fg.rules.structure(expr, head=head)
+evidence  = fg.eval.explain(expr, head=head, engine="native").evidence
+# same branch_id / occurrence_alias / atom_id / join_id on both;
+# structure atoms hold FreeVar terms, evidence atoms hold executed values + verdicts.
+```
+
+This holds identically across the relational engines (`native` / `souffle` / `problog`). PyReason timelines are temporal and outside node-identity scope; the static structure is always tree-shaped.
+
+`fg.rules.structure` is a read-only derived view — like `inspect`, it never executes a rule or touches the ledger, and it is never an authoring input. A runnable walkthrough lives in [`examples/rule_structure_demo.ipynb`](../../examples/rule_structure_demo.ipynb).
 
 ### History
 
@@ -487,6 +526,16 @@ from factgraph.sdk import (
     ConditionDescriptor,
     PortInspect,
 
+    # Structure projection types (fg.rules.structure):
+    RuleStructure,
+    StructureBranch,
+    StructureOccurrence,
+    StructureAtom,
+    StructureJoin,
+    StructurePort,
+    StructurePortRef,
+    StructureHeadLink,
+
     # History (§6):
     Inference,           # Rule + head/emits, legacy still-usable
     EmitSpec,            # head fact emit: target, vars
@@ -514,6 +563,7 @@ Indirect types reached through methods:
 | Namespace | Method | Status |
 |---|---|---|
 | `fg.rules` | `.inspect(rule_or_expr_or_inference)` | active |
+| `fg.rules` | `.structure(rule_or_expr[, head=])` | active (see §4.5) |
 | `fg.rules` | `.save` / `.load` / `.list` / `.get` | **removed** (Slice 6 / Q8 Phase 2) |
 | `fg.inferences` | *(no methods)* | reserved for forward compatibility |
 

@@ -347,6 +347,29 @@ ports are reported unbound. `Rule.projection(...)` heads inspect as closed by
 construction. Structural RuleExpr inspect exposes the fields for shape
 consistency but does not define closed-head semantics.
 
+### Static RuleStructure
+
+`fg.rules.structure(...)` returns an immutable `RuleStructure` for application
+`Rule` and RuleExpr inputs:
+
+```python
+rule_structure = fg.rules.structure(active_user)
+expr_structure = fg.rules.structure(expr, head=Rule.projection("user"))
+```
+
+For RuleExpr inputs, `head=` is required because the lowering plan must know the
+result head. The SDK method is a thin shell over application
+`assemble_static_structure(...)`.
+
+`RuleStructure` is engine-neutral, read-only derived data. It is not accepted as
+authoring input and does not evaluate or derive facts. It carries the authored
+inspect floor (`ast`, `occurrences`, `joins`, `ports`, `templates`,
+`port_visibility`, `render(...)`, `render_compact()`) and DNF branches with
+plan-derived identity keys. Those branch keys line up with explain evidence:
+`branch_id` ↔ `EvidenceTree.tree_id`, `occurrence_alias`, `atom_id`, and
+`join_id`. Runtime-only fields such as verdicts, certainty, support, and
+timestep stay on `EvidenceGraph`, not `RuleStructure`.
+
 ### RuleExpr execution
 
 `fg.eval.evaluate(...)` also accepts application `Rule` and RuleExpr values

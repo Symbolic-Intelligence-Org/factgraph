@@ -190,6 +190,9 @@ For application `Rule` inspect values, `RuleExprInspect.is_closed` and
 `RuleExprInspect.unbound_ports` report the strict closed-head inspect subset.
 Structural RuleExpr inspect carries default fields for shape consistency but
 does not define closed-head semantics.
+`fg.rules.structure(...)` returns the engine-neutral `RuleStructure`: the same
+authored inspect floor plus DNF branches whose branch, occurrence, atom, and join
+keys align with `fg.eval.explain(...).evidence`.
 
 ---
 

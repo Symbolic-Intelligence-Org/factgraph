@@ -1,7 +1,7 @@
 # Application Explain Module
 
 - Scope: `src/factgraph/application/explain`
-- Last updated: 2026-06-22
+- Last updated: 2026-06-26
 - Audience: developers building explain consumers, adapter writers, SDK layer maintainers, and test authors
 
 ---
@@ -19,6 +19,9 @@ Files:
   joins.
 - `prober.py` — `probe_native(...)`, `ProbeEnv`, native atom probing, row
   anchoring, and native `repr_text` baking.
+- `structure_keys.py` — shared key minting helpers for branch-local atom ids,
+  join ids, and occurrence ownership. Runtime evidence assembly and static
+  rule structure projection both use these helpers.
 - `__init__.py` — re-export surface for application-layer callers and tests.
 
 The legacy flat-DAG evidence model (`EvidenceNode`, `EvidenceEdge`,
@@ -171,7 +174,52 @@ builder left in this layer.
 
 ---
 
-## 6. Closed-Head-False (Full-Coverage Failure Explain)
+## 6. Static RuleStructure Projection
+
+`RuleStructure` is the engine-neutral static projection of a Rule or RuleExpr.
+It is defined in `factgraph.application.protocol.rule_structure` and assembled
+by:
+
+```python
+assemble_static_structure(plan, schema_index=None, *, rule_expr=None)
+```
+
+The projection is read-only derived data. It is not an authoring substrate and
+must not be accepted by `core/` or derivation-chain functions as input. The
+same boundary applies to `EvidenceGraph`: both types can be rendered, walked,
+diffed, narrated, or overlaid for display, but they must not be used to derive
+facts or bypass Rule evaluation.
+
+`RuleStructure` and `EvidenceGraph` share the same `RuleExprLoweringPlan`
+backbone:
+
+- `StructureBranch.branch_id` aligns with `EvidenceTree.tree_id`.
+- `StructureOccurrence.occurrence_alias` aligns with `EvidenceRule`.
+- `StructureAtom.atom_id` aligns with `EvidenceAtom`.
+- `StructureJoin.join_id` aligns with `EvidenceJoin`.
+
+The container ids are intentionally different: `RuleStructure.structure_id` is
+per-rule static identity, while `EvidenceGraph.graph_id` is per-run identity.
+Only branch-and-below keys are node identity keys.
+
+`RuleStructure.ast`, `render(...)`, and `render_compact()` are authored inspect
+floor fields. When `rule_expr` is supplied, `RuleStructure.ast` is exactly the
+same authored AST returned by `RuleExprInspect`, not the DNF branch skeleton.
+DNF remains in `RuleStructure.branches`. If no authored `rule_expr` is supplied,
+`ast` is empty because the lowering plan does not retain enough source shape to
+reconstruct `RuleExprInspect.ast` verbatim.
+
+`HeadClosure` is schema-gated. With a schema index, `head_closure` records the
+same closed-head result as `_inspect_closed_head`; without schema it is `None`.
+Compatibility properties expose `is_closed=False` and `unbound_ports=()` when
+closure was not computed.
+
+Scope is tree-only. PyReason's `EvidenceTimeline` is a runtime temporal shape
+and is outside node-identity alignment with `RuleStructure`.
+
+---
+
+## 7. Closed-Head-False (Full-Coverage Failure Explain)
 
 When `fg.eval.explain(expr, head=closed_head)` matches no result row (the closed
 head's pinned subject does not hold), the SDK does NOT fall back to a head-only
@@ -215,10 +263,11 @@ Known limits / per-engine nuances:
 
 ---
 
-## 7. Test Entry Points
+## 8. Test Entry Points
 
 ```bash
 PYTHONPATH=src python -m unittest tests.application.explain.test_prober
+PYTHONPATH=src python -m unittest tests.application.test_rule_structure
 PYTHONPATH=src python -m unittest tests.sdk.test_explain_conformance_native
 PYTHONPATH=src python -m pytest tests/sdk/test_explain_composite_closed_head_false.py
 ```
