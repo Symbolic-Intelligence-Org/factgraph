@@ -653,6 +653,59 @@ class AssertionsManager:
             code = "ASSERTION_NOT_FOUND" if "unknown revoked_asrt_id" in str(exc) else None
             raise SDKStoreError(str(exc), code=code) from exc
 
+    def append_meta(self, asrt_id: str, key: str, value: Any) -> None:
+        """Append one meta row to an existing assertion (public reclassification seam).
+
+        Meta rows are append-only: the new row never replaces earlier rows, it
+        extends the assertion's meta history. Every canonical read resolves a
+        key LAST-WINS — ``record.meta.raw`` (``_meta_raw_for_assertion``,
+        sdk/facade.py) and the premise admissibility filter
+        (``core/store/premise_filter.py::is_premise_excluded``) both take the
+        most recently written row. Appending e.g. a new ``provenance_class``
+        value therefore reclassifies the assertion for rule evaluation (moves
+        it INTO or OUT OF an excluded class) while the full history stays
+        auditable via ``fg.ledger.find_meta(asrt_id=..., key=...)``.
+
+        This is the supported public surface for post-write meta
+        reclassification. ``Ledger.append_meta`` remains a deprecated
+        compatibility seam and may be downgraded to private in a later
+        cleanup phase; consumers should call this method instead.
+
+        ``value`` must be a scalar (str/bool/int/float — the same shape free
+        meta keys accept at write time); the row kind is derived from the
+        Python type. Raises ``SDKStoreError`` for invalid input or an unknown
+        ``asrt_id``.
+        """
+        self._sdk._reject_attached_write("fg.assertions.append_meta")
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise SDKStoreError(
+                "fg.assertions.append_meta(asrt_id, ...) expects non-empty string asrt_id"
+            )
+        if not isinstance(key, str) or not key:
+            raise SDKStoreError(
+                "fg.assertions.append_meta(..., key, ...) expects non-empty string key"
+            )
+        if isinstance(value, bool):
+            kind = "bool"
+        elif isinstance(value, str):
+            kind = "str"
+        elif isinstance(value, int):
+            kind = "int"
+        elif isinstance(value, float):
+            kind = "float"
+        else:
+            raise SDKStoreError(
+                "fg.assertions.append_meta(..., value) expects a scalar "
+                f"(str/bool/int/float), got {type(value).__name__}"
+            )
+        try:
+            self._sdk._store.ledger.append_meta(
+                [MetaRow(asrt_id=asrt_id, key=key, kind=kind, value=value)]
+            )
+        except ValueError as exc:
+            code = "ASSERTION_NOT_FOUND" if "unknown asrt_id" in str(exc) else None
+            raise SDKStoreError(str(exc), code=code) from exc
+
 
 class _SDKSchemaManager:
     """Namespace manager for schema registration and extension."""
