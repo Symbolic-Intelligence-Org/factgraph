@@ -1,4 +1,10 @@
-"""Application-layer ProofFrame recheck runtime."""
+"""Application-layer ProofFrame recheck runtime.
+
+Premise admissibility: the recheck premise set matches evaluation — the
+witness projection reads through the premise-scoped ledger, so assertions
+excluded via ``store.premise_exclusions`` (core/store/premise_filter.py)
+cannot witness a proof frame here either. Zero-config is unchanged.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,7 @@ from factgraph.core.store._support import (
     PredWitness,
     ProjectedFact,
 )
+from factgraph.core.store.premise_filter import premise_scoped_ledger
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import project_view_facts_with_witness
 
@@ -44,7 +51,8 @@ def recheck_proof_frame(
     if request.overlay.rule_actions:
         return _unknown_frame_result(request)
 
-    projected_witness = project_view_facts_with_witness(store.ledger, store.schema_ir)
+    ledger = premise_scoped_ledger(store.ledger, store.premise_exclusions)
+    projected_witness = project_view_facts_with_witness(ledger, store.schema_ir)
     visible_rows = _visible_projected_rows(projected_witness)
     action_index = _index_overlay_actions(request.overlay)
     frame_relevant_action_indices = _frame_relevant_action_indices(

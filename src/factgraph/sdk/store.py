@@ -122,6 +122,7 @@ from factgraph.core.store.database import (
     validate_schema_object_for_workspace,
     write_schema_object_for_workspace,
 )
+from factgraph.core.store.premise_filter import MetaExclusion
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
@@ -1892,6 +1893,32 @@ class SDKStore:
     @property
     def ledger(self) -> Ledger:
         return self._store.ledger
+
+    @property
+    def premise_exclusions(self) -> tuple[MetaExclusion, ...]:
+        """Configured meta-based premise admissibility exclusions (empty = disabled)."""
+        return self._store.premise_exclusions
+
+    def set_premise_exclusions(
+        self,
+        exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
+    ) -> None:
+        """Configure meta-based premise admissibility exclusions for evaluation.
+
+        Assertions whose meta rows carry one of the configured key/value
+        pairs become invisible to every rule evaluation (all engine modes,
+        proof-frame recheck, derivation check): they can neither support a
+        derivation nor block one through negation. Read/query paths outside
+        evaluation (entity views, assertion listings, audit, history) stay
+        unfiltered — the assertions remain fully visible there. Key and
+        values are pure configuration; passing ``None`` or an empty iterable
+        disables filtering (zero-behavior-change default). See
+        ``factgraph/core/store/premise_filter.py``.
+        """
+        try:
+            self._store.set_premise_exclusions(exclusions)
+        except ValueError as exc:
+            raise SDKStoreError(str(exc)) from exc
 
     @property
     def schema_ir(self) -> dict[str, Any]:
