@@ -1,10 +1,27 @@
 """Meta-based premise admissibility filtering for rule evaluation.
 
-A configured ``MetaExclusion`` makes every assertion whose meta rows carry
-``key`` with a value in ``values`` invisible to rule evaluation: the
+A configured ``MetaExclusion`` makes every assertion whose meta ``key``
+currently carries a value in ``values`` invisible to rule evaluation: the
 assertion can neither support a derivation nor block one through negation.
 For evaluation, the assertion does not exist. Key and values are pure
 configuration — no consumer vocabulary is hardcoded here.
+
+Visibility semantics (single logic, shared by every projection):
+
+- LAST-WINS per ``(asrt_id, key)``: only the most recent meta row under the
+  exclusion key decides, mirroring the canonical SDK meta read
+  (``_meta_raw_for_assertion`` in sdk/facade.py, which dict-overwrites per
+  key in iteration order). A later ``Ledger.append_meta`` reclassification
+  therefore moves an assertion INTO or OUT OF the excluded class for
+  evaluation exactly as every read path reports it.
+- LIVE per access: nothing is snapshotted at wrapper construction. A fact
+  (or revoker) written or reclassified while an evaluation is running is
+  judged the moment it becomes readable — evaluation can never diverge from
+  the ledger state it actually reads. Baseline semantics for assertions
+  without a configured key are identical to the unfiltered ledger.
+
+Both properties hinge on ``is_premise_excluded`` below; see its docstring
+for the ``find_meta`` ordering guarantee.
 
 Scope (deliberate):
 
@@ -36,10 +53,14 @@ The ledger wrapper mirrors the full read surface of the production-proven
 get_claim, find_claim_args, find_meta, find_annotations, revokes,
 has_active_revocation, find_revoker, get_ledger_meta) so neither the
 souffle export nor the witness reconstruction can leak an excluded claim.
-Visibility is snapshotted per wrapper construction; evaluation entrypoints
-construct a fresh wrapper per call. Zero-behavior-change contract: with no
-exclusions configured (or no matching assertions) ``premise_scoped_ledger``
-returns the base ledger object unchanged — no wrapper is introduced.
+Evaluation entrypoints construct a fresh wrapper per call; within one call
+the view and witness projections share the same wrapper object.
+Zero-behavior-change contract: with no exclusions configured
+``premise_scoped_ledger`` returns the base ledger object unchanged — no
+wrapper is introduced. With exclusions configured the wrapper is ALWAYS
+introduced (even when no assertion currently matches), so live visibility
+also covers facts that gain an excluded class only after wrapper
+construction.
 """
 
 from __future__ import annotations
@@ -115,60 +136,66 @@ def normalize_premise_exclusions(
     return normalized
 
 
-def excluded_premise_asrt_ids(
+def is_premise_excluded(
     ledger: Ledger,
+    asrt_id: str,
     exclusions: tuple[MetaExclusion, ...],
-) -> frozenset[str]:
-    """Collect asrt_ids carrying an excluded meta value (``ledger.find_meta`` is indexed)."""
-    excluded: set[str] = set()
+) -> bool:
+    """THE visibility decision — last-wins per exclusion key, read live from ``ledger``.
+
+    Per key only the LAST meta row under ``(asrt_id, key)`` decides, matching
+    the canonical SDK meta read (``_meta_raw_for_assertion``, sdk/facade.py:
+    dict-overwrite per key in iteration order). Ordering guarantee:
+    ``Ledger.find_meta(asrt_id=, key=)`` serves ``_meta_by_asrt_id_key``,
+    which ``_idx_add_meta`` appends to in write order and which
+    ``_load_from_db_via`` rebuilds with ``ORDER BY id`` — the last list entry
+    is therefore always the most recently written row, live and after
+    reload. Only string meta values participate in matching (FG free meta
+    keys allow scalars; a non-string last value never matches).
+
+    Cost per call: one indexed dict lookup per configured exclusion.
+    """
     for exclusion in exclusions:
-        for row in ledger.find_meta(key=exclusion.key):
-            if isinstance(row.value, str) and row.value in exclusion.values:
-                excluded.add(row.asrt_id)
-    return frozenset(excluded)
+        rows = ledger.find_meta(asrt_id=asrt_id, key=exclusion.key)
+        if not rows:
+            continue
+        last_value = rows[-1].value
+        if isinstance(last_value, str) and last_value in exclusion.values:
+            return True
+    return False
 
 
 def premise_scoped_ledger(
     ledger: Ledger,
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
 ) -> Ledger:
-    """Return ``ledger`` unchanged when no exclusion applies, else a filtered snapshot view."""
+    """Return ``ledger`` unchanged when nothing is configured, else a live filtered view."""
     normalized = normalize_premise_exclusions(exclusions)
     if not normalized:
         return ledger
-    excluded = excluded_premise_asrt_ids(ledger, normalized)
-    if not excluded:
-        return ledger
-    return _PremiseExcludedLedger(ledger, excluded_asrt_ids=excluded)
+    return _PremiseExcludedLedger(ledger, exclusions=normalized)
 
 
 class _PremiseExcludedLedger(Ledger):
     """Read-only Ledger view hiding assertions excluded by MetaExclusion config.
 
-    Constructed as a snapshot per evaluation call; it owns no sqlite
-    connection (same no-``super().__init__()`` construction pattern as
-    ``_ViewScopedLedger`` in sdk/store.py) and overrides the full read
-    surface so no evaluate or engine-export path can see an excluded claim.
+    Visibility is decided LIVE per access through ``is_premise_excluded``
+    (the single last-wins visibility logic) — no frozen exclusion set and no
+    revocation snapshot: a fact or revoker written or reclassified while an
+    evaluation is running is judged the moment it becomes readable, and the
+    view/witness projections of one call read through the same wrapper
+    object. It owns no sqlite connection (same no-``super().__init__()``
+    construction pattern as ``_ViewScopedLedger`` in sdk/store.py) and
+    overrides the full read surface so no evaluate or engine-export path can
+    see an excluded claim.
     """
 
-    def __init__(self, base: Ledger, *, excluded_asrt_ids: frozenset[str]) -> None:
+    def __init__(self, base: Ledger, *, exclusions: tuple[MetaExclusion, ...]) -> None:
         self._base = base
-        self._excluded_asrt_ids = excluded_asrt_ids
-        # Snapshot of revocations by non-excluded revokers: an excluded
-        # revoker's revocation is invisible to evaluation (symmetric
-        # admissibility, see module docstring).
-        visible_revokes = [
-            row for row in base.revokes if row.revoker_asrt_id not in excluded_asrt_ids
-        ]
-        self._visible_revokes = visible_revokes
-        self._visible_revoked_ids = {row.revoked_asrt_id for row in visible_revokes}
-        first_visible_revoker: dict[str, str] = {}
-        for row in visible_revokes:
-            first_visible_revoker.setdefault(row.revoked_asrt_id, row.revoker_asrt_id)
-        self._first_visible_revoker = first_visible_revoker
+        self._exclusions = exclusions
 
     def _is_visible(self, asrt_id: str) -> bool:
-        return asrt_id not in self._excluded_asrt_ids
+        return not is_premise_excluded(self._base, asrt_id, self._exclusions)
 
     def _filter_claims(self, claims: Iterable[Claim]) -> list[Claim]:
         return [claim for claim in claims if self._is_visible(claim.asrt_id)]
@@ -223,12 +250,29 @@ class _PremiseExcludedLedger(Ledger):
     def has_active_revocation(self, revoked_asrt_id: str) -> bool:
         if not self._is_visible(revoked_asrt_id):
             return False
-        return revoked_asrt_id in self._visible_revoked_ids
+        first_revoker = self._base.find_revoker(revoked_asrt_id)
+        if first_revoker is None:
+            return False
+        if self._is_visible(first_revoker):
+            return True
+        return self.find_revoker(revoked_asrt_id) is not None
 
     def find_revoker(self, revoked_asrt_id: str) -> str | None:
         if not self._is_visible(revoked_asrt_id):
             return None
-        return self._first_visible_revoker.get(revoked_asrt_id)
+        first_revoker = self._base.find_revoker(revoked_asrt_id)
+        if first_revoker is None:
+            return None
+        if self._is_visible(first_revoker):
+            return first_revoker
+        # Rare path — the base's first revoker is excluded: fall back to the
+        # first VISIBLE revoker in insertion order, scanning base revokes.
+        for row in self._base.revokes:
+            if row.revoked_asrt_id == revoked_asrt_id and self._is_visible(
+                row.revoker_asrt_id
+            ):
+                return row.revoker_asrt_id
+        return None
 
     @property
     def claims(self) -> list[Claim]:
@@ -248,7 +292,12 @@ class _PremiseExcludedLedger(Ledger):
 
     @property
     def revokes(self) -> list[Revokes]:
-        return list(self._visible_revokes)
+        # An excluded revoker's revocation is invisible to evaluation
+        # (symmetric admissibility, see module docstring); this filtered
+        # projection is what the souffle export reads.
+        return [
+            row for row in self._base.revokes if self._is_visible(row.revoker_asrt_id)
+        ]
 
     def get_ledger_meta(self, key: str) -> str | None:
         return self._base.get_ledger_meta(key)
@@ -286,7 +335,7 @@ class _PremiseExcludedLedger(Ledger):
 
 __all__ = [
     "MetaExclusion",
-    "excluded_premise_asrt_ids",
+    "is_premise_excluded",
     "normalize_premise_exclusions",
     "premise_scoped_ledger",
 ]

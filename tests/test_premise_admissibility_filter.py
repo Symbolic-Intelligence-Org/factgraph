@@ -11,7 +11,9 @@ adapters read every fact through ``store.ledger`` (souffle
 ``_build_fact_rows``, problog ``export_problog``), so an excluded claim that
 never reaches the exported package/program cannot influence the engine
 result. ``Store.evaluate_engine`` hands every registered evaluator the same
-premise-scoped store view exercised here via ``premise_scoped_store_view``.
+premise-scoped store view exercised here via ``premise_scoped_store_view``;
+``EngineEvaluatorSeamTests`` pins that hand-off itself through the real
+registration mechanics and the real ``fg.eval.evaluate_candidates`` path.
 """
 
 from __future__ import annotations
@@ -126,13 +128,21 @@ class MetaExclusionConfigTests(unittest.TestCase):
         self.assertIs(premise_scoped_ledger(fg.ledger, ()), fg.ledger)
         self.assertIs(premise_scoped_ledger(fg.ledger, None), fg.ledger)
 
-    def test_configured_but_no_matching_claims_introduces_no_wrapper(self) -> None:
+    def test_configured_exclusions_always_wrap_for_live_visibility(self) -> None:
         fg = SDKStore([User])
         fg.set_premise_exclusions([EXCLUSION])
         ref = fg.entities.ref(User, user_id="u-1")
         fg.fields.set(User.tag_seed, ref, "vip", meta=HUMAN_META)
-        # Exclusion konfiguriert, aber keine Assertion traegt den Wert -> kein Wrapper.
-        self.assertIs(premise_scoped_store_view(fg.store), fg.store)
+        # Konfigurierte Exclusions ziehen den Wrapper IMMER ein — auch ohne
+        # aktuell passende Assertion. Nur so greift die Live-Sichtbarkeit
+        # fuer Fakten, die erst nach Wrapper-Konstruktion klassifiziert
+        # werden (kein Konstruktionszeit-Kurzschluss).
+        self.assertIsNot(premise_scoped_store_view(fg.store), fg.store)
+        # Baseline-Semantik fuer nicht-klassifizierte Fakten unveraendert.
+        candidates = fg.eval.evaluate_candidates(
+            _tag_inference("inf.premise.nomatch"), engine="native"
+        )
+        self.assertEqual(_candidate_refs(candidates), [ref])
 
     def test_zero_config_evaluation_sees_agent_classed_facts(self) -> None:
         fg = SDKStore([User])
@@ -275,6 +285,43 @@ class EngineExportGateTests(unittest.TestCase):
             export_problog(fg.store, rule_spec, raw_path)
             self.assertIn(agent_id, raw_path.read_text(encoding="utf-8"))
 
+    def test_souffle_export_filters_excluded_revocation(self) -> None:
+        # Revocation-Symmetrie im Engine-Export: die revokes-Filterung des
+        # Wrappers traegt die Symmetrie in den souffle-Export — eine
+        # agent-klassifizierte Ruecknahme erreicht revokes.facts nicht.
+        fg = SDKStore([User])
+        fg.set_premise_exclusions([EXCLUSION])
+        ref = fg.entities.ref(User, user_id="u-1")
+        support_id = fg.fields.set(User.tag_seed, ref, "vip", meta=HUMAN_META)
+        fg.assertions.retract(support_id, meta=dict(AGENT_META))
+        revoker_id = fg.ledger.find_revoker(support_id)
+        self.assertIsNotNone(revoker_id)
+
+        view = premise_scoped_store_view(fg.store)
+        self.assertIsNot(view, fg.store)
+        with TemporaryDirectory() as tmp:
+            scoped_dir = Path(tmp) / "scoped"
+            souffle_package.export_package(
+                view, scoped_dir, souffle_package.ExportOptions()
+            )
+            scoped_revokes = (scoped_dir / "facts" / "revokes.facts").read_text(
+                encoding="utf-8"
+            )
+            # Die Revoke-Zeile fehlt in der scoped View ...
+            self.assertNotIn(support_id, scoped_revokes)
+            self.assertNotIn(revoker_id, scoped_revokes)
+
+            # ... und ist im Roh-Export (Audit-/Lese-Pfad) vorhanden.
+            raw_dir = Path(tmp) / "raw"
+            souffle_package.export_package(
+                fg.store, raw_dir, souffle_package.ExportOptions()
+            )
+            raw_revokes = (raw_dir / "facts" / "revokes.facts").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(support_id, raw_revokes)
+            self.assertIn(revoker_id, raw_revokes)
+
 
 class ProofFrameRecheckGateTests(unittest.TestCase):
     """Gate 5: Re-Check-Konsistenz bei nachtraeglicher Meta-Umklassifizierung.
@@ -326,6 +373,178 @@ class ProofFrameRecheckGateTests(unittest.TestCase):
             ),
             [],
         )
+
+
+class ReclassificationLastWinsTests(unittest.TestCase):
+    """Last-wins: Umklassifizierung RAUS aus der Klasse stellt Admissibility wieder her.
+
+    Gegenrichtung zu Gate 5 (ProofFrameRecheckGateTests): dort macht
+    ``append_meta`` eine Assertion auswertungs-unsichtbar, hier macht
+    derselbe Mechanismus sie wieder sichtbar. Es zaehlt der LETZTE
+    Meta-Row-Wert unter dem Schluessel — identische Reihenfolge-Semantik
+    wie die kanonische SDK-Lesart (``_meta_raw_for_assertion``,
+    last-row-wins; siehe ``is_premise_excluded``).
+    """
+
+    def test_reclassification_out_of_excluded_class_restores_admissibility(self) -> None:
+        fg = SDKStore([User])
+        fg.set_premise_exclusions([EXCLUSION])
+        ref = fg.entities.ref(User, user_id="u-1")
+        asrt_id = fg.fields.set(User.tag_seed, ref, "vip", meta=AGENT_META)
+
+        # Agent-klassifiziert: unsichtbar fuer die Auswertung.
+        self.assertEqual(
+            fg.eval.evaluate_candidates(
+                _tag_inference("inf.premise.lastwins.before"), engine="native"
+            ),
+            [],
+        )
+
+        # Umklassifizierung RAUS aus der ausgeschlossenen Klasse — exakt der
+        # Gate-5-Mechanismus (Ledger.append_meta) in Gegenrichtung.
+        fg.ledger.append_meta(
+            [
+                MetaRow(
+                    asrt_id=asrt_id,
+                    key="provenance_class",
+                    kind="str",
+                    value="verified",
+                )
+            ]
+        )
+
+        # Kanonische Lesart zeigt die neue Klasse ...
+        record = fg.assertions.by_id(asrt_id)
+        self.assertIsNotNone(record)
+        self.assertEqual(record.meta.raw.get("provenance_class"), "verified")
+        # ... und die Auswertung folgt ihr: der Kandidat entsteht wieder.
+        candidates = fg.eval.evaluate_candidates(
+            _tag_inference("inf.premise.lastwins.after"), engine="native"
+        )
+        self.assertEqual(_candidate_refs(candidates), [ref])
+
+    def test_reclassified_excluded_revoker_becomes_effective(self) -> None:
+        # Symmetrie: ein agent-klassifizierter Revoker, spaeter aus der
+        # Klasse herausklassifiziert, macht die Ruecknahme auch fuer die
+        # Auswertung wirksam.
+        fg = SDKStore([User])
+        fg.set_premise_exclusions([EXCLUSION])
+        ref = fg.entities.ref(User, user_id="u-1")
+        support_id = fg.fields.set(User.tag_seed, ref, "vip", meta=HUMAN_META)
+        fg.assertions.retract(support_id, meta=dict(AGENT_META))
+        revoker_id = fg.ledger.find_revoker(support_id)
+        self.assertIsNotNone(revoker_id)
+        assert revoker_id is not None
+
+        candidates = fg.eval.evaluate_candidates(
+            _tag_inference("inf.premise.lastwins.revoker.before"), engine="native"
+        )
+        self.assertEqual(_candidate_refs(candidates), [ref])
+
+        fg.ledger.append_meta(
+            [
+                MetaRow(
+                    asrt_id=revoker_id,
+                    key="provenance_class",
+                    kind="str",
+                    value="verified",
+                )
+            ]
+        )
+        self.assertEqual(
+            fg.eval.evaluate_candidates(
+                _tag_inference("inf.premise.lastwins.revoker.after"), engine="native"
+            ),
+            [],
+        )
+
+
+class LiveVisibilityTests(unittest.TestCase):
+    """Sichtbarkeit wird pro Zugriff LIVE entschieden — kein eingefrorenes Set.
+
+    meander-Evals laufen in Request-Threads ohne den meander-WRITE_LOCK; ein
+    mid-eval geschriebener Fakt mit ausgeschlossener Klasse darf die
+    Praemissenmenge nicht erreichen. Dieselbe eine Logik
+    (``is_premise_excluded``) traegt last-wins und Revocation-Symmetrie.
+    """
+
+    def test_fact_written_after_wrapper_construction_is_filtered_live(self) -> None:
+        fg = SDKStore([User])
+        # Wrapper VOR den Schreib-Vorgaengen konstruieren (mid-eval Szenario);
+        # zu diesem Zeitpunkt existiert noch keine klassifizierte Assertion.
+        scoped = premise_scoped_ledger(fg.ledger, (EXCLUSION,))
+        self.assertIsNot(scoped, fg.ledger)
+
+        ref_agent = fg.entities.ref(User, user_id="u-agent-late")
+        agent_id = fg.fields.set(User.tag_seed, ref_agent, "vip", meta=AGENT_META)
+        ref_plain = fg.entities.ref(User, user_id="u-plain-late")
+        plain_id = fg.fields.set(User.tag_seed, ref_plain, "vip", meta=HUMAN_META)
+
+        # Der spaeter geschriebene agent-Fakt ist im selben Moment unsichtbar ...
+        self.assertIsNone(scoped.get_claim(agent_id))
+        self.assertNotIn(agent_id, [c.asrt_id for c in scoped.claims])
+        self.assertEqual(scoped.find_meta(asrt_id=agent_id), [])
+        # ... der nicht-klassifizierte bleibt sichtbar (Baseline unveraendert).
+        self.assertIsNotNone(scoped.get_claim(plain_id))
+        self.assertIn(plain_id, [c.asrt_id for c in scoped.claims])
+
+    def test_revocation_written_after_wrapper_construction_is_filtered_live(self) -> None:
+        fg = SDKStore([User])
+        ref = fg.entities.ref(User, user_id="u-1")
+        support_id = fg.fields.set(User.tag_seed, ref, "vip", meta=HUMAN_META)
+        scoped = premise_scoped_ledger(fg.ledger, (EXCLUSION,))
+
+        fg.assertions.retract(support_id, meta=dict(AGENT_META))
+
+        # Basis sieht die Ruecknahme, die scoped Sicht nicht.
+        self.assertTrue(fg.ledger.has_active_revocation(support_id))
+        self.assertFalse(scoped.has_active_revocation(support_id))
+        self.assertIsNone(scoped.find_revoker(support_id))
+        self.assertEqual(scoped.revokes, [])
+
+
+class EngineEvaluatorSeamTests(unittest.TestCase):
+    """Produktions-Naht aller Engine-Modi: ``Store.evaluate_engine`` reicht
+    die premise-scoped Store-View an den registrierten Evaluator.
+
+    Der Probe-Evaluator wird ueber die reale Override-Mechanik registriert
+    (``Store.set_engine_evaluator`` -> ``_engine_overrides['souffle']``,
+    dieselbe Naht, die ``register_engine_evaluator`` global bedient) und
+    ueber den ECHTEN Aufrufweg ``fg.eval.evaluate_candidates(...,
+    engine='souffle')`` gefahren. Eine Mutation von
+    ``runtime.py::evaluate_engine`` zurueck zu ``evaluator(self, ...)``
+    macht diesen Test rot.
+    """
+
+    def test_engine_evaluator_receives_premise_scoped_store(self) -> None:
+        fg = SDKStore([User])
+        fg.set_premise_exclusions([EXCLUSION])
+        ref_plain = fg.entities.ref(User, user_id="u-plain")
+        plain_id = fg.fields.set(User.tag_seed, ref_plain, "vip", meta=HUMAN_META)
+        ref_agent = fg.entities.ref(User, user_id="u-agent")
+        agent_id = fg.fields.set(User.tag_seed, ref_agent, "vip", meta=AGENT_META)
+
+        observed: dict[str, object] = {}
+
+        def probe_evaluator(store, **kwargs):  # noqa: ANN001, ANN003 - EngineEvaluatorFn
+            observed["excluded_claim"] = store.ledger.get_claim(agent_id)
+            observed["plain_claim"] = store.ledger.get_claim(plain_id)
+            observed["claim_ids"] = [c.asrt_id for c in store.ledger.claims]
+            return []
+
+        fg.store.set_engine_evaluator(probe_evaluator)
+        candidates = fg.eval.evaluate_candidates(
+            _tag_inference("inf.premise.seam"), engine="souffle"
+        )
+        self.assertEqual(candidates, [])
+        # Der Evaluator ist ueber den echten Weg gelaufen ...
+        self.assertIn("claim_ids", observed)
+        # ... und sieht die ausgeschlossene Assertion NICHT,
+        # die nicht-klassifizierte sehr wohl.
+        self.assertIsNone(observed["excluded_claim"])
+        self.assertIsNotNone(observed["plain_claim"])
+        self.assertNotIn(agent_id, observed["claim_ids"])
+        self.assertIn(plain_id, observed["claim_ids"])
 
 
 class DerivationCheckGateTests(unittest.TestCase):

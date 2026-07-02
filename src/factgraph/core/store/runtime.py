@@ -491,7 +491,12 @@ class _PremiseScopedStore(Store):
 
 
 def premise_scoped_store_view(store: Store) -> Store:
-    """Return ``store`` unchanged when no exclusion applies, else a premise-scoped view."""
+    """Return ``store`` unchanged when no exclusion is configured, else a premise-scoped view.
+
+    With exclusions configured the view is always introduced — visibility is
+    decided live per access inside the scoped ledger (see premise_filter.py),
+    so a fact classified only after view construction is still filtered.
+    """
     if isinstance(store, _PremiseScopedStore):
         return store
     exclusions = getattr(store, "premise_exclusions", ())

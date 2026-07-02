@@ -228,8 +228,9 @@ def _evaluate_where_over_view_with_support(
     root_result_kind: str,
     registry: Any | None = None,
 ) -> list[BindingSupportCapture]:
-    # One premise-scoped snapshot per evaluate call, shared between the
-    # witness projection and the native where evaluation.
+    # One premise-scoped view per evaluate call, shared between the witness
+    # projection and the native where evaluation; visibility is decided live
+    # per access inside the view (see premise_filter.py).
     ledger = premise_scoped_ledger(
         store.ledger, getattr(store, "premise_exclusions", ())
     )
