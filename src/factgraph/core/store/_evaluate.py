@@ -18,6 +18,7 @@ from factgraph.core.store._support_capture import (
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.rules.where_eval import WhereValidationError
 from factgraph.core.store import builders
+from factgraph.core.store.premise_filter import premise_scoped_ledger
 from factgraph.core.store.types import (
     EngineExtBase,
     EngineEvaluatorFn,
@@ -197,9 +198,18 @@ def _evaluate_where_over_view(
     *,
     registry: Any | None = None,
     witness_facts: dict[str, list[Any]] | None = None,
+    ledger: Any | None = None,
 ) -> Any:
+    if ledger is None:
+        # Premise admissibility: the native projection is the only fact
+        # source of native evaluation; reading through the premise-scoped
+        # ledger keeps excluded assertions out of support AND negation.
+        # Zero-config returns store.ledger unchanged.
+        ledger = premise_scoped_ledger(
+            store.ledger, getattr(store, "premise_exclusions", ())
+        )
     view_facts = project_view_facts(
-        store.ledger,
+        ledger,
         store.schema_ir,
     )
     return evaluate_native_where(
@@ -218,8 +228,14 @@ def _evaluate_where_over_view_with_support(
     root_result_kind: str,
     registry: Any | None = None,
 ) -> list[BindingSupportCapture]:
+    # One premise-scoped view per evaluate call, shared between the witness
+    # projection and the native where evaluation; visibility is decided live
+    # per access inside the view (see premise_filter.py).
+    ledger = premise_scoped_ledger(
+        store.ledger, getattr(store, "premise_exclusions", ())
+    )
     witness_facts = project_view_facts_with_witness(
-        store.ledger,
+        ledger,
         store.schema_ir,
     )
     evaluation = _evaluate_where_over_view(
@@ -227,6 +243,7 @@ def _evaluate_where_over_view_with_support(
         where,
         registry=registry,
         witness_facts=witness_facts,
+        ledger=ledger,
     )
     bindings = evaluation.bindings
     if not bindings:
