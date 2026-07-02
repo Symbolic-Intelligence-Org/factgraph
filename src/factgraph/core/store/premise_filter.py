@@ -6,6 +6,15 @@ assertion can neither support a derivation nor block one through negation.
 For evaluation, the assertion does not exist. Key and values are pure
 configuration — no consumer vocabulary is hardcoded here.
 
+A configured ``PredicatePremiseAllowance`` narrows a SINGLE predicate: for
+assertions of that predicate, only those whose meta ``key`` currently carries
+a value in ``allowed_values`` stay visible to evaluation (an assertion missing
+the key is admitted only if ``absent_ok``). Assertions of any other predicate
+are untouched. The two dimensions are OR-combined, so an assertion is
+invisible when the global exclusion OR the per-predicate allowance excludes
+it, and a global exclusion can never be re-admitted by an allowance. Both are
+pure configuration; no consumer vocabulary is hardcoded here.
+
 Visibility semantics (single logic, shared by every projection):
 
 - LAST-WINS per ``(asrt_id, key)``: only the most recent meta row under the
@@ -65,7 +74,7 @@ construction.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -114,6 +123,54 @@ class MetaExclusion:
         object.__setattr__(self, "values", values)
 
 
+@dataclass(frozen=True)
+class PredicatePremiseAllowance:
+    """One per-predicate admissibility rule: for assertions of ``pred_id``, admit
+    as a premise ONLY those whose meta ``key`` currently carries a value in
+    ``allowed_values``.
+
+    An assertion of ``pred_id`` that is missing the ``key`` is admitted only
+    when ``absent_ok`` is set (default: excluded, so a declared requirement is
+    enforced against class-less legacy facts). Assertions of any other
+    predicate are untouched by this rule. Predicate id, key and values are pure
+    configuration; only string meta values participate in matching (a
+    non-string last value never equals a configured string value, so it counts
+    as not-allowed).
+    """
+
+    pred_id: str
+    key: str
+    allowed_values: frozenset[str]
+    absent_ok: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.pred_id, str) or not self.pred_id:
+            raise ValueError("PredicatePremiseAllowance.pred_id must be non-empty string")
+        if not isinstance(self.key, str) or not self.key:
+            raise ValueError("PredicatePremiseAllowance.key must be non-empty string")
+        if not isinstance(self.absent_ok, bool):
+            raise ValueError("PredicatePremiseAllowance.absent_ok must be bool")
+        if isinstance(self.allowed_values, str):
+            raise ValueError(
+                "PredicatePremiseAllowance.allowed_values must be an iterable of strings, "
+                "not a single string"
+            )
+        try:
+            values = frozenset(self.allowed_values)
+        except TypeError as exc:
+            raise ValueError(
+                "PredicatePremiseAllowance.allowed_values must be an iterable of strings"
+            ) from exc
+        if not values:
+            raise ValueError("PredicatePremiseAllowance.allowed_values must be non-empty")
+        for value in values:
+            if not isinstance(value, str) or not value:
+                raise ValueError(
+                    "PredicatePremiseAllowance.allowed_values entries must be non-empty strings"
+                )
+        object.__setattr__(self, "allowed_values", values)
+
+
 def normalize_premise_exclusions(
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
 ) -> tuple[MetaExclusion, ...]:
@@ -133,6 +190,38 @@ def normalize_premise_exclusions(
             raise ValueError(
                 f"premise_exclusions entries must be MetaExclusion, got {type(item).__name__}"
             )
+    return normalized
+
+
+def normalize_premise_allowances(
+    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+) -> tuple[PredicatePremiseAllowance, ...]:
+    """Normalize the per-predicate allowance input to a validated tuple (empty = disabled).
+
+    Rejects duplicate ``pred_id`` entries: one predicate carries at most one
+    allowance rule, so the visibility decision stays unambiguous.
+    """
+    if allowances is None:
+        return ()
+    if isinstance(allowances, PredicatePremiseAllowance):
+        return (allowances,)
+    try:
+        normalized = tuple(allowances)
+    except TypeError as exc:
+        raise ValueError(
+            "premise_allowances must be PredicatePremiseAllowance | "
+            "iterable[PredicatePremiseAllowance] | None"
+        ) from exc
+    seen: set[str] = set()
+    for item in normalized:
+        if not isinstance(item, PredicatePremiseAllowance):
+            raise ValueError(
+                "premise_allowances entries must be PredicatePremiseAllowance, "
+                f"got {type(item).__name__}"
+            )
+        if item.pred_id in seen:
+            raise ValueError(f"premise_allowances has duplicate pred_id {item.pred_id!r}")
+        seen.add(item.pred_id)
     return normalized
 
 
@@ -165,15 +254,64 @@ def is_premise_excluded(
     return False
 
 
+def is_predicate_premise_excluded(
+    ledger: Ledger,
+    asrt_id: str,
+    allowances_by_pred: Mapping[str, PredicatePremiseAllowance],
+) -> bool:
+    """Per-predicate admissibility — exclude an assertion of a configured predicate
+    whose meta ``key`` last-value is not in that predicate's allowed set.
+
+    An assertion of a configured predicate that is MISSING the key is excluded
+    unless the predicate's ``absent_ok`` is set. Assertions of predicates NOT
+    in the map, and assertions that are not claims (``get_claim`` -> ``None``,
+    e.g. a revocation record), are never excluded here. An empty map never
+    excludes.
+
+    Last-wins per ``(asrt_id, key)`` mirrors ``is_premise_excluded``: only the
+    most recently written meta row under the key decides, so a reclassification
+    moves the assertion INTO or OUT OF the allowed set exactly as every read
+    path reports it. Only a string last value can be allowed. Cost when
+    configured: one claim lookup, plus one indexed meta lookup for assertions
+    of a configured predicate.
+    """
+    if not allowances_by_pred:
+        return False
+    claim = ledger.get_claim(asrt_id)
+    if claim is None:
+        return False
+    allowance = allowances_by_pred.get(claim.pred_id)
+    if allowance is None:
+        return False
+    rows = ledger.find_meta(asrt_id=asrt_id, key=allowance.key)
+    if not rows:
+        return not allowance.absent_ok
+    last_value = rows[-1].value
+    return not (isinstance(last_value, str) and last_value in allowance.allowed_values)
+
+
 def premise_scoped_ledger(
     ledger: Ledger,
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
+    allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
 ) -> Ledger:
-    """Return ``ledger`` unchanged when nothing is configured, else a live filtered view."""
+    """Return ``ledger`` unchanged when nothing is configured, else a live filtered view.
+
+    Two orthogonal, OR-combined dimensions: the global ``exclusions`` (hide any
+    assertion carrying an excluded meta value, predicate-blind) and the
+    per-predicate ``allowances`` (for a configured predicate, hide any
+    assertion whose class is not allowed). An assertion is invisible to
+    evaluation when EITHER dimension excludes it, so a global exclusion is never
+    undone by an allowance. Empty on both dimensions returns the base ledger
+    object unchanged (zero-behaviour-change contract).
+    """
     normalized = normalize_premise_exclusions(exclusions)
-    if not normalized:
+    normalized_allowances = normalize_premise_allowances(allowances)
+    if not normalized and not normalized_allowances:
         return ledger
-    return _PremiseExcludedLedger(ledger, exclusions=normalized)
+    return _PremiseExcludedLedger(
+        ledger, exclusions=normalized, allowances=normalized_allowances
+    )
 
 
 class _PremiseExcludedLedger(Ledger):
@@ -190,12 +328,27 @@ class _PremiseExcludedLedger(Ledger):
     see an excluded claim.
     """
 
-    def __init__(self, base: Ledger, *, exclusions: tuple[MetaExclusion, ...]) -> None:
+    def __init__(
+        self,
+        base: Ledger,
+        *,
+        exclusions: tuple[MetaExclusion, ...],
+        allowances: tuple[PredicatePremiseAllowance, ...] = (),
+    ) -> None:
         self._base = base
         self._exclusions = exclusions
+        self._allowances_by_pred: dict[str, PredicatePremiseAllowance] = {
+            allowance.pred_id: allowance for allowance in allowances
+        }
 
     def _is_visible(self, asrt_id: str) -> bool:
-        return not is_premise_excluded(self._base, asrt_id, self._exclusions)
+        if is_premise_excluded(self._base, asrt_id, self._exclusions):
+            return False
+        if is_predicate_premise_excluded(
+            self._base, asrt_id, self._allowances_by_pred
+        ):
+            return False
+        return True
 
     def _filter_claims(self, claims: Iterable[Claim]) -> list[Claim]:
         return [claim for claim in claims if self._is_visible(claim.asrt_id)]
@@ -335,7 +488,10 @@ class _PremiseExcludedLedger(Ledger):
 
 __all__ = [
     "MetaExclusion",
+    "PredicatePremiseAllowance",
     "is_premise_excluded",
+    "is_predicate_premise_excluded",
     "normalize_premise_exclusions",
+    "normalize_premise_allowances",
     "premise_scoped_ledger",
 ]

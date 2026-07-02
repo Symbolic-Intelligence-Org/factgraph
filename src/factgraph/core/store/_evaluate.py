@@ -206,7 +206,9 @@ def _evaluate_where_over_view(
         # ledger keeps excluded assertions out of support AND negation.
         # Zero-config returns store.ledger unchanged.
         ledger = premise_scoped_ledger(
-            store.ledger, getattr(store, "premise_exclusions", ())
+            store.ledger,
+            getattr(store, "premise_exclusions", ()),
+            getattr(store, "premise_allowances", ()),
         )
     view_facts = project_view_facts(
         ledger,
@@ -232,7 +234,9 @@ def _evaluate_where_over_view_with_support(
     # projection and the native where evaluation; visibility is decided live
     # per access inside the view (see premise_filter.py).
     ledger = premise_scoped_ledger(
-        store.ledger, getattr(store, "premise_exclusions", ())
+        store.ledger,
+        getattr(store, "premise_exclusions", ()),
+        getattr(store, "premise_allowances", ()),
     )
     witness_facts = project_view_facts_with_witness(
         ledger,

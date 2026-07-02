@@ -51,7 +51,9 @@ def recheck_proof_frame(
     if request.overlay.rule_actions:
         return _unknown_frame_result(request)
 
-    ledger = premise_scoped_ledger(store.ledger, store.premise_exclusions)
+    ledger = premise_scoped_ledger(
+        store.ledger, store.premise_exclusions, store.premise_allowances
+    )
     projected_witness = project_view_facts_with_witness(ledger, store.schema_ir)
     visible_rows = _visible_projected_rows(projected_witness)
     action_index = _index_overlay_actions(request.overlay)

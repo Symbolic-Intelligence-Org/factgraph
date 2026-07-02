@@ -174,7 +174,9 @@ def _native_check(
     # assertions excluded via store.premise_exclusions are invisible here.
     # The non-native legs inherit the same filter through
     # evaluate_derivation_plans -> Store.evaluate_engine.
-    ledger = premise_scoped_ledger(store.ledger, store.premise_exclusions)
+    ledger = premise_scoped_ledger(
+        store.ledger, store.premise_exclusions, store.premise_allowances
+    )
     view_facts = project_view_facts(ledger, store.schema_ir)
     witness_facts = project_view_facts_with_witness(ledger, store.schema_ir)
 

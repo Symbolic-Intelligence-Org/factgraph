@@ -27,6 +27,8 @@ from factgraph.core.store.evaluation import evaluate_store
 from factgraph.core.store.ledger import Ledger
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
+    PredicatePremiseAllowance,
+    normalize_premise_allowances,
     normalize_premise_exclusions,
     premise_scoped_ledger,
 )
@@ -80,12 +82,14 @@ class Store:
         engine_evaluator: EngineEvaluatorFn | None = None,
         artifact_sidecar: ArtifactSidecar | None = None,
         premise_exclusions: "MetaExclusion | Iterable[MetaExclusion] | None" = None,
+        premise_allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
             raise ValueError("schema_ir must be dict")
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
         self._premise_exclusions = normalize_premise_exclusions(premise_exclusions)
+        self._premise_allowances = normalize_premise_allowances(premise_allowances)
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, ProofReceipt] = {}
@@ -124,6 +128,28 @@ class Store:
         unfiltered. Passing ``None`` or an empty iterable disables filtering.
         """
         self._premise_exclusions = normalize_premise_exclusions(exclusions)
+
+    @property
+    def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
+        """Configured per-predicate premise admissibility allowances (empty = disabled)."""
+        return self._premise_allowances
+
+    def set_premise_allowances(
+        self,
+        allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+    ) -> None:
+        """Configure per-predicate evaluation allowances; see core/store/premise_filter.py.
+
+        For each configured predicate, an assertion of that predicate is
+        visible to rule evaluation only when its meta ``key`` last-value is in
+        the predicate's ``allowed_values`` (an assertion missing the key is
+        admitted only when ``absent_ok`` is set). Predicates without an entry
+        are unaffected. This is OR-combined with ``premise_exclusions`` (an
+        assertion excluded by either is invisible), so the global exclusion
+        floor is never lifted. Passing ``None`` or an empty iterable disables
+        per-predicate filtering.
+        """
+        self._premise_allowances = normalize_premise_allowances(allowances)
 
     def _remember_support_artifact(
         self,
@@ -491,18 +517,19 @@ class _PremiseScopedStore(Store):
 
 
 def premise_scoped_store_view(store: Store) -> Store:
-    """Return ``store`` unchanged when no exclusion is configured, else a premise-scoped view.
+    """Return ``store`` unchanged when neither exclusions nor allowances are configured, else a premise-scoped view.
 
-    With exclusions configured the view is always introduced — visibility is
-    decided live per access inside the scoped ledger (see premise_filter.py),
+    With either dimension configured the view is always introduced — visibility
+    is decided live per access inside the scoped ledger (see premise_filter.py),
     so a fact classified only after view construction is still filtered.
     """
     if isinstance(store, _PremiseScopedStore):
         return store
     exclusions = getattr(store, "premise_exclusions", ())
-    if not exclusions:
+    allowances = getattr(store, "premise_allowances", ())
+    if not exclusions and not allowances:
         return store
-    scoped_ledger = premise_scoped_ledger(store.ledger, exclusions)
+    scoped_ledger = premise_scoped_ledger(store.ledger, exclusions, allowances)
     if scoped_ledger is store.ledger:
         return store
     return _PremiseScopedStore(store, scoped_ledger)

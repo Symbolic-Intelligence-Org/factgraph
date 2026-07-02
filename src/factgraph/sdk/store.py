@@ -122,7 +122,7 @@ from factgraph.core.store.database import (
     validate_schema_object_for_workspace,
     write_schema_object_for_workspace,
 )
-from factgraph.core.store.premise_filter import MetaExclusion
+from factgraph.core.store.premise_filter import MetaExclusion, PredicatePremiseAllowance
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
@@ -1970,6 +1970,34 @@ class SDKStore:
         """
         try:
             self._store.set_premise_exclusions(exclusions)
+        except ValueError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    @property
+    def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
+        """Configured per-predicate premise admissibility allowances (empty = disabled)."""
+        return self._store.premise_allowances
+
+    def set_premise_allowances(
+        self,
+        allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
+    ) -> None:
+        """Configure per-predicate premise admissibility allowances for evaluation.
+
+        For each configured predicate, an assertion of that predicate is
+        visible to every rule evaluation (all engine modes, proof-frame
+        recheck, derivation check) only when its meta ``key`` last-value is in
+        the predicate's ``allowed_values``; an assertion of that predicate
+        missing the key is admitted only when ``absent_ok`` is set. Predicates
+        without an entry are unaffected. This is OR-combined with
+        ``set_premise_exclusions``: an assertion excluded by either dimension is
+        invisible, so the global exclusion floor is never lifted. Read/query
+        paths outside evaluation stay unfiltered. Predicate, key and values are
+        pure configuration; passing ``None`` or an empty iterable disables
+        per-predicate filtering. See ``factgraph/core/store/premise_filter.py``.
+        """
+        try:
+            self._store.set_premise_allowances(allowances)
         except ValueError as exc:
             raise SDKStoreError(str(exc)) from exc
 
