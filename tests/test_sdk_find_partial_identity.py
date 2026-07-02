@@ -136,7 +136,11 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_no_new_public_sdk_names_or_read_helpers_are_added(self) -> None:
         sdk = _seed_store()
 
-        self.assertEqual(len(sdk_module.__all__), 63)
+        # Pin refreshed: the 63 baseline predated deliberate public additions
+        # (RuleStructure/Structure* inspection surface, release-surface sync,
+        # MetaExclusion for premise admissibility) and was stale at 74 before
+        # MetaExclusion landed. Intent unchanged: no ACCIDENTAL name creep.
+        self.assertEqual(len(sdk_module.__all__), 75)
         self.assertNotIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogConfig", sdk_module.__all__)
