@@ -51,11 +51,17 @@ Scope (deliberate):
   reads serve candidate_key idempotency dedup, which must see the full
   ledger.
 
-Revocations are treated symmetrically: a revocation whose revoker assertion
-carries an excluded meta value is also invisible to evaluation — an
-inadmissible retraction can neither remove a fact from the premise set nor
-lift a negation blocker. Everywhere outside evaluation the revocation stays
-effective.
+Revocations are treated symmetrically BY THE GLOBAL ``MetaExclusion`` (which is
+predicate-blind): a revocation whose revoker assertion carries an excluded meta
+value is also invisible to evaluation — an inadmissible retraction can neither
+remove a fact from the premise set nor lift a negation blocker. Everywhere
+outside evaluation the revocation stays effective. The per-predicate dimensions
+(``PredicatePremiseAllowance`` / ``PredicatePremiseBlock``) key on
+``claim.pred_id`` and short-circuit on a revocation record (``get_claim`` ->
+``None``), which carries no predicate id — so they structurally cannot make a
+*revocation* inadmissible. If a revocation must itself be made inadmissible by a
+meta value (e.g. a revoked ``origin_binding``), that has to go through a global
+``MetaExclusion``, not a per-predicate allowance/block.
 
 The ledger wrapper mirrors the full read surface of the production-proven
 ``_ViewScopedLedger`` (sdk/store.py: claims property, find_claims,
