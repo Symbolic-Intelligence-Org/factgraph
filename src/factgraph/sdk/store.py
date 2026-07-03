@@ -127,7 +127,7 @@ from factgraph.core.store.premise_filter import (
     PredicatePremiseAllowance,
     PredicatePremiseBlock,
 )
-from factgraph.core.store.runtime import Store
+from factgraph.core.store.runtime import Store, premise_scoped_store_view
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
 
@@ -2033,6 +2033,42 @@ class SDKStore:
             self._store.set_premise_blocks(blocks)
         except ValueError as exc:
             raise SDKStoreError(str(exc)) from exc
+
+    def premise_scoped_view(self) -> "SDKStore":
+        """Read-only `FactGraph` whose reads see only evaluation-admissible facts.
+
+        Every entity/field/assertion read through the returned view applies the
+        SAME premise admissibility filter that rule evaluation applies — the
+        configured ``premise_exclusions`` / ``premise_allowances`` /
+        ``premise_blocks`` — so an assertion hidden from evaluation is also hidden
+        from reads here. This is the ONE supported way to read the
+        admissible-only premise set without re-implementing the filter: it
+        composes the existing ``premise_scoped_store_view`` (the same view
+        evaluation builds) with the SDK read facades, so callers keep using the
+        ordinary read verbs (``entities.where`` + ``getattr``, ``fields.get``,
+        ``assertions.where``) and get admissible-only results.
+
+        Ordinary read/query paths on the base graph stay unfiltered (see
+        ``set_premise_exclusions``); this view is the deliberate opt-in for
+        callers — e.g. building ILP training data — that must read exactly what
+        evaluation would admit.
+
+        Zero-config (no exclusions, allowances or blocks configured) returns
+        ``self`` unchanged, preserving the zero-behavior-change contract.
+        Visibility is decided live per access, so a fact classified after the
+        view is created is still filtered. The view is READ-ONLY and shares the
+        underlying ledger and schema — do not write or save through it. See
+        ``factgraph/core/store/premise_filter.py``.
+        """
+        scoped_store = premise_scoped_store_view(self._store)
+        if scoped_store is self._store:
+            return self
+        return SDKStore(
+            self._classes,
+            store=scoped_store,
+            schema_ir=self._schema_ir,
+            default_row_format=self._default_row_format,
+        )
 
     @property
     def schema_ir(self) -> dict[str, Any]:
