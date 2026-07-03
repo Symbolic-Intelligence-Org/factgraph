@@ -140,11 +140,12 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # (RuleStructure/Structure* inspection surface, release-surface sync,
         # MetaExclusion for premise admissibility) and was stale at 74 before
         # MetaExclusion landed. Bumped to 76 for the deliberate
-        # PredicatePremiseAllowance addition (per-predicate premise
-        # admissibility, sibling of MetaExclusion). Intent unchanged: no
-        # ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 76)
+        # PredicatePremiseAllowance addition, then to 77 for the deliberate
+        # PredicatePremiseBlock addition (per-predicate premise blocklist,
+        # complement of the allowance). Intent unchanged: no ACCIDENTAL name creep.
+        self.assertEqual(len(sdk_module.__all__), 77)
         self.assertIn("PredicatePremiseAllowance", sdk_module.__all__)
+        self.assertIn("PredicatePremiseBlock", sdk_module.__all__)
         self.assertNotIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogConfig", sdk_module.__all__)

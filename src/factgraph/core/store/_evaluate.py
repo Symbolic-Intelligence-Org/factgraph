@@ -209,6 +209,7 @@ def _evaluate_where_over_view(
             store.ledger,
             getattr(store, "premise_exclusions", ()),
             getattr(store, "premise_allowances", ()),
+            getattr(store, "premise_blocks", ()),
         )
     view_facts = project_view_facts(
         ledger,
@@ -237,6 +238,7 @@ def _evaluate_where_over_view_with_support(
         store.ledger,
         getattr(store, "premise_exclusions", ()),
         getattr(store, "premise_allowances", ()),
+        getattr(store, "premise_blocks", ()),
     )
     witness_facts = project_view_facts_with_witness(
         ledger,

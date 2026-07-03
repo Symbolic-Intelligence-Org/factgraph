@@ -171,6 +171,55 @@ class PredicatePremiseAllowance:
         object.__setattr__(self, "allowed_values", values)
 
 
+@dataclass(frozen=True)
+class PredicatePremiseBlock:
+    """One per-predicate blocklist: for assertions of ``pred_id``, hide any whose
+    meta ``key`` currently carries a value in ``blocked_values``.
+
+    The complement of ``PredicatePremiseAllowance`` and independent of it: an
+    allowance narrows to an ALLOWED set on one key (default-deny), a block
+    excludes an explicit DENIED set on another key (default-admit). An assertion
+    of ``pred_id`` MISSING the key is never blocked (only explicit matches are);
+    an assertion of any other predicate is untouched. The two are orthogonal, so
+    a predicate can carry both — e.g. allow class ``accredited`` on
+    ``provenance_class`` AND block revoked bindings on ``origin_binding`` — and
+    an assertion must clear every configured dimension to stay visible.
+
+    Predicate id, key and values are pure configuration; only string meta values
+    participate in matching (a non-string last value never equals a configured
+    string value, so it is never blocked).
+    """
+
+    pred_id: str
+    key: str
+    blocked_values: frozenset[str]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.pred_id, str) or not self.pred_id:
+            raise ValueError("PredicatePremiseBlock.pred_id must be non-empty string")
+        if not isinstance(self.key, str) or not self.key:
+            raise ValueError("PredicatePremiseBlock.key must be non-empty string")
+        if isinstance(self.blocked_values, str):
+            raise ValueError(
+                "PredicatePremiseBlock.blocked_values must be an iterable of strings, "
+                "not a single string"
+            )
+        try:
+            values = frozenset(self.blocked_values)
+        except TypeError as exc:
+            raise ValueError(
+                "PredicatePremiseBlock.blocked_values must be an iterable of strings"
+            ) from exc
+        if not values:
+            raise ValueError("PredicatePremiseBlock.blocked_values must be non-empty")
+        for value in values:
+            if not isinstance(value, str) or not value:
+                raise ValueError(
+                    "PredicatePremiseBlock.blocked_values entries must be non-empty strings"
+                )
+        object.__setattr__(self, "blocked_values", values)
+
+
 def normalize_premise_exclusions(
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
 ) -> tuple[MetaExclusion, ...]:
@@ -221,6 +270,39 @@ def normalize_premise_allowances(
             )
         if item.pred_id in seen:
             raise ValueError(f"premise_allowances has duplicate pred_id {item.pred_id!r}")
+        seen.add(item.pred_id)
+    return normalized
+
+
+def normalize_premise_blocks(
+    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+) -> tuple[PredicatePremiseBlock, ...]:
+    """Normalize the per-predicate blocklist input to a validated tuple (empty = disabled).
+
+    Rejects duplicate ``pred_id`` entries: one predicate carries at most one
+    block rule (all its blocked values on one key), so the visibility decision
+    stays unambiguous.
+    """
+    if blocks is None:
+        return ()
+    if isinstance(blocks, PredicatePremiseBlock):
+        return (blocks,)
+    try:
+        normalized = tuple(blocks)
+    except TypeError as exc:
+        raise ValueError(
+            "premise_blocks must be PredicatePremiseBlock | "
+            "iterable[PredicatePremiseBlock] | None"
+        ) from exc
+    seen: set[str] = set()
+    for item in normalized:
+        if not isinstance(item, PredicatePremiseBlock):
+            raise ValueError(
+                "premise_blocks entries must be PredicatePremiseBlock, "
+                f"got {type(item).__name__}"
+            )
+        if item.pred_id in seen:
+            raise ValueError(f"premise_blocks has duplicate pred_id {item.pred_id!r}")
         seen.add(item.pred_id)
     return normalized
 
@@ -290,27 +372,69 @@ def is_predicate_premise_excluded(
     return not (isinstance(last_value, str) and last_value in allowance.allowed_values)
 
 
+def is_predicate_premise_blocked(
+    ledger: Ledger,
+    asrt_id: str,
+    blocks_by_pred: Mapping[str, PredicatePremiseBlock],
+) -> bool:
+    """Per-predicate blocklist — exclude an assertion of a configured predicate
+    whose meta ``key`` last-value IS in that predicate's blocked set.
+
+    Default-admit: an assertion of a configured predicate that is MISSING the
+    key, or whose last value is not blocked, stays visible (only explicit
+    matches are blocked). Assertions of predicates NOT in the map, and
+    non-claims (``get_claim`` -> ``None``), are never blocked. An empty map
+    never blocks.
+
+    Last-wins per ``(asrt_id, key)`` mirrors the allowance/exclusion logic: only
+    the most recent meta row under the key decides, so removing the blocked
+    value (or the block config) re-admits the assertion exactly as every read
+    path reports it. Cost when configured: one claim lookup, plus one indexed
+    meta lookup for assertions of a configured predicate.
+    """
+    if not blocks_by_pred:
+        return False
+    claim = ledger.get_claim(asrt_id)
+    if claim is None:
+        return False
+    block = blocks_by_pred.get(claim.pred_id)
+    if block is None:
+        return False
+    rows = ledger.find_meta(asrt_id=asrt_id, key=block.key)
+    if not rows:
+        return False
+    last_value = rows[-1].value
+    return isinstance(last_value, str) and last_value in block.blocked_values
+
+
 def premise_scoped_ledger(
     ledger: Ledger,
     exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
     allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
+    blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
 ) -> Ledger:
     """Return ``ledger`` unchanged when nothing is configured, else a live filtered view.
 
-    Two orthogonal, OR-combined dimensions: the global ``exclusions`` (hide any
-    assertion carrying an excluded meta value, predicate-blind) and the
-    per-predicate ``allowances`` (for a configured predicate, hide any
-    assertion whose class is not allowed). An assertion is invisible to
-    evaluation when EITHER dimension excludes it, so a global exclusion is never
-    undone by an allowance. Empty on both dimensions returns the base ledger
-    object unchanged (zero-behaviour-change contract).
+    Three orthogonal, OR-combined dimensions: the global ``exclusions`` (hide any
+    assertion carrying an excluded meta value, predicate-blind), the
+    per-predicate ``allowances`` (for a configured predicate, hide any assertion
+    whose class is not allowed) and the per-predicate ``blocks`` (for a
+    configured predicate, hide any assertion whose key value IS in the blocked
+    set). An assertion is invisible to evaluation when ANY dimension excludes it,
+    so neither a global exclusion nor a block is ever undone by an allowance.
+    Empty on all three dimensions returns the base ledger object unchanged
+    (zero-behaviour-change contract).
     """
     normalized = normalize_premise_exclusions(exclusions)
     normalized_allowances = normalize_premise_allowances(allowances)
-    if not normalized and not normalized_allowances:
+    normalized_blocks = normalize_premise_blocks(blocks)
+    if not normalized and not normalized_allowances and not normalized_blocks:
         return ledger
     return _PremiseExcludedLedger(
-        ledger, exclusions=normalized, allowances=normalized_allowances
+        ledger,
+        exclusions=normalized,
+        allowances=normalized_allowances,
+        blocks=normalized_blocks,
     )
 
 
@@ -334,11 +458,15 @@ class _PremiseExcludedLedger(Ledger):
         *,
         exclusions: tuple[MetaExclusion, ...],
         allowances: tuple[PredicatePremiseAllowance, ...] = (),
+        blocks: tuple[PredicatePremiseBlock, ...] = (),
     ) -> None:
         self._base = base
         self._exclusions = exclusions
         self._allowances_by_pred: dict[str, PredicatePremiseAllowance] = {
             allowance.pred_id: allowance for allowance in allowances
+        }
+        self._blocks_by_pred: dict[str, PredicatePremiseBlock] = {
+            block.pred_id: block for block in blocks
         }
 
     def _is_visible(self, asrt_id: str) -> bool:
@@ -346,6 +474,10 @@ class _PremiseExcludedLedger(Ledger):
             return False
         if is_predicate_premise_excluded(
             self._base, asrt_id, self._allowances_by_pred
+        ):
+            return False
+        if is_predicate_premise_blocked(
+            self._base, asrt_id, self._blocks_by_pred
         ):
             return False
         return True
@@ -489,9 +621,12 @@ class _PremiseExcludedLedger(Ledger):
 __all__ = [
     "MetaExclusion",
     "PredicatePremiseAllowance",
+    "PredicatePremiseBlock",
     "is_premise_excluded",
     "is_predicate_premise_excluded",
+    "is_predicate_premise_blocked",
     "normalize_premise_exclusions",
     "normalize_premise_allowances",
+    "normalize_premise_blocks",
     "premise_scoped_ledger",
 ]

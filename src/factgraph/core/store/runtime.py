@@ -28,7 +28,9 @@ from factgraph.core.store.ledger import Ledger
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
+    PredicatePremiseBlock,
     normalize_premise_allowances,
+    normalize_premise_blocks,
     normalize_premise_exclusions,
     premise_scoped_ledger,
 )
@@ -83,6 +85,7 @@ class Store:
         artifact_sidecar: ArtifactSidecar | None = None,
         premise_exclusions: "MetaExclusion | Iterable[MetaExclusion] | None" = None,
         premise_allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
+        premise_blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
             raise ValueError("schema_ir must be dict")
@@ -90,6 +93,7 @@ class Store:
         self.ledger = ledger if ledger is not None else Ledger()
         self._premise_exclusions = normalize_premise_exclusions(premise_exclusions)
         self._premise_allowances = normalize_premise_allowances(premise_allowances)
+        self._premise_blocks = normalize_premise_blocks(premise_blocks)
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, ProofReceipt] = {}
@@ -150,6 +154,27 @@ class Store:
         per-predicate filtering.
         """
         self._premise_allowances = normalize_premise_allowances(allowances)
+
+    @property
+    def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
+        """Configured per-predicate premise blocklists (empty = disabled)."""
+        return self._premise_blocks
+
+    def set_premise_blocks(
+        self,
+        blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+    ) -> None:
+        """Configure per-predicate evaluation blocklists; see core/store/premise_filter.py.
+
+        For each configured predicate, an assertion of that predicate is hidden
+        from rule evaluation when its meta ``key`` last-value IS in the
+        predicate's ``blocked_values`` (default-admit: a missing or unblocked
+        value stays visible). Predicates without an entry are unaffected. This
+        is OR-combined with ``premise_exclusions`` and ``premise_allowances``
+        (an assertion excluded by any is invisible). Passing ``None`` or an
+        empty iterable disables per-predicate blocking.
+        """
+        self._premise_blocks = normalize_premise_blocks(blocks)
 
     def _remember_support_artifact(
         self,
@@ -517,19 +542,21 @@ class _PremiseScopedStore(Store):
 
 
 def premise_scoped_store_view(store: Store) -> Store:
-    """Return ``store`` unchanged when neither exclusions nor allowances are configured, else a premise-scoped view.
+    """Return ``store`` unchanged when no premise dimension is configured, else a premise-scoped view.
 
-    With either dimension configured the view is always introduced — visibility
-    is decided live per access inside the scoped ledger (see premise_filter.py),
-    so a fact classified only after view construction is still filtered.
+    With any dimension configured (exclusions, allowances or blocks) the view is
+    always introduced — visibility is decided live per access inside the scoped
+    ledger (see premise_filter.py), so a fact classified only after view
+    construction is still filtered.
     """
     if isinstance(store, _PremiseScopedStore):
         return store
     exclusions = getattr(store, "premise_exclusions", ())
     allowances = getattr(store, "premise_allowances", ())
-    if not exclusions and not allowances:
+    blocks = getattr(store, "premise_blocks", ())
+    if not exclusions and not allowances and not blocks:
         return store
-    scoped_ledger = premise_scoped_ledger(store.ledger, exclusions, allowances)
+    scoped_ledger = premise_scoped_ledger(store.ledger, exclusions, allowances, blocks)
     if scoped_ledger is store.ledger:
         return store
     return _PremiseScopedStore(store, scoped_ledger)

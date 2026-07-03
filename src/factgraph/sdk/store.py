@@ -122,7 +122,11 @@ from factgraph.core.store.database import (
     validate_schema_object_for_workspace,
     write_schema_object_for_workspace,
 )
-from factgraph.core.store.premise_filter import MetaExclusion, PredicatePremiseAllowance
+from factgraph.core.store.premise_filter import (
+    MetaExclusion,
+    PredicatePremiseAllowance,
+    PredicatePremiseBlock,
+)
 from factgraph.core.store.runtime import Store
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
@@ -1998,6 +2002,35 @@ class SDKStore:
         """
         try:
             self._store.set_premise_allowances(allowances)
+        except ValueError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    @property
+    def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
+        """Configured per-predicate premise blocklists (empty = disabled)."""
+        return self._store.premise_blocks
+
+    def set_premise_blocks(
+        self,
+        blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
+    ) -> None:
+        """Configure per-predicate premise blocklists for evaluation.
+
+        For each configured predicate, an assertion of that predicate becomes
+        invisible to every rule evaluation (all engine modes, proof-frame
+        recheck, derivation check) when its meta ``key`` last-value IS in the
+        predicate's ``blocked_values`` (default-admit: a missing or unblocked
+        value stays visible). Predicates without an entry are unaffected. This
+        is OR-combined with ``set_premise_exclusions`` and
+        ``set_premise_allowances``: an assertion excluded by any dimension is
+        invisible. The block is the complement of the allowance and independent
+        of it — a predicate may carry both (allow a class on one key, block
+        values on another). Read/query paths outside evaluation stay unfiltered.
+        Passing ``None`` or an empty iterable disables per-predicate blocking.
+        See ``factgraph/core/store/premise_filter.py``.
+        """
+        try:
+            self._store.set_premise_blocks(blocks)
         except ValueError as exc:
             raise SDKStoreError(str(exc)) from exc
 

@@ -52,7 +52,8 @@ def recheck_proof_frame(
         return _unknown_frame_result(request)
 
     ledger = premise_scoped_ledger(
-        store.ledger, store.premise_exclusions, store.premise_allowances
+        store.ledger, store.premise_exclusions, store.premise_allowances,
+        getattr(store, "premise_blocks", ()),
     )
     projected_witness = project_view_facts_with_witness(ledger, store.schema_ir)
     visible_rows = _visible_projected_rows(projected_witness)
