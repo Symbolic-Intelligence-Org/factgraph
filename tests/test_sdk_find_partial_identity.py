@@ -142,8 +142,13 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # MetaExclusion landed. Bumped to 76 for the deliberate
         # PredicatePremiseAllowance addition, then to 77 for the deliberate
         # PredicatePremiseBlock addition (per-predicate premise blocklist,
-        # complement of the allowance). Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 77)
+        # complement of the allowance). Bumped from 77 to 84 for the deliberate
+        # RuleProgram, closed-goal, per-call scope, and explanation value objects.
+        # Intent unchanged: no ACCIDENTAL name creep.
+        self.assertEqual(len(sdk_module.__all__), 84)
+        self.assertIn("RuleProgram", sdk_module.__all__)
+        self.assertIn("RuleProgramFact", sdk_module.__all__)
+        self.assertIn("EvaluationPremiseScope", sdk_module.__all__)
         self.assertIn("PredicatePremiseAllowance", sdk_module.__all__)
         self.assertIn("PredicatePremiseBlock", sdk_module.__all__)
         self.assertNotIn("ReadPolicy", sdk_module.__all__)

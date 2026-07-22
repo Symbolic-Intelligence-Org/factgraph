@@ -1408,6 +1408,12 @@ class _SDKEvalManager:
         """Explain a closed-head evaluation replay."""
         return self._sdk._explain(*args, **kwargs)
 
+    def evaluate_program(self, *args: Any, **kwargs: Any) -> Any:
+        """Evaluate a selected Horn program read-only on this ledger."""
+        from .rule_program_runtime import evaluate_rule_program
+
+        return evaluate_rule_program(self._sdk, *args, **kwargs)
+
     def preview_config(self, *args: Any, **kwargs: Any) -> Any:
         """Inspect semantics configuration without evaluating an inference.
 

@@ -29,6 +29,15 @@ from .error_codes import (
 )
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogConfig, PyReasonConfig
+from .rule_program import (
+    EvaluationPremiseScope,
+    RuleProgram,
+    RuleProgramClause,
+    RuleProgramExplanation,
+    RuleProgramFact,
+    RuleProgramGoal,
+    RuleProgramResult,
+)
 from .store import FactGraph, SDKStore
 from factgraph.application.protocol import (
     ConditionDescriptor,
@@ -117,6 +126,13 @@ __all__ = [
     "ResultFingerprint",
     "ProbLogConfig",
     "PyReasonConfig",
+    "EvaluationPremiseScope",
+    "RuleProgram",
+    "RuleProgramClause",
+    "RuleProgramExplanation",
+    "RuleProgramFact",
+    "RuleProgramGoal",
+    "RuleProgramResult",
     "SchemaAddResult",
     "AssertionInput",
     "CommitResult",
