@@ -65,6 +65,7 @@ from factgraph.application.protocol import (
     StructureOccurrence,
     StructurePort,
     StructurePortRef,
+    compile_derivation_plan,
 )
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
@@ -169,6 +170,7 @@ __all__ = [
     "StructurePortRef",
     "RuleExpr",
     "RuleExprError",
+    "compile_derivation_plan",
     "RuleJoinConstraint",
     "ExplicitBoolError",
     "FactGraph",

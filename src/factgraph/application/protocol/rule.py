@@ -127,6 +127,55 @@ class Rule:
 
         return _REPR_PORT_RE.sub(replace, self.repr)
 
+    def to_rule_spec(self) -> Any:
+        """This rule as the core ``RuleSpec`` the rule runtime executes.
+
+        The counterpart to :func:`~factgraph.application.protocol.rule_expr_lowering.compile_derivation_plan`
+        for the capabilities that take a rule rather than a derivation. Nothing is
+        translated: ``when`` goes through the same ``lower_ast_to_where_ir`` the
+        lowering uses, and the selected variables are this rule's own port
+        variables.
+
+        ``select_vars`` and the lowered ``where`` must name the same variables,
+        because the runtime looks a select variable up in the bindings the where
+        body produced. ``RuleSpec`` requires a ``$`` prefix on the former, so a
+        port variable without one is rejected here rather than prefixed: adding
+        the ``$`` on one side only would leave the variable unbound at run time,
+        and rewriting it on both would change the rule.
+
+        Ports are emitted in sorted port-name order so the same rule always
+        yields the same spec.
+        """
+        from factgraph.core.rules.rule_ir import RuleCompileError, RuleSpec
+        from factgraph.core.rules.where_ast import AndExpr, lower_ast_to_where_ir
+
+        select_vars: list[str] = []
+        for port_name, var in sorted(self.ports.items()):
+            if not var.name.startswith("$"):
+                raise RuleValidationError(
+                    f"ports[{port_name!r}] variable {var.name!r} cannot be selected: "
+                    "the rule runtime binds select variables by name and requires a "
+                    "'$' prefix"
+                )
+            if var.name not in select_vars:
+                select_vars.append(var.name)
+
+        try:
+            where = lower_ast_to_where_ir(AndExpr(atoms=list(self.when)))
+        except Exception as exc:
+            raise RuleValidationError(f"rule body cannot be lowered: {exc}") from exc
+
+        try:
+            return RuleSpec(
+                rule_id=self.id,
+                version=self.version or "1.0",
+                select_vars=select_vars,
+                where=where,
+                expose=False,
+            )
+        except RuleCompileError as exc:
+            raise RuleValidationError(str(exc)) from exc
+
     def as_(self, alias: str | None = None) -> RuleOccurrence:
         effective_alias = self.id if alias is None else alias
         return RuleOccurrence(rule=self, alias=_validate_occurrence_alias(effective_alias))

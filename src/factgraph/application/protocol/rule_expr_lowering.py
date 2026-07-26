@@ -308,6 +308,43 @@ class RuleExprHeadValidation:
             raise RuleExprError("version_warning_emitted requires version-warning identity_state")
 
 
+def compile_derivation_plan(
+    source: Rule | _RuleExpr,
+    *,
+    head: Rule,
+    engine: str = "native",
+) -> CompiledDerivationPlan:
+    """Lower an application ``Rule`` or ``RuleExpr`` to a ``CompiledDerivationPlan``.
+
+    This is a named facade over the lowering that already exists and is already
+    exercised: the same two steps ``rule_program_runtime`` takes for every clause
+    it compiles, and the same steps the adapters take for their engines. No
+    lowering logic lives here.
+
+    It exists so the capability shells can take the rule form the application
+    layer authors anyway. Before this, that form was reachable only through
+    callers that happened to be inside the package; the shells validated for the
+    SDK ``Inference`` builder and had no way to reach the identical runtime with
+    an equivalent rule.
+
+    ``head`` is required: a ``Rule`` or ``RuleExpr`` says what holds, not what it
+    concludes, and a default head would invent the conclusion.
+
+    Raises ``RuleExprError`` for anything the lowering rejects, unchanged.
+    """
+    if isinstance(source, Rule):
+        lowering = _lower_application_rule(source, head=head)
+    elif isinstance(source, _RuleExpr):
+        lowering = _lower_rule_expr(source, head=head)
+    else:
+        raise RuleExprError("source must be application protocol Rule or RuleExpr")
+    if engine == "native":
+        compiled, _traces = _materialize_native_derivation_plan(lowering)
+        return compiled
+    compiled, _traces = _materialize_adapter_derivation_plan(lowering, engine=engine)
+    return compiled
+
+
 def _lower_application_rule(rule: Rule, *, head: Rule) -> RuleExprLoweringPlan:
     if not isinstance(rule, Rule):
         raise RuleExprError("rule must be application protocol Rule")

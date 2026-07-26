@@ -42,9 +42,8 @@ from factgraph.application.capability_helpers import (
 from factgraph.application.diagnose_runtime import diagnose_derivation_binding
 from factgraph.application.protocol import DiagnoseResult
 
-from ._validation import resolve_runtime_registry, validate_binding, validate_derivation
+from ._validation import resolve_derivation_plan, resolve_runtime_registry, validate_binding
 from ..errors import SDKStoreError
-from ..store import _compiled_derivation_plan_to_application
 
 
 def sdk_diagnose(
@@ -52,6 +51,7 @@ def sdk_diagnose(
     inference: Any,
     binding: Mapping[str, Any],
     *,
+    head: Any = None,
     engine: str = "native",
     registry: Any = None,
 ) -> DiagnoseResult:
@@ -59,29 +59,21 @@ def sdk_diagnose(
 
     Returns the application ``DiagnoseResult`` DTO directly. The SDK shell
     keeps Diagnose independent from Check and does not import walker helpers.
+
+    ``head`` is only consulted for the ``Rule`` / ``RuleExpr`` form, where it
+    names the conclusion the body supports. An ``Inference`` already carries
+    its head, so the argument is ignored for it.
     """
 
-    validate_derivation(inference, path="$.diagnose.inference")
+    plan = resolve_derivation_plan(
+        sdk,
+        inference,
+        head=head,
+        engine=engine,
+        path="$.diagnose.inference",
+    )
     binding_dict = validate_binding(binding, path="$.diagnose.binding")
 
-    compiled_plans = sdk._compile_derivation_input(inference)
-    if len(compiled_plans) != 1:
-        raise SDKStoreError(
-            "diagnose inference must compile to exactly one plan",
-            path="$.diagnose.inference",
-        )
-
-    try:
-        plan = _compiled_derivation_plan_to_application(
-            compiled_plans[0],
-            mode=engine,
-            engine_options=None,
-        )
-    except ValueError as exc:
-        raise SDKStoreError(
-            f"invalid diagnose input: {exc}",
-            path="$.diagnose.inference",
-        ) from exc
     resolved_registry = resolve_runtime_registry(
         sdk,
         inference,

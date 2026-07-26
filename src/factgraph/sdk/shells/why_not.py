@@ -43,9 +43,8 @@ from factgraph.application.capability_helpers import (
 from factgraph.application.protocol import ProtocolShapeError, WhyNotUniverseRequest, WhyNotUniverseResult
 from factgraph.application.why_not_runtime import WhyNotRuntimeError, check_why_not_universe
 
-from ._validation import resolve_runtime_registry, validate_derivation
+from ._validation import resolve_derivation_plan, resolve_runtime_registry
 from ..errors import SDKStoreError
-from ..store import _compiled_derivation_plan_to_application
 
 
 def sdk_why_not(
@@ -53,6 +52,7 @@ def sdk_why_not(
     inference: Any,
     candidates: Sequence[Mapping[str, Any] | Sequence[Any]],
     *,
+    head: Any = None,
     engine: str = "native",
     registry: Any = None,
 ) -> WhyNotUniverseResult:
@@ -61,28 +61,20 @@ def sdk_why_not(
     Returns the application ``WhyNotUniverseResult`` DTO directly. The SDK
     shell does not import Check / Diagnose SDK shells and does not wrap result
     rows or Frontier data.
+
+    ``head`` is only consulted for the ``Rule`` / ``RuleExpr`` form, where it
+    names the conclusion the body supports. An ``Inference`` already carries
+    its head, so the argument is ignored for it.
     """
 
-    validate_derivation(inference, path="$.why_not.inference")
+    plan = resolve_derivation_plan(
+        sdk,
+        inference,
+        head=head,
+        engine=engine,
+        path="$.why_not.inference",
+    )
 
-    compiled_plans = sdk._compile_derivation_input(inference)
-    if len(compiled_plans) != 1:
-        raise SDKStoreError(
-            "why_not inference must compile to exactly one plan",
-            path="$.why_not.inference",
-        )
-
-    try:
-        plan = _compiled_derivation_plan_to_application(
-            compiled_plans[0],
-            mode=engine,
-            engine_options=None,
-        )
-    except ValueError as exc:
-        raise SDKStoreError(
-            f"invalid why_not input: {exc}",
-            path="$.why_not.inference",
-        ) from exc
 
     resolved_registry = resolve_runtime_registry(
         sdk,

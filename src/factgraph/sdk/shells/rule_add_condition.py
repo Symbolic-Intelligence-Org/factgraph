@@ -53,12 +53,11 @@ from factgraph.application.protocol import ProtocolShapeError, RuleAddConditionR
 from factgraph.application.rule_add_condition_runtime import (
     check_rule_add_condition_action,
 )
-from factgraph.core.rules.rule_ir import RuleCompileError, RuleSpec
 
 from ._validation import (
     resolve_runtime_registry,
     validate_optional_evaluation_overlay,
-    validate_rule,
+    resolve_rule_spec,
     validate_support_artifact,
 )
 from ..errors import SDKStoreError
@@ -82,26 +81,12 @@ def sdk_rule_add_condition(
     failure modes as result DTOs and passes them through unchanged.
     """
 
-    validate_rule(rule, path="$.check_rule_add_condition.rule")
+    rule_spec = resolve_rule_spec(sdk, rule, path="$.check_rule_add_condition.rule")
     validate_support_artifact(support, path="$.check_rule_add_condition.support")
     validate_optional_evaluation_overlay(
         overlay, path="$.check_rule_add_condition.overlay"
     )
 
-    try:
-        compiled = sdk._compile_rule_input(rule)
-        rule_spec = RuleSpec(
-            rule_id=compiled["rule_id"],
-            version=compiled["version"],
-            select_vars=list(compiled["select_vars"]),
-            where=list(compiled["where"]),
-            expose=bool(compiled.get("expose", False)),
-        )
-    except (SDKStoreError, RuleCompileError) as exc:
-        raise SDKStoreError(
-            f"invalid check_rule_add_condition rule: {exc}",
-            path="$.check_rule_add_condition.rule",
-        ) from exc
 
     resolved_registry = resolve_runtime_registry(
         sdk,

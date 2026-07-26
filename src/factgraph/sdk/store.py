@@ -3680,6 +3680,21 @@ class SDKStore:
                 "where": list(rule.where),
                 "expose": rule.expose,
             }
+        if hasattr(rule, "to_rule_spec"):
+            # The application protocol Rule the application layer authors anyway.
+            # It lowers to a RuleSpec through its own body, so it needs no
+            # authoring payload detour.
+            try:
+                spec = rule.to_rule_spec()
+            except Exception as exc:
+                raise SDKStoreError(f"invalid rule input: {exc}") from exc
+            return {
+                "rule_id": spec.rule_id,
+                "version": spec.version,
+                "select_vars": list(spec.select_vars),
+                "where": list(spec.where),
+                "expose": spec.expose,
+            }
         if hasattr(rule, "to_authoring_payload"):
             payload = rule.to_authoring_payload()
         elif isinstance(rule, dict):

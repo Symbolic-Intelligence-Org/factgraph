@@ -83,6 +83,7 @@ from .rule_literal_replace import (
 from .rule import Rule, RuleOccurrence, RulePortRef, RuleValidationError
 from .rule_expr import ExplicitBoolError, RuleExpr, RuleExprError, RuleJoinConstraint
 from .rule_expr_inspect import ConditionDescriptor, OccurrenceInspect, PortInspect, RuleExprInspect
+from .rule_expr_lowering import compile_derivation_plan
 from .rule_structure import (
     Const,
     FreeVar,
@@ -242,6 +243,7 @@ __all__ = [
     "RulePortRef",
     "RuleExpr",
     "RuleExprError",
+    "compile_derivation_plan",
     "RuleExprInspect",
     "RuleJoinConstraint",
     "RuleStructure",

@@ -61,11 +61,10 @@ from factgraph.core.store._support import normalize_binding_items
 from ._validation import (
     resolve_runtime_registry,
     validate_binding,
-    validate_derivation,
+    resolve_derivation_plan,
     validate_evaluation_overlay,
 )
 from ..errors import SDKStoreError
-from ..store import _compiled_derivation_plan_to_application
 
 
 def sdk_fact_overlay_check(
@@ -74,6 +73,7 @@ def sdk_fact_overlay_check(
     binding: Mapping[str, Any],
     overlay: Any,
     *,
+    head: Any = None,
     engine: str = "native",
     registry: Any = None,
 ) -> FactOverlayCheckResult:
@@ -84,30 +84,22 @@ def sdk_fact_overlay_check(
     ``check_fact_overlay_binding(...)`` represents unsupported overlay /
     runtime conditions as ``invalid_request`` result DTOs and is passed
     through unchanged.
+
+    ``head`` is only consulted for the ``Rule`` / ``RuleExpr`` form, where it
+    names the conclusion the body supports. An ``Inference`` already carries
+    its head, so the argument is ignored for it.
     """
 
-    validate_derivation(inference, path="$.check_fact_overlay.inference")
+    plan = resolve_derivation_plan(
+        sdk,
+        inference,
+        head=head,
+        engine=engine,
+        path="$.check_fact_overlay.inference",
+    )
     binding_dict = validate_binding(binding, path="$.check_fact_overlay.binding")
     validate_evaluation_overlay(overlay, path="$.check_fact_overlay.overlay")
 
-    compiled_plans = sdk._compile_derivation_input(inference)
-    if len(compiled_plans) != 1:
-        raise SDKStoreError(
-            "check_fact_overlay inference must compile to exactly one plan",
-            path="$.check_fact_overlay.inference",
-        )
-
-    try:
-        plan = _compiled_derivation_plan_to_application(
-            compiled_plans[0],
-            mode=engine,
-            engine_options=None,
-        )
-    except ValueError as exc:
-        raise SDKStoreError(
-            f"invalid check_fact_overlay input: {exc}",
-            path="$.check_fact_overlay.inference",
-        ) from exc
 
     resolved_registry = resolve_runtime_registry(
         sdk,

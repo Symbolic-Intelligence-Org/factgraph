@@ -144,8 +144,12 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # PredicatePremiseBlock addition (per-predicate premise blocklist,
         # complement of the allowance). Bumped from 77 to 84 for the deliberate
         # RuleProgram, closed-goal, per-call scope, and explanation value objects.
+        # Bumped from 84 to 85 for the deliberate compile_derivation_plan
+        # addition (the public lowering that lets the capability shells take
+        # the application rule form).
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 84)
+        self.assertEqual(len(sdk_module.__all__), 85)
+        self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)
         self.assertIn("EvaluationPremiseScope", sdk_module.__all__)
