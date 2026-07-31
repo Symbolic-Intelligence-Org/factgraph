@@ -47,7 +47,7 @@
 - **Phase 0 — 基线同步**:hnsm-backend `src/factgraph` surgical sync 至 `b92d6bf5`;全套件绿(`PYTHONPATH=src pytest`,排除本机 pandas 损坏的 `test_pyreason_provenance_v0.py`)。
 - **Phase 1 — 写链原子化 + 双承诺指纹**(Q-SAE-7 全部):`commit_changes(assertions, revocations)` 统一入口(RevocationInput DTO);单事务批量写(ledger `_write_session` 批量化);head 迁入 `ledger_meta`;LtHash state_digest(增量维护,状态同事务持久化);tx 链输入改为本笔 delta 规范化字节 + `digest_scheme` 版本位;open 时 fail-closed 校验 + 独立 `repair` 流程;flock + head CAS。
 - **Phase 2 — 写路径收编**:`planned_ops_to_inputs` 翻译器;`apply_write_plan` → plan → 翻译 → `db.commit_changes`;`entities.create/delete` 入链;批量/交互双粒度提交面(批量面一批 = 一 tx)。
-- **Phase 3 — Lifecycle 内部化**:`FactGraph.create/load_workspace` 内部 = `Database.create/open + attach`;拆 14 处 reject;`save_workspace` → metadata 时间戳;workspace 格式收敛 + `migrate-workspace` CLI(Q-SAE-2 按设计文档提案:CLI,opt-in —— 本 blueprint 内联裁定,如有异议在 Phase 3 前提出);
+- **Phase 3 — Lifecycle 内部化**:`FactGraph.create/load_workspace` 内部 = `Database.create/open + attach`;拆 14 处 reject;`save_workspace` → metadata 时间戳;workspace 格式收敛 + `migrate-workspace` CLI(Q-SAE-2 按设计文档提案:CLI,opt-in —— 本 blueprint 内联裁定,如有异议在 Phase 3 前提出);**前置项(Phase 2 审计裁定 2026-08-01)**:application `FieldValue` 扩展承载 `bytes`(additive DTO 扩展,application-first)—— 否则 lifecycle 内部化使 bytes 字段(tup_v1 一等 tag)在全部生命周期不可写,构成对 v0.2 的行为回归;扩展落地后撤销 Phase 2 的 attach-bytes fail-closed 挡板;
 - **Phase 4 — 文档诚实化 + 收尾**:store.py:2578 stale docstring、母文档 1 §5.5 措辞、模块 docs(core/store + sdk)、CHANGELOG。
 
 ## 6. Boundaries And Invariants
