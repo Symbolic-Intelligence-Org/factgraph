@@ -11,8 +11,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
+from factgraph.application.explain import EvidenceGraph
+from factgraph.application.protocol.explanation_render import (
+    narrate_evidence,
+    walk_evidence,
+)
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
@@ -152,13 +157,33 @@ class EvaluationPremiseScope:
 
 @dataclass(frozen=True)
 class RuleProgramExplanation:
-    """Recursive native support snapshot for one program entailment check."""
+    """Canonical evidence plus recursive native support for one program check."""
 
     status: str
     failure_class: str | None
     root_support_digest: str | None
     steps: tuple[dict[str, Any], ...]
     checked_scope: dict[str, Any]
+    evidence: EvidenceGraph
+
+    @property
+    def repr(self) -> tuple[str, ...]:
+        """Deterministic machine-readable walk of the canonical evidence graph."""
+
+        return walk_evidence(
+            self.evidence,
+            status=self.status,
+            failure_class=self.failure_class,
+        )
+
+    def narrate(self) -> tuple[str, ...]:
+        """Render this evidence through FactGraph's canonical narrator."""
+
+        return narrate_evidence(
+            self.evidence,
+            status=self.status,
+            failure_class=self.failure_class,
+        )
 
 
 @dataclass(frozen=True)
@@ -176,15 +201,22 @@ class RuleProgramResult:
     premise_scope_digest: str
     program_facts: tuple[RuleProgramFact, ...] = ()
     support_digest: str | None = None
-    _support_lookup: Callable[[str], dict[str, Any] | None] = field(
+    _evidence: EvidenceGraph | None = field(
         repr=False,
         compare=False,
-        default=lambda _digest: None,
+        default=None,
+    )
+    _support_steps: tuple[dict[str, Any], ...] = field(
+        repr=False,
+        compare=False,
+        default=(),
     )
 
     def explain(self) -> RuleProgramExplanation:
-        """Resolve the complete RuleRef proof tree without touching the ledger."""
+        """Return the immutable evidence and support captured by this evaluation."""
 
+        if self._evidence is None:
+            raise SDKValueError("RuleProgramResult has no canonical EvidenceGraph")
         checked_scope = {
             "engine": self.engine,
             "effective_rule_ids": list(self.effective_rule_ids),
@@ -199,36 +231,16 @@ class RuleProgramResult:
                 root_support_digest=None,
                 steps=(),
                 checked_scope=checked_scope,
+                evidence=self._evidence,
             )
 
-        steps: dict[str, dict[str, Any]] = {}
-        visiting: set[str] = set()
-
-        def walk(digest: str) -> None:
-            if digest in steps or digest in visiting:
-                return
-            visiting.add(digest)
-            receipt = self._support_lookup(digest) or {}
-            children: list[str] = []
-            for edge in receipt.get("rule_ref_edges", []) or []:
-                child = edge.get("child_support_digest")
-                if isinstance(child, str) and child and child != digest:
-                    children.append(child)
-                    walk(child)
-            steps[digest] = {
-                "support_digest": digest,
-                "child_support_digests": sorted(set(children)),
-                "factgraph_explain": receipt,
-            }
-            visiting.remove(digest)
-
-        walk(self.support_digest)
         return RuleProgramExplanation(
             status="passed",
             failure_class=None,
             root_support_digest=self.support_digest,
-            steps=tuple(steps[key] for key in sorted(steps)),
+            steps=self._support_steps,
             checked_scope=checked_scope,
+            evidence=self._evidence,
         )
 
 

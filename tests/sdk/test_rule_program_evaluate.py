@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from factgraph.core.rules.where_ast import Const, PredAtom, Var
+from factgraph.application.explain import evidence_graph_to_dict
+from factgraph.application.protocol.explanation_render import narrate_evidence
 from factgraph.sdk import (
     Entity,
     EvaluationPremiseScope,
@@ -137,6 +139,25 @@ def test_multilayer_program_uses_same_ledger_and_original_assertion_ids() -> Non
         for assertion_id in witness.get("asrt_ids", [])
     }
     assert evidence_assertion in witness_ids
+    narration = explanation.narrate()
+    assert narration[0].startswith("Conclusion ──")
+    assert any("decision.allow" in line and "[holds]" in line for line in narration)
+    assert any("decision.evidence_gate" in line and "[holds]" in line for line in narration)
+    assert any("received" in line for line in narration)
+    assert narration == narrate_evidence(
+        explanation.evidence,
+        status=explanation.status,
+        failure_class=explanation.failure_class,
+    )
+    encoded = evidence_graph_to_dict(explanation.evidence)
+    sources = {
+        source["ref"]
+        for path in encoded["paths"]
+        for rule in path.get("rules", [])
+        for atom in rule.get("atoms", [])
+        for source in atom.get("verdict", {}).get("support", [])
+    }
+    assert evidence_assertion in sources
 
 
 def test_program_ignores_materialized_head_from_rule_outside_selected_program() -> None:
@@ -152,8 +173,37 @@ def test_program_ignores_materialized_head_from_rule_outside_selected_program() 
     result = fg.eval.evaluate_program(_program(), _goal(case_ref, outcome_ref))
 
     assert result.entailed is False
-    assert result.explain().failure_class == "closed_goal_not_entailed"
+    explanation = result.explain()
+    assert explanation.failure_class == "closed_goal_not_entailed"
+    assert explanation.narrate()[0].startswith("NOT concluded ──")
+    assert explanation.checked_scope["effective_rule_ids"] == [
+        "decision.allow",
+        "decision.evidence_gate",
+    ]
+    assert explanation.evidence.paths[0].status == "fails"
+    failed_rules = [
+        rule
+        for rule in explanation.evidence.paths[0].rules
+        if rule.status == "fails"
+    ]
+    assert [rule.rule_id for rule in failed_rules] == ["decision.allow"]
+    assert any(
+        type(atom.verdict).__name__ == "Fails"
+        for atom in failed_rules[0].atoms
+    )
     assert tuple(fg.ledger.claims) == before
+
+
+def test_program_narration_is_frozen_with_the_evaluation_snapshot() -> None:
+    fg, case_ref, _gate_ref, outcome_ref, _evidence_assertion = _world()
+    result = fg.eval.evaluate_program(_program(), _goal(case_ref, outcome_ref))
+    expected = result.explain().narrate()
+
+    fg.fields.set(DecisionCase.evidence, case_ref, "changed later")
+    fg.store._support_artifacts.clear()
+
+    assert result.explain().narrate() == expected
+    assert result.explain().steps
 
 
 def test_evaluation_scope_can_relax_one_filter_without_mutating_graph_config() -> None:
