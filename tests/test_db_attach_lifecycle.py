@@ -306,7 +306,12 @@ class DBAttachLifecycleTests(unittest.TestCase):
             {after.tx_id},
         )
         self.assertEqual(target.entities.get(User, user_id="wire-1").name, "Wire")
-        repeated = wire.apply(target)
+        with patch.object(
+            target.ledger,
+            "find_meta",
+            side_effect=AssertionError("batch idempotency must not scan global meta rows"),
+        ):
+            repeated = wire.apply(target)
         self.assertEqual(db.head(), after)
         self.assertEqual(repeated.assertion_ids, result.assertion_ids)
 

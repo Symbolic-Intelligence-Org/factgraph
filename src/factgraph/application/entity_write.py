@@ -449,15 +449,7 @@ def _meta_entry_str(meta: Sequence[MetaEntry], key: str) -> str:
 
 
 def _active_assertion_for_ingest_key(store: Store, ingest_key: str) -> str | None:
-    for row in store.ledger.find_meta(key="ingest_key", kind="str"):
-        if row.value != ingest_key:
-            continue
-        if store.ledger.get_claim(row.asrt_id) is None:
-            continue
-        if store.ledger.has_active_revocation(row.asrt_id):
-            continue
-        return row.asrt_id
-    return None
+    return store.ledger._find_active_assertion_by_ingest_key(ingest_key)
 
 
 # ---------- Slice 3a Step 2: fg.entities.create eager emission planner + executor ----------

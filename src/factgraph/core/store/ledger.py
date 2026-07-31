@@ -867,6 +867,20 @@ class Ledger:
             self._ensure_open()
             return self._first_revoker_by_revoked_asrt_id.get(revoked_asrt_id)
 
+    def _find_active_assertion_by_ingest_key(self, ingest_key: str) -> str | None:
+        """Internal O(1)-indexed lookup used by the application commit adapter."""
+        if not isinstance(ingest_key, str) or not ingest_key:
+            raise ValueError("ingest_key must be non-empty string")
+        with self._write_lock:
+            self._ensure_open()
+            for asrt_id in self._meta_ingest_key_asrt_ids.get(ingest_key, ()):
+                if asrt_id not in self._claim_by_asrt_id:
+                    continue
+                if asrt_id in self._revoked_asrt_ids:
+                    continue
+                return asrt_id
+            return None
+
     @property
     def claims(self) -> list[Claim]:
         with self._write_lock:
