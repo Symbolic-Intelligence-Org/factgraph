@@ -3,7 +3,16 @@ from __future__ import annotations
 from collections import Counter
 import unittest
 
-from factgraph.sdk import Entity, Field, Identity, SDKStore
+from factgraph.sdk import (
+    Database,
+    Entity,
+    FactGraph,
+    Field,
+    Identity,
+    SDKStore,
+    SDKStoreError,
+    compile_schema_from_classes,
+)
 from factgraph.sdk.batch import WireBatchPlan
 
 
@@ -20,6 +29,11 @@ class User(Entity):
     lives_in: Country = Field()
 
 
+class BinaryDoc(Entity):
+    doc_id: str = Identity()
+    payload: bytes = Field()
+
+
 PRED_USER_ID = "user:user_id"
 PRED_LOCALE = "user:locale"
 PRED_USER_NAME = "user:name"
@@ -32,6 +46,22 @@ def _claim_counts(sdk: SDKStore, e_ref: str) -> Counter:
 
 
 class SDKBatchApplicationDelegateTests(unittest.TestCase):
+    def test_attached_batch_fails_closed_when_value_is_not_application_representable(self) -> None:
+        db = Database.create(schema_ir=compile_schema_from_classes([BinaryDoc]))
+        sdk = FactGraph.attach(db, schema_classes=[BinaryDoc])
+        before = db.head()
+
+        with sdk.batch() as tx:
+            doc = tx.entity(BinaryDoc, doc_id="doc-1")
+            doc.payload.set(b"payload")
+            plan = tx.preview(objects=[doc])
+            self.assertFalse(plan._application_handle_order)
+            with self.assertRaisesRegex(SDKStoreError, "cannot be represented"):
+                plan.apply(sdk)
+
+        self.assertEqual(db.head(), before)
+        self.assertEqual(sdk.ledger.claims, [])
+
     def test_batch_preview_and_apply_delegate_simple_writes(self) -> None:
         sdk = SDKStore([Country, User])
 

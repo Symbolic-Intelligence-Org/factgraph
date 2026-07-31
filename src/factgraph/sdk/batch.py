@@ -182,6 +182,12 @@ class BatchPlan:
     def apply(self, sdk: "SDKStore") -> BatchApplyResult:
         if self._application_handle_order:
             return _apply_application_batch_plan(self, sdk)
+        if sdk._database is not None:
+            sdk._database_for_application_write("fg.batch")
+            raise SDKStoreError(
+                "attached batch contains an operation that cannot be represented by "
+                "the application write-plan protocol; no writes were committed"
+            )
         refs_by_handle_id: dict[int, str] = {}
         assertion_ids: list[str] = []
         identity_pred_index = _sdk_identity_pred_index(sdk)
