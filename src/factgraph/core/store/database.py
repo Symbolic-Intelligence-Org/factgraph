@@ -1,16 +1,28 @@
 from __future__ import annotations
 
 import base64
+import fcntl
 import json
 import math
 import os
 import struct
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import IO, Any, Iterable, Mapping, Sequence
 
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
+from factgraph.core.protocol.lthash import (
+    LTHASH_SCHEME,
+    LtHashError,
+    add as lthash_add,
+    decode_state,
+    empty_state,
+    encode_state,
+    from_elements as lthash_from_elements,
+    remove as lthash_remove,
+)
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
 from factgraph.core.schema.schema_ir import (
     SchemaIRValidationError,
@@ -19,10 +31,21 @@ from factgraph.core.schema.schema_ir import (
     ensure_schema_ir,
     schema_digest as compute_schema_digest,
 )
-from factgraph.core.store.ledger import Claim, ClaimArg, Ledger, META_KINDS, MetaRow
+from factgraph.core.store.ledger import (
+    Claim,
+    ClaimArg,
+    Ledger,
+    LedgerAssertionWrite,
+    LedgerHeadConflictError,
+    LedgerRevocationWrite,
+    META_KINDS,
+    MetaRow,
+    Revokes,
+)
 
 
 DBTX_V1_PREFIX = b"factpy\x00dbtx_v1\x00"
+DBTX_V2_PREFIX = b"factgraph\x00dbtx_v2\x00"
 DBDATA_V1_PREFIX = b"factpy\x00dbdata_v1\x00"
 ASSERTION_V1_PREFIX = b"factpy\x00assertion_v1\x00"
 VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"
@@ -38,7 +61,19 @@ class DatabaseError(Exception):
 
 
 class DuplicateAssertionError(DatabaseError):
-    """Raised when a content-addressed assertion already exists."""
+    """Raised when a server-generated assertion id unexpectedly collides."""
+
+
+class DatabaseIntegrityError(DatabaseError):
+    """Raised when persisted history, state and ledger data disagree."""
+
+
+class DatabaseLockedError(DatabaseError):
+    """Raised when another process owns the workspace writer lock."""
+
+
+class HeadConflictError(DatabaseError):
+    """Raised when a commit loses the ledger head compare-and-swap."""
 
 
 @dataclass(frozen=True)
@@ -56,6 +91,12 @@ class AssertionInput:
 
 
 @dataclass(frozen=True)
+class RevocationInput:
+    revoked_asrt_id: str
+    meta: tuple[MetaEntry, ...] = ()
+
+
+@dataclass(frozen=True)
 class AssertionRecord:
     asrt_id: str
     pred_id: str
@@ -67,11 +108,26 @@ class AssertionRecord:
 
 
 @dataclass(frozen=True)
+class RevocationRecord:
+    revoker_asrt_id: str
+    revoked_asrt_id: str
+    tx_id: str
+    meta: tuple[MetaEntry, ...]
+
+
+@dataclass(frozen=True)
 class DatabaseValue:
     db_id: str
     tx_id: str
     schema_digest: str
-    data_digest: str
+    state_digest: str
+    digest_scheme: str
+    tx_seq: int
+
+    @property
+    def data_digest(self) -> str:
+        """Compatibility alias for the v0.2 DatabaseValue field name."""
+        return self.state_digest
 
 
 @dataclass(frozen=True)
@@ -89,6 +145,7 @@ class CommitResult:
     parent_tx_id: str
     value: DatabaseValue
     assertions: tuple[AssertionRecord, ...]
+    revocations: tuple[RevocationRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -102,12 +159,15 @@ class DatabaseWorkspacePaths:
     schema_objects: Path
     refs: Path
     head: Path
+    lock: Path
     assertions: Path
     views: Path
 
 
 def canonical_bytes_dbdata_v1(asrt_ids: Iterable[str]) -> bytes:
-    sorted_ids = sorted(_require_token(asrt_id, prefix="asrt:", field="asrt_id") for asrt_id in asrt_ids)
+    sorted_ids = sorted(
+        _require_token(asrt_id, prefix="asrt:", field="asrt_id") for asrt_id in asrt_ids
+    )
     out = bytearray(DBDATA_V1_PREFIX)
     out.extend(_u32be(len(sorted_ids)))
     for asrt_id in sorted_ids:
@@ -160,6 +220,57 @@ def canonical_bytes_dbtx_v1(
     for digest in sorted_digests:
         out.extend(_str_field(digest))
     out.extend(_str_field(data_digest))
+    return bytes(out)
+
+
+def canonical_bytes_dbtx_v2(
+    *,
+    parent_tx_id: str | None,
+    schema_digest: str,
+    digest_scheme: str,
+    tx_seq: int,
+    operations: Sequence[Mapping[str, Any]],
+) -> bytes:
+    """Canonical history commitment over one ordered commit delta."""
+    if parent_tx_id is not None:
+        _require_token(parent_tx_id, prefix="tx:", field="parent_tx_id")
+    _require_token(schema_digest, prefix="sha256:", field="schema_digest")
+    if digest_scheme != LTHASH_SCHEME:
+        raise DatabaseError(f"unsupported digest_scheme: {digest_scheme!r}")
+    if isinstance(tx_seq, bool) or not isinstance(tx_seq, int) or tx_seq < 0:
+        raise DatabaseError("tx_seq must be non-negative int")
+    normalized = _normalize_tx_operations(operations)
+
+    out = bytearray(DBTX_V2_PREFIX)
+    out.extend(b"\x00" if parent_tx_id is None else b"\x01" + _str_field(parent_tx_id))
+    out.extend(_str_field(schema_digest))
+    out.extend(_str_field(digest_scheme))
+    out.extend(_u64be(tx_seq))
+    out.extend(_u32be(len(normalized)))
+    for operation in normalized:
+        kind = operation["kind"]
+        if kind == "assertion":
+            out.extend(b"A")
+            out.extend(_str_field(operation["asrt_id"]))
+            out.extend(_str_field(operation["assertion_digest"]))
+        elif kind == "revocation":
+            out.extend(b"R")
+            out.extend(_str_field(operation["revoker_asrt_id"]))
+            out.extend(_str_field(operation["revoked_asrt_id"]))
+            out.extend(_bytes_field(_canonical_meta_entries_bytes(operation["meta"])))
+        elif kind == "repair_add":
+            out.extend(b"+")
+            out.extend(_str_field(operation["asrt_id"]))
+        elif kind == "repair_remove":
+            out.extend(b"-")
+            out.extend(_str_field(operation["asrt_id"]))
+        elif kind == "repair":
+            out.extend(b"P")
+            out.extend(_str_field(operation["previous_state_digest"]))
+            out.extend(_str_field(operation["rebuilt_state_digest"]))
+            out.extend(_str_field(operation["reason"]))
+        else:  # pragma: no cover - normalization is exhaustive
+            raise DatabaseError(f"unsupported tx operation: {kind!r}")
     return bytes(out)
 
 
@@ -247,11 +358,39 @@ class Database:
         db_id: str,
         schema_digest: str,
         workspace_paths: DatabaseWorkspacePaths | None = None,
+        lock_handle: IO[bytes] | None = None,
     ) -> None:
         self._ledger = ledger
         self._db_id = _require_db_id(db_id)
         self._schema_digest = _require_token(schema_digest, prefix="sha256:", field="schema_digest")
         self._workspace_paths = workspace_paths
+        self._lock_handle = lock_handle
+        self._closed = False
+
+    def __enter__(self) -> Database:
+        return self
+
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any
+    ) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            return
+
+    def close(self) -> None:
+        if getattr(self, "_closed", True):
+            return
+        self._closed = True
+        try:
+            self._ledger.close()
+        finally:
+            if self._lock_handle is not None:
+                _release_workspace_lock(self._lock_handle)
+                self._lock_handle = None
 
     @classmethod
     def create(cls, path: str | Path = ":memory:", *, schema_ir: dict[str, Any]) -> Database:
@@ -270,57 +409,88 @@ class Database:
 
         schema_token = compute_schema_digest(schema_ir)
         db_id = _new_db_id(path)
-        data_digest = sha256_token(canonical_bytes_dbdata_v1(()))
-        tx_id = "tx:" + sha256_hex(
-            canonical_bytes_dbtx_v1(
-                parent_tx_id=None,
-                schema_digest=schema_token,
-                added_assertion_digests=(),
-                data_digest=data_digest,
-            )
+        state_digest = encode_state(empty_state())
+        tx_id = _tx_id_for_v2(
+            parent_tx_id=None,
+            schema_digest=schema_token,
+            digest_scheme=LTHASH_SCHEME,
+            tx_seq=0,
+            operations=(),
         )
-        ledger.set_ledger_meta("db_id", db_id)
-        ledger.set_ledger_meta("schema_digest", schema_token)
-        ledger.set_ledger_meta("head_tx_id", tx_id)
-        ledger.set_ledger_meta("head_data_digest", data_digest)
+        ledger.commit_batch(
+            assertions=(),
+            revocations=(),
+            expected_head_tx_id=None,
+            head_tx_id=tx_id,
+            metadata=_head_metadata(
+                db_id=db_id,
+                schema_digest=schema_token,
+                state_digest=state_digest,
+                tx_seq=0,
+            ),
+        )
         return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token)
 
     @classmethod
     def _create_workspace(cls, *, path: Path, schema_ir: dict[str, Any]) -> Database:
         paths = resolve_database_workspace_paths(path)
         _ensure_new_database_workspace(paths)
+        lock_handle = _acquire_workspace_lock(paths)
+        ledger: Ledger | None = None
+        try:
+            schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
+            schema_token = compute_schema_digest(schema_ir)
+            db_id = _new_db_id(path)
+            state_digest = encode_state(empty_state())
+            tx_id = _tx_id_for_v2(
+                parent_tx_id=None,
+                schema_digest=schema_token,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=0,
+                operations=(),
+            )
+            ledger = Ledger(path=paths.assertions)
+            if ledger.get_ledger_meta("db_id") is not None:
+                raise DatabaseError("Database already exists in db/assertions.db")
+            if ledger.find_claims() or ledger.revokes:
+                raise DatabaseError("Database.create requires an empty db/assertions.db substrate")
 
-        schema_bytes = canonicalize_schema_ir_jcs(schema_ir)
-        schema_token = compute_schema_digest(schema_ir)
-        db_id = _new_db_id(path)
-        data_digest = sha256_token(canonical_bytes_dbdata_v1(()))
-        tx_id = _tx_id_for(
-            parent_tx_id=None,
-            schema_digest=schema_token,
-            added_assertion_digests=(),
-            data_digest=data_digest,
-        )
-        ledger = Ledger(path=paths.assertions)
-        if ledger.get_ledger_meta("db_id") is not None:
-            raise DatabaseError("Database already exists in db/assertions.db")
-        if ledger.find_claims() or ledger.revokes:
-            raise DatabaseError("Database.create requires an empty db/assertions.db substrate")
-
-        _write_schema_object(paths, schema_digest=schema_token, schema_bytes=schema_bytes)
-        _write_tx_object(
-            paths,
-            tx_id=tx_id,
-            parent_tx_id=None,
-            schema_digest=schema_token,
-            data_digest=data_digest,
-            added_assertion_digests=(),
-            added_asrt_ids=(),
-        )
-        _write_database_meta(paths, db_id=db_id)
-        _write_workspace_manifest(paths)
-        _write_head_ref(paths, tx_id)
-        _update_ledger_meta_cache(ledger, db_id=db_id, schema_digest=schema_token, tx_id=tx_id, data_digest=data_digest)
-        return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token, workspace_paths=paths)
+            _write_schema_object(paths, schema_digest=schema_token, schema_bytes=schema_bytes)
+            _write_tx_object(
+                paths,
+                tx_id=tx_id,
+                parent_tx_id=None,
+                schema_digest=schema_token,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=0,
+                operations=(),
+            )
+            _write_database_meta(paths, db_id=db_id)
+            _write_workspace_manifest(paths)
+            ledger.commit_batch(
+                assertions=(),
+                revocations=(),
+                expected_head_tx_id=None,
+                head_tx_id=tx_id,
+                metadata=_head_metadata(
+                    db_id=db_id,
+                    schema_digest=schema_token,
+                    state_digest=state_digest,
+                    tx_seq=0,
+                ),
+            )
+            return cls(
+                ledger=ledger,
+                db_id=db_id,
+                schema_digest=schema_token,
+                workspace_paths=paths,
+                lock_handle=lock_handle,
+            )
+        except Exception:
+            if ledger is not None:
+                ledger.close()
+            _release_workspace_lock(lock_handle)
+            raise
 
     @classmethod
     def open(cls, path: str | Path, *, schema_ir: dict[str, Any]) -> Database:
@@ -328,7 +498,16 @@ class Database:
             raise DatabaseError("Database.open does not support ':memory:'")
         paths = resolve_database_workspace_paths(path)
         if _is_new_database_workspace(paths):
-            return cls._open_workspace(paths=paths, schema_ir=schema_ir)
+            lock_handle = _acquire_workspace_lock(paths)
+            try:
+                return cls._open_workspace(
+                    paths=paths,
+                    schema_ir=schema_ir,
+                    lock_handle=lock_handle,
+                )
+            except Exception:
+                _release_workspace_lock(lock_handle)
+                raise
         if paths.manifest.exists() or paths.db.exists():
             raise DatabaseError("new-layout Database workspace metadata not found")
         return cls._open_legacy_ledger(path=path, schema_ir=schema_ir)
@@ -336,30 +515,166 @@ class Database:
     @classmethod
     def _open_legacy_ledger(cls, *, path: str | Path, schema_ir: dict[str, Any]) -> Database:
         ledger = Ledger(path=path)
-        db_id = ledger.get_ledger_meta("db_id")
-        if db_id is None:
-            raise DatabaseError("Database metadata not found; use Database.create first")
-        schema_token = compute_schema_digest(schema_ir)
-        stored_schema = ledger.get_ledger_meta("schema_digest")
-        if stored_schema != schema_token:
-            raise DatabaseError(
-                f"schema_digest mismatch: stored={stored_schema!r}, expected={schema_token!r}"
-            )
-        if ledger.get_ledger_meta("head_tx_id") is None:
-            raise DatabaseError("Database head_tx_id metadata missing")
-        if ledger.get_ledger_meta("head_data_digest") is None:
-            raise DatabaseError("Database head_data_digest metadata missing")
-        return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token)
+        try:
+            db_id = ledger.get_ledger_meta("db_id")
+            if db_id is None:
+                raise DatabaseError("Database metadata not found; use Database.create first")
+            schema_token = compute_schema_digest(schema_ir)
+            stored_schema = ledger.get_ledger_meta("schema_digest")
+            if stored_schema != schema_token:
+                raise DatabaseError(
+                    f"schema_digest mismatch: stored={stored_schema!r}, expected={schema_token!r}"
+                )
+            if ledger.get_ledger_meta("digest_scheme") != LTHASH_SCHEME:
+                raise DatabaseError(
+                    "legacy v0.2 Database requires the Phase 3 migrate-workspace flow"
+                )
+            _validate_ledger_state(ledger)
+            return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token)
+        except Exception:
+            ledger.close()
+            raise
 
     @classmethod
-    def _open_workspace(cls, *, paths: DatabaseWorkspacePaths, schema_ir: dict[str, Any]) -> Database:
+    def _open_workspace(
+        cls,
+        *,
+        paths: DatabaseWorkspacePaths,
+        schema_ir: dict[str, Any],
+        lock_handle: IO[bytes],
+    ) -> Database:
         schema_token = compute_schema_digest(schema_ir)
         _validate_schema_object(paths, schema_digest=schema_token, expected_schema_ir=schema_ir)
         meta = _read_database_meta(paths)
         db_id = _require_db_id(meta["db_id"])
         ledger = Ledger(path=paths.assertions)
-        _read_head_value(paths, expected_schema_digest=schema_token, db_id=db_id)
-        return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token, workspace_paths=paths)
+        try:
+            _validate_workspace_integrity(
+                paths,
+                ledger=ledger,
+                expected_schema_digest=schema_token,
+                db_id=db_id,
+            )
+        except Exception:
+            ledger.close()
+            raise
+        return cls(
+            ledger=ledger,
+            db_id=db_id,
+            schema_digest=schema_token,
+            workspace_paths=paths,
+            lock_handle=lock_handle,
+        )
+
+    @classmethod
+    def repair(
+        cls,
+        path: str | Path,
+        *,
+        schema_ir: dict[str, Any],
+        reason: str = "explicit-rebuild",
+    ) -> Database:
+        """Rebuild state from ledger data and append an explicit repair event."""
+        if _is_memory_path(path):
+            raise DatabaseError("Database.repair requires a durable workspace")
+        if not isinstance(reason, str) or not reason.strip():
+            raise DatabaseError("repair reason must be non-empty string")
+        paths = resolve_database_workspace_paths(path)
+        if not _is_new_database_workspace(paths):
+            raise DatabaseError("Database.repair requires a v0.3 Database workspace")
+        lock_handle = _acquire_workspace_lock(paths)
+        ledger: Ledger | None = None
+        try:
+            schema_token = compute_schema_digest(schema_ir)
+            _validate_schema_object(paths, schema_digest=schema_token, expected_schema_ir=schema_ir)
+            db_id = _require_db_id(_read_database_meta(paths)["db_id"])
+            ledger = Ledger(path=paths.assertions)
+            stored_head = ledger.get_ledger_meta("head_tx_id")
+            if stored_head is None:
+                raise DatabaseIntegrityError("repair cannot recover a missing head_tx_id anchor")
+            parent_payload = _read_tx_object(paths, stored_head)
+            history_ids = _replay_history(
+                paths,
+                head_tx_id=stored_head,
+                expected_schema_digest=schema_token,
+            )
+            ledger_ids = _active_factual_assertion_ids(ledger)
+            rebuilt_digest = _state_digest_for_ids(ledger_ids)
+            previous_digest = ledger.get_ledger_meta("head_state_digest") or "<missing>"
+            operations: list[dict[str, Any]] = [
+                {"kind": "repair_remove", "asrt_id": asrt_id}
+                for asrt_id in sorted(history_ids - ledger_ids)
+            ]
+            operations.extend(
+                {"kind": "repair_add", "asrt_id": asrt_id}
+                for asrt_id in sorted(ledger_ids - history_ids)
+            )
+            operations.append(
+                {
+                    "kind": "repair",
+                    "previous_state_digest": previous_digest,
+                    "rebuilt_state_digest": rebuilt_digest,
+                    "reason": reason.strip(),
+                }
+            )
+            tx_seq = int(parent_payload["tx_seq"]) + 1
+            tx_id = _tx_id_for_v2(
+                parent_tx_id=stored_head,
+                schema_digest=schema_token,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=tx_seq,
+                operations=operations,
+            )
+            _write_tx_object(
+                paths,
+                tx_id=tx_id,
+                parent_tx_id=stored_head,
+                schema_digest=schema_token,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=tx_seq,
+                operations=operations,
+            )
+            ledger.commit_batch(
+                assertions=(),
+                revocations=(),
+                expected_head_tx_id=stored_head,
+                head_tx_id=tx_id,
+                metadata={
+                    **_head_metadata(
+                        db_id=db_id,
+                        schema_digest=schema_token,
+                        state_digest=rebuilt_digest,
+                        tx_seq=tx_seq,
+                    ),
+                    "last_repair": json.dumps(
+                        {
+                            "reason": reason.strip(),
+                            "repaired_at_epoch_ns": time.time_ns(),
+                            "tx_id": tx_id,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                },
+            )
+            _validate_workspace_integrity(
+                paths,
+                ledger=ledger,
+                expected_schema_digest=schema_token,
+                db_id=db_id,
+            )
+            return cls(
+                ledger=ledger,
+                db_id=db_id,
+                schema_digest=schema_token,
+                workspace_paths=paths,
+                lock_handle=lock_handle,
+            )
+        except Exception:
+            if ledger is not None:
+                ledger.close()
+            _release_workspace_lock(lock_handle)
+            raise
 
     @property
     def db_id(self) -> str:
@@ -374,48 +689,77 @@ class Database:
         return self._ledger
 
     def head(self) -> DatabaseValue:
-        if self._workspace_paths is not None:
-            return _read_head_value(
-                self._workspace_paths,
-                expected_schema_digest=self._schema_digest,
-                db_id=self._db_id,
-            )
-        tx_id = self._ledger.get_ledger_meta("head_tx_id")
-        data_digest = self._ledger.get_ledger_meta("head_data_digest")
-        if tx_id is None or data_digest is None:
-            raise DatabaseError("Database head metadata missing")
-        return DatabaseValue(
+        self._ensure_open()
+        value = _read_ledger_head(
+            self._ledger,
+            expected_schema_digest=self._schema_digest,
             db_id=self._db_id,
-            tx_id=_require_token(tx_id, prefix="tx:", field="tx_id"),
-            schema_digest=self._schema_digest,
-            data_digest=_require_token(data_digest, prefix="sha256:", field="data_digest"),
         )
+        if self._workspace_paths is not None:
+            payload = _read_tx_object(self._workspace_paths, value.tx_id)
+            if payload["tx_seq"] != value.tx_seq or payload["digest_scheme"] != value.digest_scheme:
+                raise DatabaseIntegrityError("head metadata disagrees with the head tx object")
+        return value
 
     def commit_assertions(self, assertions: Sequence[AssertionInput]) -> CommitResult:
         if not assertions:
             raise DatabaseError("commit_assertions requires at least one assertion")
+        return self.commit_changes(assertions=assertions, revocations=())
 
+    def commit_changes(
+        self,
+        assertions: Sequence[AssertionInput],
+        revocations: Sequence[RevocationInput],
+    ) -> CommitResult:
+        self._ensure_open()
+        if not assertions and not revocations:
+            raise DatabaseError("commit_changes requires at least one change")
         parent = self.head()
         prepared = [self._prepare_assertion(item) for item in assertions]
         added_ids = [record.asrt_id for record, _claim, _args, _meta in prepared]
         if len(set(added_ids)) != len(added_ids):
-            raise DuplicateAssertionError("duplicate content-addressed assertion in commit")
+            raise DuplicateAssertionError("duplicate server-generated assertion id in commit")
         for asrt_id in added_ids:
             if self._ledger.get_claim(asrt_id) is not None:
                 raise DuplicateAssertionError(f"assertion already exists: {asrt_id}")
 
-        active_ids = self._active_assertion_ids()
-        active_ids.update(added_ids)
-        data_digest = sha256_token(canonical_bytes_dbdata_v1(active_ids))
-        added_assertion_digests = [record.assertion_digest for record, *_ in prepared]
-        tx_id = _tx_id_for(
+        prepared_revocations = self._prepare_revocations(
+            revocations,
+            added_ids=set(added_ids),
+        )
+        state = decode_state(parent.state_digest)
+        operations: list[dict[str, Any]] = []
+        for provisional, _claim, _args, _meta in prepared:
+            state = lthash_add(state, _state_element(provisional.asrt_id))
+            operations.append(
+                {
+                    "kind": "assertion",
+                    "asrt_id": provisional.asrt_id,
+                    "assertion_digest": provisional.assertion_digest,
+                }
+            )
+        for revocation, _meta_rows in prepared_revocations:
+            state = lthash_remove(state, _state_element(revocation.revoked_asrt_id))
+            operations.append(
+                {
+                    "kind": "revocation",
+                    "revoker_asrt_id": revocation.revoker_asrt_id,
+                    "revoked_asrt_id": revocation.revoked_asrt_id,
+                    "meta": revocation.meta,
+                }
+            )
+        state_digest = encode_state(state)
+        tx_seq = parent.tx_seq + 1
+        tx_id = _tx_id_for_v2(
             parent_tx_id=parent.tx_id,
             schema_digest=self._schema_digest,
-            added_assertion_digests=added_assertion_digests,
-            data_digest=data_digest,
+            digest_scheme=LTHASH_SCHEME,
+            tx_seq=tx_seq,
+            operations=operations,
         )
 
         records: list[AssertionRecord] = []
+        assertion_writes: list[LedgerAssertionWrite] = []
         for provisional, claim, args, input_meta_rows in prepared:
             record = AssertionRecord(
                 asrt_id=provisional.asrt_id,
@@ -428,7 +772,12 @@ class Database:
             )
             ledger_meta_rows = [
                 *input_meta_rows,
-                MetaRow(asrt_id=record.asrt_id, key="schema_digest", kind="str", value=record.schema_digest),
+                MetaRow(
+                    asrt_id=record.asrt_id,
+                    key="schema_digest",
+                    kind="str",
+                    value=record.schema_digest,
+                ),
                 MetaRow(
                     asrt_id=record.asrt_id,
                     key="assertion_digest",
@@ -437,13 +786,39 @@ class Database:
                 ),
                 MetaRow(asrt_id=record.asrt_id, key="tx_id", kind="str", value=record.tx_id),
             ]
-            self._ledger.append_assertion(
-                claim=claim,
-                claim_args=args,
-                meta_rows=ledger_meta_rows,
-                asrt_id=record.asrt_id,
+            assertion_writes.append(
+                LedgerAssertionWrite(
+                    claim=claim,
+                    claim_args=tuple(args),
+                    meta_rows=tuple(ledger_meta_rows),
+                )
             )
             records.append(record)
+
+        revocation_records: list[RevocationRecord] = []
+        revocation_writes: list[LedgerRevocationWrite] = []
+        for provisional, input_meta_rows in prepared_revocations:
+            record = RevocationRecord(
+                revoker_asrt_id=provisional.revoker_asrt_id,
+                revoked_asrt_id=provisional.revoked_asrt_id,
+                tx_id=tx_id,
+                meta=provisional.meta,
+            )
+            revocation_writes.append(
+                LedgerRevocationWrite(
+                    revokes=Revokes(record.revoker_asrt_id, record.revoked_asrt_id),
+                    meta_rows=tuple(
+                        [
+                            *input_meta_rows,
+                            MetaRow(
+                                record.revoker_asrt_id, "schema_digest", "str", self._schema_digest
+                            ),
+                            MetaRow(record.revoker_asrt_id, "tx_id", "str", tx_id),
+                        ]
+                    ),
+                )
+            )
+            revocation_records.append(record)
 
         if self._workspace_paths is not None:
             _write_tx_object(
@@ -451,30 +826,38 @@ class Database:
                 tx_id=tx_id,
                 parent_tx_id=parent.tx_id,
                 schema_digest=self._schema_digest,
-                data_digest=data_digest,
-                added_assertion_digests=added_assertion_digests,
-                added_asrt_ids=added_ids,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=tx_seq,
+                operations=operations,
             )
-            _write_head_ref(self._workspace_paths, tx_id)
-            _update_ledger_meta_cache(
-                self._ledger,
-                db_id=self._db_id,
-                schema_digest=self._schema_digest,
-                tx_id=tx_id,
-                data_digest=data_digest,
+        try:
+            self._ledger.commit_batch(
+                assertions=assertion_writes,
+                revocations=revocation_writes,
+                expected_head_tx_id=parent.tx_id,
+                head_tx_id=tx_id,
+                metadata=_head_metadata(
+                    db_id=self._db_id,
+                    schema_digest=self._schema_digest,
+                    state_digest=state_digest,
+                    tx_seq=tx_seq,
+                ),
             )
-        else:
-            self._ledger.replace_ledger_meta("head_tx_id", tx_id)
-            self._ledger.replace_ledger_meta("head_data_digest", data_digest)
+        except LedgerHeadConflictError as exc:
+            raise HeadConflictError(str(exc)) from exc
+
         return CommitResult(
             parent_tx_id=parent.tx_id,
             value=DatabaseValue(
                 db_id=self._db_id,
                 tx_id=tx_id,
                 schema_digest=self._schema_digest,
-                data_digest=data_digest,
+                state_digest=state_digest,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=tx_seq,
             ),
             assertions=tuple(records),
+            revocations=tuple(revocation_records),
         )
 
     def create_view(
@@ -526,7 +909,7 @@ class Database:
             schema_digest=self._schema_digest,
             meta=meta,
         )
-        asrt_id = "asrt:" + assertion_digest.removeprefix("sha256:")
+        asrt_id = _new_assertion_id()
         e_ref = fact_tuple[0][1]
         rest_terms = list(fact_tuple[1:])
         claim = Claim(asrt_id=asrt_id, pred_id=item.pred_id, e_ref=e_ref, rest_terms=rest_terms)
@@ -535,7 +918,9 @@ class Database:
             ClaimArg(asrt_id=asrt_id, idx=idx, val_atom=val_atom, tag=tag)
             for idx, val_atom, tag in claim_arg_rows
         ]
-        meta_rows = [MetaRow(asrt_id=asrt_id, key=row.key, kind=row.kind, value=row.value) for row in meta]
+        meta_rows = [
+            MetaRow(asrt_id=asrt_id, key=row.key, kind=row.kind, value=row.value) for row in meta
+        ]
         provisional = AssertionRecord(
             asrt_id=asrt_id,
             pred_id=item.pred_id,
@@ -547,12 +932,49 @@ class Database:
         )
         return provisional, claim, args, meta_rows
 
+    def _prepare_revocations(
+        self,
+        items: Sequence[RevocationInput],
+        *,
+        added_ids: set[str],
+    ) -> list[tuple[RevocationRecord, list[MetaRow]]]:
+        prepared: list[tuple[RevocationRecord, list[MetaRow]]] = []
+        targets: set[str] = set()
+        for item in items:
+            if not isinstance(item, RevocationInput):
+                raise TypeError("revocations must contain RevocationInput")
+            target = _require_asrt_id(item.revoked_asrt_id, field="revoked_asrt_id")
+            if target in targets:
+                raise DatabaseError(f"duplicate revocation target in commit: {target}")
+            targets.add(target)
+            claim = self._ledger.get_claim(target)
+            if target not in added_ids:
+                if claim is None:
+                    if any(row.revoker_asrt_id == target for row in self._ledger.revokes):
+                        raise DatabaseError("revoke-of-revoke is forbidden")
+                    raise DatabaseError(f"revocation target does not exist: {target}")
+                if claim.pred_id.startswith("__system__."):
+                    raise DatabaseError("system claims cannot be revoked")
+                if self._ledger.has_active_revocation(target):
+                    raise DatabaseError(f"assertion is already revoked: {target}")
+            meta = _normalize_meta_entries(item.meta)
+            revoker_id = _new_assertion_id()
+            provisional = RevocationRecord(
+                revoker_asrt_id=revoker_id,
+                revoked_asrt_id=target,
+                tx_id="tx:" + "0" * 64,
+                meta=meta,
+            )
+            meta_rows = [MetaRow(revoker_id, row.key, row.kind, row.value) for row in meta]
+            prepared.append((provisional, meta_rows))
+        return prepared
+
     def _active_assertion_ids(self) -> set[str]:
-        return {
-            claim.asrt_id
-            for claim in self._ledger.find_claims()
-            if not self._ledger.has_active_revocation(claim.asrt_id)
-        }
+        return _active_factual_assertion_ids(self._ledger)
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise DatabaseError("Database is closed")
 
 
 def resolve_database_workspace_paths(path: str | Path) -> DatabaseWorkspacePaths:
@@ -570,6 +992,7 @@ def resolve_database_workspace_paths(path: str | Path) -> DatabaseWorkspacePaths
         schema_objects=objects / "schema",
         refs=refs,
         head=refs / "head.txt",
+        lock=db / "writer.lock",
         assertions=db / "assertions.db",
         views=root / "views",
     )
@@ -603,15 +1026,27 @@ def _is_memory_path(path: str | Path) -> bool:
 
 
 def _is_new_database_workspace(paths: DatabaseWorkspacePaths) -> bool:
-    return paths.db_meta.exists() and paths.head.exists() and paths.assertions.exists()
+    return paths.db_meta.exists() and paths.assertions.exists()
 
 
 def _ensure_new_database_workspace(paths: DatabaseWorkspacePaths) -> None:
     if paths.root.exists() and not paths.root.is_dir():
         raise DatabaseError("Database workspace path exists and is not a directory")
-    if paths.manifest.exists() or paths.db_meta.exists() or paths.head.exists() or paths.assertions.exists():
+    if (
+        paths.manifest.exists()
+        or paths.db_meta.exists()
+        or paths.head.exists()
+        or paths.assertions.exists()
+    ):
         raise DatabaseError("Database workspace already exists at path")
-    for directory in (paths.root, paths.db, paths.objects, paths.tx_objects, paths.schema_objects, paths.refs):
+    for directory in (
+        paths.root,
+        paths.db,
+        paths.objects,
+        paths.tx_objects,
+        paths.schema_objects,
+        paths.refs,
+    ):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -628,6 +1063,25 @@ def _tx_id_for(
             schema_digest=schema_digest,
             added_assertion_digests=added_assertion_digests,
             data_digest=data_digest,
+        )
+    )
+
+
+def _tx_id_for_v2(
+    *,
+    parent_tx_id: str | None,
+    schema_digest: str,
+    digest_scheme: str,
+    tx_seq: int,
+    operations: Sequence[Mapping[str, Any]],
+) -> str:
+    return "tx:" + sha256_hex(
+        canonical_bytes_dbtx_v2(
+            parent_tx_id=parent_tx_id,
+            schema_digest=schema_digest,
+            digest_scheme=digest_scheme,
+            tx_seq=tx_seq,
+            operations=operations,
         )
     )
 
@@ -663,7 +1117,9 @@ def _write_view_object(paths: DatabaseWorkspacePaths, view: FrozenAssertionSet) 
     )
     if expected_digest != _require_token(view.view_digest, prefix="sha256:", field="view_digest"):
         raise DatabaseError("view object identity fields do not match view_digest")
-    _write_once_bytes(_view_object_path(paths, view.view_digest), _json_bytes(_view_object_payload(view)))
+    _write_once_bytes(
+        _view_object_path(paths, view.view_digest), _json_bytes(_view_object_payload(view))
+    )
 
 
 def _view_object_payload(view: FrozenAssertionSet) -> dict[str, Any]:
@@ -672,7 +1128,9 @@ def _view_object_payload(view: FrozenAssertionSet) -> dict[str, Any]:
         "base_tx_id": _require_token(view.base_tx_id, prefix="tx:", field="base_tx_id"),
         "db_id": _require_db_id(view.db_id),
         "name": _normalize_view_name(view.name),
-        "schema_digest": _require_token(view.schema_digest, prefix="sha256:", field="schema_digest"),
+        "schema_digest": _require_token(
+            view.schema_digest, prefix="sha256:", field="schema_digest"
+        ),
         "view_digest": _require_token(view.view_digest, prefix="sha256:", field="view_digest"),
     }
 
@@ -696,7 +1154,9 @@ def _validate_schema_object(
     expected_schema_ir = ensure_schema_ir(expected_schema_ir)
     if compute_schema_digest(expected_schema_ir) != expected_token:
         raise DatabaseError("expected schema_ir does not match schema_digest")
-    if canonicalize_schema_ir_identity_jcs(stored_schema_ir) != canonicalize_schema_ir_identity_jcs(expected_schema_ir):
+    if canonicalize_schema_ir_identity_jcs(stored_schema_ir) != canonicalize_schema_ir_identity_jcs(
+        expected_schema_ir
+    ):
         raise DatabaseError("schema object identity differs from expected schema identity")
 
 
@@ -719,32 +1179,29 @@ def _write_tx_object(
     tx_id: str,
     parent_tx_id: str | None,
     schema_digest: str,
-    data_digest: str,
-    added_assertion_digests: Sequence[str],
-    added_asrt_ids: Sequence[str],
+    digest_scheme: str,
+    tx_seq: int,
+    operations: Sequence[Mapping[str, Any]],
 ) -> None:
     tx_id = _require_token(tx_id, prefix="tx:", field="tx_id")
-    sorted_digests = sorted(
-        _require_token(digest, prefix="sha256:", field="assertion_digest")
-        for digest in added_assertion_digests
-    )
-    sorted_asrt_ids = sorted(_require_token(asrt_id, prefix="asrt:", field="asrt_id") for asrt_id in added_asrt_ids)
-    expected_tx_id = _tx_id_for(
+    normalized = _normalize_tx_operations(operations)
+    expected_tx_id = _tx_id_for_v2(
         parent_tx_id=parent_tx_id,
         schema_digest=schema_digest,
-        added_assertion_digests=sorted_digests,
-        data_digest=data_digest,
+        digest_scheme=digest_scheme,
+        tx_seq=tx_seq,
+        operations=normalized,
     )
     if expected_tx_id != tx_id:
         raise DatabaseError("tx object identity fields do not match tx_id")
     payload = {
-        "added_assertion_digests": sorted_digests,
-        "added_asrt_ids": sorted_asrt_ids,
-        "data_digest": _require_token(data_digest, prefix="sha256:", field="data_digest"),
+        "digest_scheme": digest_scheme,
+        "operations": [_tx_operation_payload(operation) for operation in normalized],
         "parent_tx_id": None
         if parent_tx_id is None
         else _require_token(parent_tx_id, prefix="tx:", field="parent_tx_id"),
         "schema_digest": _require_token(schema_digest, prefix="sha256:", field="schema_digest"),
+        "tx_seq": tx_seq,
         "tx_id": tx_id,
     }
     _write_once_bytes(_tx_object_path(paths, tx_id), _json_bytes(payload))
@@ -758,39 +1215,49 @@ def _read_tx_object(paths: DatabaseWorkspacePaths, tx_id: str) -> dict[str, Any]
     payload = json.loads(tx_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise DatabaseError("tx object must be JSON object")
+    _require_exact_keys(
+        payload,
+        {
+            "digest_scheme",
+            "operations",
+            "parent_tx_id",
+            "schema_digest",
+            "tx_id",
+            "tx_seq",
+        },
+    )
     if payload.get("tx_id") != tx_id:
         raise DatabaseError("tx object filename/content tx_id mismatch")
     parent_tx_id = payload.get("parent_tx_id")
     if parent_tx_id is not None:
         parent_tx_id = _require_token(parent_tx_id, prefix="tx:", field="parent_tx_id")
-    schema_token = _require_token(payload.get("schema_digest"), prefix="sha256:", field="schema_digest")
-    data_digest = _require_token(payload.get("data_digest"), prefix="sha256:", field="data_digest")
-    digests = payload.get("added_assertion_digests")
-    if not isinstance(digests, list):
-        raise DatabaseError("tx object added_assertion_digests must be list")
-    assertion_digests = [
-        _require_token(digest, prefix="sha256:", field="assertion_digest")
-        for digest in digests
-    ]
-    added_asrt_ids = payload.get("added_asrt_ids")
-    if not isinstance(added_asrt_ids, list):
-        raise DatabaseError("tx object added_asrt_ids must be list")
-    payload["added_asrt_ids"] = [
-        _require_token(asrt_id, prefix="asrt:", field="asrt_id")
-        for asrt_id in added_asrt_ids
-    ]
-    expected_tx_id = _tx_id_for(
+    schema_token = _require_token(
+        payload.get("schema_digest"), prefix="sha256:", field="schema_digest"
+    )
+    digest_scheme = payload.get("digest_scheme")
+    if digest_scheme != LTHASH_SCHEME:
+        raise DatabaseError(f"unsupported tx digest_scheme: {digest_scheme!r}")
+    tx_seq = payload.get("tx_seq")
+    if isinstance(tx_seq, bool) or not isinstance(tx_seq, int) or tx_seq < 0:
+        raise DatabaseError("tx object tx_seq must be non-negative int")
+    raw_operations = payload.get("operations")
+    if not isinstance(raw_operations, list):
+        raise DatabaseError("tx object operations must be list")
+    operations = _normalize_tx_operations(raw_operations)
+    expected_tx_id = _tx_id_for_v2(
         parent_tx_id=parent_tx_id,
         schema_digest=schema_token,
-        added_assertion_digests=assertion_digests,
-        data_digest=data_digest,
+        digest_scheme=digest_scheme,
+        tx_seq=tx_seq,
+        operations=operations,
     )
     if expected_tx_id != tx_id:
         raise DatabaseError("tx object identity fields do not recompute tx_id")
     payload["parent_tx_id"] = parent_tx_id
     payload["schema_digest"] = schema_token
-    payload["data_digest"] = data_digest
-    payload["added_assertion_digests"] = assertion_digests
+    payload["digest_scheme"] = digest_scheme
+    payload["tx_seq"] = tx_seq
+    payload["operations"] = operations
     return payload
 
 
@@ -829,45 +1296,206 @@ def _write_workspace_manifest(paths: DatabaseWorkspacePaths) -> None:
     _atomic_write_bytes(paths.manifest, _json_bytes(payload))
 
 
-def _write_head_ref(paths: DatabaseWorkspacePaths, tx_id: str) -> None:
-    tx_id = _require_token(tx_id, prefix="tx:", field="tx_id")
-    _read_tx_object(paths, tx_id)
-    _atomic_write_bytes(paths.head, (tx_id + "\n").encode("ascii"))
+def _head_metadata(
+    *,
+    db_id: str,
+    schema_digest: str,
+    state_digest: str,
+    tx_seq: int,
+) -> dict[str, str]:
+    decode_state(state_digest)
+    if isinstance(tx_seq, bool) or not isinstance(tx_seq, int) or tx_seq < 0:
+        raise DatabaseError("tx_seq must be non-negative int")
+    return {
+        "db_id": _require_db_id(db_id),
+        "schema_digest": _require_token(schema_digest, prefix="sha256:", field="schema_digest"),
+        "head_state_digest": state_digest,
+        "digest_scheme": LTHASH_SCHEME,
+        "head_tx_seq": str(tx_seq),
+    }
 
 
-def _read_head_value(
-    paths: DatabaseWorkspacePaths,
+def _read_ledger_head(
+    ledger: Ledger,
     *,
     expected_schema_digest: str,
     db_id: str,
 ) -> DatabaseValue:
-    if not paths.head.exists():
-        raise DatabaseError("head.txt missing")
-    tx_id = _require_token(paths.head.read_text(encoding="ascii").strip(), prefix="tx:", field="tx_id")
-    tx_payload = _read_tx_object(paths, tx_id)
-    schema_token = tx_payload["schema_digest"]
-    if schema_token != _require_token(expected_schema_digest, prefix="sha256:", field="schema_digest"):
-        raise DatabaseError("head tx object schema_digest mismatch")
+    keys = (
+        "db_id",
+        "schema_digest",
+        "head_tx_id",
+        "head_state_digest",
+        "digest_scheme",
+        "head_tx_seq",
+    )
+    meta = ledger.get_ledger_meta_snapshot(keys)
+    missing = [key for key in keys if meta[key] is None]
+    if missing:
+        raise DatabaseIntegrityError(f"Database head metadata missing: {', '.join(missing)}")
+    if meta["db_id"] != _require_db_id(db_id):
+        raise DatabaseIntegrityError("ledger_meta db_id mismatch")
+    schema_token = _require_token(
+        str(meta["schema_digest"]),
+        prefix="sha256:",
+        field="schema_digest",
+    )
+    if schema_token != _require_token(
+        expected_schema_digest,
+        prefix="sha256:",
+        field="expected_schema_digest",
+    ):
+        raise DatabaseIntegrityError("ledger_meta schema_digest mismatch")
+    if meta["digest_scheme"] != LTHASH_SCHEME:
+        raise DatabaseIntegrityError(f"unsupported digest_scheme: {meta['digest_scheme']!r}")
+    state_digest = str(meta["head_state_digest"])
+    try:
+        decode_state(state_digest)
+    except LtHashError as exc:
+        raise DatabaseIntegrityError(f"invalid head_state_digest: {exc}") from exc
+    raw_seq = str(meta["head_tx_seq"])
+    try:
+        tx_seq = int(raw_seq)
+    except ValueError as exc:
+        raise DatabaseIntegrityError("head_tx_seq must be a non-negative integer") from exc
+    if tx_seq < 0 or str(tx_seq) != raw_seq:
+        raise DatabaseIntegrityError("head_tx_seq must use canonical decimal encoding")
     return DatabaseValue(
         db_id=_require_db_id(db_id),
-        tx_id=tx_id,
+        tx_id=_require_token(str(meta["head_tx_id"]), prefix="tx:", field="head_tx_id"),
         schema_digest=schema_token,
-        data_digest=tx_payload["data_digest"],
+        state_digest=state_digest,
+        digest_scheme=LTHASH_SCHEME,
+        tx_seq=tx_seq,
     )
 
 
-def _update_ledger_meta_cache(
-    ledger: Ledger,
+def _validate_ledger_state(ledger: Ledger) -> None:
+    stored = ledger.get_ledger_meta("head_state_digest")
+    if stored is None:
+        raise DatabaseIntegrityError("head_state_digest metadata missing")
+    computed = _state_digest_for_ids(_active_factual_assertion_ids(ledger))
+    if stored != computed:
+        raise DatabaseIntegrityError("stored state digest does not match active factual data")
+
+
+def _validate_workspace_integrity(
+    paths: DatabaseWorkspacePaths,
     *,
+    ledger: Ledger,
+    expected_schema_digest: str,
     db_id: str,
-    schema_digest: str,
-    tx_id: str,
-    data_digest: str,
-) -> None:
-    ledger.replace_ledger_meta("db_id", _require_db_id(db_id))
-    ledger.replace_ledger_meta("schema_digest", _require_token(schema_digest, prefix="sha256:", field="schema_digest"))
-    ledger.replace_ledger_meta("head_tx_id", _require_token(tx_id, prefix="tx:", field="tx_id"))
-    ledger.replace_ledger_meta("head_data_digest", _require_token(data_digest, prefix="sha256:", field="data_digest"))
+) -> DatabaseValue:
+    head = _read_ledger_head(
+        ledger,
+        expected_schema_digest=expected_schema_digest,
+        db_id=db_id,
+    )
+    payload = _read_tx_object(paths, head.tx_id)
+    if payload["schema_digest"] != head.schema_digest:
+        raise DatabaseIntegrityError("head tx object schema_digest mismatch")
+    if payload["digest_scheme"] != head.digest_scheme or payload["tx_seq"] != head.tx_seq:
+        raise DatabaseIntegrityError("head tx object disagrees with ledger_meta")
+    history_ids = _replay_history(
+        paths,
+        head_tx_id=head.tx_id,
+        expected_schema_digest=head.schema_digest,
+    )
+    ledger_ids = _active_factual_assertion_ids(ledger)
+    if history_ids != ledger_ids:
+        raise DatabaseIntegrityError("tx history terminal set does not match ledger data")
+    computed = _state_digest_for_ids(ledger_ids)
+    if computed != head.state_digest:
+        raise DatabaseIntegrityError("head_state_digest does not match active factual data")
+    return head
+
+
+def _replay_history(
+    paths: DatabaseWorkspacePaths,
+    *,
+    head_tx_id: str,
+    expected_schema_digest: str,
+) -> set[str]:
+    chain: list[dict[str, Any]] = []
+    seen_tx_ids: set[str] = set()
+    cursor: str | None = _require_token(head_tx_id, prefix="tx:", field="head_tx_id")
+    while cursor is not None:
+        if cursor in seen_tx_ids:
+            raise DatabaseIntegrityError("tx history contains a cycle")
+        seen_tx_ids.add(cursor)
+        payload = _read_tx_object(paths, cursor)
+        if payload["schema_digest"] != expected_schema_digest:
+            raise DatabaseIntegrityError("tx history schema_digest mismatch")
+        chain.append(payload)
+        cursor = payload["parent_tx_id"]
+    chain.reverse()
+    active: set[str] = set()
+    seen_assertions: set[str] = set()
+    for expected_seq, payload in enumerate(chain):
+        if payload["tx_seq"] != expected_seq:
+            raise DatabaseIntegrityError("tx history sequence is not contiguous from genesis")
+        if expected_seq == 0 and payload["parent_tx_id"] is not None:
+            raise DatabaseIntegrityError("genesis tx must not have a parent")
+        for operation in payload["operations"]:
+            kind = operation["kind"]
+            if kind == "assertion":
+                asrt_id = operation["asrt_id"]
+                if asrt_id in seen_assertions:
+                    raise DatabaseIntegrityError(f"assertion id repeated in history: {asrt_id}")
+                seen_assertions.add(asrt_id)
+                active.add(asrt_id)
+            elif kind == "revocation":
+                target = operation["revoked_asrt_id"]
+                if target not in active:
+                    raise DatabaseIntegrityError(
+                        f"revocation target is not active in history: {target}"
+                    )
+                active.remove(target)
+            elif kind == "repair_add":
+                active.add(operation["asrt_id"])
+            elif kind == "repair_remove":
+                active.discard(operation["asrt_id"])
+            elif kind == "repair":
+                continue
+    return active
+
+
+def _active_factual_assertion_ids(ledger: Ledger) -> set[str]:
+    return {
+        _require_asrt_id(claim.asrt_id, field="asrt_id")
+        for claim in ledger.find_claims()
+        if not claim.pred_id.startswith("__system__")
+        and not ledger.has_active_revocation(claim.asrt_id)
+    }
+
+
+def _state_digest_for_ids(asrt_ids: Iterable[str]) -> str:
+    normalized = sorted({_require_asrt_id(asrt_id, field="asrt_id") for asrt_id in asrt_ids})
+    return encode_state(lthash_from_elements(_state_element(asrt_id) for asrt_id in normalized))
+
+
+def _state_element(asrt_id: str) -> bytes:
+    return _require_asrt_id(asrt_id, field="asrt_id").encode("ascii")
+
+
+def _acquire_workspace_lock(paths: DatabaseWorkspacePaths) -> IO[bytes]:
+    paths.lock.parent.mkdir(parents=True, exist_ok=True)
+    handle = paths.lock.open("a+b")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        handle.close()
+        raise DatabaseLockedError(
+            f"Database workspace is already open for writing: {paths.root}"
+        ) from exc
+    return handle
+
+
+def _release_workspace_lock(handle: IO[bytes]) -> None:
+    with _suppress_os_error():
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with _suppress_os_error():
+        handle.close()
 
 
 def _tx_object_path(paths: DatabaseWorkspacePaths, tx_id: str) -> Path:
@@ -875,11 +1503,18 @@ def _tx_object_path(paths: DatabaseWorkspacePaths, tx_id: str) -> Path:
 
 
 def _schema_object_path(paths: DatabaseWorkspacePaths, schema_digest: str) -> Path:
-    return paths.schema_objects / f"{_token_hex(schema_digest, prefix='sha256:', field='schema_digest')}.json"
+    return (
+        paths.schema_objects
+        / f"{_token_hex(schema_digest, prefix='sha256:', field='schema_digest')}.json"
+    )
 
 
 def _view_object_path(paths: DatabaseWorkspacePaths, view_digest: str) -> Path:
-    return paths.views / "objects" / f"{_token_hex(view_digest, prefix='sha256:', field='view_digest')}.json"
+    return (
+        paths.views
+        / "objects"
+        / f"{_token_hex(view_digest, prefix='sha256:', field='view_digest')}.json"
+    )
 
 
 def _token_hex(value: str, *, prefix: str, field: str) -> str:
@@ -887,7 +1522,9 @@ def _token_hex(value: str, *, prefix: str, field: str) -> str:
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
 
 
 def _write_once_bytes(path: Path, data: bytes) -> None:
@@ -927,7 +1564,9 @@ class _suppress_os_error:
     def __enter__(self) -> None:
         return None
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any) -> bool:
+    def __exit__(
+        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: Any
+    ) -> bool:
         return exc_type is not None and issubclass(exc_type, OSError)
 
 
@@ -935,6 +1574,12 @@ def _u32be(number: int) -> bytes:
     if number < 0:
         raise DatabaseError("negative length")
     return number.to_bytes(4, "big", signed=False)
+
+
+def _u64be(number: int) -> bytes:
+    if number < 0 or number >= 1 << 64:
+        raise DatabaseError("integer is out of uint64 range")
+    return number.to_bytes(8, "big", signed=False)
 
 
 def _str_field(value: str) -> bytes:
@@ -969,6 +1614,130 @@ def _new_db_id(path: str | Path) -> str:
     return f"db:{uuid.uuid4()}"
 
 
+def _new_assertion_id() -> str:
+    return f"asrt:{uuid.uuid4().hex}"
+
+
+def _require_asrt_id(value: str, *, field: str) -> str:
+    if not isinstance(value, str) or not value.startswith("asrt:"):
+        raise DatabaseError(f"{field} must start with 'asrt:'")
+    suffix = value.removeprefix("asrt:")
+    if len(suffix) not in {32, 64} or any(ch not in "0123456789abcdef" for ch in suffix):
+        raise DatabaseError(f"{field} must contain 32 or 64 lowercase hex chars")
+    return value
+
+
+def _normalize_tx_operations(
+    operations: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, Any], ...]:
+    normalized: list[dict[str, Any]] = []
+    for raw in operations:
+        if not isinstance(raw, Mapping):
+            raise DatabaseError("tx operations must be mappings")
+        kind = raw.get("kind")
+        if kind == "assertion":
+            _require_exact_keys(raw, {"kind", "asrt_id", "assertion_digest"})
+            normalized.append(
+                {
+                    "kind": kind,
+                    "asrt_id": _require_asrt_id(raw.get("asrt_id"), field="asrt_id"),
+                    "assertion_digest": _require_token(
+                        raw.get("assertion_digest"),
+                        prefix="sha256:",
+                        field="assertion_digest",
+                    ),
+                }
+            )
+        elif kind == "revocation":
+            _require_exact_keys(raw, {"kind", "revoker_asrt_id", "revoked_asrt_id", "meta"})
+            raw_meta = raw.get("meta")
+            if not isinstance(raw_meta, (list, tuple)):
+                raise DatabaseError("revocation operation meta must be a sequence")
+            meta_entries: list[MetaEntry] = []
+            for entry in raw_meta:
+                if isinstance(entry, MetaEntry):
+                    meta_entries.append(entry)
+                    continue
+                if not isinstance(entry, Mapping):
+                    raise DatabaseError("tx operation meta entries must be mappings")
+                _require_exact_keys(entry, {"key", "kind", "value"})
+                meta_entries.append(
+                    MetaEntry(
+                        entry.get("key"),
+                        entry.get("kind"),
+                        _from_jsonable(entry.get("value")),
+                    )
+                )
+            normalized.append(
+                {
+                    "kind": kind,
+                    "revoker_asrt_id": _require_asrt_id(
+                        raw.get("revoker_asrt_id"),
+                        field="revoker_asrt_id",
+                    ),
+                    "revoked_asrt_id": _require_asrt_id(
+                        raw.get("revoked_asrt_id"),
+                        field="revoked_asrt_id",
+                    ),
+                    "meta": _normalize_meta_entries(tuple(meta_entries)),
+                }
+            )
+        elif kind in {"repair_add", "repair_remove"}:
+            _require_exact_keys(raw, {"kind", "asrt_id"})
+            normalized.append(
+                {
+                    "kind": kind,
+                    "asrt_id": _require_asrt_id(raw.get("asrt_id"), field="repair asrt_id"),
+                }
+            )
+        elif kind == "repair":
+            _require_exact_keys(
+                raw,
+                {"kind", "previous_state_digest", "rebuilt_state_digest", "reason"},
+            )
+            previous = raw.get("previous_state_digest")
+            rebuilt = raw.get("rebuilt_state_digest")
+            reason = raw.get("reason")
+            if not isinstance(previous, str) or not previous:
+                raise DatabaseError("repair previous_state_digest must be non-empty string")
+            if not isinstance(rebuilt, str):
+                raise DatabaseError("repair rebuilt_state_digest must be string")
+            decode_state(rebuilt)
+            if not isinstance(reason, str) or not reason:
+                raise DatabaseError("repair reason must be non-empty string")
+            normalized.append(
+                {
+                    "kind": kind,
+                    "previous_state_digest": previous,
+                    "rebuilt_state_digest": rebuilt,
+                    "reason": reason,
+                }
+            )
+        else:
+            raise DatabaseError(f"unsupported tx operation kind: {kind!r}")
+    return tuple(normalized)
+
+
+def _tx_operation_payload(operation: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_tx_operations((operation,))[0]
+    if normalized["kind"] != "revocation":
+        return dict(normalized)
+    return {
+        **normalized,
+        "meta": [
+            {"key": row.key, "kind": row.kind, "value": _to_jsonable(row.value)}
+            for row in normalized["meta"]
+        ],
+    }
+
+
+def _require_exact_keys(value: Mapping[str, Any], expected: set[str]) -> None:
+    if set(value) != expected:
+        raise DatabaseError(
+            f"unexpected tx operation fields: expected {sorted(expected)}, got {sorted(value)}"
+        )
+
+
 def _normalize_fact_tuple(fact_tuple: Sequence[tuple[str, Any]]) -> tuple[tuple[str, Any], ...]:
     if not isinstance(fact_tuple, tuple):
         raise DatabaseError("fact_tuple must be tuple of (tag, value) pairs")
@@ -994,18 +1763,11 @@ def _normalize_view_asrt_ids(values: Iterable[str]) -> tuple[str, ...]:
         items = tuple(values)
     except TypeError as exc:
         raise DatabaseError("view asrt_ids must be iterable[str]") from exc
-    return tuple(
-        sorted(
-            {
-                _require_token(value, prefix="asrt:", field="view asrt_id")
-                for value in items
-            }
-        )
-    )
+    return tuple(sorted({_require_asrt_id(value, field="view asrt_id") for value in items}))
 
 
 def _normalize_meta_entries(
-    rows: Sequence[MetaEntry | MetaRow | tuple[str, str, Any]]
+    rows: Sequence[MetaEntry | MetaRow | tuple[str, str, Any]],
 ) -> tuple[MetaEntry, ...]:
     result: list[MetaEntry] = []
     for row in rows:
@@ -1026,10 +1788,7 @@ def _normalize_meta_entries(
 
 
 def _canonical_meta_entries_bytes(rows: Sequence[MetaEntry]) -> bytes:
-    encoded = [
-        (row.key, row.kind, _meta_value_bytes(row.kind, row.value))
-        for row in rows
-    ]
+    encoded = [(row.key, row.kind, _meta_value_bytes(row.kind, row.value)) for row in rows]
     encoded.sort(key=lambda item: (item[0], item[1], item[2]))
     out = bytearray()
     out.extend(_u32be(len(encoded)))
@@ -1100,26 +1859,43 @@ def _to_jsonable(value: Any) -> Any:
     return value
 
 
+def _from_jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        if set(value) == {_JSON_BYTES_KEY} and isinstance(value[_JSON_BYTES_KEY], str):
+            return base64.b64decode(value[_JSON_BYTES_KEY].encode("ascii"))
+        return {str(key): _from_jsonable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_from_jsonable(item) for item in value]
+    return value
+
+
 __all__ = [
     "ASSERTION_V1_PREFIX",
     "DBDATA_V1_PREFIX",
     "DBTX_V1_PREFIX",
+    "DBTX_V2_PREFIX",
     "VIEW_V1_PREFIX",
     "AssertionInput",
     "AssertionRecord",
     "CommitResult",
     "Database",
     "DatabaseError",
+    "DatabaseIntegrityError",
+    "DatabaseLockedError",
     "DatabaseValue",
     "DatabaseWorkspacePaths",
     "DuplicateAssertionError",
     "FrozenAssertionSet",
+    "HeadConflictError",
     "MetaEntry",
+    "RevocationInput",
+    "RevocationRecord",
     "asrt_id_for",
     "assertion_digest_for",
     "canonical_bytes_assertion_v1",
     "canonical_bytes_dbdata_v1",
     "canonical_bytes_dbtx_v1",
+    "canonical_bytes_dbtx_v2",
     "canonical_bytes_view_v1",
     "resolve_database_workspace_paths",
     "schema_object_exists_for_workspace",

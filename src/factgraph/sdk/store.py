@@ -117,6 +117,7 @@ from factgraph.core.store.database import (
     Database,
     DatabaseError,
     FrozenAssertionSet as DatabaseFrozenAssertionSet,
+    RevocationInput,
     _read_tx_object,
     schema_object_exists_for_workspace,
     validate_schema_object_for_workspace,
@@ -362,11 +363,26 @@ def _database_asrt_ids_at_tx(db: Database, tx_id: str) -> set[str]:
     if paths is None:
         raise DatabaseError("tx lookup requires a durable Database workspace")
     current_tx_id: str | None = tx_id
-    asrt_ids: set[str] = set()
+    chain: list[dict[str, Any]] = []
+    seen_tx_ids: set[str] = set()
     while current_tx_id is not None:
+        if current_tx_id in seen_tx_ids:
+            raise DatabaseError("tx history contains a cycle")
+        seen_tx_ids.add(current_tx_id)
         payload = _read_tx_object(paths, current_tx_id)
-        asrt_ids.update(payload["added_asrt_ids"])
+        chain.append(payload)
         current_tx_id = payload["parent_tx_id"]
+
+    asrt_ids: set[str] = set()
+    for payload in reversed(chain):
+        for operation in payload["operations"]:
+            kind = operation["kind"]
+            if kind in {"assertion", "repair_add"}:
+                asrt_ids.add(operation["asrt_id"])
+            elif kind == "revocation":
+                asrt_ids.discard(operation["revoked_asrt_id"])
+            elif kind == "repair_remove":
+                asrt_ids.discard(operation["asrt_id"])
     return asrt_ids
 
 
@@ -2157,6 +2173,19 @@ class SDKStore:
                 "view-attached runtimes are read-only"
             )
         return self._database.commit_assertions(assertions)
+
+    def commit_changes(
+        self,
+        assertions: Sequence[AssertionInput],
+        revocations: Sequence[RevocationInput],
+    ) -> CommitResult:
+        if self._database is None:
+            raise SDKStoreError(
+                "fg.commit_changes(...) is only available on FactGraph.attach(db) runtimes"
+            )
+        if not self._attached_writable:
+            raise SDKStoreError("fg.commit_changes(...) is not available on view-attached runtimes")
+        return self._database.commit_changes(assertions, revocations)
 
     def batch(self, *, meta: dict[str, Any] | None = None):
         self._reject_attached_write("fg.batch")
@@ -4900,7 +4929,7 @@ def _evaluate_digest_safe(value: Any) -> Any:
 
 def _view_snapshot_asrt_id_for_claim(claim: Any) -> str:
     asrt_id = getattr(claim, "asrt_id", None)
-    if isinstance(asrt_id, str) and re.fullmatch(r"asrt:[0-9a-f]{64}", asrt_id):
+    if isinstance(asrt_id, str) and re.fullmatch(r"asrt:(?:[0-9a-f]{32}|[0-9a-f]{64})", asrt_id):
         return asrt_id
     return "asrt:" + sha256_hex(
         canonical_bytes_for_evaluate(

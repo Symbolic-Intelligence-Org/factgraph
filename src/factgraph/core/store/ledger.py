@@ -9,7 +9,7 @@ import warnings
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal
+from typing import Any, Callable, Iterator, Literal, Mapping, Sequence
 
 
 META_KINDS = {"str", "int", "float", "bool", "time", "json"}
@@ -76,6 +76,24 @@ class AppendResult:
 
 class DuplicateIngestKeyError(Exception):
     """Raised when an ingest key already exists and on_conflict='error'."""
+
+
+class LedgerHeadConflictError(Exception):
+    """Raised when a commit's expected head no longer matches ledger_meta."""
+
+
+@dataclass(frozen=True)
+class LedgerAssertionWrite:
+    claim: Claim
+    claim_args: tuple[ClaimArg, ...]
+    meta_rows: tuple[MetaRow, ...]
+    annotation_rows: tuple[AnnotationRow, ...] = ()
+
+
+@dataclass(frozen=True)
+class LedgerRevocationWrite:
+    revokes: Revokes
+    meta_rows: tuple[MetaRow, ...] = ()
 
 
 _DDL = """
@@ -301,13 +319,137 @@ class Ledger:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 yield conn, post_commit
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-            else:
                 conn.execute("COMMIT")
-                for hook in post_commit:
-                    hook()
+            except BaseException:
+                if conn.in_transaction:
+                    with suppress(Exception):
+                        conn.execute("ROLLBACK")
+                raise
+            for hook in post_commit:
+                hook()
+
+    def commit_batch(
+        self,
+        *,
+        assertions: Sequence[LedgerAssertionWrite],
+        revocations: Sequence[LedgerRevocationWrite],
+        expected_head_tx_id: str | None,
+        head_tx_id: str,
+        metadata: Mapping[str, str],
+    ) -> None:
+        """Atomically append a Database commit and advance its CAS-protected head.
+
+        Database owns transaction identity and digest computation.  Ledger owns
+        the single SQLite boundary: all factual rows, revocation rows and
+        lifecycle metadata become visible together, with in-memory indexes
+        updated only after COMMIT succeeds.
+        """
+        if not isinstance(head_tx_id, str) or not head_tx_id:
+            raise ValueError("head_tx_id must be non-empty string")
+        if expected_head_tx_id is not None and (
+            not isinstance(expected_head_tx_id, str) or not expected_head_tx_id
+        ):
+            raise ValueError("expected_head_tx_id must be non-empty string when provided")
+        normalized_metadata = dict(metadata)
+        if "head_tx_id" in normalized_metadata:
+            raise ValueError("metadata must not contain head_tx_id; use the dedicated argument")
+        for key, value in normalized_metadata.items():
+            if not isinstance(key, str) or not key:
+                raise ValueError("ledger metadata keys must be non-empty strings")
+            if not isinstance(value, str):
+                raise ValueError("ledger metadata values must be strings")
+
+        assertion_writes = tuple(assertions)
+        revocation_writes = tuple(revocations)
+        new_claim_ids: set[str] = set()
+        new_revoker_ids: set[str] = set()
+        for item in assertion_writes:
+            if not isinstance(item, LedgerAssertionWrite):
+                raise TypeError("assertions must contain LedgerAssertionWrite")
+            _validate_claim_input(item.claim, require_asrt_id=True)
+            _validate_claim_args_rows(list(item.claim_args))
+            _validate_meta_rows(list(item.meta_rows))
+            _validate_annotation_rows(list(item.annotation_rows))
+            asrt_id = item.claim.asrt_id
+            if asrt_id in new_claim_ids:
+                raise ValueError(f"duplicate asrt_id in batch: {asrt_id}")
+            if any(row.asrt_id != asrt_id for row in item.claim_args):
+                raise ValueError("claim_args asrt_id must match the batch claim")
+            if any(row.asrt_id != asrt_id for row in item.meta_rows):
+                raise ValueError("meta_rows asrt_id must match the batch claim")
+            if any(row.asrt_id != asrt_id for row in item.annotation_rows):
+                raise ValueError("annotation_rows asrt_id must match the batch claim")
+            new_claim_ids.add(asrt_id)
+
+        for item in revocation_writes:
+            if not isinstance(item, LedgerRevocationWrite):
+                raise TypeError("revocations must contain LedgerRevocationWrite")
+            _validate_revokes_row(item.revokes)
+            _validate_meta_rows(list(item.meta_rows))
+            revoker_id = item.revokes.revoker_asrt_id
+            if revoker_id in new_revoker_ids or revoker_id in new_claim_ids:
+                raise ValueError(f"duplicate revoker_asrt_id in batch: {revoker_id}")
+            if any(row.asrt_id != revoker_id for row in item.meta_rows):
+                raise ValueError("revocation meta_rows asrt_id must match revoker_asrt_id")
+            new_revoker_ids.add(revoker_id)
+
+        with self._write_session() as (conn, post_commit):
+            existing_ids = new_claim_ids | new_revoker_ids
+            for asrt_id in existing_ids:
+                if self._is_known_asrt_id(asrt_id):
+                    raise ValueError(f"duplicate asrt_id: {asrt_id}")
+
+            if expected_head_tx_id is None:
+                cursor = conn.execute(
+                    "INSERT OR IGNORE INTO ledger_meta (key, value) VALUES ('head_tx_id', ?)",
+                    (head_tx_id,),
+                )
+            else:
+                cursor = conn.execute(
+                    "UPDATE ledger_meta SET value = ? WHERE key = 'head_tx_id' AND value = ?",
+                    (head_tx_id, expected_head_tx_id),
+                )
+            if cursor.rowcount != 1:
+                raise LedgerHeadConflictError(f"head CAS failed: expected {expected_head_tx_id!r}")
+
+            for item in assertion_writes:
+                self._insert_claim(conn, item.claim, item.claim.asrt_id)
+                self._insert_claim_args(conn, list(item.claim_args), item.claim.asrt_id)
+                self._insert_meta_rows(conn, list(item.meta_rows), item.claim.asrt_id)
+                if item.annotation_rows:
+                    self._insert_annotation_rows(conn, list(item.annotation_rows))
+
+            for item in revocation_writes:
+                conn.execute(
+                    "INSERT INTO revokes (revoker_asrt_id, revoked_asrt_id) VALUES (?, ?)",
+                    (item.revokes.revoker_asrt_id, item.revokes.revoked_asrt_id),
+                )
+                self._insert_meta_rows(
+                    conn,
+                    list(item.meta_rows),
+                    item.revokes.revoker_asrt_id,
+                )
+
+            conn.executemany(
+                """
+                INSERT INTO ledger_meta (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                sorted(normalized_metadata.items()),
+            )
+
+            def _apply_batch_indexes() -> None:
+                for item in assertion_writes:
+                    self._idx_add_claim(item.claim)
+                    self._idx_add_claim_args(list(item.claim_args))
+                    self._idx_add_meta(list(item.meta_rows))
+                    if item.annotation_rows:
+                        self._idx_add_annotation(list(item.annotation_rows))
+                for item in revocation_writes:
+                    self._idx_add_revoke(item.revokes)
+                    self._idx_add_meta(list(item.meta_rows))
+
+            post_commit.append(_apply_batch_indexes)
 
     def _open_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(
@@ -438,6 +580,7 @@ class Ledger:
                     "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, 'assertion')",
                     (idempotency.ingest_key, effective_asrt_id),
                 )
+
             def _apply_assertion_indexes() -> None:
                 self._idx_add_claim(actual_claim)
                 self._idx_add_claim_args(actual_claim_args)
@@ -500,6 +643,7 @@ class Ledger:
                     "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, 'revocation')",
                     (idempotency.ingest_key, effective_revoker_id),
                 )
+
             def _apply_revocation_indexes() -> None:
                 self._idx_add_revoke(actual_revokes)
                 self._idx_add_meta(actual_meta_rows)
@@ -639,7 +783,11 @@ class Ledger:
     ) -> list[ClaimArg]:
         with self._write_lock:
             self._ensure_open()
-            rows = self._claim_args_by_asrt_id.get(asrt_id, []) if asrt_id is not None else self._claim_args
+            rows = (
+                self._claim_args_by_asrt_id.get(asrt_id, [])
+                if asrt_id is not None
+                else self._claim_args
+            )
             if idx is not None:
                 rows = [row for row in rows if row.idx == idx]
             if tag is not None:
@@ -771,11 +919,35 @@ class Ledger:
     def get_ledger_meta(self, key: str) -> str | None:
         """Return the stored ledger_meta value for key, or None when absent."""
         with self._write_lock:
-            row = self._get_connection().execute(
-                "SELECT value FROM ledger_meta WHERE key = ?",
-                (key,),
-            ).fetchone()
+            row = (
+                self._get_connection()
+                .execute(
+                    "SELECT value FROM ledger_meta WHERE key = ?",
+                    (key,),
+                )
+                .fetchone()
+            )
             return str(row["value"]) if row is not None else None
+
+    def get_ledger_meta_snapshot(self, keys: Sequence[str]) -> dict[str, str | None]:
+        """Read lifecycle metadata under one Ledger lock acquisition."""
+        normalized = tuple(keys)
+        if any(not isinstance(key, str) or not key for key in normalized):
+            raise ValueError("ledger metadata keys must be non-empty strings")
+        if not normalized:
+            return {}
+        placeholders = ",".join("?" for _ in normalized)
+        with self._write_lock:
+            rows = (
+                self._get_connection()
+                .execute(
+                    f"SELECT key, value FROM ledger_meta WHERE key IN ({placeholders})",
+                    normalized,
+                )
+                .fetchall()
+            )
+            found = {str(row["key"]): str(row["value"]) for row in rows}
+            return {key: found.get(key) for key in normalized}
 
     def set_ledger_meta(self, key: str, value: str) -> None:
         """Insert a ledger_meta value when key is absent; existing values are preserved."""
@@ -809,6 +981,7 @@ class Ledger:
                     "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
                     [(row.asrt_id, row.key, row.kind, _enc(row.value)) for row in actual_rows],
                 )
+
             def _apply_meta_replace() -> None:
                 self._clear_meta_indexes()
                 self._idx_add_meta(actual_rows)
@@ -881,7 +1054,9 @@ class Ledger:
             self._meta_by_kind.setdefault(row.kind, []).append(row)
             self._meta_by_key.setdefault(row.key, []).append(row)
             self._meta_by_asrt_id_key.setdefault((row.asrt_id, row.key), []).append(row)
-            self._meta_by_asrt_id_key_kind.setdefault((row.asrt_id, row.key, row.kind), []).append(row)
+            self._meta_by_asrt_id_key_kind.setdefault((row.asrt_id, row.key, row.kind), []).append(
+                row
+            )
             if row.key == "ingest_key" and row.kind == "str" and isinstance(row.value, str):
                 self._meta_ingest_key_asrt_ids.setdefault(row.value, []).append(row.asrt_id)
 
@@ -948,7 +1123,9 @@ class Ledger:
         for row in conn.execute(
             "SELECT asrt_id, key, kind, value FROM meta_rows ORDER BY id"
         ).fetchall():
-            self._idx_add_meta([MetaRow(row["asrt_id"], row["key"], row["kind"], _dec(row["value"]))])
+            self._idx_add_meta(
+                [MetaRow(row["asrt_id"], row["key"], row["kind"], _dec(row["value"]))]
+            )
 
         for row in conn.execute(
             "SELECT asrt_id, namespace, category, key, kind, value, origin, derivation"
@@ -992,7 +1169,9 @@ class Ledger:
             if entry is not None:
                 asrt_id, kind = entry
                 if kind == "assertion":
-                    if asrt_id in self._claim_by_asrt_id and not self.has_active_revocation(asrt_id):
+                    if asrt_id in self._claim_by_asrt_id and not self.has_active_revocation(
+                        asrt_id
+                    ):
                         return asrt_id
                 elif kind == "revocation" and asrt_id in self._revoker_asrt_ids:
                     return asrt_id
@@ -1015,7 +1194,9 @@ class Ledger:
                     "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, ?)",
                     (ingest_key, asrt_id, kind),
                 )
-                post_commit.append(lambda: self._ingest_keys.__setitem__(ingest_key, (asrt_id, kind)))
+                post_commit.append(
+                    lambda: self._ingest_keys.__setitem__(ingest_key, (asrt_id, kind))
+                )
         except Exception:
             return
 
@@ -1030,13 +1211,17 @@ class Ledger:
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"duplicate asrt_id: {asrt_id}") from exc
 
-    def _insert_claim_args(self, conn: sqlite3.Connection, rows: list[ClaimArg], asrt_id: str) -> None:
+    def _insert_claim_args(
+        self, conn: sqlite3.Connection, rows: list[ClaimArg], asrt_id: str
+    ) -> None:
         conn.executemany(
             "INSERT INTO claim_args (asrt_id, idx, val_atom, tag) VALUES (?, ?, ?, ?)",
             [(asrt_id, row.idx, _enc(row.val_atom), row.tag) for row in rows],
         )
 
-    def _insert_meta_rows(self, conn: sqlite3.Connection, rows: list[MetaRow], asrt_id: str) -> None:
+    def _insert_meta_rows(
+        self, conn: sqlite3.Connection, rows: list[MetaRow], asrt_id: str
+    ) -> None:
         conn.executemany(
             "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
             [(asrt_id, row.key, row.kind, _enc(row.value)) for row in rows],
