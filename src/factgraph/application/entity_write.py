@@ -262,12 +262,12 @@ def apply_write_plan(
         )
 
     if database is not None:
-        return _apply_write_plan_to_database(
-            plan,
+        return apply_write_plans(
+            (plan,),
             store=store,
             index=index,
             database=database,
-        )
+        )[0]
 
     applied: list[AppliedOpResultDTO] = []
     for op_index, op in enumerate(plan.planned_ops):
@@ -297,32 +297,74 @@ def apply_write_plan(
     )
 
 
-def _apply_write_plan_to_database(
-    plan: EntityWritePlan,
+def apply_write_plans(
+    plans: Sequence[EntityWritePlan],
     *,
     store: Store,
     index: SchemaIndex,
     database: Database,
-) -> EntityWriteResult:
+) -> tuple[EntityWriteResult, ...]:
+    """Apply multiple write plans as one Database transaction.
+
+    This is the application-layer batch boundary. Every planned operation is
+    translated and retract-guarded before the single ``commit_changes`` call.
+    Result ``op_index`` values remain local to each input plan.
+    """
+    if not plans:
+        return ()
+    for plan in plans:
+        if not isinstance(plan, EntityWritePlan):
+            raise TypeError("plans must contain EntityWritePlan")
+    if any(not plan.can_apply for plan in plans):
+        return tuple(
+            EntityWriteResult(
+                resolved_target=plan.resolved_target,
+                errors=plan.errors,
+                warnings=plan.warnings,
+            )
+            for plan in plans
+        )
+
     try:
-        applied = _commit_planned_ops_to_database(
-            plan.planned_ops,
+        flattened_ops = tuple(op for plan in plans for op in plan.planned_ops)
+        flattened_applied = _commit_planned_ops_to_database(
+            flattened_ops,
             store=store,
             index=index,
             database=database,
             enforce_retract_guard=True,
         )
-        return EntityWriteResult(
-            resolved_target=plan.resolved_target,
-            applied=applied,
-            warnings=plan.warnings,
-        )
+        results: list[EntityWriteResult] = []
+        offset = 0
+        for plan in plans:
+            plan_applied = tuple(
+                AppliedOpResultDTO(
+                    op_index=local_index,
+                    status=row.status,
+                    assertion_id=row.assertion_id,
+                )
+                for local_index, row in enumerate(
+                    flattened_applied[offset : offset + len(plan.planned_ops)]
+                )
+            )
+            offset += len(plan.planned_ops)
+            results.append(
+                EntityWriteResult(
+                    resolved_target=plan.resolved_target,
+                    applied=plan_applied,
+                    warnings=plan.warnings,
+                )
+            )
+        return tuple(results)
     except Exception as exc:
-        return EntityWriteResult(
-            resolved_target=plan.resolved_target,
-            applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
-            errors=(_to_error_dto(exc),),
-            warnings=plan.warnings,
+        return tuple(
+            EntityWriteResult(
+                resolved_target=plan.resolved_target,
+                applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
+                errors=(_to_error_dto(exc),),
+                warnings=plan.warnings,
+            )
+            for plan in plans
         )
 
 
@@ -343,24 +385,79 @@ def _commit_planned_ops_to_database(
         for op in planned_ops:
             if op.op == "retract":
                 _check_generic_retract_allowed(op, store=store, index=index)
-    assertions, revocations = planned_ops_to_inputs(planned_ops, index=index)
-    if not assertions and not revocations:
-        return ()
-    commit = database.commit_changes(assertions, revocations)
-    assertion_records = iter(commit.assertions)
-    revocation_records = iter(commit.revocations)
+    assertion_inputs, revocation_inputs = planned_ops_to_inputs(planned_ops, index=index)
+    assertion_iter = iter(assertion_inputs)
+    revocation_index = 0
+    kept_assertions: list[AssertionInput] = []
+    kept_by_ingest_key: dict[str, int] = {}
+    resolutions: list[tuple[str, str | int]] = []
+    for op in planned_ops:
+        if op.op == "retract":
+            resolutions.append(("revocation", revocation_index))
+            revocation_index += 1
+            continue
+        assertion = next(assertion_iter)
+        ingest_key = _meta_entry_str(assertion.meta, "ingest_key")
+        existing = _active_assertion_for_ingest_key(store, ingest_key)
+        if existing is not None:
+            resolutions.append(("existing", existing))
+            continue
+        kept_index = kept_by_ingest_key.get(ingest_key)
+        if kept_index is None:
+            kept_index = len(kept_assertions)
+            kept_assertions.append(assertion)
+            kept_by_ingest_key[ingest_key] = kept_index
+        resolutions.append(("assertion", kept_index))
+
+    if not kept_assertions and not revocation_inputs:
+        return tuple(
+            AppliedOpResultDTO(
+                op_index=op_index,
+                status="applied",
+                assertion_id=str(resolution),
+            )
+            for op_index, (kind, resolution) in enumerate(resolutions)
+            if kind == "existing"
+        )
+    commit = database.commit_changes(kept_assertions, revocation_inputs)
+    applied_ids: list[str] = []
+    for kind, resolution in resolutions:
+        if kind == "existing":
+            applied_ids.append(str(resolution))
+        elif kind == "assertion":
+            applied_ids.append(commit.assertions[int(resolution)].asrt_id)
+        else:
+            applied_ids.append(commit.revocations[int(resolution)].revoker_asrt_id)
     return tuple(
         AppliedOpResultDTO(
             op_index=op_index,
             status="applied",
-            assertion_id=(
-                next(revocation_records).revoker_asrt_id
-                if op.op == "retract"
-                else next(assertion_records).asrt_id
-            ),
+            assertion_id=assertion_id,
         )
-        for op_index, op in enumerate(planned_ops)
+        for op_index, assertion_id in enumerate(applied_ids)
     )
+
+
+def _meta_entry_str(meta: Sequence[MetaEntry], key: str) -> str:
+    values = [entry.value for entry in meta if entry.key == key and entry.kind == "str"]
+    if len(values) != 1 or not isinstance(values[0], str):
+        raise EntityWriteError(
+            f"translated assertion requires exactly one string meta[{key}]",
+            code="INVALID_TRANSLATED_META",
+        )
+    return values[0]
+
+
+def _active_assertion_for_ingest_key(store: Store, ingest_key: str) -> str | None:
+    for row in store.ledger.find_meta(key="ingest_key", kind="str"):
+        if row.value != ingest_key:
+            continue
+        if store.ledger.get_claim(row.asrt_id) is None:
+            continue
+        if store.ledger.has_active_revocation(row.asrt_id):
+            continue
+        return row.asrt_id
+    return None
 
 
 # ---------- Slice 3a Step 2: fg.entities.create eager emission planner + executor ----------
@@ -1154,6 +1251,7 @@ __all__ = [
     "apply_create_plan",
     "apply_delete_plan",
     "apply_write_plan",
+    "apply_write_plans",
     "plan_create_command",
     "plan_delete_command",
     "plan_write_command",

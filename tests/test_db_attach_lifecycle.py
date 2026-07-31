@@ -162,6 +162,8 @@ class DBAttachLifecycleTests(unittest.TestCase):
                 scoped.entities.create(User, user_id="blocked")
             with self.assertRaisesRegex(SDKStoreError, "view-attached.*read-only"):
                 scoped.entities.delete(User, user_id="u-view")
+            with self.assertRaisesRegex(SDKStoreError, "view-attached.*read-only"):
+                scoped.batch()
 
     def test_attach_returns_database_bound_store_and_commit_assertions_routes_to_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -240,7 +242,6 @@ class DBAttachLifecycleTests(unittest.TestCase):
             "fg.entities.edit": lambda: fg.entities.edit(User, user_id="u-1"),
             "fg.ingest": lambda: fg.schema.ingest({}),
             "fg.add_schema_classes": lambda: fg.add_schema_classes(Account),
-            "fg.batch": lambda: fg.batch(),
             "fg.save_workspace": lambda: fg.save_workspace(),
         }
 
@@ -251,12 +252,63 @@ class DBAttachLifecycleTests(unittest.TestCase):
                     with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
                         call()
 
-    def test_attached_batch_is_rejected_before_record_exists_plan_can_be_built(self) -> None:
+    def test_attached_batch_commits_multiple_entities_in_one_tx(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
         fg = FactGraph.attach(db, schema_classes=[User])
+        before = db.head()
 
-        with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
-            fg.batch()
+        with fg.batch(meta={"source": "attached-batch"}) as tx:
+            first = tx.entity(User, user_id="batch-1")
+            first.name.set("Ada")
+            first.tag.add("admin")
+            second = tx.entity(User, user_id="batch-2")
+            second.name.set("Grace")
+            committed = tx.commit()
+
+        after = db.head()
+        self.assertEqual(after.tx_seq, before.tx_seq + 1)
+        self.assertEqual(set(committed.apply_result.refs_by_handle_id), {first.handle_id, second.handle_id})
+        self.assertGreaterEqual(len(committed.apply_result.assertion_ids), 5)
+        self.assertEqual(
+            {
+                row.value
+                for asrt_id in committed.apply_result.assertion_ids
+                for row in fg.ledger.find_meta(asrt_id=asrt_id, key="tx_id")
+            },
+            {after.tx_id},
+        )
+        self.assertEqual(fg.entities.get(User, user_id="batch-1").name, "Ada")
+        self.assertEqual(fg.entities.get(User, user_id="batch-2").name, "Grace")
+
+    def test_attached_wire_batch_plan_commits_in_one_tx(self) -> None:
+        from factgraph.sdk.batch import WireBatchPlan
+
+        source = FactGraph.create(schema_classes=[User])
+        with source.batch() as tx:
+            user = tx.entity(User, user_id="wire-1")
+            user.name.set("Wire")
+            payload = tx.preview(objects=[user]).export(source).to_dict()
+
+        db = Database.create(schema_ir=_schema_ir())
+        target = FactGraph.attach(db, schema_classes=[User])
+        before = db.head()
+        wire = WireBatchPlan.from_dict(payload)
+        result = wire.apply(target)
+        after = db.head()
+
+        self.assertEqual(after.tx_seq, before.tx_seq + 1)
+        self.assertEqual(
+            {
+                row.value
+                for asrt_id in result.assertion_ids
+                for row in target.ledger.find_meta(asrt_id=asrt_id, key="tx_id")
+            },
+            {after.tx_id},
+        )
+        self.assertEqual(target.entities.get(User, user_id="wire-1").name, "Wire")
+        repeated = wire.apply(target)
+        self.assertEqual(db.head(), after)
+        self.assertEqual(repeated.assertion_ids, result.assertion_ids)
 
     def test_attached_manager_write_paths_are_rejected(self) -> None:
         db = Database.create(schema_ir=_schema_ir())

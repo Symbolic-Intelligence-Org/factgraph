@@ -2199,7 +2199,7 @@ class SDKStore:
         return self._database.commit_changes(assertions, revocations)
 
     def batch(self, *, meta: dict[str, Any] | None = None):
-        self._reject_attached_write("fg.batch")
+        self._database_for_application_write("fg.batch")
         from .batch import SDKBatchTx
 
         return SDKBatchTx(self, meta=meta)

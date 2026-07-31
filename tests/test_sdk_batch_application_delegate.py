@@ -80,7 +80,7 @@ class SDKBatchApplicationDelegateTests(unittest.TestCase):
         self.assertEqual(user_snap.lives_in, country.e_ref)
         self.assertEqual(country_snap.name, "Germany")
 
-    def test_batch_preview_falls_back_for_raw_entity_ref_values(self) -> None:
+    def test_batch_preview_delegates_managed_raw_entity_ref_values(self) -> None:
         sdk = SDKStore([Country, User])
         country_ref = sdk.entities.ref(Country, code="DE")
         sdk.fields.set(Country.name, country_ref, "Germany")
