@@ -445,6 +445,41 @@ The atom line's `repr_text` is the schema-authored / default-rendered text (§4.
 
 **Unsupported / invalid_request** — `repr` is `None`. Read `errors[*].code` + `errors[*].message`.
 
+### 4.5.1 Selected rule programs
+
+`fg.eval.evaluate_program(program, goal)` exposes the same two-level contract for
+an explicitly selected Horn program:
+
+```python
+result = fg.eval.evaluate_program(program, goal)
+proof = result.explain()
+
+proof.status
+proof.evidence       # canonical EvidenceGraph from this evaluation snapshot
+proof.repr           # deterministic walk of proof.evidence
+proof.steps          # recursive native RuleRef support receipts
+proof.checked_scope  # engine, rule-set, premise-scope and view digests
+proof.narrate()      # canonical narrate_evidence(proof.evidence, ...)
+```
+
+For an entailed goal, `steps` retains the recursive RuleRef receipts and
+`evidence` projects that exact selected proof into the standard
+`EvidenceGraph`/`EvidenceTree` model, with original assertion ids in
+`EvidenceAtom.verdict.support`. `repr` and `narrate()` are therefore two
+renderings of the same structural artifact. For a non-entailed closed goal, the
+explanation reports `closed_goal_not_entailed`, preserves the exact checked
+scope, and runs the canonical native prober for every selected rule that can
+produce the goal. The resulting graph carries condition-level
+`Holds`/`Fails`/`NotReached` verdicts and joins from the selected program only.
+Pre-materialized conclusions from outside that selected program cannot satisfy
+or rewrite this explanation.
+
+Program narration is computed during evaluation and retained on the immutable
+result. Calling `result.explain().narrate()` later performs no ledger read and no
+re-evaluation, so facts appended after the decision cannot rewrite its account.
+Applications that persist decisions should store `evidence`, `steps`,
+`checked_scope`, and `narrate()` together as one append-only evaluation receipt.
+
 ### 4.6 Per-engine fidelity today
 
 | Engine | layout | paths | Notes |
