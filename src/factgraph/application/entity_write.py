@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
-from factgraph.core.evidence.write_protocol import add_field, retract_by_asrt, set_field
-from factgraph.core.store import Store
+from factgraph.core.evidence.write_protocol import (
+    _compute_ingest_key,
+    _infer_meta_kind,
+    _normalize_meta,
+    add_field,
+    now_epoch_nanos,
+    retract_by_asrt,
+    set_field,
+)
+from factgraph.core.store import AssertionInput, MetaEntry, RevocationInput, Store
 from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
@@ -68,6 +77,111 @@ class EntityWriteError(ValueError):
             path=self.path,
             details=self.details,
         )
+
+
+def planned_ops_to_inputs(
+    planned_ops: Sequence[PlannedOpDTO],
+    *,
+    index: SchemaIndex,
+) -> tuple[list[AssertionInput], list[RevocationInput]]:
+    """Translate application write-plan operations into Database commit DTOs.
+
+    The translation preserves the metadata produced by the shipped evidence
+    write protocol. In particular, assertion inputs receive ``ingested_at``
+    and ``ingest_key`` rows, while revocations receive ``ingested_at`` and
+    ``revoked_asrt_id`` rows. Database-owned digest/tx metadata remains the
+    responsibility of ``Database.commit_changes``.
+    """
+    if isinstance(planned_ops, (str, bytes)) or not isinstance(planned_ops, Sequence):
+        raise TypeError("planned_ops must be a sequence of PlannedOpDTO")
+    if not isinstance(index, SchemaIndex):
+        raise TypeError("index must be SchemaIndex")
+
+    assertions: list[AssertionInput] = []
+    revocations: list[RevocationInput] = []
+    for op in planned_ops:
+        if not isinstance(op, PlannedOpDTO):
+            raise TypeError("planned_ops must contain PlannedOpDTO")
+
+        e_ref = _encoded_ref(op.target, index=index)
+        if op.op == "record_exists":
+            pred_id = entity_info(index, op.target.entity_type).exists_predicate_id
+            rest_terms: list[tuple[str, Any]] = []
+        elif op.op in {"set", "add"}:
+            assert op.field is not None and op.value is not None
+            pred_info = field_predicate(index, op.field.entity_type, op.field.field_name)
+            field_type = field_value_type(index, op.field.entity_type, op.field.field_name)
+            try:
+                validate_field_value(op.value, pred_info=pred_info)
+            except FieldValueValidationError as exc:
+                raise EntityWriteError(
+                    str(exc),
+                    code=exc.code,
+                    path=exc.path,
+                    details=exc.details,
+                ) from exc
+            pred_id = pred_info.pred_id
+            rest_terms = [_rest_term_for_value(op.value, field_type=field_type, index=index)]
+        else:
+            assert op.assertion_id is not None
+            revocations.append(
+                RevocationInput(
+                    revoked_asrt_id=op.assertion_id,
+                    meta=_revocation_meta_entries(
+                        op.assertion_id,
+                        dict(op.meta) if op.meta else None,
+                    ),
+                )
+            )
+            continue
+
+        assertions.append(
+            AssertionInput(
+                pred_id=pred_id,
+                fact_tuple=(("entity_ref", e_ref), *rest_terms),
+                meta=_assertion_meta_entries(
+                    pred_id,
+                    e_ref,
+                    rest_terms,
+                    dict(op.meta) if op.meta else None,
+                ),
+            )
+        )
+    return assertions, revocations
+
+
+def _assertion_meta_entries(
+    pred_id: str,
+    e_ref: str,
+    rest_terms: list[tuple[str, Any]],
+    meta: dict[str, Any] | None,
+) -> tuple[MetaEntry, ...]:
+    normalized = _normalize_meta(meta)
+    ingest_key = _compute_ingest_key(pred_id, e_ref, rest_terms, normalized)
+    return (
+        MetaEntry("ingested_at", "time", now_epoch_nanos()),
+        MetaEntry("ingest_key", "str", ingest_key),
+        *_user_meta_entries(normalized),
+    )
+
+
+def _revocation_meta_entries(
+    revoked_asrt_id: str,
+    meta: dict[str, Any] | None,
+) -> tuple[MetaEntry, ...]:
+    normalized = _normalize_meta(meta)
+    return (
+        MetaEntry("ingested_at", "time", now_epoch_nanos()),
+        MetaEntry("revoked_asrt_id", "str", revoked_asrt_id),
+        *_user_meta_entries(normalized),
+    )
+
+
+def _user_meta_entries(meta: dict[str, Any]) -> tuple[MetaEntry, ...]:
+    return tuple(
+        MetaEntry(key, _infer_meta_kind(key, meta[key]), meta[key])
+        for key in sorted(meta)
+    )
 
 
 def plan_write_command(
@@ -914,6 +1028,7 @@ __all__ = [
     "plan_create_command",
     "plan_delete_command",
     "plan_write_command",
+    "planned_ops_to_inputs",
 ]
 # Note:``_apply_entity_delete_retract`` is intentionally **NOT** in __all__。
 # It is the path-bound private helper per SF3 P1 amend(see module docstring

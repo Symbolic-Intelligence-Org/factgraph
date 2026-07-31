@@ -9,6 +9,7 @@ from factgraph.application import (
     field_predicate,
     hydrate_entity,
     plan_write_command,
+    planned_ops_to_inputs,
     resolve_selector,
 )
 from factgraph.application.protocol import (
@@ -18,8 +19,9 @@ from factgraph.application.protocol import (
     EntityWriteResult,
     FieldMutation,
     FieldPath,
+    PlannedOpDTO,
 )
-from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.evidence.write_protocol import WriteProtocolError, set_field
 from factgraph.core.store import Store
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
@@ -59,6 +61,68 @@ def _write_entity_exists(store: Store, index, ref) -> None:
 
 
 class ApplicationEntityWriteTests(unittest.TestCase):
+    def test_planned_ops_to_inputs_preserves_fact_shapes_and_write_metadata(self) -> None:
+        _store, index = _build_store()
+        target = resolve_selector(
+            EntitySelector(entity_type="User", identity={"name": "alice", "locale": "en"}),
+            index=index,
+        )
+
+        assertions, revocations = planned_ops_to_inputs(
+            (
+                PlannedOpDTO(op="record_exists", target=target, meta={"source": "unit"}),
+                PlannedOpDTO(
+                    op="add",
+                    target=target,
+                    field=FieldPath(entity_type="User", field_name="tag"),
+                    value="admin",
+                    meta={"source": "unit", "priority": 7},
+                ),
+                PlannedOpDTO(
+                    op="retract",
+                    target=target,
+                    field=FieldPath(entity_type="User", field_name="tag"),
+                    assertion_id="asrt:" + "1" * 32,
+                    meta={"note": "cleanup"},
+                ),
+            ),
+            index=index,
+        )
+
+        self.assertEqual(len(assertions), 2)
+        self.assertEqual(len(revocations), 1)
+        self.assertEqual(assertions[0].fact_tuple, (("entity_ref", target.encoded_ref),))
+        self.assertEqual(
+            assertions[1].fact_tuple,
+            (("entity_ref", target.encoded_ref), ("string", "admin")),
+        )
+        assertion_meta = {row.key: (row.kind, row.value) for row in assertions[1].meta}
+        self.assertEqual(assertion_meta["source"], ("str", "unit"))
+        self.assertEqual(assertion_meta["priority"], ("int", 7))
+        self.assertEqual(assertion_meta["ingested_at"][0], "time")
+        self.assertTrue(str(assertion_meta["ingest_key"][1]).startswith("sha256:"))
+        revocation_meta = {row.key: (row.kind, row.value) for row in revocations[0].meta}
+        self.assertEqual(revocation_meta["revoked_asrt_id"], ("str", "asrt:" + "1" * 32))
+        self.assertEqual(revocation_meta["note"], ("str", "cleanup"))
+        self.assertEqual(revocation_meta["ingested_at"][0], "time")
+
+    def test_planned_ops_to_inputs_rejects_invalid_meta_like_legacy_writer(self) -> None:
+        _store, index = _build_store()
+        target = resolve_selector(
+            EntitySelector(entity_type="User", identity={"name": "alice", "locale": "en"}),
+            index=index,
+        )
+        op = PlannedOpDTO(
+            op="add",
+            target=target,
+            field=FieldPath(entity_type="User", field_name="tag"),
+            value="admin",
+            meta={"ingested_at": 1},
+        )
+
+        with self.assertRaisesRegex(WriteProtocolError, "reserved and system-managed"):
+            planned_ops_to_inputs((op,), index=index)
+
     def test_plan_write_command_creates_missing_target_with_identity_bundle(self) -> None:
         store, index = _build_store()
 
