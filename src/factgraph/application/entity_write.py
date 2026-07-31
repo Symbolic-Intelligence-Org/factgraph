@@ -305,34 +305,12 @@ def _apply_write_plan_to_database(
     database: Database,
 ) -> EntityWriteResult:
     try:
-        if database._ledger_for_attach() is not store.ledger:
-            raise EntityWriteError(
-                "database and store must share the same Ledger",
-                code="DATABASE_STORE_MISMATCH",
-            )
-        for op in plan.planned_ops:
-            if op.op == "retract":
-                _check_generic_retract_allowed(op, store=store, index=index)
-        assertions, revocations = planned_ops_to_inputs(plan.planned_ops, index=index)
-        if not assertions and not revocations:
-            return EntityWriteResult(
-                resolved_target=plan.resolved_target,
-                warnings=plan.warnings,
-            )
-        commit = database.commit_changes(assertions, revocations)
-        assertion_records = iter(commit.assertions)
-        revocation_records = iter(commit.revocations)
-        applied = tuple(
-            AppliedOpResultDTO(
-                op_index=op_index,
-                status="applied",
-                assertion_id=(
-                    next(revocation_records).revoker_asrt_id
-                    if op.op == "retract"
-                    else next(assertion_records).asrt_id
-                ),
-            )
-            for op_index, op in enumerate(plan.planned_ops)
+        applied = _commit_planned_ops_to_database(
+            plan.planned_ops,
+            store=store,
+            index=index,
+            database=database,
+            enforce_retract_guard=True,
         )
         return EntityWriteResult(
             resolved_target=plan.resolved_target,
@@ -346,6 +324,43 @@ def _apply_write_plan_to_database(
             errors=(_to_error_dto(exc),),
             warnings=plan.warnings,
         )
+
+
+def _commit_planned_ops_to_database(
+    planned_ops: Sequence[PlannedOpDTO],
+    *,
+    store: Store,
+    index: SchemaIndex,
+    database: Database,
+    enforce_retract_guard: bool,
+) -> tuple[AppliedOpResultDTO, ...]:
+    if database._ledger_for_attach() is not store.ledger:
+        raise EntityWriteError(
+            "database and store must share the same Ledger",
+            code="DATABASE_STORE_MISMATCH",
+        )
+    if enforce_retract_guard:
+        for op in planned_ops:
+            if op.op == "retract":
+                _check_generic_retract_allowed(op, store=store, index=index)
+    assertions, revocations = planned_ops_to_inputs(planned_ops, index=index)
+    if not assertions and not revocations:
+        return ()
+    commit = database.commit_changes(assertions, revocations)
+    assertion_records = iter(commit.assertions)
+    revocation_records = iter(commit.revocations)
+    return tuple(
+        AppliedOpResultDTO(
+            op_index=op_index,
+            status="applied",
+            assertion_id=(
+                next(revocation_records).revoker_asrt_id
+                if op.op == "retract"
+                else next(assertion_records).asrt_id
+            ),
+        )
+        for op_index, op in enumerate(planned_ops)
+    )
 
 
 # ---------- Slice 3a Step 2: fg.entities.create eager emission planner + executor ----------
@@ -420,14 +435,13 @@ def apply_create_plan(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None = None,
 ) -> EntityCreateResult:
     """Execute the planned materialization ops atomically per ADR-IC §4.2。
 
-    Reuses the same ``_apply_op`` dispatcher as ``apply_write_plan`` so emission
-    semantics are byte-identical to the shipped lazy materialization path。If
-    any planned op fails the whole result surfaces the error(no partial writes
-    are leaked through the result DTO,though ledger atomicity is governed by
-    the write_protocol layer per Q-PR1 carve-out boundary)。
+    The legacy Store route reuses ``_apply_op``. The Database-backed route
+    translates the complete plan and calls ``Database.commit_changes`` once,
+    so Identity and ``:exists`` emission share one tx and head advance.
     """
     if not plan.can_apply:
         return EntityCreateResult(
@@ -435,6 +449,28 @@ def apply_create_plan(
             errors=plan.errors,
             warnings=plan.warnings,
         )
+
+    if database is not None:
+        try:
+            applied = _commit_planned_ops_to_database(
+                plan.planned_ops,
+                store=store,
+                index=index,
+                database=database,
+                enforce_retract_guard=True,
+            )
+            return EntityCreateResult(
+                resolved_target=plan.resolved_target,
+                applied=applied,
+                warnings=plan.warnings,
+            )
+        except Exception as exc:
+            return EntityCreateResult(
+                resolved_target=plan.resolved_target,
+                applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
+                errors=(_to_error_dto(exc),),
+                warnings=plan.warnings,
+            )
 
     applied: list[AppliedOpResultDTO] = []
     for op_index, op in enumerate(plan.planned_ops):
@@ -559,15 +595,14 @@ def apply_delete_plan(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None = None,
 ) -> EntityDeleteResult:
     """Execute a whole-entity retract plan via the path-bound private helper。
 
-    Per SF3 P1 amend:this executor calls ``_apply_entity_delete_retract``
-    **directly** on each planned retract op,NOT through generic ``_apply_op``。
-    ``_apply_op`` continues to enforce Slice 2 ``check_retract_allowed`` on
-    every retract — any application-level caller routing through the generic
-    dispatcher hits the guard。 ``apply_delete_plan`` is the **only** entry
-    point into ``_apply_entity_delete_retract`` from within this module。
+    The legacy Store route calls ``_apply_entity_delete_retract`` directly.
+    The Database-backed route translates the whole delete plan inside this
+    executor and commits once. Both are path-bound here; generic ``_apply_op``
+    and ``apply_write_plan`` continue to enforce ``check_retract_allowed``.
     """
     if not plan.can_apply:
         return EntityDeleteResult(
@@ -575,6 +610,30 @@ def apply_delete_plan(
             errors=plan.errors,
             warnings=plan.warnings,
         )
+
+    if database is not None:
+        try:
+            # Whole-entity delete is the path-bound INV-7c exception. The
+            # generic write executor still enables the retract guard above.
+            applied = _commit_planned_ops_to_database(
+                plan.planned_retracts,
+                store=store,
+                index=index,
+                database=database,
+                enforce_retract_guard=False,
+            )
+            return EntityDeleteResult(
+                resolved_target=plan.resolved_target,
+                applied=applied,
+                warnings=plan.warnings,
+            )
+        except Exception as exc:
+            return EntityDeleteResult(
+                resolved_target=plan.resolved_target,
+                applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
+                errors=(_to_error_dto(exc),),
+                warnings=plan.warnings,
+            )
 
     applied: list[AppliedOpResultDTO] = []
     for op_index, op in enumerate(plan.planned_retracts):

@@ -97,6 +97,72 @@ def _user_name_rule() -> Rule:
 
 
 class DBAttachLifecycleTests(unittest.TestCase):
+    def test_attached_entities_create_delete_each_advance_one_consistent_tx(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "workspace"
+            schema_ir = _schema_ir()
+            db = Database.create(workspace, schema_ir=schema_ir)
+            fg = FactGraph.attach(db, schema_classes=[User])
+            initial = db.head()
+
+            e_ref = fg.entities.create(User, user_id="u-entity", meta={"source": "attach"})
+            created = db.head()
+
+            self.assertEqual(created.tx_seq, initial.tx_seq + 1)
+            created_claims = fg.ledger.find_claims(e_ref=e_ref)
+            self.assertEqual(len(created_claims), 2)
+            self.assertEqual(
+                {
+                    row.value
+                    for claim in created_claims
+                    for row in fg.ledger.find_meta(asrt_id=claim.asrt_id, key="tx_id")
+                },
+                {created.tx_id},
+            )
+            self.assertTrue(all(not fg.ledger.has_active_revocation(row.asrt_id) for row in created_claims))
+
+            revoked = fg.entities.delete(e_ref, meta={"note": "remove"})
+            deleted = db.head()
+
+            self.assertEqual(revoked, 2)
+            self.assertEqual(deleted.tx_seq, created.tx_seq + 1)
+            self.assertEqual(deleted.state_digest, initial.state_digest)
+            revoker_ids = [fg.ledger.find_revoker(row.asrt_id) for row in created_claims]
+            self.assertTrue(all(isinstance(row, str) for row in revoker_ids))
+            self.assertEqual(
+                {
+                    meta.value
+                    for revoker_id in revoker_ids
+                    for meta in fg.ledger.find_meta(asrt_id=revoker_id, key="tx_id")
+                },
+                {deleted.tx_id},
+            )
+            self.assertEqual(
+                {
+                    annotation.value
+                    for revoker_id in revoker_ids
+                    for annotation in fg.ledger.find_annotations(asrt_id=revoker_id, key="note")
+                },
+                {"remove"},
+            )
+            db.close()
+            reopened = Database.open(workspace, schema_ir=schema_ir)
+            self.assertEqual(reopened.head(), deleted)
+            reopened.close()
+
+    def test_view_attached_entities_create_delete_are_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database.create(Path(tmp) / "workspace", schema_ir=_schema_ir())
+            writer = FactGraph.attach(db, schema_classes=[User])
+            writer.entities.create(User, user_id="u-view")
+            view = db.create_view("entity-view", [row.asrt_id for row in writer.ledger.claims])
+            scoped = FactGraph.attach(db, schema_classes=[User], view=view)
+
+            with self.assertRaisesRegex(SDKStoreError, "view-attached.*read-only"):
+                scoped.entities.create(User, user_id="blocked")
+            with self.assertRaisesRegex(SDKStoreError, "view-attached.*read-only"):
+                scoped.entities.delete(User, user_id="u-view")
+
     def test_attach_returns_database_bound_store_and_commit_assertions_routes_to_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database.create(Path(tmp) / "workspace", schema_ir=_schema_ir())

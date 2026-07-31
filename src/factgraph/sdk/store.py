@@ -1150,6 +1150,7 @@ class _SDKEntitiesManager:
             path. Slice 3a does NOT remove the shadow store。
         """
         self._reject_non_entity_class(entity_cls, method="create")
+        database = self._sdk._database_for_application_write("fg.entities.create")
 
         # Step 1+2: identity bundle completeness + shadow store populate via
         # shipped _ref path. SDKStore._ref raises SDKStoreError for missing
@@ -1185,6 +1186,7 @@ class _SDKEntitiesManager:
             plan,
             store=self._sdk._store,
             index=self._sdk._application_schema_index,
+            database=database,
         )
         if result.errors:
             self._raise_create_error(result.errors[0], entity_cls=entity_cls, identity=identity)
@@ -1256,6 +1258,7 @@ class _SDKEntitiesManager:
             ``EntityNotFoundError``(``ENTITY_NOT_FOUND``)if the target
             entity is not visible in the active view。
         """
+        database = self._sdk._database_for_application_write("fg.entities.delete")
         # Form A vs Form B vs forbidden tuple — discriminate per PF-S2。
         if isinstance(e_ref_or_cls, str):
             # Form A: e_ref-based。 Reject extra identity kwargs(Form A 不
@@ -1326,6 +1329,7 @@ class _SDKEntitiesManager:
             plan,
             store=self._sdk._store,
             index=self._sdk._application_schema_index,
+            database=database,
         )
         if result.errors:
             self._sdk._raise_from_application_error(result.errors[0], op="delete")
@@ -1750,6 +1754,13 @@ class SDKStore:
     def _reject_attached_write(self, method_name: str) -> None:
         if self._is_attached():
             raise SDKStoreError(_ATTACHED_WRITE_ERROR.format(method_name=method_name))
+
+    def _database_for_application_write(self, method_name: str) -> Database | None:
+        if self._database is None:
+            return None
+        if not self._attached_writable:
+            raise SDKStoreError(f"{method_name} is not available on view-attached runtimes; view is read-only")
+        return self._database
 
     @classmethod
     def create(
