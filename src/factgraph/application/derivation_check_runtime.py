@@ -59,6 +59,7 @@ from factgraph.core.store._support_capture import (
     derive_rule_ref_edges_for_binding,
     find_winning_case_index,
 )
+from factgraph.core.store.premise_filter import premise_scoped_ledger
 from factgraph.core.store.runtime import Store
 from factgraph.core.view.projector import (
     project_view_facts,
@@ -169,8 +170,16 @@ def _native_check(
         return _invalid_request(request, errors=ruleref_errors)
 
     # Project facts at read time (per Step 0.C input boundary §3.1).
-    view_facts = project_view_facts(store.ledger, store.schema_ir)
-    witness_facts = project_view_facts_with_witness(store.ledger, store.schema_ir)
+    # Premise admissibility: the check premise set matches evaluation —
+    # assertions excluded via store.premise_exclusions are invisible here.
+    # The non-native legs inherit the same filter through
+    # evaluate_derivation_plans -> Store.evaluate_engine.
+    ledger = premise_scoped_ledger(
+        store.ledger, store.premise_exclusions, store.premise_allowances,
+        getattr(store, "premise_blocks", ()),
+    )
+    view_facts = project_view_facts(ledger, store.schema_ir)
+    witness_facts = project_view_facts_with_witness(ledger, store.schema_ir)
 
     # Unified native evaluation (per Step 0.C C1+C2 -- complete binding is the
     # special case where subset-match equals exact match).

@@ -29,6 +29,15 @@ from .error_codes import (
 )
 from .schema import Entity, Field, Identity, Relationship
 from .semantics import ProbLogConfig, PyReasonConfig
+from .rule_program import (
+    EvaluationPremiseScope,
+    RuleProgram,
+    RuleProgramClause,
+    RuleProgramExplanation,
+    RuleProgramFact,
+    RuleProgramGoal,
+    RuleProgramResult,
+)
 from .store import FactGraph, SDKStore
 from factgraph.application.protocol import (
     ConditionDescriptor,
@@ -56,10 +65,16 @@ from factgraph.application.protocol import (
     StructureOccurrence,
     StructurePort,
     StructurePortRef,
+    compile_derivation_plan,
 )
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
 from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry
+from factgraph.core.store.premise_filter import (
+    MetaExclusion,
+    PredicatePremiseAllowance,
+    PredicatePremiseBlock,
+)
 from .dsl import (
     Case,
     DSLToApplicationRuleError,
@@ -112,11 +127,21 @@ __all__ = [
     "ResultFingerprint",
     "ProbLogConfig",
     "PyReasonConfig",
+    "EvaluationPremiseScope",
+    "RuleProgram",
+    "RuleProgramClause",
+    "RuleProgramExplanation",
+    "RuleProgramFact",
+    "RuleProgramGoal",
+    "RuleProgramResult",
     "SchemaAddResult",
     "AssertionInput",
     "CommitResult",
     "Database",
     "MetaEntry",
+    "MetaExclusion",
+    "PredicatePremiseAllowance",
+    "PredicatePremiseBlock",
     "Rule",
     "ApplicationRule",
     "RuleRef",
@@ -145,6 +170,7 @@ __all__ = [
     "StructurePortRef",
     "RuleExpr",
     "RuleExprError",
+    "compile_derivation_plan",
     "RuleJoinConstraint",
     "ExplicitBoolError",
     "FactGraph",

@@ -59,6 +59,7 @@ from .proof_frame_diff import (
     ProofFrameDiff,
     ProofFrameDiffError,
 )
+from .package_export import export_audit_package, write_audit_artifacts
 from .reader import AuditPackageData, AuditReadError, load_audit_package
 from .round_events import (
     ROUND_EVENT_KINDS,
@@ -92,6 +93,8 @@ __all__ = [
     "AuditPackageData",
     "AuditReadError",
     "load_audit_package",
+    "export_audit_package",
+    "write_audit_artifacts",
     "ROUND_EVENT_KINDS",
     "ROUND_EVENT_SCHEMA_VERSION",
     "ROUND_EVENTS_AUDIT_FILE_KEY",

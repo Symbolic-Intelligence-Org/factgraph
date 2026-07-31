@@ -19,14 +19,21 @@ Helper inventory:
 
 Input validators (pure type / shape guards):
 
-- ``validate_derivation`` — G1 + G4 + G2 Fact Overlay (rejects non-SDK
-  ``Inference``).
+- ``validate_derivation`` — rejects non-SDK ``Inference``. Kept for callers
+  that genuinely require the DSL form; the capability shells use
+  ``resolve_derivation_plan`` instead.
 - ``validate_binding`` — G1 + G4 + G2 Fact Overlay (validates
   ``$``-prefixed variable name mapping).
 - ``validate_evaluation_overlay`` — G2 (rejects non-``FactOverlay``
   including ``None``; used at boundaries that require an overlay).
-- ``validate_rule`` — G3 (rejects non-SDK ``Rule``; mirrors
-  ``validate_derivation`` shape).
+- ``validate_rule`` — rejects anything that is neither an SDK ``Rule`` nor an
+  application ``Rule``.
+
+Rule-form resolvers (accept either form, return what the runtime takes):
+
+- ``resolve_derivation_plan`` — G1 + G4 + G2 Fact Overlay. ``Inference``,
+  application ``Rule`` or ``RuleExpr`` in, ``CompiledDerivationPlan`` out.
+- ``resolve_rule_spec`` — G3. Either ``Rule`` form in, ``RuleSpec`` out.
 - ``validate_support_artifact`` — G2 ProofFrame + G3 (rejects
   non-``ProofReceipt``).
 - ``validate_optional_evaluation_overlay`` — G3 (rejects non-
@@ -57,6 +64,7 @@ from factgraph.core.store._support import ProofReceipt
 
 from ..dsl import Inference, Rule
 from ..errors import SDKStoreError
+from ..store import _compiled_derivation_plan_to_application
 
 
 def validate_derivation(derivation: Any, *, path: str) -> None:
@@ -66,10 +74,71 @@ def validate_derivation(derivation: Any, *, path: str) -> None:
     that the calling shell wants attached, e.g. ``"$.check.inference"`` or
     ``"$.diagnose.inference"``. The error message text is shared across
     callers — only the path differs.
+
+    Kept for callers that genuinely require the DSL form. The capability shells
+    use :func:`resolve_derivation_plan`, which accepts both rule forms.
     """
 
     if not isinstance(derivation, Inference):
         raise SDKStoreError("inference must be SDK Inference", path=path)
+
+
+def resolve_derivation_plan(
+    sdk: Any,
+    derivation: Any,
+    *,
+    head: Any = None,
+    engine: str = "native",
+    path: str,
+) -> Any:
+    """Resolve either rule form to the ``CompiledDerivationPlan`` the runtime takes.
+
+    The capability runtimes never asked for an ``Inference``: they take a
+    ``CompiledDerivationPlan``. Only the shells in front of them did, which left
+    the whole capability surface closed to the rule form the application layer
+    authors. This resolves both to the same plan.
+
+    * ``Inference`` — the existing compile path, unchanged.
+    * ``Rule`` / ``RuleExpr`` — the lowering that already runs for rule programs
+      and for the adapters, through the public ``compile_derivation_plan``.
+
+    ``head`` is required for the rule form and there is no default: a rule says
+    what holds, not what it concludes, so a standin head would invent the
+    conclusion. Passing one with an ``Inference`` is ignored, since an inference
+    already carries its head.
+    """
+    from factgraph.application.protocol import Rule as ApplicationRule
+    from factgraph.application.protocol import compile_derivation_plan
+    from factgraph.application.protocol.rule_expr import RuleExprError, _RuleExpr
+
+    if isinstance(derivation, Inference):
+        compiled_plans = sdk._compile_derivation_input(derivation)
+        if len(compiled_plans) != 1:
+            raise SDKStoreError(
+                "inference must compile to exactly one plan", path=path
+            )
+        try:
+            return _compiled_derivation_plan_to_application(
+                compiled_plans[0], mode=engine, engine_options=None
+            )
+        except ValueError as exc:
+            raise SDKStoreError(f"invalid derivation input: {exc}", path=path) from exc
+
+    if isinstance(derivation, (ApplicationRule, _RuleExpr)):
+        if not isinstance(head, ApplicationRule):
+            raise SDKStoreError(
+                "a Rule or RuleExpr needs head= Rule: it states what holds, not "
+                "what it concludes",
+                path=path,
+            )
+        try:
+            return compile_derivation_plan(derivation, head=head, engine=engine)
+        except RuleExprError as exc:
+            raise SDKStoreError(f"invalid derivation input: {exc}", path=path) from exc
+
+    raise SDKStoreError(
+        "derivation must be SDK Inference, application Rule, or RuleExpr", path=path
+    )
 
 
 def validate_binding(binding: Any, *, path: str) -> dict[str, Any]:
@@ -113,18 +182,45 @@ def validate_evaluation_overlay(value: Any, *, path: str) -> None:
 
 
 def validate_rule(rule: Any, *, path: str) -> None:
-    """Reject anything that is not an SDK ``Rule`` instance.
+    """Reject anything that is neither an SDK ``Rule`` nor an application ``Rule``.
 
-    Mirrors ``validate_derivation``. The ``path`` argument is the
-    ``SDKStoreError.path`` boundary identifier the calling shell wants
-    attached, e.g. ``"$.check_rule_disable.rule"`` or
-    ``"$.check_rule_literal_replace.rule"``. Used by G3 rule-overlay
-    SDK shells (``check_rule_disable`` / ``check_rule_literal_replace``
-    / ``check_rule_add_condition``) per blueprint §5.2 lock.
+    The type guard on its own. Shells use :func:`resolve_rule_spec`, which also
+    returns the spec the runtime takes.
     """
 
-    if not isinstance(rule, Rule):
-        raise SDKStoreError("rule must be SDK Rule", path=path)
+    from factgraph.application.protocol import Rule as ApplicationRule
+
+    if not isinstance(rule, (Rule, ApplicationRule)):
+        raise SDKStoreError("rule must be SDK Rule or application Rule", path=path)
+
+
+def resolve_rule_spec(sdk: Any, rule: Any, *, path: str) -> Any:
+    """Resolve either rule form to the ``RuleSpec`` the rule-overlay runtimes take.
+
+    The runtimes never asked for the SDK DSL ``Rule``; they take a ``RuleSpec``.
+    Both forms compile to one through the same ``SDKStore._compile_rule_input``:
+    the SDK ``Rule`` through its authoring payload, the application ``Rule``
+    through its own ``to_rule_spec``, which lowers the body with the same
+    ``lower_ast_to_where_ir`` the derivation lowering uses.
+
+    Replaces the ``RuleSpec(...)`` each rule-overlay shell used to assemble by
+    hand from the compiled dict — one place, one shape.
+    """
+
+    from factgraph.core.rules.rule_ir import RuleCompileError, RuleSpec
+
+    validate_rule(rule, path=path)
+    try:
+        compiled = sdk._compile_rule_input(rule)
+        return RuleSpec(
+            rule_id=compiled["rule_id"],
+            version=compiled["version"],
+            select_vars=list(compiled["select_vars"]),
+            where=list(compiled["where"]),
+            expose=bool(compiled.get("expose", False)),
+        )
+    except (SDKStoreError, RuleCompileError) as exc:
+        raise SDKStoreError(f"invalid rule: {exc}", path=path) from exc
 
 
 def validate_support_artifact(value: Any, *, path: str) -> None:
@@ -209,6 +305,8 @@ def resolve_runtime_registry(
 
 
 __all__ = [
+    "resolve_derivation_plan",
+    "resolve_rule_spec",
     "resolve_runtime_registry",
     "validate_binding",
     "validate_derivation",

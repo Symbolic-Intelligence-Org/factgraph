@@ -25,6 +25,15 @@ from factgraph.core.store._support import (
 )
 from factgraph.core.store.evaluation import evaluate_store
 from factgraph.core.store.ledger import Ledger
+from factgraph.core.store.premise_filter import (
+    MetaExclusion,
+    PredicatePremiseAllowance,
+    PredicatePremiseBlock,
+    normalize_premise_allowances,
+    normalize_premise_blocks,
+    normalize_premise_exclusions,
+    premise_scoped_ledger,
+)
 from factgraph.core.store.queries import conflicts as store_conflicts
 from factgraph.core.store.queries import explain_fact as store_explain_fact
 from factgraph.core.store.queries import resolve_mapping as store_resolve_mapping
@@ -39,6 +48,8 @@ from factgraph.core.store.types import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from factgraph.core.rules.rule_ir import RuleRegistry
 
 
@@ -72,11 +83,17 @@ class Store:
         *,
         engine_evaluator: EngineEvaluatorFn | None = None,
         artifact_sidecar: ArtifactSidecar | None = None,
+        premise_exclusions: "MetaExclusion | Iterable[MetaExclusion] | None" = None,
+        premise_allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None" = None,
+        premise_blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None" = None,
     ) -> None:
         if not isinstance(schema_ir, dict):
             raise ValueError("schema_ir must be dict")
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
+        self._premise_exclusions = normalize_premise_exclusions(premise_exclusions)
+        self._premise_allowances = normalize_premise_allowances(premise_allowances)
+        self._premise_blocks = normalize_premise_blocks(premise_blocks)
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, ProofReceipt] = {}
@@ -97,6 +114,67 @@ class Store:
             self._engine_overrides.pop("souffle", None)
         else:
             self._engine_overrides["souffle"] = evaluator
+
+    @property
+    def premise_exclusions(self) -> tuple[MetaExclusion, ...]:
+        """Configured meta-based premise admissibility exclusions (empty = disabled)."""
+        return self._premise_exclusions
+
+    def set_premise_exclusions(
+        self,
+        exclusions: "MetaExclusion | Iterable[MetaExclusion] | None",
+    ) -> None:
+        """Configure evaluation premise exclusions; see core/store/premise_filter.py.
+
+        Assertions whose meta rows carry an excluded key/value are invisible
+        to every rule evaluation (all engine modes, proof-frame recheck, and
+        the derivation check). Read/query paths outside evaluation stay
+        unfiltered. Passing ``None`` or an empty iterable disables filtering.
+        """
+        self._premise_exclusions = normalize_premise_exclusions(exclusions)
+
+    @property
+    def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
+        """Configured per-predicate premise admissibility allowances (empty = disabled)."""
+        return self._premise_allowances
+
+    def set_premise_allowances(
+        self,
+        allowances: "PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None",
+    ) -> None:
+        """Configure per-predicate evaluation allowances; see core/store/premise_filter.py.
+
+        For each configured predicate, an assertion of that predicate is
+        visible to rule evaluation only when its meta ``key`` last-value is in
+        the predicate's ``allowed_values`` (an assertion missing the key is
+        admitted only when ``absent_ok`` is set). Predicates without an entry
+        are unaffected. This is OR-combined with ``premise_exclusions`` (an
+        assertion excluded by either is invisible), so the global exclusion
+        floor is never lifted. Passing ``None`` or an empty iterable disables
+        per-predicate filtering.
+        """
+        self._premise_allowances = normalize_premise_allowances(allowances)
+
+    @property
+    def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
+        """Configured per-predicate premise blocklists (empty = disabled)."""
+        return self._premise_blocks
+
+    def set_premise_blocks(
+        self,
+        blocks: "PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None",
+    ) -> None:
+        """Configure per-predicate evaluation blocklists; see core/store/premise_filter.py.
+
+        For each configured predicate, an assertion of that predicate is hidden
+        from rule evaluation when its meta ``key`` last-value IS in the
+        predicate's ``blocked_values`` (default-admit: a missing or unblocked
+        value stays visible). Predicates without an entry are unaffected. This
+        is OR-combined with ``premise_exclusions`` and ``premise_allowances``
+        (an assertion excluded by any is invisible). Passing ``None`` or an
+        empty iterable disables per-predicate blocking.
+        """
+        self._premise_blocks = normalize_premise_blocks(blocks)
 
     def _remember_support_artifact(
         self,
@@ -320,7 +398,12 @@ class Store:
             call_kwargs["engine_options"] = engine_options
         if semantics_profile is not None:
             call_kwargs["semantics_profile"] = semantics_profile
-        return evaluator(self, **call_kwargs)
+        # Premise admissibility: engine adapters read all facts through
+        # store.ledger (souffle/problog exports, pyreason projection, witness
+        # reconstruction). Handing them the premise-scoped view is the single
+        # seam that filters every engine mode without engine-specific logic.
+        # Zero-config returns ``self`` unchanged.
+        return evaluator(premise_scoped_store_view(self), **call_kwargs)
 
     def evaluate_dummy(
         self,
@@ -433,4 +516,55 @@ class Store:
         return store_resolve_mapping(self, pred_id, policy_mode=policy_mode)
 
 
-__all__ = ["Store", "register_engine_evaluator", "get_engine_evaluator"]
+class _PremiseScopedStore(Store):
+    """Per-evaluation-call view of a Store with a premise-filtered ledger.
+
+    Everything except ``ledger`` is the base store: attribute reads fall
+    through to the base (support-artifact dicts, engine overrides, sidecar,
+    dynamic adapter state such as ``_problog_pending_annotations``) and
+    attribute writes land on the base, so ``_remember_*`` bookkeeping during
+    evaluation mutates the real store. Subclassing keeps the adapters'
+    ``isinstance(store, Store)`` gates (souffle package export, problog
+    export) satisfied. Instances are transient — constructed per evaluate
+    call by ``premise_scoped_store_view`` and never persisted.
+    """
+
+    def __init__(self, base: Store, ledger: Ledger) -> None:
+        # Deliberately no Store.__init__: this is a view, not a new store.
+        object.__setattr__(self, "_premise_base", base)
+        object.__setattr__(self, "ledger", ledger)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(object.__getattribute__(self, "_premise_base"), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(object.__getattribute__(self, "_premise_base"), name, value)
+
+
+def premise_scoped_store_view(store: Store) -> Store:
+    """Return ``store`` unchanged when no premise dimension is configured, else a premise-scoped view.
+
+    With any dimension configured (exclusions, allowances or blocks) the view is
+    always introduced — visibility is decided live per access inside the scoped
+    ledger (see premise_filter.py), so a fact classified only after view
+    construction is still filtered.
+    """
+    if isinstance(store, _PremiseScopedStore):
+        return store
+    exclusions = getattr(store, "premise_exclusions", ())
+    allowances = getattr(store, "premise_allowances", ())
+    blocks = getattr(store, "premise_blocks", ())
+    if not exclusions and not allowances and not blocks:
+        return store
+    scoped_ledger = premise_scoped_ledger(store.ledger, exclusions, allowances, blocks)
+    if scoped_ledger is store.ledger:
+        return store
+    return _PremiseScopedStore(store, scoped_ledger)
+
+
+__all__ = [
+    "Store",
+    "premise_scoped_store_view",
+    "register_engine_evaluator",
+    "get_engine_evaluator",
+]

@@ -136,16 +136,16 @@ class SDKG3InvariantTests(unittest.TestCase):
 
         self.assertIn("build_rule_disable_request(", rule_disable_source)
         self.assertIn("check_rule_disable_action(", rule_disable_source)
-        self.assertIn("validate_rule(", rule_disable_source)
+        self.assertIn("resolve_rule_spec(", rule_disable_source)
         self.assertIn("validate_support_artifact(", rule_disable_source)
 
         self.assertIn("build_rule_literal_replace_request(", rule_literal_replace_source)
         self.assertIn("check_rule_literal_replace_action(", rule_literal_replace_source)
-        self.assertIn("validate_rule(", rule_literal_replace_source)
+        self.assertIn("resolve_rule_spec(", rule_literal_replace_source)
 
         self.assertIn("build_rule_add_condition_request(", rule_add_condition_source)
         self.assertIn("check_rule_add_condition_action(", rule_add_condition_source)
-        self.assertIn("validate_rule(", rule_add_condition_source)
+        self.assertIn("resolve_rule_spec(", rule_add_condition_source)
 
     def test_store_method_docstrings_record_boundary_contracts(self) -> None:
         """§5.7 + §6 lock: G3 SDKStore method docstrings record boundary

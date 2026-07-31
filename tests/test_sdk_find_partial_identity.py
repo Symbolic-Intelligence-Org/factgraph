@@ -136,7 +136,25 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
     def test_no_new_public_sdk_names_or_read_helpers_are_added(self) -> None:
         sdk = _seed_store()
 
-        self.assertEqual(len(sdk_module.__all__), 63)
+        # Pin refreshed: the 63 baseline predated deliberate public additions
+        # (RuleStructure/Structure* inspection surface, release-surface sync,
+        # MetaExclusion for premise admissibility) and was stale at 74 before
+        # MetaExclusion landed. Bumped to 76 for the deliberate
+        # PredicatePremiseAllowance addition, then to 77 for the deliberate
+        # PredicatePremiseBlock addition (per-predicate premise blocklist,
+        # complement of the allowance). Bumped from 77 to 84 for the deliberate
+        # RuleProgram, closed-goal, per-call scope, and explanation value objects.
+        # Bumped from 84 to 85 for the deliberate compile_derivation_plan
+        # addition (the public lowering that lets the capability shells take
+        # the application rule form).
+        # Intent unchanged: no ACCIDENTAL name creep.
+        self.assertEqual(len(sdk_module.__all__), 85)
+        self.assertIn("compile_derivation_plan", sdk_module.__all__)
+        self.assertIn("RuleProgram", sdk_module.__all__)
+        self.assertIn("RuleProgramFact", sdk_module.__all__)
+        self.assertIn("EvaluationPremiseScope", sdk_module.__all__)
+        self.assertIn("PredicatePremiseAllowance", sdk_module.__all__)
+        self.assertIn("PredicatePremiseBlock", sdk_module.__all__)
         self.assertNotIn("ReadPolicy", sdk_module.__all__)
         self.assertIn("SemanticsProfile", sdk_module.__all__)
         self.assertIn("ProbLogConfig", sdk_module.__all__)

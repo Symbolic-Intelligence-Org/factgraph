@@ -214,7 +214,7 @@ class SDKFactOverlayContractTests(unittest.TestCase):
         sdk = _build_sdk()
 
         with patch(
-            "factgraph.sdk.shells.fact_overlay._compiled_derivation_plan_to_application",
+            "factgraph.sdk.shells._validation._compiled_derivation_plan_to_application",
             side_effect=ValueError(
                 "Conflicting engine_ext between explicit derivation and compiled plan"
             ),

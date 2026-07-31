@@ -53,12 +53,11 @@ from factgraph.application.capability_helpers import build_rule_disable_request
 from factgraph.application.capability_helpers.errors import CapabilityHelperError
 from factgraph.application.protocol import ProtocolShapeError, RuleDisableResult
 from factgraph.application.rule_disable_runtime import check_rule_disable_action
-from factgraph.core.rules.rule_ir import RuleCompileError, RuleSpec
 
 from ._validation import (
     resolve_runtime_registry,
     validate_optional_evaluation_overlay,
-    validate_rule,
+    resolve_rule_spec,
     validate_support_artifact,
 )
 from ..errors import SDKStoreError
@@ -83,24 +82,10 @@ def sdk_rule_disable(
     result DTOs and passes them through unchanged.
     """
 
-    validate_rule(rule, path="$.check_rule_disable.rule")
+    rule_spec = resolve_rule_spec(sdk, rule, path="$.check_rule_disable.rule")
     validate_support_artifact(support, path="$.check_rule_disable.support")
     validate_optional_evaluation_overlay(overlay, path="$.check_rule_disable.overlay")
 
-    try:
-        compiled = sdk._compile_rule_input(rule)
-        rule_spec = RuleSpec(
-            rule_id=compiled["rule_id"],
-            version=compiled["version"],
-            select_vars=list(compiled["select_vars"]),
-            where=list(compiled["where"]),
-            expose=bool(compiled.get("expose", False)),
-        )
-    except (SDKStoreError, RuleCompileError) as exc:
-        raise SDKStoreError(
-            f"invalid check_rule_disable rule: {exc}",
-            path="$.check_rule_disable.rule",
-        ) from exc
 
     resolved_registry = resolve_runtime_registry(
         sdk,

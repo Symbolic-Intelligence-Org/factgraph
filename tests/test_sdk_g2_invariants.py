@@ -114,7 +114,7 @@ class SDKG2InvariantTests(unittest.TestCase):
 
         self.assertIn("FactOverlayCheckRequest(", fact_overlay_source)
         self.assertIn("check_fact_overlay_binding(", fact_overlay_source)
-        self.assertIn("validate_derivation(", fact_overlay_source)
+        self.assertIn("resolve_derivation_plan(", fact_overlay_source)
         self.assertIn("validate_binding(", fact_overlay_source)
 
         self.assertIn("ProofFrameRecheckRequest(", proof_frame_source)

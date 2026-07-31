@@ -122,7 +122,12 @@ from factgraph.core.store.database import (
     validate_schema_object_for_workspace,
     write_schema_object_for_workspace,
 )
-from factgraph.core.store.runtime import Store
+from factgraph.core.store.premise_filter import (
+    MetaExclusion,
+    PredicatePremiseAllowance,
+    PredicatePremiseBlock,
+)
+from factgraph.core.store.runtime import Store, premise_scoped_store_view
 from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
 
@@ -650,6 +655,59 @@ class AssertionsManager:
             return retract_by_asrt(self._sdk._store.ledger, asrt_id, meta)
         except WriteProtocolError as exc:
             code = "ASSERTION_NOT_FOUND" if "unknown revoked_asrt_id" in str(exc) else None
+            raise SDKStoreError(str(exc), code=code) from exc
+
+    def append_meta(self, asrt_id: str, key: str, value: Any) -> None:
+        """Append one meta row to an existing assertion (public reclassification seam).
+
+        Meta rows are append-only: the new row never replaces earlier rows, it
+        extends the assertion's meta history. Every canonical read resolves a
+        key LAST-WINS — ``record.meta.raw`` (``_meta_raw_for_assertion``,
+        sdk/facade.py) and the premise admissibility filter
+        (``core/store/premise_filter.py::is_premise_excluded``) both take the
+        most recently written row. Appending e.g. a new ``provenance_class``
+        value therefore reclassifies the assertion for rule evaluation (moves
+        it INTO or OUT OF an excluded class) while the full history stays
+        auditable via ``fg.ledger.find_meta(asrt_id=..., key=...)``.
+
+        This is the supported public surface for post-write meta
+        reclassification. ``Ledger.append_meta`` remains a deprecated
+        compatibility seam and may be downgraded to private in a later
+        cleanup phase; consumers should call this method instead.
+
+        ``value`` must be a scalar (str/bool/int/float — the same shape free
+        meta keys accept at write time); the row kind is derived from the
+        Python type. Raises ``SDKStoreError`` for invalid input or an unknown
+        ``asrt_id``.
+        """
+        self._sdk._reject_attached_write("fg.assertions.append_meta")
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise SDKStoreError(
+                "fg.assertions.append_meta(asrt_id, ...) expects non-empty string asrt_id"
+            )
+        if not isinstance(key, str) or not key:
+            raise SDKStoreError(
+                "fg.assertions.append_meta(..., key, ...) expects non-empty string key"
+            )
+        if isinstance(value, bool):
+            kind = "bool"
+        elif isinstance(value, str):
+            kind = "str"
+        elif isinstance(value, int):
+            kind = "int"
+        elif isinstance(value, float):
+            kind = "float"
+        else:
+            raise SDKStoreError(
+                "fg.assertions.append_meta(..., value) expects a scalar "
+                f"(str/bool/int/float), got {type(value).__name__}"
+            )
+        try:
+            self._sdk._store.ledger.append_meta(
+                [MetaRow(asrt_id=asrt_id, key=key, kind=kind, value=value)]
+            )
+        except ValueError as exc:
+            code = "ASSERTION_NOT_FOUND" if "unknown asrt_id" in str(exc) else None
             raise SDKStoreError(str(exc), code=code) from exc
 
 
@@ -1350,6 +1408,12 @@ class _SDKEvalManager:
         """Explain a closed-head evaluation replay."""
         return self._sdk._explain(*args, **kwargs)
 
+    def evaluate_program(self, *args: Any, **kwargs: Any) -> Any:
+        """Evaluate a selected Horn program read-only on this ledger."""
+        from .rule_program_runtime import evaluate_rule_program
+
+        return evaluate_rule_program(self._sdk, *args, **kwargs)
+
     def preview_config(self, *args: Any, **kwargs: Any) -> Any:
         """Inspect semantics configuration without evaluating an inference.
 
@@ -1892,6 +1956,125 @@ class SDKStore:
     @property
     def ledger(self) -> Ledger:
         return self._store.ledger
+
+    @property
+    def premise_exclusions(self) -> tuple[MetaExclusion, ...]:
+        """Configured meta-based premise admissibility exclusions (empty = disabled)."""
+        return self._store.premise_exclusions
+
+    def set_premise_exclusions(
+        self,
+        exclusions: MetaExclusion | Iterable[MetaExclusion] | None,
+    ) -> None:
+        """Configure meta-based premise admissibility exclusions for evaluation.
+
+        Assertions whose meta rows carry one of the configured key/value
+        pairs become invisible to every rule evaluation (all engine modes,
+        proof-frame recheck, derivation check): they can neither support a
+        derivation nor block one through negation. Read/query paths outside
+        evaluation (entity views, assertion listings, audit, history) stay
+        unfiltered — the assertions remain fully visible there. Key and
+        values are pure configuration; passing ``None`` or an empty iterable
+        disables filtering (zero-behavior-change default). See
+        ``factgraph/core/store/premise_filter.py``.
+        """
+        try:
+            self._store.set_premise_exclusions(exclusions)
+        except ValueError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    @property
+    def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
+        """Configured per-predicate premise admissibility allowances (empty = disabled)."""
+        return self._store.premise_allowances
+
+    def set_premise_allowances(
+        self,
+        allowances: PredicatePremiseAllowance | Iterable[PredicatePremiseAllowance] | None,
+    ) -> None:
+        """Configure per-predicate premise admissibility allowances for evaluation.
+
+        For each configured predicate, an assertion of that predicate is
+        visible to every rule evaluation (all engine modes, proof-frame
+        recheck, derivation check) only when its meta ``key`` last-value is in
+        the predicate's ``allowed_values``; an assertion of that predicate
+        missing the key is admitted only when ``absent_ok`` is set. Predicates
+        without an entry are unaffected. This is OR-combined with
+        ``set_premise_exclusions``: an assertion excluded by either dimension is
+        invisible, so the global exclusion floor is never lifted. Read/query
+        paths outside evaluation stay unfiltered. Predicate, key and values are
+        pure configuration; passing ``None`` or an empty iterable disables
+        per-predicate filtering. See ``factgraph/core/store/premise_filter.py``.
+        """
+        try:
+            self._store.set_premise_allowances(allowances)
+        except ValueError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    @property
+    def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
+        """Configured per-predicate premise blocklists (empty = disabled)."""
+        return self._store.premise_blocks
+
+    def set_premise_blocks(
+        self,
+        blocks: PredicatePremiseBlock | Iterable[PredicatePremiseBlock] | None,
+    ) -> None:
+        """Configure per-predicate premise blocklists for evaluation.
+
+        For each configured predicate, an assertion of that predicate becomes
+        invisible to every rule evaluation (all engine modes, proof-frame
+        recheck, derivation check) when its meta ``key`` last-value IS in the
+        predicate's ``blocked_values`` (default-admit: a missing or unblocked
+        value stays visible). Predicates without an entry are unaffected. This
+        is OR-combined with ``set_premise_exclusions`` and
+        ``set_premise_allowances``: an assertion excluded by any dimension is
+        invisible. The block is the complement of the allowance and independent
+        of it — a predicate may carry both (allow a class on one key, block
+        values on another). Read/query paths outside evaluation stay unfiltered.
+        Passing ``None`` or an empty iterable disables per-predicate blocking.
+        See ``factgraph/core/store/premise_filter.py``.
+        """
+        try:
+            self._store.set_premise_blocks(blocks)
+        except ValueError as exc:
+            raise SDKStoreError(str(exc)) from exc
+
+    def premise_scoped_view(self) -> "SDKStore":
+        """Read-only `FactGraph` whose reads see only evaluation-admissible facts.
+
+        Every entity/field/assertion read through the returned view applies the
+        SAME premise admissibility filter that rule evaluation applies — the
+        configured ``premise_exclusions`` / ``premise_allowances`` /
+        ``premise_blocks`` — so an assertion hidden from evaluation is also hidden
+        from reads here. This is the ONE supported way to read the
+        admissible-only premise set without re-implementing the filter: it
+        composes the existing ``premise_scoped_store_view`` (the same view
+        evaluation builds) with the SDK read facades, so callers keep using the
+        ordinary read verbs (``entities.where`` + ``getattr``, ``fields.get``,
+        ``assertions.where``) and get admissible-only results.
+
+        Ordinary read/query paths on the base graph stay unfiltered (see
+        ``set_premise_exclusions``); this view is the deliberate opt-in for
+        callers — e.g. building ILP training data — that must read exactly what
+        evaluation would admit.
+
+        Zero-config (no exclusions, allowances or blocks configured) returns
+        ``self`` unchanged, preserving the zero-behavior-change contract.
+        Visibility is decided live per access, so a fact classified after the
+        view is created is still filtered. The view is READ-ONLY and shares the
+        underlying ledger and schema — do not write or save through it. See
+        ``factgraph/core/store/premise_filter.py``.
+        """
+        scoped_store = premise_scoped_store_view(self._store)
+        if scoped_store is self._store:
+            return self
+        return SDKStore(
+            self._classes,
+            store=scoped_store,
+            schema_ir=self._schema_ir,
+            default_row_format=self._default_row_format,
+        )
 
     @property
     def schema_ir(self) -> dict[str, Any]:
@@ -3496,6 +3679,21 @@ class SDKStore:
                 "select_vars": list(rule.select_vars),
                 "where": list(rule.where),
                 "expose": rule.expose,
+            }
+        if hasattr(rule, "to_rule_spec"):
+            # The application protocol Rule the application layer authors anyway.
+            # It lowers to a RuleSpec through its own body, so it needs no
+            # authoring payload detour.
+            try:
+                spec = rule.to_rule_spec()
+            except Exception as exc:
+                raise SDKStoreError(f"invalid rule input: {exc}") from exc
+            return {
+                "rule_id": spec.rule_id,
+                "version": spec.version,
+                "select_vars": list(spec.select_vars),
+                "where": list(spec.where),
+                "expose": spec.expose,
             }
         if hasattr(rule, "to_authoring_payload"):
             payload = rule.to_authoring_payload()

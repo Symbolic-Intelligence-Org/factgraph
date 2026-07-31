@@ -1,3 +1,11 @@
+"""Store-level accept seam (write leg).
+
+Premise admissibility (core/store/premise_filter.py) deliberately does NOT
+apply here: accept only consumes candidates produced by an already-filtered
+evaluation, and its ledger reads serve candidate_key idempotency dedup,
+which must see the full ledger.
+"""
+
 from __future__ import annotations
 
 import warnings
