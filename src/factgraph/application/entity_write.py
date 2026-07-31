@@ -12,7 +12,7 @@ from factgraph.core.evidence.write_protocol import (
     retract_by_asrt,
     set_field,
 )
-from factgraph.core.store import AssertionInput, MetaEntry, RevocationInput, Store
+from factgraph.core.store import AssertionInput, Database, MetaEntry, RevocationInput, Store
 from factgraph.core.view.projector import project_view_facts
 
 from .protocol import (
@@ -252,12 +252,21 @@ def apply_write_plan(
     *,
     store: Store,
     index: SchemaIndex,
+    database: Database | None = None,
 ) -> EntityWriteResult:
     if not plan.can_apply:
         return EntityWriteResult(
             resolved_target=plan.resolved_target,
             errors=plan.errors,
             warnings=plan.warnings,
+        )
+
+    if database is not None:
+        return _apply_write_plan_to_database(
+            plan,
+            store=store,
+            index=index,
+            database=database,
         )
 
     applied: list[AppliedOpResultDTO] = []
@@ -286,6 +295,57 @@ def apply_write_plan(
         applied=tuple(applied),
         warnings=plan.warnings,
     )
+
+
+def _apply_write_plan_to_database(
+    plan: EntityWritePlan,
+    *,
+    store: Store,
+    index: SchemaIndex,
+    database: Database,
+) -> EntityWriteResult:
+    try:
+        if database._ledger_for_attach() is not store.ledger:
+            raise EntityWriteError(
+                "database and store must share the same Ledger",
+                code="DATABASE_STORE_MISMATCH",
+            )
+        for op in plan.planned_ops:
+            if op.op == "retract":
+                _check_generic_retract_allowed(op, store=store, index=index)
+        assertions, revocations = planned_ops_to_inputs(plan.planned_ops, index=index)
+        if not assertions and not revocations:
+            return EntityWriteResult(
+                resolved_target=plan.resolved_target,
+                warnings=plan.warnings,
+            )
+        commit = database.commit_changes(assertions, revocations)
+        assertion_records = iter(commit.assertions)
+        revocation_records = iter(commit.revocations)
+        applied = tuple(
+            AppliedOpResultDTO(
+                op_index=op_index,
+                status="applied",
+                assertion_id=(
+                    next(revocation_records).revoker_asrt_id
+                    if op.op == "retract"
+                    else next(assertion_records).asrt_id
+                ),
+            )
+            for op_index, op in enumerate(plan.planned_ops)
+        )
+        return EntityWriteResult(
+            resolved_target=plan.resolved_target,
+            applied=applied,
+            warnings=plan.warnings,
+        )
+    except Exception as exc:
+        return EntityWriteResult(
+            resolved_target=plan.resolved_target,
+            applied=(AppliedOpResultDTO(op_index=0, status="failed"),),
+            errors=(_to_error_dto(exc),),
+            warnings=plan.warnings,
+        )
 
 
 # ---------- Slice 3a Step 2: fg.entities.create eager emission planner + executor ----------
@@ -843,7 +903,18 @@ def _apply_op(
         if op.op == "set":
             return set_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
         return add_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
+    _check_generic_retract_allowed(op, store=store, index=index)
     assert op.assertion_id is not None
+    return retract_by_asrt(store.ledger, op.assertion_id, dict(op.meta) if op.meta else None)
+
+
+def _check_generic_retract_allowed(
+    op: PlannedOpDTO,
+    *,
+    store: Store,
+    index: SchemaIndex,
+) -> None:
+    assert op.op == "retract" and op.assertion_id is not None
     # Slice 2 Step 5: application entity_write path leg of three-layer retract guard.
     # check_retract_allowed raises RetractGuardError for INV-7c-protected Identity
     # Claims or :exists Claims (existence-claim transitional guard).
@@ -879,7 +950,6 @@ def _apply_op(
                 "classification": guard_exc.classification,
             },
         ) from guard_exc
-    return retract_by_asrt(store.ledger, op.assertion_id, dict(op.meta) if op.meta else None)
 
 
 def _rest_term_for_value(

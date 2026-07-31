@@ -16,13 +16,14 @@ from factgraph.application.protocol import (
     EntityReadRequest,
     EntitySelector,
     EntityWriteCommand,
+    EntityWritePlan,
     EntityWriteResult,
     FieldMutation,
     FieldPath,
     PlannedOpDTO,
 )
 from factgraph.core.evidence.write_protocol import WriteProtocolError, set_field
-from factgraph.core.store import Store
+from factgraph.core.store import Database, Store
 from factgraph.sdk import Entity, Field, Identity, compile_schema_from_classes
 
 
@@ -61,6 +62,94 @@ def _write_entity_exists(store: Store, index, ref) -> None:
 
 
 class ApplicationEntityWriteTests(unittest.TestCase):
+    def test_apply_write_plan_database_route_commits_all_ops_in_one_tx(self) -> None:
+        schema_ir = compile_schema_from_classes([Country, User])
+        database = Database.create(schema_ir=schema_ir)
+        store = Store(schema_ir=schema_ir, ledger=database._ledger_for_attach())
+        index = build_schema_index(schema_ir)
+        plan = plan_write_command(
+            EntityWriteCommand(
+                target=EntitySelector(
+                    entity_type="User",
+                    identity={"name": "alice", "locale": "en"},
+                ),
+                mutations=(
+                    FieldMutation(
+                        op="add",
+                        field=FieldPath(entity_type="User", field_name="tag"),
+                        value="admin",
+                        meta={"source": "application-test"},
+                    ),
+                ),
+                create_if_missing=True,
+            ),
+            store=store,
+            index=index,
+        )
+
+        before = database.head()
+        result = apply_write_plan(
+            plan,
+            store=store,
+            index=index,
+            database=database,
+        )
+
+        self.assertFalse(result.errors)
+        self.assertEqual(len(result.applied), len(plan.planned_ops))
+        after = database.head()
+        self.assertEqual(after.tx_seq, before.tx_seq + 1)
+        tx_ids = {
+            row.value
+            for applied in result.applied
+            for row in store.ledger.find_meta(asrt_id=applied.assertion_id, key="tx_id")
+        }
+        self.assertEqual(tx_ids, {after.tx_id})
+        tag_id = result.applied[-1].assertion_id
+        assert tag_id is not None
+        annotations = store.ledger.find_annotations(asrt_id=tag_id)
+        self.assertEqual(
+            [(row.namespace, row.category, row.key, row.value) for row in annotations],
+            [("shared", "source", "source", "application-test")],
+        )
+
+    def test_apply_write_plan_database_route_is_atomic_on_translation_error(self) -> None:
+        schema_ir = compile_schema_from_classes([Country, User])
+        database = Database.create(schema_ir=schema_ir)
+        store = Store(schema_ir=schema_ir, ledger=database._ledger_for_attach())
+        index = build_schema_index(schema_ir)
+        target = resolve_selector(
+            EntitySelector(entity_type="User", identity={"name": "alice", "locale": "en"}),
+            index=index,
+        )
+        plan = EntityWritePlan(
+            command=EntityWriteCommand(
+                target=EntitySelector(
+                    entity_type="User",
+                    identity={"name": "alice", "locale": "en"},
+                ),
+            ),
+            resolved_target=target,
+            planned_ops=(
+                PlannedOpDTO(op="record_exists", target=target),
+                PlannedOpDTO(
+                    op="add",
+                    target=target,
+                    field=FieldPath(entity_type="User", field_name="tag"),
+                    value="admin",
+                    meta={"ingested_at": 1},
+                ),
+            ),
+            can_apply=True,
+        )
+
+        before = database.head()
+        result = apply_write_plan(plan, store=store, index=index, database=database)
+
+        self.assertTrue(result.errors)
+        self.assertEqual(database.head(), before)
+        self.assertEqual(store.ledger.claims, [])
+
     def test_planned_ops_to_inputs_preserves_fact_shapes_and_write_metadata(self) -> None:
         _store, index = _build_store()
         target = resolve_selector(

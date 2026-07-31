@@ -40,6 +40,7 @@ from factgraph.core.schema.schema_ir import (
     schema_digest as compute_schema_digest,
 )
 from factgraph.core.store.ledger import (
+    AnnotationRow,
     Claim,
     ClaimArg,
     Ledger,
@@ -64,6 +65,15 @@ _INT64_MAX = (1 << 63) - 1
 _WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
 _DATABASE_WORKSPACE_VERSION = "1"
 _RESERVED_ASSERTION_META_KEYS = frozenset({"assertion_digest", "schema_digest", "tx_id"})
+_SHARED_ANNOTATION_KEYS: dict[str, tuple[str, str]] = {
+    "source": ("source", "observed"),
+    "source_loc": ("source", "observed"),
+    "trace_id": ("source", "observed"),
+    "approved_by": ("source", "observed"),
+    "note": ("source", "observed"),
+    "raw_kind": ("semantic", "observed"),
+    "bound": ("semantic", "observed"),
+}
 
 
 class DatabaseError(Exception):
@@ -726,21 +736,24 @@ class Database:
             raise DatabaseError("commit_changes requires at least one change")
         parent = self.head()
         prepared = [self._prepare_assertion(item) for item in assertions]
-        added_ids = [record.asrt_id for record, _claim, _args, _meta in prepared]
+        added_ids = [record.asrt_id for record, _claim, _args, _meta, _annotations in prepared]
         if len(set(added_ids)) != len(added_ids):
             raise DuplicateAssertionError("duplicate server-generated assertion id in commit")
         for asrt_id in added_ids:
             if self._ledger.get_claim(asrt_id) is not None:
                 raise DuplicateAssertionError(f"assertion already exists: {asrt_id}")
 
-        added_assertions = {record.asrt_id: record for record, _claim, _args, _meta in prepared}
+        added_assertions = {
+            record.asrt_id: record
+            for record, _claim, _args, _meta, _annotations in prepared
+        }
         prepared_revocations = self._prepare_revocations(
             revocations,
             added_assertions=added_assertions,
         )
         state = decode_state(parent.state_digest)
         operations: list[dict[str, Any]] = []
-        for provisional, _claim, _args, _meta in prepared:
+        for provisional, _claim, _args, _meta, _annotations in prepared:
             state = lthash_add(
                 state,
                 _state_element(provisional.asrt_id, provisional.assertion_digest),
@@ -777,7 +790,7 @@ class Database:
 
         records: list[AssertionRecord] = []
         assertion_writes: list[LedgerAssertionWrite] = []
-        for provisional, claim, args, input_meta_rows in prepared:
+        for provisional, claim, args, input_meta_rows, annotation_rows in prepared:
             record = AssertionRecord(
                 asrt_id=provisional.asrt_id,
                 pred_id=provisional.pred_id,
@@ -808,6 +821,7 @@ class Database:
                     claim=claim,
                     claim_args=tuple(args),
                     meta_rows=tuple(ledger_meta_rows),
+                    annotation_rows=tuple(annotation_rows),
                 )
             )
             records.append(record)
@@ -833,6 +847,7 @@ class Database:
                             MetaRow(record.revoker_asrt_id, "tx_id", "str", tx_id),
                         ]
                     ),
+                    annotation_rows=tuple(_annotation_rows(record.revoker_asrt_id, record.meta)),
                 )
             )
             revocation_records.append(record)
@@ -915,7 +930,7 @@ class Database:
 
     def _prepare_assertion(
         self, item: AssertionInput
-    ) -> tuple[AssertionRecord, Claim, list[ClaimArg], list[MetaRow]]:
+    ) -> tuple[AssertionRecord, Claim, list[ClaimArg], list[MetaRow], list[AnnotationRow]]:
         if not isinstance(item, AssertionInput):
             raise TypeError("assertions must contain AssertionInput")
         if _is_system_predicate(item.pred_id):
@@ -950,7 +965,7 @@ class Database:
             tx_id="tx:" + "0" * 64,
             meta=meta,
         )
-        return provisional, claim, args, meta_rows
+        return provisional, claim, args, meta_rows, _annotation_rows(asrt_id, meta)
 
     def _prepare_revocations(
         self,
@@ -1889,6 +1904,27 @@ def _normalize_meta_entries(
             raise DatabaseError(f"unsupported meta kind: {entry.kind}")
         result.append(entry)
     return tuple(result)
+
+
+def _annotation_rows(asrt_id: str, meta: Sequence[MetaEntry]) -> list[AnnotationRow]:
+    rows: list[AnnotationRow] = []
+    for entry in meta:
+        annotation = _SHARED_ANNOTATION_KEYS.get(entry.key)
+        if annotation is None:
+            continue
+        category, origin = annotation
+        rows.append(
+            AnnotationRow(
+                asrt_id=asrt_id,
+                namespace="shared",
+                category=category,
+                key=entry.key,
+                kind=entry.kind,
+                value=entry.value,
+                origin=origin,
+            )
+        )
+    return rows
 
 
 def _reject_reserved_assertion_meta(rows: Sequence[MetaEntry]) -> None:

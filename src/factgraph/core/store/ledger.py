@@ -94,6 +94,7 @@ class LedgerAssertionWrite:
 class LedgerRevocationWrite:
     revokes: Revokes
     meta_rows: tuple[MetaRow, ...] = ()
+    annotation_rows: tuple[AnnotationRow, ...] = ()
 
 
 _DDL = """
@@ -386,11 +387,14 @@ class Ledger:
                 raise TypeError("revocations must contain LedgerRevocationWrite")
             _validate_revokes_row(item.revokes)
             _validate_meta_rows(list(item.meta_rows))
+            _validate_annotation_rows(list(item.annotation_rows))
             revoker_id = item.revokes.revoker_asrt_id
             if revoker_id in new_revoker_ids or revoker_id in new_claim_ids:
                 raise ValueError(f"duplicate revoker_asrt_id in batch: {revoker_id}")
             if any(row.asrt_id != revoker_id for row in item.meta_rows):
                 raise ValueError("revocation meta_rows asrt_id must match revoker_asrt_id")
+            if any(row.asrt_id != revoker_id for row in item.annotation_rows):
+                raise ValueError("revocation annotation_rows asrt_id must match revoker_asrt_id")
             new_revoker_ids.add(revoker_id)
 
         with self._write_session() as (conn, post_commit):
@@ -429,6 +433,8 @@ class Ledger:
                     list(item.meta_rows),
                     item.revokes.revoker_asrt_id,
                 )
+                if item.annotation_rows:
+                    self._insert_annotation_rows(conn, list(item.annotation_rows))
 
             conn.executemany(
                 """
@@ -448,6 +454,8 @@ class Ledger:
                 for item in revocation_writes:
                     self._idx_add_revoke(item.revokes)
                     self._idx_add_meta(list(item.meta_rows))
+                    if item.annotation_rows:
+                        self._idx_add_annotation(list(item.annotation_rows))
 
             post_commit.append(_apply_batch_indexes)
 
