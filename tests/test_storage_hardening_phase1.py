@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import multiprocessing
 import json
+import multiprocessing
 import os
+import random
 import shutil
 import sqlite3
 import tempfile
@@ -22,15 +23,20 @@ from factgraph.core.protocol.lthash import (
 )
 from factgraph.core.store.database import (
     AssertionInput,
+    AssertionRecord,
     Database,
+    DatabaseError,
     DatabaseIntegrityError,
     DatabaseLockedError,
     HeadConflictError,
     MetaEntry,
     RevocationInput,
-    _state_digest_for_ids,
+    _atomic_write_bytes,
+    assertion_digest_for,
     resolve_database_workspace_paths,
 )
+from factgraph.core.schema.schema_ir import schema_digest
+from factgraph.core.store.ledger import Claim, Ledger, MetaRow
 
 
 def _schema_ir() -> dict:
@@ -70,6 +76,19 @@ def _assertion(person_id: str, name: str) -> AssertionInput:
             ("string", name),
         ),
     )
+
+
+def _oracle_state_digest(assertions: dict[str, str]) -> str:
+    def _field(value: str) -> bytes:
+        encoded = value.encode("utf-8")
+        return len(encoded).to_bytes(4, "big") + encoded
+
+    prefix = b"factgraph\x00dbstate_element_v2\x00"
+    elements = (
+        prefix + _field(asrt_id) + _field(assertion_digest)
+        for asrt_id, assertion_digest in sorted(assertions.items())
+    )
+    return encode_state(from_elements(elements))
 
 
 def _try_open_worker(path: str, schema_ir: dict, queue: multiprocessing.Queue) -> None:
@@ -112,13 +131,17 @@ class LtHashProtocolTests(unittest.TestCase):
 
 class StorageHardeningPhase1Tests(unittest.TestCase):
     def assert_state_matches_full_recompute(self, db: Database) -> None:
-        active_ids = {
-            claim.asrt_id
+        active_assertions = {
+            claim.asrt_id: db._ledger.find_meta(
+                asrt_id=claim.asrt_id,
+                key="assertion_digest",
+                kind="str",
+            )[0].value
             for claim in db._ledger.find_claims()
-            if not claim.pred_id.startswith("__system__")
+            if not claim.pred_id.startswith("__system__.")
             and not db._ledger.has_active_revocation(claim.asrt_id)
         }
-        self.assertEqual(db.head().state_digest, _state_digest_for_ids(active_ids))
+        self.assertEqual(db.head().state_digest, _oracle_state_digest(active_assertions))
 
     def test_incremental_state_matches_full_recompute_through_revoke_and_reassert(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
@@ -144,6 +167,70 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                 revocations=(RevocationInput(revoked.revocations[0].revoker_asrt_id),),
             )
 
+    def test_seeded_random_sequences_match_independent_state_oracle(self) -> None:
+        rng = random.Random(0x5A17A)
+        db = Database.create(schema_ir=_schema_ir())
+        active: dict[str, str] = {}
+
+        for step in range(200):
+            if active and rng.random() < 0.45:
+                target = rng.choice(sorted(active))
+                db.commit_changes(
+                    assertions=(),
+                    revocations=(RevocationInput(target),),
+                )
+                del active[target]
+            else:
+                value = rng.randrange(17)
+                committed = db.commit_assertions(
+                    (_assertion(f"p-{step}", f"name-{value}"),)
+                ).assertions[0]
+                active[committed.asrt_id] = committed.assertion_digest
+            self.assertEqual(db.head().state_digest, _oracle_state_digest(active))
+
+    def test_system_namespace_guards_use_exact_inv13_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            reserved = AssertionInput(
+                pred_id="__system__.user-forbidden",
+                fact_tuple=(("entity_ref", "idref_v1:Person:p1"), ("string", "x")),
+            )
+            with self.assertRaisesRegex(DatabaseError, "reserved '__system__.'"):
+                db.commit_assertions((reserved,))
+
+            # INV-13 reserves the dotted namespace, not arbitrary names that
+            # merely begin with the characters "__system__".
+            allowed = AssertionInput(
+                pred_id="__system__user_predicate",
+                fact_tuple=(("entity_ref", "idref_v1:Person:p2"), ("string", "y")),
+            )
+            committed = db.commit_assertions((allowed,))
+            self.assert_state_matches_full_recompute(db)
+            db.close()
+
+            reopened = Database.open(path, schema_ir=_schema_ir())
+            self.assertEqual(reopened.head(), committed.value)
+            reopened.close()
+
+    def test_same_batch_revocation_guard_checks_added_system_claim(self) -> None:
+        db = Database.create(schema_ir=_schema_ir())
+        asrt_id = "asrt:" + "a" * 32
+        system_record = AssertionRecord(
+            asrt_id=asrt_id,
+            pred_id="__system__.internal",
+            fact_tuple=(("entity_ref", "idref_v1:Person:p1"), ("string", "x")),
+            schema_digest=db.schema_digest,
+            assertion_digest="sha256:" + "b" * 64,
+            tx_id="tx:" + "c" * 64,
+            meta=(),
+        )
+        with self.assertRaisesRegex(DatabaseError, "system claims cannot be revoked"):
+            db._prepare_revocations(
+                (RevocationInput(asrt_id),),
+                added_assertions={asrt_id: system_record},
+            )
+
     def test_tx_object_commits_ordered_delta_and_digest_scheme_not_full_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workspace"
@@ -153,7 +240,7 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
             tx_path = paths.tx_objects / f"{committed.value.tx_id.removeprefix('tx:')}.json"
             payload = json.loads(tx_path.read_text(encoding="utf-8"))
 
-            self.assertEqual(payload["digest_scheme"], "lthash16-v1")
+            self.assertEqual(payload["digest_scheme"], "lthash16-v2")
             self.assertEqual(payload["tx_seq"], 1)
             self.assertNotIn("state_digest", payload)
             self.assertNotIn("data_digest", payload)
@@ -188,6 +275,85 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                 revoke_payload["operations"][0]["meta"],
                 [{"key": "reason", "kind": "str", "value": "test"}],
             )
+
+    def test_content_tampering_fails_closed_even_when_assertion_id_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            committed = db.commit_assertions((_assertion("p1", "Alice"),))
+            original_state = committed.value.state_digest
+            asrt_id = committed.assertions[0].asrt_id
+            db.close()
+
+            paths = resolve_database_workspace_paths(path)
+            with sqlite3.connect(paths.assertions) as conn:
+                stored = conn.execute(
+                    "SELECT rest_terms FROM claims WHERE asrt_id = ?",
+                    (asrt_id,),
+                ).fetchone()[0]
+                self.assertIn("Alice", stored)
+                conn.execute(
+                    "UPDATE claims SET rest_terms = ? WHERE asrt_id = ?",
+                    (stored.replace("Alice", "Mallory"), asrt_id),
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT value FROM ledger_meta WHERE key = 'head_state_digest'"
+                    ).fetchone()[0],
+                    original_state,
+                )
+
+            with self.assertRaisesRegex(DatabaseIntegrityError, "assertion_digest"):
+                Database.open(path, schema_ir=_schema_ir())
+
+    def test_legacy_ledger_write_mode_is_rejected_with_migration_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            legacy_path = Path(tmp) / "legacy.db"
+            ledger = Ledger(legacy_path)
+            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+                Database(
+                    ledger=ledger,
+                    db_id="db:legacy",
+                    schema_digest=schema_digest(_schema_ir()),
+                )
+            ledger.close()
+
+            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+                Database.open(legacy_path, schema_ir=_schema_ir())
+
+            workspace = Path(tmp) / "v0.2-layout"
+            current = Database.create(workspace, schema_ir=_schema_ir())
+            current.close()
+            paths = resolve_database_workspace_paths(workspace)
+            with sqlite3.connect(paths.assertions) as conn:
+                conn.execute(
+                    "UPDATE ledger_meta SET value = 'lthash16-v1' WHERE key = 'digest_scheme'"
+                )
+            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+                Database.open(workspace, schema_ir=_schema_ir())
+            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+                Database.repair(workspace, schema_ir=_schema_ir())
+
+    def test_object_and_directory_fsync_failures_are_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with (
+                patch(
+                    "factgraph.core.store.database.os.fsync",
+                    side_effect=OSError("injected file fsync failure"),
+                ),
+                self.assertRaisesRegex(DatabaseError, "fsync failed for object file"),
+            ):
+                _atomic_write_bytes(root / "file-fsync.json", b"{}")
+
+            with (
+                patch(
+                    "factgraph.core.store.database.os.fsync",
+                    side_effect=(None, OSError("injected directory fsync failure")),
+                ),
+                self.assertRaisesRegex(DatabaseError, "directory fsync failed"),
+            ):
+                _atomic_write_bytes(root / "directory-fsync.json", b"{}")
 
     def test_different_histories_with_same_terminal_set_have_distinct_heads(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -278,16 +444,37 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
             path = Path(tmp) / "workspace"
             db = Database.create(path, schema_ir=_schema_ir())
             db.commit_assertions((_assertion("p1", "Ada"),))
-            before_repair_seq = db.head().tx_seq
+            before_repair = db.head()
             db.close()
 
             rogue_id = "asrt:" + "f" * 32
             paths = resolve_database_workspace_paths(path)
-            with sqlite3.connect(paths.assertions) as conn:
-                conn.execute(
-                    "INSERT INTO claims (asrt_id, pred_id, e_ref, rest_terms) VALUES (?, ?, ?, ?)",
-                    (rogue_id, "person:name", "idref_v1:Person:rogue", "[]"),
-                )
+            rogue_fact = (
+                ("entity_ref", "idref_v1:Person:rogue"),
+                ("string", "Rogue"),
+            )
+            rogue_digest = assertion_digest_for(
+                pred_id="person:name",
+                fact_tuple=rogue_fact,
+                schema_digest=schema_digest(_schema_ir()),
+            )
+            drift_ledger = Ledger(paths.assertions)
+            drift_ledger.append_assertion(
+                claim=Claim(
+                    asrt_id=rogue_id,
+                    pred_id="person:name",
+                    e_ref=rogue_fact[0][1],
+                    rest_terms=[rogue_fact[1]],
+                ),
+                claim_args=[],
+                meta_rows=[
+                    MetaRow(rogue_id, "schema_digest", "str", schema_digest(_schema_ir())),
+                    MetaRow(rogue_id, "assertion_digest", "str", rogue_digest),
+                    MetaRow(rogue_id, "tx_id", "str", before_repair.tx_id),
+                ],
+                asrt_id=rogue_id,
+            )
+            drift_ledger.close()
 
             with self.assertRaisesRegex(DatabaseIntegrityError, "terminal set"):
                 Database.open(path, schema_ir=_schema_ir())
@@ -297,7 +484,7 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                 schema_ir=_schema_ir(),
                 reason="phase1-test-injected-ledger-drift",
             )
-            self.assertEqual(repaired.head().tx_seq, before_repair_seq + 1)
+            self.assertEqual(repaired.head().tx_seq, before_repair.tx_seq + 1)
             self.assertIsNotNone(repaired._ledger.get_claim(rogue_id))
             repair_meta = repaired._ledger.get_ledger_meta("last_repair")
             self.assertIsNotNone(repair_meta)
@@ -383,7 +570,7 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
     def test_commit_hot_path_does_not_scan_active_ledger(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
         with patch(
-            "factgraph.core.store.database._active_factual_assertion_ids",
+            "factgraph.core.store.database._active_factual_assertions",
             side_effect=AssertionError("commit performed a full active-set scan"),
         ):
             db.commit_assertions((_assertion("p1", "Ada"),))

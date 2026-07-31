@@ -1,3 +1,11 @@
+"""LtHash16 set accumulator used by the Database state commitment.
+
+Callers must provide a set of unique, canonically framed elements. Each of the
+1024 lanes is added or subtracted modulo ``2^16``; wraparound is part of the
+construction, not integer overflow. ``from_elements`` rejects duplicate bytes
+so accidental multiset use cannot silently cancel the set-level invariant.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -16,9 +24,9 @@ from collections.abc import Iterable
 LTHASH_LANES = 1024
 LTHASH_LANE_BITS = 16
 LTHASH_STATE_BYTES = LTHASH_LANES * (LTHASH_LANE_BITS // 8)
-LTHASH_SCHEME = "lthash16-v1"
+LTHASH_SCHEME = "lthash16-v2"
 _TOKEN_PREFIX = f"{LTHASH_SCHEME}:"
-_ELEMENT_DOMAIN = b"factgraph\x00lthash16-v1\x00element\x00"
+_ELEMENT_DOMAIN = b"factgraph\x00lthash16-v2\x00element\x00"
 _LANE_MASK = (1 << LTHASH_LANE_BITS) - 1
 
 

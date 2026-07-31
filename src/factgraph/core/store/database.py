@@ -1,3 +1,11 @@
+"""Durable Database commit protocol and dual state/history commitments.
+
+Known durability gaps: macOS ``F_FULLFSYNC`` is not requested after the
+portable ``fsync`` calls, and a missing authoritative tx object cannot yet be
+re-anchored even when the SQLite ledger is intact. The explicit repair flow
+therefore requires a valid tx-object head anchor.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -46,6 +54,7 @@ from factgraph.core.store.ledger import (
 
 DBTX_V1_PREFIX = b"factpy\x00dbtx_v1\x00"
 DBTX_V2_PREFIX = b"factgraph\x00dbtx_v2\x00"
+DBSTATE_ELEMENT_V2_PREFIX = b"factgraph\x00dbstate_element_v2\x00"
 DBDATA_V1_PREFIX = b"factpy\x00dbdata_v1\x00"
 ASSERTION_V1_PREFIX = b"factpy\x00assertion_v1\x00"
 VIEW_V1_PREFIX = b"factpy\x00subset_view_v1\x00"
@@ -54,6 +63,7 @@ _INT64_MIN = -(1 << 63)
 _INT64_MAX = (1 << 63) - 1
 _WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
 _DATABASE_WORKSPACE_VERSION = "1"
+_RESERVED_ASSERTION_META_KEYS = frozenset({"assertion_digest", "schema_digest", "tx_id"})
 
 
 class DatabaseError(Exception):
@@ -360,6 +370,11 @@ class Database:
         workspace_paths: DatabaseWorkspacePaths | None = None,
         lock_handle: IO[bytes] | None = None,
     ) -> None:
+        if workspace_paths is None and not getattr(ledger, "_memory_mode", False):
+            raise DatabaseError(
+                "durable legacy Ledger injection is not writable; "
+                "use the Phase 3 migrate-workspace flow"
+            )
         self._ledger = ledger
         self._db_id = _require_db_id(db_id)
         self._schema_digest = _require_token(schema_digest, prefix="sha256:", field="schema_digest")
@@ -509,31 +524,13 @@ class Database:
                 _release_workspace_lock(lock_handle)
                 raise
         if paths.manifest.exists() or paths.db.exists():
-            raise DatabaseError("new-layout Database workspace metadata not found")
-        return cls._open_legacy_ledger(path=path, schema_ir=schema_ir)
-
-    @classmethod
-    def _open_legacy_ledger(cls, *, path: str | Path, schema_ir: dict[str, Any]) -> Database:
-        ledger = Ledger(path=path)
-        try:
-            db_id = ledger.get_ledger_meta("db_id")
-            if db_id is None:
-                raise DatabaseError("Database metadata not found; use Database.create first")
-            schema_token = compute_schema_digest(schema_ir)
-            stored_schema = ledger.get_ledger_meta("schema_digest")
-            if stored_schema != schema_token:
-                raise DatabaseError(
-                    f"schema_digest mismatch: stored={stored_schema!r}, expected={schema_token!r}"
-                )
-            if ledger.get_ledger_meta("digest_scheme") != LTHASH_SCHEME:
-                raise DatabaseError(
-                    "legacy v0.2 Database requires the Phase 3 migrate-workspace flow"
-                )
-            _validate_ledger_state(ledger)
-            return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token)
-        except Exception:
-            ledger.close()
-            raise
+            raise DatabaseError(
+                "legacy or incomplete Database workspace is not writable in v0.3; "
+                "use the Phase 3 migrate-workspace flow"
+            )
+        raise DatabaseError(
+            "legacy ledger write mode is disabled; use the Phase 3 migrate-workspace flow"
+        )
 
     @classmethod
     def _open_workspace(
@@ -549,6 +546,12 @@ class Database:
         db_id = _require_db_id(meta["db_id"])
         ledger = Ledger(path=paths.assertions)
         try:
+            stored_scheme = ledger.get_ledger_meta("digest_scheme")
+            if stored_scheme != LTHASH_SCHEME:
+                raise DatabaseError(
+                    f"Database digest_scheme {stored_scheme!r} is not writable in v0.3; "
+                    "use the Phase 3 migrate-workspace flow"
+                )
             _validate_workspace_integrity(
                 paths,
                 ledger=ledger,
@@ -589,6 +592,12 @@ class Database:
             _validate_schema_object(paths, schema_digest=schema_token, expected_schema_ir=schema_ir)
             db_id = _require_db_id(_read_database_meta(paths)["db_id"])
             ledger = Ledger(path=paths.assertions)
+            stored_scheme = ledger.get_ledger_meta("digest_scheme")
+            if stored_scheme != LTHASH_SCHEME:
+                raise DatabaseError(
+                    f"Database digest_scheme {stored_scheme!r} is not repairable in v0.3; "
+                    "use the Phase 3 migrate-workspace flow"
+                )
             stored_head = ledger.get_ledger_meta("head_tx_id")
             if stored_head is None:
                 raise DatabaseIntegrityError("repair cannot recover a missing head_tx_id anchor")
@@ -598,8 +607,9 @@ class Database:
                 head_tx_id=stored_head,
                 expected_schema_digest=schema_token,
             )
-            ledger_ids = _active_factual_assertion_ids(ledger)
-            rebuilt_digest = _state_digest_for_ids(ledger_ids)
+            ledger_assertions = _active_factual_assertions(ledger)
+            ledger_ids = set(ledger_assertions)
+            rebuilt_digest = _state_digest_for_assertions(ledger_assertions)
             previous_digest = ledger.get_ledger_meta("head_state_digest") or "<missing>"
             operations: list[dict[str, Any]] = [
                 {"kind": "repair_remove", "asrt_id": asrt_id}
@@ -723,14 +733,18 @@ class Database:
             if self._ledger.get_claim(asrt_id) is not None:
                 raise DuplicateAssertionError(f"assertion already exists: {asrt_id}")
 
+        added_assertions = {record.asrt_id: record for record, _claim, _args, _meta in prepared}
         prepared_revocations = self._prepare_revocations(
             revocations,
-            added_ids=set(added_ids),
+            added_assertions=added_assertions,
         )
         state = decode_state(parent.state_digest)
         operations: list[dict[str, Any]] = []
         for provisional, _claim, _args, _meta in prepared:
-            state = lthash_add(state, _state_element(provisional.asrt_id))
+            state = lthash_add(
+                state,
+                _state_element(provisional.asrt_id, provisional.assertion_digest),
+            )
             operations.append(
                 {
                     "kind": "assertion",
@@ -738,8 +752,11 @@ class Database:
                     "assertion_digest": provisional.assertion_digest,
                 }
             )
-        for revocation, _meta_rows in prepared_revocations:
-            state = lthash_remove(state, _state_element(revocation.revoked_asrt_id))
+        for revocation, _meta_rows, target_assertion_digest in prepared_revocations:
+            state = lthash_remove(
+                state,
+                _state_element(revocation.revoked_asrt_id, target_assertion_digest),
+            )
             operations.append(
                 {
                     "kind": "revocation",
@@ -797,7 +814,7 @@ class Database:
 
         revocation_records: list[RevocationRecord] = []
         revocation_writes: list[LedgerRevocationWrite] = []
-        for provisional, input_meta_rows in prepared_revocations:
+        for provisional, input_meta_rows, _target_assertion_digest in prepared_revocations:
             record = RevocationRecord(
                 revoker_asrt_id=provisional.revoker_asrt_id,
                 revoked_asrt_id=provisional.revoked_asrt_id,
@@ -901,8 +918,11 @@ class Database:
     ) -> tuple[AssertionRecord, Claim, list[ClaimArg], list[MetaRow]]:
         if not isinstance(item, AssertionInput):
             raise TypeError("assertions must contain AssertionInput")
+        if _is_system_predicate(item.pred_id):
+            raise DatabaseError("user assertions cannot use the reserved '__system__.' namespace")
         fact_tuple = _normalize_fact_tuple(item.fact_tuple)
         meta = _normalize_meta_entries(item.meta)
+        _reject_reserved_assertion_meta(meta)
         assertion_digest = assertion_digest_for(
             pred_id=item.pred_id,
             fact_tuple=fact_tuple,
@@ -936,9 +956,9 @@ class Database:
         self,
         items: Sequence[RevocationInput],
         *,
-        added_ids: set[str],
-    ) -> list[tuple[RevocationRecord, list[MetaRow]]]:
-        prepared: list[tuple[RevocationRecord, list[MetaRow]]] = []
+        added_assertions: Mapping[str, AssertionRecord],
+    ) -> list[tuple[RevocationRecord, list[MetaRow], str]]:
+        prepared: list[tuple[RevocationRecord, list[MetaRow], str]] = []
         targets: set[str] = set()
         for item in items:
             if not isinstance(item, RevocationInput):
@@ -947,17 +967,24 @@ class Database:
             if target in targets:
                 raise DatabaseError(f"duplicate revocation target in commit: {target}")
             targets.add(target)
-            claim = self._ledger.get_claim(target)
-            if target not in added_ids:
+            added = added_assertions.get(target)
+            if added is not None:
+                if _is_system_predicate(added.pred_id):
+                    raise DatabaseError("system claims cannot be revoked")
+                target_assertion_digest = added.assertion_digest
+            else:
+                claim = self._ledger.get_claim(target)
                 if claim is None:
                     if any(row.revoker_asrt_id == target for row in self._ledger.revokes):
                         raise DatabaseError("revoke-of-revoke is forbidden")
                     raise DatabaseError(f"revocation target does not exist: {target}")
-                if claim.pred_id.startswith("__system__."):
+                if _is_system_predicate(claim.pred_id):
                     raise DatabaseError("system claims cannot be revoked")
                 if self._ledger.has_active_revocation(target):
                     raise DatabaseError(f"assertion is already revoked: {target}")
+                target_assertion_digest = _verified_assertion_digest(self._ledger, claim)
             meta = _normalize_meta_entries(item.meta)
+            _reject_reserved_assertion_meta(meta)
             revoker_id = _new_assertion_id()
             provisional = RevocationRecord(
                 revoker_asrt_id=revoker_id,
@@ -966,7 +993,7 @@ class Database:
                 meta=meta,
             )
             meta_rows = [MetaRow(revoker_id, row.key, row.kind, row.value) for row in meta]
-            prepared.append((provisional, meta_rows))
+            prepared.append((provisional, meta_rows, target_assertion_digest))
         return prepared
 
     def _active_assertion_ids(self) -> set[str]:
@@ -1370,15 +1397,6 @@ def _read_ledger_head(
     )
 
 
-def _validate_ledger_state(ledger: Ledger) -> None:
-    stored = ledger.get_ledger_meta("head_state_digest")
-    if stored is None:
-        raise DatabaseIntegrityError("head_state_digest metadata missing")
-    computed = _state_digest_for_ids(_active_factual_assertion_ids(ledger))
-    if stored != computed:
-        raise DatabaseIntegrityError("stored state digest does not match active factual data")
-
-
 def _validate_workspace_integrity(
     paths: DatabaseWorkspacePaths,
     *,
@@ -1401,10 +1419,11 @@ def _validate_workspace_integrity(
         head_tx_id=head.tx_id,
         expected_schema_digest=head.schema_digest,
     )
-    ledger_ids = _active_factual_assertion_ids(ledger)
+    ledger_assertions = _active_factual_assertions(ledger)
+    ledger_ids = set(ledger_assertions)
     if history_ids != ledger_ids:
         raise DatabaseIntegrityError("tx history terminal set does not match ledger data")
-    computed = _state_digest_for_ids(ledger_ids)
+    computed = _state_digest_for_assertions(ledger_assertions)
     if computed != head.state_digest:
         raise DatabaseIntegrityError("head_state_digest does not match active factual data")
     return head
@@ -1461,21 +1480,98 @@ def _replay_history(
 
 
 def _active_factual_assertion_ids(ledger: Ledger) -> set[str]:
-    return {
-        _require_asrt_id(claim.asrt_id, field="asrt_id")
-        for claim in ledger.find_claims()
-        if not claim.pred_id.startswith("__system__")
-        and not ledger.has_active_revocation(claim.asrt_id)
-    }
+    return set(_active_factual_assertions(ledger))
 
 
-def _state_digest_for_ids(asrt_ids: Iterable[str]) -> str:
-    normalized = sorted({_require_asrt_id(asrt_id, field="asrt_id") for asrt_id in asrt_ids})
-    return encode_state(lthash_from_elements(_state_element(asrt_id) for asrt_id in normalized))
+def _is_system_predicate(pred_id: str) -> bool:
+    """Return the INV-13/INV-15 reserved-namespace predicate."""
+    return isinstance(pred_id, str) and pred_id.startswith("__system__.")
 
 
-def _state_element(asrt_id: str) -> bytes:
-    return _require_asrt_id(asrt_id, field="asrt_id").encode("ascii")
+def _verified_assertion_digest(ledger: Ledger, claim: Claim) -> str:
+    """Read and verify the content digest persisted with one factual claim."""
+    rows = ledger.find_meta(asrt_id=claim.asrt_id)
+    digest_rows = [row for row in rows if row.key == "assertion_digest" and row.kind == "str"]
+    schema_rows = [row for row in rows if row.key == "schema_digest" and row.kind == "str"]
+    tx_rows = [row for row in rows if row.key == "tx_id" and row.kind == "str"]
+    if len(digest_rows) != 1 or len(schema_rows) != 1 or len(tx_rows) != 1:
+        raise DatabaseIntegrityError(
+            f"assertion {claim.asrt_id} must have exactly one assertion_digest, "
+            "schema_digest and tx_id metadata row"
+        )
+    try:
+        stored_digest = _require_token(
+            digest_rows[0].value,
+            prefix="sha256:",
+            field="assertion_digest",
+        )
+        schema_digest = _require_token(
+            schema_rows[0].value,
+            prefix="sha256:",
+            field="schema_digest",
+        )
+        _require_token(tx_rows[0].value, prefix="tx:", field="tx_id")
+        tx_row_index = rows.index(tx_rows[0])
+        if rows.index(digest_rows[0]) >= tx_row_index or rows.index(schema_rows[0]) >= tx_row_index:
+            raise DatabaseError("reserved assertion identity metadata is out of order")
+        # Initial assertion meta is inserted before the reserved tx_id marker.
+        # Later append_meta history is deliberately outside state_digest per
+        # Q-SAE-7 and therefore must not alter the assertion content digest.
+        user_meta = _normalize_meta_entries(
+            tuple(
+                row for row in rows[:tx_row_index] if row.key not in _RESERVED_ASSERTION_META_KEYS
+            )
+        )
+        recomputed = assertion_digest_for(
+            pred_id=claim.pred_id,
+            fact_tuple=(("entity_ref", claim.e_ref), *tuple(claim.rest_terms)),
+            schema_digest=schema_digest,
+            meta=user_meta,
+        )
+    except DatabaseError as exc:
+        raise DatabaseIntegrityError(
+            f"assertion {claim.asrt_id} has malformed identity metadata"
+        ) from exc
+    if recomputed != stored_digest:
+        raise DatabaseIntegrityError(
+            f"assertion_digest does not match factual content for {claim.asrt_id}"
+        )
+    return stored_digest
+
+
+def _active_factual_assertions(ledger: Ledger) -> dict[str, str]:
+    active: dict[str, str] = {}
+    for claim in ledger.find_claims():
+        if _is_system_predicate(claim.pred_id) or ledger.has_active_revocation(claim.asrt_id):
+            continue
+        asrt_id = _require_asrt_id(claim.asrt_id, field="asrt_id")
+        active[asrt_id] = _verified_assertion_digest(ledger, claim)
+    return active
+
+
+def _state_digest_for_assertions(assertions: Mapping[str, str]) -> str:
+    normalized = sorted(
+        (
+            _require_asrt_id(asrt_id, field="asrt_id"),
+            _require_token(digest, prefix="sha256:", field="assertion_digest"),
+        )
+        for asrt_id, digest in assertions.items()
+    )
+    return encode_state(
+        lthash_from_elements(
+            _state_element(asrt_id, assertion_digest) for asrt_id, assertion_digest in normalized
+        )
+    )
+
+
+def _state_element(asrt_id: str, assertion_digest: str) -> bytes:
+    normalized_id = _require_asrt_id(asrt_id, field="asrt_id")
+    normalized_digest = _require_token(
+        assertion_digest,
+        prefix="sha256:",
+        field="assertion_digest",
+    )
+    return DBSTATE_ELEMENT_V2_PREFIX + _str_field(normalized_id) + _str_field(normalized_digest)
 
 
 def _acquire_workspace_lock(paths: DatabaseWorkspacePaths) -> IO[bytes]:
@@ -1542,22 +1638,30 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
         with tmp.open("wb") as fh:
             fh.write(data)
             fh.flush()
-            with _suppress_os_error():
+            try:
                 os.fsync(fh.fileno())
+            except OSError as exc:
+                raise DatabaseError(f"fsync failed for object file: {tmp}") from exc
         os.replace(tmp, path)
         _fsync_parent(path)
     finally:
         if tmp.exists():
-            tmp.unlink()
+            with _suppress_os_error():
+                tmp.unlink()
 
 
 def _fsync_parent(path: Path) -> None:
-    with _suppress_os_error():
+    try:
         fd = os.open(path.parent, os.O_RDONLY)
+    except OSError as exc:
+        raise DatabaseError(f"cannot open object directory for fsync: {path.parent}") from exc
+    try:
         try:
             os.fsync(fd)
-        finally:
-            os.close(fd)
+        except OSError as exc:
+            raise DatabaseError(f"directory fsync failed: {path.parent}") from exc
+    finally:
+        os.close(fd)
 
 
 class _suppress_os_error:
@@ -1785,6 +1889,14 @@ def _normalize_meta_entries(
             raise DatabaseError(f"unsupported meta kind: {entry.kind}")
         result.append(entry)
     return tuple(result)
+
+
+def _reject_reserved_assertion_meta(rows: Sequence[MetaEntry]) -> None:
+    reserved = sorted({row.key for row in rows} & _RESERVED_ASSERTION_META_KEYS)
+    if reserved:
+        raise DatabaseError(
+            "assertion/revocation meta cannot use Database-reserved key(s): " + ", ".join(reserved)
+        )
 
 
 def _canonical_meta_entries_bytes(rows: Sequence[MetaEntry]) -> bytes:

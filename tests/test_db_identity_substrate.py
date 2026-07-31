@@ -20,6 +20,7 @@ from factgraph.core.store.database import (
     FrozenAssertionSet,
     MetaEntry,
     RevocationInput,
+    _state_element,
     asrt_id_for,
     assertion_digest_for,
     canonical_bytes_assertion_v1,
@@ -158,8 +159,8 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             created = db.head()
             self.assertTrue(created.db_id.startswith("db:"))
             self.assertTrue(created.tx_id.startswith("tx:"))
-            self.assertTrue(created.state_digest.startswith("lthash16-v1:"))
-            self.assertEqual(created.digest_scheme, "lthash16-v1")
+            self.assertTrue(created.state_digest.startswith("lthash16-v2:"))
+            self.assertEqual(created.digest_scheme, "lthash16-v2")
             self.assertEqual(created.tx_seq, 0)
 
             result = db.commit_assertions(
@@ -324,7 +325,14 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             revocations=(RevocationInput(revoked_asrt_id=ada.asrt_id),),
         )
         expected = encode_state(
-            from_elements((after_revoke.assertions[0].asrt_id.encode("ascii"),))
+            from_elements(
+                (
+                    _state_element(
+                        after_revoke.assertions[0].asrt_id,
+                        after_revoke.assertions[0].assertion_digest,
+                    ),
+                )
+            )
         )
         self.assertEqual(after_revoke.value.state_digest, expected)
 
