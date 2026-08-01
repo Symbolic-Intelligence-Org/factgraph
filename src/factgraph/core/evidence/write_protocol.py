@@ -5,6 +5,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from factgraph.core.protocol.annotation_v1 import SHARED_ANNOTATION_KEYS
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
 from factgraph.core.store.ledger import (
@@ -94,15 +95,7 @@ _missing_kind_map_keys = sorted(_required_kind_keys - set(_KEY_KIND_MAP.keys()))
 if _missing_kind_map_keys:
     raise RuntimeError(f"_KEY_KIND_MAP is missing required keys: {', '.join(_missing_kind_map_keys)}")
 
-_SHARED_ANNOTATION_WHITELIST: dict[str, tuple[str, str]] = {
-    "source": ("source", "observed"),
-    "source_loc": ("source", "observed"),
-    "trace_id": ("source", "observed"),
-    "approved_by": ("source", "observed"),
-    "note": ("source", "observed"),
-    "raw_kind": ("semantic", "observed"),
-    "bound": ("semantic", "observed"),
-}
+_SHARED_ANNOTATION_WHITELIST = SHARED_ANNOTATION_KEYS
 
 __all__ = [
     "WriteProtocolError",

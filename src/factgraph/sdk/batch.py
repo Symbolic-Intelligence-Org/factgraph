@@ -180,13 +180,16 @@ class BatchPlan:
         return self.export(sdk).to_json()
 
     def apply(self, sdk: "SDKStore") -> BatchApplyResult:
+        if not self.ops:
+            return BatchApplyResult(refs_by_handle_id={}, assertion_ids=[])
         if self._application_handle_order:
             return _apply_application_batch_plan(self, sdk)
         if sdk._database is not None:
             sdk._database_for_application_write("fg.batch")
+            path, reason = _first_unrepresentable_batch_op(self, sdk)
             raise SDKStoreError(
-                "attached batch contains an operation that cannot be represented by "
-                "the application write-plan protocol; no writes were committed"
+                f"{path}: attached batch operation cannot be represented by the "
+                f"application write-plan protocol ({reason}); no writes were committed"
             )
         refs_by_handle_id: dict[int, str] = {}
         assertion_ids: list[str] = []
@@ -394,6 +397,8 @@ class WireBatchPlan:
             raise SDKStoreError(
                 f"wire plan schema_digest mismatch: expected {self.schema_digest}, actual {actual_digest}"
             )
+        if not self.ops:
+            return BatchApplyResult(refs_by_handle_id={}, assertion_ids=[])
         if sdk._database is not None:
             return _apply_attached_wire_batch_plan(self, sdk)
 
@@ -486,6 +491,57 @@ class WireBatchPlan:
             raise SDKStoreError(f"unsupported wire batch op: {type(op).__name__}")
 
         return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
+
+
+def _first_unrepresentable_batch_op(plan: BatchPlan, sdk: "SDKStore") -> tuple[str, str]:
+    """Describe the first legacy-only op before an attached batch fails closed."""
+    refs_by_handle_id: dict[int, RefOp] = {}
+    for op in plan.ops:
+        path = op.path or f"{op.entity_type}#{op.handle_id}"
+        if isinstance(op, RefOp):
+            refs_by_handle_id[op.handle_id] = op
+            try:
+                _normalize_json_object(op.identity_values, path=f"{path}.identity", allow_nested=False)
+            except SDKStoreError as exc:
+                return path, str(exc)
+            continue
+        if isinstance(op, (SetOp, AddOp)):
+            try:
+                _normalize_json_object(op.meta, path=f"{path}.meta", allow_nested=True)
+            except SDKStoreError as exc:
+                return path, str(exc)
+            if op.value_kind == "handle":
+                if not isinstance(op.value, int) or op.value not in refs_by_handle_id:
+                    return path, "staged handle value could not be resolved to an application EntityRef"
+                continue
+            if op.value_kind == "entity_ref":
+                if not isinstance(op.value, str):
+                    return path, "raw entity_ref value is not a canonical string token"
+                identity = sdk._identity_values_by_e_ref.get(op.value)
+                if not isinstance(identity, dict) or not identity:
+                    return path, "raw entity_ref value is not managed by this runtime"
+                continue
+            try:
+                schema_pred = sdk._schema_pred_for_field(op.field)
+                rest_terms = sdk._rest_terms_for_field(schema_pred, value=op.value)
+            except Exception as exc:
+                return path, str(exc)
+            if len(rest_terms) != 1:
+                return path, "field value does not lower to exactly one canonical term"
+            tag, _value = rest_terms[0]
+            if tag == "bytes":
+                return path, "bytes values are outside the current application FieldValue contract"
+            if tag == "entity_ref":
+                return path, "scalar value lowered unexpectedly to entity_ref"
+            continue
+        if isinstance(op, (RetractOp, RecordExistsOp)):
+            try:
+                _normalize_json_object(op.meta, path=f"{path}.meta", allow_nested=True)
+            except SDKStoreError as exc:
+                return path, str(exc)
+
+    first = plan.ops[0]
+    return first.path or f"{first.entity_type}#{first.handle_id}", "operation lowering failed"
 
 
 def _resolve_planned_value(op: SetOp | AddOp, refs_by_handle_id: dict[int, str]) -> Any:

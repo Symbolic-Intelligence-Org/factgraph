@@ -121,7 +121,14 @@ def planned_ops_to_inputs(
                     details=exc.details,
                 ) from exc
             pred_id = pred_info.pred_id
-            rest_terms = [_rest_term_for_value(op.value, field_type=field_type, index=index)]
+            rest_terms = [
+                _rest_term_for_value(
+                    op.value,
+                    field_type=field_type,
+                    index=index,
+                    field=op.field,
+                )
+            ]
         else:
             assert op.assertion_id is not None
             revocations.append(
@@ -381,25 +388,40 @@ def _commit_planned_ops_to_database(
             "database and store must share the same Ledger",
             code="DATABASE_STORE_MISMATCH",
         )
-    if enforce_retract_guard:
-        for op in planned_ops:
-            if op.op == "retract":
-                _check_generic_retract_allowed(op, store=store, index=index)
     assertion_inputs, revocation_inputs = planned_ops_to_inputs(planned_ops, index=index)
     assertion_iter = iter(assertion_inputs)
-    revocation_index = 0
+    revocation_iter = iter(revocation_inputs)
+    revocation_targets = frozenset(
+        op.assertion_id
+        for op in planned_ops
+        if op.op == "retract" and op.assertion_id is not None
+    )
     kept_assertions: list[AssertionInput] = []
     kept_by_ingest_key: dict[str, int] = {}
+    kept_revocations: list[RevocationInput] = []
+    kept_revocation_by_target: dict[str, int] = {}
     resolutions: list[tuple[str, str | int]] = []
     for op in planned_ops:
         if op.op == "retract":
-            resolutions.append(("revocation", revocation_index))
-            revocation_index += 1
+            revocation = next(revocation_iter)
+            target = revocation.revoked_asrt_id
+            existing_revoker = store.ledger.find_revoker(target)
+            if existing_revoker is not None:
+                resolutions.append(("existing", existing_revoker))
+                continue
+            kept_index = kept_revocation_by_target.get(target)
+            if kept_index is None:
+                if enforce_retract_guard:
+                    _check_generic_retract_allowed(op, store=store, index=index)
+                kept_index = len(kept_revocations)
+                kept_revocations.append(revocation)
+                kept_revocation_by_target[target] = kept_index
+            resolutions.append(("revocation", kept_index))
             continue
         assertion = next(assertion_iter)
         ingest_key = _meta_entry_str(assertion.meta, "ingest_key")
         existing = _active_assertion_for_ingest_key(store, ingest_key)
-        if existing is not None:
+        if existing is not None and existing not in revocation_targets:
             resolutions.append(("existing", existing))
             continue
         kept_index = kept_by_ingest_key.get(ingest_key)
@@ -409,17 +431,18 @@ def _commit_planned_ops_to_database(
             kept_by_ingest_key[ingest_key] = kept_index
         resolutions.append(("assertion", kept_index))
 
-    if not kept_assertions and not revocation_inputs:
+    if not kept_assertions and not kept_revocations:
+        if any(kind != "existing" for kind, _resolution in resolutions):
+            raise AssertionError("no-write resolution must contain only existing assertion ids")
         return tuple(
             AppliedOpResultDTO(
                 op_index=op_index,
                 status="applied",
                 assertion_id=str(resolution),
             )
-            for op_index, (kind, resolution) in enumerate(resolutions)
-            if kind == "existing"
+            for op_index, (_kind, resolution) in enumerate(resolutions)
         )
-    commit = database.commit_changes(kept_assertions, revocation_inputs)
+    commit = database.commit_changes(kept_assertions, kept_revocations)
     applied_ids: list[str] = []
     for kind, resolution in resolutions:
         if kind == "existing":
@@ -1047,7 +1070,14 @@ def _apply_op(
                 path=exc.path,
                 details=exc.details,
             ) from exc
-        rest_terms = [_rest_term_for_value(op.value, field_type=field_type, index=index)]
+        rest_terms = [
+            _rest_term_for_value(
+                op.value,
+                field_type=field_type,
+                index=index,
+                field=op.field,
+            )
+        ]
         if op.op == "set":
             return set_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
         return add_field(store.ledger, pred_info.pred_id, target_e_ref, rest_terms, dict(op.meta) if op.meta else None)
@@ -1105,16 +1135,28 @@ def _rest_term_for_value(
     *,
     field_type: Any,
     index: SchemaIndex,
+    field: FieldPath,
 ) -> tuple[str, Any]:
+    path = ("planned_ops", field.entity_type, field.field_name, "value")
+    field_name = f"{field.entity_type}.{field.field_name}"
     if field_type.value_kind == "entity_ref":
         if not isinstance(value, EntityRef):
             raise EntityWriteError(
                 "entity_ref planned value must be EntityRef",
                 code="INVALID_PLANNED_VALUE",
-                path=("planned_ops", "value"),
+                path=path,
             )
         return ("entity_ref", _encoded_ref(value, index=index))
-    return (str(field_type.scalar_domain), value)
+    scalar_domain = str(field_type.scalar_domain)
+    return (
+        scalar_domain,
+        _normalize_scalar_value(
+            scalar_domain,
+            value,
+            field_name=field_name,
+            path=path,
+        ),
+    )
 
 
 def _normalize_scalar_field_value(
@@ -1126,6 +1168,21 @@ def _normalize_scalar_field_value(
 ) -> Any:
     path = ("mutations", str(mutation_index), "value")
     field_name = f"{mutation.field.entity_type}.{mutation.field.field_name}"
+    return _normalize_scalar_value(
+        scalar_domain,
+        value,
+        field_name=field_name,
+        path=path,
+    )
+
+
+def _normalize_scalar_value(
+    scalar_domain: str | None,
+    value: Any,
+    *,
+    field_name: str,
+    path: tuple[str, ...],
+) -> Any:
     if scalar_domain == "string":
         if not isinstance(value, str):
             raise EntityWriteError(

@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Iterable, Mapping, Sequence
 
+from factgraph.core.protocol.annotation_v1 import SHARED_ANNOTATION_KEYS
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.lthash import (
     LTHASH_SCHEME,
@@ -65,15 +66,6 @@ _INT64_MAX = (1 << 63) - 1
 _WORKSPACE_MANIFEST_NAME = "factgraph_workspace.json"
 _DATABASE_WORKSPACE_VERSION = "1"
 _RESERVED_ASSERTION_META_KEYS = frozenset({"assertion_digest", "schema_digest", "tx_id"})
-_SHARED_ANNOTATION_KEYS: dict[str, tuple[str, str]] = {
-    "source": ("source", "observed"),
-    "source_loc": ("source", "observed"),
-    "trace_id": ("source", "observed"),
-    "approved_by": ("source", "observed"),
-    "note": ("source", "observed"),
-    "raw_kind": ("semantic", "observed"),
-    "bound": ("semantic", "observed"),
-}
 
 
 class DatabaseError(Exception):
@@ -1909,7 +1901,7 @@ def _normalize_meta_entries(
 def _annotation_rows(asrt_id: str, meta: Sequence[MetaEntry]) -> list[AnnotationRow]:
     rows: list[AnnotationRow] = []
     for entry in meta:
-        annotation = _SHARED_ANNOTATION_KEYS.get(entry.key)
+        annotation = SHARED_ANNOTATION_KEYS.get(entry.key)
         if annotation is None:
             continue
         category, origin = annotation

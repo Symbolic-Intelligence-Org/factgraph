@@ -315,6 +315,112 @@ class DBAttachLifecycleTests(unittest.TestCase):
         self.assertEqual(db.head(), after)
         self.assertEqual(repeated.assertion_ids, result.assertion_ids)
 
+    def test_attached_wire_retract_then_identical_reassert_preserves_field(self) -> None:
+        from factgraph.sdk.batch import WireBatchPlan
+
+        db = Database.create(schema_ir=_schema_ir())
+        fg = FactGraph.attach(db, schema_classes=[User])
+        fg.entities.create(User, user_id="wire-reassert")
+        with fg.batch() as tx:
+            user = tx.entity(User, user_id="wire-reassert")
+            user.name.set("Alice")
+            tx.commit(objects=[user])
+        old_claim = fg.ledger.find_claims(
+            pred_id=_name_pred_id(fg),
+            e_ref=_user_ref("wire-reassert"),
+        )[0]
+
+        with fg.batch() as tx:
+            user = tx.entity(User, user_id="wire-reassert")
+            user.name.set("Alice")
+            payload = tx.preview(objects=[user]).export(fg).to_dict()
+        write_index = next(
+            index
+            for index, op in enumerate(payload["ops"])
+            if op["kind"] == "set" and op["field_name"] == "name"
+        )
+        payload["ops"].insert(
+            write_index,
+            {
+                "kind": "retract",
+                "handle_id": user.handle_id,
+                "entity_type": "User",
+                "pred_id": _name_pred_id(fg),
+                "field_name": "name",
+                "assertion_id": old_claim.asrt_id,
+                "meta": {"note": "replace-identically"},
+                "path": "$.ops[retract-name]",
+            },
+        )
+
+        before = db.head()
+        result = WireBatchPlan.from_dict(payload).apply(fg)
+        after = db.head()
+        active = [
+            claim
+            for claim in fg.ledger.find_claims(
+                pred_id=_name_pred_id(fg),
+                e_ref=_user_ref("wire-reassert"),
+            )
+            if not fg.ledger.has_active_revocation(claim.asrt_id)
+        ]
+
+        self.assertEqual(after.tx_seq, before.tx_seq + 1)
+        self.assertEqual(len(active), 1)
+        self.assertNotEqual(active[0].asrt_id, old_claim.asrt_id)
+        self.assertEqual(active[0].rest_terms, [("string", "Alice")])
+        self.assertIn(active[0].asrt_id, result.assertion_ids)
+
+    def test_attached_wire_duplicate_retract_replay_is_idempotent(self) -> None:
+        from factgraph.sdk.batch import WireBatchPlan
+
+        db = Database.create(schema_ir=_schema_ir())
+        fg = FactGraph.attach(db, schema_classes=[User])
+        fg.entities.create(User, user_id="wire-retract-replay")
+        with fg.batch() as tx:
+            user = tx.entity(User, user_id="wire-retract-replay")
+            user.name.set("Alice")
+            tx.commit(objects=[user])
+        target = fg.ledger.find_claims(
+            pred_id=_name_pred_id(fg),
+            e_ref=_user_ref("wire-retract-replay"),
+        )[0]
+
+        with fg.batch() as tx:
+            user = tx.entity(User, user_id="wire-retract-replay")
+            user.name.set("unused")
+            payload = tx.preview(objects=[user]).export(fg).to_dict()
+        payload["ops"] = [op for op in payload["ops"] if op["kind"] == "ref"]
+        retract = {
+            "kind": "retract",
+            "handle_id": user.handle_id,
+            "entity_type": "User",
+            "pred_id": _name_pred_id(fg),
+            "field_name": "name",
+            "assertion_id": target.asrt_id,
+            "meta": {"note": "first-wins"},
+            "path": "$.ops[retract-name]",
+        }
+        payload["ops"].extend((retract, {**retract, "path": "$.ops[retract-name-duplicate]"}))
+        wire = WireBatchPlan.from_dict(payload)
+
+        before = db.head()
+        first = wire.apply(fg)
+        committed = db.head()
+        revoker = fg.ledger.find_revoker(target.asrt_id)
+        self.assertIsNotNone(revoker)
+        assert revoker is not None
+        repeated = wire.apply(fg)
+
+        self.assertEqual(committed.tx_seq, before.tx_seq + 1)
+        self.assertEqual(db.head(), committed)
+        self.assertEqual(first.assertion_ids, repeated.assertion_ids)
+        self.assertEqual(first.assertion_ids.count(revoker), 2)
+        self.assertEqual(
+            sum(row.revoked_asrt_id == target.asrt_id for row in fg.ledger.revokes),
+            1,
+        )
+
     def test_attached_manager_write_paths_are_rejected(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
         fg = FactGraph.attach(db, schema_classes=[User])
