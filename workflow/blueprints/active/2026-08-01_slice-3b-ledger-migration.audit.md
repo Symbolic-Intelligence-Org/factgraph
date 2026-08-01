@@ -18,6 +18,7 @@
 | Date | Event | Notes |
 |---|---|---|
 | 2026-08-01 | blueprint created at `scoped` | scope 由 adopted ADR + spec §9 锁定;Phase 0 把 golden fixture 与 spec 修订前置为安全网;内联裁定待办:migration CLI 对 3b 前 v0.3 工作区的升级路径(§7 倒数第二条)在 Phase 1 前由协调方裁定 |
+| 2026-08-01 | **内联裁定:3b 前 v0.3(7 表)工作区无升级路径** | v0.3.0 未发布,7 表格式零真实消费者 —— migrate-workspace CLI 目标改为 v0.2 → 3b 终态直达;Stage A 期间产生的 7 表 dev 工作区显式拒绝 + 指引(重建或从 v0.2 源重迁移)。为一个从未发布的中间格式造迁移器是浪费 |
 
 ## Deviations
 
