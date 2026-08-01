@@ -151,6 +151,11 @@ class DbtxV2GoldenTests(unittest.TestCase):
                             ),
                         ),
                     ),
+                    meta_appends=(
+                        MetaAppendInput(
+                            _COMMIT_PATH_IDS[0], "reviewed", "bool", True
+                        ),
+                    ),
                 )
                 self.assertEqual(mixed.assertions[0].asrt_id, _COMMIT_PATH_IDS[1])
                 self.assertEqual(mixed.revocations[0].revoker_asrt_id, _COMMIT_PATH_IDS[2])
