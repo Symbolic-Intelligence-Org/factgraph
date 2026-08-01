@@ -66,4 +66,6 @@ Profile B(asset-first,meander):│
 - [ ] 基数变更(multi→single 等)纳入迁移配方适用域:transition + 可选归一化回填(哪条 claim 胜出的政策待定);
 - [ ] rename 语义:new-field+retire 模式 vs alias 机制 —— 待实际用例;
 - [ ] transition 序数的精确定义(全局 schema transition 计数 vs tx_seq 引用)—— blueprint 时定;
-- [ ] meander proposal 流与 retire 操作的治理接线(谁有权退休字段)—— meander 侧设计。
+- [ ] meander proposal 流与 retire 操作的治理接线(谁有权退休字段)—— meander 侧设计;
+- [ ] **rule-impact gate(2026-08-01 增补)**:retire 一个谓词前,checker 用 `fg.rules.structure`(已 shipped 的引擎中立静态投影)提取规则库中每条规则引用的谓词集,与 diff 的 retired 集求交 —— **受影响规则 = 交集**,非空时拒绝 transition 或要求同 proposal 内修正规则。规则绑定 pred_id 字符串而非类对象(类重生成不失效),求值期对未知谓词 fail-closed —— 内核提供分析原语,规则库与治理门在 asset 层(factgraph 有意不设规则库);
+- [ ] **`classes_from_schema_ir()` 反向生成(2026-08-01 增补)**:从工作区存储的 canonical IR(`db/objects/schema/<digest>.json`)运行时生成 Entity 类,使完全自动化的进程无需持有资产/源码即可打开工作区(正向:资产→类 已由 meander generator 证明;反向是无类运维打开的缺口,与"class-less load" deferred 项同题)。
