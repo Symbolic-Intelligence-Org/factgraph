@@ -23,6 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicit `python -m factgraph migrate-workspace <path>` before load. The CLI
   stages and verifies the replacement, writes an explicit genesis repair
   anchor, and retains the complete source workspace by default.
+- **Database-backed ingest no longer falls back to unmanaged raw entity
+  references.** `FactGraph.create(...)`, `FactGraph.load_workspace(...)`, and
+  writable `FactGraph.attach(...)` fail closed when an ingest target or
+  `entity_ref` value cannot be recovered from the graph's managed identity
+  cache. Obtain references through `fg.entities.ref/create` before ingest.
+  `FactGraph.from_schema_classes(...)` remains the lower-level unmanaged
+  Ledger compatibility lifecycle and retains the legacy fallback.
+- **Raw schema transitions are not an SDK policy surface.**
+  `SchemaTransitionInput` is no longer exported from `factgraph.sdk`; SDK
+  callers must use the additive-only `fg.schema.register/extend/apply` paths.
+  The core Database DTO remains an internal, policy-free commit mechanism.
 
 ### Added
 

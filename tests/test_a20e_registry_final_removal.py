@@ -27,6 +27,7 @@ from pathlib import Path
 from factgraph.application.workspace_runtime import save_workspace as save_v02_workspace
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.core.store.database import write_schema_object_for_workspace
+from factgraph.core.store.ledger import MetaRow
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
@@ -38,6 +39,7 @@ class _UserForA20E(Entity):
 class V02MigrationUser(Entity):
     user_id: str = Identity()
     name: str = Field()
+    payload: bytes = Field()
 
 
 class SDKConstructorRejectionTests(unittest.TestCase):
@@ -184,6 +186,76 @@ class MigrationCLIOutputTests(unittest.TestCase):
             self.assertEqual(payload["status"], "noop")
             self.assertEqual(payload["actions"], [])
 
+    def test_missing_and_noop_paths_report_interrupted_replacement_siblings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            parent = Path(tmp_dir)
+            missing = parent / "workspace"
+            backup = parent / "workspace.legacy-20260801T000000Z"
+            backup.mkdir()
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(missing)])
+            self.assertEqual(rc, 1, f"stdout={stdout!r}")
+            payload = json.loads(stderr)
+            self.assertEqual(payload["kind"], "workspace_recovery_required")
+            self.assertEqual(
+                payload["details"]["recovery_candidates"],
+                [str(backup.resolve())],
+            )
+            self.assertFalse(payload["details"]["replacement_present"])
+
+            fg = FactGraph.create(schema_classes=[_UserForA20E], path=missing)
+            fg.close()
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(missing)])
+            self.assertEqual(rc, 1, f"stdout={stdout!r}")
+            payload = json.loads(stderr)
+            self.assertEqual(payload["kind"], "workspace_recovery_required")
+            self.assertTrue(payload["details"]["replacement_present"])
+
+    def test_incomplete_and_registry_only_sources_do_not_loop_as_noop(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            incomplete = Path(tmp_dir) / "torn-create"
+            (incomplete / "db").mkdir(parents=True)
+            (incomplete / "factgraph_workspace.json").write_text(
+                json.dumps(
+                    {
+                        "factgraph_workspace_version": "1",
+                        "components": {"db": "db/", "views": "views/"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (incomplete / "db" / "meta.json").write_text("{}", encoding="utf-8")
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(incomplete)])
+            self.assertEqual(rc, 1, f"stdout={stdout!r}")
+            self.assertEqual(json.loads(stderr)["kind"], "workspace_incomplete")
+
+            registry_only = Path(tmp_dir) / "registry-only"
+            schema_dir = registry_only / "registry" / "schema"
+            schema_dir.mkdir(parents=True)
+            schema_graph = FactGraph.create(schema_classes=[_UserForA20E])
+            schema_ir = schema_graph.schema_ir
+            schema_graph.close()
+            (schema_dir / "schema_ir.json").write_text(
+                json.dumps(schema_ir, sort_keys=True),
+                encoding="utf-8",
+            )
+            (registry_only / "factgraph_workspace.json").write_text(
+                json.dumps(
+                    {
+                        "factgraph_workspace_version": "1",
+                        "schema_digest": schema_digest(schema_ir),
+                        "components": {"registry": "registry/"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(registry_only)])
+            self.assertEqual(rc, 1, f"stdout={stdout!r}")
+            self.assertEqual(json.loads(stderr)["kind"], "workspace_incomplete")
+            self.assertFalse((registry_only / "db" / "assertions.db").exists())
+
     def test_dry_run_class_legacy_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             fg = FactGraph.create(schema_classes=[_UserForA20E], path=tmp_dir)
@@ -242,10 +314,17 @@ class MigrationCLIOutputTests(unittest.TestCase):
                 meta={"source": "v0.2"},
             )
             revoker_id = legacy.assertions.retract(superseded_id)
+            payload_id = legacy.fields.set(
+                V02MigrationUser.payload,
+                e_ref,
+                b"\x00v0.2\xff",
+            )
+            legacy.assertions.append_meta(current_id, "reviewed", False)
             legacy.assertions.append_meta(current_id, "reviewed", True)
             expected_claims = tuple(legacy.ledger.claims)
             expected_args = tuple(legacy.ledger.claim_args)
             expected_revokes = tuple(legacy.ledger.revokes)
+            expected_user_meta = tuple(legacy.ledger.meta_rows)
             expected_ids = {claim.asrt_id for claim in expected_claims}
             self.assertFalse(any(asrt_id.startswith("asrt:") for asrt_id in expected_ids))
             self.assertEqual(legacy.ledger.find_revoker(superseded_id), revoker_id)
@@ -294,9 +373,32 @@ class MigrationCLIOutputTests(unittest.TestCase):
                 self.assertEqual(tuple(loaded.ledger.revokes), expected_revokes)
                 self.assertEqual(loaded.fields.get(V02MigrationUser.name, e_ref), "Alice Two")
                 self.assertEqual(
+                    loaded.fields.get(V02MigrationUser.payload, e_ref),
+                    b"\x00v0.2\xff",
+                )
+                self.assertEqual(
+                    [
+                        row.value
+                        for row in loaded.ledger.find_meta(
+                            asrt_id=current_id,
+                            key="reviewed",
+                        )
+                    ],
+                    [False, True],
+                )
+                self.assertEqual(
+                    tuple(
+                        row
+                        for row in loaded.ledger.meta_rows
+                        if row.key not in {"assertion_digest", "schema_digest", "tx_id"}
+                    ),
+                    expected_user_meta,
+                )
+                self.assertEqual(
                     loaded.ledger.find_meta(asrt_id=current_id, key="reviewed")[-1].value,
                     True,
                 )
+                self.assertIn(payload_id, {claim.asrt_id for claim in loaded.ledger.claims})
                 head = loaded._database.head()
                 self.assertEqual(head.tx_seq, 0)
                 self.assertEqual(head.tx_id, migrated["head_tx_id"])
@@ -317,6 +419,87 @@ class MigrationCLIOutputTests(unittest.TestCase):
                 self.assertEqual(loaded.fields.get(V02MigrationUser.name, e_ref), "Alice Three")
             finally:
                 loaded.close()
+
+    def test_v02_migration_rejects_corrupt_ledger_without_replacing_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "corrupt-source"
+            legacy = FactGraph.from_schema_classes([V02MigrationUser])
+            digest = schema_digest(legacy.schema_ir)
+            save_v02_workspace(workspace, schema_digest=digest, ledger=legacy.ledger)
+            write_schema_object_for_workspace(workspace, legacy.schema_ir)
+            legacy.ledger.close()
+            corrupt_bytes = b"not-a-sqlite-database"
+            (workspace / "ledger.db").write_bytes(corrupt_bytes)
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(workspace)])
+            self.assertEqual(rc, 1, f"stdout={stdout!r}")
+            self.assertEqual(json.loads(stderr)["kind"], "workspace_layout_migration_failed")
+            self.assertEqual((workspace / "ledger.db").read_bytes(), corrupt_bytes)
+            self.assertEqual(list(workspace.parent.glob(f"{workspace.name}.legacy-*")), [])
+
+    def test_v02_migration_rejects_reserved_assertion_digest_on_revoker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "reserved-revoker"
+            legacy = FactGraph.from_schema_classes([V02MigrationUser])
+            e_ref = legacy.entities.create(V02MigrationUser, user_id="alice")
+            name_id = legacy.fields.set(V02MigrationUser.name, e_ref, "Alice")
+            revoker_id = legacy.assertions.retract(name_id)
+            self.assertIsNotNone(revoker_id)
+            legacy.ledger.append_meta(
+                [MetaRow(revoker_id, "assertion_digest", "str", "legacy-collision")]
+            )
+            digest = schema_digest(legacy.schema_ir)
+            save_v02_workspace(workspace, schema_digest=digest, ledger=legacy.ledger)
+            write_schema_object_for_workspace(workspace, legacy.schema_ir)
+            legacy.ledger.close()
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(workspace)])
+            self.assertEqual(rc, 1, f"stdout={stdout!r}")
+            payload = json.loads(stderr)
+            self.assertEqual(payload["kind"], "workspace_layout_migration_failed")
+            self.assertIn("legacy revoker", payload["message"])
+            self.assertTrue((workspace / "ledger.db").is_file())
+
+    def test_v02_migration_no_archive_removes_source_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "no-archive"
+            legacy = FactGraph.from_schema_classes([V02MigrationUser])
+            legacy.entities.create(V02MigrationUser, user_id="alice")
+            digest = schema_digest(legacy.schema_ir)
+            save_v02_workspace(workspace, schema_digest=digest, ledger=legacy.ledger)
+            write_schema_object_for_workspace(workspace, legacy.schema_ir)
+            legacy.ledger.close()
+
+            rc, stdout, stderr = self._run_cli(
+                ["migrate-workspace", str(workspace), "--no-archive"]
+            )
+            self.assertEqual(rc, 0, f"stdout={stdout!r} stderr={stderr!r}")
+            self.assertEqual(json.loads(stdout)["status"], "migrated")
+            self.assertEqual(list(workspace.glob("workspace.legacy.*")), [])
+            self.assertEqual(list(workspace.parent.glob(f"{workspace.name}.legacy-*")), [])
+            loaded = FactGraph.load_workspace(workspace, schema_classes=[V02MigrationUser])
+            loaded.close()
+
+    def test_v02_manifest_digest_mismatch_names_manifest_and_object_digests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "digest-mismatch"
+            legacy = FactGraph.from_schema_classes([V02MigrationUser])
+            digest = schema_digest(legacy.schema_ir)
+            save_v02_workspace(workspace, schema_digest=digest, ledger=legacy.ledger)
+            write_schema_object_for_workspace(workspace, legacy.schema_ir)
+            legacy.ledger.close()
+            manifest_path = workspace / "factgraph_workspace.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            wrong_digest = "sha256:" + "0" * 64
+            manifest["schema_digest"] = wrong_digest
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(workspace)])
+            self.assertEqual(rc, 1, f"stdout={stdout!r}")
+            payload = json.loads(stderr)
+            self.assertEqual(payload["kind"], "schema_digest_mismatch")
+            self.assertEqual(payload["details"]["manifest_schema_digest"], wrong_digest)
+            self.assertEqual(payload["details"]["object_schema_digest"], digest)
 
 
 class ServiceRouteRemovalTests(unittest.TestCase):

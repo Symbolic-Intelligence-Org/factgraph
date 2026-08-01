@@ -71,6 +71,13 @@ Closed v0.2 workspaces must be migrated explicitly:
 python -m factgraph migrate-workspace ./workspace
 ```
 
+Migration uses a visible `<workspace-name>.legacy-<UTC timestamp>` sibling
+during atomic replacement. If a crash strands that sibling, rerun the same
+command: it returns `workspace_recovery_required` with candidate paths and
+whether a replacement is already present. Verify the indicated copy before
+renaming, archiving, or removing anything; recovery is intentionally not
+automatic.
+
 ## Non-responsibilities
 
 - The SDK does not provide concurrent read-only opens for durable workspaces.
@@ -84,12 +91,19 @@ python -m factgraph migrate-workspace ./workspace
 
 - `FactGraph.create(...)` rejects `ledger=` and `ledger_path=`; use
   `from_schema_classes(...)` for unmanaged Ledger compatibility.
+- Database-backed ingest rejects raw target/entity-reference tokens that are
+  not present in the graph's managed identity cache. Use
+  `fg.entities.ref/create` first. The lower-level
+  `from_schema_classes(...)` lifecycle alone retains the legacy direct-write
+  fallback.
 - `save_workspace(path=other)` does not copy or rebind; make an explicit
   directory copy for sandbox workflows.
 - Durable lifecycle is single-writer. Multi-worker deployments must arrange a
   single writer or wait for a separately designed read-only channel.
 - Schema mutation remains additive-only. Successful durable schema changes are
-  committed immediately as isolated `schema_change` transactions.
+  committed immediately as isolated `schema_change` transactions. The raw
+  core `SchemaTransitionInput` mechanism is policy-free and is not exported
+  from `factgraph.sdk`.
 - Snapshot attach (`db.as_of(...)`) and method-level `view=` parameters remain
   future work.
 

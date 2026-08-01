@@ -257,7 +257,13 @@ Boundaries:
 - SDK pre-validates all items with `items[i].*` paths.
 - Any `severity="error"` triggers collect-and-stop (whole batch is not written).
 - Warnings do not block writes.
-- After precheck, cache-resolvable `set/add/retract` items delegate to application `apply_ingest_request(...)`; when the target or entity_ref value cannot be recovered from the SDK identity cache, SDK conservatively falls back to the legacy write path.
+- After precheck, cache-resolvable `set/add/retract` items delegate to
+  application `apply_ingest_request(...)`. On Database-backed created, loaded,
+  or writable-attached graphs, a target or `entity_ref` value that cannot be
+  recovered from the SDK identity cache fails closed before writing. Obtain
+  references through `fg.entities.ref/create` first. Only the lower-level
+  unmanaged `FactGraph.from_schema_classes(...)` lifecycle retains the legacy
+  direct-write fallback.
 
 ### 7.3 Meta behavior
 

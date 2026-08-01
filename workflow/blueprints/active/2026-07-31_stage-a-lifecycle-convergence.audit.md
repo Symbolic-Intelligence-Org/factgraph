@@ -32,11 +32,20 @@
 | 2026-08-01 | **Phase 3 实施完成,待只读审计** | 六个任务提交:`a24d3168` application `FieldValue` additive bytes;`6fc3a70c` `append_meta/schema_change` 规范 tx op(old/new digest only,对应 schema object write-once + replay 连续性);`dd456717` writable attach 写面统一路由 Database;`7b63bba2` create/load owned Database + close/context manager + 12 reject 与定义拆除 + save metadata touch;`cb773192` v0.2 CLI staging/repair-anchor/verified replacement + 完整旧 workspace 默认归档;`8f342ce9` core/store + SDK lifecycle docs/CHANGELOG 诚实化。关键 gate:全套件 **2761 passed / 32 skipped / 1 approved deselected / 1078 subtests**;PR #20/#21/#22 精确专项 **157 passed**;Phase 3 lifecycle/schema/migration 面 **153 passed / 12 skipped / 1 approved deselected / 28 subtests**;implementation ruff 全绿,`git diff --check` 全绿。migration round-trip 保留 claim/arg/revoke 行与裸 UUID ID/meta,迁移后 reopen 校验通过且下一笔写正常推进 `tx_seq=1`。meander 设计快照 `71d26f9` 的 28 个业务 `save_workspace()` 点全为无参且不消费返回值,metadata no-op 化不改控制流;sandbox 继续以目录 copy 运行。Phase 4 未启动。 |
 
 | 2026-08-01 | **Phase 3 只读审计完成(Claude,四透镜对抗式)** | 裁决 **blocking fixes required(C1-C4)**。已确认:三 lifecycle 行为等价(10 步独立探针序列三路 canonical 投影逐行相等、head 一致 tx_seq=10)、12+定义 reject 全拆(pre-state 逐行核对口径)、save_workspace 字节级 no-op + "不 save=丢弃"消失已在 CHANGELOG/user guide 显式声明、owned Database 语义(幂等 close/context manager/双开显式失败)、bytes 四 lifecycle parity、六项裁决四条约束基本合规(additive v2 + docstring、transition 连续性 fail-closed、digest 分职实测、op 序=输入序 —— Q-SAE-8 地基成立)、迁移 round-trip 五表逐字节 + repair-anchor 审计化 + verified replacement 顺序正确、subtests 1094→1078 逐项归因=适配非弱化、a20e known-failure 锚点逐字节未动、meander 28 处 save 无参兼容。**Blocking(Phase 4 前)**:**C1(blocker)`_prepare_meta_appends` 漏保留键守卫** —— 公开 `append_meta(asrt_id,"assertion_digest"/"schema_digest"/"tx_id",…)` 一次调用使 exactly-one 校验永久 fail-closed 且 **repair 拒收**(Phase 1 F1 同型,新 meta 通道重新引入;断言/撤销侧均有守卫唯此缺失);修法=补 `_reject_reserved_assertion_meta` + 负向测试 + revoker 目标同类评估。**C2(serious)未声明的 v0.2 回归**:lifecycle 内部化使 ingest 的 unmanaged raw e_ref 回退在主 lifecycle 上 fail-closed,CHANGELOG/Deviations 零记录;裁定=**(a) 显式声明**(Breaking + Deviations + docs,幸存面 from_schema_classes 定位),meander 适配若撞上再议扩翻译层。**C3(serious)additive 政策在 Database transition 面零执行** + `SchemaTransitionInput` 公开导出构成绕过通道;裁定=**撤回公开导出**(narrow-public-api),Database 层定位为 policy-free 内部机制层并文档声明,政策门归 schema-evolution blueprint 统一设计;补"SDK 面无法非 additive"负向测试。**C4(serious)迁移 replacement 阶段崩溃恢复**:原 workspace 只存活于隐藏 `.{ws}.legacy-*` sibling,CLI 重跑 not_found/noop 双盲,零找回指引;修法=非隐藏备份命名 + not_found/noop 路径扫描 sibling 输出 recovery 指引 + docs 崩溃恢复段。**C5 打包**:半成品 v0.3 三态误导报错(torn-create 指 recreate 而非 migrate)、workspace_incomplete 取代 noop 死循环、digest 失配诊断失真、revoker 保留键全集、迁移负向测试固化(损坏 ledger/--no-archive/registry-only/bytes+同键多 meta)、报错含完整 CLI 命令并去 "Phase 3" 行话、153 口径补调用式、**meander manifest 断裂点补记**(v0.3 manifest 无 schema_digest → meander `load_migrate_or_create` 解 pin 即 KeyError —— 入 Q-SAE-6 适配队列)。登记 known-gap/后续:append_meta 链-账本 parity 校验空洞(3b/Q-SAE-8 收口)、dbtx_v2 golden fixture(3b)、closed-graph SDK 报错、view-attach 错误分类、dry-run ledger 探测、源侧锁探测、staging sibling 清扫、大库迁移进度+open 成本(Q-SAE-6 评估)、14 个 pre-existing F821(独立小任务)、quickstart load_and_save.md 重写级失真(Phase 4 基线)。 |
+| 2026-08-01 | **Phase 3 C1-C5 fix 实施完成,待轻量 reaudit** | C1 meta-append 在 SDK 与 Database 双边拒绝三项 DB-owned key,claim/revoker 共用全集,零写/head 不动/reopen 探针；migration revoker 同步改全集。C2 unmanaged raw e_ref 回归已进 CHANGELOG Breaking、Deviations 与 SDK/application docs,幸存 `from_schema_classes` 面明确。C3 `SchemaTransitionInput` 撤出 `factgraph.sdk` public namespace,SDK 非 additive 尝试零推进,core/store 明定 policy-free mechanism。C4 replacement sibling 改可见命名,not-found/noop 双路发现并输出 `workspace_recovery_required` 候选与人工恢复指引。C5 torn-create/registry-only=`workspace_incomplete`,digest 诊断给 manifest/object 双值,Database.open 三态去 Phase 行话且给完整命令；损坏 ledger/`--no-archive`/registry-only/bytes+同键多 meta/revoker reserved 全部固化。meander manifest `schema_digest` 断裂入适配队列。门禁:Phase 3 精确面 **162 passed / 12 skipped / 1 deselected / 34 subtests**；PR #20/#21/#22 **157 passed**；全套件 **2770 passed / 32 skipped / 1 approved deselected / 1084 subtests**；implementation ruff 与 `git diff --check` 全绿(测试 ruff 仅命中已登记的 pre-existing F821)。Phase 4 仍冻结。 |
 
 ## Phase 2 专项回归精确调用式
 
 ```bash
 PYTHONPATH=src pytest -q tests/test_premise_admissibility_filter.py tests/test_premise_predicate_allowance.py tests/test_premise_predicate_block.py tests/test_premise_scoped_view.py tests/sdk/test_rule_program_evaluate.py tests/test_audit_evidence_graph.py tests/test_candidate_evidence_steps.py tests/test_core_annotation_evidence.py tests/test_ledger_concurrency.py tests/test_application_entity_view.py tests/test_sdk_assertion_view_unification.py
+```
+
+## Phase 3 lifecycle/schema/migration 精确调用式
+
+审计表中 **153 passed / 12 skipped / 1 deselected / 28 subtests** 的精确命令为:
+
+```bash
+PYTHONPATH=src pytest -q tests/test_factgraph_workspace_lifecycle.py tests/test_db_attach_lifecycle.py tests/test_application_entity_write.py tests/test_sdk_batch_application_delegate.py tests/test_schema_mutation_lifecycle.py tests/test_schema_field_add_lifecycle.py tests/test_a20e_registry_final_removal.py --deselect=tests/test_a20e_registry_final_removal.py::ServiceRouteRemovalTests::test_service_app_v1_drops_registry_routes
 ```
 
 ## Deviations
@@ -47,6 +56,17 @@ PYTHONPATH=src pytest -q tests/test_premise_admissibility_filter.py tests/test_p
 | 2026-07-31 | application write protocol 的 `FieldValue` 明确是 JSONValue/EntityRef,不承载 `bytes`;SDK batch 对 bytes 因而落 legacy fallback | attach 上禁止 fallback 触 Ledger,改为提交前 fail-closed(零写、head 不动);非 attach 行为不变。**已裁(2026-08-01)**:fail-closed 批准;`FieldValue` bytes 扩展列为 Phase 3 前置(blueprint §5 已注),否则 lifecycle 内部化构成 v0.2 行为回归 |
 | 2026-08-01 | `fg.batch` 的 `_reject_attached_write` 于 Phase 2 提前拆除(4cb7a904,批量面交付内含) | 追认保留;**Phase 3 reject 拆除口径更新为 12 call sites + 定义** |
 | 2026-08-01 | 非 attach 运行时 managed raw entity_ref 批从 legacy shadow 路径改走 application 委托(4cb7a904 拓宽 `_application_write_value_for_op`),超出"Phase 2 仅落 attach"预裁定字面 | 追认保留 —— parity 探针证明 7 claims 逐行相等,回退反而制造 attach/非 attach 判定分叉;B4 要求把 parity 探针固化为常驻测试 |
+| 2026-08-01 | lifecycle 内部化使 ingest 的 unmanaged raw e_ref 回退在 Database-backed create/load/attach 面改为 fail-closed,Phase 3 初稿未声明 | 按 C2 裁定走显式 breaking 声明:CHANGELOG + SDK/application 模块 docs 已定位;`FactGraph.from_schema_classes(...)` 仍为 unmanaged Ledger 兼容面并保留旧回退。若 meander 适配实撞该边界,由后续设计决定是否扩翻译层 |
+
+## Cross-repository adaptation queue
+
+1. **meander manifest schema anchor(Q-SAE-6 发布解 pin 前 blocker)**:meander
+   设计快照的 `load_migrate_or_create` 直接读取
+   `factgraph_workspace.json["schema_digest"]`;v0.3 manifest 只保留 `db/` 与
+   `views/` components,不再含顶层 `schema_digest`,解 pin 后必然 `KeyError`。
+   适配必须改从 Database head/content-addressed schema object 获取 schema
+   anchor,并在 meander pin 更新前完成。此项只登记,不在 hnsm-backend Phase 3
+   fix 内跨仓实现。
 
 ## Known Gaps(Phase 1 durability,reaudit 前登记)
 

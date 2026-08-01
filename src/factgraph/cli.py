@@ -13,6 +13,8 @@ Invocation:
 The migration is opt-in and must run while the source workspace is closed.
 ``FactGraph.load_workspace(...)`` never auto-invokes it. The migration writes
 no ``authoring_apply_events.jsonl`` entry (Slice 7C retired that write path).
+Interrupted replacement leaves a visible ``<workspace>.legacy-<timestamp>``
+sibling; reruns detect it and return explicit manual recovery guidance.
 """
 
 from __future__ import annotations
@@ -39,6 +41,53 @@ _LEGACY_REGISTRY_DIR = "registry"
 _LEGACY_REGISTRY_SCHEMA_REL = "schema/schema_ir.json"
 _LEGACY_REGISTRY_MANIFEST = "registry_manifest.json"
 _WORKSPACE_MANIFEST = "factgraph_workspace.json"
+
+
+def _migration_backup_siblings(workspace: Path) -> list[Path]:
+    """Return interrupted-replacement backups beside ``workspace``.
+
+    The non-hidden form is canonical. The hidden pattern is also recognized so
+    a workspace stranded by an earlier prerelease build remains discoverable.
+    """
+    parent = workspace.parent
+    if not parent.is_dir():
+        return []
+    prefixes = (f"{workspace.name}.legacy-", f".{workspace.name}.legacy-")
+    return sorted(
+        candidate
+        for candidate in parent.iterdir()
+        if candidate.is_dir() and candidate.name.startswith(prefixes)
+    )
+
+
+def _print_recovery_required(
+    *,
+    workspace: Path,
+    candidates: list[Path],
+    replacement_present: bool,
+) -> None:
+    abs_path = str(workspace.resolve(strict=False))
+    candidate_paths = [str(candidate.resolve(strict=False)) for candidate in candidates]
+    if replacement_present:
+        guidance = (
+            "a migrated replacement and an unarchived legacy sibling both exist; "
+            "verify the replacement, then archive or remove the sibling explicitly"
+        )
+    else:
+        guidance = (
+            "the requested workspace is missing; verify the legacy sibling, rename it "
+            "back to the requested path, then rerun migrate-workspace"
+        )
+    _print_error_json(
+        kind="workspace_recovery_required",
+        message=f"interrupted workspace replacement detected: {guidance}",
+        details={
+            "workspace": abs_path,
+            "recovery_candidates": candidate_paths,
+            "replacement_present": replacement_present,
+            "guidance": guidance,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +158,14 @@ def _run_migrate_workspace(*, path: str, dry_run: bool, archive: bool) -> int:
     abs_path = str(workspace.resolve(strict=False))
 
     if not workspace.exists() or not workspace.is_dir():
+        recovery_candidates = _migration_backup_siblings(workspace)
+        if recovery_candidates:
+            _print_recovery_required(
+                workspace=workspace,
+                candidates=recovery_candidates,
+                replacement_present=False,
+            )
+            return 1
         _print_error_json(
             kind="workspace_not_found",
             message=f"workspace directory not found: {abs_path}",
@@ -119,9 +176,16 @@ def _run_migrate_workspace(*, path: str, dry_run: bool, archive: bool) -> int:
     manifest_path = workspace / _WORKSPACE_MANIFEST
     if not manifest_path.exists():
         _print_error_json(
-            kind="workspace_manifest_missing",
-            message=f"workspace manifest missing: {_WORKSPACE_MANIFEST}",
-            details={"workspace": abs_path, "manifest_path": str(manifest_path)},
+            kind="workspace_incomplete",
+            message=(
+                f"workspace manifest missing: {_WORKSPACE_MANIFEST}; "
+                "recreate this incomplete workspace"
+            ),
+            details={
+                "workspace": abs_path,
+                "manifest_path": str(manifest_path),
+                "guidance": "recreate; migrate-workspace requires a complete v0.2 workspace",
+            },
         )
         return 1
 
@@ -168,12 +232,36 @@ def _run_migrate_workspace(*, path: str, dry_run: bool, archive: bool) -> int:
             archive=archive,
         )
 
+    if not new_layout:
+        _print_error_json(
+            kind="workspace_incomplete",
+            message=(
+                "workspace has neither a complete v0.3 db/ layout nor a complete "
+                "v0.2 ledger.db source; recreate it"
+            ),
+            details={
+                "workspace": abs_path,
+                "expected_v03": ["db/meta.json", "db/assertions.db"],
+                "expected_v02": legacy_ledger_name,
+                "guidance": "recreate; registry-only and torn-create sources are not migratable",
+            },
+        )
+        return 1
+
     legacy_present = (
         manifest_registry is not None or legacy_registry_dir.exists()
     )
 
     # Idempotent noop: nothing to migrate.
     if not legacy_present:
+        recovery_candidates = _migration_backup_siblings(workspace)
+        if recovery_candidates:
+            _print_recovery_required(
+                workspace=workspace,
+                candidates=recovery_candidates,
+                replacement_present=True,
+            )
+            return 1
         _print_success_json(
             status="noop",
             workspace=abs_path,
@@ -257,7 +345,7 @@ def _run_migrate_workspace(*, path: str, dry_run: bool, archive: bool) -> int:
     archive_target_name = f"{_LEGACY_REGISTRY_DIR}.legacy.{timestamp}"
     archive_target = workspace / archive_target_name
 
-    schema_object_rel = f"db/objects/schema/{digest}.json"
+    schema_object_rel = f"db/objects/schema/{digest.removeprefix('sha256:')}.json"
     actions: list[dict[str, Any]] = [
         {"kind": "write", "path": schema_object_rel},
     ]
@@ -391,7 +479,7 @@ def _run_v02_layout_migration(
             dir=str(workspace.parent),
         )
     )
-    backup_sibling = workspace.with_name(f".{workspace.name}.legacy-{timestamp}")
+    backup_sibling = workspace.with_name(f"{workspace.name}.legacy-{timestamp}")
     try:
         head = Database.migrate_legacy_ledger(
             source_ledger_path=legacy_ledger_path,
@@ -454,6 +542,11 @@ def _load_v02_schema_ir(
             / f"{manifest_digest.removeprefix('sha256:')}.json"
         )
     candidates.append(legacy_registry_dir / _LEGACY_REGISTRY_SCHEMA_REL)
+    schema_object_dir = workspace / "db" / "objects" / "schema"
+    if schema_object_dir.is_dir():
+        for candidate in sorted(schema_object_dir.glob("*.json")):
+            if candidate not in candidates:
+                candidates.append(candidate)
     schema_path = next((candidate for candidate in candidates if candidate.is_file()), None)
     if schema_path is None:
         _print_error_json(
@@ -477,8 +570,15 @@ def _load_v02_schema_ir(
     if isinstance(manifest_digest, str) and manifest_digest and manifest_digest != digest:
         _print_error_json(
             kind="schema_digest_mismatch",
-            message="v0.2 schema object digest disagrees with workspace manifest",
-            details={"manifest_digest": manifest_digest, "schema_digest": digest},
+            message=(
+                "v0.2 schema object content digest disagrees with the workspace "
+                "manifest schema_digest"
+            ),
+            details={
+                "manifest_schema_digest": manifest_digest,
+                "object_schema_digest": digest,
+                "schema_path": str(schema_path),
+            },
         )
         return None
     return payload, digest

@@ -76,7 +76,6 @@ from factgraph.core.store import (
     MetaAppendInput,
     MetaEntry,
     RevocationInput,
-    SchemaTransitionInput,
 )
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
@@ -149,7 +148,6 @@ __all__ = [
     "MetaAppendInput",
     "MetaEntry",
     "RevocationInput",
-    "SchemaTransitionInput",
     "MetaExclusion",
     "PredicatePremiseAllowance",
     "PredicatePremiseBlock",

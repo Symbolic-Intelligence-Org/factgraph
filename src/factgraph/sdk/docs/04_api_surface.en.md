@@ -53,7 +53,9 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from factgraph.sdk import <name>`.
-The export list currently has 88 names.
+The export list currently has 87 names. `SchemaTransitionInput` is deliberately
+absent: it is a policy-free core mechanism, while SDK schema changes go through
+the additive-only `fg.schema` namespace.
 
 ### 1.1 Schema and store
 

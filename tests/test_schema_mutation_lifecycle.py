@@ -191,6 +191,20 @@ class SchemaMutationAPITests(unittest.TestCase):
 
         self.assertIn("SchemaAddResult", sdk_module.__all__)
 
+    def test_sdk_has_no_raw_non_additive_schema_transition_channel(self) -> None:
+        sdk_module = _sdk_module()
+        self.assertNotIn("SchemaTransitionInput", sdk_module.__all__)
+        self.assertFalse(hasattr(sdk_module, "SchemaTransitionInput"))
+
+        with TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "workspace"
+            fg = FactGraph.create(schema_classes=[User], path=workspace)
+            before = fg._database.head()
+            with self.assertRaises(SDKStoreError):
+                fg.schema.apply(_changed_user_class())
+            self.assertEqual(fg._database.head(), before)
+            fg.close()
+
 
 class SchemaMutationApplicationRuntimeTests(unittest.TestCase):
     def test_schema_mutation_runtime_exports_application_functions(self) -> None:

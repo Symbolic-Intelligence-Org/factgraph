@@ -39,12 +39,23 @@ UUID4 tokens. A transaction object commits only the normalized delta for that
 batch plus its parent, sequence, schema digest, and `digest_scheme`; it does
 not hash the whole ledger.
 
+The low-level `SchemaTransitionInput` path is deliberately policy-free: it
+commits and validates an already-authorized transition but does not decide
+whether the IR change is additive. It is not exported from `factgraph.sdk`.
+SDK users must go through `fg.schema.register/extend/apply`, whose application
+runtime enforces the current additive-only policy. A future schema-evolution
+blueprint owns diff generation and richer policy filtering.
+
 The current state scheme is `lthash16-v2`. Each multiset element binds both
 `asrt_id` and `assertion_digest`, so factual-content tampering is detected on
 open. Metadata appended after assertion creation is event history and does not
 change `state_digest`. A schema-transition transaction stores only the old and
 new schema digests; both canonical, content-addressed schema objects are
 required for replay, which validates transition continuity.
+
+`assertion_digest`, `schema_digest`, and `tx_id` are Database-owned assertion
+metadata keys. Assertion, revocation, and later meta-append inputs reject the
+same complete set for both factual assertion ids and revoker ids.
 
 `Ledger.commit_batch(...)` is the single SQLite transaction boundary. Head CAS
 and the persisted state are updated in the same transaction as the rows. A
@@ -95,6 +106,16 @@ per-commit history cannot be reconstructed. The default keeps the complete old
 workspace under `workspace.legacy.<UTC timestamp>/`; `--no-archive` discards
 that backup only after verified replacement. Migration is never automatic.
 
+During the two-rename replacement window, the complete source is held in a
+visible sibling named `<workspace-name>.legacy-<UTC timestamp>`. If the process
+stops there, rerunning the CLI returns `workspace_recovery_required` and lists
+the candidate. When the requested workspace is absent, verify the sibling and
+rename it back before rerunning migration. When both the verified replacement
+and sibling exist, verify the replacement, then explicitly archive the sibling
+inside the workspace or remove it. The CLI does not guess which copy to keep.
+Torn-create and registry-only directories report `workspace_incomplete` with
+recreate guidance; only a complete v0.2 `ledger.db` source is migratable.
+
 ## Frozen Assertion View Persistence
 
 `Database.create_view(name, asrt_ids, *, base=None)` writes a content-addressed
@@ -107,7 +128,8 @@ the caller-owned Database.
 ## Non-responsibilities
 
 - Schema authoring and additive compatibility policy belong to authoring and
-  application layers; this module commits an already-approved transition.
+  application layers; this policy-free mechanism commits an already-approved
+  transition and must not be exposed as a product policy bypass.
 - SDK entity/field planning and ingest normalization belong to the application
   and SDK layers.
 - Engine projection, premise filtering, evidence, and service routing consume

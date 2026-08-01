@@ -13,6 +13,7 @@ import fcntl
 import json
 import math
 import os
+import shlex
 import sqlite3
 import struct
 import time
@@ -405,7 +406,8 @@ class Database:
         if workspace_paths is None and not getattr(ledger, "_memory_mode", False):
             raise DatabaseError(
                 "durable legacy Ledger injection is not writable; "
-                "use the Phase 3 migrate-workspace flow"
+                "migrate its closed v0.2 workspace with "
+                "`python -m factgraph migrate-workspace <workspace>`"
             )
         self._ledger = ledger
         self._db_id = _require_db_id(db_id)
@@ -566,18 +568,26 @@ class Database:
             except Exception:
                 _release_workspace_lock(lock_handle)
                 raise
-        if paths.manifest.exists() or paths.db.exists():
+        if not paths.root.exists():
             raise DatabaseError(
-                "legacy or incomplete Database workspace is not writable in v0.3; "
-                "use the Phase 3 migrate-workspace flow"
+                f"Database workspace not found: {paths.root}; "
+                "create it with Database.create(...)"
             )
-        if paths.root.exists():
+        if not paths.root.is_dir():
             raise DatabaseError(
-                "incomplete Database workspace: factgraph_workspace.json and db/ are missing; "
-                "recreate the workspace or use the Phase 3 migrate-workspace flow for a legacy source"
+                f"Database workspace path is not a directory: {paths.root}; "
+                "migrate a closed v0.2 workspace directory with "
+                "`python -m factgraph migrate-workspace <workspace>`"
+            )
+        if (paths.root / "ledger.db").is_file():
+            raise DatabaseError(
+                "legacy v0.2 workspace is not writable; run "
+                f"`{_migrate_workspace_command(paths.root)}`"
             )
         raise DatabaseError(
-            "legacy ledger write mode is disabled; use the Phase 3 migrate-workspace flow"
+            "incomplete Database workspace; recreate it with Database.create(...). "
+            "The migration command is only for a complete v0.2 workspace: "
+            f"`{_migrate_workspace_command(paths.root)}`"
         )
 
     @classmethod
@@ -597,8 +607,8 @@ class Database:
             stored_scheme = ledger.get_ledger_meta("digest_scheme")
             if stored_scheme != LTHASH_SCHEME:
                 raise DatabaseError(
-                    f"Database digest_scheme {stored_scheme!r} is not writable in v0.3; "
-                    "use the Phase 3 migrate-workspace flow"
+                    f"Database digest_scheme {stored_scheme!r} is unsupported; "
+                    "this db/ workspace needs an explicit format migration"
                 )
             _validate_workspace_integrity(
                 paths,
@@ -644,8 +654,8 @@ class Database:
             stored_scheme = ledger.get_ledger_meta("digest_scheme")
             if stored_scheme != LTHASH_SCHEME:
                 raise DatabaseError(
-                    f"Database digest_scheme {stored_scheme!r} is not repairable in v0.3; "
-                    "use the Phase 3 migrate-workspace flow"
+                    f"Database digest_scheme {stored_scheme!r} is unsupported; "
+                    "this db/ workspace needs an explicit format migration"
                 )
             stored_head = ledger.get_ledger_meta("head_tx_id")
             if stored_head is None:
@@ -873,7 +883,7 @@ class Database:
                     field="legacy revoker_asrt_id",
                 )
                 rows = ledger.find_meta(asrt_id=revoker_id)
-                if any(row.key in {"schema_digest", "tx_id"} for row in rows):
+                if any(row.key in _RESERVED_ASSERTION_META_KEYS for row in rows):
                     raise DatabaseError(
                         f"legacy revoker already carries v0.3 reserved metadata: {revoker_id}"
                     )
@@ -1275,6 +1285,7 @@ class Database:
             if not self._ledger._is_known_asrt_id(asrt_id):
                 raise DatabaseError(f"meta append target does not exist: {asrt_id}")
             entry = _normalize_meta_entries((MetaEntry(item.key, item.kind, item.value),))[0]
+            _reject_reserved_assertion_meta((entry,))
             _meta_value_bytes(entry.kind, entry.value)
             prepared.append(MetaRow(asrt_id, entry.key, entry.kind, entry.value))
         return prepared
@@ -1357,6 +1368,10 @@ def schema_object_exists_for_workspace(path: str | Path, schema_digest: str) -> 
 
 def _is_memory_path(path: str | Path) -> bool:
     return str(path) == ":memory:"
+
+
+def _migrate_workspace_command(path: str | Path) -> str:
+    return f"python -m factgraph migrate-workspace {shlex.quote(str(path))}"
 
 
 def _is_new_database_workspace(paths: DatabaseWorkspacePaths) -> bool:

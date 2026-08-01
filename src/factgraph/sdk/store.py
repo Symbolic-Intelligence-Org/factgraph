@@ -119,6 +119,7 @@ from factgraph.core.store.database import (
     MetaAppendInput,
     RevocationInput,
     SchemaTransitionInput,
+    _RESERVED_ASSERTION_META_KEYS,
     _read_tx_object,
     schema_object_exists_for_workspace,
     validate_schema_object_for_workspace,
@@ -720,6 +721,10 @@ class AssertionsManager:
         if not isinstance(key, str) or not key:
             raise SDKStoreError(
                 "fg.assertions.append_meta(..., key, ...) expects non-empty string key"
+            )
+        if key in _RESERVED_ASSERTION_META_KEYS:
+            raise SDKStoreError(
+                f"assertion/revocation meta cannot use Database-reserved key: {key}"
             )
         if isinstance(value, bool):
             kind = "bool"

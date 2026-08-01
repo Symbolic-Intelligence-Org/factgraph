@@ -446,7 +446,7 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             legacy_path = Path(tmp) / "legacy.db"
             ledger = Ledger(legacy_path)
-            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+            with self.assertRaisesRegex(DatabaseError, "python -m factgraph migrate-workspace"):
                 Database(
                     ledger=ledger,
                     db_id="db:legacy",
@@ -454,7 +454,7 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                 )
             ledger.close()
 
-            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+            with self.assertRaisesRegex(DatabaseError, "python -m factgraph migrate-workspace"):
                 Database.open(legacy_path, schema_ir=_schema_ir())
 
             workspace = Path(tmp) / "v0.2-layout"
@@ -465,9 +465,9 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                 conn.execute(
                     "UPDATE ledger_meta SET value = 'lthash16-v1' WHERE key = 'digest_scheme'"
                 )
-            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+            with self.assertRaisesRegex(DatabaseError, "explicit format migration"):
                 Database.open(workspace, schema_ir=_schema_ir())
-            with self.assertRaisesRegex(DatabaseError, "Phase 3 migrate-workspace"):
+            with self.assertRaisesRegex(DatabaseError, "explicit format migration"):
                 Database.repair(workspace, schema_ir=_schema_ir())
 
     def test_object_and_directory_fsync_failures_are_explicit(self) -> None:

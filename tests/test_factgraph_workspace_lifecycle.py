@@ -14,6 +14,7 @@ from unittest.mock import patch
 # Slice 7C / Q6-A (a.2): FileAuthoringRegistry was removed. Test methods
 # that exercised the legacy adapter directly are skipped below.
 from factgraph.adapters.souffle.package import ExportOptions
+from factgraph.application.workspace_runtime import save_workspace as save_v02_workspace
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import (
     Case,
@@ -311,6 +312,27 @@ class WorkspaceLoadTests(unittest.TestCase):
                 FactGraph.load_workspace(workspace, schema_classes=[User])
 
         self.assertIn("incomplete Database workspace", str(ctx.exception))
+        self.assertIn("recreate", str(ctx.exception))
+        self.assertNotIn("Phase 3", str(ctx.exception))
+
+    def test_factgraph_load_distinguishes_missing_and_legacy_workspaces(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            missing = Path(tmp_dir) / "missing"
+            with self.assertRaisesRegex(SDKStoreError, "workspace not found"):
+                FactGraph.load_workspace(missing, schema_classes=[User])
+
+            legacy = Path(tmp_dir) / "legacy"
+            graph = FactGraph.from_schema_classes([User])
+            save_v02_workspace(
+                legacy,
+                schema_digest=schema_digest(graph.schema_ir),
+                ledger=graph.ledger,
+            )
+            graph.ledger.close()
+            with self.assertRaises(SDKStoreError) as ctx:
+                FactGraph.load_workspace(legacy, schema_classes=[User])
+            self.assertIn(f"python -m factgraph migrate-workspace {legacy}", str(ctx.exception))
+            self.assertNotIn("Phase 3", str(ctx.exception))
 
     def test_owned_lifecycle_is_exclusive_until_close(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -387,6 +409,39 @@ class WorkspaceLoadTests(unittest.TestCase):
             )
             attached.close()
             db.close()
+
+    def test_append_meta_rejects_database_reserved_keys_for_claims_and_revokers(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "workspace"
+            fg = FactGraph.create(schema_classes=[User], path=workspace)
+            e_ref = fg.entities.create(User, user_id="reserved-meta")
+            name_id = fg.fields.set(User.name, e_ref, "Ada")
+            revoker_id = fg.assertions.retract(name_id)
+            self.assertIsNotNone(revoker_id)
+            before_head = fg._database.head()
+            before_meta = tuple(fg.ledger.meta_rows)
+
+            for target in (name_id, revoker_id):
+                for key in ("assertion_digest", "schema_digest", "tx_id"):
+                    with self.subTest(target=target, key=key):
+                        with self.assertRaisesRegex(SDKStoreError, "Database-reserved"):
+                            fg.assertions.append_meta(target, key, "forbidden")
+                        self.assertEqual(fg._database.head(), before_head)
+                        self.assertEqual(tuple(fg.ledger.meta_rows), before_meta)
+            fg.close()
+
+            reopened = FactGraph.load_workspace(workspace, schema_classes=[User])
+            self.assertEqual(reopened._database.head(), before_head)
+            reopened.close()
+
+        unmanaged = FactGraph.from_schema_classes([User])
+        e_ref = unmanaged.entities.create(User, user_id="legacy-reserved-meta")
+        name_id = unmanaged.fields.set(User.name, e_ref, "Ada")
+        before_meta = tuple(unmanaged.ledger.meta_rows)
+        with self.assertRaisesRegex(SDKStoreError, "Database-reserved"):
+            unmanaged.assertions.append_meta(name_id, "assertion_digest", "forbidden")
+        self.assertEqual(tuple(unmanaged.ledger.meta_rows), before_meta)
+        unmanaged.close()
 
     def test_factgraph_load_migrates_legacy_registry_schema_to_db_schema_object(self) -> None:
         self.skipTest("FileAuthoringRegistry was removed by Q6-A")

@@ -1008,6 +1008,13 @@ package-local `authoring_apply_events.jsonl`, and legacy
 `registry/authoring_apply_events.jsonl` inputs. The service `/v1/registry/*`
 routes were deleted.
 
+During replacement, the CLI temporarily holds the complete source in a visible
+`<workspace-name>.legacy-<UTC timestamp>` sibling. If migration is interrupted,
+rerun the command. A `workspace_recovery_required` response lists candidate
+siblings and says whether a replacement exists. Verify the candidate, then
+restore it when the workspace is missing, or explicitly archive/remove it when
+the replacement is valid. The CLI never chooses automatically.
+
 See [`04_api_surface.en.md`](04_api_surface.en.md#27-rules-namespace-fgrules)
 for the post-Phase-2 `fg.rules.*` and `fg.inferences.*` namespace shape.
 
