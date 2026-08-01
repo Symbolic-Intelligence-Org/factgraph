@@ -30,6 +30,9 @@
 | 2026-08-01 | **Phase 0 补钉轮复验:全部闭合;Phase 1 有条件放行 —— 唯一前置 = 用户对 C1 的批准落笔** | 四验证器逐项复现(见下文 §Phase 0 补钉轮复验);残留仅 C1 署名(授权问题非代码缺陷)+ 三项转 Phase 1 gate/纪律 |
 | 2026-08-01 | **C1 用户批准;Phase 1 正式放行** | 用户批准 UNSET=SQL NULL 编码,署名补入 spec 裁定行与本表闭环行;Phase 0 全部关闭 |
 | 2026-08-01 | **内联裁定(协调方):`tx_ref` ≡ `tx_seq`(INTEGER)** | 兑现 C2 留待的 Phase 1 裁定:claims 与 claim_meta 事件行共用同一引用空间,满足 Q-SAE-9 §2 的 8 字节/行成本口径;canonical `tx_id` 经 tx_seq→tx object 链解析恢复(attach 期索引或按需走链),审计面无损。用户可否决 |
+| 2026-08-01 | Phase 1 C0 停点轻核通过 | `3aafbd4b`:读等价 fixture + 生产 `Database.repair` golden,3 文件全新增,`src/` 零差分,既有 fixture 零修改;联跑 4 passed / 3 subtests 亲测复现。完整对抗审计留 Phase 1 边界 |
+| 2026-08-01 | **内联裁定(协调方):`claim_meta` 恢复 `kind` 列(六列形态)** | codex C1 前上报冲突①的裁定。决定性依据:dbtx_v2 canonical bytes **本就携带每条 meta 的 kind**(已被 golden 字节钉死)—— 无 kind 列则冷启动读与账本重放不一致,存储对其所总结的链信息有损,且读等价门与公开 `MetaEntry` API(任意 key 的 int/float/bool/time/json/bytes)必破。终态:`claim_meta(asrt_id, key, kind, value, tx_seq, op_ordinal)`,PK 不变 `(asrt_id, key, tx_seq, op_ordinal)`;UNSET tombstone = kind 与 value **双 NULL**(对称保留,用户行两列均 NOT NULL,prepare 边界守卫);kind 不入 fact 身份/digest(digest 输入范围不变)。spec §3.2/§5.2、Q-SYS-B §4.4 标注扩展(kind 恢复;value_tag/namespace/category/origin/derivation 照旧不保留)由 C1 同 commit 修订。用户可否决 |
+| 2026-08-01 | **内联裁定(协调方):initial meta 同 op 内 key 唯一,prepare 边界显式拒绝** | codex C1 前上报冲突②的裁定。同 op 内同 key 重复共享 op_ordinal 撞事件 PK,且"同一瞬间两个值"在 Q-SAE-8 全序模型下语义退化 —— 显式拒绝优于静默去重(fail-closed)或第三层序号(为退化用例膨胀 PK)。同 key 连续赋值一律经独立 `append_meta` op(各得 op_ordinal)。约束在输入域,wire format 不变,既有 golden 不受影响;拒绝须覆盖**所有**携带 initial meta 的 op 准备路径(assertion/revocation/其他)并各配负向测试(三侧守卫);CHANGELOG 记 Breaking(此前静默接受)。用户可否决 |
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
