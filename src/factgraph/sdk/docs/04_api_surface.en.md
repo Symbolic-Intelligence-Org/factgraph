@@ -1,5 +1,8 @@
 # SDK API Surface Reference
 
+- Applicable scope: `src/factgraph/sdk`
+- Last updated: 2026-08-01
+
 The exact public surface of `factgraph.sdk`. For tutorials see
 [`00_user_guide.en.md`](00_user_guide.en.md).
 
@@ -33,7 +36,7 @@ fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_event
 |---|---|
 | `entities` | `get`, `where`, `match`, `ref`, `create`, `delete`, `exists`, `edit` |
 | `fields` | `set`, `add`, `retract`, `delete`, `get` |
-| `assertions` | `by_id`, `by_ids`, `where`, `retract`, `active`, `all` |
+| `assertions` | `by_id`, `by_ids`, `where`, `retract`, `append_meta`, `active`, `all` |
 | `schema` | `register`, `extend`, `apply`, `ingest`, `validate_provenance` |
 | `eval` | `evaluate`, `explain`, `preview_config` |
 | `audit` | `explain`, `conflicts`, `diff_proof_frames` |
@@ -50,7 +53,7 @@ should not be imported directly.
 ## 1. Top-Level Exports
 
 Everything below is importable as `from factgraph.sdk import <name>`.
-The export list currently has 59 names.
+The export list currently has 88 names.
 
 ### 1.1 Schema and store
 
@@ -69,7 +72,7 @@ values in declaration order; unset `Field` values render as `None`.
 `FactGraph.create(schema_classes=[...])` is the canonical constructor.
 `FactGraph.load_workspace(path, schema_classes=[...])` restores a saved workspace.
 `FactGraph.from_schema_classes([...])` remains available as the lower-level
-class-first constructor name and does not accept workspace `path=`.
+unmanaged-Ledger constructor and does not accept workspace `path=`.
 
 #### Form I schema descriptors
 
@@ -231,10 +234,11 @@ FactGraph.create(
 
 Class-validation errors raise `SDKSchemaError`; constructor-path errors
 raise `SDKStoreError`. `path=` binds the graph to a compact workspace root and
-derives the default `ledger.db` component path and Database schema-object
-anchor. Explicit `ledger_path=` may be supplied with `path=` only when it
-matches the workspace default. `registry_root=` and `registry=` were removed by
-A20(E) / Q6-A; passing either raises `SDKStoreError` with migration guidance.
+creates an owned `Database` immediately. Canonical writes are write-through.
+`ledger=` and `ledger_path=` are rejected by `FactGraph.create(...)`; use
+`FactGraph.from_schema_classes(...)` for the unmanaged compatibility lifecycle.
+`registry_root=` and `registry=` were removed by A20(E) / Q6-A; passing either
+raises `SDKStoreError` with migration guidance.
 `artifact_store_root` enables sidecar-backed
 explain artifact readback (ignored if a fully constructed `store=` is
 supplied).
@@ -243,36 +247,50 @@ class-first constructor name.
 
 ```python
 FactGraph.load_workspace(path, *, schema_classes=[...], default_row_format=None)
+FactGraph.attach(db, *, schema_classes=[...], view=None, default_row_format=None)
 fg.save_workspace(path=None)
+fg.close()
 ```
 
-`fg.save_workspace()` writes the bound workspace. `fg.save_workspace(path)` writes and rebinds the
-graph to that workspace. An unbound graph raises
-`SDKStoreError("workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)")`.
-`FactGraph.load_workspace(...)` requires Python schema classes and validates the workspace
-manifest digest, ledger schema digest, Database schema object, any legacy
-registry schema entry that is still present, and the digest compiled from the
-supplied classes.
+`FactGraph.create(path=...)` and `FactGraph.load_workspace(...)` own the opened
+Database. They hold its exclusive writer lock until idempotent `close()` or
+context-manager exit. v0.3 has no concurrent read-only open channel; a second
+open fails explicitly. `FactGraph.attach(db, schema_classes=[...])` is writable
+but caller-owned, so closing the graph does not close `db`; view attach is
+read-only.
+
+`fg.save_workspace()` only updates lifecycle metadata and returns its path,
+manifest path, and `last_saved_at_epoch_ns`. It does not persist facts, advance
+the head, copy, or rebind. Passing a different path raises `SDKStoreError` with
+directory-copy guidance. An unbound graph raises
+`SDKStoreError("workspace path not bound; create with FactGraph.create(path=...) before saving")`.
+`FactGraph.load_workspace(...)` requires Python schema classes and fail-closed
+validates the manifest, transaction chain, active-state digest, assertion
+content digests, Database schema objects, and compiled schema digest.
 
 Workspace v1 layout:
 
 ```text
 workspace/
   factgraph_workspace.json
-  ledger.db
   db/
+    assertions.db
+    meta.json
+    writer.lock
     objects/
       schema/
         <schema-digest>.json
+      tx/
+        <tx-digest>.json
+  views/
 ```
 
-`factgraph_workspace.json` records `factgraph_workspace_version="1"`,
-`save_scope="level_4"`, `schema_digest`, component paths, and timestamps.
-Level 4 includes the ledger and Database schema object. The top-level
-`schema_digest` is a compatibility cross-check; the authoritative schema bytes
-live under `db/objects/schema/`. Level 4 excludes artifact sidecars, in-memory
-views, audit/evidence round files, package exports, saved rules/inferences, and
-new registry content.
+`factgraph_workspace.json` records `factgraph_workspace_version="1"` and the
+`db/` and `views/` component paths. `db/assertions.db:ledger_meta` owns the
+current head, sequence, schema digest, and state commitment. Schema and tx
+objects are content-addressed and write-once. The workspace excludes artifact
+sidecars, in-memory assertion views, audit/evidence round files, package
+exports, saved rules/inferences, and live registry content.
 
 ### 2.2 Schema namespace (`fg.schema.*`)
 
@@ -293,9 +311,9 @@ fields, changing field type/cardinality, and changing the generated `:exists`
 predicate are rejected with zero side effects.
 
 On success, the in-memory schema, compiled SchemaIndex, class registry,
-descriptor maps, ledger schema digest, and Database schema object are updated
-as one schema transaction. If the graph is bound to a workspace, the manifest is
-not rewritten until a later explicit `fg.save_workspace(...)`.
+descriptor maps, Database schema digest, and canonical schema object are
+updated by one isolated `schema_change` transaction. Its history operation
+commits the old and new schema digests; `fg.save_workspace()` is not required.
 
 Field-add uses a replacement class object. After a field-add succeeds, reads
 or writes through superseded entity classes or their descriptors raise
@@ -477,7 +495,8 @@ additional SDK export is required for the protocol-layer evidence walker.
 SDK code should use `FactGraph.create(..., path=...)` for workspace
 persistence, `Rule(...)` / `Inference(...)` as in-memory values, and
 `python -m factgraph migrate-workspace <path>` for legacy workspaces that still
-carry a filesystem `registry/` directory.
+use the v0.2 layout. The CLI preserves legacy rows and ids, creates an explicit
+genesis repair anchor, and retains the complete source workspace by default.
 
 ---
 

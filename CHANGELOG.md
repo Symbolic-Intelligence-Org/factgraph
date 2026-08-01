@@ -7,8 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- **The v0.3 workspace lifecycle is write-through and single-writer.**
+  `FactGraph.create(path=...)` and `FactGraph.load_workspace(...)` now own a
+  transactional `Database` and hold its exclusive lock until `close()`.
+  Canonical mutations are durable when their call returns;
+  `save_workspace()` only touches lifecycle metadata. Omitting save no longer
+  discards changes, and save cannot copy or rebind a workspace. Copy a closed
+  workspace directory first for dry-run/sandbox workflows. A second durable
+  open, including read-only use, fails explicitly; v0.3 has no read-only open
+  channel.
+- **The durable workspace layout converges on `db/`.** The authoritative
+  SQLite file is `db/assertions.db`; existing v0.2 `ledger.db` workspaces require
+  explicit `python -m factgraph migrate-workspace <path>` before load. The CLI
+  stages and verifies the replacement, writes an explicit genesis repair
+  anchor, and retains the complete source workspace by default.
+
 ### Added
 
+- **Database commits now carry dual state/history commitments.** One logical
+  batch is one SQLite transaction with a CAS-protected head, incremental
+  `lthash16-v2` state digest binding assertion id plus content digest, and a
+  normalized delta tx object carrying `digest_scheme`. Open is fail-closed;
+  repair is explicit; durable opens use a lifetime `flock`.
+- **`Database.commit_changes(...)` supports metadata and schema history.**
+  `append_meta` is history-only and leaves active-state identity unchanged.
+  Isolated `schema_change` transactions commit old/new schema digests while
+  replay requires both content-addressed schema objects and transition
+  continuity. Application `FieldValue` now carries `bytes` additively.
+- **The canonical SDK write surface routes through Database transactions.**
+  Entity create/delete, field mutation, ingest, batch, metadata append, and
+  additive schema mutation use the same commit chain for created, loaded, and
+  writable-attached graphs.
 - **`fg.meta.capabilities()` runtime introspection** is shipped: new read-only
   `fg.meta` namespace exposing `capabilities()` which returns a frozen
   `MappingProxyType` of `frozenset[str]` reporting runtime-accepted
