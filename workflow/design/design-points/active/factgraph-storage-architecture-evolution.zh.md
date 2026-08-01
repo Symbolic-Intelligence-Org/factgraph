@@ -254,13 +254,29 @@ FactGraph 当前存储架构在 2026-06-02 的源码挖掘中暴露出五个相�
 
 ### 5.5 短期 docs hygiene 影响
 
-在阶段 A 落地前,当前 quickstart docs 关于 `Database` / `attach` / `save_workspace` 的叙述需要避免下列误导:
+截至 v0.3 Stage A implementation branch,原先的双 lifecycle / 双 workspace
+格式已经收敛。quickstart 与模块 docs 必须按以下事实叙述,不能继续沿用 v0.2
+的 Mode A / Mode B 模型:
 
-- 不要说 "attach 是 forward-looking lifecycle / SDK 是 compat" — 实际是平行实现且 attach 缺 ergonomic 入口
-- 不要说 "Database 是 substrate-level write path" 而不澄清 "实际仍是内存 + SQLite WAL,跟 SDK 路径同一存储模型"
-- 不要承诺 "lazy load / 多进程读 / SQL 查询" — 当前都不支持
+- `FactGraph.create(path=...)` / `load_workspace(...)` 内部拥有一个
+  `Database`;`FactGraph.attach(db)` 绑定 caller-owned `Database`。两条入口
+  使用同一 `db/assertions.db`、同一事务链与同一完整 ergonomic 写面,差异只在
+  ownership。
+- canonical 写调用返回时已经持久化;`save_workspace()` 只更新 lifecycle
+  metadata,不是事务或 durability 边界,也不能把内存 runtime promotion/copy 到
+  新路径。dry-run / sandbox 应复制一个已经关闭的 workspace 目录。
+- durable open 在 v0.3 是 single-writer exclusive `flock`;没有只读并发打开
+  通道。同一 workspace 双开(即使只读意图)会显式失败。
+- v0.2 顶层 `ledger.db` workspace 只能通过显式
+  `python -m factgraph migrate-workspace <path>` 迁移;不会在 load 时自动改写。
+- `FactGraph.attach(db, view=view)` 是只读 snapshot 运行时;base attach 可使用
+  canonical SDK 写面。`Database` 的低层 DTO commit 是机制面,不是另一种磁盘
+  格式或唯一 attach 写入口。
+- 仍然不能承诺 lazy load、并发多进程读或 SQL-first query。Stage A 收敛了
+  lifecycle 与写链,没有实施 Stage B/C 的读路径和 engine materialization。
 
-可以诚实地说:"v0.2 阶段提供 two lifecycle entry points,功能上 SDK lifecycle 更完整,Database lifecycle 额外提供 tx 链 + durable view 元数据;两者使用同一个内存 + SQLite 存储后端。"
+发布状态也必须诚实:v0.3.0 尚需按 Q-SAE-6 完成 meander pin-first 时序和用户
+裁定的 RC 动作;implementation branch 落地不等于已经发布。
 
 ## 6. Status notes
 
