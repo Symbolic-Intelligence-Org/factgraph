@@ -17,10 +17,12 @@ the exact same harness can replay a wider production histogram when available.
 Storage is reported as the filled workspace delta over an empty workspace with
 the same schema.  This removes fixed schema/genesis costs while retaining
 SQLite pages and per-commit tx-object cost.  WAL files, SHM files and the writer
-lock are excluded after an explicit checkpoint.  Each assertion carries five
-meander-shaped input meta entries; Stage A injects the three integrity anchors
-(``schema_digest``, ``assertion_digest``, ``tx_id``), preserving the established
-eight persisted meta rows per claim sizing profile.
+lock are excluded after an explicit checkpoint.  SQLite allocation is sampled
+at least five times and reported as a median plus jitter band; only the
+content-addressed tx-object delta is expected to be byte-exact across runs.
+Each assertion carries the same five meander-shaped input meta entries in all
+three phases.  Projected Ledger rows, physical persisted rows and the eager
+in-memory workset are reported separately instead of fixing their ratio.
 """
 
 from __future__ import annotations
@@ -58,8 +60,8 @@ from factgraph.core.store.premise_filter import (
 
 PRED_ID = "benchmark:value"
 INPUT_META_PER_ASSERTION = 5
-EXPECTED_PERSISTED_META_PER_ASSERTION = 8
 DEFAULT_BATCH_SIZES = (3,)
+DEFAULT_STORAGE_RUNS = 5
 
 
 def _schema_ir() -> dict[str, Any]:
@@ -102,7 +104,9 @@ def _parse_batch_sizes(raw: str) -> tuple[int, ...]:
     return values
 
 
-def _assertion(index: int, *, batch_index: int, batch_time: int, entity_count: int) -> AssertionInput:
+def _assertion(
+    index: int, *, batch_index: int, batch_time: int, entity_count: int
+) -> AssertionInput:
     entity_index = index % entity_count
     e_ref = f"idref_v1:Benchmark:{entity_index:032x}"
     shared_suffix = f"{batch_index:08d}"
@@ -216,7 +220,9 @@ def _read_benchmarks(
         return len(compute_chosen_for_predicate(ledger, chosen_schema))
 
     read_cases: dict[str, Callable[[], Any]] = {
-        "get_claim_256": lambda: sum(ledger.get_claim(asrt_id) is not None for asrt_id in point_ids),
+        "get_claim_256": lambda: sum(
+            ledger.get_claim(asrt_id) is not None for asrt_id in point_ids
+        ),
         "find_claims_all": lambda: len(ledger.find_claims()),
         "find_claims_pred": lambda: len(ledger.find_claims(pred_id=PRED_ID)),
         "find_claims_e_ref": lambda: len(ledger.find_claims(e_ref=first_claim.e_ref)),
@@ -294,7 +300,9 @@ def _durable_file_bytes(workspace: Path) -> tuple[int, dict[str, int]]:
     excluded_suffixes = {"-wal", "-shm"}
     files: dict[str, int] = {}
     for path in sorted(candidate for candidate in workspace.rglob("*") if candidate.is_file()):
-        if path.name in excluded_names or any(path.name.endswith(suffix) for suffix in excluded_suffixes):
+        if path.name in excluded_names or any(
+            path.name.endswith(suffix) for suffix in excluded_suffixes
+        ):
             continue
         files[str(path.relative_to(workspace))] = path.stat().st_size
     return sum(files.values()), files
@@ -318,6 +326,11 @@ def _storage_snapshot(workspace: Path) -> dict[str, Any]:
                 "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
             ).fetchall()
         ]
+        physical_meta_rows = {
+            table: int(conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
+            for table in ("meta_rows", "annotation_rows", "claim_meta")
+            if table in tables
+        }
     return {
         "durable_bytes": durable_bytes,
         "sqlite_bytes": sqlite_bytes,
@@ -325,60 +338,154 @@ def _storage_snapshot(workspace: Path) -> dict[str, Any]:
         "schema_object_bytes": schema_object_bytes,
         "tables": tables,
         "dbstat_bytes": dbstat,
+        "physical_meta_rows": physical_meta_rows,
     }
 
 
-def run(*, claim_count: int, batch_sizes: Sequence[int], repeats: int) -> dict[str, Any]:
+def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
+    projected_meta_rows = len(ledger.find_meta())
+    projected_annotation_rows = len(ledger.find_annotations())
+    resident_meta_rows = len(ledger._meta_rows_data)
+    resident_annotation_rows = len(ledger._annotation_rows_data)
+    meta_index_references = resident_meta_rows + sum(
+        len(rows)
+        for index in (
+            ledger._meta_by_asrt_id,
+            ledger._meta_by_kind,
+            ledger._meta_by_key,
+            ledger._meta_by_asrt_id_key,
+            ledger._meta_by_asrt_id_key_kind,
+            ledger._meta_ingest_key_asrt_ids,
+        )
+        for rows in index.values()
+    )
+    annotation_index_references = (
+        resident_annotation_rows
+        + sum(len(rows) for rows in ledger._anno_by_asrt_id.values())
+        + sum(len(rows) for rows in ledger._anno_by_ns_cat.values())
+        + sum(len(rows) for rows in ledger._anno_by_key.values())
+        + len(ledger._anno_by_identity)
+    )
+    eager_projection_meta_rows = resident_meta_rows + resident_annotation_rows
+    return {
+        "projected_ledger_meta_rows": projected_meta_rows,
+        "projected_ledger_meta_rows_per_claim": round(projected_meta_rows / claim_count, 6),
+        "projected_annotation_rows": projected_annotation_rows,
+        "projected_annotation_rows_per_claim": round(projected_annotation_rows / claim_count, 6),
+        "eager_projection_meta_rows": eager_projection_meta_rows,
+        "eager_projection_meta_rows_per_claim": round(eager_projection_meta_rows / claim_count, 6),
+        "resident_meta_row_objects": resident_meta_rows,
+        "resident_annotation_row_objects": resident_annotation_rows,
+        "resident_meta_index_references": meta_index_references,
+        "resident_annotation_index_references": annotation_index_references,
+        "resident_meta_index_references_total": (
+            meta_index_references + annotation_index_references
+        ),
+    }
+
+
+def _distribution(values: Sequence[int], *, claim_count: int) -> dict[str, Any]:
+    median = float(statistics.median(values))
+    minimum = min(values)
+    maximum = max(values)
+    max_deviation = max(abs(minimum - median), abs(maximum - median))
+    return {
+        "median_bytes": median,
+        "median_bytes_per_claim": round(median / claim_count, 3),
+        "min_bytes": minimum,
+        "max_bytes": maximum,
+        "jitter_band_bytes": [minimum, maximum],
+        "max_abs_deviation_percent": round(100 * max_deviation / median, 6),
+    }
+
+
+def _storage_summary(samples: Sequence[dict[str, int]], *, claim_count: int) -> dict[str, Any]:
+    sqlite_values = [sample["sqlite_bytes"] for sample in samples]
+    durable_values = [sample["durable_bytes"] for sample in samples]
+    tx_object_values = [sample["tx_object_bytes"] for sample in samples]
+    if len(set(tx_object_values)) != 1:
+        raise AssertionError(
+            "content-addressed tx-object byte delta must be exact across storage runs"
+        )
+    tx_object_bytes = tx_object_values[0]
+    return {
+        "sqlite_allocated": _distribution(sqlite_values, claim_count=claim_count),
+        "durable_total": _distribution(durable_values, claim_count=claim_count),
+        "tx_objects_exact": {
+            "bytes": tx_object_bytes,
+            "bytes_per_claim": round(tx_object_bytes / claim_count, 3),
+        },
+    }
+
+
+def run(
+    *,
+    claim_count: int,
+    batch_sizes: Sequence[int],
+    repeats: int,
+    storage_runs: int,
+) -> dict[str, Any]:
     if claim_count <= 0:
         raise ValueError("claim_count must be positive")
     if repeats <= 0:
         raise ValueError("repeats must be positive")
+    if storage_runs < 5:
+        raise ValueError("storage_runs must be at least five")
     if not batch_sizes or any(size <= 0 for size in batch_sizes):
         raise ValueError("batch_sizes must contain positive integers")
 
+    storage_samples: list[dict[str, int]] = []
+    reads: dict[str, Any] | None = None
+    workset: dict[str, Any] | None = None
+    layout: dict[str, Any] | None = None
+    histogram: Counter[int] | None = None
     with tempfile.TemporaryDirectory(prefix="factgraph-slice3b-baseline-") as raw_tmp:
         root = Path(raw_tmp)
-        empty_workspace = root / "empty"
-        empty = Database.create(empty_workspace, schema_ir=_schema_ir())
-        empty.close()
-        empty_storage = _storage_snapshot(empty_workspace)
+        for run_index in range(storage_runs):
+            run_root = root / f"run-{run_index}"
+            empty_workspace = run_root / "empty"
+            empty = Database.create(empty_workspace, schema_ir=_schema_ir())
+            empty.close()
+            empty_storage = _storage_snapshot(empty_workspace)
 
-        filled_workspace = root / "filled"
-        database, asrt_ids, histogram = _populate(
-            filled_workspace,
-            claim_count=claim_count,
-            batch_sizes=batch_sizes,
-        )
-        ledger = database._ledger_for_attach()
-        persisted_meta_per_assertion = len(ledger.find_meta()) / claim_count
-        if persisted_meta_per_assertion != EXPECTED_PERSISTED_META_PER_ASSERTION:
-            raise AssertionError(
-                "sizing profile drifted: expected eight projected meta rows per assertion, "
-                f"got {persisted_meta_per_assertion}"
+            filled_workspace = run_root / "filled"
+            database, asrt_ids, current_histogram = _populate(
+                filled_workspace,
+                claim_count=claim_count,
+                batch_sizes=batch_sizes,
             )
-        reads = _read_benchmarks(ledger, asrt_ids, repeats=repeats)
-        database.close()
-        filled_storage = _storage_snapshot(filled_workspace)
+            database.close()
 
-        storage_delta = {
-            key: filled_storage[key] - empty_storage[key]
-            for key in ("durable_bytes", "sqlite_bytes", "tx_object_bytes")
-        }
-        storage_delta["bytes_per_claim"] = round(
-            storage_delta["durable_bytes"] / claim_count,
-            3,
-        )
-        storage_delta["sqlite_bytes_per_claim"] = round(
-            storage_delta["sqlite_bytes"] / claim_count,
-            3,
-        )
-        storage_delta["tx_object_bytes_per_claim"] = round(
-            storage_delta["tx_object_bytes"] / claim_count,
-            3,
-        )
+            if run_index == 0:
+                database = Database.open(filled_workspace, schema_ir=_schema_ir())
+                ledger = database._ledger_for_attach()
+                workset = _workset_snapshot(ledger, claim_count=claim_count)
+                reads = _read_benchmarks(ledger, asrt_ids, repeats=repeats)
+                database.close()
+                histogram = current_histogram
+
+            filled_storage = _storage_snapshot(filled_workspace)
+            if layout is None:
+                layout = {
+                    "tables": filled_storage["tables"],
+                    "dbstat_bytes_first_run": filled_storage["dbstat_bytes"],
+                    "persisted_physical_meta_rows": filled_storage["physical_meta_rows"],
+                    "persisted_physical_meta_rows_total": sum(
+                        filled_storage["physical_meta_rows"].values()
+                    ),
+                }
+            storage_samples.append(
+                {
+                    key: filled_storage[key] - empty_storage[key]
+                    for key in ("durable_bytes", "sqlite_bytes", "tx_object_bytes")
+                }
+            )
+
+        if reads is None or workset is None or layout is None or histogram is None:
+            raise AssertionError("storage baseline did not produce a first-run sample")
 
         return {
-            "harness": "slice3b_storage_baseline_v1",
+            "harness": "slice3b_storage_baseline_v2",
             "environment": {
                 "platform": platform.platform(),
                 "python": platform.python_version(),
@@ -387,25 +494,24 @@ def run(*, claim_count: int, batch_sizes: Sequence[int], repeats: int) -> dict[s
             "workload": {
                 "claim_count": claim_count,
                 "meta_entries_per_assertion_input": INPUT_META_PER_ASSERTION,
-                "projected_meta_rows_per_assertion": persisted_meta_per_assertion,
                 "batch_sizes_repeating": list(batch_sizes),
-                "batch_histogram": {
-                    str(size): count for size, count in sorted(histogram.items())
-                },
+                "batch_histogram": {str(size): count for size, count in sorted(histogram.items())},
                 "commit_count": sum(histogram.values()),
                 "meander_profile": (
-                    "plan.ingest request group; five workload meta entries plus three "
-                    "Stage A integrity anchors"
+                    "plan.ingest request group; five fixed workload meta entries; "
+                    "projected and persisted meta profiles are measured outputs"
                 ),
             },
-            "layout": {
-                "tables": filled_storage["tables"],
-                "dbstat_bytes": filled_storage["dbstat_bytes"],
-            },
+            "layout": layout,
+            "workset_after_cold_attach": workset,
             "storage": {
-                "empty": empty_storage,
-                "filled": filled_storage,
-                "delta": storage_delta,
+                "measurement_runs": storage_runs,
+                "precision": (
+                    "SQLite and durable totals are median estimates with a jitter band; "
+                    "tx_objects_exact is the only byte-exact component"
+                ),
+                "delta_samples": storage_samples,
+                "summary": _storage_summary(storage_samples, claim_count=claim_count),
             },
             "reads": reads,
         }
@@ -421,11 +527,13 @@ def main() -> int:
         help="comma-separated repeating batch-size distribution (default: 3)",
     )
     parser.add_argument("--repeats", type=int, default=7)
+    parser.add_argument("--storage-runs", type=int, default=DEFAULT_STORAGE_RUNS)
     args = parser.parse_args()
     result = run(
         claim_count=args.claims,
         batch_sizes=args.batch_sizes,
         repeats=args.repeats,
+        storage_runs=args.storage_runs,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
