@@ -21,8 +21,11 @@
 | 2026-08-01 | **内联裁定:3b 前 v0.3(7 表)工作区无升级路径** | v0.3.0 未发布,7 表格式零真实消费者 —— migrate-workspace CLI 目标改为 v0.2 → 3b 终态直达;Stage A 期间产生的 7 表 dev 工作区显式拒绝 + 指引(重建或从 v0.2 源重迁移)。为一个从未发布的中间格式造迁移器是浪费 |
 | 2026-08-01 | Phase 0 dbtx_v2 golden fixture | `af7b92ab`;A/R-only 链与含 append_meta/schema_change 的链均冻结每环 canonical bytes、tx_id 与 genesis→head 推进序列;协议代码零改动 |
 | 2026-08-01 | Phase 0 current-context re-anchor | 基于 `af7b92ab` 逐项重 grep blueprint §4;结果与 blueprint 描述一致,证据清单见下文 |
-| 2026-08-01 | Phase 0 seven-table baseline | `benchmarks/slice3b_storage_baseline.py`;3,000 claims、8 persisted meta/claim、3 claims/tx 的 current-layout 基线已落数;同一 harness 留给 Phase 4 的 3-table 与 3-table+tiering 对照 |
+| 2026-08-01 | Phase 0 seven-table baseline(initial) | `benchmarks/slice3b_storage_baseline.py`;3,000 claims、8 projected Ledger meta rows/claim、3 claims/tx 的 current-layout 首轮基线;单样本 SQLite 口径随后被补钉轮 N=5 方法取代 |
 | 2026-08-01 | **Phase 0 对抗审计:0 blocker / 8 serious / 7 minor —— 有条件不放行,先走补钉轮** | 四透镜(golden 完整性/转录保真/基线方法学/纪律锚点)+ 独立全套件复跑(2772/32/1 + 1097 subtests 逐字复现);裁定与发现全文见下文 §Phase 0 对抗审计 |
+| 2026-08-01 | Phase 0 补钉 A/B/C | `6ef6579a` 增加 production commit-path + repair golden;`b6ff1a8a` 补 Q-SAE-8 §4 逐行转录、Q-SYS-B supersede 与 C1/C2 内联裁定落笔 |
+| 2026-08-01 | Phase 0 baseline 补测 | `5d9e7463`;harness v2 改为 N=5 中位数+抖动带、tx-object 唯一字节精确分量、projected/persisted/workset 分名;补 batch=1 与冷 attach 驻留指标 |
+| 2026-08-01 | Phase 0 补钉 canonical gate | `PYTHONPATH=src` + process-only readline shim + ignore pyreason binary failure + deselect static-ui known failure:`2773 passed / 32 skipped / 1 deselected / 1098 subtests`;相对进入补钉轮净增 1 test + 1 subtest |
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
@@ -144,49 +147,73 @@
 
 ### Frozen method
 
-- Harness:`benchmarks/slice3b_storage_baseline.py`(`slice3b_storage_baseline_v1`)。
-- Invocation:`PYTHONPATH=src python benchmarks/slice3b_storage_baseline.py --claims 3000 --batch-sizes 3 --repeats 7`。
+- Harness:`benchmarks/slice3b_storage_baseline.py`(`slice3b_storage_baseline_v2`,commit `5d9e7463`)。
+- Invocations:
+  - batch profile:`PYTHONPATH=src python benchmarks/slice3b_storage_baseline.py --claims 3000 --batch-sizes 3 --repeats 7 --storage-runs 5`;
+  - interactive profile:`PYTHONPATH=src python benchmarks/slice3b_storage_baseline.py --claims 3000 --batch-sizes 1 --repeats 7 --storage-runs 5`。
 - Environment:macOS 14.4.1 arm64;Python 3.10.11;SQLite 3.45.3。
-- Meander batch profile:read-only probe of the current local meander dev workspace found one `plan.ingest` request_id group containing 3 claims;the harness repeats 1,000 commits × 3 claims。`--batch-sizes` remains a repeatable comma-separated distribution input for a wider production histogram。
-- Meta profile:5 workload entries/claim(`ingested_at`,`provenance_class`,`origin_binding`,`trace_id`,`request_id`) + Stage A's 3 integrity anchors(`schema_digest`,`assertion_digest`,`tx_id`) = exactly 8 projected meta rows/claim。Batch-shared values are constant inside each 3-claim commit。
-- Size method:create an empty and a filled Database with the same schema;checkpoint WAL;exclude `-wal`/`-shm`/writer lock;subtract the empty workspace's fixed schema/genesis cost;retain SQLite page allocation and tx-object bytes。This is the value reused without method changes for groups 2/3。
-- Read method:7-repeat median after warm-up and GC;3,000-claim premise scan executes global exclusion + predicate allowance + predicate block for every assertion;chosen projects 300 groups × 10 versions;Ledger suite exercises every public read method/property and all supported filter shapes(point methods use 256 ids)。
+- Batch profiles:meander read-only probe found one `plan.ingest` request_id group containing 3 claims,故主 profile 为 1,000 commits × 3 claims;另以 3,000 commits × 1 claim 固定 interactive 摊销基线。`--batch-sizes` 继续接受可复跑的逗号分隔分布。
+- Meta input profile 固定为 5 entries/claim(`ingested_at`,`provenance_class`,`origin_binding`,`trace_id`,`request_id`);输出分三种口径,不做 8-row 硬断言:
+  - **projected**:`Ledger.find_meta()` / `find_annotations()` 可见的 read projection;
+  - **persisted physical**:SQLite `meta_rows` / `annotation_rows` / 后续 `claim_meta` 的实际行数;
+  - **eager workset**:cold `Database.open` + attach 后驻留的 meta-bearing row objects 与 index references。
+- Size method:每个 profile 独立创建 **5 组**同 schema 的 empty/filled Database;checkpoint WAL;exclude `-wal`/`-shm`/writer lock;逐组 subtract empty workspace 固定 schema/genesis 成本。SQLite allocation 与 durable total 报中位数、min/max 抖动带及相对中位数最大偏差;**只有 content-addressed tx-object delta 要求五组逐字节相等**,是唯一 byte-exact 分量。Phase 4 groups 2/3 必须复用此方法。
+- Read method:第一组 filled workspace 关闭后 cold reopen/attach,再做 warm-up + GC 后 7-repeat median;3,000-claim premise scan 对每条 assertion 执行 global exclusion + predicate allowance + predicate block;chosen projects 300 groups × 10 versions;Ledger suite 覆盖公开 read method/property 的代表性 filter shapes(point methods use 256 ids),**不宣称穷尽每个参数组合**。
+- Harness private dependency:`Database._ledger_for_attach` 用于取得 attach 后 Ledger;其转正时必须保留 alias,或在同一 commit 更新 harness。workset 还读取当前 `_meta_*` / `_anno_*` 内存索引;3b 重构这些索引时必须同 commit 更新计数 adapter,不得静默丢指标。
 
 ### Storage result
 
-| Metric | Total delta | Per claim |
-|---|---:|---:|
-| SQLite allocated bytes | 10,637,312 B | 3,545.771 B |
-| dbtx_v2 tx objects | 803,893 B | 267.964 B |
-| **Durable total** | **11,441,205 B** | **3,813.735 B(3.724 KiB)** |
+| Profile | Commits | SQLite median[min,max] | SQLite B/claim | dbtx_v2 exact | tx B/claim | Durable median[min,max] | Durable B/claim |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| batch=3 | 1,000 | 10,612,736 [10,600,448, 10,653,696] B | 3,537.579 | 803,893 B | 267.964 | 11,416,629 [11,404,341, 11,457,589] B | 3,805.543 |
+| batch=1 | 3,000 | 10,620,928 [10,555,392, 10,633,216] B | 3,540.309 | 1,429,893 B | 476.631 | 12,050,821 [11,985,285, 12,063,109] B | 4,016.940 |
+
+SQLite 最大偏差(batch=3 / batch=1)分别为中位数的 0.385951% / 0.617046%;durable total 分别为 0.358775% / 0.543830%。两组各 5 次 tx-object delta 均逐字节一致。batch=1 相对 batch=3 每 claim 增加 208.667 B tx-object 摊销,这正是 Q-SAE-9 §6 要冻结的 interactive 成本。
 
 Schema introspection returned exactly the current seven tables:`annotation_rows`,`claim_args`,`claims`,`ingest_keys`,`ledger_meta`,`meta_rows`,`revokes`。
 
+### Meta projection / persistence / eager workset(cold attach)
+
+两种 batch profile 的 claim/meta 内容相同,下列计数完全一致:
+
+| Metric | Rows / references | Per claim | 语义 |
+|---|---:|---:|---|
+| projected Ledger meta rows | 24,000 | 8.0 | `find_meta()` 的稳定读投影;不是 physical 总行数 |
+| projected annotation rows | 3,000 | 1.0 | `find_annotations()` 的兼容投影 |
+| persisted `meta_rows` | 24,000 | 8.0 | SQLite physical |
+| persisted `annotation_rows` | 3,000 | 1.0 | SQLite physical;与 meta projection 有共享数据的重复物化 |
+| **persisted physical meta-bearing total** | **27,000** | **9.0** | 当前 7 表物理成本;不是 8 |
+| **eager projection meta-bearing rows** | **27,000** | **9.0** | cold attach 后 `_meta_rows_data` + `_annotation_rows_data` 全驻留 |
+| resident meta index references | 144,000 | 48.0 | row list + 六族 meta lookup 中的引用数 |
+| resident annotation index references | 15,000 | 5.0 | row list + 四族 annotation lookup 中的引用数 |
+| **resident meta index references total** | **159,000** | **53.0** | 引用计数,不是 distinct Python object 数 |
+
+这组 workset 是 Q-SAE-9 §7.4 的 group 1 锚点:Phase 4 的 3-table+tiering 必须证明 audit/lazy 类不再进入 eager projection,并用同名字段呈现降幅。
+
 ### Read result(median)
 
-| Surface | Work per sample | Median |
-|---|---|---:|
-| premise filter | 3 decisions × 3,000 assertions | 7.415500 ms |
-| chosen | full 3,000-claim projection(300 groups × 10 versions) | 9.716667 ms |
-| all Ledger read APIs | one complete method/filter-shape suite | 1.354208 ms |
+| Profile | premise filter(3 × 3,000) | chosen(3,000;300 × 10) | Ledger representative read suite |
+|---|---:|---:|---:|
+| batch=3 | 7.937334 ms | 9.353000 ms | 1.297375 ms |
+| batch=1 | 8.772667 ms | 9.259625 ms | 1.413084 ms |
 
-All Ledger read API case timings(ms):
+Batch=3 Ledger read API case timings(ms):
 
 | Case | Median | Case | Median |
 |---|---:|---|---:|
-| `get_claim_256` | 0.084166 | `find_claims_all` | 0.016000 |
-| `find_claims_pred` | 0.017167 | `find_claims_e_ref` | 0.004209 |
-| `find_claims_pred_e_ref` | 0.009708 | `find_claim_args_all` | 0.015917 |
-| `find_claim_args_asrt` | 0.004083 | `find_claim_args_filtered` | 0.285917 |
-| `find_meta_all` | 0.082209 | `find_meta_asrt` | 0.010500 |
-| `find_meta_asrt_key` | 0.009833 | `find_meta_key_kind` | 0.226708 |
-| `find_annotations_all` | 0.017125 | `find_annotations_asrt` | 0.006041 |
-| `find_annotations_ns_category` | 0.005708 | `find_annotations_key` | 0.293750 |
-| `has_active_revocation_256` | 0.067958 | `find_revoker_256` | 0.071458 |
-| `claims_property` | 0.011209 | `claim_args_property` | 0.010375 |
-| `meta_rows_property` | 0.065125 | `annotation_rows_property` | 0.010625 |
-| `revokes_property` | 0.003166 | `get_ledger_meta` | 0.025625 |
-| `get_ledger_meta_snapshot` | 0.044958 | | |
+| `get_claim_256` | 0.078625 | `find_claims_all` | 0.024500 |
+| `find_claims_pred` | 0.024375 | `find_claims_e_ref` | 0.004333 |
+| `find_claims_pred_e_ref` | 0.009375 | `find_claim_args_all` | 0.015750 |
+| `find_claim_args_asrt` | 0.009792 | `find_claim_args_filtered` | 0.190875 |
+| `find_meta_all` | 0.077292 | `find_meta_asrt` | 0.008750 |
+| `find_meta_asrt_key` | 0.009000 | `find_meta_key_kind` | 0.350500 |
+| `find_annotations_all` | 0.009708 | `find_annotations_asrt` | 0.005542 |
+| `find_annotations_ns_category` | 0.005708 | `find_annotations_key` | 0.233666 |
+| `has_active_revocation_256` | 0.066583 | `find_revoker_256` | 0.071042 |
+| `claims_property` | 0.014083 | `claim_args_property` | 0.014208 |
+| `meta_rows_property` | 0.070750 | `annotation_rows_property` | 0.016125 |
+| `revokes_property` | 0.003833 | `get_ledger_meta` | 0.042792 |
+| `get_ledger_meta_snapshot` | 0.064708 | | |
 
 ## Phase 0 对抗审计(2026-08-01,Claude 四透镜 + 独立复跑)
 
@@ -208,6 +235,26 @@ All Ledger read API case timings(ms):
 **Minor ×7**:混合 scope commit(1373c1c5 bench+audit);spec:894 "仅 2 个原语"历史行漏 ⚠️ 标注;spec:171 索引注释超出 (key,value) 索引在事件史下的实际能力;harness 依赖私有 `_ledger_for_attach`(本 blueprint 自己要转正的名字);batch=1 摊销无基线(诚实披露的 n=1 点估计);"all supported filter shapes" 超述(find_meta 两条索引路径未测);求值工作集指标缺失(Q-SAE-9 §7.4 gate 需要)。另记:canonical 套件跑法(readline stub + ignore + deselect)只存在于归档 audit prose,无 pytest 配置载体,有漂移风险。
 
 **裁定:有条件不放行 Phase 1。** 关键时序约束:D 组基线补测(中位数重基线/batch=1/工作集指标)必须在动表**之前**完成 —— 翻转落地后补 7 表基线需回老 checkout,成本陡增。补钉轮(A/B/D + C 裁定落笔)完成并复验后放行 Phase 1。
+
+## Phase 0 补钉轮实施闭环(待对抗复验)
+
+| 审计项 | 闭环证据 |
+|---|---|
+| G1 + G3 | `6ef6579a`:确定 UUID 序列下走 `Database.create` + production `commit_changes`;覆盖 assertion/revocation(`MetaEntry` meta)/append_meta/schema_change,逐环比较持久化 tx-object bytes、tx_id、head_tx_id/head_tx_seq/head_state_digest 字面 fixture |
+| G2 | `6ef6579a`:`repair_add` / `repair_remove` / `repair` 三 tag canonical bytes + tx_id + head progression fixture |
+| A3 minor | B 链新增 observed kind 上界断言,与 A 链对称;repair 链也有同构上下界 |
+| T1 | `b6ff1a8a`:Q-SAE-8 §4 三行逐字补入 worklist;Q-SYS-B §4.4 加 Q-SAE-8 supersede 标注 |
+| T2 / C1 | `b6ff1a8a`:保留 UNSET=SQL NULL,明确记为 2026-08-01 内联裁定编码 |
+| T3 / C2 | `b6ff1a8a`:`tx_seq` 仅定为 Q-SAE-8 提交序;与 Q-SAE-9 `tx_ref` 关系留 Phase 1 裁定 |
+| B1 / D1 | `5d9e7463`:SQLite/durable 改 N=5 中位数+抖动带;tx-object 是唯一 byte-exact 分量 |
+| B2 / D2 | `5d9e7463`:删除 8-row 硬断言;projected Ledger rows、persisted physical rows、eager workset 分名报告 |
+| D3 | batch=1 的 3,000-commit interactive 摊销基线已在 7 表翻转前落数 |
+| D4 | cold attach 后 eager projection rows、resident row objects、meta/annotation index references 已入 group 1 基线 |
+| D5 | Frozen method 明记 `_ledger_for_attach` private dependency 与 alias/update 约束;同时记录 workset 所依赖的 `_meta_*` / `_anno_*` adapter 更新纪律 |
+| B3/B4 minor | spec 历史“仅 2 个原语”行加 ⚠️;`idx_claim_meta_key_value` 注释收窄为候选过滤,组内 max 才决定 effective |
+| 额外 minor | read suite 措辞从“all supported filter shapes”收窄为代表性 shapes,不再过诺 |
+
+补钉期间未修改 `src/`、DDL 或生产写路径;readline shim 仅在测试进程内注入,无文件落盘。Phase 1 仍须协调方复验放行。
 
 ## Deviations
 
