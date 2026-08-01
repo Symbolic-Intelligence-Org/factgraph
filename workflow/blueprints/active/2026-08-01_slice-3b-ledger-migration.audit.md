@@ -24,6 +24,7 @@
 | 2026-08-01 | Phase 0 seven-table baseline(initial) | `benchmarks/slice3b_storage_baseline.py`;3,000 claims、8 projected Ledger meta rows/claim、3 claims/tx 的 current-layout 首轮基线;单样本 SQLite 口径随后被补钉轮 N=5 方法取代 |
 | 2026-08-01 | **Phase 0 对抗审计:0 blocker / 8 serious / 7 minor —— 有条件不放行,先走补钉轮** | 四透镜(golden 完整性/转录保真/基线方法学/纪律锚点)+ 独立全套件复跑(2772/32/1 + 1097 subtests 逐字复现);裁定与发现全文见下文 §Phase 0 对抗审计 |
 | 2026-08-01 | Phase 0 补钉 A/B/C | `6ef6579a` 增加 production commit-path + repair golden;`b6ff1a8a` 补 Q-SAE-8 §4 逐行转录、Q-SYS-B supersede 与 C1/C2 内联裁定落笔 |
+| 2026-08-01 | Phase 0 production golden 混合序加固 | `c1a06555`;同一 production commit 字面钉死 assertion → revocation → append_meta 顺序,schema_change 依生产约束独立成环 |
 | 2026-08-01 | Phase 0 baseline 补测 | `5d9e7463`;harness v2 改为 N=5 中位数+抖动带、tx-object 唯一字节精确分量、projected/persisted/workset 分名;补 batch=1 与冷 attach 驻留指标 |
 | 2026-08-01 | Phase 0 补钉 canonical gate | `PYTHONPATH=src` + process-only readline shim + ignore pyreason binary failure + deselect static-ui known failure:`2773 passed / 32 skipped / 1 deselected / 1098 subtests`;相对进入补钉轮净增 1 test + 1 subtest |
 
@@ -240,7 +241,7 @@ Batch=3 Ledger read API case timings(ms):
 
 | 审计项 | 闭环证据 |
 |---|---|
-| G1 + G3 | `6ef6579a`:确定 UUID 序列下走 `Database.create` + production `commit_changes`;覆盖 assertion/revocation(`MetaEntry` meta)/append_meta/schema_change,逐环比较持久化 tx-object bytes、tx_id、head_tx_id/head_tx_seq/head_state_digest 字面 fixture |
+| G1 + G3 | `6ef6579a` + `c1a06555`:确定 UUID 序列下走 `Database.create` + production `commit_changes`;同批钉死 assertion → revocation(`MetaEntry` meta)→ append_meta,schema_change 独立成环;逐环比较持久化 tx-object bytes、tx_id、head_tx_id/head_tx_seq/head_state_digest 字面 fixture |
 | G2 | `6ef6579a`:`repair_add` / `repair_remove` / `repair` 三 tag canonical bytes + tx_id + head progression fixture |
 | A3 minor | B 链新增 observed kind 上界断言,与 A 链对称;repair 链也有同构上下界 |
 | T1 | `b6ff1a8a`:Q-SAE-8 §4 三行逐字补入 worklist;Q-SYS-B §4.4 加 Q-SAE-8 supersede 标注 |
