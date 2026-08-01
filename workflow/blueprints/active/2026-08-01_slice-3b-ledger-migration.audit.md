@@ -36,6 +36,12 @@
 - [ ] reload/导出/迁移**保序不变量**:落库即定序,任何重建路径不得重排;
 - [ ] 失败回滚:事务失败则该 `tx_seq` 下全部事件不存在(原子性由 Stage A 追加项 (a) 保证)—— 无部分序号泄漏。
 
+### Q-SAE-8 §4 后果
+
+- spec 修订面:claim_meta 表定义(+event_seq)、§9.7、INV 族("immutable"从表级降为行级);**Q-SYS-B §4.4 对应条款按本 ADR supersede 标注**;
+- 与 Q-SAE-9 咬合:J 类 claim 覆盖行与 tombstone 事件(Q-SAE-9 定义)都是本 ADR 的 meta event,共用 `(tx_seq, op_ordinal)` 序;
+- meta 历史入 `tx_id` 链、不入 `state_digest`(Q-SAE-7 §4 已裁)。
+
 ### Q-SAE-8 §5 验收 gates
 
 1. [ ] 重放等价:含重复键 append_meta 的序列在新表可完整重放,读输出与 6 表现状逐字节等价(含一次调用内多次同键赋值);

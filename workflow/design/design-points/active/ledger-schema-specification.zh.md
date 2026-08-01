@@ -168,7 +168,7 @@ CREATE TABLE claim_meta (
   PRIMARY KEY (asrt_id, key, tx_seq, op_ordinal)
 );
 
-CREATE INDEX idx_claim_meta_key_value ON claim_meta(key, value);     -- effective meta 过滤查询
+CREATE INDEX idx_claim_meta_key_value ON claim_meta(key, value);     -- 过滤候选;effective 判定需组内 max 事件
 CREATE INDEX idx_claim_meta_asrt      ON claim_meta(asrt_id);         -- 按 claim 取完整事件流
 ```
 
@@ -177,7 +177,7 @@ CREATE INDEX idx_claim_meta_asrt      ON claim_meta(asrt_id);         -- 按 cla
 | `asrt_id` | TEXT | NOT NULL, event PK | 关联到 `claims.asrt_id` — 这条 meta event 所属的 claim 或 revoker |
 | `key` | TEXT | NOT NULL, event PK | meta key(如 `source`、`trace_id`、`bound`) |
 | `value` | TEXT | NULLABLE | 非 `UNSET` 时为 SQL canonical text(格式由 META_KEY_REGISTRY 规定,见 §5.3);SQL `NULL` 是保留的 `UNSET` tombstone,不属于用户 TEXT 值域 |
-| `tx_seq` | INTEGER | NOT NULL, event PK | 产生该事件的 Database 提交序;同时是该 meta event 的稳定 tx reference |
+| `tx_seq` | INTEGER | NOT NULL, event PK | 产生该事件的 Database 提交序(Q-SAE-8);与 Q-SAE-9 `tx_ref` 的关系在 Phase 1 裁定 |
 | `op_ordinal` | INTEGER | NOT NULL, event PK | 本次 commit 内按输入顺序分配的操作序号 |
 
 #### 关键设计点
@@ -396,6 +396,8 @@ INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Clai
 ### §5.2 `claim_meta.value` 列编码
 
 `claim_meta.value` 的普通事件值**全部 TEXT**,没有 per-row `value_tag` 标识;SQL `NULL` 保留为 `UNSET` tombstone,不进入下列 value 解码。格式约定如下:
+
+**编码经 2026-08-01 内联裁定采纳**:`UNSET` 使用 SQL `NULL`;普通 user meta 不能伪造该 tombstone 编码。
 
 | 类型 | 决定规则 |
 |---|---|
@@ -891,7 +893,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-28 | `claim_meta` drop `value_tag` 列 | 接受 — 非 UNSET 值为 TEXT;特殊 key 格式 META_KEY_REGISTRY 中心化 | ✅ 已采纳 |
 | 2026-05-28 | `claim_meta` drop `origin` 列 | 接受 — 如需要 encode 为 meta key 自身 | ✅ 已采纳 |
 | 2026-05-28 | META_KEY_REGISTRY 必须文档化 | 接受 — 见 §5.3 | ✅ 已采纳 |
-| 2026-05-28 | Ledger 仅 2 个原语(append claim / append revoke claim);SDK update / delete 是组合糖 | 接受 — ledger 不引入 update 概念 | ✅ 已采纳 |
+| 2026-05-28 | Ledger 仅 2 个原语(append claim / append revoke claim);SDK update / delete 是组合糖 | 接受 — ledger 不引入 update 概念 | ⚠️ 事实生命周期二原语仍有效;全局“仅 2 个原语”措辞已被 Q-SAE-8 `append meta event` 补充 |
 | 2026-05-28 | Digest 输入范围:仅 claims 核心 4-tuple,不含 claim_meta | 接受 — meta 是 provenance 不参与 fact 身份 | ✅ 已采纳(见 §6.1)|
 | 2026-05-28 | 存在性断言 pred_id 形态 | `<EntityType>:exists` per-entity-type;**不**属于 `__system__.*` namespace;INV-15 不 filter | ✅ 已采纳(见 §3.1 + §4.7)|
 | 2026-05-28 | Multi-cardinality 读取语义 | multiset(保留独立 asrt_id;caller 自行 dedup 如需 set 语义)| ✅ 已采纳(见 §8.3)|
