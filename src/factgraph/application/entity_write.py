@@ -1238,12 +1238,14 @@ def _normalize_scalar_value(
             )
         return value.lower()
     if scalar_domain == "bytes":
-        raise EntityWriteError(
-            f"{field_name} uses unsupported protocol field domain: bytes",
-            code="UNSUPPORTED_FIELD_DOMAIN",
-            path=path,
-            details={"expected_type_domain": scalar_domain},
-        )
+        if not isinstance(value, bytes):
+            raise EntityWriteError(
+                f"{field_name} expects bytes value",
+                code="FIELD_VALUE_TYPE_MISMATCH",
+                path=path,
+                details={"expected_type_domain": scalar_domain},
+            )
+        return value
     raise EntityWriteError(
         f"{field_name} uses unsupported field domain: {scalar_domain!r}",
         code="UNSUPPORTED_FIELD_DOMAIN",

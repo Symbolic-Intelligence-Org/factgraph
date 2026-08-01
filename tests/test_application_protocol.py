@@ -17,6 +17,23 @@ from factgraph.application.protocol import (
 
 
 class ApplicationProtocolTests(unittest.TestCase):
+    def test_field_value_dtos_accept_bytes_without_widening_json_meta(self) -> None:
+        field = FieldPath(entity_type="Document", field_name="payload")
+        payload = b"\x00\xffpayload"
+
+        value = FieldValueDTO(
+            field=field,
+            value_kind="scalar",
+            cardinality="single",
+            value=payload,
+        )
+        mutation = FieldMutation(op="set", field=field, value=payload)
+
+        self.assertEqual(value.value, payload)
+        self.assertEqual(mutation.value, payload)
+        with self.assertRaises(ProtocolShapeError):
+            FieldMutation(op="set", field=field, value="ok", meta={"payload": payload})
+
     def test_error_dto_requires_screaming_snake_case(self) -> None:
         with self.assertRaises(ProtocolShapeError):
             ErrorDTO(code="entity_not_found", message="bad")

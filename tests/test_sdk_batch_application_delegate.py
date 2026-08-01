@@ -11,7 +11,6 @@ from factgraph.sdk import (
     Field,
     Identity,
     SDKStore,
-    SDKStoreError,
     compile_schema_from_classes,
 )
 from factgraph.sdk.batch import BatchPlan, WireBatchPlan
@@ -52,7 +51,7 @@ def _claim_counts(sdk: SDKStore, e_ref: str) -> Counter:
 
 
 class SDKBatchApplicationDelegateTests(unittest.TestCase):
-    def test_attached_batch_fails_closed_when_value_is_not_application_representable(self) -> None:
+    def test_attached_batch_commits_bytes_through_application_protocol(self) -> None:
         db = Database.create(schema_ir=compile_schema_from_classes([BinaryDoc]))
         sdk = FactGraph.attach(db, schema_classes=[BinaryDoc])
         before = db.head()
@@ -61,15 +60,17 @@ class SDKBatchApplicationDelegateTests(unittest.TestCase):
             doc = tx.entity(BinaryDoc, doc_id="doc-1")
             doc.payload.set(b"payload")
             plan = tx.preview(objects=[doc])
-            self.assertFalse(plan._application_handle_order)
-            with self.assertRaises(SDKStoreError) as caught:
-                plan.apply(sdk)
-            self.assertIn("BinaryDoc#1.payload", str(caught.exception))
-            self.assertIn("cannot be represented", str(caught.exception))
-            self.assertIn("bytes", str(caught.exception))
+            self.assertTrue(plan._application_handle_order)
+            result = plan.apply(sdk)
 
-        self.assertEqual(db.head(), before)
-        self.assertEqual(sdk.ledger.claims, [])
+        self.assertEqual(db.head().tx_seq, before.tx_seq + 1)
+        self.assertTrue(result.assertion_ids)
+        payload_claims = sdk.ledger.find_claims(
+            pred_id="binary_doc:payload",
+            e_ref=result.refs_by_handle_id[doc.handle_id],
+        )
+        self.assertEqual(len(payload_claims), 1)
+        self.assertEqual(payload_claims[0].rest_terms, [("bytes", b"payload")])
 
     def test_batch_preview_and_apply_delegate_simple_writes(self) -> None:
         sdk = SDKStore([Country, User])

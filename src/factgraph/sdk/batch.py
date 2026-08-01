@@ -529,8 +529,6 @@ def _first_unrepresentable_batch_op(plan: BatchPlan, sdk: "SDKStore") -> tuple[s
             if len(rest_terms) != 1:
                 return path, "field value does not lower to exactly one canonical term"
             tag, _value = rest_terms[0]
-            if tag == "bytes":
-                return path, "bytes values are outside the current application FieldValue contract"
             if tag == "entity_ref":
                 return path, "scalar value lowered unexpectedly to entity_ref"
             continue
@@ -1767,7 +1765,7 @@ class SDKBatchTx:
         if len(rest_terms) != 1:
             return None
         tag, value = rest_terms[0]
-        if tag in {"entity_ref", "bytes"}:
+        if tag == "entity_ref":
             return None
         return value
 
