@@ -21,6 +21,7 @@
 | 2026-08-01 | **内联裁定:3b 前 v0.3(7 表)工作区无升级路径** | v0.3.0 未发布,7 表格式零真实消费者 —— migrate-workspace CLI 目标改为 v0.2 → 3b 终态直达;Stage A 期间产生的 7 表 dev 工作区显式拒绝 + 指引(重建或从 v0.2 源重迁移)。为一个从未发布的中间格式造迁移器是浪费 |
 | 2026-08-01 | Phase 0 dbtx_v2 golden fixture | `af7b92ab`;A/R-only 链与含 append_meta/schema_change 的链均冻结每环 canonical bytes、tx_id 与 genesis→head 推进序列;协议代码零改动 |
 | 2026-08-01 | Phase 0 current-context re-anchor | 基于 `af7b92ab` 逐项重 grep blueprint §4;结果与 blueprint 描述一致,证据清单见下文 |
+| 2026-08-01 | Phase 0 seven-table baseline | `benchmarks/slice3b_storage_baseline.py`;3,000 claims、8 persisted meta/claim、3 claims/tx 的 current-layout 基线已落数;同一 harness 留给 Phase 4 的 3-table 与 3-table+tiering 对照 |
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
@@ -131,6 +132,54 @@
 - [x] **双粒度提交面**:`src/factgraph/application/entity_write.py:257-277` 的交互 `apply_write_plan` 以单 plan 委托;`307-365` 的 `apply_write_plans` 展平一批 plan,`378-461` 最终只在 `445` 调用一次 `database.commit_changes`;SDK batch 接线在 `src/factgraph/sdk/batch.py:591-605`;公开交互/批量入口在 `src/factgraph/sdk/store.py:2234-2261`。
 
 结论:blueprint §4 的当前上下文描述均被当前 HEAD 代码证实,无偏差需停线。
+
+## Phase 0 measurement baseline:group 1(current seven-table)
+
+### Frozen method
+
+- Harness:`benchmarks/slice3b_storage_baseline.py`(`slice3b_storage_baseline_v1`)。
+- Invocation:`PYTHONPATH=src python benchmarks/slice3b_storage_baseline.py --claims 3000 --batch-sizes 3 --repeats 7`。
+- Environment:macOS 14.4.1 arm64;Python 3.10.11;SQLite 3.45.3。
+- Meander batch profile:read-only probe of the current local meander dev workspace found one `plan.ingest` request_id group containing 3 claims;the harness repeats 1,000 commits × 3 claims。`--batch-sizes` remains a repeatable comma-separated distribution input for a wider production histogram。
+- Meta profile:5 workload entries/claim(`ingested_at`,`provenance_class`,`origin_binding`,`trace_id`,`request_id`) + Stage A's 3 integrity anchors(`schema_digest`,`assertion_digest`,`tx_id`) = exactly 8 projected meta rows/claim。Batch-shared values are constant inside each 3-claim commit。
+- Size method:create an empty and a filled Database with the same schema;checkpoint WAL;exclude `-wal`/`-shm`/writer lock;subtract the empty workspace's fixed schema/genesis cost;retain SQLite page allocation and tx-object bytes。This is the value reused without method changes for groups 2/3。
+- Read method:7-repeat median after warm-up and GC;3,000-claim premise scan executes global exclusion + predicate allowance + predicate block for every assertion;chosen projects 300 groups × 10 versions;Ledger suite exercises every public read method/property and all supported filter shapes(point methods use 256 ids)。
+
+### Storage result
+
+| Metric | Total delta | Per claim |
+|---|---:|---:|
+| SQLite allocated bytes | 10,637,312 B | 3,545.771 B |
+| dbtx_v2 tx objects | 803,893 B | 267.964 B |
+| **Durable total** | **11,441,205 B** | **3,813.735 B(3.724 KiB)** |
+
+Schema introspection returned exactly the current seven tables:`annotation_rows`,`claim_args`,`claims`,`ingest_keys`,`ledger_meta`,`meta_rows`,`revokes`。
+
+### Read result(median)
+
+| Surface | Work per sample | Median |
+|---|---|---:|
+| premise filter | 3 decisions × 3,000 assertions | 7.415500 ms |
+| chosen | full 3,000-claim projection(300 groups × 10 versions) | 9.716667 ms |
+| all Ledger read APIs | one complete method/filter-shape suite | 1.354208 ms |
+
+All Ledger read API case timings(ms):
+
+| Case | Median | Case | Median |
+|---|---:|---|---:|
+| `get_claim_256` | 0.084166 | `find_claims_all` | 0.016000 |
+| `find_claims_pred` | 0.017167 | `find_claims_e_ref` | 0.004209 |
+| `find_claims_pred_e_ref` | 0.009708 | `find_claim_args_all` | 0.015917 |
+| `find_claim_args_asrt` | 0.004083 | `find_claim_args_filtered` | 0.285917 |
+| `find_meta_all` | 0.082209 | `find_meta_asrt` | 0.010500 |
+| `find_meta_asrt_key` | 0.009833 | `find_meta_key_kind` | 0.226708 |
+| `find_annotations_all` | 0.017125 | `find_annotations_asrt` | 0.006041 |
+| `find_annotations_ns_category` | 0.005708 | `find_annotations_key` | 0.293750 |
+| `has_active_revocation_256` | 0.067958 | `find_revoker_256` | 0.071458 |
+| `claims_property` | 0.011209 | `claim_args_property` | 0.010375 |
+| `meta_rows_property` | 0.065125 | `annotation_rows_property` | 0.010625 |
+| `revokes_property` | 0.003166 | `get_ledger_meta` | 0.025625 |
+| `get_ledger_meta_snapshot` | 0.044958 | | |
 
 ## Deviations
 
