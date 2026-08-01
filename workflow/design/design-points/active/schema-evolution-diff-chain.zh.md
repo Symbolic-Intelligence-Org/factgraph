@@ -39,7 +39,7 @@ Profile B(asset-first,meander):│
 | Protobuf | 当前 .proto | `reserved N;` 墓碑 | **最小墓碑防复用**的原型 |
 | Datomic | schema 即 facts | append-only 到底,ident 改名不删 | "模型也 append-only"的成熟形态,与状态化著述不冲突 |
 | GraphQL | 当前 schema | `@deprecated` 留在文件内 | 弃用期作为接口契约的可见中间态(我们可选二段式 deprecated→retired) |
-| **TypeDB**(2026-08-01 核实) | **TypeQL define 语句**(非 Python;3.x 连 2.x 的编程式 API 都已删除) | **无** —— define/undefine/redefine 就地可变,只存当前态;`undefine` 真删且**必须先删光数据实例**;无版本链/迁移框架 | 反面教材两则:①"删 schema 先删 facts"与 audit-first 零相容;②零历史 —— 我们的 transition 链是**超出参照产品的差异化**。可借鉴其 `redefine` 的作者面纪律(每查询一处变更 + no-op 报错 + commit 时全量校验) |
+| **TypeDB**(2026-08-01 核实) | **TypeQL define 语句**(非 Python;3.x 连 2.x 的编程式 API 都已删除) | **无** —— define/undefine/redefine 就地可变,只存当前态;`undefine` 真删且**必须先删光数据实例**;无版本链/迁移框架 | 反面教材两则:①"删 schema 先删 facts"与 audit-first 零相容;②零历史 —— 我们的 transition 链是**超出参照产品的差异化**。可借鉴其 `redefine` 的作者面纪律(每查询一处变更 + no-op 报错 + commit 时全量校验)。补注(2026-08-01,用户二手信息、逻辑自洽未单独核实):社区演化出**子类型派生**绕行模式(不改有数据的类型、旁边派生新子类型),硬变更(约束/基数/改名/删有数据类型)仍靠**迁移脚本 + 数据回填**。评判:子类型派生是记录型系统对 additivity 的模拟 —— claim-first 模型下"加字段=新谓词"天然 additive,**无需借鉴**;迁移+回填模式**已借鉴且升级**(见 §3.6) |
 
 ## §3 机制设计要点(codex 可行性评估五点,全部采纳)
 
@@ -48,6 +48,7 @@ Profile B(asset-first,meander):│
 3. **retired 注册表(墓碑)+ 自引用环陷阱**:IR 顶层加 `retired` 节(pred_id + 退休锚点),live predicates/projection 排除退休项,注册/plan 翻译/wire 入口拒绝 pred_id 复用。**陷阱(codex 发现,裁定采纳)**:墓碑若内嵌本次 schema_change 的 tx_id → `new_schema_digest → tx_id → 墓碑 → new_schema_digest` 自引用环。**裁定:墓碑 identity 只含稳定 transition 序数/parent 锚,审计链接放 schema identity 之外。**
 4. **checker 统一为 "diff 生成器 + 政策过滤器"**:现行 additive checker 是 map 比较直接抛错(schema_mutation_runtime.py:49),与 diff 门并存会两套规则漂移 —— 重构为单一 diff 生成器,additive/retire/identity 政策作为过滤器;`fg.schema.extend` 的同名类替换保留为前端语法,底下走 keyed diff。
 5. **meander 侧配套**:generator/reflection 已刻意保序(generator.py:47),但 YAML model 无 retired carrier、反射丢失部分 asset-only 语义 —— 需同步扩展 YAML model/parser/checker/generator/reflection,并增加 **asset→class→IR→asset round-trip 门禁**。
+6. **迁移配方(migration recipe,2026-08-01 增补 —— 借鉴"迁移脚本+回填"模式并升级为账本公民)**:把"schema transition + 回填批(revoke+重断言)+ retire 标记"包成**一个可审计单元**的 ergonomic 面。地基已全部由 Stage A shipped:回填原语(Phase 2 B1/B2 加固的同批 revoke+重断言 + 幂等重放)、迁移纪律(Phase 3 迁移 CLI 的 staging→verified replacement→归档)、schema transition 链。与外部脚本式迁移(TypeDB/Django)的结构差异:**迁移过程本身入 tx 链,可重放可审计** —— "谁、何时、依据什么迁移了这个字段"是产品能力,不是运维残迹。
 
 ## §4 硬角与非目标
 
@@ -62,6 +63,7 @@ Profile B(asset-first,meander):│
 ## §6 Open Items
 
 - [ ] retire 的二段式(deprecated 中间态)是否纳入 v1 —— 倾向不纳入,需求出现再加;
+- [ ] 基数变更(multi→single 等)纳入迁移配方适用域:transition + 可选归一化回填(哪条 claim 胜出的政策待定);
 - [ ] rename 语义:new-field+retire 模式 vs alias 机制 —— 待实际用例;
 - [ ] transition 序数的精确定义(全局 schema transition 计数 vs tx_seq 引用)—— blueprint 时定;
 - [ ] meander proposal 流与 retire 操作的治理接线(谁有权退休字段)—— meander 侧设计。
