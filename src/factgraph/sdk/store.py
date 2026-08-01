@@ -1873,7 +1873,7 @@ class SDKStore:
         schema_classes: list[type[Entity]] | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
-        """Load a saved FactGraph workspace from disk.
+        """Open a durable FactGraph workspace from disk.
 
         Workspace load restores the ledger and validates the workspace schema
         digest against the supplied `schema_classes`. Class-less dynamic load
@@ -1882,7 +1882,8 @@ class SDKStore:
         ``python -m factgraph migrate-workspace <path>``.
 
         Args:
-            path: Workspace directory created by `fg.save_workspace(...)`.
+            path: Workspace directory created by `FactGraph.create(path=...)`
+                or the explicit v0.2 migration CLI.
             schema_classes: Entity classes matching the saved workspace schema.
             default_row_format: Optional default output row format.
 

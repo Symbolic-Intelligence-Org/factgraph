@@ -72,7 +72,7 @@ the additive-only `fg.schema` namespace.
 values in declaration order; unset `Field` values render as `None`.
 
 `FactGraph.create(schema_classes=[...])` is the canonical constructor.
-`FactGraph.load_workspace(path, schema_classes=[...])` restores a saved workspace.
+`FactGraph.load_workspace(path, schema_classes=[...])` opens a durable workspace.
 `FactGraph.from_schema_classes([...])` remains available as the lower-level
 unmanaged-Ledger constructor and does not accept workspace `path=`.
 

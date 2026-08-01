@@ -139,7 +139,11 @@ For single-cardinality fields, multiple `fg.fields.set(...)` calls produce multi
 
 ## 4. Physical storage — SQLite tables
 
-The ledger is a single SQLite database file. The path depends on which workspace mode you use (see [`load_and_save.md`](load_and_save.md)). The current schema has seven tables:
+The ledger is a single SQLite database file. A durable v0.3 workspace stores it
+at `db/assertions.db`; a pathless graph uses an in-memory Database. The
+lower-level `FactGraph.from_schema_classes(...)` unmanaged-Ledger compatibility
+lifecycle remains separate (see [`load_and_save.md`](load_and_save.md)). The
+current schema has seven tables:
 
 | Table | What it stores | Append-only? |
 |---|---|---|
@@ -149,7 +153,7 @@ The ledger is a single SQLite database file. The path depends on which workspace
 | `revokes` | one row per Revokes record | ✓ |
 | `annotation_rows` | separate internal annotation channel (not covered in this chapter) | ✓ |
 | `ingest_keys` | idempotency keys for bulk-ingest dedup | ✓ |
-| `ledger_meta` | mutable head pointers (`db_id`, `schema_digest`, `head_tx_id`, `head_data_digest`) | ✗ |
+| `ledger_meta` | mutable head metadata (`db_id`, `schema_digest`, `head_tx_id`, `head_state_digest`, `digest_scheme`, `head_tx_seq`) | ✗ |
 
 Only `ledger_meta` is mutable — it holds the head pointers (analogous to git's `HEAD` ref). Every other table is strictly INSERT-only.
 
@@ -167,7 +171,7 @@ CREATE TABLE IF NOT EXISTS claims (
 
 ### 4.1 The append-only invariant
 
-Six of the seven tables never UPDATE or DELETE a row. Retract is two INSERTs (one new Claim for the revoker, one Revokes row); schema mutation is INSERTs into a new schema object; even errors that "remove" a fact are recorded as new revoke records. The only mutable state is `ledger_meta`, which holds the few pointers (head transaction id, head data digest, current schema digest) needed to navigate the immutable record stream.
+Six of the seven tables never UPDATE or DELETE a row. Retract is two INSERTs (one new Claim for the revoker, one Revokes row); schema mutation is INSERTs into a new schema object; even errors that "remove" a fact are recorded as new revoke records. The only mutable state is `ledger_meta`, which holds the head transaction id, state digest, digest scheme, transaction sequence, current schema digest, and Database id needed to navigate and verify the immutable record stream.
 
 ### 4.2 Comparison with similar designs
 

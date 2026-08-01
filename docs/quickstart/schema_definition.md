@@ -1,6 +1,11 @@
 # Schema definition: declaring and evolving entity types
 
-A schema declares the entity types your FactGraph holds. Each workspace is anchored to one `schema_digest` (the canonical hash of the compiled schema) at create time. The runtime supports additive evolution — adding new entity types and adding non-identity fields to existing ones — through the `fg.schema.*` namespace; destructive changes are not supported.
+A schema declares the entity types your FactGraph holds. A Database head is
+anchored to one `schema_digest` (the canonical hash of the compiled schema) at
+any point in history. Successful additive transitions advance the head to a new
+digest; older schema objects remain content-addressed history. The runtime
+supports adding new entity types and non-identity fields through the
+`fg.schema.*` namespace; destructive changes are not supported.
 
 ## 1. Declaring an entity class
 
@@ -146,7 +151,15 @@ schema_ir = compile_schema_from_classes([User])     # compile and return the IR
 schema_preflight_from_classes([User])               # validate only; does not return IR
 ```
 
-The `schema_digest` is the SHA-256 of the canonicalized schema identity (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at` metadata, so recompiling the same `Entity` classes at a later time keeps the same digest. Schema `repr` templates are presentation metadata and do not participate in the identity digest. Structural schema fields, including versions, remain identity-bearing in this release. Reopening with a different class set raises a mismatch error (see [load_and_save.md](load_and_save.md)).
+The `schema_digest` is the SHA-256 of the canonicalized schema identity
+(sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at`
+metadata, so recompiling the same `Entity` classes at a later time keeps the
+same digest. Schema `repr` templates are presentation metadata and do not
+participate in the identity digest. Structural schema fields, including
+versions, remain identity-bearing in this release. Reopening validates the
+supplied classes against the current digest in `db/assertions.db` and the
+matching content-addressed schema object. A mismatch fails closed (see
+[load_and_save.md](load_and_save.md)).
 
 ## 3. Runtime schema mutation
 
@@ -219,13 +232,19 @@ SDKStoreError: schema declaration was superseded; use the post-add class object
 
 In normal use the `User` name is rebound to the new class by Python's import or local re-declaration, so the old class object is only reachable through code that explicitly captured a reference before `extend`. Re-import the module or rebind the name to clear the reference.
 
-### 3.6 Workspace persistence timing
+### 3.6 Database history timing
 
-`fg.schema.register / extend / apply` update the in-memory schema state and the ledger's `schema_digest` metadata immediately. The workspace manifest digest is **not** rewritten until you call `fg.save_workspace()`. This means a runtime that has mutated its schema but not saved will load with the post-mutation schema digest from the ledger, but the on-disk manifest may still show the pre-mutation digest until the next save.
+`fg.schema.register / extend / apply` first apply the SDK's additive-only
+policy. A successful change writes the canonical new schema object and commits
+one isolated `schema_change` transaction containing the old and new digests.
+The current digest and transaction head advance together; failed and no-op
+changes do not advance either one. `fg.save_workspace()` is unrelated: it only
+touches lifecycle metadata, and the v0.3 workspace manifest contains no schema
+digest.
 
 ## 4. Schema mutation is additive-only (current scope)
 
-Destructive operations (`delete`, `update`, `migrate`, `deprecate`) are not part of the current `fg.schema.*` surface. If you need a non-additive change today — removing a field, changing identity, retyping, or anything that retracts schema state — create a new workspace with the new schema and re-ingest.
+Destructive operations (`delete`, `update`, `migrate`, `deprecate`) are not part of the current `fg.schema.*` surface. If you need a non-additive change today — removing a field, changing identity, retyping, or anything that retracts schema state — create a new workspace with the new schema and re-ingest. The core Database has a policy-free schema-transition mechanism for internal orchestration, but its raw transition DTO is intentionally not exported from the public SDK.
 
 This is the **current mode**. Broader schema evolution semantics (destructive operations, in-place migration, digest evolution) are an open design question. The full rejection taxonomy and the design space sit in [`workflow/design/design-points/active/schema-mutation-additive-only.zh.md`](../../workflow/design/design-points/active/schema-mutation-additive-only.zh.md).
 
