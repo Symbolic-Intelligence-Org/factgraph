@@ -109,6 +109,20 @@ class RevocationInput:
 
 
 @dataclass(frozen=True)
+class MetaAppendInput:
+    asrt_id: str
+    key: str
+    kind: str
+    value: Any
+
+
+@dataclass(frozen=True)
+class SchemaTransitionInput:
+    old_schema_digest: str
+    new_schema_ir: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class AssertionRecord:
     asrt_id: str
     pred_id: str
@@ -243,7 +257,13 @@ def canonical_bytes_dbtx_v2(
     tx_seq: int,
     operations: Sequence[Mapping[str, Any]],
 ) -> bytes:
-    """Canonical history commitment over one ordered commit delta."""
+    """Canonical history commitment over one ordered commit delta.
+
+    ``dbtx_v2`` operation tags are additive: ``A`` assertion, ``R``
+    revocation, ``M`` append-meta, ``S`` schema-change, and the existing repair
+    tags. Readers must continue accepting tx objects written before later tags
+    were introduced.
+    """
     if parent_tx_id is not None:
         _require_token(parent_tx_id, prefix="tx:", field="parent_tx_id")
     _require_token(schema_digest, prefix="sha256:", field="schema_digest")
@@ -270,6 +290,14 @@ def canonical_bytes_dbtx_v2(
             out.extend(_str_field(operation["revoker_asrt_id"]))
             out.extend(_str_field(operation["revoked_asrt_id"]))
             out.extend(_bytes_field(_canonical_meta_entries_bytes(operation["meta"])))
+        elif kind == "append_meta":
+            out.extend(b"M")
+            out.extend(_str_field(operation["asrt_id"]))
+            out.extend(_bytes_field(_canonical_meta_entries_bytes((operation["meta"],))))
+        elif kind == "schema_change":
+            out.extend(b"S")
+            out.extend(_str_field(operation["old_schema_digest"]))
+            out.extend(_str_field(operation["new_schema_digest"]))
         elif kind == "repair_add":
             out.extend(b"+")
             out.extend(_str_field(operation["asrt_id"]))
@@ -369,6 +397,7 @@ class Database:
         ledger: Ledger,
         db_id: str,
         schema_digest: str,
+        schema_ir: dict[str, Any] | None = None,
         workspace_paths: DatabaseWorkspacePaths | None = None,
         lock_handle: IO[bytes] | None = None,
     ) -> None:
@@ -380,6 +409,11 @@ class Database:
         self._ledger = ledger
         self._db_id = _require_db_id(db_id)
         self._schema_digest = _require_token(schema_digest, prefix="sha256:", field="schema_digest")
+        if schema_ir is not None:
+            schema_ir = ensure_schema_ir(schema_ir)
+            if compute_schema_digest(schema_ir) != self._schema_digest:
+                raise DatabaseError("schema_ir does not match schema_digest")
+        self._schema_ir = schema_ir
         self._workspace_paths = workspace_paths
         self._lock_handle = lock_handle
         self._closed = False
@@ -446,7 +480,12 @@ class Database:
                 tx_seq=0,
             ),
         )
-        return cls(ledger=ledger, db_id=db_id, schema_digest=schema_token)
+        return cls(
+            ledger=ledger,
+            db_id=db_id,
+            schema_digest=schema_token,
+            schema_ir=schema_ir,
+        )
 
     @classmethod
     def _create_workspace(cls, *, path: Path, schema_ir: dict[str, Any]) -> Database:
@@ -500,6 +539,7 @@ class Database:
                 ledger=ledger,
                 db_id=db_id,
                 schema_digest=schema_token,
+                schema_ir=schema_ir,
                 workspace_paths=paths,
                 lock_handle=lock_handle,
             )
@@ -567,6 +607,7 @@ class Database:
             ledger=ledger,
             db_id=db_id,
             schema_digest=schema_token,
+            schema_ir=schema_ir,
             workspace_paths=paths,
             lock_handle=lock_handle,
         )
@@ -679,6 +720,7 @@ class Database:
                 ledger=ledger,
                 db_id=db_id,
                 schema_digest=schema_token,
+                schema_ir=schema_ir,
                 workspace_paths=paths,
                 lock_handle=lock_handle,
             )
@@ -722,10 +764,14 @@ class Database:
         self,
         assertions: Sequence[AssertionInput],
         revocations: Sequence[RevocationInput],
+        meta_appends: Sequence[MetaAppendInput] = (),
+        schema_transition: SchemaTransitionInput | None = None,
     ) -> CommitResult:
         self._ensure_open()
-        if not assertions and not revocations:
+        if not assertions and not revocations and not meta_appends and schema_transition is None:
             raise DatabaseError("commit_changes requires at least one change")
+        if schema_transition is not None and (assertions or revocations or meta_appends):
+            raise DatabaseError("schema_transition must be committed as an isolated change")
         parent = self.head()
         prepared = [self._prepare_assertion(item) for item in assertions]
         added_ids = [record.asrt_id for record, _claim, _args, _meta, _annotations in prepared]
@@ -743,6 +789,8 @@ class Database:
             revocations,
             added_assertions=added_assertions,
         )
+        prepared_meta_appends = self._prepare_meta_appends(meta_appends)
+        prepared_schema_transition = self._prepare_schema_transition(schema_transition)
         state = decode_state(parent.state_digest)
         operations: list[dict[str, Any]] = []
         for provisional, _claim, _args, _meta, _annotations in prepared:
@@ -770,11 +818,31 @@ class Database:
                     "meta": revocation.meta,
                 }
             )
+        for row in prepared_meta_appends:
+            operations.append(
+                {
+                    "kind": "append_meta",
+                    "asrt_id": row.asrt_id,
+                    "meta": MetaEntry(row.key, row.kind, row.value),
+                }
+            )
+
+        commit_schema_digest = self._schema_digest
+        next_schema_ir = self._schema_ir
+        if prepared_schema_transition is not None:
+            old_schema_digest, commit_schema_digest, next_schema_ir = prepared_schema_transition
+            operations.append(
+                {
+                    "kind": "schema_change",
+                    "old_schema_digest": old_schema_digest,
+                    "new_schema_digest": commit_schema_digest,
+                }
+            )
         state_digest = encode_state(state)
         tx_seq = parent.tx_seq + 1
         tx_id = _tx_id_for_v2(
             parent_tx_id=parent.tx_id,
-            schema_digest=self._schema_digest,
+            schema_digest=commit_schema_digest,
             digest_scheme=LTHASH_SCHEME,
             tx_seq=tx_seq,
             operations=operations,
@@ -845,11 +913,18 @@ class Database:
             revocation_records.append(record)
 
         if self._workspace_paths is not None:
+            if prepared_schema_transition is not None:
+                assert next_schema_ir is not None
+                _write_schema_object(
+                    self._workspace_paths,
+                    schema_digest=commit_schema_digest,
+                    schema_bytes=canonicalize_schema_ir_jcs(next_schema_ir),
+                )
             _write_tx_object(
                 self._workspace_paths,
                 tx_id=tx_id,
                 parent_tx_id=parent.tx_id,
-                schema_digest=self._schema_digest,
+                schema_digest=commit_schema_digest,
                 digest_scheme=LTHASH_SCHEME,
                 tx_seq=tx_seq,
                 operations=operations,
@@ -858,11 +933,12 @@ class Database:
             self._ledger.commit_batch(
                 assertions=assertion_writes,
                 revocations=revocation_writes,
+                meta_appends=prepared_meta_appends,
                 expected_head_tx_id=parent.tx_id,
                 head_tx_id=tx_id,
                 metadata=_head_metadata(
                     db_id=self._db_id,
-                    schema_digest=self._schema_digest,
+                    schema_digest=commit_schema_digest,
                     state_digest=state_digest,
                     tx_seq=tx_seq,
                 ),
@@ -870,12 +946,16 @@ class Database:
         except LedgerHeadConflictError as exc:
             raise HeadConflictError(str(exc)) from exc
 
+        if prepared_schema_transition is not None:
+            self._schema_digest = commit_schema_digest
+            self._schema_ir = next_schema_ir
+
         return CommitResult(
             parent_tx_id=parent.tx_id,
             value=DatabaseValue(
                 db_id=self._db_id,
                 tx_id=tx_id,
-                schema_digest=self._schema_digest,
+                schema_digest=commit_schema_digest,
                 state_digest=state_digest,
                 digest_scheme=LTHASH_SCHEME,
                 tx_seq=tx_seq,
@@ -1002,6 +1082,46 @@ class Database:
             meta_rows = [MetaRow(revoker_id, row.key, row.kind, row.value) for row in meta]
             prepared.append((provisional, meta_rows, target_assertion_digest))
         return prepared
+
+    def _prepare_meta_appends(
+        self,
+        items: Sequence[MetaAppendInput],
+    ) -> list[MetaRow]:
+        prepared: list[MetaRow] = []
+        for item in items:
+            if not isinstance(item, MetaAppendInput):
+                raise TypeError("meta_appends must contain MetaAppendInput")
+            asrt_id = _require_asrt_id(item.asrt_id, field="meta append asrt_id")
+            if not self._ledger._is_known_asrt_id(asrt_id):
+                raise DatabaseError(f"meta append target does not exist: {asrt_id}")
+            entry = _normalize_meta_entries((MetaEntry(item.key, item.kind, item.value),))[0]
+            _meta_value_bytes(entry.kind, entry.value)
+            prepared.append(MetaRow(asrt_id, entry.key, entry.kind, entry.value))
+        return prepared
+
+    def _prepare_schema_transition(
+        self,
+        item: SchemaTransitionInput | None,
+    ) -> tuple[str, str, dict[str, Any]] | None:
+        if item is None:
+            return None
+        if not isinstance(item, SchemaTransitionInput):
+            raise TypeError("schema_transition must be SchemaTransitionInput")
+        old_schema_digest = _require_token(
+            item.old_schema_digest,
+            prefix="sha256:",
+            field="old_schema_digest",
+        )
+        if old_schema_digest != self._schema_digest:
+            raise DatabaseError(
+                "schema transition old_schema_digest does not match the current Database schema"
+            )
+        schema_bytes = canonicalize_schema_ir_jcs(item.new_schema_ir)
+        new_schema_ir = _schema_ir_from_canonical_bytes(schema_bytes)
+        new_schema_digest = compute_schema_digest(new_schema_ir)
+        if new_schema_digest == old_schema_digest:
+            raise DatabaseError("schema transition must change schema_digest")
+        return old_schema_digest, new_schema_digest, new_schema_ir
 
     def _active_assertion_ids(self) -> set[str]:
         return _active_factual_assertion_ids(self._ledger)
@@ -1192,6 +1312,26 @@ def _validate_schema_object(
         expected_schema_ir
     ):
         raise DatabaseError("schema object identity differs from expected schema identity")
+
+
+def _validate_schema_object_digest(
+    paths: DatabaseWorkspacePaths,
+    schema_digest: str,
+) -> None:
+    schema_token = _require_token(
+        schema_digest,
+        prefix="sha256:",
+        field="schema_digest",
+    )
+    schema_path = _schema_object_path(paths, schema_token)
+    if not schema_path.exists():
+        raise DatabaseIntegrityError(f"schema object missing: {schema_path}")
+    actual = schema_path.read_bytes()
+    stored_schema_ir = _schema_ir_from_canonical_bytes(actual)
+    if canonicalize_schema_ir_jcs(stored_schema_ir) != actual:
+        raise DatabaseIntegrityError("schema object bytes differ from canonical schema bytes")
+    if compute_schema_digest(stored_schema_ir) != schema_token:
+        raise DatabaseIntegrityError("schema object filename/content digest mismatch")
 
 
 def _schema_ir_from_canonical_bytes(schema_bytes: bytes) -> dict[str, Any]:
@@ -1450,25 +1590,46 @@ def _replay_history(
             raise DatabaseIntegrityError("tx history contains a cycle")
         seen_tx_ids.add(cursor)
         payload = _read_tx_object(paths, cursor)
-        if payload["schema_digest"] != expected_schema_digest:
-            raise DatabaseIntegrityError("tx history schema_digest mismatch")
         chain.append(payload)
         cursor = payload["parent_tx_id"]
     chain.reverse()
     active: set[str] = set()
-    seen_assertions: set[str] = set()
+    known_asrt_ids: set[str] = set()
+    effective_schema_digest: str | None = None
     for expected_seq, payload in enumerate(chain):
         if payload["tx_seq"] != expected_seq:
             raise DatabaseIntegrityError("tx history sequence is not contiguous from genesis")
         if expected_seq == 0 and payload["parent_tx_id"] is not None:
             raise DatabaseIntegrityError("genesis tx must not have a parent")
+        schema_operations = [
+            operation
+            for operation in payload["operations"]
+            if operation["kind"] == "schema_change"
+        ]
+        if expected_seq == 0:
+            if schema_operations:
+                raise DatabaseIntegrityError("genesis tx cannot contain schema_change")
+            effective_schema_digest = payload["schema_digest"]
+            _validate_schema_object_digest(paths, effective_schema_digest)
+        elif schema_operations:
+            if len(schema_operations) != 1 or len(payload["operations"]) != 1:
+                raise DatabaseIntegrityError("schema_change must be an isolated tx operation")
+            operation = schema_operations[0]
+            if operation["old_schema_digest"] != effective_schema_digest:
+                raise DatabaseIntegrityError("schema_change old digest breaks transition continuity")
+            if operation["new_schema_digest"] != payload["schema_digest"]:
+                raise DatabaseIntegrityError("schema_change new digest disagrees with tx schema_digest")
+            _validate_schema_object_digest(paths, operation["new_schema_digest"])
+            effective_schema_digest = operation["new_schema_digest"]
+        elif payload["schema_digest"] != effective_schema_digest:
+            raise DatabaseIntegrityError("tx history schema_digest changed without schema_change")
         for operation in payload["operations"]:
             kind = operation["kind"]
             if kind == "assertion":
                 asrt_id = operation["asrt_id"]
-                if asrt_id in seen_assertions:
+                if asrt_id in known_asrt_ids:
                     raise DatabaseIntegrityError(f"assertion id repeated in history: {asrt_id}")
-                seen_assertions.add(asrt_id)
+                known_asrt_ids.add(asrt_id)
                 active.add(asrt_id)
             elif kind == "revocation":
                 target = operation["revoked_asrt_id"]
@@ -1477,12 +1638,32 @@ def _replay_history(
                         f"revocation target is not active in history: {target}"
                     )
                 active.remove(target)
+                revoker_asrt_id = operation["revoker_asrt_id"]
+                if revoker_asrt_id in known_asrt_ids:
+                    raise DatabaseIntegrityError(
+                        f"revoker assertion id repeated in history: {revoker_asrt_id}"
+                    )
+                known_asrt_ids.add(revoker_asrt_id)
+            elif kind == "append_meta":
+                if operation["asrt_id"] not in known_asrt_ids:
+                    raise DatabaseIntegrityError(
+                        f"append_meta target is not present in history: {operation['asrt_id']}"
+                    )
+            elif kind == "schema_change":
+                continue
             elif kind == "repair_add":
                 active.add(operation["asrt_id"])
+                known_asrt_ids.add(operation["asrt_id"])
             elif kind == "repair_remove":
                 active.discard(operation["asrt_id"])
             elif kind == "repair":
                 continue
+    if effective_schema_digest != _require_token(
+        expected_schema_digest,
+        prefix="sha256:",
+        field="expected_schema_digest",
+    ):
+        raise DatabaseIntegrityError("tx history terminal schema_digest mismatch")
     return active
 
 
@@ -1793,6 +1974,53 @@ def _normalize_tx_operations(
                     "meta": _normalize_meta_entries(tuple(meta_entries)),
                 }
             )
+        elif kind == "append_meta":
+            _require_exact_keys(raw, {"kind", "asrt_id", "meta"})
+            raw_meta = raw.get("meta")
+            if isinstance(raw_meta, MetaEntry):
+                meta = raw_meta
+            elif isinstance(raw_meta, Mapping):
+                _require_exact_keys(raw_meta, {"key", "kind", "value"})
+                meta = MetaEntry(
+                    raw_meta.get("key"),
+                    raw_meta.get("kind"),
+                    _from_jsonable(raw_meta.get("value")),
+                )
+            else:
+                raise DatabaseError("append_meta operation meta must be MetaEntry or mapping")
+            normalized_meta = _normalize_meta_entries((meta,))[0]
+            _meta_value_bytes(normalized_meta.kind, normalized_meta.value)
+            normalized.append(
+                {
+                    "kind": kind,
+                    "asrt_id": _require_asrt_id(raw.get("asrt_id"), field="append_meta asrt_id"),
+                    "meta": normalized_meta,
+                }
+            )
+        elif kind == "schema_change":
+            _require_exact_keys(
+                raw,
+                {"kind", "old_schema_digest", "new_schema_digest"},
+            )
+            old_schema_digest = _require_token(
+                raw.get("old_schema_digest"),
+                prefix="sha256:",
+                field="old_schema_digest",
+            )
+            new_schema_digest = _require_token(
+                raw.get("new_schema_digest"),
+                prefix="sha256:",
+                field="new_schema_digest",
+            )
+            if old_schema_digest == new_schema_digest:
+                raise DatabaseError("schema_change must change schema_digest")
+            normalized.append(
+                {
+                    "kind": kind,
+                    "old_schema_digest": old_schema_digest,
+                    "new_schema_digest": new_schema_digest,
+                }
+            )
         elif kind in {"repair_add", "repair_remove"}:
             _require_exact_keys(raw, {"kind", "asrt_id"})
             normalized.append(
@@ -1831,8 +2059,15 @@ def _normalize_tx_operations(
 
 def _tx_operation_payload(operation: Mapping[str, Any]) -> dict[str, Any]:
     normalized = _normalize_tx_operations((operation,))[0]
-    if normalized["kind"] != "revocation":
+    if normalized["kind"] not in {"revocation", "append_meta"}:
         return dict(normalized)
+    if normalized["kind"] == "append_meta":
+        row = normalized["meta"]
+        return {
+            "kind": "append_meta",
+            "asrt_id": normalized["asrt_id"],
+            "meta": {"key": row.key, "kind": row.kind, "value": _to_jsonable(row.value)},
+        }
     return {
         **normalized,
         "meta": [
@@ -2028,8 +2263,10 @@ __all__ = [
     "FrozenAssertionSet",
     "HeadConflictError",
     "MetaEntry",
+    "MetaAppendInput",
     "RevocationInput",
     "RevocationRecord",
+    "SchemaTransitionInput",
     "asrt_id_for",
     "assertion_digest_for",
     "canonical_bytes_assertion_v1",

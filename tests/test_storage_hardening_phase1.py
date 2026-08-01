@@ -29,8 +29,10 @@ from factgraph.core.store.database import (
     DatabaseIntegrityError,
     DatabaseLockedError,
     HeadConflictError,
+    MetaAppendInput,
     MetaEntry,
     RevocationInput,
+    SchemaTransitionInput,
     _atomic_write_bytes,
     assertion_digest_for,
     resolve_database_workspace_paths,
@@ -275,6 +277,140 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                 revoke_payload["operations"][0]["meta"],
                 [{"key": "reason", "kind": "str", "value": "test"}],
             )
+
+    def test_append_meta_is_an_ordered_history_event_without_state_digest_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            db = Database.create(path, schema_ir=_schema_ir())
+            assertion = db.commit_assertions((_assertion("p1", "Ada"),)).assertions[0]
+            before = db.head()
+
+            committed = db.commit_changes(
+                assertions=(),
+                revocations=(),
+                meta_appends=(
+                    MetaAppendInput(assertion.asrt_id, "provenance_class", "str", "observed"),
+                    MetaAppendInput(assertion.asrt_id, "provenance_class", "str", "accredited"),
+                ),
+            )
+
+            self.assertEqual(committed.value.tx_seq, before.tx_seq + 1)
+            self.assertEqual(committed.value.state_digest, before.state_digest)
+            self.assertEqual(
+                [row.value for row in db._ledger.find_meta(
+                    asrt_id=assertion.asrt_id,
+                    key="provenance_class",
+                )],
+                ["observed", "accredited"],
+            )
+            paths = resolve_database_workspace_paths(path)
+            tx_path = paths.tx_objects / f"{committed.value.tx_id.removeprefix('tx:')}.json"
+            payload = json.loads(tx_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                payload["operations"],
+                [
+                    {
+                        "asrt_id": assertion.asrt_id,
+                        "kind": "append_meta",
+                        "meta": {
+                            "key": "provenance_class",
+                            "kind": "str",
+                            "value": "observed",
+                        },
+                    },
+                    {
+                        "asrt_id": assertion.asrt_id,
+                        "kind": "append_meta",
+                        "meta": {
+                            "key": "provenance_class",
+                            "kind": "str",
+                            "value": "accredited",
+                        },
+                    },
+                ],
+            )
+            db.close()
+
+            reopened = Database.open(path, schema_ir=_schema_ir())
+            self.assertEqual(reopened.head(), committed.value)
+            reopened.close()
+
+    def test_schema_change_commits_digest_pair_and_requires_both_schema_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace"
+            old_schema = _schema_ir()
+            new_schema = json.loads(json.dumps(old_schema))
+            new_schema["predicates"].append(
+                {
+                    "pred_id": "person:status",
+                    "arg_specs": [
+                        {"name": "person", "type_domain": "entity_ref"},
+                        {"name": "status", "type_domain": "string"},
+                    ],
+                    "group_key_indexes": [0],
+                }
+            )
+            new_schema["projection"]["predicates"].append("person:status")
+
+            db = Database.create(path, schema_ir=old_schema)
+            before = db.head()
+            committed = db.commit_changes(
+                assertions=(),
+                revocations=(),
+                schema_transition=SchemaTransitionInput(
+                    old_schema_digest=before.schema_digest,
+                    new_schema_ir=new_schema,
+                ),
+            )
+
+            self.assertNotEqual(committed.value.schema_digest, before.schema_digest)
+            self.assertEqual(committed.value.state_digest, before.state_digest)
+            self.assertEqual(db.schema_digest, committed.value.schema_digest)
+            paths = resolve_database_workspace_paths(path)
+            tx_path = paths.tx_objects / f"{committed.value.tx_id.removeprefix('tx:')}.json"
+            payload = json.loads(tx_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                payload["operations"],
+                [
+                    {
+                        "kind": "schema_change",
+                        "old_schema_digest": before.schema_digest,
+                        "new_schema_digest": committed.value.schema_digest,
+                    }
+                ],
+            )
+            db.close()
+
+            reopened = Database.open(path, schema_ir=new_schema)
+            self.assertEqual(reopened.head(), committed.value)
+            reopened.close()
+
+            old_schema_path = (
+                paths.schema_objects / f"{before.schema_digest.removeprefix('sha256:')}.json"
+            )
+            old_schema_path.unlink()
+            with self.assertRaisesRegex(DatabaseIntegrityError, "schema object missing"):
+                Database.open(path, schema_ir=new_schema)
+
+    def test_schema_change_rejects_mixed_or_stale_transitions_without_advancing_head(self) -> None:
+        db = Database.create(schema_ir=_schema_ir())
+        before = db.head()
+        new_schema = json.loads(json.dumps(_schema_ir()))
+        new_schema["projection"]["entities"].append("Other")
+
+        with self.assertRaisesRegex(DatabaseError, "isolated"):
+            db.commit_changes(
+                assertions=(_assertion("p1", "Ada"),),
+                revocations=(),
+                schema_transition=SchemaTransitionInput(before.schema_digest, new_schema),
+            )
+        with self.assertRaisesRegex(DatabaseError, "old_schema_digest"):
+            db.commit_changes(
+                assertions=(),
+                revocations=(),
+                schema_transition=SchemaTransitionInput("sha256:" + "f" * 64, new_schema),
+            )
+        self.assertEqual(db.head(), before)
 
     def test_content_tampering_fails_closed_even_when_assertion_id_is_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

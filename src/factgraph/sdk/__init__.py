@@ -69,7 +69,15 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
-from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry, RevocationInput
+from factgraph.core.store import (
+    AssertionInput,
+    CommitResult,
+    Database,
+    MetaAppendInput,
+    MetaEntry,
+    RevocationInput,
+    SchemaTransitionInput,
+)
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
@@ -138,8 +146,10 @@ __all__ = [
     "AssertionInput",
     "CommitResult",
     "Database",
+    "MetaAppendInput",
     "MetaEntry",
     "RevocationInput",
+    "SchemaTransitionInput",
     "MetaExclusion",
     "PredicatePremiseAllowance",
     "PredicatePremiseBlock",

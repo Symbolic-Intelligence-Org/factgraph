@@ -337,13 +337,14 @@ class Ledger:
         expected_head_tx_id: str | None,
         head_tx_id: str,
         metadata: Mapping[str, str],
+        meta_appends: Sequence[MetaRow] = (),
     ) -> None:
         """Atomically append a Database commit and advance its CAS-protected head.
 
         Database owns transaction identity and digest computation.  Ledger owns
-        the single SQLite boundary: all factual rows, revocation rows and
-        lifecycle metadata become visible together, with in-memory indexes
-        updated only after COMMIT succeeds.
+        the single SQLite boundary: all factual rows, revocation rows, appended
+        meta events and lifecycle metadata become visible together, with
+        in-memory indexes updated only after COMMIT succeeds.
         """
         if not isinstance(head_tx_id, str) or not head_tx_id:
             raise ValueError("head_tx_id must be non-empty string")
@@ -362,6 +363,8 @@ class Ledger:
 
         assertion_writes = tuple(assertions)
         revocation_writes = tuple(revocations)
+        appended_meta_rows = tuple(meta_appends)
+        _validate_meta_rows(list(appended_meta_rows))
         new_claim_ids: set[str] = set()
         new_revoker_ids: set[str] = set()
         for item in assertion_writes:
@@ -396,6 +399,11 @@ class Ledger:
             if any(row.asrt_id != revoker_id for row in item.annotation_rows):
                 raise ValueError("revocation annotation_rows asrt_id must match revoker_asrt_id")
             new_revoker_ids.add(revoker_id)
+
+        known_after_commit = new_claim_ids | new_revoker_ids
+        for row in appended_meta_rows:
+            if row.asrt_id not in known_after_commit and not self._is_known_asrt_id(row.asrt_id):
+                raise ValueError(f"unknown asrt_id for meta: {row.asrt_id}")
 
         with self._write_session() as (conn, post_commit):
             existing_ids = new_claim_ids | new_revoker_ids
@@ -436,6 +444,9 @@ class Ledger:
                 if item.annotation_rows:
                     self._insert_annotation_rows(conn, list(item.annotation_rows))
 
+            for row in appended_meta_rows:
+                self._insert_meta_rows(conn, [row], row.asrt_id)
+
             conn.executemany(
                 """
                 INSERT INTO ledger_meta (key, value) VALUES (?, ?)
@@ -456,6 +467,7 @@ class Ledger:
                     self._idx_add_meta(list(item.meta_rows))
                     if item.annotation_rows:
                         self._idx_add_annotation(list(item.annotation_rows))
+                self._idx_add_meta(list(appended_meta_rows))
 
             post_commit.append(_apply_batch_indexes)
 
