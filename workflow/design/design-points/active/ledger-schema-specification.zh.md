@@ -1,9 +1,9 @@
 # Ledger 数据格式 Specification
 
-- Status: working / specification v2（claim-first immutable payload model）
+- Status: working / specification v2（claim-first + meta event model）
 - Authority: candidate design / non-authoritative reference; not current implementation truth
 - First draft: 2026-05-27
-- Last updated: 2026-06-02(§10 联动节加入)
+- Last updated: 2026-08-01(Q-SAE-8 claim_meta 事件化 supersede 同步)
 - Scope: FactGraph ledger 数据格式终态 — 表 schema、SQL canonical 编码契约、digest path 纪律、structural 不变量族、数据精简 migration 路径
 - Parent: 取代 `identity-and-data-model-redesign.zh.md`(之前的 umbrella doc,已或即将归档);与 `append-only-ledger-evaluation.zh.md`(背景评估)配套
 - Co-roadmap: [`factgraph-storage-architecture-evolution.zh.md`](factgraph-storage-architecture-evolution.zh.md) — lifecycle 收敛 + SQL 读路径 + lazy eval 演化路线;本 design-point 的 Slice 3b 实施 = 该 essay Stage A 完成后启动(详见 §10)
@@ -81,7 +81,7 @@
 ```text
 [数据表 2 张]
   claims      (seq, asrt_id, pred_id, e_ref, value, value_tag)
-  claim_meta  (asrt_id, key, value)                       ← 复合 PK (asrt_id, key); 3 列
+  claim_meta  (asrt_id, key, value, tx_seq, op_ordinal)   ← event PK (asrt_id, key, tx_seq, op_ordinal)
 
 [Infra 表 1 张]
   ledger_meta (key, value)
@@ -94,11 +94,11 @@
 > **Alpha 阶段说明**:FactGraph 当前处于 **alpha 版本状态**,**无生产数据 / 已发布版本的兼容性负担**。所有 schema 变更、migration、wire format 演化都按"代码 + schema 一次性重构"处理,不需要数据搬迁工具、跨版本 reader dispatch、view snapshot 兼容层等。下面所有承诺都在此前提下设计。
 
 - **ledger 不承担 idempotency 责任**:write 不做 content dedup;同内容多次写入产生多个独立 asrt_id;idempotency 由上层 API/SDK policy 处理
-- **Meta 是 claim 不可变 payload 的一部分**:`claim_meta` 行随 claim 一同写入;写入后**immutable**;meta 变更 = revoke 旧 claim + append 新 claim(含新 meta)— 不允许 in-place meta update
-- **Ledger 仅有 2 个原语**:`append claim` + `append revoke claim`。SDK 暴露的 `update` / `delete` 是这两个原语的组合糖
+- **Meta 是 claim 身份下的不可变事件流**:`claim_meta` 每行写入后 immutable;同一 `(asrt_id, key)` 可追加多条事件,禁止 in-place UPDATE/REPLACE;effective meta 由事件序投影
+- **事实生命周期有 2 个原语**:`append claim` + `append revoke claim`;另有不改 fact 身份的 `append meta event`。SDK 暴露的 fact `update` / `delete` 仍是前两个原语的组合糖
 - **撤销 = 特殊 pred Claim**(精简 3):`pred_id="__system__.revokes"` 进 claims,不再有独立 revokes 表
 - **每条 Claim 是 unary fact**(INV-9):rest_terms list 退场,value + value_tag 双列 inline
-- **claim_meta 复合 PK + 全 TEXT value**:`(asrt_id, key)` 是唯一身份;value 永远 TEXT,特殊 key 格式由 META_KEY_REGISTRY 规定(详见 §5.3)
+- **claim_meta 事件 PK + canonical value**:`(asrt_id, key, tx_seq, op_ordinal)` 唯一标识事件;普通 value 是 TEXT,SQL `NULL` 专用于 `UNSET` tombstone;特殊 key 格式由 META_KEY_REGISTRY 规定(详见 §5.3)
 - **`__system__.*` pred_id 命名空间预留**(INV-10):user-facing 写入路径必须拒绝
 - **存在性断言**用 `<EntityType>:exists` 形态(per-entity-type 约定)— **不属于** `__system__.*` 命名空间;**Step 1 后实质冗余**(Identity 镜像 Claim 即"该 entity 存在"证据);保留为 **legacy / transitional emission**,Step 2+ 评估完整废除(详见 §3.1)
 
@@ -156,33 +156,39 @@ ledger 中 pred_id 有 **两类预留约定**,作用范围不同:
 
 > **重要**(Step 1 后 `:exists` 的状态):[`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md) §4.1 硬定义 4 + INV-7b 锁定后,Identity 字段在 `fg.entities.create` 时**强制**同时产生镜像 Claim — Identity Claim 本身即"该 entity 存在"的证据。`<EntityType>:exists` Claim 在 Step 1 后**实质冗余**;本 spec 当前保留 `:exists` 形态作为 **legacy compatibility / optional transitional emission**(不作为 Step 1 终态 truth)。Step 2+ 评估完整废除时机。
 
-### §3.2 `claim_meta` — Claim 不可变 payload 中的 meta
+### §3.2 `claim_meta` — Claim 身份下的不可变 meta events
 
 ```sql
 CREATE TABLE claim_meta (
-  asrt_id  TEXT NOT NULL,
-  key      TEXT NOT NULL,
-  value    TEXT NOT NULL,
-  PRIMARY KEY (asrt_id, key)
+  asrt_id     TEXT NOT NULL,
+  key         TEXT NOT NULL,
+  value       TEXT,                 -- NULL 仅表示 UNSET tombstone
+  tx_seq      INTEGER NOT NULL,
+  op_ordinal  INTEGER NOT NULL,
+  PRIMARY KEY (asrt_id, key, tx_seq, op_ordinal)
 );
 
-CREATE INDEX idx_claim_meta_key_value ON claim_meta(key, value);     -- meta 过滤查询
-CREATE INDEX idx_claim_meta_asrt      ON claim_meta(asrt_id);         -- 按 claim 取所有 meta
+CREATE INDEX idx_claim_meta_key_value ON claim_meta(key, value);     -- effective meta 过滤查询
+CREATE INDEX idx_claim_meta_asrt      ON claim_meta(asrt_id);         -- 按 claim 取完整事件流
 ```
 
 | 列 | 类型 | 约束 | 含义 |
 |---|---|---|---|
-| `asrt_id` | TEXT | NOT NULL, 复合 PK 一半 | 关联到 `claims.asrt_id` — 这条 meta 所属的 claim |
-| `key` | TEXT | NOT NULL, 复合 PK 一半 | meta key(如 `source`、`trace_id`、`bound`) |
-| `value` | TEXT | NOT NULL | meta value 的 SQL canonical text 编码(格式由 META_KEY_REGISTRY 规定,见 §5.3)|
+| `asrt_id` | TEXT | NOT NULL, event PK | 关联到 `claims.asrt_id` — 这条 meta event 所属的 claim 或 revoker |
+| `key` | TEXT | NOT NULL, event PK | meta key(如 `source`、`trace_id`、`bound`) |
+| `value` | TEXT | NULLABLE | 非 `UNSET` 时为 SQL canonical text(格式由 META_KEY_REGISTRY 规定,见 §5.3);SQL `NULL` 是保留的 `UNSET` tombstone,不属于用户 TEXT 值域 |
+| `tx_seq` | INTEGER | NOT NULL, event PK | 产生该事件的 Database 提交序;同时是该 meta event 的稳定 tx reference |
+| `op_ordinal` | INTEGER | NOT NULL, event PK | 本次 commit 内按输入顺序分配的操作序号 |
 
 #### 关键设计点
 
-- **复合 PK `(asrt_id, key)` 是 meta 行的真正身份**;不引入 surrogate `id` 列
-- **没有 `value_tag` 列**:所有 value 都是 TEXT;特殊格式由 META_KEY_REGISTRY(§5.3)规定。默认(用户自定义 key)= string
+- **事件 PK `(asrt_id, key, tx_seq, op_ordinal)` 是 meta 行的真正身份**;不引入 surrogate `id` 列;`event_seq` 即 `(tx_seq, op_ordinal)` 二元组
+- **没有 `value_tag` 列**:非 tombstone value 都是 TEXT;特殊格式由 META_KEY_REGISTRY(§5.3)规定。默认(用户自定义 key)= string;SQL `NULL` 只表示 `UNSET`,不能由普通 user meta 伪造
 - **没有 `origin` 列**(observed / derived):如未来需要区分 origin,encode 为额外 meta key(如 `meta_origin: "derived"`),不作为 schema 字段
-- **写入语义**:claim_meta 行随 claim 一同写入(同一 SQLite transaction,INV-3);写入后 immutable。因为每条 claim 有独立 asrt_id(INV-2 全局唯一),`PRIMARY KEY (asrt_id, key)` 永远只被插入一次,不会触发 UPDATE/REPLACE 路径
-- **变更 meta 不通过修改 claim_meta**:要"改 meta"必须 revoke 整个 claim + append 新 claim with 新 meta(详见 §8.5)
+- **写入语义**:initial meta 可随 claim 同事务写入;后续 `append_meta` 为同一 claim 身份追加新事件。每个事件行写入后 immutable,禁止 UPDATE/REPLACE
+- **全序与 last-wins**:全部读取入口按 `(tx_seq, op_ordinal)` 字典序;`effective(asrt_id, key)` 取该组 `max(tx_seq, op_ordinal)`;若最新事件是 `UNSET`,该 key 视同缺失
+- **保序**:reload、导出、迁移与再导入不得重排 event;失败事务对应 `tx_seq` 下的全部 event 必须一起消失
+- **receipt 语义**:receipt 携带 as-of event sequence(必须包含 `tx_seq` 与 `op_ordinal`,或等价复合字段);v0.3 常规验证默认读取 latest-effective;按 as-of 重放归窄域 audit/explain 面,不扩成通用 SDK 历史 API
 
 ### §3.3 `ledger_meta` — 全局配置
 
@@ -225,8 +231,8 @@ CREATE TABLE ledger_meta (
 
 **含义**:
 - 撤销 = 写新的 `__system__.revokes` Claim(INV-11);不就地标记 active 列
-- claim_meta 行写入后 immutable — 因为 `(asrt_id, key)` 复合 PK 上每个 asrt_id 都是全局唯一(INV-2),同一 (asrt_id, key) 在写入后永不会再 INSERT,不会触发 UPDATE/REPLACE 路径
-- Meta 变更不是改 claim_meta,而是 **revoke + append 新 claim with 新 meta**(详见 §8.5)
+- claim_meta **事件行**写入后 immutable;同一 `(asrt_id, key)` 的变更通过追加更大的 `(tx_seq, op_ordinal)` 事件表达,不触发 UPDATE/REPLACE
+- fact payload 变更仍是 **revoke + append new claim**(详见 §8.5);不改 fact payload 的重分类走 `append meta event`,保留 asrt_id 历史线
 - `ledger_meta` 是 infra 配置层(非 claim 数据),允许就地修改(如更新 schema_digest);与 INV-1 共存的合理例外
 
 ### §4.2 INV-2:asrt_id 全局唯一
@@ -238,7 +244,7 @@ CREATE TABLE ledger_meta (
 **含义**:
 - 同内容多次写入产生**多个不同 asrt_id**(ledger 不做 dedup);这是 audit 完整性的代价 / 收益
 - asrt_id 是逻辑 PK;`seq INTEGER PRIMARY KEY` 是物理 SQL PK(性能优化)
-- claim_meta 的 (asrt_id, key) 复合 PK 借力 INV-2 — 因为 asrt_id 唯一,复合 PK 永远只被 INSERT 一次,从根上排除 UPDATE 路径
+- claim_meta 以 asrt_id 关联 fact/revoker 身份;事件唯一性由 `(asrt_id, key, tx_seq, op_ordinal)` 保证,同键历史是多条不可变 INSERT
 
 ### §4.3 INV-3:SQLite 单事务原子写
 
@@ -264,7 +270,7 @@ CREATE TABLE ledger_meta (
 - entity_ref 形态本轮锁定 `idref_v1`(详见 identity-mechanism-redesign §7);若未来评估其他 tag value 字符串格式,只是该 tag 的 value 字符串格式变化,不动 tag 集合
 - claims/revokes 统一不破 INV-4:revoke Claim 的 value 用 `string` tag 承载 asrt_id,无需新 tag
 - ledger 写入永远 length 0 或 1(INV-9),但协议保留 variable-length 编码能力 — ledger 比协议更严格
-- claim_meta value 不走 tup_v1(claim_meta value 全 TEXT,格式由 META_KEY_REGISTRY 规定 — 与 protocol 层独立)
+- claim_meta value 不走 tup_v1(普通 event value 为 TEXT,格式由 META_KEY_REGISTRY 规定;SQL `NULL` 仅作 UNSET tombstone — 与 protocol 层独立)
 - alpha 阶段如果出现真实需要新 tag 的场景,可重新评估 — 不是不能动,而是默认不动
 
 ### §4.5 INV-5:Ledger 是 source of truth
@@ -364,7 +370,7 @@ CREATE TABLE ledger_meta (
 |---|---|
 | FactGraph 长期承诺(跨 spec 有效)| INV-1 / INV-2 / INV-3 / INV-5 |
 | 当前实现版本约束(v0.3+ 可重评估)| INV-4 |
-| 议题特异约束(claim-first immutable payload 终态特异) | INV-9 / INV-10 / INV-11 / INV-12 / INV-13 / INV-14 / INV-15 |
+| 议题特异约束(claim-first + meta event 终态特异) | INV-9 / INV-10 / INV-11 / INV-12 / INV-13 / INV-14 / INV-15 |
 
 INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Claim-mirrored anchor + Claim ↔ e_ref hash 一致性)/ ~~INV-8~~(原 idref_v1 兼容,2026-05-28 后因 idref_v1 锁定 Step 1 而消解)是 **identity-specific 不变量**,在 [`identity-mechanism-redesign.zh.md §5`](identity-mechanism-redesign.zh.md) 中。**INV-7c 对 ledger 层有直接约束** — Identity Claim 不允许通过 `fg.assertions.retract(asrt_id)` 单独撤销,只能走 `fg.entities.delete` 整批路径(详见 §11.5 上层 API 映射)。
 
@@ -389,7 +395,7 @@ INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Clai
 
 ### §5.2 `claim_meta.value` 列编码
 
-`claim_meta.value` 列**全部 TEXT**,没有 per-row `value_tag` 标识。格式约定如下:
+`claim_meta.value` 的普通事件值**全部 TEXT**,没有 per-row `value_tag` 标识;SQL `NULL` 保留为 `UNSET` tombstone,不进入下列 value 解码。格式约定如下:
 
 | 类型 | 决定规则 |
 |---|---|
@@ -402,9 +408,10 @@ INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Clai
 - 加 value_tag 列对绝大多数行是 dead weight;用 registry 中心化更简洁
 
 **reader 端解码协议**:
-1. 看 `claim_meta.key`
-2. 若 key 在 META_KEY_REGISTRY → 按 registry 格式解码
-3. 否则 → 直接 return TEXT 字符串
+1. 若 `claim_meta.value IS NULL` → 返回逻辑 `UNSET`,effective 投影把该 key 视同缺失
+2. 看 `claim_meta.key`
+3. 若 key 在 META_KEY_REGISTRY → 按 registry 格式解码
+4. 否则 → 直接 return TEXT 字符串
 
 ### §5.3 META_KEY_REGISTRY
 
@@ -550,7 +557,7 @@ UUID4 hex 无 dashes,由 [`write_protocol.new_assertion_id`](../../../../src/fac
 
 **核心索引族**:
 - claims: `(pred_id, e_ref)` / `e_ref` / `(pred_id, value)` / partial on revokes
-- claim_meta: `(key, value)` / `asrt_id`(复合 PK 自动提供 asrt_id-prefix 查询,但单列 asrt_id 索引保证按 claim 取全部 meta 的高效查询)
+- claim_meta: `(key, value)` / `asrt_id`(event PK 自动提供 asrt_id-prefix 查询,但单列 asrt_id 索引保证按 claim 取完整事件流的高效查询)
 
 ### §7.5 Idempotency 责任划分
 
@@ -660,9 +667,9 @@ snap = fg.entities.get(User, tenant_id="t1", user_id="U001"); snap.display_name
 record = snap.field("display_name").active.where(_meta={"source": "import"}).one()
     ↓
 1. 取该 field 的所有 active asrt_id(同 §8.3)
-2. SELECT asrt_id FROM claim_meta
-     WHERE asrt_id IN (...) AND key="source" AND value="import"
-3. 返回对应 AssertionRecord
+2. 对每个 `(asrt_id, "source")` 取 `max(tx_seq, op_ordinal)` 的 latest-effective event
+3. 保留 latest event 非 `UNSET` 且 value="import" 的 asrt_id
+4. 返回对应 AssertionRecord
 ```
 
 ### §8.5 SDK update 流(revoke + append 组合糖)
@@ -688,9 +695,11 @@ core/evidence/write_protocol 内部(**单一 SQLite transaction**):
 
 **关键约束**:
 - 整个 update 必须**单一 SQLite transaction**(INV-3)— 防止 revoke 写了但 new claim 没写的部分态
-- 旧 claim 的 claim_meta 行**保留不动**(永远 immutable);新 claim 有自己的 claim_meta 行(不同 asrt_id key prefix)
+- 旧 claim 的 claim_meta event **保留不动**(event row 永远 immutable);新 claim 有自己的 initial meta event(不同 asrt_id prefix)
 - 历史 audit 显示:在 T1 时间点 old asrt_id 的 (value, meta) 是某个状态;在 T2 时间点 revoke + new asrt_id 是另一个状态
 - ledger 视角只看到 2 个原子操作(revoke + append),没有 "update" 概念
+
+不改变 fact payload 的 meta 重分类不是本节的 fact update:它通过 `append_meta` 在原 asrt_id 下写新 event;latest-effective 与 as-of 投影均按 §3.2 解析。
 
 ### §8.6 SDK delete / retract 流
 
@@ -741,7 +750,7 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 ### §9.5 数据精简 5:`fact_meta` → `claim_meta` 改名 + drop `value_tag` + drop `origin` + 引入 META_KEY_REGISTRY
 
 - **delta**:
-  - 表 rename: `fact_meta` → `claim_meta`(强调"claim 的 meta"而非"事实的 meta";与 claim 不可变 payload 一致)
+  - 表 rename: `fact_meta` → `claim_meta`(强调"claim 身份下的 meta event"而非"事实 payload")
   - 列 drop: `value_tag`(meta value 全 TEXT;特殊格式由 META_KEY_REGISTRY 规定)
   - 列 drop: `origin`(observed/derived 简化掉;如需要 encode 为 meta key 自身)
   - 中心化:META_KEY_REGISTRY(§5.3)显式文档化系统已知 key 的格式(source / bound / ingested_at / 等)
@@ -764,14 +773,16 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
   - 同内容多次写入可以有意义(不同来源、不同时间、不同 actor)— 不应被 schema 阻止
   - 消除现有双轨冗余(INV-5 合规)
 
-### §9.7 数据精简 7:`claim_meta` 复合 PK,删除 surrogate `id`
+### §9.7 数据精简 7:`claim_meta` 事件 PK,删除 surrogate `id`
 
-- **delta**:`claim_meta` 表去掉 `id INTEGER PRIMARY KEY AUTOINCREMENT` 列;改为 `PRIMARY KEY (asrt_id, key)`
+> **Superseded 标注**:本节原 `PRIMARY KEY (asrt_id, key)` 锁定已被 adopted [Q-SAE-8](../../decisions/active/2026-07-31_q-sae-8-claim-meta-history-decision.md) 显式 supersede;旧锁定依赖"同键无多行历史"前提,该前提已被 `append_meta` 与 premise 重分类语义证伪。
+
+- **delta**:`claim_meta` 表去掉 `id INTEGER PRIMARY KEY AUTOINCREMENT` 列;改为事件 PK `PRIMARY KEY (asrt_id, key, tx_seq, op_ordinal)`
 - **理由**:
-  - 物理 surrogate 无语义价值(meta 行的真正身份是 `asrt_id + key`)
-  - UNIQUE(asrt_id, key) 反正存在,复合 PK 是更准确表达
-  - 与现实"按 asrt_id 查所有 meta"的查询模式直接对齐
-  - 配合 INV-2(asrt_id 全局唯一),复合 PK 永远只被 INSERT 一次,从根上排除 UPDATE 路径,强化 INV-1 append-only
+  - 物理 surrogate 无语义价值;事件的逻辑身份是 `(asrt_id, key, tx_seq, op_ordinal)`
+  - `(tx_seq, op_ordinal)` 是跨提交且提交内稳定的全序,不依赖各表独立的 SQLite 自增序列
+  - 同一 `(asrt_id, key)` 可保留完整 append-only 历史,last-wins 精确定义为组内 `max(tx_seq, op_ordinal)`
+  - 与现实"按 asrt_id 查所有 meta"及按 key 解析 effective value 的查询模式直接对齐
 
 ### §9.8 Migration 时序(blueprint 拆分参考)
 
@@ -782,7 +793,7 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 1. 精简 1+5(meta_rows + annotation_rows → claim_meta;同时 drop value_tag/origin/derivation/namespace/category 列;引入 META_KEY_REGISTRY) — schema 层基础重构
 2. 精简 3(claims/revokes 统一) — 需要协调 accept 退场的 dead code 清理
 3. 精简 4 + 精简 6 **同 slice**(rest_terms 内联 + ingest_keys 退场) — 二者都触动 write_protocol 的 idempotency / set_field 路径,必须协调
-4. 精简 7(claim_meta 复合 PK + 删 surrogate id 列) — 列结构最终清理
+4. 精简 7(claim_meta 事件 PK `(asrt_id, key, tx_seq, op_ordinal)` + 删 surrogate id 列) — 列结构最终清理;原二列复合 PK 已被 Q-SAE-8 supersede
 
 精简 2 是精简 1 的一部分(drop 4 列),不单独成步。
 
@@ -865,7 +876,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 |---|---|---|---|
 | 2026-05-27 | β' schema 终态(不含 ingest_keys、不含 content_hash)| 选 β'(ledger 不做 dedup;idempotency 上层 API 责任)| ✅ 已采纳 |
 | 2026-05-27 | 数据精简 6:`ingest_keys` 完全退场 + ledger 不做 dedup | 接受 | ✅ 已采纳 |
-| 2026-05-27 | 数据精简 7:`claim_meta` 复合 PK `(asrt_id, key)` | 接受 — 删除 surrogate `id` | ✅ 已采纳 |
+| 2026-05-27 | 数据精简 7:`claim_meta` 复合 PK `(asrt_id, key)` | 接受 — 删除 surrogate `id` | ⚠️ PK 形态被 2026-07-31 Q-SAE-8 supersede;删除 surrogate 仍有效 |
 | 2026-05-27 | INV-1 至 INV-15(除 INV-6/7/8 是 identity 议题)| 接受作硬不变量 | ✅ 已采纳 |
 | 2026-05-27 | Q-CK:是否引入 `claim_kind` 列(Datomic `added` 同款)| 不引入 — 保持 system predicate + INV-10 至 INV-15 institutionalization | ✅ 已采纳 |
 | 2026-05-27 | INV-14 措辞:撤销幂等是 retract-specific 契约,不依赖 ingest_keys | 接受 — INV-14 永远走 find_revoker 风格机制 | ✅ 已采纳 |
@@ -875,9 +886,9 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-27 | `float64` 写入纪律:finite + `-0.0` normalize + reparse-then-format | 锁定 | ✅ 已采纳(见 §5.4)|
 | 2026-05-27 | Cross-language float formatter 必须 golden tests 锁住 | 锁定 | ✅ 已采纳(见 §7.1)|
 | 2026-05-27 | Q-RV1:撤销机制属于哪个工业系谱 | append-only correction event 系谱(与 Datomic / Event Sourcing 同系谱)| ✅ 已采纳 |
-| 2026-05-28 | claim-first immutable payload 模型:meta 是 claim 不可变 payload 一部分;meta 变更 = revoke + append 新 claim | 接受(覆盖之前"fact_meta 可独立 upsert"心智模型)| ✅ 已采纳 |
+| 2026-05-28 | claim-first immutable payload 模型:meta 是 claim 不可变 payload 一部分;meta 变更 = revoke + append 新 claim | 接受(覆盖之前"fact_meta 可独立 upsert"心智模型)| ⚠️ meta 部分被 2026-07-31 Q-SAE-8 supersede;fact payload 变更规则仍有效 |
 | 2026-05-28 | `fact_meta` 表 rename 为 `claim_meta` | 接受 — 强调 claim-bound 语义 | ✅ 已采纳 |
-| 2026-05-28 | `claim_meta` drop `value_tag` 列 | 接受 — 全 TEXT;特殊 key 格式 META_KEY_REGISTRY 中心化 | ✅ 已采纳 |
+| 2026-05-28 | `claim_meta` drop `value_tag` 列 | 接受 — 非 UNSET 值为 TEXT;特殊 key 格式 META_KEY_REGISTRY 中心化 | ✅ 已采纳 |
 | 2026-05-28 | `claim_meta` drop `origin` 列 | 接受 — 如需要 encode 为 meta key 自身 | ✅ 已采纳 |
 | 2026-05-28 | META_KEY_REGISTRY 必须文档化 | 接受 — 见 §5.3 | ✅ 已采纳 |
 | 2026-05-28 | Ledger 仅 2 个原语(append claim / append revoke claim);SDK update / delete 是组合糖 | 接受 — ledger 不引入 update 概念 | ✅ 已采纳 |
@@ -885,6 +896,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-28 | 存在性断言 pred_id 形态 | `<EntityType>:exists` per-entity-type;**不**属于 `__system__.*` namespace;INV-15 不 filter | ✅ 已采纳(见 §3.1 + §4.7)|
 | 2026-05-28 | Multi-cardinality 读取语义 | multiset(保留独立 asrt_id;caller 自行 dedup 如需 set 语义)| ✅ 已采纳(见 §8.3)|
 | 2026-05-28 | Alpha 状态:无生产数据兼容性负担 | 接受 — migration 是代码 + schema 重构,不是数据搬迁;Q-VD / Q-WF 消解;Q-DB / Q-TP1 简化 | ✅ 已采纳(见 §2.3 + §9 alpha 前言)|
+| 2026-07-31 | Q-SAE-8:claim_meta 事件化 + `(tx_seq, op_ordinal)` 全序;supersede `(asrt_id, key)` 唯一行模型 | 接受 — row immutable、同键多 event、last-wins=max、receipt as-of | ✅ adopted(见 §3.2 / §9.7)|
 
 **待裁定**(alpha 状态下大幅简化):
 
@@ -922,7 +934,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 
 ### §11.4 外部启蒙 / cross-validation reference
 
-claim-first immutable payload 模型经多源 cross-validation:
+claim-first + immutable meta event 模型经多源 cross-validation:
 
 - **Event Sourcing**: events immutable; 状态由 projection 得出;update = new event
   - [Microsoft Azure — Event Sourcing pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing)
@@ -973,7 +985,7 @@ ledger 层 ↔ API 层的核心映射:
 - [x] §1 目的与范围 / §2 演化总览
 - [x] §3 表结构(claim-first 3-table schema:claims / claim_meta / ledger_meta)
 - [x] §4 12 条结构性不变量(含 adapter 边界、存在性 namespace、multiset 语义等收紧)
-- [x] §5 SQL value canonical 编码契约(§5.1 claims 8-tag;§5.2 claim_meta 全 TEXT;§5.3 META_KEY_REGISTRY;§5.4 float64 / §5.5 time / §5.6 json)
+- [x] §5 SQL value canonical 编码契约(§5.1 claims 8-tag;§5.2 claim_meta 普通值 TEXT + UNSET SQL NULL;§5.3 META_KEY_REGISTRY;§5.4 float64 / §5.5 time / §5.6 json)
 - [x] §6 Digest path 纪律(限定 claims 4-tuple;meta 不参与 fact 身份)
 - [x] §7 Implementation discipline(含 §7.5 idempotency 责任划分 + §7.6 SDK update/delete 组合糖)
 - [x] §8 写入 / 读取 / 撤销 / 更新 / 删除流程概览(6 节,含 §8.5 update + §8.6 delete)
