@@ -5002,7 +5002,10 @@ def _evaluate_digest_safe(value: Any) -> Any:
 
 def _view_snapshot_asrt_id_for_claim(claim: Any) -> str:
     asrt_id = getattr(claim, "asrt_id", None)
-    if isinstance(asrt_id, str) and re.fullmatch(r"asrt:(?:[0-9a-f]{32}|[0-9a-f]{64})", asrt_id):
+    if isinstance(asrt_id, str) and re.fullmatch(
+        r"(?:asrt:)?(?:[0-9a-f]{32}|[0-9a-f]{64})",
+        asrt_id,
+    ):
         return asrt_id
     return "asrt:" + sha256_hex(
         canonical_bytes_for_evaluate(

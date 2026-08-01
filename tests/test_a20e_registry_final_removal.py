@@ -24,11 +24,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from factgraph.application.workspace_runtime import save_workspace as save_v02_workspace
 from factgraph.core.schema.schema_ir import schema_digest
+from factgraph.core.store.database import write_schema_object_for_workspace
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
 class _UserForA20E(Entity):
+    user_id: str = Identity()
+    name: str = Field()
+
+
+class V02MigrationUser(Entity):
     user_id: str = Identity()
     name: str = Field()
 
@@ -216,6 +223,100 @@ class MigrationCLIOutputTests(unittest.TestCase):
             fg2 = FactGraph.load_workspace(tmp_dir, schema_classes=[_UserForA20E])
             self.assertEqual(schema_digest(fg2.schema_ir), expected_digest)
             fg2.close()
+
+    def test_v02_workspace_round_trip_preserves_rows_and_becomes_writable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "legacy workspace"
+            legacy = FactGraph.from_schema_classes([V02MigrationUser])
+            e_ref = legacy.entities.create(V02MigrationUser, user_id="alice")
+            superseded_id = legacy.fields.set(
+                V02MigrationUser.name,
+                e_ref,
+                "Alice One",
+                meta={"source": "v0.2"},
+            )
+            current_id = legacy.fields.set(
+                V02MigrationUser.name,
+                e_ref,
+                "Alice Two",
+                meta={"source": "v0.2"},
+            )
+            revoker_id = legacy.assertions.retract(superseded_id)
+            legacy.assertions.append_meta(current_id, "reviewed", True)
+            expected_claims = tuple(legacy.ledger.claims)
+            expected_args = tuple(legacy.ledger.claim_args)
+            expected_revokes = tuple(legacy.ledger.revokes)
+            expected_ids = {claim.asrt_id for claim in expected_claims}
+            self.assertFalse(any(asrt_id.startswith("asrt:") for asrt_id in expected_ids))
+            self.assertEqual(legacy.ledger.find_revoker(superseded_id), revoker_id)
+
+            digest = schema_digest(legacy.schema_ir)
+            save_v02_workspace(
+                workspace,
+                schema_digest=digest,
+                ledger=legacy.ledger,
+            )
+            write_schema_object_for_workspace(workspace, legacy.schema_ir)
+            legacy.ledger.close()
+
+            rc, stdout, stderr = self._run_cli(
+                ["migrate-workspace", str(workspace), "--dry-run"]
+            )
+            self.assertEqual(rc, 0, f"stderr={stderr!r}")
+            dry_run = json.loads(stdout)
+            self.assertEqual(dry_run["status"], "dry_run")
+            self.assertTrue((workspace / "ledger.db").is_file())
+            self.assertFalse((workspace / "db" / "assertions.db").is_file())
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(workspace)])
+            self.assertEqual(rc, 0, f"stdout={stdout!r} stderr={stderr!r}")
+            migrated = json.loads(stdout)
+            self.assertEqual(migrated["status"], "migrated")
+            self.assertEqual(migrated["schema_digest"], digest)
+            self.assertTrue(migrated["head_tx_id"].startswith("tx:"))
+            self.assertFalse((workspace / "ledger.db").exists())
+            manifest = json.loads(
+                (workspace / "factgraph_workspace.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["components"], {"db": "db/", "views": "views/"})
+            archives = list(workspace.glob("workspace.legacy.*"))
+            self.assertEqual(len(archives), 1)
+            self.assertTrue((archives[0] / "ledger.db").is_file())
+            self.assertTrue((archives[0] / "factgraph_workspace.json").is_file())
+
+            loaded = FactGraph.load_workspace(
+                workspace,
+                schema_classes=[V02MigrationUser],
+            )
+            try:
+                self.assertEqual(tuple(loaded.ledger.claims), expected_claims)
+                self.assertEqual(tuple(loaded.ledger.claim_args), expected_args)
+                self.assertEqual(tuple(loaded.ledger.revokes), expected_revokes)
+                self.assertEqual(loaded.fields.get(V02MigrationUser.name, e_ref), "Alice Two")
+                self.assertEqual(
+                    loaded.ledger.find_meta(asrt_id=current_id, key="reviewed")[-1].value,
+                    True,
+                )
+                head = loaded._database.head()
+                self.assertEqual(head.tx_seq, 0)
+                self.assertEqual(head.tx_id, migrated["head_tx_id"])
+                self.assertEqual(
+                    loaded.ledger.get_ledger_meta("migration_source_version"),
+                    "v0.2",
+                )
+
+                managed_ref = loaded.entities.ref(V02MigrationUser, user_id="alice")
+                self.assertEqual(managed_ref, e_ref)
+                replacement_id = loaded.fields.set(
+                    V02MigrationUser.name,
+                    managed_ref,
+                    "Alice Three",
+                )
+                self.assertTrue(replacement_id.startswith("asrt:"))
+                self.assertEqual(loaded._database.head().tx_seq, 1)
+                self.assertEqual(loaded.fields.get(V02MigrationUser.name, e_ref), "Alice Three")
+            finally:
+                loaded.close()
 
 
 class ServiceRouteRemovalTests(unittest.TestCase):

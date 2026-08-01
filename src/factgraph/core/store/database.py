@@ -13,6 +13,7 @@ import fcntl
 import json
 import math
 import os
+import sqlite3
 import struct
 import time
 import uuid
@@ -759,6 +760,163 @@ class Database:
             payload["created_at_epoch_ns"] = saved_at
         _atomic_write_bytes(self._workspace_paths.db_meta, _json_bytes(payload))
         return saved_at
+
+    @classmethod
+    def migrate_legacy_ledger(
+        cls,
+        *,
+        source_ledger_path: str | Path,
+        target_workspace: str | Path,
+        schema_ir: dict[str, Any],
+    ) -> DatabaseValue:
+        """Build and verify a v0.3 workspace from an offline v0.2 Ledger.
+
+        The target must be a distinct empty staging directory. Legacy factual
+        and revocation rows keep their assertion ids and insertion order. The
+        pre-v0.3 history cannot be reconstructed, so migration creates an
+        explicit genesis repair anchor over the imported active set.
+        """
+        source = Path(source_ledger_path)
+        target = Path(target_workspace)
+        if not source.is_file():
+            raise DatabaseError(f"legacy ledger component missing: {source}")
+        if source.resolve(strict=False) == (
+            resolve_database_workspace_paths(target).assertions.resolve(strict=False)
+        ):
+            raise DatabaseError("legacy migration source and target ledger must differ")
+
+        created = cls.create(target, schema_ir=schema_ir)
+        created.close()
+        paths = resolve_database_workspace_paths(target)
+        try:
+            source_uri = source.resolve().as_uri() + "?mode=ro"
+            source_conn = sqlite3.connect(source_uri, uri=True)
+            try:
+                target_conn = sqlite3.connect(str(paths.assertions))
+                try:
+                    source_conn.backup(target_conn)
+                finally:
+                    target_conn.close()
+            finally:
+                source_conn.close()
+        except sqlite3.Error as exc:
+            raise DatabaseError(f"failed to copy legacy ledger: {exc}") from exc
+
+        for orphan in paths.tx_objects.glob("*.json"):
+            orphan.unlink()
+
+        schema_token = compute_schema_digest(schema_ir)
+        db_id = _require_db_id(_read_database_meta(paths)["db_id"])
+        ledger = Ledger(path=paths.assertions)
+        try:
+            if ledger.get_ledger_meta("head_tx_id") is not None:
+                raise DatabaseError("legacy migration source already has a transactional head")
+
+            assertion_digests: dict[str, str] = {}
+            meta_appends: list[MetaRow] = []
+            for claim in ledger.find_claims():
+                asrt_id = _require_asrt_id(claim.asrt_id, field="legacy asrt_id")
+                rows = ledger.find_meta(asrt_id=asrt_id)
+                if any(row.key in _RESERVED_ASSERTION_META_KEYS for row in rows):
+                    raise DatabaseError(
+                        f"legacy assertion already carries v0.3 reserved metadata: {asrt_id}"
+                    )
+                if _is_system_predicate(claim.pred_id):
+                    continue
+                user_meta = _normalize_meta_entries(
+                    tuple(MetaEntry(row.key, row.kind, row.value) for row in rows)
+                )
+                digest = assertion_digest_for(
+                    pred_id=claim.pred_id,
+                    fact_tuple=(("entity_ref", claim.e_ref), *tuple(claim.rest_terms)),
+                    schema_digest=schema_token,
+                    meta=user_meta,
+                )
+                assertion_digests[asrt_id] = digest
+
+            active_assertions = {
+                asrt_id: digest
+                for asrt_id, digest in assertion_digests.items()
+                if not ledger.has_active_revocation(asrt_id)
+            }
+            state_digest = _state_digest_for_assertions(active_assertions)
+            operations: list[dict[str, Any]] = [
+                {"kind": "repair_add", "asrt_id": asrt_id}
+                for asrt_id in sorted(active_assertions)
+            ]
+            operations.append(
+                {
+                    "kind": "repair",
+                    "previous_state_digest": "<legacy-v0.2-unanchored>",
+                    "rebuilt_state_digest": state_digest,
+                    "reason": "migrate-workspace-v0.2-anchor",
+                }
+            )
+            tx_id = _tx_id_for_v2(
+                parent_tx_id=None,
+                schema_digest=schema_token,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=0,
+                operations=operations,
+            )
+            for asrt_id, digest in assertion_digests.items():
+                meta_appends.extend(
+                    (
+                        MetaRow(asrt_id, "schema_digest", "str", schema_token),
+                        MetaRow(asrt_id, "assertion_digest", "str", digest),
+                        MetaRow(asrt_id, "tx_id", "str", tx_id),
+                    )
+                )
+            for revocation in ledger.revokes:
+                revoker_id = _require_asrt_id(
+                    revocation.revoker_asrt_id,
+                    field="legacy revoker_asrt_id",
+                )
+                rows = ledger.find_meta(asrt_id=revoker_id)
+                if any(row.key in {"schema_digest", "tx_id"} for row in rows):
+                    raise DatabaseError(
+                        f"legacy revoker already carries v0.3 reserved metadata: {revoker_id}"
+                    )
+                meta_appends.extend(
+                    (
+                        MetaRow(revoker_id, "schema_digest", "str", schema_token),
+                        MetaRow(revoker_id, "tx_id", "str", tx_id),
+                    )
+                )
+
+            _write_tx_object(
+                paths,
+                tx_id=tx_id,
+                parent_tx_id=None,
+                schema_digest=schema_token,
+                digest_scheme=LTHASH_SCHEME,
+                tx_seq=0,
+                operations=operations,
+            )
+            ledger.commit_batch(
+                assertions=(),
+                revocations=(),
+                meta_appends=meta_appends,
+                expected_head_tx_id=None,
+                head_tx_id=tx_id,
+                metadata={
+                    **_head_metadata(
+                        db_id=db_id,
+                        schema_digest=schema_token,
+                        state_digest=state_digest,
+                        tx_seq=0,
+                    ),
+                    "migration_source_version": "v0.2",
+                },
+            )
+        finally:
+            ledger.close()
+
+        verified = cls.open(target, schema_ir=schema_ir)
+        try:
+            return verified.head()
+        finally:
+            verified.close()
 
     def _ledger_for_attach(self) -> Ledger:
         """Return the mutable Ledger substrate for FactGraph.attach internals."""
@@ -1942,11 +2100,13 @@ def _new_assertion_id() -> str:
 
 
 def _require_asrt_id(value: str, *, field: str) -> str:
-    if not isinstance(value, str) or not value.startswith("asrt:"):
-        raise DatabaseError(f"{field} must start with 'asrt:'")
-    suffix = value.removeprefix("asrt:")
+    if not isinstance(value, str):
+        raise DatabaseError(f"{field} must be string")
+    suffix = value.removeprefix("asrt:") if value.startswith("asrt:") else value
     if len(suffix) not in {32, 64} or any(ch not in "0123456789abcdef" for ch in suffix):
-        raise DatabaseError(f"{field} must contain 32 or 64 lowercase hex chars")
+        raise DatabaseError(
+            f"{field} must be UUID hex or 'asrt:' plus 32 or 64 lowercase hex chars"
+        )
     return value
 
 
