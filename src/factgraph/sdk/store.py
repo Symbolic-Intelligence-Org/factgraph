@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from factgraph.application import apply_write_plan, is_entity_identity_bundle_active, plan_write_command
+from factgraph.application.entity_write import _revocation_meta_entries
 from factgraph.application.schema_mutation_runtime import (
     SchemaAddResult,
     add_schema_classes as app_add_schema_classes,
@@ -117,7 +118,9 @@ from factgraph.core.store.database import (
     Database,
     DatabaseError,
     FrozenAssertionSet as DatabaseFrozenAssertionSet,
+    MetaAppendInput,
     RevocationInput,
+    SchemaTransitionInput,
     _read_tx_object,
     schema_object_exists_for_workspace,
     validate_schema_object_for_workspace,
@@ -176,8 +179,8 @@ _ATTACH_REJECTED_KWARGS = {
     "workspace_path",
 }
 _ATTACHED_WRITE_ERROR = (
-    "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
-    "{method_name} is not available on attached runtimes"
+    "attached FactGraph runtimes persist writes immediately; "
+    "{method_name} requires a workspace-bound lifecycle"
 )
 _RULE_EXPR_DEFAULT_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
@@ -419,7 +422,6 @@ class _SDKAssertionViewsManager:
         An assertion set stores assertion ids only. It does not store a read
         policy and it is not included in `fg.save_workspace(...)` persistence.
         """
-        self._sdk._reject_attached_write("fg.assertion_views.create")
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
@@ -439,7 +441,6 @@ class _SDKAssertionViewsManager:
         asrts: Iterable[Any] | None = None,
     ) -> FrozenAssertionSet:
         """Replace the assertion ids for an existing frozen assertion set."""
-        self._sdk._reject_attached_write("fg.assertion_views.update")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -453,7 +454,6 @@ class _SDKAssertionViewsManager:
 
     def delete(self, name: str) -> None:
         """Delete a named frozen assertion set."""
-        self._sdk._reject_attached_write("fg.assertion_views.delete")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -623,7 +623,6 @@ class AssertionsManager:
         **kwargs: Any,
     ) -> str | None:
         """Retract one assertion by id with Slice 2 guard semantics preserved."""
-        self._sdk._reject_attached_write("fg.assertions.retract")
         if kwargs:
             raise SDKStoreError(
                 "fg.assertions.retract requires asrt_id (Layer 3); pass "
@@ -637,6 +636,7 @@ class AssertionsManager:
                 "delete. See ADR-API §4.1.1."
             )
 
+        database = self._sdk._database_for_application_write("fg.assertions.retract")
         try:
             check_retract_allowed(
                 asrt_id,
@@ -667,6 +667,24 @@ class AssertionsManager:
                 "entirely (see ADR-IC §4.4).",
                 code=guard_exc.code,
             ) from guard_exc
+        if database is not None:
+            existing_revoker = self._sdk.ledger.find_revoker(asrt_id)
+            if existing_revoker is not None:
+                return existing_revoker
+            try:
+                committed = database.commit_changes(
+                    assertions=(),
+                    revocations=(
+                        RevocationInput(
+                            revoked_asrt_id=asrt_id,
+                            meta=_revocation_meta_entries(asrt_id, meta),
+                        ),
+                    ),
+                )
+            except DatabaseError as exc:
+                code = "ASSERTION_NOT_FOUND" if "does not exist" in str(exc) else None
+                raise SDKStoreError(str(exc), code=code) from exc
+            return committed.revocations[0].revoker_asrt_id
         try:
             return retract_by_asrt(self._sdk._store.ledger, asrt_id, meta)
         except WriteProtocolError as exc:
@@ -696,7 +714,6 @@ class AssertionsManager:
         Python type. Raises ``SDKStoreError`` for invalid input or an unknown
         ``asrt_id``.
         """
-        self._sdk._reject_attached_write("fg.assertions.append_meta")
         if not isinstance(asrt_id, str) or not asrt_id:
             raise SDKStoreError(
                 "fg.assertions.append_meta(asrt_id, ...) expects non-empty string asrt_id"
@@ -718,12 +735,24 @@ class AssertionsManager:
                 "fg.assertions.append_meta(..., value) expects a scalar "
                 f"(str/bool/int/float), got {type(value).__name__}"
             )
+        database = self._sdk._database_for_application_write("fg.assertions.append_meta")
         try:
+            if database is not None:
+                database.commit_changes(
+                    assertions=(),
+                    revocations=(),
+                    meta_appends=(MetaAppendInput(asrt_id, key, kind, value),),
+                )
+                return
             self._sdk._store.ledger.append_meta(
                 [MetaRow(asrt_id=asrt_id, key=key, kind=kind, value=value)]
             )
-        except ValueError as exc:
-            code = "ASSERTION_NOT_FOUND" if "unknown asrt_id" in str(exc) else None
+        except (DatabaseError, ValueError) as exc:
+            code = (
+                "ASSERTION_NOT_FOUND"
+                if "unknown asrt_id" in str(exc) or "does not exist" in str(exc)
+                else None
+            )
             raise SDKStoreError(str(exc), code=code) from exc
 
 
@@ -886,7 +915,6 @@ class _SDKFieldsManager:
     ) -> str:
         """Write a single-cardinality Field value."""
         self._reject_non_field_descriptor(field, method="set")
-        self._sdk._reject_attached_write("fg.fields.set")
         return self._sdk._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def add(
@@ -899,7 +927,6 @@ class _SDKFieldsManager:
     ) -> str:
         """Append a multi-cardinality Field value."""
         self._reject_non_field_descriptor(field, method="add")
-        self._sdk._reject_attached_write("fg.fields.add")
         return self._sdk._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def retract(
@@ -1357,7 +1384,6 @@ class _SDKEntitiesManager:
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
         """Open an EntityEditor for an existing entity."""
         self._reject_non_entity_class(entity_cls, method="edit")
-        self._sdk._reject_attached_write("fg.entities.edit")
         from .facade import sdk_edit
 
         return sdk_edit(self._sdk, entity_cls, **identity_kwargs)
@@ -2211,7 +2237,7 @@ class SDKStore:
         meta: dict[str, Any] | None = None,
         allow_sensitive_meta: bool = False,
     ):
-        self._reject_attached_write("fg.ingest")
+        self._database_for_application_write("fg.ingest")
         from .ingest import sdk_ingest
 
         return sdk_ingest(self, data, meta=meta, allow_sensitive_meta=allow_sensitive_meta)
@@ -2226,7 +2252,6 @@ class SDKStore:
         *schema_class_args: type[Entity],
         schema_classes: list[type[Entity]] | None = None,
     ) -> SchemaAddResult:
-        self._reject_attached_write("fg.add_schema_classes")
         if schema_class_args and schema_classes is not None:
             raise SDKStoreError("pass either positional schema classes or schema_classes=, not both")
         if schema_classes is None:
@@ -2256,7 +2281,6 @@ class SDKStore:
         non_additive_error_type: type[SDKStoreError],
     ) -> SchemaAddResult:
         _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
-        self._reject_attached_write(f"fg.schema.{operation}")
         try:
             return self._apply_schema_class_batch(
                 [entity_cls],
@@ -2304,15 +2328,31 @@ class SDKStore:
             )
 
         self._preflight_schema_digest_anchors(old_digest)
+        database = self._database_for_application_write(f"fg.schema.{operation}")
+        if database is not None:
+            try:
+                committed = database.commit_changes(
+                    assertions=(),
+                    revocations=(),
+                    schema_transition=SchemaTransitionInput(
+                        old_schema_digest=old_digest,
+                        new_schema_ir=result.schema_ir,
+                    ),
+                )
+            except DatabaseError as exc:
+                raise SDKStoreError(str(exc)) from exc
+            if committed.value.schema_digest != result.schema_digest:
+                raise SDKStoreError("Database schema transition digest disagrees with compiled schema")
         self._refresh_schema_state(
             classes=result.classes,
             schema_ir=result.schema_ir,
             schema_digest_value=result.schema_digest,
         )
-        self._update_schema_digest_anchors(
-            schema_ir=result.schema_ir,
-            schema_digest_value=result.schema_digest,
-        )
+        if database is None:
+            self._update_schema_digest_anchors(
+                schema_ir=result.schema_ir,
+                schema_digest_value=result.schema_digest,
+            )
         return SchemaAddResult(
             old_digest=old_digest,
             new_digest=result.schema_digest,
@@ -2497,7 +2537,12 @@ class SDKStore:
         if not plan.can_apply:
             self._raise_from_application_error(plan.errors[0], op=op)
 
-        result = apply_write_plan(plan, store=self._store, index=self._application_schema_index)
+        result = apply_write_plan(
+            plan,
+            store=self._store,
+            index=self._application_schema_index,
+            database=self._database_for_application_write(f"fg.fields.{op}"),
+        )
         if result.errors:
             self._raise_from_application_error(result.errors[0], op=op)
 

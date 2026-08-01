@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-import warnings
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -228,29 +227,52 @@ class DBAttachLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(SDKStoreError, "only available on FactGraph.attach"):
             fg.commit_assertions([_assertion(fg, "Ada")])
 
-    def test_attached_canonical_write_paths_are_rejected(self) -> None:
+    def test_attached_canonical_write_paths_route_through_database_history(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
         fg = FactGraph.attach(db, schema_classes=[User])
+        head = db.head()
 
-        # Q8 Phase 2 (Slice 6): fg.save_rule / fg.save_inference were removed
-        # entirely (no longer exist on SDKStore). Remaining flat write paths
-        # are still rejected when attached.
-        write_calls = {
-            "fg.fields.set": lambda: fg.fields.set(User.name, _user_ref(), "Ada"),
-            "fg.fields.add": lambda: fg.fields.add(User.tag, _user_ref(), "vip"),
-            "fg.assertions.retract": lambda: fg.assertions.retract("asrt:" + "0" * 64),
-            "fg.entities.edit": lambda: fg.entities.edit(User, user_id="u-1"),
-            "fg.ingest": lambda: fg.schema.ingest({}),
-            "fg.add_schema_classes": lambda: fg.add_schema_classes(Account),
-            "fg.save_workspace": lambda: fg.save_workspace(),
-        }
+        user_ref = fg.entities.create(User, user_id="u-1")
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+        head = db.head()
 
-        for method_name, call in write_calls.items():
-            with self.subTest(method=method_name):
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", DeprecationWarning)
-                    with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
-                        call()
+        name_id = fg.fields.set(User.name, user_ref, "Ada")
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+        head = db.head()
+
+        fg.fields.add(User.tag, user_ref, "vip")
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+        head = db.head()
+
+        fg.assertions.append_meta(name_id, "provenance_class", "observed")
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+        self.assertEqual(db.head().state_digest, head.state_digest)
+        head = db.head()
+
+        revoker_id = fg.assertions.retract(name_id, meta={"note": "replace"})
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+        self.assertEqual(fg.ledger.find_revoker(name_id), revoker_id)
+        head = db.head()
+
+        ingest = fg.schema.ingest(
+            [{"kind": "set", "field": User.name, "e_ref": user_ref, "value": "Grace"}]
+        )
+        self.assertEqual(len(ingest.written_assertion_ids), 1)
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+        head = db.head()
+
+        schema_result = fg.add_schema_classes(Account)
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+        self.assertEqual(db.head().schema_digest, schema_result.new_digest)
+        self.assertEqual(db.schema_digest, schema_result.new_digest)
+
+        view = fg.assertion_views.create("review", asrt_ids=[ingest.written_assertion_ids[0]])
+        fg.assertion_views.update("review", asrt_ids=view.asrt_ids)
+        fg.assertion_views.delete("review")
+        self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
+
+        with self.assertRaisesRegex(SDKStoreError, "workspace-bound lifecycle"):
+            fg.save_workspace()
 
     def test_attached_batch_commits_multiple_entities_in_one_tx(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
@@ -421,31 +443,19 @@ class DBAttachLifecycleTests(unittest.TestCase):
             1,
         )
 
-    def test_attached_manager_write_paths_are_rejected(self) -> None:
+    def test_attached_entity_editor_commits_through_database(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
         fg = FactGraph.attach(db, schema_classes=[User])
+        fg.entities.create(User, user_id="u-1")
+        before = db.head()
 
-        # Q8 Phase 2 (Slice 6): fg.rules.save / fg.inferences.save were removed
-        # entirely (no longer exist on rules/inferences namespaces). Remaining
-        # manager write paths are still rejected when attached.
-        manager_calls = {
-            "fg.fields.set": lambda: fg.fields.set(User.name, _user_ref(), "Ada"),
-            "fg.fields.add": lambda: fg.fields.add(User.tag, _user_ref(), "vip"),
-            "fg.assertions.retract": lambda: fg.assertions.retract("asrt:" + "0" * 64),
-            "fg.entities.edit": lambda: fg.entities.edit(User, user_id="u-1"),
-            "fg.schema.ingest": lambda: fg.schema.ingest({}),
-            "fg.schema.apply": lambda: fg.schema.apply(Account),
-            "fg.assertion_views.create": lambda: fg.assertion_views.create("review", asrt_ids=[]),
-            "fg.assertion_views.update": lambda: fg.assertion_views.update("review", asrt_ids=[]),
-            "fg.assertion_views.delete": lambda: fg.assertion_views.delete("review"),
-        }
+        with fg.entities.edit(User, user_id="u-1") as editor:
+            editor.name.set("Ada")
+            editor.tag.add("vip")
 
-        for method_name, call in manager_calls.items():
-            with self.subTest(method=method_name):
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", DeprecationWarning)
-                    with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
-                        call()
+        self.assertEqual(db.head().tx_seq, before.tx_seq + 1)
+        self.assertEqual(fg.entities.get(User, user_id="u-1").name, "Ada")
+        self.assertEqual(fg.entities.get(User, user_id="u-1").tag, ("vip",))
 
     def test_non_attached_views_and_batch_surface_still_work(self) -> None:
         fg = FactGraph.from_schema_classes([User])
@@ -528,8 +538,9 @@ class DBAttachLifecycleTests(unittest.TestCase):
 
             with self.assertRaisesRegex(SDKStoreError, "view-attached runtimes are read-only"):
                 scoped.commit_assertions(_entity_assertions(scoped, "u-2", "Grace"))
-            with self.assertRaisesRegex(SDKStoreError, "fg\\.commit_assertions"):
-                scoped.assertion_views.create("another", asrt_ids=[])
+            scoped.assertion_views.create("another", asrt_ids=[])
+            with self.assertRaisesRegex(SDKStoreError, "view.*read-only"):
+                scoped.fields.set(User.name, scoped.entities.ref(User, user_id="u-2"), "Grace")
 
     def test_attach_with_view_rejects_in_memory_view_and_stale_database_anchors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -326,6 +326,13 @@ def _legacy_ingest_set_or_add(
     kind: str,
     path: str,
 ) -> str:
+    database = sdk._database_for_application_write("fg.ingest")
+    if database is not None:
+        raise SDKStoreError(
+            f"{path}: ingest item cannot be represented by the application write protocol",
+            code="INGEST_PLAN_FAILED",
+            path=path,
+        )
     field = item.field
     e_ref = item.e_ref
     if not isinstance(e_ref, str) or not e_ref:
@@ -405,6 +412,7 @@ def _app_ingest_set_or_add(
         IngestRequest(items=(app_item,), collect_mode="stop"),
         store=sdk._store,
         index=sdk._application_schema_index,
+        database=sdk._database_for_application_write("fg.ingest"),
     )
     warnings.extend(_app_warnings_to_sdk(result.warnings, fallback_path=path))
     if result.errors:
@@ -436,6 +444,7 @@ def _app_ingest_retract(
         ),
         store=sdk._store,
         index=sdk._application_schema_index,
+        database=sdk._database_for_application_write("fg.ingest"),
     )
     warnings.extend(_app_warnings_to_sdk(result.warnings, fallback_path=path))
     if result.errors:
