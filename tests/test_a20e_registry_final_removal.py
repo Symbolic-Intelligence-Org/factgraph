@@ -18,16 +18,20 @@ from __future__ import annotations
 
 import importlib
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from factgraph.application.workspace_runtime import save_workspace as save_v02_workspace
+from factgraph.application.workspace_runtime import (
+    save_workspace as save_v02_workspace,
+    save_workspace_manifest,
+)
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.core.store.database import write_schema_object_for_workspace
-from factgraph.core.store.ledger import MetaRow
+from factgraph.core.store.ledger import MetaRow, _enc, _enc_rest_terms
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
@@ -417,6 +421,187 @@ class MigrationCLIOutputTests(unittest.TestCase):
                 self.assertTrue(replacement_id.startswith("asrt:"))
                 self.assertEqual(loaded._database.head().tx_seq, 1)
                 self.assertEqual(loaded.fields.get(V02MigrationUser.name, e_ref), "Alice Three")
+            finally:
+                loaded.close()
+
+    def test_released_seven_table_v02_fixture_migrates_directly_to_three_tables(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "released-seven-table"
+            workspace.mkdir()
+            source = workspace / "ledger.db"
+            claim_id = "1" * 32
+            edge_id = "2" * 32
+            revoker_id = "3" * 32
+            alice_ref = "idref_v1:User:alice"
+            bob_ref = "idref_v1:User:bob"
+            edge_terms = [("entity_ref", bob_ref), ("string", "context")]
+            conn = sqlite3.connect(source)
+            try:
+                conn.executescript(
+                    """
+                    CREATE TABLE claims (
+                        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                        asrt_id TEXT NOT NULL UNIQUE,
+                        pred_id TEXT NOT NULL,
+                        e_ref TEXT NOT NULL,
+                        rest_terms TEXT NOT NULL
+                    );
+                    CREATE TABLE claim_args (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        asrt_id TEXT NOT NULL,
+                        idx INTEGER NOT NULL,
+                        val_atom TEXT NOT NULL,
+                        tag TEXT NOT NULL
+                    );
+                    CREATE TABLE meta_rows (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        asrt_id TEXT NOT NULL,
+                        key TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        value TEXT NOT NULL
+                    );
+                    CREATE TABLE revokes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        revoker_asrt_id TEXT NOT NULL,
+                        revoked_asrt_id TEXT NOT NULL
+                    );
+                    CREATE TABLE ingest_keys (
+                        ingest_key TEXT PRIMARY KEY,
+                        asrt_id TEXT NOT NULL,
+                        kind TEXT NOT NULL
+                    );
+                    CREATE TABLE ledger_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE annotation_rows (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        asrt_id TEXT NOT NULL,
+                        namespace TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        key TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        value TEXT NOT NULL,
+                        origin TEXT NOT NULL,
+                        derivation TEXT,
+                        UNIQUE(asrt_id, namespace, category, key)
+                    );
+                    """
+                )
+                conn.executemany(
+                    "INSERT INTO claims (asrt_id, pred_id, e_ref, rest_terms) VALUES (?, ?, ?, ?)",
+                    (
+                        (
+                            claim_id,
+                            "legacy.name",
+                            alice_ref,
+                            _enc_rest_terms([("string", "Alice")]),
+                        ),
+                        (edge_id, "legacy.edge", alice_ref, _enc_rest_terms(edge_terms)),
+                    ),
+                )
+                conn.executemany(
+                    "INSERT INTO claim_args (asrt_id, idx, val_atom, tag) VALUES (?, ?, ?, ?)",
+                    (
+                        (claim_id, 0, _enc("Alice"), "string"),
+                        (edge_id, 0, _enc(bob_ref), "entity_ref"),
+                        (edge_id, 1, _enc("context"), "string"),
+                    ),
+                )
+                conn.executemany(
+                    "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
+                    (
+                        (claim_id, "source", "str", _enc("v0.2")),
+                        (claim_id, "reviewed", "bool", _enc(False)),
+                        (claim_id, "reviewed", "bool", _enc(True)),
+                        (edge_id, "ingest_key", "str", _enc("legacy-edge-key")),
+                        (revoker_id, "reason", "str", _enc("superseded")),
+                    ),
+                )
+                conn.execute(
+                    "INSERT INTO revokes (revoker_asrt_id, revoked_asrt_id) VALUES (?, ?)",
+                    (revoker_id, claim_id),
+                )
+                conn.execute(
+                    "INSERT INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, ?)",
+                    ("legacy-edge-key", edge_id, "assertion"),
+                )
+                conn.executemany(
+                    "INSERT INTO annotation_rows "
+                    "(asrt_id, namespace, category, key, kind, value, origin, derivation) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        (
+                            claim_id,
+                            "shared",
+                            "source",
+                            "source",
+                            "str",
+                            _enc("v0.2"),
+                            "observed",
+                            None,
+                        ),
+                        (
+                            edge_id,
+                            "legacy",
+                            "derived",
+                            "score",
+                            "float",
+                            _enc(0.5),
+                            "derived",
+                            "rule:1",
+                        ),
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            schema_graph = FactGraph.from_schema_classes([V02MigrationUser])
+            schema_ir = schema_graph.schema_ir
+            schema_graph.close()
+            digest = schema_digest(schema_ir)
+            save_workspace_manifest(workspace, schema_digest=digest)
+            write_schema_object_for_workspace(workspace, schema_ir)
+
+            rc, stdout, stderr = self._run_cli(["migrate-workspace", str(workspace)])
+            self.assertEqual(rc, 0, f"stdout={stdout!r} stderr={stderr!r}")
+            self.assertEqual(json.loads(stdout)["status"], "migrated")
+
+            with sqlite3.connect(workspace / "db" / "assertions.db") as migrated_conn:
+                tables = {
+                    str(row[0])
+                    for row in migrated_conn.execute(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                    ).fetchall()
+                }
+            self.assertEqual(tables, {"claims", "claim_meta", "ledger_meta"})
+
+            loaded = FactGraph.load_workspace(workspace, schema_classes=[V02MigrationUser])
+            try:
+                self.assertEqual(
+                    [(row.asrt_id, row.rest_terms) for row in loaded.ledger.claims],
+                    [(claim_id, [("string", "Alice")]), (edge_id, edge_terms)],
+                )
+                self.assertEqual(
+                    loaded.ledger.revokes,
+                    [type(loaded.ledger.revokes[0])(revoker_id, claim_id)],
+                )
+                self.assertEqual(
+                    [
+                        row.value
+                        for row in loaded.ledger.find_meta(asrt_id=claim_id, key="reviewed")
+                    ],
+                    [False, True],
+                )
+                self.assertEqual(
+                    [
+                        (row.namespace, row.category, row.key, row.value, row.derivation)
+                        for row in loaded.ledger.find_annotations(asrt_id=edge_id)
+                    ],
+                    [("legacy", "derived", "score", 0.5, "rule:1")],
+                )
+                self.assertEqual(loaded._database.head().tx_seq, 0)
+                loaded.entities.create(V02MigrationUser, user_id="after-migration")
+                self.assertEqual(loaded._database.head().tx_seq, 1)
             finally:
                 loaded.close()
 

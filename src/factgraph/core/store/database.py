@@ -53,6 +53,13 @@ from factgraph.core.store.ledger import (
     META_KINDS,
     MetaRow,
     Revokes,
+    _ANNOTATION_COMPAT_PREFIX,
+    _annotation_from_storage_key,
+    _annotation_compatibility_meta_rows,
+    _dec,
+    _decode_claim_terms,
+    _decode_meta_value,
+    _dec_rest_terms,
 )
 
 
@@ -116,6 +123,14 @@ class MetaAppendInput:
     key: str
     kind: str
     value: Any
+
+
+@dataclass(frozen=True)
+class _LegacyLedgerRows:
+    claims: tuple[Claim, ...]
+    meta_rows: tuple[MetaRow, ...]
+    annotation_rows: tuple[AnnotationRow, ...]
+    revocations: tuple[Revokes, ...]
 
 
 @dataclass(frozen=True)
@@ -795,44 +810,48 @@ class Database:
         ):
             raise DatabaseError("legacy migration source and target ledger must differ")
 
+        legacy_rows = _read_legacy_ledger_rows(source)
+        schema_token = compute_schema_digest(schema_ir)
         created = cls.create(target, schema_ir=schema_ir)
         created.close()
         paths = resolve_database_workspace_paths(target)
         try:
-            source_uri = source.resolve().as_uri() + "?mode=ro"
-            source_conn = sqlite3.connect(source_uri, uri=True)
+            target_conn = sqlite3.connect(str(paths.assertions))
             try:
-                target_conn = sqlite3.connect(str(paths.assertions))
+                target_conn.execute("BEGIN IMMEDIATE")
                 try:
-                    source_conn.backup(target_conn)
-                finally:
-                    target_conn.close()
+                    target_conn.execute("DELETE FROM claims")
+                    target_conn.execute("DELETE FROM claim_meta")
+                    target_conn.execute(
+                        "DELETE FROM ledger_meta WHERE key <> 'ledger_format_version'"
+                    )
+                    target_conn.execute("COMMIT")
+                except BaseException:
+                    if target_conn.in_transaction:
+                        target_conn.execute("ROLLBACK")
+                    raise
             finally:
-                source_conn.close()
+                target_conn.close()
         except sqlite3.Error as exc:
-            raise DatabaseError(f"failed to copy legacy ledger: {exc}") from exc
+            raise DatabaseError(f"failed to initialize migration target: {exc}") from exc
 
         for orphan in paths.tx_objects.glob("*.json"):
             orphan.unlink()
 
-        schema_token = compute_schema_digest(schema_ir)
         db_id = _require_db_id(_read_database_meta(paths)["db_id"])
         ledger = Ledger(path=paths.assertions)
         try:
-            if ledger.get_ledger_meta("head_tx_id") is not None:
-                raise DatabaseError("legacy migration source already has a transactional head")
-
             assertion_digests: dict[str, str] = {}
-            meta_appends: list[MetaRow] = []
-            for claim in ledger.find_claims():
+            meta_rows_by_asrt_id: dict[str, list[MetaRow]] = {}
+            for row in legacy_rows.meta_rows:
+                meta_rows_by_asrt_id.setdefault(row.asrt_id, []).append(row)
+            for claim in legacy_rows.claims:
                 asrt_id = _require_asrt_id(claim.asrt_id, field="legacy asrt_id")
-                rows = ledger.find_meta(asrt_id=asrt_id)
+                rows = meta_rows_by_asrt_id.get(asrt_id, [])
                 if any(row.key in _RESERVED_ASSERTION_META_KEYS for row in rows):
                     raise DatabaseError(
                         f"legacy assertion already carries v0.3 reserved metadata: {asrt_id}"
                     )
-                if _is_system_predicate(claim.pred_id):
-                    continue
                 user_meta = _normalize_meta_entries(
                     tuple(MetaEntry(row.key, row.kind, row.value) for row in rows)
                 )
@@ -844,15 +863,17 @@ class Database:
                 )
                 assertion_digests[asrt_id] = digest
 
+            revoked_assertion_ids = {
+                row.revoked_asrt_id for row in legacy_rows.revocations
+            }
             active_assertions = {
                 asrt_id: digest
                 for asrt_id, digest in assertion_digests.items()
-                if not ledger.has_active_revocation(asrt_id)
+                if asrt_id not in revoked_assertion_ids
             }
             state_digest = _state_digest_for_assertions(active_assertions)
             operations: list[dict[str, Any]] = [
-                {"kind": "repair_add", "asrt_id": asrt_id}
-                for asrt_id in sorted(active_assertions)
+                {"kind": "repair_add", "asrt_id": asrt_id} for asrt_id in sorted(active_assertions)
             ]
             operations.append(
                 {
@@ -869,6 +890,21 @@ class Database:
                 tx_seq=0,
                 operations=operations,
             )
+            assertion_writes = tuple(
+                LedgerAssertionWrite(
+                    claim=claim,
+                    claim_args=tuple(
+                        ClaimArg(claim.asrt_id, idx, val_atom, tag)
+                        for idx, val_atom, tag in claim_args_from_rest_terms(claim.rest_terms)
+                    ),
+                    meta_rows=(),
+                )
+                for claim in legacy_rows.claims
+            )
+            revocation_writes = tuple(
+                LedgerRevocationWrite(revokes=row) for row in legacy_rows.revocations
+            )
+            meta_appends: list[MetaRow] = list(legacy_rows.meta_rows)
             for asrt_id, digest in assertion_digests.items():
                 meta_appends.extend(
                     (
@@ -877,12 +913,12 @@ class Database:
                         MetaRow(asrt_id, "tx_id", "str", tx_id),
                     )
                 )
-            for revocation in ledger.revokes:
+            for revocation in legacy_rows.revocations:
                 revoker_id = _require_asrt_id(
                     revocation.revoker_asrt_id,
                     field="legacy revoker_asrt_id",
                 )
-                rows = ledger.find_meta(asrt_id=revoker_id)
+                rows = meta_rows_by_asrt_id.get(revoker_id, [])
                 if any(row.key in _RESERVED_ASSERTION_META_KEYS for row in rows):
                     raise DatabaseError(
                         f"legacy revoker already carries v0.3 reserved metadata: {revoker_id}"
@@ -893,6 +929,12 @@ class Database:
                         MetaRow(revoker_id, "tx_id", "str", tx_id),
                     )
                 )
+            meta_appends.extend(
+                _annotation_compatibility_meta_rows(
+                    legacy_rows.annotation_rows,
+                    legacy_rows.meta_rows,
+                )
+            )
 
             _write_tx_object(
                 paths,
@@ -904,8 +946,8 @@ class Database:
                 operations=operations,
             )
             ledger.commit_batch(
-                assertions=(),
-                revocations=(),
+                assertions=assertion_writes,
+                revocations=revocation_writes,
                 meta_appends=meta_appends,
                 expected_head_tx_id=None,
                 head_tx_id=tx_id,
@@ -1544,6 +1586,206 @@ def _schema_ir_from_canonical_bytes(schema_bytes: bytes) -> dict[str, Any]:
         return ensure_schema_ir(payload)
     except SchemaIRValidationError as exc:
         raise DatabaseError(f"invalid schema object bytes: {exc}") from exc
+
+
+def _read_legacy_ledger_rows(source: Path) -> _LegacyLedgerRows:
+    """Read a v0.2 logical snapshot without mutating its SQLite file.
+
+    Released v0.2 workspaces use the seven-table layout. A headless
+    three-table snapshot is also accepted for the v0.2 compatibility surface
+    on this release line. A transactional Database is never a migration source.
+    """
+    seven_tables = {
+        "claims",
+        "claim_args",
+        "meta_rows",
+        "revokes",
+        "ingest_keys",
+        "ledger_meta",
+        "annotation_rows",
+    }
+    three_tables = {"claims", "claim_meta", "ledger_meta"}
+    source_uri = source.resolve().as_uri() + "?mode=ro"
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = sqlite3.connect(source_uri, uri=True)
+        conn.row_factory = sqlite3.Row
+        checks = [str(row[0]) for row in conn.execute("PRAGMA quick_check").fetchall()]
+        if checks != ["ok"]:
+            raise DatabaseError(f"legacy ledger quick_check failed: {checks!r}")
+        tables = {
+            str(row["name"])
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        head = (
+            conn.execute("SELECT value FROM ledger_meta WHERE key = 'head_tx_id'").fetchone()
+            if "ledger_meta" in tables
+            else None
+        )
+        if head is not None:
+            raise DatabaseError("legacy migration source already has a transactional head")
+
+        if seven_tables <= tables:
+            rows = _read_seven_table_legacy_rows(conn)
+        elif three_tables <= tables and not (tables & (seven_tables - {"claims", "ledger_meta"})):
+            rows = _read_three_table_legacy_rows(conn)
+        else:
+            raise DatabaseError(
+                "unsupported v0.2 ledger schema; expected the seven-table release layout"
+            )
+        _validate_legacy_ledger_rows(rows)
+        return rows
+    except DatabaseError:
+        raise
+    except (json.JSONDecodeError, sqlite3.Error, TypeError, ValueError) as exc:
+        raise DatabaseError(f"failed to read legacy ledger: {exc}") from exc
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _read_seven_table_legacy_rows(conn: sqlite3.Connection) -> _LegacyLedgerRows:
+    claims = tuple(
+        Claim(
+            str(row["asrt_id"]),
+            str(row["pred_id"]),
+            str(row["e_ref"]),
+            _dec_rest_terms(str(row["rest_terms"])),
+        )
+        for row in conn.execute(
+            "SELECT asrt_id, pred_id, e_ref, rest_terms FROM claims ORDER BY seq"
+        ).fetchall()
+    )
+    actual_args = tuple(
+        ClaimArg(
+            str(row["asrt_id"]),
+            int(row["idx"]),
+            _dec(str(row["val_atom"])),
+            str(row["tag"]),
+        )
+        for row in conn.execute(
+            "SELECT asrt_id, idx, val_atom, tag FROM claim_args ORDER BY id"
+        ).fetchall()
+    )
+    expected_args = tuple(
+        ClaimArg(claim.asrt_id, idx, val_atom, tag)
+        for claim in claims
+        for idx, val_atom, tag in claim_args_from_rest_terms(claim.rest_terms)
+    )
+    if actual_args != expected_args:
+        raise DatabaseError("legacy claim_args disagree with claims.rest_terms")
+    meta_rows = tuple(
+        MetaRow(
+            str(row["asrt_id"]),
+            str(row["key"]),
+            str(row["kind"]),
+            _dec(str(row["value"])),
+        )
+        for row in conn.execute(
+            "SELECT asrt_id, key, kind, value FROM meta_rows ORDER BY id"
+        ).fetchall()
+    )
+    annotation_rows = tuple(
+        AnnotationRow(
+            str(row["asrt_id"]),
+            str(row["namespace"]),
+            str(row["category"]),
+            str(row["key"]),
+            str(row["kind"]),
+            _dec(str(row["value"])),
+            str(row["origin"]),
+            None if row["derivation"] is None else str(row["derivation"]),
+        )
+        for row in conn.execute(
+            "SELECT asrt_id, namespace, category, key, kind, value, origin, derivation "
+            "FROM annotation_rows ORDER BY id"
+        ).fetchall()
+    )
+    revocations = tuple(
+        Revokes(str(row["revoker_asrt_id"]), str(row["revoked_asrt_id"]))
+        for row in conn.execute(
+            "SELECT revoker_asrt_id, revoked_asrt_id FROM revokes ORDER BY id"
+        ).fetchall()
+    )
+    return _LegacyLedgerRows(claims, meta_rows, annotation_rows, revocations)
+
+
+def _read_three_table_legacy_rows(conn: sqlite3.Connection) -> _LegacyLedgerRows:
+    factual_claims: list[Claim] = []
+    revocations: list[Revokes] = []
+    claim_tx_refs: dict[str, int] = {}
+    for row in conn.execute(
+        "SELECT asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref "
+        "FROM claims ORDER BY seq"
+    ).fetchall():
+        asrt_id = str(row["asrt_id"])
+        pred_id = str(row["pred_id"])
+        terms = _decode_claim_terms(row["rest_terms"], row["value"], row["value_tag"])
+        claim_tx_refs[asrt_id] = int(row["tx_ref"])
+        if pred_id.startswith("__system__."):
+            if pred_id != "__system__.revokes" or len(terms) != 1 or terms[0][0] != "string":
+                raise DatabaseError(f"invalid legacy system claim: {asrt_id}")
+            revocations.append(Revokes(asrt_id, str(terms[0][1])))
+        else:
+            factual_claims.append(Claim(asrt_id, pred_id, str(row["e_ref"]), terms))
+
+    meta_rows: list[MetaRow] = []
+    annotation_rows: list[AnnotationRow] = []
+    for row in conn.execute(
+        "SELECT rowid, asrt_id, key, kind, value, tx_seq, op_ordinal "
+        "FROM claim_meta ORDER BY tx_seq, op_ordinal, rowid"
+    ).fetchall():
+        asrt_id = str(row["asrt_id"])
+        key = str(row["key"])
+        kind = row["kind"]
+        value = _decode_meta_value(kind, row["value"])
+        if kind is None:
+            raise DatabaseError("v0.2 migration source cannot contain claim_meta tombstones")
+        kind = str(kind)
+        if key.startswith(_ANNOTATION_COMPAT_PREFIX):
+            annotation_rows.append(_annotation_from_storage_key(asrt_id, key, kind, value))
+            continue
+        meta_rows.append(MetaRow(asrt_id, key, kind, value))
+        shared = SHARED_ANNOTATION_KEYS.get(key)
+        if shared is not None and int(row["tx_seq"]) == claim_tx_refs.get(asrt_id):
+            category, origin = shared
+            annotation_rows.append(
+                AnnotationRow(asrt_id, "shared", category, key, kind, value, origin)
+            )
+    return _LegacyLedgerRows(
+        tuple(factual_claims),
+        tuple(meta_rows),
+        tuple(annotation_rows),
+        tuple(revocations),
+    )
+
+
+def _validate_legacy_ledger_rows(rows: _LegacyLedgerRows) -> None:
+    factual_ids: set[str] = set()
+    for claim in rows.claims:
+        asrt_id = _require_asrt_id(claim.asrt_id, field="legacy asrt_id")
+        if asrt_id in factual_ids:
+            raise DatabaseError(f"duplicate legacy asrt_id: {asrt_id}")
+        if _is_system_predicate(claim.pred_id):
+            raise DatabaseError(f"legacy factual claim uses reserved predicate: {claim.pred_id}")
+        factual_ids.add(asrt_id)
+
+    revoker_ids: set[str] = set()
+    for row in rows.revocations:
+        revoker_id = _require_asrt_id(row.revoker_asrt_id, field="legacy revoker_asrt_id")
+        target_id = _require_asrt_id(row.revoked_asrt_id, field="legacy revoked_asrt_id")
+        if revoker_id in factual_ids or revoker_id in revoker_ids:
+            raise DatabaseError(f"duplicate legacy revoker_asrt_id: {revoker_id}")
+        if target_id not in factual_ids:
+            raise DatabaseError(f"legacy revocation target does not exist: {target_id}")
+        revoker_ids.add(revoker_id)
+
+    known_ids = factual_ids | revoker_ids
+    for row in (*rows.meta_rows, *rows.annotation_rows):
+        if row.asrt_id not in known_ids:
+            raise DatabaseError(f"legacy metadata references unknown asrt_id: {row.asrt_id}")
 
 
 def _write_tx_object(
