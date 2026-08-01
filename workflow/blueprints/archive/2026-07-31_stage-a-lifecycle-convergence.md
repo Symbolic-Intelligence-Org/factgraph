@@ -1,8 +1,8 @@
 # Task Blueprint: Stage A — Lifecycle 收敛 + 写链加固 + 双承诺指纹
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-07-31
-- Last Updated: 2026-07-31
+- Last Updated: 2026-08-01
 - Branch: `v0.3.0-impl-storage-hardening-2026-07-31`(impl;设计基线 = `v0.2.0-design-storage-hardening-2026-07-31` @ 2aae8622)
 - Related Modules:
   - `src/factgraph/core/store/database.py` / `ledger.py` / `runtime.py`
@@ -58,18 +58,30 @@
 - 发布纪律:factgraph 发布走 `feature/...` surgical checkout,**绝不合 main**,user merge;
 - Phase 之间:doc-only 严格审计 + fix commit,才进下一 Phase。
 
-## 7. Acceptance(gates 汇总自设计文档 §7 + ADR)
+## 7. Acceptance(gates 汇总自设计文档 §7 + ADR;终审 2026-08-01 十门全过,证据见 audit log 终审行)
 
-- [ ] 全套件零回归(Phase 0 基线对照);
-- [ ] 三 lifecycle 行为等价(同操作序列 → 同 ledger 内容 + 同 head);
-- [ ] `entities.create/delete` 经 tx 链:写后 `db.head()` 与 ledger 一致性断言;
-- [ ] 指纹差分:增量 state_digest == 全量重算(含撤销后重断言;revoke-of-revoke 按 INV-12 拒绝);
-- [ ] 历史区分性:不同历史同终集 → tx 链头不同、state_digest 相同;
-- [ ] harness:写耗时曲线平坦(100K/1M);
-- [ ] 崩溃注入:commit 中途 kill → open fail-closed → repair 可恢复;
-- [ ] flock:双进程打开同 workspace,第二个显式失败;head CAS:并发 commit 一胜一败,无分叉;
-- [ ] migration CLI:v0.2 workspace 样本 round-trip;
-- [ ] 受影响模块 docs 已同步。
+- [x] 全套件零回归(Phase 0 基线 2725 → 终态 2771/32/1,增量全为战役新增测试,唯一失败 = 登记基线例外);
+- [x] 三 lifecycle 行为等价(五表逐行 + head 一致;终审另跑独立短序列探针);
+- [x] `entities.create/delete` 经 tx 链(tx_seq 精确 +1、tx_id 集合等式、delete 后 digest 回初始);
+- [x] 指纹差分(含撤销后重断言、200 步种子随机序列、revoke-of-revoke INV-12 拒绝);
+- [x] 历史区分性(同终集 → digest 相同、链头不同,reopen 各自持久);
+- [x] harness 写耗时平坦(终态 1.05ms@100K / 1.59ms@1M,ratio 1.52;对照 v0.2 303/3218ms);
+- [x] 崩溃注入(真子进程事务中途 kill → fail-closed → repair 恢复 + 审计记录);
+- [x] flock 双进程显式失败;CAS 并发一胜一败无分叉;
+- [x] migration CLI round-trip(裸 UUID/bytes/撤销/同键多 meta 保留;负向面俱全);
+- [x] 受影响模块 docs 已同步(Phase 4 + 终审 D1-D8 修订)。
+
+## 7.1 Outcome / Deviations(close-out 2026-08-01)
+
+**交付**:五 Phase 全完成(sync `f577f1d1` → 写链加固 `90689514`+`bfdacfd7` → 写路径收编 `3d7254df..3ec09863`+`f2325373` → lifecycle 内部化 `a24d3168..8f342ce9`+`dd2a2d2d` → docs `2663b2e0..4a498286`+D 修订)。核心结果:写成本 303ms→1.05ms@100K(O(delta) 平坦)、单事务原子写链、LtHash16-v2 内容绑定防篡改、tx 历史链(含 meta/schema 事件)、lifecycle 统一 Database-backed、v0.2 迁移 CLI。四轮对抗审计共 2 blocker + 13 serious,全部闭合后放行。
+
+**Deviations**:五则,全部 disposition 在 audit log Deviations 表(SDK commit_changes 提前量、bytes fail-closed→Phase 3 前置、fg.batch reject 提前拆、entity_ref 委托拓宽、ingest unmanaged raw e_ref 收窄声明)。
+
+**ADR 兑现对账(3b 口径护栏)**:Q-SAE-7 **全部兑现**;Q-SAE-8 只落 tx_seq 地基 + op 保序(**事件化/(tx_seq,op_ordinal)/tombstone 归 3b**);Q-SAE-9 只兑现双粒度提交面 + tx object **介质裁定**(**"承载批次 meta"的能力、tx_ref 列、meta 正交属性、UNSET 全部归 3b**);Q-SAE-3 触发线附则**未落 Q-SAE-6,欠账在案**。
+
+**Known Gaps(带归属,汇总自全程审计)**:◆3b:append_meta 链-账本 parity 校验、dbtx_v2 golden fixture、application 调 ledger 私有名转正;◆durability 后续:macOS fullfsync、tx object 缺失 re-anchor、stray tx object 清理、read-after-close SDK 层化;◆meander 适配队列(随 Q-SAE-6 解 pin):manifest 无 schema_digest 键、多 worker 单写者安排;◆独立任务:F821 实测 18 处、service static_ui 漂移(task_b3c98818)、大库迁移进度输出与 open 成本;◆设计线:L2 design-point、Stage B 触发线阈值、schema-evolution blueprint(迁移配方含)、PR#22 eval-perf follow-up。
+
+**治理遗留(用户裁定)**:CLAUDE.md 的 docs/README.md 指针不可闭合(仓库级既存漂移),migration CLI 无中央索引 —— 恢复索引 vs 修订 CLAUDE.md 待裁。
 
 ## 8. Implementation Plan
 
