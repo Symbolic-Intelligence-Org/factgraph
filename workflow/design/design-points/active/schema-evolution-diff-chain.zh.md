@@ -51,6 +51,8 @@ Profile B(asset-first,meander):│
 6. **携带 diff 的 mismatch 报错 + 版本定位(2026-08-01 增补,用户场景驱动)**:load 时 digest 不匹配的错误必须**携带 keyed diff 报告**(缺哪个实体/哪个字段/类型差异 + 工作区 IR 路径),而非只报判决 —— 复用 §3.1 的 diff 生成器,接线近乎免费;更进一步:用户类的 digest 与工作区**历史版本集**逐一比对(版本全部 write-once 留存),命中即定位"你停在版本 N",沿 transition 链枚举其后每步变更 —— "schema 的 git status"。此能力为 transition 链独有红利(就地可变系统无历史可查),消除大体量下人工比对 schema 的折磨。
 7. **迁移配方(migration recipe,2026-08-01 增补 —— 借鉴"迁移脚本+回填"模式并升级为账本公民)**:把"schema transition + 回填批(revoke+重断言)+ retire 标记"包成**一个可审计单元**的 ergonomic 面。地基已全部由 Stage A shipped:回填原语(Phase 2 B1/B2 加固的同批 revoke+重断言 + 幂等重放)、迁移纪律(Phase 3 迁移 CLI 的 staging→verified replacement→归档)、schema transition 链。与外部脚本式迁移(TypeDB/Django)的结构差异:**迁移过程本身入 tx 链,可重放可审计** —— "谁、何时、依据什么迁移了这个字段"是产品能力,不是运维残迹。
 
+8. **内省与渲染面(2026-08-01 增补,用户提议定形)**:三件套共用一次 IR 遍历 —— ①schema 展示:`fg.schema.describe()`(结构化)+ **CLI `python -m factgraph schema <workspace> [--python]`**(被锁在门外的用户没有 fg 句柄,必须有不开门的通道,沿 migrate-workspace CLI 先例);②双渲染器:`classes_from_schema_ir(ir)` → 运行时类对象(程序自动打开),`python_source_from_schema_ir(ir)` → `.py` 源码文本(人类贴回代码库 —— Profile A 追版本的闭环);③§3.6 的 mismatch 报错同时携带结构化 diff 与**差异实体的工作区版 Python 渲染**("你的类应该长这样,复制即修")。三条纪律:**round-trip digest 门**(render→compile→digest 相等,否则渲染器即漂移源);类型反向映射从编译器正向映射**派生**,禁手写第二张表(annotation 双源教训);只渲染 IR 不触数据(中立性)。
+
 ## §4 硬角与非目标
 
 - **identity field 的退休/变更**:参与 e_ref 推导,动它 = 动实体身份 —— 归 identity-redesign 线,本设计显式拒绝(checker 政策层),不装作能解;
@@ -69,4 +71,4 @@ Profile B(asset-first,meander):│
 - [ ] transition 序数的精确定义(全局 schema transition 计数 vs tx_seq 引用)—— blueprint 时定;
 - [ ] meander proposal 流与 retire 操作的治理接线(谁有权退休字段)—— meander 侧设计;
 - [ ] **rule-impact gate(2026-08-01 增补)**:retire 一个谓词前,checker 用 `fg.rules.structure`(已 shipped 的引擎中立静态投影)提取规则库中每条规则引用的谓词集,与 diff 的 retired 集求交 —— **受影响规则 = 交集**,非空时拒绝 transition 或要求同 proposal 内修正规则。规则绑定 pred_id 字符串而非类对象(类重生成不失效),求值期对未知谓词 fail-closed —— 内核提供分析原语,规则库与治理门在 asset 层(factgraph 有意不设规则库);
-- [ ] **`classes_from_schema_ir()` 反向生成(2026-08-01 增补)**:从工作区存储的 canonical IR(`db/objects/schema/<digest>.json`)运行时生成 Entity 类,使完全自动化的进程无需持有资产/源码即可打开工作区(正向:资产→类 已由 meander generator 证明;反向是无类运维打开的缺口,与"class-less load" deferred 项同题)。
+- [ ] 内省与渲染面(§3.8)的 CLI 子命令名与 `describe()` 输出 shape —— blueprint 时定;class-less load 是否随 `classes_from_schema_ir` 一并转正为 `load_workspace(path)` 无类形态 —— 待裁。
