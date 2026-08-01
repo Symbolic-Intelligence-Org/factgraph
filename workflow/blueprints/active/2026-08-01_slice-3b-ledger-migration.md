@@ -24,7 +24,7 @@ Stage A 完成写链与生命周期收敛,但表形态仍是 7 表(3 组内建�
 ## 2. Goals
 
 1. 7 表 → 3 表 atomic flip:`claims`(+`tx_ref` 列)+ `claim_meta`(事件化)+ `ledger_meta`;
-2. spec §9 七步精简全部落地(revokes-as-claim、ingest_keys 退场、双写退场、rest_terms 收口、四列删除、surrogate 删除);
+2. spec §9 七步精简全部落地(revokes-as-claim、ingest_keys 退场、双写退场、rest_terms 收口 —— **per adopted Q-SYS-B §4.2(c) 为 partial:双列引入 + `claim_args` 删除属 3b;`rest_terms` 列保留为 legacy 桥(PyReason adapter)至 Slice 5 三项绑定,不加 blanket enforce;2026-08-02 内联裁定确认**、四列删除、surrogate 删除);
 3. claim_meta 事件化:`(tx_seq, op_ordinal)` 全序、last-wins=max、UNSET tombstone、receipt as-of 字段;
 4. meta 五正交属性声明入 schema digest + tx-lift 存储(批次默认+claim 覆盖)+ audit 类惰性投影 + `premise_eligible` 封闭集 `{provenance_class, origin_binding}`;
 5. chosen 定序 ingested_at → seq(承认为语义变更);
