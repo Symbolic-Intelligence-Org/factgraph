@@ -22,7 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SQLite file is `db/assertions.db`; existing v0.2 `ledger.db` workspaces require
   explicit `python -m factgraph migrate-workspace <path>` before load. The CLI
   stages and verifies the replacement, writes an explicit genesis repair
-  anchor, and retains the complete source workspace by default.
+  anchor, and retains the complete source workspace by default. Interrupted
+  replacement is reported as `workspace_recovery_required` with visible backup
+  candidates and manual recovery guidance; torn-create or registry-only input
+  is `workspace_incomplete` and must be recreated.
 - **Database-backed ingest no longer falls back to unmanaged raw entity
   references.** `FactGraph.create(...)`, `FactGraph.load_workspace(...)`, and
   writable `FactGraph.attach(...)` fail closed when an ingest target or
@@ -131,6 +134,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **SDK lifecycle failures are classified at the SDK boundary.** Writes after
+  an SDK-owned graph is closed raise `SDKStoreError(code="GRAPH_CLOSED")` with
+  reopen guidance. Writes through a durable view attach report its read-only
+  status directly instead of being wrapped as a non-additive schema failure.
 - **`Explanation.repr` conclusion line now auto-renders `Rule.desc`** when the
   rule head sets `desc=` template. `_row_conclusion_node` calls
   `head.render_desc(row.bindings)` and stores the rendered string as the

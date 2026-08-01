@@ -35,6 +35,7 @@
 | 2026-08-01 | **Phase 3 C1-C5 fix 实施完成,待轻量 reaudit** | C1 meta-append 在 SDK 与 Database 双边拒绝三项 DB-owned key,claim/revoker 共用全集,零写/head 不动/reopen 探针；migration revoker 同步改全集。C2 unmanaged raw e_ref 回归已进 CHANGELOG Breaking、Deviations 与 SDK/application docs,幸存 `from_schema_classes` 面明确。C3 `SchemaTransitionInput` 撤出 `factgraph.sdk` public namespace,SDK 非 additive 尝试零推进,core/store 明定 policy-free mechanism。C4 replacement sibling 改可见命名,not-found/noop 双路发现并输出 `workspace_recovery_required` 候选与人工恢复指引。C5 torn-create/registry-only=`workspace_incomplete`,digest 诊断给 manifest/object 双值,Database.open 三态去 Phase 行话且给完整命令；损坏 ledger/`--no-archive`/registry-only/bytes+同键多 meta/revoker reserved 全部固化。meander manifest `schema_digest` 断裂入适配队列。门禁:Phase 3 精确面 **162 passed / 12 skipped / 1 deselected / 34 subtests**；PR #20/#21/#22 **157 passed**；全套件 **2770 passed / 32 skipped / 1 approved deselected / 1084 subtests**；implementation ruff 与 `git diff --check` 全绿(测试 ruff 仅命中已登记的 pre-existing F821)。Phase 4 仍冻结。 |
 
 | 2026-08-01 | **Phase 3 reaudit 通过(Claude,独立探针)→ Phase 4 放行** | 裁决 **pass**(commit `dd2a2d2d`)。独立验证:套件 2770/32/1;C1 三个保留键 append_meta 全拒、head 不动、close→reopen 通过(变砖路径闭合);C2 CHANGELOG Breaking 明文声明 ingest 收窄(含 `from_schema_classes` 幸存面定位);C3 `SchemaTransitionInput` 已撤出 sdk `__all__`;C4 备份 sibling 改可见命名 `<ws>.legacy-<ts>`,重跑扫描新旧双前缀并输出 `workspace_recovery_required` + recovery_candidates;C5 revoker 保留键全集(database.py:886)+ 迁移负向测试 +183 行落地。**Phase 4(文档诚实化收尾)放行**,基线清单 = 母文档 1 §5.5 措辞、quickstart load_and_save.md(重写级)+ schema_definition.md、closed-graph SDK 报错、view-attach 错误分类直通。 |
+| 2026-08-01 | **Phase 4 实施完成,待战役终审** | 四个独立步骤:①`2663b2e0` 将 owned graph close 后 11 个 SDK 写面统一为 `SDKStoreError(code="GRAPH_CLOSED")` + lifecycle 指引,view-attach schema 写错误直接呈现 read-only(不再被 non-additive 包裹);②`91c88449` 母文档 §5.5 改为统一 Database/write-through/single-writer/显式迁移叙事,并保留 Q-SAE-6 pin-first 发布边界;③`2351df00` 重写 `load_and_save.md`,同步 schema/data/rules/API 与 stale load docstring;④CHANGELOG 终稿 + 本 audit 收口。门禁:Phase 4 lifecycle/schema/migration 精确面 **163 passed / 12 skipped / 1 deselected / 45 subtests**;PR #20/#21/#22 精确专项 **157 passed**;全套件 **2771 passed / 32 skipped / 1 approved deselected / 1095 subtests**;implementation ruff、`git diff --check` 全绿。Phase 4 后按指令停止;blueprint Outcome/Deviations 汇总与 `implemented` 状态留给 Claude 终审,未执行 push/merge/tag。 |
 
 ## Phase 2 专项回归精确调用式
 
@@ -49,6 +50,39 @@ PYTHONPATH=src pytest -q tests/test_premise_admissibility_filter.py tests/test_p
 ```bash
 PYTHONPATH=src pytest -q tests/test_factgraph_workspace_lifecycle.py tests/test_db_attach_lifecycle.py tests/test_application_entity_write.py tests/test_sdk_batch_application_delegate.py tests/test_schema_mutation_lifecycle.py tests/test_schema_field_add_lifecycle.py tests/test_a20e_registry_final_removal.py --deselect=tests/test_a20e_registry_final_removal.py::ServiceRouteRemovalTests::test_service_app_v1_drops_registry_routes
 ```
+
+## Phase 4 verification + Docs To Update 勾验
+
+Phase 4 运行时精确面沿用 Phase 3 文件集并复跑,结果为
+**163 passed / 12 skipped / 1 deselected / 45 subtests**。PR 专项沿用上节
+“Phase 2 专项回归精确调用式”,结果 **157 passed**。全套件命令为:
+
+```bash
+PYTHONPATH=src python -c 'import sys,types,pytest; sys.modules["readline"]=types.ModuleType("readline"); raise SystemExit(pytest.main(["-q","tests","--ignore=tests/test_pyreason_provenance_v0.py","--deselect=tests/test_a20e_registry_final_removal.py::ServiceRouteRemovalTests::test_service_app_v1_drops_registry_routes"]))'
+```
+
+结果:**2771 passed / 32 skipped / 1 approved deselected / 1095 subtests**。
+`readline` shim 仅在测试进程的 `sys.modules` 中临时注入,无文件入库。
+
+Blueprint §9 逐项:
+
+- [x] `src/factgraph/core/store/docs/README.md`:commit 协议、LtHash state/history
+  双承诺、fail-closed/repair、flock、统一布局、迁移崩溃恢复均已覆盖;
+- [x] `src/factgraph/sdk/docs/00_user_guide.en.md` §11:write-through、save
+  metadata-only、排他锁、统一 layout、migration/recovery 已覆盖;
+- [x] `src/factgraph/sdk/docs/04_api_surface.en.md` §2.1:owned/attached ownership、
+  view read-only、save 语义、完整性校验已覆盖,并修正 stale “saved workspace”措辞;
+- [x] `docs/quickstart/`:重写 `load_and_save.md`,同步
+  `schema_definition.md` 的即时 schema_change 历史语义与 `data_model.md` 的
+  v0.3 路径/head metadata;邻接 rules 文档的 stale save 叙事同步清除;
+- [x] `docs/README.md`:仓库不存在该文件,本 Phase 未新增 docs 入口,故无需更新。
+
+Phase 4 点名补充项:
+
+- [x] 母文档 `factgraph-storage-architecture-evolution.zh.md` §5.5 已诚实化;
+- [x] CHANGELOG 三项 lifecycle 语义变更(write-through/save、single-writer、
+  layout+migration)、Database-backed ingest 收窄、迁移与中断恢复指引均齐;
+- [x] closed-graph SDK 错误与 view-attach 只读错误有常驻负向测试。
 
 ## Deviations
 
