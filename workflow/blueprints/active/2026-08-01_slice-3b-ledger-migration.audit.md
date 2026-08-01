@@ -27,6 +27,7 @@
 | 2026-08-01 | Phase 0 production golden 混合序加固 | `c1a06555`;同一 production commit 字面钉死 assertion → revocation → append_meta 顺序,schema_change 依生产约束独立成环 |
 | 2026-08-01 | Phase 0 baseline 补测 | `5d9e7463`;harness v2 改为 N=5 中位数+抖动带、tx-object 唯一字节精确分量、projected/persisted/workset 分名;补 batch=1 与冷 attach 驻留指标 |
 | 2026-08-01 | Phase 0 补钉 canonical gate | `PYTHONPATH=src` + process-only readline shim + ignore pyreason binary failure + deselect static-ui known failure:`2773 passed / 32 skipped / 1 deselected / 1098 subtests`;相对进入补钉轮净增 1 test + 1 subtest |
+| 2026-08-01 | **Phase 0 补钉轮复验:全部闭合;Phase 1 有条件放行 —— 唯一前置 = 用户对 C1 的批准落笔** | 四验证器逐项复现(见下文 §Phase 0 补钉轮复验);残留仅 C1 署名(授权问题非代码缺陷)+ 三项转 Phase 1 gate/纪律 |
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
@@ -256,6 +257,24 @@ Batch=3 Ledger read API case timings(ms):
 | 额外 minor | read suite 措辞从“all supported filter shapes”收窄为代表性 shapes,不再过诺 |
 
 补钉期间未修改 `src/`、DDL 或生产写路径;readline shim 仅在测试进程内注入,无文件落盘。Phase 1 仍须协调方复验放行。
+
+## Phase 0 补钉轮复验(2026-08-01,Claude 定向四验证器 + 独立复跑)
+
+**结论:G1-G3 / T1 / T3 / B1-B2 及 D1-D5 全部闭合(逐项复现验证);T2/C1 部分闭合 —— 裁定记录存在但未署名,待用户批准/否决。**
+
+复现要点(全部亲测或验证器落盘证据):
+- commit-path golden 真走生产入口(`Database.create` + `commit_changes`,即 SDK/application 层同一入口;monkeypatch 生产 id 源 `_new_assertion_id`),断言**落盘读回**的 tx object 字节与 ledger_meta head 三元组(含逐环 state_digest);fixture 同时钉住"append_meta/schema_change 不动 LtHash state"的不变量;3 项变异探针(tx 字节/state_digest/repair canonical)全部红显,control 全绿;
+- Q-SAE-8 §4 三行与 ADR 源**字节级一致**;Q-SYS-B 标注纯增量且正确切分 supersede 范围;本审计的"Phase 0 对抗审计"节在补钉范围内字节未动;闭环表无过诺;
+- 基线双 profile 复跑:tx 字节精确复现(803,893 / 1,429,893,各 5/5 样本一致),sqlite 中位数落在记录带内,workset 计数精确复现(27,000 / 159,000);第 9 物理行溯源 = `trace_id` 经 `SHARED_ANNOTATION_KEYS` 复制物化入 annotation_rows;batch=1 摊销恶化(267.964→476.631 B/claim)与 Q-SAE-9 §6 预期一致;
+- canonical 套件 2773/32/1/1098 逐字复现,跑前跑后工作树零污染;六 commit 全部 scope-clean;`src/` 零差分;未 push。
+
+残留处置:
+1. repair 生产路径组装未 golden(三 op 字节布局已钉,序列化器级)→ **转 Phase 1 gate**:首 commit 补生产 repair golden,或将 repair 重放纳入读等价 differential;
+2. harness `physical_meta_rows` 枚举三个表名,换表若改名会静默少计 → **转 Phase 1 纪律**:DDL 变更同 commit 由 introspection 派生或扩表名元组;
+3. 抖动带为 5 样本观测 min/max 而非上界 → **Phase 4 对照纪律:中位数对中位数,带仅作背景;sub-1% 差异视为噪声**;
+4. CI ruff 范围不含 tests/benchmarks 新文件(既有范围,两文件本轮 ruff 全绿)→ 留待未来 hygiene slice。
+
+**放行裁定:Phase 1 有条件放行。唯一前置 = 用户对 C1(UNSET=SQL NULL)批准落笔(署名补入 spec 裁定行与本文件闭环表);若否决,回退表示中立措辞后放行。**
 
 ## Deviations
 
