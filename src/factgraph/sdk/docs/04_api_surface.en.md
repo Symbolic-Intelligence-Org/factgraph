@@ -41,7 +41,8 @@ fg.audit.diff_proof_frames(round_a_id, round_b_id, round_a_events, round_b_event
 | `eval` | `evaluate`, `explain`, `preview_config` |
 | `audit` | `explain`, `conflicts`, `diff_proof_frames` |
 | `package` | `export_package`, `run_package` |
-| `views` | `create`, `update`, `delete`, `get`, `list` |
+| `assertion_views` | `create`, `update`, `delete`, `get`, `list` |
+| `meta` | `capabilities` |
 
 Namespace accessors return private manager objects. The managers are
 read-only — assigning attributes to namespace managers raises
@@ -267,7 +268,7 @@ the head, copy, or rebind. Passing a different path raises `SDKStoreError` with
 directory-copy guidance. An unbound graph raises
 `SDKStoreError("workspace path not bound; create with FactGraph.create(path=...) before saving")`.
 `FactGraph.load_workspace(...)` requires Python schema classes and fail-closed
-validates the manifest, transaction chain, active-state digest, assertion
+validates the transaction chain, active-state digest, assertion
 content digests, Database schema objects, and compiled schema digest.
 
 Workspace v1 layout:
@@ -284,7 +285,9 @@ workspace/
         <schema-digest>.json
       tx/
         <tx-digest>.json
-  views/
+    refs/                      # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                       # created lazily by db.create_view(...)
+    objects/<view-digest>.json
 ```
 
 `factgraph_workspace.json` records `factgraph_workspace_version="1"` and the
@@ -370,9 +373,12 @@ trusted internal paths and do not run this SDK-layer validation.
 | `field(Field)` | Return `AssertionView` for one schema field; exposes `active_records` and `history_records` |
 | `where(*, field=None, e_ref=None, value=None, value_tag=None, _meta=None)` | Filter active assertions by canonical Layer 3 criteria |
 | `retract(asrt_id, *, meta=None)` | Retract a specific assertion id; Identity Claims and legacy `:exists` Claims are protected |
+| `append_meta(asrt_id, key, value)` | Append one scalar metadata event to an assertion; Database-reserved keys are rejected |
 | `active` / `all` | Active or all assertion records |
 
-`fg.assertions.retract(...)` is the only public assertion-id mutation entry.
+`fg.assertions.retract(...)` is the only public assertion-id revocation entry.
+`fg.assertions.append_meta(...)` appends history without changing the active
+state commitment.
 Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 `<EntityType>:exists` retracts raise `EXISTENCE_CLAIM_TRANSITIONAL_GUARD`.
 

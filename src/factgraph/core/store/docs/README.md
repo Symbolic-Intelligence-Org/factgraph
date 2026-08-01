@@ -78,7 +78,9 @@ workspace/
     objects/
       schema/<64hex>.json
       tx/<64hex>.json
-  views/
+    refs/                    # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                     # created lazily by Database.create_view(...)
+    objects/<64hex>.json
 ```
 
 `ledger_meta` inside `db/assertions.db` is authoritative for the current head,
@@ -121,9 +123,9 @@ recreate guidance; only a complete v0.2 `ledger.db` source is migratable.
 `Database.create_view(name, asrt_ids, *, base=None)` writes a content-addressed
 `FrozenAssertionSet` under `views/objects/`. Creation is current-head-only.
 Membership requires an existing claim but may include revoked assertions.
-Memory-mode Databases do not persist views. `FactGraph.attach(db, view=view)`
-is read-only; base attach is writable and routes canonical SDK writes through
-the caller-owned Database.
+Memory-mode Databases reject `create_view(...)` because view objects require a
+durable workspace. `FactGraph.attach(db, view=view)` is read-only; base attach
+is writable and routes canonical SDK writes through the caller-owned Database.
 
 ## Non-responsibilities
 

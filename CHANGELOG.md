@@ -25,7 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anchor, and retains the complete source workspace by default. Interrupted
   replacement is reported as `workspace_recovery_required` with visible backup
   candidates and manual recovery guidance; torn-create or registry-only input
-  is `workspace_incomplete` and must be recreated.
+  is `workspace_incomplete` and must be recreated. The v0.3
+  `factgraph_workspace.json` no longer contains a top-level `schema_digest`;
+  schema anchoring now comes from the Database head and content-addressed
+  schema objects.
 - **Database-backed ingest no longer falls back to unmanaged raw entity
   references.** `FactGraph.create(...)`, `FactGraph.load_workspace(...)`, and
   writable `FactGraph.attach(...)` fail closed when an ingest target or
@@ -50,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Isolated `schema_change` transactions commit old/new schema digests while
   replay requires both content-addressed schema objects and transition
   continuity. Application `FieldValue` now carries `bytes` additively.
+- **The SDK exposes low-level atomic assertion/revocation commits.**
+  `fg.commit_changes(assertions, revocations)` and the public
+  `RevocationInput` DTO let advanced callers submit one mixed change set as
+  one Database transaction.
 - **The canonical SDK write surface routes through Database transactions.**
   Entity create/delete, field mutation, ingest, batch, metadata append, and
   additive schema mutation use the same commit chain for created, loaded, and
@@ -134,8 +141,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **SDK lifecycle failures are classified at the SDK boundary.** Writes after
-  an SDK-owned graph is closed raise `SDKStoreError(code="GRAPH_CLOSED")` with
+- **SDK write-lifecycle failures are classified at the SDK boundary.**
+  Writes after an SDK-owned graph is closed raise
+  `SDKStoreError(code="GRAPH_CLOSED")` with
   reopen guidance. Writes through a durable view attach report its read-only
   status directly instead of being wrapped as a non-additive schema failure.
 - **`Explanation.repr` conclusion line now auto-renders `Rule.desc`** when the

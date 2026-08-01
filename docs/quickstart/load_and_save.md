@@ -184,7 +184,8 @@ workspace/
     objects/
       schema/<64hex>.json
       tx/<64hex>.json
-  views/
+    refs/                    # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                     # created lazily by db.create_view(...)
     objects/<64hex>.json
 ```
 

@@ -81,7 +81,10 @@ retracts, and `fg.schema.*` for schema operations.
 
 The public namespaces:
 `entities`, `fields`, `assertions`, `schema`, `eval`, `audit`, `package`,
-`views`, `rules`, and `inferences`. See [§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
+`assertion_views`, `meta`, `rules`, and `inferences`. `meta` is the read-only
+runtime-capability namespace (`fg.meta.capabilities()`); session-local named
+assertion sets live under `fg.assertion_views`. See
+[§0 of 04_api_surface.en.md](04_api_surface.en.md#0-namespace-map)
 for the full map.
 
 ---
@@ -130,7 +133,7 @@ same_graph.close()
 ```
 
 `FactGraph.load_workspace(...)` requires the same Python `Entity` classes used to create
-the workspace. It validates the manifest, transaction history, active-state
+the workspace. It validates the transaction history, active-state
 digest, assertion content digests, Database schema object, and supplied classes
 before returning a graph. Create/load holds an exclusive writer lock until
 `close()`; opening the same durable workspace twice fails explicitly.
@@ -986,7 +989,9 @@ workspace/
         <schema-digest>.json
       tx/
         <tx-digest>.json
-  views/
+    refs/                      # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                       # created lazily by db.create_view(...)
+    objects/<view-digest>.json
 ```
 
 `factgraph_workspace.json` uses version `"1"` and points only to `db/` and

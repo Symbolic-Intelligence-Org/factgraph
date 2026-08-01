@@ -35,12 +35,12 @@ manager method.
 fg = FactGraph.create(schema_classes=[User, Country, LivesIn])
 ```
 
-File-backed ledger:
+Durable workspace:
 
 ```python
 fg = FactGraph.create(
     schema_classes=[User, Country, LivesIn],
-    ledger_path="./data/ledger.db",
+    path="./data/workspace",
 )
 ```
 
@@ -49,15 +49,21 @@ To make explain artifacts readable across later `FactGraph` instances as well, y
 ```python
 fg = FactGraph.create(
     schema_classes=[User, Country, LivesIn],
-    ledger_path="./data/ledger.db",
+    path="./data/workspace",
     artifact_store_root="./data/artifacts",
 )
 ```
 
 Stable contract:
-- `classes` must be a non-empty `list[Entity subclass]`; `from_schema_classes(...)` / `schema_preflight_from_classes(...)` raise `SDKSchemaError`, while `SDKStore(...)` constructor-path checks raise `SDKStoreError`.
-- `ledger` and `ledger_path` are mutually exclusive.
-- `ledger_path` records `schema_digest` when the ledger is opened/created, and validates it on reopen.
+- `schema_classes` must be a non-empty `list[Entity subclass]`; schema
+  compilation failures raise `SDKSchemaError`, while lifecycle/storage errors
+  raise `SDKStoreError`.
+- `path=` creates a v0.3 Database workspace immediately. Writes are durable on
+  return and the workspace holds an exclusive writer lock until `close()`.
+- `FactGraph.create(...)` rejects `ledger=` and `ledger_path=`. The lower-level
+  unmanaged compatibility lifecycle is
+  `FactGraph.from_schema_classes(classes, ledger=... | ledger_path=...)`; those
+  two arguments are mutually exclusive there.
 - `artifact_store_root` is an optional `str`; when provided it enables sidecar-backed explain artifact readback, while omitting it keeps the default in-process explain registry behavior.
 - `default_row_format` and `FACTPY_ROW_FORMAT` are legacy row-dispatch
   settings. T5 public evaluation uses `fg.eval.evaluate(...)` and returns

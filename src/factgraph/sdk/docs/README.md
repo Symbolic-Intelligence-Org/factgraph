@@ -125,9 +125,9 @@ automatic.
 
 ## Doc Map
 
-The user-facing official quickstart lives at
-`docs/official/factgraph/index.md`. The module documents below remain the
-implementation-truth layer for maintainers and advanced users.
+The user-facing quickstarts live under
+[`docs/quickstart/`](../../../../docs/quickstart/). The module documents below
+remain the implementation-truth layer for maintainers and advanced users.
 
 | Doc | When to read |
 |---|---|
