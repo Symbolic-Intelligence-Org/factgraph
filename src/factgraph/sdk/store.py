@@ -947,6 +947,7 @@ class _SDKFieldsManager:
         That preserves Slice 2 INV-7c / `:exists` guard behavior without
         duplicating the Layer 3 retract guard in Layer 2.
         """
+        self._sdk._database_for_application_write("fg.fields.retract")
         schema_pred = self._schema_pred_for_descriptor(field, method="retract", allow_identity=True)
         expected_terms = self._sdk._rest_terms_for_field(schema_pred, value=value)
         matches = [
@@ -982,6 +983,7 @@ class _SDKFieldsManager:
         first error is raised immediately. No rollback or best-effort behavior
         is introduced in Step 5.
         """
+        self._sdk._database_for_application_write("fg.fields.delete")
         schema_pred = self._schema_pred_for_descriptor(field, method="delete", allow_identity=True)
         count = 0
         for claim in self._active_claims_for_field(schema_pred, e_ref):
@@ -1387,6 +1389,7 @@ class _SDKEntitiesManager:
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
         """Open an EntityEditor for an existing entity."""
+        self._sdk._database_for_application_write("fg.entities.edit")
         self._reject_non_entity_class(entity_cls, method="edit")
         from .facade import sdk_edit
 
@@ -1750,8 +1753,17 @@ class SDKStore:
     def _database_for_application_write(self, method_name: str) -> Database | None:
         if self._database is None:
             return None
+        if getattr(self._database, "_closed", False):
+            raise SDKStoreError(
+                f"{method_name} is unavailable because this FactGraph's Database is closed; "
+                "create or load a new FactGraph, or attach an open Database, before writing",
+                code="GRAPH_CLOSED",
+            )
         if not self._attached_writable:
-            raise SDKStoreError(f"{method_name} is not available on view-attached runtimes; view is read-only")
+            raise SDKStoreError(
+                f"{method_name} is not available on view-attached runtimes; "
+                "view-attached runtimes are read-only"
+            )
         return self._database
 
     @classmethod
@@ -2224,12 +2236,9 @@ class SDKStore:
                 "fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; "
                 "use fg.fields.set / fg.fields.add for non-attached SDKStores"
             )
-        if not self._attached_writable:
-            raise SDKStoreError(
-                "fg.commit_assertions(...) is not available on FactGraph.attach(db, view=view) runtimes; "
-                "view-attached runtimes are read-only"
-            )
-        return self._database.commit_assertions(assertions)
+        database = self._database_for_application_write("fg.commit_assertions(...)")
+        assert database is not None
+        return database.commit_assertions(assertions)
 
     def commit_changes(
         self,
@@ -2240,9 +2249,9 @@ class SDKStore:
             raise SDKStoreError(
                 "fg.commit_changes(...) is only available on FactGraph.attach(db) runtimes"
             )
-        if not self._attached_writable:
-            raise SDKStoreError("fg.commit_changes(...) is not available on view-attached runtimes")
-        return self._database.commit_changes(assertions, revocations)
+        database = self._database_for_application_write("fg.commit_changes(...)")
+        assert database is not None
+        return database.commit_changes(assertions, revocations)
 
     def batch(self, *, meta: dict[str, Any] | None = None):
         self._database_for_application_write("fg.batch")
@@ -2300,6 +2309,7 @@ class SDKStore:
         operation: str,
         non_additive_error_type: type[SDKStoreError],
     ) -> SchemaAddResult:
+        self._database_for_application_write(f"fg.schema.{operation}")
         _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
         try:
             return self._apply_schema_class_batch(
@@ -2322,6 +2332,7 @@ class SDKStore:
         operation: str,
         non_additive_error_type: type[SDKStoreError] = SDKStoreError,
     ) -> SchemaAddResult:
+        database = self._database_for_application_write(f"fg.schema.{operation}")
         old_digest = self._schema_digest
         try:
             result = app_add_schema_classes(
@@ -2348,7 +2359,6 @@ class SDKStore:
             )
 
         self._preflight_schema_digest_anchors(old_digest)
-        database = self._database_for_application_write(f"fg.schema.{operation}")
         if database is not None:
             try:
                 committed = database.commit_changes(
@@ -2518,6 +2528,7 @@ class SDKStore:
         value: Any,
         meta: dict[str, Any] | None,
     ) -> str:
+        database = self._database_for_application_write(f"fg.fields.{op}")
         pred = self._schema_pred_for_field(field)
         owner_type = pred.get("owner_type")
         if not isinstance(owner_type, str) or not owner_type:
@@ -2561,7 +2572,7 @@ class SDKStore:
             plan,
             store=self._store,
             index=self._application_schema_index,
-            database=self._database_for_application_write(f"fg.fields.{op}"),
+            database=database,
         )
         if result.errors:
             self._raise_from_application_error(result.errors[0], op=op)

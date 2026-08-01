@@ -541,6 +541,10 @@ class DBAttachLifecycleTests(unittest.TestCase):
             scoped.assertion_views.create("another", asrt_ids=[])
             with self.assertRaisesRegex(SDKStoreError, "view.*read-only"):
                 scoped.fields.set(User.name, scoped.entities.ref(User, user_id="u-2"), "Grace")
+            with self.assertRaises(SDKStoreError) as ctx:
+                scoped.schema.apply(Account)
+            self.assertIn("view-attached runtimes are read-only", str(ctx.exception))
+            self.assertNotIn("non-additive", str(ctx.exception))
 
     def test_attach_with_view_rejects_in_memory_view_and_stale_database_anchors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

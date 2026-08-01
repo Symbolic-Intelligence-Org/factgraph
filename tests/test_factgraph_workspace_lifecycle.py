@@ -362,6 +362,37 @@ class WorkspaceLoadTests(unittest.TestCase):
         self.assertEqual(db.head().tx_seq, 1)
         db.close()
 
+    def test_closed_owned_graph_write_surfaces_raise_sdk_lifecycle_error(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir) / "workspace"
+            fg = FactGraph.create(schema_classes=[User], path=workspace)
+            e_ref = fg.entities.create(User, user_id="closed")
+            name_id = fg.fields.set(User.name, e_ref, "Ada")
+            fg.close()
+
+            writes = {
+                "entities.create": lambda: fg.entities.create(User, user_id="later"),
+                "entities.delete": lambda: fg.entities.delete(e_ref),
+                "entities.edit": lambda: fg.entities.edit(User, user_id="closed"),
+                "fields.set": lambda: fg.fields.set(User.name, e_ref, "Grace"),
+                "fields.retract": lambda: fg.fields.retract(User.name, e_ref, "Ada"),
+                "fields.delete": lambda: fg.fields.delete(User.name, e_ref),
+                "assertions.retract": lambda: fg.assertions.retract(name_id),
+                "assertions.append_meta": lambda: fg.assertions.append_meta(
+                    name_id, "source", "closed"
+                ),
+                "schema.apply": lambda: fg.schema.apply(Account),
+                "batch": lambda: fg.batch(),
+                "save_workspace": lambda: fg.save_workspace(),
+            }
+            for surface, write in writes.items():
+                with self.subTest(surface=surface):
+                    with self.assertRaises(SDKStoreError) as ctx:
+                        write()
+                    self.assertEqual(ctx.exception.code, "GRAPH_CLOSED")
+                    self.assertIn("Database is closed", str(ctx.exception))
+                    self.assertIn("create or load a new FactGraph", str(ctx.exception))
+
     def test_create_load_and_attach_observe_identical_ledger_and_head(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
