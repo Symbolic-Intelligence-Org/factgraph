@@ -148,9 +148,10 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # addition (the public lowering that lets the capability shells take
         # the application rule form).
         # Bumped from 85 to 86 for the Stage A RevocationInput DTO exposed by
-        # the unified Database.commit_changes assertion/revocation entrypoint.
+        # the unified Database.commit_changes assertion/revocation entrypoint,
+        # then to 88 for the Phase 3 MetaAppendInput/SchemaTransitionInput DTOs.
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 86)
+        self.assertEqual(len(sdk_module.__all__), 88)
         self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)

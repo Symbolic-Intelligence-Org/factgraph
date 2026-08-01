@@ -24,6 +24,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import Entity, FactGraph, Field, Identity, SDKStoreError
 
 
@@ -129,8 +130,9 @@ class WorkspaceManifestLayoutTests(unittest.TestCase):
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             components = payload.get("components", {})
             self.assertNotIn("registry", components)
-            self.assertIn("ledger", components)
-            self.assertIn("db", components)
+            self.assertEqual(components, {"db": "db/", "views": "views/"})
+            self.assertTrue((Path(tmp_dir) / "db" / "assertions.db").is_file())
+            fg.close()
 
     def test_load_rejects_legacy_registry_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -168,6 +170,7 @@ class MigrationCLIOutputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             fg = FactGraph.create(schema_classes=[_UserForA20E], path=tmp_dir)
             fg.save_workspace()
+            fg.close()
             rc, stdout, stderr = self._run_cli(["migrate-workspace", tmp_dir])
             self.assertEqual(rc, 0, f"stderr={stderr!r}")
             payload = json.loads(stdout)
@@ -182,6 +185,7 @@ class MigrationCLIOutputTests(unittest.TestCase):
             legacy.mkdir(parents=True)
             schema_path = legacy / "schema_ir.json"
             schema_path.write_text(json.dumps(fg.schema_ir, sort_keys=True), encoding="utf-8")
+            fg.close()
             rc, stdout, stderr = self._run_cli(["migrate-workspace", tmp_dir, "--dry-run"])
             self.assertEqual(rc, 0, f"stderr={stderr!r}")
             payload = json.loads(stdout)
@@ -198,6 +202,8 @@ class MigrationCLIOutputTests(unittest.TestCase):
             legacy.mkdir(parents=True)
             schema_path = legacy / "schema_ir.json"
             schema_path.write_text(json.dumps(fg.schema_ir, sort_keys=True), encoding="utf-8")
+            expected_digest = schema_digest(fg.schema_ir)
+            fg.close()
             rc, stdout, stderr = self._run_cli(["migrate-workspace", tmp_dir])
             self.assertEqual(rc, 0, f"stderr={stderr!r}")
             payload = json.loads(stdout)
@@ -208,7 +214,8 @@ class MigrationCLIOutputTests(unittest.TestCase):
             self.assertEqual(len(archives), 1)
             # Subsequent load should succeed now.
             fg2 = FactGraph.load_workspace(tmp_dir, schema_classes=[_UserForA20E])
-            self.assertEqual(fg2.schema_ir, fg.schema_ir)
+            self.assertEqual(schema_digest(fg2.schema_ir), expected_digest)
+            fg2.close()
 
 
 class ServiceRouteRemovalTests(unittest.TestCase):

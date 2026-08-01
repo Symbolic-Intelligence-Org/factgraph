@@ -271,7 +271,7 @@ class DBAttachLifecycleTests(unittest.TestCase):
         fg.assertion_views.delete("review")
         self.assertEqual(db.head().tx_seq, head.tx_seq + 1)
 
-        with self.assertRaisesRegex(SDKStoreError, "workspace-bound lifecycle"):
+        with self.assertRaisesRegex(SDKStoreError, "workspace path not bound"):
             fg.save_workspace()
 
     def test_attached_batch_commits_multiple_entities_in_one_tx(self) -> None:

@@ -15,9 +15,7 @@ from factgraph.application.schema_mutation_runtime import (
     SchemaAddResult,
     add_schema_classes as app_add_schema_classes,
 )
-from factgraph.application.workspace_runtime import load_workspace as app_load_workspace
 from factgraph.application.workspace_runtime import resolve_workspace_paths
-from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
@@ -178,10 +176,6 @@ _ATTACH_REJECTED_KWARGS = {
     "rules",
     "workspace_path",
 }
-_ATTACHED_WRITE_ERROR = (
-    "attached FactGraph runtimes persist writes immediately; "
-    "{method_name} requires a workspace-bound lifecycle"
-)
 _RULE_EXPR_DEFAULT_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
 
@@ -668,6 +662,11 @@ class AssertionsManager:
                 code=guard_exc.code,
             ) from guard_exc
         if database is not None:
+            if self._sdk.ledger.get_claim(asrt_id) is None:
+                raise SDKStoreError(
+                    f"unknown revoked_asrt_id: {asrt_id}",
+                    code="ASSERTION_NOT_FOUND",
+                )
             existing_revoker = self._sdk.ledger.find_revoker(asrt_id)
             if existing_revoker is not None:
                 return existing_revoker
@@ -1617,28 +1616,6 @@ def _path_equivalent(left: str | Path, right: str | Path) -> bool:
     return Path(left).expanduser().resolve(strict=False) == Path(right).expanduser().resolve(strict=False)
 
 
-def _resolve_workspace_constructor_paths(
-    *,
-    path: str | Path | None,
-    ledger_path: str | None,
-) -> tuple[Path | None, str | None]:
-    workspace_path = _normalize_workspace_path(path)
-    if workspace_path is None:
-        return None, ledger_path
-
-    workspace_paths = resolve_workspace_paths(workspace_path)
-    expected_ledger = workspace_paths.ledger
-
-    if ledger_path is not None:
-        if not _path_equivalent(ledger_path, expected_ledger):
-            raise SDKStoreError("ledger_path conflicts with workspace path")
-        resolved_ledger_path = ledger_path
-    else:
-        resolved_ledger_path = str(expected_ledger)
-
-    return workspace_path, resolved_ledger_path
-
-
 def _reject_legacy_registry_marker(workspace_path: str | Path) -> None:
     workspace_paths = resolve_workspace_paths(workspace_path)
     legacy_registry = workspace_paths.root / "registry"
@@ -1669,17 +1646,6 @@ def _schema_non_additive_message(exc: SDKStoreError) -> str:
     )
 
 
-def _ensure_workspace_schema_object(path: str | Path, schema_ir: dict[str, Any]) -> None:
-    expected_digest = schema_digest(schema_ir)
-    if schema_object_exists_for_workspace(path, expected_digest):
-        try:
-            validate_schema_object_for_workspace(path, schema_ir)
-        except DatabaseError as exc:
-            raise SDKStoreError(f"workspace schema object invalid: {exc}") from exc
-        return
-    raise SDKStoreError("workspace schema object missing")
-
-
 class SDKStore:
     """Main SDK graph object, exported to users as `FactGraph`.
 
@@ -1689,11 +1655,9 @@ class SDKStore:
     `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `audit`,
     `package`, and `assertion_views`.
 
-    `FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle
-    for new DB/view substrate work. Attached runtimes expose
-    `fg.commit_assertions(...)` for Database-routed writes; shipped
-    `create` / `from_schema_classes` / `load_workspace` constructors remain available as
-    compatibility lifecycles.
+    `create` and `load_workspace` own an internal `Database`; `attach` borrows
+    a caller-owned Database. `from_schema_classes` remains the lower-level
+    compatibility constructor for unmanaged in-memory or injected Ledgers.
     """
 
     def __init__(
@@ -1734,6 +1698,7 @@ class SDKStore:
         self._workspace_path = _normalize_workspace_path(workspace_path)
         self._database: Database | None = None
         self._attached_writable = False
+        self._owns_database = False
         self._application_schema_index = build_schema_index(self._schema_ir)
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
@@ -1777,10 +1742,6 @@ class SDKStore:
     def _is_attached(self) -> bool:
         return self._database is not None
 
-    def _reject_attached_write(self, method_name: str) -> None:
-        if self._is_attached():
-            raise SDKStoreError(_ATTACHED_WRITE_ERROR.format(method_name=method_name))
-
     def _database_for_application_write(self, method_name: str) -> Database | None:
         if self._database is None:
             return None
@@ -1803,15 +1764,16 @@ class SDKStore:
     ) -> "SDKStore":
         """Create a `FactGraph` from Python `Entity` classes.
 
-        This is the normal SDK constructor. Pass `path=` when the graph should
-        own a durable workspace that can later be saved with
-        `fg.save_workspace()` and restored with `FactGraph.load_workspace(...)`.
+        This is the normal SDK constructor. Pass `path=` to create a durable
+        Database workspace immediately. Canonical writes are write-through;
+        `fg.save_workspace()` only updates lifecycle metadata.
 
         Args:
             schema_classes: Non-empty list of `Entity` subclasses.
-            ledger: Optional existing ledger object.
-            ledger_path: Optional SQLite ledger path; mutually exclusive with
-                `ledger`.
+            ledger: Removed from this lifecycle in v0.3; use
+                `from_schema_classes` for an unmanaged Ledger.
+            ledger_path: Removed from this lifecycle in v0.3; use
+                `from_schema_classes` for an unmanaged Ledger path.
             path: Optional workspace directory.
             artifact_store_root: Optional artifact sidecar root.
             registry_root: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
@@ -1832,25 +1794,35 @@ class SDKStore:
         # users get the migration message without ambiguous downstream errors.
         if registry_root is not None or registry is not None:
             _raise_registry_root_removed()
-        workspace_path, resolved_ledger_path = _resolve_workspace_constructor_paths(
-            path=path,
-            ledger_path=ledger_path,
-        )
+        if ledger is not None or ledger_path is not None:
+            raise SDKStoreError(
+                "FactGraph.create no longer accepts ledger= or ledger_path= in v0.3; "
+                "use FactGraph.from_schema_classes(...) for the unmanaged Ledger lifecycle"
+            )
+        workspace_path = _normalize_workspace_path(path)
         schema_ir = compile_schema_from_classes(schema_classes)
-        if workspace_path is not None:
-            try:
-                write_schema_object_for_workspace(workspace_path, schema_ir)
-            except DatabaseError as exc:
-                raise SDKStoreError(f"workspace schema object write failed: {exc}") from exc
-        return cls._from_schema_classes_impl(
-            schema_classes,
-            ledger=ledger,
-            ledger_path=resolved_ledger_path,
-            artifact_store_root=artifact_store_root,
-            schema_ir=schema_ir,
-            workspace_path=workspace_path,
-            default_row_format=default_row_format,
-        )
+        try:
+            database = Database.create(
+                workspace_path if workspace_path is not None else ":memory:",
+                schema_ir=schema_ir,
+            )
+        except DatabaseError as exc:
+            raise SDKStoreError(str(exc)) from exc
+        try:
+            graph = cls._attach_compiled(
+                database,
+                schema_classes=schema_classes,
+                schema_ir=schema_ir,
+                default_row_format=default_row_format,
+            )
+        except Exception:
+            database.close()
+            raise
+        graph._owns_database = True
+        graph._workspace_path = workspace_path
+        if artifact_store_root is not None:
+            graph._store._artifact_sidecar = FileArtifactSidecar(artifact_store_root)
+        return graph
 
     @classmethod
     def from_schema_classes(
@@ -1905,19 +1877,24 @@ class SDKStore:
         if schema_classes is None:
             raise SDKStoreError("schema_classes is required for FactGraph.load_workspace(...)")
         schema_ir = compile_schema_from_classes(schema_classes)
-        digest = schema_digest(schema_ir)
+        workspace_path = _normalize_workspace_path(path)
+        assert workspace_path is not None
         try:
-            _reject_legacy_registry_marker(path)
-            paths = app_load_workspace(path, schema_digest=digest)
-            _ensure_workspace_schema_object(paths.root, schema_ir)
-            return cls._from_schema_classes_impl(
-                schema_classes,
-                ledger=Ledger(path=paths.ledger),
+            _reject_legacy_registry_marker(workspace_path)
+            database = Database.open(workspace_path, schema_ir=schema_ir)
+            graph = cls._attach_compiled(
+                database,
+                schema_classes=schema_classes,
                 schema_ir=schema_ir,
-                workspace_path=paths.root,
                 default_row_format=default_row_format,
             )
+            graph._owns_database = True
+            graph._workspace_path = workspace_path
+            return graph
         except Exception as exc:
+            database_to_close = locals().get("database")
+            if isinstance(database_to_close, Database):
+                database_to_close.close()
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(str(exc)) from exc
@@ -1943,6 +1920,24 @@ class SDKStore:
             )
 
         schema_ir = compile_schema_from_classes(schema_classes)
+        return cls._attach_compiled(
+            db,
+            schema_classes=schema_classes,
+            schema_ir=schema_ir,
+            view=view,
+            default_row_format=default_row_format,
+        )
+
+    @classmethod
+    def _attach_compiled(
+        cls,
+        db: Database,
+        *,
+        schema_classes: list[type[Entity]],
+        schema_ir: dict[str, Any],
+        view: DatabaseFrozenAssertionSet | None = None,
+        default_row_format: str | None = None,
+    ) -> "SDKStore":
         digest = schema_digest(schema_ir)
         if digest != db.schema_digest:
             raise SDKStoreError(
@@ -1959,7 +1954,27 @@ class SDKStore:
         attached = cls(schema_classes, store=store, default_row_format=default_row_format)
         attached._database = db
         attached._attached_writable = attached_writable
+        paths = getattr(db, "_workspace_paths", None)
+        if paths is not None:
+            attached._workspace_path = paths.root
         return attached
+
+    def __enter__(self) -> "SDKStore":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: Any,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Release an internally owned Database; attached Databases remain caller-owned."""
+        if self._owns_database and self._database is not None:
+            self._database.close()
+            self._owns_database = False
 
     @classmethod
     def _from_schema_classes_impl(
@@ -2658,32 +2673,34 @@ class SDKStore:
         raise SDKStoreError("rules.structure(...) expects application Rule or RuleExpr input")
 
     def save_workspace(self, path: str | Path | None = None) -> dict[str, Any]:
-        """Persist this graph as a FactGraph workspace.
-
-        A workspace contains the ledger, schema metadata, authoring registry,
-        and a workspace manifest. If `path` is omitted, the graph must already
-        be bound to a workspace path through `FactGraph.create(path=...)` or an
-        earlier `fg.save_workspace(path)`.
-        """
-        self._reject_attached_write("fg.save_workspace")
-        workspace_path = _normalize_workspace_path(path) or self._workspace_path
-        if workspace_path is None:
+        """Touch workspace lifecycle metadata; canonical writes are already durable."""
+        database = self._database_for_application_write("fg.save_workspace")
+        if database is None or self._workspace_path is None:
             raise SDKStoreError(
-                "workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)"
+                "workspace path not bound; create with FactGraph.create(path=...) before saving"
             )
+        requested_path = _normalize_workspace_path(path)
+        if requested_path is not None and not _path_equivalent(requested_path, self._workspace_path):
+            raise SDKStoreError(
+                "save_workspace cannot copy or rebind a v0.3 workspace; copy the workspace "
+                "directory explicitly for dry-run/sandbox workflows"
+            )
+        before = database.head()
         try:
-            write_schema_object_for_workspace(workspace_path, self.schema_ir)
-            paths = app_save_workspace(
-                workspace_path,
-                schema_digest=self._schema_digest,
-                ledger=self.ledger,
-            )
+            saved_at = database.touch_saved_at()
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(str(exc)) from exc
-        self._workspace_path = paths.root
-        return {"path": str(paths.root), "manifest": str(paths.manifest)}
+        if database.head() != before:
+            raise SDKStoreError("save_workspace metadata update unexpectedly changed Database head")
+        paths = getattr(database, "_workspace_paths", None)
+        assert paths is not None
+        return {
+            "path": str(paths.root),
+            "manifest": str(paths.manifest),
+            "last_saved_at_epoch_ns": saved_at,
+        }
 
     @staticmethod
     def _resolve_public_engine(raw_engine: Any, *, api_path: str) -> str:

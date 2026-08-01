@@ -570,6 +570,11 @@ class Database:
                 "legacy or incomplete Database workspace is not writable in v0.3; "
                 "use the Phase 3 migrate-workspace flow"
             )
+        if paths.root.exists():
+            raise DatabaseError(
+                "incomplete Database workspace: factgraph_workspace.json and db/ are missing; "
+                "recreate the workspace or use the Phase 3 migrate-workspace flow for a legacy source"
+            )
         raise DatabaseError(
             "legacy ledger write mode is disabled; use the Phase 3 migrate-workspace flow"
         )
@@ -737,6 +742,23 @@ class Database:
     @property
     def schema_digest(self) -> str:
         return self._schema_digest
+
+    def touch_saved_at(self) -> int:
+        """Update non-transactional workspace lifecycle metadata.
+
+        Factual data, state/history commitments, and the Database head are not
+        changed. This is the v0.3 implementation of ``FactGraph.save_workspace``.
+        """
+        self._ensure_open()
+        if self._workspace_paths is None:
+            raise DatabaseError("save metadata requires a durable Database workspace")
+        payload = _read_database_meta(self._workspace_paths)
+        saved_at = time.time_ns()
+        payload["last_saved_at_epoch_ns"] = saved_at
+        if "created_at_epoch_ns" not in payload:
+            payload["created_at_epoch_ns"] = saved_at
+        _atomic_write_bytes(self._workspace_paths.db_meta, _json_bytes(payload))
+        return saved_at
 
     def _ledger_for_attach(self) -> Ledger:
         """Return the mutable Ledger substrate for FactGraph.attach internals."""
@@ -1297,7 +1319,9 @@ def _validate_schema_object(
 ) -> None:
     schema_path = _schema_object_path(paths, schema_digest)
     if not schema_path.exists():
-        raise DatabaseError(f"schema object missing: {schema_path}")
+        raise DatabaseError(
+            f"schema object missing for schema_digest={schema_digest!r}: {schema_path}"
+        )
     actual = schema_path.read_bytes()
     stored_schema_ir = _schema_ir_from_canonical_bytes(actual)
     if canonicalize_schema_ir_jcs(stored_schema_ir) != actual:
@@ -1436,14 +1460,17 @@ def _read_tx_object(paths: DatabaseWorkspacePaths, tx_id: str) -> dict[str, Any]
 
 
 def _write_database_meta(paths: DatabaseWorkspacePaths, *, db_id: str) -> None:
+    created_at = time.time_ns()
     payload = {
+        "created_at_epoch_ns": created_at,
         "database_workspace_version": _DATABASE_WORKSPACE_VERSION,
         "db_id": _require_db_id(db_id),
+        "last_saved_at_epoch_ns": created_at,
     }
     _write_once_bytes(paths.db_meta, _json_bytes(payload))
 
 
-def _read_database_meta(paths: DatabaseWorkspacePaths) -> dict[str, str]:
+def _read_database_meta(paths: DatabaseWorkspacePaths) -> dict[str, Any]:
     if not paths.db_meta.exists():
         raise DatabaseError("Database meta.json missing")
     payload = json.loads(paths.db_meta.read_text(encoding="utf-8"))
@@ -1455,7 +1482,11 @@ def _read_database_meta(paths: DatabaseWorkspacePaths) -> dict[str, str]:
     db_id = payload.get("db_id")
     if not isinstance(db_id, str):
         raise DatabaseError("Database meta.json db_id missing")
-    return {"db_id": db_id}
+    for key in ("created_at_epoch_ns", "last_saved_at_epoch_ns"):
+        value = payload.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+            raise DatabaseError(f"Database meta.json {key} must be non-negative int")
+    return dict(payload)
 
 
 def _write_workspace_manifest(paths: DatabaseWorkspacePaths) -> None:
