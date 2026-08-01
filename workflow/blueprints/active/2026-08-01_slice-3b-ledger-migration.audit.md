@@ -22,6 +22,7 @@
 | 2026-08-01 | Phase 0 dbtx_v2 golden fixture | `af7b92ab`;A/R-only 链与含 append_meta/schema_change 的链均冻结每环 canonical bytes、tx_id 与 genesis→head 推进序列;协议代码零改动 |
 | 2026-08-01 | Phase 0 current-context re-anchor | 基于 `af7b92ab` 逐项重 grep blueprint §4;结果与 blueprint 描述一致,证据清单见下文 |
 | 2026-08-01 | Phase 0 seven-table baseline | `benchmarks/slice3b_storage_baseline.py`;3,000 claims、8 persisted meta/claim、3 claims/tx 的 current-layout 基线已落数;同一 harness 留给 Phase 4 的 3-table 与 3-table+tiering 对照 |
+| 2026-08-01 | **Phase 0 对抗审计:0 blocker / 8 serious / 7 minor —— 有条件不放行,先走补钉轮** | 四透镜(golden 完整性/转录保真/基线方法学/纪律锚点)+ 独立全套件复跑(2772/32/1 + 1097 subtests 逐字复现);裁定与发现全文见下文 §Phase 0 对抗审计 |
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
@@ -180,6 +181,27 @@ All Ledger read API case timings(ms):
 | `meta_rows_property` | 0.065125 | `annotation_rows_property` | 0.010625 |
 | `revokes_property` | 0.003166 | `get_ledger_meta` | 0.025625 |
 | `get_ledger_meta_snapshot` | 0.044958 | | |
+
+## Phase 0 对抗审计(2026-08-01,Claude 四透镜 + 独立复跑)
+
+**实质合格项(亲手/透镜复现)**:golden 为入库字面量、非自我实现(4 项变异探针 —— canonical 字节翻转/输入漂移/head 序列漂移/tx_id 翻转 —— 全部红显,control 全绿);序列化器即生产函数(`_tx_id_for_v2` → commit_changes/repair 同源);锚点 9/9 与 blueprint §4 精确相符(含 audit 清单对"op_ordinal 未落"的正确对冲);全套件 2772/32/1 + 1097 subtests 独立逐字复现,跑后工作树零污染;基线算术全部自洽,tx-object 字节(803,893)逐字节复现;spec 修订无 Q-SAE-9 Phase 3 溢出;readline shim 零落盘;未 push、无遗留物、blueprint 本体未动。
+
+**Serious ×8**(G=golden,T=转录,B=基线):
+
+| # | 发现 | 归属 |
+|---|---|---|
+| G1 | golden 只钉序列化器契约,未走生产 commit 路径:op 组装序(assertions→revocations→meta→schema)、tx_seq 推导、MetaEntry 类型分支全部未钉 —— Phase 1/2 重构组装可漂字节而 golden 全绿 | 补钉轮 A1 |
+| G2 | repair 族 3/7 op(`repair_add`/`repair_remove`/`repair`,均为真实入链 op,database.py:673-705)零 golden 覆盖;**缺口源头在 blueprint §5 与工作包,非 codex 偏差** | 补钉轮 A2 |
+| G3 | head_state_digest / LtHash 状态累积完全不在 fixture 内 —— "head 推进"仅指 tx_id 序列;3b 重写的正是状态存储 | 补钉轮 A1 |
+| T1 | worklist 自称 verbatim 却整节丢失 Q-SAE-8 §4 —— Q-SYS-B §4.4 supersede 标注承诺无任何载体且未执行(该 ADR 自 2026-05-29 未动)—— 历史同型失败复发 | 补钉轮 B1/B2 |
+| T2 | UNSET=SQL NULL 是两 ADR 均未裁的存储编码决策,经 doc-only "转录" commit 走私入 spec(Q-SAE-8 明示 tombstone 形态 non-scope) | 裁定 C1 |
+| T3 | spec:180 把 tx_seq 预裁为 meta event 的"稳定 tx reference",越过 Q-SAE-9 §2 留白 | 裁定 C2 |
+| B1 | SQLite 字节不可复现(6 跑 5 值,±0.77%,根因 uuid4 asrt_id 的索引页分裂),audit 以三位小数冻结单样本且无方差声明;tx-object 字节是唯一字节精确分量 | 补钉轮 D1 |
+| B2 | 硬编码 8-meta 断言(harness:61,353-358)与"同一可执行跑三组"自相矛盾 —— 第 3 组分级的设计目标恰是改变该剖面 | 补钉轮 D2 |
+
+**Minor ×7**:混合 scope commit(1373c1c5 bench+audit);spec:894 "仅 2 个原语"历史行漏 ⚠️ 标注;spec:171 索引注释超出 (key,value) 索引在事件史下的实际能力;harness 依赖私有 `_ledger_for_attach`(本 blueprint 自己要转正的名字);batch=1 摊销无基线(诚实披露的 n=1 点估计);"all supported filter shapes" 超述(find_meta 两条索引路径未测);求值工作集指标缺失(Q-SAE-9 §7.4 gate 需要)。另记:canonical 套件跑法(readline stub + ignore + deselect)只存在于归档 audit prose,无 pytest 配置载体,有漂移风险。
+
+**裁定:有条件不放行 Phase 1。** 关键时序约束:D 组基线补测(中位数重基线/batch=1/工作集指标)必须在动表**之前**完成 —— 翻转落地后补 7 表基线需回老 checkout,成本陡增。补钉轮(A/B/D + C 裁定落笔)完成并复验后放行 Phase 1。
 
 ## Deviations
 
