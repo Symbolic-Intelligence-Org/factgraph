@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import sqlite3
 import tempfile
 import unittest
@@ -247,6 +248,54 @@ class Slice3bAtomicFlipTests(unittest.TestCase):
                     ).fetchone()[0],
                     1,
                 )
+
+    def test_claim_meta_event_index_matches_physical_rows_before_and_after_reopen(self) -> None:
+        benchmark_path = (
+            Path(__file__).resolve().parents[1] / "benchmarks" / "slice3b_storage_baseline.py"
+        )
+        spec = importlib.util.spec_from_file_location("slice3b_storage_baseline", benchmark_path)
+        assert spec is not None and spec.loader is not None
+        benchmark = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(benchmark)
+
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            workspace = Path(raw_tmp) / "workspace"
+            db = Database.create(workspace, schema_ir=_schema_ir())
+            committed = db.commit_changes(
+                assertions=(_assertion("Alice"),),
+                revocations=(),
+            )
+            asrt_id = committed.assertions[0].asrt_id
+            db.commit_changes(
+                assertions=(),
+                revocations=(),
+                meta_appends=(MetaAppendInput(asrt_id, "review", "str", "approved"),),
+            )
+            ledger = db._ledger_for_attach()
+            live_events = tuple(ledger._claim_meta_events)
+            storage = benchmark._storage_snapshot(workspace)
+            self.assertEqual(set(storage["physical_meta_rows"]), {"claim_meta"})
+            self.assertEqual(
+                storage["physical_meta_rows"]["claim_meta"],
+                len(live_events),
+            )
+            workset = benchmark._workset_snapshot(ledger, claim_count=1)
+            self.assertEqual(
+                workset["resident_claim_meta_event_objects"],
+                len(live_events),
+            )
+            self.assertGreaterEqual(
+                workset["resident_meta_bearing_row_objects"],
+                workset["resident_claim_meta_event_objects"],
+            )
+            db.close()
+
+            reopened = Database.open(workspace, schema_ir=_schema_ir())
+            self.assertEqual(
+                tuple(reopened._ledger_for_attach()._claim_meta_events),
+                live_events,
+            )
+            reopened.close()
 
     def test_initial_meta_repeated_key_is_rejected_without_advancing_head(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:

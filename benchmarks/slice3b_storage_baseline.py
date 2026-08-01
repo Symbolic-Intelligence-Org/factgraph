@@ -326,11 +326,16 @@ def _storage_snapshot(workspace: Path) -> dict[str, Any]:
                 "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
             ).fetchall()
         ]
-        physical_meta_rows = {
-            table: int(conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
-            for table in ("meta_rows", "annotation_rows", "claim_meta")
-            if table in tables
-        }
+        physical_meta_rows = {}
+        for table in tables:
+            columns = {
+                str(row[1])
+                for row in conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+            }
+            if {"asrt_id", "key", "value"}.issubset(columns):
+                physical_meta_rows[table] = int(
+                    conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                )
     return {
         "durable_bytes": durable_bytes,
         "sqlite_bytes": sqlite_bytes,
@@ -345,8 +350,17 @@ def _storage_snapshot(workspace: Path) -> dict[str, Any]:
 def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
     projected_meta_rows = len(ledger.find_meta())
     projected_annotation_rows = len(ledger.find_annotations())
+    resident_claim_meta_events = len(ledger._claim_meta_events)
     resident_meta_rows = len(ledger._meta_rows_data)
     resident_annotation_rows = len(ledger._annotation_rows_data)
+    claim_meta_event_index_references = resident_claim_meta_events + sum(
+        len(rows)
+        for index in (
+            ledger._claim_meta_events_by_asrt_id,
+            ledger._claim_meta_events_by_asrt_id_key,
+        )
+        for rows in index.values()
+    )
     meta_index_references = resident_meta_rows + sum(
         len(rows)
         for index in (
@@ -367,6 +381,9 @@ def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
         + len(ledger._anno_by_identity)
     )
     eager_projection_meta_rows = resident_meta_rows + resident_annotation_rows
+    resident_meta_bearing_row_objects = (
+        resident_claim_meta_events + resident_meta_rows + resident_annotation_rows
+    )
     return {
         "projected_ledger_meta_rows": projected_meta_rows,
         "projected_ledger_meta_rows_per_claim": round(projected_meta_rows / claim_count, 6),
@@ -376,10 +393,15 @@ def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
         "eager_projection_meta_rows_per_claim": round(eager_projection_meta_rows / claim_count, 6),
         "resident_meta_row_objects": resident_meta_rows,
         "resident_annotation_row_objects": resident_annotation_rows,
+        "resident_claim_meta_event_objects": resident_claim_meta_events,
+        "resident_meta_bearing_row_objects": resident_meta_bearing_row_objects,
+        "resident_claim_meta_event_index_references": claim_meta_event_index_references,
         "resident_meta_index_references": meta_index_references,
         "resident_annotation_index_references": annotation_index_references,
         "resident_meta_index_references_total": (
-            meta_index_references + annotation_index_references
+            claim_meta_event_index_references
+            + meta_index_references
+            + annotation_index_references
         ),
     }
 

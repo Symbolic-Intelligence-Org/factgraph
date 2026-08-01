@@ -106,6 +106,16 @@ class LedgerRevocationWrite:
     annotation_rows: tuple[AnnotationRow, ...] = ()
 
 
+@dataclass(frozen=True)
+class _ClaimMetaEvent:
+    asrt_id: str
+    key: str
+    kind: str | None
+    value: Any
+    tx_seq: int
+    op_ordinal: int
+
+
 _DDL = """
 CREATE TABLE IF NOT EXISTS claims (
     seq        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -374,6 +384,22 @@ def _annotation_storage_key(row: AnnotationRow) -> str:
     ).encode("utf-8")
     token = base64.urlsafe_b64encode(identity).decode("ascii").rstrip("=")
     return _ANNOTATION_COMPAT_PREFIX + token
+
+
+def _annotation_compatibility_meta_rows(
+    rows: Sequence[AnnotationRow],
+    skip_meta_rows: Sequence[MetaRow],
+) -> list[MetaRow]:
+    meta_projection = {
+        (row.key, row.kind, _encode_meta_value(row.kind, row.value))
+        for row in skip_meta_rows
+    }
+    return [
+        MetaRow(row.asrt_id, _annotation_storage_key(row), row.kind, row.value)
+        for row in rows
+        if (row.key, row.kind, _encode_meta_value(row.kind, row.value))
+        not in meta_projection
+    ]
 
 
 def _annotation_from_storage_key(
@@ -651,13 +677,28 @@ class Ledger:
             )
 
             def _apply_batch_indexes() -> None:
-                for item in assertion_writes:
+                for op_ordinal, item in enumerate(assertion_writes):
                     self._claim_tx_refs[item.claim.asrt_id] = tx_seq
                     self._idx_add_claim(item.claim)
-                    self._idx_add_meta(list(item.meta_rows))
+                    self._idx_add_claim_meta_events(
+                        item.meta_rows,
+                        tx_seq=tx_seq,
+                        op_ordinal=op_ordinal,
+                        project_meta=True,
+                    )
                     if item.annotation_rows:
+                        self._idx_add_claim_meta_events(
+                            _annotation_compatibility_meta_rows(
+                                item.annotation_rows,
+                                item.meta_rows,
+                            ),
+                            tx_seq=tx_seq,
+                            op_ordinal=op_ordinal,
+                            project_meta=False,
+                        )
                         self._idx_add_annotation(list(item.annotation_rows))
-                for item in revocation_writes:
+                for relative_ordinal, item in enumerate(revocation_writes):
+                    op_ordinal = revocation_offset + relative_ordinal
                     target = self._claim_by_asrt_id.get(item.revokes.revoked_asrt_id)
                     if target is None:
                         target = next(
@@ -675,10 +716,30 @@ class Ledger:
                         tx_ref=tx_seq,
                     )
                     self._idx_add_revoke(item.revokes)
-                    self._idx_add_meta(list(item.meta_rows))
+                    self._idx_add_claim_meta_events(
+                        item.meta_rows,
+                        tx_seq=tx_seq,
+                        op_ordinal=op_ordinal,
+                        project_meta=True,
+                    )
                     if item.annotation_rows:
+                        self._idx_add_claim_meta_events(
+                            _annotation_compatibility_meta_rows(
+                                item.annotation_rows,
+                                item.meta_rows,
+                            ),
+                            tx_seq=tx_seq,
+                            op_ordinal=op_ordinal,
+                            project_meta=False,
+                        )
                         self._idx_add_annotation(list(item.annotation_rows))
-                self._idx_add_meta(list(appended_meta_rows))
+                for relative_ordinal, row in enumerate(appended_meta_rows):
+                    self._idx_add_claim_meta_events(
+                        (row,),
+                        tx_seq=tx_seq,
+                        op_ordinal=meta_offset + relative_ordinal,
+                        project_meta=True,
+                    )
 
             post_commit.append(_apply_batch_indexes)
 
@@ -841,8 +902,22 @@ class Ledger:
             def _apply_assertion_indexes() -> None:
                 self._claim_tx_refs[actual_claim.asrt_id] = tx_seq
                 self._idx_add_claim(actual_claim)
-                self._idx_add_meta(actual_meta_rows)
+                self._idx_add_claim_meta_events(
+                    actual_meta_rows,
+                    tx_seq=tx_seq,
+                    op_ordinal=0,
+                    project_meta=True,
+                )
                 if actual_annotation_rows:
+                    self._idx_add_claim_meta_events(
+                        _annotation_compatibility_meta_rows(
+                            actual_annotation_rows,
+                            actual_meta_rows,
+                        ),
+                        tx_seq=tx_seq,
+                        op_ordinal=0,
+                        project_meta=False,
+                    )
                     self._idx_add_annotation(actual_annotation_rows)
 
             post_commit.append(_apply_assertion_indexes)
@@ -911,7 +986,12 @@ class Ledger:
             def _apply_revocation_indexes() -> None:
                 self._idx_add_system_revocation_claim(revoke_claim, tx_ref=tx_seq)
                 self._idx_add_revoke(actual_revokes)
-                self._idx_add_meta(actual_meta_rows)
+                self._idx_add_claim_meta_events(
+                    actual_meta_rows,
+                    tx_seq=tx_seq,
+                    op_ordinal=0,
+                    project_meta=True,
+                )
 
             post_commit.append(_apply_revocation_indexes)
         return AppendResult(asrt_id=effective_revoker_id, written=True)
@@ -983,7 +1063,16 @@ class Ledger:
                     tx_seq=tx_seq,
                     op_ordinal=op_ordinal,
                 )
-            post_commit.append(lambda: self._idx_add_meta(actual_rows))
+            def _apply_meta_indexes() -> None:
+                for op_ordinal, row in enumerate(actual_rows):
+                    self._idx_add_claim_meta_events(
+                        (row,),
+                        tx_seq=tx_seq,
+                        op_ordinal=op_ordinal,
+                        project_meta=True,
+                    )
+
+            post_commit.append(_apply_meta_indexes)
 
     def append_annotations(self, rows: list[AnnotationRow]) -> None:
         _validate_annotation_rows(rows)
@@ -1013,7 +1102,17 @@ class Ledger:
                     op_ordinal=op_ordinal,
                     skip_meta_rows=(),
                 )
-            post_commit.append(lambda: self._idx_add_annotation(actual_rows))
+            def _apply_annotation_indexes() -> None:
+                for op_ordinal, row in enumerate(actual_rows):
+                    self._idx_add_claim_meta_events(
+                        _annotation_compatibility_meta_rows((row,), ()),
+                        tx_seq=tx_seq,
+                        op_ordinal=op_ordinal,
+                        project_meta=False,
+                    )
+                self._idx_add_annotation(actual_rows)
+
+            post_commit.append(_apply_annotation_indexes)
 
     def append_revokes(self, row: Revokes) -> None:
         """
@@ -1300,12 +1399,13 @@ class Ledger:
                 )
 
             def _apply_meta_replace() -> None:
-                self._clear_meta_indexes()
-                self._idx_add_meta(actual_rows)
+                self._load_from_db()
 
             post_commit.append(_apply_meta_replace)
 
     def _reset_indexes(self) -> None:
+        # Physical three-table indexes. Public legacy row families below are
+        # eager compatibility projections rebuilt from these sources at open.
         self._claims: list[Claim] = []
         self._claim_by_asrt_id: dict[str, Claim] = {}
         self._claims_by_pred_id: dict[str, list[Claim]] = {}
@@ -1313,6 +1413,12 @@ class Ledger:
         self._claims_by_pred_e_ref: dict[tuple[str, str], list[Claim]] = {}
         self._system_claim_by_asrt_id: dict[str, Claim] = {}
         self._claim_tx_refs: dict[str, int] = {}
+
+        self._claim_meta_events: list[_ClaimMetaEvent] = []
+        self._claim_meta_events_by_asrt_id: dict[str, list[_ClaimMetaEvent]] = {}
+        self._claim_meta_events_by_asrt_id_key: dict[
+            tuple[str, str], list[_ClaimMetaEvent]
+        ] = {}
 
         self._claim_args: list[ClaimArg] = []
         self._claim_args_by_asrt_id: dict[str, list[ClaimArg]] = {}
@@ -1337,6 +1443,9 @@ class Ledger:
         self._first_revoker_by_revoked_asrt_id: dict[str, str] = {}
 
     def _clear_meta_indexes(self) -> None:
+        self._claim_meta_events = []
+        self._claim_meta_events_by_asrt_id.clear()
+        self._claim_meta_events_by_asrt_id_key.clear()
         self._meta_rows_data = []
         self._meta_by_asrt_id.clear()
         self._meta_by_kind.clear()
@@ -1400,6 +1509,37 @@ class Ledger:
             )
             if row.key == "ingest_key" and row.kind == "str" and isinstance(row.value, str):
                 self._meta_ingest_key_asrt_ids.setdefault(row.value, []).append(row.asrt_id)
+
+    def _idx_add_claim_meta_events(
+        self,
+        rows: Sequence[MetaRow],
+        *,
+        tx_seq: int,
+        op_ordinal: int,
+        project_meta: bool,
+    ) -> None:
+        events = [
+            _ClaimMetaEvent(
+                asrt_id=row.asrt_id,
+                key=row.key,
+                kind=row.kind,
+                value=row.value,
+                tx_seq=tx_seq,
+                op_ordinal=op_ordinal,
+            )
+            for row in rows
+        ]
+        for event in events:
+            self._idx_add_claim_meta_event(event)
+        if project_meta:
+            self._idx_add_meta(list(rows))
+
+    def _idx_add_claim_meta_event(self, event: _ClaimMetaEvent) -> None:
+        self._claim_meta_events.append(event)
+        self._claim_meta_events_by_asrt_id.setdefault(event.asrt_id, []).append(event)
+        self._claim_meta_events_by_asrt_id_key.setdefault(
+            (event.asrt_id, event.key), []
+        ).append(event)
 
     def _idx_add_annotation(self, rows: list[AnnotationRow]) -> None:
         for row in rows:
@@ -1468,10 +1608,20 @@ class Ledger:
         ).fetchall():
             kind = row["kind"]
             value = _decode_meta_value(kind, row["value"])
-            if kind is None:
-                continue
             key = str(row["key"])
             asrt_id = str(row["asrt_id"])
+            self._idx_add_claim_meta_event(
+                _ClaimMetaEvent(
+                    asrt_id=asrt_id,
+                    key=key,
+                    kind=None if kind is None else str(kind),
+                    value=value,
+                    tx_seq=int(row["tx_seq"]),
+                    op_ordinal=int(row["op_ordinal"]),
+                )
+            )
+            if kind is None:
+                continue
             if key.startswith(_ANNOTATION_COMPAT_PREFIX):
                 self._idx_add_annotation(
                     [_annotation_from_storage_key(asrt_id, key, str(kind), value)]
@@ -1587,16 +1737,7 @@ class Ledger:
         op_ordinal: int,
         skip_meta_rows: Sequence[MetaRow],
     ) -> None:
-        meta_projection = {
-            (row.key, row.kind, _encode_meta_value(row.kind, row.value))
-            for row in skip_meta_rows
-        }
-        compatibility_rows = [
-            MetaRow(row.asrt_id, _annotation_storage_key(row), row.kind, row.value)
-            for row in rows
-            if (row.key, row.kind, _encode_meta_value(row.kind, row.value))
-            not in meta_projection
-        ]
+        compatibility_rows = _annotation_compatibility_meta_rows(rows, skip_meta_rows)
         if compatibility_rows:
             for row in compatibility_rows:
                 self._insert_meta_rows(
