@@ -397,7 +397,7 @@ INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Clai
 
 `claim_meta.value` 的普通事件值**全部 TEXT**,没有 per-row `value_tag` 标识;SQL `NULL` 保留为 `UNSET` tombstone,不进入下列 value 解码。格式约定如下:
 
-**编码经 2026-08-01 内联裁定采纳**:`UNSET` 使用 SQL `NULL`;普通 user meta 不能伪造该 tombstone 编码。
+**编码经 2026-08-01 内联裁定采纳(用户批准 2026-08-01)**:`UNSET` 使用 SQL `NULL`;普通 user meta 不能伪造该 tombstone 编码。
 
 | 类型 | 决定规则 |
 |---|---|

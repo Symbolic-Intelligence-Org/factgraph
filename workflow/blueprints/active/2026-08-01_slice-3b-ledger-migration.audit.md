@@ -28,6 +28,8 @@
 | 2026-08-01 | Phase 0 baseline 补测 | `5d9e7463`;harness v2 改为 N=5 中位数+抖动带、tx-object 唯一字节精确分量、projected/persisted/workset 分名;补 batch=1 与冷 attach 驻留指标 |
 | 2026-08-01 | Phase 0 补钉 canonical gate | `PYTHONPATH=src` + process-only readline shim + ignore pyreason binary failure + deselect static-ui known failure:`2773 passed / 32 skipped / 1 deselected / 1098 subtests`;相对进入补钉轮净增 1 test + 1 subtest |
 | 2026-08-01 | **Phase 0 补钉轮复验:全部闭合;Phase 1 有条件放行 —— 唯一前置 = 用户对 C1 的批准落笔** | 四验证器逐项复现(见下文 §Phase 0 补钉轮复验);残留仅 C1 署名(授权问题非代码缺陷)+ 三项转 Phase 1 gate/纪律 |
+| 2026-08-01 | **C1 用户批准;Phase 1 正式放行** | 用户批准 UNSET=SQL NULL 编码,署名补入 spec 裁定行与本表闭环行;Phase 0 全部关闭 |
+| 2026-08-01 | **内联裁定(协调方):`tx_ref` ≡ `tx_seq`(INTEGER)** | 兑现 C2 留待的 Phase 1 裁定:claims 与 claim_meta 事件行共用同一引用空间,满足 Q-SAE-9 §2 的 8 字节/行成本口径;canonical `tx_id` 经 tx_seq→tx object 链解析恢复(attach 期索引或按需走链),审计面无损。用户可否决 |
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
@@ -246,7 +248,7 @@ Batch=3 Ledger read API case timings(ms):
 | G2 | `6ef6579a`:`repair_add` / `repair_remove` / `repair` 三 tag canonical bytes + tx_id + head progression fixture |
 | A3 minor | B 链新增 observed kind 上界断言,与 A 链对称;repair 链也有同构上下界 |
 | T1 | `b6ff1a8a`:Q-SAE-8 §4 三行逐字补入 worklist;Q-SYS-B §4.4 加 Q-SAE-8 supersede 标注 |
-| T2 / C1 | `b6ff1a8a`:保留 UNSET=SQL NULL,明确记为 2026-08-01 内联裁定编码 |
+| T2 / C1 | `b6ff1a8a`:保留 UNSET=SQL NULL,明确记为 2026-08-01 内联裁定编码(**用户批准 2026-08-01**,署名同步补入 spec 裁定行)|
 | T3 / C2 | `b6ff1a8a`:`tx_seq` 仅定为 Q-SAE-8 提交序;与 Q-SAE-9 `tx_ref` 关系留 Phase 1 裁定 |
 | B1 / D1 | `5d9e7463`:SQLite/durable 改 N=5 中位数+抖动带;tx-object 是唯一 byte-exact 分量 |
 | B2 / D2 | `5d9e7463`:删除 8-row 硬断言;projected Ledger rows、persisted physical rows、eager workset 分名报告 |
