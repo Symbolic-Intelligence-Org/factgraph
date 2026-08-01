@@ -424,12 +424,12 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
             paths = resolve_database_workspace_paths(path)
             with sqlite3.connect(paths.assertions) as conn:
                 stored = conn.execute(
-                    "SELECT rest_terms FROM claims WHERE asrt_id = ?",
+                    "SELECT value FROM claims WHERE asrt_id = ?",
                     (asrt_id,),
                 ).fetchone()[0]
                 self.assertIn("Alice", stored)
                 conn.execute(
-                    "UPDATE claims SET rest_terms = ? WHERE asrt_id = ?",
+                    "UPDATE claims SET value = ? WHERE asrt_id = ?",
                     (stored.replace("Alice", "Mallory"), asrt_id),
                 )
                 self.assertEqual(

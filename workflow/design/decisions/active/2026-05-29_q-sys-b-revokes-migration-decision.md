@@ -499,11 +499,11 @@ def find_claim_args(
 
 ### 4.4 Q15.3 — `claim_meta` 替代范围:**完全替代 + 删 4 列**
 
-> **Superseded(2026-07-31)**:adopted [Q-SAE-8](2026-07-31_q-sae-8-claim-meta-history-decision.md) 显式 supersede 本节 Q15.3 的 `claim_meta` 3 列形态与 Q15.7 的 `PRIMARY KEY (asrt_id, key)` 锁定;终态改为事件化列 `(asrt_id, key, value, tx_seq, op_ordinal)` 与事件 PK `(asrt_id, key, tx_seq, op_ordinal)`。本节关于删除 `meta_rows` / `annotation_rows`、删除 surrogate `id` 及不保留 namespace/category/origin/derivation/kind/value_tag 的其余裁定继续有效。
+> **Superseded(2026-07-31;扩展于 2026-08-01 用户裁定)**:adopted [Q-SAE-8](2026-07-31_q-sae-8-claim-meta-history-decision.md) 显式 supersede 本节 Q15.3 的 `claim_meta` 3 列形态与 Q15.7 的 `PRIMARY KEY (asrt_id, key)` 锁定;2026-08-01 用户进一步裁定恢复 dbtx_v2 canonical bytes 已承诺的著述端 `kind`。终态改为六列 `(asrt_id, key, kind, value, tx_seq, op_ordinal)` 与事件 PK `(asrt_id, key, tx_seq, op_ordinal)`;UNSET 为 kind/value 双 NULL。本节关于删除 `meta_rows` / `annotation_rows`、删除 surrogate `id` 及不保留 namespace/category/origin/derivation/value_tag 的其余裁定继续有效;**“不保留 kind”已 supersede**。
 
 **锁定**:`meta_rows` + `annotation_rows` 两张表 **全删**;新 `claim_meta` 表 schema 严格按 ledger-spec §3.2:
 - 列:`asrt_id` / `key` / `value`(3 列)
-- **不含**:`id`(surrogate)/ `namespace` / `category` / `origin` / `derivation` / `kind` / `value_tag`(per Q15.3 + Q15.7 一并落)
+- **不含**:`id`(surrogate)/ `namespace` / `category` / `origin` / `derivation` / `value_tag`;`kind` 依 2026-08-01 裁定恢复
 - 复合 PK `(asrt_id, key)`(per Q15.7 同步落地)
 
 #### 4.4.1 决策选项 + 选择

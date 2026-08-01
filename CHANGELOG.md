@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- **Initial assertion and revocation metadata now requires unique keys per
+  operation.** Repeating one key inside a single assertion/revocation input is
+  rejected fail-closed; successive values for one key must be separate
+  `append_meta` operations so `(tx_seq, op_ordinal)` defines an unambiguous
+  event order.
 - **The v0.3 workspace lifecycle is write-through and single-writer.**
   `FactGraph.create(path=...)` and `FactGraph.load_workspace(...)` now own a
   transactional `Database` and hold its exclusive lock until `close()`.

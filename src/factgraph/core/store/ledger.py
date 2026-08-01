@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import sqlite3
+import struct
 import threading
 import uuid
 import warnings
@@ -10,6 +12,9 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Literal, Mapping, Sequence
+
+from factgraph.core.protocol.annotation_v1 import SHARED_ANNOTATION_KEYS
+from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
 
 META_KINDS = {"str", "int", "float", "bool", "time", "json"}
@@ -82,6 +87,10 @@ class LedgerHeadConflictError(Exception):
     """Raised when a commit's expected head no longer matches ledger_meta."""
 
 
+class LedgerFormatError(Exception):
+    """Raised when a persisted ledger uses an unsupported physical schema."""
+
+
 @dataclass(frozen=True)
 class LedgerAssertionWrite:
     claim: Claim
@@ -103,35 +112,10 @@ CREATE TABLE IF NOT EXISTS claims (
     asrt_id    TEXT NOT NULL UNIQUE,
     pred_id    TEXT NOT NULL,
     e_ref      TEXT NOT NULL,
-    rest_terms TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS claim_args (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    asrt_id  TEXT NOT NULL,
-    idx      INTEGER NOT NULL,
-    val_atom TEXT NOT NULL,
-    tag      TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS meta_rows (
-    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    asrt_id TEXT NOT NULL,
-    key     TEXT NOT NULL,
-    kind    TEXT NOT NULL,
-    value   TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS revokes (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    revoker_asrt_id  TEXT NOT NULL,
-    revoked_asrt_id  TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS ingest_keys (
-    ingest_key TEXT PRIMARY KEY,
-    asrt_id    TEXT NOT NULL,
-    kind       TEXT NOT NULL
+    value      TEXT,
+    value_tag  TEXT,
+    tx_ref     INTEGER NOT NULL,
+    CHECK ((value IS NULL) = (value_tag IS NULL))
 );
 
 CREATE TABLE IF NOT EXISTS ledger_meta (
@@ -143,39 +127,32 @@ CREATE INDEX IF NOT EXISTS idx_claims_asrt_id ON claims(asrt_id);
 CREATE INDEX IF NOT EXISTS idx_claims_pred_id ON claims(pred_id);
 CREATE INDEX IF NOT EXISTS idx_claims_e_ref ON claims(e_ref);
 CREATE INDEX IF NOT EXISTS idx_claims_pred_eref ON claims(pred_id, e_ref);
+CREATE INDEX IF NOT EXISTS idx_claims_pred_value ON claims(pred_id, value);
+CREATE INDEX IF NOT EXISTS idx_claims_revokes ON claims(value)
+    WHERE pred_id = '__system__.revokes';
 
-CREATE INDEX IF NOT EXISTS idx_args_asrt ON claim_args(asrt_id);
-CREATE INDEX IF NOT EXISTS idx_args_tag ON claim_args(tag);
-CREATE INDEX IF NOT EXISTS idx_args_idx ON claim_args(idx);
-
-CREATE INDEX IF NOT EXISTS idx_meta_asrt ON meta_rows(asrt_id);
-CREATE INDEX IF NOT EXISTS idx_meta_key ON meta_rows(key);
-CREATE INDEX IF NOT EXISTS idx_meta_kind ON meta_rows(kind);
-CREATE INDEX IF NOT EXISTS idx_meta_asrt_key ON meta_rows(asrt_id, key);
-CREATE INDEX IF NOT EXISTS idx_meta_asrt_key_kind ON meta_rows(asrt_id, key, kind);
-
-CREATE INDEX IF NOT EXISTS idx_revokes_revoked ON revokes(revoked_asrt_id);
-CREATE INDEX IF NOT EXISTS idx_revokes_revoker ON revokes(revoker_asrt_id);
-
-CREATE TABLE IF NOT EXISTS annotation_rows (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    asrt_id    TEXT NOT NULL,
-    namespace  TEXT NOT NULL,
-    category   TEXT NOT NULL,
-    key        TEXT NOT NULL,
-    kind       TEXT NOT NULL,
-    value      TEXT NOT NULL,
-    origin     TEXT NOT NULL,
-    derivation TEXT,
-    UNIQUE(asrt_id, namespace, category, key)
+CREATE TABLE IF NOT EXISTS claim_meta (
+    asrt_id     TEXT NOT NULL,
+    key         TEXT NOT NULL,
+    kind        TEXT,
+    value       TEXT,
+    tx_seq      INTEGER NOT NULL,
+    op_ordinal  INTEGER NOT NULL,
+    PRIMARY KEY (asrt_id, key, tx_seq, op_ordinal),
+    CHECK ((kind IS NULL) = (value IS NULL))
 );
 
-CREATE INDEX IF NOT EXISTS idx_anno_asrt ON annotation_rows(asrt_id);
-CREATE INDEX IF NOT EXISTS idx_anno_ns_cat ON annotation_rows(namespace, category);
-CREATE INDEX IF NOT EXISTS idx_anno_key ON annotation_rows(key);
-CREATE INDEX IF NOT EXISTS idx_anno_asrt_ns_cat_key
-    ON annotation_rows(asrt_id, namespace, category, key);
+CREATE INDEX IF NOT EXISTS idx_claim_meta_key_value ON claim_meta(key, value);
+CREATE INDEX IF NOT EXISTS idx_claim_meta_asrt ON claim_meta(asrt_id);
+CREATE INDEX IF NOT EXISTS idx_claim_meta_kind ON claim_meta(kind);
 """
+
+_LEGACY_TABLES = frozenset(
+    {"claim_args", "meta_rows", "revokes", "ingest_keys", "annotation_rows"}
+)
+_SYSTEM_PREFIX = "__system__."
+_REVOCATION_PREDICATE = "__system__.revokes"
+_ANNOTATION_COMPAT_PREFIX = "__factgraph_annotation_v1__:"
 
 
 class _MetaRowsProxy(list[MetaRow]):
@@ -261,6 +238,145 @@ def _enc_rest_terms(rest_terms: list[tuple[str, Any]]) -> str:
 
 def _dec_rest_terms(raw: str) -> list[tuple[str, Any]]:
     return [(str(tag), _from_jsonable(value)) for tag, value in json.loads(raw)]
+
+
+def _encode_claim_value(rest_terms: list[tuple[str, Any]]) -> tuple[str | None, str | None]:
+    if not rest_terms:
+        return None, None
+    if len(rest_terms) != 1:
+        raise ValueError("claims must contain zero or one value term")
+    _idx, value, tag = claim_args_from_rest_terms(rest_terms)[0]
+    if tag in {"entity_ref", "string", "uuid", "bytes"}:
+        return str(value), tag
+    if tag in {"int", "time"}:
+        return str(value), tag
+    if tag == "bool":
+        return "true" if value else "false", tag
+    if tag == "float64":
+        bits = int(str(value)[2:], 16)
+        number = struct.unpack(">d", bits.to_bytes(8, "big"))[0]
+        return repr(0.0 if number == 0.0 else number), tag
+    raise ValueError(f"unsupported claim value tag: {tag}")
+
+
+def _decode_claim_value(value: str | None, tag: str | None) -> list[tuple[str, Any]]:
+    if value is None and tag is None:
+        return []
+    if value is None or tag is None:
+        raise LedgerFormatError("claims value/value_tag nullability mismatch")
+    if tag in {"entity_ref", "string", "uuid"}:
+        decoded: Any = value
+    elif tag in {"int", "time"}:
+        decoded = int(value)
+    elif tag == "bool":
+        if value not in {"true", "false"}:
+            raise LedgerFormatError("invalid canonical bool in claims.value")
+        decoded = value == "true"
+    elif tag == "float64":
+        decoded = float(value)
+        if not math.isfinite(decoded):
+            raise LedgerFormatError("invalid canonical float64 in claims.value")
+        if decoded == 0.0:
+            decoded = 0.0
+    elif tag == "bytes":
+        padding = "=" * (-len(value) % 4)
+        decoded = base64.urlsafe_b64decode((value + padding).encode("ascii"))
+    else:
+        raise LedgerFormatError(f"unsupported claims.value_tag: {tag!r}")
+    # Re-run protocol normalization so corrupt/non-canonical SQL text fails closed.
+    claim_args_from_rest_terms([(tag, decoded)])
+    return [(tag, decoded)]
+
+
+def _encode_meta_value(kind: str, value: Any) -> str:
+    if kind == "str":
+        if not isinstance(value, str):
+            raise ValueError("meta str value must be str")
+        return value
+    if kind in {"int", "time"}:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"meta {kind} value must be int")
+        return str(value)
+    if kind == "float":
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError("meta float value must be numeric")
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("meta float value must be finite")
+        return repr(0.0 if number == 0.0 else number)
+    if kind == "bool":
+        if not isinstance(value, bool):
+            raise ValueError("meta bool value must be bool")
+        return "true" if value else "false"
+    if kind == "json":
+        return json.dumps(
+            _to_jsonable(value),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+    raise ValueError(f"unsupported meta kind: {kind}")
+
+
+def _decode_meta_value(kind: str | None, value: str | None) -> Any:
+    if kind is None and value is None:
+        return None
+    if kind is None or value is None:
+        raise LedgerFormatError("claim_meta kind/value nullability mismatch")
+    if kind == "str":
+        return value
+    if kind in {"int", "time"}:
+        return int(value)
+    if kind == "float":
+        decoded = float(value)
+        if not math.isfinite(decoded):
+            raise LedgerFormatError("invalid canonical float claim_meta value")
+        return 0.0 if decoded == 0.0 else decoded
+    if kind == "bool":
+        if value not in {"true", "false"}:
+            raise LedgerFormatError("invalid canonical bool claim_meta value")
+        return value == "true"
+    if kind == "json":
+        return _from_jsonable(json.loads(value))
+    raise LedgerFormatError(f"unsupported claim_meta kind: {kind!r}")
+
+
+def _annotation_storage_key(row: AnnotationRow) -> str:
+    identity = json.dumps(
+        {
+            "category": row.category,
+            "derivation": row.derivation,
+            "key": row.key,
+            "namespace": row.namespace,
+            "origin": row.origin,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    token = base64.urlsafe_b64encode(identity).decode("ascii").rstrip("=")
+    return _ANNOTATION_COMPAT_PREFIX + token
+
+
+def _annotation_from_storage_key(
+    asrt_id: str,
+    storage_key: str,
+    kind: str,
+    value: Any,
+) -> AnnotationRow:
+    token = storage_key.removeprefix(_ANNOTATION_COMPAT_PREFIX)
+    padding = "=" * (-len(token) % 4)
+    payload = json.loads(base64.urlsafe_b64decode((token + padding).encode("ascii")))
+    return AnnotationRow(
+        asrt_id=asrt_id,
+        namespace=payload["namespace"],
+        category=payload["category"],
+        key=payload["key"],
+        kind=kind,
+        value=value,
+        origin=payload["origin"],
+        derivation=payload["derivation"],
+    )
 
 
 class Ledger:
@@ -365,6 +481,10 @@ class Ledger:
         revocation_writes = tuple(revocations)
         appended_meta_rows = tuple(meta_appends)
         _validate_meta_rows(list(appended_meta_rows))
+        raw_tx_seq = normalized_metadata.get("head_tx_seq")
+        if raw_tx_seq is None or not raw_tx_seq.isdecimal():
+            raise ValueError("metadata head_tx_seq must be a canonical non-negative integer")
+        tx_seq = int(raw_tx_seq)
         new_claim_ids: set[str] = set()
         new_revoker_ids: set[str] = set()
         for item in assertion_writes:
@@ -373,6 +493,7 @@ class Ledger:
             _validate_claim_input(item.claim, require_asrt_id=True)
             _validate_claim_args_rows(list(item.claim_args))
             _validate_meta_rows(list(item.meta_rows))
+            _reject_duplicate_meta_keys(item.meta_rows, context="assertion initial meta")
             _validate_annotation_rows(list(item.annotation_rows))
             asrt_id = item.claim.asrt_id
             if asrt_id in new_claim_ids:
@@ -390,6 +511,7 @@ class Ledger:
                 raise TypeError("revocations must contain LedgerRevocationWrite")
             _validate_revokes_row(item.revokes)
             _validate_meta_rows(list(item.meta_rows))
+            _reject_duplicate_meta_keys(item.meta_rows, context="revocation initial meta")
             _validate_annotation_rows(list(item.annotation_rows))
             revoker_id = item.revokes.revoker_asrt_id
             if revoker_id in new_revoker_ids or revoker_id in new_claim_ids:
@@ -424,28 +546,83 @@ class Ledger:
             if cursor.rowcount != 1:
                 raise LedgerHeadConflictError(f"head CAS failed: expected {expected_head_tx_id!r}")
 
-            for item in assertion_writes:
-                self._insert_claim(conn, item.claim, item.claim.asrt_id)
-                self._insert_claim_args(conn, list(item.claim_args), item.claim.asrt_id)
-                self._insert_meta_rows(conn, list(item.meta_rows), item.claim.asrt_id)
+            for op_ordinal, item in enumerate(assertion_writes):
+                self._insert_claim(
+                    conn,
+                    item.claim,
+                    item.claim.asrt_id,
+                    tx_ref=tx_seq,
+                )
+                self._insert_meta_rows(
+                    conn,
+                    list(item.meta_rows),
+                    item.claim.asrt_id,
+                    tx_seq=tx_seq,
+                    op_ordinal=op_ordinal,
+                )
                 if item.annotation_rows:
-                    self._insert_annotation_rows(conn, list(item.annotation_rows))
+                    self._insert_annotation_rows(
+                        conn,
+                        list(item.annotation_rows),
+                        tx_seq=tx_seq,
+                        op_ordinal=op_ordinal,
+                        skip_meta_rows=item.meta_rows,
+                    )
 
-            for item in revocation_writes:
-                conn.execute(
-                    "INSERT INTO revokes (revoker_asrt_id, revoked_asrt_id) VALUES (?, ?)",
-                    (item.revokes.revoker_asrt_id, item.revokes.revoked_asrt_id),
+            revocation_offset = len(assertion_writes)
+            for relative_ordinal, item in enumerate(revocation_writes):
+                op_ordinal = revocation_offset + relative_ordinal
+                target = self._claim_by_asrt_id.get(item.revokes.revoked_asrt_id)
+                if target is None:
+                    target = next(
+                        (
+                            candidate.claim
+                            for candidate in assertion_writes
+                            if candidate.claim.asrt_id == item.revokes.revoked_asrt_id
+                        ),
+                        None,
+                    )
+                if target is None:
+                    raise ValueError(
+                        f"revocation target does not exist: {item.revokes.revoked_asrt_id}"
+                    )
+                revoke_claim = Claim(
+                    asrt_id=item.revokes.revoker_asrt_id,
+                    pred_id=_REVOCATION_PREDICATE,
+                    e_ref=target.e_ref,
+                    rest_terms=[("string", item.revokes.revoked_asrt_id)],
+                )
+                self._insert_claim(
+                    conn,
+                    revoke_claim,
+                    item.revokes.revoker_asrt_id,
+                    tx_ref=tx_seq,
                 )
                 self._insert_meta_rows(
                     conn,
                     list(item.meta_rows),
                     item.revokes.revoker_asrt_id,
+                    tx_seq=tx_seq,
+                    op_ordinal=op_ordinal,
                 )
                 if item.annotation_rows:
-                    self._insert_annotation_rows(conn, list(item.annotation_rows))
+                    self._insert_annotation_rows(
+                        conn,
+                        list(item.annotation_rows),
+                        tx_seq=tx_seq,
+                        op_ordinal=op_ordinal,
+                        skip_meta_rows=item.meta_rows,
+                    )
 
-            for row in appended_meta_rows:
-                self._insert_meta_rows(conn, [row], row.asrt_id)
+            meta_offset = revocation_offset + len(revocation_writes)
+            for relative_ordinal, row in enumerate(appended_meta_rows):
+                self._insert_meta_rows(
+                    conn,
+                    [row],
+                    row.asrt_id,
+                    tx_seq=tx_seq,
+                    op_ordinal=meta_offset + relative_ordinal,
+                )
 
             conn.executemany(
                 """
@@ -457,12 +634,28 @@ class Ledger:
 
             def _apply_batch_indexes() -> None:
                 for item in assertion_writes:
+                    self._claim_tx_refs[item.claim.asrt_id] = tx_seq
                     self._idx_add_claim(item.claim)
-                    self._idx_add_claim_args(list(item.claim_args))
                     self._idx_add_meta(list(item.meta_rows))
                     if item.annotation_rows:
                         self._idx_add_annotation(list(item.annotation_rows))
                 for item in revocation_writes:
+                    target = self._claim_by_asrt_id.get(item.revokes.revoked_asrt_id)
+                    if target is None:
+                        target = next(
+                            candidate.claim
+                            for candidate in assertion_writes
+                            if candidate.claim.asrt_id == item.revokes.revoked_asrt_id
+                        )
+                    self._idx_add_system_revocation_claim(
+                        Claim(
+                            item.revokes.revoker_asrt_id,
+                            _REVOCATION_PREDICATE,
+                            target.e_ref,
+                            [("string", item.revokes.revoked_asrt_id)],
+                        ),
+                        tx_ref=tx_seq,
+                    )
                     self._idx_add_revoke(item.revokes)
                     self._idx_add_meta(list(item.meta_rows))
                     if item.annotation_rows:
@@ -516,7 +709,25 @@ class Ledger:
         return conn
 
     def _init_schema(self, conn: sqlite3.Connection) -> None:
+        existing_tables = {
+            str(row["name"])
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        legacy_tables = sorted(existing_tables & _LEGACY_TABLES)
+        if legacy_tables:
+            raise LedgerFormatError(
+                "unsupported seven-table v0.3 ledger format "
+                f"({', '.join(legacy_tables)} present); rebuild this development workspace "
+                "or re-run `python -m factgraph migrate-workspace <v0.2-workspace>` "
+                "from the original v0.2 source"
+            )
         conn.executescript(_DDL)
+        conn.execute(
+            "INSERT OR IGNORE INTO ledger_meta (key, value) VALUES "
+            "('ledger_format_version', 'slice3b-v1')"
+        )
 
     def _ensure_open(self) -> None:
         if self._closed:
@@ -535,6 +746,7 @@ class Ledger:
         _validate_claim_input(claim, require_asrt_id=False)
         _validate_claim_args_rows(claim_args)
         _validate_meta_rows_for_append_assertion(meta_rows)
+        _reject_duplicate_meta_keys(meta_rows, context="assertion initial meta")
         effective_asrt_id = asrt_id or (
             claim.asrt_id if isinstance(claim.asrt_id, str) and claim.asrt_id else _new_asrt_id()
         )
@@ -590,25 +802,30 @@ class Ledger:
             _validate_annotation_rows(actual_annotation_rows)
 
         with self._write_session() as (conn, post_commit):
-            self._insert_claim(conn, actual_claim, effective_asrt_id)
-            self._insert_claim_args(conn, actual_claim_args, effective_asrt_id)
-            self._insert_meta_rows(conn, actual_meta_rows, effective_asrt_id)
+            tx_seq = self._next_direct_tx_seq(conn)
+            self._insert_claim(conn, actual_claim, effective_asrt_id, tx_ref=tx_seq)
+            self._insert_meta_rows(
+                conn,
+                actual_meta_rows,
+                effective_asrt_id,
+                tx_seq=tx_seq,
+                op_ordinal=0,
+            )
             if actual_annotation_rows:
-                self._insert_annotation_rows(conn, actual_annotation_rows)
-            if idempotency is not None:
-                conn.execute(
-                    "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, 'assertion')",
-                    (idempotency.ingest_key, effective_asrt_id),
+                self._insert_annotation_rows(
+                    conn,
+                    actual_annotation_rows,
+                    tx_seq=tx_seq,
+                    op_ordinal=0,
+                    skip_meta_rows=actual_meta_rows,
                 )
 
             def _apply_assertion_indexes() -> None:
+                self._claim_tx_refs[actual_claim.asrt_id] = tx_seq
                 self._idx_add_claim(actual_claim)
-                self._idx_add_claim_args(actual_claim_args)
                 self._idx_add_meta(actual_meta_rows)
                 if actual_annotation_rows:
                     self._idx_add_annotation(actual_annotation_rows)
-                if idempotency is not None:
-                    self._ingest_keys[idempotency.ingest_key] = (effective_asrt_id, "assertion")
 
             post_commit.append(_apply_assertion_indexes)
         return AppendResult(asrt_id=effective_asrt_id, written=True)
@@ -623,6 +840,7 @@ class Ledger:
     ) -> AppendResult:
         _validate_revokes_row(revokes)
         _validate_meta_rows(meta_rows)
+        _reject_duplicate_meta_keys(meta_rows, context="revocation initial meta")
         effective_revoker_id = revoker_asrt_id or (
             revokes.revoker_asrt_id
             if isinstance(revokes.revoker_asrt_id, str) and revokes.revoker_asrt_id
@@ -653,22 +871,29 @@ class Ledger:
         ]
 
         with self._write_session() as (conn, post_commit):
-            conn.execute(
-                "INSERT INTO revokes (revoker_asrt_id, revoked_asrt_id) VALUES (?, ?)",
-                (effective_revoker_id, revokes.revoked_asrt_id),
+            target = self._claim_by_asrt_id.get(revokes.revoked_asrt_id)
+            if target is None:
+                raise ValueError(f"revocation target does not exist: {revokes.revoked_asrt_id}")
+            tx_seq = self._next_direct_tx_seq(conn)
+            revoke_claim = Claim(
+                effective_revoker_id,
+                _REVOCATION_PREDICATE,
+                target.e_ref,
+                [("string", revokes.revoked_asrt_id)],
             )
-            self._insert_meta_rows(conn, actual_meta_rows, effective_revoker_id)
-            if idempotency is not None:
-                conn.execute(
-                    "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, 'revocation')",
-                    (idempotency.ingest_key, effective_revoker_id),
-                )
+            self._insert_claim(conn, revoke_claim, effective_revoker_id, tx_ref=tx_seq)
+            self._insert_meta_rows(
+                conn,
+                actual_meta_rows,
+                effective_revoker_id,
+                tx_seq=tx_seq,
+                op_ordinal=0,
+            )
 
             def _apply_revocation_indexes() -> None:
+                self._idx_add_system_revocation_claim(revoke_claim, tx_ref=tx_seq)
                 self._idx_add_revoke(actual_revokes)
                 self._idx_add_meta(actual_meta_rows)
-                if idempotency is not None:
-                    self._ingest_keys[idempotency.ingest_key] = (effective_revoker_id, "revocation")
 
             post_commit.append(_apply_revocation_indexes)
         return AppendResult(asrt_id=effective_revoker_id, written=True)
@@ -689,8 +914,13 @@ class Ledger:
             rest_terms=normalized_terms,
         )
         with self._write_session() as (conn, post_commit):
-            self._insert_claim(conn, actual_claim, claim.asrt_id)
-            post_commit.append(lambda: self._idx_add_claim(actual_claim))
+            tx_seq = self._next_direct_tx_seq(conn)
+            self._insert_claim(conn, actual_claim, claim.asrt_id, tx_ref=tx_seq)
+            def _apply_claim_index() -> None:
+                self._claim_tx_refs[actual_claim.asrt_id] = tx_seq
+                self._idx_add_claim(actual_claim)
+
+            post_commit.append(_apply_claim_index)
 
     def append_claim_args(self, rows: list[ClaimArg]) -> None:
         """
@@ -703,16 +933,11 @@ class Ledger:
         for row in rows:
             if not self._is_known_asrt_id(row.asrt_id):
                 raise ValueError(f"unknown asrt_id for claim_arg: {row.asrt_id}")
-        actual_rows = [
-            ClaimArg(asrt_id=row.asrt_id, idx=row.idx, val_atom=row.val_atom, tag=row.tag)
-            for row in rows
-        ]
-        with self._write_session() as (conn, post_commit):
-            conn.executemany(
-                "INSERT INTO claim_args (asrt_id, idx, val_atom, tag) VALUES (?, ?, ?, ?)",
-                [(row.asrt_id, row.idx, _enc(row.val_atom), row.tag) for row in actual_rows],
-            )
-            post_commit.append(lambda: self._idx_add_claim_args(actual_rows))
+        for row in rows:
+            claim = self._claim_by_asrt_id.get(row.asrt_id)
+            expected = claim_args_from_rest_terms(claim.rest_terms if claim is not None else [])
+            if (row.idx, row.val_atom, row.tag) not in expected:
+                raise ValueError("claim_args must match the value already stored on claims")
 
     def append_meta(self, rows: list[MetaRow]) -> None:
         """
@@ -731,10 +956,15 @@ class Ledger:
             for row in rows
         ]
         with self._write_session() as (conn, post_commit):
-            conn.executemany(
-                "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
-                [(row.asrt_id, row.key, row.kind, _enc(row.value)) for row in actual_rows],
-            )
+            tx_seq = self._next_direct_tx_seq(conn)
+            for op_ordinal, row in enumerate(actual_rows):
+                self._insert_meta_rows(
+                    conn,
+                    [row],
+                    row.asrt_id,
+                    tx_seq=tx_seq,
+                    op_ordinal=op_ordinal,
+                )
             post_commit.append(lambda: self._idx_add_meta(actual_rows))
 
     def append_annotations(self, rows: list[AnnotationRow]) -> None:
@@ -756,7 +986,15 @@ class Ledger:
             for row in rows
         ]
         with self._write_session() as (conn, post_commit):
-            self._insert_annotation_rows(conn, actual_rows)
+            tx_seq = self._next_direct_tx_seq(conn)
+            for op_ordinal, row in enumerate(actual_rows):
+                self._insert_annotation_rows(
+                    conn,
+                    [row],
+                    tx_seq=tx_seq,
+                    op_ordinal=op_ordinal,
+                    skip_meta_rows=(),
+                )
             post_commit.append(lambda: self._idx_add_annotation(actual_rows))
 
     def append_revokes(self, row: Revokes) -> None:
@@ -773,11 +1011,23 @@ class Ledger:
             revoked_asrt_id=row.revoked_asrt_id,
         )
         with self._write_session() as (conn, post_commit):
-            conn.execute(
-                "INSERT INTO revokes (revoker_asrt_id, revoked_asrt_id) VALUES (?, ?)",
-                (row.revoker_asrt_id, row.revoked_asrt_id),
+            target = self._claim_by_asrt_id.get(row.revoked_asrt_id)
+            if target is None:
+                raise ValueError(f"revocation target does not exist: {row.revoked_asrt_id}")
+            tx_seq = self._next_direct_tx_seq(conn)
+            revoke_claim = Claim(
+                row.revoker_asrt_id,
+                _REVOCATION_PREDICATE,
+                target.e_ref,
+                [("string", row.revoked_asrt_id)],
             )
-            post_commit.append(lambda: self._idx_add_revoke(actual_row))
+            self._insert_claim(conn, revoke_claim, row.revoker_asrt_id, tx_ref=tx_seq)
+            post_commit.append(
+                lambda: (
+                    self._idx_add_system_revocation_claim(revoke_claim, tx_ref=tx_seq),
+                    self._idx_add_revoke(actual_row),
+                )
+            )
 
     def get_claim(self, asrt_id: str) -> Claim | None:
         with self._write_lock:
@@ -1009,11 +1259,18 @@ class Ledger:
             for row in rows
         ]
         with self._write_session() as (conn, post_commit):
-            conn.execute("DELETE FROM meta_rows")
-            if actual_rows:
-                conn.executemany(
-                    "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
-                    [(row.asrt_id, row.key, row.kind, _enc(row.value)) for row in actual_rows],
+            tx_seq = self._next_direct_tx_seq(conn)
+            conn.execute(
+                "DELETE FROM claim_meta WHERE key NOT LIKE ?",
+                (_ANNOTATION_COMPAT_PREFIX + "%",),
+            )
+            for op_ordinal, row in enumerate(actual_rows):
+                self._insert_meta_rows(
+                    conn,
+                    [row],
+                    row.asrt_id,
+                    tx_seq=tx_seq,
+                    op_ordinal=op_ordinal,
                 )
 
             def _apply_meta_replace() -> None:
@@ -1028,6 +1285,8 @@ class Ledger:
         self._claims_by_pred_id: dict[str, list[Claim]] = {}
         self._claims_by_e_ref: dict[str, list[Claim]] = {}
         self._claims_by_pred_e_ref: dict[tuple[str, str], list[Claim]] = {}
+        self._system_claim_by_asrt_id: dict[str, Claim] = {}
+        self._claim_tx_refs: dict[str, int] = {}
 
         self._claim_args: list[ClaimArg] = []
         self._claim_args_by_asrt_id: dict[str, list[ClaimArg]] = {}
@@ -1051,8 +1310,6 @@ class Ledger:
         self._revoked_asrt_ids: set[str] = set()
         self._first_revoker_by_revoked_asrt_id: dict[str, str] = {}
 
-        self._ingest_keys: dict[str, tuple[str, str]] = {}
-
     def _clear_meta_indexes(self) -> None:
         self._meta_rows_data = []
         self._meta_by_asrt_id.clear()
@@ -1069,12 +1326,36 @@ class Ledger:
         self._anno_by_key.clear()
         self._anno_by_identity.clear()
 
-    def _idx_add_claim(self, claim: Claim) -> None:
+    def _idx_add_claim(self, claim: Claim, *, tx_ref: int | None = None) -> None:
+        if claim.pred_id.startswith(_SYSTEM_PREFIX):
+            self._idx_add_system_revocation_claim(claim, tx_ref=tx_ref)
+            return
         self._claims.append(claim)
         self._claim_by_asrt_id[claim.asrt_id] = claim
+        if tx_ref is not None:
+            self._claim_tx_refs[claim.asrt_id] = tx_ref
         self._claims_by_pred_id.setdefault(claim.pred_id, []).append(claim)
         self._claims_by_e_ref.setdefault(claim.e_ref, []).append(claim)
         self._claims_by_pred_e_ref.setdefault((claim.pred_id, claim.e_ref), []).append(claim)
+        rows = [
+            ClaimArg(claim.asrt_id, idx, value, tag)
+            for idx, value, tag in claim_args_from_rest_terms(claim.rest_terms)
+        ]
+        self._idx_add_claim_args(rows)
+
+    def _idx_add_system_revocation_claim(
+        self,
+        claim: Claim,
+        *,
+        tx_ref: int | None = None,
+    ) -> None:
+        if claim.pred_id != _REVOCATION_PREDICATE:
+            raise LedgerFormatError(f"unsupported system claim predicate: {claim.pred_id}")
+        if len(claim.rest_terms) != 1 or claim.rest_terms[0][0] != "string":
+            raise LedgerFormatError("__system__.revokes claim has invalid value shape")
+        self._system_claim_by_asrt_id[claim.asrt_id] = claim
+        if tx_ref is not None:
+            self._claim_tx_refs[claim.asrt_id] = tx_ref
 
     def _idx_add_claim_args(self, rows: list[ClaimArg]) -> None:
         for row in rows:
@@ -1143,143 +1424,158 @@ class Ledger:
         self._reset_indexes()
 
         for row in conn.execute(
-            "SELECT asrt_id, pred_id, e_ref, rest_terms FROM claims ORDER BY seq"
+            "SELECT asrt_id, pred_id, e_ref, value, value_tag, tx_ref "
+            "FROM claims ORDER BY seq"
         ).fetchall():
-            self._idx_add_claim(_row_to_claim(row))
+            claim = _row_to_claim(row)
+            tx_ref = int(row["tx_ref"])
+            if claim.pred_id.startswith(_SYSTEM_PREFIX):
+                self._idx_add_system_revocation_claim(claim, tx_ref=tx_ref)
+                self._idx_add_revoke(Revokes(claim.asrt_id, str(claim.rest_terms[0][1])))
+            else:
+                self._claim_tx_refs[claim.asrt_id] = tx_ref
+                self._idx_add_claim(claim)
 
         for row in conn.execute(
-            "SELECT asrt_id, idx, val_atom, tag FROM claim_args ORDER BY id"
+            "SELECT rowid, asrt_id, key, kind, value, tx_seq, op_ordinal "
+            "FROM claim_meta ORDER BY tx_seq, op_ordinal, rowid"
         ).fetchall():
-            self._idx_add_claim_args(
-                [ClaimArg(row["asrt_id"], row["idx"], _dec(row["val_atom"]), row["tag"])]
-            )
-
-        for row in conn.execute(
-            "SELECT asrt_id, key, kind, value FROM meta_rows ORDER BY id"
-        ).fetchall():
-            self._idx_add_meta(
-                [MetaRow(row["asrt_id"], row["key"], row["kind"], _dec(row["value"]))]
-            )
-
-        for row in conn.execute(
-            "SELECT asrt_id, namespace, category, key, kind, value, origin, derivation"
-            " FROM annotation_rows ORDER BY id"
-        ).fetchall():
-            self._idx_add_annotation(
-                [
-                    AnnotationRow(
-                        row["asrt_id"],
-                        row["namespace"],
-                        row["category"],
-                        row["key"],
-                        row["kind"],
-                        _dec(row["value"]),
-                        row["origin"],
-                        row["derivation"],
-                    )
-                ]
-            )
-
-        for row in conn.execute(
-            "SELECT revoker_asrt_id, revoked_asrt_id FROM revokes ORDER BY id"
-        ).fetchall():
-            self._idx_add_revoke(Revokes(row["revoker_asrt_id"], row["revoked_asrt_id"]))
-
-        for row in conn.execute(
-            "SELECT ingest_key, asrt_id, kind FROM ingest_keys ORDER BY ingest_key"
-        ).fetchall():
-            self._ingest_keys[str(row["ingest_key"])] = (str(row["asrt_id"]), str(row["kind"]))
+            kind = row["kind"]
+            value = _decode_meta_value(kind, row["value"])
+            if kind is None:
+                continue
+            key = str(row["key"])
+            asrt_id = str(row["asrt_id"])
+            if key.startswith(_ANNOTATION_COMPAT_PREFIX):
+                self._idx_add_annotation(
+                    [_annotation_from_storage_key(asrt_id, key, str(kind), value)]
+                )
+                continue
+            meta = MetaRow(asrt_id, key, str(kind), value)
+            self._idx_add_meta([meta])
+            shared = SHARED_ANNOTATION_KEYS.get(key)
+            if shared is not None and int(row["tx_seq"]) == self._claim_tx_refs.get(asrt_id):
+                category, origin = shared
+                self._idx_add_annotation(
+                    [
+                        AnnotationRow(
+                            asrt_id,
+                            "shared",
+                            category,
+                            key,
+                            str(kind),
+                            value,
+                            origin,
+                        )
+                    ]
+                )
 
     def _load_from_db(self) -> None:
         self._load_from_db_via(self._get_connection())
 
     def _is_known_asrt_id(self, asrt_id: str) -> bool:
         with self._write_lock:
-            return asrt_id in self._claim_by_asrt_id or asrt_id in self._revoker_asrt_ids
+            return asrt_id in self._claim_by_asrt_id or asrt_id in self._system_claim_by_asrt_id
 
     def _find_ingest_key(self, ingest_key: str) -> str | None:
         with self._write_lock:
-            entry = self._ingest_keys.get(ingest_key)
-            if entry is not None:
-                asrt_id, kind = entry
-                if kind == "assertion":
-                    if asrt_id in self._claim_by_asrt_id and not self.has_active_revocation(
-                        asrt_id
-                    ):
-                        return asrt_id
-                elif kind == "revocation" and asrt_id in self._revoker_asrt_ids:
-                    return asrt_id
-
             for asrt_id in self._meta_ingest_key_asrt_ids.get(ingest_key, []):
                 if asrt_id in self._claim_by_asrt_id:
                     if self.has_active_revocation(asrt_id):
                         continue
-                    self._backfill_ingest_key(ingest_key, asrt_id, "assertion")
                     return asrt_id
                 if asrt_id in self._revoker_asrt_ids:
-                    self._backfill_ingest_key(ingest_key, asrt_id, "revocation")
                     return asrt_id
         return None
 
     def _backfill_ingest_key(self, ingest_key: str, asrt_id: str, kind: str) -> None:
-        try:
-            with self._write_session() as (conn, post_commit):
-                conn.execute(
-                    "INSERT OR REPLACE INTO ingest_keys (ingest_key, asrt_id, kind) VALUES (?, ?, ?)",
-                    (ingest_key, asrt_id, kind),
-                )
-                post_commit.append(
-                    lambda: self._ingest_keys.__setitem__(ingest_key, (asrt_id, kind))
-                )
-        except Exception:
-            return
+        return
 
-    def _insert_claim(self, conn: sqlite3.Connection, claim: Claim, asrt_id: str) -> None:
+    def _insert_claim(
+        self,
+        conn: sqlite3.Connection,
+        claim: Claim,
+        asrt_id: str,
+        *,
+        tx_ref: int,
+    ) -> None:
         _validate_claim_identity(asrt_id=asrt_id, pred_id=claim.pred_id, e_ref=claim.e_ref)
         normalized = [_normalize_term(term) for term in claim.rest_terms]
+        value, value_tag = _encode_claim_value(normalized)
         try:
             conn.execute(
-                "INSERT INTO claims (asrt_id, pred_id, e_ref, rest_terms) VALUES (?, ?, ?, ?)",
-                (asrt_id, claim.pred_id, claim.e_ref, _enc_rest_terms(normalized)),
+                "INSERT INTO claims "
+                "(asrt_id, pred_id, e_ref, value, value_tag, tx_ref) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (asrt_id, claim.pred_id, claim.e_ref, value, value_tag, tx_ref),
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"duplicate asrt_id: {asrt_id}") from exc
 
-    def _insert_claim_args(
-        self, conn: sqlite3.Connection, rows: list[ClaimArg], asrt_id: str
-    ) -> None:
-        conn.executemany(
-            "INSERT INTO claim_args (asrt_id, idx, val_atom, tag) VALUES (?, ?, ?, ?)",
-            [(asrt_id, row.idx, _enc(row.val_atom), row.tag) for row in rows],
-        )
-
     def _insert_meta_rows(
-        self, conn: sqlite3.Connection, rows: list[MetaRow], asrt_id: str
+        self,
+        conn: sqlite3.Connection,
+        rows: list[MetaRow],
+        asrt_id: str,
+        *,
+        tx_seq: int,
+        op_ordinal: int,
     ) -> None:
         conn.executemany(
-            "INSERT INTO meta_rows (asrt_id, key, kind, value) VALUES (?, ?, ?, ?)",
-            [(asrt_id, row.key, row.kind, _enc(row.value)) for row in rows],
-        )
-
-    def _insert_annotation_rows(self, conn: sqlite3.Connection, rows: list[AnnotationRow]) -> None:
-        conn.executemany(
-            "INSERT OR REPLACE INTO annotation_rows"
-            " (asrt_id, namespace, category, key, kind, value, origin, derivation)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO claim_meta "
+            "(asrt_id, key, kind, value, tx_seq, op_ordinal) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             [
                 (
-                    row.asrt_id,
-                    row.namespace,
-                    row.category,
+                    asrt_id,
                     row.key,
                     row.kind,
-                    _enc(row.value),
-                    row.origin,
-                    row.derivation,
+                    _encode_meta_value(row.kind, row.value),
+                    tx_seq,
+                    op_ordinal,
                 )
                 for row in rows
             ],
         )
+
+    def _insert_annotation_rows(
+        self,
+        conn: sqlite3.Connection,
+        rows: list[AnnotationRow],
+        *,
+        tx_seq: int,
+        op_ordinal: int,
+        skip_meta_rows: Sequence[MetaRow],
+    ) -> None:
+        meta_projection = {
+            (row.key, row.kind, _encode_meta_value(row.kind, row.value))
+            for row in skip_meta_rows
+        }
+        compatibility_rows = [
+            MetaRow(row.asrt_id, _annotation_storage_key(row), row.kind, row.value)
+            for row in rows
+            if (row.key, row.kind, _encode_meta_value(row.kind, row.value))
+            not in meta_projection
+        ]
+        if compatibility_rows:
+            for row in compatibility_rows:
+                self._insert_meta_rows(
+                    conn,
+                    [row],
+                    row.asrt_id,
+                    tx_seq=tx_seq,
+                    op_ordinal=op_ordinal,
+                )
+
+    @staticmethod
+    def _next_direct_tx_seq(conn: sqlite3.Connection) -> int:
+        row = conn.execute(
+            "SELECT MAX(seq_value) AS max_seq FROM ("
+            "SELECT MAX(tx_ref) AS seq_value FROM claims "
+            "UNION ALL SELECT MAX(tx_seq) AS seq_value FROM claim_meta"
+            ")"
+        ).fetchone()
+        return 0 if row is None or row["max_seq"] is None else int(row["max_seq"]) + 1
 
 
 def _new_asrt_id() -> str:
@@ -1287,7 +1583,12 @@ def _new_asrt_id() -> str:
 
 
 def _row_to_claim(row: sqlite3.Row) -> Claim:
-    return Claim(row["asrt_id"], row["pred_id"], row["e_ref"], _dec_rest_terms(row["rest_terms"]))
+    return Claim(
+        row["asrt_id"],
+        row["pred_id"],
+        row["e_ref"],
+        _decode_claim_value(row["value"], row["value_tag"]),
+    )
 
 
 def _validate_claim_input(claim: Claim, *, require_asrt_id: bool) -> None:
@@ -1341,6 +1642,19 @@ def _validate_meta_rows_for_append_assertion(rows: list[MetaRow]) -> None:
             raise ValueError("meta key must be non-empty str")
         if not isinstance(row.asrt_id, str):
             raise ValueError("meta asrt_id must be str when provided")
+
+
+def _reject_duplicate_meta_keys(rows: Sequence[MetaRow], *, context: str) -> None:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for row in rows:
+        if row.key in seen:
+            duplicates.add(row.key)
+        seen.add(row.key)
+    if duplicates:
+        raise ValueError(
+            f"{context} keys must be unique; repeated key(s): " + ", ".join(sorted(duplicates))
+        )
 
 
 def _validate_annotation_rows(rows: list[AnnotationRow]) -> None:

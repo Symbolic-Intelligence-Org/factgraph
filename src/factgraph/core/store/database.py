@@ -1199,6 +1199,7 @@ class Database:
             raise DatabaseError("user assertions cannot use the reserved '__system__.' namespace")
         fact_tuple = _normalize_fact_tuple(item.fact_tuple)
         meta = _normalize_meta_entries(item.meta)
+        _reject_duplicate_initial_meta_keys(meta, context="assertion initial meta")
         _reject_reserved_assertion_meta(meta)
         assertion_digest = assertion_digest_for(
             pred_id=item.pred_id,
@@ -1261,6 +1262,7 @@ class Database:
                     raise DatabaseError(f"assertion is already revoked: {target}")
                 target_assertion_digest = _verified_assertion_digest(self._ledger, claim)
             meta = _normalize_meta_entries(item.meta)
+            _reject_duplicate_initial_meta_keys(meta, context="revocation initial meta")
             _reject_reserved_assertion_meta(meta)
             revoker_id = _new_assertion_id()
             provisional = RevocationRecord(
@@ -2365,6 +2367,24 @@ def _reject_reserved_assertion_meta(rows: Sequence[MetaEntry]) -> None:
     if reserved:
         raise DatabaseError(
             "assertion/revocation meta cannot use Database-reserved key(s): " + ", ".join(reserved)
+        )
+
+
+def _reject_duplicate_initial_meta_keys(
+    rows: Sequence[MetaEntry],
+    *,
+    context: str,
+) -> None:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for row in rows:
+        if row.key in seen:
+            duplicates.add(row.key)
+        seen.add(row.key)
+    if duplicates:
+        raise DatabaseError(
+            f"{context} keys must be unique; repeated key(s): "
+            + ", ".join(sorted(duplicates))
         )
 
 

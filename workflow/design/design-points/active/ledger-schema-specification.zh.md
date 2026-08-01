@@ -80,8 +80,8 @@
 
 ```text
 [数据表 2 张]
-  claims      (seq, asrt_id, pred_id, e_ref, value, value_tag)
-  claim_meta  (asrt_id, key, value, tx_seq, op_ordinal)   ← event PK (asrt_id, key, tx_seq, op_ordinal)
+  claims      (seq, asrt_id, pred_id, e_ref, value, value_tag, tx_ref)
+  claim_meta  (asrt_id, key, kind, value, tx_seq, op_ordinal)   ← event PK (asrt_id, key, tx_seq, op_ordinal)
 
 [Infra 表 1 张]
   ledger_meta (key, value)
@@ -98,7 +98,7 @@
 - **事实生命周期有 2 个原语**:`append claim` + `append revoke claim`;另有不改 fact 身份的 `append meta event`。SDK 暴露的 fact `update` / `delete` 仍是前两个原语的组合糖
 - **撤销 = 特殊 pred Claim**(精简 3):`pred_id="__system__.revokes"` 进 claims,不再有独立 revokes 表
 - **每条 Claim 是 unary fact**(INV-9):rest_terms list 退场,value + value_tag 双列 inline
-- **claim_meta 事件 PK + canonical value**:`(asrt_id, key, tx_seq, op_ordinal)` 唯一标识事件;普通 value 是 TEXT,SQL `NULL` 专用于 `UNSET` tombstone;特殊 key 格式由 META_KEY_REGISTRY 规定(详见 §5.3)
+- **claim_meta 事件 PK + canonical value**:`(asrt_id, key, tx_seq, op_ordinal)` 唯一标识事件;普通事件保留著述端 kind 且 value 是 TEXT,kind/value 双 SQL `NULL` 专用于 `UNSET` tombstone;系统 key 格式由 META_KEY_REGISTRY 规定(详见 §5.3)
 - **`__system__.*` pred_id 命名空间预留**(INV-10):user-facing 写入路径必须拒绝
 - **存在性断言**用 `<EntityType>:exists` 形态(per-entity-type 约定)— **不属于** `__system__.*` 命名空间;**Step 1 后实质冗余**(Identity 镜像 Claim 即"该 entity 存在"证据);保留为 **legacy / transitional emission**,Step 2+ 评估完整废除(详见 §3.1)
 
@@ -115,7 +115,8 @@ CREATE TABLE claims (
   pred_id    TEXT NOT NULL,
   e_ref      TEXT NOT NULL,
   value      TEXT,                  -- nullable: 0-arity 时 NULL(如 exists)
-  value_tag  TEXT                    -- nullable: 同 value 同步
+  value_tag  TEXT,                  -- nullable: 同 value 同步
+  tx_ref     INTEGER NOT NULL        -- = tx_seq;关联产生本 claim 的 tx
 );
 
 CREATE INDEX idx_claims_pred_eref ON claims(pred_id, e_ref);
@@ -133,6 +134,7 @@ CREATE INDEX idx_claims_revokes ON claims(value)
 | `e_ref` | TEXT | NOT NULL | 主语 entity ref(详见 `identity-mechanism-redesign.zh.md`)|
 | `value` | TEXT | NULLABLE | 事实 value 的 SQL canonical 编码;NULL = 0-arity(详见 §5.1)|
 | `value_tag` | TEXT | NULLABLE | value 的 canonical 类型 tag(8 种之一);与 value 同步 NULL/非 NULL |
+| `tx_ref` | INTEGER | NOT NULL | 产生本 claim 的提交序;**等同该提交的 `tx_seq`**(2026-08-01 协调裁定),通过 tx object chain 恢复 tx_id |
 
 #### Claim 形态枚举
 
@@ -162,10 +164,12 @@ ledger 中 pred_id 有 **两类预留约定**,作用范围不同:
 CREATE TABLE claim_meta (
   asrt_id     TEXT NOT NULL,
   key         TEXT NOT NULL,
+  kind        TEXT,                 -- tombstone 时与 value 同为 NULL
   value       TEXT,                 -- NULL 仅表示 UNSET tombstone
   tx_seq      INTEGER NOT NULL,
   op_ordinal  INTEGER NOT NULL,
-  PRIMARY KEY (asrt_id, key, tx_seq, op_ordinal)
+  PRIMARY KEY (asrt_id, key, tx_seq, op_ordinal),
+  CHECK ((kind IS NULL) = (value IS NULL))
 );
 
 CREATE INDEX idx_claim_meta_key_value ON claim_meta(key, value);     -- 过滤候选;effective 判定需组内 max 事件
@@ -176,14 +180,16 @@ CREATE INDEX idx_claim_meta_asrt      ON claim_meta(asrt_id);         -- 按 cla
 |---|---|---|---|
 | `asrt_id` | TEXT | NOT NULL, event PK | 关联到 `claims.asrt_id` — 这条 meta event 所属的 claim 或 revoker |
 | `key` | TEXT | NOT NULL, event PK | meta key(如 `source`、`trace_id`、`bound`) |
-| `value` | TEXT | NULLABLE | 非 `UNSET` 时为 SQL canonical text(格式由 META_KEY_REGISTRY 规定,见 §5.3);SQL `NULL` 是保留的 `UNSET` tombstone,不属于用户 TEXT 值域 |
-| `tx_seq` | INTEGER | NOT NULL, event PK | 产生该事件的 Database 提交序(Q-SAE-8);与 Q-SAE-9 `tx_ref` 的关系在 Phase 1 裁定 |
+| `kind` | TEXT | NULLABLE | 著述端 meta kind(`str/int/float/bool/time/json`);普通事件 NOT NULL;UNSET 时与 value 同为 SQL NULL |
+| `value` | TEXT | NULLABLE | 非 `UNSET` 时为 kind 对应的 SQL canonical text;SQL `NULL` 与 `kind=NULL` 共同表示保留的 `UNSET` tombstone |
+| `tx_seq` | INTEGER | NOT NULL, event PK | 产生该事件的 Database 提交序(Q-SAE-8);`claims.tx_ref ≡ tx_seq`(2026-08-01 协调裁定) |
 | `op_ordinal` | INTEGER | NOT NULL, event PK | 本次 commit 内按输入顺序分配的操作序号 |
 
 #### 关键设计点
 
 - **事件 PK `(asrt_id, key, tx_seq, op_ordinal)` 是 meta 行的真正身份**;不引入 surrogate `id` 列;`event_seq` 即 `(tx_seq, op_ordinal)` 二元组
-- **没有 `value_tag` 列**:非 tombstone value 都是 TEXT;特殊格式由 META_KEY_REGISTRY(§5.3)规定。默认(用户自定义 key)= string;SQL `NULL` 只表示 `UNSET`,不能由普通 user meta 伪造
+- **保留 `kind`,不设 claims-style `value_tag`**:dbtx_v2 已把著述端 kind 纳入 canonical bytes;账本必须无损保存它,否则链重放与冷启动直读不等价。META_KEY_REGISTRY(§5.3)仍是系统 key 的格式权威
+- **UNSET 对称编码**:`kind IS NULL AND value IS NULL`;普通用户事件两列都必须 NOT NULL,不允许伪造半 tombstone
 - **没有 `origin` 列**(observed / derived):如未来需要区分 origin,encode 为额外 meta key(如 `meta_origin: "derived"`),不作为 schema 字段
 - **写入语义**:initial meta 可随 claim 同事务写入;后续 `append_meta` 为同一 claim 身份追加新事件。每个事件行写入后 immutable,禁止 UPDATE/REPLACE
 - **全序与 last-wins**:全部读取入口按 `(tx_seq, op_ordinal)` 字典序;`effective(asrt_id, key)` 取该组 `max(tx_seq, op_ordinal)`;若最新事件是 `UNSET`,该 key 视同缺失
@@ -395,25 +401,25 @@ INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Clai
 
 ### §5.2 `claim_meta.value` 列编码
 
-`claim_meta.value` 的普通事件值**全部 TEXT**,没有 per-row `value_tag` 标识;SQL `NULL` 保留为 `UNSET` tombstone,不进入下列 value 解码。格式约定如下:
+`claim_meta.value` 的普通事件值**全部 TEXT**;同行 `kind` 无损记录 dbtx_v2 著述端 kind,但不引入 claims-style `value_tag`。`kind/value` 双 SQL `NULL` 保留为 `UNSET` tombstone,不进入下列 value 解码。格式约定如下:
 
-**编码经 2026-08-01 内联裁定采纳(用户批准 2026-08-01)**:`UNSET` 使用 SQL `NULL`;普通 user meta 不能伪造该 tombstone 编码。
+**编码经 2026-08-01 内联裁定采纳(用户批准 2026-08-01)**:`UNSET` 使用 `kind IS NULL AND value IS NULL`;普通 user meta 两列均 NOT NULL,不能伪造半 tombstone。
 
 | 类型 | 决定规则 |
 |---|---|
-| **系统已知 key**(如 `source`、`bound`、`ingested_at`) | 格式由 **META_KEY_REGISTRY**(§5.3)显式规定 |
-| **用户自定义 key** | 默认 `string` — 直接 UTF-8 text。如需结构化 value,**用户负责自行序列化**(如 JSON 字符串)+ 自行管理 reader 端解码 |
+| **系统已知 key**(如 `source`、`bound`、`ingested_at`) | 格式由 **META_KEY_REGISTRY**(§5.3)显式规定;`kind` 必须与 registry 一致 |
+| **用户自定义 key** | `kind` 记录著述端类型,`value` 按该 kind canonical 编码;未知 key 的 registry 默认仍是 string,但低层 dbtx 重放不得丢弃已经承诺的显式 kind |
 
-**没有 value_tag 的理由**:
-- 100% 用户 meta 是 string(source / trace_id / note 等)
-- 少数 system key 有固定已知格式(registry 唯一来源)
-- 加 value_tag 列对绝大多数行是 dead weight;用 registry 中心化更简洁
+**`kind` 恢复而仍不设 `value_tag` 的理由**:
+- dbtx_v2 canonical bytes 已携带每条 meta 的 kind;存储必须能无损总结并重放该链
+- META_KEY_REGISTRY 继续约束系统 key 的允许 kind/格式,不是从存储删除著述信息的理由
+- claims 的 `value_tag` 是事实 tuple 类型;claim_meta 的 `kind` 是 meta 著述类型,二者不混用
 
 **reader 端解码协议**:
-1. 若 `claim_meta.value IS NULL` → 返回逻辑 `UNSET`,effective 投影把该 key 视同缺失
-2. 看 `claim_meta.key`
-3. 若 key 在 META_KEY_REGISTRY → 按 registry 格式解码
-4. 否则 → 直接 return TEXT 字符串
+1. 若 `claim_meta.kind IS NULL AND claim_meta.value IS NULL` → 返回逻辑 `UNSET`,effective 投影把该 key 视同缺失
+2. 若仅一列为 NULL → 格式损坏,fail closed
+3. 看 `claim_meta.key`;若在 META_KEY_REGISTRY,校验 stored kind 与 registry 一致
+4. 按 stored kind 解码 canonical TEXT;未知 key 保留其著述端 kind
 
 ### §5.3 META_KEY_REGISTRY
 
@@ -749,15 +755,15 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 - **触发**:INV-9 unary commitment 确立后 `claim_args` 行展开退化为冗余(每条 Claim 永远 0 或 1 args)
 - **影响**:写入路径取消 JSON 序列化;读取路径取消 JSON parse;canonical_bytes_tup_v1 调用点 list 永远 length 0 或 1
 
-### §9.5 数据精简 5:`fact_meta` → `claim_meta` 改名 + drop `value_tag` + drop `origin` + 引入 META_KEY_REGISTRY
+### §9.5 数据精简 5:`fact_meta` → `claim_meta` 改名 + 保留 `kind` + drop `origin` + 引入 META_KEY_REGISTRY
 
 - **delta**:
   - 表 rename: `fact_meta` → `claim_meta`(强调"claim 身份下的 meta event"而非"事实 payload")
-  - 列 drop: `value_tag`(meta value 全 TEXT;特殊格式由 META_KEY_REGISTRY 规定)
+  - 列口径:`claim_meta` 不设 claims-style `value_tag`,但保留 dbtx_v2 已承诺的著述端 `kind`(2026-08-01 用户裁定)
   - 列 drop: `origin`(observed/derived 简化掉;如需要 encode 为 meta key 自身)
   - 中心化:META_KEY_REGISTRY(§5.3)显式文档化系统已知 key 的格式(source / bound / ingested_at / 等)
-- **理由**:100% user meta 是 string;少数 system key 有固定已知格式;value_tag 列对绝大多数行是 dead weight;用 registry 中心化更简洁
-- **影响**:reader 端解码协议改为"查 META_KEY_REGISTRY → 按 format 解码"
+- **理由**:registry 中心化系统 key 格式;同时存储不得丢失 canonical tx 已携带的 kind
+- **影响**:reader 端解码协议改为"registry 校验系统 key → 按 stored kind 解码"
 
 ### §9.6 数据精简 6:`ingest_keys` 退场 + ledger 不做 dedup
 
@@ -792,7 +798,7 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 
 但如果 blueprint 期希望分拆成更小的 slice 做 incremental landing(降低单次 review/test 负担),以下逻辑分解可参考:
 
-1. 精简 1+5(meta_rows + annotation_rows → claim_meta;同时 drop value_tag/origin/derivation/namespace/category 列;引入 META_KEY_REGISTRY) — schema 层基础重构
+1. 精简 1+5(meta_rows + annotation_rows → claim_meta;保留 kind,同时 drop origin/derivation/namespace/category 列;引入 META_KEY_REGISTRY) — schema 层基础重构
 2. 精简 3(claims/revokes 统一) — 需要协调 accept 退场的 dead code 清理
 3. 精简 4 + 精简 6 **同 slice**(rest_terms 内联 + ingest_keys 退场) — 二者都触动 write_protocol 的 idempotency / set_field 路径,必须协调
 4. 精简 7(claim_meta 事件 PK `(asrt_id, key, tx_seq, op_ordinal)` + 删 surrogate id 列) — 列结构最终清理;原二列复合 PK 已被 Q-SAE-8 supersede
@@ -890,7 +896,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-27 | Q-RV1:撤销机制属于哪个工业系谱 | append-only correction event 系谱(与 Datomic / Event Sourcing 同系谱)| ✅ 已采纳 |
 | 2026-05-28 | claim-first immutable payload 模型:meta 是 claim 不可变 payload 一部分;meta 变更 = revoke + append 新 claim | 接受(覆盖之前"fact_meta 可独立 upsert"心智模型)| ⚠️ meta 部分被 2026-07-31 Q-SAE-8 supersede;fact payload 变更规则仍有效 |
 | 2026-05-28 | `fact_meta` 表 rename 为 `claim_meta` | 接受 — 强调 claim-bound 语义 | ✅ 已采纳 |
-| 2026-05-28 | `claim_meta` drop `value_tag` 列 | 接受 — 非 UNSET 值为 TEXT;特殊 key 格式 META_KEY_REGISTRY 中心化 | ✅ 已采纳 |
+| 2026-05-28 | `claim_meta` drop `value_tag` 列 | ⚠️ 术语收紧 — 不设 claims-style `value_tag`;2026-08-01 用户裁定恢复著述端 `kind`,因 dbtx_v2 canonical bytes 已承诺该信息 | superseded in part |
 | 2026-05-28 | `claim_meta` drop `origin` 列 | 接受 — 如需要 encode 为 meta key 自身 | ✅ 已采纳 |
 | 2026-05-28 | META_KEY_REGISTRY 必须文档化 | 接受 — 见 §5.3 | ✅ 已采纳 |
 | 2026-05-28 | Ledger 仅 2 个原语(append claim / append revoke claim);SDK update / delete 是组合糖 | 接受 — ledger 不引入 update 概念 | ⚠️ 事实生命周期二原语仍有效;全局“仅 2 个原语”措辞已被 Q-SAE-8 `append meta event` 补充 |
@@ -899,6 +905,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-28 | Multi-cardinality 读取语义 | multiset(保留独立 asrt_id;caller 自行 dedup 如需 set 语义)| ✅ 已采纳(见 §8.3)|
 | 2026-05-28 | Alpha 状态:无生产数据兼容性负担 | 接受 — migration 是代码 + schema 重构,不是数据搬迁;Q-VD / Q-WF 消解;Q-DB / Q-TP1 简化 | ✅ 已采纳(见 §2.3 + §9 alpha 前言)|
 | 2026-07-31 | Q-SAE-8:claim_meta 事件化 + `(tx_seq, op_ordinal)` 全序;supersede `(asrt_id, key)` 唯一行模型 | 接受 — row immutable、同键多 event、last-wins=max、receipt as-of | ✅ adopted(见 §3.2 / §9.7)|
+| 2026-08-01 | `claim_meta.kind` 恢复 + tombstone 双 NULL;initial meta 同 op 内 key 唯一 | 接受 — 链重放/冷启动无损一致;重复 initial key fail closed | ✅ 用户裁定 |
 
 **待裁定**(alpha 状态下大幅简化):
 
