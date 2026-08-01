@@ -652,14 +652,22 @@ class AssertionsManager:
                     "(Identity is immutable per INV-7a). See ADR-IC §4.1.",
                     code=guard_exc.code,
                 ) from guard_exc
+            if guard_exc.classification == "exists":
+                raise SDKStoreError(
+                    f"<EntityType>:exists Claim {guard_exc.asrt_id} "
+                    f"(pred_id={guard_exc.pred_id}) cannot be retracted independently. "
+                    "The :exists Claim is co-emitted atomically with Identity Claims "
+                    "and can only be removed via fg.entities.delete(e_ref) "
+                    "(atomic full-entity revoke). "
+                    "This guard is transitional — Step 2+ may remove :exists emission "
+                    "entirely (see ADR-IC §4.4).",
+                    code=guard_exc.code,
+                ) from guard_exc
             raise SDKStoreError(
-                f"<EntityType>:exists Claim {guard_exc.asrt_id} "
-                f"(pred_id={guard_exc.pred_id}) cannot be retracted independently. "
-                "The :exists Claim is co-emitted atomically with Identity Claims "
-                "and can only be removed via fg.entities.delete(e_ref) "
-                "(atomic full-entity revoke). "
-                "This guard is transitional — Step 2+ may remove :exists emission "
-                "entirely (see ADR-IC §4.4).",
+                f"System Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted: "
+                "revoke-of-revoke is forbidden by INV-12 part 2. "
+                "See ADR-SYS-B §4.1.5.",
                 code=guard_exc.code,
             ) from guard_exc
         if database is not None:
@@ -4114,7 +4122,7 @@ def _normalize_asrt_ids_from_records(records: Iterable[Any]) -> frozenset[str]:
 
 
 def _assertion_record_by_id(sdk: SDKStore, asrt_id: str) -> Any:
-    claim = sdk.ledger.get_claim(asrt_id)
+    claim = sdk.ledger._get_claim_including_system(asrt_id)
     if claim is None:
         return None
     schema_pred = _schema_pred_by_pred_id(sdk, claim.pred_id)
@@ -4124,6 +4132,13 @@ def _assertion_record_by_id(sdk: SDKStore, asrt_id: str) -> Any:
 
 
 def _schema_pred_by_pred_id(sdk: SDKStore, pred_id: str) -> dict[str, Any]:
+    if pred_id.startswith("__system__."):
+        return {
+            "pred_id": pred_id,
+            "owner_type": "",
+            "py_field_name": "",
+            "cardinality": "multi",
+        }
     for pred in sdk.schema_ir.get("predicates", []):
         if isinstance(pred, dict) and pred.get("pred_id") == pred_id:
             return pred

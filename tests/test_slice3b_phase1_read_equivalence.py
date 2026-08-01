@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from factgraph.application.protocol.evaluate_result import view_snapshot_digest_for_parts
 from factgraph.core.policy.chosen import compute_chosen_for_predicate
+from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
+from factgraph.core.store._support import PredWitness, ProofReceipt, compute_support_digest
 from factgraph.core.store.database import (
     AssertionInput,
     Database,
@@ -22,7 +25,7 @@ from factgraph.core.store.database import (
     assertion_digest_for,
     resolve_database_workspace_paths,
 )
-from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow
+from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
 from factgraph.core.store.premise_filter import MetaExclusion, premise_scoped_ledger
 from factgraph.core.view.projector import (
     project_view_facts,
@@ -34,6 +37,7 @@ from factgraph.core.view.projector import (
 _GOLDEN_ROOT = Path(__file__).with_name("golden") / "slice3b_phase1"
 _READ_FIXTURE = _GOLDEN_ROOT / "read_equivalence_v1.json"
 _REPAIR_FIXTURE = _GOLDEN_ROOT / "production_repair_v1.json"
+_LEGACY_NARY_FIXTURE = _GOLDEN_ROOT / "legacy_nary_read_equivalence_v1.json"
 _FIXED_DB_ID = "db:slice3b-phase1-read-equivalence"
 _FIXED_TIME_NS = 1_788_307_200_000_000_000
 _IDS = (
@@ -78,6 +82,68 @@ class Slice3bReadEquivalenceGoldenTests(unittest.TestCase):
                     ),
                 })
                 _assert_compressed_golden(actual, _REPAIR_FIXTURE)
+            finally:
+                database.close()
+
+    def test_legacy_nary_read_surfaces_match_the_pre_flip_golden(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            ledger = _build_legacy_nary_ledger(Path(raw_tmp) / "ledger.db")
+            try:
+                actual = _canonical_json_bytes(_legacy_nary_snapshot(ledger))
+                _assert_compressed_golden(actual, _LEGACY_NARY_FIXTURE)
+            finally:
+                ledger.close()
+
+    def test_system_claims_do_not_change_support_or_view_digest_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            database, _workspace = _build_repaired_workspace(Path(raw_tmp))
+            try:
+                ledger = database._ledger_for_attach()
+                projected = project_view_facts_with_witness(
+                    ledger,
+                    _schema_ir(version=2),
+                )
+                witnesses = tuple(
+                    PredWitness(
+                        pred_condition_key=pred_id,
+                        asrt_ids=tuple(sorted(row.asrt_id for row in rows)),
+                    )
+                    for pred_id, rows in sorted(projected.items())
+                    if rows
+                )
+                receipt = ProofReceipt(
+                    kind="native_binding_v1",
+                    root_result_kind="row",
+                    binding_items=(),
+                    pred_witnesses=witnesses,
+                )
+                system_ids = frozenset(ledger._system_claim_by_asrt_id)
+                witnessed_ids = {
+                    asrt_id for witness in witnesses for asrt_id in witness.asrt_ids
+                }
+                self.assertTrue(system_ids)
+                self.assertTrue(system_ids.isdisjoint(witnessed_ids))
+                self.assertEqual(
+                    compute_support_digest(receipt),
+                    "sha256:b25e372eb3f48e975a1c3032174292d0940fcdd3558d0485904dcd24105b9c1d",
+                )
+
+                head = database.head()
+                active_factual_ids = tuple(
+                    claim.asrt_id
+                    for claim in sorted(ledger.find_claims(), key=lambda row: row.asrt_id)
+                    if not ledger.has_active_revocation(claim.asrt_id)
+                )
+                self.assertTrue(system_ids.isdisjoint(active_factual_ids))
+                self.assertEqual(
+                    view_snapshot_digest_for_parts(
+                        db_id=head.db_id,
+                        base_tx_id=head.tx_id,
+                        schema_digest=head.schema_digest,
+                        asrt_ids=active_factual_ids,
+                    ),
+                    "sha256:edba605fdf323bfba4d648307c9e2703cbfdf8d10537d6e52a071c7c9bac89c6",
+                )
             finally:
                 database.close()
 
@@ -331,6 +397,157 @@ def _read_snapshot(database: Database) -> dict[str, Any]:
             "witness": project_view_facts_with_witness(ledger, schema_ir),
             "facts_with_audit": facts_with_audit,
             "audit": audit,
+            "premise_filtered_facts": project_view_facts(scoped, schema_ir),
+        },
+    }
+
+
+def _build_legacy_nary_ledger(path: Path) -> Ledger:
+    ledger = Ledger(path)
+    first_id = "asrt:66666666666666666666666666666666"
+    second_id = "asrt:77777777777777777777777777777777"
+    revoker_id = "asrt:88888888888888888888888888888888"
+    first_terms = [
+        ("entity_ref", "idref_v1:Person:bob"),
+        ("float64", 0.75),
+    ]
+    second_terms = [
+        ("entity_ref", "idref_v1:Person:bob"),
+        ("float64", 0.9),
+    ]
+    for asrt_id, terms, ingested_at, classification in (
+        (first_id, first_terms, 100, "blocked"),
+        (second_id, second_terms, 200, "allowed"),
+    ):
+        ledger.append_assertion(
+            claim=Claim(
+                asrt_id=asrt_id,
+                pred_id="person:trust",
+                e_ref="idref_v1:Person:alice",
+                rest_terms=terms,
+            ),
+            claim_args=[
+                ClaimArg(asrt_id, idx, value, tag)
+                for idx, value, tag in claim_args_from_rest_terms(terms)
+            ],
+            meta_rows=[
+                MetaRow(asrt_id, "ingested_at", "time", ingested_at),
+                MetaRow(asrt_id, "source", "str", "pyreason-legacy"),
+                MetaRow(asrt_id, "provenance_class", "str", classification),
+            ],
+            annotation_rows=[
+                AnnotationRow(
+                    asrt_id,
+                    "shared",
+                    "source",
+                    "source",
+                    "str",
+                    "pyreason-legacy",
+                    "observed",
+                )
+            ],
+            asrt_id=asrt_id,
+        )
+    ledger.append_revocation(
+        revokes=Revokes(revoker_id, first_id),
+        meta_rows=[MetaRow(revoker_id, "reason", "str", "legacy-superseded")],
+        revoker_asrt_id=revoker_id,
+    )
+    return ledger
+
+
+def _legacy_nary_snapshot(ledger: Ledger) -> dict[str, Any]:
+    ids = (
+        "asrt:66666666666666666666666666666666",
+        "asrt:77777777777777777777777777777777",
+        "asrt:88888888888888888888888888888888",
+    )
+    schema_ir = {
+        "schema_ir_version": "v1",
+        "entities": [{"entity_type": "Person", "identity_fields": []}],
+        "predicates": [
+            {
+                "pred_id": "person:trust",
+                "arg_specs": [
+                    {"name": "source", "type_domain": "entity_ref"},
+                    {"name": "target", "type_domain": "entity_ref"},
+                    {"name": "strength", "type_domain": "float64"},
+                ],
+                "cardinality": "single",
+                "group_key_indexes": [0, 1],
+            }
+        ],
+        "projection": {"entities": ["Person"], "predicates": ["person:trust"]},
+        "protocol_version": {
+            "idref_v1": "idref_v1",
+            "tup_v1": "tup_v1",
+            "export_v1": "export_v1",
+        },
+        "generated_at": "2026-08-01T12:00:03Z",
+    }
+    scoped = premise_scoped_ledger(
+        ledger,
+        MetaExclusion("provenance_class", frozenset({"blocked"})),
+    )
+    return {
+        "fixture_version": 1,
+        "ledger": {
+            "claims": ledger.claims,
+            "claim_args": ledger.claim_args,
+            "meta_rows": ledger.meta_rows,
+            "annotation_rows": ledger.annotation_rows,
+            "revokes": ledger.revokes,
+            "get_claim": {asrt_id: ledger.get_claim(asrt_id) for asrt_id in ids},
+            "find_claims": {
+                "all": ledger.find_claims(),
+                "by_predicate": ledger.find_claims(pred_id="person:trust"),
+                "by_entity": ledger.find_claims(e_ref="idref_v1:Person:alice"),
+                "by_both": ledger.find_claims(
+                    pred_id="person:trust", e_ref="idref_v1:Person:alice"
+                ),
+            },
+            "find_claim_args": {
+                "all": ledger.find_claim_args(),
+                "by_assertion": ledger.find_claim_args(asrt_id=ids[1]),
+                "by_index": ledger.find_claim_args(idx=1),
+                "by_tag": ledger.find_claim_args(tag="float64"),
+            },
+            "find_meta": {
+                "all": ledger.find_meta(),
+                "by_assertion": ledger.find_meta(asrt_id=ids[1]),
+                "by_key": ledger.find_meta(key="provenance_class"),
+                "by_kind": ledger.find_meta(kind="time"),
+            },
+            "find_annotations": {
+                "all": ledger.find_annotations(),
+                "by_assertion": ledger.find_annotations(asrt_id=ids[1]),
+                "by_namespace": ledger.find_annotations(namespace="shared"),
+                "by_category": ledger.find_annotations(category="source"),
+                "by_key": ledger.find_annotations(key="source"),
+            },
+            "active_revocation": {
+                asrt_id: ledger.has_active_revocation(asrt_id) for asrt_id in ids
+            },
+            "find_revoker": {asrt_id: ledger.find_revoker(asrt_id) for asrt_id in ids},
+        },
+        "premise_filter": {
+            "claims": scoped.claims,
+            "claim_args": scoped.claim_args,
+            "meta_rows": scoped.meta_rows,
+            "annotation_rows": scoped.annotation_rows,
+            "revokes": scoped.revokes,
+            "get_claim": {asrt_id: scoped.get_claim(asrt_id) for asrt_id in ids},
+        },
+        "chosen": [
+            {"group_key": list(group_key), "asrt_id": asrt_id}
+            for group_key, asrt_id in sorted(
+                compute_chosen_for_predicate(ledger, schema_ir["predicates"][0]).items(),
+                key=lambda item: repr(item[0]),
+            )
+        ],
+        "projector": {
+            "facts": project_view_facts(ledger, schema_ir),
+            "witness": project_view_facts_with_witness(ledger, schema_ir),
             "premise_filtered_facts": project_view_facts(scoped, schema_ir),
         },
     }

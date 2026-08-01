@@ -169,8 +169,15 @@ def retract_by_asrt(
         raise WriteProtocolError("ledger must be Ledger")
     if not isinstance(revoked_asrt_id, str) or not revoked_asrt_id:
         raise WriteProtocolError("revoked_asrt_id must be non-empty string")
-    if ledger.get_claim(revoked_asrt_id) is None:
+    target = ledger._get_claim_including_system(revoked_asrt_id)
+    if target is None:
         raise WriteProtocolError(f"unknown revoked_asrt_id: {revoked_asrt_id}")
+    if target.pred_id.startswith("__system__."):
+        raise WriteProtocolError(
+            f"INV-12 part 2: target {revoked_asrt_id!r} is a system claim "
+            f"(pred_id={target.pred_id!r}); revoke-of-revoke is forbidden. "
+            "See ADR-SYS-B §4.1.5."
+        )
 
     existing_revoker = ledger.find_revoker(revoked_asrt_id)
     if existing_revoker is not None:

@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS claims (
     asrt_id    TEXT NOT NULL UNIQUE,
     pred_id    TEXT NOT NULL,
     e_ref      TEXT NOT NULL,
+    rest_terms TEXT,
     value      TEXT,
     value_tag  TEXT,
     tx_ref     INTEGER NOT NULL,
@@ -286,6 +287,23 @@ def _decode_claim_value(value: str | None, tag: str | None) -> list[tuple[str, A
     # Re-run protocol normalization so corrupt/non-canonical SQL text fails closed.
     claim_args_from_rest_terms([(tag, decoded)])
     return [(tag, decoded)]
+
+
+def _decode_claim_terms(
+    rest_terms: str | None,
+    value: str | None,
+    value_tag: str | None,
+) -> list[tuple[str, Any]]:
+    legacy_terms = [] if rest_terms is None else _dec_rest_terms(rest_terms)
+    normalized_legacy = [_normalize_term(term) for term in legacy_terms]
+    if normalized_legacy and (value is not None or value_tag is not None):
+        raise LedgerFormatError(
+            "claims row uses both legacy rest_terms and value/value_tag carriers"
+        )
+    if normalized_legacy:
+        claim_args_from_rest_terms(normalized_legacy)
+        return normalized_legacy
+    return _decode_claim_value(value, value_tag)
 
 
 def _encode_meta_value(kind: str, value: Any) -> str:
@@ -1034,6 +1052,14 @@ class Ledger:
             self._ensure_open()
             return self._claim_by_asrt_id.get(asrt_id)
 
+    def _get_claim_including_system(self, asrt_id: str) -> Claim | None:
+        """Return an exact id for audit/replay, bypassing INV-15 filtering."""
+        with self._write_lock:
+            self._ensure_open()
+            return self._claim_by_asrt_id.get(asrt_id) or self._system_claim_by_asrt_id.get(
+                asrt_id
+            )
+
     def find_claims(self, pred_id: str | None = None, e_ref: str | None = None) -> list[Claim]:
         with self._write_lock:
             self._ensure_open()
@@ -1424,7 +1450,7 @@ class Ledger:
         self._reset_indexes()
 
         for row in conn.execute(
-            "SELECT asrt_id, pred_id, e_ref, value, value_tag, tx_ref "
+            "SELECT asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref "
             "FROM claims ORDER BY seq"
         ).fetchall():
             claim = _row_to_claim(row)
@@ -1501,13 +1527,27 @@ class Ledger:
     ) -> None:
         _validate_claim_identity(asrt_id=asrt_id, pred_id=claim.pred_id, e_ref=claim.e_ref)
         normalized = [_normalize_term(term) for term in claim.rest_terms]
-        value, value_tag = _encode_claim_value(normalized)
+        if len(normalized) <= 1:
+            value, value_tag = _encode_claim_value(normalized)
+            stored_rest_terms = _enc_rest_terms([])
+        else:
+            # Q-SYS-B Q15.1: retain the legacy n-ary carrier through Slice 5.
+            value, value_tag = None, None
+            stored_rest_terms = _enc_rest_terms(normalized)
         try:
             conn.execute(
                 "INSERT INTO claims "
-                "(asrt_id, pred_id, e_ref, value, value_tag, tx_ref) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (asrt_id, claim.pred_id, claim.e_ref, value, value_tag, tx_ref),
+                "(asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    asrt_id,
+                    claim.pred_id,
+                    claim.e_ref,
+                    stored_rest_terms,
+                    value,
+                    value_tag,
+                    tx_ref,
+                ),
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"duplicate asrt_id: {asrt_id}") from exc
@@ -1587,7 +1627,7 @@ def _row_to_claim(row: sqlite3.Row) -> Claim:
         row["asrt_id"],
         row["pred_id"],
         row["e_ref"],
-        _decode_claim_value(row["value"], row["value_tag"]),
+        _decode_claim_terms(row["rest_terms"], row["value"], row["value_tag"]),
     )
 
 

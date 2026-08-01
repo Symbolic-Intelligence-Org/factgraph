@@ -420,6 +420,13 @@ def _commit_planned_ops_to_database(
             continue
         assertion = next(assertion_iter)
         ingest_key = _meta_entry_str(assertion.meta, "ingest_key")
+        if op.op == "add":
+            # Q-SYS-B §4.5.2: add is multiset append, so neither an existing
+            # active value nor a duplicate in this batch is coalesced.
+            kept_index = len(kept_assertions)
+            kept_assertions.append(assertion)
+            resolutions.append(("assertion", kept_index))
+            continue
         existing = _active_assertion_for_ingest_key(store, ingest_key)
         if existing is not None and existing not in revocation_targets:
             resolutions.append(("existing", existing))
@@ -1111,12 +1118,19 @@ def _check_generic_retract_allowed(
                 "Identity bundle modification requires delete + recreate of the entity. "
                 "See ADR-IC §4.1."
             )
-        else:  # classification == "exists"
+        elif guard_exc.classification == "exists":
             message = (
                 f"<EntityType>:exists Claim {guard_exc.asrt_id} "
                 f"(pred_id={guard_exc.pred_id}) cannot be retracted independently; "
                 ":exists is co-emitted atomically with Identity Claims (existence-claim "
                 "transitional guard). See ADR-IC §4.4."
+            )
+        else:  # classification == "system"
+            message = (
+                f"System Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted; "
+                "revoke-of-revoke is forbidden by INV-12 part 2. "
+                "See ADR-SYS-B §4.1.5."
             )
         raise EntityWriteError(
             message,

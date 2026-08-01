@@ -80,7 +80,7 @@
 
 ```text
 [数据表 2 张]
-  claims      (seq, asrt_id, pred_id, e_ref, value, value_tag, tx_ref)
+  claims      (seq, asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref)
   claim_meta  (asrt_id, key, kind, value, tx_seq, op_ordinal)   ← event PK (asrt_id, key, tx_seq, op_ordinal)
 
 [Infra 表 1 张]
@@ -97,7 +97,7 @@
 - **Meta 是 claim 身份下的不可变事件流**:`claim_meta` 每行写入后 immutable;同一 `(asrt_id, key)` 可追加多条事件,禁止 in-place UPDATE/REPLACE;effective meta 由事件序投影
 - **事实生命周期有 2 个原语**:`append claim` + `append revoke claim`;另有不改 fact 身份的 `append meta event`。SDK 暴露的 fact `update` / `delete` 仍是前两个原语的组合糖
 - **撤销 = 特殊 pred Claim**(精简 3):`pred_id="__system__.revokes"` 进 claims,不再有独立 revokes 表
-- **每条 Claim 是 unary fact**(INV-9):rest_terms list 退场,value + value_tag 双列 inline
+- **新写路径的 Claim 是 unary fact**(INV-9):value + value_tag 双列 inline;Slice 3b 保留 rest_terms 作 legacy adapter compatibility,严格强制与真正 drop 绑定延后 Slice 5(Q-SYS-B §4.2(c))
 - **claim_meta 事件 PK + canonical value**:`(asrt_id, key, tx_seq, op_ordinal)` 唯一标识事件;普通事件保留著述端 kind 且 value 是 TEXT,kind/value 双 SQL `NULL` 专用于 `UNSET` tombstone;系统 key 格式由 META_KEY_REGISTRY 规定(详见 §5.3)
 - **`__system__.*` pred_id 命名空间预留**(INV-10):user-facing 写入路径必须拒绝
 - **存在性断言**用 `<EntityType>:exists` 形态(per-entity-type 约定)— **不属于** `__system__.*` 命名空间;**Step 1 后实质冗余**(Identity 镜像 Claim 即"该 entity 存在"证据);保留为 **legacy / transitional emission**,Step 2+ 评估完整废除(详见 §3.1)
@@ -114,6 +114,7 @@ CREATE TABLE claims (
   asrt_id    TEXT NOT NULL UNIQUE,
   pred_id    TEXT NOT NULL,
   e_ref      TEXT NOT NULL,
+  rest_terms TEXT,                  -- Slice 3b legacy compatibility;NEW writes 写 []
   value      TEXT,                  -- nullable: 0-arity 时 NULL(如 exists)
   value_tag  TEXT,                  -- nullable: 同 value 同步
   tx_ref     INTEGER NOT NULL        -- = tx_seq;关联产生本 claim 的 tx
@@ -132,6 +133,7 @@ CREATE INDEX idx_claims_revokes ON claims(value)
 | `asrt_id` | TEXT | NOT NULL UNIQUE | **逻辑 PK** / 全 ledger join 根;UUID4 hex 形式(INV-2)|
 | `pred_id` | TEXT | NOT NULL | 谓词标识;schema 层约定,`__system__.*` 前缀预留(INV-10)|
 | `e_ref` | TEXT | NOT NULL | 主语 entity ref(详见 `identity-mechanism-redesign.zh.md`)|
+| `rest_terms` | TEXT | NULLABLE | Slice 3b legacy adapter carrier;NEW application/SDK 与 revoke 写 `[]`;Slice 5 随 adapter rewrite + ADR-INV9 strict enforce 一并删除 |
 | `value` | TEXT | NULLABLE | 事实 value 的 SQL canonical 编码;NULL = 0-arity(详见 §5.1)|
 | `value_tag` | TEXT | NULLABLE | value 的 canonical 类型 tag(8 种之一);与 value 同步 NULL/非 NULL |
 | `tx_ref` | INTEGER | NOT NULL | 产生本 claim 的提交序;**等同该提交的 `tx_seq`**(2026-08-01 协调裁定),通过 tx object chain 恢复 tx_id |
@@ -145,6 +147,7 @@ CREATE INDEX idx_claims_revokes ON claims(value)
 | Multi-cardinality 每一项 | `<EntityType>:<field_name>` | 同上 | 同上 | 多 row,相同 pred_id + e_ref;不同 asrt_id |
 | Existence 断言(**legacy / transitional**) | `<EntityType>:exists`(per-entity-type) | NULL | NULL | **不是** `__system__.*`;Step 1 后实质冗余(Identity Claim 已是存在性证据) |
 | Revoke claim | `__system__.revokes`(reserved system)| 被撤销 asrt_id 字符串 | `"string"` | e_ref = 被撤销 claim 的 e_ref |
+| Legacy adapter n-ary Claim | adapter-specific predicate | NULL | NULL | 真实值保存在 `rest_terms`;仅过渡到 Slice 5,不施加 `len≤1` runtime enforce |
 
 #### 命名空间边界(重要)
 
@@ -217,7 +220,7 @@ CREATE TABLE ledger_meta (
 
 完全消失的表:
 
-- `claim_args`(数据精简 4)— rest_terms list 内联到 claims.value + value_tag 后,行展开冗余
+- `claim_args`(数据精简 4)— NEW 路径由 claims.value + value_tag 表达,legacy 路径可直接从保留的 rest_terms 合成;物理行展开在两侧都冗余
 - `meta_rows`(数据精简 1+5)— 与 annotation_rows 合并并改名为 `claim_meta`
 - `annotation_rows`(数据精简 1+2+5)— 同上;连带 `namespace` / `category` / `derivation` / `origin` / `kind` 列消失
 - `revokes`(数据精简 3)— 撤销变成特殊 pred Claim 进 claims
@@ -275,7 +278,7 @@ CREATE TABLE ledger_meta (
 **含义**:
 - entity_ref 形态本轮锁定 `idref_v1`(详见 identity-mechanism-redesign §7);若未来评估其他 tag value 字符串格式,只是该 tag 的 value 字符串格式变化,不动 tag 集合
 - claims/revokes 统一不破 INV-4:revoke Claim 的 value 用 `string` tag 承载 asrt_id,无需新 tag
-- ledger 写入永远 length 0 或 1(INV-9),但协议保留 variable-length 编码能力 — ledger 比协议更严格
+- NEW application/SDK 写入为 length 0 或 1(INV-9);Slice 3b legacy adapter 豁免仍可写 variable-length,协议编码本身保持稳定
 - claim_meta value 不走 tup_v1(普通 event value 为 TEXT,格式由 META_KEY_REGISTRY 规定;SQL `NULL` 仅作 UNSET tombstone — 与 protocol 层独立)
 - alpha 阶段如果出现真实需要新 tag 的场景,可重新评估 — 不是不能动,而是默认不动
 
@@ -288,18 +291,18 @@ CREATE TABLE ledger_meta (
 - 任何"加 active flag" / "加 derived 状态表"违反 INV-5
 - ledger 是灾难恢复的 anchor
 
-### §4.6 INV-9:Ledger Claim 是 unary fact
+### §4.6 INV-9:新路径 Ledger Claim 是 unary fact
 
-> 每条 `claims` row 严格表达 `(asrt_id, pred_id, e_ref, value?, value_tag?)` 的 unary 关系。n-ary 计算(Rule head 派生多 arity 事实等)仅存在于 in-memory evaluate 阶段;写入 ledger 必经过 unary 投影。
+> NEW application/SDK 写入严格表达 `(asrt_id, pred_id, e_ref, value?, value_tag?)` 的 unary 关系。Slice 3b 对尚未改写的 legacy adapter 保留 `rest_terms` 载体;该豁免按 Q-SYS-B §4.2(c) 延续到 Slice 5。
 
 **适用范围**:`claims` 表 + `set_field` / `add_field` / `retract_by_asrt` 写入路径。
 
 **含义**:
 - N-ary predicate(如 Datalog rule head `parent(alice, bob)`)必须 reify 为 entity-ref Field 或 Relationship 实例后再写入
-- `tup_v1` 协议仍保留 length>1 编码能力(INV-4 不变),但 ledger 写入永远只产生 length 0 或 1
+- `tup_v1` 协议仍保留 length>1 编码能力(INV-4 不变);NEW 路径只产生 length 0 或 1,legacy adapter 可继续产生 2-position
 - 显式关闭 Datalog-style n-ary fact 作为 ledger 一等公民的留口
 
-**Adapter 边界责任**:原生模型为 n-ary 的 adapter(如 PyReason edge 的 `(source, target)` 2-position 形态)必须在 adapter → ledger boundary reify 为 Relationship 实例或多个 unary Claim — 详见 [`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md) Q-PR1。
+**Adapter 边界责任(分步)**:原生模型为 n-ary 的 adapter(如 PyReason edge 的 `(source, target)` 2-position 形态)在 Slice 3b 继续走 legacy `rest_terms`;Slice 5 必须在 adapter → ledger boundary reify 为 Relationship 实例或多个 unary Claim,并与 drop 列及 ADR-INV9 strict enforce 同批完成 — 详见 Q-SYS-B §4.2(c)与 [`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md) Q-PR1。
 
 ### §4.7 INV-10:`__system__.*` pred_id 命名空间预留
 
@@ -749,11 +752,12 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 - **影响**:所有 revoke reader 改走 claims 表的 `pred_id="__system__.revokes"` 过滤;`find_revoker` 实现改写
 - **专用索引**:`idx_claims_revokes` partial index 补回原 `revokes` 表的窄查询性能
 
-### §9.4 数据精简 4:`rest_terms` / `claim_args` 收口
+### §9.4 数据精简 4:`rest_terms` / `claim_args` 分步收口
 
-- **delta**:删除 `claim_args` 表;`claims.rest_terms` JSON 列内联为 `value` + `value_tag` 双列
-- **触发**:INV-9 unary commitment 确立后 `claim_args` 行展开退化为冗余(每条 Claim 永远 0 或 1 args)
-- **影响**:写入路径取消 JSON 序列化;读取路径取消 JSON parse;canonical_bytes_tup_v1 调用点 list 永远 length 0 或 1
+- **Slice 3b delta**:删除 `claim_args` 表并引入 `value` + `value_tag` 双列;保留 nullable `claims.rest_terms` 作 legacy compatibility。NEW application/SDK 与 revoke emission 以双列为权威并写 `rest_terms=[]`;未改写 PyReason adapter 仍可写 2-position `rest_terms`,双列为 NULL。
+- **Slice 3b enforce**:不加 blanket `len(rest_terms)≤1` runtime enforce;INV-9 只要求新路径成立,legacy 路径显式豁免。
+- **Slice 5 绑定项**:真正 drop `rest_terms` 列 + adapter rewrite + ADR-INV9 strict enforce 三项同批完成,不得提前拆分。权威依据:[Q-SYS-B §4.2(c)](../../decisions/active/2026-05-29_q-sys-b-revokes-migration-decision.md#42-q151--claimsrest_terms-列删除时机slice-3b-保留legacy-compatibilitystep-2-slice-5-真正-drop不做-blanket-weak-enforceinv-9-强制留-adr-inv9)。
+- **兼容读取**:`value/value_tag` 非 NULL 时优先解双列;仅两列均 NULL 时 fallback 到 legacy `rest_terms`;`find_claim_args` 从对应载体合成,不再依赖物理展开表。
 
 ### §9.5 数据精简 5:`fact_meta` → `claim_meta` 改名 + 保留 `kind` + drop `origin` + 引入 META_KEY_REGISTRY
 
@@ -911,7 +915,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 
 | Q | 描述 | 当前状态 |
 |---|---|---|
-| Q-PR1 | PyReason edge 2-position 与 INV-9 unary 的冲突;建议 pyreason 改 Relationship 模式 | 待裁定(在 identity-mechanism-redesign 中跟踪)— **alpha 不影响**:adapter 设计议题与历史兼容无关 |
+| Q-PR1 | PyReason edge 2-position 与 INV-9 unary 的冲突;建议 pyreason 改 Relationship 模式 | Slice 3b 明确保留 legacy 路径;具体 adapter rewrite 在 Slice 5 / identity-mechanism-redesign 中裁定 |
 | Q-DB | SQLite DB on-disk migration 工具设计 | **alpha 简化为**:drop old schema + create new schema;无数据搬迁工具需求;blueprint 期定具体 DDL drop/create 顺序 |
 | Q-TP1 | tup_v1 协议解读(length 永远 0/1 是否构成协议变化)| **alpha 简化为**:length 永远 0/1 不算协议变化;ledger 比协议严格(INV-4);如未来真需要新 tag,在新 blueprint 中重评估 |
 
@@ -935,7 +939,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 
 ### §11.3 代码锚点
 
-- [`src/factgraph/core/store/ledger.py`](../../../../src/factgraph/core/store/ledger.py) — 当前 7-table ledger schema + DDL + 写入路径(将被本 spec 重写)
+- [`src/factgraph/core/store/ledger.py`](../../../../src/factgraph/core/store/ledger.py) — Slice 3b 三表 ledger schema + dual-carrier DDL + 写入路径
 - [`src/factgraph/core/protocol/tup_v1.py`](../../../../src/factgraph/core/protocol/tup_v1.py) — `tup_v1` 字节级 canonical 编码(INV-4 锁定)
 - [`src/factgraph/core/protocol/idref_v1.py`](../../../../src/factgraph/core/protocol/idref_v1.py) — 当前 entity_ref 编码协议(详见 identity 重设计)
 - [`src/factgraph/core/evidence/write_protocol.py`](../../../../src/factgraph/core/evidence/write_protocol.py) — 写入/撤销路径(精简 6 后简化:取消 Idempotency 参数链;精简 5 后加 META_KEY_REGISTRY 校验)
