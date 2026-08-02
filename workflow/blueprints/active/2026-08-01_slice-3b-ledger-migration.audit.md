@@ -43,6 +43,7 @@
 | 2026-08-02 | **内联裁定(协调方):annotation 不加第 7 列;合同投影 + hidden-key companion 事件分解修复** | 否决 `annotation_refs` 列:列不入 M op 线格式会使 Phase 2 parity、不可篡改性与账本重建开洞。C-1:reload 只对 initial-meta 事件执行 `annotation_v1` 纯函数合同投影,语义仲裁以 pre-flip 等价 fixture 为准;late append 不得启发式投影。C-2:v0.2 `annotation_rows` 是迁移地面真值;合同可再生行按 `(asrt_id,key,namespace,category,kind,value)` 精确跳过,非合同行把 namespace/category 编入 hidden key 并成为链上 M 事件;仅“v0.2 迁移非合同 annotation 撞键”窄域允许 companion event,不扩张一般单物理事件承诺。增补 scope:PyReason/ProbLog live accept 同样写 hidden-key 事件,冷启动无损;ProbLog namespace 必须跨 reload 非空。World 1(late shared meta、源无 annotation)live/reload 均为 `[]`;World 2 合同 `shared/source` 与 custom namespace companion 并存。namespace/category 清理与引擎 annotation 契约重设计登记为 Slice 5 捆绑项。用户可否决 |
 | 2026-08-02 | Phase 1 补钉 A-C | `1267d551`:所有公开/通用 claim 写入口 pre-commit 拒绝 `__system__.*`;迁移 annotation skip 改成 per-claim 完整合同 identity;initial-meta 合同投影与 hidden-key companion 统一 live/reload/replay;World 1/2、跨 claim 撞值、ProbLog cold reload 常驻门通过 |
 | 2026-08-02 | Phase 1 补钉 D-F 完成,停下待复验 | `claim_args` 严格交叉校验;Ledger `Idempotency` 自动物化 ingest_key 事件;INV-12 Database 本层负向;旧 checkout `3aafbd4b` 实跑生成新增组合过滤 golden,原有 dbtx/read fixtures 零修改;PR 精确面 **157 passed**;canonical **2794 passed / 32 skipped / 1 deselected / 1106 subtests**;ruff + diff-check 全绿 |
+| 2026-08-02 | **Phase 1 补钉轮复验:A-F 实质全闭;新增 P1-R1~R4 —— 最后一张 P1-R 补丁卡后关闭 Phase 1** | 双验证器逐项复现;2 个相邻通道 serious(hidden-key 前缀无守卫 → 变砖/伪造)+ Q-SYS-B 增量性违规 + INV-12 半闭;全文见 §Phase 1 补钉轮复验 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -352,6 +353,23 @@ Phase 2 保持冻结;以上仅声明 Phase 1 物理事件地基与表形态完�
 **Minor ×7**:组合过滤读分支未入等价 fixture(探针已证当前字节相等);Idempotency 失忆(并入 S6);INV 映射缺 INV-2/3/4/13 + blueprint §12 指针过期;kind 恢复在三处文档误署"用户裁定"(实为协调方内联裁定、否决权仍开);spec §3.4 仍写 kind"消失"与六列自矛盾;INV-12 新守卫分支缺本层负向测试;迁移 late-append shared-key meta 被制造成 annotation 的表面变化无记录。另:audit"真实七表 fixture"措辞过诺(实为测试内合成、四特征俱全)。
 
 **放行裁定:Phase 1 补钉轮完成并复验后放行 Phase 2。** P1-S1 为最高优先(伪造通道 + 变砖通道);P1-S2/S3 涉迁移数据保真;S4-S6 为证据完整性。
+
+## Phase 1 补钉轮复验(2026-08-02,Claude 双验证器 + 独立复跑)
+
+**结论:A-F 全部实质闭合(逐项复现);发现 2 个相邻通道新 serious + 1 个 moderate 文档纪律违规 —— 收官前需最后一张小补丁卡(P1-R 组),完成后 Phase 1 关闭、放行 Phase 2。**
+
+**闭合证据(要点)**:A = 14/14 伪造尝试跨 7 通道全部 pre-commit 拒绝、零残留零变砖、内部 retract 发射三层(write_protocol/Database/SDK)live+reload 均正常;B = per-claim 身份(含 asrt_id),变异探针证明旧池化逻辑丢行、新逻辑保真;C = ①-④ 全验(reload 仅投影 initial-meta 事件、World 1/2 探针双侧一致、迁移以源 annotation_rows 为地面真值、ProbLog 跨 reload 回读修复于 Ledger+Database 两层、companion 单事件且 tx_seq 锚定);D = claim_args 死代码变承重交叉校验(不匹配即拒且零写入);E = Idempotency 仅传参数即物化 ingest_key 事件,同句柄+冷启动双侧去重探针通过;F = 组合过滤 golden 经 `git archive` 3aafbd4b 字节级复产(sha256 645182e5…)、PR 面精确调用式已入本 log 且复跑 157 passed、署名清扫全对(仅 C1 为用户批准,其余全为协调方+否决权开放);套件 2794/32/1/1106 双方独立逐字复现;协调方全部审计节字节未动;fixture 仅新增零修改;未 push。
+
+**新发现(→ P1-R 补丁卡)**:
+
+| # | 发现 | 处置 |
+|---|---|---|
+| P1-R1(serious) | **公开 meta 通道不拒绝 `__factgraph_annotation_v1__:` 前缀** —— 垃圾载荷 hidden-key 经 `fg.assertions.append_meta`/`commit_changes(meta_appends)`/`Ledger.append_meta` 提交成功后**每次 open 必炸**(UnicodeDecodeError @ ledger.py:452-470)= commit-then-brick 同类;基线期即存在,非本轮引入 | R-a |
+| P1-R2(serious) | **格式良好 hidden-key 经公开通道 = annotation 伪造 + live/reload 分裂**(live 不可见,冷启动后凭空出现伪造 problog annotation)—— 三侧守卫 checklist 第四次同型:hidden-key 编码开了新的被解释 key 命名空间但公开通道未封 | R-a |
+| P1-R3(moderate) | **Q-SYS-B 增量性违规**:4 处原始段落被删除/改写而非标注(§4.4.2 前提行、§4.4.2 kind bullet、§4.7.2 表头、§7.4 carry-forward),且替换文自称"纯增量标注"名不副实;历史文本仅存 git | R-b |
+| P1-R4(moderate) | INV-12 两处新守卫分支(write_protocol.retract_by_asrt:178、entity_write:1128)仍无本层负向测试(原 minor 只闭一半) | R-c |
+| note | hidden-key M 事件不在 tx object JSON;**adapter annotation 持久化路径 tx_seq 越 head 且无 tx object(未真正入链)**;commit_batch meta 索引与 reload annotation 索引瞬态不对称(仅迁移使用) | **Phase 2 具名 gate:全部 meta-event 写者过 tx 协议 + parity 校验覆盖 hidden-key** |
+| note | 转录 commit 归属与计划不符(C 裁定全文落在 48881bd5);blueprint 头部 Status/Last Updated 未更新 | R-d 顺手 |
 
 ## Deviations
 
