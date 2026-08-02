@@ -53,6 +53,7 @@
 | 2026-08-02 | **内联裁定(协调方):as-of 置于 EvidenceEnvelope/audit context 层,`ProofReceipt` 本体保持 as-of-free** | receipt as-of 三角冲突裁定。此解为两条 adopted 约束合力所迫:Q-SAE-8 裁定 1 要求 receipt 携带 as-of 字段,blueprint §6 digest 冻结门禁止 support_digest canonical bytes 变化 —— 唯一同时满足两者的位置是 envelope 层(receipt-as-artifact = envelope + body,字段在 envelope 即为携带)。深层一致性:as-of 是"何时切的证据"= provenance 语境,非 proof 事实身份 —— 与"meta 历史入 tx 链、不入 state_digest"(Q-SAE-7 §4)同一分层逻辑;sidecar 的 digest↔bytes 双射是内容寻址诚实性的完整性资产,多版本寻址 `(support_digest, event_seq)` 会为不随 event_seq 变化的 body 制造纯重复并弱化该双射 —— 否决。执行约束四条:①`ProofReceipt` canonical bytes 字节冻结不动;②`as_of_event_seq` 必须随每一个持久化的 envelope 载体序列化,冷启动 audit 可回读(回路测试:切 receipt → 冷启动 → audit 面读回同一 as-of);**若当前不存在持久化 envelope 载体,停下上报,不得自设新存储位置**;③验证默认 latest-effective 不变(裁定 1 (ii)),as-of 重放仅 audit/explain 面(iii);envelope as-of 校验 fail-closed(event_seq 越 head 或畸形即拒,不静默钳制);④sidecar 维持 support_digest 单址,双射不变量显式断言。用户可否决 |
 | 2026-08-02 | Phase 2 receipt as-of 落地(本提交) | 载体盘点确认唯一现成持久化 `EvidenceEnvelope` 载体为 `audit/round_events.jsonl` 的 passed `check_result.result.evidence_envelope`;在该载体序列化 `as_of_event_seq`,冷读后由窄域 audit helper 对当前 Ledger head fail-closed 校验并重放。`ProofReceipt` canonical bytes/support_digest 与 `FileArtifactSidecar` 单址均未改,字面 hex+digest 与碰撞拒绝门新增。`Ledger.latest_event_sequence()` 是 application→core 正常向下的公开只读契约,非临时跨层桥;桥梁清单无新增项。 |
 | 2026-08-02 | Phase 2 硬门 fix-forward `67246b67` | 全量 golden 联跑发现前半提交的 parity 校验把 repair-add 漂移行误绑定到 repair op 自身位置;生产 repair fixture 的物理 drift 行 `(tx_ref,op_ordinal)` 可与同 tx 的 repair-remove 位置碰撞。校验改为先按 repair-add 的 assertion 身份验证并消费原物理事件组,再走普通 position-bound ops;既有 production repair fixture 零修改恢复全绿。无协议/DDL/写路径变化。 |
+| 2026-08-02 | **Phase 2 实施完成,停下待对抗审计** | `201d89e8` / `1c942aea` / `67246b67` / `77482bba`;Q-SAE-8 全序/UNSET/receipt-as-of/窄域历史、adapter M 入链与六列 parity 全落。dbtx_v2 + pre-flip 读等价 fixture 零修改;Phase 2 精确面 **16 passed / 14 subtests**;PR #20/#21/#22 精确面 **157 passed**;canonical **2832 passed / 32 skipped / 1 deselected / 1122 subtests**(相对 2822/32/1/1106 净增 10 pass / 16 subtests)。Phase 3 未启动。 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -77,11 +78,11 @@
 
 ### Q-SAE-8 §1 Decision
 
-- [ ] **claim_meta 事件化:每行是一个不可变 meta event,PK `(asrt_id, key, event_seq)`;last-wins = 组内 `max(event_seq)`。**
-- [ ] 采用 **`(tx_seq, op_ordinal)` 二元组**:`tx_seq` = 提交序(Stage A 后一次 commit = 一个事务,天然全序);`op_ordinal` = 本次 commit 内按输入顺序的操作序号(覆盖"一次调用同 key 多次赋值"的次序);
-- [ ] 全部读取入口(premise filter、AssertionMeta 投影、reload、导出)统一按此二元组字典序解析;
-- [ ] reload/导出/迁移**保序不变量**:落库即定序,任何重建路径不得重排;
-- [ ] 失败回滚:事务失败则该 `tx_seq` 下全部事件不存在(原子性由 Stage A 追加项 (a) 保证)—— 无部分序号泄漏。
+- [x] **claim_meta 事件化:每行是一个不可变 meta event,PK `(asrt_id, key, event_seq)`;last-wins = 组内 `max(event_seq)`。**
+- [x] 采用 **`(tx_seq, op_ordinal)` 二元组**:`tx_seq` = 提交序(Stage A 后一次 commit = 一个事务,天然全序);`op_ordinal` = 本次 commit 内按输入顺序的操作序号(覆盖"一次调用同 key 多次赋值"的次序);
+- [x] 全部读取入口(premise filter、AssertionMeta 投影、reload、导出)统一按此二元组字典序解析;
+- [x] reload/导出/迁移**保序不变量**:落库即定序,任何重建路径不得重排;
+- [x] 失败回滚:事务失败则该 `tx_seq` 下全部事件不存在(原子性由 Stage A 追加项 (a) 保证)—— 无部分序号泄漏。
 
 ### Q-SAE-8 §4 后果
 
@@ -91,16 +92,16 @@
 
 ### Q-SAE-8 §5 验收 gates
 
-1. [ ] 重放等价:含重复键 append_meta 的序列在新表可完整重放,读输出与 6 表现状逐字节等价(含一次调用内多次同键赋值);
-2. [ ] premise filter 差分测试:重分类全路径 + revoker 对称可采性;
-3. [ ] reload 保序:落库 → 冷启动 → 导出 → 再导入,event 序不变;
-4. [ ] 若 (iii) 采纳:as-of 重放正确性(任取历史时点,effective meta 与当时实测一致)。
+1. [x] 重放等价:含重复键 append_meta 的序列在新表可完整重放,读输出与 6 表现状逐字节等价(含一次调用内多次同键赋值);
+2. [x] premise filter 差分测试:重分类全路径 + revoker 对称可采性;
+3. [x] reload 保序:落库 → 冷启动 → 导出 → 再导入,event 序不变;
+4. [x] 若 (iii) 采纳:as-of 重放正确性(任取历史时点,effective meta 与当时实测一致)。
 
 ### Q-SAE-8 §6 裁定
 
 - codex 评审:Q-SYS-B supersede、全局序分配、receipt 语义三分、(b) 拒绝理由不成立 —— **全部采纳**(拒绝结论保留、理由重写);
-- [ ] **裁定 1(用户 2026-07-31)**:receipt 承诺语义 = **事件化后 receipt 携带 as-of(event_seq)字段;v0.3 验证默认按 (ii) 最新 effective(现行为);(iii) as-of 重放作为 audit/explain 面能力**;
-- [ ] **裁定 2(用户 2026-07-31)**:meta 历史读取 = **v0.3 不出通用 SDK API,保留窄域 audit/debug 接口**。
+- [x] **裁定 1(用户 2026-07-31)**:receipt 承诺语义 = **事件化后 receipt 携带 as-of(event_seq)字段;v0.3 验证默认按 (ii) 最新 effective(现行为);(iii) as-of 重放作为 audit/explain 面能力**;
+- [x] **裁定 2(用户 2026-07-31)**:meta 历史读取 = **v0.3 不出通用 SDK API,保留窄域 audit/debug 接口**。
 
 ### Q-SAE-9 §1 五个正交属性
 
@@ -385,6 +386,29 @@ Phase 2 保持冻结;以上仅声明 Phase 1 物理事件地基与表形态完�
 R-a:四层守卫亲核(ledger `_ANNOTATION_COMPAT_PREFIX` + 私有载体 `_AnnotationStorageMetaRow` 区分内部写者;write_protocol:267 / sdk/store:742 / database:2701 公开通道拒绝),新负向测试 64 passed / 21 subtests;R-b:Q-SYS-B 四处历史原文逐字恢复 + ⚠️ 追加式修正(diff 亲核,增量性回归);R-c:write_protocol / entity_write 两处本层 INV-12 负向测试落地;R-d:blueprint 头部推进 `implementing`。canonical 套件 **2822/32/1/1106** 亲测复现(相对 2794 净增 28);golden 零修改;暂存空;未 push。
 
 **裁定:P1-R 全闭 —— Phase 1 正式关闭,Phase 2 放行。** Phase 2 具名 gate(复验期立):①全部 meta-event 写者过 tx 协议(adapter annotation 持久化路径现状 = tx_seq 越 head 且无 tx object,未真正入链);②parity 校验覆盖 hidden-key 事件;③commit_batch meta 索引 vs reload annotation 索引的瞬态不对称随事件解析统一收敛。
+
+## Phase 2 implementation evidence(2026-08-02,待对抗审计)
+
+### Commit chain
+
+| Commit | Evidence |
+|---|---|
+| `201d89e8` | `_meta_history_events` + `_effective_meta_events` 建立唯一 `(tx_seq,op_ordinal)` 解析器;premise/AssertionMeta/reload/export/dedup 等读者统一收口;双 NULL UNSET 私有载体与窄域 `factgraph.audit.meta_history` |
+| `1c942aea` | Database-backed PyReason/ProbLog annotation 写者改走 dbtx_v2 M op;append_meta 六列链-账本 parity + hidden-key 载荷校验;v0.2 migration genesis 改用 A/R/M 标准操作;新增 adapter production golden,B7 同 commit 登记 |
+| `67246b67` | repair-add parity 按 assertion 身份消费 drift 原物理事件组,修复 repair op position 碰撞;生产 repair golden 零修改回绿 |
+| `77482bba` | `EvidenceEnvelope.as_of_event_seq`;既有 round-event envelope 持久化/冷读;audit fail-closed as-of 重放;`ProofReceipt` canonical body 与 sidecar 单址冻结门 |
+
+### Phase-boundary gates
+
+- **全序/last-wins 单源**:`Ledger._effective_meta_events(...)` 以 `(tx_seq,op_ordinal)` 字典序选每 `(asrt_id,key)` 的 max;所有公开/兼容投影只消费该 resolver。重复 key、同 tx 多 M op、冷启动、canonical export/import 均由 `tests/test_slice3b_phase2_meta_events.py` 覆盖。
+- **UNSET + 三侧守卫**:双 NULL 仅私有 `_MetaUnsetInput`/`_MetaTombstone` 可达,通用 Database/Ledger meta 输入拒绝伪造;断言与 revoker 对称 tombstone 后 effective 缺失,premise exclusion/allowance `absent_ok` 分支均有负向门。DDL CHECK 与 dbtx M 解码保持 kind/value 双 NULL 对称。
+- **全部持久化写者过 tx**:Database-backed adapter annotation 产生 append_meta tx object且 head 连续推进;现成 `adapter_annotation_commit.json` production golden 钉住链字节。仅 unmanaged `from_schema_classes` compatibility 保留 B7 明列 direct fallback,不冒充已拆桥。
+- **append_meta parity**:open/repair 对 tx 链与物理 claim_meta 的 `asrt_id/key/kind/value/tx_seq/op_ordinal` 全列比对;hidden-key 解码载荷同样受保护;六列逐一篡改与 well-formed annotation payload 替换均 fail-closed。repair-add 是唯一 sanctioned 链外事实锚,按其原物理事件组验证。
+- **receipt as-of**:盘点确认当前唯一持久化 `EvidenceEnvelope` 载体是 `audit/round_events.jsonl` 的 passed Check envelope。运行时盖 `(tx_seq,op_ordinal)` 边界、round event 写入 JSON pair、冷启动 audit 回读同值;畸形/越 head 均拒绝且不钳制。普通 proof verification 未改,仍按 latest-effective;历史重放仅 `factgraph.audit.meta_history`。
+- **digest 冻结**:`ProofReceipt` 字面 canonical hex 与 `support_digest=sha256:06a1621a…` 新门钉死;sidecar 仍仅以 support_digest 单址,同址异 bytes 碰撞拒绝。adapter M/UNSET 不改变 LtHash state element、support/view snapshot 定义;既有 dbtx/read goldens零修改。
+- **回归证据**:Phase 2/golden 精确面 `16 passed / 14 subtests`;PR #20/#21/#22 原精确命令 `157 passed`;canonical 命令 `PYTHONPATH=src` + process-only readline shim + approved ignore/deselect 得 **2832 passed / 32 skipped / 1 deselected / 1122 subtests**。changed-file ruff 与 `git diff --check` 全绿。
+
+Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9 两层 tx-lift、属性声明、premise_eligible 封闭或惰性分级当作已有。
 
 ## 桥梁清单(Bridge Inventory,2026-08-02 用户批准建立)
 
