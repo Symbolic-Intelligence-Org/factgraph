@@ -597,7 +597,7 @@ def _valid_range_for_asrt_id(store: Any, asrt_id: str) -> tuple[str | None, str 
 
 
 def _meta_value_for_key(store: Any, asrt_id: str, key: str) -> str | None:
-    rows = store.ledger._effective_meta_rows(asrt_id=asrt_id, key=key)
+    rows = store.ledger.effective_meta_rows(asrt_id=asrt_id, key=key)
     if not rows:
         return None
     value = rows[-1].value

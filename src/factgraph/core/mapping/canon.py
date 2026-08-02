@@ -246,7 +246,7 @@ def _required_meta_time(ledger: Ledger, asrt_id: str, key: str) -> int:
 
 
 def _optional_meta_str(ledger: Ledger, asrt_id: str, key: str) -> str | None:
-    rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=key, kind="str")
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=key, kind="str")
     if not rows:
         return None
     value = rows[-1].value

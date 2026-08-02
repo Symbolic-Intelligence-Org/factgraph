@@ -383,7 +383,7 @@ def _compute_ingest_key(
 
 
 def _find_active_claim_by_ingest_key(ledger: Ledger, ingest_key: str) -> str | None:
-    for row in ledger._effective_meta_rows(key="ingest_key", kind="str"):
+    for row in ledger.effective_meta_rows(key="ingest_key", kind="str"):
         if row.value != ingest_key:
             continue
         if ledger.has_active_revocation(row.asrt_id):

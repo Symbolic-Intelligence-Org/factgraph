@@ -364,7 +364,7 @@ class Slice3bMetaEventSemanticsTests(unittest.TestCase):
                 ],
             )
             self.assertEqual(
-                ledger._effective_meta_rows(
+                ledger.effective_meta_rows(
                     asrt_id=record.asrt_id,
                     key="provenance_class",
                 ),

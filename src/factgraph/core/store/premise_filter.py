@@ -329,7 +329,7 @@ def is_premise_excluded(
     Cost per call: one indexed dict lookup per configured exclusion.
     """
     for exclusion in exclusions:
-        rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=exclusion.key)
+        rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=exclusion.key)
         if not rows:
             continue
         last_value = rows[-1].value
@@ -367,7 +367,7 @@ def is_predicate_premise_excluded(
     allowance = allowances_by_pred.get(claim.pred_id)
     if allowance is None:
         return False
-    rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=allowance.key)
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=allowance.key)
     if not rows:
         return not allowance.absent_ok
     last_value = rows[-1].value
@@ -402,7 +402,7 @@ def is_predicate_premise_blocked(
     block = blocks_by_pred.get(claim.pred_id)
     if block is None:
         return False
-    rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=block.key)
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=block.key)
     if not rows:
         return False
     last_value = rows[-1].value
@@ -517,7 +517,7 @@ class _PremiseExcludedLedger(Ledger):
         rows = self._base.find_meta(asrt_id=asrt_id, key=key, kind=kind)
         return [row for row in rows if self._is_visible(row.asrt_id)]
 
-    def _effective_meta_rows(
+    def effective_meta_rows(
         self,
         *,
         asrt_id: str | None = None,
@@ -527,7 +527,7 @@ class _PremiseExcludedLedger(Ledger):
     ) -> tuple[MetaRow, ...]:
         if asrt_id is not None and not self._is_visible(asrt_id):
             return ()
-        rows = self._base._effective_meta_rows(
+        rows = self._base.effective_meta_rows(
             asrt_id=asrt_id,
             key=key,
             kind=kind,

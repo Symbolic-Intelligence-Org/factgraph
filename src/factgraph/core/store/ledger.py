@@ -1402,7 +1402,7 @@ class Ledger:
                 return list(self._meta_by_kind.get(kind, []))
             return list(self._meta_rows_data)
 
-    def _meta_history_events(
+    def meta_history_events(
         self,
         *,
         asrt_id: str | None = None,
@@ -1421,7 +1421,7 @@ class Ledger:
                 rows = self._claim_meta_events
             return tuple(sorted(rows, key=_claim_meta_event_sort_key))
 
-    def _effective_meta_events(
+    def effective_meta_events(
         self,
         *,
         asrt_id: str | None = None,
@@ -1430,8 +1430,8 @@ class Ledger:
         as_of: tuple[int, int] | None = None,
     ) -> tuple[_ClaimMetaEvent, ...]:
         """Resolve last-wins meta using the Q-SAE-8 global event order."""
-        boundary = _normalize_event_sequence(as_of)
-        history = self._meta_history_events(asrt_id=asrt_id, key=key)
+        boundary = normalize_event_sequence(as_of)
+        history = self.meta_history_events(asrt_id=asrt_id, key=key)
         latest: dict[tuple[str, str], _ClaimMetaEvent] = {}
         for event in history:
             if boundary is not None and event.event_seq > boundary:
@@ -1444,7 +1444,7 @@ class Ledger:
         ]
         return tuple(sorted(rows, key=_claim_meta_event_sort_key))
 
-    def _effective_meta_rows(
+    def effective_meta_rows(
         self,
         *,
         asrt_id: str | None = None,
@@ -1454,7 +1454,7 @@ class Ledger:
     ) -> tuple[MetaRow, ...]:
         return tuple(
             MetaRow(event.asrt_id, event.key, str(event.kind), event.value)
-            for event in self._effective_meta_events(
+            for event in self.effective_meta_events(
                 asrt_id=asrt_id,
                 key=key,
                 kind=kind,
@@ -2137,7 +2137,7 @@ def _validate_meta_events(rows: Sequence[MetaRow | _MetaTombstone]) -> None:
             raise ValueError("UNSET cannot target the reserved annotation storage namespace")
 
 
-def _normalize_event_sequence(value: tuple[int, int] | None) -> tuple[int, int] | None:
+def normalize_event_sequence(value: tuple[int, int] | None) -> tuple[int, int] | None:
     if value is None:
         return None
     if (

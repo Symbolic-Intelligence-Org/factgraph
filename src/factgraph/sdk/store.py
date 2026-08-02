@@ -240,7 +240,7 @@ class _ViewScopedLedger(Ledger):
         rows = self._base.find_meta(asrt_id=asrt_id, key=key, kind=kind)
         return [row for row in rows if self._is_visible(row.asrt_id)]
 
-    def _effective_meta_rows(
+    def effective_meta_rows(
         self,
         *,
         asrt_id: str | None = None,
@@ -250,7 +250,7 @@ class _ViewScopedLedger(Ledger):
     ) -> tuple[MetaRow, ...]:
         if asrt_id is not None and not self._is_visible(asrt_id):
             return ()
-        rows = self._base._effective_meta_rows(
+        rows = self._base.effective_meta_rows(
             asrt_id=asrt_id,
             key=key,
             kind=kind,
@@ -4915,7 +4915,7 @@ def _claim_rest_terms_match_values(rest_terms: Sequence[tuple[str, Any]], values
 
 
 def _claim_meta_value(ledger: Ledger, asrt_id: str, key: str) -> Any:
-    rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=key)
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=key)
     if not rows:
         return None
     return rows[-1].value

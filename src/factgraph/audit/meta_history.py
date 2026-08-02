@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from factgraph.core.store.ledger import Ledger, META_KINDS, _normalize_event_sequence
+from factgraph.core.store.ledger import Ledger, META_KINDS, normalize_event_sequence
 
 _JSON_BYTES_KEY = "__factgraph_meta_bytes_b64__"
 
@@ -40,7 +40,7 @@ class MetaHistoryEvent:
                 raise MetaHistoryError("UNSET event kind/value must both be null")
         elif self.kind not in META_KINDS:
             raise MetaHistoryError(f"unsupported meta kind: {self.kind!r}")
-        _normalize_event_sequence((self.tx_seq, self.op_ordinal))
+        normalize_event_sequence((self.tx_seq, self.op_ordinal))
 
     @property
     def event_seq(self) -> tuple[int, int]:
@@ -69,7 +69,7 @@ def read_meta_history(
             tx_seq=event.tx_seq,
             op_ordinal=event.op_ordinal,
         )
-        for event in ledger._meta_history_events(asrt_id=asrt_id, key=key)
+        for event in ledger.meta_history_events(asrt_id=asrt_id, key=key)
     )
 
 
@@ -83,7 +83,7 @@ def effective_meta_at(
     boundary = _validated_as_of_boundary(ledger, as_of)
     return {
         event.key: event.value
-        for event in ledger._effective_meta_events(asrt_id=asrt_id, as_of=boundary)
+        for event in ledger.effective_meta_events(asrt_id=asrt_id, as_of=boundary)
     }
 
 
@@ -205,7 +205,7 @@ def _validated_as_of_boundary(ledger: Ledger, value: Any) -> tuple[int, int]:
     if not isinstance(ledger, Ledger):
         raise TypeError("ledger must be Ledger")
     try:
-        boundary = _normalize_event_sequence(value)
+        boundary = normalize_event_sequence(value)
     except ValueError as exc:
         raise MetaHistoryError("as_of must be a valid event sequence") from exc
     if boundary is None:

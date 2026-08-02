@@ -102,7 +102,7 @@ class Slice3bReceiptAsOfTests(unittest.TestCase):
                 ),
             )
             self.assertEqual(
-                db._ledger_for_attach()._effective_meta_rows(
+                db._ledger_for_attach().effective_meta_rows(
                     asrt_id=assertion.asrt_id,
                     key="provenance_class",
                 )[0].value,
