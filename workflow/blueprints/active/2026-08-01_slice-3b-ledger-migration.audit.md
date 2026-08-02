@@ -54,6 +54,7 @@
 | 2026-08-02 | Phase 2 receipt as-of 落地(本提交) | 载体盘点确认唯一现成持久化 `EvidenceEnvelope` 载体为 `audit/round_events.jsonl` 的 passed `check_result.result.evidence_envelope`;在该载体序列化 `as_of_event_seq`,冷读后由窄域 audit helper 对当前 Ledger head fail-closed 校验并重放。`ProofReceipt` canonical bytes/support_digest 与 `FileArtifactSidecar` 单址均未改,字面 hex+digest 与碰撞拒绝门新增。`Ledger.latest_event_sequence()` 是 application→core 正常向下的公开只读契约,非临时跨层桥;桥梁清单无新增项。 |
 | 2026-08-02 | Phase 2 硬门 fix-forward `67246b67` | 全量 golden 联跑发现前半提交的 parity 校验把 repair-add 漂移行误绑定到 repair op 自身位置;生产 repair fixture 的物理 drift 行 `(tx_ref,op_ordinal)` 可与同 tx 的 repair-remove 位置碰撞。校验改为先按 repair-add 的 assertion 身份验证并消费原物理事件组,再走普通 position-bound ops;既有 production repair fixture 零修改恢复全绿。无协议/DDL/写路径变化。 |
 | 2026-08-02 | **Phase 2 实施完成,停下待对抗审计** | `201d89e8` / `1c942aea` / `67246b67` / `77482bba`;Q-SAE-8 全序/UNSET/receipt-as-of/窄域历史、adapter M 入链与六列 parity 全落。dbtx_v2 + pre-flip 读等价 fixture 零修改;Phase 2 精确面 **16 passed / 14 subtests**;PR #20/#21/#22 精确面 **157 passed**;canonical **2832 passed / 32 skipped / 1 deselected / 1122 subtests**(相对 2822/32/1/1106 净增 10 pass / 16 subtests)。Phase 3 未启动。 |
+| 2026-08-02 | **Phase 2 对抗审计:0 blocker / 4 类 serious / 7 minor —— 有条件不放行,补钉轮先行** | 三透镜(事件语义/as-of 裁定合规+入链/证据与范围);as-of 合规面满分;serious = append_meta 绕链变砖(第三个假绝对句)、chosen/canon 守卫静默拆除、repair-add 注入洞、私有名触达 0→18 未登记;全文见 §Phase 2 对抗审计 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -423,6 +424,25 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 | B5 | deprecated `Ledger.append_claim` 兼容入口 | 3b 前(pre-existing) | A 项 system-pred 守卫已覆盖 | 待裁(caller 清点后) | 对应兼容用例 |
 | B6 | `_ledger_for_attach` 等私有名跨层调用(sdk×2、benchmark×1)+ tests→`_enc*` reach-through | Stage A / Phase 0 | audit 冻结方法节同 commit 更新纪律 | **3b 自身 Goal 7**(Phase 2-4 内转正) | 无(转正即改引用) |
 | B7 | unmanaged `Store` adapter annotation 直写 fallback | Phase 2 meta-event writer 收编 | attach/Database-backed lifecycle 一律经 dbtx_v2 M op;仅 `from_schema_classes` 无 Database runtime 保留 direct Ledger compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | adapter managed-path tx-object golden + unmanaged adapter compatibility tests |
+
+## Phase 2 对抗审计(2026-08-02,Claude 三透镜 + 独立复跑)
+
+**结论:0 blocker / 去重后 4 类 serious / 7 minor —— 有条件不放行 Phase 3,补钉轮先行。**
+
+**验实的合格面**:as-of 裁定四条执行约束全 PASS(ProofReceipt 七键序列化未动、digest 字面量原样、envelope 生产路径回路含冷启动、fail-closed 三层无钳制、sidecar 双射、adapter 真入链 tx object 亲验、新 golden 变异探针红显、B7 围栏、parity UPDATE/INSERT/DELETE 三方向全拦);统一解析包内全量覆盖(前 rows[-1] 三站点、AssertionMeta、reload、导出、chosen、canon、accept、_queries、package_export 全走 effective 语义);UNSET 六通道伪造负向全拒、intra-tx 混序探针正确;Q-SAE-8 §5 四 gate 落位;repair-add 位置修正(67246b67)在 pre-fix checkout 复现 3 红、HEAD 转绿;勾选无过打;Phase 3 零走私(chosen 排序未动);套件 2832/32/1/1122 三方独立复现;协调方审计节字节未动。
+
+**Serious(去重 →补钉轮)**:
+
+| # | 发现 | 处置 |
+|---|---|---|
+| P2-S1 | **`Ledger.append_meta` 仍是绕链公开写者(经 `fg.ledger` 可达),managed 工作区直写 M 事件无 tx object —— Phase 2 新 parity 门使之成为无恢复 commit-then-brick**(实测 open 炸且 **repair 也炸**:repair 只赦免漂移 claim,无漂移 M 事件通道);audit:405"全部持久化写者过 tx"为**战役第三个假绝对句**;未守卫亦未登记桥 | 补钉 A |
+| P2-S2 | **chosen/canon 的 ingested_at 重复守卫被统一解析静默拆除**:pre-Phase-2 重复行 → ViewProjectionError fail-closed;HEAD → last-wins **静默翻转评估可见的胜者**(实测投影翻转);`Database.commit_changes(meta_appends)` 对 `_SYSTEM_MANAGED_META_KEYS` 无守卫;未披露未测试;Phase2→3 窗口弱于 7 表基线 | 补钉 B |
+| P2-S3 | **repair-add 漂移位置组接受注入 meta 事件**:`_verified_assertion_digest` 只按 `rows[:tx_row_index]` 重算,注入行按 rowid 恒排 `tx_id` 标记后被静默排除 —— 实测伪造 `origin_binding`(premise_eligible 键!)开库通过并改变评估可见性;与 audit:406 表述相悖 | 补钉 C |
+| P2-S4 | **跨层私有名触达 0→18/27 站点**(`_effective_meta_rows` 族被 adapters/audit/sdk/application 全面消费,audit/meta_history 还 import 了 `_normalize_event_sequence`),B6 未刷新 —— Goal 7 要求 Phase 2-4 内**退休**该债务类,实际膨胀 | 补钉 D(倾向直接转正) |
+
+**Minor ×7**:①迁移 genesis 改 A/R/M 后 docstring(database.py:823-829)与 CHANGELOG:29 仍称 repair anchor(被本范围证伪);②predicate-block 路径无 UNSET 差分;③16/14 精确面无调用式记录(157 面教训重演);④worklist 反向漏勾(Q-SAE-9 §2.1/§3.1/§3.3 已交付未勾);⑤souffle `_build_fact_rows` 改发 effective-only 事实集 —— 方向正确但落在 blueprint §3 非目标面(引擎行为变更),未披露未钉测;⑥`find_meta` 兼容投影墓碑盲,与 SDK docstring"完整历史可审计"相悖;⑦"再导入"腿实为 parse-only(无真回写),gate 措辞应如实。另 note:src/service 三处 raw first-wins 残留(包外,挂 known-gap);premise_filter 模块级 docstring 一行过期;UNSET 现无公开 API(与披露一致)。
+
+**放行裁定:Phase 2 补钉轮(A-E)完成并复验后关闭 Phase 2、放行 Phase 3。** 第七项内联裁定(as-of envelope 层)追认待用户。
 
 ## Deviations
 
