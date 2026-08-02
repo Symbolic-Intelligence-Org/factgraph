@@ -499,7 +499,7 @@ def find_claim_args(
 
 ### 4.4 Q15.3 — `claim_meta` 替代范围:**完全替代 + 删 4 列**
 
-> **Superseded(2026-07-31;扩展于 2026-08-01 协调方内联裁定,用户否决权开放)**:adopted [Q-SAE-8](2026-07-31_q-sae-8-claim-meta-history-decision.md) 显式 supersede 本节 Q15.3 的 `claim_meta` 3 列形态与 Q15.7 的 `PRIMARY KEY (asrt_id, key)` 锁定;2026-08-01 内联裁定进一步恢复 dbtx_v2 canonical bytes 已承诺的著述端 `kind`。终态改为六列 `(asrt_id, key, kind, value, tx_seq, op_ordinal)` 与事件 PK `(asrt_id, key, tx_seq, op_ordinal)`;UNSET 为 kind/value 双 NULL。本节关于删除 `meta_rows` / `annotation_rows`、删除 surrogate `id` 及不保留 namespace/category/origin/derivation/value_tag 的其余裁定继续有效;**“不保留 kind”已 supersede**。
+> **Superseded(2026-07-31;扩展于 2026-08-01 协调方内联裁定,用户追认 2026-08-02)**:adopted [Q-SAE-8](2026-07-31_q-sae-8-claim-meta-history-decision.md) 显式 supersede 本节 Q15.3 的 `claim_meta` 3 列形态与 Q15.7 的 `PRIMARY KEY (asrt_id, key)` 锁定;2026-08-01 内联裁定进一步恢复 dbtx_v2 canonical bytes 已承诺的著述端 `kind`。终态改为六列 `(asrt_id, key, kind, value, tx_seq, op_ordinal)` 与事件 PK `(asrt_id, key, tx_seq, op_ordinal)`;UNSET 为 kind/value 双 NULL。本节关于删除 `meta_rows` / `annotation_rows`、删除 surrogate `id` 及不保留 namespace/category/origin/derivation/value_tag 的其余裁定继续有效;**“不保留 kind”已 supersede**。
 
 **锁定**:`meta_rows` + `annotation_rows` 两张表 **全删**;新 `claim_meta` 表 schema 严格按 ledger-spec §3.2:
 - 列:`asrt_id` / `key` / `value`(3 列)
@@ -525,7 +525,7 @@ def find_claim_args(
 
 - `kind` 列移除:per ledger-spec §3.2 注释 "所有 value 都是 TEXT;特殊格式由 META_KEY_REGISTRY 规定";SDK 读 path 不再 query kind 列
 
-> ⚠️ **Superseded in part(2026-08-01,协调方内联裁定;用户可否决)**:上述 `kind` 删除结论被六列 claim_meta 裁定替代;`kind` 作为 dbtx_v2 已承诺的著述类型保留并用于无损解码,META_KEY_REGISTRY 继续作为系统 key 格式权威。
+> ⚠️ **Superseded in part(2026-08-01,协调方内联裁定;用户追认 2026-08-02)**:上述 `kind` 删除结论被六列 claim_meta 裁定替代;`kind` 作为 dbtx_v2 已承诺的著述类型保留并用于无损解码,META_KEY_REGISTRY 继续作为系统 key 格式权威。
 
 #### 4.4.3 跟 Q15.7(复合 PK)同 Slice 落地
 
@@ -740,7 +740,7 @@ per identity §12.5 Rule 5:"by_id 查 .all 不是 .active" — audit / replay �
 |---|---|---|
 | 精简 4 真正 drop `rest_terms` 列(+ Q-PR1 adapter rewrite + ADR-INV9 strict enforce)| ALTER TABLE drop rest_terms;adapter rewrite 改写 Pyreason 2-position;ADR-INV9 锁的 strict / weak enforce 落地 | 三项绑定:任一项缺失则 Slice 5 不可 mark `implemented` |
 
-> ⚠️ **实施期追加项(2026-08-02,协调方内联裁定;用户可否决)**:annotation 维度清理 + 引擎契约重设计与 Slice 5 adapter rewrite 同 blueprint 设计与验收;届时重评 namespace/category/origin/derivation 的逻辑契约与 PyReason/ProbLog emission,替换 3b hidden-key compatibility 编码时必须保持链可重放与冷启动等价,不得在 3b 静默删除。
+> ⚠️ **实施期追加项(2026-08-02,协调方内联裁定;用户追认 2026-08-02)**:annotation 维度清理 + 引擎契约重设计与 Slice 5 adapter rewrite 同 blueprint 设计与验收;届时重评 namespace/category/origin/derivation 的逻辑契约与 PyReason/ProbLog emission,替换 3b hidden-key compatibility 编码时必须保持链可重放与冷启动等价,不得在 3b 静默删除。
 
 #### 4.7.3 Acceptance criteria(per meta-ADR §4.3 acceptance boundary)
 
@@ -1011,7 +1011,7 @@ Slice 3b blueprint Stage 4 acceptance criteria 必须包含:
 - §4.3 value + value_tag 双列 + `__system__.revokes` 形态 + general canonical mapping:carry-forward — 不可改 Claim 形态(per INV-11);不可去 partial index `idx_claims_revokes`;mapping 表是 Slice 3b NEW writes 的 binding contract
 - §4.4 claim_meta 完全替代 + 4 列 drop + 复合 PK:carry-forward — Slice 5+ 不可重新加回 namespace / category / origin / derivation / kind / value_tag / surrogate id 列
 
-> ⚠️ **Superseded in part(2026-08-01,协调方内联裁定;用户可否决)**:上述 PK 形态改为 Q-SAE-8 事件 PK `(asrt_id,key,tx_seq,op_ordinal)`;`kind` 按六列 claim_meta 裁定保留。namespace/category/origin/derivation/value_tag/surrogate id 不得作为未入链物理列恢复的边界不变。
+> ⚠️ **Superseded in part(2026-08-01,协调方内联裁定;用户追认 2026-08-02)**:上述 PK 形态改为 Q-SAE-8 事件 PK `(asrt_id,key,tx_seq,op_ordinal)`;`kind` 按六列 claim_meta 裁定保留。namespace/category/origin/derivation/value_tag/surrogate id 不得作为未入链物理列恢复的边界不变。
 - §4.5 ingest_keys 删除 + ledger 不 idempotency + set preserve dedup / add multiset:carry-forward — Slice 5+ 不可重新引入 ledger-side idempotency 机制;`set` 永远应用 layer dedup;`add` 永远 multiset
 - §4.6 INV-15 read-path default filter:carry-forward — `fg.entities.*` / `fg.fields.*` / `fg.assertions.where/active/all/field` 永远默认 exclude `__system__.*`;by_id/by_ids bypass 永久 carry-forward(audit/replay 不可阻断)
 - §4.7 Slice 3b 完成判定 acceptance:carry-forward — Stage 4 acceptance criteria 任一项缺失则 Slice 3b blueprint 不可 mark `implemented`

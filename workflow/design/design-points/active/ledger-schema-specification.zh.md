@@ -764,7 +764,7 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 
 - **delta**:
   - 表 rename: `fact_meta` → `claim_meta`(强调"claim 身份下的 meta event"而非"事实 payload")
-  - 列口径:`claim_meta` 不设 claims-style `value_tag`,但保留 dbtx_v2 已承诺的著述端 `kind`(2026-08-01 协调方内联裁定,用户否决权开放)
+  - 列口径:`claim_meta` 不设 claims-style `value_tag`,但保留 dbtx_v2 已承诺的著述端 `kind`(2026-08-01 协调方内联裁定,用户追认 2026-08-02)
   - 列 drop: `origin`(observed/derived 简化掉;如需要 encode 为 meta key 自身)
   - 中心化:META_KEY_REGISTRY(§5.3)显式文档化系统已知 key 的格式(source / bound / ingested_at / 等)
 - **理由**:registry 中心化系统 key 格式;同时存储不得丢失 canonical tx 已携带的 kind
@@ -901,7 +901,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-27 | Q-RV1:撤销机制属于哪个工业系谱 | append-only correction event 系谱(与 Datomic / Event Sourcing 同系谱)| ✅ 已采纳 |
 | 2026-05-28 | claim-first immutable payload 模型:meta 是 claim 不可变 payload 一部分;meta 变更 = revoke + append 新 claim | 接受(覆盖之前"fact_meta 可独立 upsert"心智模型)| ⚠️ meta 部分被 2026-07-31 Q-SAE-8 supersede;fact payload 变更规则仍有效 |
 | 2026-05-28 | `fact_meta` 表 rename 为 `claim_meta` | 接受 — 强调 claim-bound 语义 | ✅ 已采纳 |
-| 2026-05-28 | `claim_meta` drop `value_tag` 列 | ⚠️ 术语收紧 — 不设 claims-style `value_tag`;2026-08-01 协调方内联裁定(用户否决权开放)恢复著述端 `kind`,因 dbtx_v2 canonical bytes 已承诺该信息 | superseded in part |
+| 2026-05-28 | `claim_meta` drop `value_tag` 列 | ⚠️ 术语收紧 — 不设 claims-style `value_tag`;2026-08-01 协调方内联裁定(用户追认 2026-08-02)恢复著述端 `kind`,因 dbtx_v2 canonical bytes 已承诺该信息 | superseded in part |
 | 2026-05-28 | `claim_meta` drop `origin` 列 | 接受 — 如需要 encode 为 meta key 自身 | ✅ 已采纳 |
 | 2026-05-28 | META_KEY_REGISTRY 必须文档化 | 接受 — 见 §5.3 | ✅ 已采纳 |
 | 2026-05-28 | Ledger 仅 2 个原语(append claim / append revoke claim);SDK update / delete 是组合糖 | 接受 — ledger 不引入 update 概念 | ⚠️ 事实生命周期二原语仍有效;全局“仅 2 个原语”措辞已被 Q-SAE-8 `append meta event` 补充 |
@@ -910,7 +910,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-28 | Multi-cardinality 读取语义 | multiset(保留独立 asrt_id;caller 自行 dedup 如需 set 语义)| ✅ 已采纳(见 §8.3)|
 | 2026-05-28 | Alpha 状态:无生产数据兼容性负担 | 接受 — migration 是代码 + schema 重构,不是数据搬迁;Q-VD / Q-WF 消解;Q-DB / Q-TP1 简化 | ✅ 已采纳(见 §2.3 + §9 alpha 前言)|
 | 2026-07-31 | Q-SAE-8:claim_meta 事件化 + `(tx_seq, op_ordinal)` 全序;supersede `(asrt_id, key)` 唯一行模型 | 接受 — row immutable、同键多 event、last-wins=max、receipt as-of | ✅ adopted(见 §3.2 / §9.7)|
-| 2026-08-01 | `claim_meta.kind` 恢复 + tombstone 双 NULL;initial meta 同 op 内 key 唯一 | 接受 — 链重放/冷启动无损一致;重复 initial key fail closed | ✅ 协调方内联裁定,用户否决权开放 |
+| 2026-08-01 | `claim_meta.kind` 恢复 + tombstone 双 NULL;initial meta 同 op 内 key 唯一 | 接受 — 链重放/冷启动无损一致;重复 initial key fail closed | ✅ 协调方内联裁定,用户追认 2026-08-02 |
 | 2026-08-02 | §9.6 实施完成度修正 | `ingest_keys` 物理表退场已完成;`claim_meta.ingest_key`、Ledger `Idempotency` 参数及 lookup/compute helper 作为 compatibility surface 保留,标注 partial | ⚠️ partial,见 §9.6 / blueprint Deviations |
 
 **待裁定**(alpha 状态下大幅简化):

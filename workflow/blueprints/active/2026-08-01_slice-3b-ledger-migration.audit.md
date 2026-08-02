@@ -48,6 +48,7 @@
 | 2026-08-02 | **Phase 1 P1-R 收官卡完成,停下待复验** | `__factgraph_annotation_v1__:` 在 Ledger/Database/SDK 与 write_protocol 的 assertion/revocation/append_meta 通道 pre-commit 拒绝;内部 annotation/迁移以私有 carrier 保留合法通路;畸形持久化 key 统一 fail-closed 为 `LedgerFormatError`;Q-SYS-B 四段原文恢复并以追加警告表达修正;INV-12 write_protocol/entity_write 两层负向门补齐。dbtx_v2+读等价 **7 passed / 3 subtests**,PR 面 **157 passed**,canonical **2822 passed / 32 skipped / 1 deselected / 1106 subtests**,ruff + diff-check 全绿;Phase 2 未启动 |
 | 2026-08-02 | **P1-R 收官复验通过;Phase 1 正式关闭,Phase 2 放行** | 手核:四层前缀守卫 + 私有载体类型、Q-SYS-B 增量性恢复(原文逐字回归 + ⚠️ 追加式)、INV-12 两本层负向、套件 2822/32/1/1106 亲测复现;详见 §Phase 1 收官复验 |
 | 2026-08-02 | **进程机制建立(用户批准 2026-08-02):桥梁清单 + 收官量化** | 背景 = 用户对项目野蛮生长的担忧;桥梁清单专节立于本 log(B1-B6,新桥同 commit 登记否则视为走私),收官量化行入 blueprint §7;后续 slice 沿用 |
+| 2026-08-02 | **六项内联裁定用户追认(2026-08-02)** | ①7 表格式无升级路径 ②`tx_ref`≡`tx_seq` ③`claim_meta` 六列(kind 恢复+双 NULL tombstone)④initial meta 同 op key 唯一 ⑤rest_terms 采 Q-SYS-B §4.2(c) ⑥annotation 合同投影 + hidden-key 事件(含迁移撞键窄域 companion 放宽)—— 全部经用户追认关闭;本表历史行的“用户可否决”标记保留原样(书写时为真),追认状态以本行为准;spec ×3 与 Q-SYS-B ×4 在世署名行已同步更新 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
