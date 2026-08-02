@@ -2290,6 +2290,37 @@ def _validate_claim_meta_parity(
 
     consumed: set[tuple[int, int]] = set()
     known_tx_ids = {str(payload["tx_id"]) for payload in chain}
+
+    # A repair_add sanctions a factual claim that arrived outside the tx
+    # chain. Its physical tx_ref/op_ordinal therefore describes the drifted
+    # write, not the later repair operation's position. Validate and consume
+    # that original event group by assertion identity before walking normal
+    # position-bound operations; the two positions can legitimately collide
+    # with a repair_remove/repair operation in the repair transaction.
+    for payload in chain:
+        for operation in payload["operations"]:
+            if operation["kind"] != "repair_add":
+                continue
+            asrt_id = operation["asrt_id"]
+            physical_position = (
+                ledger._claim_tx_refs.get(asrt_id),
+                ledger._claim_op_ordinals.get(asrt_id),
+            )
+            if not all(isinstance(part, int) for part in physical_position):
+                raise DatabaseIntegrityError(
+                    f"repair_add has no physical claim position: {asrt_id}"
+                )
+            typed_position = (int(physical_position[0]), int(physical_position[1]))
+            events = actual_by_position.get(typed_position, [])
+            _validate_repair_add_meta_operation(
+                ledger,
+                payload=payload,
+                operation=operation,
+                events=events,
+                known_tx_ids=known_tx_ids,
+            )
+            consumed.add(typed_position)
+
     for payload in chain:
         tx_seq = int(payload["tx_seq"])
         for op_ordinal, operation in enumerate(payload["operations"]):
@@ -2314,16 +2345,7 @@ def _validate_claim_meta_parity(
                 )
             elif kind == "append_meta":
                 _validate_append_meta_operation(operation=operation, events=events, position=position)
-            elif kind == "repair_add" and events:
-                _validate_repair_add_meta_operation(
-                    ledger,
-                    payload=payload,
-                    operation=operation,
-                    op_ordinal=op_ordinal,
-                    events=events,
-                    known_tx_ids=known_tx_ids,
-                )
-            elif events:
+            elif events and position not in consumed:
                 raise DatabaseIntegrityError(
                     f"claim_meta event has no meta-bearing tx operation at {position}"
                 )
@@ -2443,7 +2465,6 @@ def _validate_repair_add_meta_operation(
     *,
     payload: Mapping[str, Any],
     operation: Mapping[str, Any],
-    op_ordinal: int,
     events: Sequence[Any],
     known_tx_ids: set[str],
 ) -> None:
@@ -2452,10 +2473,6 @@ def _validate_repair_add_meta_operation(
     claim = ledger.get_claim(asrt_id)
     if claim is None:
         raise DatabaseIntegrityError(f"repair_add has no factual claim: {asrt_id}")
-    if ledger._claim_tx_refs.get(asrt_id) != payload["tx_seq"]:
-        raise DatabaseIntegrityError(f"claims.tx_ref disagrees with repair_add for {asrt_id}")
-    if ledger._claim_op_ordinals.get(asrt_id) != op_ordinal:
-        raise DatabaseIntegrityError(f"claim operation ordinal disagrees with repair_add for {asrt_id}")
     rows = _unique_meta_events(events, asrt_id=asrt_id, context="repair_add")
     _require_meta_event_value(
         rows,
