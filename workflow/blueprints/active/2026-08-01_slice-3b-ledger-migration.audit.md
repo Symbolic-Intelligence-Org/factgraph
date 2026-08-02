@@ -403,7 +403,7 @@ R-a:四层守卫亲核(ledger `_ANNOTATION_COMPAT_PREFIX` + 私有载体 `_Annot
 
 - **全序/last-wins 单源**:`Ledger._effective_meta_events(...)` 以 `(tx_seq,op_ordinal)` 字典序选每 `(asrt_id,key)` 的 max;所有公开/兼容投影只消费该 resolver。重复 key、同 tx 多 M op、冷启动、canonical export/import 均由 `tests/test_slice3b_phase2_meta_events.py` 覆盖。
 - **UNSET + 三侧守卫**:双 NULL 仅私有 `_MetaUnsetInput`/`_MetaTombstone` 可达,通用 Database/Ledger meta 输入拒绝伪造;断言与 revoker 对称 tombstone 后 effective 缺失,premise exclusion/allowance `absent_ok` 分支均有负向门。DDL CHECK 与 dbtx M 解码保持 kind/value 双 NULL 对称。
-- **全部持久化写者过 tx**:Database-backed adapter annotation 产生 append_meta tx object且 head 连续推进;现成 `adapter_annotation_commit.json` production golden 钉住链字节。仅 unmanaged `from_schema_classes` compatibility 保留 B7 明列 direct fallback,不冒充已拆桥。
+- **Database-managed 持久化写者过 tx**:Database-backed adapter annotation 与 managed `Ledger.append_meta` 产生 append_meta tx object且 head 连续推进;现成 `adapter_annotation_commit.json` production golden 钉住 adapter 链字节。unmanaged `from_schema_classes` compatibility 仍保留 B7 annotation 与 B8 meta 明列 direct fallback,不冒充已拆桥。
 - **append_meta parity**:open/repair 对 tx 链与物理 claim_meta 的 `asrt_id/key/kind/value/tx_seq/op_ordinal` 全列比对;hidden-key 解码载荷同样受保护;六列逐一篡改与 well-formed annotation payload 替换均 fail-closed。repair-add 是唯一 sanctioned 链外事实锚,按其原物理事件组验证。
 - **receipt as-of**:盘点确认当前唯一持久化 `EvidenceEnvelope` 载体是 `audit/round_events.jsonl` 的 passed Check envelope。运行时盖 `(tx_seq,op_ordinal)` 边界、round event 写入 JSON pair、冷启动 audit 回读同值;畸形/越 head 均拒绝且不钳制。普通 proof verification 未改,仍按 latest-effective;历史重放仅 `factgraph.audit.meta_history`。
 - **digest 冻结**:`ProofReceipt` 字面 canonical hex 与 `support_digest=sha256:06a1621a…` 新门钉死;sidecar 仍仅以 support_digest 单址,同址异 bytes 碰撞拒绝。adapter M/UNSET 不改变 LtHash state element、support/view snapshot 定义;既有 dbtx/read goldens零修改。
@@ -424,6 +424,7 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 | B5 | deprecated `Ledger.append_claim` 兼容入口 | 3b 前(pre-existing) | A 项 system-pred 守卫已覆盖 | 待裁(caller 清点后) | 对应兼容用例 |
 | B6 | `_ledger_for_attach` 等私有名跨层调用(sdk×2、benchmark×1)+ tests→`_enc*` reach-through | Stage A / Phase 0 | audit 冻结方法节同 commit 更新纪律 | **3b 自身 Goal 7**(Phase 2-4 内转正) | 无(转正即改引用) |
 | B7 | unmanaged `Store` adapter annotation 直写 fallback | Phase 2 meta-event writer 收编 | attach/Database-backed lifecycle 一律经 dbtx_v2 M op;仅 `from_schema_classes` 无 Database runtime 保留 direct Ledger compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | adapter managed-path tx-object golden + unmanaged adapter compatibility tests |
+| B8 | unmanaged `Ledger.append_meta` 直写 fallback | Phase 2 补钉 A managed writer 收编 | Database 构造时安装 `_managed_meta_writer`,managed 调用在任何 SQLite 直写前委托 `commit_changes`;仅无 Database owner 的 Ledger 保留 direct compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | managed direct-path-unreachable/tx-object 回路 + unmanaged compatibility tests |
 
 ## Phase 2 对抗审计(2026-08-02,Claude 三透镜 + 独立复跑)
 

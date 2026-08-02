@@ -551,6 +551,7 @@ class Ledger:
         self._closed = False
         self._owner_thread_id = threading.get_ident()
         self._memory_warning_emitted = False
+        self._managed_meta_writer: Callable[[Sequence[MetaRow]], Any] | None = None
         self._managed_annotation_writer: Callable[[Sequence[AnnotationRow]], Any] | None = None
         self._local = threading.local()
         self._write_lock = threading.RLock()
@@ -1225,6 +1226,9 @@ class Ledger:
             a later cleanup phase.
         """
         _validate_meta_rows(rows)
+        if self._managed_meta_writer is not None:
+            self._managed_meta_writer(tuple(rows))
+            return
         for row in rows:
             if not self._is_known_asrt_id(row.asrt_id):
                 raise ValueError(f"unknown asrt_id for meta: {row.asrt_id}")

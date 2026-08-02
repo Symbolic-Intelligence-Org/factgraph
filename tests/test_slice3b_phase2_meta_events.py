@@ -40,6 +40,78 @@ _REVOKER_ID = "asrt:22222222222222222222222222222222"
 
 
 class Slice3bMetaEventSemanticsTests(unittest.TestCase):
+    def test_managed_ledger_append_meta_routes_through_database_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp, patch(
+            "factgraph.core.store.database._new_assertion_id",
+            side_effect=[_ASSERTION_ID],
+        ):
+            workspace = Path(raw_tmp) / "workspace"
+            db = Database.create(workspace, schema_ir=_schema_ir())
+            assertion = db.commit_assertions(
+                (
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:alice"), ("string", "Alice")),
+                    ),
+                )
+            ).assertions[0]
+            ledger = db._ledger_for_attach()
+            before = db.head()
+
+            with patch.object(
+                ledger,
+                "_next_direct_tx_seq",
+                side_effect=AssertionError("managed append_meta reached the direct writer"),
+            ):
+                ledger.append_meta(
+                    [MetaRow(assertion.asrt_id, "provenance_class", "str", "observed")]
+                )
+
+            after = db.head()
+            self.assertEqual(after.tx_seq, before.tx_seq + 1)
+            self.assertEqual(after.state_digest, before.state_digest)
+            tx_object = json.loads(
+                (
+                    resolve_database_workspace_paths(workspace).tx_objects
+                    / f"{after.tx_id.removeprefix('tx:')}.json"
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                tx_object["operations"],
+                [
+                    {
+                        "asrt_id": assertion.asrt_id,
+                        "kind": "append_meta",
+                        "meta": {
+                            "key": "provenance_class",
+                            "kind": "str",
+                            "value": "observed",
+                        },
+                    }
+                ],
+            )
+
+            clean_head = db.head()
+            with self.assertRaisesRegex(DatabaseError, "Database-reserved key"):
+                ledger.append_meta(
+                    [MetaRow(assertion.asrt_id, "assertion_digest", "str", "forged")]
+                )
+            self.assertEqual(db.head(), clean_head)
+            db.close()
+
+            reopened = Database.open(workspace, schema_ir=_schema_ir())
+            try:
+                self.assertEqual(reopened.head(), after)
+                self.assertEqual(
+                    reopened._ledger_for_attach().find_meta(
+                        asrt_id=assertion.asrt_id,
+                        key="provenance_class",
+                    )[-1].value,
+                    "observed",
+                )
+            finally:
+                reopened.close()
+
     def test_adapter_annotations_commit_hidden_m_ops_and_reload_symmetrically(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp, patch(
             "factgraph.core.store.database._new_assertion_id",

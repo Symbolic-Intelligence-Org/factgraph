@@ -458,6 +458,7 @@ class Database:
         self._workspace_paths = workspace_paths
         self._lock_handle = lock_handle
         self._closed = False
+        self._ledger._managed_meta_writer = self._commit_meta_rows
         self._ledger._managed_annotation_writer = self._commit_annotations
 
     def __enter__(self) -> Database:
@@ -478,6 +479,8 @@ class Database:
         if getattr(self, "_closed", True):
             return
         self._closed = True
+        if getattr(self._ledger._managed_meta_writer, "__self__", None) is self:
+            self._ledger._managed_meta_writer = None
         if getattr(self._ledger._managed_annotation_writer, "__self__", None) is self:
             self._ledger._managed_annotation_writer = None
         try:
@@ -1243,6 +1246,18 @@ class Database:
         if not items:
             raise DatabaseError("_commit_meta_unsets requires at least one event")
         return self.commit_changes(assertions=(), revocations=(), meta_appends=items)
+
+    def _commit_meta_rows(self, rows: Sequence[MetaRow]) -> CommitResult | None:
+        """Commit managed ``Ledger.append_meta`` calls through dbtx_v2."""
+        if not rows:
+            return None
+        return self.commit_changes(
+            assertions=(),
+            revocations=(),
+            meta_appends=tuple(
+                MetaAppendInput(row.asrt_id, row.key, row.kind, row.value) for row in rows
+            ),
+        )
 
     def _commit_annotations(self, rows: Sequence[AnnotationRow]) -> CommitResult | None:
         """Commit adapter annotation events through dbtx_v2 append-meta ops."""
