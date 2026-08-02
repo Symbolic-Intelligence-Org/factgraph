@@ -64,9 +64,11 @@ from .meta_history import (
     MetaHistoryError,
     MetaHistoryEvent,
     effective_meta_at,
+    effective_meta_at_receipt,
     export_meta_history,
     import_meta_history,
     read_meta_history,
+    receipt_as_of_event_seq,
 )
 from .reader import AuditPackageData, AuditReadError, load_audit_package
 from .round_events import (
@@ -106,9 +108,11 @@ __all__ = [
     "MetaHistoryError",
     "MetaHistoryEvent",
     "effective_meta_at",
+    "effective_meta_at_receipt",
     "export_meta_history",
     "import_meta_history",
     "read_meta_history",
+    "receipt_as_of_event_seq",
     "ROUND_EVENT_KINDS",
     "ROUND_EVENT_SCHEMA_VERSION",
     "ROUND_EVENTS_AUDIT_FILE_KEY",

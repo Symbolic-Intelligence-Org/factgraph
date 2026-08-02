@@ -133,6 +133,11 @@ Explicitly deferred:
 
 The recorder uses the caller-supplied `round_id` plus a per-round monotonic `sequence`. Capability runtimes do not import `factgraph.audit`; the caller explicitly records events after each capability returns.
 
+A passed Check projection persists its receipt envelope's
+`as_of_event_seq=[tx_seq, op_ordinal]`. The proof body and `support_digest` stay
+unchanged; audit/explain code may use `receipt_as_of_event_seq(...)` and
+`effective_meta_at_receipt(...)` for fail-closed historical meta replay.
+
 The reader is intentionally lenient on `round_events.jsonl`:
 
 - malformed row: skipped, with a `ROUND_EVENT_MALFORMED` warning recorded

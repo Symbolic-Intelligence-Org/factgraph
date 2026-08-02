@@ -261,6 +261,9 @@ class _ViewScopedLedger(Ledger):
     def _latest_meta_event_sequence(self) -> tuple[int, int] | None:
         return self._base._latest_meta_event_sequence()
 
+    def latest_event_sequence(self) -> tuple[int, int] | None:
+        return self._base.latest_event_sequence()
+
     def find_annotations(
         self,
         asrt_id: str | None = None,

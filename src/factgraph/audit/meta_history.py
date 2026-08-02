@@ -80,12 +80,52 @@ def effective_meta_at(
     as_of: tuple[int, int],
 ) -> dict[str, Any]:
     """Return effective key/value state at an inclusive event boundary."""
-    boundary = _normalize_event_sequence(as_of)
-    assert boundary is not None
+    boundary = _validated_as_of_boundary(ledger, as_of)
     return {
         event.key: event.value
         for event in ledger._effective_meta_events(asrt_id=asrt_id, as_of=boundary)
     }
+
+
+def receipt_as_of_event_seq(
+    ledger: Ledger,
+    envelope: Any,
+) -> tuple[int, int]:
+    """Read and validate an in-memory or persisted receipt-envelope boundary.
+
+    Persisted round-event envelopes decode their JSON pair as a list; the
+    application DTO carries the same pair as a tuple.  This audit-only helper
+    accepts those two existing carriers and rejects malformed or future
+    boundaries rather than clamping them.
+    """
+    if not isinstance(ledger, Ledger):
+        raise TypeError("ledger must be Ledger")
+    if isinstance(envelope, Mapping):
+        raw = envelope.get("as_of_event_seq")
+    else:
+        raw = getattr(envelope, "as_of_event_seq", None)
+    if isinstance(raw, list):
+        raw = tuple(raw)
+    try:
+        return _validated_as_of_boundary(ledger, raw)
+    except (TypeError, ValueError) as exc:
+        if isinstance(exc, MetaHistoryError):
+            raise
+        raise MetaHistoryError("receipt envelope has malformed as_of_event_seq") from exc
+
+
+def effective_meta_at_receipt(
+    ledger: Ledger,
+    *,
+    asrt_id: str,
+    envelope: Any,
+) -> dict[str, Any]:
+    """Replay effective meta at a receipt envelope's recorded boundary."""
+    return effective_meta_at(
+        ledger,
+        asrt_id=asrt_id,
+        as_of=receipt_as_of_event_seq(ledger, envelope),
+    )
 
 
 def export_meta_history(
@@ -161,6 +201,23 @@ def _event_sort_key(event: MetaHistoryEvent) -> tuple[int, int, str, str]:
     return (event.tx_seq, event.op_ordinal, event.asrt_id, event.key)
 
 
+def _validated_as_of_boundary(ledger: Ledger, value: Any) -> tuple[int, int]:
+    if not isinstance(ledger, Ledger):
+        raise TypeError("ledger must be Ledger")
+    try:
+        boundary = _normalize_event_sequence(value)
+    except ValueError as exc:
+        raise MetaHistoryError("as_of must be a valid event sequence") from exc
+    if boundary is None:
+        raise MetaHistoryError("as_of must be a valid event sequence")
+    latest = ledger.latest_event_sequence() or (0, 0)
+    if boundary > latest:
+        raise MetaHistoryError(
+            f"as_of event sequence {boundary!r} is beyond ledger head {latest!r}"
+        )
+    return boundary
+
+
 def _to_jsonable(value: Any) -> Any:
     if isinstance(value, bytes):
         return {_JSON_BYTES_KEY: base64.urlsafe_b64encode(value).decode("ascii")}
@@ -193,7 +250,9 @@ __all__ = [
     "MetaHistoryError",
     "MetaHistoryEvent",
     "effective_meta_at",
+    "effective_meta_at_receipt",
     "export_meta_history",
     "import_meta_history",
     "read_meta_history",
+    "receipt_as_of_event_seq",
 ]

@@ -247,6 +247,7 @@ def _native_check(
         support_digest=support_digest,
         case_index=primary_branch_index,
         proof=artifact,
+        as_of_event_seq=_receipt_as_of_event_seq(store),
         branch_atom_projection=None,
     )
 
@@ -363,6 +364,7 @@ def _souffle_check(
         support_digest=primary_candidate.support_digest,
         case_index=primary_branch_index,
         proof=primary_artifact,
+        as_of_event_seq=_receipt_as_of_event_seq(store),
         branch_atom_projection=None,
     )
 
@@ -511,6 +513,7 @@ def _problog_pyreason_check(
         support_digest=primary_candidate.support_digest,
         case_index=None,  # ProbLog/PyReason: no per-branch concept
         proof=primary_envelope,
+        as_of_event_seq=_receipt_as_of_event_seq(store),
         branch_atom_projection=None,
     )
 
@@ -536,6 +539,11 @@ def _lookup_provenance_envelope(
     consumers can serialize via ``explain_provenance`` themselves if needed.
     """
     return store._lookup_provenance_envelope(digest)
+
+
+def _receipt_as_of_event_seq(store: Store) -> tuple[int, int]:
+    """Capture the ledger boundary without changing proof-body identity."""
+    return store.ledger.latest_event_sequence() or (0, 0)
 
 
 def _extract_head_var_binding(

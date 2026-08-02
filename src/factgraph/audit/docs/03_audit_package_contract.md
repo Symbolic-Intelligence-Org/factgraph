@@ -65,6 +65,15 @@ Each row is a JSON object:
 | `schema_version` | string | Starts at `"1.0"`. |
 | `payload` | object | Kind-specific JSON projection;never a raw dataclass blob or `repr`. |
 
+For newly recorded passed `check_result` rows,
+`payload.result.evidence_envelope.as_of_event_seq` is the two-integer
+`[tx_seq, op_ordinal]` boundary captured with the receipt. It is serialized in
+this existing envelope carrier, not in the content-addressed `ProofReceipt`
+body. Consequently one `support_digest` still names exactly one canonical
+proof body. `factgraph.audit.meta_history.receipt_as_of_event_seq(...)` and
+`effective_meta_at_receipt(...)` validate the field against a Ledger and reject
+malformed or future boundaries rather than clamping them.
+
 Lifecycle:
 
 - sequence 0 is `round_started`

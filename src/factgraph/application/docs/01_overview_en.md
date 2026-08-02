@@ -49,7 +49,7 @@ It is not responsible for:
   - `query.py`: `QueryRuntimeRequest` / `QueryRuntimeResponse` / return contract
   - `ingest.py`: normalized ingest item/request/result DTOs
   - `derivation.py`: compiled derivation evaluate/accept request DTOs
-  - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`)
+  - `derivation_check.py`: explicit-binding Check protocol DTOs (`CheckRequest` / `CheckResult` / `EvidenceEnvelope`); the envelope records `as_of_event_seq=(tx_seq, op_ordinal)` while the proof body remains content-addressed independently
   - `derivation_diagnose.py`: explicit-binding Diagnose protocol DTOs (`DiagnoseRequest` / `DiagnoseResult` / `DiagnoseConditionLocator`)
   - `derivation_fact_overlay.py`: Fact Overlay Check protocol DTOs and shared overlay actions (`FactOverlayCheckRequest` / `FactOverlayCheckResult` / `FactOverlay` / `ReplaceFact` / `RemoveFact` / `RuleDisableAction` / `RuleLiteralReplaceAction` / `RuleAddConditionAction`)
   - `proofframe.py`: ProofFrame Rechecker protocol DTOs (`ProofFrameRecheckRequest` / `ProofFrameRecheckResult` / `ProofFrameConditionVerdict` / `ProofFrameStatus`)
@@ -220,6 +220,13 @@ SDK outward behavior remains the compatibility contract for end users; applicati
 ## 5.5 Durable Round Persistence Boundary
 
 Application capability runtimes return stable protocol DTOs, but they do not emit audit events internally. Batch 6 round persistence is owned by `factgraph.audit.round_events` and is invoked by an external caller/recorder after a capability result exists.
+
+Every passed Check `EvidenceEnvelope` captures the current inclusive ledger
+event boundary in `as_of_event_seq`. Normal proof verification deliberately
+continues to use latest-effective metadata. Audit/explain callers can replay
+metadata at the recorded boundary through `factgraph.audit.meta_history`; the
+field is provenance context and is not part of `ProofReceipt` canonical bytes
+or `support_digest`.
 
 Current persistable first-slice result surfaces are:
 

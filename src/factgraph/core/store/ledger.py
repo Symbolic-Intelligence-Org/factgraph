@@ -1465,6 +1465,37 @@ class Ledger:
                 return None
             return max(event.event_seq for event in self._claim_meta_events)
 
+    def latest_event_sequence(self) -> tuple[int, int] | None:
+        """Return the current inclusive ``(tx_seq, op_ordinal)`` boundary.
+
+        Managed ledgers anchor the boundary to ``head_tx_seq``.  Claim and
+        claim-meta indexes recover the last visible operation ordinal in that
+        transaction; schema-only and repair-remove heads use ordinal zero.
+        Unmanaged compatibility ledgers without head metadata fall back to the
+        greatest indexed claim/meta event, or ``None`` when empty.
+        """
+        with self._write_lock:
+            self._ensure_open()
+            positions = [
+                (tx_ref, self._claim_op_ordinals[asrt_id])
+                for asrt_id, tx_ref in self._claim_tx_refs.items()
+                if asrt_id in self._claim_op_ordinals
+            ]
+            positions.extend(event.event_seq for event in self._claim_meta_events)
+
+            raw_head_tx_seq = self.get_ledger_meta("head_tx_seq")
+            if raw_head_tx_seq is not None and raw_head_tx_seq.isdecimal():
+                head_tx_seq = int(raw_head_tx_seq)
+                head_ordinals = [
+                    op_ordinal
+                    for tx_seq, op_ordinal in positions
+                    if tx_seq == head_tx_seq
+                ]
+                return (head_tx_seq, max(head_ordinals, default=0))
+            if not positions:
+                return None
+            return max(positions)
+
     def find_annotations(
         self,
         asrt_id: str | None = None,

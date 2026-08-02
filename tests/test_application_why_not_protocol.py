@@ -699,6 +699,7 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
                 support_digest="sha256:" + ("1" * 64),
                 case_index=0,
                 proof=_atom_locator(),  # type: ignore[arg-type]
+                as_of_event_seq=(0, 0),
             )
 
     def test_evidence_envelope_existing_payload_types_unchanged(self) -> None:
@@ -721,6 +722,7 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
                 support_digest="sha256:" + ("1" * 64),
                 case_index=0,
                 proof=support,
+                as_of_event_seq=(0, 0),
             ).proof,
             ProofReceipt,
         )
@@ -731,6 +733,7 @@ class WhyNotProtocolStaticInvariantTests(unittest.TestCase):
                 support_digest="sha256:" + ("2" * 64),
                 case_index=None,
                 proof=provenance,
+                as_of_event_seq=(0, 0),
             ).proof,
             ProvenanceEnvelope,
         )

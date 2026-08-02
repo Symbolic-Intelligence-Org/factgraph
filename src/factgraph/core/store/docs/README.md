@@ -1,7 +1,7 @@
 # Core Store Docs
 
 - Applicable scope: `src/factgraph/core/store`
-- Last updated: 2026-08-01
+- Last updated: 2026-08-02
 - Audience: maintainers of the Ledger, Database commit protocol, and durable
   workspace lifecycle
 
@@ -52,6 +52,12 @@ open. Metadata appended after assertion creation is event history and does not
 change `state_digest`. A schema-transition transaction stores only the old and
 new schema digests; both canonical, content-addressed schema objects are
 required for replay, which validates transition continuity.
+
+`claim_meta` rows are immutable events ordered by `(tx_seq, op_ordinal)`.
+Effective reads choose the greatest event per `(asrt_id, key)`; a dual-NULL
+`kind`/`value` event is an internal UNSET tombstone. `Ledger.latest_event_sequence()`
+returns the inclusive current ledger boundary used by evidence envelopes. It
+does not alter `state_digest`, support digests, or view-snapshot digests.
 
 `assertion_digest`, `schema_digest`, and `tx_id` are Database-owned assertion
 metadata keys. Assertion, revocation, and later meta-append inputs reject the

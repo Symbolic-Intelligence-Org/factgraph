@@ -297,9 +297,23 @@ def project_check_event_payload(request: Any, result: Any) -> dict[str, JSONValu
     evidence_payload: dict[str, JSONValue] | None = None
     if evidence is not None:
         support_digest = getattr(evidence, "support_digest", None)
+        as_of_event_seq = getattr(evidence, "as_of_event_seq", None)
+        if (
+            not isinstance(as_of_event_seq, tuple)
+            or len(as_of_event_seq) != 2
+            or any(
+                isinstance(part, bool) or not isinstance(part, int) or part < 0
+                for part in as_of_event_seq
+            )
+        ):
+            raise RoundEventError(
+                "evidence_envelope.as_of_event_seq must be a "
+                "(tx_seq, op_ordinal) pair of non-negative ints"
+            )
         evidence_payload = {
             "engine_payload_kind": str(getattr(evidence, "support_kind", "")),
             "payload_digest": str(support_digest) if isinstance(support_digest, str) else _opaque_digest(evidence),
+            "as_of_event_seq": list(as_of_event_seq),
         }
     return {
         "request": {
