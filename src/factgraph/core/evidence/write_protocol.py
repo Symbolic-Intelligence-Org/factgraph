@@ -5,7 +5,10 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from factgraph.core.protocol.annotation_v1 import SHARED_ANNOTATION_KEYS
+from factgraph.core.protocol.annotation_v1 import (
+    SHARED_ANNOTATION_KEYS,
+    initial_meta_annotation_v1,
+)
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
 from factgraph.core.store.ledger import (
@@ -186,7 +189,6 @@ def retract_by_asrt(
     normalized_meta = _normalize_meta(meta)
     revoker_asrt_id = new_assertion_id()
     ingested_at = now_epoch_nanos()
-    annotation_rows = _annotation_rows_for_claim(revoker_asrt_id, normalized_meta)
     meta_rows = [
         MetaRow(asrt_id=revoker_asrt_id, key="ingested_at", kind="time", value=ingested_at),
         MetaRow(
@@ -203,8 +205,6 @@ def retract_by_asrt(
         idempotency=None,
         revoker_asrt_id=revoker_asrt_id,
     )
-    if annotation_rows:
-        ledger.append_annotations(annotation_rows)
     return revoker_asrt_id
 
 
@@ -238,6 +238,11 @@ def _validate_write_inputs(
         raise WriteProtocolError("ledger must be Ledger")
     if not isinstance(pred_id, str) or not pred_id:
         raise WriteProtocolError("pred_id must be non-empty string")
+    if pred_id.startswith("__system__."):
+        raise WriteProtocolError(
+            "general field writes cannot use the reserved '__system__.' namespace; "
+            "use retract_by_asrt for revocations"
+        )
     if not isinstance(e_ref, str) or not e_ref:
         raise WriteProtocolError("e_ref must be non-empty string")
     if not isinstance(rest_terms, list):
@@ -403,10 +408,9 @@ def _annotation_rows_for_claim(
     """Project whitelisted shared meta keys into canonical annotation rows."""
     rows: list[AnnotationRow] = []
     for key in sorted(meta.keys()):
-        entry = _SHARED_ANNOTATION_WHITELIST.get(key)
-        if entry is None:
+        projection = initial_meta_annotation_v1(key)
+        if projection is None:
             continue
-        category, origin = entry
         value = meta[key]
         kind = _KEY_KIND_MAP.get(key)
         if kind is None:
@@ -414,21 +418,16 @@ def _annotation_rows_for_claim(
         rows.append(
             AnnotationRow(
                 asrt_id=asrt_id,
-                namespace="shared",
-                category=category,
+                namespace=projection.namespace,
+                category=projection.category,
                 key=key,
                 kind=kind,
                 value=value,
-                origin=origin,
-                derivation=_annotation_derivation_for_key(key, meta),
+                origin=projection.origin,
+                derivation=projection.derivation,
             )
         )
     return rows
-
-
-def _annotation_derivation_for_key(key: str, meta: dict[str, Any]) -> str | None:
-    del key, meta
-    return None
 
 
 def _user_meta_rows(asrt_id: str, meta: dict[str, Any]) -> list[MetaRow]:

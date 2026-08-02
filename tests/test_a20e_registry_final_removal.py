@@ -511,6 +511,13 @@ class MigrationCLIOutputTests(unittest.TestCase):
                         (claim_id, "source", "str", _enc("v0.2")),
                         (claim_id, "reviewed", "bool", _enc(False)),
                         (claim_id, "reviewed", "bool", _enc(True)),
+                        # Same logical value as another claim's annotation:
+                        # migration skip matching must remain assertion-local.
+                        (claim_id, "score", "float", _enc(0.5)),
+                        # A shared-contract key without a source annotation is
+                        # imported as late meta and must not fabricate one.
+                        (claim_id, "note", "str", _enc("meta-only")),
+                        (edge_id, "source", "str", _enc("edge-source")),
                         (edge_id, "ingest_key", "str", _enc("legacy-edge-key")),
                         (revoker_id, "reason", "str", _enc("superseded")),
                     ),
@@ -535,6 +542,26 @@ class MigrationCLIOutputTests(unittest.TestCase):
                             "source",
                             "str",
                             _enc("v0.2"),
+                            "observed",
+                            None,
+                        ),
+                        (
+                            edge_id,
+                            "shared",
+                            "source",
+                            "source",
+                            "str",
+                            _enc("edge-source"),
+                            "observed",
+                            None,
+                        ),
+                        (
+                            edge_id,
+                            "custom",
+                            "source",
+                            "source",
+                            "str",
+                            _enc("edge-source"),
                             "observed",
                             None,
                         ),
@@ -593,9 +620,29 @@ class MigrationCLIOutputTests(unittest.TestCase):
                     [False, True],
                 )
                 self.assertEqual(
+                    loaded.ledger.find_annotations(asrt_id=claim_id, key="note"),
+                    [],
+                )
+                self.assertEqual(
+                    [
+                        (row.namespace, row.category, row.value)
+                        for row in loaded.ledger.find_annotations(
+                            asrt_id=edge_id,
+                            key="source",
+                        )
+                    ],
+                    [
+                        ("shared", "source", "edge-source"),
+                        ("custom", "source", "edge-source"),
+                    ],
+                )
+                self.assertEqual(
                     [
                         (row.namespace, row.category, row.key, row.value, row.derivation)
-                        for row in loaded.ledger.find_annotations(asrt_id=edge_id)
+                        for row in loaded.ledger.find_annotations(
+                            asrt_id=edge_id,
+                            key="score",
+                        )
                     ],
                     [("legacy", "derived", "score", 0.5, "rule:1")],
                 )

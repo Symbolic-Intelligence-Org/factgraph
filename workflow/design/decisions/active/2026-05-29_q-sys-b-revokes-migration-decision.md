@@ -519,7 +519,8 @@ def find_claim_args(
 #### 4.4.2 SDK 影响(per ADR-API §4.4 `_meta` 统一)
 
 - `AssertionRecordSet.where(_meta={"key": "value"})` query path:Slice 3b 改 claim_meta 索引(`idx_claim_meta_key_value`)
-- shipped `accept` / `accept_many` 写 `annotation_rows` 路径在 Slice 3b 前已退场(per audit baseline);annotation_rows 表实际无写入源
+- **纯增量标注(2026-08-02)**:原“`annotation_rows` 无写入源”前提不成立;`adapters/pyreason/accept.py` 与 `adapters/problog/accept.py` 是现役写入源。Slice 3b 不恢复 namespace/category 物理列,而把非合同 annotation 的完整维度编码进 hidden-key M 事件,使 live 与账本重建可互相重现。
+- namespace/category 的维度清理与引擎 annotation 契约重设计并入 Slice 5 捆绑项;在此之前合同 initial-meta 投影与非合同 hidden-key companion 同时受支持。
 - `kind` 列移除:per ledger-spec §3.2 注释 "所有 value 都是 TEXT;特殊格式由 META_KEY_REGISTRY 规定";SDK 读 path 不再 query kind 列
 
 #### 4.4.3 跟 Q15.7(复合 PK)同 Slice 落地
@@ -729,11 +730,12 @@ per identity §12.5 Rule 5:"by_id 查 .all 不是 .active" — audit / replay �
 
 **Slice 3b schema 终态**:7 张表 → 3 张表(`claims` / `claim_meta` / `ledger_meta`),其中 `claims` 表 **暂保留** `rest_terms` 列作 legacy compatibility(per §4.2)+ **加** value + value_tag 双列。
 
-#### 4.7.2 **延后** Step 2+ Slice 5 — 1 项(三项绑定)
+#### 4.7.2 **延后** Step 2+ Slice 5 — 捆绑项
 
-| 项 | 延后内容 | 触发条件(三项绑定)|
+| 项 | 延后内容 | 触发条件|
 |---|---|---|
 | 精简 4 真正 drop `rest_terms` 列(+ Q-PR1 adapter rewrite + ADR-INV9 strict enforce)| ALTER TABLE drop rest_terms;adapter rewrite 改写 Pyreason 2-position;ADR-INV9 锁的 strict / weak enforce 落地 | 三项绑定:任一项缺失则 Slice 5 不可 mark `implemented` |
+| annotation 维度清理 + 引擎契约重设计 | 重评 namespace/category/origin/derivation 的逻辑契约与 PyReason/ProbLog emission;替换 3b hidden-key compatibility 编码时必须保持链可重放与冷启动等价 | 与 Slice 5 adapter rewrite 同 blueprint 设计与验收,不得在 3b 静默删除 |
 
 #### 4.7.3 Acceptance criteria(per meta-ADR §4.3 acceptance boundary)
 
@@ -986,6 +988,7 @@ Slice 3b blueprint Stage 4 acceptance criteria 必须包含:
 | Slice 3b implementation:application layer dispatch(INV-7c + INV-12 part 2 + find_revoker idempotency)+ INV-15 read-path filter to user-facing read APIs | Slice 3b implementation | Slice 3b Step 4.7 |
 | Slice 3b implementation:`Idempotency` 参数链清理 + `set` preserve dedup via `_find_active_claim_by_value` + `add` 改 multiset semantics + retract idempotency 走 find_revoker(INV-14)| Slice 3b implementation | Slice 3b Step 4.7 |
 | Slice 5(Step 2+)blueprint:引用本 ADR §4.7.2 作为三项绑定 acceptance(drop rest_terms 列 + adapter rewrite + ADR-INV9 strict enforce)| Slice 5 blueprint preflight | Step 2+ |
+| Slice 5 blueprint 同时纳入 annotation namespace/category 维度清理 + PyReason/ProbLog annotation 契约重设计;替换 hidden-key compatibility 编码须有 live/reload/replay parity gate | Slice 5 blueprint preflight | Step 2+ |
 | docs sync(Slice 4)— `ledger-schema-specification` 跟 ADR-SYS-B 对齐;`04_api_surface.en.md` 加 retract idempotency + `_meta` claim_meta path + INV-15 read filter + `add` multiset behavior change 说明;`identity-mechanism-redesign §10` 同步 | Slice 4 docs sync | Slice 3b 完成后 |
 
 ### 7.3 Cross-pillar interaction

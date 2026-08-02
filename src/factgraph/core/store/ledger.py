@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Literal, Mapping, Sequence
 
-from factgraph.core.protocol.annotation_v1 import SHARED_ANNOTATION_KEYS
+from factgraph.core.protocol.annotation_v1 import initial_meta_annotation_v1
 from factgraph.core.protocol.tup_v1 import claim_args_from_rest_terms
 
 
@@ -390,16 +390,63 @@ def _annotation_compatibility_meta_rows(
     rows: Sequence[AnnotationRow],
     skip_meta_rows: Sequence[MetaRow],
 ) -> list[MetaRow]:
-    meta_projection = {
-        (row.key, row.kind, _encode_meta_value(row.kind, row.value))
+    reproducible = {
+        _annotation_identity(annotation)
         for row in skip_meta_rows
+        if (annotation := _initial_meta_annotation_row(row)) is not None
     }
     return [
         MetaRow(row.asrt_id, _annotation_storage_key(row), row.kind, row.value)
         for row in rows
-        if (row.key, row.kind, _encode_meta_value(row.kind, row.value))
-        not in meta_projection
+        if _annotation_identity(row) not in reproducible
     ]
+
+
+def _initial_meta_annotation_row(row: MetaRow) -> AnnotationRow | None:
+    projection = initial_meta_annotation_v1(row.key)
+    if projection is None:
+        return None
+    return AnnotationRow(
+        asrt_id=row.asrt_id,
+        namespace=projection.namespace,
+        category=projection.category,
+        key=row.key,
+        kind=row.kind,
+        value=row.value,
+        origin=projection.origin,
+        derivation=projection.derivation,
+    )
+
+
+def _initial_meta_annotation_rows(rows: Sequence[MetaRow]) -> list[AnnotationRow]:
+    return [
+        annotation
+        for row in rows
+        if (annotation := _initial_meta_annotation_row(row)) is not None
+    ]
+
+
+def _annotation_identity(row: AnnotationRow) -> tuple[object, ...]:
+    return (
+        row.asrt_id,
+        row.namespace,
+        row.category,
+        row.key,
+        row.kind,
+        _encode_meta_value(row.kind, row.value),
+        row.origin,
+        row.derivation,
+    )
+
+
+def _merge_annotation_rows(
+    contract_rows: Sequence[AnnotationRow],
+    explicit_rows: Sequence[AnnotationRow],
+) -> list[AnnotationRow]:
+    merged: dict[tuple[str, str, str, str], AnnotationRow] = {}
+    for row in (*contract_rows, *explicit_rows):
+        merged[(row.asrt_id, row.namespace, row.category, row.key)] = row
+    return list(merged.values())
 
 
 def _annotation_from_storage_key(
@@ -521,8 +568,39 @@ class Ledger:
             if not isinstance(value, str):
                 raise ValueError("ledger metadata values must be strings")
 
-        assertion_writes = tuple(assertions)
-        revocation_writes = tuple(revocations)
+        raw_assertion_writes = tuple(assertions)
+        raw_revocation_writes = tuple(revocations)
+        if any(not isinstance(item, LedgerAssertionWrite) for item in raw_assertion_writes):
+            raise TypeError("assertions must contain LedgerAssertionWrite")
+        if any(not isinstance(item, LedgerRevocationWrite) for item in raw_revocation_writes):
+            raise TypeError("revocations must contain LedgerRevocationWrite")
+        assertion_writes = tuple(
+            LedgerAssertionWrite(
+                claim=item.claim,
+                claim_args=item.claim_args,
+                meta_rows=item.meta_rows,
+                annotation_rows=tuple(
+                    _merge_annotation_rows(
+                        _initial_meta_annotation_rows(item.meta_rows),
+                        item.annotation_rows,
+                    )
+                ),
+            )
+            for item in raw_assertion_writes
+        )
+        revocation_writes = tuple(
+            LedgerRevocationWrite(
+                revokes=item.revokes,
+                meta_rows=item.meta_rows,
+                annotation_rows=tuple(
+                    _merge_annotation_rows(
+                        _initial_meta_annotation_rows(item.meta_rows),
+                        item.annotation_rows,
+                    )
+                ),
+            )
+            for item in raw_revocation_writes
+        )
         appended_meta_rows = tuple(meta_appends)
         _validate_meta_rows(list(appended_meta_rows))
         raw_tx_seq = normalized_metadata.get("head_tx_seq")
@@ -532,8 +610,6 @@ class Ledger:
         new_claim_ids: set[str] = set()
         new_revoker_ids: set[str] = set()
         for item in assertion_writes:
-            if not isinstance(item, LedgerAssertionWrite):
-                raise TypeError("assertions must contain LedgerAssertionWrite")
             _validate_claim_input(item.claim, require_asrt_id=True)
             _validate_claim_args_rows(list(item.claim_args))
             _validate_meta_rows(list(item.meta_rows))
@@ -551,8 +627,6 @@ class Ledger:
             new_claim_ids.add(asrt_id)
 
         for item in revocation_writes:
-            if not isinstance(item, LedgerRevocationWrite):
-                raise TypeError("revocations must contain LedgerRevocationWrite")
             _validate_revokes_row(item.revokes)
             _validate_meta_rows(list(item.meta_rows))
             _reject_duplicate_meta_keys(item.meta_rows, context="revocation initial meta")
@@ -679,6 +753,7 @@ class Ledger:
             def _apply_batch_indexes() -> None:
                 for op_ordinal, item in enumerate(assertion_writes):
                     self._claim_tx_refs[item.claim.asrt_id] = tx_seq
+                    self._claim_op_ordinals[item.claim.asrt_id] = op_ordinal
                     self._idx_add_claim(item.claim)
                     self._idx_add_claim_meta_events(
                         item.meta_rows,
@@ -715,6 +790,7 @@ class Ledger:
                         ),
                         tx_ref=tx_seq,
                     )
+                    self._claim_op_ordinals[item.revokes.revoker_asrt_id] = op_ordinal
                     self._idx_add_revoke(item.revokes)
                     self._idx_add_claim_meta_events(
                         item.meta_rows,
@@ -864,7 +940,7 @@ class Ledger:
             )
             for row in meta_rows
         ]
-        actual_annotation_rows = [
+        explicit_annotation_rows = [
             AnnotationRow(
                 asrt_id=effective_asrt_id,
                 namespace=row.namespace,
@@ -877,6 +953,10 @@ class Ledger:
             )
             for row in (annotation_rows or [])
         ]
+        actual_annotation_rows = _merge_annotation_rows(
+            _initial_meta_annotation_rows(actual_meta_rows),
+            explicit_annotation_rows,
+        )
         if actual_annotation_rows:
             _validate_annotation_rows(actual_annotation_rows)
 
@@ -901,6 +981,7 @@ class Ledger:
 
             def _apply_assertion_indexes() -> None:
                 self._claim_tx_refs[actual_claim.asrt_id] = tx_seq
+                self._claim_op_ordinals[actual_claim.asrt_id] = 0
                 self._idx_add_claim(actual_claim)
                 self._idx_add_claim_meta_events(
                     actual_meta_rows,
@@ -962,6 +1043,8 @@ class Ledger:
             )
             for row in meta_rows
         ]
+        actual_annotation_rows = _initial_meta_annotation_rows(actual_meta_rows)
+        _validate_annotation_rows(actual_annotation_rows)
 
         with self._write_session() as (conn, post_commit):
             target = self._claim_by_asrt_id.get(revokes.revoked_asrt_id)
@@ -982,9 +1065,18 @@ class Ledger:
                 tx_seq=tx_seq,
                 op_ordinal=0,
             )
+            if actual_annotation_rows:
+                self._insert_annotation_rows(
+                    conn,
+                    actual_annotation_rows,
+                    tx_seq=tx_seq,
+                    op_ordinal=0,
+                    skip_meta_rows=actual_meta_rows,
+                )
 
             def _apply_revocation_indexes() -> None:
                 self._idx_add_system_revocation_claim(revoke_claim, tx_ref=tx_seq)
+                self._claim_op_ordinals[revoke_claim.asrt_id] = 0
                 self._idx_add_revoke(actual_revokes)
                 self._idx_add_claim_meta_events(
                     actual_meta_rows,
@@ -992,6 +1084,8 @@ class Ledger:
                     op_ordinal=0,
                     project_meta=True,
                 )
+                if actual_annotation_rows:
+                    self._idx_add_annotation(actual_annotation_rows)
 
             post_commit.append(_apply_revocation_indexes)
         return AppendResult(asrt_id=effective_revoker_id, written=True)
@@ -1016,6 +1110,7 @@ class Ledger:
             self._insert_claim(conn, actual_claim, claim.asrt_id, tx_ref=tx_seq)
             def _apply_claim_index() -> None:
                 self._claim_tx_refs[actual_claim.asrt_id] = tx_seq
+                self._claim_op_ordinals[actual_claim.asrt_id] = 0
                 self._idx_add_claim(actual_claim)
 
             post_commit.append(_apply_claim_index)
@@ -1142,6 +1237,7 @@ class Ledger:
             post_commit.append(
                 lambda: (
                     self._idx_add_system_revocation_claim(revoke_claim, tx_ref=tx_seq),
+                    self._claim_op_ordinals.__setitem__(revoke_claim.asrt_id, 0),
                     self._idx_add_revoke(actual_row),
                 )
             )
@@ -1413,6 +1509,7 @@ class Ledger:
         self._claims_by_pred_e_ref: dict[tuple[str, str], list[Claim]] = {}
         self._system_claim_by_asrt_id: dict[str, Claim] = {}
         self._claim_tx_refs: dict[str, int] = {}
+        self._claim_op_ordinals: dict[str, int] = {}
 
         self._claim_meta_events: list[_ClaimMetaEvent] = []
         self._claim_meta_events_by_asrt_id: dict[str, list[_ClaimMetaEvent]] = {}
@@ -1589,12 +1686,16 @@ class Ledger:
     def _load_from_db_via(self, conn: sqlite3.Connection) -> None:
         self._reset_indexes()
 
+        next_op_ordinal_by_tx: dict[int, int] = {}
         for row in conn.execute(
             "SELECT asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref "
             "FROM claims ORDER BY seq"
         ).fetchall():
             claim = _row_to_claim(row)
             tx_ref = int(row["tx_ref"])
+            op_ordinal = next_op_ordinal_by_tx.get(tx_ref, 0)
+            next_op_ordinal_by_tx[tx_ref] = op_ordinal + 1
+            self._claim_op_ordinals[claim.asrt_id] = op_ordinal
             if claim.pred_id.startswith(_SYSTEM_PREFIX):
                 self._idx_add_system_revocation_claim(claim, tx_ref=tx_ref)
                 self._idx_add_revoke(Revokes(claim.asrt_id, str(claim.rest_terms[0][1])))
@@ -1602,10 +1703,17 @@ class Ledger:
                 self._claim_tx_refs[claim.asrt_id] = tx_ref
                 self._idx_add_claim(claim)
 
-        for row in conn.execute(
+        persisted_meta_rows = conn.execute(
             "SELECT rowid, asrt_id, key, kind, value, tx_seq, op_ordinal "
             "FROM claim_meta ORDER BY tx_seq, op_ordinal, rowid"
-        ).fetchall():
+        ).fetchall()
+        identity_marked_asrt_ids = {
+            str(row["asrt_id"])
+            for row in persisted_meta_rows
+            if row["key"] == "tx_id" and row["kind"] == "str"
+        }
+        identity_closed: set[str] = set()
+        for row in persisted_meta_rows:
             kind = row["kind"]
             value = _decode_meta_value(kind, row["value"])
             key = str(row["key"])
@@ -1629,22 +1737,19 @@ class Ledger:
                 continue
             meta = MetaRow(asrt_id, key, str(kind), value)
             self._idx_add_meta([meta])
-            shared = SHARED_ANNOTATION_KEYS.get(key)
-            if shared is not None and int(row["tx_seq"]) == self._claim_tx_refs.get(asrt_id):
-                category, origin = shared
-                self._idx_add_annotation(
-                    [
-                        AnnotationRow(
-                            asrt_id,
-                            "shared",
-                            category,
-                            key,
-                            str(kind),
-                            value,
-                            origin,
-                        )
-                    ]
+            if asrt_id in identity_marked_asrt_ids:
+                is_initial_meta = asrt_id not in identity_closed
+            else:
+                is_initial_meta = (
+                    int(row["tx_seq"]) == self._claim_tx_refs.get(asrt_id)
+                    and int(row["op_ordinal"]) == self._claim_op_ordinals.get(asrt_id)
                 )
+            if is_initial_meta:
+                annotation = _initial_meta_annotation_row(meta)
+                if annotation is not None:
+                    self._idx_add_annotation([annotation])
+            if key == "tx_id" and kind == "str":
+                identity_closed.add(asrt_id)
 
     def _load_from_db(self) -> None:
         self._load_from_db_via(self._get_connection())
@@ -1780,6 +1885,11 @@ def _validate_claim_input(claim: Claim, *, require_asrt_id: bool) -> None:
         pred_id=claim.pred_id,
         e_ref=claim.e_ref,
     )
+    if claim.pred_id.startswith(_SYSTEM_PREFIX):
+        raise ValueError(
+            "general claim writes cannot use the reserved '__system__.' namespace; "
+            "use the dedicated revocation path"
+        )
 
 
 def _validate_claim_identity(*, asrt_id: str | None, pred_id: str, e_ref: str) -> None:

@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 from factgraph.adapters.problog.problog_export import ProbLogExportError, export_problog
 from factgraph.core.evidence.write_protocol import set_field
-from factgraph.core.store.ledger import AnnotationRow
+from factgraph.core.store.ledger import AnnotationRow, Ledger
 from factgraph.sdk.schema import Entity, Field, Identity
 from factgraph.sdk.store import SDKStore
 
@@ -19,6 +19,60 @@ class User(Entity):
 
 
 class ProbLogExportTests(unittest.TestCase):
+    def test_problog_annotation_namespace_survives_cold_reload(self) -> None:
+        from types import SimpleNamespace
+
+        from factgraph.adapters.problog.accept import persist_problog_annotations
+
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "ledger.db"
+            ledger = Ledger(path)
+            asrt_id = set_field(
+                ledger,
+                pred_id="user:name",
+                e_ref="idref_v1:User:Alice",
+                rest_terms=[("string", "Alice")],
+                meta={"source": "test"},
+            )
+            store = SimpleNamespace(
+                _problog_pending_annotations={
+                    "run-1": {
+                        "cand-1": [
+                            {
+                                "namespace": "problog",
+                                "category": "semantic",
+                                "key": "probability",
+                                "kind": "float",
+                                "value": 0.8,
+                                "origin": "derived",
+                                "derivation": "drv.problog_tag",
+                                "fact_index": 0,
+                            }
+                        ]
+                    }
+                }
+            )
+            accept_result = SimpleNamespace(
+                candidate_id="cand-1",
+                written_assertions=[{"asrt_id": asrt_id, "pred_id": "user:name"}],
+            )
+            self.assertEqual(
+                persist_problog_annotations(ledger, "run-1", store, accept_result),
+                1,
+            )
+            self.assertEqual(
+                len(ledger.find_annotations(asrt_id=asrt_id, namespace="problog")),
+                1,
+            )
+            ledger.close()
+
+            reopened = Ledger(path)
+            self.assertEqual(
+                len(reopened.find_annotations(asrt_id=asrt_id, namespace="problog")),
+                1,
+            )
+            reopened.close()
+
     def _make_sdk(self) -> SDKStore:
         sdk = SDKStore([User])
         alice_ref = sdk.entities.ref(User, user_id="Alice")

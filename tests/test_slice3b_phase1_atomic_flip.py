@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from factgraph.core.evidence.write_protocol import WriteProtocolError, set_field
 from factgraph.core.store.database import (
     AssertionInput,
     Database,
@@ -17,7 +18,9 @@ from factgraph.core.store.database import (
     resolve_database_workspace_paths,
 )
 from factgraph.core.store.ledger import (
+    AnnotationRow,
     Claim,
+    LedgerAssertionWrite,
     Ledger,
     LedgerFormatError,
     MetaRow,
@@ -41,6 +44,102 @@ class Inv15Person(Entity):
 
 
 class Slice3bAtomicFlipTests(unittest.TestCase):
+    def test_initial_meta_contract_and_custom_companion_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            path = Path(raw_tmp) / "ledger.db"
+            ledger = Ledger(path)
+
+            late_id = "asrt:11111111111111111111111111111111"
+            ledger.append_assertion(
+                claim=Claim(late_id, "person:name", "idref_v1:Person:late", []),
+                claim_args=[],
+                meta_rows=[],
+                asrt_id=late_id,
+            )
+            ledger.append_meta([MetaRow(late_id, "source", "str", "late-only")])
+            self.assertEqual(ledger.find_annotations(asrt_id=late_id), [])
+
+            initial_id = "asrt:22222222222222222222222222222222"
+            custom = AnnotationRow(
+                initial_id,
+                "custom",
+                "source",
+                "source",
+                "str",
+                "initial-and-custom",
+                "observed",
+            )
+            ledger.append_assertion(
+                claim=Claim(initial_id, "person:name", "idref_v1:Person:initial", []),
+                claim_args=[],
+                meta_rows=[MetaRow(initial_id, "source", "str", "initial-and-custom")],
+                annotation_rows=[custom],
+                asrt_id=initial_id,
+            )
+            self.assertEqual(
+                [row.namespace for row in ledger.find_annotations(asrt_id=initial_id)],
+                ["shared", "custom"],
+            )
+            ledger.close()
+
+            reopened = Ledger(path)
+            self.assertEqual(reopened.find_annotations(asrt_id=late_id), [])
+            self.assertEqual(
+                [row.namespace for row in reopened.find_annotations(asrt_id=initial_id)],
+                ["shared", "custom"],
+            )
+            reopened.close()
+
+    def test_general_claim_write_paths_reject_system_predicates_before_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            path = Path(raw_tmp) / "ledger.db"
+            ledger = Ledger(path)
+            for index, pred_id in enumerate(
+                ("__system__.revokes", "__system__.unsupported"),
+                start=1,
+            ):
+                asrt_id = f"asrt:{index:032x}"
+                claim = Claim(asrt_id, pred_id, "idref_v1:Person:alice", [])
+                with self.subTest(path="append_assertion", pred_id=pred_id):
+                    with self.assertRaisesRegex(ValueError, "reserved '__system__.'"):
+                        ledger.append_assertion(
+                            claim=claim,
+                            claim_args=[],
+                            meta_rows=[],
+                            asrt_id=asrt_id,
+                        )
+                with self.subTest(path="append_claim", pred_id=pred_id):
+                    with self.assertRaisesRegex(ValueError, "reserved '__system__.'"):
+                        ledger.append_claim(claim)
+                with self.subTest(path="commit_batch", pred_id=pred_id):
+                    with self.assertRaisesRegex(ValueError, "reserved '__system__.'"):
+                        ledger.commit_batch(
+                            assertions=(
+                                LedgerAssertionWrite(
+                                    claim=claim,
+                                    claim_args=(),
+                                    meta_rows=(),
+                                ),
+                            ),
+                            revocations=(),
+                            expected_head_tx_id=None,
+                            head_tx_id="tx:rejected-before-cas",
+                            metadata={"head_tx_seq": "0"},
+                        )
+                with self.subTest(path="write_protocol.set_field", pred_id=pred_id):
+                    with self.assertRaisesRegex(WriteProtocolError, "reserved '__system__.'"):
+                        set_field(ledger, pred_id, "idref_v1:Person:alice", [])
+
+            self.assertEqual(ledger.find_claims(), [])
+            self.assertIsNone(ledger.get_ledger_meta("head_tx_id"))
+            ledger.close()
+
+            reopened = Ledger(path)
+            self.assertEqual(reopened.find_claims(), [])
+            self.assertEqual(reopened.revokes, [])
+            self.assertIsNone(reopened.get_ledger_meta("head_tx_id"))
+            reopened.close()
+
     def test_new_workspace_has_exact_three_table_shape_and_tx_refs(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp, patch(
             "factgraph.core.store.database._new_assertion_id",

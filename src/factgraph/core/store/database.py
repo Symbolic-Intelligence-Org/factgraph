@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Iterable, Mapping, Sequence
 
-from factgraph.core.protocol.annotation_v1 import SHARED_ANNOTATION_KEYS
+from factgraph.core.protocol.annotation_v1 import initial_meta_annotation_v1
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.lthash import (
     LTHASH_SCHEME,
@@ -845,6 +845,28 @@ class Database:
             meta_rows_by_asrt_id: dict[str, list[MetaRow]] = {}
             for row in legacy_rows.meta_rows:
                 meta_rows_by_asrt_id.setdefault(row.asrt_id, []).append(row)
+            source_annotation_identities = {
+                _migration_annotation_identity(row)
+                for row in legacy_rows.annotation_rows
+            }
+            post_identity_meta_rows = tuple(
+                row
+                for row in legacy_rows.meta_rows
+                if (
+                    (annotation := _contract_annotation_for_meta(row)) is not None
+                    and _migration_annotation_identity(annotation)
+                    not in source_annotation_identities
+                )
+            )
+            post_identity_meta_ids = {id(row) for row in post_identity_meta_rows}
+            initial_meta_rows = tuple(
+                row
+                for row in legacy_rows.meta_rows
+                if id(row) not in post_identity_meta_ids
+            )
+            initial_meta_rows_by_asrt_id: dict[str, list[MetaRow]] = {}
+            for row in initial_meta_rows:
+                initial_meta_rows_by_asrt_id.setdefault(row.asrt_id, []).append(row)
             for claim in legacy_rows.claims:
                 asrt_id = _require_asrt_id(claim.asrt_id, field="legacy asrt_id")
                 rows = meta_rows_by_asrt_id.get(asrt_id, [])
@@ -853,7 +875,10 @@ class Database:
                         f"legacy assertion already carries v0.3 reserved metadata: {asrt_id}"
                     )
                 user_meta = _normalize_meta_entries(
-                    tuple(MetaEntry(row.key, row.kind, row.value) for row in rows)
+                    tuple(
+                        MetaEntry(row.key, row.kind, row.value)
+                        for row in initial_meta_rows_by_asrt_id.get(asrt_id, [])
+                    )
                 )
                 digest = assertion_digest_for(
                     pred_id=claim.pred_id,
@@ -904,7 +929,7 @@ class Database:
             revocation_writes = tuple(
                 LedgerRevocationWrite(revokes=row) for row in legacy_rows.revocations
             )
-            meta_appends: list[MetaRow] = list(legacy_rows.meta_rows)
+            meta_appends: list[MetaRow] = list(initial_meta_rows)
             for asrt_id, digest in assertion_digests.items():
                 meta_appends.extend(
                     (
@@ -929,6 +954,7 @@ class Database:
                         MetaRow(revoker_id, "tx_id", "str", tx_id),
                     )
                 )
+            meta_appends.extend(post_identity_meta_rows)
             meta_appends.extend(
                 _annotation_compatibility_meta_rows(
                     legacy_rows.annotation_rows,
@@ -1646,6 +1672,40 @@ def _read_legacy_ledger_rows(source: Path) -> _LegacyLedgerRows:
             conn.close()
 
 
+def _contract_annotation_for_meta(row: MetaRow) -> AnnotationRow | None:
+    projection = initial_meta_annotation_v1(row.key)
+    if projection is None:
+        return None
+    return AnnotationRow(
+        row.asrt_id,
+        projection.namespace,
+        projection.category,
+        row.key,
+        row.kind,
+        row.value,
+        projection.origin,
+        projection.derivation,
+    )
+
+
+def _migration_annotation_identity(row: AnnotationRow) -> tuple[object, ...]:
+    return (
+        row.asrt_id,
+        row.key,
+        row.namespace,
+        row.category,
+        row.kind,
+        json.dumps(
+            _to_jsonable(row.value),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ),
+        row.origin,
+        row.derivation,
+    )
+
+
 def _read_seven_table_legacy_rows(conn: sqlite3.Connection) -> _LegacyLedgerRows:
     claims = tuple(
         Claim(
@@ -1716,6 +1776,8 @@ def _read_three_table_legacy_rows(conn: sqlite3.Connection) -> _LegacyLedgerRows
     factual_claims: list[Claim] = []
     revocations: list[Revokes] = []
     claim_tx_refs: dict[str, int] = {}
+    claim_op_ordinals: dict[str, int] = {}
+    next_op_ordinal_by_tx: dict[int, int] = {}
     for row in conn.execute(
         "SELECT asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref "
         "FROM claims ORDER BY seq"
@@ -1723,7 +1785,10 @@ def _read_three_table_legacy_rows(conn: sqlite3.Connection) -> _LegacyLedgerRows
         asrt_id = str(row["asrt_id"])
         pred_id = str(row["pred_id"])
         terms = _decode_claim_terms(row["rest_terms"], row["value"], row["value_tag"])
-        claim_tx_refs[asrt_id] = int(row["tx_ref"])
+        tx_ref = int(row["tx_ref"])
+        claim_tx_refs[asrt_id] = tx_ref
+        claim_op_ordinals[asrt_id] = next_op_ordinal_by_tx.get(tx_ref, 0)
+        next_op_ordinal_by_tx[tx_ref] = claim_op_ordinals[asrt_id] + 1
         if pred_id.startswith("__system__."):
             if pred_id != "__system__.revokes" or len(terms) != 1 or terms[0][0] != "string":
                 raise DatabaseError(f"invalid legacy system claim: {asrt_id}")
@@ -1733,10 +1798,17 @@ def _read_three_table_legacy_rows(conn: sqlite3.Connection) -> _LegacyLedgerRows
 
     meta_rows: list[MetaRow] = []
     annotation_rows: list[AnnotationRow] = []
-    for row in conn.execute(
+    persisted_meta_rows = conn.execute(
         "SELECT rowid, asrt_id, key, kind, value, tx_seq, op_ordinal "
         "FROM claim_meta ORDER BY tx_seq, op_ordinal, rowid"
-    ).fetchall():
+    ).fetchall()
+    identity_marked_asrt_ids = {
+        str(row["asrt_id"])
+        for row in persisted_meta_rows
+        if row["key"] == "tx_id" and row["kind"] == "str"
+    }
+    identity_closed: set[str] = set()
+    for row in persisted_meta_rows:
         asrt_id = str(row["asrt_id"])
         key = str(row["key"])
         kind = row["kind"]
@@ -1747,13 +1819,32 @@ def _read_three_table_legacy_rows(conn: sqlite3.Connection) -> _LegacyLedgerRows
         if key.startswith(_ANNOTATION_COMPAT_PREFIX):
             annotation_rows.append(_annotation_from_storage_key(asrt_id, key, kind, value))
             continue
-        meta_rows.append(MetaRow(asrt_id, key, kind, value))
-        shared = SHARED_ANNOTATION_KEYS.get(key)
-        if shared is not None and int(row["tx_seq"]) == claim_tx_refs.get(asrt_id):
-            category, origin = shared
-            annotation_rows.append(
-                AnnotationRow(asrt_id, "shared", category, key, kind, value, origin)
+        meta = MetaRow(asrt_id, key, kind, value)
+        meta_rows.append(meta)
+        if asrt_id in identity_marked_asrt_ids:
+            is_initial_meta = asrt_id not in identity_closed
+        else:
+            is_initial_meta = (
+                int(row["tx_seq"]) == claim_tx_refs.get(asrt_id)
+                and int(row["op_ordinal"]) == claim_op_ordinals.get(asrt_id)
             )
+        if is_initial_meta:
+            projection = initial_meta_annotation_v1(key)
+            if projection is not None:
+                annotation_rows.append(
+                    AnnotationRow(
+                        asrt_id,
+                        projection.namespace,
+                        projection.category,
+                        key,
+                        kind,
+                        value,
+                        projection.origin,
+                        projection.derivation,
+                    )
+                )
+        if key == "tx_id" and kind == "str":
+            identity_closed.add(asrt_id)
     return _LegacyLedgerRows(
         tuple(factual_claims),
         tuple(meta_rows),
@@ -2586,19 +2677,19 @@ def _normalize_meta_entries(
 def _annotation_rows(asrt_id: str, meta: Sequence[MetaEntry]) -> list[AnnotationRow]:
     rows: list[AnnotationRow] = []
     for entry in meta:
-        annotation = SHARED_ANNOTATION_KEYS.get(entry.key)
-        if annotation is None:
+        projection = initial_meta_annotation_v1(entry.key)
+        if projection is None:
             continue
-        category, origin = annotation
         rows.append(
             AnnotationRow(
                 asrt_id=asrt_id,
-                namespace="shared",
-                category=category,
+                namespace=projection.namespace,
+                category=projection.category,
                 key=entry.key,
                 kind=entry.kind,
                 value=entry.value,
-                origin=origin,
+                origin=projection.origin,
+                derivation=projection.derivation,
             )
         )
     return rows
