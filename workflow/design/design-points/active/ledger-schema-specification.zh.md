@@ -222,7 +222,7 @@ CREATE TABLE ledger_meta (
 
 - `claim_args`(数据精简 4)— NEW 路径由 claims.value + value_tag 表达,legacy 路径可直接从保留的 rest_terms 合成;物理行展开在两侧都冗余
 - `meta_rows`(数据精简 1+5)— 与 annotation_rows 合并并改名为 `claim_meta`
-- `annotation_rows`(数据精简 1+2+5)— 同上;连带 `namespace` / `category` / `derivation` / `origin` / `kind` 列消失
+- `annotation_rows`(数据精简 1+2+5)— 同上;独立 `namespace` / `category` / `derivation` / `origin` 列消失;著述端 `kind` 保留在六列 `claim_meta`,非合同 annotation 的维度暂编码进 hidden key
 - `revokes`(数据精简 3)— 撤销变成特殊 pred Claim 进 claims
 - `ingest_keys`(数据精简 6)— ledger 不做 idempotency;移到上层 API 责任
 
@@ -742,7 +742,8 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 ### §9.2 数据精简 2:`namespace` / `category` / `derivation` / `origin` 列删除
 
 - **delta**:claim_meta 不含这四列
-- **背景**:accept / accept_many 退场后多 namespace 写入源消失(详见 [`append-only-ledger-evaluation.zh.md`](append-only-ledger-evaluation.zh.md) §4 维度 6)
+- **前提修正(2026-08-02)**:`adapters/pyreason/accept.py` 与 `adapters/problog/accept.py` 仍是现役多 namespace 写入源;旧“写入源消失”判断不成立
+- **3b compatibility**:initial-meta 合同 annotation 由 `annotation_v1` 纯函数投影;非合同 annotation 把 namespace/category/origin/derivation 编入 hidden key M 事件,使 live/reload/replay 无损。维度清理与引擎 annotation 契约重设计并入 Slice 5 捆绑项
 - **`derivation` 列**:annotation_rows 时代零写入;未来若需要恢复以独立 derivation 链表设计
 - **`origin` 列**:observed/derived 区分简化掉;如未来需要,encode 为 meta key 自身(如 `meta_origin: "derived"`)
 
@@ -763,23 +764,23 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 
 - **delta**:
   - 表 rename: `fact_meta` → `claim_meta`(强调"claim 身份下的 meta event"而非"事实 payload")
-  - 列口径:`claim_meta` 不设 claims-style `value_tag`,但保留 dbtx_v2 已承诺的著述端 `kind`(2026-08-01 用户裁定)
+  - 列口径:`claim_meta` 不设 claims-style `value_tag`,但保留 dbtx_v2 已承诺的著述端 `kind`(2026-08-01 协调方内联裁定,用户否决权开放)
   - 列 drop: `origin`(observed/derived 简化掉;如需要 encode 为 meta key 自身)
   - 中心化:META_KEY_REGISTRY(§5.3)显式文档化系统已知 key 的格式(source / bound / ingested_at / 等)
 - **理由**:registry 中心化系统 key 格式;同时存储不得丢失 canonical tx 已携带的 kind
 - **影响**:reader 端解码协议改为"registry 校验系统 key → 按 stored kind 解码"
 
-### §9.6 数据精简 6:`ingest_keys` 退场 + ledger 不做 dedup
+### §9.6 数据精简 6:`ingest_keys` 表退场(partial)
 
-- **delta**:完全删除 `ingest_keys` 表;不在 `claim_meta` 写 `key="ingest_key"` 副本;ledger 不承担 idempotency
-- **影响重大**:
-  - `_compute_ingest_key` 算法不需要从 ledger 调(可保留作 SDK 层 helper 供上层 caller 自主使用)
-  - `Idempotency(...)` 参数从 `ledger.append_assertion` / `append_revocation` 移除
-  - `_find_active_claim_by_ingest_key` 函数(write_protocol)移除
-  - `replace_field` 的 preflight dedup 简化(直接基于已 active 的 claims 行查重,不查 claim_meta)
+- **3b 已完成**:完全删除物理 `ingest_keys` 表,消除独立幂等真值源;application/SDK 的 set/add/retract 语义按 Q-SYS-B §4.5 保持
+- **3b compatibility 残留**:
+  - `key="ingest_key"` 仍可作为 `claim_meta` 事件存在,是当前 application ingest 预解析和 legacy Ledger 幂等索引的唯一可重建介质
+  - `Idempotency(...)` 参数仍保留在 `ledger.append_assertion` / `append_revocation`;使用该参数时边界必须物化匹配的 `ingest_key` meta 事件,不得依赖已删除的表
+  - `_compute_ingest_key`、`_find_active_claim_by_ingest_key` 与 Ledger 侧 lookup 仍是 compatibility surface;正式移除须先改写现有 application/legacy caller
+- **准确边界**:7 表实现只传 `Idempotency(...)` 即会写独立表并记住 key;3 表在本补钉前若调用者未同时传匹配的 `ingest_key` meta,同句柄下一次调用及 cold reload 都会遗忘。本补钉统一自动物化事件,恢复该兼容语义
 - **承担方变化**:
-  - 旧:ledger 内部双轨幂等机制(ingest_keys 表 + meta_rows.ingest_key 副本)
-  - 新:上层 API / SDK / caller 自主管理 idempotency;ledger 仅保证 INV-14(retract 幂等)
+  - 旧:ledger 内部双轨幂等机制(`ingest_keys` 表 + `meta_rows.ingest_key` 副本)
+  - 当前 3b:单轨 `claim_meta.ingest_key` 事件 + 内存投影;普通 SDK set/add policy 仍归 application,Ledger 参数只为 compatibility
 - **理由**:
   - Datomic-style "纯 event log" 模型;idempotency 是 projection/API policy 不是 schema 约束
   - 同内容多次写入可以有意义(不同来源、不同时间、不同 actor)— 不应被 schema 阻止
@@ -900,7 +901,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-27 | Q-RV1:撤销机制属于哪个工业系谱 | append-only correction event 系谱(与 Datomic / Event Sourcing 同系谱)| ✅ 已采纳 |
 | 2026-05-28 | claim-first immutable payload 模型:meta 是 claim 不可变 payload 一部分;meta 变更 = revoke + append 新 claim | 接受(覆盖之前"fact_meta 可独立 upsert"心智模型)| ⚠️ meta 部分被 2026-07-31 Q-SAE-8 supersede;fact payload 变更规则仍有效 |
 | 2026-05-28 | `fact_meta` 表 rename 为 `claim_meta` | 接受 — 强调 claim-bound 语义 | ✅ 已采纳 |
-| 2026-05-28 | `claim_meta` drop `value_tag` 列 | ⚠️ 术语收紧 — 不设 claims-style `value_tag`;2026-08-01 用户裁定恢复著述端 `kind`,因 dbtx_v2 canonical bytes 已承诺该信息 | superseded in part |
+| 2026-05-28 | `claim_meta` drop `value_tag` 列 | ⚠️ 术语收紧 — 不设 claims-style `value_tag`;2026-08-01 协调方内联裁定(用户否决权开放)恢复著述端 `kind`,因 dbtx_v2 canonical bytes 已承诺该信息 | superseded in part |
 | 2026-05-28 | `claim_meta` drop `origin` 列 | 接受 — 如需要 encode 为 meta key 自身 | ✅ 已采纳 |
 | 2026-05-28 | META_KEY_REGISTRY 必须文档化 | 接受 — 见 §5.3 | ✅ 已采纳 |
 | 2026-05-28 | Ledger 仅 2 个原语(append claim / append revoke claim);SDK update / delete 是组合糖 | 接受 — ledger 不引入 update 概念 | ⚠️ 事实生命周期二原语仍有效;全局“仅 2 个原语”措辞已被 Q-SAE-8 `append meta event` 补充 |
@@ -909,7 +910,8 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 2026-05-28 | Multi-cardinality 读取语义 | multiset(保留独立 asrt_id;caller 自行 dedup 如需 set 语义)| ✅ 已采纳(见 §8.3)|
 | 2026-05-28 | Alpha 状态:无生产数据兼容性负担 | 接受 — migration 是代码 + schema 重构,不是数据搬迁;Q-VD / Q-WF 消解;Q-DB / Q-TP1 简化 | ✅ 已采纳(见 §2.3 + §9 alpha 前言)|
 | 2026-07-31 | Q-SAE-8:claim_meta 事件化 + `(tx_seq, op_ordinal)` 全序;supersede `(asrt_id, key)` 唯一行模型 | 接受 — row immutable、同键多 event、last-wins=max、receipt as-of | ✅ adopted(见 §3.2 / §9.7)|
-| 2026-08-01 | `claim_meta.kind` 恢复 + tombstone 双 NULL;initial meta 同 op 内 key 唯一 | 接受 — 链重放/冷启动无损一致;重复 initial key fail closed | ✅ 用户裁定 |
+| 2026-08-01 | `claim_meta.kind` 恢复 + tombstone 双 NULL;initial meta 同 op 内 key 唯一 | 接受 — 链重放/冷启动无损一致;重复 initial key fail closed | ✅ 协调方内联裁定,用户否决权开放 |
+| 2026-08-02 | §9.6 实施完成度修正 | `ingest_keys` 物理表退场已完成;`claim_meta.ingest_key`、Ledger `Idempotency` 参数及 lookup/compute helper 作为 compatibility surface 保留,标注 partial | ⚠️ partial,见 §9.6 / blueprint Deviations |
 
 **待裁定**(alpha 状态下大幅简化):
 

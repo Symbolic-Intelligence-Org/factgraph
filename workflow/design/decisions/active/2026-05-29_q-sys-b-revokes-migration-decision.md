@@ -499,11 +499,11 @@ def find_claim_args(
 
 ### 4.4 Q15.3 — `claim_meta` 替代范围:**完全替代 + 删 4 列**
 
-> **Superseded(2026-07-31;扩展于 2026-08-01 用户裁定)**:adopted [Q-SAE-8](2026-07-31_q-sae-8-claim-meta-history-decision.md) 显式 supersede 本节 Q15.3 的 `claim_meta` 3 列形态与 Q15.7 的 `PRIMARY KEY (asrt_id, key)` 锁定;2026-08-01 用户进一步裁定恢复 dbtx_v2 canonical bytes 已承诺的著述端 `kind`。终态改为六列 `(asrt_id, key, kind, value, tx_seq, op_ordinal)` 与事件 PK `(asrt_id, key, tx_seq, op_ordinal)`;UNSET 为 kind/value 双 NULL。本节关于删除 `meta_rows` / `annotation_rows`、删除 surrogate `id` 及不保留 namespace/category/origin/derivation/value_tag 的其余裁定继续有效;**“不保留 kind”已 supersede**。
+> **Superseded(2026-07-31;扩展于 2026-08-01 协调方内联裁定,用户否决权开放)**:adopted [Q-SAE-8](2026-07-31_q-sae-8-claim-meta-history-decision.md) 显式 supersede 本节 Q15.3 的 `claim_meta` 3 列形态与 Q15.7 的 `PRIMARY KEY (asrt_id, key)` 锁定;2026-08-01 内联裁定进一步恢复 dbtx_v2 canonical bytes 已承诺的著述端 `kind`。终态改为六列 `(asrt_id, key, kind, value, tx_seq, op_ordinal)` 与事件 PK `(asrt_id, key, tx_seq, op_ordinal)`;UNSET 为 kind/value 双 NULL。本节关于删除 `meta_rows` / `annotation_rows`、删除 surrogate `id` 及不保留 namespace/category/origin/derivation/value_tag 的其余裁定继续有效;**“不保留 kind”已 supersede**。
 
 **锁定**:`meta_rows` + `annotation_rows` 两张表 **全删**;新 `claim_meta` 表 schema 严格按 ledger-spec §3.2:
 - 列:`asrt_id` / `key` / `value`(3 列)
-- **不含**:`id`(surrogate)/ `namespace` / `category` / `origin` / `derivation` / `value_tag`;`kind` 依 2026-08-01 裁定恢复
+- **不含**:`id`(surrogate)/ `namespace` / `category` / `origin` / `derivation` / `value_tag`;`kind` 依 2026-08-01 协调方内联裁定恢复
 - 复合 PK `(asrt_id, key)`(per Q15.7 同步落地)
 
 #### 4.4.1 决策选项 + 选择
@@ -521,7 +521,7 @@ def find_claim_args(
 - `AssertionRecordSet.where(_meta={"key": "value"})` query path:Slice 3b 改 claim_meta 索引(`idx_claim_meta_key_value`)
 - **纯增量标注(2026-08-02)**:原“`annotation_rows` 无写入源”前提不成立;`adapters/pyreason/accept.py` 与 `adapters/problog/accept.py` 是现役写入源。Slice 3b 不恢复 namespace/category 物理列,而把非合同 annotation 的完整维度编码进 hidden-key M 事件,使 live 与账本重建可互相重现。
 - namespace/category 的维度清理与引擎 annotation 契约重设计并入 Slice 5 捆绑项;在此之前合同 initial-meta 投影与非合同 hidden-key companion 同时受支持。
-- `kind` 列移除:per ledger-spec §3.2 注释 "所有 value 都是 TEXT;特殊格式由 META_KEY_REGISTRY 规定";SDK 读 path 不再 query kind 列
+- `kind` 列保留:按 stored kind 无损解码 dbtx_v2 已承诺的著述类型;META_KEY_REGISTRY 继续校验系统 key
 
 #### 4.4.3 跟 Q15.7(复合 PK)同 Slice 落地
 
@@ -1004,7 +1004,7 @@ Slice 3b blueprint Stage 4 acceptance criteria 必须包含:
 - §4.1.5 INV-12 part 2(no revoke-of-revoke):carry-forward — application + write_protocol 双层 check 不可降级
 - §4.2 选 (c) dual-coexistence + Step 2+ drop 列:carry-forward — Slice 3b NEW writes 永远 rest_terms=[];legacy 路径 Slice 5 时统一 rewrite;INV-9 strict/weak enforce 整套留 ADR-INV9
 - §4.3 value + value_tag 双列 + `__system__.revokes` 形态 + general canonical mapping:carry-forward — 不可改 Claim 形态(per INV-11);不可去 partial index `idx_claims_revokes`;mapping 表是 Slice 3b NEW writes 的 binding contract
-- §4.4 claim_meta 完全替代 + 4 列 drop + 复合 PK:carry-forward — Slice 5+ 不可重新加回 namespace / category / origin / derivation / kind / value_tag / surrogate id 列
+- §4.4 claim_meta 完全替代 + 4 列 drop + 事件 PK:carry-forward — Slice 5+ 不可把 namespace / category / origin / derivation / value_tag / surrogate id 恢复为未入链物理列;`kind` 按 supersede 裁定保留
 - §4.5 ingest_keys 删除 + ledger 不 idempotency + set preserve dedup / add multiset:carry-forward — Slice 5+ 不可重新引入 ledger-side idempotency 机制;`set` 永远应用 layer dedup;`add` 永远 multiset
 - §4.6 INV-15 read-path default filter:carry-forward — `fg.entities.*` / `fg.fields.*` / `fg.assertions.where/active/all/field` 永远默认 exclude `__system__.*`;by_id/by_ids bypass 永久 carry-forward(audit/replay 不可阻断)
 - §4.7 Slice 3b 完成判定 acceptance:carry-forward — Stage 4 acceptance criteria 任一项缺失则 Slice 3b blueprint 不可 mark `implemented`

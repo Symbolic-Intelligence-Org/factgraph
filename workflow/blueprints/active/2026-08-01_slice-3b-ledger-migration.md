@@ -54,7 +54,7 @@ Stage A 完成写链与生命周期收敛,但表形态仍是 7 表(3 组内建�
 
 ## 6. Boundaries And Invariants
 
-- INV 族全程保持(INV-1/5/7c/9/10/11/12/14/15);spec §12 结构不变量逐条测试映射;
+- INV 族全程保持(INV-1/2/3/4/5/7c/9/10/11/12/13/14/15);spec §4 结构不变量逐条测试映射;
 - **digest 语义冻结**:`support_digest`/`view_snapshot_digest`(canonical fact bytes)与 LtHash state element 定义不因换表而变 —— 3b 前后同一逻辑世界同 digest(gate);
 - premise filter 语义:单层→两层解析必须 differential 逐字节等价(含 revoker 对称、absent_ok、UNSET);
 - PR #20/#21/#22 面专项回归(精确调用式沿用 audit log 记录);
@@ -89,3 +89,8 @@ Stage A 完成写链与生命周期收敛,但表形态仍是 7 表(3 组内建�
 - `ledger-schema-specification.zh.md`(claim_meta 事件化修订 + §9.7 supersede 标注 + 终态对齐)
 - `src/factgraph/core/store/docs/README.md`(表形态、事件序、meta 分级)
 - premise/policy 相关模块 docs;CHANGELOG(chosen 语义变更、ingest_keys 退场等 Breaking 项)
+
+## 10. Deviations
+
+- **Phase 1 annotation compatibility**:Q-SYS-B Q15.3 的“annotation 无现役写入源”前提经 PyReason/ProbLog accept 路径核验为假。依 2026-08-02 内联裁定,不增加未入链物理列;以 initial-meta 合同投影 + hidden-key M companion 事件保住 live/reload/replay,维度清理与引擎契约重设计捆绑至 Slice 5。
+- **§9.6 partial**:物理 `ingest_keys` 表已删除,但 `claim_meta.ingest_key` compatibility 事件、Ledger `Idempotency` 参数及 compute/lookup helper 保留。Phase 1 补钉确保只传参数也自动物化事件,关闭 3 表同句柄与 cold reload 失忆;正式参数/helper 退场须随 caller 改写另行完成。

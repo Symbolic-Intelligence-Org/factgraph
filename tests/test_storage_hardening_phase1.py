@@ -38,7 +38,7 @@ from factgraph.core.store.database import (
     resolve_database_workspace_paths,
 )
 from factgraph.core.schema.schema_ir import schema_digest
-from factgraph.core.store.ledger import Claim, Ledger, MetaRow
+from factgraph.core.store.ledger import Claim, ClaimArg, Ledger, MetaRow
 
 
 def _schema_ir() -> dict:
@@ -602,7 +602,14 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                     e_ref=rogue_fact[0][1],
                     rest_terms=[rogue_fact[1]],
                 ),
-                claim_args=[],
+                claim_args=[
+                    ClaimArg(
+                        asrt_id=rogue_id,
+                        idx=0,
+                        val_atom=rogue_fact[1][1],
+                        tag=rogue_fact[1][0],
+                    )
+                ],
                 meta_rows=[
                     MetaRow(rogue_id, "schema_digest", "str", schema_digest(_schema_ir())),
                     MetaRow(rogue_id, "assertion_digest", "str", rogue_digest),

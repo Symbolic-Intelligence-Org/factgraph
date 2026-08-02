@@ -20,6 +20,8 @@ from factgraph.core.store.database import (
 from factgraph.core.store.ledger import (
     AnnotationRow,
     Claim,
+    ClaimArg,
+    Idempotency,
     LedgerAssertionWrite,
     Ledger,
     LedgerFormatError,
@@ -220,7 +222,10 @@ class Slice3bAtomicFlipTests(unittest.TestCase):
             terms = [("entity_ref", "idref_v1:Person:bob"), ("string", "0.9")]
             ledger.append_assertion(
                 claim=Claim(asrt_id, "person:edge", "idref_v1:Person:alice", terms),
-                claim_args=[],
+                claim_args=[
+                    ClaimArg(asrt_id, 0, "idref_v1:Person:bob", "entity_ref"),
+                    ClaimArg(asrt_id, 1, "0.9", "string"),
+                ],
                 meta_rows=[],
                 asrt_id=asrt_id,
             )
@@ -246,6 +251,89 @@ class Slice3bAtomicFlipTests(unittest.TestCase):
                     (1, "0.9", "string"),
                 ],
             )
+            reopened.close()
+
+    def test_append_assertion_rejects_claim_args_drift_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            path = Path(raw_tmp) / "ledger.db"
+            ledger = Ledger(path)
+            asrt_id = "asrt:edededededededededededededededed"
+            with self.assertRaisesRegex(ValueError, "exactly match claim.rest_terms"):
+                ledger.append_assertion(
+                    claim=Claim(
+                        asrt_id,
+                        "person:edge",
+                        "idref_v1:Person:alice",
+                        [("entity_ref", "idref_v1:Person:bob")],
+                    ),
+                    claim_args=[],
+                    meta_rows=[],
+                    asrt_id=asrt_id,
+                )
+            self.assertIsNone(ledger.get_claim(asrt_id))
+            ledger.close()
+
+            reopened = Ledger(path)
+            self.assertIsNone(reopened.get_claim(asrt_id))
+            reopened.close()
+
+    def test_idempotency_is_materialized_and_survives_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            path = Path(raw_tmp) / "ledger.db"
+            assertion_key = "import:assertion:1"
+            revocation_key = "import:revocation:1"
+            target_id = "asrt:abababababababababababababababab"
+            revoker_id = "asrt:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+
+            ledger = Ledger(path)
+            first = ledger.append_assertion(
+                claim=Claim(target_id, "person:name", "idref_v1:Person:alice", []),
+                claim_args=[],
+                meta_rows=[],
+                idempotency=Idempotency(assertion_key),
+                asrt_id=target_id,
+            )
+            self.assertTrue(first.written)
+            self.assertEqual(
+                [(row.kind, row.value) for row in ledger.find_meta(target_id, "ingest_key")],
+                [("str", assertion_key)],
+            )
+            duplicate = ledger.append_assertion(
+                claim=Claim("", "person:name", "idref_v1:Person:alice", []),
+                claim_args=[],
+                meta_rows=[],
+                idempotency=Idempotency(assertion_key),
+            )
+            self.assertEqual(duplicate.asrt_id, target_id)
+            self.assertFalse(duplicate.written)
+            ledger.close()
+
+            reopened = Ledger(path)
+            duplicate_after_reload = reopened.append_assertion(
+                claim=Claim("", "person:name", "idref_v1:Person:alice", []),
+                claim_args=[],
+                meta_rows=[],
+                idempotency=Idempotency(assertion_key),
+            )
+            self.assertEqual(duplicate_after_reload.asrt_id, target_id)
+            self.assertFalse(duplicate_after_reload.written)
+            revocation = reopened.append_revocation(
+                revokes=Revokes(revoker_id, target_id),
+                meta_rows=[],
+                idempotency=Idempotency(revocation_key),
+                revoker_asrt_id=revoker_id,
+            )
+            self.assertTrue(revocation.written)
+            reopened.close()
+
+            reopened = Ledger(path)
+            duplicate_revoke = reopened.append_revocation(
+                revokes=Revokes("asrt:efefefefefefefefefefefefefefefef", target_id),
+                meta_rows=[],
+                idempotency=Idempotency(revocation_key),
+            )
+            self.assertEqual(duplicate_revoke.asrt_id, revoker_id)
+            self.assertFalse(duplicate_revoke.written)
             reopened.close()
 
     def test_inv15_system_revocation_is_hidden_except_exact_id_audit_lookup(self) -> None:
@@ -300,6 +388,16 @@ class Slice3bAtomicFlipTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(SDKStoreError, "revoke-of-revoke.*ADR-SYS-B"):
             fg.assertions.retract(revoker_id)
+        database = fg._database
+        self.assertIsNotNone(database)
+        assert database is not None
+        head_before = database.head()
+        with self.assertRaisesRegex(DatabaseError, "revoke-of-revoke is forbidden"):
+            database.commit_changes(
+                assertions=(),
+                revocations=(RevocationInput(revoker_id),),
+            )
+        self.assertEqual(database.head(), head_before)
 
     def test_ingest_table_retirement_preserves_set_and_adds_multiset_semantics(self) -> None:
         fg = FactGraph.create(schema_classes=[Inv15Person])

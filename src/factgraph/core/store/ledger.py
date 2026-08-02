@@ -905,6 +905,20 @@ class Ledger:
         effective_asrt_id = asrt_id or (
             claim.asrt_id if isinstance(claim.asrt_id, str) and claim.asrt_id else _new_asrt_id()
         )
+        actual_meta_rows = [
+            MetaRow(
+                asrt_id=effective_asrt_id,
+                key=row.key,
+                kind=row.kind,
+                value=row.value,
+            )
+            for row in meta_rows
+        ]
+        actual_meta_rows = _materialize_idempotency_meta(
+            actual_meta_rows,
+            idempotency=idempotency,
+            asrt_id=effective_asrt_id,
+        )
 
         if idempotency is not None:
             existing = self._find_ingest_key(idempotency.ingest_key)
@@ -931,15 +945,17 @@ class Ledger:
             )
             for row in claim_args
         ]
-        actual_meta_rows = [
-            MetaRow(
+        expected_claim_args = [
+            ClaimArg(
                 asrt_id=effective_asrt_id,
-                key=row.key,
-                kind=row.kind,
-                value=row.value,
+                idx=idx,
+                val_atom=val_atom,
+                tag=tag,
             )
-            for row in meta_rows
+            for idx, val_atom, tag in claim_args_from_rest_terms(normalized_terms)
         ]
+        if actual_claim_args != expected_claim_args:
+            raise ValueError("claim_args must exactly match claim.rest_terms")
         explicit_annotation_rows = [
             AnnotationRow(
                 asrt_id=effective_asrt_id,
@@ -1020,6 +1036,20 @@ class Ledger:
             if isinstance(revokes.revoker_asrt_id, str) and revokes.revoker_asrt_id
             else _new_asrt_id()
         )
+        actual_meta_rows = [
+            MetaRow(
+                asrt_id=effective_revoker_id,
+                key=row.key,
+                kind=row.kind,
+                value=row.value,
+            )
+            for row in meta_rows
+        ]
+        actual_meta_rows = _materialize_idempotency_meta(
+            actual_meta_rows,
+            idempotency=idempotency,
+            asrt_id=effective_revoker_id,
+        )
 
         if idempotency is not None:
             existing = self._find_ingest_key(idempotency.ingest_key)
@@ -1034,15 +1064,6 @@ class Ledger:
             revoker_asrt_id=effective_revoker_id,
             revoked_asrt_id=revokes.revoked_asrt_id,
         )
-        actual_meta_rows = [
-            MetaRow(
-                asrt_id=effective_revoker_id,
-                key=row.key,
-                kind=row.kind,
-                value=row.value,
-            )
-            for row in meta_rows
-        ]
         actual_annotation_rows = _initial_meta_annotation_rows(actual_meta_rows)
         _validate_annotation_rows(actual_annotation_rows)
 
@@ -1946,6 +1967,28 @@ def _reject_duplicate_meta_keys(rows: Sequence[MetaRow], *, context: str) -> Non
         raise ValueError(
             f"{context} keys must be unique; repeated key(s): " + ", ".join(sorted(duplicates))
         )
+
+
+def _materialize_idempotency_meta(
+    rows: list[MetaRow],
+    *,
+    idempotency: Idempotency | None,
+    asrt_id: str,
+) -> list[MetaRow]:
+    if idempotency is None:
+        return rows
+    if not isinstance(idempotency.ingest_key, str) or not idempotency.ingest_key:
+        raise ValueError("ingest_key must be non-empty string")
+    if idempotency.on_conflict not in {"skip", "error"}:
+        raise ValueError("idempotency on_conflict must be 'skip' or 'error'")
+
+    ingest_rows = [row for row in rows if row.key == "ingest_key"]
+    if ingest_rows:
+        row = ingest_rows[0]
+        if row.kind != "str" or row.value != idempotency.ingest_key:
+            raise ValueError("ingest_key meta must match the Idempotency ingest_key")
+        return rows
+    return [*rows, MetaRow(asrt_id, "ingest_key", "str", idempotency.ingest_key)]
 
 
 def _validate_annotation_rows(rows: list[AnnotationRow]) -> None:

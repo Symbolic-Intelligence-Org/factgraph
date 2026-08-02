@@ -37,10 +37,29 @@
 | 2026-08-02 | **内联裁定(协调方):rest_terms 冲突采选项 1 = adopted Q-SYS-B §4.2(c) 原样执行;C2 fix-forward 恢复列** | 权威依据亲手核实:Q-SYS-B §4.2 Q15.1 明文锁定"Slice 3b 保留 rest_terms 列作 legacy compatibility;真正 drop 延后 Slice 5 三项绑定(drop 列 + adapter rewrite + ADR-INV9 strict enforce)",且选项表已显式否决 blanket weak enforce(b ✗)与提前 adapter rewrite(a ✗,违反 user reviewer §1.3 第 3 项)。据此:①C2 恢复 `rest_terms` 列(nullable TEXT)入 3 表 claims,双真窗口 = 新路径写 `value`/`value_tag` + `rest_terms=[]`,legacy PyReason adapter 照旧写 2-position;②不加任何 len≤1 runtime enforce(INV-9 enforce 整套归 ADR-INV9);③blueprint §6"INV 族保持"之 INV-9 读作"新路径成立、legacy 路径豁免至 Slice 5"(Q-SYS-B §4.3.2 dual-truth 窗口);④17 项 PyReason 测试须零修改回绿;⑤选项 2(隐藏 meta 兼容事件)否决 —— 未设计的 meta 类型污染 Q-SAE-9 分级与三组测量;选项 4 否决 —— 破坏不退门。C1 记 fix-forward 偏差:超裁 §9.4 全内联,违背 adopted partial 口径,根因是工作包/blueprint"收口"措辞歧义(已由协调方修正 blueprint Goal 2)。用户可否决 |
 | 2026-08-02 | Phase 1 C2 三表 claim 统一 | `609317e3`:fix-forward 恢复 nullable `rest_terms`;新 unary 路径以 `value/value_tag` 为权威并写 `[]`,legacy n-ary 路径保留;revokes-as-claim + INV-15 五读面、ingest_keys 表退场而 set/add 语义保持、annotation 双物化退场、四列与 surrogate id 删除;17 项 PyReason 零修改回绿。旧 checkout `3aafbd4b` 实跑捕获 legacy n-ary fixture,未手写期望值 |
 | 2026-08-02 | Phase 1 C3 L0 索引重构 | `1438890f`:索引由三表事件重建,物理 `_ClaimMetaEvent(tx_seq, op_ordinal)` 与公开历史投影分层;冷启动/写后/force-replace 保持一致;baseline harness 同 commit 改为按列 introspection 识别 physical meta 表并计入 event objects/index refs |
-| 2026-08-02 | Phase 1 C4 v0.2 → 3b 终态迁移 | `5c0c7e31`:弃用会覆盖新 DDL 且破坏 meta 事件序的 SQLite 物理 backup;只读解析 released 七表 v0.2 逻辑快照,在全新三表目标以单次 `commit_batch(tx_seq=0)` 写入 repair anchor。真实七表 fixture 覆盖 n-ary、同 key 多 meta、revocation、annotation、三表 introspection、open/verify 与后续可写;两项原计划 migration 红转绿 |
+| 2026-08-02 | Phase 1 C4 v0.2 → 3b 终态迁移 | `5c0c7e31`:弃用会覆盖新 DDL 且破坏 meta 事件序的 SQLite 物理 backup;只读解析 released 七表 v0.2 逻辑快照,在全新三表目标以单次 `commit_batch(tx_seq=0)` 写入 repair anchor。fixture 为测试内合成、schema 忠实且覆盖 n-ary / 同 key 多 meta / revocation / annotation 四特征,另验三表 introspection、open/verify 与后续可写;两项原计划 migration 红转绿 |
 | 2026-08-02 | **Phase 1 实施完成,停下待对抗审计** | C0-C4:`3aafbd4b` / `5ba4eeed` / `609317e3` / `1438890f` / `5c0c7e31`;dbtx_v2 serializer/production commit/repair + production repair goldens 与 C0 两组读等价 fixture 全绿且 fixture 零修改;PR #20/#21/#22 精确面 **157 passed**;canonical 全套件 **2788 passed / 32 skipped / 1 deselected / 1098 subtests**。Phase 2 未启动 |
 | 2026-08-02 | **Phase 1 对抗审计:0 blocker / 8 serious(去重 6 类)/ 7 minor —— 有条件不放行,补钉轮先行** | 六透镜完整运行(首轮网络故障 2/6,断点续跑补齐 4/6);最高契约与四裁定验实,缺陷集中在 system-claim 解释通道守卫、迁移 annotation 保真、证据完整性;全文见 §Phase 1 对抗审计 |
 | 2026-08-02 | **内联裁定(协调方):annotation 不加第 7 列;合同投影 + hidden-key companion 事件分解修复** | 否决 `annotation_refs` 列:列不入 M op 线格式会使 Phase 2 parity、不可篡改性与账本重建开洞。C-1:reload 只对 initial-meta 事件执行 `annotation_v1` 纯函数合同投影,语义仲裁以 pre-flip 等价 fixture 为准;late append 不得启发式投影。C-2:v0.2 `annotation_rows` 是迁移地面真值;合同可再生行按 `(asrt_id,key,namespace,category,kind,value)` 精确跳过,非合同行把 namespace/category 编入 hidden key 并成为链上 M 事件;仅“v0.2 迁移非合同 annotation 撞键”窄域允许 companion event,不扩张一般单物理事件承诺。增补 scope:PyReason/ProbLog live accept 同样写 hidden-key 事件,冷启动无损;ProbLog namespace 必须跨 reload 非空。World 1(late shared meta、源无 annotation)live/reload 均为 `[]`;World 2 合同 `shared/source` 与 custom namespace companion 并存。namespace/category 清理与引擎 annotation 契约重设计登记为 Slice 5 捆绑项。用户可否决 |
+| 2026-08-02 | Phase 1 补钉 A-C | `1267d551`:所有公开/通用 claim 写入口 pre-commit 拒绝 `__system__.*`;迁移 annotation skip 改成 per-claim 完整合同 identity;initial-meta 合同投影与 hidden-key companion 统一 live/reload/replay;World 1/2、跨 claim 撞值、ProbLog cold reload 常驻门通过 |
+| 2026-08-02 | Phase 1 补钉 D-F 完成,停下待复验 | `claim_args` 严格交叉校验;Ledger `Idempotency` 自动物化 ingest_key 事件;INV-12 Database 本层负向;旧 checkout `3aafbd4b` 实跑生成新增组合过滤 golden,原有 dbtx/read fixtures 零修改;PR 精确面 **157 passed**;canonical **2794 passed / 32 skipped / 1 deselected / 1106 subtests**;ruff + diff-check 全绿 |
+
+### 2026-08-02 C 项内联裁定逐字记录
+
+> **【裁定回复:C 项 —— 否决 annotation_refs 列,分解修复】**
+>
+> **否决第 7 列**:表列不入 M op 线格式 → Phase 2 parity 开洞、不可篡改性缺口、重建不可恢复。与 kind 裁定同源原则:存储与链必须互相可重现。
+> **C-1**:reload 侧 annotation 投影改为只作用于 initial-meta 事件(与 live 的 prepare 路径同一 annotation_v1 纯函数契约);语义仲裁 = pre-flip 等价 fixture;World 1 的 live/reload 分裂据此消除。
+> **C-2**:迁移以 v0.2 源 annotation_rows 为地面真值:合同可再生者按 (asrt_id, key, namespace/category, kind/value) 精确跳过(与 B 的 per-claim 域一致);非合同者落 hidden-key 事件(namespace/category 入 key 编码,链携带);撞键时允许 companion event —— **单物理事件承诺仅在“v0.2 迁移非合同 annotation 撞键”窄域放宽**,此放宽与范围限定由你在 audit log Session Journal 转录为内联裁定记录(协调方 2026-08-02,用户可否决),连同本裁定全文。
+>
+> **【C 裁定增补(在前一条裁定之上)】**
+>
+> **scope 修正**:非合同 annotation 的 hidden-key 编码不只服务迁移 —— **live 引擎写入路径(pyreason/problog accept)同样落 hidden-key 事件**,reload 后 namespace/category 无损回读;
+> **新增验证项**:写一个跨 reload 的 ProbLog namespace 回读测试(find_annotations(namespace="problog") 冷启动后必须非空)—— 疑似现有 live bug,先复现再修;
+> **Q-SYS-B premise correction**:§4.4 Q15.3 加纯增量标注 —— “'annotation_rows 无写入源'前提不成立:adapters/pyreason/accept.py 与 adapters/problog/accept.py 为现役写入源(2026-08-02 核实)”,连同本裁定入 audit;
+> 维度清理(namespace/category 收敛 + 引擎 annotation 契约重设计)**登记为 Slice 5 捆绑项**,3b 不做。
+> World 2 期望终态:reload 后 = 合同投影 (source, observed) + companion 的 custom namespace annotation 并存(与 v7 双写语义一致);World 1 期望终态:live 与 reload 均为 [](除非 initial meta 触发合同投影)。两个世界各补回路测试。
+> A/B 已完成部分连同 C 一并提交;然后按原补钉包继续 D-F。
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
@@ -299,16 +318,16 @@ Batch=3 Ledger read API case timings(ms):
 | C1 DDL + 基础写入 | `5ba4eeed` | 三表 `_DDL`;claims `tx_ref=tx_seq`;六列 claim_meta 事件表;kind/value 双 NULL tombstone 约束;initial meta 同 op key 唯一;七表 v0.3 dev workspace 显式拒绝+指引 |
 | C2 七步精简 | `609317e3` | revokes-as-claim、ingest_keys/claim_args/annotation_rows/revokes 表退场、双写退场、rest_terms adopted compatibility 窗口、INV-15 与 digest 门 |
 | C3 索引重构 | `1438890f` | L0 三表全量驻留索引按物理事件重建;event 对象保留 `(tx_seq, op_ordinal)`;harness workset adapter 同步 |
-| C4 migration + 收尾门 | `5c0c7e31` | v0.2 七表逻辑快照直达三表 repair anchor;真实七表 CLI round-trip;全部专项与 canonical suite 归零 |
+| C4 migration + 收尾门 | `5c0c7e31` | v0.2 七表逻辑快照直达三表 repair anchor;合成、schema 忠实、四特征俱全的七表 CLI round-trip;全部专项与 canonical suite 归零 |
 
 ### Phase-boundary gates
 
 - **dbtx_v2 字节不漂移**:`tests/test_dbtx_v2_golden.py` + `tests/test_slice3b_phase1_read_equivalence.py::test_production_repair_tx_object_and_head_are_frozen` 全绿;Phase 0 后所有 `tests/golden/dbtx_v2/*` 与 `tests/golden/slice3b_phase1/*` fixture 零修改。终态 SHA-256 分别为 `430924a0…`,`04aac99b…`,`72820ab…`,`583b3053…`,`d80ed7d…`,`61a81da…`,`a72224d5…`。
 - **最高契约——读逐字节等价**:`test_all_read_surfaces_match_the_pre_flip_golden` 与旧 checkout 实跑捕获的 `test_legacy_nary_read_surfaces_match_the_pre_flip_golden` 全绿;覆盖 Ledger 全部代表性公开读面、premise filter、chosen、projector,system claims 过滤后相等。
-- **INV-15 + digest 冻结**:`test_inv15_system_revocation_is_hidden_except_exact_id_audit_lookup` 覆盖 Ledger scans / claim_args / meta / annotation / SDK where 五面不外泄且精确 id audit lookup 可达;`test_system_claims_do_not_change_support_or_view_digest_inputs` 对 support/view_snapshot 逐字节字面值;LtHash element 仍为 `asrt_id‖assertion_digest`,dbtx production head golden 同时钉住 state_digest。
-- **INV 族映射**:INV-1/5/11 由三表仅 append factual/system claim + 单事务 commit/read-rebuild 门覆盖;INV-7c 由全套件 identity retract guards 保持;INV-9 新路径 unary 与 legacy n-ary 豁免分别由 `test_new_workspace_has_exact_three_table_shape_and_tx_refs` / `test_legacy_nary_claim_uses_rest_terms_carrier` 覆盖;INV-10 由既有三侧 system/reserved 守卫及 initial-meta 负向门保持;INV-12 由 `test_inv15_system_revocation_is_hidden_except_exact_id_audit_lookup` 的 revoke-of-revoke 负向分支覆盖;INV-14 由 application retract replay/idempotency 全套件回归保持;INV-15 如上一条。
-- **atomic flip / migration 边界**:新建工作区直接得到且仅得到 `claims`,`claim_meta`,`ledger_meta`,无 alpha 数据搬迁;七表 v0.3 `db/assertions.db` 两种入口均 fail-closed 并给 rebuild / 原 v0.2 `migrate-workspace` 指引;CLI 真实七表 v0.2 fixture 直达三表并通过 open+verify,迁移后下一写 `tx_seq=1`。
-- **专项回归**:golden/read/atomic/migration 联跑 `28 passed / 3 subtests`;PR #20/#21/#22 精确命令保持 **157 passed**;ruff implementation+本轮测试与 `git diff --check` 全绿。
+- **INV-15 + digest 冻结**:`test_inv15_system_revocation_is_hidden_except_exact_id_audit_lookup` 覆盖 Ledger factual scans 与 SDK canonical scans 不外泄、精确 id audit lookup 可达;meta/annotation 与 premise/projector 面由两组 pre-flip 读等价 golden 承载。`test_system_claims_do_not_change_support_or_view_digest_inputs` 对 support/view_snapshot 逐字节字面值;LtHash element 仍为 `asrt_id‖assertion_digest`,dbtx production head golden 同时钉住 state_digest。
+- **INV 族映射**:INV-1/5/11 由三表仅 append factual/system claim + 单事务 commit/read-rebuild 门覆盖;INV-2 由 Database 服务端 `_new_assertion_id()` UUID4 hex 生成边界与 production id monkeypatch gates 保持;INV-3 由 `test_batch_failure_rolls_back_facts_and_head_together` 与 commit-path golden 保持;INV-4 由 dbtx_v2/read goldens及 `tup_v1` 既有协议套件保持;INV-7c 由全套件 identity retract guards 保持;INV-9 新路径 unary 与 legacy n-ary 豁免分别由 `test_new_workspace_has_exact_three_table_shape_and_tx_refs` / `test_legacy_nary_claim_uses_rest_terms_carrier` 覆盖;INV-10 由既有三侧 system/reserved 守卫及 initial-meta 负向门保持;INV-12 由 SDK 与 Database 本层 revoke-of-revoke 负向分支覆盖;INV-13 由 active factual 差集、set-after-revoke 与 premise/projector 等价门覆盖;INV-14 由 application retract replay/idempotency 全套件回归保持;INV-15 如上一条。
+- **atomic flip / migration 边界**:新建工作区直接得到且仅得到 `claims`,`claim_meta`,`ledger_meta`,无 alpha 数据搬迁;七表 v0.3 `db/assertions.db` 两种入口均 fail-closed 并给 rebuild / 原 v0.2 `migrate-workspace` 指引;CLI 使用测试内合成、schema 忠实且四特征俱全的 v0.2 fixture 直达三表并通过 open+verify,迁移后下一写 `tx_seq=1`。
+- **专项回归**:golden/read/atomic/migration 联跑 `28 passed / 3 subtests`;PR #20/#21/#22 精确调用式:`PYTHONPATH=src pytest -q tests/test_premise_admissibility_filter.py tests/test_premise_predicate_allowance.py tests/test_premise_predicate_block.py tests/test_premise_scoped_view.py tests/sdk/test_rule_program_evaluate.py tests/test_audit_evidence_graph.py tests/test_candidate_evidence_steps.py tests/test_core_annotation_evidence.py tests/test_ledger_concurrency.py tests/test_application_entity_view.py tests/test_sdk_assertion_view_unification.py`,结果 **157 passed**。原 Phase-boundary “ruff 全绿”记录不实:`actual_claim_args` 为 F841 死代码;补钉 D 改为与 `rest_terms` 严格交叉校验后,implementation+本轮测试 ruff 与 `git diff --check` 才实际全绿。
 - **canonical suite**:`PYTHONPATH=src` + process-only readline shim + `--ignore=tests/test_pyreason_provenance_v0.py` + 唯一 approved deselect,结果 **2788 passed / 32 skipped / 1 deselected / 1098 subtests**。相对 C3 的 2785,净增 3 pass = 两项计划内 migration failure 闭合 + 一项 released 七表 fixture 新门禁。
 
 Phase 2 保持冻结;以上仅声明 Phase 1 物理事件地基与表形态完成,不把 Phase 2 的 UNSET 统一解析、receipt as-of、append_meta parity/audit API 或 Phase 3 的 meta 分级当作已交付。
@@ -337,3 +356,5 @@ Phase 2 保持冻结;以上仅声明 Phase 1 物理事件地基与表形态完�
 ## Deviations
 
 - **C1 `rest_terms` 暂时超裁后 fix-forward**:`5ba4eeed` 曾删除 `rest_terms`,与 adopted Q-SYS-B §4.2(c) 不符;`609317e3` 恢复 compatibility 列并以旧 checkout 实跑 fixture/17 项 PyReason 零修改证明终态闭合。根因与裁定见 Session Journal;无终态 scope 偏差。
+- **Q-SYS-B Q15.3 annotation 前提修正**:现役 PyReason/ProbLog accept 仍著述 namespace/category;按 2026-08-02 内联裁定,3b 不增加未入链物理列,而用 initial-meta 合同投影 + hidden-key M companion 事件保持 live/reload/replay。仅 v0.2 迁移非合同 annotation 撞键允许同逻辑 key companion event;维度清理与引擎契约重设计捆绑到 Slice 5。
+- **§9.6 partial**:物理 `ingest_keys` 表已退场,但 `claim_meta.ingest_key` 事件、`Idempotency` 参数、计算/lookup compatibility helper 尚在。此前 3 表仅在 caller 同时传 ingest_key meta 时记忆;只传 `Idempotency` 会在同句柄下一调用及 reload 失忆,而 7 表独立表会记住。本补钉令 Ledger 参数总是物化匹配事件,恢复兼容语义;正式删参数/helper 留后续 caller 改写。

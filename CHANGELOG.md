@@ -146,6 +146,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **v0.2 annotation migration now treats `annotation_rows` as ground truth.**
+  A shared-key meta row appended after claim creation remains meta-only when
+  the source has no matching annotation; migration no longer synthesizes one.
+  Exact initial-meta contract annotations are regenerated, while custom
+  namespace/category rows are preserved as replayable companion events.
 - **SDK write-lifecycle failures are classified at the SDK boundary.**
   Writes after an SDK-owned graph is closed raise
   `SDKStoreError(code="GRAPH_CLOSED")` with

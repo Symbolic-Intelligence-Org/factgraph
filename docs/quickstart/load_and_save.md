@@ -235,6 +235,13 @@ preserves assertion/revocation rows and ids, and writes an auditable genesis
 repair anchor because the old per-commit history cannot be reconstructed.
 `FactGraph.load_workspace(...)` never migrates automatically.
 
+Annotation migration follows the source rows exactly. A late `append_meta`
+using a shared key such as `source` does not become an annotation unless the
+v0.2 `annotation_rows` table contains the corresponding row. Contract rows
+that can be regenerated from initial metadata are projected normally; custom
+namespaces/categories are retained as replayable companion events, so cold
+reload returns the same annotations as the source workspace.
+
 By default the complete old workspace is archived inside the replacement as
 `workspace.legacy.<UTC timestamp>/`. Use `--no-archive` only when that backup
 is intentionally unnecessary.

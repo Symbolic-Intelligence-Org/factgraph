@@ -38,6 +38,7 @@ _GOLDEN_ROOT = Path(__file__).with_name("golden") / "slice3b_phase1"
 _READ_FIXTURE = _GOLDEN_ROOT / "read_equivalence_v1.json"
 _REPAIR_FIXTURE = _GOLDEN_ROOT / "production_repair_v1.json"
 _LEGACY_NARY_FIXTURE = _GOLDEN_ROOT / "legacy_nary_read_equivalence_v1.json"
+_COMBINED_FILTER_FIXTURE = _GOLDEN_ROOT / "combined_filters_v1.json"
 _FIXED_DB_ID = "db:slice3b-phase1-read-equivalence"
 _FIXED_TIME_NS = 1_788_307_200_000_000_000
 _IDS = (
@@ -91,6 +92,15 @@ class Slice3bReadEquivalenceGoldenTests(unittest.TestCase):
             try:
                 actual = _canonical_json_bytes(_legacy_nary_snapshot(ledger))
                 _assert_compressed_golden(actual, _LEGACY_NARY_FIXTURE)
+            finally:
+                ledger.close()
+
+    def test_combined_filter_reads_match_the_pre_flip_golden(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            ledger = _build_legacy_nary_ledger(Path(raw_tmp) / "ledger.db")
+            try:
+                actual = _canonical_json_bytes(_combined_filter_snapshot(ledger))
+                _assert_compressed_golden(actual, _COMBINED_FILTER_FIXTURE)
             finally:
                 ledger.close()
 
@@ -550,6 +560,27 @@ def _legacy_nary_snapshot(ledger: Ledger) -> dict[str, Any]:
             "witness": project_view_facts_with_witness(ledger, schema_ir),
             "premise_filtered_facts": project_view_facts(scoped, schema_ir),
         },
+    }
+
+
+def _combined_filter_snapshot(ledger: Ledger) -> dict[str, Any]:
+    asrt_id = "asrt:77777777777777777777777777777777"
+    return {
+        "fixture_version": 1,
+        "find_claim_args_asrt_idx_tag": ledger.find_claim_args(
+            asrt_id=asrt_id,
+            idx=1,
+            tag="float64",
+        ),
+        "find_meta_asrt_key_kind": ledger.find_meta(
+            asrt_id=asrt_id,
+            key="provenance_class",
+            kind="str",
+        ),
+        "find_annotations_namespace_category": ledger.find_annotations(
+            namespace="shared",
+            category="source",
+        ),
     }
 
 
