@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import math
 import sqlite3
@@ -164,6 +165,15 @@ _LEGACY_TABLES = frozenset(
 _SYSTEM_PREFIX = "__system__."
 _REVOCATION_PREDICATE = "__system__.revokes"
 _ANNOTATION_COMPAT_PREFIX = "__factgraph_annotation_v1__:"
+
+
+@dataclass(frozen=True)
+class _AnnotationStorageMetaRow(MetaRow):
+    """Private carrier for annotation compatibility events emitted internally."""
+
+
+def _is_reserved_annotation_meta_key(key: str) -> bool:
+    return key.startswith(_ANNOTATION_COMPAT_PREFIX)
 
 
 class _MetaRowsProxy(list[MetaRow]):
@@ -396,7 +406,12 @@ def _annotation_compatibility_meta_rows(
         if (annotation := _initial_meta_annotation_row(row)) is not None
     }
     return [
-        MetaRow(row.asrt_id, _annotation_storage_key(row), row.kind, row.value)
+        _AnnotationStorageMetaRow(
+            row.asrt_id,
+            _annotation_storage_key(row),
+            row.kind,
+            row.value,
+        )
         for row in rows
         if _annotation_identity(row) not in reproducible
     ]
@@ -455,19 +470,37 @@ def _annotation_from_storage_key(
     kind: str,
     value: Any,
 ) -> AnnotationRow:
-    token = storage_key.removeprefix(_ANNOTATION_COMPAT_PREFIX)
-    padding = "=" * (-len(token) % 4)
-    payload = json.loads(base64.urlsafe_b64decode((token + padding).encode("ascii")))
-    return AnnotationRow(
-        asrt_id=asrt_id,
-        namespace=payload["namespace"],
-        category=payload["category"],
-        key=payload["key"],
-        kind=kind,
-        value=value,
-        origin=payload["origin"],
-        derivation=payload["derivation"],
-    )
+    try:
+        if not _is_reserved_annotation_meta_key(storage_key):
+            raise ValueError("missing annotation compatibility prefix")
+        token = storage_key.removeprefix(_ANNOTATION_COMPAT_PREFIX)
+        if not token:
+            raise ValueError("empty annotation compatibility payload")
+        padding = "=" * (-len(token) % 4)
+        raw = base64.b64decode(
+            (token + padding).encode("ascii"),
+            altchars=b"-_",
+            validate=True,
+        )
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("annotation compatibility payload must be an object")
+        row = AnnotationRow(
+            asrt_id=asrt_id,
+            namespace=payload["namespace"],
+            category=payload["category"],
+            key=payload["key"],
+            kind=kind,
+            value=value,
+            origin=payload["origin"],
+            derivation=payload["derivation"],
+        )
+        _validate_annotation_rows([row])
+        return row
+    except (binascii.Error, json.JSONDecodeError, KeyError, TypeError, UnicodeError, ValueError) as exc:
+        raise LedgerFormatError(
+            f"malformed annotation compatibility storage key for asrt_id {asrt_id!r}"
+        ) from exc
 
 
 class Ledger:
@@ -1940,6 +1973,13 @@ def _validate_meta_rows(rows: list[MetaRow]) -> None:
             raise ValueError(f"unsupported meta kind: {row.kind}")
         if not isinstance(row.key, str) or not row.key:
             raise ValueError("meta key must be non-empty str")
+        if _is_reserved_annotation_meta_key(row.key) and not isinstance(
+            row, _AnnotationStorageMetaRow
+        ):
+            raise ValueError(
+                "meta key uses the reserved annotation storage namespace: "
+                f"{_ANNOTATION_COMPAT_PREFIX}"
+            )
         if not isinstance(row.asrt_id, str) or not row.asrt_id:
             raise ValueError("meta asrt_id must be non-empty str")
 
@@ -1952,6 +1992,11 @@ def _validate_meta_rows_for_append_assertion(rows: list[MetaRow]) -> None:
             raise ValueError(f"unsupported meta kind: {row.kind}")
         if not isinstance(row.key, str) or not row.key:
             raise ValueError("meta key must be non-empty str")
+        if _is_reserved_annotation_meta_key(row.key):
+            raise ValueError(
+                "meta key uses the reserved annotation storage namespace: "
+                f"{_ANNOTATION_COMPAT_PREFIX}"
+            )
         if not isinstance(row.asrt_id, str):
             raise ValueError("meta asrt_id must be str when provided")
 

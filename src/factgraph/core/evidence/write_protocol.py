@@ -19,6 +19,8 @@ from factgraph.core.store.ledger import (
     Ledger,
     MetaRow,
     Revokes,
+    _ANNOTATION_COMPAT_PREFIX,
+    _is_reserved_annotation_meta_key,
 )
 
 
@@ -262,6 +264,11 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
     for key in meta:
         if not isinstance(key, str) or not key:
             raise WriteProtocolError("meta keys must be non-empty strings")
+        if _is_reserved_annotation_meta_key(key):
+            raise WriteProtocolError(
+                "meta key uses the reserved annotation storage namespace: "
+                f"{_ANNOTATION_COMPAT_PREFIX}"
+            )
         if key in _SYSTEM_MANAGED_META_KEYS:
             raise WriteProtocolError(f"meta[{key}] is reserved and system-managed")
     result = dict(meta)

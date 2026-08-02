@@ -60,6 +60,7 @@ from factgraph.core.store.ledger import (
     _decode_claim_terms,
     _decode_meta_value,
     _dec_rest_terms,
+    _is_reserved_annotation_meta_key,
 )
 
 
@@ -2696,6 +2697,14 @@ def _annotation_rows(asrt_id: str, meta: Sequence[MetaEntry]) -> list[Annotation
 
 
 def _reject_reserved_assertion_meta(rows: Sequence[MetaEntry]) -> None:
+    annotation_storage_keys = sorted(
+        row.key for row in rows if _is_reserved_annotation_meta_key(row.key)
+    )
+    if annotation_storage_keys:
+        raise DatabaseError(
+            "assertion/revocation meta cannot use the reserved annotation storage "
+            f"namespace: {_ANNOTATION_COMPAT_PREFIX}"
+        )
     reserved = sorted({row.key for row in rows} & _RESERVED_ASSERTION_META_KEYS)
     if reserved:
         raise DatabaseError(

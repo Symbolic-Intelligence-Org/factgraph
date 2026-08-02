@@ -44,6 +44,8 @@
 | 2026-08-02 | Phase 1 补钉 A-C | `1267d551`:所有公开/通用 claim 写入口 pre-commit 拒绝 `__system__.*`;迁移 annotation skip 改成 per-claim 完整合同 identity;initial-meta 合同投影与 hidden-key companion 统一 live/reload/replay;World 1/2、跨 claim 撞值、ProbLog cold reload 常驻门通过 |
 | 2026-08-02 | Phase 1 补钉 D-F 完成,停下待复验 | `claim_args` 严格交叉校验;Ledger `Idempotency` 自动物化 ingest_key 事件;INV-12 Database 本层负向;旧 checkout `3aafbd4b` 实跑生成新增组合过滤 golden,原有 dbtx/read fixtures 零修改;PR 精确面 **157 passed**;canonical **2794 passed / 32 skipped / 1 deselected / 1106 subtests**;ruff + diff-check 全绿 |
 | 2026-08-02 | **Phase 1 补钉轮复验:A-F 实质全闭;新增 P1-R1~R4 —— 最后一张 P1-R 补丁卡后关闭 Phase 1** | 双验证器逐项复现;2 个相邻通道 serious(hidden-key 前缀无守卫 → 变砖/伪造)+ Q-SYS-B 增量性违规 + INV-12 半闭;全文见 §Phase 1 补钉轮复验 |
+| 2026-08-02 | blueprint lifecycle `scoped` → `implementing`;Phase 1 P1-R 收官实施 | Phase 0/1 已进入代码实施但头部状态滞后,依 lifecycle 规则补正;P1-R 为 Phase 1 最后补丁卡,Phase 2 仍冻结待复验放行 |
+| 2026-08-02 | **Phase 1 P1-R 收官卡完成,停下待复验** | `__factgraph_annotation_v1__:` 在 Ledger/Database/SDK 与 write_protocol 的 assertion/revocation/append_meta 通道 pre-commit 拒绝;内部 annotation/迁移以私有 carrier 保留合法通路;畸形持久化 key 统一 fail-closed 为 `LedgerFormatError`;Q-SYS-B 四段原文恢复并以追加警告表达修正;INV-12 write_protocol/entity_write 两层负向门补齐。dbtx_v2+读等价 **7 passed / 3 subtests**,PR 面 **157 passed**,canonical **2822 passed / 32 skipped / 1 deselected / 1106 subtests**,ruff + diff-check 全绿;Phase 2 未启动 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 

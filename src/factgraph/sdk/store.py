@@ -131,7 +131,16 @@ from factgraph.core.store.premise_filter import (
     PredicatePremiseBlock,
 )
 from factgraph.core.store.runtime import Store, premise_scoped_store_view
-from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
+from factgraph.core.store.ledger import (
+    AnnotationRow,
+    Claim,
+    ClaimArg,
+    Ledger,
+    MetaRow,
+    Revokes,
+    _ANNOTATION_COMPAT_PREFIX,
+    _is_reserved_annotation_meta_key,
+)
 from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
 
 from .compile import compile_schema_from_classes
@@ -689,7 +698,7 @@ class AssertionsManager:
                         ),
                     ),
                 )
-            except DatabaseError as exc:
+            except (DatabaseError, WriteProtocolError) as exc:
                 code = "ASSERTION_NOT_FOUND" if "does not exist" in str(exc) else None
                 raise SDKStoreError(str(exc), code=code) from exc
             return committed.revocations[0].revoker_asrt_id
@@ -729,6 +738,11 @@ class AssertionsManager:
         if not isinstance(key, str) or not key:
             raise SDKStoreError(
                 "fg.assertions.append_meta(..., key, ...) expects non-empty string key"
+            )
+        if _is_reserved_annotation_meta_key(key):
+            raise SDKStoreError(
+                "fg.assertions.append_meta(..., key, ...) cannot use the reserved "
+                f"annotation storage namespace: {_ANNOTATION_COMPAT_PREFIX}"
             )
         if key in _RESERVED_ASSERTION_META_KEYS:
             raise SDKStoreError(

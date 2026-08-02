@@ -1,8 +1,8 @@
 # Task Blueprint: Slice 3b — Ledger 7→3 表迁移 + claim_meta 事件化 + Meta 分级
 
-- Status: scoped
+- Status: implementing
 - Created: 2026-08-01
-- Last Updated: 2026-08-01
+- Last Updated: 2026-08-02
 - Branch: `v0.3.0-impl-storage-hardening-2026-07-31`(与 Stage A 同一 v0.3.0 发布线,per Q-SAE-6 四合同同窗)
 - Related Modules:
   - `src/factgraph/core/store/ledger.py`(_DDL 与全部内存索引)/ `database.py` / `runtime.py`
