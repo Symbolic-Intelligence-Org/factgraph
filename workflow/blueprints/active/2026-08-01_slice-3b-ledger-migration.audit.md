@@ -56,6 +56,7 @@
 | 2026-08-02 | **Phase 2 实施完成,停下待对抗审计** | `201d89e8` / `1c942aea` / `67246b67` / `77482bba`;Q-SAE-8 全序/UNSET/receipt-as-of/窄域历史、adapter M 入链与六列 parity 全落。dbtx_v2 + pre-flip 读等价 fixture 零修改;Phase 2 精确面 **16 passed / 14 subtests**;PR #20/#21/#22 精确面 **157 passed**;canonical **2832 passed / 32 skipped / 1 deselected / 1122 subtests**(相对 2822/32/1/1106 净增 10 pass / 16 subtests)。Phase 3 未启动。 |
 | 2026-08-02 | **Phase 2 对抗审计:0 blocker / 4 类 serious / 7 minor —— 有条件不放行,补钉轮先行** | 三透镜(事件语义/as-of 裁定合规+入链/证据与范围);as-of 合规面满分;serious = append_meta 绕链变砖(第三个假绝对句)、chosen/canon 守卫静默拆除、repair-add 注入洞、私有名触达 0→18 未登记;全文见 §Phase 2 对抗审计 |
 | 2026-08-02 | Phase 2 补钉 B:system-managed meta 过渡守卫恢复 | `Database.commit_changes(meta_appends)` 的 append/UNSET 均拒绝 `ingested_at`/`ingest_key`/`revoked_asrt_id` 覆盖;chosen 与 mapping canon 对既存重复 `ingested_at` 事件恢复 fail-closed。该守卫是 Phase 3 S 类禁覆盖正式政策落地前的过渡边界;CHANGELOG 同步披露。 |
+| 2026-08-02 | Phase 2 补钉 C:repair-add 完整位置组验证 | repair-add 的 assertion digest 改按其消费的完整物理 `(tx_seq, op_ordinal)` 事件组重算,不再借用以 `tx_id` 行序切片的普通读取 helper;合法 user-meta 漂移组 repair→open 回路通过,在同组 `tx_id` 后注入 `origin_binding` 的审计探针 fail-closed。 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 

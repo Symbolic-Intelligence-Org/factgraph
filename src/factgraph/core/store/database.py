@@ -2498,7 +2498,17 @@ def _validate_repair_add_meta_operation(
         key="schema_digest",
         expected=("str", payload["schema_digest"]),
     )
-    digest = _verified_assertion_digest(ledger, claim)
+    user_meta = tuple(
+        MetaEntry(key, str(event.kind), event.value)
+        for key, event in rows.items()
+        if key not in _RESERVED_ASSERTION_META_KEYS
+    )
+    digest = assertion_digest_for(
+        pred_id=claim.pred_id,
+        fact_tuple=(("entity_ref", claim.e_ref), *tuple(claim.rest_terms)),
+        schema_digest=payload["schema_digest"],
+        meta=user_meta,
+    )
     _require_meta_event_value(
         rows,
         asrt_id=asrt_id,

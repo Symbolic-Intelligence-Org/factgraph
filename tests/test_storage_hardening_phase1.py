@@ -589,10 +589,12 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                 ("entity_ref", "idref_v1:Person:rogue"),
                 ("string", "Rogue"),
             )
+            rogue_user_meta = (MetaEntry("source", "str", "repair-drift"),)
             rogue_digest = assertion_digest_for(
                 pred_id="person:name",
                 fact_tuple=rogue_fact,
                 schema_digest=schema_digest(_schema_ir()),
+                meta=rogue_user_meta,
             )
             drift_ledger = Ledger(paths.assertions)
             drift_ledger.append_assertion(
@@ -611,6 +613,7 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
                     )
                 ],
                 meta_rows=[
+                    *(MetaRow(rogue_id, row.key, row.kind, row.value) for row in rogue_user_meta),
                     MetaRow(rogue_id, "schema_digest", "str", schema_digest(_schema_ir())),
                     MetaRow(rogue_id, "assertion_digest", "str", rogue_digest),
                     MetaRow(rogue_id, "tx_id", "str", before_repair.tx_id),
@@ -629,6 +632,10 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
             )
             self.assertEqual(repaired.head().tx_seq, before_repair.tx_seq + 1)
             self.assertIsNotNone(repaired._ledger.get_claim(rogue_id))
+            physical_position = (
+                repaired._ledger._claim_tx_refs[rogue_id],
+                repaired._ledger._claim_op_ordinals[rogue_id],
+            )
             repair_meta = repaired._ledger.get_ledger_meta("last_repair")
             self.assertIsNotNone(repair_meta)
             self.assertIn("phase1-test-injected-ledger-drift", repair_meta or "")
@@ -637,6 +644,26 @@ class StorageHardeningPhase1Tests(unittest.TestCase):
             reopened = Database.open(path, schema_ir=_schema_ir())
             self.assert_state_matches_full_recompute(reopened)
             reopened.close()
+
+            with sqlite3.connect(paths.assertions) as conn:
+                conn.execute(
+                    "INSERT INTO claim_meta "
+                    "(asrt_id, key, kind, value, tx_seq, op_ordinal) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        rogue_id,
+                        "origin_binding",
+                        "str",
+                        "forged-after-tx-marker",
+                        *physical_position,
+                    ),
+                )
+
+            with self.assertRaisesRegex(
+                DatabaseIntegrityError,
+                "claim_meta 'assertion_digest' disagrees",
+            ):
+                Database.open(path, schema_ir=_schema_ir())
 
     def test_workspace_flock_rejects_second_process(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
