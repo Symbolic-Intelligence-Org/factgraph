@@ -63,6 +63,7 @@
 | 2026-08-02 | Phase 2 补钉 E:minors ①-⑦ 收口 | migration genesis 措辞改为标准 A/R/M import transaction;predicate-block UNSET 差分;历史 16/14 精确调用式;Q-SAE-9 §2.1/§3.1/§3.3 勾选与 §3.2 partial;Souffle effective-only 事实集披露+测试;SDK 历史 docstring 指向窄域 audit 接口;export-equality/parser round-trip 如实化;service raw meta known-gap 与 premise_filter 模块说明登记。 |
 | 2026-08-02 | **Phase 2 补钉轮完成,停下待复验** | S1-S4 与 minor ①-⑦ 全部闭合;既有 dbtx_v2/read-equivalence fixtures 零修改。补钉后 Phase 2 精确面 **21 passed / 17 subtests**,PR #20/#21/#22 精确面 **157 passed**,canonical **2838 passed / 32 skipped / 1 deselected / 1125 subtests**(相对进入补钉轮 2832/32/1/1122 净增 6 pass / 3 subtests);changed-file ruff + diff-check 全绿。Phase 3 未启动。 |
 | 2026-08-02 | **Phase 2 补钉轮复验通过;Phase 2 正式关闭,Phase 3 放行** | 双验证器双树复现 A-E 全闭 + 文档半区 12/12;残留全 LOW(处置见 §Phase 2 补钉轮复验);B6 补录一处私有触达 |
+| 2026-08-02 | **第七项内联裁定用户追认(2026-08-02)** | as-of 置于 EvidenceEnvelope/audit context 层、`ProofReceipt` 本体 as-of-free(含四条执行约束)—— 经 Phase 2 复验证实全部落实后由用户追认关闭;历史行“用户可否决”保留原样,追认状态以本行为准。至此 3b 全部内联裁定(7 项)+ C1 批准均已获用户授权,零未决 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
