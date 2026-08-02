@@ -26,7 +26,16 @@ from factgraph.core.store.database import (
     _MetaUnsetInput,
     resolve_database_workspace_paths,
 )
-from factgraph.core.store.ledger import AnnotationRow, LedgerFormatError, MetaRow, _annotation_storage_key
+from factgraph.core.mapping.canon import MappingResolveError, _required_meta_time
+from factgraph.core.policy.chosen import PolicyNonDeterminismError, choose_one
+from factgraph.core.store.ledger import (
+    AnnotationRow,
+    Claim,
+    Ledger,
+    LedgerFormatError,
+    MetaRow,
+    _annotation_storage_key,
+)
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
@@ -40,6 +49,102 @@ _REVOKER_ID = "asrt:22222222222222222222222222222222"
 
 
 class Slice3bMetaEventSemanticsTests(unittest.TestCase):
+    def test_system_managed_meta_cannot_be_appended_or_unset(self) -> None:
+        with patch(
+            "factgraph.core.store.database._new_assertion_id",
+            side_effect=[_ASSERTION_ID],
+        ):
+            db = Database.create(schema_ir=_schema_ir())
+            assertion = db.commit_assertions(
+                (
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:alice"), ("string", "Alice")),
+                        (MetaEntry("ingested_at", "time", 200),),
+                    ),
+                )
+            ).assertions[0]
+            head = db.head()
+
+            for item in (
+                MetaAppendInput(assertion.asrt_id, "ingested_at", "time", 100),
+                MetaAppendInput(assertion.asrt_id, "ingest_key", "str", "forged"),
+                MetaAppendInput(
+                    assertion.asrt_id,
+                    "revoked_asrt_id",
+                    "str",
+                    "asrt:forged",
+                ),
+            ):
+                with self.subTest(key=item.key), self.assertRaisesRegex(
+                    DatabaseError,
+                    "system-managed",
+                ):
+                    db.commit_changes(assertions=(), revocations=(), meta_appends=(item,))
+                self.assertEqual(db.head(), head)
+
+            with self.assertRaisesRegex(DatabaseError, "system-managed"):
+                db._commit_meta_unsets((_MetaUnsetInput(assertion.asrt_id, "ingested_at"),))
+            self.assertEqual(db.head(), head)
+            db.close()
+
+    def test_phase2_chosen_orders_by_sample_time_not_later_commit(self) -> None:
+        later_sample_id = "asrt:33333333333333333333333333333333"
+        earlier_sample_later_commit_id = "asrt:44444444444444444444444444444444"
+        with patch(
+            "factgraph.core.store.database._new_assertion_id",
+            side_effect=[later_sample_id, earlier_sample_later_commit_id],
+        ):
+            db = Database.create(schema_ir=_schema_ir())
+            first = db.commit_assertions(
+                (
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:alice"), ("string", "first")),
+                        (MetaEntry("ingested_at", "time", 200),),
+                    ),
+                )
+            ).assertions[0]
+            second = db.commit_assertions(
+                (
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:alice"), ("string", "second")),
+                        (MetaEntry("ingested_at", "time", 100),),
+                    ),
+                )
+            ).assertions[0]
+
+            ledger = db._ledger_for_attach()
+            self.assertGreater(
+                ledger._claim_tx_refs[second.asrt_id],
+                ledger._claim_tx_refs[first.asrt_id],
+            )
+            self.assertEqual(
+                choose_one(ledger, [first.asrt_id, second.asrt_id]),
+                first.asrt_id,
+            )
+            db.close()
+
+    def test_chosen_and_mapping_canon_reject_duplicate_ingested_at_history(self) -> None:
+        ledger = Ledger()
+        ledger.append_claim(
+            Claim(
+                asrt_id=_ASSERTION_ID,
+                pred_id="person:name",
+                e_ref="idref_v1:Person:alice",
+                rest_terms=[("string", "Alice")],
+            )
+        )
+        ledger.append_meta([MetaRow(_ASSERTION_ID, "ingested_at", "time", 100)])
+        ledger.append_meta([MetaRow(_ASSERTION_ID, "ingested_at", "time", 200)])
+
+        with self.assertRaisesRegex(PolicyNonDeterminismError, "exactly one ingested_at"):
+            choose_one(ledger, [_ASSERTION_ID])
+        with self.assertRaisesRegex(MappingResolveError, "exactly one ingested_at"):
+            _required_meta_time(ledger, _ASSERTION_ID, "ingested_at")
+        ledger.close()
+
     def test_managed_ledger_append_meta_routes_through_database_commit(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp, patch(
             "factgraph.core.store.database._new_assertion_id",

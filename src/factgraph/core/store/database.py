@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Iterable, Mapping, Sequence
 
+from factgraph.core.evidence.write_protocol import _SYSTEM_MANAGED_META_KEYS
 from factgraph.core.protocol.annotation_v1 import initial_meta_annotation_v1
 from factgraph.core.protocol.digests import sha256_hex, sha256_token
 from factgraph.core.protocol.lthash import (
@@ -1408,6 +1409,7 @@ class Database:
                 if not isinstance(item.key, str) or not item.key:
                     raise DatabaseError("meta UNSET key must be non-empty string")
                 _reject_reserved_meta_keys((item.key,), context="meta UNSET")
+                _reject_system_managed_meta_keys((item.key,), context="meta UNSET")
                 prepared.append(_MetaTombstone(asrt_id, item.key))
                 continue
             if not isinstance(item, MetaAppendInput):
@@ -1422,6 +1424,7 @@ class Database:
                 row_type = _AnnotationStorageMetaRow
             else:
                 _reject_reserved_assertion_meta((entry,))
+                _reject_system_managed_meta_keys((entry.key,), context="meta append")
                 row_type = MetaRow
             _meta_value_bytes(entry.kind, entry.value)
             prepared.append(row_type(asrt_id, entry.key, entry.kind, entry.value))
@@ -3063,6 +3066,14 @@ def _reject_reserved_meta_keys(keys: Sequence[str], *, context: str) -> None:
     if reserved:
         raise DatabaseError(
             f"{context} cannot use Database-reserved key(s): " + ", ".join(reserved)
+        )
+
+
+def _reject_system_managed_meta_keys(keys: Sequence[str], *, context: str) -> None:
+    managed = sorted(set(keys) & _SYSTEM_MANAGED_META_KEYS)
+    if managed:
+        raise DatabaseError(
+            f"{context} cannot override system-managed key(s): " + ", ".join(managed)
         )
 
 

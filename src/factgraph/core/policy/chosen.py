@@ -84,13 +84,17 @@ def compute_chosen_for_predicate(ledger: Ledger, schema_pred: dict) -> dict[tupl
 
 
 def _read_required_ingested_at(ledger: Ledger, asrt_id: str) -> int:
-    rows = ledger._effective_meta_rows(asrt_id=asrt_id, key="ingested_at")
+    rows = ledger.find_meta(asrt_id=asrt_id, key="ingested_at")
     if len(rows) != 1:
         raise PolicyNonDeterminismError(
             f"asrt_id={asrt_id} must have exactly one ingested_at meta row"
         )
     row = rows[0]
-    if row.kind != "time" or isinstance(row.value, bool) or not isinstance(row.value, int):
+    if (
+        row.kind != "time"
+        or isinstance(row.value, bool)
+        or not isinstance(row.value, int)
+    ):
         raise PolicyNonDeterminismError(
             f"asrt_id={asrt_id} ingested_at must be meta_time int"
         )
