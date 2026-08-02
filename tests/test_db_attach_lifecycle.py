@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import gc
+import weakref
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -96,6 +98,21 @@ def _user_name_rule() -> Rule:
 
 
 class DBAttachLifecycleTests(unittest.TestCase):
+    def test_managed_writer_callbacks_do_not_defer_database_lock_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database.create(Path(tmp) / "workspace", schema_ir=_schema_ir())
+            ledger = db._ledger_for_attach()
+            owner = weakref.ref(db)
+
+            del db
+            gc.collect()
+
+            self.assertIsNone(owner())
+            self.assertIsNone(ledger._managed_meta_writer)
+            self.assertIsNone(ledger._managed_annotation_writer)
+            with self.assertRaisesRegex(RuntimeError, "Ledger is closed"):
+                ledger.find_claims()
+
     def test_attached_entities_create_delete_each_advance_one_consistent_tx(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "workspace"

@@ -18,6 +18,7 @@ import sqlite3
 import struct
 import time
 import uuid
+import weakref
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Iterable, Mapping, Sequence
@@ -459,8 +460,29 @@ class Database:
         self._workspace_paths = workspace_paths
         self._lock_handle = lock_handle
         self._closed = False
-        self._ledger._managed_meta_writer = self._commit_meta_rows
-        self._ledger._managed_annotation_writer = self._commit_annotations
+        owner_ref = weakref.ref(self)
+
+        def _managed_meta_writer(rows: Sequence[MetaRow]) -> CommitResult | None:
+            owner = owner_ref()
+            if owner is None or owner._closed:
+                raise DatabaseError("managed meta writer belongs to a closed Database")
+            return owner._commit_meta_rows(rows)
+
+        def _managed_annotation_writer(
+            rows: Sequence[AnnotationRow],
+        ) -> CommitResult | None:
+            owner = owner_ref()
+            if owner is None or owner._closed:
+                raise DatabaseError("managed annotation writer belongs to a closed Database")
+            return owner._commit_annotations(rows)
+
+        # Weak-owner callbacks keep Ledger writes routed through Database
+        # without forming Database -> Ledger -> bound-method -> Database cycles.
+        # Such a cycle can defer writer.lock cleanup until an unrelated GC.
+        self._managed_meta_writer_callback = _managed_meta_writer
+        self._managed_annotation_writer_callback = _managed_annotation_writer
+        self._ledger._managed_meta_writer = _managed_meta_writer
+        self._ledger._managed_annotation_writer = _managed_annotation_writer
 
     def __enter__(self) -> Database:
         return self
@@ -480,9 +502,9 @@ class Database:
         if getattr(self, "_closed", True):
             return
         self._closed = True
-        if getattr(self._ledger._managed_meta_writer, "__self__", None) is self:
+        if self._ledger._managed_meta_writer is self._managed_meta_writer_callback:
             self._ledger._managed_meta_writer = None
-        if getattr(self._ledger._managed_annotation_writer, "__self__", None) is self:
+        if self._ledger._managed_annotation_writer is self._managed_annotation_writer_callback:
             self._ledger._managed_annotation_writer = None
         try:
             self._ledger.close()
