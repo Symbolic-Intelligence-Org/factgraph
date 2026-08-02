@@ -72,7 +72,8 @@ Stage A 完成写链与生命周期收敛,但表形态仍是 7 表(3 组内建�
 - [ ] dbtx_v2 golden fixture 常驻(Phase 0 建立,全程不破);
 - [ ] 三组对照测量落数(预期 ~3.9KB → ~1KB 量级,实测为准);
 - [ ] atomic flip 无数据搬迁(alpha);migration CLI 对 3b 前 v0.3 工作区的升级路径裁定并实现或显式拒绝+指引;
-- [ ] 受影响模块 docs + spec 修订同步。
+- [ ] 受影响模块 docs + spec 修订同步;
+- [ ] **收官量化**(用户批准 2026-08-02 的进程机制):Outcome 记录本 slice 的 `src/` 净行数变化与公开名净增减,与三组对照并列(Phase 4 落数);桥梁清单(audit log 专节)收官冻结。
 
 ## 8. Implementation Plan
 

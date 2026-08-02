@@ -46,6 +46,8 @@
 | 2026-08-02 | **Phase 1 补钉轮复验:A-F 实质全闭;新增 P1-R1~R4 —— 最后一张 P1-R 补丁卡后关闭 Phase 1** | 双验证器逐项复现;2 个相邻通道 serious(hidden-key 前缀无守卫 → 变砖/伪造)+ Q-SYS-B 增量性违规 + INV-12 半闭;全文见 §Phase 1 补钉轮复验 |
 | 2026-08-02 | blueprint lifecycle `scoped` → `implementing`;Phase 1 P1-R 收官实施 | Phase 0/1 已进入代码实施但头部状态滞后,依 lifecycle 规则补正;P1-R 为 Phase 1 最后补丁卡,Phase 2 仍冻结待复验放行 |
 | 2026-08-02 | **Phase 1 P1-R 收官卡完成,停下待复验** | `__factgraph_annotation_v1__:` 在 Ledger/Database/SDK 与 write_protocol 的 assertion/revocation/append_meta 通道 pre-commit 拒绝;内部 annotation/迁移以私有 carrier 保留合法通路;畸形持久化 key 统一 fail-closed 为 `LedgerFormatError`;Q-SYS-B 四段原文恢复并以追加警告表达修正;INV-12 write_protocol/entity_write 两层负向门补齐。dbtx_v2+读等价 **7 passed / 3 subtests**,PR 面 **157 passed**,canonical **2822 passed / 32 skipped / 1 deselected / 1106 subtests**,ruff + diff-check 全绿;Phase 2 未启动 |
+| 2026-08-02 | **P1-R 收官复验通过;Phase 1 正式关闭,Phase 2 放行** | 手核:四层前缀守卫 + 私有载体类型、Q-SYS-B 增量性恢复(原文逐字回归 + ⚠️ 追加式)、INV-12 两本层负向、套件 2822/32/1/1106 亲测复现;详见 §Phase 1 收官复验 |
+| 2026-08-02 | **进程机制建立(用户批准 2026-08-02):桥梁清单 + 收官量化** | 背景 = 用户对项目野蛮生长的担忧;桥梁清单专节立于本 log(B1-B6,新桥同 commit 登记否则视为走私),收官量化行入 blueprint §7;后续 slice 沿用 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -372,6 +374,25 @@ Phase 2 保持冻结;以上仅声明 Phase 1 物理事件地基与表形态完�
 | P1-R4(moderate) | INV-12 两处新守卫分支(write_protocol.retract_by_asrt:178、entity_write:1128)仍无本层负向测试(原 minor 只闭一半) | R-c |
 | note | hidden-key M 事件不在 tx object JSON;**adapter annotation 持久化路径 tx_seq 越 head 且无 tx object(未真正入链)**;commit_batch meta 索引与 reload annotation 索引瞬态不对称(仅迁移使用) | **Phase 2 具名 gate:全部 meta-event 写者过 tx 协议 + parity 校验覆盖 hidden-key** |
 | note | 转录 commit 归属与计划不符(C 裁定全文落在 48881bd5);blueprint 头部 Status/Last Updated 未更新 | R-d 顺手 |
+
+## Phase 1 收官复验(P1-R,2026-08-02,Claude 手核)
+
+R-a:四层守卫亲核(ledger `_ANNOTATION_COMPAT_PREFIX` + 私有载体 `_AnnotationStorageMetaRow` 区分内部写者;write_protocol:267 / sdk/store:742 / database:2701 公开通道拒绝),新负向测试 64 passed / 21 subtests;R-b:Q-SYS-B 四处历史原文逐字恢复 + ⚠️ 追加式修正(diff 亲核,增量性回归);R-c:write_protocol / entity_write 两处本层 INV-12 负向测试落地;R-d:blueprint 头部推进 `implementing`。canonical 套件 **2822/32/1/1106** 亲测复现(相对 2794 净增 28);golden 零修改;暂存空;未 push。
+
+**裁定:P1-R 全闭 —— Phase 1 正式关闭,Phase 2 放行。** Phase 2 具名 gate(复验期立):①全部 meta-event 写者过 tx 协议(adapter annotation 持久化路径现状 = tx_seq 越 head 且无 tx object,未真正入链);②parity 校验覆盖 hidden-key 事件;③commit_batch meta 索引 vs reload annotation 索引的瞬态不对称随事件解析统一收敛。
+
+## 桥梁清单(Bridge Inventory,2026-08-02 用户批准建立)
+
+规则:3b 收官时冻结本表;Slice 5 blueprint 开工以此为验尸单;**新桥必须同 commit 登记入表,否则审计视为走私**;拆桥时表内所列测试一并删除。
+
+| # | 桥 | 引入点 | 守卫 | 死期归属 | 拆除时同删测试 |
+|---|---|---|---|---|---|
+| B1 | `claims.rest_terms` legacy 列(PyReason 2-position 载体) | C2 `609317e3`(Q-SYS-B §4.2(c)) | 新路径写 `[]`;无 blanket enforce(设计如此) | **Slice 5 三项绑定**(drop 列 + adapter rewrite + ADR-INV9) | legacy n-ary 读等价 fixture 及用例;PyReason 专项中依赖 2-position 的部分 |
+| B2 | hidden-key annotation 编码(`__factgraph_annotation_v1__:` 事件) | 补钉 `1267d551`(C 裁定) | 前缀保留四层守卫 + 解码 fail-closed(`8c193e10` 已落地) | **Slice 5**(namespace/category 收敛 + 引擎 annotation 契约重设计) | World 1/2 回路、ProbLog cold-reload 门、reserved-namespace 负向组(契约重设计后重写) |
+| B3 | `ingest_key` 兼容事件 + `Idempotency` 参数 + 两 helper | C2(§9.6 partial)+ 补钉 E 自动物化 | 参数与显式 meta 不匹配即拒 | 随 caller 改写另行完成 —— **归属待裁**(Slice 5 候选) | `test_idempotency_is_materialized_and_survives_reload` |
+| B4 | v0.2 七表迁移走廊(逻辑快照解析器 + migrate CLI v0.2 路径) | C4 `5c0c7e31` + 补钉 B/C | staging→verified replacement→可见归档 | **待发布裁定**(Q-SAE-6 时序定 v0.2 支持窗口) | test_a20e 迁移用例 + 合成七表 fixture |
+| B5 | deprecated `Ledger.append_claim` 兼容入口 | 3b 前(pre-existing) | A 项 system-pred 守卫已覆盖 | 待裁(caller 清点后) | 对应兼容用例 |
+| B6 | `_ledger_for_attach` 等私有名跨层调用(sdk×2、benchmark×1)+ tests→`_enc*` reach-through | Stage A / Phase 0 | audit 冻结方法节同 commit 更新纪律 | **3b 自身 Goal 7**(Phase 2-4 内转正) | 无(转正即改引用) |
 
 ## Deviations
 
