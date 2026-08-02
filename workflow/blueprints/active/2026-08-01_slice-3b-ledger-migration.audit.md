@@ -39,6 +39,7 @@
 | 2026-08-02 | Phase 1 C3 L0 索引重构 | `1438890f`:索引由三表事件重建,物理 `_ClaimMetaEvent(tx_seq, op_ordinal)` 与公开历史投影分层;冷启动/写后/force-replace 保持一致;baseline harness 同 commit 改为按列 introspection 识别 physical meta 表并计入 event objects/index refs |
 | 2026-08-02 | Phase 1 C4 v0.2 → 3b 终态迁移 | `5c0c7e31`:弃用会覆盖新 DDL 且破坏 meta 事件序的 SQLite 物理 backup;只读解析 released 七表 v0.2 逻辑快照,在全新三表目标以单次 `commit_batch(tx_seq=0)` 写入 repair anchor。真实七表 fixture 覆盖 n-ary、同 key 多 meta、revocation、annotation、三表 introspection、open/verify 与后续可写;两项原计划 migration 红转绿 |
 | 2026-08-02 | **Phase 1 实施完成,停下待对抗审计** | C0-C4:`3aafbd4b` / `5ba4eeed` / `609317e3` / `1438890f` / `5c0c7e31`;dbtx_v2 serializer/production commit/repair + production repair goldens 与 C0 两组读等价 fixture 全绿且 fixture 零修改;PR #20/#21/#22 精确面 **157 passed**;canonical 全套件 **2788 passed / 32 skipped / 1 deselected / 1098 subtests**。Phase 2 未启动 |
+| 2026-08-02 | **Phase 1 对抗审计:0 blocker / 8 serious(去重 6 类)/ 7 minor —— 有条件不放行,补钉轮先行** | 六透镜完整运行(首轮网络故障 2/6,断点续跑补齐 4/6);最高契约与四裁定验实,缺陷集中在 system-claim 解释通道守卫、迁移 annotation 保真、证据完整性;全文见 §Phase 1 对抗审计 |
 
 ## Phase 0 adopted commitments worklist(verbatim)
 
@@ -310,6 +311,27 @@ Batch=3 Ledger read API case timings(ms):
 - **canonical suite**:`PYTHONPATH=src` + process-only readline shim + `--ignore=tests/test_pyreason_provenance_v0.py` + 唯一 approved deselect,结果 **2788 passed / 32 skipped / 1 deselected / 1098 subtests**。相对 C3 的 2785,净增 3 pass = 两项计划内 migration failure 闭合 + 一项 released 七表 fixture 新门禁。
 
 Phase 2 保持冻结;以上仅声明 Phase 1 物理事件地基与表形态完成,不把 Phase 2 的 UNSET 统一解析、receipt as-of、append_meta parity/audit API 或 Phase 3 的 meta 分级当作已交付。
+
+## Phase 1 对抗审计(2026-08-02,Claude 六透镜完整运行 + 独立复跑)
+
+**结论:0 blocker / 8 serious(去重后 6 类)/ 7 minor —— 有条件不放行 Phase 2,补钉轮先行。**
+
+**验实的合格面(全部经复现,非空心)**:读等价最高契约成立 —— legacy n-ary fixture 经审计侧在 3aafbd4b 旧代码上**字节级复产**(sha256 939decab…,与入库 fixture 及 HEAD 输出三方一致),既有 fixture 零修改属实;digest 冻结门的字面量经旧代码重算相符(support/view_snapshot);LtHash 全族函数 AST 级字节相同;INV-15 五读面结构排除 + 对抗探针无泄漏;变异探针能杀死等价门;七步精简与四项内联裁定实质忠实落地(revokes-as-claim 物理核验、rest_terms §4.2(c) 无走私 enforce、initial-meta 三侧守卫齐、tx_ref≡tx_seq 已断言);全套件 2788/32/1/1098 与 PR 面 157 passed 复现;未 push;Phase 3 面零渗漏;benchmark 在两个中间 commit 复证"不崩不谎"。
+
+**Serious(去重编号,→ 补钉轮)**:
+
+| # | 发现 | 处置 |
+|---|---|---|
+| P1-S1 | **Ledger prepare 边界收下它无法忠实索引的 `__system__.*` claim**:经 `Ledger.append_assertion`/公开 `write_protocol.set_field` 伪造 `__system__.revokes` → 活跃撤销**仅在 reload 后生效**(live/reload 分裂);不支持的 system pred **先 commit 后 raise → 工作区永久变砖**。Stage A F1/C1 同型洞(新解释通道未配三侧守卫) | 补钉 A(最重) |
+| P1-S2 | **C4 迁移静默丢 v0.2 annotation**:`_annotation_compatibility_meta_rows` 的 skip-set 以 (key,kind,value) 全工作区池化、无 asrt_id —— 与**任意其他 claim** 的 meta 行撞值即被丢;`--no-archive` 下不可恢复 | 补钉 B |
+| P1-S3 | **reload 侧 shared-annotation 投影是启发式而非事件重放**:迁移会捏造 v0.2 源中不存在的 annotation;自定义 namespace 的 annotation reload 后变形为 `shared` | 补钉 C(回路保真裁定) |
+| P1-S4 | INV-15 证据句过诺:所点名测试未测 meta/annotation 面(实际由等价 golden 承载) | 补钉 F |
+| P1-S5 | audit"ruff 全绿"不实:C1 引入 F841 死代码(ledger.py:849 `actual_claim_args`),CI 门 28→29;伴生:`append_assertion` 对 `claim_args` 参数只验形不落库不交叉校验,静默丢弃 | 补钉 D |
+| P1-S6 | **spec §9.6 ingest_keys 退场仅部分交付却无 partial 标注、无 Deviations 记录** —— rest_terms 事故同型(完成度过诺);伴生 minor:无 ingest_key meta 行时 Idempotency 参数失忆(7 表时代 ingest_keys 表独立记忆) | 补钉 E |
+
+**Minor ×7**:组合过滤读分支未入等价 fixture(探针已证当前字节相等);Idempotency 失忆(并入 S6);INV 映射缺 INV-2/3/4/13 + blueprint §12 指针过期;kind 恢复在三处文档误署"用户裁定"(实为协调方内联裁定、否决权仍开);spec §3.4 仍写 kind"消失"与六列自矛盾;INV-12 新守卫分支缺本层负向测试;迁移 late-append shared-key meta 被制造成 annotation 的表面变化无记录。另:audit"真实七表 fixture"措辞过诺(实为测试内合成、四特征俱全)。
+
+**放行裁定:Phase 1 补钉轮完成并复验后放行 Phase 2。** P1-S1 为最高优先(伪造通道 + 变砖通道);P1-S2/S3 涉迁移数据保真;S4-S6 为证据完整性。
 
 ## Deviations
 
