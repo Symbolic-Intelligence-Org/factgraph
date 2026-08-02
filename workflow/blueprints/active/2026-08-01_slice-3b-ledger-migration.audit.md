@@ -62,6 +62,7 @@
 | 2026-08-02 | Phase 2 补钉 full-suite 生命周期加固 | `cbf905b9`:A 的 meta writer 与既有 annotation writer 由 bound-method 强环改为 weak-owner callback;修复 Database→Ledger→writer→Database 环使 `writer.lock` 的 ResourceWarning 延迟到无关 PyReason warning 捕获区的问题。显式 GC 探针从 1 warning→0,并钉 Database 消亡后两 callback 清空、Ledger closed。无协议/持久化语义变化。 |
 | 2026-08-02 | Phase 2 补钉 E:minors ①-⑦ 收口 | migration genesis 措辞改为标准 A/R/M import transaction;predicate-block UNSET 差分;历史 16/14 精确调用式;Q-SAE-9 §2.1/§3.1/§3.3 勾选与 §3.2 partial;Souffle effective-only 事实集披露+测试;SDK 历史 docstring 指向窄域 audit 接口;export-equality/parser round-trip 如实化;service raw meta known-gap 与 premise_filter 模块说明登记。 |
 | 2026-08-02 | **Phase 2 补钉轮完成,停下待复验** | S1-S4 与 minor ①-⑦ 全部闭合;既有 dbtx_v2/read-equivalence fixtures 零修改。补钉后 Phase 2 精确面 **21 passed / 17 subtests**,PR #20/#21/#22 精确面 **157 passed**,canonical **2838 passed / 32 skipped / 1 deselected / 1125 subtests**(相对进入补钉轮 2832/32/1/1122 净增 6 pass / 3 subtests);changed-file ruff + diff-check 全绿。Phase 3 未启动。 |
+| 2026-08-02 | **Phase 2 补钉轮复验通过;Phase 2 正式关闭,Phase 3 放行** | 双验证器双树复现 A-E 全闭 + 文档半区 12/12;残留全 LOW(处置见 §Phase 2 补钉轮复验);B6 补录一处私有触达 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -437,7 +438,7 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 | B3 | `ingest_key` 兼容事件 + `Idempotency` 参数 + 两 helper | C2(§9.6 partial)+ 补钉 E 自动物化 | 参数与显式 meta 不匹配即拒 | 随 caller 改写另行完成 —— **归属待裁**(Slice 5 候选) | `test_idempotency_is_materialized_and_survives_reload` |
 | B4 | v0.2 七表迁移走廊(逻辑快照解析器 + migrate CLI v0.2 路径) | C4 `5c0c7e31` + 补钉 B/C | staging→verified replacement→可见归档 | **待发布裁定**(Q-SAE-6 时序定 v0.2 支持窗口) | test_a20e 迁移用例 + 合成七表 fixture |
 | B5 | deprecated `Ledger.append_claim` 兼容入口 | 3b 前(pre-existing) | A 项 system-pred 守卫已覆盖 | 待裁(caller 清点后) | 对应兼容用例 |
-| B6 | `_ledger_for_attach` 跨层调用(sdk/application/benchmark)+ tests→`_enc*` reach-through;Phase 2 事件 resolver 四名已在补钉 D 转正并从本桥移除 | Stage A / Phase 0 | audit 冻结方法节同 commit 更新纪律 | **3b Phase 4**(`_ledger_for_attach` 转正或收口;测试 helper 随 fixture 边界处理) | 无(转正即改引用) |
+| B6 | `_ledger_for_attach` 跨层调用(sdk/application/benchmark)+ tests→`_enc*`;补录(2026-08-02 复验):sdk/store.py:261-262 `_latest_meta_event_sequence` reach-through;Phase 2 事件 resolver 四名已在补钉 D 转正并从本桥移除 | Stage A / Phase 0 | audit 冻结方法节同 commit 更新纪律 | **3b Phase 4**(`_ledger_for_attach` 转正或收口;测试 helper 随 fixture 边界处理) | 无(转正即改引用) |
 | B7 | unmanaged `Store` adapter annotation 直写 fallback | Phase 2 meta-event writer 收编 | attach/Database-backed lifecycle 一律经 dbtx_v2 M op;仅 `from_schema_classes` 无 Database runtime 保留 direct Ledger compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | adapter managed-path tx-object golden + unmanaged adapter compatibility tests |
 | B8 | unmanaged `Ledger.append_meta` 直写 fallback | Phase 2 补钉 A managed writer 收编 | Database 构造时安装 `_managed_meta_writer`,managed 调用在任何 SQLite 直写前委托 `commit_changes`;仅无 Database owner 的 Ledger 保留 direct compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | managed direct-path-unreachable/tx-object 回路 + unmanaged compatibility tests |
 
@@ -463,6 +464,14 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 **Minor ×7**:①迁移 genesis 改 A/R/M 后 docstring(database.py:823-829)与 CHANGELOG:29 仍称 repair anchor(被本范围证伪);②predicate-block 路径无 UNSET 差分;③16/14 精确面无调用式记录(157 面教训重演);④worklist 反向漏勾(Q-SAE-9 §2.1/§3.1/§3.3 已交付未勾);⑤souffle `_build_fact_rows` 改发 effective-only 事实集 —— 方向正确但落在 blueprint §3 非目标面(引擎行为变更),未披露未钉测;⑥`find_meta` 兼容投影墓碑盲,与 SDK docstring"完整历史可审计"相悖;⑦"再导入"腿实为 parse-only(无真回写),gate 措辞应如实。另 note:src/service 三处 raw first-wins 残留(包外,挂 known-gap);premise_filter 模块级 docstring 一行过期;UNSET 现无公开 API(与披露一致)。
 
 **放行裁定:Phase 2 补钉轮(A-E)完成并复验后关闭 Phase 2、放行 Phase 3。** 第七项内联裁定(as-of envelope 层)追认待用户。
+
+## Phase 2 补钉轮复验(2026-08-02,Claude 双验证器 + 独立复跑)
+
+**结论:A-E 全部闭合(双树复现:base 复现原缺陷、HEAD 确认致死);0 blocker / 0 serious 残留 —— Phase 2 正式关闭,Phase 3 放行。**
+
+复现要点:A = 原变砖场景 base 重现(open+repair 双炸)、HEAD 双路由(Database + `fg.ledger`)入链且冷启动 parity 过,直写分支不可达,B8 同 commit 登记;B = 重复 ingested_at base 上静默翻转胜者、HEAD pre-commit 拒绝(append 与 UNSET 双侧、三键全集),chosen/canon 回到 exactly-one fail-closed;C = 原注入 base 开库通过、HEAD 拒绝,修复按完整位置组重算,注入探针入常驻测试,自洽改写攻击亦被三重联锁门(组门/切片门/状态锚)拦截;D = 四名转正无别名、全库下划线残留零、B6 同 commit 收窄;EXTRA(cbf905b9)= 强引用环缺陷证实(bound-method 环致 flock 延迟释放)、weakref 修法健全、范围纯净。文档半区 12/12 闭合:21/17 与 157 调用式逐字复现、audit:405 同 commit 点名改正、协调方节字节完整、worklist 勾选诚实。
+
+残留处置(全 LOW):①"genesis repair anchor"旧措辞存于 4 份 shipped 文档 → **Phase 4 docs pass 清扫清单**(blueprint §9 需补 sdk guide/quickstart 两项);②sdk `_latest_meta_event_sequence` 私有触达 → 已补录 B6(本 commit);③假绝对句改正缺原位标记、cbf905b9 日志事后补登 → 过程性记录,不返工;④引用环回归测试依赖 gc.collect(),无 gc 即时重开断言更强 → 转 Phase 3 卡顺手项。
 
 ## Deviations
 
