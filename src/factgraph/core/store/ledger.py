@@ -383,21 +383,24 @@ def _decode_meta_value(kind: str | None, value: str | None) -> Any:
         return None
     if kind is None or value is None:
         raise LedgerFormatError("claim_meta kind/value nullability mismatch")
-    if kind == "str":
-        return value
-    if kind in {"int", "time"}:
-        return int(value)
-    if kind == "float":
-        decoded = float(value)
-        if not math.isfinite(decoded):
-            raise LedgerFormatError("invalid canonical float claim_meta value")
-        return 0.0 if decoded == 0.0 else decoded
-    if kind == "bool":
-        if value not in {"true", "false"}:
-            raise LedgerFormatError("invalid canonical bool claim_meta value")
-        return value == "true"
-    if kind == "json":
-        return _from_jsonable(json.loads(value))
+    try:
+        if kind == "str":
+            return value
+        if kind in {"int", "time"}:
+            return int(value)
+        if kind == "float":
+            decoded = float(value)
+            if not math.isfinite(decoded):
+                raise LedgerFormatError("invalid canonical float claim_meta value")
+            return 0.0 if decoded == 0.0 else decoded
+        if kind == "bool":
+            if value not in {"true", "false"}:
+                raise LedgerFormatError("invalid canonical bool claim_meta value")
+            return value == "true"
+        if kind == "json":
+            return _from_jsonable(json.loads(value))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise LedgerFormatError(f"invalid claim_meta {kind!r} value encoding") from exc
     raise LedgerFormatError(f"unsupported claim_meta kind: {kind!r}")
 
 
@@ -548,6 +551,7 @@ class Ledger:
         self._closed = False
         self._owner_thread_id = threading.get_ident()
         self._memory_warning_emitted = False
+        self._managed_annotation_writer: Callable[[Sequence[AnnotationRow]], Any] | None = None
         self._local = threading.local()
         self._write_lock = threading.RLock()
         self._connections_lock = threading.Lock()
@@ -1250,6 +1254,9 @@ class Ledger:
             post_commit.append(_apply_meta_indexes)
 
     def append_annotations(self, rows: list[AnnotationRow]) -> None:
+        if self._managed_annotation_writer is not None:
+            self._managed_annotation_writer(tuple(rows))
+            return
         _validate_annotation_rows(rows)
         for row in rows:
             if not self._is_known_asrt_id(row.asrt_id):

@@ -458,6 +458,7 @@ class Database:
         self._workspace_paths = workspace_paths
         self._lock_handle = lock_handle
         self._closed = False
+        self._ledger._managed_annotation_writer = self._commit_annotations
 
     def __enter__(self) -> Database:
         return self
@@ -477,6 +478,8 @@ class Database:
         if getattr(self, "_closed", True):
             return
         self._closed = True
+        if getattr(self._ledger._managed_annotation_writer, "__self__", None) is self:
+            self._ledger._managed_annotation_writer = None
         try:
             self._ledger.close()
         finally:
@@ -868,28 +871,6 @@ class Database:
             meta_rows_by_asrt_id: dict[str, list[MetaRow]] = {}
             for row in legacy_rows.meta_rows:
                 meta_rows_by_asrt_id.setdefault(row.asrt_id, []).append(row)
-            source_annotation_identities = {
-                _migration_annotation_identity(row)
-                for row in legacy_rows.annotation_rows
-            }
-            post_identity_meta_rows = tuple(
-                row
-                for row in legacy_rows.meta_rows
-                if (
-                    (annotation := _contract_annotation_for_meta(row)) is not None
-                    and _migration_annotation_identity(annotation)
-                    not in source_annotation_identities
-                )
-            )
-            post_identity_meta_ids = {id(row) for row in post_identity_meta_rows}
-            initial_meta_rows = tuple(
-                row
-                for row in legacy_rows.meta_rows
-                if id(row) not in post_identity_meta_ids
-            )
-            initial_meta_rows_by_asrt_id: dict[str, list[MetaRow]] = {}
-            for row in initial_meta_rows:
-                initial_meta_rows_by_asrt_id.setdefault(row.asrt_id, []).append(row)
             for claim in legacy_rows.claims:
                 asrt_id = _require_asrt_id(claim.asrt_id, field="legacy asrt_id")
                 rows = meta_rows_by_asrt_id.get(asrt_id, [])
@@ -897,17 +878,14 @@ class Database:
                     raise DatabaseError(
                         f"legacy assertion already carries v0.3 reserved metadata: {asrt_id}"
                     )
-                user_meta = _normalize_meta_entries(
-                    tuple(
-                        MetaEntry(row.key, row.kind, row.value)
-                        for row in initial_meta_rows_by_asrt_id.get(asrt_id, [])
-                    )
-                )
                 digest = assertion_digest_for(
                     pred_id=claim.pred_id,
                     fact_tuple=(("entity_ref", claim.e_ref), *tuple(claim.rest_terms)),
                     schema_digest=schema_token,
-                    meta=user_meta,
+                    # v0.2 had no creation-vs-append event boundary.  Import
+                    # every legacy meta row as an explicit M event below so
+                    # repeated keys remain ordered and chain-reconstructible.
+                    meta=(),
                 )
                 assertion_digests[asrt_id] = digest
 
@@ -920,16 +898,34 @@ class Database:
                 if asrt_id not in revoked_assertion_ids
             }
             state_digest = _state_digest_for_assertions(active_assertions)
+            annotation_meta_rows = _annotation_compatibility_meta_rows(
+                legacy_rows.annotation_rows,
+                (),
+            )
             operations: list[dict[str, Any]] = [
-                {"kind": "repair_add", "asrt_id": asrt_id} for asrt_id in sorted(active_assertions)
-            ]
-            operations.append(
                 {
-                    "kind": "repair",
-                    "previous_state_digest": "<legacy-v0.2-unanchored>",
-                    "rebuilt_state_digest": state_digest,
-                    "reason": "migrate-workspace-v0.2-anchor",
+                    "kind": "assertion",
+                    "asrt_id": claim.asrt_id,
+                    "assertion_digest": assertion_digests[claim.asrt_id],
                 }
+                for claim in legacy_rows.claims
+            ]
+            operations.extend(
+                {
+                    "kind": "revocation",
+                    "revoker_asrt_id": row.revoker_asrt_id,
+                    "revoked_asrt_id": row.revoked_asrt_id,
+                    "meta": (),
+                }
+                for row in legacy_rows.revocations
+            )
+            operations.extend(
+                {
+                    "kind": "append_meta",
+                    "asrt_id": row.asrt_id,
+                    "meta": MetaEntry(row.key, row.kind, row.value),
+                }
+                for row in (*legacy_rows.meta_rows, *annotation_meta_rows)
             )
             tx_id = _tx_id_for_v2(
                 parent_tx_id=None,
@@ -945,22 +941,29 @@ class Database:
                         ClaimArg(claim.asrt_id, idx, val_atom, tag)
                         for idx, val_atom, tag in claim_args_from_rest_terms(claim.rest_terms)
                     ),
-                    meta_rows=(),
+                    meta_rows=(
+                        MetaRow(claim.asrt_id, "schema_digest", "str", schema_token),
+                        MetaRow(
+                            claim.asrt_id,
+                            "assertion_digest",
+                            "str",
+                            assertion_digests[claim.asrt_id],
+                        ),
+                        MetaRow(claim.asrt_id, "tx_id", "str", tx_id),
+                    ),
                 )
                 for claim in legacy_rows.claims
             )
             revocation_writes = tuple(
-                LedgerRevocationWrite(revokes=row) for row in legacy_rows.revocations
-            )
-            meta_appends: list[MetaRow] = list(initial_meta_rows)
-            for asrt_id, digest in assertion_digests.items():
-                meta_appends.extend(
-                    (
-                        MetaRow(asrt_id, "schema_digest", "str", schema_token),
-                        MetaRow(asrt_id, "assertion_digest", "str", digest),
-                        MetaRow(asrt_id, "tx_id", "str", tx_id),
-                    )
+                LedgerRevocationWrite(
+                    revokes=row,
+                    meta_rows=(
+                        MetaRow(row.revoker_asrt_id, "schema_digest", "str", schema_token),
+                        MetaRow(row.revoker_asrt_id, "tx_id", "str", tx_id),
+                    ),
                 )
+                for row in legacy_rows.revocations
+            )
             for revocation in legacy_rows.revocations:
                 revoker_id = _require_asrt_id(
                     revocation.revoker_asrt_id,
@@ -971,19 +974,7 @@ class Database:
                     raise DatabaseError(
                         f"legacy revoker already carries v0.3 reserved metadata: {revoker_id}"
                     )
-                meta_appends.extend(
-                    (
-                        MetaRow(revoker_id, "schema_digest", "str", schema_token),
-                        MetaRow(revoker_id, "tx_id", "str", tx_id),
-                    )
-                )
-            meta_appends.extend(post_identity_meta_rows)
-            meta_appends.extend(
-                _annotation_compatibility_meta_rows(
-                    legacy_rows.annotation_rows,
-                    legacy_rows.meta_rows,
-                )
-            )
+            meta_appends: list[MetaRow] = [*legacy_rows.meta_rows, *annotation_meta_rows]
 
             _write_tx_object(
                 paths,
@@ -2173,6 +2164,7 @@ def _validate_workspace_integrity(
     computed = _state_digest_for_assertions(ledger_assertions)
     if computed != head.state_digest:
         raise DatabaseIntegrityError("head_state_digest does not match active factual data")
+    _validate_claim_meta_parity(paths, ledger=ledger, head_tx_id=head.tx_id)
     return head
 
 
@@ -2265,6 +2257,261 @@ def _replay_history(
     ):
         raise DatabaseIntegrityError("tx history terminal schema_digest mismatch")
     return active
+
+
+def _validate_claim_meta_parity(
+    paths: DatabaseWorkspacePaths,
+    *,
+    ledger: Ledger,
+    head_tx_id: str,
+) -> None:
+    """Verify every physical claim_meta event against its dbtx_v2 operation.
+
+    Assertion initial meta is committed by ``assertion_digest`` plus the
+    operation's tx/schema identity rows. Revocation initial meta and every M
+    event are carried directly by the tx object. Any unconsumed physical event
+    is therefore an unchained write and fails closed.
+    """
+    chain: list[dict[str, Any]] = []
+    cursor: str | None = head_tx_id
+    seen: set[str] = set()
+    while cursor is not None:
+        if cursor in seen:
+            raise DatabaseIntegrityError("tx history contains a cycle")
+        seen.add(cursor)
+        payload = _read_tx_object(paths, cursor)
+        chain.append(payload)
+        cursor = payload["parent_tx_id"]
+    chain.reverse()
+
+    actual_by_position: dict[tuple[int, int], list[Any]] = {}
+    for event in ledger._claim_meta_events:
+        actual_by_position.setdefault(event.event_seq, []).append(event)
+
+    consumed: set[tuple[int, int]] = set()
+    known_tx_ids = {str(payload["tx_id"]) for payload in chain}
+    for payload in chain:
+        tx_seq = int(payload["tx_seq"])
+        for op_ordinal, operation in enumerate(payload["operations"]):
+            position = (tx_seq, op_ordinal)
+            events = actual_by_position.get(position, [])
+            kind = operation["kind"]
+            if kind == "assertion":
+                _validate_assertion_meta_operation(
+                    ledger,
+                    payload=payload,
+                    operation=operation,
+                    op_ordinal=op_ordinal,
+                    events=events,
+                )
+            elif kind == "revocation":
+                _validate_revocation_meta_operation(
+                    ledger,
+                    payload=payload,
+                    operation=operation,
+                    op_ordinal=op_ordinal,
+                    events=events,
+                )
+            elif kind == "append_meta":
+                _validate_append_meta_operation(operation=operation, events=events, position=position)
+            elif kind == "repair_add" and events:
+                _validate_repair_add_meta_operation(
+                    ledger,
+                    payload=payload,
+                    operation=operation,
+                    op_ordinal=op_ordinal,
+                    events=events,
+                    known_tx_ids=known_tx_ids,
+                )
+            elif events:
+                raise DatabaseIntegrityError(
+                    f"claim_meta event has no meta-bearing tx operation at {position}"
+                )
+            consumed.add(position)
+
+    leftovers = sorted(set(actual_by_position) - consumed)
+    if leftovers:
+        first = leftovers[0]
+        event = actual_by_position[first][0]
+        raise DatabaseIntegrityError(
+            "claim_meta event is not represented by tx history: "
+            f"asrt_id={event.asrt_id!r}, key={event.key!r}, event_seq={first}"
+        )
+
+
+def _validate_assertion_meta_operation(
+    ledger: Ledger,
+    *,
+    payload: Mapping[str, Any],
+    operation: Mapping[str, Any],
+    op_ordinal: int,
+    events: Sequence[Any],
+) -> None:
+    asrt_id = operation["asrt_id"]
+    claim = ledger.get_claim(asrt_id)
+    if claim is None:
+        raise DatabaseIntegrityError(f"assertion tx operation has no factual claim: {asrt_id}")
+    if ledger._claim_tx_refs.get(asrt_id) != payload["tx_seq"]:
+        raise DatabaseIntegrityError(f"claims.tx_ref disagrees with assertion tx for {asrt_id}")
+    if ledger._claim_op_ordinals.get(asrt_id) != op_ordinal:
+        raise DatabaseIntegrityError(f"claim operation ordinal disagrees for {asrt_id}")
+    rows = _unique_meta_events(events, asrt_id=asrt_id, context="assertion")
+    expected_reserved = {
+        "schema_digest": ("str", payload["schema_digest"]),
+        "assertion_digest": ("str", operation["assertion_digest"]),
+        "tx_id": ("str", payload["tx_id"]),
+    }
+    for key, expected in expected_reserved.items():
+        _require_meta_event_value(rows, asrt_id=asrt_id, key=key, expected=expected)
+    user_meta = tuple(
+        MetaEntry(key, str(event.kind), event.value)
+        for key, event in rows.items()
+        if key not in _RESERVED_ASSERTION_META_KEYS
+    )
+    recomputed = assertion_digest_for(
+        pred_id=claim.pred_id,
+        fact_tuple=(("entity_ref", claim.e_ref), *tuple(claim.rest_terms)),
+        schema_digest=payload["schema_digest"],
+        meta=user_meta,
+    )
+    if recomputed != operation["assertion_digest"]:
+        raise DatabaseIntegrityError(
+            f"claim_meta initial content disagrees with assertion_digest for {asrt_id}"
+        )
+
+
+def _validate_revocation_meta_operation(
+    ledger: Ledger,
+    *,
+    payload: Mapping[str, Any],
+    operation: Mapping[str, Any],
+    op_ordinal: int,
+    events: Sequence[Any],
+) -> None:
+    asrt_id = operation["revoker_asrt_id"]
+    if asrt_id not in ledger._system_claim_by_asrt_id:
+        raise DatabaseIntegrityError(f"revocation tx operation has no system claim: {asrt_id}")
+    if ledger._claim_tx_refs.get(asrt_id) != payload["tx_seq"]:
+        raise DatabaseIntegrityError(f"claims.tx_ref disagrees with revocation tx for {asrt_id}")
+    if ledger._claim_op_ordinals.get(asrt_id) != op_ordinal:
+        raise DatabaseIntegrityError(f"revocation operation ordinal disagrees for {asrt_id}")
+    rows = _unique_meta_events(events, asrt_id=asrt_id, context="revocation")
+    expected = {
+        entry.key: (entry.kind, entry.value)
+        for entry in operation["meta"]
+    }
+    expected.update(
+        {
+            "schema_digest": ("str", payload["schema_digest"]),
+            "tx_id": ("str", payload["tx_id"]),
+        }
+    )
+    if set(rows) != set(expected):
+        raise DatabaseIntegrityError(
+            f"claim_meta keys disagree with revocation tx for {asrt_id}: "
+            f"ledger={sorted(rows)}, tx={sorted(expected)}"
+        )
+    for key, value in expected.items():
+        _require_meta_event_value(rows, asrt_id=asrt_id, key=key, expected=value)
+
+
+def _validate_append_meta_operation(
+    *,
+    operation: Mapping[str, Any],
+    events: Sequence[Any],
+    position: tuple[int, int],
+) -> None:
+    if len(events) != 1:
+        raise DatabaseIntegrityError(
+            f"append_meta tx operation must map to exactly one claim_meta event at {position}"
+        )
+    event = events[0]
+    entry = operation["meta"]
+    expected_kind = None if isinstance(entry, _UnsetMetaEntry) else entry.kind
+    expected_value = None if isinstance(entry, _UnsetMetaEntry) else entry.value
+    expected = (operation["asrt_id"], entry.key, expected_kind, expected_value)
+    actual = (event.asrt_id, event.key, event.kind, event.value)
+    if actual != expected:
+        raise DatabaseIntegrityError(
+            "append_meta chain/ledger mismatch at "
+            f"{position}: ledger={actual!r}, tx={expected!r}"
+        )
+
+
+def _validate_repair_add_meta_operation(
+    ledger: Ledger,
+    *,
+    payload: Mapping[str, Any],
+    operation: Mapping[str, Any],
+    op_ordinal: int,
+    events: Sequence[Any],
+    known_tx_ids: set[str],
+) -> None:
+    """Validate initial rows recovered by a sanctioned repair_add anchor."""
+    asrt_id = operation["asrt_id"]
+    claim = ledger.get_claim(asrt_id)
+    if claim is None:
+        raise DatabaseIntegrityError(f"repair_add has no factual claim: {asrt_id}")
+    if ledger._claim_tx_refs.get(asrt_id) != payload["tx_seq"]:
+        raise DatabaseIntegrityError(f"claims.tx_ref disagrees with repair_add for {asrt_id}")
+    if ledger._claim_op_ordinals.get(asrt_id) != op_ordinal:
+        raise DatabaseIntegrityError(f"claim operation ordinal disagrees with repair_add for {asrt_id}")
+    rows = _unique_meta_events(events, asrt_id=asrt_id, context="repair_add")
+    _require_meta_event_value(
+        rows,
+        asrt_id=asrt_id,
+        key="schema_digest",
+        expected=("str", payload["schema_digest"]),
+    )
+    digest = _verified_assertion_digest(ledger, claim)
+    _require_meta_event_value(
+        rows,
+        asrt_id=asrt_id,
+        key="assertion_digest",
+        expected=("str", digest),
+    )
+    tx_event = rows.get("tx_id")
+    if tx_event is None or tx_event.kind != "str" or tx_event.value not in known_tx_ids:
+        raise DatabaseIntegrityError(
+            f"claim_meta 'tx_id' for repaired assertion {asrt_id} is not anchored in history"
+        )
+def _unique_meta_events(
+    events: Sequence[Any],
+    *,
+    asrt_id: str,
+    context: str,
+) -> dict[str, Any]:
+    rows: dict[str, Any] = {}
+    for event in events:
+        if event.asrt_id != asrt_id:
+            raise DatabaseIntegrityError(
+                f"claim_meta {context} event targets the wrong assertion: {event.asrt_id}"
+            )
+        if event.kind is None:
+            raise DatabaseIntegrityError(f"claim_meta {context} initial event cannot be UNSET")
+        if event.key in rows:
+            raise DatabaseIntegrityError(
+                f"claim_meta {context} initial key is duplicated for {asrt_id}: {event.key}"
+            )
+        rows[event.key] = event
+    return rows
+
+
+def _require_meta_event_value(
+    rows: Mapping[str, Any],
+    *,
+    asrt_id: str,
+    key: str,
+    expected: tuple[str, Any],
+) -> None:
+    event = rows.get(key)
+    if event is None:
+        raise DatabaseIntegrityError(f"claim_meta is missing {key!r} for {asrt_id}")
+    actual = (event.kind, event.value)
+    if actual != expected:
+        raise DatabaseIntegrityError(
+            f"claim_meta {key!r} disagrees for {asrt_id}: ledger={actual!r}, tx={expected!r}"
+        )
 
 
 def _active_factual_assertion_ids(ledger: Ledger) -> set[str]:

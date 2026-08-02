@@ -19,6 +19,7 @@ from factgraph.core.store.database import (
     canonical_bytes_dbtx_v2,
     resolve_database_workspace_paths,
 )
+from factgraph.core.store.ledger import AnnotationRow
 
 
 _GOLDEN_ROOT = Path(__file__).with_name("golden") / "dbtx_v2"
@@ -42,6 +43,62 @@ _COMMIT_PATH_IDS = (
 
 
 class DbtxV2GoldenTests(unittest.TestCase):
+    def test_production_adapter_annotation_commit_is_frozen(self) -> None:
+        fixture = _load_fixture("adapter_annotation_commit.json")
+        expected = fixture["adapter_step"]
+        with tempfile.TemporaryDirectory() as raw_tmp, patch(
+            "factgraph.core.store.database._new_assertion_id",
+            side_effect=(_COMMIT_PATH_IDS[0],),
+        ):
+            workspace = Path(raw_tmp) / "workspace"
+            database = Database.create(workspace, schema_ir=_adapter_schema_ir())
+            actual_heads = [database.head().tx_id]
+            assertion = database.commit_assertions(
+                (
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:alice"), ("string", "Alice")),
+                    ),
+                )
+            ).assertions[0]
+            actual_heads.append(database.head().tx_id)
+            database._ledger_for_attach().append_annotations(
+                [
+                    AnnotationRow(
+                        assertion.asrt_id,
+                        "problog",
+                        "semantic",
+                        "probability",
+                        "float",
+                        0.75,
+                        "derived",
+                        "run-1",
+                    )
+                ]
+            )
+            head = database.head()
+            actual_heads.append(head.tx_id)
+            self.assertEqual(actual_heads, fixture["head_progression"])
+            self.assertEqual(head.tx_seq, expected["tx_seq"])
+            self.assertEqual(head.tx_id, expected["tx_id"])
+
+            object_path = (
+                resolve_database_workspace_paths(workspace).tx_objects
+                / f"{head.tx_id.removeprefix('tx:')}.json"
+            )
+            object_bytes = object_path.read_bytes()
+            self.assertEqual(object_bytes, bytes.fromhex(expected["tx_object_hex"]))
+            payload = json.loads(object_bytes.decode("utf-8"))
+            canonical = canonical_bytes_dbtx_v2(
+                parent_tx_id=payload["parent_tx_id"],
+                schema_digest=payload["schema_digest"],
+                digest_scheme=payload["digest_scheme"],
+                tx_seq=payload["tx_seq"],
+                operations=payload["operations"],
+            )
+            self.assertEqual(canonical, bytes.fromhex(expected["canonical_hex"]))
+            database.close()
+
     def test_canonical_bytes_tx_ids_and_head_progression_are_frozen(self) -> None:
         for fixture_name, required_kinds in _FIXTURES:
             with self.subTest(fixture=fixture_name):
@@ -286,6 +343,12 @@ def _commit_path_schema_ir(*, version: int) -> dict[str, Any]:
         },
         "generated_at": f"2026-08-01T00:00:0{version}Z",
     }
+
+
+def _adapter_schema_ir() -> dict[str, Any]:
+    value = _commit_path_schema_ir(version=1)
+    value["generated_at"] = "2026-08-02T00:00:00Z"
+    return value
 
 
 if __name__ == "__main__":
