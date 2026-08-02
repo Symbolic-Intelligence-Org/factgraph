@@ -18,19 +18,18 @@ pure configuration; no consumer vocabulary is hardcoded here.
 Visibility semantics (single logic, shared by every projection):
 
 - LAST-WINS per ``(asrt_id, key)``: only the most recent meta row under the
-  exclusion key decides, mirroring the canonical SDK meta read
-  (``_meta_raw_for_assertion`` in sdk/facade.py, which dict-overwrites per
-  key in iteration order). A later ``Ledger.append_meta`` reclassification
-  therefore moves an assertion INTO or OUT OF the excluded class for
-  evaluation exactly as every read path reports it.
+  exclusion key decides through the shared ``Ledger.effective_meta_rows``
+  event resolver. A later ``Ledger.append_meta`` reclassification therefore
+  moves an assertion INTO or OUT OF the excluded class for evaluation exactly
+  as every effective read path reports it.
 - LIVE per access: nothing is snapshotted at wrapper construction. A fact
   (or revoker) written or reclassified while an evaluation is running is
   judged the moment it becomes readable — evaluation can never diverge from
   the ledger state it actually reads. Baseline semantics for assertions
   without a configured key are identical to the unfiltered ledger.
 
-Both properties hinge on ``is_premise_excluded`` below; see its docstring
-for the ``find_meta`` ordering guarantee.
+Both properties hinge on ``is_premise_excluded`` below and the shared
+``(tx_seq, op_ordinal)`` effective-meta ordering guarantee.
 
 Scope (deliberate):
 

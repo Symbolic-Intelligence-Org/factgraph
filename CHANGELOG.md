@@ -32,8 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The durable workspace layout converges on `db/`.** The authoritative
   SQLite file is `db/assertions.db`; existing v0.2 `ledger.db` workspaces require
   explicit `python -m factgraph migrate-workspace <path>` before load. The CLI
-  stages and verifies the replacement, writes an explicit genesis repair
-  anchor, and retains the complete source workspace by default. Interrupted
+  stages and verifies the replacement, writes a genesis import transaction
+  using standard assertion/revocation/append-meta operations, and retains the
+  complete source workspace by default. Interrupted
   replacement is reported as `workspace_recovery_required` with visible backup
   candidates and manual recovery guidance; torn-create or registry-only input
   is `workspace_incomplete` and must be recreated. The v0.3
@@ -152,6 +153,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Souffle exports now materialize effective metadata only.** Historical
+  superseded values and UNSET tombstones stay in the audit event history but
+  do not enter the adapter's evaluation fact set.
 - **v0.2 annotation migration now treats `annotation_rows` as ground truth.**
   A shared-key meta row appended after claim creation remains meta-only when
   the source has no matching annotation; migration no longer synthesizes one.

@@ -95,3 +95,4 @@ Stage A 完成写链与生命周期收敛,但表形态仍是 7 表(3 组内建�
 
 - **Phase 1 annotation compatibility**:Q-SYS-B Q15.3 的“annotation 无现役写入源”前提经 PyReason/ProbLog accept 路径核验为假。依 2026-08-02 内联裁定,不增加未入链物理列;以 initial-meta 合同投影 + hidden-key M companion 事件保住 live/reload/replay,维度清理与引擎契约重设计捆绑至 Slice 5。
 - **§9.6 partial**:物理 `ingest_keys` 表已删除,但 `claim_meta.ingest_key` compatibility 事件、Ledger `Idempotency` 参数及 compute/lookup helper 保留。Phase 1 补钉确保只传参数也自动物化事件,关闭 3 表同句柄与 cold reload 失忆;正式参数/helper 退场须随 caller 改写另行完成。
+- **Souffle effective-only facts**:Phase 2 的统一 meta-event 解析使 `_build_fact_rows` 从历史兼容投影切到 effective-only 元数据事实集;这是 blueprint §3“adapter 行为不变”外的正当波及。superseded 值与 UNSET tombstone 不再进入求值事实,仅保留于 audit history;补钉 E 以无 Souffle 二进制依赖的 adapter-row 测试钉住。

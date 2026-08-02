@@ -851,7 +851,8 @@ class Database:
         The target must be a distinct empty staging directory. Legacy factual
         and revocation rows keep their assertion ids and insertion order. The
         pre-v0.3 history cannot be reconstructed, so migration creates an
-        explicit genesis repair anchor over the imported active set.
+        explicit genesis import transaction made of standard assertion,
+        revocation, and append-meta operations.
         """
         source = Path(source_ledger_path)
         target = Path(target_workspace)

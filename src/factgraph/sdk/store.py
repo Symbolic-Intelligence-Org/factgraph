@@ -742,8 +742,11 @@ class AssertionsManager:
         (``core/store/premise_filter.py::is_premise_excluded``) both take the
         most recently written row. Appending e.g. a new ``provenance_class``
         value therefore reclassifies the assertion for rule evaluation (moves
-        it INTO or OUT OF an excluded class) while the full history stays
-        auditable via ``fg.ledger.find_meta(asrt_id=..., key=...)``.
+        it INTO or OUT OF an excluded class). ``fg.ledger.find_meta(...)`` is
+        only the non-tombstone compatibility projection; complete ordered
+        history, including UNSET events, is available solely through the
+        narrow ``factgraph.audit.meta_history.read_meta_history`` audit/debug
+        interface, not a general SDK history API.
 
         This is the supported public surface for post-write meta
         reclassification. ``Ledger.append_meta`` remains a deprecated

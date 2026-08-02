@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from factgraph.adapters.problog.accept import persist_problog_annotations
 from factgraph.adapters.pyreason.accept import persist_pyreason_annotations
+from factgraph.adapters.souffle.package import _build_fact_rows
 from factgraph.audit.meta_history import (
     effective_meta_at,
     export_meta_history,
@@ -39,9 +40,12 @@ from factgraph.core.store.ledger import (
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
+    PredicatePremiseBlock,
     is_predicate_premise_excluded,
+    is_predicate_premise_blocked,
     is_premise_excluded,
 )
+from factgraph.core.store.runtime import Store
 
 
 _ASSERTION_ID = "asrt:11111111111111111111111111111111"
@@ -429,7 +433,15 @@ class Slice3bMetaEventSemanticsTests(unittest.TestCase):
             ).revocations[0]
             ledger = db._ledger_for_attach()
             exclusion = (MetaExclusion("provenance_class", frozenset({"blocked"})),)
+            block = {
+                "person:name": PredicatePremiseBlock(
+                    "person:name",
+                    "provenance_class",
+                    frozenset({"blocked"}),
+                )
+            }
             self.assertTrue(is_premise_excluded(ledger, revoker.revoker_asrt_id, exclusion))
+            self.assertTrue(is_predicate_premise_blocked(ledger, assertion.asrt_id, block))
 
             db._commit_meta_unsets(
                 (
@@ -439,6 +451,7 @@ class Slice3bMetaEventSemanticsTests(unittest.TestCase):
             )
             self.assertFalse(is_premise_excluded(ledger, assertion.asrt_id, exclusion))
             self.assertFalse(is_premise_excluded(ledger, revoker.revoker_asrt_id, exclusion))
+            self.assertFalse(is_predicate_premise_blocked(ledger, assertion.asrt_id, block))
             self.assertTrue(
                 is_predicate_premise_excluded(
                     ledger,
@@ -466,6 +479,42 @@ class Slice3bMetaEventSemanticsTests(unittest.TestCase):
                         )
                     },
                 )
+            )
+            db.close()
+
+    def test_souffle_fact_rows_include_only_effective_meta(self) -> None:
+        with patch(
+            "factgraph.core.store.database._new_assertion_id",
+            side_effect=[_ASSERTION_ID],
+        ):
+            db = Database.create(schema_ir=_schema_ir())
+            assertion = db.commit_assertions(
+                (
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:alice"), ("string", "Alice")),
+                        (MetaEntry("source", "str", "old"),),
+                    ),
+                )
+            ).assertions[0]
+            db.commit_changes(
+                assertions=(),
+                revocations=(),
+                meta_appends=(MetaAppendInput(assertion.asrt_id, "source", "str", "new"),),
+            )
+            store = Store(_schema_ir(), ledger=db._ledger_for_attach())
+
+            meta_str_rows = _build_fact_rows(store)[2]
+            self.assertEqual(
+                [row for row in meta_str_rows if row[0] == assertion.asrt_id and row[1] == "source"],
+                [[assertion.asrt_id, "source", "new"]],
+            )
+
+            db._commit_meta_unsets((_MetaUnsetInput(assertion.asrt_id, "source"),))
+            meta_str_rows = _build_fact_rows(store)[2]
+            self.assertEqual(
+                [row for row in meta_str_rows if row[0] == assertion.asrt_id and row[1] == "source"],
+                [],
             )
             db.close()
 

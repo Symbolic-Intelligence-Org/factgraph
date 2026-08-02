@@ -55,9 +55,13 @@
 | 2026-08-02 | Phase 2 硬门 fix-forward `67246b67` | 全量 golden 联跑发现前半提交的 parity 校验把 repair-add 漂移行误绑定到 repair op 自身位置;生产 repair fixture 的物理 drift 行 `(tx_ref,op_ordinal)` 可与同 tx 的 repair-remove 位置碰撞。校验改为先按 repair-add 的 assertion 身份验证并消费原物理事件组,再走普通 position-bound ops;既有 production repair fixture 零修改恢复全绿。无协议/DDL/写路径变化。 |
 | 2026-08-02 | **Phase 2 实施完成,停下待对抗审计** | `201d89e8` / `1c942aea` / `67246b67` / `77482bba`;Q-SAE-8 全序/UNSET/receipt-as-of/窄域历史、adapter M 入链与六列 parity 全落。dbtx_v2 + pre-flip 读等价 fixture 零修改;Phase 2 精确面 **16 passed / 14 subtests**;PR #20/#21/#22 精确面 **157 passed**;canonical **2832 passed / 32 skipped / 1 deselected / 1122 subtests**(相对 2822/32/1/1106 净增 10 pass / 16 subtests)。Phase 3 未启动。 |
 | 2026-08-02 | **Phase 2 对抗审计:0 blocker / 4 类 serious / 7 minor —— 有条件不放行,补钉轮先行** | 三透镜(事件语义/as-of 裁定合规+入链/证据与范围);as-of 合规面满分;serious = append_meta 绕链变砖(第三个假绝对句)、chosen/canon 守卫静默拆除、repair-add 注入洞、私有名触达 0→18 未登记;全文见 §Phase 2 对抗审计 |
-| 2026-08-02 | Phase 2 补钉 B:system-managed meta 过渡守卫恢复 | `Database.commit_changes(meta_appends)` 的 append/UNSET 均拒绝 `ingested_at`/`ingest_key`/`revoked_asrt_id` 覆盖;chosen 与 mapping canon 对既存重复 `ingested_at` 事件恢复 fail-closed。该守卫是 Phase 3 S 类禁覆盖正式政策落地前的过渡边界;CHANGELOG 同步披露。 |
-| 2026-08-02 | Phase 2 补钉 C:repair-add 完整位置组验证 | repair-add 的 assertion digest 改按其消费的完整物理 `(tx_seq, op_ordinal)` 事件组重算,不再借用以 `tx_id` 行序切片的普通读取 helper;合法 user-meta 漂移组 repair→open 回路通过,在同组 `tx_id` 后注入 `origin_binding` 的审计探针 fail-closed。 |
-| 2026-08-02 | Phase 2 补钉 D:meta event resolver 内部 API 转正 | `meta_history_events` / `effective_meta_events` / `effective_meta_rows` / `normalize_event_sequence` 四名去下划线,application/adapters/audit/sdk/core/tests 的全部调用点同批迁移;B6 收窄为仍待 Phase 4 处理的 `_ledger_for_attach` 与测试编码 helper reach-through。 |
+| 2026-08-02 | Phase 2 补钉 A:managed `Ledger.append_meta` 入链 | `8a84574f`:Database 安装 managed meta writer,在 direct tx_seq/SQLite 路径前转交 `commit_changes` 生成 M op;reserved-key 失败零写、durable tx-object/reopen 回路与 direct-path-unreachable 探针通过。unmanaged direct compatibility 以 B8 同 commit 登记;audit 假绝对句改正。 |
+| 2026-08-02 | Phase 2 补钉 B:system-managed meta 过渡守卫恢复 | `997e8bab`:`Database.commit_changes(meta_appends)` 的 append/UNSET 均拒绝 `ingested_at`/`ingest_key`/`revoked_asrt_id` 覆盖;chosen 与 mapping canon 对既存重复 `ingested_at` 事件恢复 fail-closed。该守卫是 Phase 3 S 类禁覆盖正式政策落地前的过渡边界;CHANGELOG 同步披露。 |
+| 2026-08-02 | Phase 2 补钉 C:repair-add 完整位置组验证 | `d06b3f9f`:repair-add 的 assertion digest 改按其消费的完整物理 `(tx_seq, op_ordinal)` 事件组重算,不再借用以 `tx_id` 行序切片的普通读取 helper;合法 user-meta 漂移组 repair→open 回路通过,在同组 `tx_id` 后注入 `origin_binding` 的审计探针 fail-closed。 |
+| 2026-08-02 | Phase 2 补钉 D:meta event resolver 内部 API 转正 | `812ddf1b`:`meta_history_events` / `effective_meta_events` / `effective_meta_rows` / `normalize_event_sequence` 四名去下划线,application/adapters/audit/sdk/core/tests 的全部调用点同批迁移;B6 收窄为仍待 Phase 4 处理的 `_ledger_for_attach` 与测试编码 helper reach-through。 |
+| 2026-08-02 | Phase 2 补钉 full-suite 生命周期加固 | `cbf905b9`:A 的 meta writer 与既有 annotation writer 由 bound-method 强环改为 weak-owner callback;修复 Database→Ledger→writer→Database 环使 `writer.lock` 的 ResourceWarning 延迟到无关 PyReason warning 捕获区的问题。显式 GC 探针从 1 warning→0,并钉 Database 消亡后两 callback 清空、Ledger closed。无协议/持久化语义变化。 |
+| 2026-08-02 | Phase 2 补钉 E:minors ①-⑦ 收口 | migration genesis 措辞改为标准 A/R/M import transaction;predicate-block UNSET 差分;历史 16/14 精确调用式;Q-SAE-9 §2.1/§3.1/§3.3 勾选与 §3.2 partial;Souffle effective-only 事实集披露+测试;SDK 历史 docstring 指向窄域 audit 接口;export-equality/parser round-trip 如实化;service raw meta known-gap 与 premise_filter 模块说明登记。 |
+| 2026-08-02 | **Phase 2 补钉轮完成,停下待复验** | S1-S4 与 minor ①-⑦ 全部闭合;既有 dbtx_v2/read-equivalence fixtures 零修改。补钉后 Phase 2 精确面 **21 passed / 17 subtests**,PR #20/#21/#22 精确面 **157 passed**,canonical **2838 passed / 32 skipped / 1 deselected / 1125 subtests**(相对进入补钉轮 2832/32/1/1122 净增 6 pass / 3 subtests);changed-file ruff + diff-check 全绿。Phase 3 未启动。 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -98,7 +102,7 @@
 
 1. [x] 重放等价:含重复键 append_meta 的序列在新表可完整重放,读输出与 6 表现状逐字节等价(含一次调用内多次同键赋值);
 2. [x] premise filter 差分测试:重分类全路径 + revoker 对称可采性;
-3. [x] reload 保序:落库 → 冷启动 → 导出 → 再导入,event 序不变;
+3. [x] reload/export 保序:落库 → 冷启动后导出 bytes 相等;导出 bytes 经 parser round-trip 后 event 序相等(**没有回写 Ledger 的“再导入”能力,不得过诺**);
 4. [x] 若 (iii) 采纳:as-of 重放正确性(任取历史时点,effective meta 与当时实测一致)。
 
 ### Q-SAE-8 §6 裁定
@@ -121,15 +125,15 @@
 
 ### Q-SAE-9 §2 Tx 具象化
 
-- [ ] **`claims` 与 meta event 行显式携带 `tx_ref`**(8 字节/行,相对 ~1KB/claim 可忽略;换来稳定审计、meta-only 事务支持、可迁移性);
+- [x] **`claims` 与 meta event 行显式携带 `tx_ref`**(8 字节/行,相对 ~1KB/claim 可忽略;换来稳定审计、meta-only 事务支持、可迁移性);**3b 实现注记**:`claims.tx_ref` 与 `claim_meta.tx_seq` 依 2026-08-01 内联裁定共享同一 INTEGER 引用空间(`tx_ref ≡ tx_seq`);
 - [ ] tx 级 S/共享 meta 落在 **tx object**(现有 `db/objects/tx/` 谱系,Stage A 裁定其介质)而非必然一条 tx claim —— 是否同时物化 `__system__.tx` claim 供图内查询,降级为 blueprint 实现选项;
 - [ ] **与 Q-SAE-1 的强耦合(rev.2 新增)**:per-call 事务粒度会使 tx 元数据条数 ≈ 业务写入条数,批次摊销失效。因此 Q-SAE-1 的裁定必须与本 ADR 联动 —— ✎ 提案:**ingest/批量面走批次 commit(一批 span = 一个 tx),交互式单写维持 per-call** —— 双粒度,由 API 面区分。
 
 ### Q-SAE-9 §3 跨层解析
 
-- [ ] 引入显式 **`UNSET` tombstone meta event**(Q-SAE-8 的 event 形态之一,共用 `(tx_seq, op_ordinal)` 序);
-- [ ] 统一解析器:effective(asrt, key) = 按事件序取组内最新事件;`UNSET` → 视同缺失;无 claim 级事件 → 取 tx 默认;
-- [ ] 该解析器**对普通 claim 与 revoker 对称适用**(premise filter 的 revoker 对称可采性要求)。
+- [x] 引入显式 **`UNSET` tombstone meta event**(Q-SAE-8 的 event 形态之一,共用 `(tx_seq, op_ordinal)` 序);
+- [ ] 统一解析器:effective(asrt, key) = 按事件序取组内最新事件;`UNSET` → 视同缺失;无 claim 级事件 → 取 tx 默认;**Partial(Phase 2)**:claim 级事件全序/UNSET 已统一,tx-default fallback 属 Phase 3 tx-lift,尚未交付;
+- [x] 该解析器**对普通 claim 与 revoker 对称适用**(premise filter 的 revoker 对称可采性要求)。
 
 ### Q-SAE-9 §4 逐 key 归类表
 
@@ -401,16 +405,24 @@ R-a:四层守卫亲核(ledger `_ANNOTATION_COMPAT_PREFIX` + 私有载体 `_Annot
 | `1c942aea` | Database-backed PyReason/ProbLog annotation 写者改走 dbtx_v2 M op;append_meta 六列链-账本 parity + hidden-key 载荷校验;v0.2 migration genesis 改用 A/R/M 标准操作;新增 adapter production golden,B7 同 commit 登记 |
 | `67246b67` | repair-add parity 按 assertion 身份消费 drift 原物理事件组,修复 repair op position 碰撞;生产 repair golden 零修改回绿 |
 | `77482bba` | `EvidenceEnvelope.as_of_event_seq`;既有 round-event envelope 持久化/冷读;audit fail-closed as-of 重放;`ProofReceipt` canonical body 与 sidecar 单址冻结门 |
+| `8a84574f` / `997e8bab` / `d06b3f9f` / `812ddf1b` | 补钉 S1-S4:managed append_meta 入链;system-managed key guard;repair-add 完整位置组 digest;四个事件解析内部 API 转正 |
+| `cbf905b9` | managed writer weak-owner callback 消除锁句柄延迟 GC,保证 canonical full-suite warning 隔离 |
 
 ### Phase-boundary gates
 
-- **全序/last-wins 单源**:`Ledger.effective_meta_events(...)` 以 `(tx_seq,op_ordinal)` 字典序选每 `(asrt_id,key)` 的 max;所有公开/兼容投影只消费该 resolver。重复 key、同 tx 多 M op、冷启动、canonical export/import 均由 `tests/test_slice3b_phase2_meta_events.py` 覆盖。
+- **全序/last-wins 单源**:`Ledger.effective_meta_events(...)` 以 `(tx_seq,op_ordinal)` 字典序选每 `(asrt_id,key)` 的 max;所有公开/兼容投影只消费该 resolver。重复 key、同 tx 多 M op、冷启动 export bytes equality 与 parser round-trip 均由 `tests/test_slice3b_phase2_meta_events.py` 覆盖;不存在回写 Ledger 的 import gate。
 - **UNSET + 三侧守卫**:双 NULL 仅私有 `_MetaUnsetInput`/`_MetaTombstone` 可达,通用 Database/Ledger meta 输入拒绝伪造;断言与 revoker 对称 tombstone 后 effective 缺失,premise exclusion/allowance `absent_ok` 分支均有负向门。DDL CHECK 与 dbtx M 解码保持 kind/value 双 NULL 对称。
 - **Database-managed 持久化写者过 tx**:Database-backed adapter annotation 与 managed `Ledger.append_meta` 产生 append_meta tx object且 head 连续推进;现成 `adapter_annotation_commit.json` production golden 钉住 adapter 链字节。unmanaged `from_schema_classes` compatibility 仍保留 B7 annotation 与 B8 meta 明列 direct fallback,不冒充已拆桥。
 - **append_meta parity**:open/repair 对 tx 链与物理 claim_meta 的 `asrt_id/key/kind/value/tx_seq/op_ordinal` 全列比对;hidden-key 解码载荷同样受保护;六列逐一篡改与 well-formed annotation payload 替换均 fail-closed。repair-add 是唯一 sanctioned 链外事实锚,按其原物理事件组验证。
 - **receipt as-of**:盘点确认当前唯一持久化 `EvidenceEnvelope` 载体是 `audit/round_events.jsonl` 的 passed Check envelope。运行时盖 `(tx_seq,op_ordinal)` 边界、round event 写入 JSON pair、冷启动 audit 回读同值;畸形/越 head 均拒绝且不钳制。普通 proof verification 未改,仍按 latest-effective;历史重放仅 `factgraph.audit.meta_history`。
 - **digest 冻结**:`ProofReceipt` 字面 canonical hex 与 `support_digest=sha256:06a1621a…` 新门钉死;sidecar 仍仅以 support_digest 单址,同址异 bytes 碰撞拒绝。adapter M/UNSET 不改变 LtHash state element、support/view snapshot 定义;既有 dbtx/read goldens零修改。
-- **回归证据**:Phase 2/golden 精确面 `16 passed / 14 subtests`;PR #20/#21/#22 原精确命令 `157 passed`;canonical 命令 `PYTHONPATH=src` + process-only readline shim + approved ignore/deselect 得 **2832 passed / 32 skipped / 1 deselected / 1122 subtests**。changed-file ruff 与 `git diff --check` 全绿。
+- **回归证据**:Phase 2/golden 精确面 `16 passed / 14 subtests`;其原始精确调用式如下(PR #20/#21/#22 另用 audit 已记录的 157 面命令):
+
+  ```bash
+  PYTHONPATH=src python -c 'import sys,types,pytest; sys.modules["readline"]=types.ModuleType("readline"); raise SystemExit(pytest.main(["-q","tests/test_slice3b_phase2_meta_events.py","tests/test_slice3b_phase2_receipt_as_of.py","tests/test_dbtx_v2_golden.py","tests/test_application_check_protocol.py::EvidenceEnvelopeProtocolTests::test_evidence_envelope_construction","tests/test_application_check_protocol.py::EvidenceEnvelopeProtocolTests::test_evidence_envelope_engine_payload_round_trip","tests/test_application_diagnose_protocol.py::DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests::test_engine_payload_accepts_support_artifact","tests/test_application_diagnose_protocol.py::DiagnoseAtomLocatorEvidenceEnvelopeIsolationTests::test_engine_payload_accepts_provenance_envelope","tests/test_application_why_not_protocol.py::WhyNotProtocolStaticInvariantTests::test_evidence_envelope_existing_payload_types_unchanged"]))'
+  ```
+
+  canonical 命令 `PYTHONPATH=src` + process-only readline shim + approved ignore/deselect 得 **2832 passed / 32 skipped / 1 deselected / 1122 subtests**。changed-file ruff 与 `git diff --check` 全绿。
 
 Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9 两层 tx-lift、属性声明、premise_eligible 封闭或惰性分级当作已有。
 
@@ -428,6 +440,10 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 | B6 | `_ledger_for_attach` 跨层调用(sdk/application/benchmark)+ tests→`_enc*` reach-through;Phase 2 事件 resolver 四名已在补钉 D 转正并从本桥移除 | Stage A / Phase 0 | audit 冻结方法节同 commit 更新纪律 | **3b Phase 4**(`_ledger_for_attach` 转正或收口;测试 helper 随 fixture 边界处理) | 无(转正即改引用) |
 | B7 | unmanaged `Store` adapter annotation 直写 fallback | Phase 2 meta-event writer 收编 | attach/Database-backed lifecycle 一律经 dbtx_v2 M op;仅 `from_schema_classes` 无 Database runtime 保留 direct Ledger compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | adapter managed-path tx-object golden + unmanaged adapter compatibility tests |
 | B8 | unmanaged `Ledger.append_meta` 直写 fallback | Phase 2 补钉 A managed writer 收编 | Database 构造时安装 `_managed_meta_writer`,managed 调用在任何 SQLite 直写前委托 `commit_changes`;仅无 Database owner 的 Ledger 保留 direct compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | managed direct-path-unreachable/tx-object 回路 + unmanaged compatibility tests |
+
+### Known Gaps(Phase 2 补钉登记)
+
+- `src/service/runtime_v1.py` 仍有三处 raw `find_meta` 消费:候选 meta helper 与 fact flat-meta 投影取首行(first-wins),claim JSON 面导出全部非 tombstone compatibility rows。service 在本 blueprint 模块边界外,本轮不改;在 service 收编事件 resolver 时一并决定 effective 投影与历史 audit 的分流。
 
 ## Phase 2 对抗审计(2026-08-02,Claude 三透镜 + 独立复跑)
 
