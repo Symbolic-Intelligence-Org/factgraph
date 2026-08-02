@@ -307,23 +307,23 @@ def _build_fact_rows(
 
     meta_str_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="str")
+        for row in store.ledger._effective_meta_rows(kind="str")
     ]
     meta_time_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="time")
+        for row in store.ledger._effective_meta_rows(kind="time")
     ]
     meta_int_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="int")
+        for row in store.ledger._effective_meta_rows(kind="int")
     ]
     meta_float_rows = [
         [row.asrt_id, row.key, _float_to_meta_str(row.value)]
-        for row in store.ledger.find_meta(kind="float")
+        for row in store.ledger._effective_meta_rows(kind="float")
     ]
     meta_bool_rows = [
         [row.asrt_id, row.key, _atom_to_str(row.value)]
-        for row in store.ledger.find_meta(kind="bool")
+        for row in store.ledger._effective_meta_rows(kind="bool")
     ]
     revokes_rows = [
         [row.revoker_asrt_id, row.revoked_asrt_id] for row in store.ledger.revokes

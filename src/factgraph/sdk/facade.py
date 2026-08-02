@@ -1047,7 +1047,7 @@ def _field_assertions_for_entity_field(
 
 
 def _claim_sort_key(sdk: "SDKStore", claim: "Claim") -> tuple[int, bytes]:
-    rows = sdk.ledger.find_meta(asrt_id=claim.asrt_id, key="ingested_at")
+    rows = sdk.ledger._effective_meta_rows(asrt_id=claim.asrt_id, key="ingested_at")
     ingested = -1
     if rows:
         row = rows[-1]
@@ -1084,7 +1084,7 @@ def _decode_claim_rest_terms(schema_pred: dict[str, Any], rest_terms: list[tuple
 
 def _meta_raw_for_assertion(sdk: "SDKStore", asrt_id: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for row in sdk.ledger.find_meta(asrt_id=asrt_id):
+    for row in sdk.ledger._effective_meta_rows(asrt_id=asrt_id):
         out[row.key] = row.value
     return out
 

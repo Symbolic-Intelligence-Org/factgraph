@@ -244,7 +244,7 @@ def _protocol_version(schema_ir: dict) -> dict[str, str]:
 
 
 def _latest_run_id(store: Store) -> str | None:
-    run_rows = store.ledger.find_meta(key="run_id", kind="str")
+    run_rows = store.ledger._effective_meta_rows(key="run_id", kind="str")
     if not run_rows:
         return None
     return str(run_rows[-1].value)
@@ -829,14 +829,14 @@ def _build_accept_write_ledger_rows(store: Store) -> list[dict[str, Any]]:
 
 
 def _meta_str(store: Store, asrt_id: str, key: str) -> str | None:
-    for row in store.ledger.find_meta(asrt_id=asrt_id, key=key, kind="str"):
+    for row in store.ledger._effective_meta_rows(asrt_id=asrt_id, key=key, kind="str"):
         if isinstance(row.value, str):
             return row.value
     return None
 
 
 def _meta_time(store: Store, asrt_id: str, key: str) -> int | None:
-    for row in store.ledger.find_meta(asrt_id=asrt_id, key=key, kind="time"):
+    for row in store.ledger._effective_meta_rows(asrt_id=asrt_id, key=key, kind="time"):
         if isinstance(row.value, int) and not isinstance(row.value, bool):
             return row.value
     return None

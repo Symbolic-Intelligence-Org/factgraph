@@ -60,6 +60,14 @@ from .proof_frame_diff import (
     ProofFrameDiffError,
 )
 from .package_export import export_audit_package, write_audit_artifacts
+from .meta_history import (
+    MetaHistoryError,
+    MetaHistoryEvent,
+    effective_meta_at,
+    export_meta_history,
+    import_meta_history,
+    read_meta_history,
+)
 from .reader import AuditPackageData, AuditReadError, load_audit_package
 from .round_events import (
     ROUND_EVENT_KINDS,
@@ -95,6 +103,12 @@ __all__ = [
     "load_audit_package",
     "export_audit_package",
     "write_audit_artifacts",
+    "MetaHistoryError",
+    "MetaHistoryEvent",
+    "effective_meta_at",
+    "export_meta_history",
+    "import_meta_history",
+    "read_meta_history",
     "ROUND_EVENT_KINDS",
     "ROUND_EVENT_SCHEMA_VERSION",
     "ROUND_EVENTS_AUDIT_FILE_KEY",

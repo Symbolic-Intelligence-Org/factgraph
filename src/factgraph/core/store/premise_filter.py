@@ -320,20 +320,16 @@ def is_premise_excluded(
 ) -> bool:
     """THE visibility decision — last-wins per exclusion key, read live from ``ledger``.
 
-    Per key only the LAST meta row under ``(asrt_id, key)`` decides, matching
-    the canonical SDK meta read (``_meta_raw_for_assertion``, sdk/facade.py:
-    dict-overwrite per key in iteration order). Ordering guarantee:
-    ``Ledger.find_meta(asrt_id=, key=)`` serves ``_meta_by_asrt_id_key``,
-    which ``_idx_add_meta`` appends to in write order and which
-    ``_load_from_db_via`` rebuilds with ``ORDER BY id`` — the last list entry
-    is therefore always the most recently written row, live and after
-    reload. Only string meta values participate in matching (FG free meta
-    keys allow scalars; a non-string last value never matches).
+    Per key only the event with maximal ``(tx_seq, op_ordinal)`` decides,
+    through the same resolver used by AssertionMeta and audit as-of replay.
+    An UNSET winner is missing. Only string effective values participate in
+    matching (FG free meta keys allow scalars; a non-string value never
+    matches).
 
     Cost per call: one indexed dict lookup per configured exclusion.
     """
     for exclusion in exclusions:
-        rows = ledger.find_meta(asrt_id=asrt_id, key=exclusion.key)
+        rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=exclusion.key)
         if not rows:
             continue
         last_value = rows[-1].value
@@ -371,7 +367,7 @@ def is_predicate_premise_excluded(
     allowance = allowances_by_pred.get(claim.pred_id)
     if allowance is None:
         return False
-    rows = ledger.find_meta(asrt_id=asrt_id, key=allowance.key)
+    rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=allowance.key)
     if not rows:
         return not allowance.absent_ok
     last_value = rows[-1].value
@@ -406,7 +402,7 @@ def is_predicate_premise_blocked(
     block = blocks_by_pred.get(claim.pred_id)
     if block is None:
         return False
-    rows = ledger.find_meta(asrt_id=asrt_id, key=block.key)
+    rows = ledger._effective_meta_rows(asrt_id=asrt_id, key=block.key)
     if not rows:
         return False
     last_value = rows[-1].value
@@ -520,6 +516,27 @@ class _PremiseExcludedLedger(Ledger):
             return []
         rows = self._base.find_meta(asrt_id=asrt_id, key=key, kind=kind)
         return [row for row in rows if self._is_visible(row.asrt_id)]
+
+    def _effective_meta_rows(
+        self,
+        *,
+        asrt_id: str | None = None,
+        key: str | None = None,
+        kind: str | None = None,
+        as_of: tuple[int, int] | None = None,
+    ) -> tuple[MetaRow, ...]:
+        if asrt_id is not None and not self._is_visible(asrt_id):
+            return ()
+        rows = self._base._effective_meta_rows(
+            asrt_id=asrt_id,
+            key=key,
+            kind=kind,
+            as_of=as_of,
+        )
+        return tuple(row for row in rows if self._is_visible(row.asrt_id))
+
+    def _latest_meta_event_sequence(self) -> tuple[int, int] | None:
+        return self._base._latest_meta_event_sequence()
 
     def find_annotations(
         self,

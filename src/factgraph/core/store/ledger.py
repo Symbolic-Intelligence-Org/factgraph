@@ -116,6 +116,27 @@ class _ClaimMetaEvent:
     tx_seq: int
     op_ordinal: int
 
+    @property
+    def event_seq(self) -> tuple[int, int]:
+        return (self.tx_seq, self.op_ordinal)
+
+    @property
+    def is_unset(self) -> bool:
+        return self.kind is None
+
+
+@dataclass(frozen=True)
+class _MetaTombstone:
+    """Private carrier for an explicit UNSET event.
+
+    Public/generic meta surfaces accept only ``MetaRow`` and therefore cannot
+    forge the dual-NULL storage representation.  Database policy code emits
+    this carrier only for an explicit UNSET operation.
+    """
+
+    asrt_id: str
+    key: str
+
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS claims (
@@ -577,7 +598,7 @@ class Ledger:
         expected_head_tx_id: str | None,
         head_tx_id: str,
         metadata: Mapping[str, str],
-        meta_appends: Sequence[MetaRow] = (),
+        meta_appends: Sequence[MetaRow | _MetaTombstone] = (),
     ) -> None:
         """Atomically append a Database commit and advance its CAS-protected head.
 
@@ -635,7 +656,7 @@ class Ledger:
             for item in raw_revocation_writes
         )
         appended_meta_rows = tuple(meta_appends)
-        _validate_meta_rows(list(appended_meta_rows))
+        _validate_meta_events(appended_meta_rows)
         raw_tx_seq = normalized_metadata.get("head_tx_seq")
         if raw_tx_seq is None or not raw_tx_seq.isdecimal():
             raise ValueError("metadata head_tx_seq must be a canonical non-negative integer")
@@ -847,8 +868,13 @@ class Ledger:
                         (row,),
                         tx_seq=tx_seq,
                         op_ordinal=meta_offset + relative_ordinal,
-                        project_meta=True,
+                        project_meta=isinstance(row, MetaRow)
+                        and not isinstance(row, _AnnotationStorageMetaRow),
                     )
+                    if isinstance(row, _AnnotationStorageMetaRow):
+                        self._idx_add_annotation(
+                            [_annotation_from_storage_key(row.asrt_id, row.key, row.kind, row.value)]
+                        )
 
             post_commit.append(_apply_batch_indexes)
 
@@ -1365,6 +1391,73 @@ class Ledger:
                 return list(self._meta_by_kind.get(kind, []))
             return list(self._meta_rows_data)
 
+    def _meta_history_events(
+        self,
+        *,
+        asrt_id: str | None = None,
+        key: str | None = None,
+    ) -> tuple[_ClaimMetaEvent, ...]:
+        """Return immutable event history for the narrow audit/debug surface."""
+        with self._write_lock:
+            self._ensure_open()
+            if asrt_id is not None and key is not None:
+                rows = self._claim_meta_events_by_asrt_id_key.get((asrt_id, key), ())
+            elif asrt_id is not None:
+                rows = self._claim_meta_events_by_asrt_id.get(asrt_id, ())
+            elif key is not None:
+                rows = (row for row in self._claim_meta_events if row.key == key)
+            else:
+                rows = self._claim_meta_events
+            return tuple(sorted(rows, key=_claim_meta_event_sort_key))
+
+    def _effective_meta_events(
+        self,
+        *,
+        asrt_id: str | None = None,
+        key: str | None = None,
+        kind: str | None = None,
+        as_of: tuple[int, int] | None = None,
+    ) -> tuple[_ClaimMetaEvent, ...]:
+        """Resolve last-wins meta using the Q-SAE-8 global event order."""
+        boundary = _normalize_event_sequence(as_of)
+        history = self._meta_history_events(asrt_id=asrt_id, key=key)
+        latest: dict[tuple[str, str], _ClaimMetaEvent] = {}
+        for event in history:
+            if boundary is not None and event.event_seq > boundary:
+                continue
+            latest[(event.asrt_id, event.key)] = event
+        rows = [
+            event
+            for event in latest.values()
+            if not event.is_unset and (kind is None or event.kind == kind)
+        ]
+        return tuple(sorted(rows, key=_claim_meta_event_sort_key))
+
+    def _effective_meta_rows(
+        self,
+        *,
+        asrt_id: str | None = None,
+        key: str | None = None,
+        kind: str | None = None,
+        as_of: tuple[int, int] | None = None,
+    ) -> tuple[MetaRow, ...]:
+        return tuple(
+            MetaRow(event.asrt_id, event.key, str(event.kind), event.value)
+            for event in self._effective_meta_events(
+                asrt_id=asrt_id,
+                key=key,
+                kind=kind,
+                as_of=as_of,
+            )
+        )
+
+    def _latest_meta_event_sequence(self) -> tuple[int, int] | None:
+        with self._write_lock:
+            self._ensure_open()
+            if not self._claim_meta_events:
+                return None
+            return max(event.event_seq for event in self._claim_meta_events)
+
     def find_annotations(
         self,
         asrt_id: str | None = None,
@@ -1663,7 +1756,7 @@ class Ledger:
 
     def _idx_add_claim_meta_events(
         self,
-        rows: Sequence[MetaRow],
+        rows: Sequence[MetaRow | _MetaTombstone],
         *,
         tx_seq: int,
         op_ordinal: int,
@@ -1673,8 +1766,8 @@ class Ledger:
             _ClaimMetaEvent(
                 asrt_id=row.asrt_id,
                 key=row.key,
-                kind=row.kind,
-                value=row.value,
+                kind=row.kind if isinstance(row, MetaRow) else None,
+                value=row.value if isinstance(row, MetaRow) else None,
                 tx_seq=tx_seq,
                 op_ordinal=op_ordinal,
             )
@@ -1683,7 +1776,7 @@ class Ledger:
         for event in events:
             self._idx_add_claim_meta_event(event)
         if project_meta:
-            self._idx_add_meta(list(rows))
+            self._idx_add_meta([row for row in rows if isinstance(row, MetaRow)])
 
     def _idx_add_claim_meta_event(self, event: _ClaimMetaEvent) -> None:
         self._claim_meta_events.append(event)
@@ -1864,7 +1957,7 @@ class Ledger:
     def _insert_meta_rows(
         self,
         conn: sqlite3.Connection,
-        rows: list[MetaRow],
+        rows: Sequence[MetaRow | _MetaTombstone],
         asrt_id: str,
         *,
         tx_seq: int,
@@ -1878,8 +1971,10 @@ class Ledger:
                 (
                     asrt_id,
                     row.key,
-                    row.kind,
-                    _encode_meta_value(row.kind, row.value),
+                    row.kind if isinstance(row, MetaRow) else None,
+                    _encode_meta_value(row.kind, row.value)
+                    if isinstance(row, MetaRow)
+                    else None,
                     tx_seq,
                     op_ordinal,
                 )
@@ -1982,6 +2077,38 @@ def _validate_meta_rows(rows: list[MetaRow]) -> None:
             )
         if not isinstance(row.asrt_id, str) or not row.asrt_id:
             raise ValueError("meta asrt_id must be non-empty str")
+
+
+def _validate_meta_events(rows: Sequence[MetaRow | _MetaTombstone]) -> None:
+    normal_rows = [row for row in rows if isinstance(row, MetaRow)]
+    _validate_meta_rows(normal_rows)
+    for row in rows:
+        if isinstance(row, MetaRow):
+            continue
+        if not isinstance(row, _MetaTombstone):
+            raise TypeError("meta_appends must contain MetaRow or private UNSET events")
+        if not isinstance(row.asrt_id, str) or not row.asrt_id:
+            raise ValueError("UNSET asrt_id must be non-empty str")
+        if not isinstance(row.key, str) or not row.key:
+            raise ValueError("UNSET key must be non-empty str")
+        if _is_reserved_annotation_meta_key(row.key):
+            raise ValueError("UNSET cannot target the reserved annotation storage namespace")
+
+
+def _normalize_event_sequence(value: tuple[int, int] | None) -> tuple[int, int] | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, tuple)
+        or len(value) != 2
+        or any(isinstance(part, bool) or not isinstance(part, int) or part < 0 for part in value)
+    ):
+        raise ValueError("as_of must be a (tx_seq, op_ordinal) pair of non-negative ints")
+    return value
+
+
+def _claim_meta_event_sort_key(event: _ClaimMetaEvent) -> tuple[int, int, str, str]:
+    return (event.tx_seq, event.op_ordinal, event.asrt_id, event.key)
 
 
 def _validate_meta_rows_for_append_assertion(rows: list[MetaRow]) -> None:

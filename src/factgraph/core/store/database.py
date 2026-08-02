@@ -54,6 +54,8 @@ from factgraph.core.store.ledger import (
     MetaRow,
     Revokes,
     _ANNOTATION_COMPAT_PREFIX,
+    _AnnotationStorageMetaRow,
+    _MetaTombstone,
     _annotation_from_storage_key,
     _annotation_compatibility_meta_rows,
     _dec,
@@ -124,6 +126,26 @@ class MetaAppendInput:
     key: str
     kind: str
     value: Any
+
+
+@dataclass(frozen=True)
+class _MetaUnsetInput:
+    """Private explicit-UNSET command; generic meta inputs remain non-null."""
+
+    asrt_id: str
+    key: str
+
+
+@dataclass(frozen=True)
+class _AnnotationMetaAppendInput(MetaAppendInput):
+    """Private input allowed to carry the reserved annotation storage key."""
+
+
+@dataclass(frozen=True)
+class _UnsetMetaEntry:
+    key: str
+    kind: None = None
+    value: None = None
 
 
 @dataclass(frozen=True)
@@ -1023,7 +1045,7 @@ class Database:
         self,
         assertions: Sequence[AssertionInput],
         revocations: Sequence[RevocationInput],
-        meta_appends: Sequence[MetaAppendInput] = (),
+        meta_appends: Sequence[MetaAppendInput | _MetaUnsetInput] = (),
         schema_transition: SchemaTransitionInput | None = None,
     ) -> CommitResult:
         self._ensure_open()
@@ -1082,7 +1104,9 @@ class Database:
                 {
                     "kind": "append_meta",
                     "asrt_id": row.asrt_id,
-                    "meta": MetaEntry(row.key, row.kind, row.value),
+                    "meta": MetaEntry(row.key, row.kind, row.value)
+                    if isinstance(row, MetaRow)
+                    else _UnsetMetaEntry(row.key),
                 }
             )
 
@@ -1223,6 +1247,27 @@ class Database:
             revocations=tuple(revocation_records),
         )
 
+    def _commit_meta_unsets(self, items: Sequence[_MetaUnsetInput]) -> CommitResult:
+        """Internal policy hook for explicit UNSET events."""
+        if not items:
+            raise DatabaseError("_commit_meta_unsets requires at least one event")
+        return self.commit_changes(assertions=(), revocations=(), meta_appends=items)
+
+    def _commit_annotations(self, rows: Sequence[AnnotationRow]) -> CommitResult | None:
+        """Commit adapter annotation events through dbtx_v2 append-meta ops."""
+        storage_rows = _annotation_compatibility_meta_rows(tuple(rows), ())
+        if not storage_rows:
+            return None
+        inputs: list[_AnnotationMetaAppendInput] = []
+        for row in storage_rows:
+            # Decode once before any write so malformed AnnotationRow fields fail
+            # at the prepare boundary, not after the tx object is durable.
+            _annotation_from_storage_key(row.asrt_id, row.key, row.kind, row.value)
+            inputs.append(
+                _AnnotationMetaAppendInput(row.asrt_id, row.key, row.kind, row.value)
+            )
+        return self.commit_changes(assertions=(), revocations=(), meta_appends=inputs)
+
     def create_view(
         self,
         name: str,
@@ -1346,19 +1391,34 @@ class Database:
 
     def _prepare_meta_appends(
         self,
-        items: Sequence[MetaAppendInput],
-    ) -> list[MetaRow]:
-        prepared: list[MetaRow] = []
+        items: Sequence[MetaAppendInput | _MetaUnsetInput],
+    ) -> list[MetaRow | _MetaTombstone]:
+        prepared: list[MetaRow | _MetaTombstone] = []
         for item in items:
+            if isinstance(item, _MetaUnsetInput):
+                asrt_id = _require_asrt_id(item.asrt_id, field="meta UNSET asrt_id")
+                if not self._ledger._is_known_asrt_id(asrt_id):
+                    raise DatabaseError(f"meta UNSET target does not exist: {asrt_id}")
+                if not isinstance(item.key, str) or not item.key:
+                    raise DatabaseError("meta UNSET key must be non-empty string")
+                _reject_reserved_meta_keys((item.key,), context="meta UNSET")
+                prepared.append(_MetaTombstone(asrt_id, item.key))
+                continue
             if not isinstance(item, MetaAppendInput):
                 raise TypeError("meta_appends must contain MetaAppendInput")
             asrt_id = _require_asrt_id(item.asrt_id, field="meta append asrt_id")
             if not self._ledger._is_known_asrt_id(asrt_id):
                 raise DatabaseError(f"meta append target does not exist: {asrt_id}")
             entry = _normalize_meta_entries((MetaEntry(item.key, item.kind, item.value),))[0]
-            _reject_reserved_assertion_meta((entry,))
+            if isinstance(item, _AnnotationMetaAppendInput):
+                if not _is_reserved_annotation_meta_key(entry.key):
+                    raise DatabaseError("internal annotation input must use its reserved namespace")
+                row_type = _AnnotationStorageMetaRow
+            else:
+                _reject_reserved_assertion_meta((entry,))
+                row_type = MetaRow
             _meta_value_bytes(entry.kind, entry.value)
-            prepared.append(MetaRow(asrt_id, entry.key, entry.kind, entry.value))
+            prepared.append(row_type(asrt_id, entry.key, entry.kind, entry.value))
         return prepared
 
     def _prepare_schema_transition(
@@ -2519,19 +2579,28 @@ def _normalize_tx_operations(
         elif kind == "append_meta":
             _require_exact_keys(raw, {"kind", "asrt_id", "meta"})
             raw_meta = raw.get("meta")
-            if isinstance(raw_meta, MetaEntry):
+            if isinstance(raw_meta, (MetaEntry, _UnsetMetaEntry)):
                 meta = raw_meta
             elif isinstance(raw_meta, Mapping):
                 _require_exact_keys(raw_meta, {"key", "kind", "value"})
-                meta = MetaEntry(
-                    raw_meta.get("key"),
-                    raw_meta.get("kind"),
-                    _from_jsonable(raw_meta.get("value")),
-                )
+                raw_key = raw_meta.get("key")
+                raw_kind = raw_meta.get("kind")
+                raw_value = _from_jsonable(raw_meta.get("value"))
+                if raw_kind is None:
+                    if raw_value is not None:
+                        raise DatabaseError("append_meta kind/value must both be null for UNSET")
+                    if not isinstance(raw_key, str) or not raw_key:
+                        raise DatabaseError("UNSET meta key must be non-empty string")
+                    meta = _UnsetMetaEntry(raw_key)
+                else:
+                    meta = MetaEntry(raw_key, raw_kind, raw_value)
             else:
                 raise DatabaseError("append_meta operation meta must be MetaEntry or mapping")
-            normalized_meta = _normalize_meta_entries((meta,))[0]
-            _meta_value_bytes(normalized_meta.kind, normalized_meta.value)
+            if isinstance(meta, _UnsetMetaEntry):
+                normalized_meta: MetaEntry | _UnsetMetaEntry = meta
+            else:
+                normalized_meta = _normalize_meta_entries((meta,))[0]
+                _meta_value_bytes(normalized_meta.kind, normalized_meta.value)
             normalized.append(
                 {
                     "kind": kind,
@@ -2608,7 +2677,11 @@ def _tx_operation_payload(operation: Mapping[str, Any]) -> dict[str, Any]:
         return {
             "kind": "append_meta",
             "asrt_id": normalized["asrt_id"],
-            "meta": {"key": row.key, "kind": row.kind, "value": _to_jsonable(row.value)},
+            "meta": {
+                "key": row.key,
+                "kind": row.kind,
+                "value": None if isinstance(row, _UnsetMetaEntry) else _to_jsonable(row.value),
+            },
         }
     return {
         **normalized,
@@ -2697,18 +2770,20 @@ def _annotation_rows(asrt_id: str, meta: Sequence[MetaEntry]) -> list[Annotation
 
 
 def _reject_reserved_assertion_meta(rows: Sequence[MetaEntry]) -> None:
-    annotation_storage_keys = sorted(
-        row.key for row in rows if _is_reserved_annotation_meta_key(row.key)
-    )
+    _reject_reserved_meta_keys(tuple(row.key for row in rows), context="assertion/revocation meta")
+
+
+def _reject_reserved_meta_keys(keys: Sequence[str], *, context: str) -> None:
+    annotation_storage_keys = sorted(key for key in keys if _is_reserved_annotation_meta_key(key))
     if annotation_storage_keys:
         raise DatabaseError(
-            "assertion/revocation meta cannot use the reserved annotation storage "
+            f"{context} cannot use the reserved annotation storage "
             f"namespace: {_ANNOTATION_COMPAT_PREFIX}"
         )
-    reserved = sorted({row.key for row in rows} & _RESERVED_ASSERTION_META_KEYS)
+    reserved = sorted(set(keys) & _RESERVED_ASSERTION_META_KEYS)
     if reserved:
         raise DatabaseError(
-            "assertion/revocation meta cannot use Database-reserved key(s): " + ", ".join(reserved)
+            f"{context} cannot use Database-reserved key(s): " + ", ".join(reserved)
         )
 
 
@@ -2730,8 +2805,16 @@ def _reject_duplicate_initial_meta_keys(
         )
 
 
-def _canonical_meta_entries_bytes(rows: Sequence[MetaEntry]) -> bytes:
-    encoded = [(row.key, row.kind, _meta_value_bytes(row.kind, row.value)) for row in rows]
+def _canonical_meta_entries_bytes(rows: Sequence[MetaEntry | _UnsetMetaEntry]) -> bytes:
+    # The empty kind + empty value pair is reserved for explicit UNSET.  Normal
+    # MetaEntry validation rejects an empty kind, so the encoding is unambiguous
+    # and leaves every pre-existing dbtx_v2 byte sequence unchanged.
+    encoded = [
+        (row.key, "", b"")
+        if isinstance(row, _UnsetMetaEntry)
+        else (row.key, row.kind, _meta_value_bytes(row.kind, row.value))
+        for row in rows
+    ]
     encoded.sort(key=lambda item: (item[0], item[1], item[2]))
     out = bytearray()
     out.extend(_u32be(len(encoded)))
