@@ -11,6 +11,7 @@ from factgraph.core.store.database import (
     Database,
     MetaAppendInput,
     MetaEntry,
+    SchemaTransitionInput,
     _MetaUnsetInput,
 )
 from factgraph.sdk import Entity, Identity, compile_schema_from_classes
@@ -62,6 +63,74 @@ def _benchmark_module():
 
 
 class LazyMetaProjectionTests(unittest.TestCase):
+    def test_schema_transition_refreshes_lazy_policy_in_both_directions(self) -> None:
+        eager_schema = _schema_ir(lazy=False)
+        lazy_schema = _schema_ir(lazy=True)
+        with tempfile.TemporaryDirectory() as raw:
+            workspace = Path(raw) / "workspace"
+            database = Database.create(workspace, schema_ir=eager_schema)
+            record = database.commit_assertions((_assertion(),)).assertions[0]
+            ledger = database._ledger_for_attach()
+            self.assertEqual(ledger._lazy_meta_keys, frozenset())
+            self.assertTrue(
+                any(row.key == "trace_id" for row in ledger._claim_meta_events)
+            )
+
+            database.commit_changes(
+                assertions=(),
+                revocations=(),
+                schema_transition=SchemaTransitionInput(
+                    database.schema_digest,
+                    lazy_schema,
+                ),
+            )
+            self.assertEqual(ledger._lazy_meta_keys, frozenset({"trace_id"}))
+            self.assertFalse(
+                any(row.key == "trace_id" for row in ledger._claim_meta_events)
+            )
+            self.assertEqual(
+                [
+                    row.value
+                    for row in ledger.effective_meta_rows(
+                        asrt_id=record.asrt_id,
+                        key="trace_id",
+                    )
+                ],
+                ["trace-initial"],
+            )
+            database.close()
+
+            database = Database.open(workspace, schema_ir=lazy_schema)
+            ledger = database._ledger_for_attach()
+            self.assertEqual(ledger._lazy_meta_keys, frozenset({"trace_id"}))
+            self.assertFalse(
+                any(row.key == "trace_id" for row in ledger._claim_meta_events)
+            )
+
+            database.commit_changes(
+                assertions=(),
+                revocations=(),
+                schema_transition=SchemaTransitionInput(
+                    database.schema_digest,
+                    eager_schema,
+                ),
+            )
+            self.assertEqual(ledger._lazy_meta_keys, frozenset())
+            self.assertTrue(
+                any(row.key == "trace_id" for row in ledger._claim_meta_events)
+            )
+            database.close()
+
+            database = Database.open(workspace, schema_ir=eager_schema)
+            try:
+                cold = database._ledger_for_attach()
+                self.assertEqual(cold._lazy_meta_keys, frozenset())
+                self.assertTrue(
+                    any(row.key == "trace_id" for row in cold._claim_meta_events)
+                )
+            finally:
+                database.close()
+
     def test_lazy_meta_is_read_on_demand_without_eager_index_residency(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             workspace = Path(raw) / "workspace"

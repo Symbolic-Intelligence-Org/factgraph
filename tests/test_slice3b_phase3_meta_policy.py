@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from factgraph.authoring.schema_compile import (
     AuthoringSchemaCompileError,
@@ -18,10 +20,12 @@ from factgraph.core.schema.schema_ir import (
     ensure_schema_ir,
     schema_digest,
 )
+from factgraph.core.store.database import AssertionInput, Database, MetaEntry
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
     PredicatePremiseBlock,
+    is_premise_excluded,
 )
 from factgraph.core.store.runtime import Store
 from factgraph.sdk import (
@@ -35,6 +39,10 @@ from factgraph.sdk import (
 
 
 class _MetaPolicyEntity(Entity):
+    entity_id: str = Identity()
+
+
+class _AddedMetaPolicyEntity(Entity):
     entity_id: str = Identity()
 
 
@@ -53,6 +61,106 @@ def _authoring_schema() -> dict:
 
 
 class MetaPolicySchemaIRTests(unittest.TestCase):
+    def test_direct_compiled_policy_round_trips_through_database(self) -> None:
+        policies = {
+            "audit_note": MetaKeyPolicy(
+                reader_class="audit",
+                load_policy="lazy",
+            ),
+            "source": MetaKeyPolicy(
+                premise_eligible=True,
+                storage_scope="tx_liftable",
+            ),
+        }
+        schema_ir = compile_schema_from_classes(
+            [_MetaPolicyEntity],
+            meta_keys=policies,
+        )
+        expected_digest = schema_digest(schema_ir)
+        with tempfile.TemporaryDirectory() as raw:
+            workspace = Path(raw) / "workspace"
+            database = Database.create(workspace, schema_ir=schema_ir)
+            record = database.commit_changes(
+                assertions=(
+                    AssertionInput(
+                        "__meta_policy_entity:entity_id",
+                        (
+                            (
+                                "entity_ref",
+                                "idref_v1:_MetaPolicyEntity:one",
+                            ),
+                            ("string", "one"),
+                        ),
+                        meta=(MetaEntry("audit_note", "str", "cold-only"),),
+                    ),
+                ),
+                revocations=(),
+                meta_defaults=(MetaEntry("source", "str", "batch"),),
+            ).assertions[0]
+            ledger = database._ledger_for_attach()
+            store = Store(schema_ir, ledger=ledger)
+            store.set_premise_exclusions(
+                MetaExclusion("source", frozenset({"batch"}))
+            )
+            self.assertEqual(database.schema_digest, expected_digest)
+            self.assertEqual(ledger._lazy_meta_keys, frozenset({"audit_note"}))
+            self.assertFalse(
+                any(row.key == "audit_note" for row in ledger._claim_meta_events)
+            )
+            self.assertEqual(
+                ledger.effective_meta_rows(asrt_id=record.asrt_id, key="source")[
+                    0
+                ].value,
+                "batch",
+            )
+            self.assertTrue(
+                is_premise_excluded(
+                    ledger,
+                    record.asrt_id,
+                    store.premise_exclusions,
+                )
+            )
+            database.close()
+
+            recompiled = compile_schema_from_classes(
+                [_MetaPolicyEntity],
+                meta_keys=policies,
+            )
+            self.assertEqual(schema_digest(recompiled), expected_digest)
+            database = Database.open(workspace, schema_ir=recompiled)
+            try:
+                cold = database._ledger_for_attach()
+                cold_store = Store(
+                    recompiled,
+                    ledger=cold,
+                    premise_exclusions=MetaExclusion(
+                        "source", frozenset({"batch"})
+                    ),
+                )
+                self.assertEqual(cold._lazy_meta_keys, frozenset({"audit_note"}))
+                self.assertFalse(
+                    any(
+                        row.key == "audit_note"
+                        for row in cold._claim_meta_events
+                    )
+                )
+                self.assertEqual(
+                    cold.effective_meta_rows(
+                        asrt_id=record.asrt_id,
+                        key="audit_note",
+                    )[0].value,
+                    "cold-only",
+                )
+                self.assertTrue(
+                    is_premise_excluded(
+                        cold,
+                        record.asrt_id,
+                        cold_store.premise_exclusions,
+                    )
+                )
+            finally:
+                database.close()
+
     def test_system_managed_s_class_and_event_time_backfill_key_are_frozen(self) -> None:
         self.assertEqual(
             SYSTEM_MANAGED_META_KEYS,
@@ -231,6 +339,66 @@ class MetaPolicySchemaIRTests(unittest.TestCase):
 
 
 class PremiseEligibilityClosureTests(unittest.TestCase):
+    def test_sdk_schema_refresh_revalidates_premise_configuration_atomically(
+        self,
+    ) -> None:
+        current = compile_schema_from_classes(
+            [_MetaPolicyEntity],
+            meta_keys={
+                "audit_note": MetaKeyPolicy(),
+                "review_status": MetaKeyPolicy(premise_eligible=True),
+            },
+        )
+        graph = FactGraph([_MetaPolicyEntity], store=Store(current))
+        graph.set_premise_exclusions(
+            MetaExclusion("review_status", frozenset({"rejected"}))
+        )
+        before_digest = graph._schema_digest
+        before_schema = graph.schema_ir
+        before_lazy = graph.ledger._lazy_meta_keys
+
+        invalid = compile_schema_from_classes(
+            [_MetaPolicyEntity, _AddedMetaPolicyEntity],
+            meta_keys={
+                "audit_note": MetaKeyPolicy(load_policy="lazy"),
+            },
+        )
+        with self.assertRaisesRegex(
+            SDKStoreError,
+            "schema transition invalidates premise configuration",
+        ):
+            graph._refresh_schema_state(
+                classes=[_MetaPolicyEntity, _AddedMetaPolicyEntity],
+                schema_ir=invalid,
+                schema_digest_value=schema_digest(invalid),
+            )
+        self.assertEqual(graph._schema_digest, before_digest)
+        self.assertIs(graph.schema_ir, before_schema)
+        self.assertEqual(graph.ledger._lazy_meta_keys, before_lazy)
+
+        with self.assertRaisesRegex(
+            SDKStoreError,
+            "schema transition invalidates premise configuration",
+        ):
+            graph.add_schema_classes(_AddedMetaPolicyEntity)
+        self.assertEqual(graph._schema_digest, before_digest)
+        self.assertEqual(graph.premise_exclusions[0].key, "review_status")
+
+        valid = compile_schema_from_classes(
+            [_MetaPolicyEntity, _AddedMetaPolicyEntity],
+            meta_keys={
+                "audit_note": MetaKeyPolicy(load_policy="lazy"),
+                "review_status": MetaKeyPolicy(premise_eligible=True),
+            },
+        )
+        graph._refresh_schema_state(
+            classes=[_MetaPolicyEntity, _AddedMetaPolicyEntity],
+            schema_ir=valid,
+            schema_digest_value=schema_digest(valid),
+        )
+        self.assertEqual(graph.ledger._lazy_meta_keys, frozenset({"audit_note"}))
+        self.assertEqual(graph.premise_exclusions[0].key, "review_status")
+
     def test_builtins_remain_eligible_without_schema_bytes(self) -> None:
         store = Store(
             compile_schema_from_classes([_MetaPolicyEntity]),

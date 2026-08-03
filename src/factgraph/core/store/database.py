@@ -1312,6 +1312,7 @@ class Database:
         if prepared_schema_transition is not None:
             self._schema_digest = commit_schema_digest
             self._schema_ir = next_schema_ir
+            self._ledger.configure_meta_load_policy(lazy_meta_keys(next_schema_ir))
 
         return CommitResult(
             parent_tx_id=parent.tx_id,

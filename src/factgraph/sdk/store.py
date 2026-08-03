@@ -96,6 +96,7 @@ from factgraph.core.evidence.write_protocol import WriteProtocolError, retract_b
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.semantics import SemanticsProfile, inspect_semantics_profile
+from factgraph.core.schema.meta_policy import lazy_meta_keys
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
@@ -129,6 +130,7 @@ from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
     PredicatePremiseBlock,
+    validate_premise_configuration,
 )
 from factgraph.core.store.runtime import Store, premise_scoped_store_view
 from factgraph.core.store.ledger import (
@@ -2418,6 +2420,7 @@ class SDKStore:
                 added_fields=[],
             )
 
+        self._validate_schema_runtime_policies(result.schema_ir)
         self._preflight_schema_digest_anchors(old_digest)
         if database is not None:
             try:
@@ -4017,6 +4020,8 @@ class SDKStore:
         schema_ir: dict[str, Any],
         schema_digest_value: str,
     ) -> None:
+        self._validate_schema_runtime_policies(schema_ir)
+        self._store.ledger.configure_meta_load_policy(lazy_meta_keys(schema_ir))
         self._classes = list(classes)
         self._schema_ir = schema_ir
         self._store.schema_ir = schema_ir
@@ -4026,6 +4031,19 @@ class SDKStore:
         self._field_decl_by_descriptor.clear()
         self._entity_spec_by_class.clear()
         self._index_schema()
+
+    def _validate_schema_runtime_policies(self, schema_ir: dict[str, Any]) -> None:
+        try:
+            validate_premise_configuration(
+                schema_ir,
+                self._store.premise_exclusions,
+                self._store.premise_allowances,
+                self._store.premise_blocks,
+            )
+        except ValueError as exc:
+            raise SDKStoreError(
+                f"schema transition invalidates premise configuration: {exc}"
+            ) from exc
 
     def _preflight_schema_digest_anchors(self, old_digest: str) -> None:
         ledger_digest = self.ledger.get_ledger_meta("schema_digest")

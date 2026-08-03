@@ -143,6 +143,34 @@ class TxMetaDefaultsProtocolTests(unittest.TestCase):
             with self.assertRaises(DatabaseError):
                 Database.open(workspace, schema_ir=_schema_ir())
 
+    def test_tx_object_reader_rejects_forged_reserved_default_keys(self) -> None:
+        for key, message in (
+            ("__system__.forged", "reserved '__system__.' namespace"),
+            (
+                "__factgraph_annotation_v1__:forged",
+                "reserved annotation storage namespace",
+            ),
+        ):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as raw:
+                workspace = Path(raw) / "workspace"
+                database = Database.create(workspace, schema_ir=_schema_ir())
+                head = database.head()
+                database.close()
+                tx_path = (
+                    resolve_database_workspace_paths(workspace).tx_objects
+                    / f"{head.tx_id.removeprefix('tx:')}.json"
+                )
+                payload = json.loads(tx_path.read_text(encoding="utf-8"))
+                payload["meta_defaults"] = [
+                    {"key": key, "kind": "str", "value": "forged"}
+                ]
+                tx_path.write_text(
+                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(DatabaseError, message):
+                    Database.open(workspace, schema_ir=_schema_ir())
+
 
 class TxLiftResolverTests(unittest.TestCase):
     def test_empty_default_world_is_byte_for_byte_single_layer_equivalent(self) -> None:

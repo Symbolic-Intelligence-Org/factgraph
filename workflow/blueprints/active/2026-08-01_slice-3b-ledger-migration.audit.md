@@ -74,6 +74,7 @@
 | 2026-08-03 | Phase 3 C5 批次默认写面 + 收尾 | `2c73a97d`:`Database.commit_changes(meta_defaults=...)` 只接受 schema 显式声明 `storage_scope=tx_liftable` 的普通 key,要求同 tx 至少一个 assertion/revoker consumer;沿 C2 canonical/tx-object 承诺入链,成功后更新 live 两层索引,claim initial meta 与后续 UNSET 仍优先。新增 production commit-path golden 钉 tx bytes/tx_id/head 三元组/LtHash state 与 cold reopen;baseline 第三组把 request/trace 从每 claim 行提升为每 tx 两项并分列 effective/projected/resident 指标。顺手关闭 C3/C4 的 view wrapper 委托缺口与无-GC 即时重开残留。Phase 3 扩面 `54 passed / 57 subtests`;canonical `2867 passed / 32 skipped / 1 deselected / 1170 subtests`;既有 golden 与 C0 读等价 fixture 零修改。 |
 | 2026-08-02 | **Phase 3 对抗审计:0 blocker / 0 serious / 1 MEDIUM / 4 minor —— 有条件不放行,P3-R 轻补钉先行** | 五份对抗报告(chosen-seq/tx-lift+digest/wire-format/semantics/docs-scope);字节不变 gate 与真惰性经探针证实,schema-evolution 零走私,无第四假绝对句;F1=会话内 transition 不刷新惰性策略(MEDIUM),F2=meta_keys 著述 managed 生命周期可达性(决策点);全文见 §Phase 3 对抗审计 |
 | 2026-08-02 | **用户裁定 F2 = 选项 A(2026-08-02)** | meta_keys 为少数运营 key 一次性声明,低频 —— v0.3 著述路径 = 直连 `compile_schema_from_classes(meta_keys=) → Database.create(schema_ir=)`;`FactGraph.create/attach` 不加 meta_keys 参数(窄 API),managed 生命周期的人体工学入口留待 schema-evolution blueprint(§3.8 著述面完整待遇)。P3-R B 据此定稿:证明直连路径可达 + reopen 无损 + 声明生效的常驻测试,schema_definition.md 补一句归属注记。用户直接裁定 |
+| 2026-08-03 | **Phase 3 P3-R 收官卡完成,停下待复验** | `(本提交)`:F1 Database transition 与 SDK schema refresh 同步刷新 lazy/eager 驻留,SDK 在 durable commit 前及 refresh 边界重验现存三类 premise 配置,失效即零 schema/runtime 状态变更;F2 直连 compile→Database.create/write/reopen 回路证明 lazy/premise/tx-lift 与 digest 无损,managed 人体工学明确归 schema-evolution;F3 两类 reserved tx-object 伪造 open fail-closed;F4 原 54/57 调用式入账;F5 `ingested_at` 与 `query_indexed` 能力边界诚实化。Phase 3 扩面 `58 passed / 59 subtests`;canonical `2871 passed / 32 skipped / 1 deselected / 1172 subtests`;ruff + diff-check 全绿,既有 golden 零修改。Phase 4 未启动。 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -131,7 +132,7 @@
 | `premise_eligible` | bool | 可否被 premise/可见性配置引用(**默认 false;引用未声明 key 即报错** —— 封闭漂移根源) |
 | `load_policy` | `eager` / `lazy` | 是否进求值工作集 |
 | `storage_scope` | `claim` / `tx_liftable` | 可否提升为 tx 默认(claim 级覆盖仍可用) |
-| `query_indexed` | bool | 是否建查询索引(**可查询 ≠ premise 语义** —— 修正原 `version` 误归 J 的错误) |
+| `query_indexed` | bool | 是否建查询索引(**可查询 ≠ premise 语义** —— 修正原 `version` 误归 J 的错误);v0.3 只完成 schema identity 表示,尚无专用索引消费者,不得把 `true` 解读为已建物理索引 |
 
 - [x] 五属性进入可选 canonical `meta_keys` Schema IR 与 identity digest;默认值省略、无声明 schema bytes/digest 不变;C0 `e294a0bd`。
 - [x] 原 S/J/F/T 仅保留为 ADR/本 worklist 的**文档层常用组合速记**,运行时 schema 模型只使用五个正交属性;C0。
@@ -153,7 +154,7 @@
 | key | reader_class | premise_eligible | load | storage_scope | 备注 |
 |---|---|---|---|---|---|
 | seq / tx_ref | ledger | — | eager | 列(非 meta) | 永不覆盖 |
-| ingested_at | ledger | false | eager | tx_liftable | = 提交时间,禁覆盖;回填走独立 `event_time` key |
+| ingested_at | ledger | false | eager | tx_liftable(概念分类) | = 提交时间,禁覆盖;回填走独立 `event_time` key;v0.3 `meta_defaults` 通道按 S 类守卫拒绝 caller 著述,故该分类仅表达概念上的 tx 共享性,不是可调用能力 |
 | trace_id | audit | false | lazy | tx_liftable | **不与 tx_id 合并**(trace 跨 tx、tx 可无 trace —— codex 修正,采纳);可存为 tx 默认 |
 | valid_from / valid_to | runtime | false | eager | claim | business-time 选择 |
 | raw_kind / bound | runtime | false | eager | claim | 不确定性载体 |
@@ -493,6 +494,12 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 
 覆盖(五份对抗报告,均含亲手复现):chosen→seq + 两层解析、五属性 IR + tx-lift 入链 + digest 字节不变、tx-meta wire format 八约束、premise 封闭、惰性投影真伪、S 类 + event_time、批次面、Q-SAE-9 §4 表、docs/scope/证据/走私/worklist/卫生。**验实的承重面**:字节不变 gate 经 `git archive` pre-C0 树逐字节对比(digest `sha256:d3d7bb65…` 相同);惰性投影**真惰性**(SQL trace 探针证明 premise+chosen 期间对 lazy key 零 claim_meta 查询,索引构建期 `continue` 排除);meta_defaults 真入链(改 tx_id、篡改 fail-closed、排序唯一双侧强制、无第四表、编码单源);chosen→seq 三用例 + 旧测试原地改名翻转(非静默删)+ CHANGELOG Breaking + Session Journal 因果;S 类过渡守卫升格三面 + event_time 惰性零 policy 读者;**schema-evolution 零走私**(retire/tombstone/keyed-diff grep 零命中);canonical 2867/32/1/1170 独立逐字复现;协调方审计节 6/6 字节比对完整;golden 仅新增零修改。
 
+Phase 3 扩面 `54 passed / 57 subtests` 的原始精确调用式:
+
+```bash
+PYTHONPATH=src python -c 'import sys,types,pytest; sys.modules["readline"]=types.ModuleType("readline"); raise SystemExit(pytest.main(["-q","tests/test_dbtx_v2_golden.py","tests/test_slice3b_phase3_meta_policy.py","tests/test_slice3b_phase3_tx_lift.py","tests/test_slice3b_phase3_lazy_meta.py","tests/test_slice3b_phase3_chosen_seq.py","tests/test_db_attach_lifecycle.py"]))'
+```
+
 **发现(去重):**
 
 | # | 严重度 | 发现 | 处置 |
@@ -507,6 +514,13 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 **Phase 4 挂账(非本轮,归 Phase 4 收尾)**:①~1KB durable headline 未验(当前 smoke 2.36KB、300-claim 复现 2.68KB,约 2.4-2.7× 目标);②"genesis repair anchor"陈旧措辞残留 3 shipped 文档 + core/store 模块 docs 无 meta-tiering 节 + core/policy README 缺;③三组正式对照测量(§6/§7.4 box 正确留空)。
 
 **放行裁定:P3-R 轻补钉轮(A + B 裁定 + C 三 minor 合并)完成并复验后关闭 Phase 3、放行 Phase 4。** F1 为唯一实质代码修复;F2 需用户/协调方裁定 v0.3 著述可达性口径。
+
+### P3-R implementation evidence(2026-08-03,待复验)
+
+- **F1**:`Database.commit_changes(schema_transition=...)` 在 durable schema/head 提交成功后立即按新 IR 重建 Ledger load policy;SDK 在写入 schema transition 前验证现存 exclusion/allowance/block,并由 `_refresh_schema_state` 重验后刷新 lazy policy。常驻门覆盖 eager→lazy→cold、lazy→eager→cold,以及无效 premise 配置对 schema digest/classes/ledger policy 的零变更。
+- **F2**:常驻直连回路严格走裁定路径 `compile_schema_from_classes(meta_keys=) → Database.create(schema_ir=) → commit → close → Database.open(schema_ir=)`;claim-domain lazy 行不驻留、tx 默认继承、premise exclusion 与重编译 digest 稳定均被断言。未给 `FactGraph.create/attach` 加参数。
+- **F3-F5**:手构 `__system__.` 与 annotation-prefix `meta_defaults` 的 tx object 均在 open 解码阶段按具体 reserved-namespace 诊断拒绝;54/57 原始命令见本审计节;§1/§4 表分别注明 `query_indexed` 暂无消费者与 `ingested_at:tx_liftable` 仅为概念分类。
+- **验证**:上述 Phase 3 精确命令在 P3-R 后为 `58 passed / 59 subtests`;canonical 命令为 `PYTHONPATH=src` + process-only readline shim + approved ignore/deselect,结果 `2871 passed / 32 skipped / 1 deselected / 1172 subtests`;changed-file ruff 与 `git diff --check` 全绿。既有 dbtx_v2 golden、production golden 与 C0 读等价 fixture 均零修改。
 
 ## Deviations
 

@@ -174,7 +174,11 @@ Properties equal to their defaults are omitted from canonical IR; declaring a
 non-default policy changes schema identity. The current `FactGraph.create` and
 `FactGraph.attach` convenience constructors compile their class list without a
 `meta_keys=` argument, so use the explicit compile + `Database` surface when
-authoring these policies.
+authoring these policies in v0.3: compile the IR, pass it as
+`Database.create(..., schema_ir=...)`, and pass the same IR to
+`Database.open(...)`. A managed `FactGraph.create/attach` authoring convenience
+belongs to the separate schema-evolution blueprint rather than this release's
+narrow public API.
 
 The `schema_digest` is the SHA-256 of the canonicalized schema identity
 (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at`
