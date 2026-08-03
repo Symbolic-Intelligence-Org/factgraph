@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from factgraph.authoring.schemas import compile_authoring_schema_v1, schema_preflight_authoring
+from factgraph.core.schema.meta_policy import (
+    MetaKeyPolicy,
+    MetaKeyPolicyError,
+    typed_meta_keys_to_authoring,
+)
 
 from .errors import SDKSchemaError
 from .schema import Entity, Relationship
 
 
-def build_authoring_schema_from_classes(classes: list[type[Any]]) -> dict[str, Any]:
+def build_authoring_schema_from_classes(
+    classes: list[type[Any]],
+    *,
+    meta_keys: Mapping[str, MetaKeyPolicy] | None = None,
+) -> dict[str, Any]:
     """Build authoring-schema input from SDK schema classes.
 
     This is the lower-level bridge used before schema compilation. Most users
@@ -16,6 +26,7 @@ def build_authoring_schema_from_classes(classes: list[type[Any]]) -> dict[str, A
 
     Args:
         classes: Non-empty list of `Entity` or `Relationship` subclasses.
+        meta_keys: Optional schema-global typed meta-key declarations.
 
     Returns:
         Authoring-schema payload with `entities` and optional `relationships`.
@@ -35,6 +46,12 @@ def build_authoring_schema_from_classes(classes: list[type[Any]]) -> dict[str, A
     out: dict[str, Any] = {"entities": entities}
     if relationships:
         out["relationships"] = relationships
+    try:
+        meta_keys_out = typed_meta_keys_to_authoring(meta_keys)
+    except MetaKeyPolicyError as exc:
+        raise SDKSchemaError(str(exc)) from exc
+    if meta_keys_out is not None:
+        out["meta_keys"] = meta_keys_out
     return out
 
 
@@ -42,6 +59,7 @@ def compile_schema_from_classes(
     classes: list[type[Any]],
     *,
     generated_at: str | None = None,
+    meta_keys: Mapping[str, MetaKeyPolicy] | None = None,
 ) -> dict[str, Any]:
     """Compile SDK schema classes into canonical schema IR.
 
@@ -51,11 +69,12 @@ def compile_schema_from_classes(
     Args:
         classes: Non-empty list of `Entity` or `Relationship` subclasses.
         generated_at: Optional timestamp override for deterministic tests.
+        meta_keys: Optional schema-global typed meta-key declarations.
 
     Returns:
         Canonical schema IR dictionary.
     """
-    payload = build_authoring_schema_from_classes(classes)
+    payload = build_authoring_schema_from_classes(classes, meta_keys=meta_keys)
     return compile_authoring_schema_v1(payload, generated_at=generated_at)
 
 
@@ -63,6 +82,7 @@ def schema_preflight_from_classes(
     classes: list[type[Any]],
     *,
     generated_at: str | None = None,
+    meta_keys: Mapping[str, MetaKeyPolicy] | None = None,
 ) -> dict[str, Any]:
     """Validate SDK schema classes without creating a graph.
 
@@ -73,9 +93,10 @@ def schema_preflight_from_classes(
     Args:
         classes: Non-empty list of `Entity` or `Relationship` subclasses.
         generated_at: Optional timestamp override for deterministic tests.
+        meta_keys: Optional schema-global typed meta-key declarations.
 
     Returns:
         Schema preflight report dictionary.
     """
-    payload = build_authoring_schema_from_classes(classes)
+    payload = build_authoring_schema_from_classes(classes, meta_keys=meta_keys)
     return schema_preflight_authoring(payload, generated_at=generated_at)

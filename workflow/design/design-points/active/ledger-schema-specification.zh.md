@@ -428,6 +428,8 @@ INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Clai
 
 **Registry 是系统已知 meta key 的格式权威**。所有这些 key 都是 reserved(user 可以读取,但 user 自定义 key 不应与这些冲突)。
 
+**Meta 分级声明(2026-08-03 内联裁定)**:Schema IR 顶层可选 `meta_keys` 以 key→五属性对象声明运行时策略;默认矩阵为 `reader_class=runtime / premise_eligible=false / load_policy=eager / storage_scope=claim / query_indexed=false`,canonical bytes 省略等于默认值的属性并在空映射时省略整段。`{provenance_class, origin_binding}` 是不入 IR 的内建隐式 `premise_eligible` 集;显式声明优先并可收紧。该内建集合由模块常量与常驻测试钉死,未来变更必须走 schema-evolution 决策线,不得作为普通代码改动漂移。
+
 | key | 格式 | Role | 备注 |
 |---|---|---|---|
 | `source` | string | source-meta | 事实来源标识(user / import / inference / adapter:problog 等)|
