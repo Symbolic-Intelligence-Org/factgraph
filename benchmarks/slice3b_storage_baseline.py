@@ -90,6 +90,18 @@ def _schema_ir() -> dict[str, Any]:
             "tup_v1": "tup_v1",
             "export_v1": "export_v1",
         },
+        "meta_keys": {
+            "request_id": {
+                "load_policy": "lazy",
+                "reader_class": "audit",
+                "storage_scope": "tx_liftable",
+            },
+            "trace_id": {
+                "load_policy": "lazy",
+                "reader_class": "audit",
+                "storage_scope": "tx_liftable",
+            },
+        },
         "generated_at": "2026-08-01T00:00:00Z",
     }
 
@@ -350,6 +362,7 @@ def _storage_snapshot(workspace: Path) -> dict[str, Any]:
 def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
     projected_meta_rows = len(ledger.find_meta())
     projected_annotation_rows = len(ledger.find_annotations())
+    configured_lazy_meta_keys = sorted(ledger._lazy_meta_keys)
     resident_claim_meta_events = len(ledger._claim_meta_events)
     resident_meta_rows = len(ledger._meta_rows_data)
     resident_annotation_rows = len(ledger._annotation_rows_data)
@@ -384,7 +397,19 @@ def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
     resident_meta_bearing_row_objects = (
         resident_claim_meta_events + resident_meta_rows + resident_annotation_rows
     )
+    resident_lazy_meta_event_objects = sum(
+        event.key in ledger._lazy_meta_keys for event in ledger._claim_meta_events
+    )
+    projected_lazy_meta_rows = sum(
+        len(ledger.find_meta(key=key)) for key in configured_lazy_meta_keys
+    )
     return {
+        "configured_lazy_meta_keys": configured_lazy_meta_keys,
+        "projected_lazy_meta_rows": projected_lazy_meta_rows,
+        "projected_lazy_meta_rows_per_claim": round(
+            projected_lazy_meta_rows / claim_count, 6
+        ),
+        "resident_lazy_meta_event_objects": resident_lazy_meta_event_objects,
         "projected_ledger_meta_rows": projected_meta_rows,
         "projected_ledger_meta_rows_per_claim": round(projected_meta_rows / claim_count, 6),
         "projected_annotation_rows": projected_annotation_rows,

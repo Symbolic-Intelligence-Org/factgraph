@@ -37,6 +37,7 @@ from factgraph.core.protocol.lthash import (
     remove as lthash_remove,
 )
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
+from factgraph.core.schema.meta_policy import lazy_meta_keys
 from factgraph.core.schema.schema_ir import (
     SchemaIRValidationError,
     canonicalize_schema_ir_identity_jcs,
@@ -468,6 +469,8 @@ class Database:
         self._workspace_paths = workspace_paths
         self._lock_handle = lock_handle
         self._closed = False
+        if schema_ir is not None:
+            self._ledger.configure_meta_load_policy(lazy_meta_keys(schema_ir))
         if workspace_paths is not None:
             head_tx_id = self._ledger.get_ledger_meta("head_tx_id")
             if head_tx_id is None:

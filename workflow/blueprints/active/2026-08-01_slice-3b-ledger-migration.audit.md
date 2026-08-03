@@ -68,6 +68,8 @@
 | 2026-08-03 | **内联裁定(用户):tx 批次 meta 链格式(C2 前置)** | 采纳可选顶层 `meta_defaults`:按 key 排序且唯一的 `{key,kind,value}` 序列;非空以独立 domain-separated suffix 纳入 dbtx_v2 canonical bytes/tx_id,空时 JSON 字段与 canonical suffix 双省略,因此旧 golden 一字节不变。kind/value 复用 M-op meta-entry 编码;tx 层禁止 UNSET,继承删除只走 claim UNSET。否决 `tx_meta` op —— op_ordinal 只属于 claim 事件层。写侧排序并拒重复,读侧在 normalize 前 fail-closed 拒未排序/重复/空字段;tx-object 固定六字段扩为六字段+可选 `meta_defaults`,其余未知字段继续拒绝。新通道拒 annotation/system 前缀、DB-owned 与 system-managed 六个 key。运行时 attach 从链上 tx object 按 tx_ref 重建内存默认索引,不加第四表/持久化镜像。 |
 | 2026-08-02 | Phase 3 C0/C1 停点轻核 | `e294a0bd`(canonical meta_keys/MetaKeyPolicy/著述入口/digest 字节不变门)+ `b9b03854`(premise closure 三配置入口 + per-evaluation scope);golden 零修改亲核,dbtx+读等价面绿;C2 依纪律零码停点上报 tx-meta 链格式决策 |
 | 2026-08-02 | **内联裁定(协调方):tx 批次 meta 编码 = 可选顶层 `meta_defaults` + domain-separated canonical suffix(八条约束)** | 采纳 codex 形状,依据与 kind/annotation_refs/P2-S1 同一原则:影响 effective 解析的信息必须入链承诺。约束:(a) 非空才存在,空即字段与 suffix 双省略 —— 既有 golden bytes/tx_id 全不变(golden 即证);(b) suffix 域分离,分节标记与既有 op tag 空间不可碰撞,精确字节形态实现定;(c) 按 key 排序且唯一的 `{key,kind,value}` 序列,**写侧规范化发射、读侧+parity fail-closed 校验排序与唯一**(拒未排序/重复,不做读时静默归一);(d) kind/value 编码复用 M-op meta entry 既有编码,单源禁第二套;(e) tx 默认无 UNSET,继承移除 = claim 层 UNSET;(f) 否决 `tx_meta` op —— op_ordinal 空间属 claim 事件层,正交层不互扰(采纳 codex 理由);(g) 新写通道三侧守卫:拒保留/系统 key(annotation 前缀/`__system__.`/DB-owned 三键/system-managed 三键)+ 负向测试 + 非空 defaults 新 golden(序列化器级,写面落地后补 commit-path 级);(h) 物理读路径实现自由(attach 期按 tx_ref 建内存索引或 ledger_meta 记账镜像)但**不得引入第四张表**,任何持久化镜像 = 链可重建记账状态(repair 覆盖、篡改按记账漂移处理);tx-object reader 允许列表扩展为可选 meta_defaults,其余未知字段照旧 fail-closed。用户可否决 |
+| 2026-08-03 | Phase 3 C2 tx-default 链地基 | `6f1f543d`:dbtx_v2 非空 `meta_defaults` 以独立 `tx_meta_defaults_v1` suffix 入 canonical bytes/tx_id,空值双省略;M-op MetaEntry 编码单源、写侧排序/唯一与十类保留 key 守卫、读侧非规范/未知字段 fail-closed;Ledger 两层 effective 解析与 durable attach 链重建落地。新增 serializer golden,既有 golden 零修改。批次 commit 写面与 commit-path golden 留 C5。 |
+| 2026-08-03 | Phase 3 C3 audit meta 惰性投影(本提交) | schema `load_policy=lazy` key 的物理 claim_meta 事件退出 Ledger eager event/meta/annotation 索引,历史/effective/兼容投影按需从三表真值重建且保持事件序;无声明 schema 仍全 eager。baseline harness 将 `trace_id/request_id` 声明为 audit/lazy 并新增 projected-vs-resident 指标;39 tests / 47 subtests 聚焦面通过。B6 同提交扩记 benchmark 对 lazy 驻留索引的冻结依赖。 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -127,6 +129,7 @@
 | `storage_scope` | `claim` / `tx_liftable` | 可否提升为 tx 默认(claim 级覆盖仍可用) |
 | `query_indexed` | bool | 是否建查询索引(**可查询 ≠ premise 语义** —— 修正原 `version` 误归 J 的错误) |
 
+- [x] 五属性进入可选 canonical `meta_keys` Schema IR 与 identity digest;默认值省略、无声明 schema bytes/digest 不变;C0 `e294a0bd`。
 - [ ] 原 S/J/F/T 保留为**文档层的常用组合速记**,不再是 schema 模型。
 
 ### Q-SAE-9 §2 Tx 具象化
@@ -138,7 +141,7 @@
 ### Q-SAE-9 §3 跨层解析
 
 - [x] 引入显式 **`UNSET` tombstone meta event**(Q-SAE-8 的 event 形态之一,共用 `(tx_seq, op_ordinal)` 序);
-- [ ] 统一解析器:effective(asrt, key) = 按事件序取组内最新事件;`UNSET` → 视同缺失;无 claim 级事件 → 取 tx 默认;**Partial(Phase 2)**:claim 级事件全序/UNSET 已统一,tx-default fallback 属 Phase 3 tx-lift,尚未交付;
+- [x] 统一解析器:effective(asrt, key) = 按事件序取组内最新事件;`UNSET` → 视同缺失;无 claim 级事件 → 取 tx 默认;Phase 2 claim 事件层 + Phase 3 C2 tx-default fallback 已交付;
 - [x] 该解析器**对普通 claim 与 revoker 对称适用**(premise filter 的 revoker 对称可采性要求)。
 
 ### Q-SAE-9 §4 逐 key 归类表
@@ -172,7 +175,7 @@
 1. [ ] premise filter 差分测试(最高优先):统一解析器(含 UNSET、tx 默认继承、revoker 对称)vs 现行单层 last-wins,逐字节等价 + absence 语义专项(absent_ok 全路径);
 2. [ ] INV-15:tx 物化物(若含 `__system__.tx` claim)五读面不外泄;
 3. [ ] chosen:语义变更用例集(时间倒挂、同刻、导入);
-4. [ ] 三组对照 bytes/claim + 求值工作集(lazy 生效验证:audit 类不进投影);
+4. [ ] 三组对照 bytes/claim + 求值工作集(lazy 生效验证:audit 类不进 eager 投影);**Partial(C3)**:audit/lazy 行已退出 eager 驻留并由 harness 同名指标钉住,Phase 4 三组最终测量未执行;
 5. [ ] `narrate()`/explain 无可观察回归。
 
 ### Q-SAE-9 §8 裁定
@@ -443,7 +446,7 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 | B3 | `ingest_key` 兼容事件 + `Idempotency` 参数 + 两 helper | C2(§9.6 partial)+ 补钉 E 自动物化 | 参数与显式 meta 不匹配即拒 | 随 caller 改写另行完成 —— **归属待裁**(Slice 5 候选) | `test_idempotency_is_materialized_and_survives_reload` |
 | B4 | v0.2 七表迁移走廊(逻辑快照解析器 + migrate CLI v0.2 路径) | C4 `5c0c7e31` + 补钉 B/C | staging→verified replacement→可见归档 | **待发布裁定**(Q-SAE-6 时序定 v0.2 支持窗口) | test_a20e 迁移用例 + 合成七表 fixture |
 | B5 | deprecated `Ledger.append_claim` 兼容入口 | 3b 前(pre-existing) | A 项 system-pred 守卫已覆盖 | 待裁(caller 清点后) | 对应兼容用例 |
-| B6 | `_ledger_for_attach` 跨层调用(sdk/application/benchmark)+ tests→`_enc*`;补录(2026-08-02 复验):sdk/store.py:261-262 `_latest_meta_event_sequence` reach-through;Phase 2 事件 resolver 四名已在补钉 D 转正并从本桥移除 | Stage A / Phase 0 | audit 冻结方法节同 commit 更新纪律 | **3b Phase 4**(`_ledger_for_attach` 转正或收口;测试 helper 随 fixture 边界处理) | 无(转正即改引用) |
+| B6 | `_ledger_for_attach` 跨层调用(sdk/application/benchmark)+ tests→`_enc*`;补录(2026-08-02 复验):sdk/store.py:261-262 `_latest_meta_event_sequence` reach-through;补录(Phase 3 C3):baseline harness 为量化 eager workset 读取 `_lazy_meta_keys` 与 `_claim_meta_events`/`_meta_*`/`_anno_*` resident indexes;Phase 2 事件 resolver 四名已在补钉 D 转正并从本桥移除 | Stage A / Phase 0 / Phase 3 C3 | audit 冻结方法节同 commit 更新纪律;C3 常驻测试核对 projected lazy rows 非零而 resident lazy event objects 为零 | **3b Phase 4**(`_ledger_for_attach` 转正或收口;测试 helper 与 workset introspection 随 fixture/metrics 边界处理) | 无(转正即改引用) |
 | B7 | unmanaged `Store` adapter annotation 直写 fallback | Phase 2 meta-event writer 收编 | attach/Database-backed lifecycle 一律经 dbtx_v2 M op;仅 `from_schema_classes` 无 Database runtime 保留 direct Ledger compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | adapter managed-path tx-object golden + unmanaged adapter compatibility tests |
 | B8 | unmanaged `Ledger.append_meta` 直写 fallback | Phase 2 补钉 A managed writer 收编 | Database 构造时安装 `_managed_meta_writer`,managed 调用在任何 SQLite 直写前委托 `commit_changes`;仅无 Database owner 的 Ledger 保留 direct compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | managed direct-path-unreachable/tx-object 回路 + unmanaged compatibility tests |
 

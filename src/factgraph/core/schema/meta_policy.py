@@ -187,6 +187,20 @@ def require_premise_eligible_meta_key(
         )
 
 
+def lazy_meta_keys(schema_ir: Mapping[str, Any]) -> frozenset[str]:
+    declarations = schema_ir.get("meta_keys", {})
+    if not isinstance(declarations, Mapping):
+        raise MetaKeyPolicyError("$.meta_keys must be object")
+    return frozenset(
+        key
+        for key, value in declarations.items()
+        if MetaKeyPolicy.from_mapping(
+            value, path=f"$.meta_keys[{key!r}]"
+        ).load_policy
+        == "lazy"
+    )
+
+
 def _validate_meta_key(value: Any, *, path: str) -> None:
     if not isinstance(value, str) or not value:
         raise MetaKeyPolicyError(f"{path} keys must be non-empty strings")

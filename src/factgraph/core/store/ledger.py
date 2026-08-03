@@ -559,6 +559,7 @@ class Ledger:
         self._closed = False
         self._owner_thread_id = threading.get_ident()
         self._memory_warning_emitted = False
+        self._lazy_meta_keys: frozenset[str] = frozenset()
         self._managed_meta_writer: Callable[[Sequence[MetaRow]], Any] | None = None
         self._managed_annotation_writer: Callable[[Sequence[AnnotationRow]], Any] | None = None
         self._local = threading.local()
@@ -571,14 +572,38 @@ class Ledger:
         self._init_schema(main_conn)
         self._load_from_db_via(main_conn)
 
+    def configure_meta_load_policy(self, lazy_keys: Sequence[str]) -> None:
+        normalized = frozenset(lazy_keys)
+        if any(not isinstance(key, str) or not key for key in normalized):
+            raise ValueError("lazy meta keys must be non-empty strings")
+        with self._write_lock:
+            self._ensure_open()
+            if normalized == self._lazy_meta_keys:
+                return
+            tx_meta_defaults = tuple(
+                row
+                for by_key in self._tx_meta_defaults_by_tx_seq.values()
+                for row in by_key.values()
+            )
+            self._lazy_meta_keys = normalized
+            self._load_from_db_via(self._get_connection())
+            self.replace_tx_meta_defaults(tx_meta_defaults)
+
     def __deepcopy__(self, memo: dict[int, Any]) -> Ledger:
         clone = Ledger()
         with self._write_lock:
             source_conn = self._get_connection()
             target_conn = clone._get_connection()
             source_conn.backup(target_conn)
-        clone._reset_indexes()
+            tx_meta_defaults = tuple(
+                row
+                for by_key in self._tx_meta_defaults_by_tx_seq.values()
+                for row in by_key.values()
+            )
+            lazy_meta_keys = self._lazy_meta_keys
+        clone._lazy_meta_keys = lazy_meta_keys
         clone._load_from_db_via(clone._get_connection())
+        clone.replace_tx_meta_defaults(tx_meta_defaults)
         memo[id(self)] = clone
         return clone
 
@@ -1392,9 +1417,20 @@ class Ledger:
     ) -> list[MetaRow]:
         with self._write_lock:
             self._ensure_open()
+            if self._lazy_meta_keys:
+                rows = self._projected_meta_rows_from_sql()
+                if asrt_id is not None:
+                    rows = [row for row in rows if row.asrt_id == asrt_id]
+                if key is not None:
+                    rows = [row for row in rows if row.key == key]
+                if kind is not None:
+                    rows = [row for row in rows if row.kind == kind]
+                return rows
             if asrt_id is not None:
                 if key is not None and kind is not None:
-                    return list(self._meta_by_asrt_id_key_kind.get((asrt_id, key, kind), []))
+                    return list(
+                        self._meta_by_asrt_id_key_kind.get((asrt_id, key, kind), [])
+                    )
                 if key is not None:
                     return list(self._meta_by_asrt_id_key.get((asrt_id, key), []))
                 rows = self._meta_by_asrt_id.get(asrt_id, [])
@@ -1427,7 +1463,9 @@ class Ledger:
                 rows = (row for row in self._claim_meta_events if row.key == key)
             else:
                 rows = self._claim_meta_events
-            return tuple(sorted(rows, key=_claim_meta_event_sort_key))
+            eager = tuple(rows)
+            lazy = self._lazy_meta_events(asrt_id=asrt_id, key=key)
+            return tuple(sorted((*eager, *lazy), key=_claim_meta_event_sort_key))
 
     def effective_meta_events(
         self,
@@ -1507,9 +1545,18 @@ class Ledger:
     def _latest_meta_event_sequence(self) -> tuple[int, int] | None:
         with self._write_lock:
             self._ensure_open()
-            if not self._claim_meta_events:
-                return None
-            return max(event.event_seq for event in self._claim_meta_events)
+            positions = [event.event_seq for event in self._claim_meta_events]
+            if self._lazy_meta_keys:
+                placeholders = ",".join("?" for _ in self._lazy_meta_keys)
+                row = self._get_connection().execute(
+                    "SELECT tx_seq, op_ordinal FROM claim_meta "
+                    f"WHERE key IN ({placeholders}) "
+                    "ORDER BY tx_seq DESC, op_ordinal DESC LIMIT 1",
+                    tuple(sorted(self._lazy_meta_keys)),
+                ).fetchone()
+                if row is not None:
+                    positions.append((int(row["tx_seq"]), int(row["op_ordinal"])))
+            return max(positions) if positions else None
 
     def latest_event_sequence(self) -> tuple[int, int] | None:
         """Return the current inclusive ``(tx_seq, op_ordinal)`` boundary.
@@ -1537,6 +1584,13 @@ class Ledger:
                     for tx_seq, op_ordinal in positions
                     if tx_seq == head_tx_seq
                 ]
+                row = self._get_connection().execute(
+                    "SELECT MAX(op_ordinal) FROM claim_meta WHERE tx_seq = ?",
+                    (head_tx_seq,),
+                ).fetchone()
+                persisted_max = None if row is None else row[0]
+                if persisted_max is not None:
+                    head_ordinals.append(int(persisted_max))
                 return (head_tx_seq, max(head_ordinals, default=0))
             if not positions:
                 return None
@@ -1586,7 +1640,9 @@ class Ledger:
     ) -> list[AnnotationRow]:
         with self._write_lock:
             self._ensure_open()
-            if asrt_id is not None:
+            if self._lazy_meta_keys:
+                rows = self._projected_annotation_rows_from_sql()
+            elif asrt_id is not None:
                 rows = self._anno_by_asrt_id.get(asrt_id, [])
             elif namespace is not None and category is not None:
                 rows = self._anno_by_ns_cat.get((namespace, category), [])
@@ -1646,12 +1702,16 @@ class Ledger:
     def meta_rows(self) -> list[MetaRow]:
         with self._write_lock:
             self._ensure_open()
+            if self._lazy_meta_keys:
+                return self._projected_meta_rows_from_sql()
             return list(self._meta_rows_data)
 
     @property
     def annotation_rows(self) -> list[AnnotationRow]:
         with self._write_lock:
             self._ensure_open()
+            if self._lazy_meta_keys:
+                return self._projected_annotation_rows_from_sql()
             return list(self._annotation_rows_data)
 
     @property
@@ -1863,6 +1923,8 @@ class Ledger:
 
     def _idx_add_meta(self, rows: list[MetaRow]) -> None:
         for row in rows:
+            if row.key in self._lazy_meta_keys:
+                continue
             self._meta_rows_data.append(row)
             self._meta_by_asrt_id.setdefault(row.asrt_id, []).append(row)
             self._meta_by_kind.setdefault(row.kind, []).append(row)
@@ -1899,6 +1961,8 @@ class Ledger:
             self._idx_add_meta([row for row in rows if isinstance(row, MetaRow)])
 
     def _idx_add_claim_meta_event(self, event: _ClaimMetaEvent) -> None:
+        if event.key in self._lazy_meta_keys:
+            return
         self._claim_meta_events.append(event)
         self._claim_meta_events_by_asrt_id.setdefault(event.asrt_id, []).append(event)
         self._claim_meta_events_by_asrt_id_key.setdefault(
@@ -1907,6 +1971,8 @@ class Ledger:
 
     def _idx_add_annotation(self, rows: list[AnnotationRow]) -> None:
         for row in rows:
+            if row.key in self._lazy_meta_keys:
+                continue
             identity = (row.asrt_id, row.namespace, row.category, row.key)
             existing = self._anno_by_identity.get(identity)
             if existing is not None:
@@ -2020,6 +2086,115 @@ class Ledger:
 
     def _load_from_db(self) -> None:
         self._load_from_db_via(self._get_connection())
+
+    def _lazy_meta_events(
+        self, *, asrt_id: str | None = None, key: str | None = None
+    ) -> tuple[_ClaimMetaEvent, ...]:
+        selected_keys = (
+            frozenset({key}) & self._lazy_meta_keys
+            if key is not None
+            else self._lazy_meta_keys
+        )
+        if not selected_keys:
+            return ()
+        placeholders = ",".join("?" for _ in selected_keys)
+        params: list[Any] = list(sorted(selected_keys))
+        where = f"key IN ({placeholders})"
+        if asrt_id is not None:
+            where += " AND asrt_id = ?"
+            params.append(asrt_id)
+        rows = self._get_connection().execute(
+            "SELECT asrt_id, key, kind, value, tx_seq, op_ordinal "
+            f"FROM claim_meta WHERE {where} ORDER BY tx_seq, op_ordinal, rowid",
+            params,
+        ).fetchall()
+        return tuple(
+            _ClaimMetaEvent(
+                asrt_id=str(row["asrt_id"]),
+                key=str(row["key"]),
+                kind=None if row["kind"] is None else str(row["kind"]),
+                value=_decode_meta_value(row["kind"], row["value"]),
+                tx_seq=int(row["tx_seq"]),
+                op_ordinal=int(row["op_ordinal"]),
+            )
+            for row in rows
+        )
+
+    def _projected_meta_rows_from_sql(self) -> list[MetaRow]:
+        rows = self._get_connection().execute(
+            "SELECT asrt_id, key, kind, value FROM claim_meta "
+            "WHERE kind IS NOT NULL ORDER BY tx_seq, op_ordinal, rowid"
+        ).fetchall()
+        return [
+            MetaRow(
+                str(row["asrt_id"]),
+                str(row["key"]),
+                str(row["kind"]),
+                _decode_meta_value(row["kind"], row["value"]),
+            )
+            for row in rows
+            if not str(row["key"]).startswith(_ANNOTATION_COMPAT_PREFIX)
+        ]
+
+    def _projected_annotation_rows_from_sql(self) -> list[AnnotationRow]:
+        rows: list[AnnotationRow] = []
+        rows_by_identity: dict[tuple[str, str, str, str], AnnotationRow] = {}
+        identity_positions = {
+            str(row["asrt_id"]): (int(row["tx_seq"]), int(row["op_ordinal"]))
+            for row in self._get_connection().execute(
+                "SELECT asrt_id, tx_seq, op_ordinal FROM claim_meta "
+                "WHERE key = 'tx_id' AND kind = 'str'"
+            ).fetchall()
+        }
+        persisted = self._get_connection().execute(
+            "SELECT asrt_id, key, kind, value, tx_seq, op_ordinal "
+            "FROM claim_meta WHERE kind IS NOT NULL "
+            "ORDER BY tx_seq, op_ordinal, rowid"
+        ).fetchall()
+        for persisted_row in persisted:
+            event = _ClaimMetaEvent(
+                asrt_id=str(persisted_row["asrt_id"]),
+                key=str(persisted_row["key"]),
+                kind=str(persisted_row["kind"]),
+                value=_decode_meta_value(persisted_row["kind"], persisted_row["value"]),
+                tx_seq=int(persisted_row["tx_seq"]),
+                op_ordinal=int(persisted_row["op_ordinal"]),
+            )
+            if event.is_unset:
+                continue
+            if event.key.startswith(_ANNOTATION_COMPAT_PREFIX):
+                projected = _annotation_from_storage_key(
+                    event.asrt_id, event.key, str(event.kind), event.value
+                )
+            else:
+                if event.asrt_id in identity_positions:
+                    is_initial = event.event_seq == identity_positions[event.asrt_id]
+                else:
+                    is_initial = event.event_seq == (
+                        self._claim_tx_refs.get(event.asrt_id),
+                        self._claim_op_ordinals.get(event.asrt_id),
+                    )
+                projected = (
+                    _initial_meta_annotation_row(
+                        MetaRow(event.asrt_id, event.key, str(event.kind), event.value)
+                    )
+                    if is_initial
+                    else None
+                )
+            if projected is None:
+                continue
+            identity = (
+                projected.asrt_id,
+                projected.namespace,
+                projected.category,
+                projected.key,
+            )
+            previous = rows_by_identity.get(identity)
+            if previous is not None:
+                rows.remove(previous)
+            rows.append(projected)
+            rows_by_identity[identity] = projected
+        return rows
 
     def _is_known_asrt_id(self, asrt_id: str) -> bool:
         with self._write_lock:

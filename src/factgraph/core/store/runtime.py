@@ -12,10 +12,11 @@ from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.core.rules._trace import RuleTraceArtifact
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
+from factgraph.core.schema.meta_policy import lazy_meta_keys
 from factgraph.core.schema.schema_ir import ensure_schema_ir
 from factgraph.core.store import _accept as _store_accept
 from factgraph.core.store._artifact_sidecar import ArtifactSidecar
+from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
 from factgraph.core.store._explain_support import render_support_artifact
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -92,6 +93,7 @@ class Store:
             raise ValueError("schema_ir must be dict")
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
+        self.ledger.configure_meta_load_policy(lazy_meta_keys(self.schema_ir))
         self._premise_exclusions = normalize_premise_exclusions(premise_exclusions)
         self._premise_allowances = normalize_premise_allowances(premise_allowances)
         self._premise_blocks = normalize_premise_blocks(premise_blocks)
