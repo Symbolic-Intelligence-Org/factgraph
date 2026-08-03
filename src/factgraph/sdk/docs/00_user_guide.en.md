@@ -1003,8 +1003,9 @@ Use `fg.package.export_package(...)` for a distribution/reproduction artifact.
 
 Legacy workspaces are never auto-migrated: `FactGraph.load_workspace(...)`
 raises `SDKStoreError` with the command above. The CLI verifies a staging v0.3
-workspace, preserves legacy rows and assertion ids, and writes a genesis repair
-anchor because v0.2 commit history cannot be reconstructed. By default the
+workspace, preserves legacy rows and assertion ids, and writes a genesis import
+transaction using ordinary assertion, revocation, and append-meta
+operations because v0.2 commit history cannot be reconstructed. By default the
 complete source is retained under `workspace.legacy.<UTC timestamp>/`; use
 `--no-archive` only when that backup is intentionally unnecessary. Apply-log
 readers remain compatible with

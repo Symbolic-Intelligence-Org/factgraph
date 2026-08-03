@@ -45,7 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is `workspace_incomplete` and must be recreated. The v0.3
   `factgraph_workspace.json` no longer contains a top-level `schema_digest`;
   schema anchoring now comes from the Database head and content-addressed
-  schema objects.
+  schema objects. Unreleased v0.3 development workspaces carrying the
+  intermediate seven-table layout have no upgrade path: open and migration
+  fail with guidance to rebuild or remigrate from the original v0.2 source.
 - **Database-backed ingest no longer falls back to unmanaged raw entity
   references.** `FactGraph.create(...)`, `FactGraph.load_workspace(...)`, and
   writable `FactGraph.attach(...)` fail closed when an ingest target or
@@ -82,6 +84,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   order. Defaults are committed in the tx object and inherited by assertions
   and revokers in that transaction; claim metadata overrides them and an
   `UNSET` claim event removes inheritance.
+- **Ledger persistence converges from seven tables to three.** `claims`,
+  eventized `claim_meta`, and `ledger_meta` are the complete SQLite shape;
+  revocations are internal claims, while argument and annotation compatibility
+  views are reconstructed projections. Metadata events use immutable
+  `(tx_seq, op_ordinal)` order, support internal dual-NULL UNSET tombstones, and
+  are checked against the canonical tx chain on open. Narrow audit/debug APIs
+  expose event history and as-of replay without adding a general SDK history
+  surface or changing factual/state/support digests.
 - **The SDK exposes low-level atomic assertion/revocation commits.**
   `fg.commit_changes(assertions, revocations)` and the public
   `RevocationInput` DTO let advanced callers submit one mixed change set as

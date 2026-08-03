@@ -76,6 +76,8 @@
 | 2026-08-02 | **用户裁定 F2 = 选项 A(2026-08-02)** | meta_keys 为少数运营 key 一次性声明,低频 —— v0.3 著述路径 = 直连 `compile_schema_from_classes(meta_keys=) → Database.create(schema_ir=)`;`FactGraph.create/attach` 不加 meta_keys 参数(窄 API),managed 生命周期的人体工学入口留待 schema-evolution blueprint(§3.8 著述面完整待遇)。P3-R B 据此定稿:证明直连路径可达 + reopen 无损 + 声明生效的常驻测试,schema_definition.md 补一句归属注记。用户直接裁定 |
 | 2026-08-03 | **Phase 3 P3-R 收官卡完成,停下待复验** | `(本提交)`:F1 Database transition 与 SDK schema refresh 同步刷新 lazy/eager 驻留,SDK 在 durable commit 前及 refresh 边界重验现存三类 premise 配置,失效即零 schema/runtime 状态变更;F2 直连 compile→Database.create/write/reopen 回路证明 lazy/premise/tx-lift 与 digest 无损,managed 人体工学明确归 schema-evolution;F3 两类 reserved tx-object 伪造 open fail-closed;F4 原 54/57 调用式入账;F5 `ingested_at` 与 `query_indexed` 能力边界诚实化。Phase 3 扩面 `58 passed / 59 subtests`;canonical `2871 passed / 32 skipped / 1 deselected / 1172 subtests`;ruff + diff-check 全绿,既有 golden 零修改。Phase 4 未启动。 |
 | 2026-08-03 | **P3-R 收官复验通过;Phase 3 正式关闭,Phase 4 放行** | `695e6136`;F1 双钩子亲读 + 双向 live==reopen 测试非空、F2 直连回路钉住、F3-F5 落账;套件 2871/32/1/1172 独立复现;详见 §Phase 3 收官复验 |
+| 2026-08-03 | Phase 4 三组正式测量 | `8fb74836`:v3 harness 增 `three-table` / `three-table-tiered` profile;F6 以 claim-domain lazy `trace_id` 和独立 tx-lift `request_id` 分离归因;Phase 2 source pin `e716aa39` 与 Phase 3 source pin `338c1c12` 各跑 batch=3/1,N=5。终态 durable 2,933.487 / 3,177.071 B/claim,原 ~1KB headline 否决 |
+| 2026-08-03 | **Phase 4 docs + closeout 完成,停下待收官复验** | `(本提交)`:store/policy/premise 当前真相、三份 genesis A/R/M 措辞、spec/CHANGELOG 终态、B1-B8 冻结、Outcome/Deviations/量化与 §7 证据全部落位;blueprint→`implemented`,保持 active 等归档前最终检查;canonical gate 见 Phase 4 节末 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -140,7 +142,7 @@
 
 ### Q-SAE-9 §2 Tx 具象化
 
-- [x] **`claims` 与 meta event 行显式携带 `tx_ref`**(8 字节/行,相对 ~1KB/claim 可忽略;换来稳定审计、meta-only 事务支持、可迁移性);**3b 实现注记**:`claims.tx_ref` 与 `claim_meta.tx_seq` 依 2026-08-01 内联裁定共享同一 INTEGER 引用空间(`tx_ref ≡ tx_seq`);
+- [x] **`claims` 与 meta event 行显式携带 `tx_ref`**(8 字节/行,相对 Phase 4 实测 2.93–3.18KB/claim 可忽略;换来稳定审计、meta-only 事务支持、可迁移性);**3b 实现注记**:`claims.tx_ref` 与 `claim_meta.tx_seq` 依 2026-08-01 内联裁定共享同一 INTEGER 引用空间(`tx_ref ≡ tx_seq`);
 - [x] tx 级 S/共享 meta 落在 **tx object**(现有 `db/objects/tx/` 谱系,Stage A 裁定其介质),不物化 `__system__.tx` claim;C2 `6f1f543d` + C5 `2c73a97d`;
 - [x] **与 Q-SAE-1 的强耦合(rev.2 新增)**:per-call 事务粒度会使 tx 元数据条数 ≈ 业务写入条数,批次摊销失效。因此 Q-SAE-1 的裁定必须与本 ADR 联动 —— ✎ 提案:**ingest/批量面走批次 commit(一批 span = 一个 tx),交互式单写维持 per-call** —— 双粒度,由 API 面区分。Stage A 双粒度地基 + C5 批次默认写面已兑现;
 
@@ -176,14 +178,14 @@
 
 ### Q-SAE-9 §6 后果与测量
 
-- [ ] codex 修正成立:原"3.9KB→1KB"混算了 3b 与本 ADR 的收益。harness 改为**三组对照**:① 7 表现状;② 3 表无分层;③ 3 表+分层(tx 提升 + lazy)。按 meander 实际批次大小分布测(批次越小,tx 摊销越差 —— 与 §2 双粒度裁定联动)。
+- [x] codex 修正成立:原"3.9KB→1KB"混算了 3b 与本 ADR 的收益。harness 三组对照已正式落数:① 7 表;② 3 表无分层;③ 3 表+分层(tx 提升 + claim-domain lazy);batch=3 / batch=1 终态分别为 **2,933.487 / 3,177.071 B/claim**,详 Phase 4 节。批次越小,tx 摊销越差,与 §2 双粒度裁定一致;原 ~1KB headline 被实测否决而非通过改实现凑数。
 
 ### Q-SAE-9 §7 验收 gates
 
 1. [x] premise filter 差分测试(最高优先):统一解析器(含 UNSET、tx 默认继承、revoker 对称)vs 现行单层 last-wins,逐字节等价 + absence 语义专项(absent_ok 全路径);Phase 2 单层门 + Phase 3 `test_slice3b_phase3_tx_lift.py`;
 2. [x] INV-15:实现选择不物化 `__system__.tx` claim,tx 默认只存在于链承诺与内存解析索引,因此五个 claim 读面无新增物化物可泄漏;
 3. [x] chosen:语义变更用例集(时间倒挂、同刻、导入);另有 `seq`/`tx_ref` 篡改 fail-closed 门;
-4. [ ] 三组对照 bytes/claim + 求值工作集(lazy 生效验证:audit 类不进 eager 投影);**Partial(C3)**:audit/lazy 行已退出 eager 驻留并由 harness 同名指标钉住,Phase 4 三组最终测量未执行;
+4. [x] 三组对照 bytes/claim + 求值工作集:Phase 4 v3 harness 用 claim-scoped `trace_id`(lazy、非 tx-lift)钉住 `projected=3,000 / resident=0`,另用 `request_id` 单独 tx-lift;终态 eager meta-bearing rows 27,000→18,000,物理 meta rows 27,000→21,000;
 5. [x] `narrate()`/explain 无可观察回归;Phase 3 canonical 全套件含跨引擎 explain/narrate 面 `2867 passed / 32 skipped / 1 deselected / 1170 subtests`。
 
 ### Q-SAE-9 §8 裁定
@@ -454,9 +456,11 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 | B3 | `ingest_key` 兼容事件 + `Idempotency` 参数 + 两 helper | C2(§9.6 partial)+ 补钉 E 自动物化 | 参数与显式 meta 不匹配即拒 | 随 caller 改写另行完成 —— **归属待裁**(Slice 5 候选) | `test_idempotency_is_materialized_and_survives_reload` |
 | B4 | v0.2 七表迁移走廊(逻辑快照解析器 + migrate CLI v0.2 路径) | C4 `5c0c7e31` + 补钉 B/C | staging→verified replacement→可见归档 | **待发布裁定**(Q-SAE-6 时序定 v0.2 支持窗口) | test_a20e 迁移用例 + 合成七表 fixture |
 | B5 | deprecated `Ledger.append_claim` 兼容入口 | 3b 前(pre-existing) | A 项 system-pred 守卫已覆盖 | 待裁(caller 清点后) | 对应兼容用例 |
-| B6 | `_ledger_for_attach` 跨层调用(sdk/application/benchmark)+ tests→`_enc*`;补录(2026-08-02 复验):sdk/store.py:261-262 `_latest_meta_event_sequence` reach-through;补录(Phase 3 C3):baseline harness 为量化 eager workset 读取 `_lazy_meta_keys` 与 `_claim_meta_events`/`_meta_*`/`_anno_*` resident indexes;Phase 2 事件 resolver 四名已在补钉 D 转正并从本桥移除 | Stage A / Phase 0 / Phase 3 C3 | audit 冻结方法节同 commit 更新纪律;C3 常驻测试核对 projected lazy rows 非零而 resident lazy event objects 为零 | **3b Phase 4**(`_ledger_for_attach` 转正或收口;测试 helper 与 workset introspection 随 fixture/metrics 边界处理) | 无(转正即改引用) |
+| B6 | `_ledger_for_attach` 跨层调用(sdk/application/benchmark)+ tests→`_enc*`;补录(2026-08-02 复验):sdk/store.py:261-262 `_latest_meta_event_sequence` reach-through;补录(Phase 3 C3):baseline harness 为量化 eager workset 读取 `_lazy_meta_keys` 与 `_claim_meta_events`/`_meta_*`/`_anno_*` resident indexes;Phase 2 事件 resolver 四名已在补钉 D 转正并从本桥移除 | Stage A / Phase 0 / Phase 3 C3 | audit 冻结方法节同 commit 更新纪律;C3/F6 常驻测试核对 projected lazy rows 非零而 resident lazy event objects 为零 | **Slice 5 验尸单候选**:Phase 4 无核心 API 改动且正式测量仍需 resident-index introspection;后续以窄内部 introspection API 收口,并清点 sdk/application 的生产触达 | 无(转正即改引用) |
 | B7 | unmanaged `Store` adapter annotation 直写 fallback | Phase 2 meta-event writer 收编 | attach/Database-backed lifecycle 一律经 dbtx_v2 M op;仅 `from_schema_classes` 无 Database runtime 保留 direct Ledger compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | adapter managed-path tx-object golden + unmanaged adapter compatibility tests |
 | B8 | unmanaged `Ledger.append_meta` 直写 fallback | Phase 2 补钉 A managed writer 收编 | Database 构造时安装 `_managed_meta_writer`,managed 调用在任何 SQLite 直写前委托 `commit_changes`;仅无 Database owner 的 Ledger 保留 direct compatibility | **随 unmanaged lifecycle 去留裁定移除或 Database 化** | managed direct-path-unreachable/tx-object 回路 + unmanaged compatibility tests |
+
+**Phase 4 冻结处置(2026-08-03)**:B1/B2 明确进入 Slice 5 三项绑定/annotation 契约验尸单;B3/B5/B6 作为 Slice 5 intake 候选,须先做 caller 与内部 introspection 边界清点;B4 由 Q-SAE-6 发布支持窗口裁定,不伪装为 Slice 5 清理;B7/B8 绑定 unmanaged lifecycle 去留,只有该 lifecycle 被 Slice 5 收编时才同批拆。Phase 4 harness v3 只扩大既有 B6 计量字段,没有引入 B9 或未登记跨层桥。
 
 ### Known Gaps(Phase 2 补钉登记)
 
@@ -533,6 +537,70 @@ PYTHONPATH=src python -c 'import sys,types,pytest; sys.modules["readline"]=types
 - 套件 **2871/32/1/1172** 独立逐字复现;Phase 3 面 28/46;golden 零修改;树净;未 push;master 仍 `854d03b9`。
 
 **Phase 4 承接(本 slice 最后一个 Phase,测量 + docs 收尾)**:①三组正式对照测量(含 F6:用 claim 域 lazy key 分离 tx-lift 与惰性对驻留的贡献)+ ~1KB durable headline 复核/修正(当前 ~2.4-2.7×);②模块 docs(core/store meta-tiering 节、core/policy README、premise)+ spec 终态对齐;③genesis 措辞 3 shipped 文档清扫;④CHANGELOG 终稿;⑤**桥梁清单冻结**(B1-B8 收官验尸单交 Slice 5);⑥**收官量化**(用户批准机制:src/ 净行数 + 公开名净增减,与三组 bytes/claim 并列);⑦全 §7 acceptance box 逐条证据引用后打勾,blueprint implemented→archive。
+
+## Phase 4 正式测量与收官(2026-08-03,Codex)
+
+### 方法与 source pins
+
+- Harness:`benchmarks/slice3b_storage_baseline.py` v3,commit `8fb74836`;仍复用 Phase 0 的 3,000 claims、5 组 empty/filled、WAL checkpoint、排除 WAL/SHM/lock、N=5 中位数与 tx-object 唯一 byte-exact 分量的方法。
+- Group 1(7 表):Phase 0 在 pre-flip 代码上冻结的历史值(commit `5d9e7463`),不回老实现重采样。
+- Group 2(3 表未分级):source revision `e716aa39`(Phase 2 收官),以 v3 harness 的 `--profile three-table` 运行;五个 workload meta 全为 claim scope,无 `meta_keys` / `meta_defaults`。
+- Group 3(3 表+分级):source revision `338c1c12`(Phase 3 收官),以 `--profile three-table-tiered` 运行;五个 effective meta 不变,其中 `trace_id` 是 **claim-scoped lazy、非 tx-lift** 的 F6 隔离 key,`request_id` 是唯一 tx-lift key。
+- 两档精确参数:`--claims 3000 --repeats 7 --storage-runs 5`,分别 `--batch-sizes 3` 与 `--batch-sizes 1`;环境仍为 macOS 14.4.1 arm64 / Python 3.10.11 / SQLite 3.45.3。中位数只与中位数比较,抖动带仅作背景。
+
+### 三组 durable bytes/claim
+
+| Profile | 7 表 | 3 表未分级 | 3 表+分级 | 7→3 | 3→分级 | 7→终态 |
+|---|---:|---:|---:|---:|---:|---:|
+| batch=3(1,000 tx) | 3,805.543 | 3,157.010 | **2,933.487** | -17.042% | -7.080% | **-22.915% (1.297×)** |
+| batch=1(3,000 tx) | 4,016.940 | 3,354.754 | **3,177.071** | -16.485% | -5.296% | **-20.908% (1.264×)** |
+
+分量与抖动:
+
+| Profile | SQLite B/claim(median) | SQLite [min,max] bytes | tx-object exact B/claim | Durable [min,max] bytes |
+|---|---:|---:|---:|---:|
+| 7 表,batch=3 | 3,537.579 | [10,600,448, 10,653,696] | 267.964 | [11,404,341, 11,457,589] |
+| 3 表,batch=3 | 2,889.045 | [8,626,176, 8,695,808] | 267.964 | [9,430,069, 9,499,701] |
+| 3 表+分级,batch=3 | 2,639.189 | [7,868,416, 7,938,048] | 294.298 | [8,751,309, 8,820,941] |
+| 7 表,batch=1 | 3,540.309 | [10,555,392, 10,633,216] | 476.631 | [11,985,285, 12,063,109] |
+| 3 表,batch=1 | 2,878.123 | [8,626,176, 8,667,136] | 476.631 | [10,056,069, 10,097,029] |
+| 3 表+分级,batch=1 | 2,621.440 | [7,831,552, 7,880,704] | 555.631 | [9,498,445, 9,547,597] |
+
+### 求值工作集与 F6 分离归因
+
+| Metric(3,000 claims,cold attach) | 7 表 | 3 表未分级 | 3 表+分级 |
+|---|---:|---:|---:|
+| persisted physical meta rows | 27,000 | 24,000 | **21,000** |
+| effective Ledger meta rows | 24,000(projected baseline) | 24,000 | 24,000 |
+| eager projection meta-bearing rows | 27,000 | 27,000 | **18,000** |
+| resident meta index references total | 159,000 | 231,000 | **162,000** |
+| resident tx-default objects(batch=3 / batch=1) | 0 / 0 | 0 / 0 | 1,000 / 3,000 |
+
+- **lazy 单独归因**:`trace_id` 仍是一条 claim physical event/claim 且 effective/projected 共 3,000 行,但 cold attach `resident_claim_domain_lazy_event_objects=0`;它没有被 tx-lift 平凡消掉。终态在 lazy+tx-lift 合并后 eager meta-bearing rows 比未分级少 9,000(-33.333%),但 lazy 的独立证据只取该 key 的“可投影 3,000 / 驻留 0”,不把全部降幅冒归给 lazy。
+- **tx-lift 单独归因**:`request_id` 从 3,000 条 claim rows 变为每 tx 一个默认,因此 physical meta 24,000→21,000;batch=3 只驻 1,000 个 defaults,batch=1 驻 3,000 个。它同时增加 canonical tx 历史成本(batch=3 +26.334 B/claim;batch=1 +79.000 B/claim),证明批量摊销是实质变量。
+- 事件索引使未分级 3 表的 resident reference 计数高于旧 7 表(231k vs 159k);分级降到 162k,相对未分级 -29.870%,但仍比旧基线 +1.887%。这说明 3b 的主收益是去物理重复与分离 eager/audit 工作集,不是把事件历史索引成本抹掉。
+
+### Read harness 观测(非 §7 latency gate)
+
+| Profile | premise scan batch=3 / 1(ms) | chosen batch=3 / 1(ms) | representative Ledger suite batch=3 / 1(ms) |
+|---|---:|---:|---:|
+| 7 表 | 7.937 / 8.773 | 9.353 / 9.260 | 1.297 / 1.413 |
+| 3 表未分级 | 23.846 / 24.215 | 10.409 / 10.454 | 2.357 / 2.235 |
+| 3 表+分级 | 30.172 / 30.234 | 17.903 / 18.983 | 815.294 / 806.466 |
+
+终态 full Ledger suite 刻意包含多次 `find_meta` / `find_annotations` 全投影;lazy key 每次按需从 SQL 重建,因此该 compatibility-heavy suite 显著变慢。3b 没有 read-latency acceptance gate且 Phase 4 禁止为 headline 改实现;该观测交 Stage B prepared-query/cache 性能工作,不得被写成“惰性免费”。
+
+### ~1KB headline 对账
+
+原“~3.9KB→~1KB”不成立。正式终态是 **2.933KB/claim(batch=3)** 与 **3.177KB/claim(batch=1)**,只比七表少 22.915% / 20.908%。差距来自四个被原估算混掉的事实:(1) `claim_meta` 现在是有六列事件 PK 与二级索引的历史表,不是只保留最终值;(2) lazy 只降 eager memory,不删除 durable claim event;(3) F6 可比 profile 只把一个 key 提升到 tx,另一个 audit key必须留在 claim 域证明真惰性;(4) dbtx_v2 历史本身仍占 294/556 B/claim。SQLite allocation 终态仍为 2.62–2.64KB/claim,即使忽略 tx object 也超过 1KB。结论是修正 headline,不为凑数动实现。
+
+### 收官量化与桥冻结
+
+- Slice 起点=`e74775bb`;终态 `src/` diff **+3,540 / -502 = net +3,038 lines**,41 files。该口径包含 `src/` 内模块 docs,不含 tests/benchmarks/workflow。
+- `factgraph.sdk.__all__`:87→88,**公开名净增 +1**,唯一新增 `MetaKeyPolicy`;`SchemaTransitionInput` 未重新公开。
+- B1-B8 已在桥梁清单原表冻结并逐项分流;B1/B2 确定交 Slice 5,B3/B5/B6 为 intake 候选,B4 归发布窗口,B7/B8 归 unmanaged lifecycle。Phase 4 无新桥。
+- Module docs:core/store 三表+事件序+五属性+tx-lift 已补;core/policy README 新建并把 premise closure/two-level effective/chosen seq 写为当前真相;三份 shipped genesis 文档统一改为 A/R/M import transaction;spec 与 CHANGELOG 终态对齐。
+- Verification:dbtx_v2 golden + pre-flip read-equivalence + F6 聚焦面 **13 passed / 4 subtests**;canonical `PYTHONPATH=src` + process-only readline shim + approved ignore/deselect = **2871 passed / 32 skipped / 1 deselected / 1172 subtests**;changed Python ruff 与 `git diff --check` 全绿。既有 golden fixture 零修改,无生产 `src/*.py` 变更。
 
 ## Deviations
 

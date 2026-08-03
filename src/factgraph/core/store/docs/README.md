@@ -1,7 +1,7 @@
 # Core Store Docs
 
 - Applicable scope: `src/factgraph/core/store`
-- Last updated: 2026-08-02
+- Last updated: 2026-08-03
 - Audience: maintainers of the Ledger, Database commit protocol, and durable
   workspace lifecycle
 
@@ -16,8 +16,10 @@ validation, repair, migration, and frozen assertion-set objects.
 
 ## Current Responsibilities
 
-- Persist append-only claim, argument, metadata, annotation, and revocation
-  rows through `Ledger`.
+- Persist append-only claims and claim-scoped metadata events in the three-table
+  `claims` / `claim_meta` / `ledger_meta` layout. Revocations are ordinary
+  internal claims with `pred_id="__system__.revokes"`; argument and annotation
+  compatibility reads are projections, not separate tables.
 - Commit one logical change batch through `Database.commit_changes(...)` as one
   SQLite transaction, including the factual rows, metadata rows, CAS-protected
   head, schema anchor, and state digest.
@@ -34,10 +36,11 @@ validation, repair, migration, and frozen assertion-set objects.
 `data_digest` property is a compatibility alias for `state_digest`.
 
 `Database.commit_changes(...)` accepts assertions, revocations, metadata
-appends, or one isolated schema transition. Assertion ids are server-generated
-UUID4 tokens. A transaction object commits only the normalized delta for that
-batch plus its parent, sequence, schema digest, and `digest_scheme`; it does
-not hash the whole ledger.
+appends, batch metadata defaults, or one isolated schema transition. Assertion
+ids are server-generated UUID4 tokens. A transaction object commits only the
+normalized delta for that batch plus its parent, sequence, schema digest,
+`digest_scheme`, and optional canonical `meta_defaults`; it does not hash the
+whole ledger.
 
 The low-level `SchemaTransitionInput` path is deliberately policy-free: it
 commits and validates an already-authorized transition but does not decide
@@ -58,6 +61,44 @@ Effective reads choose the greatest event per `(asrt_id, key)`; a dual-NULL
 `kind`/`value` event is an internal UNSET tombstone. `Ledger.latest_event_sequence()`
 returns the inclusive current ledger boundary used by evidence envelopes. It
 does not alter `state_digest`, support digests, or view-snapshot digests.
+
+## Three-table Shape and Metadata Tiering
+
+The durable SQLite schema contains exactly three non-internal tables:
+
+```text
+claims(seq, asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref)
+claim_meta(asrt_id, key, kind, value, tx_seq, op_ordinal)
+ledger_meta(key, value)
+```
+
+`claims.tx_ref` is the producing transaction's integer `tx_seq`. The retained
+nullable `rest_terms` column is a narrow legacy PyReason carrier; new
+application and SDK writes use `value` / `value_tag` and write `[]`. Dropping
+`rest_terms`, rewriting the adapter, and enforcing strict unary INV-9 are one
+Slice 5 change, not independent cleanups.
+
+Schema IR may declare a canonical-minimal `meta_keys` mapping. Each key has five
+orthogonal properties: `reader_class`, `premise_eligible`, `load_policy`,
+`storage_scope`, and `query_indexed`. Omitted properties mean the Phase 2
+defaults (`runtime`, `false`, `eager`, `claim`, `false`); default-valued
+properties and an empty mapping are omitted from canonical schema bytes.
+`query_indexed` is declarative in v0.3 and does not yet create a dedicated
+physical index.
+
+Keys declared `load_policy="lazy"` remain queryable from `claim_meta` but do
+not occupy the eager event/meta/annotation indexes. Keys declared
+`storage_scope="tx_liftable"` may be supplied once in
+`Database.commit_changes(meta_defaults=...)`. The sorted defaults are committed
+in the tx object's canonical bytes and inherited by every assertion and
+revoker in that batch. A claim event wins over its tx default; an internal
+claim-level UNSET removes inheritance. Tx defaults never use UNSET and no
+fourth table or ledger-meta mirror is created.
+
+Premise configuration is closed against the schema. Only the pinned built-ins
+`provenance_class` and `origin_binding`, or explicitly declared keys with
+`premise_eligible=true`, can control evaluation visibility. See
+`core/policy/README.md` and `premise_filter.py` for the evaluation boundary.
 
 `assertion_digest`, `schema_digest`, and `tx_id` are Database-owned assertion
 metadata keys. Assertion, revocation, and later meta-append inputs reject the
@@ -109,8 +150,9 @@ writes are already durable; save only updates `last_saved_at_epoch_ns` in
 `python -m factgraph migrate-workspace <path>` is the opt-in route from a
 closed v0.2 `ledger.db` workspace. It builds and verifies a staging v0.3
 workspace, preserves legacy assertion/revocation rows and ids, and writes one
-explicit genesis repair anchor over the imported active set because the old
-per-commit history cannot be reconstructed. The default keeps the complete old
+explicit genesis import transaction made from ordinary assertion, revocation,
+and append-meta operations because the old per-commit history cannot be
+reconstructed. The default keeps the complete old
 workspace under `workspace.legacy.<UTC timestamp>/`; `--no-archive` discards
 that backup only after verified replacement. Migration is never automatic.
 
@@ -157,6 +199,13 @@ is writable and routes canonical SDK writes through the caller-owned Database.
 ## Test Entry Points
 
 - `tests/test_storage_hardening_phase1.py`
+- `tests/test_dbtx_v2_golden.py`
+- `tests/test_slice3b_phase1_read_equivalence.py`
+- `tests/test_slice3b_phase2_meta_events.py`
+- `tests/test_slice3b_phase3_meta_policy.py`
+- `tests/test_slice3b_phase3_tx_lift.py`
+- `tests/test_slice3b_phase3_lazy_meta.py`
+- `tests/test_slice3b_phase3_chosen_seq.py`
 - `tests/test_application_entity_write.py`
 - `tests/test_sdk_batch_application_delegate.py`
 - `tests/test_db_identity_substrate.py`
@@ -166,8 +215,8 @@ is writable and routes canonical SDK writes through the caller-owned Database.
 
 ## Related Historical Blueprints
 
-- `workflow/blueprints/active/2026-07-31_stage-a-lifecycle-convergence.md`
-  — current Stage A lifecycle and storage-hardening implementation contract.
+- `workflow/blueprints/archive/2026-07-31_stage-a-lifecycle-convergence.md`
+  — implemented Stage A lifecycle and storage-hardening contract.
 - `workflow/design/decisions/active/2026-07-31_q-sae-7-data-digest-contract-decision.md`
   — dual commitment, fail-closed, and digest ownership rationale.
 - `workflow/design/decisions/active/2026-07-31_q-sae-9-meta-tiering-tx-reification-decision.md`

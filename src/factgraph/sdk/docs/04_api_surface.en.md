@@ -504,7 +504,8 @@ SDK code should use `FactGraph.create(..., path=...)` for workspace
 persistence, `Rule(...)` / `Inference(...)` as in-memory values, and
 `python -m factgraph migrate-workspace <path>` for legacy workspaces that still
 use the v0.2 layout. The CLI preserves legacy rows and ids, creates an explicit
-genesis repair anchor, and retains the complete source workspace by default.
+genesis import transaction using ordinary assertion, revocation, and
+append-meta operations, and retains the complete source workspace by default.
 
 ---
 

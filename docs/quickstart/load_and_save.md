@@ -232,7 +232,8 @@ python -m factgraph migrate-workspace path/to/workspace
 The supported source is a complete v0.2 workspace whose authoritative SQLite
 file is `ledger.db`. The command stages and verifies a v0.3 replacement,
 preserves assertion/revocation rows and ids, and writes an auditable genesis
-repair anchor because the old per-commit history cannot be reconstructed.
+import transaction using ordinary assertion, revocation, and append-meta
+operations because the old per-commit history cannot be reconstructed.
 `FactGraph.load_workspace(...)` never migrates automatically.
 
 Annotation migration follows the source rows exactly. A late `append_meta`

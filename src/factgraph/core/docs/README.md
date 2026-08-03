@@ -26,8 +26,10 @@ contributors), not SDK end-users learning the surface.
   Core semantics scaffolding: `SemanticsProfile` validation and
   inspection helpers for future runtime projection work.
 - [../store/docs/README.md](../store/docs/README.md) — Core store
-  substrate docs: `Ledger` compatibility storage and the Database
-  identity boundary built above it.
+  substrate docs: three-table `Ledger` storage, metadata events/tiering,
+  and the Database identity boundary built above it.
+- [../policy/README.md](../policy/README.md) — Active/chosen projection,
+  premise-key closure, and two-level effective metadata policy.
 
 > Note: the `04` numeric prefix was historically split between two
 > different topics (`04_public_contract_v1` + `04_service_layer`);

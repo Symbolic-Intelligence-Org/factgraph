@@ -1,8 +1,8 @@
 # Task Blueprint: Slice 3b — Ledger 7→3 表迁移 + claim_meta 事件化 + Meta 分级
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-01
-- Last Updated: 2026-08-02
+- Last Updated: 2026-08-03
 - Branch: `v0.3.0-impl-storage-hardening-2026-07-31`(与 Stage A 同一 v0.3.0 发布线,per Q-SAE-6 四合同同窗)
 - Related Modules:
   - `src/factgraph/core/store/ledger.py`(_DDL 与全部内存索引)/ `database.py` / `runtime.py`
@@ -63,36 +63,58 @@ Stage A 完成写链与生命周期收敛,但表形态仍是 7 表(3 组内建�
 
 ## 7. Acceptance
 
-- [ ] 全套件基线不退(2771/32/1 起点;known deselect 唯一);
-- [ ] Ledger 读 API 逐字节等价(同逻辑写序列,7 表 vs 3 表,全读 API 对照);
-- [ ] `__system__.revokes` INV-15 五读面不外泄 + 推理端 digest 一致门(support/view_snapshot 逐字节);
-- [ ] 重复键 append_meta 序列重放等价;UNSET/tombstone 全路径;
-- [ ] premise filter differential(两层 vs 单层)逐字节等价;
-- [ ] chosen seq 迁移语义变更用例集通过并入 CHANGELOG;
-- [ ] dbtx_v2 golden fixture 常驻(Phase 0 建立,全程不破);
-- [ ] 三组对照测量落数(预期 ~3.9KB → ~1KB 量级,实测为准);
-- [ ] atomic flip 无数据搬迁(alpha);migration CLI 对 3b 前 v0.3 工作区的升级路径裁定并实现或显式拒绝+指引;
-- [ ] 受影响模块 docs + spec 修订同步;
-- [ ] **收官量化**(用户批准 2026-08-02 的进程机制):Outcome 记录本 slice 的 `src/` 净行数变化与公开名净增减,与三组对照并列(Phase 4 落数);桥梁清单(audit log 专节)收官冻结。
+- [x] 全套件基线不退(2771/32/1 起点;known deselect 唯一);**证据**:Phase 4 canonical gate **2871 passed / 32 skipped / 1 deselected / 1172 subtests**。
+- [x] Ledger 读 API 逐字节等价(同逻辑写序列,7 表 vs 3 表,全读 API 对照);**证据**:audit “Phase 1 实施证据” + `tests/test_slice3b_phase1_read_equivalence.py` 四组 pre-flip golden。
+- [x] `__system__.revokes` INV-15 五读面不外泄 + 推理端 digest 一致门(support/view_snapshot 逐字节);**证据**:audit Phase 1 `INV-15 + digest 冻结` 映射。
+- [x] 重复键 append_meta 序列重放等价;UNSET/tombstone 全路径;**证据**:audit Q-SAE-8 §5 四 gate + Phase 2 收官。
+- [x] premise filter differential(两层 vs 单层)逐字节等价;**证据**:`test_slice3b_phase2_meta_events.py` + `test_slice3b_phase3_tx_lift.py`,audit Q-SAE-9 §7.1。
+- [x] chosen seq 迁移语义变更用例集通过并入 CHANGELOG;**证据**:`test_slice3b_phase3_chosen_seq.py` 时间倒挂/同刻/v0.2 import + CHANGELOG Breaking。
+- [x] dbtx_v2 golden fixture 常驻(Phase 0 建立,全程不破);**证据**:`tests/test_dbtx_v2_golden.py` serializer/commit/adapter/repair/meta-default chains,既有 fixture 零修改。
+- [x] 三组对照测量落数(实测为准);**证据**:audit “Phase 4 正式测量与收官”—— batch=3 / batch=1 终态 **2,933.487 / 3,177.071 B/claim**,原 ~1KB headline 被实测修正。
+- [x] atomic flip 无数据搬迁(alpha);migration CLI 对 3b 前 v0.3 工作区的升级路径裁定并实现或显式拒绝+指引;**证据**:`test_new_workspace_has_exact_three_table_shape_and_tx_refs` / `test_seven_table_workspace_is_rejected_with_recovery_guidance` / released v0.2 fixture direct migration。
+- [x] 受影响模块 docs + spec 修订同步;**证据**:core/store docs、core/policy README、premise contract、ledger spec、CHANGELOG 与三份 migration docs 的 Phase 4 diff。
+- [x] **收官量化**(用户批准 2026-08-02 的进程机制):Outcome 记录本 slice 的 `src/` 净行数变化与公开名净增减,与三组对照并列;audit 桥梁清单 B1-B8 已冻结并分流。
 
 ## 8. Implementation Plan
 
-1. [Phase 0] goldens + 锚点重验 + spec 修订 + 基线测量(独立 commit);
-2. [Phase 1] 新 DDL + 七步精简 + 索引重构 + 读等价 gate;
-3. [Phase 2] 事件序解析统一 + UNSET + as-of + parity 校验 + audit 接口;
-4. [Phase 3] 属性声明 + premise 封闭 + tx-lift + 惰性投影 + chosen 迁移;
-5. [Phase 4] 三组测量 + docs/spec/CHANGELOG。
+1. [x] [Phase 0] goldens + 锚点重验 + spec 修订 + 基线测量(独立 commit);
+2. [x] [Phase 1] 新 DDL + 七步精简 + 索引重构 + 读等价 gate;
+3. [x] [Phase 2] 事件序解析统一 + UNSET + as-of + parity 校验 + audit 接口;
+4. [x] [Phase 3] 属性声明 + premise 封闭 + tx-lift + 惰性投影 + chosen 迁移;
+5. [x] [Phase 4] 三组测量 + docs/spec/CHANGELOG。
 
 每步一 commit;Phase 边界停下,Claude 对抗审计放行。
 
 ## 9. Docs To Update
 
-- `ledger-schema-specification.zh.md`(claim_meta 事件化修订 + §9.7 supersede 标注 + 终态对齐)
-- `src/factgraph/core/store/docs/README.md`(表形态、事件序、meta 分级)
-- premise/policy 相关模块 docs;CHANGELOG(chosen 语义变更、ingest_keys 退场等 Breaking 项)
+- [x] `ledger-schema-specification.zh.md`(claim_meta 事件化修订 + §9.7 supersede 标注 + 终态对齐)
+- [x] `src/factgraph/core/store/docs/README.md`(表形态、事件序、meta 分级)
+- [x] premise/policy 相关模块 docs;CHANGELOG(chosen 语义变更、ingest_keys 退场等 Breaking 项)
 
-## 10. Deviations
+## 10. Outcome
+
+Slice 3b 在未发布 alpha 窗口完成 7→3 表 atomic flip,将 revocation 收为 system claim、将 `claim_meta` 定为可重放事件流,并把五属性声明、tx defaults、claim override/UNSET、lazy workset 与 chosen-by-seq 接入同一 Database/tx chain。dbtx_v2、LtHash state element、support digest、view snapshot digest 与 pre-flip Ledger 读面 goldens均未漂移。
+
+### 正式量化
+
+| Profile | 7 表 durable B/claim | 3 表未分级 | 3 表+分级 | 7→终态 |
+|---|---:|---:|---:|---:|
+| meander batch=3 | 3,805.543 | 3,157.010 | **2,933.487** | **-22.915%** |
+| interactive batch=1 | 4,016.940 | 3,354.754 | **3,177.071** | **-20.908%** |
+
+终态 physical meta rows 为 21,000(vs 27,000),eager meta-bearing rows 为 18,000(vs 27,000)。F6 claim-domain `trace_id` 保持 3,000 行可投影但 eager resident=0;`request_id` 单独 tx-lift 为每 tx 一个 default。原“~1KB/claim”预期被正式数据否决:SQLite alone 仍为 2.62–2.64KB/claim,加 canonical tx history 后为 2.93–3.18KB/claim;不为 headline 改实现。
+
+### 工程规模与公开面
+
+- Slice base `e74775bb`→终态:`src/` **+3,540 / -502,net +3,038 lines**,41 files(包含 `src/` 内模块 docs;不含 tests/benchmarks/workflow)。
+- `factgraph.sdk.__all__` **87→88,net +1**;唯一新增公开名为 `MetaKeyPolicy`。
+- 桥梁清单 B1-B8 已冻结:B1/B2 确定交 Slice 5,B3/B5/B6 为 intake 候选,B4 归 release window,B7/B8 归 unmanaged lifecycle;Phase 4 无新桥。
+
+## 11. Deviations
 
 - **Phase 1 annotation compatibility**:Q-SYS-B Q15.3 的“annotation 无现役写入源”前提经 PyReason/ProbLog accept 路径核验为假。依 2026-08-02 内联裁定,不增加未入链物理列;以 initial-meta 合同投影 + hidden-key M companion 事件保住 live/reload/replay,维度清理与引擎契约重设计捆绑至 Slice 5。
 - **§9.6 partial**:物理 `ingest_keys` 表已删除,但 `claim_meta.ingest_key` compatibility 事件、Ledger `Idempotency` 参数及 compute/lookup helper 保留。Phase 1 补钉确保只传参数也自动物化事件,关闭 3 表同句柄与 cold reload 失忆;正式参数/helper 退场须随 caller 改写另行完成。
 - **Souffle effective-only facts**:Phase 2 的统一 meta-event 解析使 `_build_fact_rows` 从历史兼容投影切到 effective-only 元数据事实集;这是 blueprint §3“adapter 行为不变”外的正当波及。superseded 值与 UNSET tombstone 不再进入求值事实,仅保留于 audit history;补钉 E 以无 Souffle 二进制依赖的 adapter-row 测试钉住。
+- **~1KB headline 修正**:正式 N=5 中位数仅达到 20.9–22.9% durable reduction。事件 PK/索引、claim-domain lazy 不删磁盘行、F6 单独归因 profile 与不可省略 tx history 都是原估算漏项;Phase 4 依指令只修文档,未为凑数改协议或表结构。
+- **B6 未在 3b 内完全退休**:Phase 2 已把四个 meta-event resolver 转正,但 `_ledger_for_attach` 与 resident-index introspection 仍被 sdk/application/benchmark 使用。Phase 4 的正式工作集测量需要该 introspection且本 Phase 无核心 API 改动,故作为 Slice 5 intake 候选冻结;这是 Goal 7 的明示 partial,不是“已完成”的假绝对句。
+- **Lazy compatibility full-read cost**:正式 harness 中反复全量 `find_meta` / `find_annotations` 的 representative suite 由 2.24–2.36ms(3 表 eager)升至 806–815ms(tiered),因为 lazy rows 每次按需从 SQL 重建。该 suite 不是 §7 latency gate;结果如实交 Stage B prepared-query/cache 工作,模块 docs 不声称 lazy 免费。

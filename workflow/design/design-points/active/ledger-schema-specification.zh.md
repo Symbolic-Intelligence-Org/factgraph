@@ -3,7 +3,7 @@
 - Status: working / specification v2（claim-first + meta event model）
 - Authority: candidate design / non-authoritative reference; not current implementation truth
 - First draft: 2026-05-27
-- Last updated: 2026-08-01(Q-SAE-8 claim_meta 事件化 supersede 同步)
+- Last updated: 2026-08-03(Slice 3b 终态同步)
 - Scope: FactGraph ledger 数据格式终态 — 表 schema、SQL canonical 编码契约、digest path 纪律、structural 不变量族、数据精简 migration 路径
 - Parent: 取代 `identity-and-data-model-redesign.zh.md`(之前的 umbrella doc,已或即将归档);与 `append-only-ledger-evaluation.zh.md`(背景评估)配套
 - Co-roadmap: [`factgraph-storage-architecture-evolution.zh.md`](factgraph-storage-architecture-evolution.zh.md) — lifecycle 收敛 + SQL 读路径 + lazy eval 演化路线;本 design-point 的 Slice 3b 实施 = 该 essay Stage A 完成后启动(详见 §10)
@@ -13,7 +13,7 @@
 
 ```text
 §1   目的与范围
-§2   演化总览(current 7-table → claim-first 3-table)
+§2   演化总览(pre-flip 7-table → shipped claim-first 3-table)
 §3   表结构(claims / claim_meta / ledger_meta)
 §4   结构性不变量(12 条)
 §5   SQL value 列 canonical 编码契约
@@ -59,9 +59,9 @@
 
 ## §2 演化总览
 
-### §2.1 当前形态(7 张表)
+### §2.1 Slice 3b 前基线形态(7 张表)
 
-来源:[`src/factgraph/core/store/ledger.py`](../../../../src/factgraph/core/store/ledger.py) `_DDL` 常量 + [`src/factgraph/core/docs/01_architecture.en.md §4`](../../../../src/factgraph/core/docs/01_architecture.en.md)。
+来源:Slice 3b 翻转前 commit `3aafbd4b` 的 `src/factgraph/core/store/ledger.py` `_DDL` 常量 + Phase 0 冻结 fixture。下列是 migration 输入,**不是当前 shipped DDL**。
 
 ```text
 [数据表 5 张]
@@ -76,7 +76,7 @@
   ledger_meta     (key, value)
 ```
 
-### §2.2 终态形态(claim-first,3 张表)
+### §2.2 当前 shipped 形态(claim-first,3 张表)
 
 ```text
 [数据表 2 张]
@@ -91,7 +91,7 @@
 
 ### §2.3 关键设计承诺
 
-> **Alpha 阶段说明**:FactGraph 当前处于 **alpha 版本状态**,**无生产数据 / 已发布版本的兼容性负担**。所有 schema 变更、migration、wire format 演化都按"代码 + schema 一次性重构"处理,不需要数据搬迁工具、跨版本 reader dispatch、view snapshot 兼容层等。下面所有承诺都在此前提下设计。
+> **Alpha 阶段说明**:7 表 v0.3 只是未发布的开发中间格式,因此 3b 对它执行代码 + DDL atomic flip,不提供原位升级 reader。已存在的 v0.2 `ledger.db` 工作区是唯一受支持的迁移输入,由 opt-in `migrate-workspace` CLI 直接生成 3b 三表终态;7 表 v0.3 工作区 fail closed 并指引重建或从 v0.2 源重迁移。dbtx_v2、support digest 与 view snapshot digest 的既有 canonical bytes 仍受兼容门约束。
 
 - **ledger 不承担 idempotency 责任**:write 不做 content dedup;同内容多次写入产生多个独立 asrt_id;idempotency 由上层 API/SDK policy 处理
 - **Meta 是 claim 身份下的不可变事件流**:`claim_meta` 每行写入后 immutable;同一 `(asrt_id, key)` 可追加多条事件,禁止 in-place UPDATE/REPLACE;effective meta 由事件序投影
@@ -430,6 +430,13 @@ INV-6(application-first runtime authority)/ INV-7a/b/c(Identity = immutable Clai
 
 **Meta 分级声明(2026-08-03 内联裁定)**:Schema IR 顶层可选 `meta_keys` 以 key→五属性对象声明运行时策略;默认矩阵为 `reader_class=runtime / premise_eligible=false / load_policy=eager / storage_scope=claim / query_indexed=false`,canonical bytes 省略等于默认值的属性并在空映射时省略整段。`{provenance_class, origin_binding}` 是不入 IR 的内建隐式 `premise_eligible` 集;显式声明优先并可收紧。该内建集合由模块常量与常驻测试钉死,未来变更必须走 schema-evolution 决策线,不得作为普通代码改动漂移。
 
+**tx-lift 与惰性读取(3b 终态)**:
+
+- `storage_scope="tx_liftable"` 只授予“可作为批次默认”的能力;非空默认以按 key 排序且唯一的 `meta_defaults` 进入 tx object canonical bytes/`tx_id`,空值时字段与 domain-separated suffix 双省略,不建第四张表
+- effective 解析逐 key 两层 last-wins:claim event(含 UNSET)优先;该 claim 没有 key 事件时才按 `claims.tx_ref` 继承 tx 默认;tx 默认本身不允许 UNSET
+- `load_policy="lazy"` 的 claim event 仍留在 `claim_meta` 且按需可读,但不进入 eager event/meta/annotation 内存索引;`query_indexed=true` 在 v0.3 仅进入 schema identity,尚无专用物理索引消费者
+- `reader_class` / `premise_eligible` / `load_policy` / `storage_scope` / `query_indexed` 是正交属性;历史 S/J/F/T 只作常用组合速记,不是第二套运行时分类表
+
 | key | 格式 | Role | 备注 |
 |---|---|---|---|
 | `source` | string | source-meta | 事实来源标识(user / import / inference / adapter:problog 等)|
@@ -727,10 +734,10 @@ Field-level `delete` 是更高层的 cell-clearance 组合操作;assertion-level
 
 ## §9 数据精简 migration 路径(7 条)
 
-> **Alpha 阶段说明**:本章节描述从当前 7 表 schema 演化到目标 3 表 schema 的**逻辑分解**。在 alpha 状态下:
+> **Alpha 阶段说明**:本章节描述从 3b 前 7 表 schema 演化到当前 3 表 schema 的**逻辑分解**。在 alpha 状态下:
 >
-> - **无生产数据搬迁需求** — drop 旧表 + create 新表即可,不需要 ALTER TABLE 的数据 backfill 工具
-> - **无跨版本兼容层** — 一次性 atomic schema flip + 代码同步重写
+> - **7 表 v0.3 不做原位搬迁** — drop 旧 DDL + create 新 DDL 的 atomic code flip,不需要 ALTER TABLE backfill 或 reader dispatch;遗留 7 表 dev workspace 明确拒绝
+> - **v0.2 有 sanctioned 迁移走廊** — `migrate-workspace` 从完整 `ledger.db` 逻辑快照直接重放为 3b 三表 A/R/M genesis import transaction,不经过 7 表 v0.3
 > - **migration 时序**(§9.8)是 blueprint 拆分时的逻辑参考,不是必须的分阶段实施
 
 按 7 → 3 张表的演化分解:
@@ -863,7 +870,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 | 顺序 | Track | 来源 | Scope |
 |---|---|---|---|
 | 1 | Lifecycle | storage-architecture-evolution §3.1 Stage A | 收敛 commit_assertions,删 entities.create/delete 漏洞,统一 tx 链 |
-| 2 | Format | **本 design-point §9 Slice 3b** | 7 → 2 数据表 + revokes-as-Claim + claim_args/annotation_rows/ingest_keys drop |
+| 2 | Format | **本 design-point §9 Slice 3b** | 7 → 3 张表(2 数据 + 1 infra)+ revokes-as-Claim + claim_args/annotation_rows/ingest_keys drop |
 | 3 | Read path | storage-architecture-evolution §3.2 Stage B | SQL prepared statement,内存索引降级 cache |
 | 4 | Engine | storage-architecture-evolution §3.3 Stage C | eval bulk_load(pred_ids) + discard;4 engine 各适配 |
 | 5(可选)| Deprecate | storage-architecture-evolution §3.4 Stage D | 仅当 lazy 性能 ≥ eager,废弃 eager mode |
@@ -946,7 +953,7 @@ Stage B 把 `Ledger.find_*` 系列迁到 SQL prepared statement(详 storage-arch
 - [`src/factgraph/core/store/ledger.py`](../../../../src/factgraph/core/store/ledger.py) — Slice 3b 三表 ledger schema + dual-carrier DDL + 写入路径
 - [`src/factgraph/core/protocol/tup_v1.py`](../../../../src/factgraph/core/protocol/tup_v1.py) — `tup_v1` 字节级 canonical 编码(INV-4 锁定)
 - [`src/factgraph/core/protocol/idref_v1.py`](../../../../src/factgraph/core/protocol/idref_v1.py) — 当前 entity_ref 编码协议(详见 identity 重设计)
-- [`src/factgraph/core/evidence/write_protocol.py`](../../../../src/factgraph/core/evidence/write_protocol.py) — 写入/撤销路径(精简 6 后简化:取消 Idempotency 参数链;精简 5 后加 META_KEY_REGISTRY 校验)
+- [`src/factgraph/core/evidence/write_protocol.py`](../../../../src/factgraph/core/evidence/write_protocol.py) — application 写入/撤销规划与 system/reserved 守卫;`Idempotency` 参数链及 `ingest_key` compatibility 事件依 §9.6 partial 暂留
 - [`src/factgraph/core/docs/01_architecture.en.md §4`](../../../../src/factgraph/core/docs/01_architecture.en.md) — 当前四层数据架构权威说明(将被本 spec 内容取代)
 
 ### §11.4 外部启蒙 / cross-validation reference
@@ -1013,3 +1020,4 @@ ledger 层 ↔ API 层的核心映射:
 - [x] 2026-05-28: 与 [`identity-mechanism-redesign.zh.md`](identity-mechanism-redesign.zh.md) Step 1 锁定同步:`:__exists__` → `:exists`(命名对齐源码);§3.1 加 Step 1 implication 注;§11.5 加上层 API 映射 pointer 到 identity §12
 - [x] 2026-05-29: X-style consistency pass — §8.3 `fg.read.snapshot` → `fg.entities.get` + `idref_v1` 算 e_ref;§8.4 `active_assertions.where(source=)` → `.active.where(_meta={})`;§3.1 `:exists` 标 **legacy / transitional**(非 Step 1 终态);§11.5 全面更新 — `entities.create` 写 Identity 镜像 Claim、`entities.delete` 整批撤销、`fields.set/add/retract/delete` 拒绝 Identity 字段、`assertions.retract` 拒绝 Identity Claim 单独撤销(INV-7c);§4 总览更新 — INV-7 → INV-7a/b/c、INV-8 消解
 - [x] 2026-05-29: INV-7c 策略 C 实施同步 — §11.5 加 application 层 Identity pred_id set 推荐策略 + 拒绝 claim_meta tag 策略(B)+ schema evolution 不允许 Identity↔Field 互转的配套约束
+- [x] 2026-08-03:Slice 3b 终态同步 — §2 把 7 表标为 pre-flip 基线、§5.3 补五属性/tx-lift/lazy 两层解析、§9 区分 7 表 v0.3 拒绝与 v0.2 sanctioned CLI、§10/§11 修正三表与 Idempotency partial 口径
