@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from factgraph.core.rules.where_ast import Const, PredAtom, Var
 from factgraph.application.explain import evidence_graph_to_dict
 from factgraph.application.protocol.explanation_render import narrate_evidence
@@ -15,6 +17,8 @@ from factgraph.sdk import (
     RuleProgramClause,
     RuleProgramFact,
     RuleProgramGoal,
+    SDKStoreError,
+    PredicatePremiseBlock,
 )
 
 
@@ -234,6 +238,28 @@ def test_evaluation_scope_can_relax_one_filter_without_mutating_graph_config() -
     }
     assert evidence_assertion in advisory_ids
     assert authoritative.view_snapshot_digest != advisory.view_snapshot_digest
+
+
+def test_evaluation_scope_cannot_bypass_schema_premise_closure() -> None:
+    fg, case_ref, _gate_ref, outcome_ref, _evidence_assertion = _world()
+    before = tuple(fg.ledger.claims)
+
+    with pytest.raises(SDKStoreError, match="not declared premise_eligible"):
+        fg.eval.evaluate_program(
+            _program(),
+            _goal(case_ref, outcome_ref),
+            scope=EvaluationPremiseScope(
+                blocks=(
+                    PredicatePremiseBlock(
+                        pred_id="decision_case:evidence",
+                        key="undeclared",
+                        blocked_values=frozenset({"blocked"}),
+                    ),
+                )
+            ),
+        )
+
+    assert tuple(fg.ledger.claims) == before
 
 
 def test_program_facts_ground_ontology_constants_without_ledger_writes() -> None:

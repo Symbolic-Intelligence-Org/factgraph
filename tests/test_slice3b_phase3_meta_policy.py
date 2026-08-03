@@ -16,7 +16,20 @@ from factgraph.core.schema.schema_ir import (
     ensure_schema_ir,
     schema_digest,
 )
-from factgraph.sdk import Entity, Identity, SDKSchemaError, compile_schema_from_classes
+from factgraph.core.store.premise_filter import (
+    MetaExclusion,
+    PredicatePremiseAllowance,
+    PredicatePremiseBlock,
+)
+from factgraph.core.store.runtime import Store
+from factgraph.sdk import (
+    Entity,
+    FactGraph,
+    Identity,
+    SDKSchemaError,
+    SDKStoreError,
+    compile_schema_from_classes,
+)
 
 
 class _MetaPolicyEntity(Entity):
@@ -206,6 +219,121 @@ class MetaPolicySchemaIRTests(unittest.TestCase):
             BUILTIN_PREMISE_ELIGIBLE_META_KEYS,
             frozenset({"provenance_class", "origin_binding"}),
         )
+
+
+class PremiseEligibilityClosureTests(unittest.TestCase):
+    def test_builtins_remain_eligible_without_schema_bytes(self) -> None:
+        store = Store(
+            compile_schema_from_classes([_MetaPolicyEntity]),
+            premise_exclusions=MetaExclusion(
+                "provenance_class", frozenset({"blocked"})
+            ),
+            premise_allowances=PredicatePremiseAllowance(
+                "_MetaPolicyEntity:exists",
+                "origin_binding",
+                frozenset({"trusted"}),
+            ),
+        )
+        self.assertEqual(store.premise_exclusions[0].key, "provenance_class")
+        self.assertEqual(store.premise_allowances[0].key, "origin_binding")
+
+    def test_each_configuration_entry_rejects_undeclared_key_atomically(self) -> None:
+        store = Store(compile_schema_from_classes([_MetaPolicyEntity]))
+        attempts = (
+            (
+                store.set_premise_exclusions,
+                MetaExclusion("undeclared", frozenset({"blocked"})),
+                lambda: store.premise_exclusions,
+            ),
+            (
+                store.set_premise_allowances,
+                PredicatePremiseAllowance(
+                    "_MetaPolicyEntity:exists",
+                    "undeclared",
+                    frozenset({"allowed"}),
+                ),
+                lambda: store.premise_allowances,
+            ),
+            (
+                store.set_premise_blocks,
+                PredicatePremiseBlock(
+                    "_MetaPolicyEntity:exists",
+                    "undeclared",
+                    frozenset({"blocked"}),
+                ),
+                lambda: store.premise_blocks,
+            ),
+        )
+        for setter, value, current in attempts:
+            with self.subTest(setter=setter.__name__):
+                with self.assertRaisesRegex(ValueError, "not declared premise_eligible"):
+                    setter(value)
+                self.assertEqual(current(), ())
+
+    def test_explicit_declaration_opens_and_can_tighten_builtin(self) -> None:
+        open_schema = compile_schema_from_classes(
+            [_MetaPolicyEntity],
+            meta_keys={"review_status": MetaKeyPolicy(premise_eligible=True)},
+        )
+        store = Store(open_schema)
+        store.set_premise_blocks(
+            PredicatePremiseBlock(
+                "_MetaPolicyEntity:exists",
+                "review_status",
+                frozenset({"rejected"}),
+            )
+        )
+        self.assertEqual(store.premise_blocks[0].key, "review_status")
+
+        tightened_schema = compile_schema_from_classes(
+            [_MetaPolicyEntity],
+            meta_keys={"origin_binding": MetaKeyPolicy()},
+        )
+        tightened = Store(tightened_schema)
+        with self.assertRaisesRegex(ValueError, "not declared premise_eligible"):
+            tightened.set_premise_exclusions(
+                MetaExclusion("origin_binding", frozenset({"revoked"}))
+            )
+
+    def test_constructor_rejects_undeclared_configuration(self) -> None:
+        with self.assertRaisesRegex(ValueError, "not declared premise_eligible"):
+            Store(
+                compile_schema_from_classes([_MetaPolicyEntity]),
+                premise_blocks=PredicatePremiseBlock(
+                    "_MetaPolicyEntity:exists",
+                    "source",
+                    frozenset({"untrusted"}),
+                ),
+            )
+
+    def test_sdk_configuration_entries_report_closed_schema_error(self) -> None:
+        graph = FactGraph.create(schema_classes=[_MetaPolicyEntity])
+        attempts = (
+            (
+                graph.set_premise_exclusions,
+                MetaExclusion("undeclared", frozenset({"blocked"})),
+            ),
+            (
+                graph.set_premise_allowances,
+                PredicatePremiseAllowance(
+                    "_MetaPolicyEntity:exists",
+                    "undeclared",
+                    frozenset({"allowed"}),
+                ),
+            ),
+            (
+                graph.set_premise_blocks,
+                PredicatePremiseBlock(
+                    "_MetaPolicyEntity:exists",
+                    "undeclared",
+                    frozenset({"blocked"}),
+                ),
+            ),
+        )
+        for setter, value in attempts:
+            with self.subTest(setter=setter.__name__):
+                with self.assertRaisesRegex(SDKStoreError, "not declared premise_eligible"):
+                    setter(value)
 
 
 if __name__ == "__main__":

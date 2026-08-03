@@ -33,6 +33,7 @@ from factgraph.core.store.premise_filter import (
     normalize_premise_blocks,
     normalize_premise_exclusions,
     premise_scoped_ledger,
+    validate_premise_configuration,
 )
 from factgraph.core.store.queries import conflicts as store_conflicts
 from factgraph.core.store.queries import explain_fact as store_explain_fact
@@ -94,6 +95,12 @@ class Store:
         self._premise_exclusions = normalize_premise_exclusions(premise_exclusions)
         self._premise_allowances = normalize_premise_allowances(premise_allowances)
         self._premise_blocks = normalize_premise_blocks(premise_blocks)
+        validate_premise_configuration(
+            self.schema_ir,
+            self._premise_exclusions,
+            self._premise_allowances,
+            self._premise_blocks,
+        )
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, ProofReceipt] = {}
@@ -131,7 +138,9 @@ class Store:
         the derivation check). Read/query paths outside evaluation stay
         unfiltered. Passing ``None`` or an empty iterable disables filtering.
         """
-        self._premise_exclusions = normalize_premise_exclusions(exclusions)
+        normalized = normalize_premise_exclusions(exclusions)
+        validate_premise_configuration(self.schema_ir, exclusions=normalized)
+        self._premise_exclusions = normalized
 
     @property
     def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
@@ -153,7 +162,9 @@ class Store:
         floor is never lifted. Passing ``None`` or an empty iterable disables
         per-predicate filtering.
         """
-        self._premise_allowances = normalize_premise_allowances(allowances)
+        normalized = normalize_premise_allowances(allowances)
+        validate_premise_configuration(self.schema_ir, allowances=normalized)
+        self._premise_allowances = normalized
 
     @property
     def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
@@ -174,7 +185,9 @@ class Store:
         (an assertion excluded by any is invisible). Passing ``None`` or an
         empty iterable disables per-predicate blocking.
         """
-        self._premise_blocks = normalize_premise_blocks(blocks)
+        normalized = normalize_premise_blocks(blocks)
+        validate_premise_configuration(self.schema_ir, blocks=normalized)
+        self._premise_blocks = normalized
 
     def _remember_support_artifact(
         self,

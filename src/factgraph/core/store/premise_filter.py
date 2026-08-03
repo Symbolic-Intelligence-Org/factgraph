@@ -3,8 +3,9 @@
 A configured ``MetaExclusion`` makes every assertion whose meta ``key``
 currently carries a value in ``values`` invisible to rule evaluation: the
 assertion can neither support a derivation nor block one through negation.
-For evaluation, the assertion does not exist. Key and values are pure
-configuration — no consumer vocabulary is hardcoded here.
+For evaluation, the assertion does not exist. Keys are closed by the current
+Schema IR: only the two decision-pinned built-ins or keys explicitly declared
+``premise_eligible=true`` may be configured.
 
 A configured ``PredicatePremiseAllowance`` narrows a SINGLE predicate: for
 assertions of that predicate, only those whose meta ``key`` currently carries
@@ -83,6 +84,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from factgraph.core.schema.meta_policy import require_premise_eligible_meta_key
 from factgraph.core.store.ledger import (
     AnnotationRow,
     Claim,
@@ -310,6 +312,28 @@ def normalize_premise_blocks(
             raise ValueError(f"premise_blocks has duplicate pred_id {item.pred_id!r}")
         seen.add(item.pred_id)
     return normalized
+
+
+def validate_premise_configuration(
+    schema_ir: Mapping[str, Any],
+    exclusions: tuple[MetaExclusion, ...] = (),
+    allowances: tuple[PredicatePremiseAllowance, ...] = (),
+    blocks: tuple[PredicatePremiseBlock, ...] = (),
+) -> None:
+    """Close every premise/visibility key against the current schema policy."""
+
+    for item in exclusions:
+        require_premise_eligible_meta_key(
+            schema_ir, item.key, context="MetaExclusion"
+        )
+    for item in allowances:
+        require_premise_eligible_meta_key(
+            schema_ir, item.key, context="PredicatePremiseAllowance"
+        )
+    for item in blocks:
+        require_premise_eligible_meta_key(
+            schema_ir, item.key, context="PredicatePremiseBlock"
+        )
 
 
 def is_premise_excluded(
@@ -653,5 +677,6 @@ __all__ = [
     "normalize_premise_exclusions",
     "normalize_premise_allowances",
     "normalize_premise_blocks",
+    "validate_premise_configuration",
     "premise_scoped_ledger",
 ]

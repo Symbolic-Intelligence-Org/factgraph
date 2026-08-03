@@ -162,6 +162,31 @@ def typed_meta_keys_to_authoring(
     return normalize_authoring_meta_keys(raw)
 
 
+def declared_meta_key_policy(schema_ir: Mapping[str, Any], key: str) -> MetaKeyPolicy | None:
+    """Resolve one explicit or built-in declaration, with explicit precedence."""
+
+    declarations = schema_ir.get("meta_keys", {})
+    if isinstance(declarations, Mapping) and key in declarations:
+        value = declarations[key]
+        if not isinstance(value, Mapping):
+            raise MetaKeyPolicyError(f"$.meta_keys[{key!r}] must be object")
+        return MetaKeyPolicy.from_mapping(value, path=f"$.meta_keys[{key!r}]")
+    if key in BUILTIN_PREMISE_ELIGIBLE_META_KEYS:
+        return MetaKeyPolicy(premise_eligible=True)
+    return None
+
+
+def require_premise_eligible_meta_key(
+    schema_ir: Mapping[str, Any], key: str, *, context: str
+) -> None:
+    policy = declared_meta_key_policy(schema_ir, key)
+    if policy is None or not policy.premise_eligible:
+        raise MetaKeyPolicyError(
+            f"{context} references meta key {key!r}, which is not declared "
+            "premise_eligible in this schema"
+        )
+
+
 def _validate_meta_key(value: Any, *, path: str) -> None:
     if not isinstance(value, str) or not value:
         raise MetaKeyPolicyError(f"{path} keys must be non-empty strings")
