@@ -72,6 +72,7 @@
 | 2026-08-03 | Phase 3 C3 audit meta 惰性投影 | `9d7e637e`:schema `load_policy=lazy` key 的物理 claim_meta 事件退出 Ledger eager event/meta/annotation 索引,历史/effective/兼容投影按需从三表真值重建且保持事件序;无声明 schema 仍全 eager。baseline harness 将 `trace_id/request_id` 声明为 audit/lazy 并新增 projected-vs-resident 指标;39 tests / 47 subtests 聚焦面通过。B6 同提交扩记 benchmark 对 lazy 驻留索引的冻结依赖。 |
 | 2026-08-03 | Phase 3 C4 chosen→seq + S 政策收编 | `6422a817`:chosen 从 `(-ingested_at, asrt_id)` 切为 durable `claims.seq`,Souffle 同步新增 `claim_seq` EDB,policy IR 改为 `latest_by_claim_seq`;时间倒挂/同刻/v0.2 导入三门齐。open 新增 `claims.seq` 与链承诺 tx_ref 顺序一致性门,阻断仅改物理序翻转 chosen。Phase 2 的 `test_phase2_chosen_orders_by_sample_time_not_later_commit` 依用户卡明确授权替换为后提交胜出测试 —— 原断言钉旧语义,本次替换是 sanctioned Breaking change 的直接证据,非测试弱化。system-managed 三键提升为单源 S-class 常量并保持 post-create append/UNSET 禁覆盖;用户回填时间走 `event_time:time`。 |
 | 2026-08-03 | Phase 3 C5 批次默认写面 + 收尾 | `2c73a97d`:`Database.commit_changes(meta_defaults=...)` 只接受 schema 显式声明 `storage_scope=tx_liftable` 的普通 key,要求同 tx 至少一个 assertion/revoker consumer;沿 C2 canonical/tx-object 承诺入链,成功后更新 live 两层索引,claim initial meta 与后续 UNSET 仍优先。新增 production commit-path golden 钉 tx bytes/tx_id/head 三元组/LtHash state 与 cold reopen;baseline 第三组把 request/trace 从每 claim 行提升为每 tx 两项并分列 effective/projected/resident 指标。顺手关闭 C3/C4 的 view wrapper 委托缺口与无-GC 即时重开残留。Phase 3 扩面 `54 passed / 57 subtests`;canonical `2867 passed / 32 skipped / 1 deselected / 1170 subtests`;既有 golden 与 C0 读等价 fixture 零修改。 |
+| 2026-08-02 | **Phase 3 对抗审计:0 blocker / 0 serious / 1 MEDIUM / 4 minor —— 有条件不放行,P3-R 轻补钉先行** | 五份对抗报告(chosen-seq/tx-lift+digest/wire-format/semantics/docs-scope);字节不变 gate 与真惰性经探针证实,schema-evolution 零走私,无第四假绝对句;F1=会话内 transition 不刷新惰性策略(MEDIUM),F2=meta_keys 著述 managed 生命周期可达性(决策点);全文见 §Phase 3 对抗审计 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -484,6 +485,27 @@ Phase 3 保持冻结;本节只声明 Q-SAE-8/Phase 2 承诺完成,不把 Q-SAE-9
 复现要点:A = 原变砖场景 base 重现(open+repair 双炸)、HEAD 双路由(Database + `fg.ledger`)入链且冷启动 parity 过,直写分支不可达,B8 同 commit 登记;B = 重复 ingested_at base 上静默翻转胜者、HEAD pre-commit 拒绝(append 与 UNSET 双侧、三键全集),chosen/canon 回到 exactly-one fail-closed;C = 原注入 base 开库通过、HEAD 拒绝,修复按完整位置组重算,注入探针入常驻测试,自洽改写攻击亦被三重联锁门(组门/切片门/状态锚)拦截;D = 四名转正无别名、全库下划线残留零、B6 同 commit 收窄;EXTRA(cbf905b9)= 强引用环缺陷证实(bound-method 环致 flock 延迟释放)、weakref 修法健全、范围纯净。文档半区 12/12 闭合:21/17 与 157 调用式逐字复现、audit:405 同 commit 点名改正、协调方节字节完整、worklist 勾选诚实。
 
 残留处置(全 LOW):①"genesis repair anchor"旧措辞存于 4 份 shipped 文档 → **Phase 4 docs pass 清扫清单**(blueprint §9 需补 sdk guide/quickstart 两项);②sdk `_latest_meta_event_sequence` 私有触达 → 已补录 B6(本 commit);③假绝对句改正缺原位标记、cbf905b9 日志事后补登 → 过程性记录,不返工;④引用环回归测试依赖 gc.collect(),无 gc 即时重开断言更强 → 转 Phase 3 卡顺手项。
+
+## Phase 3 对抗审计(2026-08-02,Claude 五份报告 + 独立复跑)
+
+**结论:0 blocker / 0 serious / 1 MEDIUM / 1 low-latent(决策点)/ 4 minor —— 有条件不放行 Phase 4,轻补钉轮 P3-R 先行。未发现第四个假绝对句。**
+
+覆盖(五份对抗报告,均含亲手复现):chosen→seq + 两层解析、五属性 IR + tx-lift 入链 + digest 字节不变、tx-meta wire format 八约束、premise 封闭、惰性投影真伪、S 类 + event_time、批次面、Q-SAE-9 §4 表、docs/scope/证据/走私/worklist/卫生。**验实的承重面**:字节不变 gate 经 `git archive` pre-C0 树逐字节对比(digest `sha256:d3d7bb65…` 相同);惰性投影**真惰性**(SQL trace 探针证明 premise+chosen 期间对 lazy key 零 claim_meta 查询,索引构建期 `continue` 排除);meta_defaults 真入链(改 tx_id、篡改 fail-closed、排序唯一双侧强制、无第四表、编码单源);chosen→seq 三用例 + 旧测试原地改名翻转(非静默删)+ CHANGELOG Breaking + Session Journal 因果;S 类过渡守卫升格三面 + event_time 惰性零 policy 读者;**schema-evolution 零走私**(retire/tombstone/keyed-diff grep 零命中);canonical 2867/32/1/1170 独立逐字复现;协调方审计节 6/6 字节比对完整;golden 仅新增零修改。
+
+**发现(去重):**
+
+| # | 严重度 | 发现 | 处置 |
+|---|---|---|---|
+| P3-F1 | **MEDIUM** | 会话内 schema transition 不刷新 Ledger 惰性策略与 premise 校验:`configure_meta_load_policy` 仅构造时调用,`database.py:1314` transition 换 `_schema_ir`、SDK `_refresh_schema_state`(`sdk/store.py:4022`)换 `schema_ir` 均未重配;探针:transition 到无声明 schema 后 live 仍持旧 lazy 集、冷启动为空 —— 声明分级 reopen 前静默不生效(投影内容仍正确,是分级背离非数据损坏) | P3-R A |
+| P3-F2 | low-latent(决策点) | meta_keys 著述面经 managed 生命周期(create/load_workspace/attach 只编译类)不可达,声明工作区 digest-mismatch fail-closed;`add_schema_classes` 重编译丢弃 meta_keys 节。**schema_definition.md 已如实记载 create/attach 不收该参** —— 是有记录的窄 API 限制非隐藏缺陷,但需裁定 v0.3 是否接受"仅直连 schema_ir 可达" | P3-R B(裁定) |
+| P3-F3 | minor | tx-meta_defaults **读侧**保留/系统 key 伪造无常驻负向测试(仅探针 green;三入口共用 `_normalize_tx_meta_defaults` 咽喉点) | P3-R C |
+| P3-F4 | minor | "54 passed / 57 subtests" Phase 3 扩面无调用式记录(第三次同型:157 面 / 16-14 面);canonical 权威数复现,cosmetic | P3-R C |
+| P3-F5 | minor | Q-SAE-9 §4 表 `ingested_at:tx_liftable` 在 S 类守卫下不可实现、`query_indexed` 仅可表示无消费者 —— 需 worklist/§4 诚实标注 | P3-R C |
+| P3-F6 | minor | 基线 harness 的两个 lazy key(request_id/trace_id)同时被 tx-lift,`resident_lazy_meta_event_objects=0` 是被 tx-lift 平凡满足;claim 域 lazy 排除仅由 C3 单测 + 探针证明 —— Phase 4 三组须用 claim 域 lazy key 或分离两机制归因 | Phase 4 gate |
+
+**Phase 4 挂账(非本轮,归 Phase 4 收尾)**:①~1KB durable headline 未验(当前 smoke 2.36KB、300-claim 复现 2.68KB,约 2.4-2.7× 目标);②"genesis repair anchor"陈旧措辞残留 3 shipped 文档 + core/store 模块 docs 无 meta-tiering 节 + core/policy README 缺;③三组正式对照测量(§6/§7.4 box 正确留空)。
+
+**放行裁定:P3-R 轻补钉轮(A + B 裁定 + C 三 minor 合并)完成并复验后关闭 Phase 3、放行 Phase 4。** F1 为唯一实质代码修复;F2 需用户/协调方裁定 v0.3 著述可达性口径。
 
 ## Deviations
 
