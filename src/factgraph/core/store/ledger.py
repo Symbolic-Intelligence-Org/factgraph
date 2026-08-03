@@ -126,6 +126,14 @@ class _ClaimMetaEvent:
 
 
 @dataclass(frozen=True)
+class TxMetaDefault:
+    tx_seq: int
+    key: str
+    kind: str
+    value: Any
+
+
+@dataclass(frozen=True)
 class _MetaTombstone:
     """Private carrier for an explicit UNSET event.
 
@@ -1437,11 +1445,45 @@ class Ledger:
             if boundary is not None and event.event_seq > boundary:
                 continue
             latest[(event.asrt_id, event.key)] = event
-        rows = [
+        rows: list[_ClaimMetaEvent] = [
             event
             for event in latest.values()
             if not event.is_unset and (kind is None or event.kind == kind)
         ]
+        candidate_ids = (
+            (asrt_id,)
+            if asrt_id is not None
+            else tuple(self._claim_tx_refs)
+        )
+        for candidate_id in candidate_ids:
+            tx_ref = self._claim_tx_refs.get(candidate_id)
+            op_ordinal = self._claim_op_ordinals.get(candidate_id)
+            if tx_ref is None or op_ordinal is None:
+                continue
+            creation_seq = (tx_ref, op_ordinal)
+            if boundary is not None and creation_seq > boundary:
+                continue
+            defaults = self._tx_meta_defaults_by_tx_seq.get(tx_ref, {})
+            inherited = (
+                (defaults.get(key),)
+                if key is not None
+                else tuple(defaults.values())
+            )
+            for default in inherited:
+                if default is None or (candidate_id, default.key) in latest:
+                    continue
+                if kind is not None and default.kind != kind:
+                    continue
+                rows.append(
+                    _ClaimMetaEvent(
+                        asrt_id=candidate_id,
+                        key=default.key,
+                        kind=default.kind,
+                        value=default.value,
+                        tx_seq=tx_ref,
+                        op_ordinal=op_ordinal,
+                    )
+                )
         return tuple(sorted(rows, key=_claim_meta_event_sort_key))
 
     def effective_meta_rows(
@@ -1499,6 +1541,41 @@ class Ledger:
             if not positions:
                 return None
             return max(positions)
+
+    def replace_tx_meta_defaults(self, rows: Sequence[TxMetaDefault]) -> None:
+        """Install the chain-rebuilt tx-default index used by effective reads."""
+
+        normalized: dict[int, dict[str, TxMetaDefault]] = {}
+        for row in rows:
+            if not isinstance(row, TxMetaDefault):
+                raise TypeError("rows must contain TxMetaDefault")
+            if isinstance(row.tx_seq, bool) or not isinstance(row.tx_seq, int) or row.tx_seq < 0:
+                raise ValueError("TxMetaDefault.tx_seq must be a non-negative int")
+            if not isinstance(row.key, str) or not row.key:
+                raise ValueError("TxMetaDefault.key must be a non-empty string")
+            if row.kind not in META_KINDS:
+                raise ValueError(f"unsupported TxMetaDefault kind: {row.kind}")
+            by_key = normalized.setdefault(row.tx_seq, {})
+            if row.key in by_key:
+                raise ValueError(
+                    f"duplicate TxMetaDefault key for tx_seq {row.tx_seq}: {row.key}"
+                )
+            by_key[row.key] = row
+        with self._write_lock:
+            self._ensure_open()
+            self._tx_meta_defaults_by_tx_seq = normalized
+
+    def record_tx_meta_defaults(self, rows: Sequence[TxMetaDefault]) -> None:
+        """Add one freshly committed tx-default group to the live index."""
+
+        with self._write_lock:
+            self._ensure_open()
+            combined = [
+                row
+                for by_key in self._tx_meta_defaults_by_tx_seq.values()
+                for row in by_key.values()
+            ]
+        self.replace_tx_meta_defaults((*combined, *tuple(rows)))
 
     def find_annotations(
         self,
@@ -1705,6 +1782,7 @@ class Ledger:
         self._claim_meta_events_by_asrt_id_key: dict[
             tuple[str, str], list[_ClaimMetaEvent]
         ] = {}
+        self._tx_meta_defaults_by_tx_seq: dict[int, dict[str, TxMetaDefault]] = {}
 
         self._claim_args: list[ClaimArg] = []
         self._claim_args_by_asrt_id: dict[str, list[ClaimArg]] = {}

@@ -55,6 +55,7 @@ from factgraph.core.store.ledger import (
     META_KINDS,
     MetaRow,
     Revokes,
+    TxMetaDefault,
     _ANNOTATION_COMPAT_PREFIX,
     _AnnotationStorageMetaRow,
     _MetaTombstone,
@@ -70,6 +71,7 @@ from factgraph.core.store.ledger import (
 
 DBTX_V1_PREFIX = b"factpy\x00dbtx_v1\x00"
 DBTX_V2_PREFIX = b"factgraph\x00dbtx_v2\x00"
+DBTX_V2_META_DEFAULTS_SUFFIX = b"\x00factgraph\x00tx_meta_defaults_v1\x00"
 DBSTATE_ELEMENT_V2_PREFIX = b"factgraph\x00dbstate_element_v2\x00"
 DBDATA_V1_PREFIX = b"factpy\x00dbdata_v1\x00"
 ASSERTION_V1_PREFIX = b"factpy\x00assertion_v1\x00"
@@ -298,13 +300,15 @@ def canonical_bytes_dbtx_v2(
     digest_scheme: str,
     tx_seq: int,
     operations: Sequence[Mapping[str, Any]],
+    meta_defaults: Sequence[MetaEntry | Mapping[str, Any]] = (),
 ) -> bytes:
     """Canonical history commitment over one ordered commit delta.
 
     ``dbtx_v2`` operation tags are additive: ``A`` assertion, ``R``
     revocation, ``M`` append-meta, ``S`` schema-change, and the existing repair
-    tags. Readers must continue accepting tx objects written before later tags
-    were introduced.
+    tags. Orthogonal tx defaults use a separate domain-delimited suffix, absent
+    when empty, so they never consume claim-event op ordinals. Readers must
+    continue accepting tx objects written before later tags were introduced.
     """
     if parent_tx_id is not None:
         _require_token(parent_tx_id, prefix="tx:", field="parent_tx_id")
@@ -314,6 +318,7 @@ def canonical_bytes_dbtx_v2(
     if isinstance(tx_seq, bool) or not isinstance(tx_seq, int) or tx_seq < 0:
         raise DatabaseError("tx_seq must be non-negative int")
     normalized = _normalize_tx_operations(operations)
+    normalized_defaults = _normalize_tx_meta_defaults(meta_defaults)
 
     out = bytearray(DBTX_V2_PREFIX)
     out.extend(b"\x00" if parent_tx_id is None else b"\x01" + _str_field(parent_tx_id))
@@ -353,6 +358,9 @@ def canonical_bytes_dbtx_v2(
             out.extend(_str_field(operation["reason"]))
         else:  # pragma: no cover - normalization is exhaustive
             raise DatabaseError(f"unsupported tx operation: {kind!r}")
+    if normalized_defaults:
+        out.extend(DBTX_V2_META_DEFAULTS_SUFFIX)
+        out.extend(_canonical_meta_entries_bytes(normalized_defaults))
     return bytes(out)
 
 
@@ -460,6 +468,15 @@ class Database:
         self._workspace_paths = workspace_paths
         self._lock_handle = lock_handle
         self._closed = False
+        if workspace_paths is not None:
+            head_tx_id = self._ledger.get_ledger_meta("head_tx_id")
+            if head_tx_id is None:
+                raise DatabaseIntegrityError(
+                    "cannot build tx meta-default index without head_tx_id"
+                )
+            self._ledger.replace_tx_meta_defaults(
+                _tx_meta_defaults_from_history(workspace_paths, head_tx_id=head_tx_id)
+            )
         owner_ref = weakref.ref(self)
 
         def _managed_meta_writer(rows: Sequence[MetaRow]) -> CommitResult | None:
@@ -1586,6 +1603,7 @@ def _tx_id_for_v2(
     digest_scheme: str,
     tx_seq: int,
     operations: Sequence[Mapping[str, Any]],
+    meta_defaults: Sequence[MetaEntry | Mapping[str, Any]] = (),
 ) -> str:
     return "tx:" + sha256_hex(
         canonical_bytes_dbtx_v2(
@@ -1594,6 +1612,7 @@ def _tx_id_for_v2(
             digest_scheme=digest_scheme,
             tx_seq=tx_seq,
             operations=operations,
+            meta_defaults=meta_defaults,
         )
     )
 
@@ -1981,15 +2000,18 @@ def _write_tx_object(
     digest_scheme: str,
     tx_seq: int,
     operations: Sequence[Mapping[str, Any]],
+    meta_defaults: Sequence[MetaEntry | Mapping[str, Any]] = (),
 ) -> None:
     tx_id = _require_token(tx_id, prefix="tx:", field="tx_id")
     normalized = _normalize_tx_operations(operations)
+    normalized_defaults = _normalize_tx_meta_defaults(meta_defaults)
     expected_tx_id = _tx_id_for_v2(
         parent_tx_id=parent_tx_id,
         schema_digest=schema_digest,
         digest_scheme=digest_scheme,
         tx_seq=tx_seq,
         operations=normalized,
+        meta_defaults=normalized_defaults,
     )
     if expected_tx_id != tx_id:
         raise DatabaseError("tx object identity fields do not match tx_id")
@@ -2003,6 +2025,8 @@ def _write_tx_object(
         "tx_seq": tx_seq,
         "tx_id": tx_id,
     }
+    if normalized_defaults:
+        payload["meta_defaults"] = _tx_meta_defaults_payload(normalized_defaults)
     _write_once_bytes(_tx_object_path(paths, tx_id), _json_bytes(payload))
 
 
@@ -2014,17 +2038,19 @@ def _read_tx_object(paths: DatabaseWorkspacePaths, tx_id: str) -> dict[str, Any]
     payload = json.loads(tx_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise DatabaseError("tx object must be JSON object")
-    _require_exact_keys(
-        payload,
-        {
-            "digest_scheme",
-            "operations",
-            "parent_tx_id",
-            "schema_digest",
-            "tx_id",
-            "tx_seq",
-        },
-    )
+    required_keys = {
+        "digest_scheme",
+        "operations",
+        "parent_tx_id",
+        "schema_digest",
+        "tx_id",
+        "tx_seq",
+    }
+    if set(payload) not in (required_keys, required_keys | {"meta_defaults"}):
+        raise DatabaseError(
+            "unexpected tx object fields: expected the six identity fields plus "
+            f"optional meta_defaults, got {sorted(payload)}"
+        )
     if payload.get("tx_id") != tx_id:
         raise DatabaseError("tx object filename/content tx_id mismatch")
     parent_tx_id = payload.get("parent_tx_id")
@@ -2043,12 +2069,20 @@ def _read_tx_object(paths: DatabaseWorkspacePaths, tx_id: str) -> dict[str, Any]
     if not isinstance(raw_operations, list):
         raise DatabaseError("tx object operations must be list")
     operations = _normalize_tx_operations(raw_operations)
+    meta_defaults = (
+        _read_tx_meta_defaults(payload["meta_defaults"])
+        if "meta_defaults" in payload
+        else ()
+    )
+    if "meta_defaults" in payload and not meta_defaults:
+        raise DatabaseError("tx object must omit meta_defaults when empty")
     expected_tx_id = _tx_id_for_v2(
         parent_tx_id=parent_tx_id,
         schema_digest=schema_token,
         digest_scheme=digest_scheme,
         tx_seq=tx_seq,
         operations=operations,
+        meta_defaults=meta_defaults,
     )
     if expected_tx_id != tx_id:
         raise DatabaseError("tx object identity fields do not recompute tx_id")
@@ -2057,6 +2091,8 @@ def _read_tx_object(paths: DatabaseWorkspacePaths, tx_id: str) -> dict[str, Any]
     payload["digest_scheme"] = digest_scheme
     payload["tx_seq"] = tx_seq
     payload["operations"] = operations
+    if meta_defaults:
+        payload["meta_defaults"] = meta_defaults
     return payload
 
 
@@ -2298,6 +2334,29 @@ def _replay_history(
     ):
         raise DatabaseIntegrityError("tx history terminal schema_digest mismatch")
     return active
+
+
+def _tx_meta_defaults_from_history(
+    paths: DatabaseWorkspacePaths, *, head_tx_id: str
+) -> tuple[TxMetaDefault, ...]:
+    chain: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    cursor: str | None = _require_token(
+        head_tx_id, prefix="tx:", field="head_tx_id"
+    )
+    while cursor is not None:
+        if cursor in seen:
+            raise DatabaseIntegrityError("tx history contains a cycle")
+        seen.add(cursor)
+        payload = _read_tx_object(paths, cursor)
+        chain.append(payload)
+        cursor = payload["parent_tx_id"]
+    chain.reverse()
+    return tuple(
+        TxMetaDefault(payload["tx_seq"], row.key, row.kind, row.value)
+        for payload in chain
+        for row in payload.get("meta_defaults", ())
+    )
 
 
 def _validate_claim_meta_parity(
@@ -3063,6 +3122,74 @@ def _normalize_meta_entries(
     return tuple(result)
 
 
+def _normalize_tx_meta_defaults(
+    rows: Sequence[MetaEntry | Mapping[str, Any]],
+) -> tuple[MetaEntry, ...]:
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+        raise DatabaseError("meta_defaults must be a sequence")
+    entries: list[MetaEntry] = []
+    for raw in rows:
+        if isinstance(raw, MetaEntry):
+            entry = raw
+        elif isinstance(raw, Mapping):
+            _require_exact_keys(raw, {"key", "kind", "value"})
+            entry = MetaEntry(
+                raw.get("key"),
+                raw.get("kind"),
+                _from_jsonable(raw.get("value")),
+            )
+        else:
+            raise DatabaseError("meta_defaults entries must be MetaEntry or mapping")
+        entries.extend(_normalize_meta_entries((entry,)))
+
+    keys = [entry.key for entry in entries]
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicates:
+        raise DatabaseError(
+            "meta_defaults keys must be unique; repeated key(s): "
+            + ", ".join(duplicates)
+        )
+    _reject_reserved_meta_keys(keys, context="tx meta defaults")
+    _reject_system_managed_meta_keys(keys, context="tx meta defaults")
+    system_keys = sorted(key for key in keys if key.startswith("__system__."))
+    if system_keys:
+        raise DatabaseError(
+            "tx meta defaults cannot use the reserved '__system__.' namespace: "
+            + ", ".join(system_keys)
+        )
+    return tuple(sorted(entries, key=lambda entry: entry.key))
+
+
+def _read_tx_meta_defaults(value: Any) -> tuple[MetaEntry, ...]:
+    if not isinstance(value, list):
+        raise DatabaseError("tx object meta_defaults must be a list")
+    raw_keys: list[str] = []
+    for raw in value:
+        if not isinstance(raw, Mapping):
+            raise DatabaseError("tx object meta_defaults entries must be objects")
+        _require_exact_keys(raw, {"key", "kind", "value"})
+        key = raw.get("key")
+        if not isinstance(key, str) or not key:
+            raise DatabaseError("tx object meta_defaults keys must be non-empty strings")
+        raw_keys.append(key)
+    if raw_keys != sorted(raw_keys):
+        raise DatabaseError("tx object meta_defaults must be sorted by key")
+    if len(raw_keys) != len(set(raw_keys)):
+        raise DatabaseError("tx object meta_defaults keys must be unique")
+    normalized = _normalize_tx_meta_defaults(value)
+    if [entry.key for entry in normalized] != raw_keys:
+        raise DatabaseError("tx object meta_defaults are not canonical")
+    return normalized
+
+
+def _tx_meta_defaults_payload(rows: Sequence[MetaEntry]) -> list[dict[str, Any]]:
+    normalized = _normalize_tx_meta_defaults(rows)
+    return [
+        {"key": row.key, "kind": row.kind, "value": _to_jsonable(row.value)}
+        for row in normalized
+    ]
+
+
 def _annotation_rows(asrt_id: str, meta: Sequence[MetaEntry]) -> list[AnnotationRow]:
     rows: list[AnnotationRow] = []
     for entry in meta:
@@ -3223,6 +3350,7 @@ __all__ = [
     "DBDATA_V1_PREFIX",
     "DBTX_V1_PREFIX",
     "DBTX_V2_PREFIX",
+    "DBTX_V2_META_DEFAULTS_SUFFIX",
     "VIEW_V1_PREFIX",
     "AssertionInput",
     "AssertionRecord",

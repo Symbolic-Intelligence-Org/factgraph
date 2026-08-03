@@ -27,6 +27,7 @@ _FIXTURES = (
     ("assertion_revocation_only.json", frozenset({"assertion", "revocation"})),
     ("append_meta_schema_change.json", frozenset({"append_meta", "schema_change"})),
     ("repair_ops.json", frozenset({"repair_add", "repair_remove", "repair"})),
+    ("tx_meta_defaults.json", frozenset({"assertion"})),
 )
 _ALLOWED_KINDS = {
     "assertion_revocation_only.json": frozenset({"assertion", "revocation"}),
@@ -34,6 +35,7 @@ _ALLOWED_KINDS = {
         {"assertion", "append_meta", "schema_change"}
     ),
     "repair_ops.json": frozenset({"repair_add", "repair_remove", "repair"}),
+    "tx_meta_defaults.json": frozenset({"assertion"}),
 }
 _COMMIT_PATH_IDS = (
     "asrt:11111111111111111111111111111111",
@@ -117,6 +119,7 @@ class DbtxV2GoldenTests(unittest.TestCase):
                         digest_scheme=transaction["digest_scheme"],
                         tx_seq=transaction["tx_seq"],
                         operations=transaction["operations"],
+                        meta_defaults=transaction.get("meta_defaults", ()),
                     )
                     self.assertTrue(canonical.startswith(DBTX_V2_PREFIX))
                     canonical_hex = transaction.get("canonical_hex")
@@ -133,6 +136,11 @@ class DbtxV2GoldenTests(unittest.TestCase):
                 self.assertEqual(actual_heads, fixture["head_progression"])
                 self.assertTrue(required_kinds.issubset(observed_kinds))
                 self.assertTrue(observed_kinds <= _ALLOWED_KINDS[fixture_name])
+                if fixture_name == "tx_meta_defaults.json":
+                    self.assertEqual(
+                        [row["key"] for row in fixture["transactions"][1]["meta_defaults"]],
+                        ["source", "trace_id"],
+                    )
 
     def test_production_commit_path_tx_objects_and_heads_are_frozen(self) -> None:
         fixture = _load_fixture("commit_path_all_ops.json")
