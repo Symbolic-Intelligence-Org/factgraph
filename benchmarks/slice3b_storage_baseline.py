@@ -21,10 +21,13 @@ lock are excluded after an explicit checkpoint.  SQLite allocation is sampled
 at least five times and reported as a median plus jitter band; only the
 content-addressed tx-object delta is expected to be byte-exact across runs.
 Each assertion has the same five-entry effective meander-shaped meta profile in
-all three phases. In the tiered phase, trace/request context is submitted once
-as a tx default while the other three entries remain claim-scoped. Projected
-Ledger rows, physical persisted rows and the eager in-memory workset are
-reported separately instead of fixing their ratio.
+all three phases.  The ``three-table`` profile keeps all five entries claim
+scoped.  The ``three-table-tiered`` profile keeps ``trace_id`` claim scoped but
+lazy, while only ``request_id`` is lifted to a tx default.  This deliberately
+separates the workset contribution of lazy projection from the storage-row
+contribution of tx lifting (Phase 3 audit item F6).  Projected Ledger rows,
+physical persisted rows and the eager in-memory workset are reported separately
+instead of fixing their ratio.
 """
 
 from __future__ import annotations
@@ -61,15 +64,28 @@ from factgraph.core.store.premise_filter import (
 
 
 PRED_ID = "benchmark:value"
+PROFILE_THREE_TABLE = "three-table"
+PROFILE_THREE_TABLE_TIERED = "three-table-tiered"
+PROFILES = (PROFILE_THREE_TABLE, PROFILE_THREE_TABLE_TIERED)
 LOGICAL_META_PER_ASSERTION = 5
-CLAIM_META_PER_ASSERTION = 3
-TX_DEFAULT_META_PER_BATCH = 2
+CLAIM_META_PER_ASSERTION = {
+    PROFILE_THREE_TABLE: 5,
+    PROFILE_THREE_TABLE_TIERED: 4,
+}
+TX_DEFAULT_META_PER_BATCH = {
+    PROFILE_THREE_TABLE: 0,
+    PROFILE_THREE_TABLE_TIERED: 1,
+}
+CLAIM_DOMAIN_LAZY_KEY = "trace_id"
+TX_LIFTED_KEY = "request_id"
 DEFAULT_BATCH_SIZES = (3,)
 DEFAULT_STORAGE_RUNS = 5
 
 
-def _schema_ir() -> dict[str, Any]:
-    return {
+def _schema_ir(profile: str = PROFILE_THREE_TABLE_TIERED) -> dict[str, Any]:
+    if profile not in PROFILES:
+        raise ValueError(f"unknown storage profile: {profile!r}")
+    schema_ir: dict[str, Any] = {
         "schema_ir_version": "v1",
         "entities": [
             {
@@ -94,20 +110,21 @@ def _schema_ir() -> dict[str, Any]:
             "tup_v1": "tup_v1",
             "export_v1": "export_v1",
         },
-        "meta_keys": {
-            "request_id": {
-                "load_policy": "lazy",
-                "reader_class": "audit",
-                "storage_scope": "tx_liftable",
-            },
-            "trace_id": {
-                "load_policy": "lazy",
-                "reader_class": "audit",
-                "storage_scope": "tx_liftable",
-            },
-        },
         "generated_at": "2026-08-01T00:00:00Z",
     }
+    if profile == PROFILE_THREE_TABLE_TIERED:
+        schema_ir["meta_keys"] = {
+            TX_LIFTED_KEY: {
+                "load_policy": "lazy",
+                "reader_class": "audit",
+                "storage_scope": "tx_liftable",
+            },
+            CLAIM_DOMAIN_LAZY_KEY: {
+                "load_policy": "lazy",
+                "reader_class": "audit",
+            },
+        }
+    return schema_ir
 
 
 def _parse_batch_sizes(raw: str) -> tuple[int, ...]:
@@ -121,17 +138,27 @@ def _parse_batch_sizes(raw: str) -> tuple[int, ...]:
 
 
 def _assertion(
-    index: int, *, batch_time: int, entity_count: int
+    index: int,
+    *,
+    profile: str,
+    batch_index: int,
+    batch_time: int,
+    entity_count: int,
 ) -> AssertionInput:
     entity_index = index % entity_count
     e_ref = f"idref_v1:Benchmark:{entity_index:032x}"
-    meta = (
+    shared_suffix = f"{batch_index:08d}"
+    rows = [
         MetaEntry("ingested_at", "time", batch_time),
         MetaEntry("provenance_class", "str", "observed"),
         MetaEntry("origin_binding", "str", "otel.span"),
-    )
-    if len(meta) != CLAIM_META_PER_ASSERTION:
-        raise AssertionError("the tiered claim meta profile must stay fixed at three entries")
+        MetaEntry(CLAIM_DOMAIN_LAZY_KEY, "str", f"trace-{shared_suffix}"),
+    ]
+    if profile == PROFILE_THREE_TABLE:
+        rows.append(MetaEntry(TX_LIFTED_KEY, "str", f"request-{shared_suffix}"))
+    meta = tuple(rows)
+    if len(meta) != CLAIM_META_PER_ASSERTION[profile]:
+        raise AssertionError("the selected claim meta profile changed unexpectedly")
     return AssertionInput(
         pred_id=PRED_ID,
         fact_tuple=(("entity_ref", e_ref), ("string", f"value-{index:08d}")),
@@ -139,15 +166,16 @@ def _assertion(
     )
 
 
-def _batch_meta_defaults(batch_index: int) -> tuple[MetaEntry, ...]:
+def _batch_meta_defaults(profile: str, batch_index: int) -> tuple[MetaEntry, ...]:
     shared_suffix = f"{batch_index:08d}"
     rows = (
-        MetaEntry("request_id", "str", f"request-{shared_suffix}"),
-        MetaEntry("trace_id", "str", f"trace-{shared_suffix}"),
+        (MetaEntry(TX_LIFTED_KEY, "str", f"request-{shared_suffix}"),)
+        if profile == PROFILE_THREE_TABLE_TIERED
+        else ()
     )
-    if len(rows) != TX_DEFAULT_META_PER_BATCH:
-        raise AssertionError("the tiered tx-default profile must stay fixed at two entries")
-    if CLAIM_META_PER_ASSERTION + len(rows) != LOGICAL_META_PER_ASSERTION:
+    if len(rows) != TX_DEFAULT_META_PER_BATCH[profile]:
+        raise AssertionError("the selected tx-default profile changed unexpectedly")
+    if CLAIM_META_PER_ASSERTION[profile] + len(rows) != LOGICAL_META_PER_ASSERTION:
         raise AssertionError("the cross-phase effective meta profile must stay at five entries")
     return rows
 
@@ -155,10 +183,11 @@ def _batch_meta_defaults(batch_index: int) -> tuple[MetaEntry, ...]:
 def _populate(
     workspace: Path,
     *,
+    profile: str,
     claim_count: int,
     batch_sizes: Sequence[int],
 ) -> tuple[Database, list[str], Counter[int]]:
-    database = Database.create(workspace, schema_ir=_schema_ir())
+    database = Database.create(workspace, schema_ir=_schema_ir(profile))
     asrt_ids: list[str] = []
     histogram: Counter[int] = Counter()
     entity_count = max(1, claim_count // 10)
@@ -171,16 +200,24 @@ def _populate(
         inputs = tuple(
             _assertion(
                 index,
+                profile=profile,
+                batch_index=batch_index,
                 batch_time=batch_time,
                 entity_count=entity_count,
             )
             for index in range(next_index, next_index + actual)
         )
-        result = database.commit_changes(
-            assertions=inputs,
-            revocations=(),
-            meta_defaults=_batch_meta_defaults(batch_index),
-        )
+        defaults = _batch_meta_defaults(profile, batch_index)
+        if defaults:
+            result = database.commit_changes(
+                assertions=inputs,
+                revocations=(),
+                meta_defaults=defaults,
+            )
+        else:
+            # Keep the pre-tiering profile runnable against the Phase 2 source
+            # revision, before ``meta_defaults`` was part of commit_changes.
+            result = database.commit_assertions(inputs)
         asrt_ids.extend(record.asrt_id for record in result.assertions)
         histogram[actual] += 1
         next_index += actual
@@ -380,7 +417,8 @@ def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
     projected_meta_rows = len(ledger.find_meta())
     effective_meta_rows = len(ledger.effective_meta_rows())
     projected_annotation_rows = len(ledger.find_annotations())
-    configured_lazy_meta_keys = sorted(ledger._lazy_meta_keys)
+    configured_lazy_meta_keys = sorted(getattr(ledger, "_lazy_meta_keys", ()))
+    lazy_meta_keys = frozenset(configured_lazy_meta_keys)
     resident_claim_meta_events = len(ledger._claim_meta_events)
     resident_meta_rows = len(ledger._meta_rows_data)
     resident_annotation_rows = len(ledger._annotation_rows_data)
@@ -416,7 +454,10 @@ def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
         resident_claim_meta_events + resident_meta_rows + resident_annotation_rows
     )
     resident_lazy_meta_event_objects = sum(
-        event.key in ledger._lazy_meta_keys for event in ledger._claim_meta_events
+        event.key in lazy_meta_keys for event in ledger._claim_meta_events
+    )
+    resident_claim_domain_lazy_event_objects = sum(
+        event.key == CLAIM_DOMAIN_LAZY_KEY for event in ledger._claim_meta_events
     )
     projected_lazy_meta_rows = sum(
         len(ledger.find_meta(key=key)) for key in configured_lazy_meta_keys
@@ -425,10 +466,19 @@ def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
         len(ledger.effective_meta_rows(key=key)) for key in configured_lazy_meta_keys
     )
     resident_tx_default_objects = sum(
-        len(rows) for rows in ledger._tx_meta_defaults_by_tx_seq.values()
+        len(rows)
+        for rows in getattr(ledger, "_tx_meta_defaults_by_tx_seq", {}).values()
     )
     return {
         "configured_lazy_meta_keys": configured_lazy_meta_keys,
+        "claim_domain_lazy_key": CLAIM_DOMAIN_LAZY_KEY,
+        "tx_lifted_key": TX_LIFTED_KEY,
+        "projected_claim_domain_lazy_rows": len(
+            ledger.find_meta(key=CLAIM_DOMAIN_LAZY_KEY)
+        ),
+        "resident_claim_domain_lazy_event_objects": (
+            resident_claim_domain_lazy_event_objects
+        ),
         "projected_lazy_meta_rows": projected_lazy_meta_rows,
         "projected_lazy_meta_rows_per_claim": round(
             projected_lazy_meta_rows / claim_count, 6
@@ -500,6 +550,7 @@ def _storage_summary(samples: Sequence[dict[str, int]], *, claim_count: int) -> 
 
 def run(
     *,
+    profile: str = PROFILE_THREE_TABLE_TIERED,
     claim_count: int,
     batch_sizes: Sequence[int],
     repeats: int,
@@ -507,6 +558,8 @@ def run(
 ) -> dict[str, Any]:
     if claim_count <= 0:
         raise ValueError("claim_count must be positive")
+    if profile not in PROFILES:
+        raise ValueError(f"unknown storage profile: {profile!r}")
     if repeats <= 0:
         raise ValueError("repeats must be positive")
     if storage_runs < 5:
@@ -524,20 +577,24 @@ def run(
         for run_index in range(storage_runs):
             run_root = root / f"run-{run_index}"
             empty_workspace = run_root / "empty"
-            empty = Database.create(empty_workspace, schema_ir=_schema_ir())
+            empty = Database.create(empty_workspace, schema_ir=_schema_ir(profile))
             empty.close()
             empty_storage = _storage_snapshot(empty_workspace)
 
             filled_workspace = run_root / "filled"
             database, asrt_ids, current_histogram = _populate(
                 filled_workspace,
+                profile=profile,
                 claim_count=claim_count,
                 batch_sizes=batch_sizes,
             )
             database.close()
 
             if run_index == 0:
-                database = Database.open(filled_workspace, schema_ir=_schema_ir())
+                database = Database.open(
+                    filled_workspace,
+                    schema_ir=_schema_ir(profile),
+                )
                 ledger = database._ledger_for_attach()
                 workset = _workset_snapshot(ledger, claim_count=claim_count)
                 reads = _read_benchmarks(ledger, asrt_ids, repeats=repeats)
@@ -565,7 +622,7 @@ def run(
             raise AssertionError("storage baseline did not produce a first-run sample")
 
         return {
-            "harness": "slice3b_storage_baseline_v2",
+            "harness": "slice3b_storage_baseline_v3",
             "environment": {
                 "platform": platform.platform(),
                 "python": platform.python_version(),
@@ -573,13 +630,14 @@ def run(
             },
             "workload": {
                 "claim_count": claim_count,
+                "profile": profile,
                 "logical_effective_meta_entries_per_assertion": (
                     LOGICAL_META_PER_ASSERTION
                 ),
                 "claim_scoped_meta_entries_per_assertion_input": (
-                    CLAIM_META_PER_ASSERTION
+                    CLAIM_META_PER_ASSERTION[profile]
                 ),
-                "tx_default_meta_entries_per_commit": TX_DEFAULT_META_PER_BATCH,
+                "tx_default_meta_entries_per_commit": TX_DEFAULT_META_PER_BATCH[profile],
                 "batch_sizes_repeating": list(batch_sizes),
                 "batch_histogram": {str(size): count for size, count in sorted(histogram.items())},
                 "commit_count": sum(histogram.values()),
@@ -607,6 +665,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--claims", type=int, default=3_000)
     parser.add_argument(
+        "--profile",
+        choices=PROFILES,
+        default=PROFILE_THREE_TABLE_TIERED,
+        help="storage/meta policy profile (default: three-table-tiered)",
+    )
+    parser.add_argument(
         "--batch-sizes",
         type=_parse_batch_sizes,
         default=DEFAULT_BATCH_SIZES,
@@ -616,6 +680,7 @@ def main() -> int:
     parser.add_argument("--storage-runs", type=int, default=DEFAULT_STORAGE_RUNS)
     args = parser.parse_args()
     result = run(
+        profile=args.profile,
         claim_count=args.claims,
         batch_sizes=args.batch_sizes,
         repeats=args.repeats,

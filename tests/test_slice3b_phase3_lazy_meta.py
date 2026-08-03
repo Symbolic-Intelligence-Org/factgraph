@@ -243,12 +243,17 @@ class LazyMetaProjectionTests(unittest.TestCase):
                 assertions=(
                     benchmark._assertion(
                         0,
+                        profile=benchmark.PROFILE_THREE_TABLE_TIERED,
+                        batch_index=0,
                         batch_time=1,
                         entity_count=1,
                     ),
                 ),
                 revocations=(),
-                meta_defaults=benchmark._batch_meta_defaults(0),
+                meta_defaults=benchmark._batch_meta_defaults(
+                    benchmark.PROFILE_THREE_TABLE_TIERED,
+                    0,
+                ),
             )
             self.assertEqual(len(committed.assertions), 1)
             workset = benchmark._workset_snapshot(
@@ -259,10 +264,12 @@ class LazyMetaProjectionTests(unittest.TestCase):
                 workset["configured_lazy_meta_keys"],
                 ["request_id", "trace_id"],
             )
-            self.assertEqual(workset["projected_lazy_meta_rows"], 0)
+            self.assertEqual(workset["projected_lazy_meta_rows"], 1)
             self.assertEqual(workset["effective_lazy_meta_rows"], 2)
             self.assertEqual(workset["resident_lazy_meta_event_objects"], 0)
-            self.assertEqual(workset["resident_tx_default_objects"], 2)
+            self.assertEqual(workset["projected_claim_domain_lazy_rows"], 1)
+            self.assertEqual(workset["resident_claim_domain_lazy_event_objects"], 0)
+            self.assertEqual(workset["resident_tx_default_objects"], 1)
             self.assertLess(
                 workset["resident_claim_meta_event_objects"],
                 workset["effective_ledger_meta_rows"],
