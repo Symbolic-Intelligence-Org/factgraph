@@ -8,7 +8,9 @@ from factgraph.authoring.schema_compile import (
 )
 from factgraph.core.schema.meta_policy import (
     BUILTIN_PREMISE_ELIGIBLE_META_KEYS,
+    EVENT_TIME_META_KEY,
     MetaKeyPolicy,
+    SYSTEM_MANAGED_META_KEYS,
 )
 from factgraph.core.schema.schema_ir import (
     SchemaIRValidationError,
@@ -51,6 +53,13 @@ def _authoring_schema() -> dict:
 
 
 class MetaPolicySchemaIRTests(unittest.TestCase):
+    def test_system_managed_s_class_and_event_time_backfill_key_are_frozen(self) -> None:
+        self.assertEqual(
+            SYSTEM_MANAGED_META_KEYS,
+            frozenset({"ingested_at", "ingest_key", "revoked_asrt_id"}),
+        )
+        self.assertEqual(EVENT_TIME_META_KEY, "event_time")
+
     def test_no_declarations_preserve_phase2_bytes_and_digest(self) -> None:
         generated_at = "2026-08-03T00:00:00Z"
         compiled = compile_authoring_schema_v1(

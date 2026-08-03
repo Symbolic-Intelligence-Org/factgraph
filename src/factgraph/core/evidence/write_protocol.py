@@ -11,6 +11,10 @@ from factgraph.core.protocol.annotation_v1 import (
 )
 from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
+from factgraph.core.schema.meta_policy import (
+    EVENT_TIME_META_KEY,
+    SYSTEM_MANAGED_META_KEYS,
+)
 from factgraph.core.store.ledger import (
     AnnotationRow,
     Claim,
@@ -32,7 +36,7 @@ class PolicyNonDeterminismError(WriteProtocolError):
     pass
 
 
-_SYSTEM_MANAGED_META_KEYS = {"ingested_at", "ingest_key", "revoked_asrt_id"}
+_SYSTEM_MANAGED_META_KEYS = SYSTEM_MANAGED_META_KEYS
 _CONVENTION_META_KEYS = {
     "source",
     "source_loc",
@@ -41,6 +45,7 @@ _CONVENTION_META_KEYS = {
     "bound",
     "approved_by",
     "note",
+    EVENT_TIME_META_KEY,
 }
 _REMOVED_UNCERTAINTY_META_KEYS = {"probability", "bound_lower", "bound_upper", "confidence", "confidence_source"}
 _RAW_UNCERTAINTY_KINDS = {"probabilistic", "possibilistic"}
@@ -65,6 +70,7 @@ _KEY_KIND_MAP = {
     "ingest_key": "str",
     "revoked_asrt_id": "str",
     "accepted_at": "time",
+    EVENT_TIME_META_KEY: "time",
     "source": "str",
     "source_loc": "str",
     "trace_id": "str",
@@ -270,7 +276,10 @@ def _normalize_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
                 f"{_ANNOTATION_COMPAT_PREFIX}"
             )
         if key in _SYSTEM_MANAGED_META_KEYS:
-            raise WriteProtocolError(f"meta[{key}] is reserved and system-managed")
+            raise WriteProtocolError(
+                f"meta[{key}] is reserved and system-managed; "
+                f"use meta[{EVENT_TIME_META_KEY}] for source event time"
+            )
     result = dict(meta)
     _validate_no_removed_uncertainty_keys(result)
     _normalize_raw_uncertainty_meta(result)
@@ -457,9 +466,9 @@ def _infer_meta_kind(key: str, value: Any) -> str:
 
 
 def _infer_meta_kind_by_value(key: str, value: Any) -> str:
-    if key == "ingested_at":
+    if key in {"ingested_at", EVENT_TIME_META_KEY}:
         if isinstance(value, bool) or not isinstance(value, int):
-            raise WriteProtocolError("ingested_at must be epoch-nanos int")
+            raise WriteProtocolError(f"{key} must be epoch-nanos int")
         return "time"
     if isinstance(value, bool):
         return "bool"

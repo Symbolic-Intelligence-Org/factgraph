@@ -69,7 +69,8 @@
 | 2026-08-02 | Phase 3 C0/C1 停点轻核 | `e294a0bd`(canonical meta_keys/MetaKeyPolicy/著述入口/digest 字节不变门)+ `b9b03854`(premise closure 三配置入口 + per-evaluation scope);golden 零修改亲核,dbtx+读等价面绿;C2 依纪律零码停点上报 tx-meta 链格式决策 |
 | 2026-08-02 | **内联裁定(协调方):tx 批次 meta 编码 = 可选顶层 `meta_defaults` + domain-separated canonical suffix(八条约束)** | 采纳 codex 形状,依据与 kind/annotation_refs/P2-S1 同一原则:影响 effective 解析的信息必须入链承诺。约束:(a) 非空才存在,空即字段与 suffix 双省略 —— 既有 golden bytes/tx_id 全不变(golden 即证);(b) suffix 域分离,分节标记与既有 op tag 空间不可碰撞,精确字节形态实现定;(c) 按 key 排序且唯一的 `{key,kind,value}` 序列,**写侧规范化发射、读侧+parity fail-closed 校验排序与唯一**(拒未排序/重复,不做读时静默归一);(d) kind/value 编码复用 M-op meta entry 既有编码,单源禁第二套;(e) tx 默认无 UNSET,继承移除 = claim 层 UNSET;(f) 否决 `tx_meta` op —— op_ordinal 空间属 claim 事件层,正交层不互扰(采纳 codex 理由);(g) 新写通道三侧守卫:拒保留/系统 key(annotation 前缀/`__system__.`/DB-owned 三键/system-managed 三键)+ 负向测试 + 非空 defaults 新 golden(序列化器级,写面落地后补 commit-path 级);(h) 物理读路径实现自由(attach 期按 tx_ref 建内存索引或 ledger_meta 记账镜像)但**不得引入第四张表**,任何持久化镜像 = 链可重建记账状态(repair 覆盖、篡改按记账漂移处理);tx-object reader 允许列表扩展为可选 meta_defaults,其余未知字段照旧 fail-closed。用户可否决 |
 | 2026-08-03 | Phase 3 C2 tx-default 链地基 | `6f1f543d`:dbtx_v2 非空 `meta_defaults` 以独立 `tx_meta_defaults_v1` suffix 入 canonical bytes/tx_id,空值双省略;M-op MetaEntry 编码单源、写侧排序/唯一与十类保留 key 守卫、读侧非规范/未知字段 fail-closed;Ledger 两层 effective 解析与 durable attach 链重建落地。新增 serializer golden,既有 golden 零修改。批次 commit 写面与 commit-path golden 留 C5。 |
-| 2026-08-03 | Phase 3 C3 audit meta 惰性投影(本提交) | schema `load_policy=lazy` key 的物理 claim_meta 事件退出 Ledger eager event/meta/annotation 索引,历史/effective/兼容投影按需从三表真值重建且保持事件序;无声明 schema 仍全 eager。baseline harness 将 `trace_id/request_id` 声明为 audit/lazy 并新增 projected-vs-resident 指标;39 tests / 47 subtests 聚焦面通过。B6 同提交扩记 benchmark 对 lazy 驻留索引的冻结依赖。 |
+| 2026-08-03 | Phase 3 C3 audit meta 惰性投影 | `9d7e637e`:schema `load_policy=lazy` key 的物理 claim_meta 事件退出 Ledger eager event/meta/annotation 索引,历史/effective/兼容投影按需从三表真值重建且保持事件序;无声明 schema 仍全 eager。baseline harness 将 `trace_id/request_id` 声明为 audit/lazy 并新增 projected-vs-resident 指标;39 tests / 47 subtests 聚焦面通过。B6 同提交扩记 benchmark 对 lazy 驻留索引的冻结依赖。 |
+| 2026-08-03 | Phase 3 C4 chosen→seq + S 政策收编(本提交) | chosen 从 `(-ingested_at, asrt_id)` 切为 durable `claims.seq`,Souffle 同步新增 `claim_seq` EDB,policy IR 改为 `latest_by_claim_seq`;时间倒挂/同刻/v0.2 导入三门齐。open 新增 `claims.seq` 与链承诺 tx_ref 顺序一致性门,阻断仅改物理序翻转 chosen。Phase 2 的 `test_phase2_chosen_orders_by_sample_time_not_later_commit` 依用户卡明确授权替换为后提交胜出测试 —— 原断言钉旧语义,本次替换是 sanctioned Breaking change 的直接证据,非测试弱化。system-managed 三键提升为单源 S-class 常量并保持 post-create append/UNSET 禁覆盖;用户回填时间走 `event_time:time`。 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -162,9 +163,11 @@
 | actor_* / tenant_id / request_id | audit | 默认 false | lazy | **tx_liftable** | 按 request 共享(meander context.py),批次提升;逐 key 声明升级 |
 | version | audit | 声明后 true | lazy | claim | `query_indexed=true`;**可查询≠premise**(修正) |
 
+- [x] S 类禁覆盖正式政策收编:`ingested_at` / `ingest_key` / `revoked_asrt_id` 为单源 lifecycle-managed 集;post-create append/UNSET fail-closed;来源时间回填走 `event_time:time`;C4。
+
 ### Q-SAE-9 §5 chosen 定序迁移
 
-- [ ] `(-ingested_at, asrt_id)` → `(-seq)`。codex 修正成立:差异**不限于同刻写入**(锁前采样时钟、时钟回拨、导入乱序都可使时间序≠提交序)。定性为**语义变更**而非等价重构:gate 增加"较早采样时间、较晚提交"用例;迁移说明写入 CHANGELOG。
+- [x] `(-ingested_at, asrt_id)` → `(-seq)`。codex 修正成立:差异**不限于同刻写入**(锁前采样时钟、时钟回拨、导入乱序都可使时间序≠提交序)。定性为**语义变更**而非等价重构:时间倒挂/同刻/v0.2 导入用例与 CHANGELOG Breaking 已落;native/projector/Souffle 共用提交序语义。
 
 ### Q-SAE-9 §6 后果与测量
 
@@ -174,7 +177,7 @@
 
 1. [ ] premise filter 差分测试(最高优先):统一解析器(含 UNSET、tx 默认继承、revoker 对称)vs 现行单层 last-wins,逐字节等价 + absence 语义专项(absent_ok 全路径);
 2. [ ] INV-15:tx 物化物(若含 `__system__.tx` claim)五读面不外泄;
-3. [ ] chosen:语义变更用例集(时间倒挂、同刻、导入);
+3. [x] chosen:语义变更用例集(时间倒挂、同刻、导入);另有 `seq`/`tx_ref` 篡改 fail-closed 门;
 4. [ ] 三组对照 bytes/claim + 求值工作集(lazy 生效验证:audit 类不进 eager 投影);**Partial(C3)**:audit/lazy 行已退出 eager 驻留并由 harness 同名指标钉住,Phase 4 三组最终测量未执行;
 5. [ ] `narrate()`/explain 无可观察回归。
 

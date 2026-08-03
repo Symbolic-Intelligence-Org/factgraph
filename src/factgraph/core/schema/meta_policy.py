@@ -15,6 +15,11 @@ DEFAULT_LOAD_POLICY: LoadPolicy = "eager"
 DEFAULT_STORAGE_SCOPE: StorageScope = "claim"
 DEFAULT_QUERY_INDEXED = False
 
+SYSTEM_MANAGED_META_KEYS = frozenset(
+    {"ingested_at", "ingest_key", "revoked_asrt_id"}
+)
+EVENT_TIME_META_KEY = "event_time"
+
 BUILTIN_PREMISE_ELIGIBLE_META_KEYS = frozenset(
     {"provenance_class", "origin_binding"}
 )
@@ -34,9 +39,7 @@ _STORAGE_SCOPES = frozenset({"claim", "tx_liftable"})
 _RESERVED_META_KEY_PREFIXES = ("__system__.", "__factgraph_annotation_v1__:")
 _RESERVED_META_KEYS = frozenset(
     {
-        "ingested_at",
-        "ingest_key",
-        "revoked_asrt_id",
+        *SYSTEM_MANAGED_META_KEYS,
         "assertion_digest",
         "schema_digest",
         "tx_id",

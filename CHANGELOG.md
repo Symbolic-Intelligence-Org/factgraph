@@ -11,10 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Post-creation system metadata overrides now fail closed.** Append or UNSET
   operations cannot replace `ingested_at`, `ingest_key`, or
-  `revoked_asrt_id`; these keys remain lifecycle-managed until the Phase 3
-  S-class policy subsumes this transitional guard. Chosen and mapping
-  projection also reject persisted duplicate `ingested_at` events instead of
-  silently resolving them last-wins.
+  `revoked_asrt_id`; these are the lifecycle-managed S-class keys. Source
+  timestamps must use the ordinary `event_time` time-valued key instead of
+  backfilling `ingested_at`. Mapping projections that explicitly consume
+  `ingested_at` reject duplicate persisted values instead of silently resolving
+  them last-wins.
+- **Single-cardinality chosen selection now follows durable claim sequence.**
+  The latest `claims.seq` wins regardless of sampled `ingested_at` or assertion
+  id. This intentionally changes time-inversion, equal-time, and imported
+  histories; Souffle packages now carry the matching `claim_seq` EDB relation.
 - **Initial assertion and revocation metadata now requires unique keys per
   operation.** Repeating one key inside a single assertion/revocation input is
   rejected fail-closed; successive values for one key must be separate

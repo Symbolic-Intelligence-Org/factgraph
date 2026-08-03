@@ -16,6 +16,10 @@ from factgraph.application.protocol import (
 )
 from factgraph.core.derivation.candidates import CandidateSet
 from factgraph.core.evidence.write_protocol import add_field, set_field
+from factgraph.core.schema.meta_policy import (
+    EVENT_TIME_META_KEY,
+    SYSTEM_MANAGED_META_KEYS,
+)
 
 from .errors import SDKStoreError
 
@@ -23,7 +27,7 @@ if TYPE_CHECKING:
     from .store import SDKStore
 
 
-HARD_RESERVED_META_KEYS: frozenset[str] = frozenset({"ingested_at", "ingest_key", "revoked_asrt_id"})
+HARD_RESERVED_META_KEYS = SYSTEM_MANAGED_META_KEYS
 # Proposed future reserved key (spec-level, not enforced by write_protocol yet).
 SUGGESTED_HARD_RESERVED_META_KEYS: frozenset[str] = frozenset({"meta_origin"})
 
@@ -695,7 +699,10 @@ def _normalize_user_meta(meta: Any, *, path: str) -> dict[str, Any]:
         if not isinstance(key, str) or not key:
             raise SDKStoreError(f"{path}: meta keys must be non-empty strings")
         if key in HARD_RESERVED_META_KEYS:
-            raise SDKStoreError(f"{path}[{key!r}] is reserved and system-managed")
+            raise SDKStoreError(
+                f"{path}[{key!r}] is reserved and system-managed; "
+                f"use {EVENT_TIME_META_KEY!r} for source event time"
+            )
         out[key] = value
     return out
 

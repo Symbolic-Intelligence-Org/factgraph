@@ -1371,6 +1371,19 @@ class Ledger:
             self._ensure_open()
             return self._claim_by_asrt_id.get(asrt_id)
 
+    def claim_sequence(self, asrt_id: str) -> int | None:
+        """Return the durable claim insertion sequence used by chosen policy."""
+
+        if not isinstance(asrt_id, str) or not asrt_id:
+            raise ValueError("asrt_id must be a non-empty string")
+        with self._write_lock:
+            self._ensure_open()
+            row = self._get_connection().execute(
+                "SELECT seq FROM claims WHERE asrt_id = ?",
+                (asrt_id,),
+            ).fetchone()
+            return None if row is None else int(row["seq"])
+
     def _get_claim_including_system(self, asrt_id: str) -> Claim | None:
         """Return an exact id for audit/replay, bypassing INV-15 filtering."""
         with self._write_lock:
@@ -2020,12 +2033,18 @@ class Ledger:
         self._reset_indexes()
 
         next_op_ordinal_by_tx: dict[int, int] = {}
+        previous_tx_ref = -1
         for row in conn.execute(
-            "SELECT asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref "
+            "SELECT seq, asrt_id, pred_id, e_ref, rest_terms, value, value_tag, tx_ref "
             "FROM claims ORDER BY seq"
         ).fetchall():
             claim = _row_to_claim(row)
             tx_ref = int(row["tx_ref"])
+            if tx_ref < previous_tx_ref:
+                raise LedgerFormatError(
+                    "claims.seq order disagrees with committed tx_ref order"
+                )
+            previous_tx_ref = tx_ref
             op_ordinal = next_op_ordinal_by_tx.get(tx_ref, 0)
             next_op_ordinal_by_tx[tx_ref] = op_ordinal + 1
             self._claim_op_ordinals[claim.asrt_id] = op_ordinal

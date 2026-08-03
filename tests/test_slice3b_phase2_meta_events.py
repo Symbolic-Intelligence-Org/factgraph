@@ -28,7 +28,7 @@ from factgraph.core.store.database import (
     resolve_database_workspace_paths,
 )
 from factgraph.core.mapping.canon import MappingResolveError, _required_meta_time
-from factgraph.core.policy.chosen import PolicyNonDeterminismError, choose_one
+from factgraph.core.policy.chosen import choose_one
 from factgraph.core.store.ledger import (
     AnnotationRow,
     Claim,
@@ -92,7 +92,7 @@ class Slice3bMetaEventSemanticsTests(unittest.TestCase):
             self.assertEqual(db.head(), head)
             db.close()
 
-    def test_phase2_chosen_orders_by_sample_time_not_later_commit(self) -> None:
+    def test_phase3_chosen_orders_by_later_commit_not_sample_time(self) -> None:
         later_sample_id = "asrt:33333333333333333333333333333333"
         earlier_sample_later_commit_id = "asrt:44444444444444444444444444444444"
         with patch(
@@ -126,11 +126,11 @@ class Slice3bMetaEventSemanticsTests(unittest.TestCase):
             )
             self.assertEqual(
                 choose_one(ledger, [first.asrt_id, second.asrt_id]),
-                first.asrt_id,
+                second.asrt_id,
             )
             db.close()
 
-    def test_chosen_and_mapping_canon_reject_duplicate_ingested_at_history(self) -> None:
+    def test_mapping_canon_still_rejects_duplicate_ingested_at_history(self) -> None:
         ledger = Ledger()
         ledger.append_claim(
             Claim(
@@ -143,8 +143,7 @@ class Slice3bMetaEventSemanticsTests(unittest.TestCase):
         ledger.append_meta([MetaRow(_ASSERTION_ID, "ingested_at", "time", 100)])
         ledger.append_meta([MetaRow(_ASSERTION_ID, "ingested_at", "time", 200)])
 
-        with self.assertRaisesRegex(PolicyNonDeterminismError, "exactly one ingested_at"):
-            choose_one(ledger, [_ASSERTION_ID])
+        self.assertEqual(choose_one(ledger, [_ASSERTION_ID]), _ASSERTION_ID)
         with self.assertRaisesRegex(MappingResolveError, "exactly one ingested_at"):
             _required_meta_time(ledger, _ASSERTION_ID, "ingested_at")
         ledger.close()

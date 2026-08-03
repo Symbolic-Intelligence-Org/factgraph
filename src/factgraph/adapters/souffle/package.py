@@ -198,6 +198,7 @@ def export_package(
         meta_float_rows,
         meta_bool_rows,
         revokes_rows,
+        claim_seq_rows,
     ) = _build_fact_rows(store)
 
     claim_path = facts_dir / "claim.facts"
@@ -208,6 +209,7 @@ def export_package(
     meta_float_path = facts_dir / "meta_float.facts"
     meta_bool_path = facts_dir / "meta_bool.facts"
     revokes_path = facts_dir / "revokes.facts"
+    claim_seq_path = facts_dir / "claim_seq.facts"
 
     write_tsv(claim_path, claim_rows)
     write_tsv(claim_arg_path, claim_arg_rows)
@@ -217,6 +219,7 @@ def export_package(
     write_tsv(meta_float_path, meta_float_rows)
     write_tsv(meta_bool_path, meta_bool_rows)
     write_tsv(revokes_path, revokes_rows)
+    write_tsv(claim_seq_path, claim_seq_rows)
 
     schema_digest_token = schema_digest(store.schema_ir)
     policy_digest_token = policy_digest(policy_ir)
@@ -230,6 +233,7 @@ def export_package(
         meta_float_path,
         meta_bool_path,
         revokes_path,
+        claim_seq_path,
     ]
     rules_files = [rules_dir / "idb.dl", rules_dir / "view.dl"]
 
@@ -260,6 +264,7 @@ def export_package(
                 "meta_float": "facts/meta_float.facts",
                 "meta_bool": "facts/meta_bool.facts",
                 "revokes": "facts/revokes.facts",
+                "claim_seq": "facts/claim_seq.facts",
             },
             "rules": {
                 "view": "rules/view.dl",
@@ -286,6 +291,7 @@ def export_package(
 def _build_fact_rows(
     store: Store,
 ) -> tuple[
+    list[list[str]],
     list[list[str]],
     list[list[str]],
     list[list[str]],
@@ -328,6 +334,11 @@ def _build_fact_rows(
     revokes_rows = [
         [row.revoker_asrt_id, row.revoked_asrt_id] for row in store.ledger.revokes
     ]
+    claim_seq_rows = [
+        [claim.asrt_id, str(sequence)]
+        for claim in store.ledger.claims
+        if (sequence := store.ledger.claim_sequence(claim.asrt_id)) is not None
+    ]
 
     return (
         sorted(claim_rows),
@@ -338,6 +349,7 @@ def _build_fact_rows(
         sorted(meta_float_rows),
         sorted(meta_bool_rows),
         sorted(revokes_rows),
+        sorted(claim_seq_rows),
     )
 
 

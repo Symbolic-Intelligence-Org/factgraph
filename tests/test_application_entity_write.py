@@ -165,7 +165,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
                     target=target,
                     field=FieldPath(entity_type="User", field_name="tag"),
                     value="admin",
-                    meta={"source": "unit", "priority": 7},
+                    meta={"source": "unit", "priority": 7, "event_time": 123},
                 ),
                 PlannedOpDTO(
                     op="retract",
@@ -188,6 +188,7 @@ class ApplicationEntityWriteTests(unittest.TestCase):
         assertion_meta = {row.key: (row.kind, row.value) for row in assertions[1].meta}
         self.assertEqual(assertion_meta["source"], ("str", "unit"))
         self.assertEqual(assertion_meta["priority"], ("int", 7))
+        self.assertEqual(assertion_meta["event_time"], ("time", 123))
         self.assertEqual(assertion_meta["ingested_at"][0], "time")
         self.assertTrue(str(assertion_meta["ingest_key"][1]).startswith("sha256:"))
         revocation_meta = {row.key: (row.kind, row.value) for row in revocations[0].meta}
@@ -209,7 +210,10 @@ class ApplicationEntityWriteTests(unittest.TestCase):
             meta={"ingested_at": 1},
         )
 
-        with self.assertRaisesRegex(WriteProtocolError, "reserved and system-managed"):
+        with self.assertRaisesRegex(
+            WriteProtocolError,
+            "reserved and system-managed.*event_time",
+        ):
             planned_ops_to_inputs((op,), index=index)
 
     def test_plan_write_command_creates_missing_target_with_identity_bundle(self) -> None:

@@ -274,7 +274,10 @@ Boundaries:
 ### 7.3 Meta behavior
 
 - Top-level `meta` and item `meta` merge; item keys override top-level keys.
-- Hard-reserved keys: `ingested_at`, `ingest_key`, `revoked_asrt_id` (user writes are rejected).
+- Hard-reserved S-class keys: `ingested_at`, `ingest_key`,
+  `revoked_asrt_id` (user overrides are rejected). Use the ordinary
+  time-valued `event_time` key when importing or backfilling a source event
+  timestamp; `ingested_at` remains lifecycle-owned commit metadata.
 - `ingest_key` idempotency material includes:
   `claim + source + source_loc + trace_id + valid_from + valid_to + version`
 

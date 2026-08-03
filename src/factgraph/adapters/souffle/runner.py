@@ -295,6 +295,7 @@ def _validate_package_layout(pkg_dir: Path, manifest: dict[str, Any]) -> None:
         _manifest_path(manifest, "paths", "rules", "view"),
         _manifest_path(manifest, "paths", "rules", "idb"),
         _manifest_path(manifest, "paths", "facts", "claim"),
+        _manifest_path(manifest, "paths", "facts", "claim_seq"),
         _manifest_path(manifest, "paths", "facts", "claim_arg"),
         _manifest_path(manifest, "paths", "facts", "meta_str"),
         _manifest_path(manifest, "paths", "facts", "meta_time"),
