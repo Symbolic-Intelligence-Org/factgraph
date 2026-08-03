@@ -106,7 +106,7 @@ Slice 3b 在未发布 alpha 窗口完成 7→3 表 atomic flip,将 revocation �
 
 ### 工程规模与公开面
 
-- Slice base `e74775bb`→终态:`src/` **+3,540 / -502,net +3,038 lines**,41 files(包含 `src/` 内模块 docs;不含 tests/benchmarks/workflow)。
+- Slice base `e74775bb`→终态:`src/` **+3,608 / -503,net +3,105 lines**,42 files(包含 `src/` 内模块 docs;不含 tests/benchmarks/workflow)。
 - `factgraph.sdk.__all__` **87→88,net +1**;唯一新增公开名为 `MetaKeyPolicy`。
 - 桥梁清单 B1-B8 已冻结:B1/B2 确定交 Slice 5,B3/B5/B6 为 intake 候选,B4 归 release window,B7/B8 归 unmanaged lifecycle;Phase 4 无新桥。
 

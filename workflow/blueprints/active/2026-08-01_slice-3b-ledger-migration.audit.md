@@ -78,6 +78,7 @@
 | 2026-08-03 | **P3-R 收官复验通过;Phase 3 正式关闭,Phase 4 放行** | `695e6136`;F1 双钩子亲读 + 双向 live==reopen 测试非空、F2 直连回路钉住、F3-F5 落账;套件 2871/32/1/1172 独立复现;详见 §Phase 3 收官复验 |
 | 2026-08-03 | Phase 4 三组正式测量 | `8fb74836`:v3 harness 增 `three-table` / `three-table-tiered` profile;F6 以 claim-domain lazy `trace_id` 和独立 tx-lift `request_id` 分离归因;Phase 2 source pin `e716aa39` 与 Phase 3 source pin `338c1c12` 各跑 batch=3/1,N=5。终态 durable 2,933.487 / 3,177.071 B/claim,原 ~1KB headline 否决 |
 | 2026-08-03 | **Phase 4 docs + closeout 完成,停下待收官复验** | `(本提交)`:store/policy/premise 当前真相、三份 genesis A/R/M 措辞、spec/CHANGELOG 终态、B1-B8 冻结、Outcome/Deviations/量化与 §7 证据全部落位;blueprint→`implemented`,保持 active 等归档前最终检查;canonical gate 见 Phase 4 节末 |
+| 2026-08-03 | Phase 4 收官量化复算修正 | docs commit 后以真实 HEAD 重算 `e74775bb..HEAD -- src`:此前 working-tree 口径未计 untracked 新 `core/policy/README.md`;更正为 +3,608/-503,net +3,105,42 files。公开名 87→88 不变;测量与代码不变 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -596,7 +597,7 @@ PYTHONPATH=src python -c 'import sys,types,pytest; sys.modules["readline"]=types
 
 ### 收官量化与桥冻结
 
-- Slice 起点=`e74775bb`;终态 `src/` diff **+3,540 / -502 = net +3,038 lines**,41 files。该口径包含 `src/` 内模块 docs,不含 tests/benchmarks/workflow。
+- Slice 起点=`e74775bb`;终态 `src/` diff **+3,608 / -503 = net +3,105 lines**,42 files。该口径包含 `src/` 内模块 docs,不含 tests/benchmarks/workflow;以 docs commit 后真实 HEAD 重算,包含此前未被 working-tree diff 计入的新 `core/policy/README.md`。
 - `factgraph.sdk.__all__`:87→88,**公开名净增 +1**,唯一新增 `MetaKeyPolicy`;`SchemaTransitionInput` 未重新公开。
 - B1-B8 已在桥梁清单原表冻结并逐项分流;B1/B2 确定交 Slice 5,B3/B5/B6 为 intake 候选,B4 归发布窗口,B7/B8 归 unmanaged lifecycle。Phase 4 无新桥。
 - Module docs:core/store 三表+事件序+五属性+tx-lift 已补;core/policy README 新建并把 premise closure/two-level effective/chosen seq 写为当前真相;三份 shipped genesis 文档统一改为 A/R/M import transaction;spec 与 CHANGELOG 终态对齐。
