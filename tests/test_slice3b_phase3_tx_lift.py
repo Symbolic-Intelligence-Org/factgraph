@@ -17,7 +17,6 @@ from factgraph.core.store.database import (
     canonical_bytes_dbtx_v2,
     resolve_database_workspace_paths,
 )
-from factgraph.core.store.ledger import TxMetaDefault
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
@@ -178,20 +177,16 @@ class TxLiftResolverTests(unittest.TestCase):
                 ),
             ),
             revocations=(),
+            meta_defaults=(MetaEntry("source", "str", "batch-default"),),
         )
         first, second = committed.assertions
         revoked = database.commit_changes(
             assertions=(),
             revocations=(RevocationInput(first.asrt_id),),
+            meta_defaults=(MetaEntry("source", "str", "batch-default"),),
         )
         revoker_id = revoked.revocations[0].revoker_asrt_id
         ledger = database._ledger_for_attach()
-        ledger.replace_tx_meta_defaults(
-            (
-                TxMetaDefault(committed.value.tx_seq, "source", "str", "batch-default"),
-                TxMetaDefault(revoked.value.tx_seq, "source", "str", "batch-default"),
-            )
-        )
 
         self.assertEqual(
             ledger.effective_meta_rows(asrt_id=first.asrt_id, key="source")[0].value,
@@ -225,6 +220,58 @@ class TxLiftResolverTests(unittest.TestCase):
         self.assertTrue(
             is_predicate_premise_excluded(ledger, first.asrt_id, allowance)
         )
+        database.close()
+
+    def test_commit_defaults_require_consumers_and_tx_liftable_schema_keys(self) -> None:
+        database = Database.create(schema_ir=_schema_ir())
+        before = database.head()
+        invalid_calls = (
+            {
+                "assertions": (),
+                "revocations": (),
+                "meta_defaults": (MetaEntry("source", "str", "batch"),),
+            },
+            {
+                "assertions": (
+                    AssertionInput(
+                        "_tx_lift_entity:entity_id",
+                        (("entity_ref", "idref_v1:_TxLiftEntity:one"), ("string", "one")),
+                    ),
+                ),
+                "revocations": (),
+                "meta_defaults": (MetaEntry("ordinary", "str", "not-liftable"),),
+            },
+        )
+        for kwargs in invalid_calls:
+            with self.subTest(kwargs=kwargs), self.assertRaises(DatabaseError):
+                database.commit_changes(**kwargs)
+            self.assertEqual(database.head(), before)
+        database.close()
+
+    def test_commit_defaults_reject_every_reserved_key_before_writing(self) -> None:
+        database = Database.create(schema_ir=_schema_ir())
+        before = database.head()
+        assertion = AssertionInput(
+            "_tx_lift_entity:entity_id",
+            (("entity_ref", "idref_v1:_TxLiftEntity:one"), ("string", "one")),
+        )
+        for key in (
+            "__system__.batch",
+            "__factgraph_annotation_v1__:forged",
+            "assertion_digest",
+            "schema_digest",
+            "tx_id",
+            "ingested_at",
+            "ingest_key",
+            "revoked_asrt_id",
+        ):
+            with self.subTest(key=key), self.assertRaises(DatabaseError):
+                database.commit_changes(
+                    assertions=(assertion,),
+                    revocations=(),
+                    meta_defaults=(MetaEntry(key, "str", "forged"),),
+                )
+            self.assertEqual(database.head(), before)
         database.close()
 
 

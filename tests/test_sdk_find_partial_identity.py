@@ -151,9 +151,11 @@ class SDKFindPartialIdentityTests(unittest.TestCase):
         # the unified Database.commit_changes assertion/revocation entrypoint,
         # then to 88 for the Phase 3 MetaAppendInput/SchemaTransitionInput DTOs.
         # C3 withdrew policy-free SchemaTransitionInput from the SDK namespace,
-        # returning the intentional surface to 87 names.
+        # returning the intentional surface to 87 names. Slice 3b Phase 3 adds
+        # the typed MetaKeyPolicy authoring DTO, bringing the deliberate total
+        # to 88.
         # Intent unchanged: no ACCIDENTAL name creep.
-        self.assertEqual(len(sdk_module.__all__), 87)
+        self.assertEqual(len(sdk_module.__all__), 88)
         self.assertIn("compile_derivation_plan", sdk_module.__all__)
         self.assertIn("RuleProgram", sdk_module.__all__)
         self.assertIn("RuleProgramFact", sdk_module.__all__)

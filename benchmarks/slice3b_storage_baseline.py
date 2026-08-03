@@ -20,9 +20,11 @@ SQLite pages and per-commit tx-object cost.  WAL files, SHM files and the writer
 lock are excluded after an explicit checkpoint.  SQLite allocation is sampled
 at least five times and reported as a median plus jitter band; only the
 content-addressed tx-object delta is expected to be byte-exact across runs.
-Each assertion carries the same five meander-shaped input meta entries in all
-three phases.  Projected Ledger rows, physical persisted rows and the eager
-in-memory workset are reported separately instead of fixing their ratio.
+Each assertion has the same five-entry effective meander-shaped meta profile in
+all three phases. In the tiered phase, trace/request context is submitted once
+as a tx default while the other three entries remain claim-scoped. Projected
+Ledger rows, physical persisted rows and the eager in-memory workset are
+reported separately instead of fixing their ratio.
 """
 
 from __future__ import annotations
@@ -59,7 +61,9 @@ from factgraph.core.store.premise_filter import (
 
 
 PRED_ID = "benchmark:value"
-INPUT_META_PER_ASSERTION = 5
+LOGICAL_META_PER_ASSERTION = 5
+CLAIM_META_PER_ASSERTION = 3
+TX_DEFAULT_META_PER_BATCH = 2
 DEFAULT_BATCH_SIZES = (3,)
 DEFAULT_STORAGE_RUNS = 5
 
@@ -117,25 +121,35 @@ def _parse_batch_sizes(raw: str) -> tuple[int, ...]:
 
 
 def _assertion(
-    index: int, *, batch_index: int, batch_time: int, entity_count: int
+    index: int, *, batch_time: int, entity_count: int
 ) -> AssertionInput:
     entity_index = index % entity_count
     e_ref = f"idref_v1:Benchmark:{entity_index:032x}"
-    shared_suffix = f"{batch_index:08d}"
     meta = (
         MetaEntry("ingested_at", "time", batch_time),
         MetaEntry("provenance_class", "str", "observed"),
         MetaEntry("origin_binding", "str", "otel.span"),
-        MetaEntry("trace_id", "str", f"trace-{shared_suffix}"),
-        MetaEntry("request_id", "str", f"request-{shared_suffix}"),
     )
-    if len(meta) != INPUT_META_PER_ASSERTION:
-        raise AssertionError("the cross-phase input meta profile must stay fixed at five entries")
+    if len(meta) != CLAIM_META_PER_ASSERTION:
+        raise AssertionError("the tiered claim meta profile must stay fixed at three entries")
     return AssertionInput(
         pred_id=PRED_ID,
         fact_tuple=(("entity_ref", e_ref), ("string", f"value-{index:08d}")),
         meta=meta,
     )
+
+
+def _batch_meta_defaults(batch_index: int) -> tuple[MetaEntry, ...]:
+    shared_suffix = f"{batch_index:08d}"
+    rows = (
+        MetaEntry("request_id", "str", f"request-{shared_suffix}"),
+        MetaEntry("trace_id", "str", f"trace-{shared_suffix}"),
+    )
+    if len(rows) != TX_DEFAULT_META_PER_BATCH:
+        raise AssertionError("the tiered tx-default profile must stay fixed at two entries")
+    if CLAIM_META_PER_ASSERTION + len(rows) != LOGICAL_META_PER_ASSERTION:
+        raise AssertionError("the cross-phase effective meta profile must stay at five entries")
+    return rows
 
 
 def _populate(
@@ -157,13 +171,16 @@ def _populate(
         inputs = tuple(
             _assertion(
                 index,
-                batch_index=batch_index,
                 batch_time=batch_time,
                 entity_count=entity_count,
             )
             for index in range(next_index, next_index + actual)
         )
-        result = database.commit_assertions(inputs)
+        result = database.commit_changes(
+            assertions=inputs,
+            revocations=(),
+            meta_defaults=_batch_meta_defaults(batch_index),
+        )
         asrt_ids.extend(record.asrt_id for record in result.assertions)
         histogram[actual] += 1
         next_index += actual
@@ -361,6 +378,7 @@ def _storage_snapshot(workspace: Path) -> dict[str, Any]:
 
 def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
     projected_meta_rows = len(ledger.find_meta())
+    effective_meta_rows = len(ledger.effective_meta_rows())
     projected_annotation_rows = len(ledger.find_annotations())
     configured_lazy_meta_keys = sorted(ledger._lazy_meta_keys)
     resident_claim_meta_events = len(ledger._claim_meta_events)
@@ -403,13 +421,28 @@ def _workset_snapshot(ledger: Ledger, *, claim_count: int) -> dict[str, Any]:
     projected_lazy_meta_rows = sum(
         len(ledger.find_meta(key=key)) for key in configured_lazy_meta_keys
     )
+    effective_lazy_meta_rows = sum(
+        len(ledger.effective_meta_rows(key=key)) for key in configured_lazy_meta_keys
+    )
+    resident_tx_default_objects = sum(
+        len(rows) for rows in ledger._tx_meta_defaults_by_tx_seq.values()
+    )
     return {
         "configured_lazy_meta_keys": configured_lazy_meta_keys,
         "projected_lazy_meta_rows": projected_lazy_meta_rows,
         "projected_lazy_meta_rows_per_claim": round(
             projected_lazy_meta_rows / claim_count, 6
         ),
+        "effective_lazy_meta_rows": effective_lazy_meta_rows,
+        "effective_lazy_meta_rows_per_claim": round(
+            effective_lazy_meta_rows / claim_count, 6
+        ),
         "resident_lazy_meta_event_objects": resident_lazy_meta_event_objects,
+        "resident_tx_default_objects": resident_tx_default_objects,
+        "effective_ledger_meta_rows": effective_meta_rows,
+        "effective_ledger_meta_rows_per_claim": round(
+            effective_meta_rows / claim_count, 6
+        ),
         "projected_ledger_meta_rows": projected_meta_rows,
         "projected_ledger_meta_rows_per_claim": round(projected_meta_rows / claim_count, 6),
         "projected_annotation_rows": projected_annotation_rows,
@@ -540,12 +573,18 @@ def run(
             },
             "workload": {
                 "claim_count": claim_count,
-                "meta_entries_per_assertion_input": INPUT_META_PER_ASSERTION,
+                "logical_effective_meta_entries_per_assertion": (
+                    LOGICAL_META_PER_ASSERTION
+                ),
+                "claim_scoped_meta_entries_per_assertion_input": (
+                    CLAIM_META_PER_ASSERTION
+                ),
+                "tx_default_meta_entries_per_commit": TX_DEFAULT_META_PER_BATCH,
                 "batch_sizes_repeating": list(batch_sizes),
                 "batch_histogram": {str(size): count for size, count in sorted(histogram.items())},
                 "commit_count": sum(histogram.values()),
                 "meander_profile": (
-                    "plan.ingest request group; five fixed workload meta entries; "
+                    "plan.ingest request group; five fixed effective meta entries; "
                     "projected and persisted meta profiles are measured outputs"
                 ),
             },

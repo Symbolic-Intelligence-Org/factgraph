@@ -37,7 +37,11 @@ from factgraph.core.protocol.lthash import (
     remove as lthash_remove,
 )
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1, claim_args_from_rest_terms
-from factgraph.core.schema.meta_policy import lazy_meta_keys
+from factgraph.core.schema.meta_policy import (
+    MetaKeyPolicyError,
+    lazy_meta_keys,
+    require_tx_liftable_meta_key,
+)
 from factgraph.core.schema.schema_ir import (
     SchemaIRValidationError,
     canonicalize_schema_ir_identity_jcs,
@@ -1085,12 +1089,40 @@ class Database:
         revocations: Sequence[RevocationInput],
         meta_appends: Sequence[MetaAppendInput | _MetaUnsetInput] = (),
         schema_transition: SchemaTransitionInput | None = None,
+        *,
+        meta_defaults: Sequence[MetaEntry] = (),
     ) -> CommitResult:
         self._ensure_open()
-        if not assertions and not revocations and not meta_appends and schema_transition is None:
+        if (
+            not assertions
+            and not revocations
+            and not meta_appends
+            and schema_transition is None
+            and not meta_defaults
+        ):
             raise DatabaseError("commit_changes requires at least one change")
-        if schema_transition is not None and (assertions or revocations or meta_appends):
+        if meta_defaults and not (assertions or revocations):
+            raise DatabaseError(
+                "meta_defaults require at least one assertion or revocation consumer"
+            )
+        if schema_transition is not None and (
+            assertions or revocations or meta_appends or meta_defaults
+        ):
             raise DatabaseError("schema_transition must be committed as an isolated change")
+        prepared_meta_defaults = _normalize_tx_meta_defaults(meta_defaults)
+        if prepared_meta_defaults and self._schema_ir is None:
+            raise DatabaseError(
+                "tx meta defaults require a schema with declared tx_liftable keys"
+            )
+        for entry in prepared_meta_defaults:
+            try:
+                require_tx_liftable_meta_key(
+                    self._schema_ir,
+                    entry.key,
+                    context="tx meta defaults",
+                )
+            except MetaKeyPolicyError as exc:
+                raise DatabaseError(str(exc)) from exc
         parent = self.head()
         prepared = [self._prepare_assertion(item) for item in assertions]
         added_ids = [record.asrt_id for record, _claim, _args, _meta, _annotations in prepared]
@@ -1167,6 +1199,7 @@ class Database:
             digest_scheme=LTHASH_SCHEME,
             tx_seq=tx_seq,
             operations=operations,
+            meta_defaults=prepared_meta_defaults,
         )
 
         records: list[AssertionRecord] = []
@@ -1249,6 +1282,7 @@ class Database:
                 digest_scheme=LTHASH_SCHEME,
                 tx_seq=tx_seq,
                 operations=operations,
+                meta_defaults=prepared_meta_defaults,
             )
         try:
             self._ledger.commit_batch(
@@ -1266,6 +1300,14 @@ class Database:
             )
         except LedgerHeadConflictError as exc:
             raise HeadConflictError(str(exc)) from exc
+
+        if prepared_meta_defaults:
+            self._ledger.record_tx_meta_defaults(
+                tuple(
+                    TxMetaDefault(tx_seq, row.key, row.kind, row.value)
+                    for row in prepared_meta_defaults
+                )
+            )
 
         if prepared_schema_transition is not None:
             self._schema_digest = commit_schema_digest

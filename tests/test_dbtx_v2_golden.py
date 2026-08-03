@@ -45,6 +45,116 @@ _COMMIT_PATH_IDS = (
 
 
 class DbtxV2GoldenTests(unittest.TestCase):
+    def test_production_meta_defaults_commit_is_frozen_and_reopens(self) -> None:
+        fixture = _load_fixture("commit_path_meta_defaults.json")
+        expected = fixture["batch_step"]
+        with tempfile.TemporaryDirectory() as raw_tmp, patch(
+            "factgraph.core.store.database._new_db_id",
+            return_value="db:11111111111111111111111111111111",
+        ), patch(
+            "factgraph.core.store.database._new_assertion_id",
+            side_effect=_COMMIT_PATH_IDS[:2],
+        ):
+            workspace = Path(raw_tmp) / "workspace"
+            database = Database.create(workspace, schema_ir=_tx_default_schema_ir())
+            self.assertEqual(database.head().tx_id, fixture["head_progression"][0])
+            committed = database.commit_changes(
+                assertions=(
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:alice"), ("string", "Alice")),
+                    ),
+                    AssertionInput(
+                        "person:name",
+                        (("entity_ref", "idref_v1:Person:bob"), ("string", "Bob")),
+                        meta=(MetaEntry("source", "str", "claim-override"),),
+                    ),
+                ),
+                revocations=(),
+                meta_defaults=(
+                    MetaEntry("trace_id", "str", "trace-batch-1"),
+                    MetaEntry("source", "str", "batch-default"),
+                ),
+            )
+            head = database.head()
+            expected_state_digest = "".join(expected["head_state_digest_chunks"])
+            self.assertEqual(
+                [fixture["head_progression"][0], head.tx_id],
+                fixture["head_progression"],
+            )
+            self.assertEqual(head.tx_id, expected["tx_id"])
+            self.assertEqual(head.tx_seq, expected["tx_seq"])
+            self.assertEqual(head.state_digest, expected_state_digest)
+            expected_metadata = dict(expected["head_metadata"])
+            expected_metadata["head_state_digest"] = expected_state_digest
+            self.assertEqual(
+                database._ledger_for_attach().get_ledger_meta_snapshot(
+                    ("head_tx_id", "head_tx_seq", "head_state_digest")
+                ),
+                expected_metadata,
+            )
+
+            object_path = (
+                resolve_database_workspace_paths(workspace).tx_objects
+                / f"{head.tx_id.removeprefix('tx:')}.json"
+            )
+            object_bytes = object_path.read_bytes()
+            self.assertEqual(
+                object_bytes,
+                bytes.fromhex("".join(expected["tx_object_hex_chunks"])),
+            )
+            payload = json.loads(object_bytes.decode("utf-8"))
+            self.assertEqual(payload["meta_defaults"], expected["meta_defaults"])
+            canonical = canonical_bytes_dbtx_v2(
+                parent_tx_id=payload["parent_tx_id"],
+                schema_digest=payload["schema_digest"],
+                digest_scheme=payload["digest_scheme"],
+                tx_seq=payload["tx_seq"],
+                operations=payload["operations"],
+                meta_defaults=payload["meta_defaults"],
+            )
+            self.assertEqual(
+                canonical,
+                bytes.fromhex("".join(expected["canonical_hex_chunks"])),
+            )
+            first, second = committed.assertions
+            ledger = database._ledger_for_attach()
+            self.assertEqual(
+                {
+                    row.key: row.value
+                    for row in ledger.effective_meta_rows(asrt_id=first.asrt_id)
+                },
+                {
+                    "assertion_digest": first.assertion_digest,
+                    "schema_digest": first.schema_digest,
+                    "source": "batch-default",
+                    "trace_id": "trace-batch-1",
+                    "tx_id": head.tx_id,
+                },
+            )
+            self.assertEqual(
+                {
+                    row.key: row.value
+                    for row in ledger.effective_meta_rows(asrt_id=second.asrt_id)
+                }["source"],
+                "claim-override",
+            )
+            database.close()
+
+            reopened = Database.open(workspace, schema_ir=_tx_default_schema_ir())
+            try:
+                cold = reopened._ledger_for_attach()
+                self.assertEqual(
+                    {
+                        row.key: row.value
+                        for row in cold.effective_meta_rows(asrt_id=first.asrt_id)
+                    }["trace_id"],
+                    "trace-batch-1",
+                )
+                self.assertEqual(reopened.head().tx_id, expected["tx_id"])
+            finally:
+                reopened.close()
+
     def test_production_adapter_annotation_commit_is_frozen(self) -> None:
         fixture = _load_fixture("adapter_annotation_commit.json")
         expected = fixture["adapter_step"]
@@ -356,6 +466,22 @@ def _commit_path_schema_ir(*, version: int) -> dict[str, Any]:
 def _adapter_schema_ir() -> dict[str, Any]:
     value = _commit_path_schema_ir(version=1)
     value["generated_at"] = "2026-08-02T00:00:00Z"
+    return value
+
+
+def _tx_default_schema_ir() -> dict[str, Any]:
+    value = _commit_path_schema_ir(version=1)
+    value["meta_keys"] = {
+        "source": {
+            "premise_eligible": True,
+            "storage_scope": "tx_liftable",
+        },
+        "trace_id": {
+            "load_policy": "lazy",
+            "reader_class": "audit",
+            "storage_scope": "tx_liftable",
+        },
+    }
     return value
 
 

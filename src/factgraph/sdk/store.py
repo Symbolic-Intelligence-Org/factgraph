@@ -204,6 +204,11 @@ class _ViewScopedLedger(Ledger):
         self._base_asrt_ids = base_asrt_ids
         self._visible_asrt_ids = frozenset(view.asrt_ids).intersection(base_asrt_ids)
 
+    def configure_meta_load_policy(self, lazy_keys: Sequence[str]) -> None:
+        """Keep the read-only wrapper aligned with its Database-owned Ledger."""
+
+        self._base.configure_meta_load_policy(lazy_keys)
+
     def _is_visible(self, asrt_id: str) -> bool:
         return asrt_id in self._visible_asrt_ids
 
@@ -214,6 +219,11 @@ class _ViewScopedLedger(Ledger):
         if not self._is_visible(asrt_id):
             return None
         return self._base.get_claim(asrt_id)
+
+    def claim_sequence(self, asrt_id: str) -> int | None:
+        if not self._is_visible(asrt_id):
+            return None
+        return self._base.claim_sequence(asrt_id)
 
     def find_claims(self, pred_id: str | None = None, e_ref: str | None = None) -> list[Claim]:
         return self._filter_claims(self._base.find_claims(pred_id=pred_id, e_ref=e_ref))

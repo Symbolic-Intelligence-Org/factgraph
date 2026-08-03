@@ -204,6 +204,17 @@ def lazy_meta_keys(schema_ir: Mapping[str, Any]) -> frozenset[str]:
     )
 
 
+def require_tx_liftable_meta_key(
+    schema_ir: Mapping[str, Any], key: str, *, context: str
+) -> None:
+    policy = declared_meta_key_policy(schema_ir, key)
+    if policy is None or policy.storage_scope != "tx_liftable":
+        raise MetaKeyPolicyError(
+            f"{context} references meta key {key!r}, which is not declared "
+            "storage_scope='tx_liftable' in this schema"
+        )
+
+
 def _validate_meta_key(value: Any, *, path: str) -> None:
     if not isinstance(value, str) or not value:
         raise MetaKeyPolicyError(f"{path} keys must be non-empty strings")

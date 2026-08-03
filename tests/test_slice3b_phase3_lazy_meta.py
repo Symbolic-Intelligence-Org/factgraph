@@ -170,8 +170,16 @@ class LazyMetaProjectionTests(unittest.TestCase):
         benchmark = _benchmark_module()
         database = Database.create(schema_ir=benchmark._schema_ir())
         try:
-            committed = database.commit_assertions(
-                (benchmark._assertion(0, batch_index=0, batch_time=1, entity_count=1),)
+            committed = database.commit_changes(
+                assertions=(
+                    benchmark._assertion(
+                        0,
+                        batch_time=1,
+                        entity_count=1,
+                    ),
+                ),
+                revocations=(),
+                meta_defaults=benchmark._batch_meta_defaults(0),
             )
             self.assertEqual(len(committed.assertions), 1)
             workset = benchmark._workset_snapshot(
@@ -182,11 +190,13 @@ class LazyMetaProjectionTests(unittest.TestCase):
                 workset["configured_lazy_meta_keys"],
                 ["request_id", "trace_id"],
             )
-            self.assertEqual(workset["projected_lazy_meta_rows"], 2)
+            self.assertEqual(workset["projected_lazy_meta_rows"], 0)
+            self.assertEqual(workset["effective_lazy_meta_rows"], 2)
             self.assertEqual(workset["resident_lazy_meta_event_objects"], 0)
+            self.assertEqual(workset["resident_tx_default_objects"], 2)
             self.assertLess(
                 workset["resident_claim_meta_event_objects"],
-                workset["projected_ledger_meta_rows"],
+                workset["effective_ledger_meta_rows"],
             )
         finally:
             database.close()

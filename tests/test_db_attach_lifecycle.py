@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-import gc
 import weakref
 from dataclasses import replace
 from pathlib import Path
@@ -105,13 +104,14 @@ class DBAttachLifecycleTests(unittest.TestCase):
             owner = weakref.ref(db)
 
             del db
-            gc.collect()
 
             self.assertIsNone(owner())
             self.assertIsNone(ledger._managed_meta_writer)
             self.assertIsNone(ledger._managed_annotation_writer)
             with self.assertRaisesRegex(RuntimeError, "Ledger is closed"):
                 ledger.find_claims()
+            reopened = Database.open(Path(tmp) / "workspace", schema_ir=_schema_ir())
+            reopened.close()
 
     def test_attached_entities_create_delete_each_advance_one_consistent_tx(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
