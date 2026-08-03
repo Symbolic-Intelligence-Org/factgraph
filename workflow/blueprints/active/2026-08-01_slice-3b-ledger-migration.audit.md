@@ -79,6 +79,7 @@
 | 2026-08-03 | Phase 4 三组正式测量 | `8fb74836`:v3 harness 增 `three-table` / `three-table-tiered` profile;F6 以 claim-domain lazy `trace_id` 和独立 tx-lift `request_id` 分离归因;Phase 2 source pin `e716aa39` 与 Phase 3 source pin `338c1c12` 各跑 batch=3/1,N=5。终态 durable 2,933.487 / 3,177.071 B/claim,原 ~1KB headline 否决 |
 | 2026-08-03 | **Phase 4 docs + closeout 完成,停下待收官复验** | `(本提交)`:store/policy/premise 当前真相、三份 genesis A/R/M 措辞、spec/CHANGELOG 终态、B1-B8 冻结、Outcome/Deviations/量化与 §7 证据全部落位;blueprint→`implemented`,保持 active 等归档前最终检查;canonical gate 见 Phase 4 节末 |
 | 2026-08-03 | Phase 4 收官量化复算修正 | docs commit 后以真实 HEAD 重算 `e74775bb..HEAD -- src`:此前 working-tree 口径未计 untracked 新 `core/policy/README.md`;更正为 +3,608/-503,net +3,105,42 files。公开名 87→88 不变;测量与代码不变 |
+| 2026-08-03 | **Phase 4 收官复验通过(归档门):0 blocker / 0 serious;slice-3b 达归档条件** | 独立复跑三组测量(durable 偏差 ≤0.47%,tx-obj 逐字节)、headline 诚实对账、F6 无双计、§7 全证、桥 B1-B8 冻结、无第四假绝对句、收官量化吻合;实际 git mv 归档待用户信号。详见 §Phase 4 收官复验 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -602,6 +603,18 @@ PYTHONPATH=src python -c 'import sys,types,pytest; sys.modules["readline"]=types
 - B1-B8 已在桥梁清单原表冻结并逐项分流;B1/B2 确定交 Slice 5,B3/B5/B6 为 intake 候选,B4 归发布窗口,B7/B8 归 unmanaged lifecycle。Phase 4 无新桥。
 - Module docs:core/store 三表+事件序+五属性+tx-lift 已补;core/policy README 新建并把 premise closure/two-level effective/chosen seq 写为当前真相;三份 shipped genesis 文档统一改为 A/R/M import transaction;spec 与 CHANGELOG 终态对齐。
 - Verification:dbtx_v2 golden + pre-flip read-equivalence + F6 聚焦面 **13 passed / 4 subtests**;canonical `PYTHONPATH=src` + process-only readline shim + approved ignore/deselect = **2871 passed / 32 skipped / 1 deselected / 1172 subtests**;changed Python ruff 与 `git diff --check` 全绿。既有 golden fixture 零修改,无生产 `src/*.py` 变更。
+
+## Phase 4 收官复验(归档门,2026-08-03,Claude 独立复跑 + 收官验证器)
+
+**结论:0 blocker / 0 serious / 0 minor / 3 note —— 无一项阻挡归档。** slice-3b 全 4 Phase 闭合,可归档。
+
+- **三组测量独立复现**:六组 durable 中位数与 audit 值偏差 ≤0.47%,tx-object 分量**逐字节相同**;降幅从复现中位数重算为 23.47%/21.04%(略高于登记的 22.915%/20.908% —— audit 未夸大);durable=sqlite+tx 算术成立;工作集(physical 27k→24k→21k、eager 27k→27k→18k、index 159k→231k→162k)精确复现。
+- **headline 诚实**:~1KB 预期被实测否决,记录在四处(Outcome/Deviations/§7 box8/专节"~1KB 对账"),未埋未粉饰;F6 拆分把 trace_id 从 tx-lift 移回 claim 域,反使实测降幅**更保守**(gaming 的反面);Phase 4 零 `src/**/*.py` 改动。
+- **F6 纪律**:claim 域 lazy trace_id 投影 3000 / 驻留 0,request_id 独立 tx-lift;eager 27k→18k 无双计。
+- **§7 十一 box 均有交付+测试证据**(焦点门 13 passed / 4 subtests 复现),status=implemented 成立,延期项(B1-B8、Stage B perf)显式归属未来 slice;桥 B1-B8 冻结与代码一致,Phase 4 无新桥;**无第四假绝对句**(所有绝对句真或诚实对冲);genesis 措辞三文档清扫净、spec 修正了先前假陈述;协调方 Phase 0-3 审计节字节未动;收官量化独立复算吻合(+3608/-503 net +3105,42 files;`__all__` 87→88 仅 +MetaKeyPolicy)。
+- note(非阻塞):sqlite 中位数偶超 5 样本带 ~2 页(uuid4 页分裂,已文档化,中位数对中位数 ≤0.52%)。
+
+**归档裁定:slice-3b 达归档条件。** 实际 `git mv` blueprint + audit → archive/ 与 INVENTORY 收录待用户"可归档"信号(大 scope 里程碑,沿互授权 cadence)。发布时序(Q-SAE-6,定 B4 死期)与 CLAUDE.md docs/README.md 指针为独立挂账,不阻挡归档。
 
 ## Deviations
 
