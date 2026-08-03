@@ -145,11 +145,36 @@ fg = FactGraph.create(path="path/to/workspace", schema_classes=[User])
 If you need the compiled IR directly (for export, hashing, or preflight inspection), call:
 
 ```python
-from factgraph.sdk import compile_schema_from_classes, schema_preflight_from_classes
+from factgraph.sdk import (
+    MetaKeyPolicy,
+    compile_schema_from_classes,
+    schema_preflight_from_classes,
+)
 
 schema_ir = compile_schema_from_classes([User])     # compile and return the IR
-schema_preflight_from_classes([User])               # validate only; does not return IR
+schema_preflight_from_classes([User])               # validate and return a preflight report
+
+# Advanced Database authoring: declare schema-global metadata policy.
+audit_schema_ir = compile_schema_from_classes(
+    [User],
+    meta_keys={
+        "trace_id": MetaKeyPolicy(
+            reader_class="audit",
+            load_policy="lazy",
+            storage_scope="tx_liftable",
+        )
+    },
+)
 ```
+
+`meta_keys=` is a schema-global compile input, not a per-entity `class Meta`
+setting. Its five independent properties are `reader_class`,
+`premise_eligible`, `load_policy`, `storage_scope`, and `query_indexed`.
+Properties equal to their defaults are omitted from canonical IR; declaring a
+non-default policy changes schema identity. The current `FactGraph.create` and
+`FactGraph.attach` convenience constructors compile their class list without a
+`meta_keys=` argument, so use the explicit compile + `Database` surface when
+authoring these policies.
 
 The `schema_digest` is the SHA-256 of the canonicalized schema identity
 (sorted-key JSON, UTF-8). It excludes volatile top-level `generated_at`
@@ -276,8 +301,16 @@ fg.schema.apply(entity_cls: type[Entity]) -> SchemaAddResult
 ### 5.3 Compile helpers
 
 ```python
-compile_schema_from_classes(classes: list[type[Entity]]) -> dict       # returns schema IR
-schema_preflight_from_classes(classes: list[type[Entity]]) -> None     # validate only
+compile_schema_from_classes(
+    classes: list[type[Entity]],
+    *,
+    meta_keys: Mapping[str, MetaKeyPolicy] | None = None,
+) -> dict
+schema_preflight_from_classes(
+    classes: list[type[Entity]],
+    *,
+    meta_keys: Mapping[str, MetaKeyPolicy] | None = None,
+) -> dict
 ```
 
 ### 5.4 SchemaAddResult

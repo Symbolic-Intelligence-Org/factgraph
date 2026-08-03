@@ -70,7 +70,8 @@
 | 2026-08-02 | **内联裁定(协调方):tx 批次 meta 编码 = 可选顶层 `meta_defaults` + domain-separated canonical suffix(八条约束)** | 采纳 codex 形状,依据与 kind/annotation_refs/P2-S1 同一原则:影响 effective 解析的信息必须入链承诺。约束:(a) 非空才存在,空即字段与 suffix 双省略 —— 既有 golden bytes/tx_id 全不变(golden 即证);(b) suffix 域分离,分节标记与既有 op tag 空间不可碰撞,精确字节形态实现定;(c) 按 key 排序且唯一的 `{key,kind,value}` 序列,**写侧规范化发射、读侧+parity fail-closed 校验排序与唯一**(拒未排序/重复,不做读时静默归一);(d) kind/value 编码复用 M-op meta entry 既有编码,单源禁第二套;(e) tx 默认无 UNSET,继承移除 = claim 层 UNSET;(f) 否决 `tx_meta` op —— op_ordinal 空间属 claim 事件层,正交层不互扰(采纳 codex 理由);(g) 新写通道三侧守卫:拒保留/系统 key(annotation 前缀/`__system__.`/DB-owned 三键/system-managed 三键)+ 负向测试 + 非空 defaults 新 golden(序列化器级,写面落地后补 commit-path 级);(h) 物理读路径实现自由(attach 期按 tx_ref 建内存索引或 ledger_meta 记账镜像)但**不得引入第四张表**,任何持久化镜像 = 链可重建记账状态(repair 覆盖、篡改按记账漂移处理);tx-object reader 允许列表扩展为可选 meta_defaults,其余未知字段照旧 fail-closed。用户可否决 |
 | 2026-08-03 | Phase 3 C2 tx-default 链地基 | `6f1f543d`:dbtx_v2 非空 `meta_defaults` 以独立 `tx_meta_defaults_v1` suffix 入 canonical bytes/tx_id,空值双省略;M-op MetaEntry 编码单源、写侧排序/唯一与十类保留 key 守卫、读侧非规范/未知字段 fail-closed;Ledger 两层 effective 解析与 durable attach 链重建落地。新增 serializer golden,既有 golden 零修改。批次 commit 写面与 commit-path golden 留 C5。 |
 | 2026-08-03 | Phase 3 C3 audit meta 惰性投影 | `9d7e637e`:schema `load_policy=lazy` key 的物理 claim_meta 事件退出 Ledger eager event/meta/annotation 索引,历史/effective/兼容投影按需从三表真值重建且保持事件序;无声明 schema 仍全 eager。baseline harness 将 `trace_id/request_id` 声明为 audit/lazy 并新增 projected-vs-resident 指标;39 tests / 47 subtests 聚焦面通过。B6 同提交扩记 benchmark 对 lazy 驻留索引的冻结依赖。 |
-| 2026-08-03 | Phase 3 C4 chosen→seq + S 政策收编(本提交) | chosen 从 `(-ingested_at, asrt_id)` 切为 durable `claims.seq`,Souffle 同步新增 `claim_seq` EDB,policy IR 改为 `latest_by_claim_seq`;时间倒挂/同刻/v0.2 导入三门齐。open 新增 `claims.seq` 与链承诺 tx_ref 顺序一致性门,阻断仅改物理序翻转 chosen。Phase 2 的 `test_phase2_chosen_orders_by_sample_time_not_later_commit` 依用户卡明确授权替换为后提交胜出测试 —— 原断言钉旧语义,本次替换是 sanctioned Breaking change 的直接证据,非测试弱化。system-managed 三键提升为单源 S-class 常量并保持 post-create append/UNSET 禁覆盖;用户回填时间走 `event_time:time`。 |
+| 2026-08-03 | Phase 3 C4 chosen→seq + S 政策收编 | `6422a817`:chosen 从 `(-ingested_at, asrt_id)` 切为 durable `claims.seq`,Souffle 同步新增 `claim_seq` EDB,policy IR 改为 `latest_by_claim_seq`;时间倒挂/同刻/v0.2 导入三门齐。open 新增 `claims.seq` 与链承诺 tx_ref 顺序一致性门,阻断仅改物理序翻转 chosen。Phase 2 的 `test_phase2_chosen_orders_by_sample_time_not_later_commit` 依用户卡明确授权替换为后提交胜出测试 —— 原断言钉旧语义,本次替换是 sanctioned Breaking change 的直接证据,非测试弱化。system-managed 三键提升为单源 S-class 常量并保持 post-create append/UNSET 禁覆盖;用户回填时间走 `event_time:time`。 |
+| 2026-08-03 | Phase 3 C5 批次默认写面 + 收尾 | `2c73a97d`:`Database.commit_changes(meta_defaults=...)` 只接受 schema 显式声明 `storage_scope=tx_liftable` 的普通 key,要求同 tx 至少一个 assertion/revoker consumer;沿 C2 canonical/tx-object 承诺入链,成功后更新 live 两层索引,claim initial meta 与后续 UNSET 仍优先。新增 production commit-path golden 钉 tx bytes/tx_id/head 三元组/LtHash state 与 cold reopen;baseline 第三组把 request/trace 从每 claim 行提升为每 tx 两项并分列 effective/projected/resident 指标。顺手关闭 C3/C4 的 view wrapper 委托缺口与无-GC 即时重开残留。Phase 3 扩面 `54 passed / 57 subtests`;canonical `2867 passed / 32 skipped / 1 deselected / 1170 subtests`;既有 golden 与 C0 读等价 fixture 零修改。 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -131,13 +132,13 @@
 | `query_indexed` | bool | 是否建查询索引(**可查询 ≠ premise 语义** —— 修正原 `version` 误归 J 的错误) |
 
 - [x] 五属性进入可选 canonical `meta_keys` Schema IR 与 identity digest;默认值省略、无声明 schema bytes/digest 不变;C0 `e294a0bd`。
-- [ ] 原 S/J/F/T 保留为**文档层的常用组合速记**,不再是 schema 模型。
+- [x] 原 S/J/F/T 仅保留为 ADR/本 worklist 的**文档层常用组合速记**,运行时 schema 模型只使用五个正交属性;C0。
 
 ### Q-SAE-9 §2 Tx 具象化
 
 - [x] **`claims` 与 meta event 行显式携带 `tx_ref`**(8 字节/行,相对 ~1KB/claim 可忽略;换来稳定审计、meta-only 事务支持、可迁移性);**3b 实现注记**:`claims.tx_ref` 与 `claim_meta.tx_seq` 依 2026-08-01 内联裁定共享同一 INTEGER 引用空间(`tx_ref ≡ tx_seq`);
-- [ ] tx 级 S/共享 meta 落在 **tx object**(现有 `db/objects/tx/` 谱系,Stage A 裁定其介质)而非必然一条 tx claim —— 是否同时物化 `__system__.tx` claim 供图内查询,降级为 blueprint 实现选项;
-- [ ] **与 Q-SAE-1 的强耦合(rev.2 新增)**:per-call 事务粒度会使 tx 元数据条数 ≈ 业务写入条数,批次摊销失效。因此 Q-SAE-1 的裁定必须与本 ADR 联动 —— ✎ 提案:**ingest/批量面走批次 commit(一批 span = 一个 tx),交互式单写维持 per-call** —— 双粒度,由 API 面区分。
+- [x] tx 级 S/共享 meta 落在 **tx object**(现有 `db/objects/tx/` 谱系,Stage A 裁定其介质),不物化 `__system__.tx` claim;C2 `6f1f543d` + C5 `2c73a97d`;
+- [x] **与 Q-SAE-1 的强耦合(rev.2 新增)**:per-call 事务粒度会使 tx 元数据条数 ≈ 业务写入条数,批次摊销失效。因此 Q-SAE-1 的裁定必须与本 ADR 联动 —— ✎ 提案:**ingest/批量面走批次 commit(一批 span = 一个 tx),交互式单写维持 per-call** —— 双粒度,由 API 面区分。Stage A 双粒度地基 + C5 批次默认写面已兑现;
 
 ### Q-SAE-9 §3 跨层解析
 
@@ -175,18 +176,18 @@
 
 ### Q-SAE-9 §7 验收 gates
 
-1. [ ] premise filter 差分测试(最高优先):统一解析器(含 UNSET、tx 默认继承、revoker 对称)vs 现行单层 last-wins,逐字节等价 + absence 语义专项(absent_ok 全路径);
-2. [ ] INV-15:tx 物化物(若含 `__system__.tx` claim)五读面不外泄;
+1. [x] premise filter 差分测试(最高优先):统一解析器(含 UNSET、tx 默认继承、revoker 对称)vs 现行单层 last-wins,逐字节等价 + absence 语义专项(absent_ok 全路径);Phase 2 单层门 + Phase 3 `test_slice3b_phase3_tx_lift.py`;
+2. [x] INV-15:实现选择不物化 `__system__.tx` claim,tx 默认只存在于链承诺与内存解析索引,因此五个 claim 读面无新增物化物可泄漏;
 3. [x] chosen:语义变更用例集(时间倒挂、同刻、导入);另有 `seq`/`tx_ref` 篡改 fail-closed 门;
 4. [ ] 三组对照 bytes/claim + 求值工作集(lazy 生效验证:audit 类不进 eager 投影);**Partial(C3)**:audit/lazy 行已退出 eager 驻留并由 harness 同名指标钉住,Phase 4 三组最终测量未执行;
-5. [ ] `narrate()`/explain 无可观察回归。
+5. [x] `narrate()`/explain 无可观察回归;Phase 3 canonical 全套件含跨引擎 explain/narrate 面 `2867 passed / 32 skipped / 1 deselected / 1170 subtests`。
 
 ### Q-SAE-9 §8 裁定
 
 - codex 评审:`tx_ref` 取代区间、正交属性拆维、UNSET tombstone、逐 key 修正(candidate/derived/note 非 T)、chosen 语义变更定性、actor 非 S、trace_id 不合并、version 条件 J、S 禁覆盖 + `event_time` —— **全部采纳**;
-- [ ] **裁定 1(用户 2026-07-31)**:双粒度事务采纳(批量面批次 commit / 交互面 per-call)—— **Q-SAE-1 就此一并裁定**,无需独立 ADR;
-- [ ] 默认执行(未单独呈批,可推翻):`__system__.tx` claim v0.3 不物化进图,仅存 tx object;
-- [ ] **裁定 3(用户 2026-07-31,经 meander 盘点)**:`premise_eligible` 初始声明集 = **`{provenance_class, origin_binding}`** —— meander 全部三个 premise 配置点(state.py MetaExclusion + PredicatePremiseAllowance、accreditation/effect.py PredicatePremiseBlock)仅引用此两 key(经 plan_semantics 常量,literal 已核实)。用户注:此集可调整,不做刚性承诺。
+- [x] **裁定 1(用户 2026-07-31)**:双粒度事务采纳(批量面批次 commit / 交互面 per-call)—— **Q-SAE-1 就此一并裁定**,无需独立 ADR;
+- [x] 默认执行(未单独呈批,可推翻):`__system__.tx` claim v0.3 不物化进图,仅存 tx object;
+- [x] **裁定 3(用户 2026-07-31,经 meander 盘点)**:`premise_eligible` 初始声明集 = **`{provenance_class, origin_binding}`** —— meander 全部三个 premise 配置点(state.py MetaExclusion + PredicatePremiseAllowance、accreditation/effect.py PredicatePremiseBlock)仅引用此两 key(经 plan_semantics 常量,literal 已核实)。用户注:此集可调整,不做刚性承诺。C0 内建常量/测试/spec 三重钉死,C1 三入口 closure 已落;
 
 ### Stage A archive §7.1 三条口径护栏(verbatim)
 

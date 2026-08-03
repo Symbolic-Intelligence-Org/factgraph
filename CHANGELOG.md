@@ -70,6 +70,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Isolated `schema_change` transactions commit old/new schema digests while
   replay requires both content-addressed schema objects and transition
   continuity. Application `FieldValue` now carries `bytes` additively.
+- **Schema compilation supports orthogonal metadata policy declarations.**
+  `compile_schema_from_classes(..., meta_keys=...)` and authoring JSON accept
+  typed `MetaKeyPolicy` declarations for reader class, premise eligibility,
+  load policy, storage scope, and query indexing. Default-valued declarations
+  stay out of canonical bytes; premise configuration is closed against the
+  schema, and audit/lazy keys stay out of the eager evaluation workset.
+- **Database batches can carry chained transaction metadata defaults.**
+  `Database.commit_changes(..., meta_defaults=...)` accepts unique ordinary
+  keys declared `storage_scope="tx_liftable"` and emits them in canonical key
+  order. Defaults are committed in the tx object and inherited by assertions
+  and revokers in that transaction; claim metadata overrides them and an
+  `UNSET` claim event removes inheritance.
 - **The SDK exposes low-level atomic assertion/revocation commits.**
   `fg.commit_changes(assertions, revocations)` and the public
   `RevocationInput` DTO let advanced callers submit one mixed change set as
