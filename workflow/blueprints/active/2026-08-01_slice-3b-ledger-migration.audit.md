@@ -75,6 +75,7 @@
 | 2026-08-02 | **Phase 3 对抗审计:0 blocker / 0 serious / 1 MEDIUM / 4 minor —— 有条件不放行,P3-R 轻补钉先行** | 五份对抗报告(chosen-seq/tx-lift+digest/wire-format/semantics/docs-scope);字节不变 gate 与真惰性经探针证实,schema-evolution 零走私,无第四假绝对句;F1=会话内 transition 不刷新惰性策略(MEDIUM),F2=meta_keys 著述 managed 生命周期可达性(决策点);全文见 §Phase 3 对抗审计 |
 | 2026-08-02 | **用户裁定 F2 = 选项 A(2026-08-02)** | meta_keys 为少数运营 key 一次性声明,低频 —— v0.3 著述路径 = 直连 `compile_schema_from_classes(meta_keys=) → Database.create(schema_ir=)`;`FactGraph.create/attach` 不加 meta_keys 参数(窄 API),managed 生命周期的人体工学入口留待 schema-evolution blueprint(§3.8 著述面完整待遇)。P3-R B 据此定稿:证明直连路径可达 + reopen 无损 + 声明生效的常驻测试,schema_definition.md 补一句归属注记。用户直接裁定 |
 | 2026-08-03 | **Phase 3 P3-R 收官卡完成,停下待复验** | `(本提交)`:F1 Database transition 与 SDK schema refresh 同步刷新 lazy/eager 驻留,SDK 在 durable commit 前及 refresh 边界重验现存三类 premise 配置,失效即零 schema/runtime 状态变更;F2 直连 compile→Database.create/write/reopen 回路证明 lazy/premise/tx-lift 与 digest 无损,managed 人体工学明确归 schema-evolution;F3 两类 reserved tx-object 伪造 open fail-closed;F4 原 54/57 调用式入账;F5 `ingested_at` 与 `query_indexed` 能力边界诚实化。Phase 3 扩面 `58 passed / 59 subtests`;canonical `2871 passed / 32 skipped / 1 deselected / 1172 subtests`;ruff + diff-check 全绿,既有 golden 零修改。Phase 4 未启动。 |
+| 2026-08-03 | **P3-R 收官复验通过;Phase 3 正式关闭,Phase 4 放行** | `695e6136`;F1 双钩子亲读 + 双向 live==reopen 测试非空、F2 直连回路钉住、F3-F5 落账;套件 2871/32/1/1172 独立复现;详见 §Phase 3 收官复验 |
 
 ### 2026-08-02 C 项内联裁定逐字记录
 
@@ -521,6 +522,17 @@ PYTHONPATH=src python -c 'import sys,types,pytest; sys.modules["readline"]=types
 - **F2**:常驻直连回路严格走裁定路径 `compile_schema_from_classes(meta_keys=) → Database.create(schema_ir=) → commit → close → Database.open(schema_ir=)`;claim-domain lazy 行不驻留、tx 默认继承、premise exclusion 与重编译 digest 稳定均被断言。未给 `FactGraph.create/attach` 加参数。
 - **F3-F5**:手构 `__system__.` 与 annotation-prefix `meta_defaults` 的 tx object 均在 open 解码阶段按具体 reserved-namespace 诊断拒绝;54/57 原始命令见本审计节;§1/§4 表分别注明 `query_indexed` 暂无消费者与 `ingested_at:tx_liftable` 仅为概念分类。
 - **验证**:上述 Phase 3 精确命令在 P3-R 后为 `58 passed / 59 subtests`;canonical 命令为 `PYTHONPATH=src` + process-only readline shim + approved ignore/deselect,结果 `2871 passed / 32 skipped / 1 deselected / 1172 subtests`;changed-file ruff 与 `git diff --check` 全绿。既有 dbtx_v2 golden、production golden 与 C0 读等价 fixture 均零修改。
+
+## Phase 3 收官复验(P3-R,2026-08-02,Claude 手核)
+
+**结论:P3-R 全闭 —— Phase 3 正式关闭,Phase 4 放行。** commit `695e6136`。
+
+- **F1(唯一 MEDIUM)实闭**:亲读 diff 确认两钩子精确到位 —— `database.py:1315` transition 后 `configure_meta_load_policy(lazy_meta_keys(next_schema_ir))`;SDK `_refresh_schema_state` 加策略刷新 + `_validate_schema_runtime_policies`,且**提交前**(`store.py:2420`)先验 premise 配置,失效则 `SDKStoreError` 零状态变更。新测试 `test_schema_transition_refreshes_lazy_policy_in_both_directions` 真断言双向 + live==reopen(eager→lazy → `{trace_id}` 两侧一致;lazy→eager → 空两侧一致),非空测。
+- **F2(选项 A)**:直连 `compile(meta_keys=)→Database.create(schema_ir=)→write→reopen` 回路测试钉住,声明生效 + digest 稳定;`schema_definition.md` 补归属注记;未给 `FactGraph.create/attach` 加参。
+- **F3-F5**:tx-object 读侧保留 key 伪造门常驻负向测试、54/57(现 58/59)调用式入账、§4 表两行能力边界标注均落。
+- 套件 **2871/32/1/1172** 独立逐字复现;Phase 3 面 28/46;golden 零修改;树净;未 push;master 仍 `854d03b9`。
+
+**Phase 4 承接(本 slice 最后一个 Phase,测量 + docs 收尾)**:①三组正式对照测量(含 F6:用 claim 域 lazy key 分离 tx-lift 与惰性对驻留的贡献)+ ~1KB durable headline 复核/修正(当前 ~2.4-2.7×);②模块 docs(core/store meta-tiering 节、core/policy README、premise)+ spec 终态对齐;③genesis 措辞 3 shipped 文档清扫;④CHANGELOG 终稿;⑤**桥梁清单冻结**(B1-B8 收官验尸单交 Slice 5);⑥**收官量化**(用户批准机制:src/ 净行数 + 公开名净增减,与三组 bytes/claim 并列);⑦全 §7 acceptance box 逐条证据引用后打勾,blueprint implemented→archive。
 
 ## Deviations
 
