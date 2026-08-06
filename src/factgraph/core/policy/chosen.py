@@ -16,11 +16,12 @@ def choose_one(ledger: Ledger, asrt_ids: list[str]) -> str:
 
     candidates: list[tuple[str, int]] = []
     for asrt_id in asrt_ids:
-        ingested_at = _read_required_ingested_at(ledger, asrt_id)
-        candidates.append((asrt_id, ingested_at))
+        sequence = ledger.claim_sequence(asrt_id)
+        if sequence is None:
+            raise PolicyNonDeterminismError(f"unknown asrt_id: {asrt_id}")
+        candidates.append((asrt_id, sequence))
 
-    candidates.sort(key=lambda item: (-item[1], item[0].encode("utf-8")))
-    return candidates[0][0]
+    return max(candidates, key=lambda item: item[1])[0]
 
 
 def group_key_for_claim(
@@ -81,20 +82,6 @@ def compute_chosen_for_predicate(ledger: Ledger, schema_pred: dict) -> dict[tupl
     for group_key, asrt_ids in groups.items():
         chosen_map[group_key] = choose_one(ledger, asrt_ids)
     return chosen_map
-
-
-def _read_required_ingested_at(ledger: Ledger, asrt_id: str) -> int:
-    rows = ledger.find_meta(asrt_id=asrt_id, key="ingested_at")
-    if len(rows) != 1:
-        raise PolicyNonDeterminismError(
-            f"asrt_id={asrt_id} must have exactly one ingested_at meta row"
-        )
-    row = rows[0]
-    if row.kind != "time" or isinstance(row.value, bool) or not isinstance(row.value, int):
-        raise PolicyNonDeterminismError(
-            f"asrt_id={asrt_id} ingested_at must be meta_time int"
-        )
-    return row.value
 
 
 def _read_group_key_indexes(schema_pred: dict, arg_count: int) -> list[int]:

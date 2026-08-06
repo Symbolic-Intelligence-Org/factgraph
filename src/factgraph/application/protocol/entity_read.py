@@ -18,7 +18,7 @@ from .common import (
 )
 from .schema_runtime import EntityRef, EntitySelector, FieldPath
 
-FieldValue: TypeAlias = JSONValue | EntityRef
+FieldValue: TypeAlias = JSONValue | bytes | EntityRef
 FieldFilterValue: TypeAlias = FieldValue | tuple[FieldValue, ...]
 
 
@@ -29,6 +29,8 @@ def _validate_field_value(value: Any, *, field_name: str, value_kind: str | None
         return
     if value_kind == "entity_ref":
         raise ProtocolShapeError(f"{field_name} must be EntityRef")
+    if isinstance(value, bytes):
+        return
     _validate_json_value(value, field_name=field_name)
 
 

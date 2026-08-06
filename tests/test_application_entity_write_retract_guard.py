@@ -225,6 +225,27 @@ def test_entity_write_guard_runs_before_retract_by_asrt():
     assert claims_after[0].asrt_id == identity_asrt_id
 
 
+def test_entity_write_system_retract_raises_inv_12_entity_write_error():
+    """The application-layer system classification rejects before another write."""
+    fg, e_ref, name_asrt_id, identity_kwargs = _make_fg_with_one_user()
+    first_revoke = _apply_retract_op(
+        fg,
+        _retract_op(name_asrt_id, identity_kwargs=identity_kwargs, e_ref=e_ref),
+    )
+    before_revokes = tuple(fg._store.ledger.revokes)
+    op = _retract_op(first_revoke, identity_kwargs=identity_kwargs, e_ref=e_ref)
+
+    with pytest.raises(EntityWriteError) as exc_info:
+        _apply_retract_op(fg, op)
+
+    error = exc_info.value
+    assert error.code == "INV_12_SYSTEM_REVOKE_FORBIDDEN"
+    assert error.details["classification"] == "system"
+    assert error.details["assertion_id"] == first_revoke
+    assert "revoke-of-revoke is forbidden" in str(error)
+    assert tuple(fg._store.ledger.revokes) == before_revokes
+
+
 # ---------- EntityWriteError code preserved ----------
 
 

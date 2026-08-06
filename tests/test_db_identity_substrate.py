@@ -6,7 +6,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from factgraph.core.protocol.digests import sha256_hex
+from factgraph.core.protocol.lthash import encode_state, from_elements
 from factgraph.core.schema.schema_ir import canonicalize_schema_ir_jcs, schema_digest
 from factgraph.core.store.database import (
     ASSERTION_V1_PREFIX,
@@ -16,9 +16,11 @@ from factgraph.core.store.database import (
     AssertionInput,
     Database,
     DatabaseError,
-    DuplicateAssertionError,
+    DatabaseIntegrityError,
     FrozenAssertionSet,
     MetaEntry,
+    RevocationInput,
+    _state_element,
     asrt_id_for,
     assertion_digest_for,
     canonical_bytes_assertion_v1,
@@ -157,7 +159,9 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             created = db.head()
             self.assertTrue(created.db_id.startswith("db:"))
             self.assertTrue(created.tx_id.startswith("tx:"))
-            self.assertTrue(created.data_digest.startswith("sha256:"))
+            self.assertTrue(created.state_digest.startswith("lthash16-v2:"))
+            self.assertEqual(created.digest_scheme, "lthash16-v2")
+            self.assertEqual(created.tx_seq, 0)
 
             result = db.commit_assertions(
                 [_assertion("Ada", meta=(MetaEntry("source", "str", "unit-test"),))]
@@ -171,8 +175,10 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             tx_meta = db._ledger.find_meta(asrt_id=record.asrt_id, key="tx_id", kind="str")
             self.assertEqual([row.value for row in tx_meta], [record.tx_id])
 
+            db_id = db.db_id
+            db.close()
             reopened = Database.open(path, schema_ir=_schema_ir())
-            self.assertEqual(reopened.db_id, db.db_id)
+            self.assertEqual(reopened.db_id, db_id)
             self.assertEqual(reopened.head(), result.value)
 
     def test_database_workspace_layout_created_with_content_addressed_objects(self) -> None:
@@ -183,10 +189,14 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             paths = resolve_database_workspace_paths(path)
 
             self.assertTrue(paths.assertions.exists())
-            self.assertEqual(paths.head.read_text(encoding="ascii").strip(), head.tx_id)
+            self.assertFalse(paths.head.exists())
+            self.assertEqual(db._ledger.get_ledger_meta("head_tx_id"), head.tx_id)
+            self.assertEqual(db._ledger.get_ledger_meta("head_state_digest"), head.state_digest)
             self.assertTrue((paths.tx_objects / f"{head.tx_id.removeprefix('tx:')}.json").exists())
 
-            schema_path = paths.schema_objects / f"{head.schema_digest.removeprefix('sha256:')}.json"
+            schema_path = (
+                paths.schema_objects / f"{head.schema_digest.removeprefix('sha256:')}.json"
+            )
             self.assertEqual(schema_path.read_bytes(), canonicalize_schema_ir_jcs(_schema_ir()))
 
             manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
@@ -253,17 +263,18 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             with self.assertRaisesRegex(DatabaseError, "filename/content digest mismatch"):
                 write_schema_object_for_workspace(path, recompiled_schema_ir)
 
-    def test_database_head_resolves_from_head_tx_object_not_ledger_meta(self) -> None:
+    def test_database_open_fails_closed_when_authoritative_state_meta_is_corrupt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workspace"
             db = Database.create(path, schema_ir=_schema_ir())
             result = db.commit_assertions([_assertion("Ada")])
 
-            db._ledger.replace_ledger_meta("head_data_digest", "sha256:" + "0" * 64)
+            db._ledger.replace_ledger_meta("head_state_digest", encode_state(bytes(2048)))
 
-            self.assertEqual(db.head(), result.value)
-            reopened = Database.open(path, schema_ir=_schema_ir())
-            self.assertEqual(reopened.head(), result.value)
+            self.assertNotEqual(db.head(), result.value)
+            db.close()
+            with self.assertRaisesRegex(DatabaseIntegrityError, "state.digest"):
+                Database.open(path, schema_ir=_schema_ir())
 
     def test_tx_object_filename_content_mismatch_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -293,34 +304,15 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
             self.assertNotIn("registry", manifest["components"])
 
-    def test_data_digest_is_path_independent_for_same_active_universe(self) -> None:
-        db_ab = Database.create(schema_ir=_schema_ir())
-        first = db_ab.commit_assertions([_assertion("Ada")])
-        second = db_ab.commit_assertions(
-            [
-                AssertionInput(
-                    pred_id="person:name",
-                    fact_tuple=(("entity_ref", _person_ref("p2")), ("string", "Grace")),
-                )
-            ]
+    def test_state_digest_is_order_independent_for_same_assertion_id_set(self) -> None:
+        first = b"asrt:" + b"1" * 32
+        second = b"asrt:" + b"2" * 32
+        self.assertEqual(
+            encode_state(from_elements((first, second))),
+            encode_state(from_elements((second, first))),
         )
 
-        db_ba = Database.create(schema_ir=_schema_ir())
-        db_ba.commit_assertions(
-            [
-                AssertionInput(
-                    pred_id="person:name",
-                    fact_tuple=(("entity_ref", _person_ref("p2")), ("string", "Grace")),
-                )
-            ]
-        )
-        reversed_second = db_ba.commit_assertions([_assertion("Ada")])
-
-        self.assertEqual(second.value.data_digest, reversed_second.value.data_digest)
-        self.assertNotEqual(second.value.tx_id, reversed_second.value.tx_id)
-        self.assertEqual(first.assertions[0].asrt_id, reversed_second.assertions[0].asrt_id)
-
-    def test_data_digest_uses_active_only_no_view_universe(self) -> None:
+    def test_state_digest_uses_active_factual_set_only(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
         ada = db.commit_assertions([_assertion("Ada")]).assertions[0]
         grace = AssertionInput(
@@ -328,20 +320,28 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
             fact_tuple=(("entity_ref", _person_ref("p2")), ("string", "Grace")),
         )
 
-        db._ledger.append_revocation(
-            revokes=Revokes(revoker_asrt_id="asrt:" + "f" * 64, revoked_asrt_id=ada.asrt_id),
-            meta_rows=[],
-            revoker_asrt_id="asrt:" + "f" * 64,
+        after_revoke = db.commit_changes(
+            assertions=(grace,),
+            revocations=(RevocationInput(revoked_asrt_id=ada.asrt_id),),
         )
-        after_revoke = db.commit_assertions([grace])
-        expected = "sha256:" + sha256_hex(canonical_bytes_dbdata_v1((after_revoke.assertions[0].asrt_id,)))
-        self.assertEqual(after_revoke.value.data_digest, expected)
+        expected = encode_state(
+            from_elements(
+                (
+                    _state_element(
+                        after_revoke.assertions[0].asrt_id,
+                        after_revoke.assertions[0].assertion_digest,
+                    ),
+                )
+            )
+        )
+        self.assertEqual(after_revoke.value.state_digest, expected)
 
-    def test_duplicate_content_addressed_assertion_rejected(self) -> None:
+    def test_server_generated_ids_allow_distinct_assertion_events_with_same_content(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
-        db.commit_assertions([_assertion("Ada")])
-        with self.assertRaises(DuplicateAssertionError):
-            db.commit_assertions([_assertion("Ada")])
+        first = db.commit_assertions([_assertion("Ada")]).assertions[0]
+        second = db.commit_assertions([_assertion("Ada")]).assertions[0]
+        self.assertNotEqual(first.asrt_id, second.asrt_id)
+        self.assertEqual(first.assertion_digest, second.assertion_digest)
 
     def test_fact_tuple_must_be_tagged_identity_tuple(self) -> None:
         db = Database.create(schema_ir=_schema_ir())
@@ -435,7 +435,9 @@ class DatabaseIdentitySubstrateTests(unittest.TestCase):
         with self.assertRaisesRegex(DatabaseError, "new-layout Database workspace"):
             legacy_db.create_view("review", [])
 
-    def test_database_create_view_validates_current_head_and_claim_existence_not_active(self) -> None:
+    def test_database_create_view_validates_current_head_and_claim_existence_not_active(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workspace"
             db = Database.create(path, schema_ir=_schema_ir())

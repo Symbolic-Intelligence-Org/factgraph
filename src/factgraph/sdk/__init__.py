@@ -69,7 +69,15 @@ from factgraph.application.protocol import (
 )
 from factgraph.application.schema_mutation_runtime import SchemaAddResult
 from factgraph.core.semantics import SemanticsProfile
-from factgraph.core.store import AssertionInput, CommitResult, Database, MetaEntry
+from factgraph.core.schema.meta_policy import MetaKeyPolicy
+from factgraph.core.store import (
+    AssertionInput,
+    CommitResult,
+    Database,
+    MetaAppendInput,
+    MetaEntry,
+    RevocationInput,
+)
 from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
@@ -120,6 +128,7 @@ __all__ = [
     "Identity",
     "Relationship",
     "SemanticsProfile",
+    "MetaKeyPolicy",
     "DetachedRowError",
     "EvaluateResult",
     "EvaluateRow",
@@ -138,7 +147,9 @@ __all__ = [
     "AssertionInput",
     "CommitResult",
     "Database",
+    "MetaAppendInput",
     "MetaEntry",
+    "RevocationInput",
     "MetaExclusion",
     "PredicatePremiseAllowance",
     "PredicatePremiseBlock",

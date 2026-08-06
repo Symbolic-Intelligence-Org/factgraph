@@ -47,6 +47,7 @@ from factgraph.core.store._support_capture import (
     find_winning_case_index,
 )
 from factgraph.core.store.premise_filter import premise_scoped_ledger
+from factgraph.core.store.premise_filter import validate_premise_configuration
 from factgraph.core.view.projector import project_view_facts_with_witness
 
 from .errors import SDKStoreError
@@ -141,7 +142,10 @@ def evaluate_rule_program(
             )
         )
 
-    exclusions, allowances, blocks = _resolved_scope(sdk, scope)
+    try:
+        exclusions, allowances, blocks = _resolved_scope(sdk, scope)
+    except ValueError as exc:
+        raise SDKStoreError(str(exc)) from exc
     scoped_ledger = premise_scoped_ledger(
         sdk.store.ledger,
         exclusions,
@@ -459,16 +463,19 @@ def _rewrite_program_predicates(
 
 def _resolved_scope(sdk: Any, scope: EvaluationPremiseScope | None) -> tuple[Any, Any, Any]:
     if scope is None:
-        return (
+        resolved = (
             sdk.store.premise_exclusions,
             sdk.store.premise_allowances,
             sdk.store.premise_blocks,
         )
-    return (
-        sdk.store.premise_exclusions if scope.exclusions is None else scope.exclusions,
-        sdk.store.premise_allowances if scope.allowances is None else scope.allowances,
-        sdk.store.premise_blocks if scope.blocks is None else scope.blocks,
-    )
+    else:
+        resolved = (
+            sdk.store.premise_exclusions if scope.exclusions is None else scope.exclusions,
+            sdk.store.premise_allowances if scope.allowances is None else scope.allowances,
+            sdk.store.premise_blocks if scope.blocks is None else scope.blocks,
+        )
+    validate_premise_configuration(sdk.store.schema_ir, *resolved)
+    return resolved
 
 
 def _scope_digest(exclusions: Any, allowances: Any, blocks: Any) -> str:

@@ -12,10 +12,11 @@ from factgraph.core.protocol.digests import sha256_token
 from factgraph.core.protocol.tup_v1 import canonical_bytes_tup_v1
 from factgraph.core.rules._trace import RuleTraceArtifact
 from factgraph.core.rules.where_eval import WhereValidationError
-from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
+from factgraph.core.schema.meta_policy import lazy_meta_keys
 from factgraph.core.schema.schema_ir import ensure_schema_ir
 from factgraph.core.store import _accept as _store_accept
 from factgraph.core.store._artifact_sidecar import ArtifactSidecar
+from factgraph.core.store._explain_rule_trace import render_rule_trace_artifact
 from factgraph.core.store._explain_support import render_support_artifact
 from factgraph.core.store._support import (
     ENGINE_NO_WITNESS_KIND,
@@ -33,6 +34,7 @@ from factgraph.core.store.premise_filter import (
     normalize_premise_blocks,
     normalize_premise_exclusions,
     premise_scoped_ledger,
+    validate_premise_configuration,
 )
 from factgraph.core.store.queries import conflicts as store_conflicts
 from factgraph.core.store.queries import explain_fact as store_explain_fact
@@ -91,9 +93,16 @@ class Store:
             raise ValueError("schema_ir must be dict")
         self.schema_ir = ensure_schema_ir(schema_ir)
         self.ledger = ledger if ledger is not None else Ledger()
+        self.ledger.configure_meta_load_policy(lazy_meta_keys(self.schema_ir))
         self._premise_exclusions = normalize_premise_exclusions(premise_exclusions)
         self._premise_allowances = normalize_premise_allowances(premise_allowances)
         self._premise_blocks = normalize_premise_blocks(premise_blocks)
+        validate_premise_configuration(
+            self.schema_ir,
+            self._premise_exclusions,
+            self._premise_allowances,
+            self._premise_blocks,
+        )
         self._engine_overrides: dict[str, EngineEvaluatorFn] = {}
         self._artifact_sidecar = artifact_sidecar
         self._support_artifacts: dict[str, ProofReceipt] = {}
@@ -131,7 +140,9 @@ class Store:
         the derivation check). Read/query paths outside evaluation stay
         unfiltered. Passing ``None`` or an empty iterable disables filtering.
         """
-        self._premise_exclusions = normalize_premise_exclusions(exclusions)
+        normalized = normalize_premise_exclusions(exclusions)
+        validate_premise_configuration(self.schema_ir, exclusions=normalized)
+        self._premise_exclusions = normalized
 
     @property
     def premise_allowances(self) -> tuple[PredicatePremiseAllowance, ...]:
@@ -153,7 +164,9 @@ class Store:
         floor is never lifted. Passing ``None`` or an empty iterable disables
         per-predicate filtering.
         """
-        self._premise_allowances = normalize_premise_allowances(allowances)
+        normalized = normalize_premise_allowances(allowances)
+        validate_premise_configuration(self.schema_ir, allowances=normalized)
+        self._premise_allowances = normalized
 
     @property
     def premise_blocks(self) -> tuple[PredicatePremiseBlock, ...]:
@@ -174,7 +187,9 @@ class Store:
         (an assertion excluded by any is invisible). Passing ``None`` or an
         empty iterable disables per-predicate blocking.
         """
-        self._premise_blocks = normalize_premise_blocks(blocks)
+        normalized = normalize_premise_blocks(blocks)
+        validate_premise_configuration(self.schema_ir, blocks=normalized)
+        self._premise_blocks = normalized
 
     def _remember_support_artifact(
         self,

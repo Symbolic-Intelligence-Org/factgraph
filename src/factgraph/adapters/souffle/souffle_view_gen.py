@@ -18,10 +18,12 @@ def generate_view_dl(
 
     lines: list[str] = [
         '.decl claim(Asrt:symbol, PredId:symbol, E:symbol, TupDigest:symbol)',
+        '.decl claim_seq(Asrt:symbol, Seq:number)',
         '.decl claim_arg(Asrt:symbol, Idx:symbol, Val:symbol, Tag:symbol)',
         '.decl meta_time(Asrt:symbol, Key:symbol, EpochNanos:number)',
         '.decl revokes(Revoker:symbol, Revoked:symbol)',
         '.input claim',
+        '.input claim_seq',
         '.input claim_arg',
         '.input meta_time',
         '.input revokes',
@@ -92,17 +94,22 @@ def generate_view_dl(
         dim_vars = [f"D{i}" for i in range(len(dim_indexes))]
 
         cand_rel = f"cand__{engine_pred}"
-        max_ts_rel = f"max_ts__{engine_pred}"
+        max_seq_rel = f"max_seq__{engine_pred}"
         chosen_rel = f"chosen_asrt__{engine_pred}"
         better_rel = f"better_asrt__{engine_pred}"
 
-        cand_decl_args = ["A:symbol", "E:symbol", *[f"{var}:symbol" for var in dim_vars], "Ts:number"]
+        cand_decl_args = [
+            "A:symbol",
+            "E:symbol",
+            *[f"{var}:symbol" for var in dim_vars],
+            "Seq:number",
+        ]
         lines.append(f'.decl {cand_rel}({", ".join(cand_decl_args)})')
 
         cand_body_parts = [
             f'claim(A,"{pred_id}",E,_)',
             'active(A)',
-            'meta_time(A,"ingested_at",Ts)',
+            "claim_seq(A,Seq)",
         ]
         for dim_position, arg_index in enumerate(dim_indexes):
             claim_idx = str(arg_index - 1)
@@ -110,17 +117,20 @@ def generate_view_dl(
             cand_body_parts.append(
                 f'claim_arg(A,"{claim_idx}",{dim_var},TagDim{dim_position})'
             )
-        lines.append(f'{cand_rel}(A,{", ".join(["E", *dim_vars, "Ts"])}) :- {", ".join(cand_body_parts)}.')
+        lines.append(
+            f'{cand_rel}(A,{", ".join(["E", *dim_vars, "Seq"])}) :- '
+            f'{", ".join(cand_body_parts)}.'
+        )
         lines.append('')
 
-        max_decl_args = ["E:symbol", *[f"{var}:symbol" for var in dim_vars], "Ts:number"]
-        lines.append(f'.decl {max_ts_rel}({", ".join(max_decl_args)})')
+        max_decl_args = ["E:symbol", *[f"{var}:symbol" for var in dim_vars], "Seq:number"]
+        lines.append(f'.decl {max_seq_rel}({", ".join(max_decl_args)})')
         key_vars = ["E", *dim_vars]
         key_args = ", ".join(key_vars)
         lines.append(
-            f'{max_ts_rel}({", ".join([*key_vars, "Ts"])}) :- '
+            f'{max_seq_rel}({", ".join([*key_vars, "Seq"])}) :- '
             f'{cand_rel}(_,{key_args},_), '
-            f'Ts = max t : {{ {cand_rel}(_,{key_args},t) }}.'
+            f'Seq = max seq : {{ {cand_rel}(_,{key_args},seq) }}.'
         )
         lines.append('')
 
@@ -128,9 +138,9 @@ def generate_view_dl(
         lines.append(f'.decl {better_rel}({", ".join(better_decl_args)})')
         lines.append(
             f'{better_rel}({", ".join([*key_vars, "A"])}) :- '
-            f'{cand_rel}(A,{", ".join([*key_vars, "Ts"])}), '
-            f'{max_ts_rel}({", ".join([*key_vars, "Ts"])}), '
-            f'{cand_rel}(B,{", ".join([*key_vars, "Ts"])}), B < A.'
+            f'{cand_rel}(A,{", ".join([*key_vars, "Seq"])}), '
+            f'{max_seq_rel}({", ".join([*key_vars, "Seq"])}), '
+            f'{cand_rel}(B,{", ".join([*key_vars, "Seq"])}), B < A.'
         )
         lines.append('')
 
@@ -138,8 +148,8 @@ def generate_view_dl(
         lines.append(f'.decl {chosen_rel}({", ".join(chosen_decl_args)})')
         lines.append(
             f'{chosen_rel}({", ".join([*key_vars, "A"])}) :- '
-            f'{cand_rel}(A,{", ".join([*key_vars, "Ts"])}), '
-            f'{max_ts_rel}({", ".join([*key_vars, "Ts"])}), '
+            f'{cand_rel}(A,{", ".join([*key_vars, "Seq"])}), '
+            f'{max_seq_rel}({", ".join([*key_vars, "Seq"])}), '
             f'!{better_rel}({", ".join([*key_vars, "A"])}).'
         )
         lines.append('')

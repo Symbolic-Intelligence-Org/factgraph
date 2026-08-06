@@ -10,13 +10,12 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from factgraph.application import apply_write_plan, is_entity_identity_bundle_active, plan_write_command
+from factgraph.application.entity_write import _revocation_meta_entries
 from factgraph.application.schema_mutation_runtime import (
     SchemaAddResult,
     add_schema_classes as app_add_schema_classes,
 )
-from factgraph.application.workspace_runtime import load_workspace as app_load_workspace
 from factgraph.application.workspace_runtime import resolve_workspace_paths
-from factgraph.application.workspace_runtime import save_workspace as app_save_workspace
 from factgraph.application.derivation_runtime import evaluate_derivation_plans
 from factgraph.application.explain import EvidenceGraph, probe_native
 from factgraph.application.explain.evidence_tree import (
@@ -97,6 +96,7 @@ from factgraph.core.evidence.write_protocol import WriteProtocolError, retract_b
 from factgraph.core.protocol.digests import sha256_hex
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.semantics import SemanticsProfile, inspect_semantics_profile
+from factgraph.core.schema.meta_policy import lazy_meta_keys
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.adapters.souffle.package import ExportOptions, export_package
 from factgraph.core.protocol.idref_v1 import encode_idref_v1
@@ -117,6 +117,10 @@ from factgraph.core.store.database import (
     Database,
     DatabaseError,
     FrozenAssertionSet as DatabaseFrozenAssertionSet,
+    MetaAppendInput,
+    RevocationInput,
+    SchemaTransitionInput,
+    _RESERVED_ASSERTION_META_KEYS,
     _read_tx_object,
     schema_object_exists_for_workspace,
     validate_schema_object_for_workspace,
@@ -126,9 +130,19 @@ from factgraph.core.store.premise_filter import (
     MetaExclusion,
     PredicatePremiseAllowance,
     PredicatePremiseBlock,
+    validate_premise_configuration,
 )
 from factgraph.core.store.runtime import Store, premise_scoped_store_view
-from factgraph.core.store.ledger import AnnotationRow, Claim, ClaimArg, Ledger, MetaRow, Revokes
+from factgraph.core.store.ledger import (
+    AnnotationRow,
+    Claim,
+    ClaimArg,
+    Ledger,
+    MetaRow,
+    Revokes,
+    _ANNOTATION_COMPAT_PREFIX,
+    _is_reserved_annotation_meta_key,
+)
 from factgraph.core.view.projector import build_args_for_claim, canonical_fact_sort_key, project_view_facts
 
 from .compile import compile_schema_from_classes
@@ -174,10 +188,6 @@ _ATTACH_REJECTED_KWARGS = {
     "rules",
     "workspace_path",
 }
-_ATTACHED_WRITE_ERROR = (
-    "attached FactGraph runtimes route writes only through fg.commit_assertions(...); "
-    "{method_name} is not available on attached runtimes"
-)
 _RULE_EXPR_DEFAULT_ALIAS_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
 
@@ -196,6 +206,11 @@ class _ViewScopedLedger(Ledger):
         self._base_asrt_ids = base_asrt_ids
         self._visible_asrt_ids = frozenset(view.asrt_ids).intersection(base_asrt_ids)
 
+    def configure_meta_load_policy(self, lazy_keys: Sequence[str]) -> None:
+        """Keep the read-only wrapper aligned with its Database-owned Ledger."""
+
+        self._base.configure_meta_load_policy(lazy_keys)
+
     def _is_visible(self, asrt_id: str) -> bool:
         return asrt_id in self._visible_asrt_ids
 
@@ -206,6 +221,11 @@ class _ViewScopedLedger(Ledger):
         if not self._is_visible(asrt_id):
             return None
         return self._base.get_claim(asrt_id)
+
+    def claim_sequence(self, asrt_id: str) -> int | None:
+        if not self._is_visible(asrt_id):
+            return None
+        return self._base.claim_sequence(asrt_id)
 
     def find_claims(self, pred_id: str | None = None, e_ref: str | None = None) -> list[Claim]:
         return self._filter_claims(self._base.find_claims(pred_id=pred_id, e_ref=e_ref))
@@ -231,6 +251,30 @@ class _ViewScopedLedger(Ledger):
             return []
         rows = self._base.find_meta(asrt_id=asrt_id, key=key, kind=kind)
         return [row for row in rows if self._is_visible(row.asrt_id)]
+
+    def effective_meta_rows(
+        self,
+        *,
+        asrt_id: str | None = None,
+        key: str | None = None,
+        kind: str | None = None,
+        as_of: tuple[int, int] | None = None,
+    ) -> tuple[MetaRow, ...]:
+        if asrt_id is not None and not self._is_visible(asrt_id):
+            return ()
+        rows = self._base.effective_meta_rows(
+            asrt_id=asrt_id,
+            key=key,
+            kind=kind,
+            as_of=as_of,
+        )
+        return tuple(row for row in rows if self._is_visible(row.asrt_id))
+
+    def _latest_meta_event_sequence(self) -> tuple[int, int] | None:
+        return self._base._latest_meta_event_sequence()
+
+    def latest_event_sequence(self) -> tuple[int, int] | None:
+        return self._base.latest_event_sequence()
 
     def find_annotations(
         self,
@@ -362,11 +406,26 @@ def _database_asrt_ids_at_tx(db: Database, tx_id: str) -> set[str]:
     if paths is None:
         raise DatabaseError("tx lookup requires a durable Database workspace")
     current_tx_id: str | None = tx_id
-    asrt_ids: set[str] = set()
+    chain: list[dict[str, Any]] = []
+    seen_tx_ids: set[str] = set()
     while current_tx_id is not None:
+        if current_tx_id in seen_tx_ids:
+            raise DatabaseError("tx history contains a cycle")
+        seen_tx_ids.add(current_tx_id)
         payload = _read_tx_object(paths, current_tx_id)
-        asrt_ids.update(payload["added_asrt_ids"])
+        chain.append(payload)
         current_tx_id = payload["parent_tx_id"]
+
+    asrt_ids: set[str] = set()
+    for payload in reversed(chain):
+        for operation in payload["operations"]:
+            kind = operation["kind"]
+            if kind in {"assertion", "repair_add"}:
+                asrt_ids.add(operation["asrt_id"])
+            elif kind == "revocation":
+                asrt_ids.discard(operation["revoked_asrt_id"])
+            elif kind == "repair_remove":
+                asrt_ids.discard(operation["asrt_id"])
     return asrt_ids
 
 
@@ -403,7 +462,6 @@ class _SDKAssertionViewsManager:
         An assertion set stores assertion ids only. It does not store a read
         policy and it is not included in `fg.save_workspace(...)` persistence.
         """
-        self._sdk._reject_attached_write("fg.assertion_views.create")
         normalized = _normalize_view_name(name)
         if normalized in self._views:
             raise SDKStoreError(f"view already exists: {normalized}")
@@ -423,7 +481,6 @@ class _SDKAssertionViewsManager:
         asrts: Iterable[Any] | None = None,
     ) -> FrozenAssertionSet:
         """Replace the assertion ids for an existing frozen assertion set."""
-        self._sdk._reject_attached_write("fg.assertion_views.update")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -437,7 +494,6 @@ class _SDKAssertionViewsManager:
 
     def delete(self, name: str) -> None:
         """Delete a named frozen assertion set."""
-        self._sdk._reject_attached_write("fg.assertion_views.delete")
         normalized = _normalize_view_name(name)
         if normalized not in self._views:
             raise SDKStoreError(f"view not found: {normalized}")
@@ -607,7 +663,6 @@ class AssertionsManager:
         **kwargs: Any,
     ) -> str | None:
         """Retract one assertion by id with Slice 2 guard semantics preserved."""
-        self._sdk._reject_attached_write("fg.assertions.retract")
         if kwargs:
             raise SDKStoreError(
                 "fg.assertions.retract requires asrt_id (Layer 3); pass "
@@ -621,6 +676,7 @@ class AssertionsManager:
                 "delete. See ADR-API §4.1.1."
             )
 
+        database = self._sdk._database_for_application_write("fg.assertions.retract")
         try:
             check_retract_allowed(
                 asrt_id,
@@ -641,16 +697,47 @@ class AssertionsManager:
                     "(Identity is immutable per INV-7a). See ADR-IC §4.1.",
                     code=guard_exc.code,
                 ) from guard_exc
+            if guard_exc.classification == "exists":
+                raise SDKStoreError(
+                    f"<EntityType>:exists Claim {guard_exc.asrt_id} "
+                    f"(pred_id={guard_exc.pred_id}) cannot be retracted independently. "
+                    "The :exists Claim is co-emitted atomically with Identity Claims "
+                    "and can only be removed via fg.entities.delete(e_ref) "
+                    "(atomic full-entity revoke). "
+                    "This guard is transitional — Step 2+ may remove :exists emission "
+                    "entirely (see ADR-IC §4.4).",
+                    code=guard_exc.code,
+                ) from guard_exc
             raise SDKStoreError(
-                f"<EntityType>:exists Claim {guard_exc.asrt_id} "
-                f"(pred_id={guard_exc.pred_id}) cannot be retracted independently. "
-                "The :exists Claim is co-emitted atomically with Identity Claims "
-                "and can only be removed via fg.entities.delete(e_ref) "
-                "(atomic full-entity revoke). "
-                "This guard is transitional — Step 2+ may remove :exists emission "
-                "entirely (see ADR-IC §4.4).",
+                f"System Claim {guard_exc.asrt_id} "
+                f"(pred_id={guard_exc.pred_id}) cannot be retracted: "
+                "revoke-of-revoke is forbidden by INV-12 part 2. "
+                "See ADR-SYS-B §4.1.5.",
                 code=guard_exc.code,
             ) from guard_exc
+        if database is not None:
+            if self._sdk.ledger.get_claim(asrt_id) is None:
+                raise SDKStoreError(
+                    f"unknown revoked_asrt_id: {asrt_id}",
+                    code="ASSERTION_NOT_FOUND",
+                )
+            existing_revoker = self._sdk.ledger.find_revoker(asrt_id)
+            if existing_revoker is not None:
+                return existing_revoker
+            try:
+                committed = database.commit_changes(
+                    assertions=(),
+                    revocations=(
+                        RevocationInput(
+                            revoked_asrt_id=asrt_id,
+                            meta=_revocation_meta_entries(asrt_id, meta),
+                        ),
+                    ),
+                )
+            except (DatabaseError, WriteProtocolError) as exc:
+                code = "ASSERTION_NOT_FOUND" if "does not exist" in str(exc) else None
+                raise SDKStoreError(str(exc), code=code) from exc
+            return committed.revocations[0].revoker_asrt_id
         try:
             return retract_by_asrt(self._sdk._store.ledger, asrt_id, meta)
         except WriteProtocolError as exc:
@@ -667,8 +754,11 @@ class AssertionsManager:
         (``core/store/premise_filter.py::is_premise_excluded``) both take the
         most recently written row. Appending e.g. a new ``provenance_class``
         value therefore reclassifies the assertion for rule evaluation (moves
-        it INTO or OUT OF an excluded class) while the full history stays
-        auditable via ``fg.ledger.find_meta(asrt_id=..., key=...)``.
+        it INTO or OUT OF an excluded class). ``fg.ledger.find_meta(...)`` is
+        only the non-tombstone compatibility projection; complete ordered
+        history, including UNSET events, is available solely through the
+        narrow ``factgraph.audit.meta_history.read_meta_history`` audit/debug
+        interface, not a general SDK history API.
 
         This is the supported public surface for post-write meta
         reclassification. ``Ledger.append_meta`` remains a deprecated
@@ -680,7 +770,6 @@ class AssertionsManager:
         Python type. Raises ``SDKStoreError`` for invalid input or an unknown
         ``asrt_id``.
         """
-        self._sdk._reject_attached_write("fg.assertions.append_meta")
         if not isinstance(asrt_id, str) or not asrt_id:
             raise SDKStoreError(
                 "fg.assertions.append_meta(asrt_id, ...) expects non-empty string asrt_id"
@@ -688,6 +777,15 @@ class AssertionsManager:
         if not isinstance(key, str) or not key:
             raise SDKStoreError(
                 "fg.assertions.append_meta(..., key, ...) expects non-empty string key"
+            )
+        if _is_reserved_annotation_meta_key(key):
+            raise SDKStoreError(
+                "fg.assertions.append_meta(..., key, ...) cannot use the reserved "
+                f"annotation storage namespace: {_ANNOTATION_COMPAT_PREFIX}"
+            )
+        if key in _RESERVED_ASSERTION_META_KEYS:
+            raise SDKStoreError(
+                f"assertion/revocation meta cannot use Database-reserved key: {key}"
             )
         if isinstance(value, bool):
             kind = "bool"
@@ -702,12 +800,24 @@ class AssertionsManager:
                 "fg.assertions.append_meta(..., value) expects a scalar "
                 f"(str/bool/int/float), got {type(value).__name__}"
             )
+        database = self._sdk._database_for_application_write("fg.assertions.append_meta")
         try:
+            if database is not None:
+                database.commit_changes(
+                    assertions=(),
+                    revocations=(),
+                    meta_appends=(MetaAppendInput(asrt_id, key, kind, value),),
+                )
+                return
             self._sdk._store.ledger.append_meta(
                 [MetaRow(asrt_id=asrt_id, key=key, kind=kind, value=value)]
             )
-        except ValueError as exc:
-            code = "ASSERTION_NOT_FOUND" if "unknown asrt_id" in str(exc) else None
+        except (DatabaseError, ValueError) as exc:
+            code = (
+                "ASSERTION_NOT_FOUND"
+                if "unknown asrt_id" in str(exc) or "does not exist" in str(exc)
+                else None
+            )
             raise SDKStoreError(str(exc), code=code) from exc
 
 
@@ -870,7 +980,6 @@ class _SDKFieldsManager:
     ) -> str:
         """Write a single-cardinality Field value."""
         self._reject_non_field_descriptor(field, method="set")
-        self._sdk._reject_attached_write("fg.fields.set")
         return self._sdk._apply_field_mutation(op="set", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def add(
@@ -883,7 +992,6 @@ class _SDKFieldsManager:
     ) -> str:
         """Append a multi-cardinality Field value."""
         self._reject_non_field_descriptor(field, method="add")
-        self._sdk._reject_attached_write("fg.fields.add")
         return self._sdk._apply_field_mutation(op="add", field=field, e_ref=e_ref, value=value, meta=meta)
 
     def retract(
@@ -900,6 +1008,7 @@ class _SDKFieldsManager:
         That preserves Slice 2 INV-7c / `:exists` guard behavior without
         duplicating the Layer 3 retract guard in Layer 2.
         """
+        self._sdk._database_for_application_write("fg.fields.retract")
         schema_pred = self._schema_pred_for_descriptor(field, method="retract", allow_identity=True)
         expected_terms = self._sdk._rest_terms_for_field(schema_pred, value=value)
         matches = [
@@ -935,6 +1044,7 @@ class _SDKFieldsManager:
         first error is raised immediately. No rollback or best-effort behavior
         is introduced in Step 5.
         """
+        self._sdk._database_for_application_write("fg.fields.delete")
         schema_pred = self._schema_pred_for_descriptor(field, method="delete", allow_identity=True)
         count = 0
         for claim in self._active_claims_for_field(schema_pred, e_ref):
@@ -1134,6 +1244,7 @@ class _SDKEntitiesManager:
             path. Slice 3a does NOT remove the shadow store。
         """
         self._reject_non_entity_class(entity_cls, method="create")
+        database = self._sdk._database_for_application_write("fg.entities.create")
 
         # Step 1+2: identity bundle completeness + shadow store populate via
         # shipped _ref path. SDKStore._ref raises SDKStoreError for missing
@@ -1169,6 +1280,7 @@ class _SDKEntitiesManager:
             plan,
             store=self._sdk._store,
             index=self._sdk._application_schema_index,
+            database=database,
         )
         if result.errors:
             self._raise_create_error(result.errors[0], entity_cls=entity_cls, identity=identity)
@@ -1240,6 +1352,7 @@ class _SDKEntitiesManager:
             ``EntityNotFoundError``(``ENTITY_NOT_FOUND``)if the target
             entity is not visible in the active view。
         """
+        database = self._sdk._database_for_application_write("fg.entities.delete")
         # Form A vs Form B vs forbidden tuple — discriminate per PF-S2。
         if isinstance(e_ref_or_cls, str):
             # Form A: e_ref-based。 Reject extra identity kwargs(Form A 不
@@ -1310,6 +1423,7 @@ class _SDKEntitiesManager:
             plan,
             store=self._sdk._store,
             index=self._sdk._application_schema_index,
+            database=database,
         )
         if result.errors:
             self._sdk._raise_from_application_error(result.errors[0], op="delete")
@@ -1336,8 +1450,8 @@ class _SDKEntitiesManager:
 
     def edit(self, entity_cls: type[Entity], **identity_kwargs: Any) -> Any:
         """Open an EntityEditor for an existing entity."""
+        self._sdk._database_for_application_write("fg.entities.edit")
         self._reject_non_entity_class(entity_cls, method="edit")
-        self._sdk._reject_attached_write("fg.entities.edit")
         from .facade import sdk_edit
 
         return sdk_edit(self._sdk, entity_cls, **identity_kwargs)
@@ -1571,28 +1685,6 @@ def _path_equivalent(left: str | Path, right: str | Path) -> bool:
     return Path(left).expanduser().resolve(strict=False) == Path(right).expanduser().resolve(strict=False)
 
 
-def _resolve_workspace_constructor_paths(
-    *,
-    path: str | Path | None,
-    ledger_path: str | None,
-) -> tuple[Path | None, str | None]:
-    workspace_path = _normalize_workspace_path(path)
-    if workspace_path is None:
-        return None, ledger_path
-
-    workspace_paths = resolve_workspace_paths(workspace_path)
-    expected_ledger = workspace_paths.ledger
-
-    if ledger_path is not None:
-        if not _path_equivalent(ledger_path, expected_ledger):
-            raise SDKStoreError("ledger_path conflicts with workspace path")
-        resolved_ledger_path = ledger_path
-    else:
-        resolved_ledger_path = str(expected_ledger)
-
-    return workspace_path, resolved_ledger_path
-
-
 def _reject_legacy_registry_marker(workspace_path: str | Path) -> None:
     workspace_paths = resolve_workspace_paths(workspace_path)
     legacy_registry = workspace_paths.root / "registry"
@@ -1623,17 +1715,6 @@ def _schema_non_additive_message(exc: SDKStoreError) -> str:
     )
 
 
-def _ensure_workspace_schema_object(path: str | Path, schema_ir: dict[str, Any]) -> None:
-    expected_digest = schema_digest(schema_ir)
-    if schema_object_exists_for_workspace(path, expected_digest):
-        try:
-            validate_schema_object_for_workspace(path, schema_ir)
-        except DatabaseError as exc:
-            raise SDKStoreError(f"workspace schema object invalid: {exc}") from exc
-        return
-    raise SDKStoreError("workspace schema object missing")
-
-
 class SDKStore:
     """Main SDK graph object, exported to users as `FactGraph`.
 
@@ -1643,11 +1724,9 @@ class SDKStore:
     `schema`, `read`, `write`, `rules`, `inferences`, `eval`, `audit`,
     `package`, and `assertion_views`.
 
-    `FactGraph.attach(db, schema_classes=...)` is the Database-owned lifecycle
-    for new DB/view substrate work. Attached runtimes expose
-    `fg.commit_assertions(...)` for Database-routed writes; shipped
-    `create` / `from_schema_classes` / `load_workspace` constructors remain available as
-    compatibility lifecycles.
+    `create` and `load_workspace` own an internal `Database`; `attach` borrows
+    a caller-owned Database. `from_schema_classes` remains the lower-level
+    compatibility constructor for unmanaged in-memory or injected Ledgers.
     """
 
     def __init__(
@@ -1688,6 +1767,7 @@ class SDKStore:
         self._workspace_path = _normalize_workspace_path(workspace_path)
         self._database: Database | None = None
         self._attached_writable = False
+        self._owns_database = False
         self._application_schema_index = build_schema_index(self._schema_ir)
         self._field_pred_by_descriptor: dict[Field, dict[str, Any]] = {}
         self._field_decl_by_descriptor: dict[Field, dict[str, Any]] = {}
@@ -1731,9 +1811,21 @@ class SDKStore:
     def _is_attached(self) -> bool:
         return self._database is not None
 
-    def _reject_attached_write(self, method_name: str) -> None:
-        if self._is_attached():
-            raise SDKStoreError(_ATTACHED_WRITE_ERROR.format(method_name=method_name))
+    def _database_for_application_write(self, method_name: str) -> Database | None:
+        if self._database is None:
+            return None
+        if getattr(self._database, "_closed", False):
+            raise SDKStoreError(
+                f"{method_name} is unavailable because this FactGraph's Database is closed; "
+                "create or load a new FactGraph, or attach an open Database, before writing",
+                code="GRAPH_CLOSED",
+            )
+        if not self._attached_writable:
+            raise SDKStoreError(
+                f"{method_name} is not available on view-attached runtimes; "
+                "view-attached runtimes are read-only"
+            )
+        return self._database
 
     @classmethod
     def create(
@@ -1750,15 +1842,16 @@ class SDKStore:
     ) -> "SDKStore":
         """Create a `FactGraph` from Python `Entity` classes.
 
-        This is the normal SDK constructor. Pass `path=` when the graph should
-        own a durable workspace that can later be saved with
-        `fg.save_workspace()` and restored with `FactGraph.load_workspace(...)`.
+        This is the normal SDK constructor. Pass `path=` to create a durable
+        Database workspace immediately. Canonical writes are write-through;
+        `fg.save_workspace()` only updates lifecycle metadata.
 
         Args:
             schema_classes: Non-empty list of `Entity` subclasses.
-            ledger: Optional existing ledger object.
-            ledger_path: Optional SQLite ledger path; mutually exclusive with
-                `ledger`.
+            ledger: Removed from this lifecycle in v0.3; use
+                `from_schema_classes` for an unmanaged Ledger.
+            ledger_path: Removed from this lifecycle in v0.3; use
+                `from_schema_classes` for an unmanaged Ledger path.
             path: Optional workspace directory.
             artifact_store_root: Optional artifact sidecar root.
             registry_root: REMOVED by A20(E) / Q6-A; raises `SDKStoreError`
@@ -1779,25 +1872,35 @@ class SDKStore:
         # users get the migration message without ambiguous downstream errors.
         if registry_root is not None or registry is not None:
             _raise_registry_root_removed()
-        workspace_path, resolved_ledger_path = _resolve_workspace_constructor_paths(
-            path=path,
-            ledger_path=ledger_path,
-        )
+        if ledger is not None or ledger_path is not None:
+            raise SDKStoreError(
+                "FactGraph.create no longer accepts ledger= or ledger_path= in v0.3; "
+                "use FactGraph.from_schema_classes(...) for the unmanaged Ledger lifecycle"
+            )
+        workspace_path = _normalize_workspace_path(path)
         schema_ir = compile_schema_from_classes(schema_classes)
-        if workspace_path is not None:
-            try:
-                write_schema_object_for_workspace(workspace_path, schema_ir)
-            except DatabaseError as exc:
-                raise SDKStoreError(f"workspace schema object write failed: {exc}") from exc
-        return cls._from_schema_classes_impl(
-            schema_classes,
-            ledger=ledger,
-            ledger_path=resolved_ledger_path,
-            artifact_store_root=artifact_store_root,
-            schema_ir=schema_ir,
-            workspace_path=workspace_path,
-            default_row_format=default_row_format,
-        )
+        try:
+            database = Database.create(
+                workspace_path if workspace_path is not None else ":memory:",
+                schema_ir=schema_ir,
+            )
+        except DatabaseError as exc:
+            raise SDKStoreError(str(exc)) from exc
+        try:
+            graph = cls._attach_compiled(
+                database,
+                schema_classes=schema_classes,
+                schema_ir=schema_ir,
+                default_row_format=default_row_format,
+            )
+        except Exception:
+            database.close()
+            raise
+        graph._owns_database = True
+        graph._workspace_path = workspace_path
+        if artifact_store_root is not None:
+            graph._store._artifact_sidecar = FileArtifactSidecar(artifact_store_root)
+        return graph
 
     @classmethod
     def from_schema_classes(
@@ -1831,7 +1934,7 @@ class SDKStore:
         schema_classes: list[type[Entity]] | None = None,
         default_row_format: str | None = None,
     ) -> "SDKStore":
-        """Load a saved FactGraph workspace from disk.
+        """Open a durable FactGraph workspace from disk.
 
         Workspace load restores the ledger and validates the workspace schema
         digest against the supplied `schema_classes`. Class-less dynamic load
@@ -1840,7 +1943,8 @@ class SDKStore:
         ``python -m factgraph migrate-workspace <path>``.
 
         Args:
-            path: Workspace directory created by `fg.save_workspace(...)`.
+            path: Workspace directory created by `FactGraph.create(path=...)`
+                or the explicit v0.2 migration CLI.
             schema_classes: Entity classes matching the saved workspace schema.
             default_row_format: Optional default output row format.
 
@@ -1852,19 +1956,24 @@ class SDKStore:
         if schema_classes is None:
             raise SDKStoreError("schema_classes is required for FactGraph.load_workspace(...)")
         schema_ir = compile_schema_from_classes(schema_classes)
-        digest = schema_digest(schema_ir)
+        workspace_path = _normalize_workspace_path(path)
+        assert workspace_path is not None
         try:
-            _reject_legacy_registry_marker(path)
-            paths = app_load_workspace(path, schema_digest=digest)
-            _ensure_workspace_schema_object(paths.root, schema_ir)
-            return cls._from_schema_classes_impl(
-                schema_classes,
-                ledger=Ledger(path=paths.ledger),
+            _reject_legacy_registry_marker(workspace_path)
+            database = Database.open(workspace_path, schema_ir=schema_ir)
+            graph = cls._attach_compiled(
+                database,
+                schema_classes=schema_classes,
                 schema_ir=schema_ir,
-                workspace_path=paths.root,
                 default_row_format=default_row_format,
             )
+            graph._owns_database = True
+            graph._workspace_path = workspace_path
+            return graph
         except Exception as exc:
+            database_to_close = locals().get("database")
+            if isinstance(database_to_close, Database):
+                database_to_close.close()
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(str(exc)) from exc
@@ -1890,6 +1999,24 @@ class SDKStore:
             )
 
         schema_ir = compile_schema_from_classes(schema_classes)
+        return cls._attach_compiled(
+            db,
+            schema_classes=schema_classes,
+            schema_ir=schema_ir,
+            view=view,
+            default_row_format=default_row_format,
+        )
+
+    @classmethod
+    def _attach_compiled(
+        cls,
+        db: Database,
+        *,
+        schema_classes: list[type[Entity]],
+        schema_ir: dict[str, Any],
+        view: DatabaseFrozenAssertionSet | None = None,
+        default_row_format: str | None = None,
+    ) -> "SDKStore":
         digest = schema_digest(schema_ir)
         if digest != db.schema_digest:
             raise SDKStoreError(
@@ -1906,7 +2033,27 @@ class SDKStore:
         attached = cls(schema_classes, store=store, default_row_format=default_row_format)
         attached._database = db
         attached._attached_writable = attached_writable
+        paths = getattr(db, "_workspace_paths", None)
+        if paths is not None:
+            attached._workspace_path = paths.root
         return attached
+
+    def __enter__(self) -> "SDKStore":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: Any,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Release an internally owned Database; attached Databases remain caller-owned."""
+        if self._owns_database and self._database is not None:
+            self._database.close()
+            self._owns_database = False
 
     @classmethod
     def _from_schema_classes_impl(
@@ -2151,15 +2298,25 @@ class SDKStore:
                 "fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; "
                 "use fg.fields.set / fg.fields.add for non-attached SDKStores"
             )
-        if not self._attached_writable:
+        database = self._database_for_application_write("fg.commit_assertions(...)")
+        assert database is not None
+        return database.commit_assertions(assertions)
+
+    def commit_changes(
+        self,
+        assertions: Sequence[AssertionInput],
+        revocations: Sequence[RevocationInput],
+    ) -> CommitResult:
+        if self._database is None:
             raise SDKStoreError(
-                "fg.commit_assertions(...) is not available on FactGraph.attach(db, view=view) runtimes; "
-                "view-attached runtimes are read-only"
+                "fg.commit_changes(...) is only available on FactGraph.attach(db) runtimes"
             )
-        return self._database.commit_assertions(assertions)
+        database = self._database_for_application_write("fg.commit_changes(...)")
+        assert database is not None
+        return database.commit_changes(assertions, revocations)
 
     def batch(self, *, meta: dict[str, Any] | None = None):
-        self._reject_attached_write("fg.batch")
+        self._database_for_application_write("fg.batch")
         from .batch import SDKBatchTx
 
         return SDKBatchTx(self, meta=meta)
@@ -2171,7 +2328,7 @@ class SDKStore:
         meta: dict[str, Any] | None = None,
         allow_sensitive_meta: bool = False,
     ):
-        self._reject_attached_write("fg.ingest")
+        self._database_for_application_write("fg.ingest")
         from .ingest import sdk_ingest
 
         return sdk_ingest(self, data, meta=meta, allow_sensitive_meta=allow_sensitive_meta)
@@ -2186,7 +2343,6 @@ class SDKStore:
         *schema_class_args: type[Entity],
         schema_classes: list[type[Entity]] | None = None,
     ) -> SchemaAddResult:
-        self._reject_attached_write("fg.add_schema_classes")
         if schema_class_args and schema_classes is not None:
             raise SDKStoreError("pass either positional schema classes or schema_classes=, not both")
         if schema_classes is None:
@@ -2215,8 +2371,8 @@ class SDKStore:
         operation: str,
         non_additive_error_type: type[SDKStoreError],
     ) -> SchemaAddResult:
+        self._database_for_application_write(f"fg.schema.{operation}")
         _entity_type_for_schema_class(entity_cls, field_name="entity_cls")
-        self._reject_attached_write(f"fg.schema.{operation}")
         try:
             return self._apply_schema_class_batch(
                 [entity_cls],
@@ -2238,6 +2394,7 @@ class SDKStore:
         operation: str,
         non_additive_error_type: type[SDKStoreError] = SDKStoreError,
     ) -> SchemaAddResult:
+        database = self._database_for_application_write(f"fg.schema.{operation}")
         old_digest = self._schema_digest
         try:
             result = app_add_schema_classes(
@@ -2263,16 +2420,32 @@ class SDKStore:
                 added_fields=[],
             )
 
+        self._validate_schema_runtime_policies(result.schema_ir)
         self._preflight_schema_digest_anchors(old_digest)
+        if database is not None:
+            try:
+                committed = database.commit_changes(
+                    assertions=(),
+                    revocations=(),
+                    schema_transition=SchemaTransitionInput(
+                        old_schema_digest=old_digest,
+                        new_schema_ir=result.schema_ir,
+                    ),
+                )
+            except DatabaseError as exc:
+                raise SDKStoreError(str(exc)) from exc
+            if committed.value.schema_digest != result.schema_digest:
+                raise SDKStoreError("Database schema transition digest disagrees with compiled schema")
         self._refresh_schema_state(
             classes=result.classes,
             schema_ir=result.schema_ir,
             schema_digest_value=result.schema_digest,
         )
-        self._update_schema_digest_anchors(
-            schema_ir=result.schema_ir,
-            schema_digest_value=result.schema_digest,
-        )
+        if database is None:
+            self._update_schema_digest_anchors(
+                schema_ir=result.schema_ir,
+                schema_digest_value=result.schema_digest,
+            )
         return SchemaAddResult(
             old_digest=old_digest,
             new_digest=result.schema_digest,
@@ -2418,6 +2591,7 @@ class SDKStore:
         value: Any,
         meta: dict[str, Any] | None,
     ) -> str:
+        database = self._database_for_application_write(f"fg.fields.{op}")
         pred = self._schema_pred_for_field(field)
         owner_type = pred.get("owner_type")
         if not isinstance(owner_type, str) or not owner_type:
@@ -2457,7 +2631,12 @@ class SDKStore:
         if not plan.can_apply:
             self._raise_from_application_error(plan.errors[0], op=op)
 
-        result = apply_write_plan(plan, store=self._store, index=self._application_schema_index)
+        result = apply_write_plan(
+            plan,
+            store=self._store,
+            index=self._application_schema_index,
+            database=database,
+        )
         if result.errors:
             self._raise_from_application_error(result.errors[0], op=op)
 
@@ -2573,32 +2752,34 @@ class SDKStore:
         raise SDKStoreError("rules.structure(...) expects application Rule or RuleExpr input")
 
     def save_workspace(self, path: str | Path | None = None) -> dict[str, Any]:
-        """Persist this graph as a FactGraph workspace.
-
-        A workspace contains the ledger, schema metadata, authoring registry,
-        and a workspace manifest. If `path` is omitted, the graph must already
-        be bound to a workspace path through `FactGraph.create(path=...)` or an
-        earlier `fg.save_workspace(path)`.
-        """
-        self._reject_attached_write("fg.save_workspace")
-        workspace_path = _normalize_workspace_path(path) or self._workspace_path
-        if workspace_path is None:
+        """Touch workspace lifecycle metadata; canonical writes are already durable."""
+        database = self._database_for_application_write("fg.save_workspace")
+        if database is None or self._workspace_path is None:
             raise SDKStoreError(
-                "workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)"
+                "workspace path not bound; create with FactGraph.create(path=...) before saving"
             )
+        requested_path = _normalize_workspace_path(path)
+        if requested_path is not None and not _path_equivalent(requested_path, self._workspace_path):
+            raise SDKStoreError(
+                "save_workspace cannot copy or rebind a v0.3 workspace; copy the workspace "
+                "directory explicitly for dry-run/sandbox workflows"
+            )
+        before = database.head()
         try:
-            write_schema_object_for_workspace(workspace_path, self.schema_ir)
-            paths = app_save_workspace(
-                workspace_path,
-                schema_digest=self._schema_digest,
-                ledger=self.ledger,
-            )
+            saved_at = database.touch_saved_at()
         except Exception as exc:
             if isinstance(exc, SDKStoreError):
                 raise
             raise SDKStoreError(str(exc)) from exc
-        self._workspace_path = paths.root
-        return {"path": str(paths.root), "manifest": str(paths.manifest)}
+        if database.head() != before:
+            raise SDKStoreError("save_workspace metadata update unexpectedly changed Database head")
+        paths = getattr(database, "_workspace_paths", None)
+        assert paths is not None
+        return {
+            "path": str(paths.root),
+            "manifest": str(paths.manifest),
+            "last_saved_at_epoch_ns": saved_at,
+        }
 
     @staticmethod
     def _resolve_public_engine(raw_engine: Any, *, api_path: str) -> str:
@@ -3839,6 +4020,8 @@ class SDKStore:
         schema_ir: dict[str, Any],
         schema_digest_value: str,
     ) -> None:
+        self._validate_schema_runtime_policies(schema_ir)
+        self._store.ledger.configure_meta_load_policy(lazy_meta_keys(schema_ir))
         self._classes = list(classes)
         self._schema_ir = schema_ir
         self._store.schema_ir = schema_ir
@@ -3848,6 +4031,19 @@ class SDKStore:
         self._field_decl_by_descriptor.clear()
         self._entity_spec_by_class.clear()
         self._index_schema()
+
+    def _validate_schema_runtime_policies(self, schema_ir: dict[str, Any]) -> None:
+        try:
+            validate_premise_configuration(
+                schema_ir,
+                self._store.premise_exclusions,
+                self._store.premise_allowances,
+                self._store.premise_blocks,
+            )
+        except ValueError as exc:
+            raise SDKStoreError(
+                f"schema transition invalidates premise configuration: {exc}"
+            ) from exc
 
     def _preflight_schema_digest_anchors(self, old_digest: str) -> None:
         ledger_digest = self.ledger.get_ledger_meta("schema_digest")
@@ -3995,7 +4191,7 @@ def _normalize_asrt_ids_from_records(records: Iterable[Any]) -> frozenset[str]:
 
 
 def _assertion_record_by_id(sdk: SDKStore, asrt_id: str) -> Any:
-    claim = sdk.ledger.get_claim(asrt_id)
+    claim = sdk.ledger._get_claim_including_system(asrt_id)
     if claim is None:
         return None
     schema_pred = _schema_pred_by_pred_id(sdk, claim.pred_id)
@@ -4005,6 +4201,13 @@ def _assertion_record_by_id(sdk: SDKStore, asrt_id: str) -> Any:
 
 
 def _schema_pred_by_pred_id(sdk: SDKStore, pred_id: str) -> dict[str, Any]:
+    if pred_id.startswith("__system__."):
+        return {
+            "pred_id": pred_id,
+            "owner_type": "",
+            "py_field_name": "",
+            "cardinality": "multi",
+        }
     for pred in sdk.schema_ir.get("predicates", []):
         if isinstance(pred, dict) and pred.get("pred_id") == pred_id:
             return pred
@@ -4743,7 +4946,7 @@ def _claim_rest_terms_match_values(rest_terms: Sequence[tuple[str, Any]], values
 
 
 def _claim_meta_value(ledger: Ledger, asrt_id: str, key: str) -> Any:
-    rows = ledger.find_meta(asrt_id=asrt_id, key=key)
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=key)
     if not rows:
         return None
     return rows[-1].value
@@ -4900,7 +5103,10 @@ def _evaluate_digest_safe(value: Any) -> Any:
 
 def _view_snapshot_asrt_id_for_claim(claim: Any) -> str:
     asrt_id = getattr(claim, "asrt_id", None)
-    if isinstance(asrt_id, str) and re.fullmatch(r"asrt:[0-9a-f]{64}", asrt_id):
+    if isinstance(asrt_id, str) and re.fullmatch(
+        r"(?:asrt:)?(?:[0-9a-f]{32}|[0-9a-f]{64})",
+        asrt_id,
+    ):
         return asrt_id
     return "asrt:" + sha256_hex(
         canonical_bytes_for_evaluate(

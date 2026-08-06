@@ -419,7 +419,7 @@ def _assertion_record_from_claim(
     value = None
     if raw_value is not None:
         value = _hydrate_value(raw_value, field_type=field_type, view_facts=view_facts, index=index, ref_cache=ref_cache)
-    meta = {row.key: row.value for row in ledger.find_meta(asrt_id=claim.asrt_id)}
+    meta = {row.key: row.value for row in ledger.effective_meta_rows(asrt_id=claim.asrt_id)}
     return AssertionRecordDTO(
         assertion_id=claim.asrt_id,
         value=value,
@@ -429,7 +429,7 @@ def _assertion_record_from_claim(
 
 
 def _claim_sort_key(ledger: Ledger, claim: Claim) -> tuple[int, bytes]:
-    rows = ledger.find_meta(asrt_id=claim.asrt_id, key="ingested_at")
+    rows = ledger.effective_meta_rows(asrt_id=claim.asrt_id, key="ingested_at")
     ingested = -1
     if rows:
         row = rows[-1]

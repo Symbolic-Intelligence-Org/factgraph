@@ -395,6 +395,26 @@ class TestRetractAnnotationProjection(unittest.TestCase):
         self.assertNotIn("confidence", by_key)
         self.assertEqual(by_key["bound"].value, [0.4, 0.4])
 
+    def test_retract_by_asrt_rejects_system_claim_target_without_writing(self) -> None:
+        ledger = Ledger()
+        asrt_id = set_field(
+            ledger,
+            "p:test",
+            _eref("system-target"),
+            [("string", "v")],
+        )
+        revoker_id = retract_by_asrt(ledger, asrt_id)
+        before_claims = tuple(ledger.claims)
+        before_revokes = tuple(ledger.revokes)
+        before_meta = tuple(ledger.meta_rows)
+
+        with self.assertRaisesRegex(WriteProtocolError, "revoke-of-revoke is forbidden"):
+            retract_by_asrt(ledger, revoker_id)
+
+        self.assertEqual(tuple(ledger.claims), before_claims)
+        self.assertEqual(tuple(ledger.revokes), before_revokes)
+        self.assertEqual(tuple(ledger.meta_rows), before_meta)
+
 
 class TestWhitelistCoverage(unittest.TestCase):
     """Verify whitelist is complete and categories are correct."""

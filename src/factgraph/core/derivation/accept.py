@@ -929,7 +929,7 @@ def _resolve_candidate_key_to_entity_ref(
             return in_batch
 
     refs: set[str] = set()
-    for row in ledger.find_meta(key="candidate_key", kind="str"):
+    for row in ledger.effective_meta_rows(key="candidate_key", kind="str"):
         if row.value != candidate_key:
             continue
         if ledger.has_active_revocation(row.asrt_id):
@@ -986,7 +986,7 @@ def _find_existing_claim_assertions_v2(
 def _business_meta_for_duplicate(
     ledger: Ledger, asrt_id: str, actor_meta_keys: frozenset[str] = frozenset()
 ) -> dict[str, Any]:
-    meta = {row.key: row.value for row in ledger.find_meta(asrt_id=asrt_id)}
+    meta = {row.key: row.value for row in ledger.effective_meta_rows(asrt_id=asrt_id)}
     return _filter_business_meta(meta, actor_meta_keys)
 
 
@@ -1121,7 +1121,7 @@ def _assert_duplicate_meta_compatible(
 
 
 def _meta_value(ledger: Ledger, asrt_id: str, key: str) -> str | None:
-    for row in ledger.find_meta(asrt_id=asrt_id, key=key):
+    for row in ledger.effective_meta_rows(asrt_id=asrt_id, key=key):
         if isinstance(row.value, str):
             return row.value
     return None

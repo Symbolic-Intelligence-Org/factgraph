@@ -1,359 +1,114 @@
-# Load and save: working with a FactGraph workspace
+# Load and save: the v0.3 workspace lifecycle
 
-A FactGraph workspace is a directory on disk that holds the persistent state of one graph. The SDK supports two ways to own and write a workspace.
+A durable FactGraph workspace has one physical format and one transactional
+history. Whether the SDK creates the `Database` for you or you attach to a
+caller-owned `Database`, canonical writes use the same SQLite transaction and
+advance the same head.
 
-**Mode A** (SDK-owned, `FactGraph.create` + `fg.save_workspace`) is the main mode. It supports the full ergonomic SDK write surface (`fg.entities.*`, `fg.fields.*`, batches, ingest) and is what every other quickstart page describes when it shows a `fg.<...>` call.
+The most important lifecycle rule is that durable writes are **write-through**:
+when a mutation call returns successfully, its facts and new head are already
+durable. `save_workspace()` is not a persistence or commit boundary.
 
-**Mode B** (Database-owned, `FactGraph.attach`) is a specialized substrate. It only accepts `fg.commit_assertions(list[AssertionInput])` as a write entry and supports durable view objects through `db.create_view(...)`. Use Mode B when you specifically need durable views, explicit `tx_id` tracking, or view-scoped read-only attach; otherwise use Mode A.
+## 1. Choose an entry point
 
-This page documents both modes, the disk layout each one produces, and the rule that governs which writes work where. The two modes write incompatible disk formats and are not interchangeable.
-
-## 1. What a workspace is
-
-A workspace is identified by its `db_id` and its `schema_digest`. Both are written once when the workspace is created and never change. Reopening a workspace with a set of `Entity` classes that compiles to a different schema digest is rejected (see §6.5).
-
-There are two disk formats. They share the manifest filename and the `db/objects/schema/` schema-object location, but diverge on where the SQLite ledger lives and what transaction-tracking files exist.
-
-### Mode A — workspace written by `fg.save_workspace()`
-
-```
-<workspace_root>/
-├── factgraph_workspace.json     # app-layer manifest (version + components + schema_digest)
-├── ledger.db                    # SQLite ledger (top-level)
-└── db/
-    └── objects/
-        └── schema/<digest>.json # one schema-IR object, content-addressed
-```
-
-The manifest lists `components: {"ledger": "ledger.db", "db": "db/", "views": "views/"}` and `save_scope: "level_4"`.
-
-### Mode B — workspace written by `Database.create()`
-
-```
-<workspace_root>/
-├── factgraph_workspace.json     # Database-layer manifest (no `ledger` component)
-└── db/
-    ├── meta.json                # db_id
-    ├── assertions.db            # SQLite ledger (under db/)
-    ├── objects/
-    │   ├── tx/<tx_id>.json      # one object per commit
-    │   └── schema/<digest>.json
-    └── refs/
-        └── head.txt             # current head tx_id
-└── views/<view_digest>.json     # one object per db.create_view(...) call
-```
-
-The manifest lists only `components: {"db": "db/", "views": "views/"}`. Every commit advances `refs/head.txt` and writes a new `objects/tx/<tx_id>.json`.
-
-### Workspace-less runtime
-
-`FactGraph.create(schema_classes=[...])` without `path=` is a pure in-memory FactGraph runtime: writes work, nothing is persisted, closing the process discards the state. It can be promoted to a Mode A workspace later by calling `fg.save_workspace(path=...)`.
-
-## 2. Two ownership modes
-
-A workspace has exactly one owner at any moment. The owner decides which write API is available.
-
-| Owner | Constructor | Reopen | Write API | Persistence trigger |
-|---|---|---|---|---|
-| **SDK runtime** (Mode A) | `FactGraph.create(path=..., schema_classes=[...])` | `FactGraph.load_workspace(path, schema_classes=[...])` | `fg.entities.*`, `fg.fields.*`, `fg.assertions.retract`, `fg.batch`, `fg.ingest` | explicit `fg.save_workspace(path=None)` |
-| **Database** (Mode B) | `Database.create(path, schema_ir=...)` + `FactGraph.attach(db, schema_classes=[...])` | `Database.open(path, schema_ir=...)` + `FactGraph.attach(...)` | `fg.commit_assertions([AssertionInput, ...])` only | every commit advances the head; no explicit save |
-
-### The write APIs are mutually exclusive
-
-| Method | Mode A | Mode B (writable attach) | Mode B (view-scoped attach) |
+| Entry point | Database owner | Writable? | Durable? |
 |---|---|---|---|
-| `fg.entities.create` / `delete` | ✅ | ❌ rejected | ❌ rejected |
-| `fg.entities.edit` | ✅ | ❌ rejected | ❌ rejected |
-| `fg.fields.set` / `add` / `retract` / `delete` | ✅ | ❌ rejected | ❌ rejected |
-| `fg.assertions.retract` | ✅ | ❌ rejected | ❌ rejected |
-| `fg.batch` / `fg.ingest` / `fg.add_schema_classes` | ✅ | ❌ rejected | ❌ rejected |
-| `fg.assertion_views.create` / `update` / `delete` | ✅ | ❌ rejected | ❌ rejected |
-| `fg.save_workspace` | ✅ | ❌ rejected | ❌ rejected |
-| `fg.commit_assertions` | ❌ rejected | ✅ the only write entry | ❌ rejected |
-| `db.create_view` | (n/a) | ✅ writes durable view object | (n/a) |
+| `FactGraph.create(path=..., schema_classes=[...])` | SDK runtime | yes | yes |
+| `FactGraph.load_workspace(path, schema_classes=[...])` | SDK runtime | yes | yes |
+| `Database.create/open(...)` + `FactGraph.attach(db, ...)` | caller | yes, for a base attach | yes |
+| `FactGraph.attach(db, ..., view=view)` | caller | no; the view runtime is read-only | yes |
+| `FactGraph.create(schema_classes=[...])` without `path=` | SDK runtime | yes | no; in-memory only |
 
-Reads work identically in both modes: `fg.entities.{get,where,match,ref,exists}`, `fg.fields.get`, `fg.assertions.*`, `fg.eval.*`, `fg.audit.*`, `fg.rules.inspect`.
+`FactGraph.from_schema_classes(...)` is a lower-level unmanaged `Ledger`
+compatibility lifecycle. It is not the v0.3 durable workspace lifecycle. In
+particular, its legacy raw entity-reference ingest fallback does not apply to
+Database-backed created, loaded, or attached graphs.
 
-Ergonomic write methods reject attached calls with:
+### 1.1 SDK-owned create and load
 
-```text
-SDKStoreError: attached FactGraph runtimes route writes only through
-fg.commit_assertions(...); <method_name> is not available on attached runtimes
-```
-
-### Disk formats are incompatible
-
-A Mode A workspace cannot be opened by `Database.open(...)` — it is missing `db/meta.json`, `db/refs/head.txt`, the transaction objects under `db/objects/tx/`, and the ledger is at the wrong path (`ledger.db` rather than `db/assertions.db`).
-
-A Mode B workspace cannot be opened by `FactGraph.load_workspace(...)` — its manifest is missing the `components.ledger` field that `validate_workspace_manifest` requires. The error is:
-
-```text
-WorkspaceRuntimeError: workspace manifest ledger component mismatch
-```
-
-Choose the mode at workspace creation. There is no in-place migration path between formats.
-
-## 3. Mode A: SDK-owned workspace
-
-This is the main mode. The rest of the SDK quickstart material assumes a Mode A runtime.
-
-### 3.1 Create
+Use a context manager so the workspace lock is released promptly:
 
 ```python
 from factgraph.sdk import FactGraph
 
-fg = FactGraph.create(
+with FactGraph.create(
     path="path/to/workspace",
     schema_classes=[User, Order],
-)
-```
+) as fg:
+    user = fg.entities.create(User, user_id="u-1")
+    fg.fields.set(User.name, user, "Alice")
+    fg.fields.set(User.name, user, "Alicia")
 
-At construction time, the SDK compiles the schema once and writes `<path>/db/objects/schema/<digest>.json`. The workspace path is stored on the runtime for later `fg.save_workspace()` calls. The SQLite ledger stays in memory until the first save.
-
-### 3.2 Write
-
-All ergonomic write methods are available. `fg.commit_assertions(...)` is rejected in this mode:
-
-```text
-SDKStoreError: fg.commit_assertions(...) is only available on FactGraph.attach(db)
-runtimes; use fg.fields.set / fg.fields.add for non-attached SDKStores
-```
-
-Use the SDK namespaces:
-
-- `fg.entities.create / delete / edit` for entity lifecycle
-- `fg.fields.set / add / retract / delete` for field-cell mutations
-- `fg.assertions.retract(asrt_id, ...)` for assertion-id retract
-- `fg.batch(meta=...)` for transactional grouping
-- `fg.ingest(...)` for bulk
-
-Each is documented in the SDK quickstart pages. This page does not duplicate that material.
-
-### 3.3 Save
-
-```python
-fg.save_workspace()                  # uses path set at FactGraph.create(...)
-fg.save_workspace(path="other/path") # binds to a new path
-```
-
-Save writes the schema object (re-emitted in case the schema changed), backs up the in-memory ledger to `<path>/ledger.db`, and writes the manifest. If neither call form supplies a path:
-
-```text
-SDKStoreError: workspace path not bound; pass fg.save_workspace(path=...) or
-create with FactGraph.create(path=...)
-```
-
-Saving an in-memory runtime to a path is the supported upgrade path from no-workspace to workspace.
-
-### 3.4 Load
-
-```python
-fg = FactGraph.load_workspace(
+with FactGraph.load_workspace(
     "path/to/workspace",
     schema_classes=[User, Order],
-)
+) as fg:
+    assert fg.entities.get(User, user_id="u-1").name == "Alicia"
 ```
 
-Load compiles `schema_classes`, computes its schema identity digest, and validates against the manifest. The digest excludes volatile top-level `generated_at`, so the same schema classes can be saved and loaded after a later recompilation timestamp. Mismatch:
+The supplied classes are compiled and checked against the schema object and
+current schema digest recorded by the Database. Class-less dynamic load is not
+supported. A mismatching class set fails closed.
 
-```text
-WorkspaceRuntimeError: workspace schema_digest mismatch: manifest='sha256:...',
-expected='sha256:...'
-```
+### 1.2 Caller-owned Database and attach
 
-If the workspace contains a legacy `registry/` directory, load tells you to run `python -m factgraph migrate-workspace <path>` first.
-
-### 3.5 In-memory variant
-
-`FactGraph.create(schema_classes=[...])` without `path=` returns a pure in-memory runtime. All Mode A writes work, nothing is persisted. Promote later with `fg.save_workspace(path=...)`.
-
-## 4. Mode B: Database-owned workspace
-
-Mode B is a specialized substrate. It supports two operations: low-level transactional commits via `fg.commit_assertions(...)`, and durable view creation via `db.create_view(...)`. The ergonomic SDK write surface (`fg.entities.*`, `fg.fields.*`, `fg.batch`, `fg.ingest`, `fg.assertions.retract`, `fg.save_workspace`) is not available here — those methods all reject on attached runtimes. If you need ergonomic writes, use Mode A.
-
-`fg.commit_assertions(...)` requires the caller to assemble `AssertionInput` records by hand: resolve `pred_id` from the compiled schema IR, build the `fact_tuple` as `(tag, value)` pairs, attach optional `MetaEntry` rows.
-
-### 4.1 Create
+Attach is useful when the caller needs direct access to `db.head()`, low-level
+commit results, or durable frozen views:
 
 ```python
 from factgraph.sdk import Database, FactGraph, compile_schema_from_classes
 
-schema_ir = compile_schema_from_classes([User, Order])
+schema_classes = [User, Order]
+schema_ir = compile_schema_from_classes(schema_classes)
 
-db = Database.create("path/to/workspace", schema_ir=schema_ir)
-fg = FactGraph.attach(db, schema_classes=[User, Order])
+with Database.create("path/to/workspace", schema_ir=schema_ir) as db:
+    fg = FactGraph.attach(db, schema_classes=schema_classes)
+    user = fg.entities.create(User, user_id="u-1")
+    fg.fields.set(User.name, user, "Alice")
+    head = db.head()
 ```
 
-`Database.create(path, schema_ir=...)` writes the full Mode B layout (§1) in one call: the manifest, the schema object, the initial tx object, `db/meta.json`, the head ref, and the empty SQLite ledger at `db/assertions.db`.
+A base attach supports the same ergonomic write surface as SDK-owned
+create/load: `fg.entities.*`, `fg.fields.*`, `fg.assertions.*`, `fg.batch`,
+ingest, metadata append, and additive `fg.schema.*` changes. The caller, not
+the attached `FactGraph`, owns and closes the `Database`.
 
-`FactGraph.attach(db, schema_classes=[...])` compiles `schema_classes`, computes its digest, and checks it against `db.schema_digest`. Mismatch:
+`FactGraph.attach(...)` accepts attach-specific options only. Lifecycle and
+storage options such as `path=`, `ledger=`, `ledger_path=`, and
+`registry_root=` are rejected rather than silently ignored.
 
-```text
-SDKStoreError: schema mismatch: Database has schema_digest='sha256:...',
-but schema_classes compile to 'sha256:...'
-```
+### 1.3 In-memory graphs
 
-`attach(...)` rejects nine keyword arguments that belong to Mode A: `artifact_store_root`, `ledger`, `ledger_path`, `path`, `policy`, `registry`, `registry_root`, `rules`, `workspace_path`.
-
-### 4.2 Reopen
+Omitting `path=` creates an in-memory Database:
 
 ```python
-db = Database.open("path/to/workspace", schema_ir=schema_ir)
-fg = FactGraph.attach(db, schema_classes=[User, Order])
+with FactGraph.create(schema_classes=[User]) as fg:
+    fg.entities.create(User, user_id="temporary")
 ```
 
-`Database.open(...)` does not accept `:memory:`:
+Its contents disappear when the runtime closes. It cannot later be promoted
+to a durable workspace with `save_workspace(path=...)`; create a durable graph
+up front or explicitly transfer the data through supported write APIs.
 
-```text
-DatabaseError: Database.open does not support ':memory:'
-```
+## 2. Writes, commits, and the head
 
-### 4.3 The only write entry — `fg.commit_assertions`
+Every logical commit is one SQLite transaction. Assertion rows, revocations,
+metadata, schema history, the current schema digest, state commitment, and
+head update succeed or roll back together.
 
-`AssertionInput` is the assembly format for a commit:
+- A normal SDK mutation is one transaction per call.
+- Operations inside `fg.batch(...)` are committed as one transaction.
+- A bulk-ingest batch is one transaction.
+- An additive schema transition is its own `schema_change` transaction.
+- A no-op or rejected operation does not advance the head.
 
-```python
-@dataclass(frozen=True)
-class AssertionInput:
-    pred_id: str
-    fact_tuple: tuple[tuple[str, Any], ...]
-    meta: tuple[MetaEntry, ...] = ()
-```
+The SDK also exposes `fg.commit_assertions(...)` and `fg.commit_changes(...)`
+on writable Database-backed graphs. These accept low-level protocol DTOs and
+are advanced mechanisms, not a second workspace format. Raw schema-transition
+DTOs are deliberately not part of the public SDK namespace; SDK schema policy
+is enforced through additive-only `fg.schema.register/extend/apply`.
 
-`fact_tuple` is a tuple of `(tag, value)` pairs. The first element is conventionally the entity ref; the rest carry the field values for that predicate.
-
-A complete single-assertion commit:
-
-```python
-from factgraph.sdk import AssertionInput, MetaEntry
-
-# 1) resolve pred_id from the compiled schema
-def field_pred_id(schema_ir, owner_type, field_name):
-    for pred in schema_ir["predicates"]:
-        if pred.get("owner_type") == owner_type and pred.get("py_field_name") == field_name:
-            return pred["pred_id"]
-    raise LookupError(f"{owner_type}.{field_name} predicate not found")
-
-user_name_pred = field_pred_id(schema_ir, "User", "name")
-
-# 2) assemble
-input = AssertionInput(
-    pred_id=user_name_pred,
-    fact_tuple=(("entity_ref", "idref_v1:User:u-1"), ("string", "Alice")),
-    meta=(MetaEntry("source", "str", "demo"),),
-)
-
-# 3) commit
-result = fg.commit_assertions([input])
-# result.parent_tx_id : the previous head's tx_id
-# result.value        : the new DatabaseValue (db_id + tx_id + schema_digest + data_digest)
-# result.assertions   : tuple[AssertionRecord, ...]
-
-assert db.head() == result.value  # head has advanced
-```
-
-Errors raised by the commit path:
-
-```text
-DatabaseError: commit_assertions requires at least one assertion
-DuplicateAssertionError: duplicate content-addressed assertion in commit
-DuplicateAssertionError: assertion already exists: asrt:...
-```
-
-### 4.4 View creation — the main current capability
-
-```python
-view = db.create_view(
-    name="snap-2026-06",
-    asrt_ids=["asrt:abc...", "asrt:def..."],
-)
-```
-
-`view` is a Database-layer `FrozenAssertionSet` (6 fields: `name`, `db_id`, `base_tx_id`, `schema_digest`, `asrt_ids: tuple[str, ...]`, `view_digest`). The call writes a content-addressed JSON object at `<workspace_root>/views/<view_digest>.json` and is durable for as long as the workspace exists.
-
-In-memory Databases reject this:
-
-```text
-DatabaseError: durable view persistence requires a new-layout Database workspace
-```
-
-There is also a session-local SDK-layer `FrozenAssertionSet` returned by `fg.assertion_views.create(...)` in Mode A (2 fields: `name`, `asrt_ids: frozenset[str]`). The two types share a class name but are distinct dataclasses with different schemas; the SDK module renames the Database one to `DatabaseFrozenAssertionSet` internally to keep them disambiguated.
-
-### 4.5 View-scoped attach (read-only)
-
-```python
-view = db.create_view(name="snap", asrt_ids=[...])
-fg_view = FactGraph.attach(db, schema_classes=[...], view=view)
-```
-
-The view-scoped runtime sees only the assertions in `view.asrt_ids`. All writes are rejected, including `fg.commit_assertions(...)`:
-
-```text
-SDKStoreError: fg.commit_assertions(...) is not available on
-FactGraph.attach(db, view=view) runtimes; view-attached runtimes are read-only
-```
-
-Reads work as on a regular attach.
-
-## 5. Choosing a mode
-
-| You want to ... | Use |
-|---|---|
-| Build a graph with ergonomic SDK writes, save it, load it later | **Mode A** |
-| Single-process, no persistence | **Mode A** in-memory variant |
-| Build a durable, content-addressed view object that other processes can read | **Mode B** + `db.create_view(...)` |
-| Read a database at a specific view snapshot | **Mode B** with `view=` |
-| Track `db_id` / `tx_id` explicitly for replication or audit | **Mode B** |
-| Anything else | **Mode A** |
-
-Once a workspace is created in one mode, it cannot be opened in the other (see §2 "Disk formats are incompatible"). Treat the mode as a workspace-level commitment made at create time.
-
-## 6. Reference
-
-### 6.1 Class and method signatures
-
-```python
-# Mode A
-FactGraph.create(
-    schema_classes: list[type[Entity]],
-    *,
-    ledger: Ledger | None = None,
-    ledger_path: str | None = None,
-    path: str | Path | None = None,
-    artifact_store_root: str | None = None,
-    default_row_format: str | None = None,
-) -> FactGraph
-
-fg.save_workspace(path: str | Path | None = None) -> dict[str, Any]
-
-FactGraph.load_workspace(
-    path: str | Path,
-    *,
-    schema_classes: list[type[Entity]],
-    default_row_format: str | None = None,
-) -> FactGraph
-
-# Mode B
-Database.create(path: str | Path = ":memory:", *, schema_ir: dict) -> Database
-Database.open(path: str | Path, *, schema_ir: dict) -> Database
-db.head() -> DatabaseValue
-db.commit_assertions(assertions: Sequence[AssertionInput]) -> CommitResult
-db.create_view(name: str, asrt_ids: Iterable[str], *, base: DatabaseValue | None = None) -> FrozenAssertionSet
-
-FactGraph.attach(
-    db: Database,
-    *,
-    schema_classes: list[type[Entity]],
-    view: FrozenAssertionSet | None = None,
-    default_row_format: str | None = None,
-    # rejects: artifact_store_root, ledger, ledger_path, path, policy,
-    #          registry, registry_root, rules, workspace_path
-) -> FactGraph
-
-fg.commit_assertions(assertions: Sequence[AssertionInput]) -> CommitResult
-```
-
-### 6.2 Returned types
+`db.head()` returns:
 
 ```python
 @dataclass(frozen=True)
@@ -361,97 +116,175 @@ class DatabaseValue:
     db_id: str
     tx_id: str
     schema_digest: str
-    data_digest: str
+    state_digest: str
+    digest_scheme: str
+    tx_seq: int
 
-@dataclass(frozen=True)
-class CommitResult:
-    parent_tx_id: str               # previous head's tx_id
-    value: DatabaseValue             # new head
-    assertions: tuple[AssertionRecord, ...]
-
-# factgraph.core.store.database.FrozenAssertionSet
-@dataclass(frozen=True)
-class FrozenAssertionSet:
-    name: str
-    db_id: str
-    base_tx_id: str
-    schema_digest: str
-    asrt_ids: tuple[str, ...]
-    view_digest: str
-
-# factgraph.sdk.FrozenAssertionSet — distinct class, same name
-@dataclass(frozen=True)
-class FrozenAssertionSet:
-    name: str
-    asrt_ids: frozenset[str]
-
-@dataclass(frozen=True)
-class AssertionInput:
-    pred_id: str
-    fact_tuple: tuple[tuple[str, Any], ...]
-    meta: tuple[MetaEntry, ...] = ()
-
-@dataclass(frozen=True)
-class MetaEntry:
-    key: str
-    kind: str
-    value: Any
+    @property
+    def data_digest(self) -> str: ...  # v0.2 compatibility alias for state_digest
 ```
 
-### 6.3 Manifest schema
+`state_digest` is an order-independent LtHash commitment to the active factual
+assertion ids and their content digests. The transaction chain separately
+commits each normalized delta, so different histories that reach the same
+active state retain different `tx_id` histories.
 
-Both modes write `factgraph_workspace.json` at the workspace root. The payloads differ.
+## 3. What `save_workspace()` means now
 
-Mode A payload (from `application/workspace_runtime.py`):
+For a writable durable graph, `fg.save_workspace()` updates only
+`db/meta.json:last_saved_at_epoch_ns`. It does not write pending facts (there
+are none), advance the head, rewrite the manifest, or create a transaction.
 
-```json
-{
-  "factgraph_workspace_version": "1",
-  "save_scope": "level_4",
-  "schema_digest": "sha256:...",
-  "components": {"ledger": "ledger.db", "db": "db/", "views": "views/"},
-  "created_at": "<ISO timestamp>",
-  "last_saved_at": "<ISO timestamp>"
-}
+```python
+info = fg.save_workspace()
+print(info["last_saved_at_epoch_ns"])
 ```
 
-Mode B payload (from `core/store/database.py`):
+Callers using `FactGraph.attach(db, ...)` can compare `db.head()` before and
+after this call to verify that the head is unchanged.
 
-```json
-{
-  "factgraph_workspace_version": "<database-layer version>",
-  "components": {"db": "db/", "views": "views/"}
-}
+Passing the already-bound path is accepted. Passing another path is rejected:
+save cannot copy or rebind a workspace. It also cannot turn an in-memory graph
+into a durable one.
+
+The old pattern “load → modify → omit save to discard” therefore no longer
+works. For a dry run or sandbox, first close the workspace, copy the entire
+directory, and open the copy. Do not copy a live workspace.
+
+## 4. Ownership, locking, and close
+
+Every durable `Database.create/open` acquires a non-blocking exclusive writer
+lock for the lifetime of the Database. v0.3 has no concurrent read-only open
+channel: a second open of the same workspace, even one intended only for
+reading, fails explicitly.
+
+- `FactGraph.create(path=...)` and `FactGraph.load_workspace(...)` own their
+  Database. `fg.close()` or context-manager exit closes it and releases the
+  lock.
+- `FactGraph.attach(db, ...)` does not own the caller's Database. Closing the
+  attached graph does not replace the caller's responsibility to close `db`.
+- `close()` is idempotent.
+- Writing through an SDK-owned graph after close raises `SDKStoreError` with
+  `code="GRAPH_CLOSED"` and lifecycle guidance.
+
+Arrange multi-worker deployments around a single durable writer. A second
+process cannot use `FactGraph.load_workspace(...)` as a read-only observer.
+
+## 5. On-disk format
+
+Both SDK-owned and caller-owned durable lifecycles use this layout:
+
+```text
+workspace/
+  factgraph_workspace.json
+  db/
+    assertions.db
+    meta.json
+    writer.lock
+    objects/
+      schema/<64hex>.json
+      tx/<64hex>.json
+    refs/                    # reserved; empty in v0.3 (head is in ledger_meta)
+  views/                     # created lazily by db.create_view(...)
+    objects/<64hex>.json
 ```
 
-`validate_workspace_manifest` (used by `FactGraph.load_workspace`) checks that `components.ledger == "ledger.db"`. Mode B manifests fail this check.
+`factgraph_workspace.json` contains version `"1"` and only the `db/` and
+`views/` component locations. It does not contain a top-level
+`schema_digest`. The authoritative current head, Database id, schema digest,
+state digest, digest scheme, and transaction sequence live together in the
+`ledger_meta` table inside `db/assertions.db`; there is no `db/refs/head.txt`.
 
-### 6.4 Errors
+Canonical schema objects and transaction objects are content-addressed and
+write-once. A successful additive schema change writes the new schema object
+and advances the Database's schema digest in the same logical commit. The
+manifest does not need a later save to catch up.
 
-| Raised by | Type | Message |
-|---|---|---|
-| `Database.open(":memory:", ...)` | `DatabaseError` | `Database.open does not support ':memory:'` |
-| `db.commit_assertions([])` | `DatabaseError` | `commit_assertions requires at least one assertion` |
-| `db.commit_assertions(...)` with duplicate | `DuplicateAssertionError` | `duplicate content-addressed assertion in commit` or `assertion already exists: asrt:...` |
-| `db.create_view(...)` on `:memory:` | `DatabaseError` | `durable view persistence requires a new-layout Database workspace` |
-| `FactGraph.attach(db, ...)` with non-Database `db` | `SDKStoreError` | `FactGraph.attach(db) expects a Database instance` |
-| `FactGraph.attach(db, schema_classes=...)` digest mismatch | `SDKStoreError` | `schema mismatch: Database has schema_digest=..., but schema_classes compile to ...` |
-| `FactGraph.attach(db, **rejected_kwarg=...)` | `SDKStoreError` | `FactGraph.attach(...) does not accept keyword(s): <list>` |
-| `fg.commit_assertions(...)` on non-attached | `SDKStoreError` | `fg.commit_assertions(...) is only available on FactGraph.attach(db) runtimes; use fg.fields.set / fg.fields.add for non-attached SDKStores` |
-| `fg.commit_assertions(...)` on view-attached | `SDKStoreError` | `fg.commit_assertions(...) is not available on FactGraph.attach(db, view=view) runtimes; view-attached runtimes are read-only` |
-| ergonomic write on attached | `SDKStoreError` | `attached FactGraph runtimes route writes only through fg.commit_assertions(...); <method> is not available on attached runtimes` |
-| `fg.save_workspace()` with no path bound | `SDKStoreError` | `workspace path not bound; pass fg.save_workspace(path=...) or create with FactGraph.create(path=...)` |
-| `FactGraph.load_workspace(...)` digest mismatch | `WorkspaceRuntimeError` | `workspace schema_digest mismatch: manifest=..., expected=...` |
-| `FactGraph.load_workspace(...)` on Mode B workspace | `WorkspaceRuntimeError` | `workspace manifest ledger component mismatch` |
-| `FactGraph.load_workspace(...)` with legacy `registry/` | `SDKStoreError` | (instructs `python -m factgraph migrate-workspace <path>`) |
+## 6. Durable frozen views
 
-### 6.5 Schema strong correspondence
+Create a view from a durable Database, then attach it read-only:
 
-Two validation sites enforce `schema_digest(compile_schema_from_classes(schema_classes)) == workspace_schema_digest` but raise different error types and messages. The comparison is schema-identity based: top-level `generated_at` metadata may differ between the stored schema object and the freshly compiled schema IR, while structural schema changes still fail.
+```python
+with Database.open("path/to/workspace", schema_ir=schema_ir) as db:
+    view = db.create_view(name="review-set", asrt_ids=["asrt:..."])
+    fg_view = FactGraph.attach(db, schema_classes=[User, Order], view=view)
+    rows = fg_view.assertions.all()
+```
 
-| Site | File | Compared against | Error type | Error message |
-|---|---|---|---|---|
-| `FactGraph.attach(db, schema_classes=...)` | `sdk/store.py:1755-1761` | `db.schema_digest` | `SDKStoreError` | `schema mismatch: Database has schema_digest=..., but schema_classes compile to ...` |
-| `FactGraph.load_workspace(path, schema_classes=...)` | `application/workspace_runtime.py:106-109` | manifest `schema_digest` field | `WorkspaceRuntimeError` | `workspace schema_digest mismatch: manifest=..., expected=...` |
+The view object is stored at `views/objects/<view_digest>.json`. It records the
+Database id, base transaction, schema digest, and assertion-id membership.
+In-memory Databases cannot persist views.
 
-`Database.create(path, schema_ir=...)` and `Database.open(path, schema_ir=...)` take a pre-compiled schema IR. They compute the digest from the IR for storage and for the open-time validation.
+A view-attached runtime is read-only. Any write entry fails directly with a
+message that the method is unavailable and view-attached runtimes are
+read-only; it is not reported as a schema-policy or non-additive error.
+
+## 7. Migrating a v0.2 workspace
+
+Migration is explicit and opt-in. Close every process using the source, then
+inspect or migrate it with:
+
+```bash
+python -m factgraph migrate-workspace path/to/workspace --dry-run
+python -m factgraph migrate-workspace path/to/workspace
+```
+
+The supported source is a complete v0.2 workspace whose authoritative SQLite
+file is `ledger.db`. The command stages and verifies a v0.3 replacement,
+preserves assertion/revocation rows and ids, and writes an auditable genesis
+import transaction using ordinary assertion, revocation, and append-meta
+operations because the old per-commit history cannot be reconstructed.
+`FactGraph.load_workspace(...)` never migrates automatically.
+
+Annotation migration follows the source rows exactly. A late `append_meta`
+using a shared key such as `source` does not become an annotation unless the
+v0.2 `annotation_rows` table contains the corresponding row. Contract rows
+that can be regenerated from initial metadata are projected normally; custom
+namespaces/categories are retained as replayable companion events, so cold
+reload returns the same annotations as the source workspace.
+
+By default the complete old workspace is archived inside the replacement as
+`workspace.legacy.<UTC timestamp>/`. Use `--no-archive` only when that backup
+is intentionally unnecessary.
+
+### 7.1 Interrupted replacement recovery
+
+During the two-rename replacement window, the complete source is temporarily
+stored in a visible sibling named
+`<workspace-name>.legacy-<UTC timestamp>`. If the process stops there, rerun
+the same command. It returns `workspace_recovery_required` with
+`recovery_candidates` and `replacement_present` instead of guessing which copy
+to keep.
+
+- If the requested workspace is missing, verify a candidate, rename it back
+  to the requested path, then rerun migration.
+- If both a replacement and candidate exist, verify the replacement, then
+  explicitly archive or remove the sibling.
+
+A registry-only directory or torn create is reported as
+`workspace_incomplete` with recreate guidance. It is not treated as a
+migratable v0.2 workspace.
+
+## 8. Common failures
+
+| Situation | Result and recovery |
+|---|---|
+| Schema classes do not match the current Database schema | fail-closed schema mismatch; supply the current classes |
+| A second durable open is attempted | exclusive-lock error; close the current owner first |
+| A write is attempted through a view attach | direct read-only `SDKStoreError` |
+| A write is attempted after SDK-owned close | `SDKStoreError(code="GRAPH_CLOSED")`; create/load a new graph or attach an open Database |
+| `save_workspace(path=other)` is used as copy/export | rejected; close and copy the whole directory instead |
+| A v0.2 `ledger.db` workspace is loaded | run `python -m factgraph migrate-workspace <path>` |
+| A torn or registry-only workspace is found | `workspace_incomplete`; recreate rather than looping migration |
+| Migration stopped during replacement | follow `workspace_recovery_required.recovery_candidates` |
+
+## 9. Current boundaries
+
+The v0.3 lifecycle does not promise lazy loading, a SQL-first query surface,
+or multiprocess concurrent readers. It also does not reconstruct a missing
+content-addressed transaction object from an otherwise intact ledger; such a
+workspace fails closed pending a separately designed re-anchor flow.
+
+For lower-level integrity and repair details, see
+[`src/factgraph/core/store/docs/README.md`](../../src/factgraph/core/store/docs/README.md).
+For schema evolution, see [`schema_definition.md`](schema_definition.md).

@@ -51,8 +51,8 @@ def build_policy_ir_v1(
         "generated_at": generated_at_value,
         "active": {"model": "revokes_only"},
         "chosen": {
-            "strategy": "latest_by_ingested_at_then_min_assertion_id",
-            "required_meta": ["ingested_at"],
+            "strategy": "latest_by_claim_seq",
+            "required_meta": [],
         },
         "policy_mode": policy_mode,
     }

@@ -5,7 +5,12 @@ import math
 from dataclasses import dataclass, field as dc_field
 from typing import Any, TYPE_CHECKING, Literal
 
-from factgraph.application import apply_write_plan, plan_write_command
+from factgraph.application import (
+    apply_write_plan,
+    apply_write_plans,
+    entity_type_from_ref,
+    plan_write_command,
+)
 from factgraph.application.protocol import (
     EntityRef as AppEntityRef,
     EntitySelector as AppEntitySelector,
@@ -175,8 +180,17 @@ class BatchPlan:
         return self.export(sdk).to_json()
 
     def apply(self, sdk: "SDKStore") -> BatchApplyResult:
+        if not self.ops:
+            return BatchApplyResult(refs_by_handle_id={}, assertion_ids=[])
         if self._application_handle_order:
             return _apply_application_batch_plan(self, sdk)
+        if sdk._database is not None:
+            sdk._database_for_application_write("fg.batch")
+            path, reason = _first_unrepresentable_batch_op(self, sdk)
+            raise SDKStoreError(
+                f"{path}: attached batch operation cannot be represented by the "
+                f"application write-plan protocol ({reason}); no writes were committed"
+            )
         refs_by_handle_id: dict[int, str] = {}
         assertion_ids: list[str] = []
         identity_pred_index = _sdk_identity_pred_index(sdk)
@@ -383,6 +397,10 @@ class WireBatchPlan:
             raise SDKStoreError(
                 f"wire plan schema_digest mismatch: expected {self.schema_digest}, actual {actual_digest}"
             )
+        if not self.ops:
+            return BatchApplyResult(refs_by_handle_id={}, assertion_ids=[])
+        if sdk._database is not None:
+            return _apply_attached_wire_batch_plan(self, sdk)
 
         entity_cls_by_type = _sdk_entity_cls_by_type(sdk)
         pred_index = _sdk_pred_field_index(sdk)
@@ -475,6 +493,55 @@ class WireBatchPlan:
         return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
 
 
+def _first_unrepresentable_batch_op(plan: BatchPlan, sdk: "SDKStore") -> tuple[str, str]:
+    """Describe the first legacy-only op before an attached batch fails closed."""
+    refs_by_handle_id: dict[int, RefOp] = {}
+    for op in plan.ops:
+        path = op.path or f"{op.entity_type}#{op.handle_id}"
+        if isinstance(op, RefOp):
+            refs_by_handle_id[op.handle_id] = op
+            try:
+                _normalize_json_object(op.identity_values, path=f"{path}.identity", allow_nested=False)
+            except SDKStoreError as exc:
+                return path, str(exc)
+            continue
+        if isinstance(op, (SetOp, AddOp)):
+            try:
+                _normalize_json_object(op.meta, path=f"{path}.meta", allow_nested=True)
+            except SDKStoreError as exc:
+                return path, str(exc)
+            if op.value_kind == "handle":
+                if not isinstance(op.value, int) or op.value not in refs_by_handle_id:
+                    return path, "staged handle value could not be resolved to an application EntityRef"
+                continue
+            if op.value_kind == "entity_ref":
+                if not isinstance(op.value, str):
+                    return path, "raw entity_ref value is not a canonical string token"
+                identity = sdk._identity_values_by_e_ref.get(op.value)
+                if not isinstance(identity, dict) or not identity:
+                    return path, "raw entity_ref value is not managed by this runtime"
+                continue
+            try:
+                schema_pred = sdk._schema_pred_for_field(op.field)
+                rest_terms = sdk._rest_terms_for_field(schema_pred, value=op.value)
+            except Exception as exc:
+                return path, str(exc)
+            if len(rest_terms) != 1:
+                return path, "field value does not lower to exactly one canonical term"
+            tag, _value = rest_terms[0]
+            if tag == "entity_ref":
+                return path, "scalar value lowered unexpectedly to entity_ref"
+            continue
+        if isinstance(op, (RetractOp, RecordExistsOp)):
+            try:
+                _normalize_json_object(op.meta, path=f"{path}.meta", allow_nested=True)
+            except SDKStoreError as exc:
+                return path, str(exc)
+
+    first = plan.ops[0]
+    return first.path or f"{first.entity_type}#{first.handle_id}", "operation lowering failed"
+
+
 def _resolve_planned_value(op: SetOp | AddOp, refs_by_handle_id: dict[int, str]) -> Any:
     if op.value_kind == "handle":
         ref_handle_id = op.value
@@ -488,6 +555,9 @@ def _resolve_planned_value(op: SetOp | AddOp, refs_by_handle_id: dict[int, str])
 
 
 def _apply_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchApplyResult:
+    if sdk._database is not None:
+        return _apply_attached_application_batch_plan(plan, sdk)
+
     refs_by_handle_id: dict[int, str] = {}
     assertion_ids: list[str] = []
     for handle_id in plan._application_handle_order:
@@ -516,6 +586,187 @@ def _apply_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchAppl
             if isinstance(applied.assertion_id, str):
                 assertion_ids.append(applied.assertion_id)
     return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
+
+
+def _apply_attached_application_batch_plan(plan: BatchPlan, sdk: "SDKStore") -> BatchApplyResult:
+    database = sdk._database_for_application_write("fg.batch")
+    assert database is not None
+    plans: list[EntityWritePlan] = []
+    for handle_id in plan._application_handle_order:
+        app_plan = plan._application_plans_by_handle_id.get(handle_id)
+        if app_plan is None:
+            raise SDKStoreError(f"delegated batch plan missing application plan for handle_id={handle_id}")
+        plans.append(app_plan)
+    results = apply_write_plans(
+        tuple(plans),
+        store=sdk.store,
+        index=sdk._application_schema_index,
+        database=database,
+    )
+
+    refs_by_handle_id: dict[int, str] = {}
+    assertion_ids: list[str] = []
+    for handle_id, app_plan, result in zip(
+        plan._application_handle_order,
+        plans,
+        results,
+        strict=True,
+    ):
+        if result.errors:
+            _raise_application_batch_error(result.errors[0])
+        if app_plan.resolved_target is None or not app_plan.resolved_target.encoded_ref:
+            raise SDKStoreError(f"delegated batch plan missing resolved target for handle_id={handle_id}")
+        refs_by_handle_id[handle_id] = app_plan.resolved_target.encoded_ref
+        assertion_ids.extend(
+            row.assertion_id
+            for row in result.applied
+            if isinstance(row.assertion_id, str)
+        )
+    return BatchApplyResult(refs_by_handle_id=refs_by_handle_id, assertion_ids=assertion_ids)
+
+
+def _apply_attached_wire_batch_plan(plan: WireBatchPlan, sdk: "SDKStore") -> BatchApplyResult:
+    database = sdk._database_for_application_write("WireBatchPlan.apply")
+    assert database is not None
+    entity_cls_by_type = _sdk_entity_cls_by_type(sdk)
+    pred_index = _sdk_pred_field_index(sdk)
+    record_exists_pred_index = _sdk_record_exists_pred_index(sdk)
+    refs_by_handle_id: dict[int, str] = {}
+    targets_by_handle_id: dict[int, AppEntityRef] = {}
+    planned_ops: list[PlannedOpDTO] = []
+
+    for op in plan.ops:
+        if isinstance(op, WireRefOp):
+            if op.handle_id in targets_by_handle_id:
+                raise SDKStoreError(f"{op.path}: duplicate ref handle_id={op.handle_id}")
+            entity_cls = entity_cls_by_type.get(op.entity_type)
+            if entity_cls is None:
+                raise SDKStoreError(f"{op.path}: unknown entity_type for sdk schema: {op.entity_type}")
+            identity = dict(op.identity)
+            e_ref = sdk.entities.ref(entity_cls, **identity)
+            target = AppEntityRef(
+                entity_type=op.entity_type,
+                identity=identity,
+                encoded_ref=e_ref,
+            )
+            refs_by_handle_id[op.handle_id] = e_ref
+            targets_by_handle_id[op.handle_id] = target
+            info = sdk._application_schema_index.entities.get(op.entity_type)
+            if info is None:
+                raise SDKStoreError(f"{op.path}: entity_type missing from application schema: {op.entity_type}")
+            planned_ops.extend(
+                PlannedOpDTO(
+                    op="set",
+                    target=target,
+                    field=FieldPath(entity_type=op.entity_type, field_name=identity_field.name),
+                    value=identity[identity_field.name],
+                )
+                for identity_field in info.identity_fields
+            )
+            continue
+
+        target = targets_by_handle_id.get(op.handle_id)
+        if target is None:
+            raise SDKStoreError(f"{op.path}: missing preceding ref op for handle_id={op.handle_id}")
+        if target.entity_type != op.entity_type:
+            raise SDKStoreError(
+                f"{op.path}: entity_type mismatch for handle_id={op.handle_id}: "
+                f"{op.entity_type} != {target.entity_type}"
+            )
+        if isinstance(op, WireWriteOp):
+            _resolve_wire_field_for_write_op(sdk=sdk, pred_index=pred_index, op=op)
+            value = _wire_application_value(op.value, sdk=sdk, path=f"{op.path}.value")
+            planned_ops.append(
+                PlannedOpDTO(
+                    op=op.kind,
+                    target=target,
+                    field=FieldPath(entity_type=op.entity_type, field_name=op.field_name),
+                    value=value,
+                    meta=dict(op.meta),
+                )
+            )
+            continue
+        if isinstance(op, WireRetractOp):
+            _validate_wire_retract_binding(sdk=sdk, pred_index=pred_index, op=op)
+            planned_ops.append(
+                PlannedOpDTO(
+                    op="retract",
+                    target=target,
+                    field=FieldPath(entity_type=op.entity_type, field_name=op.field_name),
+                    assertion_id=op.assertion_id,
+                    meta=dict(op.meta),
+                )
+            )
+            continue
+        if isinstance(op, WireRecordExistsOp):
+            _validate_wire_record_exists_binding(
+                record_exists_pred_index=record_exists_pred_index,
+                op=op,
+            )
+            planned_ops.append(PlannedOpDTO(op="record_exists", target=target, meta=dict(op.meta)))
+            continue
+        raise SDKStoreError(f"unsupported wire batch op: {type(op).__name__}")
+
+    if not targets_by_handle_id:
+        return BatchApplyResult(refs_by_handle_id={}, assertion_ids=[])
+    first_target = next(iter(targets_by_handle_id.values()))
+    app_plan = EntityWritePlan(
+        command=EntityWriteCommand(
+            target=AppEntitySelector(
+                entity_type=first_target.entity_type,
+                identity=dict(first_target.identity),
+                encoded_ref=first_target.encoded_ref,
+            ),
+        ),
+        resolved_target=first_target,
+        planned_ops=tuple(planned_ops),
+        can_apply=True,
+    )
+    result = apply_write_plans(
+        (app_plan,),
+        store=sdk.store,
+        index=sdk._application_schema_index,
+        database=database,
+    )[0]
+    if result.errors:
+        _raise_application_batch_error(result.errors[0])
+    return BatchApplyResult(
+        refs_by_handle_id=refs_by_handle_id,
+        assertion_ids=[
+            row.assertion_id
+            for row in result.applied
+            if isinstance(row.assertion_id, str)
+        ],
+    )
+
+
+def _wire_application_value(value: dict[str, Any], *, sdk: "SDKStore", path: str) -> Any:
+    kind = value.get("kind")
+    if kind == "scalar":
+        return value.get("data")
+    if kind == "ref_identity":
+        entity_type = value.get("entity_type")
+        identity = value.get("identity")
+        if not isinstance(entity_type, str) or not isinstance(identity, dict):
+            raise SDKStoreError(f"{path}: invalid ref_identity value")
+        entity_cls = _sdk_entity_cls_by_type(sdk).get(entity_type)
+        if entity_cls is None:
+            raise SDKStoreError(f"{path}: unknown entity_type for sdk schema: {entity_type}")
+        e_ref = sdk.entities.ref(entity_cls, **dict(identity))
+        return AppEntityRef(
+            entity_type=entity_type,
+            identity=dict(identity),
+            encoded_ref=e_ref,
+        )
+    raise SDKStoreError(f"{path}.kind unsupported: {kind!r}")
+
+
+def _raise_application_batch_error(error: Any) -> None:
+    path = ".".join(error.path) if error.path else ""
+    prefix = f"{path}: " if path else ""
+    if error.code == "FIELD_VALUE_VALIDATION_FAILED":
+        raise SDKValueError(f"{prefix}{error.message}", code=error.code, path=(path or None))
+    raise SDKStoreError(f"{prefix}{error.message}")
 
 
 def _parse_wire_ref_op(raw: dict[str, Any], *, path: str) -> WireRefOp:
@@ -1494,7 +1745,17 @@ class SDKBatchTx:
                 return None
             return self._application_entity_ref_for_handle(ref_handle)
         if op.value_kind == "entity_ref":
-            return None
+            if not isinstance(op.value, str):
+                return None
+            identity = self._sdk._identity_values_by_e_ref.get(op.value)
+            entity_type = entity_type_from_ref(op.value)
+            if not isinstance(identity, dict) or not identity or not isinstance(entity_type, str):
+                return None
+            return AppEntityRef(
+                entity_type=entity_type,
+                identity=dict(identity),
+                encoded_ref=op.value,
+            )
 
         schema_pred = self._sdk._schema_pred_for_field(op.field)
         try:
@@ -1504,7 +1765,7 @@ class SDKBatchTx:
         if len(rest_terms) != 1:
             return None
         tag, value = rest_terms[0]
-        if tag in {"entity_ref", "bytes"}:
+        if tag == "entity_ref":
             return None
         return value
 

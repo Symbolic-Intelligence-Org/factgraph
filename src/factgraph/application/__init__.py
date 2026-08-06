@@ -44,9 +44,11 @@ from .entity_write import (
     apply_create_plan,
     apply_delete_plan,
     apply_write_plan,
+    apply_write_plans,
     plan_create_command,
     plan_delete_command,
     plan_write_command,
+    planned_ops_to_inputs,
 )
 from .fact_overlay_runtime import check_fact_overlay_binding
 from .ingest_runtime import (
@@ -152,6 +154,7 @@ __all__ = [
     "apply_create_plan",
     "apply_delete_plan",
     "apply_write_plan",
+    "apply_write_plans",
     "build_check_request",
     "build_diagnose_request",
     "build_evaluation_overlay",
@@ -188,6 +191,7 @@ __all__ = [
     "load_workspace",
     "materialize_identity",
     "parse_condition_key",
+    "planned_ops_to_inputs",
     "plan_create_command",
     "plan_delete_command",
     "plan_write_command",

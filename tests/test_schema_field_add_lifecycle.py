@@ -12,7 +12,6 @@ import warnings
 
 # Slice 7C / Q6-A (a.2): FileAuthoringRegistry was removed. Test methods
 # that exercised the legacy adapter directly are skipped below.
-from factgraph.core.evidence.write_protocol import set_field
 from factgraph.core.schema.schema_ir import schema_digest
 from factgraph.sdk import Case, EmitSpec, FactGraph, Inference, Pred, SDKSchemaError, vars as sdk_vars
 from factgraph.sdk.compile import compile_schema_from_classes
@@ -148,21 +147,9 @@ def _seed_fg(*, registry_root: Path | None = None, path: Path | None = None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         fg = FactGraph.create(schema_classes=[User], **kwargs)
-    alice_ref = fg.entities.ref(User, user_id="u-1")
-    set_field(
-        fg.ledger,
-        pred_id="user:name",
-        e_ref=alice_ref,
-        rest_terms=[("string", "Alice")],
-        meta={"source": "test"},
-    )
-    set_field(
-        fg.ledger,
-        pred_id="user:tag_seed",
-        e_ref=alice_ref,
-        rest_terms=[("string", "vip")],
-        meta={"source": "test"},
-    )
+    alice_ref = fg.entities.create(User, user_id="u-1")
+    fg.fields.set(User.name, alice_ref, "Alice", meta={"source": "test"})
+    fg.fields.set(User.tag_seed, alice_ref, "vip", meta={"source": "test"})
     return fg, User, alice_ref
 
 
@@ -424,20 +411,33 @@ class SchemaFieldAddDigestAnchorTests(unittest.TestCase):
 
 
 class SchemaFieldAddWorkspaceTests(unittest.TestCase):
-    def test_workspace_manifest_updates_only_after_save(self) -> None:
+    def test_workspace_schema_head_updates_immediately_and_save_only_touches_metadata(self) -> None:
         with TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir) / "workspace"
             fg, _, _ = _seed_fg(path=workspace)
             fg.save_workspace()
-            old_manifest = _read_manifest(workspace)
+            before = fg._database.head()
+            old_meta = json.loads((workspace / "db" / "meta.json").read_text(encoding="utf-8"))
 
             result = fg.schema.apply(_user_with_nickname())
-            after_add_manifest = _read_manifest(workspace)
+            after_add = fg._database.head()
+            after_add_meta = json.loads(
+                (workspace / "db" / "meta.json").read_text(encoding="utf-8")
+            )
             fg.save_workspace()
-            after_save_manifest = _read_manifest(workspace)
+            after_save = fg._database.head()
+            after_save_meta = json.loads(
+                (workspace / "db" / "meta.json").read_text(encoding="utf-8")
+            )
 
-        self.assertEqual(after_add_manifest["schema_digest"], old_manifest["schema_digest"])
-        self.assertEqual(after_save_manifest["schema_digest"], result.new_digest)
+        self.assertEqual(after_add.tx_seq, before.tx_seq + 1)
+        self.assertEqual(after_add.schema_digest, result.new_digest)
+        self.assertEqual(after_save, after_add)
+        self.assertEqual(after_add_meta, old_meta)
+        self.assertGreaterEqual(
+            after_save_meta["last_saved_at_epoch_ns"],
+            after_add_meta["last_saved_at_epoch_ns"],
+        )
 
     def test_load_saved_workspace_requires_post_add_class(self) -> None:
         with TemporaryDirectory() as tmp_dir:
@@ -447,7 +447,9 @@ class SchemaFieldAddWorkspaceTests(unittest.TestCase):
 
             fg.schema.apply(NewUser)
             fg.save_workspace()
+            fg.close()
             loaded = FactGraph.load_workspace(workspace, schema_classes=[NewUser])
+            loaded.close()
 
         self.assertEqual(schema_digest(loaded.schema_ir), schema_digest(fg.schema_ir))
 
@@ -457,6 +459,7 @@ class SchemaFieldAddWorkspaceTests(unittest.TestCase):
             fg, OldUser, _ = _seed_fg(path=workspace)
             fg.schema.apply(_user_with_nickname())
             fg.save_workspace()
+            fg.close()
 
             with self.assertRaises(SDKStoreError) as ctx:
                 FactGraph.load_workspace(workspace, schema_classes=[OldUser])
@@ -554,7 +557,9 @@ class SchemaFieldAddPreservationTests(unittest.TestCase):
             fg.schema.apply(NewUser)
 
             fg.save_workspace()
+            fg.close()
             loaded = FactGraph.load_workspace(workspace, schema_classes=[NewUser])
+            loaded.close()
 
         self.assertEqual(schema_digest(loaded.schema_ir), schema_digest(fg.schema_ir))
 

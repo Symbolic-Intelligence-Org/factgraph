@@ -28,6 +28,9 @@ class SouffleWitnessViewGenV1Tests(unittest.TestCase):
         self.assertIn(".decl p_user_status(E:symbol, V0:symbol)", dl)
         self.assertIn(".decl p_user_status_w(E:symbol, V0:symbol, WA:symbol)", dl)
         self.assertIn(".decl chosen_asrt__p_user_status(E:symbol, A:symbol)", dl)
+        self.assertIn(".decl claim_seq(Asrt:symbol, Seq:number)", dl)
+        self.assertIn("claim_seq(A,Seq)", dl)
+        self.assertNotIn('meta_time(A,"ingested_at",Ts)', dl)
         self.assertIn(
             'p_user_status_w(E, V0, A) :- chosen_asrt__p_user_status(E, A), claim_arg(A,"0",V0,TagOut0).',
             dl,

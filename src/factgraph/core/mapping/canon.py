@@ -236,13 +236,17 @@ def _required_meta_time(ledger: Ledger, asrt_id: str, key: str) -> int:
     if len(rows) != 1:
         raise MappingResolveError(f"{asrt_id} requires exactly one {key}")
     row = rows[0]
-    if row.kind != "time" or isinstance(row.value, bool) or not isinstance(row.value, int):
+    if (
+        row.kind != "time"
+        or isinstance(row.value, bool)
+        or not isinstance(row.value, int)
+    ):
         raise MappingResolveError(f"{asrt_id}.{key} must be meta_time int")
     return row.value
 
 
 def _optional_meta_str(ledger: Ledger, asrt_id: str, key: str) -> str | None:
-    rows = ledger.find_meta(asrt_id=asrt_id, key=key, kind="str")
+    rows = ledger.effective_meta_rows(asrt_id=asrt_id, key=key, kind="str")
     if not rows:
         return None
     value = rows[-1].value
