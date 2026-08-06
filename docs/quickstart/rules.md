@@ -579,7 +579,7 @@ Indirect types reached through methods:
 ### 7.4 Related chapters
 
 - [`schema_definition.md`](schema_definition.md) — Entity / Identity / Field declarations that rule bodies reference
-- [`data_model.md`](data_model.md) — the Claim / MetaRow shape that rule matches read from
+- [`data_model.md`](data_model.md) — the Claim and meta-event shape that rule matches read from
 - [`three_layer_api.md`](three_layer_api.md) — `fg.entities.match(...)` (Query's successor)
 - [`engines_and_configs.md`](engines_and_configs.md) — `engine=`, `semantics=`, config
 - [`evaluate_and_evidence.md`](evaluate_and_evidence.md) — `fg.eval.evaluate` / `explain`, `EvaluateRow` / `Explanation` shapes
