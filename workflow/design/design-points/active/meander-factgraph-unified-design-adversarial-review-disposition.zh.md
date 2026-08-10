@@ -378,4 +378,5 @@
 
 - 2026-08-10：建立首版完整 disposition；Review Freeze 与 Meander/FactGraph shipped 源码均未修改，仅新增本 design-point 并更新 design-point 索引。
 - 2026-08-10：对抗审核方复核后的收敛修订——SC-01 改为“构造合法、当前 lowering 行为可观察，但 asymmetric 语义未测试/未规格化”；PM-02 改为 `ACCEPT_WITH_NARROWING`；补入证伪实验 4 hidden-workflow/cascade coverage 与实验 7 blind native-log baseline；处置分布更新为 `32/23/16/10/2`。Review Freeze 与 shipped 源码保持不变。
+- 2026-08-10：用户授权的 Option 1 文本收敛切片新增 [`meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md`](./meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md)，作为 frozen v0.1 的 narrow lineage successor/revision；它保留 architecture `REVISE`、product authorization `STOP-except-discovery`、`32/23/16/10/2` 处置分布及 16 项 `NEEDS_DECISION`，不构成 formal supersedes、adopted design、产品/实验/实现授权。v0.1 predecessor 与本矩阵 finding rows、counts、verdicts 均保持不变。
 - 当前状态为 `working`。它是下一轮讨论的索引，不是已 adopted 的修订决定。

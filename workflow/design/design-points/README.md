@@ -31,6 +31,7 @@
 
 | Design-point | Status | Role |
 |---|---|---|
+| `meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md` | active narrow lineage revision (2026-08-10 working) | Option 1 text-convergence successor to the byte-frozen v0.1 candidate; preserves architecture `REVISE`, product authorization `STOP-except-discovery`, and all 16 `NEEDS_DECISION`; candidate/non-authoritative, with no formal supersession or product/experiment/implementation authorization. |
 | `explanation-completion-roadmap.zh.md` | active strategic synthesis (2026-05-28 draft) | User-facing explainability completion stack inheriting evidence-tree §14 deferred items (D1/D5/D6/D7/D11/D15/D18/D20). Also carries §10/§11/§12 legacy backlog from 6 superseded design-points (RuleExpr v1 / Database-View / Post-T5 roadmap residuals). |
 | `identity-mechanism-redesign.zh.md` | active design exploration (2026-05-29 intake) | Identity 机制重设计:Form I schema(Identity/Field + `_DataMember`)+ 3-layer API(entities/fields/assertions)+ AssertionView 统一 + INV-7a/b/c(Identity-as-Claim mirrored anchor)+ Q1 idref_v1 typed content-derived hash locked. Stage 1 audit pending. |
 | `ledger-schema-specification.zh.md` | active design exploration (2026-05-29 intake) | Claim-first 3-table ledger schema(claims / claim_meta / ledger_meta)+ INV-1..INV-15 + 7-条数据精简 migration + INV-7c strategy C 实施同步(Identity pred_id set,拒 claim_meta tag). |
