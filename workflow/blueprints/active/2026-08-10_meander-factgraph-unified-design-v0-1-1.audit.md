@@ -28,6 +28,7 @@
 | 2026-08-10 | scoped | Preflight amendments and self-check passed | After Step 4.5 was separately authorized and returned three-way `CLEAR` with no tightening commit, the user separately authorized Step 4.6 via “下一步”. PF-R01…PF-R05 and PF-Rec01…PF-Rec03 are covered by `cfb1ccb7abfaf3e42fe6d8ac42814fad038240db`; its exact content/path allowlists are frozen as the implementation contract. This event does not authorize Step 4.6.5 or Step 4.7. |
 | 2026-08-10 | scoped | Step 4.6.5 deletion-grep explicitly skipped | User separately authorized Step 4.6.5 via “下一步”. The scoped slice changes documentation only and removes no shipped symbol/API, so no deletion target or deletion grep applies. Replacement coverage is mandatory at Step 4.7: frozen predecessor hash; fixed 41-atom normalized semantic comparator and before/after guards; added-semantic-span negative scans; repository commit path allowlist; and mixed-file cached/residual two-sided proof. Any newly discovered consumer or scope issue returns to amendment. This event does not authorize Step 4.7. |
 | 2026-08-10 | scoped | Step 4.7 docs content landed | User separately authorized Step 4.7 via “下一步”. The implementation content adds only the v0.1.1 Option 1 narrow lineage revision, the disposition §11 cross-link/status note, one safely isolated design-point index row, and this paired-audit event. Frozen v0.1, disposition finding rows/counts/verdicts, the exact 16 open decisions, runtime/external repositories and the fixed preflight artifact remain unchanged. Independent Step 4.7 review, Step 4.8 closure, Step 4.9 archive, push and merge remain separately gated. |
+| 2026-08-10 | scoped | Step 4.7 independent review passed | User separately authorized review via “进行review”. Against implementation commit `ed7aa47abe2c54de3237e481e9303c9836766a59`, two independent read-only reviews plus the primary boundary recheck returned `CLEAR`: 41/41 atom guards and unique span ownership, the exact 16-row matrix was all `No`, all four §5.5 answers were `No`, and path/pin/dirty/external/sacred guards held. No review fix was required. Step 4.8 remains separately gated. |
 
 ## Decision Notes
 
@@ -129,3 +130,121 @@
 - Final results: Required `CLEAR`; Recommended/audit `CLEAR`; consistency/threat review `CLEAR`; unresolved Required `0`; Abandonment blockers `0`.
 - `git diff --check` passed; index remained empty; exact exclusion of the two previously clean task paths restored the unrelated `git status --porcelain=v1 --untracked-files=all` baseline to 112 lines and SHA-256 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`.
 - Blueprint status remains `draft`. This closure completes Step 4.4 only and does not authorize Step 4.5.
+
+### 2026-08-10 — Step 4.7 independent implementation review
+
+#### Review basis and method
+
+- User authorization: “进行review”; this authorizes only the separately gated Step 4.7 review.
+- Implementation commit / parent: `ed7aa47abe2c54de3237e481e9303c9836766a59` / `5c6694a3eb66d0c55ddb985aadcb3ac4e91b0921`.
+- Frozen predecessor: `workflow/design/design-points/active/meander-factgraph-unified-design-review-candidate.zh.md`, 2185 lines, SHA-256 `574677ddd30d2a7ec8933785cbcb258a8758c793bd34c115ea138162aa9df6c7`.
+- Actual successor: `workflow/design/design-points/active/meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md`, 2235 lines, SHA-256 `d0baa71d3969c92d8f4d8addc34e87b3776e8ac406a00fb5b406f49f81027105`.
+- Normalized predecessor→successor content diff: 78 added physical lines and 28 removed physical lines. Thirteen additions are blank separators, leaving 65 nonblank added semantic lines and 28 nonblank removed semantic lines.
+- Two internal independent same-model read-only reviews separately checked semantic decision non-preselection and exhaustive atom/span ownership. The primary agent independently rechecked repository boundaries and immutable pins. These reviews are not represented as user-side, external or cross-model evidence.
+
+#### Fixed 41-atom comparator result
+
+All exact predecessor anchors existed. Every one of the 65 added and 28 removed nonblank semantic lines or substrings has exactly one owner; there are no unmapped or duplicate-owned semantic spans. Successor line numbers below are commit-pinned navigation aids rather than floating authority.
+
+| Atom | Frozen predecessor locus | Actual successor locus / ownership | Result |
+|---|---|---|---|
+| AT-0101-01 | P:83 | S:91, Gate -1 entry gate | PASS |
+| AT-0101-02 | P:1761 | S:1783, risk-first candidate sequence | PASS |
+| AT-0101-03 | P:1769 anchor | S:1799, Gate -1 entry | PASS |
+| AT-0101-04 | P:1775 anchor | S:1807, separately named §0.4 path | PASS |
+| AT-0101-05 | P:2013 | S:2052 first span, Phase 0/1 and post-§0.4 product-build dependency | PASS |
+| AT-0102-01 | P:13 | S:16-19, Product research inputs | PASS |
+| AT-0102-02 | P:1766 anchor | S:1791, workflow walkthrough | PASS |
+| AT-0102-03 | P:1766 anchor | S:1793, comparison/packaging scope | PASS |
+| AT-0102-04 | P:1951 anchor | S:1994 and S:1996, Phase 3 promotion/context framing | PASS |
+| AT-0102-05 | P:1951 anchor | S:1997-1998, priced-offer and incumbent thresholds; `DISTINCT` guard passed | PASS |
+| AT-0102-06 | P:1955 | S:1987, Managed Translator threshold | PASS |
+| AT-0102-07 | P:1951 anchor | S:1999, Gate C condition | PASS |
+| AT-0102-08 | P:2013 | S:2052 second span, Gate -1 DoD does not decide PM-03 | PASS |
+| AT-0103-01 | P:38 | S:44 Agent/source-bound span only | PASS |
+| AT-0103-02 | P:87 | S:95, provisional heading | PASS |
+| AT-0103-03 | P:91 | S:99, provisional thesis | PASS |
+| AT-0103-04 | P:102 | S:110, source-bound challenge | PASS |
+| AT-0103-05 | P:118 | S:126, narrow-profile heading | PASS |
+| AT-0103-06 | P:120 | S:128, deliberately narrow profile | PASS |
+| AT-0103-07 | P:128 | S:136, post-gate experiments | PASS |
+| AT-0103-08 | P:838 | S:846, post-gate rather than default MVP | PASS |
+| AT-0104-01 | P:38 | S:44 exact “smallest coherent review map” span only | PASS |
+| AT-0104-02 | P:1761 anchor | S:1785, bounded-artifact rule | PASS |
+| AT-0104-03 | P:2172 | S:2211 exact “smallest coherent review map” phrase only | PASS |
+| AT-0105-01 | P:2158 | S:2197, REVISE remains phase-specific | PASS |
+| AT-0106-01 | P:876 | S:884-888 and S:900, lifecycle/failure/recovery distinctions | PASS |
+| AT-0106-02 | P:916 anchor | S:930, Meander lifecycle ownership | PASS |
+| AT-0106-03 | P:1491 | S:1507-1511, five Flow A branches | PASS |
+| AT-0107-01 | P:213 | S:221, governance-row anchors | PASS |
+| AT-0107-02 | P:217 | S:225, `RulePortRef`/Occurrence anchors | PASS |
+| AT-0107-03 | P:223 | S:231, `EvidenceTimeline`/Graph/RuleStructure anchors | PASS |
+| AT-0108-01 | P:1743 | S:1763-1765, minimum-disclosure scope | PASS |
+| AT-0108-02 | P:1749 | S:1771, §16.5 `PolicyQueryContract` information-boundary heading remains `PROVISIONAL`; regex guard passed | PASS |
+| AT-0108-03 | P:1755 | S:1777, Verify isolation remains `SETTLED DIRECTION` while the future Decision profile remains `DEFERRED` | PASS |
+| AT-0109-01 | P:221 | S:229, Explain/store handoff evidence | PASS |
+| AT-0110-01 | P:1 | S:1, successor title/lineage marker | PASS |
+| AT-0110-02 | P Inputs anchor | S:8-10, frozen input identities | PASS |
+| AT-0110-03 | P:20 | S:26, output/authority framing | PASS |
+| AT-0110-04 | P:30 | S:36, authority statement | PASS |
+| AT-0110-05 | P:2170 and P:2172 | S:2209-2222 excluding AT-0104-03 phrase, lineage/open-set framing | PASS |
+| AT-0110-06 | P:2185 | S:2235, terminal successor marker | PASS |
+
+Shared physical lines were split by exact substring ownership: S:44 between AT-0103-01 and AT-0104-01; S:2052 between AT-0101-05 and AT-0102-08; S:2211 between AT-0104-03 and AT-0110-05. S:1994 framing belongs only to AT-0102-04, S:1997-1998 only to AT-0102-05, and S:1999 only to AT-0102-07.
+
+#### Exact 16-row actual-successor non-preselection matrix
+
+The open-question wording is summarized here; the authoritative finding text remains in the review documents. CE-03/SF-04 and CE-05/AS-02 remain four distinct rows.
+
+| Finding | Question still requiring a decision | Actual successor loci | Preselected? | Review evidence |
+|---|---|---|---|---|
+| PM-03 | Standalone, embedded, OEM, both or neither packaging | S:95-110, 1354-1369, 1787-1795, 1981-2000, 2052 | No | S:1793 retains OEM and both/neither and says it does not decide PM-03; D01 remains open at S:2052. |
+| PM-06 | Freshness state, owner, version, disposition and replay pin | S:1056-1082, 1411-1451, 1723-1746, 1763-1769; D08/D10 at S:2059/2061 | No | `SourceRecord` still carries observed/valid time without selecting a freshness axis; retention remains open at S:1765. |
+| CE-03 | Old/new dual-run topology, projection, pins, owner and rollback | S:160-174, 872-936, 1835-1839; J2 at S:1873 | No | S:930 clarifies only shipped lifecycle ownership; no migration topology is selected. |
+| CE-05 | Tenant keying/isolation for artifacts, caches, indexes, exports and content-addressed storage | S:272-307, 1056-1082, 1752-1769, 1835-1839 | No | S:1765 explicitly leaves tenant keying open. |
+| CE-06 | Retention, erasure, legal hold, replay degradation, priority and UI | S:1267-1281, 1723-1750, 1763-1769, 1841-1845; D10 at S:2061 | No | S:1765 explicitly leaves the policy open. |
+| CE-08 | Cross-repository fixture/schema owner, version pin and joint CI | Header S:7-24, Phase 0 S:1797-1803; J1 at S:1872 | No | Repository pins are evidence coordinates; no owner or CI topology is selected. |
+| SC-01 | Asymmetric join×Any: branch-scoped or reject-on-partial | S:467-531, 1805-1833, 1944-1957; D03 at S:2054 | No | The unresolved D03 choice is unchanged. |
+| SC-03 | Managed Rule capability for `NotAtom` and aggregates | S:500-531, 1809-1833, 1944-1957; D03 at S:2054 | No | No managed capability decision is introduced. |
+| SC-05 | Schema digest granularity: local dependency closure or whole ontology/migration | S:438-464, 1723-1744; D02 at S:2053 | No | Digest granularity remains undefined. |
+| SC-12 | DNF over-limit publication/request failure and budget semantics | S:566-627, 1817-1833, 1944-1957; D06 at S:2057 | No | Explicit failure language does not select the publication/request axis. |
+| SF-04 | Same-package dual-run topology | S:160-174, 1835-1839; J2 at S:1873 | No | No venv, IPC or batch topology is selected. |
+| AS-02 | Credential tenant scope, cache key and deny semantics across artifacts | S:1056-1082, 1752-1769, 1835-1839 | No | Tenant keying remains explicitly open. |
+| AS-06 | Widen-review semantics and caller/reviewer dual view | S:533-549, 803-811, 1125-1152, 1771-1775; D05/D07 at S:2056/2058 | No | Widening remains undefined and §16.5 remains `PROVISIONAL`. |
+| AS-11 | Locator/admission executor and premise handoff | S:721-736, 1056-1102, 1125-1152, 1723-1744; D08 at S:2059 | No | No Source Resolver algorithm or handoff contract is selected. |
+| AC-16 | Subject/evidence lineage comparison and self-support exclusion | S:370-398, 631-647, 1125-1152, 1598-1617, 1893-1925; D08 at S:2059 | No | The successor retains invariants/metrics without selecting a mechanism. |
+| AC-24 | Mandatory enumeration, fail-close and per-unit partial-failure semantics | S:790-860, 1125-1168, 1223-1265, 1411-1451; D07 at S:2058 | No | Optional append and `EvaluationUnit[]` do not establish completeness. |
+
+#### §5.5 semantic prohibition questions
+
+| Question | Answer | Evidence summary |
+|---|---|---|
+| Does the successor close or preselect any of the 16 open findings? | No | The fresh 16-row actual-successor matrix above is entirely `No`; D01-D18 remain the exact decision set. |
+| Does it start, claim passage of or report results for a gate, experiment, benchmark or pilot? | No | Added-semantic-span review found only candidate/gate definitions and no execution or passage claim. |
+| Does it add or promise any API, schema, implementation or cross-repository mutation? | No | The commit adds or promises no API, schema or implementation and performs no cross-repository mutation. |
+| Does it weaken `STOP-except-discovery` or turn `REVISE` into approval? | No | Product authorization and architecture verdict remain unchanged and phase-specific. |
+
+#### Repository and immutability boundary recheck
+
+| Guard | Result | Evidence |
+|---|---|---|
+| Commit path allowlist | PASS | `ed7aa47...` changes exactly the paired audit, design-point index, disposition §11 note and v0.1.1 successor. |
+| Frozen predecessor | PASS | 2185 lines and SHA-256 `574677...`, unchanged. |
+| Successor identity | PASS | 2235 lines and SHA-256 `d0baa71...`. |
+| Disposition stability | PASS | Finding rows/counts/verdicts are unchanged; the commit adds only the allowed §11 successor/status note. |
+| Decision/open-set stability | PASS | The 16 findings remain `NEEDS_DECISION`; D01-D18 are exact; no D19 or new Q identifier appears. |
+| Forbidden semantic deltas | PASS | No gate-passage claim, new decision/experiment artifact, API/schema/enum, implementation claim, formal supersession or verdict weakening. |
+| Mixed design-point index | PASS | Exactly one task row was committed; removing it from the current worktree reproduces the original user worktree blob `fb40a7d9dbc126af3c1ac5aa8f52a281f5a21ac9`. |
+| Dirty worktree preservation | PASS | Exact raw baseline remains 112 lines with SHA-256 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`; index was empty at review completion. |
+| Sacred branches | PASS | `master` remains `854d03b9a960c0be8c6b86cfd6d2b5ae72bc90b0`; `v0.1-oss-prep` remains absent locally and from remote-tracking refs. |
+| External repositories | PASS | Meander `4ddb8e36f0b7a80e99a7447c719c21b4776d6ca7`, meander-agent `e4b044911de5495ffa93edeba933985588b51cfa`, factgraph-new `b92d6bf5405be8d15eedea5b97aa7408914e76b9`; all remained read-only and clean. |
+| Fixed preflight | PASS | Ref remains at `c59bfc77...`; artifact blob `6f17cdfb...` / content SHA-256 `0b2702d...` is unchanged and is not yet imported into this branch tree. |
+| Markdown/diff hygiene | PASS | `git diff --check` passed; no review fix was required. |
+
+#### Review verdict and authorization boundary
+
+- Independent semantic review: `CLEAR`, 0 Required, 0 Recommended.
+- Independent exhaustive atom/span review: `CLEAR`, 0 P1/P2, 0 unmapped spans, 0 duplicate-owned spans, no recommended fix.
+- Primary repository-boundary recheck: `CLEAR`.
+- Combined Step 4.7 review verdict: **CLEAR**. No successor, blueprint, disposition, index or runtime correction is authorized or required by this review.
+- Blueprint and paired-audit status intentionally remain `scoped`; no §7 acceptance box or Outcome field is closed here. Step 4.8 closure remains a distinct user-authorization gate. Step 4.9 reconciliation/archive, push and merge remain later separate gates.
