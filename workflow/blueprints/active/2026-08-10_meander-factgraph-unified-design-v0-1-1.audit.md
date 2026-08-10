@@ -1,6 +1,6 @@
 # Task Blueprint Audit: Meander × FactGraph 统一设计 Review Freeze v0.1.1 文本收敛
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-08-10
 - Last Updated: 2026-08-10
 - Authority: paired blueprint audit log
@@ -29,6 +29,7 @@
 | 2026-08-10 | scoped | Step 4.6.5 deletion-grep explicitly skipped | User separately authorized Step 4.6.5 via “下一步”. The scoped slice changes documentation only and removes no shipped symbol/API, so no deletion target or deletion grep applies. Replacement coverage is mandatory at Step 4.7: frozen predecessor hash; fixed 41-atom normalized semantic comparator and before/after guards; added-semantic-span negative scans; repository commit path allowlist; and mixed-file cached/residual two-sided proof. Any newly discovered consumer or scope issue returns to amendment. This event does not authorize Step 4.7. |
 | 2026-08-10 | scoped | Step 4.7 docs content landed | User separately authorized Step 4.7 via “下一步”. The implementation content adds only the v0.1.1 Option 1 narrow lineage revision, the disposition §11 cross-link/status note, one safely isolated design-point index row, and this paired-audit event. Frozen v0.1, disposition finding rows/counts/verdicts, the exact 16 open decisions, runtime/external repositories and the fixed preflight artifact remain unchanged. Independent Step 4.7 review, Step 4.8 closure, Step 4.9 archive, push and merge remain separately gated. |
 | 2026-08-10 | scoped | Step 4.7 independent review passed | User separately authorized review via “进行review”. Against implementation commit `ed7aa47abe2c54de3237e481e9303c9836766a59`, two independent read-only reviews plus the primary boundary recheck returned `CLEAR`: 41/41 atom guards and unique span ownership, the exact 16-row matrix was all `No`, all four §5.5 answers were `No`, and path/pin/dirty/external/sacred guards held. No review fix was required. Step 4.8 remains separately gated. |
+| 2026-08-10 | implemented | Scoped implementation landed | User separately authorized Step 4.8 via “下一步”. Implementation `ed7aa47abe2c54de3237e481e9303c9836766a59` plus review record `3398956ce5a8f35674b8349fdec22c1f6c8283b3` satisfy all 26 acceptance items; the blueprint now records final paths/counts, O1/PF alignment, immutable pins, baseline/deviation status and conditional archive readiness. This closes only the docs-only Option 1 slice; Step 4.9 reconciliation/archive, push and merge remain separately gated. |
 
 ## Decision Notes
 
@@ -248,3 +249,13 @@ The open-question wording is summarized here; the authoritative finding text rem
 - Primary repository-boundary recheck: `CLEAR`.
 - Combined Step 4.7 review verdict: **CLEAR**. No successor, blueprint, disposition, index or runtime correction is authorized or required by this review.
 - Blueprint and paired-audit status intentionally remain `scoped`; no §7 acceptance box or Outcome field is closed here. Step 4.8 closure remains a distinct user-authorization gate. Step 4.9 reconciliation/archive, push and merge remain later separate gates.
+
+### 2026-08-10 — Step 4.8 closure
+
+- Authorization: the user's “下一步” separately authorized Step 4.8 after the independent Step 4.7 review commit.
+- Closure basis: implementation `ed7aa47abe2c54de3237e481e9303c9836766a59`; review evidence `3398956ce5a8f35674b8349fdec22c1f6c8283b3`; frozen preflight `c59bfc77b2a7f316fd750e2d413e979fb532ea63` / blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521` / content SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`.
+- Acceptance: 26/26 checked with evidence. O1-01…O1-10 pass; machine/path/hash/dirty guards pass; semantic review is `CLEAR`; all 16 decision rows remain `No`; all four §5.5 questions remain `No`.
+- Scope result: docs-only Option 1 text convergence is implemented. The successor remains candidate/non-authoritative; architecture remains `REVISE`; product authorization remains `STOP-except-discovery`; no design adoption, gate execution, product build or shipped behavior change is inferred.
+- Validation profile: no runtime tests/lint apply because no runtime/test/API/schema/notebook/module-doc path changed. All declared document, semantic, immutable-pin and repository-boundary checks passed; no task-applicable baseline failure was observed or introduced.
+- Deviations: none. The 112-line unrelated dirty manifest and mixed design-point index residual were preserved; sacred refs and all external repository pins remained unchanged.
+- Archive state: not archived. Step 4.9 must first reconcile the absent preflight path by exact-blob import, then revalidate the dirty INVENTORY seam before any archive commit. Step 4.9, push and merge require separate authorization.

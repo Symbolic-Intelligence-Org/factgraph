@@ -1,6 +1,6 @@
 # Task Blueprint: Meander × FactGraph 统一设计 Review Freeze v0.1.1 文本收敛
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-08-10
 - Last Updated: 2026-08-10
 - Authority: task-scoped docs-only blueprint. 本文只约束 O1-01…O1-10 的候选文本收敛；不 adopted 目标设计，不覆盖 shipped 行为，也不授权代码、产品建设或实验。
@@ -205,42 +205,42 @@ Any “yes” prevents scope freeze or content acceptance.
 
 ## 7. Acceptance
 
-All boxes remain open in `draft`.
+All 26 acceptance items are closed by the Step 4.7 implementation and independent review evidence recorded in the paired audit.
 
 ### 7.1 O1 content acceptance
 
-- [ ] **A-O1-01:** Phase 0/1 are explicitly Gate -1-gated；唯一实现例外是用户另行具名批准、预算封顶、可丢弃、不代表 product approval 且不得倒逼产品继续的 discovery experiment/spike；纯设计/审计另行表述。
-- [ ] **A-O1-02:** Pinned sources/anchors, including report09 `:98-106`, appear in the successor；walkthrough、case bundle、claim classes、four arms、dual quotes、reviewer value/data access/cost-bearing pilot each retain their own scope；Phase 3 promotion retains the relative-to-baseline, payment-relevant, customer-co-defined 30% target；Phase 3 kill/total-stop retains completed-10-offer `<3 paid pilot` separately from `>7 incumbent-sufficient buyers`；Phase 2 Managed Translator mapping/ontology implementation-and-maintenance >50% remains separate from Gate C/total-stop semantic customization/engineering >50% without a reusable vertical pack；dual quotes do not exclude OEM or decide standalone/embedded/both/neither under PM-03.
-- [ ] **A-O1-03:** §1.1 is explicitly `PROVISIONAL` + `EXPERIMENT REQUIRED` rather than `SETTLED DIRECTION`; case/draft review is the provisional product axis, Agent is one input, Gate -1 remains unpassed, and P0 is a post-gate compatibility profile—not default MVP.
-- [ ] **A-O1-04:** `smallest` is scoped to the coherent review map; phase deliverables do not imply full-map implementation.
-- [ ] **A-O1-05:** final-verdict wording uses phase-specific revisions/gates rather than surviving blockers.
-- [ ] **A-O1-06:** successor separately names governance-blocked、validation-rejected、`PlanWriteFailure` + successful-rollback terminal、second-`WriteBoundaryError` no-write terminal and the broader post-`create_ingesting` recovery-needed nonterminal class with their pinned anchors；both terminal branches retain terminal PlanStore audit/lifecycle records but have no effective Claim state or evaluation；among those two terminal branches only rollback-success may retain revoked traces, without excluding assertion/retract history in nonterminal/recovery paths；PlanStore / graph-service orchestration / adjacent ledger ownership is explicit；target hnsm/adapter ownership does not drift；§2.4 Scenario wording is unchanged.
-- [ ] **A-O1-07:** all three shipped anchor groups match the pinned, full-read source files.
-- [ ] **A-O1-08:** §16.4 is `SETTLED DIRECTION` only for minimum source disclosure and Meander access-control boundary；tenant keying and retention/erasure/legal-hold/replay precedence explicitly remain open under CE-05/CE-06/AS-02；§16.5 is `PROVISIONAL`; §16.6 marks Verify isolation `SETTLED DIRECTION` and future Decision profile `DEFERRED`; none is newly `ADOPTED CONSTRAINT`.
-- [ ] **A-O1-09:** Explain wording separates manual re-evaluation `store.py:3020-3045`；builder dispatch `:3367-3381`；native current-ledger probe `:3565-3595` with projection `:3575`；Soufflé preferred current-store `:3413-3424` with `self._store :3414`；Soufflé captured/minimal fallback `:3427-3438`；ProbLog preferred current-store `:3453-3469` with `self._store :3454`；and ProbLog hybrid fallback `:3472-3501` with callback injection `:3488` and current-ledger lookup `:3518-3536`, without claiming all-path live reads, fully frozen fallback or replay safety.
-- [ ] **A-O1-10:** successor title/header/Inputs/Outputs/§23 pin predecessor, disposition and Stage 1 audit identities；name the completed review, dual verdict, Option 1-only lineage and exact still-open decision set；v0.1 stays unchanged and no formal `supersedes` claim is made.
+- [x] **A-O1-01:** Phase 0/1 are explicitly Gate -1-gated；唯一实现例外是用户另行具名批准、预算封顶、可丢弃、不代表 product approval 且不得倒逼产品继续的 discovery experiment/spike；纯设计/审计另行表述。
+- [x] **A-O1-02:** Pinned sources/anchors, including report09 `:98-106`, appear in the successor；walkthrough、case bundle、claim classes、four arms、dual quotes、reviewer value/data access/cost-bearing pilot each retain their own scope；Phase 3 promotion retains the relative-to-baseline, payment-relevant, customer-co-defined 30% target；Phase 3 kill/total-stop retains completed-10-offer `<3 paid pilot` separately from `>7 incumbent-sufficient buyers`；Phase 2 Managed Translator mapping/ontology implementation-and-maintenance >50% remains separate from Gate C/total-stop semantic customization/engineering >50% without a reusable vertical pack；dual quotes do not exclude OEM or decide standalone/embedded/both/neither under PM-03.
+- [x] **A-O1-03:** §1.1 is explicitly `PROVISIONAL` + `EXPERIMENT REQUIRED` rather than `SETTLED DIRECTION`; case/draft review is the provisional product axis, Agent is one input, Gate -1 remains unpassed, and P0 is a post-gate compatibility profile—not default MVP.
+- [x] **A-O1-04:** `smallest` is scoped to the coherent review map; phase deliverables do not imply full-map implementation.
+- [x] **A-O1-05:** final-verdict wording uses phase-specific revisions/gates rather than surviving blockers.
+- [x] **A-O1-06:** successor separately names governance-blocked、validation-rejected、`PlanWriteFailure` + successful-rollback terminal、second-`WriteBoundaryError` no-write terminal and the broader post-`create_ingesting` recovery-needed nonterminal class with their pinned anchors；both terminal branches retain terminal PlanStore audit/lifecycle records but have no effective Claim state or evaluation；among those two terminal branches only rollback-success may retain revoked traces, without excluding assertion/retract history in nonterminal/recovery paths；PlanStore / graph-service orchestration / adjacent ledger ownership is explicit；target hnsm/adapter ownership does not drift；§2.4 Scenario wording is unchanged.
+- [x] **A-O1-07:** all three shipped anchor groups match the pinned, full-read source files.
+- [x] **A-O1-08:** §16.4 is `SETTLED DIRECTION` only for minimum source disclosure and Meander access-control boundary；tenant keying and retention/erasure/legal-hold/replay precedence explicitly remain open under CE-05/CE-06/AS-02；§16.5 is `PROVISIONAL`; §16.6 marks Verify isolation `SETTLED DIRECTION` and future Decision profile `DEFERRED`; none is newly `ADOPTED CONSTRAINT`.
+- [x] **A-O1-09:** Explain wording separates manual re-evaluation `store.py:3020-3045`；builder dispatch `:3367-3381`；native current-ledger probe `:3565-3595` with projection `:3575`；Soufflé preferred current-store `:3413-3424` with `self._store :3414`；Soufflé captured/minimal fallback `:3427-3438`；ProbLog preferred current-store `:3453-3469` with `self._store :3454`；and ProbLog hybrid fallback `:3472-3501` with callback injection `:3488` and current-ledger lookup `:3518-3536`, without claiming all-path live reads, fully frozen fallback or replay safety.
+- [x] **A-O1-10:** successor title/header/Inputs/Outputs/§23 pin predecessor, disposition and Stage 1 audit identities；name the completed review, dual verdict, Option 1-only lineage and exact still-open decision set；v0.1 stays unchanged and no formal `supersedes` claim is made.
 
 ### 7.2 Machine-verifiable acceptance
 
-- [ ] v0.1 path, 2185-line content and SHA remain unchanged.
-- [ ] Disposition IDs, rows, counts and verdicts remain unchanged at `32/23/16/10/2`; its only diff is a §11 successor link/status note.
-- [ ] Normalized predecessor-content → successor-content comparison, operationally equivalent to `git diff --no-index -- <frozen-predecessor> <successor>` (where exit `1` means a diff was produced), assigns every added/removed semantic span to exactly one of the preflight's 41 atoms and passes its exact before/after guards; there are no unmapped spans.
-- [ ] `git diff-tree --no-commit-id --name-only -r <commit>` separately equals the applicable §4.3 section stage allowlist; repo-local commit diff contains no `src/`, `tests/`, API, notebook or predecessor path.
-- [ ] Preflight-defined required/forbidden guards pass, including status labels, code anchors and IDs/counts; absence of newly introduced API/DTO/schema/enum/decision/experiment artifacts is checked only over normalized added semantic spans, not the full copied successor.
-- [ ] Immediately before each mixed-file use, the recorded index/worktree blob identities still match; cached synthetic patch passes; cached diff contains only the task row; residual unstaged diff preserves the user hunk; post-commit unrelated manifest returns to 112 lines.
-- [ ] Step 4.7 reads the ledger, matrix and guards from `git show c59bfc77b2a7f316fd750e2d413e979fb532ea63:workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`; `git rev-parse` resolves that path to blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`, content SHA-256 is `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`, and the protecting preflight branch ref remains pinned until Step 4.9 proves exact blob presence in the implementation-branch tree, whether through an exact pre-existing path or the separately committed import.
-- [ ] Step 4.9 reconciliation is three-state and fail-closed: absent path imports the exact blob in its own commit; present exact blob skips import; present nonexact blob stops for amendment/coordination and is neither overwritten, repaired nor archived.
-- [ ] Preflight-pinned Meander/meander-agent/factgraph-new HEAD + status identities are unchanged after Step 4.7.
-- [ ] `git diff --check` passes; index is empty after each commit.
-- [ ] Sacred refs are unchanged. Before commit, filtering is limited to previously clean/task-new exact in-scope paths; pre-existing mixed dirty paths retain their residual proof. After commit, raw `git status --porcelain=v1 --untracked-files=all` yields exactly 112 lines with SHA `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`.
-- [ ] Paired audit mirrors every lifecycle event; no push/merge occurs without separate authorization.
+- [x] v0.1 path, 2185-line content and SHA remain unchanged.
+- [x] Disposition IDs, rows, counts and verdicts remain unchanged at `32/23/16/10/2`; its only diff is a §11 successor link/status note.
+- [x] Normalized predecessor-content → successor-content comparison, operationally equivalent to `git diff --no-index -- <frozen-predecessor> <successor>` (where exit `1` means a diff was produced), assigns every added/removed semantic span to exactly one of the preflight's 41 atoms and passes its exact before/after guards; there are no unmapped spans.
+- [x] `git diff-tree --no-commit-id --name-only -r <commit>` separately equals the applicable §4.3 section stage allowlist; repo-local commit diff contains no `src/`, `tests/`, API, notebook or predecessor path.
+- [x] Preflight-defined required/forbidden guards pass, including status labels, code anchors and IDs/counts; absence of newly introduced API/DTO/schema/enum/decision/experiment artifacts is checked only over normalized added semantic spans, not the full copied successor.
+- [x] Immediately before each mixed-file use, the recorded index/worktree blob identities still match; cached synthetic patch passes; cached diff contains only the task row; residual unstaged diff preserves the user hunk; post-commit unrelated manifest returns to 112 lines.
+- [x] Step 4.7 reads the ledger, matrix and guards from `git show c59bfc77b2a7f316fd750e2d413e979fb532ea63:workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`; `git rev-parse` resolves that path to blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`, content SHA-256 is `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`, and the protecting preflight branch ref remains pinned until Step 4.9 proves exact blob presence in the implementation-branch tree, whether through an exact pre-existing path or the separately committed import.
+- [x] Step 4.9 reconciliation is three-state and fail-closed: absent path imports the exact blob in its own commit; present exact blob skips import; present nonexact blob stops for amendment/coordination and is neither overwritten, repaired nor archived.
+- [x] Preflight-pinned Meander/meander-agent/factgraph-new HEAD + status identities are unchanged after Step 4.7.
+- [x] `git diff --check` passes; index is empty after each commit.
+- [x] Sacred refs are unchanged. Before commit, filtering is limited to previously clean/task-new exact in-scope paths; pre-existing mixed dirty paths retain their residual proof. After commit, raw `git status --porcelain=v1 --untracked-files=all` yields exactly 112 lines with SHA `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`.
+- [x] Paired audit mirrors every lifecycle event; no push/merge occurs without separate authorization.
 
 ### 7.3 Semantic and review acceptance
 
-- [ ] The exact 16-row `NEEDS_DECISION` non-preselection matrix records `answer/preselection introduced = no` for every item with evidence; unchanged IDs/counts alone are insufficient.
-- [ ] Independent semantic review answers “no” to all four §5.5 questions and finds no product/authority/owner drift.
-- [ ] Every Step 4.3 Required and Recommended finding has an amendment disposition plus independent diff-check; before scoped there are zero unresolved Required findings and zero Abandonment blockers.
-- [ ] The paired audit states that no **additional** user-side/cross-model Step 4.2 report was supplied before preflight; this does not erase the already dispositioned 28-agent adversarial review, and internal same-model reviews are not relabelled as cross-model evidence.
+- [x] The exact 16-row `NEEDS_DECISION` non-preselection matrix records `answer/preselection introduced = no` for every item with evidence; unchanged IDs/counts alone are insufficient.
+- [x] Independent semantic review answers “no” to all four §5.5 questions and finds no product/authority/owner drift.
+- [x] Every Step 4.3 Required and Recommended finding has an amendment disposition plus independent diff-check; before scoped there are zero unresolved Required findings and zero Abandonment blockers.
+- [x] The paired audit states that no **additional** user-side/cross-model Step 4.2 report was supplied before preflight; this does not erase the already dispositioned 28-agent adversarial review, and internal same-model reviews are not relabelled as cross-model evidence.
 
 ## 8. Implementation Plan
 
@@ -277,13 +277,96 @@ No module docs, `docs/README.md`, source repository, external report or v0.1 pre
 
 ## 10. Outcome / Deviations
 
-To be completed only at Step 4.8:
+### 10.1 Final state and commits
 
-- final commits, per-path line counts and changed paths;
-- O1-01…O1-10 evidence table;
-- predecessor hash and dual-verdict/open-decision preservation results;
-- independent preflight/review results and per-PF alignment;
-- acknowledged baseline failures, or explicit `none`;
-- sacred-ref and unrelated-dirty verification;
-- deviations from this blueprint, or explicit `none`;
-- archive intent/readiness. Actual archive completion is recorded by the Step 4.9 paired-audit event after the move.
+- This docs-only Option 1 slice is **implemented**. “Implemented” means the bounded v0.1.1 text-convergence deliverables and their review evidence landed; it does not adopt the candidate architecture, authorize product construction, run a gate/experiment, or change shipped behavior.
+- Implementation branch: `v0.3.0-impl-meander-factgraph-unified-design-v0-1-1-2026-08-10`.
+
+| Stage | Commit | Result |
+|---|---|---|
+| Scoped anchor | `11aea61dd7db1d120179bbed7a0ffbdfc775dfb9` | Blueprint pair moved to `scoped`. |
+| Step 4.6.5 | `5c6694a3eb66d0c55ddb985aadcb3ac4e91b0921` | Docs-only deletion-grep skip and replacement guards recorded. |
+| Step 4.7 implementation | `ed7aa47abe2c54de3237e481e9303c9836766a59` | Successor, one index row, one disposition note and implementation audit event landed. |
+| Step 4.7 review record | `3398956ce5a8f35674b8349fdec22c1f6c8283b3` | Independent semantic and exhaustive atom/span reviews recorded `CLEAR`. |
+| Step 4.8 closure | This commit; Git history is the non-circular identity source. | Status, 26 acceptance items, Outcome and paired lifecycle event only. |
+
+### 10.2 Landed paths and line counts
+
+Step 4.7 implementation plus its independently committed review record produced this exact aggregate relative to `5c6694a3...`:
+
+| Path | Added | Removed | Purpose |
+|---|---:|---:|---|
+| `workflow/blueprints/active/2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md` | 120 | 0 | One implementation event plus the complete independent review record. |
+| `workflow/design/design-points/README.md` | 1 | 0 | One isolated successor index row. |
+| `workflow/design/design-points/active/meander-factgraph-unified-design-adversarial-review-disposition.zh.md` | 1 | 0 | One §11 successor/status note. |
+| `workflow/design/design-points/active/meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md` | 2235 | 0 | New narrow-lineage successor. |
+
+The Step 4.8 closure commit changes only this blueprint pair: blueprint `+120/-37`; paired audit `+12/-1`.
+
+### 10.3 O1 implementation evidence
+
+Successor loci are pinned to `ed7aa47...`; the paired audit's 41-row comparator is the detailed evidence source.
+
+| Objective | Atom coverage | Successor evidence | Result |
+|---|---|---|---|
+| O1-01 Gate precedence | AT-0101-01…05 | S:91, 1783, 1799, 1807, 2052 first span | PASS |
+| O1-02 product evidence/thresholds | AT-0102-01…08 | S:16-19, 1791, 1793, 1987, 1994-1999, 2052 second span | PASS |
+| O1-03 provisional product axis | AT-0103-01…08 | S:44 Agent/source-bound span, 95, 99, 110, 126, 128, 136, 846 | PASS |
+| O1-04 bounded review-map meaning | AT-0104-01…03 | S:44 review-map span, 1785, 2211 exact review-map phrase | PASS |
+| O1-05 phase-specific verdict wording | AT-0105-01 | S:2197 | PASS |
+| O1-06 shipped lifecycle fidelity | AT-0106-01…03 | S:884-888, 900, 930, 1507-1511 | PASS |
+| O1-07 shipped source anchors | AT-0107-01…03 | S:221, 225, 231 | PASS |
+| O1-08 §16 label boundaries | AT-0108-01…03 | S:1763-1765, 1771, 1777 | PASS |
+| O1-09 Explain fidelity | AT-0109-01 | S:229 | PASS |
+| O1-10 successor governance/lineage | AT-0110-01…06 | S:1, 8-10, 26, 36, 2209-2222 excluding the O1-04 phrase at S:2211, 2235 | PASS |
+
+### 10.4 Frozen-state and verdict preservation
+
+- Frozen predecessor remains present and unchanged: 2185 lines, SHA-256 `574677ddd30d2a7ec8933785cbcb258a8758c793bd34c115ea138162aa9df6c7`.
+- Successor identity is 2235 lines, SHA-256 `d0baa71d3969c92d8f4d8addc34e87b3776e8ac406a00fb5b406f49f81027105`.
+- Disposition is 382 lines after its single permitted §11 addition, SHA-256 `7449dd6041bea639aeddecc6903e04b03ce0ead1c9ebd38a7052c67bc6eb45f2`; its 83 finding rows, `32/23/16/10/2` distribution and verdicts are unchanged from intake SHA-256 `f8a2fedb48f6f3f1b1e19b41cdd7a5823352a59cc74aa8b1068c10aaa7bc6e14`.
+- Architecture remains `REVISE`; product authorization remains `STOP-except-discovery`.
+- The exact 16-item set remains `NEEDS_DECISION`: `PM-03 PM-06 CE-03 CE-05 CE-06 CE-08 SC-01 SC-03 SC-05 SC-12 SF-04 AS-02 AS-06 AS-11 AC-16 AC-24`. D01-D18 remain exact; no D19 or new Q was added.
+- Scenario premise lifecycle and the candidate/non-authoritative boundary remain unchanged. v0.1.1 is a narrow lineage successor/revision, not a formal `supersedes` event.
+
+### 10.5 Independent preflight and per-PF alignment
+
+Fixed preflight `c59bfc77...` / blob `6f17cdfb...` / content SHA-256 `0b2702d...` reported `5 Required / 3 Recommended / 5 Verified / 4 Scoped-detail / 0 Abandonment`. Alignment at closure:
+
+| Finding | Closure evidence | Result |
+|---|---|---|
+| PF-R01 | Comparator separated from repository path diff; 41/41 ownership and exact dirty-manifest checks passed. | PASS |
+| PF-R02 | report09 `:98-106` and independent product-evidence scopes are pinned through AT-0102. | PASS |
+| PF-R03 | Two terminal write failures, broader nonterminal recovery and three-layer ownership are preserved through AT-0106. | PASS |
+| PF-R04 | `self._store :3414/:3454` and ProbLog hybrid callback `:3488/:3518-3536` are preserved through AT-0109. | PASS |
+| PF-R05 | Preflight commit/blob/SHA and three-state Step 4.9 contract remain pinned; protecting ref has not moved. | PASS |
+| PF-Rec01 | §16.4 settles only minimum disclosure/access control; tenant and retention questions remain open. | PASS |
+| PF-Rec02 | PM-03 retains OEM and both/neither. | PASS |
+| PF-Rec03 | `APPLIED WITH EVIDENCE CORRECTION`: the directly tested separator seam controls over the preflight's untested “active-table tail” wording; the actual index row was staged narrowly and left the user residual intact. | PASS |
+| PF-V01 | The slice remained docs-only; no abandonment blocker or runtime/API/schema/decision/experiment artifact was introduced. | VERIFIED |
+| PF-V02 | Dual verdict and all 16 open decisions remain unselected. | VERIFIED |
+| PF-V03 | Shipped source pins and the identified substrate objects remain consistent with the full-read audit. | VERIFIED |
+| PF-V04 | Meander, meander-agent and factgraph-new remain clean at their pinned HEADs. | VERIFIED |
+| PF-V05 | The design-point index seam's index-side/worktree-side isolation proof held at actual use; the archive INVENTORY seam remains prospective and requires fresh Step 4.9 validation. | VERIFIED |
+| PF-S01 | Actual implementation used exact predecessor anchors; successor line numbers were navigation only. | PASS |
+| PF-S02 | A fresh actual-successor 16-row matrix recorded `No` for every row. | PASS |
+| PF-S03 | All 65 added and 28 removed nonblank semantic lines/substrings have one owner; shared lines were split by exact subspan. | PASS |
+| PF-S04 | Negative checks were limited to normalized added semantic spans and protected identities. | PASS |
+
+Independent Step 4.7 results: semantic review `CLEAR` with all four §5.5 answers `No`; atom/span review `CLEAR` with 41/41 guards, 0 unmapped spans and 0 duplicate-owned spans; primary boundary recheck `CLEAR`. These were internal independent same-model checks, not additional user-side or cross-model evidence.
+
+### 10.6 Verification, baseline and deviations
+
+- Tests/lint: not applicable to this docs-only slice; no runtime, test, API, schema, notebook or module-doc path changed. The applicable checks were `git diff --check`, exact content/path/hash guards, semantic comparator, 41-atom harness, 16-row matrix, external-pin checks and dirty-worktree proofs; all passed.
+- Acknowledged task-applicable baseline failures: **none observed or introduced**. The pre-existing 112-line dirty manifest is preserved user work, not a task test failure; after each landed commit it returned exactly SHA-256 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326` with an empty index.
+- Sacred refs: `master` remains `854d03b9a960c0be8c6b86cfd6d2b5ae72bc90b0`; `v0.1-oss-prep` remains absent locally and from remote-tracking refs.
+- External repositories remained clean and read-only: Meander `4ddb8e36f0b7a80e99a7447c719c21b4776d6ca7`, meander-agent `e4b044911de5495ffa93edeba933985588b51cfa`, factgraph-new `b92d6bf5405be8d15eedea5b97aa7408914e76b9`.
+- Deviations from the scoped blueprint: **none**. The already-recorded governance tension between the per-pillar state list and canonical CADENCE does not change task content; conflict priority applies CADENCE Step 4.8's direct `scoped → implemented` closure.
+- No push, merge, release ref, product experiment or cross-repository mutation occurred.
+
+### 10.7 Archive intent and readiness
+
+- This commit records closure only; the blueprint pair and standalone audits remain in `active/`.
+- The implementation-branch tree does not yet contain `workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`. Therefore Step 4.9, if separately authorized, must first import exact blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521` in its own single-purpose commit and verify content SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`.
+- Archive readiness is conditional on that exact-path reconciliation and a fresh safe-isolation check for the already-dirty `workflow/blueprints/archive/INVENTORY.md`. A present-but-nonexact artifact or unsafe INVENTORY seam stops the archive.
+- Step 4.9 reconciliation/archive, push and merge remain separately gated and are not authorized by this Outcome.
