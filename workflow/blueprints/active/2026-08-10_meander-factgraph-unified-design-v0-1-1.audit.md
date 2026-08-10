@@ -1,6 +1,6 @@
 # Task Blueprint Audit: Meander × FactGraph 统一设计 Review Freeze v0.1.1 文本收敛
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-10
 - Last Updated: 2026-08-10
 - Authority: paired blueprint audit log
@@ -25,6 +25,7 @@
 | 2026-08-10 | draft | Step 4.3 independent preflight completed | User separately authorized “可以继续”. Standalone preflight commit `c59bfc77...` produced 41 semantic atoms, an exact 16-row prospective non-preselection matrix and `5 Required / 3 Recommended / 5 Verified / 4 Scoped-detail / 0 Abandonment`; three closure reviews and a post-commit audit returned `CLEAR`. |
 | 2026-08-10 | draft | Step 4.4 preflight amendment | User separately authorized “下一步”. The blueprint pair absorbed and dispositioned all five Required and three Recommended findings below; no successor, preflight artifact, source, experiment or external repository was changed. Blueprint remains `draft`; Step 4.5 is not authorized by this event. |
 | 2026-08-10 | draft | Step 4.4 independent diff-check | Three read-only reviews attacked Required closure, Recommended/audit closure and cross-section consistency. Their concrete findings were amended inside the pair and all three final rechecks returned `CLEAR`; Step 4.5 remains separately gated. |
+| 2026-08-10 | scoped | Preflight amendments and self-check passed | After Step 4.5 was separately authorized and returned three-way `CLEAR` with no tightening commit, the user separately authorized Step 4.6 via “下一步”. PF-R01…PF-R05 and PF-Rec01…PF-Rec03 are covered by `cfb1ccb7abfaf3e42fe6d8ac42814fad038240db`; its exact content/path allowlists are frozen as the implementation contract. This event does not authorize Step 4.6.5 or Step 4.7. |
 
 ## Decision Notes
 

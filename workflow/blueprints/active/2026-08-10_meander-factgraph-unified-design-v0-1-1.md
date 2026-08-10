@@ -1,6 +1,6 @@
 # Task Blueprint: Meander × FactGraph 统一设计 Review Freeze v0.1.1 文本收敛
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-10
 - Last Updated: 2026-08-10
 - Authority: task-scoped docs-only blueprint. 本文只约束 O1-01…O1-10 的候选文本收敛；不 adopted 目标设计，不覆盖 shipped 行为，也不授权代码、产品建设或实验。
