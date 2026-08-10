@@ -5,12 +5,12 @@
 - Last Updated: 2026-08-11
 - Authority: task-scoped docs-only blueprint. 本文只约束 O1-01…O1-10 的候选文本收敛；不 adopted 目标设计，不覆盖 shipped 行为，也不授权代码、产品建设或实验。
 - Inputs:
-  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md), Stage 1 commit `e32ec385427a5eabb4645d3a4da06cef3c9fe652`, 394 行，SHA-256 `0d1dfb6a5236d15fc8d9ba8624cdc2317915d3a77dc7e5c0ed042b0e429d9329`
+  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md), Stage 1 commit `e32ec385427a5eabb4645d3a4da06cef3c9fe652`, 394 行，SHA-256 `0d1dfb6a5236d15fc8d9ba8624cdc2317915d3a77dc7e5c0ed042b0e429d9329`
   - [`meander-factgraph-unified-design-review-candidate.zh.md`](../../design/design-points/active/meander-factgraph-unified-design-review-candidate.zh.md), frozen v0.1 predecessor, 2185 行，SHA-256 `574677ddd30d2a7ec8933785cbcb258a8758c793bd34c115ea138162aa9df6c7`
   - [`meander-factgraph-unified-design-adversarial-review-disposition.zh.md`](../../design/design-points/active/meander-factgraph-unified-design-adversarial-review-disposition.zh.md), 381 行，SHA-256 `f8a2fedb48f6f3f1b1e19b41cdd7a5823352a59cc74aa8b1068c10aaa7bc6e14`
   - [`01_执行摘要与最终判决.md`](</Users/zhenzhili/obsidian_workspace/symb-Intelli./codex_report/01_执行摘要与最终判决.md>), 186 行，SHA-256 `cc6eb3297a4b33ceebbd675eb896b13519a2f183758ca1a03b7dd9a5acc65f3d`；承重锚点 `:154-168`
   - [`09_实验路线_停止条件与迁移.md`](</Users/zhenzhili/obsidian_workspace/symb-Intelli./codex_report/09_实验路线_停止条件与迁移.md>), 227 行，SHA-256 `7f8f73ce18b8e688daa485cf465a06157993a94bef60ed3b4a03f406df2da474`；承重锚点 `:17-30/:98-106/:124-132/:220-225`
-  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`](../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md), independent Step 4.3 artifact on commit `c59bfc77b2a7f316fd750e2d413e979fb532ea63`, 353 行，SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`, Git blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`
+  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`](../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md), independent Step 4.3 artifact on commit `c59bfc77b2a7f316fd750e2d413e979fb532ea63`, 353 行，SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`, Git blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`
 - Outputs / Downstream:
   - the completed independent preflight remains pinned on its independent branch and was imported byte-identically into the implementation-branch tree by Step 4.9a commit `5857a530d27b4a32b12ddc70194e6a1a0b28e43e`; Step 4.7 consumed the fixed commit/blob above rather than a floating branch
   - future active successor: `workflow/design/design-points/active/meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md`

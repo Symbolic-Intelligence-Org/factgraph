@@ -5,8 +5,8 @@
 - Last Updated: 2026-08-10
 - Authority: working triage document; surfaces blueprint-vs-shipped drift before scoped anchor per CADENCE Step 4.3. Does not lock implementation; findings feed back into Step 4.4 amendment.
 - Inputs:
-  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1.md`](../../blueprints/active/2026-08-10_meander-factgraph-unified-design-v0-1-1.md), reviewed Step 4.2 blueprint at commit `b392f45f2a9762c7d9225b73acb59077474ffea0`, 276 lines, SHA-256 `dbdf3be726dd3b395f01a7a2f58d8e50e3c56eb795c9ec9da65498faca7bd6eb`
-  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md`](../../blueprints/active/2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md), 83 lines, SHA-256 `5fa8972f0e5dc1580eaea9f471510ea15d4e8a76b906c63520e29e4a9be03f58`
+  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1.md`](../../blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.md), reviewed Step 4.2 blueprint at commit `b392f45f2a9762c7d9225b73acb59077474ffea0`, 276 lines, SHA-256 `dbdf3be726dd3b395f01a7a2f58d8e50e3c56eb795c9ec9da65498faca7bd6eb`
+  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md`](../../blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md), 83 lines, SHA-256 `5fa8972f0e5dc1580eaea9f471510ea15d4e8a76b906c63520e29e4a9be03f58`
   - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](./2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md), Stage 1 audit, 394 lines, SHA-256 `0d1dfb6a5236d15fc8d9ba8624cdc2317915d3a77dc7e5c0ed042b0e429d9329`
   - [`meander-factgraph-unified-design-review-candidate.zh.md`](../../design/design-points/active/meander-factgraph-unified-design-review-candidate.zh.md), frozen v0.1 predecessor, 2185 lines, SHA-256 `574677ddd30d2a7ec8933785cbcb258a8758c793bd34c115ea138162aa9df6c7`
   - [`meander-factgraph-unified-design-adversarial-review-disposition.zh.md`](../../design/design-points/active/meander-factgraph-unified-design-adversarial-review-disposition.zh.md), 381 lines, SHA-256 `f8a2fedb48f6f3f1b1e19b41cdd7a5823352a59cc74aa8b1068c10aaa7bc6e14`
@@ -17,7 +17,7 @@
 - Related:
   - [`workflow/CADENCE.md`](../../CADENCE.md)
   - [`workflow/templates/audit/preflight.md`](../../templates/audit/preflight.md)
-- Blueprint: [`2026-08-10_meander-factgraph-unified-design-v0-1-1.md`](../../blueprints/active/2026-08-10_meander-factgraph-unified-design-v0-1-1.md)
+- Blueprint: [`2026-08-10_meander-factgraph-unified-design-v0-1-1.md`](../../blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.md)
 - Branch: `v0.3.0-meander-factgraph-unified-design-v0-1-1-preflight-2026-08-10` (independent from blueprint branch)
 
 > 本 preflight 是 REQUIRED：该 slice 同时涉及 historical-design compatibility、跨 Meander/FactGraph 的 architecture-facing shipped 描述精确性以及 pre-release verification。它只审计文本收敛蓝图，不授权 successor 写入、实验、代码、ADR、产品建设、push 或 merge。

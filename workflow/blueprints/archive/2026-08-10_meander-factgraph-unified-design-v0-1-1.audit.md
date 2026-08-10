@@ -10,7 +10,7 @@
 - Outputs / Downstream:
   - (none)
 - Related:
-  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md)
+  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md)
   - [`meander-factgraph-unified-design-adversarial-review-disposition.zh.md`](../../design/design-points/active/meander-factgraph-unified-design-adversarial-review-disposition.zh.md)
 - Blueprint: [`2026-08-10_meander-factgraph-unified-design-v0-1-1.md`](./2026-08-10_meander-factgraph-unified-design-v0-1-1.md)
 - Branch: `v0.3.0-blueprint-meander-factgraph-unified-design-v0-1-1-2026-08-10`

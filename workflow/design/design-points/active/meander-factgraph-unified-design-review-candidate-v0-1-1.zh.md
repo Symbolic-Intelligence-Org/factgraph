@@ -7,7 +7,7 @@
 - Inputs:
   - [`meander-factgraph-unified-design-review-candidate.zh.md`](./meander-factgraph-unified-design-review-candidate.zh.md), frozen v0.1 predecessor, 2185 lines, SHA-256 `574677ddd30d2a7ec8933785cbcb258a8758c793bd34c115ea138162aa9df6c7`
   - [`meander-factgraph-unified-design-adversarial-review-disposition.zh.md`](./meander-factgraph-unified-design-adversarial-review-disposition.zh.md), pre-successor intake identity, 381 lines, SHA-256 `f8a2fedb48f6f3f1b1e19b41cdd7a5823352a59cc74aa8b1068c10aaa7bc6e14`
-  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](../../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md), completed Stage 1 audit, 394 lines, SHA-256 `0d1dfb6a5236d15fc8d9ba8624cdc2317915d3a77dc7e5c0ed042b0e429d9329`
+  - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](../../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md), completed Stage 1 audit, 394 lines, SHA-256 `0d1dfb6a5236d15fc8d9ba8624cdc2317915d3a77dc7e5c0ed042b0e429d9329`
   - [`rule-addressing-semantic-ports-and-evaluation-target.zh.md`](./rule-addressing-semantic-ports-and-evaluation-target.zh.md)
   - [`premise-effective-view-and-scenario-resolution.zh.md`](./premise-effective-view-and-scenario-resolution.zh.md)
   - [`scenario-plan-what-if-run-and-policy-aware-explain.zh.md`](./scenario-plan-what-if-run-and-policy-aware-explain.zh.md)
