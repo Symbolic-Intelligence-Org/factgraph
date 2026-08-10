@@ -6,6 +6,7 @@
 - Authority: paired blueprint audit log
 - Inputs:
   - [`2026-08-10_meander-factgraph-unified-design-v0-1-1.md`](./2026-08-10_meander-factgraph-unified-design-v0-1-1.md)
+  - fixed independent preflight `workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md` at commit `c59bfc77b2a7f316fd750e2d413e979fb532ea63`, blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`, SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`
 - Outputs / Downstream:
   - (none)
 - Related:
@@ -21,6 +22,9 @@
 | 2026-08-10 | draft | Blueprint created | Initial Option 1 docs-only scope recorded from the Stage 1 audit; no downstream phase authorized. |
 | 2026-08-10 | draft | Step 4.2 independent review tightening | Three read-only reviews were deduplicated into 11 Required and 6 Recommended amendments; all were applied below. One lower-priority lifecycle finding was rejected under the governance conflict order. Blueprint remains draft; preflight is not authorized. |
 | 2026-08-10 | draft | Step 4.2 evidence closure recheck | Independent internal read-only closure confirmed all six evidence Required findings and the recommendations resolved: `0 OPEN`, `0 REGRESSION`. Blueprint remains draft; Step 4.3 was neither performed nor authorized. |
+| 2026-08-10 | draft | Step 4.3 independent preflight completed | User separately authorized “可以继续”. Standalone preflight commit `c59bfc77...` produced 41 semantic atoms, an exact 16-row prospective non-preselection matrix and `5 Required / 3 Recommended / 5 Verified / 4 Scoped-detail / 0 Abandonment`; three closure reviews and a post-commit audit returned `CLEAR`. |
+| 2026-08-10 | draft | Step 4.4 preflight amendment | User separately authorized “下一步”. The blueprint pair absorbed and dispositioned all five Required and three Recommended findings below; no successor, preflight artifact, source, experiment or external repository was changed. Blueprint remains `draft`; Step 4.5 is not authorized by this event. |
+| 2026-08-10 | draft | Step 4.4 independent diff-check | Three read-only reviews attacked Required closure, Recommended/audit closure and cross-section consistency. Their concrete findings were amended inside the pair and all three final rechecks returned `CLEAR`; Step 4.5 remains separately gated. |
 
 ## Decision Notes
 
@@ -34,7 +38,7 @@
 ### 2026-08-10 — Dirty-worktree preservation lock
 
 - Fork basis: `e32ec385427a5eabb4645d3a4da06cef3c9fe652`.
-- Unrelated dirty baseline: exactly 112 porcelain-v1 lines, SHA-256 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`; index empty at branch creation.
+- Unrelated dirty baseline: exact output of `git status --porcelain=v1 --untracked-files=all`, 112 lines, SHA-256 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`; index empty at branch creation.
 - This draft commit may contain only the paired blueprint files. Existing design-point index and archive inventory changes are explicitly excluded.
 
 ### 2026-08-10 — Step 4.2 Required finding disposition
@@ -81,3 +85,44 @@
 ### 2026-08-10 — Cross-model review intake
 
 - This commit dispositions the three repository-grounded read-only reviews run by the primary agent. If the user supplies a separate Agent review before Step 4.3, it remains a Step 4.2 input and must receive its own finding/disposition entry before preflight begins. If none is supplied, the record must say so; it must not imply that an external cross-model review occurred.
+- No **additional** user-side/cross-model Step 4.2 report was supplied before Step 4.3 began. This does not erase or downgrade the already dispositioned 28-agent adversarial review in `claude_report/`. The three same-model preflight reviews are internal independent checks and are not relabelled as cross-model evidence.
+
+### 2026-08-10 — Step 4.3 fixed preflight intake
+
+- Preflight branch: `v0.3.0-meander-factgraph-unified-design-v0-1-1-preflight-2026-08-10`.
+- Commit / parent: `c59bfc77b2a7f316fd750e2d413e979fb532ea63` / `b392f45f2a9762c7d9225b73acb59077474ffea0`.
+- Artifact: `workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`, 353 lines, Git blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`, SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`.
+- Result: `5 Required / 3 Recommended / 5 Verified / 4 Scoped-detail / 0 Abandonment`; Option 1 remains viable and docs-only.
+- The fixed artifact carries the sole preflight ledger/matrix/guard copy. This blueprint pins and consumes it; it does not copy a second truth source into the blueprint pair.
+
+### 2026-08-10 — Step 4.4 Required finding disposition
+
+| ID | Preflight finding | Disposition and applied blueprint locus |
+|---|---|---|
+| PF-R01 | New successor path makes repository commit diff unsuitable as a semantic comparator; 112-line baseline command was underspecified | **ACCEPTED.** Inputs/§4.1/§4.3/§5.3/INV-9/INV-10/§7.2/§8 now separate normalized predecessor→successor content diff from repository path diff, define exit `1`, limit negative checks to added semantic spans, fix `--untracked-files=all`, and preserve mixed dirty paths through residual proof rather than whole-path filtering. |
+| PF-R02 | O1-02 omitted report09 `:98-106`, which carries the Phase 2 Managed Translator >50% condition | **ACCEPTED.** Inputs, O1-02, INV-5 and A-O1-02 now pin `:98-106` and state that it neither elevates research authority nor authorizes an experiment. |
+| PF-R03 | O1-06 collapsed two terminal write-failure facts and treated recovery-needed `ingesting` too narrowly | **ACCEPTED.** O1-06/INV-6/A-O1-06 now distinguish PlanStore lifecycle, graph-service orchestration and adjacent ledger history; governance/validation rejection; rollback-success `PlanWriteFailure`; no-write second `WriteBoundaryError`; and all post-`create_ingesting` unexpected failures, including cases where written facts may temporarily coexist with nonterminal state. Both terminal branches retain PlanStore audit/lifecycle records but have no effective Claim state or evaluation; terminal-branch trace distinctions do not exclude nonterminal/recovery assertion/retract history. Scenario premise lifecycle remains untouched. |
+| PF-R04 | O1-09 handoff anchors were one line early and ProbLog captured fallback still consults current ledger certainty | **ACCEPTED.** O1-09/INV-7/A-O1-09 now separate builder dispatch, native current-ledger probe, Soufflé/ProbLog preferred paths, Soufflé captured/minimal fallback and ProbLog hybrid fallback; use actual `self._store` lines `:3414/:3454` plus `:3488/:3518-3536`; and forbid all-path-live/fully-frozen/replay-safe claims. |
+| PF-R05 | Independent preflight branch was not a stable input to the future implementation branch | **ACCEPTED.** Header/§4.1/§4.3/§5.3–5.4/INV-8–9/§7/§8/§9 pin commit/blob/content SHA and fixed `git show` consumption. Step 4.9 is three-state: absent path imports the exact blob in its own commit; exact presence skips import; nonexact presence stops for amendment/coordination and forbids overwrite, repair or archive. Only exact presence permits the later separate archive commit; floating branch/object reachability is insufficient. |
+
+### 2026-08-10 — Step 4.4 Recommended finding disposition
+
+| ID | Preflight recommendation | Disposition and applied blueprint locus |
+|---|---|---|
+| PF-Rec01 | Limit §16.4 `SETTLED DIRECTION` so it cannot close tenant/retention questions | **APPLIED.** O1-08 and A-O1-08 settle only minimum disclosure and Meander access-control boundary; CE-05/CE-06/AS-02 remain open for tenant keying and retention/erasure/legal-hold/replay precedence. |
+| PF-Rec02 | Keep OEM and both/neither inside PM-03's packaging space | **APPLIED.** O1-02/INV-5/A-O1-02 state that the two quote arms neither exclude OEM nor require a unique winner. |
+| PF-Rec03 | Pin mixed-file seam identities and revalidate instead of treating the current patch check as future permission | **APPLIED WITH EVIDENCE CORRECTION.** §4.3/INV-11/§7.2 pin both index/worktree identities and the tested zero-context separator seams, require index-side and worktree-side synthetic checks plus cached/residual/post-commit proofs, and stop on drift. The directly tested separator location controls over the preflight recommendation's untested “active-table tail” wording. |
+
+### 2026-08-10 — Step 4.4 carry-forward and authorization boundary
+
+- PF-S01…PF-S04 remain Step 4.7 guards: exact before anchors rather than successor line numbers; a fresh actual-successor 16-row matrix; one owner per semantic span even in shared hunks; and negative checks over added semantic spans only.
+- The preflight branch ref must remain pinned at `c59bfc77...` until exact blob `6f17cdfb...` is present in the implementation-branch tree.
+- This amendment does not check any §7 acceptance box, create a successor, run a gate/experiment, change an open decision, import the preflight artifact, or authorize Step 4.5/4.6/4.7.
+
+### 2026-08-10 — Step 4.4 independent diff-check closure
+
+- Three independent read-only passes reviewed the actual amendment diff: PF-R01…PF-R05 mapping, PF-Rec01…PF-Rec03 plus audit authority, and end-to-end blueprint consistency.
+- Review-found corrections were applied only inside this pair: Step 4.9 now has absent/exact/nonexact fail-closed states; O1-06 preserves terminal PlanStore audit records while denying effective Claim state/evaluation; O1-09 separates dispatch, native probe, preferred current-store paths and captured/hybrid fallbacks.
+- Final results: Required `CLEAR`; Recommended/audit `CLEAR`; consistency/threat review `CLEAR`; unresolved Required `0`; Abandonment blockers `0`.
+- `git diff --check` passed; index remained empty; exact exclusion of the two previously clean task paths restored the unrelated `git status --porcelain=v1 --untracked-files=all` baseline to 112 lines and SHA-256 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`.
+- Blueprint status remains `draft`. This closure completes Step 4.4 only and does not authorize Step 4.5.
