@@ -2,7 +2,7 @@
 
 - Status: implemented
 - Created: 2026-08-10
-- Last Updated: 2026-08-10
+- Last Updated: 2026-08-11
 - Authority: paired blueprint audit log
 - Inputs:
   - [`2026-08-10_meander-factgraph-unified-design-v0-1-1.md`](./2026-08-10_meander-factgraph-unified-design-v0-1-1.md)
@@ -30,6 +30,7 @@
 | 2026-08-10 | scoped | Step 4.7 docs content landed | User separately authorized Step 4.7 via “下一步”. The implementation content adds only the v0.1.1 Option 1 narrow lineage revision, the disposition §11 cross-link/status note, one safely isolated design-point index row, and this paired-audit event. Frozen v0.1, disposition finding rows/counts/verdicts, the exact 16 open decisions, runtime/external repositories and the fixed preflight artifact remain unchanged. Independent Step 4.7 review, Step 4.8 closure, Step 4.9 archive, push and merge remain separately gated. |
 | 2026-08-10 | scoped | Step 4.7 independent review passed | User separately authorized review via “进行review”. Against implementation commit `ed7aa47abe2c54de3237e481e9303c9836766a59`, two independent read-only reviews plus the primary boundary recheck returned `CLEAR`: 41/41 atom guards and unique span ownership, the exact 16-row matrix was all `No`, all four §5.5 answers were `No`, and path/pin/dirty/external/sacred guards held. No review fix was required. Step 4.8 remains separately gated. |
 | 2026-08-10 | implemented | Scoped implementation landed | User separately authorized Step 4.8 via “下一步”. Implementation `ed7aa47abe2c54de3237e481e9303c9836766a59` plus review record `3398956ce5a8f35674b8349fdec22c1f6c8283b3` satisfy all 26 acceptance items; the blueprint now records final paths/counts, O1/PF alignment, immutable pins, baseline/deviation status and conditional archive readiness. This closes only the docs-only Option 1 slice; Step 4.9 reconciliation/archive, push and merge remain separately gated. |
+| 2026-08-11 | implemented | Step 4.9 narrow archive-link amendment authorized | Step 4.9a exact preflight import landed at `5857a530d27b4a32b12ddc70194e6a1a0b28e43e`. Before archive, the incoming-link audit found that moving the vs-shipped audit would break one active-successor Inputs link outside the original moved-artifact-only link boundary. The user explicitly authorized the exact `AR-LINK-01` target rewrite and continuation of Step 4.9. This event amends only the archive allowlist; it does not yet edit the successor, move artifacts, touch INVENTORY, push or merge. |
 
 ## Decision Notes
 
@@ -258,4 +259,11 @@ The open-question wording is summarized here; the authoritative finding text rem
 - Scope result: docs-only Option 1 text convergence is implemented. The successor remains candidate/non-authoritative; architecture remains `REVISE`; product authorization remains `STOP-except-discovery`; no design adoption, gate execution, product build or shipped behavior change is inferred.
 - Validation profile: no runtime tests/lint apply because no runtime/test/API/schema/notebook/module-doc path changed. All declared document, semantic, immutable-pin and repository-boundary checks passed; no task-applicable baseline failure was observed or introduced.
 - Deviations: none. The 112-line unrelated dirty manifest and mixed design-point index residual were preserved; sacred refs and all external repository pins remained unchanged.
-- Archive state: not archived. Step 4.9 must first reconcile the absent preflight path by exact-blob import, then revalidate the dirty INVENTORY seam before any archive commit. Step 4.9, push and merge require separate authorization.
+- Closure-time archive state at commit `eaec1f3abb1e70d6c790be2df32ef7f74ee135be`: not archived. At that point Step 4.9 still had to reconcile the absent preflight path by exact-blob import, then revalidate the dirty INVENTORY seam before any archive commit; Step 4.9, push and merge remained separately gated.
+
+### 2026-08-11 — Step 4.9 reconciliation and `AR-LINK-01` boundary
+
+- Exact reconciliation is complete at `5857a530d27b4a32b12ddc70194e6a1a0b28e43e`: `HEAD:workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md` is blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`, 353 lines, SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`.
+- Incoming-link review found one scope blocker before any move: the active successor's vs-shipped Inputs target uses `../../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`, which would break when that standalone audit moves to `audit/archive`.
+- User authorization on 2026-08-11 permits exactly one outside-moved-artifact exception, `AR-LINK-01`: change only that target to `../../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`. Together with it, blueprint §4.4 enumerates the only five moved-artifact target rewrite rules (`AR-MOVED-01…05`), covering six occurrences. Link labels, successor line count, design prose, 41 historical semantic atoms, exact 16 open decisions, D01–D18, architecture `REVISE`, product `STOP-except-discovery`, candidate authority and every nonmanifest byte remain invariant.
+- Review-time successor SHA-256 `d0baa71d3969c92d8f4d8addc34e87b3776e8ac406a00fb5b406f49f81027105` remains the identity reviewed in Step 4.7. The one-target transform deterministically yields 2235 lines, SHA-256 `750ced2141e9d8c20400c5ed59d6c439707b32fb363919ab7b1533918f2a9e1b`, Git blob `27e8449a0e82803e611ef4b8beaae6f19363e2dc`; the isolated INVENTORY row must carry both SHAs. This amendment commit changes only the blueprint pair and performs no archive action.

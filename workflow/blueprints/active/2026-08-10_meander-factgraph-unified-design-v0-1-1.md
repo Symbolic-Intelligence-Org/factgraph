@@ -2,7 +2,7 @@
 
 - Status: implemented
 - Created: 2026-08-10
-- Last Updated: 2026-08-10
+- Last Updated: 2026-08-11
 - Authority: task-scoped docs-only blueprint. 本文只约束 O1-01…O1-10 的候选文本收敛；不 adopted 目标设计，不覆盖 shipped 行为，也不授权代码、产品建设或实验。
 - Inputs:
   - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md`](../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md), Stage 1 commit `e32ec385427a5eabb4645d3a4da06cef3c9fe652`, 394 行，SHA-256 `0d1dfb6a5236d15fc8d9ba8624cdc2317915d3a77dc7e5c0ed042b0e429d9329`
@@ -12,7 +12,7 @@
   - [`09_实验路线_停止条件与迁移.md`](</Users/zhenzhili/obsidian_workspace/symb-Intelli./codex_report/09_实验路线_停止条件与迁移.md>), 227 行，SHA-256 `7f8f73ce18b8e688daa485cf465a06157993a94bef60ed3b4a03f406df2da474`；承重锚点 `:17-30/:98-106/:124-132/:220-225`
   - [`2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`](../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md), independent Step 4.3 artifact on commit `c59bfc77b2a7f316fd750e2d413e979fb532ea63`, 353 行，SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`, Git blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`
 - Outputs / Downstream:
-  - completed independent preflight remains on its independent branch until Step 4.9 reconciliation; Step 4.7 consumes the fixed commit/blob above rather than a floating branch
+  - the completed independent preflight remains pinned on its independent branch and was imported byte-identically into the implementation-branch tree by Step 4.9a commit `5857a530d27b4a32b12ddc70194e6a1a0b28e43e`; Step 4.7 consumed the fixed commit/blob above rather than a floating branch
   - future active successor: `workflow/design/design-points/active/meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md`
   - minimal successor cross-link/status update in the disposition and a safely isolated design-point index entry
 - Related:
@@ -118,7 +118,7 @@ Stage 2 is skipped because Option 1 closes no load-bearing question and creates 
 | Step 4.7 review fix, if any | implementation branch | only paths named by the reviewed finding plus paired audit event | scope expansion returns to blueprint amendment rather than being inferred |
 | Step 4.8 closure | implementation branch | this blueprint pair only | fill Outcome and record implementation evidence |
 | Step 4.9 preflight reconciliation | implementation branch | inspect the exact audit path in the implementation-branch tree: if absent, import exactly blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521` from preflight commit `c59bfc77b2a7f316fd750e2d413e979fb532ea63`; if present and exact, skip import; if present but nonexact, stop and return to amendment/coordination without overwrite, repair or archive; global object/ref reachability is not sufficient | any import is a separate single-purpose commit before archive; byte/content identity is mandatory and mismatch is fail-closed |
-| Step 4.9 archive | implementation branch | blueprint pair `active → archive`; vs-shipped + preflight `audit/active → audit/archive`; link-only fixes inside moved artifacts; one isolated row in `workflow/blueprints/archive/INVENTORY.md` | if the dirty INVENTORY row cannot be isolated, stop for coordination; never stage the whole file |
+| Step 4.9 archive | implementation branch | blueprint pair `active → archive`; vs-shipped + preflight `audit/active → audit/archive`; apply exactly `AR-MOVED-01…05` and `AR-LINK-01` from §4.4; stage one isolated row in `workflow/blueprints/archive/INVENTORY.md` carrying both successor identities | all other moved-artifact bytes and all historical/plain `active` path coordinates stay unchanged；if the dirty INVENTORY row cannot be isolated, stop for coordination；never stage the whole file |
 
 The Step 4.7 content payload is limited to:
 
@@ -138,6 +138,23 @@ The preflight fixed the current seam recipe, not a future write authorization:
 At the applicable stage, revalidate both index/worktree identities first, then require both index-side `git apply --cached --check --unidiff-zero` and worktree-side `git apply --check --unidiff-zero`, a cached diff containing only the task row, a residual diff preserving the user hunk and the exact post-commit unrelated manifest. Any identity drift or failed isolation stops the stage; these pins never authorize staging the whole file.
 
 The design-point index proof is a precondition to the scoped anchor and no Step 4.7 content write begins without it. The archive INVENTORY proof may be revalidated immediately before Step 4.9, but archive does not begin if it is unsafe.
+
+`AR-LINK-01` is a post-closure, archive-only exception explicitly authorized by the user on 2026-08-11 after the incoming-link audit found that moving the vs-shipped audit would otherwise break the active successor's Inputs link. It is not a forty-second semantic edit atom and does not reopen the 41-atom Step 4.7 review: the original successor SHA remains the review-time content identity, while the archive commit must record and independently verify the new current identity produced solely by this target rewrite.
+
+### 4.4 Step 4.9 exact Markdown-target manifest
+
+Only these six rewrite rules, covering seven live Markdown-link target occurrences, may accompany the moves. Counts below apply to actual Markdown links in the named file and exclude the literal before/after strings recorded in this manifest. Link labels, surrounding prose and all plain/historical path literals remain byte-identical.
+
+| ID | File at edit time | Exact before target | Exact after target | Required live-link occurrence count |
+|---|---|---|---|---:|
+| AR-MOVED-01 | `workflow/blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.md` | `../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md` | `../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md` | 1 |
+| AR-MOVED-02 | `workflow/blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.md` | `../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md` | `../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md` | 1 |
+| AR-MOVED-03 | `workflow/blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md` | `../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md` | `../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md` | 1 |
+| AR-MOVED-04 | `workflow/audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md` | `../../blueprints/active/2026-08-10_meander-factgraph-unified-design-v0-1-1.md` | `../../blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.md` | 2 |
+| AR-MOVED-05 | `workflow/audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md` | `../../blueprints/active/2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md` | `../../blueprints/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1.audit.md` | 1 |
+| AR-LINK-01 | `workflow/design/design-points/active/meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md` | `../../../audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md` | `../../../audit/archive/2026-08-10_meander-factgraph-unified-design-v0-1-1-vs-shipped.md` | 1 |
+
+`AR-LINK-01` has a deterministic expected output: 2235 lines, SHA-256 `750ced2141e9d8c20400c5ed59d6c439707b32fb363919ab7b1533918f2a9e1b`, Git blob `27e8449a0e82803e611ef4b8beaae6f19363e2dc`. The isolated archive INVENTORY row is the archive-completion record and must carry both the Step 4.7 review-time SHA `d0baa71d3969c92d8f4d8addc34e87b3776e8ac406a00fb5b406f49f81027105` and this archive-time SHA. Any occurrence-count mismatch, different hash/blob or additional Markdown/plain-path mutation stops the archive.
 
 ## 5. Proposed Shape
 
@@ -202,6 +219,7 @@ Any “yes” prevents scope freeze or content acceptance.
 - **INV-10 — dirty preservation:** the exact `git status --porcelain=v1 --untracked-files=all` 112-line unrelated baseline remains byte-for-byte the same status manifest and is never staged/restored. Before commit, only previously clean/task-new in-scope paths may be removed by exact allowlist when comparing the unrelated manifest; pre-existing mixed dirty paths are never filtered wholesale and instead require the INV-11 cached/residual proof. After each commit, the raw full-untracked manifest returns to exactly 112 lines and the frozen SHA.
 - **INV-11 — mixed-file safety:** disposition changes are confined to a §11 successor link/status note; design-point index and archive INVENTORY are touched/staged only through the pinned-and-revalidated zero-context rows with cached synthetic-patch, cached-task-only, residual-user-hunk and post-commit 112-line proofs.
 - **INV-12 — cadence:** draft, review, independent preflight, amendment, self-check, scoped anchor, implementation branch/content, review, closure and archive remain separate authorization gates; no automatic push/merge.
+- **INV-13 — narrow archive-link exception:** `AR-LINK-01` changes exactly one successor Markdown target from the active to archive location of the same pinned vs-shipped audit. It cannot alter the link label, design prose, line count, O1 semantic ownership, 16 open decisions, D01–D18, dual verdict or authority. The archive record preserves `d0baa71d...` as review-time identity and records the post-link SHA as current archive-time identity.
 
 ## 7. Acceptance
 
@@ -256,7 +274,7 @@ Each numbered stage transition requires a new explicit authorization. Mechanical
 8. **Step 4.7 — implementation branch/docs content:** fork `v0.3.0-impl-meander-factgraph-unified-design-v0-1-1-2026-08-10` from the scoped anchor；verify and consume the fixed preflight through `git show c59bfc77b2a7f316fd750e2d413e979fb532ea63:workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md` without merging/cherry-picking its branch；copy v0.1 to the successor path；apply O1-01…O1-10；append only the disposition §11 cross-link/status note and a safely isolated index row；record the implementation event in the paired audit.
 9. **Step 4.7 review:** independently verify predecessor hash, fixed preflight commit/blob/content SHA, 41-atom guards, normalized semantic comparator, four semantic questions, fresh 16-row open-decision matrix, dual verdict, repo/path allowlists, external pins and dirty baseline；any scope expansion returns to blueprint amendment.
 10. **Step 4.8 — closure on the implementation branch:** mark implemented only after every acceptance item has evidence；fill Outcome / Deviations without turning the design-point into current truth；record archive readiness, not a completed archive.
-11. **Step 4.9 — reconciliation and archive on the implementation branch:** first inspect `HEAD:workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`; global object/ref reachability is irrelevant. If the path is absent, import exact blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521` in a preflight-only commit；if present and exact, skip import；if present but nonexact, stop and return to amendment/coordination without overwriting, repairing or archiving it. Only after exact presence is proven may a second single-purpose commit archive the blueprint pair and the vs-shipped/preflight standalone audits, fix only moved-artifact links, and stage one isolated INVENTORY row. The v0.1 predecessor remains active；any later design-point lifecycle move is separately authorized.
+11. **Step 4.9 — reconciliation and archive on the implementation branch:** first inspect `HEAD:workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`; global object/ref reachability is irrelevant. If the path is absent, import exact blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521` in a preflight-only commit；if present and exact, skip import；if present but nonexact, stop and return to amendment/coordination without overwriting, repairing or archiving it. Only after exact presence is proven may a second single-purpose commit archive the blueprint pair and the vs-shipped/preflight standalone audits, apply exactly the §4.4 target manifest, and stage one isolated INVENTORY row that records both successor identities. The archive commit must prove exact occurrence counts, target-only successor equality and the pinned archive-time SHA/blob. The v0.1 predecessor remains active；any later design-point lifecycle move is separately authorized.
 
 ## 9. Docs To Update
 
@@ -366,7 +384,14 @@ Independent Step 4.7 results: semantic review `CLEAR` with all four §5.5 answer
 
 ### 10.7 Archive intent and readiness
 
-- This commit records closure only; the blueprint pair and standalone audits remain in `active/`.
-- The implementation-branch tree does not yet contain `workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`. Therefore Step 4.9, if separately authorized, must first import exact blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521` in its own single-purpose commit and verify content SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`.
-- Archive readiness is conditional on that exact-path reconciliation and a fresh safe-isolation check for the already-dirty `workflow/blueprints/archive/INVENTORY.md`. A present-but-nonexact artifact or unsafe INVENTORY seam stops the archive.
-- Step 4.9 reconciliation/archive, push and merge remain separately gated and are not authorized by this Outcome.
+- At closure commit `eaec1f3abb1e70d6c790be2df32ef7f74ee135be`, the blueprint pair and standalone audits remained in `active/`; this subsection records that closure-time state.
+- At that closure commit, the implementation-branch tree did not yet contain `workflow/audit/active/2026-08-10_meander-factgraph-unified-design-v0-1-1-preflight.md`, so Step 4.9 still required an exact-blob import and SHA verification.
+- At closure time, archive readiness was conditional on exact-path reconciliation and a fresh safe-isolation check for the already-dirty `workflow/blueprints/archive/INVENTORY.md`; a present-but-nonexact artifact or unsafe INVENTORY seam would stop the archive.
+- At closure time, Step 4.9 reconciliation/archive, push and merge remained separately gated and were not authorized by that Outcome.
+
+### 10.8 Step 4.9 reconciliation and narrow link amendment (2026-08-11)
+
+- Step 4.9a exact-path reconciliation completed in single-purpose commit `5857a530d27b4a32b12ddc70194e6a1a0b28e43e`: the implementation-branch tree now contains the preflight artifact as Git blob `6f17cdfb2f73732e34fa3e07d03f7cbc2a1c8521`, 353 lines, SHA-256 `0b2702d36310161e7df1c29b1880c7f7d167abc4f528140cda9fe0ebc30146b4`.
+- Before any archive move, an incoming-link audit found that the active successor links to the vs-shipped audit's current `audit/active` path. Moving that audit under the original allowlist would leave a broken live link; editing the successor without amendment would exceed the reviewed boundary.
+- The user explicitly authorized “授权窄范围链接修订，并继续完成 Step 4.9 归档”. This adds only `AR-LINK-01`: the exact target rewrite specified in §4.3/INV-13. It does not authorize any other successor edit, semantic atom, runtime change, design adoption, push or merge.
+- This blueprint-pair amendment records the exception but does not apply any §4.4 rewrite or move any artifact. The following single-purpose archive commit must independently prove all exact occurrence counts, target-only successor equality and archive-time SHA/blob, revalidate the INVENTORY seam, and then move the blueprint pair plus both standalone audits together. The isolated INVENTORY row is the sole archive-completion record and carries both successor SHAs; no generic path rewrite or additional moved-artifact prose edit is permitted.
