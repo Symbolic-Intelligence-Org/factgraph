@@ -3,7 +3,7 @@
 - Status: draft
 - Created: 2026-08-11
 - Last Updated: 2026-08-11
-- Authority: task-scoped experimental blueprint draft under authorized Step 4.2 review；只消费已 adopted 的 Q2 约束并定义一个待 review closure、待 independent preflight、待 final-cap confirmation、待 scoped/execution authorization 的一次性 `P0/A0` 纵向探测。本文不是生产设计、公共契约、ADR、产品批准或执行授权。
+- Authority: formally reviewed task-scoped experimental blueprint draft；只消费已 adopted 的 Q2 约束并定义一个待 independent preflight、待 final-cap confirmation、待 scoped/execution authorization 的一次性 `P0/A0` 纵向探测。本文不是生产设计、公共契约、ADR、产品批准或执行授权。
 - Inputs:
   - adopted [`2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md`](../../design/decisions/active/2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md), commit `7f84d4f601fe5f680a183ae7aefba79c35f52f99`, 607 行，SHA-256 `802d5980ccadf523c8c0ef0f145c7881592dccfab5abebd91a7f999e672850ad`
   - adopted [`2026-08-11_q1-offline-feasibility-before-external-validation-decision.md`](../../design/decisions/active/2026-08-11_q1-offline-feasibility-before-external-validation-decision.md)；只作为非复用、`P-GATE` 仍开放和 CB0 独立性的治理输入
@@ -14,7 +14,7 @@
   - read-only adjacent baselines：`meander@4ddb8e36f0b7a80e99a7447c719c21b4776d6ca7`、`meander-agent@e4b044911de5495ffa93edeba933985588b51cfa`、`factgraph-new@b92d6bf5405be8d15eedea5b97aa7408914e76b9`
   - 2026-08-11 user direction after initial draft：接受 3 working days / 24 person-hours / 20 deterministic cells / 6 model cells / 24+2 model turns 的 kill-first review baseline，授权 final Step 4.2 review，并指示未来执行工作交给届时具名的 user-designated agent；该指示不授权 preflight、`scoped`、execution、BYOK 或 egress
 - Outputs / Downstream:
-  - current authorized output: one formally reviewed revision of this paired blueprint/audit only
+  - completed under current authorization: one formally reviewed revision of this paired blueprint/audit only
   - after a separate Step 4.3 authorization: `workflow/audit/active/2026-08-11_meander-agent-query-validation-vertical-probe-preflight.md` on an independent preflight branch
   - only after later `scoped` and execution authorization: one isolated disposable harness, one frozen fixture/oracle lineage, one immutable final result/disposition report, and this paired audit's lifecycle record
   - only after a terminal `PROCEED_TO_ADR_CANDIDATES` and new authorization: evidence-scoped D02–D07/D10–D11 decision proposals；本文本身不创建它们
@@ -35,7 +35,7 @@
 - Audit Log:
   - [`2026-08-11_meander-agent-query-validation-vertical-probe.audit.md`](./2026-08-11_meander-agent-query-validation-vertical-probe.audit.md)
 
-> Workflow Step 4.1 已完成；Step 4.2 review 已获授权并正在闭合 findings。本文中的数值、路径、模型条件和协议仍必须经过 review closure、独立 preflight、self-check、`CAP-FINAL-01`、`draft -> scoped` 与 `scoped -> implementing`/execution 的分离授权后才可执行。BYOK 与 data egress 还需要各自独立授权。
+> Workflow Step 4.1 与 Step 4.2 已完成；三条 review lane 对 exact substantive baseline `c9786e34a45534e66323d5b254e244468864a5fd` 均返回 `CLEAR 0/0/0`。本文仍必须经过独立 preflight、self-check、`CAP-FINAL-01`、`draft -> scoped` 与 `scoped -> implementing`/execution 的分离授权后才可执行。BYOK 与 data egress 还需要各自独立授权。
 
 ## 1. Problem
 
@@ -89,7 +89,7 @@ Agent 只填写固定 profile 的 typed slots
 - 不宣称 open fixtures 或两个模型可以统计泛化到所有 Agent。
 - 不用模型修复失败的 deterministic core；Step 3 不过则跳过模型。
 - 不创建第三个 discovery envelope；不把有利结果续成另一个架构 slice。
-- 除本轮已获授权的文档级 Step 4.2 review 外，不在当前 `draft` 阶段运行测试、创建 fixtures/harness、选择/调用模型、使用 key、外发数据、执行 preflight 或推进状态。
+- 本轮获授权的文档级 Step 4.2 review 已闭合；不在当前 `draft` 阶段运行测试、创建 fixtures/harness、选择/调用模型、使用 key、外发数据、执行 preflight 或推进状态。
 
 ## 4. Current Context
 
@@ -99,7 +99,7 @@ Agent 只填写固定 profile 的 typed slots
 |---|---|---|
 | Q2 decision | `adopted` at `7f84d4f6` | 允许用户另行授权起草一个 paired blueprint；不授权执行 |
 | Workflow Step 4.1 drafting | explicitly authorized by user on 2026-08-11 | 本次只可创建本 paired blueprint/audit |
-| Workflow Step 4.2 review | authorized on 2026-08-11；first-pass findings under disposition | review 只可修改 paired docs；不产生下一阶段授权 |
+| Workflow Step 4.2 review | completed on 2026-08-11；exact baseline `c9786e34`；three lanes `CLEAR 0/0/0` | review 只修改 paired docs；不产生下一阶段授权 |
 | Independent preflight | not authorized / absent | 不得创建 preflight artifact 或从 draft 跳到 scoped |
 | Numeric cap acceptance | user accepted the lean review baseline on 2026-08-11；not execution authorization | review 可以检验/收窄；任何增量必须重新获批 |
 | `scoped` / execution | not authorized | 不得创建 harness、fixtures、reports 或改源码 |
@@ -841,7 +841,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 ### 7.1 Workflow gates before `scoped`
 
 - [ ] Q2 adoption pin、branch fork basis、外部 repo pins 和 dirty baseline 经独立 preflight 重核。
-- [ ] Step 4.2 formal review 完成，paired audit 只记录真实 review evidence。
+- [x] Step 4.2 formal review 完成；exact substantive baseline `c9786e34` 的三条 review lane 均为 `CLEAR 0/0/0`，paired audit 只记录真实 review evidence。
 - [ ] 独立 preflight artifact 在独立 branch 完成并被 blueprint consume。
 - [x] 用户于 2026-08-11 明确接受 commit `4592e491` 中的原始 lean baseline（3 working days、24 person-hours、20/6 cells、2 models、24+2 turn ceiling 及其余当时列出的资源/零 repair caps）；本轮新增 operation accounting 与 22+2/10 收窄仍等待 `CAP-FINAL-01`，且均不构成 execution authorization。
 - [ ] `PF-BASELINE-01..PF-DISPOSITION-01` 全部逐项报告；external gates 不能伪装成 PASS。
@@ -906,7 +906,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 ### Workflow controls before probe execution
 
 1. **Step 4.1 — draft（completed）**：只创建本 paired blueprint/audit，状态保持 `draft`；运行文档结构、link 和 diff-scope 自检后提交 blueprint-only commit。
-2. **Step 4.2 — formal blueprint review（current authorization）**：governance、FactGraph contract、Agent/replay/privacy 三视角审阅 exact commit；findings 逐项进入 paired audit并 follow-up clear。不得把起草前咨询冒充 review。
+2. **Step 4.2 — formal blueprint review（completed）**：governance、FactGraph contract、Agent/replay/privacy 三视角审阅并复验 exact substantive baseline `c9786e34`；三条 lane 均为 `CLEAR 0/0/0`，findings 已逐项进入 paired audit。该结果不授权下一阶段。
 3. **Step 4.3 — independent preflight（separate authorization）**：从 reviewed-draft commit fork `v0.3.0-meander-agent-query-validation-vertical-probe-preflight-2026-08-11`，只创建批准的 preflight artifact；核 repo pins、路径、环境、private imports、测试命令、预算可执行性、secret/egress gates 和 dirty seam。
 4. **Step 4.4/4.5 — amendment + self-check**：只消费 preflight findings 收紧 blueprint pair；不得创建实验资产。机械检查 fixture count、model subset、OBL mapping、kill precedence 和 path allowlist。
 5. **Step 4.6 — scope freeze（separate authorization）**：`CAP-FINAL-01` 与所有 non-external preflight checks 闭合后，用户单独授权 `draft -> scoped`；paired audit 记录 exact scoped commit。Execution/BYOK/egress 都不随 scoped 自动授权。
