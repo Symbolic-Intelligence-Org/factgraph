@@ -55,7 +55,8 @@ class ResolverChecks(unittest.TestCase):
         with self.assertRaises(ProbeError) as cm:
             pr.resolve(fx, profile_snapshot(fx))
         self.assertEqual(cm.exception.code, "INGRESS_UNKNOWN_FIELDS")
-        self.assertEqual(cm.exception.diagnostics, ["config", "policy_ref"])
+        # submission order preserved (experiment-v0 convention, not a public contract)
+        self.assertEqual(cm.exception.diagnostics, ["policy_ref", "config"])
 
     def test_case_insensitive_ambiguity(self):
         fx = _fixture({"person_ref": "ADA"},

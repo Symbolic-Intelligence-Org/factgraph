@@ -56,14 +56,16 @@ def resolve(fixture: dict, snapshot: dict) -> dict:
 
     # --- ingress: additionalProperties=false over the whole submission ---
     extra = invocation.get("extra_fields") or {}
-    attempted = [k for k in extra.keys()]
-    artifact["attempted_authority_fields"] = sorted(attempted)
+    # Submission order preserved (frozen-oracle convention; experiment-v0 only,
+    # NOT a public canonical-ordering contract — see final report note).
+    attempted = list(extra.keys())
+    artifact["attempted_authority_fields"] = attempted
     if attempted:
         artifact["status"] = "rejected_unknown_field"
-        artifact["diagnostics"] = sorted(attempted)
+        artifact["diagnostics"] = attempted
         raise ProbeError(
             INGRESS_UNKNOWN_FIELDS, stage="ingress",
-            diagnostics=sorted(attempted), artifact=artifact,
+            diagnostics=attempted, artifact=artifact,
         )
     unknown_top = set(invocation.keys()) - {"slots", "extra_fields"}
     if unknown_top:

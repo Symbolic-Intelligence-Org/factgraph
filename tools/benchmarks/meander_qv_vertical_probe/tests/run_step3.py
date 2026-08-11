@@ -123,6 +123,8 @@ def run_static_capability(fixture: dict, outcome: dict) -> None:
         if pe.extra.get("owner"):
             failure["owner"] = pe.extra["owner"]
         outcome["result"] = static_validation_result([], assertions_ok=False, failure=failure)
+        # a publish/catalog rejection carries structured diagnostic content
+        outcome["explain"] = {"anchor": "none", "content_class": "structured_diagnostic"}
 
 
 def run_normal(fixture: dict, outcome: dict) -> None:

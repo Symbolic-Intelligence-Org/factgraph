@@ -34,7 +34,7 @@
     },
     "step3_deterministic": {
       "cap_minutes": 600,
-      "used_minutes": 95,
+      "used_minutes": 115,
       "entries": [
         {
           "what": "contracts/profiles/resolver/compiler/lineage/evaluator implementation",
@@ -50,6 +50,10 @@
         },
         {
           "what": "20/20 primary invocations executed once each; 15 PASS / 5 FAIL (all output-shaping harness defects, zero semantic failures; 13 engine calls == pinned)",
+          "minutes": 20
+        },
+        {
+          "what": "A-prime: 3 root-cause fixes (resolver order / static explain / validation summary) + selftest 12 passed + one verification sweep 20/20 PASS (20 inv, 13 engine, 0.14s)",
           "minutes": 20
         }
       ]
@@ -158,6 +162,19 @@
     "non_model_paid_infrastructure_eur": {
       "cap": 0,
       "used": 0
+    },
+    "implementation_verification_sweep": {
+      "authorization": "user A-prime ruling 2026-08-11",
+      "cap_invocations": 20,
+      "used_invocations": 20,
+      "cap_engine_calls": 13,
+      "used_engine_calls": 13,
+      "result": "20/20 PASS",
+      "not_counted_in": [
+        "primary_harness_invocations",
+        "model",
+        "replay"
+      ]
     }
   },
   "phase_log": [
@@ -181,6 +198,11 @@
     {
       "utc": "2026-08-11T21:05:00Z",
       "event": "CAP BOUNDARY STOP: 5 cells (SC12-P, AC21, A01-AUTH, E02, E03) failed on harness output-shaping; re-run would need +5 primary invocations (25>20). Stopped per user stop-conditions; awaiting user ruling (one-time cap amendment vs REVISE closure). No golden touched; semantic-repair counter remains 0.",
+      "charged_to": "step3_deterministic"
+    },
+    {
+      "utc": "2026-08-11T21:40:00Z",
+      "event": "Step 3 exit gate: ALL items PASS on verification sweep evidence; scoring material frozen; original 15/20 primary manifest preserved untouched",
       "charged_to": "step3_deterministic"
     }
   ]

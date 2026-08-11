@@ -1,0 +1,3365 @@
+{
+  "record_type": "ImplementationVerificationManifestV0",
+  "authorization": "user A-prime ruling 2026-08-11: one full 20-cell sweep after three located harness root-cause fixes; separately accounted, not primary",
+  "root_cause_fixes": [
+    "resolver.py: attempted_authority_fields preserves submission order (experiment-v0 convention only, NOT a public canonical-ordering contract)",
+    "tests/run_step3.py: static publish/catalog rejection carries content_class=structured_diagnostic",
+    "evaluator.py: zero-row query_summary synthesized for task_kind=query only"
+  ],
+  "frozen_unchanged": "fixtures/goldens/SCHEMA/manifests/rubric/scorer/shipped source byte-identical",
+  "sweep_invocations": 20,
+  "sweep_engine_calls": 13,
+  "cells_passed": 20,
+  "cells_failed": 0,
+  "elapsed_seconds": 0.145,
+  "on_failure_policy": "no further fix/rerun; straight to REVISE",
+  "results": [
+    {
+      "cell_id": "NAV02",
+      "score": {
+        "cell_id": "NAV02",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "NAV02",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "static_validation_only",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": []
+        },
+        "result": {
+          "kind": "static_validation",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": null,
+          "diagnostics": [
+            {
+              "probe": "restricted",
+              "code": "FIELD_NAVIGATION_RESTRICTED"
+            },
+            {
+              "probe": "missing",
+              "code": "FIELD_NAVIGATION_UNKNOWN_FIELD"
+            },
+            {
+              "probe": "ambiguous",
+              "code": "PATH_UNRESOLVED_ALIAS"
+            },
+            {
+              "probe": "any_branch_unbound",
+              "code": "NAVIGATION_BRANCH_UNBOUND"
+            },
+            {
+              "probe": "pin_mismatch",
+              "code": "PIN_MISMATCH"
+            }
+          ]
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "structured_diagnostic"
+        },
+        "engine_invocations": 0,
+        "model_invocations": 0,
+        "lineage": null,
+        "totality": null,
+        "compile_meta": null,
+        "row_anchors": [],
+        "publish_check": null,
+        "world_built": false,
+        "catalog_invocations": 1
+      }
+    },
+    {
+      "cell_id": "SC12-32",
+      "score": {
+        "cell_id": "SC12-32",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "SC12-32",
+        "ingress": {
+          "status": "not_reached",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "not_reached",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": []
+        },
+        "result": {
+          "kind": "static_validation",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "none"
+        },
+        "engine_invocations": 0,
+        "model_invocations": 0,
+        "lineage": null,
+        "totality": null,
+        "compile_meta": null,
+        "row_anchors": [],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 32,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": false,
+        "catalog_invocations": 1
+      }
+    },
+    {
+      "cell_id": "SC12-P",
+      "score": {
+        "cell_id": "SC12-P",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "SC12-P",
+        "ingress": {
+          "status": "not_reached",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "not_reached",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": []
+        },
+        "result": {
+          "kind": "static_validation",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": {
+            "code": "DNF_BRANCH_LIMIT_EXCEEDED",
+            "stage": "profile_publish_freeze",
+            "owner": "ProbeProfileCapabilityValidatorV0"
+          }
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "structured_diagnostic"
+        },
+        "engine_invocations": 0,
+        "model_invocations": 0,
+        "lineage": null,
+        "totality": null,
+        "compile_meta": null,
+        "row_anchors": [],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 64,
+          "limit": 32,
+          "state": "exceeded"
+        },
+        "world_built": false,
+        "catalog_invocations": 1
+      }
+    },
+    {
+      "cell_id": "AC21",
+      "score": {
+        "cell_id": "AC21",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "AC21",
+        "ingress": {
+          "status": "not_reached",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "not_reached",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": []
+        },
+        "result": {
+          "kind": "static_validation",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": {
+            "code": "SYNTHETIC_QUERY_NAMESPACE_COLLISION",
+            "stage": "catalog_validation_pre_lowering",
+            "owner": "ProbeManagedCatalogValidatorV0"
+          }
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "structured_diagnostic"
+        },
+        "engine_invocations": 0,
+        "model_invocations": 0,
+        "lineage": null,
+        "totality": null,
+        "compile_meta": null,
+        "row_anchors": [],
+        "publish_check": null,
+        "world_built": false,
+        "catalog_invocations": 1
+      }
+    },
+    {
+      "cell_id": "A01-AMB",
+      "score": {
+        "cell_id": "A01-AMB",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "A01-AMB",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "AMBIGUOUS_IDENTITY",
+          "diagnostics": [
+            {
+              "code": "AMBIGUOUS_IDENTITY",
+              "slot": "person_ref",
+              "submitted": "ALEX",
+              "candidates": [
+                {
+                  "entity": "person",
+                  "id": "Alex"
+                },
+                {
+                  "entity": "person",
+                  "id": "alex"
+                }
+              ]
+            }
+          ]
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": []
+        },
+        "result": {
+          "kind": "typed_failure",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": {
+            "code": "AMBIGUOUS_IDENTITY"
+          }
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "none"
+        },
+        "engine_invocations": 0,
+        "model_invocations": 0,
+        "lineage": null,
+        "totality": null,
+        "compile_meta": null,
+        "row_anchors": [],
+        "publish_check": null,
+        "world_built": false,
+        "catalog_invocations": 0
+      }
+    },
+    {
+      "cell_id": "A01-AUTH",
+      "score": {
+        "cell_id": "A01-AUTH",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "A01-AUTH",
+        "ingress": {
+          "status": "rejected_unknown_field",
+          "attempted_authority_fields": [
+            "policy_ref",
+            "occurrence",
+            "path",
+            "select",
+            "expect",
+            "config",
+            "authority"
+          ]
+        },
+        "resolution": {
+          "status": "not_reached",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": []
+        },
+        "result": {
+          "kind": "typed_failure",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": {
+            "code": "INGRESS_UNKNOWN_FIELDS"
+          }
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "none"
+        },
+        "engine_invocations": 0,
+        "model_invocations": 0,
+        "lineage": null,
+        "totality": null,
+        "compile_meta": null,
+        "row_anchors": [],
+        "publish_check": null,
+        "world_built": false,
+        "catalog_invocations": 0
+      }
+    },
+    {
+      "cell_id": "SC01-B",
+      "score": {
+        "cell_id": "SC01-B",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "SC01-B",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": [
+            {
+              "alias": "ax",
+              "path": "a.x"
+            }
+          ]
+        },
+        "result": {
+          "kind": "typed_failure",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": {
+            "code": "JOIN_ENDPOINT_NOT_TOTAL"
+          }
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "none"
+        },
+        "engine_invocations": 0,
+        "model_invocations": 0,
+        "lineage": null,
+        "totality": null,
+        "compile_meta": null,
+        "row_anchors": [],
+        "publish_check": null,
+        "world_built": false,
+        "catalog_invocations": 0
+      }
+    },
+    {
+      "cell_id": "Q01",
+      "score": {
+        "cell_id": "Q01",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "Q01",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.person",
+              "term": {
+                "entity": "person",
+                "id": "alice"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "team",
+              "path": "m.team"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [
+            {
+              "team": "red"
+            }
+          ],
+          "row_count": 1,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "row",
+          "content_class": "native_evidence_graph",
+          "selected_row_anchor": "run_v1:225db784dd0b445888dc7dd78227d1f0f3f8b20db3b54992801a5f03e5433859:d8b02f6b86fac925",
+          "explanation_status": "passed",
+          "has_evidence_graph": true
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:c53ea06fda7fb32e",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_identity_anchor:m.person",
+              "kind": "bind_identity_anchor"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:team:m.team",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_identity_anchor:m.person",
+              "kind": "injected_atom",
+              "compiler_role": "bind_identity_anchor",
+              "generated_for": "authored:bind_identity_anchor:m.person"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__10f7b64075dd1c8d",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_identity_anchor:m.person",
+              "to": "lowered:atom:probe__member__m:bind_identity_anchor:m.person"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__10f7b64075dd1c8d"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:team:m.team",
+              "to": "lowered:synthetic_head:__factgraph_projection__10f7b64075dd1c8d",
+              "head_port": "m__team"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.person",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 5,
+          "lowered_count": 5,
+          "edge_count": 6
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "team": "m__team"
+          }
+        },
+        "row_anchors": [
+          "run_v1:225db784dd0b445888dc7dd78227d1f0f3f8b20db3b54992801a5f03e5433859:d8b02f6b86fac925"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:225db784dd0b445888dc7dd78227d1f0f3f8b20db3b54992801a5f03e5433859",
+          "result_digest": "sha256:49ea3ef24200c2e398993f1dd190de6aa47ac4020ff61a7a05e202247b7db000",
+          "view_snapshot_digest": "sha256:1f38786194070ca47c842ee77d36a6f46a3522e476cb817d3ec55ee2b38bee92"
+        }
+      }
+    },
+    {
+      "cell_id": "Q03",
+      "score": {
+        "cell_id": "Q03",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "Q03",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": []
+        },
+        "result": {
+          "kind": "exists_summary",
+          "rows": [],
+          "row_count": 3,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": {
+            "status": true
+          },
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "query_summary",
+          "content_class": "structured_diagnostic",
+          "diagnostic": {
+            "summary": {
+              "status": true
+            },
+            "completeness": "complete"
+          }
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:0697a8fd9e617226",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 4,
+          "lowered_count": 5,
+          "edge_count": 5
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {}
+        },
+        "row_anchors": [
+          "run_v1:89a63b4c5505440fb429759eadc438633d322166468945d198b607f6671819a5:f339909c413e99cd",
+          "run_v1:89a63b4c5505440fb429759eadc438633d322166468945d198b607f6671819a5:def4c8b804bd4a92",
+          "run_v1:89a63b4c5505440fb429759eadc438633d322166468945d198b607f6671819a5:4e0eb154670b8287"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:89a63b4c5505440fb429759eadc438633d322166468945d198b607f6671819a5",
+          "result_digest": "sha256:2c8ccf4b19750e2819f9b784005d5a412f0e6972a96201a1908403e7d6b928de",
+          "view_snapshot_digest": "sha256:e6a7b2da8c1060379edb6a3803fe0abf7f986fe374415183815873660cf9adfa"
+        }
+      }
+    },
+    {
+      "cell_id": "Q04",
+      "score": {
+        "cell_id": "Q04",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "Q04",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "green"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [],
+          "row_count": 0,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": {
+            "status": false
+          },
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "query_summary",
+          "content_class": "structured_diagnostic",
+          "diagnostic": {
+            "summary": {
+              "status": false
+            },
+            "completeness": "complete"
+          }
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:49f4d370f2b066c1",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 5,
+          "lowered_count": 5,
+          "edge_count": 6
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:1b5474abb1cc4aa791fd52a76983b630db6f5cff1c394b8ba2d9fc4c8fc569db",
+          "result_digest": "sha256:b7d24f789e5e036f69dea0d1fd3b2eb83c51aeb1ec3ca91d7715660d9267c2c7",
+          "view_snapshot_digest": "sha256:024899718a1600eaccec64cea78dd1e6e4e3114fb893f2864cabeeba4e32b8ac"
+        }
+      }
+    },
+    {
+      "cell_id": "Q02",
+      "score": {
+        "cell_id": "Q02",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "Q02",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [
+            {
+              "person": "alice"
+            },
+            {
+              "person": "bob"
+            },
+            {
+              "person": "dan"
+            }
+          ],
+          "row_count": 3,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "row",
+          "content_class": "native_evidence_graph",
+          "selected_row_anchor": "run_v1:e5699ced9a404d2c9c81095bc9a4c2e987c9e1de21db483880e56a34c9a87251:f339909c413e99cd",
+          "explanation_status": "passed",
+          "has_evidence_graph": true
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:24d3ee454385bcb3",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 5,
+          "lowered_count": 5,
+          "edge_count": 6
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [
+          "run_v1:e5699ced9a404d2c9c81095bc9a4c2e987c9e1de21db483880e56a34c9a87251:f339909c413e99cd",
+          "run_v1:e5699ced9a404d2c9c81095bc9a4c2e987c9e1de21db483880e56a34c9a87251:def4c8b804bd4a92",
+          "run_v1:e5699ced9a404d2c9c81095bc9a4c2e987c9e1de21db483880e56a34c9a87251:4e0eb154670b8287"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:e5699ced9a404d2c9c81095bc9a4c2e987c9e1de21db483880e56a34c9a87251",
+          "result_digest": "sha256:2a21f7ddcd12aedcdf304be9a1b7d703d0dfc43720f3548db3772c3d10140219",
+          "view_snapshot_digest": "sha256:0fba01abf2f10f8eb7f32e55b10c518b62e1be3c508a11e4d998a026e61fa144"
+        }
+      }
+    },
+    {
+      "cell_id": "Q05",
+      "score": {
+        "cell_id": "Q05",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "Q05",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [],
+          "row_count": 0,
+          "completeness": "incomplete",
+          "truncated": true,
+          "query_summary": {
+            "status": "underdetermined"
+          },
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "query_summary",
+          "content_class": "structured_diagnostic",
+          "diagnostic": {
+            "summary": {
+              "status": "underdetermined"
+            },
+            "completeness": "incomplete"
+          }
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:6a7ab3934891fcdc",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 5,
+          "lowered_count": 5,
+          "edge_count": 6
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:2c7df7b63bdf430380456f856009b4bcb644ae42425a491883b3ff306b68a3cf",
+          "result_digest": "sha256:ebde45376022de0863e94d046caad57e7bc08ef6cfef2b42a0a9fe88872ee557",
+          "view_snapshot_digest": "sha256:cdc7e97e93db5a9ed8034ba8256ed9af08c55aee2d0ad59288fcec8085827bc4"
+        }
+      }
+    },
+    {
+      "cell_id": "E01",
+      "score": {
+        "cell_id": "E01",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "E01",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [
+            {
+              "person": "alice"
+            },
+            {
+              "person": "bob"
+            },
+            {
+              "person": "dan"
+            }
+          ],
+          "row_count": 3,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": {
+          "kind": "contains_row",
+          "status": "satisfied",
+          "matched_row_count": 1,
+          "completeness_relied_upon": "complete",
+          "diagnostics": []
+        },
+        "explain": {
+          "anchor": "expectation",
+          "content_class": "structured_diagnostic",
+          "diagnostic": {
+            "expectation_status": "satisfied",
+            "matched_row_count": 1
+          }
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:145775c576f5c86a",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            },
+            {
+              "id": "authored:expectation",
+              "kind": "expectation_target"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            },
+            {
+              "relation": "targets_expectation",
+              "from": "authored:expectation",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 6,
+          "lowered_count": 5,
+          "edge_count": 7
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [
+          "run_v1:6ebdda6d295142649fbce23c91ebafe7574517efb4e74c69b8b19f4ca89acbc3:f339909c413e99cd",
+          "run_v1:6ebdda6d295142649fbce23c91ebafe7574517efb4e74c69b8b19f4ca89acbc3:def4c8b804bd4a92",
+          "run_v1:6ebdda6d295142649fbce23c91ebafe7574517efb4e74c69b8b19f4ca89acbc3:4e0eb154670b8287"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:6ebdda6d295142649fbce23c91ebafe7574517efb4e74c69b8b19f4ca89acbc3",
+          "result_digest": "sha256:37902f47d8b7d4867e68ba44da8a69664feabd25bd09fc5daa764d05c61cab8e",
+          "view_snapshot_digest": "sha256:7f054e93d1e23656c56b8b65034a55a6b64b1f91bd71064716598331905d5b6e"
+        }
+      }
+    },
+    {
+      "cell_id": "E02",
+      "score": {
+        "cell_id": "E02",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "E02",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "green"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [],
+          "row_count": 0,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": {
+          "kind": "exists",
+          "status": "not_satisfied",
+          "matched_row_count": 0,
+          "completeness_relied_upon": "complete",
+          "diagnostics": []
+        },
+        "explain": {
+          "anchor": "expectation",
+          "content_class": "structured_diagnostic",
+          "diagnostic": {
+            "expectation_status": "not_satisfied",
+            "matched_row_count": 0
+          }
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:cccaf280983698bb",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            },
+            {
+              "id": "authored:expectation",
+              "kind": "expectation_target"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            },
+            {
+              "relation": "targets_expectation",
+              "from": "authored:expectation",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 6,
+          "lowered_count": 5,
+          "edge_count": 7
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:4739b58d878a48dfb456b871e61b50001e72f01c82e841f0bbd740b5efecaac9",
+          "result_digest": "sha256:2ff83447ddaf0b928a2d4b2030956367bf94fcfed8a3c9c303b468082184d8f2",
+          "view_snapshot_digest": "sha256:75328a7719e475d5df6516aa578910b2cd7da8e5f63e7491de120e16fab1c136"
+        }
+      }
+    },
+    {
+      "cell_id": "E04",
+      "score": {
+        "cell_id": "E04",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "E04",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [
+            {
+              "person": "alice"
+            },
+            {
+              "person": "bob"
+            },
+            {
+              "person": "dan"
+            }
+          ],
+          "row_count": 3,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": {
+          "kind": "contains_row",
+          "status": "unsupported",
+          "matched_row_count": 0,
+          "completeness_relied_upon": "complete",
+          "diagnostics": [
+            "EXPECTATION_SET_MODE_UNSUPPORTED"
+          ]
+        },
+        "explain": {
+          "anchor": "expectation",
+          "content_class": "structured_diagnostic",
+          "diagnostic": {
+            "expectation_status": "unsupported",
+            "matched_row_count": 0
+          }
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:4eabce6b91af9382",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            },
+            {
+              "id": "authored:expectation",
+              "kind": "expectation_target"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            },
+            {
+              "relation": "targets_expectation",
+              "from": "authored:expectation",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 6,
+          "lowered_count": 5,
+          "edge_count": 7
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [
+          "run_v1:f6b6fff073bb440798b219729b1379d203b6ecf9fdbd40c497cb835f65ea4d8f:f339909c413e99cd",
+          "run_v1:f6b6fff073bb440798b219729b1379d203b6ecf9fdbd40c497cb835f65ea4d8f:def4c8b804bd4a92",
+          "run_v1:f6b6fff073bb440798b219729b1379d203b6ecf9fdbd40c497cb835f65ea4d8f:4e0eb154670b8287"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:f6b6fff073bb440798b219729b1379d203b6ecf9fdbd40c497cb835f65ea4d8f",
+          "result_digest": "sha256:39d0b29b56a3c71601f1b54ae988e0825f5a491afdbe8a2587d456c695005b1b",
+          "view_snapshot_digest": "sha256:55365d907862656805708a3930160068f70fe83904a42c6c47d2271074f17ae7"
+        }
+      }
+    },
+    {
+      "cell_id": "E03",
+      "score": {
+        "cell_id": "E03",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "E03",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [],
+          "row_count": 0,
+          "completeness": "incomplete",
+          "truncated": true,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": {
+          "kind": "contains_row",
+          "status": "underdetermined",
+          "matched_row_count": 0,
+          "completeness_relied_upon": "incomplete",
+          "diagnostics": []
+        },
+        "explain": {
+          "anchor": "expectation",
+          "content_class": "structured_diagnostic",
+          "diagnostic": {
+            "expectation_status": "underdetermined",
+            "matched_row_count": 0
+          }
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:8857d89106d98e0e",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            },
+            {
+              "id": "authored:expectation",
+              "kind": "expectation_target"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            },
+            {
+              "relation": "targets_expectation",
+              "from": "authored:expectation",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 6,
+          "lowered_count": 5,
+          "edge_count": 7
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:868a3bbc0f794090998d39d71b7c14c278310e0b706e47fca8e6872cd20cf94b",
+          "result_digest": "sha256:f71412b54c6d5b39c30e407d3c17303374db8aba95af55d6730cf6456fff8220",
+          "view_snapshot_digest": "sha256:bc6f420678a4699b639600d639f0e804721f943f6679c594c367113258f5fe20"
+        }
+      }
+    },
+    {
+      "cell_id": "NAV01",
+      "score": {
+        "cell_id": "NAV01",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "NAV01",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            },
+            {
+              "alias": "age",
+              "path": "m.person.age"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [
+            {
+              "person": "alice",
+              "age": 30
+            },
+            {
+              "person": "dan",
+              "age": 40
+            }
+          ],
+          "row_count": 2,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "row",
+          "content_class": "native_evidence_graph",
+          "selected_row_anchor": "run_v1:cbcbe0c0a4f747e6b5f9fa769bd53bf1966df9668c604a17aa2be8d93854d7e3:065923e40576ae90",
+          "explanation_status": "passed",
+          "has_evidence_graph": true
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:9d33473a1868e3c9",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:navigation_lookup:m.person.age",
+              "kind": "navigation_lookup"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            },
+            {
+              "id": "authored:select:age:m.person.age",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:navigation_lookup:m.person.age",
+              "kind": "injected_atom",
+              "compiler_role": "navigation_lookup",
+              "generated_for": "authored:navigation_lookup:m.person.age"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__6623f19cb911c834",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "injects_lookup",
+              "from": "authored:navigation_lookup:m.person.age",
+              "to": "lowered:atom:probe__member__m:navigation_lookup:m.person.age"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__6623f19cb911c834"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__6623f19cb911c834",
+              "head_port": "m__person"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:age:m.person.age",
+              "to": "lowered:synthetic_head:__factgraph_projection__6623f19cb911c834",
+              "head_port": "m__person__age"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            },
+            {
+              "constraint": "authored:navigation:m.person.age",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 7,
+          "lowered_count": 6,
+          "edge_count": 8
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [
+            {
+              "path": "m.person.age",
+              "op": ">",
+              "const": 26
+            }
+          ],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": true,
+          "select_map": {
+            "person": "m__person",
+            "age": "m__person__age"
+          }
+        },
+        "row_anchors": [
+          "run_v1:cbcbe0c0a4f747e6b5f9fa769bd53bf1966df9668c604a17aa2be8d93854d7e3:065923e40576ae90",
+          "run_v1:cbcbe0c0a4f747e6b5f9fa769bd53bf1966df9668c604a17aa2be8d93854d7e3:a060a391d5816bda"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:cbcbe0c0a4f747e6b5f9fa769bd53bf1966df9668c604a17aa2be8d93854d7e3",
+          "result_digest": "sha256:915638c6661386cf50e32834277b89d715f80fdd349f65addd87df0db93a170e",
+          "view_snapshot_digest": "sha256:da76147cf07edb9a0c0fbe3e468f8461a4330ef5697b131f158afaade9055123"
+        }
+      }
+    },
+    {
+      "cell_id": "P01",
+      "score": {
+        "cell_id": "P01",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "P01",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m1.person",
+              "term": {
+                "entity": "person",
+                "id": "alice"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "colleague",
+              "path": "m2.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [
+            {
+              "colleague": "alice"
+            },
+            {
+              "colleague": "bob"
+            },
+            {
+              "colleague": "dan"
+            }
+          ],
+          "row_count": 3,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "row",
+          "content_class": "native_evidence_graph",
+          "selected_row_anchor": "run_v1:9797226764394a7e8f0e277ee09d0f9bc26ffbe116064a03a27f6695737e1a23:03ab31bf70d5937f",
+          "explanation_status": "passed",
+          "has_evidence_graph": true
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:ddc973d832453c0b",
+          "query_digest": "sha256:eb4d5286c35d2e5d",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m1",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_identity_anchor:m1.person",
+              "kind": "bind_identity_anchor"
+            },
+            {
+              "id": "authored:occurrence:m2",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:unify:m1.team==m2.team",
+              "kind": "unify"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:colleague:m2.person",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m1",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m1"
+            },
+            {
+              "id": "lowered:atom:probe__member__m1:bind_identity_anchor:m1.person",
+              "kind": "injected_atom",
+              "compiler_role": "bind_identity_anchor",
+              "generated_for": "authored:bind_identity_anchor:m1.person"
+            },
+            {
+              "id": "lowered:specialized_rule:probe__member__m2",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m2"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m1",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:occurrence_activation:m2",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:join:authored:unify:m1.team==m2.team:m1-m2",
+              "kind": "join_constraint",
+              "compiler_role": "join_materialization",
+              "generated_for": "authored:unify:m1.team==m2.team"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__6f11dcc57896ff63",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m1",
+              "to": "lowered:specialized_rule:probe__member__m1"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_identity_anchor:m1.person",
+              "to": "lowered:atom:probe__member__m1:bind_identity_anchor:m1.person"
+            },
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m2",
+              "to": "lowered:specialized_rule:probe__member__m2"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m1",
+              "to": "lowered:occurrence_activation:m1"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m2",
+              "to": "lowered:occurrence_activation:m2"
+            },
+            {
+              "relation": "materializes_join",
+              "from": "authored:unify:m1.team==m2.team",
+              "to": "lowered:join:authored:unify:m1.team==m2.team:m1-m2"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__6f11dcc57896ff63"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:colleague:m2.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__6f11dcc57896ff63",
+              "head_port": "m2__person"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:unify:m1.team==m2.team",
+              "branch": [
+                "m1",
+                "m2"
+              ],
+              "state": "materialized"
+            },
+            {
+              "constraint": "authored:bind:m1.person",
+              "branch": [
+                "m1",
+                "m2"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m1",
+              "m2"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 7,
+          "lowered_count": 8,
+          "edge_count": 9
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m1__",
+            "m2__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "colleague": "m2__person"
+          }
+        },
+        "row_anchors": [
+          "run_v1:9797226764394a7e8f0e277ee09d0f9bc26ffbe116064a03a27f6695737e1a23:03ab31bf70d5937f",
+          "run_v1:9797226764394a7e8f0e277ee09d0f9bc26ffbe116064a03a27f6695737e1a23:5a0da1387601db0f",
+          "run_v1:9797226764394a7e8f0e277ee09d0f9bc26ffbe116064a03a27f6695737e1a23:97eddf1f94a3bead"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:9797226764394a7e8f0e277ee09d0f9bc26ffbe116064a03a27f6695737e1a23",
+          "result_digest": "sha256:71b64454398cc7e9723abc8c716514f642d0459f636b3617e12454e7e71501aa",
+          "view_snapshot_digest": "sha256:c8457e33b1f90a07bb1e99af0dc1bf603b0298a04f3d05165b248f3cafc6e236"
+        }
+      }
+    },
+    {
+      "cell_id": "SC01-A",
+      "score": {
+        "cell_id": "SC01-A",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "SC01-A",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [],
+          "selections": [
+            {
+              "alias": "ax",
+              "path": "a.x"
+            }
+          ]
+        },
+        "result": {
+          "kind": "rows",
+          "rows": [
+            {
+              "ax": 1
+            }
+          ],
+          "row_count": 1,
+          "completeness": "complete",
+          "truncated": false,
+          "query_summary": null,
+          "failure": null
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "row",
+          "content_class": "native_evidence_graph",
+          "selected_row_anchor": "run_v1:fb239a4583bc4d94be703b3958328342064f13fcb9b64baa92afc792589250bb:ab9346d92399947e",
+          "explanation_status": "passed",
+          "has_evidence_graph": true
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:222e6c4408683f59",
+          "query_digest": "sha256:5d4ab8af4fa993aa",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:a",
+              "kind": "occurrence",
+              "rule_ref": "a"
+            },
+            {
+              "id": "authored:occurrence:b",
+              "kind": "occurrence",
+              "rule_ref": "b"
+            },
+            {
+              "id": "authored:occurrence:c",
+              "kind": "occurrence",
+              "rule_ref": "c"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:unify:a.x==b.x",
+              "kind": "unify"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:ax:a.x",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__a__a",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:a"
+            },
+            {
+              "id": "lowered:specialized_rule:probe__b__b",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:b"
+            },
+            {
+              "id": "lowered:specialized_rule:probe__c__c",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:c"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:branch:c1",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:a__c0",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:occurrence_activation:a__c1",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:occurrence_activation:b",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:occurrence_activation:c",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:join:authored:unify:a.x==b.x:a-b",
+              "kind": "join_constraint",
+              "compiler_role": "join_materialization",
+              "generated_for": "authored:unify:a.x==b.x"
+            },
+            {
+              "id": "lowered:join_na:authored:unify:a.x==b.x:a-c",
+              "kind": "join_not_applicable",
+              "compiler_role": "candidate_semantics_branch_scope",
+              "generated_for": "authored:unify:a.x==b.x"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__aa566bbac86a8c3a",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:a",
+              "to": "lowered:specialized_rule:probe__a__a"
+            },
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:b",
+              "to": "lowered:specialized_rule:probe__b__b"
+            },
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:c",
+              "to": "lowered:specialized_rule:probe__c__c"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c1"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:a",
+              "to": "lowered:occurrence_activation:a__c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:a",
+              "to": "lowered:occurrence_activation:a__c1"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:b",
+              "to": "lowered:occurrence_activation:b"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:c",
+              "to": "lowered:occurrence_activation:c"
+            },
+            {
+              "relation": "materializes_join",
+              "from": "authored:unify:a.x==b.x",
+              "to": "lowered:join:authored:unify:a.x==b.x:a-b"
+            },
+            {
+              "relation": "rejected_as",
+              "from": "authored:unify:a.x==b.x",
+              "to": "lowered:join_na:authored:unify:a.x==b.x:a-c",
+              "reason": "not_applicable_by_candidate_semantics"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__aa566bbac86a8c3a"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:ax:a.x",
+              "to": "lowered:synthetic_head:__factgraph_projection__aa566bbac86a8c3a",
+              "head_port": "a__x"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:unify:a.x==b.x",
+              "branch": [
+                "a",
+                "b"
+              ],
+              "state": "materialized"
+            },
+            {
+              "constraint": "authored:unify:a.x==b.x",
+              "branch": [
+                "a",
+                "c"
+              ],
+              "state": "not_applicable_by_candidate_semantics"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0",
+              "c1"
+            ],
+            "occurrence_aliases": [
+              "a__c0",
+              "a__c1",
+              "b",
+              "c"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 7,
+          "lowered_count": 12,
+          "edge_count": 13
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "a__",
+            "b__",
+            "c__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "ax": "a__x"
+          }
+        },
+        "row_anchors": [
+          "run_v1:fb239a4583bc4d94be703b3958328342064f13fcb9b64baa92afc792589250bb:ab9346d92399947e"
+        ],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 2,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": {
+          "run_id": "run_v1:fb239a4583bc4d94be703b3958328342064f13fcb9b64baa92afc792589250bb",
+          "result_digest": "sha256:cd07d2d973d16a23ce01de0e44e41d1540761d1f320aa8181483b407adc08b5f",
+          "view_snapshot_digest": "sha256:a062817042913da964d471fdc8356a70d5173256f1157153b721c3faa2231e82"
+        }
+      }
+    },
+    {
+      "cell_id": "X01",
+      "score": {
+        "cell_id": "X01",
+        "pass": true,
+        "failures": []
+      },
+      "actual_artifact": {
+        "cell_id": "X01",
+        "ingress": {
+          "status": "accepted",
+          "attempted_authority_fields": []
+        },
+        "resolution": {
+          "status": "resolved",
+          "diagnostics": []
+        },
+        "binding_path": {
+          "bindings": [
+            {
+              "path": "m.team",
+              "term": {
+                "entity": "team_name",
+                "id": "red"
+              }
+            }
+          ],
+          "selections": [
+            {
+              "alias": "person",
+              "path": "m.person"
+            }
+          ]
+        },
+        "result": {
+          "kind": "typed_failure",
+          "rows": null,
+          "row_count": null,
+          "completeness": null,
+          "truncated": null,
+          "query_summary": null,
+          "failure": {
+            "code": "EXECUTION_ENGINE_FAULT",
+            "stage": "native_evaluation"
+          }
+        },
+        "expectation": null,
+        "explain": {
+          "anchor": "none",
+          "content_class": "none"
+        },
+        "engine_invocations": 1,
+        "model_invocations": 0,
+        "lineage": {
+          "record_type": "CompilationLineageV0",
+          "policy_digest": "sha256:f5255b396f21e653",
+          "query_digest": "sha256:f8cd1432692a97a9",
+          "compiler_build": "probe-compiler-v0",
+          "authored_nodes": [
+            {
+              "id": "authored:occurrence:m",
+              "kind": "occurrence",
+              "rule_ref": "member"
+            },
+            {
+              "id": "authored:bind_value_eq:m.team",
+              "kind": "bind_value_eq"
+            },
+            {
+              "id": "authored:policy_root",
+              "kind": "policy_root"
+            },
+            {
+              "id": "authored:selections",
+              "kind": "selection_set"
+            },
+            {
+              "id": "authored:select:person:m.person",
+              "kind": "select"
+            }
+          ],
+          "lowered_nodes": [
+            {
+              "id": "lowered:specialized_rule:probe__member__m",
+              "kind": "specialized_rule",
+              "compiler_role": "occurrence_specialization",
+              "generated_for": "authored:occurrence:m"
+            },
+            {
+              "id": "lowered:atom:probe__member__m:bind_value_eq:m.team",
+              "kind": "injected_atom",
+              "compiler_role": "bind_value_eq",
+              "generated_for": "authored:bind_value_eq:m.team"
+            },
+            {
+              "id": "lowered:branch:c0",
+              "kind": "dnf_branch",
+              "compiler_role": "dnf_copy",
+              "generated_for": "authored:policy_root"
+            },
+            {
+              "id": "lowered:occurrence_activation:m",
+              "kind": "occurrence_activation",
+              "compiler_role": "branch_activation",
+              "generated_for": "shipped_lowering"
+            },
+            {
+              "id": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "kind": "synthetic_head",
+              "compiler_role": "projection_only",
+              "generated_for": "authored:selections"
+            }
+          ],
+          "lineage_edges": [
+            {
+              "relation": "lowers_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:specialized_rule:probe__member__m"
+            },
+            {
+              "relation": "binds",
+              "from": "authored:bind_value_eq:m.team",
+              "to": "lowered:atom:probe__member__m:bind_value_eq:m.team"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:policy_root",
+              "to": "lowered:branch:c0"
+            },
+            {
+              "relation": "copies_to",
+              "from": "authored:occurrence:m",
+              "to": "lowered:occurrence_activation:m"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:selections",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f"
+            },
+            {
+              "relation": "projects_to",
+              "from": "authored:select:person:m.person",
+              "to": "lowered:synthetic_head:__factgraph_projection__95ba76a770df8c0f",
+              "head_port": "m__person"
+            }
+          ],
+          "branch_coverage": [
+            {
+              "constraint": "authored:bind:m.team",
+              "branch": [
+                "m"
+              ],
+              "state": "materialized"
+            }
+          ],
+          "diagnostics": [],
+          "shipped_plan": {
+            "branch_ids": [
+              "c0"
+            ],
+            "occurrence_aliases": [
+              "m"
+            ],
+            "head_binding_kind": "projection"
+          }
+        },
+        "totality": {
+          "ok": true,
+          "failures": [],
+          "authored_count": 5,
+          "lowered_count": 5,
+          "edge_count": 6
+        },
+        "compile_meta": {
+          "specialized_aliases": [
+            "m__"
+          ],
+          "navigations": [],
+          "navigation_pre_lowering_validated": true,
+          "navigation_selection_reused": false,
+          "select_map": {
+            "person": "m__person"
+          }
+        },
+        "row_anchors": [],
+        "publish_check": {
+          "owner": "ProbeProfileCapabilityValidatorV0",
+          "stage": "profile_publish_freeze",
+          "branch_count": 1,
+          "limit": 32,
+          "state": "within_limit"
+        },
+        "world_built": true,
+        "catalog_invocations": 0,
+        "shipped_fingerprint": null
+      }
+    }
+  ]
+}

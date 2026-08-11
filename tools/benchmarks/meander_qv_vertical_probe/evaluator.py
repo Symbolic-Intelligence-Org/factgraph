@@ -173,7 +173,9 @@ def run_cell(fixture: dict, resolution: dict, compile_result: dict) -> dict:
             result = exists_summary_result(status, observed, completeness)
         else:
             summary = None
-            if not rows_sorted:
+            # zero-row query_summary belongs to task_kind=query only; a validation
+            # cell's verdict semantics live exclusively in its ExpectationResult.
+            if not rows_sorted and task_kind == "query":
                 if completeness == "complete":
                     summary = {"status": False}
                 else:
