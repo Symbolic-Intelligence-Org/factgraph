@@ -1,0 +1,40 @@
+{
+  "cell_id": "NAV01",
+  "ingress": { "status": "accepted", "attempted_authority_fields": [] },
+  "resolution": { "status": "resolved", "diagnostics": [] },
+  "binding_path": {
+    "bindings": [ { "path": "m.team", "term": { "entity": "team_name", "id": "red" } } ],
+    "selections": [
+      { "alias": "person", "path": "m.person" },
+      { "alias": "age", "path": "m.person.age" }
+    ]
+  },
+  "lineage": {
+    "assertions": [
+      "every_authored_node_mapped",
+      "every_lowered_node_attributed",
+      "synthetic_head_projection_only",
+      "bind_edge_present_for_m_team",
+      "projects_to_edge_present_for_person_selection",
+      "projects_to_edge_present_for_age_selection",
+      "injects_lookup_edge_present",
+      "field_navigation_resolution_recorded",
+      "grant_checked_before_lowering",
+      "selection_reuses_policy_materialized_field_variable",
+      "no_generated_alias_in_public_paths"
+    ]
+  },
+  "result": {
+    "kind": "rows",
+    "rows": [ { "age": 30, "person": "alice" }, { "age": 40, "person": "dan" } ],
+    "row_count": 2,
+    "completeness": "complete",
+    "truncated": false,
+    "query_summary": null,
+    "failure": null
+  },
+  "expectation": null,
+  "explain_target": { "anchor": "row", "content_class": "native_evidence_graph" },
+  "agent_interpretation": { "applicable": false },
+  "forbidden_interpretation_oracle": null
+}

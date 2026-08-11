@@ -1,0 +1,39 @@
+{
+  "cell_id": "Q04",
+  "ingress": { "status": "accepted", "attempted_authority_fields": [] },
+  "resolution": { "status": "resolved", "diagnostics": [] },
+  "binding_path": {
+    "bindings": [ { "path": "m.team", "term": { "entity": "team_name", "id": "green" } } ],
+    "selections": [ { "alias": "person", "path": "m.person" } ]
+  },
+  "lineage": {
+    "assertions": [
+      "every_authored_node_mapped",
+      "every_lowered_node_attributed",
+      "synthetic_head_projection_only",
+      "bind_edge_present_for_m_team",
+      "projects_to_edge_present_for_person_selection",
+      "no_generated_alias_in_public_paths"
+    ]
+  },
+  "result": {
+    "kind": "rows",
+    "rows": [],
+    "row_count": 0,
+    "completeness": "complete",
+    "truncated": false,
+    "query_summary": { "status": false },
+    "failure": null
+  },
+  "expectation": null,
+  "explain_target": { "anchor": "query_summary", "content_class": "structured_diagnostic" },
+  "agent_interpretation": {
+    "applicable": true,
+    "success_shape": "如实报告空结果/无匹配",
+    "forbidden": [ "deny", "error", "policy violated", "unsupported" ]
+  },
+  "forbidden_interpretation_oracle": {
+    "name": "empty_not_deny",
+    "rejects": [ "request denied", "policy violation detected", "error: no access", "evaluation failed" ]
+  }
+}

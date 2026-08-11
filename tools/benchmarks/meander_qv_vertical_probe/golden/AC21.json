@@ -1,0 +1,30 @@
+{
+  "cell_id": "AC21",
+  "ingress": { "status": "not_reached", "attempted_authority_fields": [] },
+  "resolution": { "status": "not_reached", "diagnostics": [] },
+  "binding_path": { "bindings": [], "selections": [] },
+  "lineage": {
+    "assertions": [
+      "diagnostic_SYNTHETIC_QUERY_NAMESPACE_COLLISION",
+      "authored_namespace_preserved_no_capture",
+      "engine_invocations_zero"
+    ]
+  },
+  "result": {
+    "kind": "static_validation",
+    "rows": null,
+    "row_count": null,
+    "completeness": null,
+    "truncated": null,
+    "query_summary": null,
+    "failure": {
+      "code": "SYNTHETIC_QUERY_NAMESPACE_COLLISION",
+      "owner": "ProbeManagedCatalogValidatorV0",
+      "stage": "catalog_validation_pre_lowering"
+    }
+  },
+  "expectation": null,
+  "explain_target": { "anchor": "none", "content_class": "structured_diagnostic" },
+  "agent_interpretation": { "applicable": false },
+  "forbidden_interpretation_oracle": null
+}

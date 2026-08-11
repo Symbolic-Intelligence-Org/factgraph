@@ -1,0 +1,151 @@
+{
+  "record_type": "BudgetLedgerV0",
+  "caps_ref": "blueprint §6.1 confirmed by CAP-FINAL-01 @ 9eb8b95d",
+  "execution_authorized": "2026-08-11 (user message; scoped @ 6ce7e2a5)",
+  "execution_start_utc": "2026-08-11T19:24:13Z",
+  "elapsed_window_cap": "3 working days from execution authorization",
+  "notes": "operator time = agent wall-clock on envelope work, conservatively charged against per-step person-hour caps; user interaction time recorded separately; local compute measured as CPU-core-hours of harness/test commands",
+  "steps": {
+    "step2_fixtures_oracle": {
+      "cap_minutes": 300,
+      "used_minutes": 52,
+      "entries": [
+        {
+          "what": "schema freeze + 2 exemplar cells",
+          "minutes": 10
+        },
+        {
+          "what": "18 cells authored (3 parallel agents, wall ~7min)",
+          "minutes": 8
+        },
+        {
+          "what": "mechanical validation + tension adjudication (8 rulings)",
+          "minutes": 12
+        },
+        {
+          "what": "manifests + rubric + SDK notes",
+          "minutes": 10
+        },
+        {
+          "what": "independent oracle review (agent wall ~9min) + MINOR-1/2/3/5 fixes + manifest regen",
+          "minutes": 12
+        }
+      ]
+    },
+    "step3_deterministic": {
+      "cap_minutes": 600,
+      "used_minutes": 0,
+      "entries": []
+    },
+    "step4_model": {
+      "cap_minutes": 180,
+      "used_minutes": 0,
+      "entries": [],
+      "state": "NOT_AUTHORIZED"
+    },
+    "step5_replay_compat": {
+      "cap_minutes": 240,
+      "used_minutes": 0,
+      "entries": []
+    },
+    "non_repair_reserve": {
+      "cap_minutes": 120,
+      "used_minutes": 0,
+      "entries": []
+    }
+  },
+  "counters": {
+    "primary_harness_invocations": {
+      "cap": 20,
+      "used": 0,
+      "per_cell_max": 1,
+      "cells_run": []
+    },
+    "declared_nonprimary_engine_smokes": {
+      "cap_policy": "openly declared, ledgered, synthetic non-cell input only",
+      "used": 0,
+      "entries": []
+    },
+    "replay_local_attempts": {
+      "cap": 14,
+      "operation_ids_cap": 13,
+      "used": 0,
+      "verbs_allowed": [
+        "EVALUATE",
+        "EXPLAIN",
+        "REOPEN"
+      ],
+      "entries": []
+    },
+    "model_primary_turns": {
+      "cap": 22,
+      "used": 0
+    },
+    "model_transient_retries": {
+      "cap": 2,
+      "used": 0
+    },
+    "model_loop_local_tool_executions": {
+      "cap": 10,
+      "used": 0
+    },
+    "provider_calls": {
+      "used": 0
+    },
+    "external_tokens_input": {
+      "cap": 150000,
+      "used": 0
+    },
+    "external_tokens_output": {
+      "cap": 30000,
+      "used": 0
+    },
+    "external_cost_eur": {
+      "cap": 25,
+      "used": 0
+    },
+    "outbound_payload_bytes": {
+      "cap": 1048576,
+      "used": 0
+    },
+    "semantic_schema_repairs": {
+      "cap": 0,
+      "used": 0
+    },
+    "post_oracle_semantic_contract_adjustments": {
+      "cap": 0,
+      "used": 0
+    },
+    "local_compute_cpu_core_hours": {
+      "cap": 8,
+      "used_estimate": 0.01
+    },
+    "durable_artifact_bytes": {
+      "cap": 536870912,
+      "used_estimate": 0
+    },
+    "non_model_paid_infrastructure_eur": {
+      "cap": 0,
+      "used": 0
+    }
+  },
+  "phase_log": [
+    {
+      "utc": "2026-08-11T19:24:13Z",
+      "event": "execution entry checks",
+      "detail": "four-repo DIRTY-BASELINE-01 exact; protected-surface zero drift vs 3ad19859; COMPAT-CMD-01 rerun 70 passed exit 0 (~0.5s wall); MEANDER-STATE-DIGEST-01 quiescent double baseline 24 files roll-up b6ba7d6f...",
+      "operator_minutes": 4
+    },
+    {
+      "utc": "2026-08-11T19:30:00Z",
+      "event": "commit 126f505d skeleton+HandoffRecordV0",
+      "operator_minutes": 6,
+      "charged_to": "step2_fixtures_oracle"
+    },
+    {
+      "utc": "2026-08-11T20:15:00Z",
+      "event": "Step 2 freeze: 20 fixture/golden pairs + manifests; oracle review CLEAR 0 BLOCKER/5 MINOR (all resolved or recorded)",
+      "charged_to": "step2_fixtures_oracle"
+    }
+  ]
+}

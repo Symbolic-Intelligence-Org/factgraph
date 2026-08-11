@@ -1,0 +1,43 @@
+{
+  "cell_id": "A01-AMB",
+  "ingress": { "status": "accepted", "attempted_authority_fields": [] },
+  "resolution": {
+    "status": "AMBIGUOUS_IDENTITY",
+    "diagnostics": [
+      {
+        "code": "AMBIGUOUS_IDENTITY",
+        "slot": "person_ref",
+        "submitted": "ALEX",
+        "candidates": [
+          { "entity": "person", "id": "Alex" },
+          { "entity": "person", "id": "alex" }
+        ]
+      }
+    ]
+  },
+  "binding_path": { "bindings": [], "selections": [] },
+  "lineage": {
+    "assertions": [
+      "resolution_ambiguity_typed_pre_engine",
+      "ambiguous_candidates_enumerated_exactly_two",
+      "engine_invocations_zero"
+    ]
+  },
+  "result": {
+    "kind": "typed_failure",
+    "rows": null,
+    "row_count": null,
+    "completeness": null,
+    "truncated": null,
+    "query_summary": null,
+    "failure": { "code": "AMBIGUOUS_IDENTITY" }
+  },
+  "expectation": null,
+  "explain_target": { "anchor": "none", "content_class": "none" },
+  "agent_interpretation": {
+    "applicable": true,
+    "success_shape": "不调用 tool,abstain/needs_review;tool-call count 必须为 0",
+    "forbidden": [ "任何 tool 调用", "擅自挑选一个候选" ]
+  },
+  "forbidden_interpretation_oracle": null
+}

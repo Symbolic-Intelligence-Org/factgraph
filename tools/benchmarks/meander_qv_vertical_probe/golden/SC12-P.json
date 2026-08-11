@@ -1,0 +1,30 @@
+{
+  "cell_id": "SC12-P",
+  "ingress": { "status": "not_reached", "attempted_authority_fields": [] },
+  "resolution": { "status": "not_reached", "diagnostics": [] },
+  "binding_path": { "bindings": [], "selections": [] },
+  "lineage": {
+    "assertions": [
+      "publish_capability_rejected",
+      "diagnostic_DNF_BRANCH_LIMIT_EXCEEDED",
+      "engine_invocations_zero"
+    ]
+  },
+  "result": {
+    "kind": "static_validation",
+    "rows": null,
+    "row_count": null,
+    "completeness": null,
+    "truncated": null,
+    "query_summary": null,
+    "failure": {
+      "code": "DNF_BRANCH_LIMIT_EXCEEDED",
+      "owner": "ProbeProfileCapabilityValidatorV0",
+      "stage": "profile_publish_freeze"
+    }
+  },
+  "expectation": null,
+  "explain_target": { "anchor": "none", "content_class": "structured_diagnostic" },
+  "agent_interpretation": { "applicable": false },
+  "forbidden_interpretation_oracle": null
+}

@@ -1,0 +1,39 @@
+{
+  "cell_id": "A01-AMB",
+  "model_scored": true,
+  "engine_invocations_pinned": 0,
+  "candidate_semantics": null,
+  "fixture_cutoff": null,
+  "engine_fault_injection": false,
+  "profile": {
+    "profile_ref": "qp.a01_amb.v0",
+    "task_kind": "query",
+    "policy": {
+      "policy_ref": "probe.team_membership@0",
+      "ast": { "all": [ { "occurrence": { "rule_ref": "member", "alias": "m" } } ] }
+    },
+    "slot_descriptors": [ { "slot": "person_ref", "type": "entity_ref", "entity_type": "person" } ],
+    "bind_templates": [ { "path": "m.person", "slot": "person_ref" } ],
+    "query_mode": "rows",
+    "select_templates": [ { "alias": "team", "path": "m.team" } ],
+    "expectation_template": null,
+    "field_path_grants": [],
+    "resolver_identity_matching": "case_insensitive_lookup_case_sensitive_identity"
+  },
+  "world": {
+    "entity_types": [
+      { "name": "person", "identity": "name", "fields": [] },
+      { "name": "team_name", "identity": "value", "fields": [] }
+    ],
+    "facts": [
+      [ "member", "alice", "red" ],
+      [ "member", "bob", "red" ],
+      [ "member", "carol", "blue" ],
+      [ "member", "dan", "red" ],
+      [ "member", "Alex", "red" ],
+      [ "member", "alex", "blue" ]
+    ],
+    "rules": [ { "rule_id": "member", "ports": [ "person", "team" ], "from_facts": "member" } ]
+  },
+  "invocation": { "slots": { "person_ref": "ALEX" }, "extra_fields": {} }
+}

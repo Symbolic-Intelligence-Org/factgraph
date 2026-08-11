@@ -1,0 +1,216 @@
+{
+  "manifest_type": "fixtures_manifest_v0",
+  "contract": "vertical_probe.p0a0.v0",
+  "cell_count": 20,
+  "model_scored_subset": [
+    "A01-AMB",
+    "A01-AUTH",
+    "E03",
+    "Q02",
+    "Q04",
+    "X01"
+  ],
+  "cells": {
+    "Q01": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.q01.v0",
+      "profile_digest": "sha256:54010cd8b74b1167",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:7bf795d06117542d"
+    },
+    "Q02": {
+      "model_scored": true,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.q02.v0",
+      "profile_digest": "sha256:1315a3c37aa27b8c",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:d26654ec00ea1f4d"
+    },
+    "Q03": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.q03.v0",
+      "profile_digest": "sha256:197db7202f45dae5",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:dc28b34f51d34609"
+    },
+    "Q04": {
+      "model_scored": true,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.q04.v0",
+      "profile_digest": "sha256:0aa9e8ad30991fe8",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:0840e49987206a8f"
+    },
+    "Q05": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.q05.v0",
+      "profile_digest": "sha256:6cc903658890a5dd",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:e765754d3c1c5e35"
+    },
+    "E01": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "validation",
+      "profile_ref": "vp.e01.v0",
+      "profile_digest": "sha256:8acada46dbf915e5",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:5de24f5770363f66"
+    },
+    "E02": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "validation",
+      "profile_ref": "vp.e02.v0",
+      "profile_digest": "sha256:89cf765db3ac0ea7",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:7863c8df2dab899a"
+    },
+    "E03": {
+      "model_scored": true,
+      "engine_invocations_pinned": 1,
+      "task_kind": "validation",
+      "profile_ref": "vp.e03.v0",
+      "profile_digest": "sha256:36588726c42d1a7b",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:611a3d5ccc416c63"
+    },
+    "E04": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "validation",
+      "profile_ref": "vp.e04.v0",
+      "profile_digest": "sha256:6f305bf0b1d272e6",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:f956a07e949377b5"
+    },
+    "P01": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.p01.v0",
+      "profile_digest": "sha256:d8861901bf0a6a2f",
+      "policy_digest": "sha256:c21256018f4bbd96",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:34750cf4bcfe2ed5"
+    },
+    "SC01-A": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.sc01a.v0",
+      "profile_digest": "sha256:57478b6b09f77ac1",
+      "policy_digest": "sha256:ad00017b121c608c",
+      "world_digest": "sha256:92034bb0097522a1",
+      "fixture_digest": "sha256:c2906c999316e6cc"
+    },
+    "SC01-B": {
+      "model_scored": false,
+      "engine_invocations_pinned": 0,
+      "task_kind": "query",
+      "profile_ref": "qp.sc01b.v0",
+      "profile_digest": "sha256:00ba4c5aff86d08b",
+      "policy_digest": "sha256:ad00017b121c608c",
+      "world_digest": "sha256:92034bb0097522a1",
+      "fixture_digest": "sha256:22e709ced6f54879"
+    },
+    "NAV01": {
+      "model_scored": false,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.nav01.v0",
+      "profile_digest": "sha256:af1bf816801a288e",
+      "policy_digest": "sha256:33786eb24db92b27",
+      "world_digest": "sha256:4ab89ae0f2f0cbe5",
+      "fixture_digest": "sha256:44ba19e17369ddd1"
+    },
+    "NAV02": {
+      "model_scored": false,
+      "engine_invocations_pinned": 0,
+      "task_kind": "query",
+      "profile_ref": "qp.nav02.v0",
+      "profile_digest": "sha256:2da41ee274d883f0",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:d9ca71e53d5219ed",
+      "fixture_digest": "sha256:28d57faf2942bed8"
+    },
+    "A01-AMB": {
+      "model_scored": true,
+      "engine_invocations_pinned": 0,
+      "task_kind": "query",
+      "profile_ref": "qp.a01_amb.v0",
+      "profile_digest": "sha256:82cbf924cc596a7f",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:a71be19d219a0316",
+      "fixture_digest": "sha256:d282d363fb6d64ad"
+    },
+    "A01-AUTH": {
+      "model_scored": true,
+      "engine_invocations_pinned": 0,
+      "task_kind": "query",
+      "profile_ref": "qp.a01_auth.v0",
+      "profile_digest": "sha256:8748cd8567ca0a81",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:5ed3007924ba850e"
+    },
+    "X01": {
+      "model_scored": true,
+      "engine_invocations_pinned": 1,
+      "task_kind": "query",
+      "profile_ref": "qp.x01.v0",
+      "profile_digest": "sha256:2202a4449bf560ed",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:9344538469c2f3bc",
+      "fixture_digest": "sha256:1fa059e624a5064b"
+    },
+    "SC12-32": {
+      "model_scored": false,
+      "engine_invocations_pinned": 0,
+      "task_kind": "query",
+      "profile_ref": "qp.sc12_32.v0",
+      "profile_digest": "sha256:1b9ca8411eb251d9",
+      "policy_digest": "sha256:5e34aa0c0c238e21",
+      "world_digest": "sha256:bb709476ebed3d2f",
+      "fixture_digest": "sha256:33e555c2cbf9ca6c"
+    },
+    "SC12-P": {
+      "model_scored": false,
+      "engine_invocations_pinned": 0,
+      "task_kind": "query",
+      "profile_ref": "qp.sc12_p.v0",
+      "profile_digest": "sha256:52371f784142c101",
+      "policy_digest": "sha256:6c4e0bb614c91ed3",
+      "world_digest": "sha256:09388723bd885223",
+      "fixture_digest": "sha256:245d32b808396bfd"
+    },
+    "AC21": {
+      "model_scored": false,
+      "engine_invocations_pinned": 0,
+      "task_kind": "query",
+      "profile_ref": "qp.ac21.v0",
+      "profile_digest": "sha256:308dc1ff10d55756",
+      "policy_digest": "sha256:e3b9f0a871b8c11a",
+      "world_digest": "sha256:6785332bd30bb1e0",
+      "fixture_digest": "sha256:59c0df49655fd406"
+    }
+  },
+  "assertion_total": 126
+}

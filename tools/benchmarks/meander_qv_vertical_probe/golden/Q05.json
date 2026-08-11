@@ -1,0 +1,35 @@
+{
+  "cell_id": "Q05",
+  "ingress": { "status": "accepted", "attempted_authority_fields": [] },
+  "resolution": { "status": "resolved", "diagnostics": [] },
+  "binding_path": {
+    "bindings": [ { "path": "m.team", "term": { "entity": "team_name", "id": "red" } } ],
+    "selections": [ { "alias": "person", "path": "m.person" } ]
+  },
+  "lineage": {
+    "assertions": [
+      "every_authored_node_mapped",
+      "every_lowered_node_attributed",
+      "synthetic_head_projection_only",
+      "bind_edge_present_for_m_team",
+      "projects_to_edge_present_for_person_selection",
+      "no_generated_alias_in_public_paths"
+    ]
+  },
+  "result": {
+    "kind": "rows",
+    "rows": [],
+    "row_count": 0,
+    "completeness": "incomplete",
+    "truncated": true,
+    "query_summary": { "status": "underdetermined" },
+    "failure": null
+  },
+  "expectation": null,
+  "explain_target": { "anchor": "query_summary", "content_class": "structured_diagnostic" },
+  "agent_interpretation": { "applicable": false },
+  "forbidden_interpretation_oracle": {
+    "name": "incomplete_not_false",
+    "rejects": [ "exists=false", "team red has no members", "not found" ]
+  }
+}
