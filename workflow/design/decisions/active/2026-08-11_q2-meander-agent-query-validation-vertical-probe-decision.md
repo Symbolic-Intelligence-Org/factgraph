@@ -1,6 +1,6 @@
 # Q2 Decision: 一次性 Agent→Meander→FactGraph Query/Validation 共享纵切架构验证例外
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-08-11
 - Last Updated: 2026-08-11
 - Authority: design constraint; if adopted, locks one separately named, budget-capped, disposable `P0/A0` Agent→Meander→FactGraph Query/Validation shared-seam vertical-probe envelope, its provisional contract ownership, evidence boundaries, and stop semantics before any consuming blueprint; it adopts no production API, ADR, implementation, or product direction.
@@ -24,7 +24,7 @@
 - Branch: `v0.3.0-q2-meander-agent-query-validation-vertical-probe-decision-2026-08-11`
 - Depends on: adopted Q1 only as a non-reuse, evidence, and P-GATE-revisit constraint; Q1 is not this probe's authorization source
 
-> ADR 4-state lifecycle: `proposed` → `adopted` (current binding constraint, stays in `active/`) → `superseded` or `withdrawn` (moves to `archive/`). This file is only `proposed`. Drafting it does not authorize adoption, blueprint drafting, review, preflight, source changes, model calls, credential use, or execution.
+> ADR 4-state lifecycle: `proposed` → `adopted` (current binding constraint, stays in `active/`) → `superseded` or `withdrawn` (moves to `archive/`). This file is adopted and closes only Q2. Adoption does not authorize blueprint drafting, review, preflight, source changes, model calls, credential use, data egress, or execution.
 
 ## 1. Inputs
 
@@ -592,5 +592,16 @@ The decision is honored only if all applicable checks hold:
 |---|---|---|---|
 | 2026-08-11 | proposed | Decision drafted | Drafting authorized by the user's request to absorb six corrections into the five-step vertical-probe decision. Three pre-draft read-only checks covered source mapping, workflow authority, and red-team boundary attacks. No adoption, blueprint, experiment, model call, or source implementation is authorized. |
 | 2026-08-11 | proposed | Independent draft review hardened the contract | Governance review found no authority blocker and added the independent-preflight/standalone-synthesis clarification. Red-team review's disposition-closure, P0/A0 operand ownership, Query/Validation scope, dual-model precedence, and replay/Step-3 findings were applied; follow-up found no blocker and its two remaining majors were applied. A separate final citation audit returned `CLEAR`. Status remains `proposed`. |
+| 2026-08-11 | adopted | Decision adopted by user | Adopted without revision to the substantive decision contract. `OBL-Q2-BP-01..03` below become mandatory obligations for any separately authorized consuming blueprint. No blueprint, source change, model call, credential/data-egress use, or execution is authorized by adoption. |
 
 Status transitions are appended as new rows when they happen.
+
+### 9.1 Adoption-turn blueprint obligations
+
+These obligations are non-blocking for adoption but mandatory in the gate checklist of any future consuming blueprint. Their durable proximate source is the user's 2026-08-11 adoption turn. The blueprint must map each ID to a concrete fixture/protocol/gate and its paired audit must verify the mapping.
+
+| ID | Mandatory blueprint-stage obligation | Closure evidence |
+|---|---|---|
+| `OBL-Q2-BP-01` | Add two low-cost fixtures: **SC-12**, distinguishing whether DNF branch-limit overflow is a publication-time capability rejection or a request-time execution failure; and **AC-21**, exercising collision between the synthetic `__query__` head namespace and an authored predicate. | Named paired fixtures, expected failure owner/stage, diagnostics, and no silent fallback or namespace capture. |
+| `OBL-Q2-BP-02` | Blind every human-scored judgment whose rubric includes semantic-intent match or final-answer faithfulness. The grader must not know the model identity or run identity while scoring; mechanical schema/canonical-equivalence checks remain mechanical. | Pre-registered blinding method plus retained per-case judgment and adjudication records. |
+| `OBL-Q2-BP-03` | Prevent parked-envelope proliferation: while CB0 and this Q2 probe are both non-terminal, no third discovery-envelope proposal is admissible. At least one must first reach a terminal state through completed execution or formal withdrawal. | Blueprint entry gate records current CB0/Q2 state and rejects progression if both remain non-terminal. |
