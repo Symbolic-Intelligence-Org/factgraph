@@ -1,0 +1,61 @@
+{
+  "record_type": "HandoffRecordV0",
+  "created": "2026-08-11T19:24:13Z",
+  "recipient": "user-designated executor agent (Claude, this session; execution authorized by user message of 2026-08-11)",
+  "scoped_blueprint_commit": "6ce7e2a59ebac1aa2e16c83651a0af6f290bcc96",
+  "scoped_blueprint_path": "workflow/blueprints/active/2026-08-11_meander-agent-query-validation-vertical-probe.md",
+  "paired_audit_path": "workflow/blueprints/active/2026-08-11_meander-agent-query-validation-vertical-probe.audit.md",
+  "preflight_commit": "8a6a0577ebfc9aa0167badece0735e74b17bff97",
+  "preflight_artifact": "workflow/audit/active/2026-08-11_meander-agent-query-validation-vertical-probe-preflight.md (on preflight branch)",
+  "cap_final_baseline_commit": "9eb8b95dd580e7faaa75788c745f5ef2398c88a2",
+  "implementation_branch": "v0.3.0-impl-meander-agent-query-validation-vertical-probe-2026-08-11",
+  "repo_pins": {
+    "hnsm_backend_scoped_root": "/Users/zhenzhili/hnsm-backend @ 6ce7e2a59ebac1aa2e16c83651a0af6f290bcc96",
+    "hnsm_backend_shipped_source_evidence": "32093c98d39f21a61418314a5f7a685acc256d4a",
+    "meander_readonly_root": "/Users/zhenzhili/meander-latest-stack/meander @ 4ddb8e36f0b7a80e99a7447c719c21b4776d6ca7",
+    "meander_agent_readonly": "/Users/zhenzhili/meander-latest-stack/meander-agent @ e4b044911de5495ffa93edeba933985588b51cfa",
+    "factgraph_new_readonly": "/Users/zhenzhili/meander-latest-stack/factgraph-new @ b92d6bf5405be8d15eedea5b97aa7408914e76b9"
+  },
+  "dirty_baseline": {
+    "recipe": "DIRTY-BASELINE-01: raw stdout bytes of `git status --porcelain -uall` (trailing newline preserved), line count + SHA-256",
+    "hnsm_execution_start": { "lines": 112, "sha256": "c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326" },
+    "adjacent_repos": "all clean (0 lines, empty-manifest sha e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)"
+  },
+  "runtime_contracts": [
+    "DIRTY-BASELINE-01 (blueprint §4.2)",
+    "CACHED-DIFF-ISOLATION-01 (blueprint §4.2)",
+    "MEANDER-STATE-DIGEST-01 (blueprint §6.3; execution-start quiescent double baseline: 24 files, roll-up b6ba7d6f0755a95aa2215cd8b62eb56caab84492697b9f42b30d9c83054a9a9c)",
+    "COMPAT-CMD-01 (blueprint §6.3; protected surface zero drift vs 3ad19859 verified; rerun 70 passed exit 0 at execution start 2026-08-11)"
+  ],
+  "path_allowlist": [
+    "tools/benchmarks/meander_qv_vertical_probe/**",
+    "tools/benchmarks/README.md (single isolated index entry only)",
+    "workflow/blueprints/active/2026-08-11_meander-agent-query-validation-vertical-probe.md",
+    "workflow/blueprints/active/2026-08-11_meander-agent-query-validation-vertical-probe.audit.md",
+    "workflow/working/meander-agent-query-validation-vertical-probe/** (gitignored scratch)"
+  ],
+  "caps_ref": "blueprint §6.1 as confirmed by CAP-FINAL-01 against 9eb8b95d: 3 working days; 24 person-hours (Step2=5h Step3=10h Step4=3h Step5=4h reserve=2h); exactly 20 deterministic cells / 20 primary invocations (each cell <=1, engine call oracle-pinned 0 or 1); exactly 6 model-scored cells; <=10 model-loop local tool executions; exactly 13 replay operation IDs / <=14 local EVALUATE|EXPLAIN|REOPEN attempts; 8 CPU-core-hours; 512 MiB durable artifacts; EUR 0 non-model infra; exactly 2 model configurations; <=22+2 model turns; 0 semantic/schema repair; <=150k input + 30k output external tokens; <=EUR 25 model cost; <=1 MiB outbound payload; 0 post-oracle semantic contract adjustment",
+  "fixture_plan_contract": {
+    "deterministic_cells": ["Q01","Q02","Q03","Q04","Q05","E01","E02","E03","E04","P01","SC01-A","SC01-B","NAV01","NAV02","A01-AMB","A01-AUTH","X01","SC12-32","SC12-P","AC21"],
+    "model_scored_subset": ["Q02","Q04","E03","A01-AMB","A01-AUTH","X01"],
+    "oracle_schema": "eight expected artifacts per cell (ingress, resolution, binding/path, lineage, rows/completeness/error, expectation, Explain target, Agent interpretation) per blueprint §5.6",
+    "rubric_version": "blind-human rubric v0 per blueprint §5.12 (12 slots = 2 models x 6 cells)",
+    "step2_artifact_freeze_gate": "fixtures/goldens/manifests frozen (hashed) after independent oracle review and before Step 3 primary invocations"
+  },
+  "replay_operation_ids": ["RP-R0-Q02","RP-R0-Q04","RP-R0-E03","RP-R1-REOPEN","RP-R2-REEXECUTE","RP-NEG-PARTIAL","RP-NEG-UNAVAILABLE","RP-NEG-EXPIRED","RP-NEG-INTEGRITY","RP-MUT-FACT","RP-MUT-POLICY","RP-MUT-CONFIG","RP-MUT-SOURCE"],
+  "provider_profiles_pre_scoped": [
+    { "profile_id": "openai-gpt-responses-v1", "provider_organization": "OpenAI", "base_model_family": "GPT", "wire_dialect": "Responses tool-call JSON", "adapter_strategy": "experiment-owned raw HTTP projection", "model_id_state": "pending_until_first_scored_call_freeze", "remote_api_acceptance": "NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION" },
+    { "profile_id": "anthropic-claude-messages-v1", "provider_organization": "Anthropic", "base_model_family": "Claude", "wire_dialect": "Messages tool_use/tool_result JSON", "adapter_strategy": "experiment-owned raw HTTP projection", "model_id_state": "pending_until_first_scored_call_freeze", "remote_api_acceptance": "NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION" }
+  ],
+  "blind_adjudicator_ref": null,
+  "accept_no_adjudicator_unresolved": true,
+  "open_gates": [
+    "BYOK-01: not authorized; no credential may be read, accepted, or stored",
+    "EGRESS-01 (per provider): not authorized; no payload may leave the machine",
+    "Step 4 model execution: not authorized; all local work first, then one consolidated model-stage package for user confirmation",
+    "implementing -> implemented transition: recorded only after final synthesis per §8.13",
+    "closure/archive: separate lifecycle authorization (§8.14)"
+  ],
+  "stop_semantics": "Stop and ask on: scope/contract change; src/** or existing tests/** or public API or adjacent-repo modification; any credential/model/network use; any CAP-FINAL cap at risk; any STOP/REVISE kill criterion (§6.4); push/merge/publish. Kill precedence per §5.15/DispositionPrecedenceValidatorV0. Exceeding any cap stops the envelope as REVISE with affected dimensions UNRESOLVED.",
+  "secrets": "none present; secret values must never enter any tracked or durable artifact"
+}
