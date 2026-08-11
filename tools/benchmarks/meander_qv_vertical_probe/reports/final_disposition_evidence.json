@@ -1,0 +1,39 @@
+{
+  "record_type": "FinalDispositionEvidenceV0",
+  "evidence": {
+    "kills": [],
+    "gates": {
+      "step3_exit_all_items": false,
+      "replay_r0_three_target": false,
+      "replay_r1_q02": false,
+      "replay_r2_q02": false,
+      "mutation_isolation": true,
+      "negatives_explicit": true,
+      "compat_no_side_effect": true
+    },
+    "thresholds": {
+      "dual_model_arms_pass": false,
+      "step3_exact_anchor_exit": false
+    },
+    "allowlisted_states": [
+      "agent_dimension=UNRESOLVED_WITHOUT_BYOK_EGRESS",
+      "R3=UNRESOLVED",
+      "R4=NOT_TESTED"
+    ]
+  },
+  "derived": {
+    "disposition": "REVISE",
+    "reason": "THRESHOLD_UNMET",
+    "detail": [
+      "dual_model_arms_pass",
+      "replay_r0_three_target",
+      "replay_r1_q02",
+      "replay_r2_q02",
+      "step3_exact_anchor_exit",
+      "step3_exit_all_items"
+    ]
+  },
+  "architecture_hypothesis": "NOT_CONTRADICTED",
+  "experiment_validity": "EXPERIMENT_INVALID (required gates unmet; model dimension NOT_TESTED)",
+  "agent_dimension": "NOT_TESTED/UNRESOLVED"
+}

@@ -28,10 +28,25 @@ NON_BLOCKING_ALLOWLIST = (
 )
 
 
+MANDATORY_INPUT_SECTIONS = ("kills", "gates", "thresholds", "allowlisted_states")
+
+
 def derive(evidence: dict) -> dict:
     """evidence = {kills: [{id, fired}], invalidations: [..], gates: {name: bool|None},
-                    thresholds: {name: bool}, allowlisted_states: [..]}"""
-    problems: list[str] = []
+                    thresholds: {name: bool}, allowlisted_states: [..]}
+
+    Fail-closed: every mandatory input SECTION must be present (an absent kills/
+    gates/thresholds/allowlist manifest is EXPERIMENT_INVALID, never PROCEED);
+    unknown state strings are EXPERIMENT_INVALID immediately (not folded into
+    threshold semantics). Fixed at closure per user ruling (fail-open defect)."""
+    for section in MANDATORY_INPUT_SECTIONS:
+        if section not in evidence:
+            return {"disposition": "REVISE", "reason": "EXPERIMENT_INVALID",
+                    "detail": f"missing mandatory input section {section!r}"}
+    for state in evidence.get("allowlisted_states", ()):
+        if state not in NON_BLOCKING_ALLOWLIST:
+            return {"disposition": "REVISE", "reason": "EXPERIMENT_INVALID",
+                    "detail": f"state {state!r} not in pre-registered allowlist"}
     fired_stop, fired_revise = [], []
     seen: dict[str, bool] = {}
     for k in evidence.get("kills", ()):
@@ -45,9 +60,6 @@ def derive(evidence: dict) -> dict:
         seen[kid] = bool(k.get("fired"))
         if k.get("fired"):
             (fired_stop if KILL_TERMINAL_CLASS[kid] == "STOP" else fired_revise).append(kid)
-    for state in evidence.get("allowlisted_states", ()):
-        if state not in NON_BLOCKING_ALLOWLIST:
-            problems.append(f"state {state!r} not in pre-registered allowlist")
     gates = evidence.get("gates", {})
     for g in REQUIRED_GATES:
         if g not in gates:
@@ -62,36 +74,48 @@ def derive(evidence: dict) -> dict:
         return {"disposition": "REVISE", "reason": "REVISE_CLASS_KILL", "detail": sorted(fired_revise)}
     unmet = [g for g in REQUIRED_GATES if gates.get(g) is not True]
     unmet += [t for t, ok in evidence.get("thresholds", {}).items() if ok is not True]
-    if unmet or problems:
+    if unmet:
         return {"disposition": "REVISE", "reason": "THRESHOLD_UNMET",
-                "detail": sorted(unmet) + problems}
+                "detail": sorted(unmet)}
     return {"disposition": "PROCEED_TO_ADR_CANDIDATES", "reason": "ALL_PREREQUISITES_MET",
             "detail": []}
 
 
 def validate_declared(evidence: dict, declared: str) -> dict:
+    """Refuse a declared terminal that the evidence cannot support, recording the
+    §5.15 taxonomy properly: EXPERIMENT_INVALID / THRESHOLD_UNMET when the
+    derivation itself carries that reason; CONTRADICTED only for a value-level
+    mismatch on a valid derivation. (Verdict-taxonomy defect fixed at closure.)"""
     derived = derive(evidence)
     ok = derived["disposition"] == declared
-    return {"derived": derived, "declared": declared, "consistent": ok,
-            "verdict": "ACCEPT" if ok else
-            {"STOP": "CONTRADICTED", "REVISE": "CONTRADICTED"}.get(derived["disposition"], "CONTRADICTED")}
+    if ok:
+        verdict = "ACCEPT"
+    elif derived["reason"] == "EXPERIMENT_INVALID":
+        verdict = "EXPERIMENT_INVALID"
+    elif derived["reason"] == "THRESHOLD_UNMET":
+        verdict = "THRESHOLD_UNMET"
+    else:
+        verdict = "CONTRADICTED"
+    return {"derived": derived, "declared": declared, "consistent": ok, "verdict": verdict}
 
 
 def selftest() -> list[str]:
     fails: list[str] = []
     base_gates = {g: True for g in REQUIRED_GATES}
+    full = lambda **kw: {"kills": [], "gates": base_gates, "thresholds": {},
+                        "allowlisted_states": [], **kw}
     # group 1: STOP-class kill dominates everything
-    r = derive({"kills": [{"id": "K-AUTHORITY", "fired": True}, {"id": "K-BUDGET", "fired": True}],
-                "gates": base_gates, "thresholds": {"t": True}})
+    r = derive(full(kills=[{"id": "K-AUTHORITY", "fired": True}, {"id": "K-BUDGET", "fired": True}],
+                    thresholds={"t": True}))
     if r["disposition"] != "STOP":
         fails.append(f"stop-group: {r}")
     # group 2: invalidation -> REVISE even with clean gates
-    r = derive({"kills": [], "invalidations": ["score invalidated"], "gates": base_gates})
+    r = derive(full(invalidations=["score invalidated"]))
     if (r["disposition"], r["reason"]) != ("REVISE", "EXPERIMENT_INVALID"):
         fails.append(f"invalidation-group: {r}")
     # group 3: threshold unmet -> REVISE; allowlisted states never block
     r = derive({"kills": [{"id": "K-SC02", "fired": False}], "gates": {**base_gates, "replay_r2_q02": False},
-                "allowlisted_states": ["R3=UNRESOLVED", "R4=NOT_TESTED"]})
+                "thresholds": {}, "allowlisted_states": ["R3=UNRESOLVED", "R4=NOT_TESTED"]})
     if (r["disposition"], r["reason"]) != ("REVISE", "THRESHOLD_UNMET"):
         fails.append(f"threshold-group: {r}")
     # group 4: proceed only when everything holds; unknown kill id invalidates
@@ -100,9 +124,19 @@ def selftest() -> list[str]:
                 "allowlisted_states": ["product/P-GATE=NOT_TESTED/UNCHANGED"]})
     if r["disposition"] != "PROCEED_TO_ADR_CANDIDATES":
         fails.append(f"proceed-group: {r}")
-    r = derive({"kills": [{"id": "K-MADE-UP", "fired": False}], "gates": base_gates})
+    r = derive({"kills": [{"id": "K-MADE-UP", "fired": False}], "gates": base_gates,
+                "thresholds": {}, "allowlisted_states": []})
     if r["reason"] != "EXPERIMENT_INVALID":
         fails.append(f"unknown-id-group: {r}")
+    # group 5 (fail-closed regression): a missing mandatory section must NOT proceed
+    r = derive({"gates": base_gates})  # no kills/thresholds/allowlist sections
+    if r["reason"] != "EXPERIMENT_INVALID":
+        fails.append(f"fail-closed-group: {r}")
+    # group 6: unknown allowlist state is EXPERIMENT_INVALID, not a threshold miss
+    r = derive({"kills": [], "gates": base_gates, "thresholds": {},
+                "allowlisted_states": ["made_up_state"]})
+    if r["reason"] != "EXPERIMENT_INVALID":
+        fails.append(f"unknown-state-group: {r}")
     return fails
 
 

@@ -1,6 +1,6 @@
 # Task Blueprint: Meander Agent Query/Validation 纵向探测
 
-- Status: scoped
+- Status: implemented
 - Created: 2026-08-11
 - Last Updated: 2026-08-11
 - Authority: formally reviewed, preflight-amended and user-scoped experimental blueprint；只消费已 adopted 的 Q2 约束并定义一个仍待独立 execution authorization 的一次性 `P0/A0` 纵向探测。本文不是生产设计、公共契约、ADR、产品批准或执行授权。
@@ -969,15 +969,17 @@ Q2 要求每项 §4 lock 成为具名 preflight check。completed standalone pre
 
 ## 10. Outcome / Deviations
 
-任务完成后填写；当前 `draft` 不预写结果。
+Envelope closed 2026-08-11 at user direction after all local work; model stage declined.
+Full evidence: [`tools/benchmarks/meander_qv_vertical_probe/reports/final_disposition.md`](../../../tools/benchmarks/meander_qv_vertical_probe/reports/final_disposition.md).
 
-- 最终落地结果：`pending`
-- 最终 disposition：`pending`
-- Architecture hypothesis：`pending`
-- Experiment validity：`pending`
-- D02–D07/D10–D11 evidence map：`pending`
-- Product/P-GATE/D01：固定 `NOT_TESTED / UNCHANGED / OPEN`
-- 与 blueprint 不同的地方：`pending`
-- 为什么会有这些调整：`pending`
-- 预算/egress compliance：`pending`
-- 归档说明：`pending`
+- 最终落地结果：**协议完成，未落地生产**。一次性 disposable harness + fixtures/goldens/manifests/reports 存于 experiment root;`src/**`、生产 Meander、公共 schema、邻接仓零改动。
+- 最终 disposition：**`REVISE`**(由 `DispositionPrecedenceValidatorV0` 机械推导,fail-closed,已自检)。
+- Experiment validity：**`EXPERIMENT_INVALID`** —— reason **`REQUIRED_GATES_UNMET`**(模型双臂门未授权;Step 3 exact-anchor exit 未满足;R0 aggregate 未满足)。
+- Architecture hypothesis：**`NOT_CONTRADICTED`** —— 无 kill criterion 触发;假设未被证伪,而是在模型层未测、在确定性层未达 exact-anchor exit。
+- Agent dimension：**`NOT_TESTED / UNRESOLVED`**(BYOK/EGRESS/provider call 均未授权)。
+- D02–D07/D10–D11 evidence map：全部 `PARTIAL`/`UNRESOLVED`,无一 `SUPPORTED_FOR_ADR`(详见终报 §3);probe 不采用任何 D-number。
+- Product/P-GATE/D01：固定 `NOT_TESTED / UNCHANGED / OPEN`。
+- 与 blueprint 不同的地方(deviations):①**A′ cap deviation**(用户 2026-08-11 裁定)——保留原始 20 primary invocations 与 15/20 manifest 不覆盖,仅修 3 项 harness root cause,恰一次单独记账的 20-cell verification sweep(20 inv/13 engine),再有失败即 REVISE;②Step 5 R0 的 SUMMARY/EXPECTATION 因 attempt-verb 代数从 Step-3 captured 工件校验而非 Step-5 live(manifest 内 interpretation note),据此 R0 aggregate 记 UNMET、R1/R2 记 PARTIAL/UNRESOLVED,不写 PASS。
+- 收束期事实修正(仅 report/audit,无 fixture/golden 改动、无重跑):validator fail-open 修复 + fail-closed 回归组;durable bytes 实测 ~357 KB(此前占位 0);phase_log 时间戳改为 logical milestones(去虚构精确壁钟;本机 UTC 收束约 2026-08-11T20:44Z);model_runner 明确为 offline projection prototype;`step4_model.state=NOT_AUTHORIZED_CLOSED_UNRESOLVED`。
+- 预算/egress compliance:person-hours 远在 24h 内;semantic/schema repair = 0;**model provider calls / tokens / cost / egress 全部为 0**;dirty baseline 112 项/`c058409c…` 全程逐字节保持;master 未动;未 push/merge。
+- 归档说明:blueprint pair active→archive 与 standalone preflight active→archive 属独立 lifecycle 授权(§8.14),**本次未执行**;等用户单独授权归档。

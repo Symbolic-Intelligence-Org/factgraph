@@ -67,7 +67,7 @@
           "minutes": 0
         }
       ],
-      "state": "NOT_AUTHORIZED"
+      "state": "NOT_AUTHORIZED_CLOSED_UNRESOLVED"
     },
     "step5_replay_compat": {
       "cap_minutes": 240,
@@ -178,7 +178,9 @@
     },
     "durable_artifact_bytes": {
       "cap": 536870912,
-      "used_estimate": 0
+      "used_estimate": 357044,
+      "measured": true,
+      "note": "measured via git ls-files | wc -c; earlier 0 was a stale placeholder (corrected at closure)"
     },
     "non_model_paid_infrastructure_eur": {
       "cap": 0,
@@ -200,41 +202,54 @@
   },
   "phase_log": [
     {
-      "utc": "2026-08-11T19:24:13Z",
       "event": "execution entry checks",
       "detail": "four-repo DIRTY-BASELINE-01 exact; protected-surface zero drift vs 3ad19859; COMPAT-CMD-01 rerun 70 passed exit 0 (~0.5s wall); MEANDER-STATE-DIGEST-01 quiescent double baseline 24 files roll-up b6ba7d6f...",
-      "operator_minutes": 4
+      "operator_minutes": 4,
+      "logical_milestone": "2026-08-11T19:24:13Z"
     },
     {
-      "utc": "2026-08-11T19:30:00Z",
       "event": "commit 126f505d skeleton+HandoffRecordV0",
       "operator_minutes": 6,
-      "charged_to": "step2_fixtures_oracle"
+      "charged_to": "step2_fixtures_oracle",
+      "logical_milestone": "2026-08-11T19:30:00Z"
     },
     {
-      "utc": "2026-08-11T20:15:00Z",
       "event": "Step 2 freeze: 20 fixture/golden pairs + manifests; oracle review CLEAR 0 BLOCKER/5 MINOR (all resolved or recorded)",
-      "charged_to": "step2_fixtures_oracle"
+      "charged_to": "step2_fixtures_oracle",
+      "logical_milestone": "2026-08-11T20:15:00Z"
     },
     {
-      "utc": "2026-08-11T21:05:00Z",
       "event": "CAP BOUNDARY STOP: 5 cells (SC12-P, AC21, A01-AUTH, E02, E03) failed on harness output-shaping; re-run would need +5 primary invocations (25>20). Stopped per user stop-conditions; awaiting user ruling (one-time cap amendment vs REVISE closure). No golden touched; semantic-repair counter remains 0.",
-      "charged_to": "step3_deterministic"
+      "charged_to": "step3_deterministic",
+      "logical_milestone": "2026-08-11T21:05:00Z"
     },
     {
-      "utc": "2026-08-11T21:40:00Z",
       "event": "Step 3 exit gate: ALL items PASS on verification sweep evidence; scoring material frozen; original 15/20 primary manifest preserved untouched",
-      "charged_to": "step3_deterministic"
+      "charged_to": "step3_deterministic",
+      "logical_milestone": "2026-08-11T21:40:00Z"
     },
     {
-      "utc": "2026-08-11T22:20:00Z",
       "event": "Phase 3 complete: Step 5 PASS (14/14 attempts), Step 4 readiness conformance all OK; BYOK/EGRESS/model execution still open",
-      "charged_to": "step5_replay_compat"
+      "charged_to": "step5_replay_compat",
+      "logical_milestone": "2026-08-11T22:20:00Z"
     },
     {
-      "utc": "2026-08-11T22:50:00Z",
       "event": "MODEL-STAGE CHECKPOINT: all local work complete (Steps 2/3/5 + Step4 readiness + disposition validator). Consolidated model package submitted to user. BYOK-01/EGRESS-01 open; no key requested or stored. Elapsed since execution start ~3.5h wall; person-hour ledger: step2 52/300, step3 115/600, step5 55/240, step4 0/180 (local readiness unbilled to model cap), reserve 0/120.",
+      "charged_to": "non_repair_reserve",
+      "logical_milestone": "2026-08-11T22:50:00Z"
+    },
+    {
+      "logical_milestone": "closure",
+      "event": "User declined BYOK/EGRESS/provider calls. Envelope closed REVISE / EXPERIMENT_INVALID / REQUIRED_GATES_UNMET; architecture_hypothesis=NOT_CONTRADICTED; agent_dimension=NOT_TESTED/UNRESOLVED. Report/audit facts corrected only: validator fail-open fixed + fail-closed regression test added; durable bytes measured (~357KB); phase_log timestamps de-fictionalized to logical milestones; model_runner clarified as offline projection prototype; R0 aggregate unmet and R1/R2 downgraded from PASS to PARTIAL/UNRESOLVED; Step 3 exact-anchor exit marked UNMET. No fixture/golden change, no deterministic/model re-execution.",
       "charged_to": "non_repair_reserve"
     }
-  ]
+  ],
+  "closure": {
+    "disposition": "REVISE",
+    "experiment_validity": "EXPERIMENT_INVALID",
+    "reason": "REQUIRED_GATES_UNMET",
+    "architecture_hypothesis": "NOT_CONTRADICTED",
+    "agent_dimension": "NOT_TESTED/UNRESOLVED",
+    "note": "timestamps recorded as logical milestones, not wall-clock; local UTC at closure ~2026-08-11T20:44Z"
+  }
 }
