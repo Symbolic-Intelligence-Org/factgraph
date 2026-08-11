@@ -15,6 +15,7 @@
   - 2026-08-11 user direction after initial draft：接受 3 working days / 24 person-hours / 20 deterministic cells / 6 model cells / 24+2 model turns 的 kill-first review baseline，授权 final Step 4.2 review，并指示未来执行工作交给届时具名的 user-designated agent；该指示不授权 preflight、`scoped`、execution、BYOK 或 egress
   - completed standalone preflight：commit `8a6a0577ebfc9aa0167badece0735e74b17bff97`，preflight blob `3e28c8b76ac58851035aaee70804382eb33df432` / SHA-256 `01b0e6ca9f576f5f5c9af5b1df66257bb4834471f23853277d4bbd38e7e0dbdd`；15 PASS / 1 FAIL，3 Required / 8 Recommended / 6 Verified / 4 Scoped-detail / 0 Abandonment
   - 2026-08-11 user direction after preflight：正式采纳较轻模型门方案并授权 Step 4.4/4.5 的 paired-doc amendment 与 self-check；不授权 SDK 安装、API/model 调用、网络外发、`scoped` 或实验执行
+  - 2026-08-11 `CAP-FINAL-01`：用户明确确认 commit `9eb8b95dd580e7faaa75788c745f5ef2398c88a2` 的 §6.1 完整规模、精确分母和全部上限；明确不授权 `draft → scoped`、实验执行、BYOK、模型调用或数据外发
 - Outputs / Downstream:
   - completed under current authorization: one formally reviewed and preflight-amended revision of this paired blueprint/audit only
   - completed on its independent branch: `workflow/audit/active/2026-08-11_meander-agent-query-validation-vertical-probe-preflight.md` at `8a6a0577`
@@ -37,7 +38,7 @@
 - Audit Log:
   - [`2026-08-11_meander-agent-query-validation-vertical-probe.audit.md`](./2026-08-11_meander-agent-query-validation-vertical-probe.audit.md)
 
-> Workflow Step 4.1–4.5 已完成：formal review 对 `c9786e34` 返回三路 `CLEAR 0/0/0`，standalone preflight 于 `8a6a0577` 完成，findings 已在本 paired docs 中消费并通过轻量 self-check。本文仍需 `CAP-FINAL-01`、`draft -> scoped` 与 `scoped -> implementing`/execution 的分离授权后才可执行；BYOK 与 data egress 还需要各自独立授权。
+> Workflow Step 4.1–4.5 与 `CAP-FINAL-01` 已完成：formal review 对 `c9786e34` 返回三路 `CLEAR 0/0/0`，standalone preflight 于 `8a6a0577` 完成，findings 已在本 paired docs 中消费并通过轻量 self-check，用户已确认 `9eb8b95d` 的完整 §6.1。本文仍需 `draft -> scoped` 与 `scoped -> implementing`/execution 的分离授权后才可执行；BYOK 与 data egress 还需要各自独立授权。
 
 ## 1. Problem
 
@@ -105,6 +106,7 @@ Agent 只填写固定 profile 的 typed slots
 | Independent preflight | completed at `8a6a0577`；15 PASS / 1 FAIL；findings consumed by Step 4.4 | preflight artifact 保持独立；其完成不授权 scoped/execution |
 | Workflow Step 4.4/4.5 | completed under explicit 2026-08-11 user authorization | 只修订 paired docs 并 self-check；不创建实验资产 |
 | Numeric cap acceptance | user accepted the lean review baseline on 2026-08-11；not execution authorization | review 可以检验/收窄；任何增量必须重新获批 |
+| `CAP-FINAL-01` | confirmed against `9eb8b95d` §6.1 on 2026-08-11 | 锁定完整规模、精确分母和全部上限；不授权 scoped/execution/BYOK/egress |
 | `scoped` / execution | not authorized | 不得创建 harness、fixtures、reports 或改源码 |
 | `BYOK-01` | not authorized | 不得读取、接受或使用模型凭据 |
 | `EGRESS-01` | not authorized | 不得向任何 provider 发送 payload |
@@ -146,7 +148,7 @@ Blueprint 分支创建时存在 112 项 unrelated dirty baseline，其 exact por
 
 ### 4.4 Review/preflight disposition
 
-1. §6.1 的 lean hard caps 与 20/6 matrix 已由 formal review/preflight 复算闭合；review-derived `22+2/10/13/14` 仍等待 `CAP-FINAL-01`，不构成 execution authorization。
+1. §6.1 的 lean hard caps 与 20/6 matrix 已由 formal review/preflight 复算闭合；用户已通过 `CAP-FINAL-01` 确认 review-derived `22+2/10/13/14`。该确认不构成 scoped 或 execution authorization。
 2. 20 个 executable cells 和 6 个 model-scored cells 保持不变；batch validation 必须记录全部内部 assertions，不能用“一个 cell”隐藏额外 engine/model runs。
 3. preflight 的 production scan 未发现实验符号；未来 disposable package 仍只允许 private imports/facade，不得修改 `src/`。
 4. 轻量模型门冻结两项 profile identity：`openai-gpt-responses-v1`（OpenAI / GPT family / Responses tool-call dialect / experiment-owned raw HTTP adapter）与 `anthropic-claude-messages-v1`（Anthropic / Claude family / Messages `tool_use` dialect / experiment-owned raw HTTP adapter）。精确 model ID 与 adapter implementation version 延后至首次 scored call 前冻结；真实 API 接受度均为 `NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION`。
@@ -390,7 +392,7 @@ restricted、missing、ambiguous、branch-unbound fixtures 必须在 ledger acce
 
 ### 5.6 Frozen fixture plan: 20 named executable cells
 
-下表的 lean hard cap 已由 formal review/preflight 复算闭合，仍等待 `CAP-FINAL-01`。一个 cell 就是一个 executable fixture；mutation/retry/variant 不得藏在同一个 ID 内规避 cap。静态 batch-validation cell 可以在一次显式 compiler/catalog invocation 中返回多条具名 diagnostics，但 manifest 必须列出每条 assertion，且不得暗中触发额外 engine/model runs。Step 2 必须在实现前写出每个 cell 的 ingress、resolution、lineage、result、expectation、Explain target 和 Agent interpretation oracle，并记录一次轻量独立 review。
+下表的 lean hard cap 已由 formal review/preflight 复算闭合，并由 `CAP-FINAL-01` 对 `9eb8b95d` 最终确认。一个 cell 就是一个 executable fixture；mutation/retry/variant 不得藏在同一个 ID 内规避 cap。静态 batch-validation cell 可以在一次显式 compiler/catalog invocation 中返回多条具名 diagnostics，但 manifest 必须列出每条 assertion，且不得暗中触发额外 engine/model runs。Step 2 必须在实现前写出每个 cell 的 ingress、resolution、lineage、result、expectation、Explain target 和 Agent interpretation oracle，并记录一次轻量独立 review。
 
 | ID | Coverage / oracle | Model-scored |
 |---|---|---|
@@ -768,7 +770,7 @@ STOP-class kill
 
 `BudgetLedgerV0` 逐项记录 cap、used、artifact/run IDs、每 Step 人工分钟、primary/model-loop/replay local operations、provider calls/retries、tokens、cost、serialized egress bytes 和 durable artifact bytes。`20 cells / 6 model cells / 2 model configurations / 12 expected output slots / 13 replay operation IDs` 是 `PROCEED` 所需的精确 cardinality，不是可随意缩水的 ceiling；缺任一项只能形成 `REVISE/UNRESOLVED`。其余数值是不可超出的 ceiling。
 
-`CAP-FINAL-01`：independent preflight 后、execution 前，用户必须对 pinned reviewed/preflight commit 上的精确 §6.1 表再次确认。即使 review/preflight 只做收窄，也要记录 exact diff 与确认；没有 `CAP-FINAL-01` 不得进入 `implementing`。
+`CAP-FINAL-01`：用户已于 2026-08-11 明确确认 commit `9eb8b95dd580e7faaa75788c745f5ef2398c88a2` 的精确 §6.1 表，包括完整实验规模、精确分母和全部上限。该确认不授权 `draft → scoped`、`scoped → implementing`、实验执行、BYOK、模型调用或数据外发；任何后续 cap 增量仍须重新授权。
 
 ### 6.2 Exact path allowlist after future execution authorization
 
@@ -869,9 +871,9 @@ Q2 要求每项 §4 lock 成为具名 preflight check。completed standalone pre
 - [x] Q2 adoption pin、branch fork basis、外部 repo pins 和 dirty baseline 经 independent preflight `8a6a0577` 重核。
 - [x] Step 4.2 formal review 完成；exact substantive baseline `c9786e34` 的三条 review lane 均为 `CLEAR 0/0/0`，paired audit 只记录真实 review evidence。
 - [x] 独立 preflight artifact 在独立 branch 完成；3 Required 与 8 Recommended 已由 Step 4.4 消费，历史 `PF-MODEL-01=FAIL` 未被改写为 PASS。
-- [x] 用户于 2026-08-11 明确接受 commit `4592e491` 中的原始 lean baseline（3 working days、24 person-hours、20/6 cells、2 models、24+2 turn ceiling 及其余当时列出的资源/零 repair caps）；本轮新增 operation accounting 与 22+2/10 收窄仍等待 `CAP-FINAL-01`，且均不构成 execution authorization。
+- [x] 用户于 2026-08-11 明确接受 commit `4592e491` 中的原始 lean baseline，并通过 `CAP-FINAL-01` 最终确认 `9eb8b95d` 的 review-derived `22+2/10/13/14` 及完整 §6.1；均不构成 execution authorization。
 - [x] `PF-BASELINE-01..PF-DISPOSITION-01` 已全部逐项报告；external gates 保持 OPEN，未伪装成 PASS。
-- [ ] `CAP-FINAL-01` 对 pinned reviewed/preflight commit 获得用户确认；精确 cardinality 不得缩水后仍称 PROCEED。
+- [x] `CAP-FINAL-01` 已对 `9eb8b95d` 的完整 §6.1 获得用户明确确认；精确 cardinality 不得缩水后仍称 PROCEED。
 - [ ] 用户单独授权 `draft -> scoped`；这不授权 execution。
 - [x] `OBL-Q2-BP-01` 映射到 `SC12-32/SC12-P/AC21` 及明确 oracle。
 - [x] `OBL-Q2-BP-02` 映射到 §5.12 的 12-slot protocol；仅实际 candidate texts 进入 blind judgment。
@@ -936,7 +938,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。completed standalone pre
 2. **Step 4.2 — formal blueprint review（completed）**：governance、FactGraph contract、Agent/replay/privacy 三视角审阅并复验 exact substantive baseline `c9786e34`；三条 lane 均为 `CLEAR 0/0/0`，findings 已逐项进入 paired audit。该结果不授权下一阶段。
 3. **Step 4.3 — independent preflight（completed）**：独立分支产物最终 commit `8a6a0577`；15 PASS / 1 historical FAIL，3 Required / 8 Recommended / 6 Verified / 4 Scoped-detail / 0 Abandonment；未创建实验资产或授予后续权限。
 4. **Step 4.4/4.5 — amendment + self-check（completed）**：本 paired-doc amendment 消费 PF-R1..R3 与 PF-Rec1..8，并分流 PF-S1..S4；轻量自检覆盖 fixture/model/cap 计数、OBL mapping、kill precedence、path/dirty isolation、stale wording 与 diff scope。未运行测试或创建实验资产。
-5. **Step 4.6 — scope freeze（separate authorization）**：`CAP-FINAL-01` 与所有 non-external preflight checks 闭合后，用户单独授权 `draft -> scoped`；paired audit 记录 exact scoped commit。Execution/BYOK/egress 都不随 scoped 自动授权。
+5. **Step 4.6 — scope freeze（separate authorization）**：`CAP-FINAL-01` 与所有 non-external preflight checks 已闭合；现在只等待用户单独授权 `draft -> scoped`，随后由 paired audit 记录 exact scoped commit。Execution/BYOK/egress 都不随 scoped 自动授权。
 6. **Step 4.6a — user-agent handoff and execution gate（separate authorization）**：生成/记录 `HandoffRecordV0`，至少含 scoped blueprint/audit commit、preflight commit/blob、四仓 pins/dirty manifest、pinned hnsm/Meander repo roots、exact path allowlist、四个 runtime contract refs、§6.1 caps、frozen fixture-plan contract（20/6 IDs、oracle schema、rubric version、Step-2 artifact-freeze gate）、13 replay operation IDs、open gates、stop semantics 和 recipient=`user-designated executor agent`；不得包含尚未生成的 fixture/golden/oracle hashes 或 credential。用户审阅 handoff 后另行授权 `scoped -> implementing`/execution；handoff 本身不是授权。
 
 ### One implementation envelope
