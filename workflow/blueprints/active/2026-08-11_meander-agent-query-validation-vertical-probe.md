@@ -1,9 +1,9 @@
 # Task Blueprint: Meander Agent Query/Validation 纵向探测
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-11
 - Last Updated: 2026-08-11
-- Authority: formally reviewed and preflight-amended task-scoped experimental blueprint draft；只消费已 adopted 的 Q2 约束并定义一个待 final-cap confirmation、待 scoped/execution authorization 的一次性 `P0/A0` 纵向探测。本文不是生产设计、公共契约、ADR、产品批准或执行授权。
+- Authority: formally reviewed, preflight-amended and user-scoped experimental blueprint；只消费已 adopted 的 Q2 约束并定义一个仍待独立 execution authorization 的一次性 `P0/A0` 纵向探测。本文不是生产设计、公共契约、ADR、产品批准或执行授权。
 - Inputs:
   - adopted [`2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md`](../../design/decisions/active/2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md), commit `7f84d4f601fe5f680a183ae7aefba79c35f52f99`, 607 行，SHA-256 `802d5980ccadf523c8c0ef0f145c7881592dccfab5abebd91a7f999e672850ad`
   - adopted [`2026-08-11_q1-offline-feasibility-before-external-validation-decision.md`](../../design/decisions/active/2026-08-11_q1-offline-feasibility-before-external-validation-decision.md)；只作为非复用、`P-GATE` 仍开放和 CB0 独立性的治理输入
@@ -17,9 +17,9 @@
   - 2026-08-11 user direction after preflight：正式采纳较轻模型门方案并授权 Step 4.4/4.5 的 paired-doc amendment 与 self-check；不授权 SDK 安装、API/model 调用、网络外发、`scoped` 或实验执行
   - 2026-08-11 `CAP-FINAL-01`：用户明确确认 commit `9eb8b95dd580e7faaa75788c745f5ef2398c88a2` 的 §6.1 完整规模、精确分母和全部上限；明确不授权 `draft → scoped`、实验执行、BYOK、模型调用或数据外发
 - Outputs / Downstream:
-  - completed under current authorization: one formally reviewed and preflight-amended revision of this paired blueprint/audit only
+  - completed under current authorization: one formally reviewed, preflight-amended and scoped revision of this paired blueprint/audit only
   - completed on its independent branch: `workflow/audit/active/2026-08-11_meander-agent-query-validation-vertical-probe-preflight.md` at `8a6a0577`
-  - only after later `scoped` and execution authorization: one isolated disposable harness, one frozen fixture/oracle lineage, one immutable final result/disposition report, and this paired audit's lifecycle record
+  - only after later `scoped -> implementing`/execution authorization: one isolated disposable harness, one frozen fixture/oracle lineage, one immutable final result/disposition report, and this paired audit's lifecycle record
   - only after a terminal `PROCEED_TO_ADR_CANDIDATES` and new authorization: evidence-scoped D02–D07/D10–D11 decision proposals；本文本身不创建它们
 - Related:
   - [`workflow/CADENCE.md`](../../CADENCE.md)
@@ -38,7 +38,7 @@
 - Audit Log:
   - [`2026-08-11_meander-agent-query-validation-vertical-probe.audit.md`](./2026-08-11_meander-agent-query-validation-vertical-probe.audit.md)
 
-> Workflow Step 4.1–4.5 与 `CAP-FINAL-01` 已完成：formal review 对 `c9786e34` 返回三路 `CLEAR 0/0/0`，standalone preflight 于 `8a6a0577` 完成，findings 已在本 paired docs 中消费并通过轻量 self-check，用户已确认 `9eb8b95d` 的完整 §6.1。本文仍需 `draft -> scoped` 与 `scoped -> implementing`/execution 的分离授权后才可执行；BYOK 与 data egress 还需要各自独立授权。
+> Workflow Step 4.1–4.6 与 `CAP-FINAL-01` 已完成：formal review 对 `c9786e34` 返回三路 `CLEAR 0/0/0`，standalone preflight 于 `8a6a0577` 完成，findings 已消费并通过轻量 self-check，用户已确认 `9eb8b95d` 的完整 §6.1 并单独授权 `draft -> scoped`。本文仍需 `scoped -> implementing`/execution 授权后才可执行；BYOK 与 data egress 还需要各自独立授权。
 
 ## 1. Problem
 
@@ -92,7 +92,7 @@ Agent 只填写固定 profile 的 typed slots
 - 不宣称 open fixtures 或两个模型可以统计泛化到所有 Agent。
 - 不用模型修复失败的 deterministic core；Step 3 不过则跳过模型。
 - 不创建第三个 discovery envelope；不把有利结果续成另一个架构 slice。
-- 本轮获授权的文档级 Step 4.4/4.5 amendment 与 self-check 只消费已完成的 preflight；不运行测试、创建 fixtures/harness、调用模型、使用 key、外发数据或推进状态。
+- 本轮获授权的 Step 4.6 scoped anchor 只冻结既有范围；不运行测试、创建 fixtures/harness、调用模型、使用 key、外发数据或进入 implementing。
 
 ## 4. Current Context
 
@@ -107,11 +107,12 @@ Agent 只填写固定 profile 的 typed slots
 | Workflow Step 4.4/4.5 | completed under explicit 2026-08-11 user authorization | 只修订 paired docs 并 self-check；不创建实验资产 |
 | Numeric cap acceptance | user accepted the lean review baseline on 2026-08-11；not execution authorization | review 可以检验/收窄；任何增量必须重新获批 |
 | `CAP-FINAL-01` | confirmed against `9eb8b95d` §6.1 on 2026-08-11 | 锁定完整规模、精确分母和全部上限；不授权 scoped/execution/BYOK/egress |
-| `scoped` / execution | not authorized | 不得创建 harness、fixtures、reports 或改源码 |
+| `scoped` | explicitly authorized and anchored on 2026-08-11 | scope 已冻结；不隐含 implementing/execution |
+| execution | not authorized | 不得创建 harness、fixtures、reports 或改源码 |
 | `BYOK-01` | not authorized | 不得读取、接受或使用模型凭据 |
 | `EGRESS-01` | not authorized | 不得向任何 provider 发送 payload |
 | Q1 CB0 | parked `draft`, non-terminal | 保持 byte/state independent；不得复用 |
-| Q2 probe | this blueprint `draft`, non-terminal | 与 CB0 至少一个 terminal 前，`OBL-Q2-BP-03` 禁止第三个 discovery-envelope proposal |
+| Q2 probe | this blueprint `scoped`, non-terminal | 与 CB0 至少一个 terminal 前，`OBL-Q2-BP-03` 禁止第三个 discovery-envelope proposal |
 
 `OBL-Q2-BP-03` 在本 blueprint 的入口处闭合为一个持续 gate：当前允许的是 Q2 已批准的第二个封套，不是第三个封套。只要 CB0 与本 probe 都未达到下述 terminal predicate，任何第三个 discovery-envelope 提案都必须被拒绝，而不是排队、park 后继续增殖：
 
@@ -874,7 +875,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。completed standalone pre
 - [x] 用户于 2026-08-11 明确接受 commit `4592e491` 中的原始 lean baseline，并通过 `CAP-FINAL-01` 最终确认 `9eb8b95d` 的 review-derived `22+2/10/13/14` 及完整 §6.1；均不构成 execution authorization。
 - [x] `PF-BASELINE-01..PF-DISPOSITION-01` 已全部逐项报告；external gates 保持 OPEN，未伪装成 PASS。
 - [x] `CAP-FINAL-01` 已对 `9eb8b95d` 的完整 §6.1 获得用户明确确认；精确 cardinality 不得缩水后仍称 PROCEED。
-- [ ] 用户单独授权 `draft -> scoped`；这不授权 execution。
+- [x] 用户已于 2026-08-11 单独授权 `draft -> scoped`；这不授权 execution。
 - [x] `OBL-Q2-BP-01` 映射到 `SC12-32/SC12-P/AC21` 及明确 oracle。
 - [x] `OBL-Q2-BP-02` 映射到 §5.12 的 12-slot protocol；仅实际 candidate texts 进入 blind judgment。
 - [x] `OBL-Q2-BP-03` entry gate 确认 CB0/Q2 状态并禁止第三封套。
@@ -938,7 +939,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。completed standalone pre
 2. **Step 4.2 — formal blueprint review（completed）**：governance、FactGraph contract、Agent/replay/privacy 三视角审阅并复验 exact substantive baseline `c9786e34`；三条 lane 均为 `CLEAR 0/0/0`，findings 已逐项进入 paired audit。该结果不授权下一阶段。
 3. **Step 4.3 — independent preflight（completed）**：独立分支产物最终 commit `8a6a0577`；15 PASS / 1 historical FAIL，3 Required / 8 Recommended / 6 Verified / 4 Scoped-detail / 0 Abandonment；未创建实验资产或授予后续权限。
 4. **Step 4.4/4.5 — amendment + self-check（completed）**：本 paired-doc amendment 消费 PF-R1..R3 与 PF-Rec1..8，并分流 PF-S1..S4；轻量自检覆盖 fixture/model/cap 计数、OBL mapping、kill precedence、path/dirty isolation、stale wording 与 diff scope。未运行测试或创建实验资产。
-5. **Step 4.6 — scope freeze（separate authorization）**：`CAP-FINAL-01` 与所有 non-external preflight checks 已闭合；现在只等待用户单独授权 `draft -> scoped`，随后由 paired audit 记录 exact scoped commit。Execution/BYOK/egress 都不随 scoped 自动授权。
+5. **Step 4.6 — scope freeze（completed）**：`CAP-FINAL-01` 与所有 non-external preflight checks 闭合后，用户已单独授权 `draft -> scoped`；本 scoped anchor 由 paired audit 记录。Execution/BYOK/egress 都不随 scoped 自动授权。
 6. **Step 4.6a — user-agent handoff and execution gate（separate authorization）**：生成/记录 `HandoffRecordV0`，至少含 scoped blueprint/audit commit、preflight commit/blob、四仓 pins/dirty manifest、pinned hnsm/Meander repo roots、exact path allowlist、四个 runtime contract refs、§6.1 caps、frozen fixture-plan contract（20/6 IDs、oracle schema、rubric version、Step-2 artifact-freeze gate）、13 replay operation IDs、open gates、stop semantics 和 recipient=`user-designated executor agent`；不得包含尚未生成的 fixture/golden/oracle hashes 或 credential。用户审阅 handoff 后另行授权 `scoped -> implementing`/execution；handoff 本身不是授权。
 
 ### One implementation envelope

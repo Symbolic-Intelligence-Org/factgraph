@@ -1,6 +1,6 @@
 # Task Blueprint Audit: Meander Agent Query/Validation 纵向探测
 
-- Status: draft
+- Status: scoped
 - Created: 2026-08-11
 - Last Updated: 2026-08-11
 - Authority: paired blueprint audit log；只记录 sibling blueprint 的真实状态转换、scope changes、reviews、implementation checkpoints 和 closure，不替代 standalone preflight 或实验终报。
@@ -28,6 +28,7 @@
 | 2026-08-11 | draft | Step 4.4 preflight amendment applied | User explicitly authorized Step 4.4/4.5 as lightweight paired-doc work。PF-R1..R3 与 PF-Rec1..8 已落入 sibling blueprint，PF-S1..S4 已具名分流；`PF-MODEL-01` 原 verdict 未被回写成 PASS。两个 family-level provider profiles 与 transport-neutral offline contract 已冻结；exact model IDs/adapter versions 与 remote acceptance 仍留给后续 gate。状态保持 `draft`；无测试、fixture/harness、模型、网络、凭证或实验执行。 |
 | 2026-08-11 | draft | Step 4.5 lightweight self-check closed | Governance、FactGraph/runtime、Agent/replay 三条只读 diff-check 均最终 `CLEAR 0/0/0`。机械复核保持 20/6 cells、2 profiles、22+2 provider turns、10 tool executions、13 replay operations/14 attempts 与 24h cap；stale wording、PF disposition、OBL mapping、path/dirty isolation 和 external gates 均自洽。剔除本 paired-doc diff 后用户 baseline 仍为 112 项 / `c058409c…`；`git diff --check` clean。未复跑测试、未读 live sqlite、未调用模型/网络/凭证；状态仍 `draft`。 |
 | 2026-08-11 | draft | `CAP-FINAL-01` confirmed | User explicitly accepted the complete §6.1 scale, exact denominators and all caps at blueprint commit `9eb8b95dd580e7faaa75788c745f5ef2398c88a2`。The confirmation explicitly does **not** authorize `draft → scoped`、execution、BYOK、model calls or data egress；all remain separate gates。 |
+| 2026-08-11 | scoped | Scope frozen after explicit user authorization | User separately authorized `draft → scoped` after `CAP-FINAL-01`。Anchor parent is `94af1953`;the exact scoped commit is the commit containing this row。Scope is frozen to the reviewed/preflight-amended blueprint；no harness/fixture/report/source implementation、`scoped → implementing`/execution、BYOK、model call or egress is authorized。 |
 
 ## Decision Notes
 
