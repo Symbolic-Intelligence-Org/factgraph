@@ -13,9 +13,10 @@
   - 2026-08-11 user authorization to execute the next stage；在执行前的公开边界说明中，该阶段被限定为起草 blueprint pair、独立审阅与目标文件限定提交；未授权 case construction、preflight、experiment execution 或状态推进
   - Completed independent preflight `workflow/audit/active/2026-08-11_meander-case-bundle-feasibility-preflight.md`，固定对象为 commit `04ad3c722f14e67ab6370d228aa8ee010ea4d9ff`、blob `2e5d5c7361659cc3d53526843de0bf66cb0d51a8`、内容 SHA-256 `7ab6b6113d501f5dffae8e374f109d061a76b954de51a96ea861e699e502f7d5`；本次 amendment 只从该固定对象读取，不依赖 preflight branch tip
   - 2026-08-11 user authorization to proceed with Step 4.4；范围仅为把上述 preflight 的全部 Required/Recommended finding 及 Operator scope guard 写入本 blueprint pair、独立 diff review 并限定提交；不授权 Step 4.5 self-check、`scoped`、case/harness、实验、凭据或产品源码变更
+  - 2026-08-11 user authorization to execute Step 4.5 self-check；范围仅为完整重读本 pair、逐项核对 preflight/gates、取得独立 second opinion，并在 self-check 发现必要收紧时仅修改和提交本 pair；不授权 `scoped`、case/harness、实验、凭据或产品源码变更
 - Outputs / Downstream:
   - Paired audit log [`2026-08-11_meander-case-bundle-feasibility.audit.md`](./2026-08-11_meander-case-bundle-feasibility.audit.md)
-  - Completed independent preflight on its canonical branch；本 amendment 后仍须另行执行 Step 4.5 self-check，并关闭其余未决门，才可请求任何 `scoped` anchor
+  - Completed independent preflight and completed Step 4.5 self-check；其余未决门仍须关闭，才可请求任何 `scoped` anchor
   - At Step 4.9 archive, import the preflight artifact content-identically from the pinned commit/blob above and archive it with this pair；不得从浮动 branch tip 重取或改写内容
   - If separately authorized after `scoped`: one disposable benchmark package, one sealed-holdout run batch, one immutable result/report lineage, and this blueprint's completed outcome/audit
   - No production API, service, Agent integration, Translator, UI, customer connector, or automatic successor slice
@@ -438,8 +439,6 @@ field_attribution               # raw fields: factgraph_native | benchmark_adapt
 supporting_fact_ids
 refuting_fact_ids
 source_locator_bindings
-evidence_artifact_ref
-support_dag_artifact_ref
 run_manifest_ref
 errors                          # BenchmarkErrorV0[]
 warnings
@@ -447,7 +446,7 @@ latency_ms
 setup_revision
 ```
 
-Each `GoalCallRaw` records `goal_role`、canonical goal/digest、`execution_valid`、nullable Boolean `entailed`、typed error references、native RuleProgram fields、raw EvidenceGraph/support-step references and timing. `coverage_status` is `COMPLETE | INCOMPLETE | INVALID | UNKNOWN` against the arm-visible required contract. Raw `field_attribution` is fixed by schema to `factgraph_native | benchmark_adapter` only；after output seal the scorer writes a separate `ScoredBundleV0` that references the sealed raw-bundle digest and applicable raw exact/portable fingerprints. Gold-derived expected coverage、`common_scorer | gold` attribution、`source_conformance`、exact-match flags、confusion labels、scorer-only reason codes、candidate-capability aggregates、`exact_workspace_integrity`、`deterministic_increment`、`experiment_check_status` and overall disposition exist only in `ScoredBundleV0`, never in `ArmRawBundleV0` or an arm input. Capability completeness is independent of logic status；a degraded/missing evidence builder cannot normalize into complete evidence.
+Each `GoalCallRaw` is the sole owner for its goal side's evidence/support artifact references. It records `goal_role`、canonical goal/digest、`execution_valid`、nullable Boolean `entailed`、typed error references、native RuleProgram fields、the arm-specific raw evidence/trace and support/instrumentation references、any corresponding normalized artifact references/digests, and timing. `ArmRawBundleV0` has no bundle-level evidence/support alias or second fact source；any aggregate index is derived only after the sealed bundle and cannot replace either ordered goal record. `coverage_status` is `COMPLETE | INCOMPLETE | INVALID | UNKNOWN` against the arm-visible required contract. Raw `field_attribution` is fixed by schema to `factgraph_native | benchmark_adapter` only；after output seal the scorer writes a separate `ScoredBundleV0` that references the sealed raw-bundle digest and applicable raw exact/portable fingerprints. Gold-derived expected coverage、`common_scorer | gold` attribution、`source_conformance`、exact-match flags、confusion labels、scorer-only reason codes、candidate-capability aggregates、`exact_workspace_integrity`、`deterministic_increment`、`experiment_check_status` and overall disposition exist only in `ScoredBundleV0`, never in `ArmRawBundleV0` or an arm input. Capability completeness is independent of logic status；a degraded/missing evidence builder cannot normalize into complete evidence.
 
 #### 5.7.1 Three-layer failure algebra
 
@@ -685,7 +684,7 @@ BYOK authorizes credential use only. It never authorizes data egress.
 flowchart TD
   R["Completed independent blueprint review"] --> P["Fixed preflight 04ad3c / 2e5d5c"]
   P --> AM["Completed Step 4.4 amendment + independent diff-check"]
-  AM --> SC["Separate Step 4.5 self-check"]
+  AM --> SC["Completed Step 4.5 self-check"]
   SC --> G{"Close pre-scoped gates + user scope-freeze authorization"}
   G -->|"not closed"| D
   G -->|"authorized"| S["Scoped blueprint"]
@@ -759,7 +758,7 @@ No arrow grants authority automatically; every repository-governed state transit
 - [x] `NATIVE-INCREMENT-01` freezes the two candidate capabilities、non-vacuous denominators、five basis states and ordered exhaustive `PASS/FAIL/UNRESOLVED` truth table in §5.7；the actual manifest、arms and telemetry remain `ARMS-01`.
 - [x] The separately authorized independent preflight is fixed at commit `04ad3c...` / blob `2e5d5c...` / content SHA-256 `7ab6b6...` with disposition `AMEND REQUIRED` and zero abandonment blockers.
 - [x] Every Required/Recommended PF is represented by the complete pair, and independent reviewers diff-checked that pair against the fixed preflight object with no remaining finding.
-- [ ] Step 4.5 self-check confirms PF-R01..PF-R04、PF-Rec01..02、PF-S01..02 and every pre-existing gate with no stale high-severity residual.
+- [x] Step 4.5 self-check confirms PF-R01..PF-R04、PF-Rec01..02、PF-S01..02 and every pre-existing gate with no stale high-severity residual after `SC45-01` tightening and independent recheck.
 - [x] This paired audit records independent draft/preflight/amendment review results and maps every finding to a frozen contract or explicit later operational gate.
 - [x] It remains explicit that preflight, `draft → scoped`, and execution each need separate authorization.
 
@@ -849,7 +848,7 @@ No weighted aggregate can override these rules.
 2. **Independent blueprint review** — completed against parity、leakage、attribution、budget、source legality、replay and status derivation；findings are in the paired audit.
 3. **Fixed independent preflight** — completed on its canonical branch at commit `04ad3c...` / blob `2e5d5c...`；the shipped surfaces and hash-seed shape probe were reviewed without modifying the blueprint branch.
 4. **Step 4.4 amendment and independent diff-check — completed** — on this blueprint branch, every Required/Recommended finding and PF-S02 guard was applied to this pair；independent runtime/SDK、repository/codec、failure/custody and governance/product-boundary reviews reached `CLEAR`. This pair-only commit records the step without changing status or creating experiment artifacts.
-5. **Step 4.5 self-check** — separately re-read the whole amended pair, confirm every PF and pre-existing gate, and record the result；no high finding may remain. This current Step 4.4 authorization does not itself execute Step 4.5.
+5. **Step 4.5 self-check — completed** — the whole amended pair was re-read and every PF/pre-existing gate was checked. `SC45-01` removed ambiguous bundle-level evidence/support aliases；independent technical and governance rechecks returned `CLEAR`, with no high residual and no state advance.
 6. **Scope-freeze authorization** — only after Step 4.5 and all blocking gates close may the user separately approve `draft → scoped`.
 7. **Execution authorization and lifecycle transition** — separately request permission before any case、harness、sealed package、credential or run is created；only after approval advance `scoped → implementing`.
 8. **Protocol and corpus preparation** — ProtocolOwner freezes schemas/matrices/denominators/failure expectations；CaseAuthor constructs hidden inputs/rules under physical custody；GoldAuthors label independently；GoldAdjudicator resolves eligible disagreement；GoldCustodian validates the count predicate and gold payload, CommitmentSecretCustodian generates the nonce and computes the opaque commitment, and the distinct AttestationKeyCustodian authenticates GoldCustodian's pass/fail statement. No gold、nonce or signing material reaches the run side.
@@ -870,7 +869,7 @@ Only during a later authorized implementation:
 - This blueprint and paired audit — status changes, deviations, outcome, budgets, and immutable disposition.
 - At Step 4.9, the standalone preflight is imported/archived content-identically from blob `2e5d5c7361659cc3d53526843de0bf66cb0d51a8` and verified against SHA-256 `7ab6b6113d501f5dffae8e374f109d061a76b954de51a96ea861e699e502f7d5`; no floating branch-tip copy is authoritative.
 - No `src/factgraph/**/docs` update unless a later decision separately authorizes a production-code/contract change; such a change is outside this blueprint.
-- No `docs/README.md` update is currently planned because this creates no product-facing persistent entry. Step 4.5 must revisit this only if the artifact topology changes.
+- No `docs/README.md` update is currently planned because this creates no product-facing persistent entry. Step 4.5 confirmed that the artifact topology did not change.
 
 ## 10. Outcome / Deviations
 
