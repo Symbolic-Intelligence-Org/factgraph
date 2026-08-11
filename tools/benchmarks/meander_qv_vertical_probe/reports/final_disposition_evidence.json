@@ -7,6 +7,10 @@
     "architecture_hypothesis": "NOT_CONTRADICTED",
     "agent_dimension": "NOT_TESTED/UNRESOLVED"
   },
+  "validate_declared": {
+    "consistent": true,
+    "verdict": "ACCEPT"
+  },
   "unmet_eligibility_gates": [
     "dual_model_arms_pass",
     "replay_r0_three_target",
@@ -14,9 +18,67 @@
     "replay_r2_q02",
     "step3_exit_all_items"
   ],
-  "byok_egress": "NOT_CONSUMED — deterministic eligibility gates unmet (dual_model_arms_pass, step3 exact-anchor exit, replay R0 aggregate); BYOK-01/EGRESS-01 therefore never reached",
+  "byok_egress": "NOT_CONSUMED — deterministic eligibility gates unmet (dual_model_arms_pass, step3 exact-anchor exit not implemented/proven, replay R0 aggregate); BYOK-01/EGRESS-01 never reached",
+  "kills_census_note": "complete well-formed census: all 14 KILL_TERMINAL_CLASS ids present, each fired=False (no kill fired) — required by the hardened validator",
   "evidence": {
-    "kills": [],
+    "kills": [
+      {
+        "id": "K-AUTHORITY",
+        "fired": false
+      },
+      {
+        "id": "K-SEMANTIC",
+        "fired": false
+      },
+      {
+        "id": "K-ZERO",
+        "fired": false
+      },
+      {
+        "id": "K-SELECT",
+        "fired": false
+      },
+      {
+        "id": "K-SC01",
+        "fired": false
+      },
+      {
+        "id": "K-REPLAY",
+        "fired": false
+      },
+      {
+        "id": "K-COMPAT",
+        "fired": false
+      },
+      {
+        "id": "K-SCHEMA",
+        "fired": false
+      },
+      {
+        "id": "K-CB0",
+        "fired": false
+      },
+      {
+        "id": "K-SCOPE",
+        "fired": false
+      },
+      {
+        "id": "K-DATA",
+        "fired": false
+      },
+      {
+        "id": "K-SC02",
+        "fired": false
+      },
+      {
+        "id": "K-THRESHOLD",
+        "fired": false
+      },
+      {
+        "id": "K-BUDGET",
+        "fired": false
+      }
+    ],
     "gates": {
       "step3_exit_all_items": false,
       "replay_r0_three_target": false,
@@ -41,12 +103,7 @@
     "disposition": "REVISE",
     "reason": "THRESHOLD_UNMET",
     "experiment_validity": "UNRESOLVED",
-    "detail": [
-      "dual_model_arms_pass",
-      "replay_r0_three_target",
-      "replay_r1_q02",
-      "replay_r2_q02",
-      "step3_exit_all_items"
-    ]
+    "architecture_hypothesis": "NOT_CONTRADICTED",
+    "agent_dimension": "NOT_TESTED/UNRESOLVED"
   }
 }
