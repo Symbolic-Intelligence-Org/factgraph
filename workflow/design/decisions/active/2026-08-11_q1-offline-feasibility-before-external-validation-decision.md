@@ -1,9 +1,9 @@
 # Q1 Decision: 先做离线覆盖型可行性验证，后做外部产品验证
 
-- Status: proposed
+- Status: adopted
 - Created: 2026-08-11
 - Last Updated: 2026-08-11
-- Authority: proposed design constraint; if adopted, locks the discovery-gate decomposition, evidence boundaries, and experiment ordering before any Meander case-bundle feasibility blueprint or execution.
+- Authority: design constraint; locks the discovery-gate decomposition, evidence boundaries, and experiment ordering before any Meander case-bundle feasibility blueprint or execution.
 - Inputs:
   - [`meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md`](../../design-points/active/meander-factgraph-unified-design-review-candidate-v0-1-1.zh.md) §0.4, §17 Phase -1–1, §18.7, §20 D01; 2235 lines; SHA-256 `750ced2141e9d8c20400c5ed59d6c439707b32fb363919ab7b1533918f2a9e1b`
   - [`meander-factgraph-unified-design-adversarial-review-disposition.zh.md`](../../design-points/active/meander-factgraph-unified-design-adversarial-review-disposition.zh.md) lines 34–35, 71–80, 95–107, 117–126; 382 lines; SHA-256 `7449dd6041bea639aeddecc6903e04b03ce0ead1c9ebd38a7052c67bc6eb45f2`
@@ -23,7 +23,7 @@
   - Candidate §18.1–§18.7 experiments, metrics, comprehension gates, and kill criteria
 - Branch: `v0.3.0-q1-meander-offline-feasibility-decision-2026-08-11`
 
-> ADR 4-state lifecycle: `proposed` → `adopted` (current binding constraint, stays in `active/`) → `superseded` or `withdrawn` (moves to `archive/`). This file is currently a proposal. Adoption would close only Q1; it would not automatically authorize blueprint drafting, review, preflight, experiment, implementation, external contact, or use of credentials. Every transition requires separate explicit user authorization.
+> ADR 4-state lifecycle: `proposed` → `adopted` (current binding constraint, stays in `active/`) → `superseded` or `withdrawn` (moves to `archive/`). This file is adopted and closes only Q1; it does not automatically authorize blueprint drafting, review, preflight, experiment, implementation, external contact, or use of credentials. Every transition requires separate explicit user authorization.
 
 ## 1. Inputs
 
@@ -316,5 +316,6 @@ No FactGraph or Meander repository change follows directly from this decision. I
 |---|---|---|---|
 | 2026-08-11 | proposed | Decision drafted | User authorized the next decision stage after choosing coverage-oriented feasibility as the immediate priority and deferring target-account outreach; no experiment or implementation authorized. |
 | 2026-08-11 | proposed | Independent review amendments applied | Closed phase-auto-advance, branch naming, citation precision, renewable-discovery, holdout leakage, weak-baseline, replay, data-egress, and immutable-failure-lineage findings; status remains proposed. |
+| 2026-08-11 | adopted | Decision adopted by user | Adopted without substantive decision-text revision. The three non-blocking review items remain mandatory future-blueprint obligations and must be enumerated with their source when that separately authorized stage begins; no blueprint or execution authorized here. |
 
 Status transitions are appended as new rows when they happen.
