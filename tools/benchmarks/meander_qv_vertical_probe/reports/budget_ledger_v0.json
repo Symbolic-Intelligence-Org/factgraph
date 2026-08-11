@@ -34,8 +34,25 @@
     },
     "step3_deterministic": {
       "cap_minutes": 600,
-      "used_minutes": 0,
-      "entries": []
+      "used_minutes": 95,
+      "entries": [
+        {
+          "what": "contracts/profiles/resolver/compiler/lineage/evaluator implementation",
+          "minutes": 45
+        },
+        {
+          "what": "scorer (50 assertion handlers) + runner",
+          "minutes": 18
+        },
+        {
+          "what": "self-tests 12 passed (zero engine) + 2 smoke batches + 1 defect fix",
+          "minutes": 12
+        },
+        {
+          "what": "20/20 primary invocations executed once each; 15 PASS / 5 FAIL (all output-shaping harness defects, zero semantic failures; 13 engine calls == pinned)",
+          "minutes": 20
+        }
+      ]
     },
     "step4_model": {
       "cap_minutes": 180,
@@ -57,14 +74,28 @@
   "counters": {
     "primary_harness_invocations": {
       "cap": 20,
-      "used": 0,
+      "used": 20,
       "per_cell_max": 1,
-      "cells_run": []
+      "cells_run": [
+        "all 20 cells, one invocation each"
+      ]
     },
     "declared_nonprimary_engine_smokes": {
       "cap_policy": "openly declared, ledgered, synthetic non-cell input only",
-      "used": 0,
-      "entries": []
+      "used": 8,
+      "entries": [
+        {
+          "what": "smoke-1 synthetic query world (2 evaluate: pre-fix fail at lineage + post-fix pass)",
+          "engine_calls": 2
+        },
+        {
+          "what": "smoke-2 batch: scalar branch_scoped / navigation / fault(1 attempted) / validation / exists x2",
+          "engine_calls": 6
+        },
+        {
+          "note": "all synthetic non-cell inputs; openly declared per plan; one ordinary defect found+fixed (single-occurrence RuleExpr lift)"
+        }
+      ]
     },
     "replay_local_attempts": {
       "cap": 14,
@@ -146,6 +177,11 @@
       "utc": "2026-08-11T20:15:00Z",
       "event": "Step 2 freeze: 20 fixture/golden pairs + manifests; oracle review CLEAR 0 BLOCKER/5 MINOR (all resolved or recorded)",
       "charged_to": "step2_fixtures_oracle"
+    },
+    {
+      "utc": "2026-08-11T21:05:00Z",
+      "event": "CAP BOUNDARY STOP: 5 cells (SC12-P, AC21, A01-AUTH, E02, E03) failed on harness output-shaping; re-run would need +5 primary invocations (25>20). Stopped per user stop-conditions; awaiting user ruling (one-time cap amendment vs REVISE closure). No golden touched; semantic-repair counter remains 0.",
+      "charged_to": "step3_deterministic"
     }
   ]
 }

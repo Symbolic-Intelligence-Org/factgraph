@@ -1,0 +1,226 @@
+{
+  "record_type": "Step3RunManifestV0",
+  "primary_invocations": 20,
+  "cells_passed": 15,
+  "cells_failed": 5,
+  "engine_invocations_total": 13,
+  "elapsed_seconds": 0.165,
+  "results": [
+    {
+      "cell_id": "NAV02",
+      "outcome_digest": "sha256:b7a0abf78af734fd",
+      "engine_invocations": 0,
+      "score": {
+        "cell_id": "NAV02",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "SC12-32",
+      "outcome_digest": "sha256:92c01643b0bd426c",
+      "engine_invocations": 0,
+      "score": {
+        "cell_id": "SC12-32",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "SC12-P",
+      "outcome_digest": "sha256:396b91c25d885b2e",
+      "engine_invocations": 0,
+      "score": {
+        "cell_id": "SC12-P",
+        "pass": false,
+        "failures": [
+          "explain_target.content_class: 'structured_diagnostic' != 'none'"
+        ]
+      }
+    },
+    {
+      "cell_id": "AC21",
+      "outcome_digest": "sha256:39232b431721886d",
+      "engine_invocations": 0,
+      "score": {
+        "cell_id": "AC21",
+        "pass": false,
+        "failures": [
+          "explain_target.content_class: 'structured_diagnostic' != 'none'"
+        ]
+      }
+    },
+    {
+      "cell_id": "A01-AMB",
+      "outcome_digest": "sha256:fec1c6eebad078b2",
+      "engine_invocations": 0,
+      "score": {
+        "cell_id": "A01-AMB",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "A01-AUTH",
+      "outcome_digest": "sha256:e47db43f37c7822e",
+      "engine_invocations": 0,
+      "score": {
+        "cell_id": "A01-AUTH",
+        "pass": false,
+        "failures": [
+          "ingress.attempted_authority_fields[0]: 'policy_ref' != 'authority'",
+          "ingress.attempted_authority_fields[1]: 'occurrence' != 'config'",
+          "ingress.attempted_authority_fields[2]: 'path' != 'expect'",
+          "ingress.attempted_authority_fields[3]: 'select' != 'occurrence'",
+          "ingress.attempted_authority_fields[4]: 'expect' != 'path'",
+          "ingress.attempted_authority_fields[5]: 'config' != 'policy_ref'",
+          "ingress.attempted_authority_fields[6]: 'authority' != 'select'"
+        ]
+      }
+    },
+    {
+      "cell_id": "SC01-B",
+      "outcome_digest": "sha256:c270a4d678ade717",
+      "engine_invocations": 0,
+      "score": {
+        "cell_id": "SC01-B",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "Q01",
+      "outcome_digest": "sha256:3bc28e93289835a4",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "Q01",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "Q03",
+      "outcome_digest": "sha256:3e0664b3713a1ae0",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "Q03",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "Q04",
+      "outcome_digest": "sha256:db7bcab2b001363c",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "Q04",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "Q02",
+      "outcome_digest": "sha256:71fa4661ccf8dd14",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "Q02",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "Q05",
+      "outcome_digest": "sha256:c58a3c48346d148a",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "Q05",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "E01",
+      "outcome_digest": "sha256:6ea4b78e9f553117",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "E01",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "E02",
+      "outcome_digest": "sha256:5132c84b648b6cd9",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "E02",
+        "pass": false,
+        "failures": [
+          "result.query_summary: None != {'status': False}"
+        ]
+      }
+    },
+    {
+      "cell_id": "E04",
+      "outcome_digest": "sha256:71dd51f1508b67bd",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "E04",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "E03",
+      "outcome_digest": "sha256:df38a1c884d9603c",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "E03",
+        "pass": false,
+        "failures": [
+          "result.query_summary: None != {'status': 'underdetermined'}"
+        ]
+      }
+    },
+    {
+      "cell_id": "NAV01",
+      "outcome_digest": "sha256:34bccc6b7623f94f",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "NAV01",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "P01",
+      "outcome_digest": "sha256:f32a64d9e5a98d61",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "P01",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "SC01-A",
+      "outcome_digest": "sha256:735eede30c73f522",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "SC01-A",
+        "pass": true,
+        "failures": []
+      }
+    },
+    {
+      "cell_id": "X01",
+      "outcome_digest": "sha256:b9252689a870e003",
+      "engine_invocations": 1,
+      "score": {
+        "cell_id": "X01",
+        "pass": true,
+        "failures": []
+      }
+    }
+  ]
+}
