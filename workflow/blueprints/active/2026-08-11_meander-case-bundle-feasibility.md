@@ -14,6 +14,7 @@
   - Completed independent preflight `workflow/audit/active/2026-08-11_meander-case-bundle-feasibility-preflight.md`，固定对象为 commit `04ad3c722f14e67ab6370d228aa8ee010ea4d9ff`、blob `2e5d5c7361659cc3d53526843de0bf66cb0d51a8`、内容 SHA-256 `7ab6b6113d501f5dffae8e374f109d061a76b954de51a96ea861e699e502f7d5`；本次 amendment 只从该固定对象读取，不依赖 preflight branch tip
   - 2026-08-11 user authorization to proceed with Step 4.4；范围仅为把上述 preflight 的全部 Required/Recommended finding 及 Operator scope guard 写入本 blueprint pair、独立 diff review 并限定提交；不授权 Step 4.5 self-check、`scoped`、case/harness、实验、凭据或产品源码变更
   - 2026-08-11 user authorization to execute Step 4.5 self-check；范围仅为完整重读本 pair、逐项核对 preflight/gates、取得独立 second opinion，并在 self-check 发现必要收紧时仅修改和提交本 pair；不授权 `scoped`、case/harness、实验、凭据或产品源码变更
+  - 2026-08-11 user-supplied `OBL-REVIEW-01..03` recovery/closure package；授权把三项原文、来源链、条款映射与两项 carry-forward 耐久写入本 pair，并补入 custody/environment 的 pre-scoped sequencing guard；不授权关闭其他 gate、`scoped`、case/harness、实验、凭据或产品源码变更
 - Outputs / Downstream:
   - Paired audit log [`2026-08-11_meander-case-bundle-feasibility.audit.md`](./2026-08-11_meander-case-bundle-feasibility.audit.md)
   - Completed independent preflight and completed Step 4.5 self-check；其余未决门仍须关闭，才可请求任何 `scoped` anchor
@@ -130,19 +131,27 @@ Substrate pin 与 harness/run pin 是两个独立身份。上表只描述 `5a37f
 
 If the adapter evaluates business conditions, resolves conflicts, infers coverage, repairs a result, or fabricates provenance, the FactGraph increment dimension is `FAIL` or `UNRESOLVED`. The work may still reveal a reusable wrapper, but it cannot be reported as FactGraph mechanism evidence. Every result report must keep the five ownership lines above separate；benchmark source mapping、portable codecs、custody 或 reconstruction 的成功不得被合并成“FactGraph native”，而 generic fallback degradation 必须逐 case 显式显示。
 
-### 4.4 Adoption-review carry-forward identity gate
+### 4.4 Recovered adoption-review obligations and carry-forwards
 
-The 2026-08-11 user adoption turn `019ff082-3edb-78f2-b045-ee89db181deb`, item `item-1051`, states that **three non-blocking review items** become mandatory future-blueprint obligations, but that message references rather than enumerates them; their exact upstream review source and text are not available in the currently recoverable chain. This draft records the gap rather than inventing content:
+The 2026-08-11 adoption turn `019ff082-3edb-78f2-b045-ee89db181deb`, item `item-1051`, referenced three mandatory future-blueprint obligations without reproducing their text. On 2026-08-11 the user supplied the missing closure package and identified the proximate source as the same Claude Code session's “Q1 采纳评估” response—the message beginning “核验全部完成，结论先行：我的裁定建议是——采纳” and ending “采纳与否由你定”，under the heading《三项蓝图阶段义务（不修改决策，由蓝图评审强制）》. This section is the durable transcription of that session-only source.
 
-| ID | Exact source | Exact obligation | Blueprint mapping | Closure |
-| --- | --- | --- | --- | --- |
-| `OBL-REVIEW-01` | user turn `019ff082-3edb-78f2-b045-ee89db181deb`, item `item-1051`, 2026-08-11；exact upstream item unavailable | `UNRESOLVED — do not infer` | `UNRESOLVED` | Original wording, upstream source identity, and clause mapping required before `scoped` |
-| `OBL-REVIEW-02` | same adoption reference；exact upstream item unavailable | `UNRESOLVED — do not infer` | `UNRESOLVED` | Same |
-| `OBL-REVIEW-03` | same adoption reference；exact upstream item unavailable | `UNRESOLVED — do not infer` | `UNRESOLVED` | Same |
+The recovered wording and the Markdown emphasis supplied with it are reproduced below；the emphasis is part of the supplied transcription, not a new prioritization by this blueprint:
 
-The Q1 §7.2/§8 obligations are independently binding. They may overlap the missing three, but they must not be substituted for them without provenance.
+> 决策 §3 已把 taxonomy 留给蓝图，恰好是这三项的正确落点：
+>
+> 1. **wrong-but-internally-consistent-source 作为具名强制失败类**进入覆盖 taxonomy（PM-05/证伪实验 2 的离线形态）；
+> 2. **级联/隐藏依赖覆盖 cell**（处置矩阵 Gate -1 队列已收的实验 4）进入 coverage matrix；
+> 3. **proxy 人群盲测协议按 UI-04 标准预注册**（样本、判分、通过线说明依据），支撑 §4.4 的 artifact legibility 维度与实验 7 的盲对照精神。
 
-The fixed preflight independently re-checked the recoverable task history and again found only the adoption reference, not the three enumerated upstream obligations. Failed recovery is evidence of source absence, not waiver or closure. PF-R01..PF-R04、PF-Rec01..02、Q1 obligations or new clauses in this amendment must not be substituted for `OBL-REVIEW-01..03` without exact provenance. Step 4.4 may amend the draft while they remain open；`draft → scoped` may not occur.
+The upstream files below corroborate the recovered wording；they are not substitutes for the session-only proximate source. The falsification report at `/Users/zhenzhili/Downloads/meander-falsifikationsstudie-2026.zh.md` is pinned by content SHA-256 `ef877c0e35bbf049a0c548f0d64d69d43a621cf757dfee13b71281aa0465ab7e`；the adversarial-review main report at `/Users/zhenzhili/obsidian_workspace/symb-Intelli./claude_report/2026-08-10_meander-factgraph统一设计对抗审核报告.zh.md` is pinned by SHA-256 `8ac1c7638a82f0a26a5ba2f4a722255370424086f506727af1a8108aa6a41166`；the repository disposition is pinned by SHA-256 `7449dd6041bea639aeddecc6903e04b03ce0ead1c9ebd38a7052c67bc6eb45f2`；the adopted Q1 decision is pinned by commit `5a37f947...` and SHA-256 `47e48838664328072dd6bda223832286fedc905a2c95283fa66b7a5f204fceec`.
+
+| ID | Durable upstream anchors | Blueprint mapping | Closure and mandatory residual |
+| --- | --- | --- | --- |
+| `OBL-REVIEW-01` | `meander-falsifikationsstudie-2026.zh.md:547-551`；adversarial main report `:181-188/:427`；[disposition](../../design/design-points/active/meander-factgraph-unified-design-adversarial-review-disposition.zh.md) `:121/:254/:285`；Q1 §4.4 `:139-140` | §5.3 class 2 plus `freshness`，which may appear only as an optional declared `secondary_stressor`，and §5.3's rule that an uninstantiated umbrella mechanism remains `UNRESOLVED`. This is a partial protective mapping, not satisfaction of the named experiment. | `PROVENANCE CLOSED / CB0 EVIDENCE UNRESOLVED / CARRY-FORWARD MANDATORY`：CB0 has no independent real-world truth/authority layer and does not instantiate this named failure class as a required invariant. A CB0 `PASS` does not cover wrong-but-consistent/obsolete sources. The next separately authorized envelope with source-authority semantics must include this named mandatory class and its evidence-quality/automation-bias test. |
+| `OBL-REVIEW-02` | `meander-falsifikationsstudie-2026.zh.md:559-563`；disposition `:252/:334/:380`；Q1 §4.4/§4.5 `:145/:160` | §5.3 class 4 and class 6 prevent absent evidence or a missing conjunct from being swallowed as false/pass；`multi-hop` and `cascade` may appear only as optional declared `secondary_stressor` values，and their uninstantiated mechanisms remain `UNRESOLVED`. This is a partial protective mapping, not execution of the hidden-workflow experiment. | `PROVENANCE CLOSED / CB0 EVIDENCE UNRESOLVED / CARRY-FORWARD MANDATORY`：CB0 tests the anti-swallowing invariant but not a real ERP/CRM/ServiceNow audit differential. Full hidden-workflow、upstream/downstream dependency and cascade coverage remains a separately authorized `P-GATE`/later source-connected envelope obligation；CB0 must report that gap explicitly. |
+| `OBL-REVIEW-03` | `meander-falsifikationsstudie-2026.zh.md:579-583`；adversarial main report `:145-151/:427`；disposition `:213/:253/:335/:380`；Q1 §4.4 `:144` | §5.7 requires a blind、role-defined reviewer task with pre-registered sampling、fixture/answer key、scoring、threshold-rationale and comparator fields；`A-SOURCE` makes no reviewer-performance claim without that task，and §7.5 keeps reviewer legibility optional | `PROVENANCE + PROTOCOL MAPPING CLOSED / REVIEWER EVIDENCE UNRESOLVED`：the required pre-registration standard is present, but CB0 does not include the reviewer task. Artifact legibility and the blind native-log comparison therefore remain `UNRESOLVED`; a conditional incumbent arm alone does not count as an executed blind-review experiment. |
+
+Closing `OBL-REVIEW-01..03` certifies recovery of the exact obligations、their provenance and their blueprint dispositions. It does **not** claim that any of the three experiments passed, close `P-GATE`, or waive the two carry-forwards. The Q1 §7.2/§8 obligations remain independently binding.
 
 ### 4.5 Draft-time environment observation
 
@@ -161,7 +170,7 @@ tests/test_db_attach_lifecycle.py::DBAttachLifecycleTests::test_attach_with_dura
 -q
 ```
 
-Two temporary read-only probes in the `factpy` environment also observed stable rule/view/scope/support digests and canonical EvidenceGraph across repeated evaluation and workspace reopen, while `evaluated_at` changed. The fixed independent preflight reran the same focused suite as `14 passed in 0.34s` and added the multi-process/hash-seed shape probe. These remain local observations, not shipped tests or a replay contract. Before `scoped`, `ENV-01` still requires dependency/command pinning and clean-checkout reproduction so the passing named environment—not a bare `python` alias—becomes canonical.
+Two temporary read-only probes in the `factpy` environment also observed stable rule/view/scope/support digests and canonical EvidenceGraph across repeated evaluation and workspace reopen, while `evaluated_at` changed. The fixed independent preflight reran the same focused suite as `14 passed in 0.34s` and added the multi-process/hash-seed shape probe. These remain local observations, not shipped tests or a replay contract. The observed exit `139` is treated as a crash/SIGSEGV-class failure, not environment noise. Before `scoped`, `ENV-01` requires preservation of the exact failing command/environment coordinates、attribution or isolation of the cause to a specific interpreter/runtime、native dependency/ABI or project-source boundary, and evidence that the pinned clean environment removes it. `UNKNOWN` is not a closure state；merely choosing the passing `factpy` entrypoint does not close the gate. If the cause is project source, this blueprint does not authorize its repair.
 
 ## 5. Proposed Shape
 
@@ -380,6 +389,8 @@ Minimum roles:
 
 `CaseAuthor` should be separate from both GoldAuthors. If staffing makes overlap unavoidable, it may overlap with at most one GoldAuthor; the other GoldAuthor and GoldAdjudicator remain blind and independent. `CUSTODY-01` must freeze this incompatibility matrix rather than merely list names.
 
+`CUSTODY-01` closes in two ordered stages. First, before `BUDGET-01`、`CORPUS-01` or `ARMS-01` can be accepted, a named-principal feasibility check must show that every incompatibility above can be satisfied. Those three contracts may be discussed or revised before then, but they cannot be frozen. Second, the feasible assignment must be instantiated with the actual custody mechanisms、credentials、locations and logs described below. If the first stage fails, accepting the limitation does not close `CUSTODY-01` or authorize a scored run；only a separately authorized engineering smoke may proceed, while protocol、logic and semantic dimensions remain `UNRESOLVED`.
+
 `GoldCustodian` alone holds gold access before output sealing；`CommitmentSecretCustodian` and `AttestationKeyCustodian` separately hold hiding and authentication material. ImplementationSide、all arms and the pre-gold RunCustodian receive none of the three. `RunCustodian/Scorer` is one lifecycle role with temporally split capability: it may receive holdout input after global freeze, but receives gold and commitment-opening material only after the atomic output seal.
 
 Holdout input and holdout gold are two independently sealed, physically separate packages. Before `scoped`, the blueprint must name their actual durable custodians, different storage/access credentials, opaque locators, retention rules, access-log path, revocation/failure handling and eventual lawful-release policy. It must also name generation/storage/destruction-or-retention rules for the hiding and signing material and the verifier identity. At pre-registration it records each package's SHA-256, byte size, item count, coverage commitment, creation time, and custodian. Digest proves integrity only；it does not substitute for access control.
@@ -577,7 +588,7 @@ Thus a logic-conformance or semantic-reference-control failure cannot be mistake
 
 This proves at most a corpus-local、cap-bound mechanism delta. It does not prove reviewer utility、product demand、market uniqueness, or that a reference implementation could not match the capability with a different budget. Without the LLM or a relevant incumbent arm, broader “unique mechanism value” remains `UNRESOLVED`.
 
-Artifact legibility remains `UNRESOLVED` unless a blind, role-defined reviewer task with a pre-registered population, method, threshold, and comparator is separately included without breaking the fixed cap. This blueprint does not currently include that task.
+Artifact legibility remains `UNRESOLVED` unless a blind, role-defined reviewer task is separately included without breaking the fixed cap. Its protocol must pre-register the target proxy role/population、sampling frame and sample-size rationale、blind allocation、fixed task/fixtures and answer key、scoring rubric and metrics、pass threshold and rationale、and comparator. Any Experiment-7-style claim must compare against existing native/original logs and report reviewer minutes、follow-up-question count、material-defect recall and false challenge separately；a conditional incumbent arm without this blind task is not a substitute. This blueprint does not currently include that task.
 
 ### 5.8 Replay protocol
 
@@ -737,14 +748,16 @@ No arrow grants authority automatically; every repository-governed state transit
 
 ### 7.1 Required before `draft → scoped`
 
-- [ ] `OBL-REVIEW-01..03` have exact original text, source identity/date, and clause-level mappings; nothing is inferred.
+Gate-order dependency: before accepting `BUDGET-01`、`CORPUS-01` or `ARMS-01`, `CUSTODY-01` must demonstrate a feasible assignment of named principals against the §5.5 incompatibility matrix. If available principals cannot preserve the required independence, the pre-scope decision must identify every structurally `UNRESOLVED` dimension and narrow or stop the scored envelope before budget is committed；accepting the limitation cannot close `CUSTODY-01` or authorize a scored run, and it may support only a separately authorized engineering smoke.
+
+- [x] `OBL-REVIEW-01..03` have exact original wording、the 2026-08-11 proximate session source、durable upstream anchors and clause-level mappings；§4.4 preserves both mandatory carry-forwards and does not infer experimental success.
 - [ ] The user confirms or revises every §5.2 hard cap, including the per-scored-arm 6 active-hours / 2-revision sub-cap counted inside the global/workstream totals.
 - [ ] Named people/agents and actual access mechanisms are recorded for `ProtocolOwner`, `CaseAuthor`, both `GoldAuthor` roles, `GoldAdjudicator`, `GoldCustodian`, `CommitmentSecretCustodian`, `AttestationKeyCustodian`, `ImplementationSide`, `RunCustodian/Scorer`, and `FinalAuditor`; the §5.5 incompatibility matrix is enforced.
 - [x] `COUNT-COMMITMENT-01` freezes the domain-bound `CB0-CJSON-v1 + 32-byte hidden nonce + SHA-256` construction and forbids alternatives in §5.3；actual nonce/authentication custody remains `CUSTODY-01`.
 - [ ] Exact durable custody locations、separate credentials、access logs and access/retention/release policy are recorded for physically separate holdout-input and holdout-gold packages；hiding and signing material custody is named separately.
 - [ ] The 16-family/32-instance taxonomy, one required invariant per class, single-variable perturbation rule, public allowlist, zero-corpus-`EXPECTED_ABSTENTION` / gold-side-`UNSCORABLE` split, sealed non-vacuity commitment, exact denominators, proof contracts, and double-annotation gold contract are accepted.
 - [ ] Mandatory/conditional arms, `capability_comparison_manifest.json`、actual reference instrumentation attempt, primary batch/case/goal-call counts, replay case IDs/operators/relations, and absence consequences are frozen.
-- [ ] `ENV-01` is closed with one pinned Python/dependency environment, exact reproducible commands, and a clean-checkout smoke result.
+- [ ] `ENV-01` preserves the exact exit-`139` command/environment coordinates, attributes or isolates the cause to a specific interpreter/runtime、native dependency/ABI or project-source boundary, and closes with one pinned Python/dependency environment that demonstrably removes it plus exact reproducible commands and a clean-checkout smoke result；`UNKNOWN` and entrypoint substitution are insufficient.
 - [x] `PROGRAM-PROFILE-01` freezes the strict positive grammar/dependency DAG、`NotAtom/InAtom/BuiltinAtom/RuleRefAtom` exclusions、exact primitive truth/type/coercion rejection、global rule identity、produced-head collision rejection、empty program-fact policy and proof admissibility contract in §5.4.1.
 - [x] `DUAL-GOAL-01` freezes the ordered two-call bundle、raw evidence/error ownership and batch/case/goal-call accounting in §5.4.1.
 - [x] `SEMANTIC-PARITY-01` freezes the neutral semantics、operand types/primitive truth and one-to-one projection contract in §§5.4.2/5.6；actual arm implementation remains under `ARMS-01`.
@@ -791,7 +804,7 @@ No arrow grants authority automatically; every repository-governed state transit
 - [ ] `NATIVE-INCREMENT-01` is recomputed exactly: all five basis fields are valid/pass, `A-FACTGRAPH` is `100%` on both frozen native-origin candidates, the equally capped reference attempt and telemetry are real, and that reference remains below `100%` or `UNSUPPORTED` on at least one functional equivalent；reference parity makes this dimension and overall result `FAIL`.
 - [ ] Durable per-case outputs can recompute every aggregate; budget actuals remain within every cap.
 - [ ] Post-unseal commitment opening/recomputation and detached authentication both verify；every disposable-copy manifest verifies and every retained base digest is unchanged.
-- [ ] Final report returns independent verdict dimensions and preserves all mandatory `UNRESOLVED` product/Translator/Agent/reviewer claims.
+- [ ] Final report returns independent verdict dimensions and preserves all mandatory `UNRESOLVED` product/Translator/Agent claims；it explicitly lists real-world wrong-but-consistent source authority、complete hidden-workflow/cascade coverage and reviewer-legibility/blind-native-log evidence as `UNRESOLVED`.
 
 ### 7.4 Immediate stop / immutable failure conditions
 
@@ -844,7 +857,7 @@ No weighted aggregate can override these rules.
 
 **Operator scope guard:** CB0 may inform a later Restricted Portable Operator decision, but no numbered step may implement、score、budget or authorize Operator/Query artifacts、arms、cases、host-materialized relations or production-source changes.
 
-1. **Blueprint intake/carry-forward recovery** — recovery was attempted；if `OBL-REVIEW-01..03` remain unavailable, preserve them as blocking while docs-only review/amendment/self-check continues. Resolve no missing text by inference；do not create cases or request `scoped`.
+1. **Blueprint intake/carry-forward recovery — completed** — the user recovered the exact three session-only obligations、their date/source identity and durable upstream anchors. §4.4 closes the provenance gate while preserving wrong-source and real-workflow-cascade carry-forwards plus reviewer-legibility `UNRESOLVED`; no experiment or product gate is represented as passed.
 2. **Independent blueprint review** — completed against parity、leakage、attribution、budget、source legality、replay and status derivation；findings are in the paired audit.
 3. **Fixed independent preflight** — completed on its canonical branch at commit `04ad3c...` / blob `2e5d5c...`；the shipped surfaces and hash-seed shape probe were reviewed without modifying the blueprint branch.
 4. **Step 4.4 amendment and independent diff-check — completed** — on this blueprint branch, every Required/Recommended finding and PF-S02 guard was applied to this pair；independent runtime/SDK、repository/codec、failure/custody and governance/product-boundary reviews reached `CLEAR`. This pair-only commit records the step without changing status or creating experiment artifacts.
