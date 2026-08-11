@@ -3,7 +3,7 @@
 - Status: draft
 - Created: 2026-08-11
 - Last Updated: 2026-08-11
-- Authority: formally reviewed task-scoped experimental blueprint draft；只消费已 adopted 的 Q2 约束并定义一个待 independent preflight、待 final-cap confirmation、待 scoped/execution authorization 的一次性 `P0/A0` 纵向探测。本文不是生产设计、公共契约、ADR、产品批准或执行授权。
+- Authority: formally reviewed and preflight-amended task-scoped experimental blueprint draft；只消费已 adopted 的 Q2 约束并定义一个待 final-cap confirmation、待 scoped/execution authorization 的一次性 `P0/A0` 纵向探测。本文不是生产设计、公共契约、ADR、产品批准或执行授权。
 - Inputs:
   - adopted [`2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md`](../../design/decisions/active/2026-08-11_q2-meander-agent-query-validation-vertical-probe-decision.md), commit `7f84d4f601fe5f680a183ae7aefba79c35f52f99`, 607 行，SHA-256 `802d5980ccadf523c8c0ef0f145c7881592dccfab5abebd91a7f999e672850ad`
   - adopted [`2026-08-11_q1-offline-feasibility-before-external-validation-decision.md`](../../design/decisions/active/2026-08-11_q1-offline-feasibility-before-external-validation-decision.md)；只作为非复用、`P-GATE` 仍开放和 CB0 独立性的治理输入
@@ -13,9 +13,11 @@
   - 当前 hnsm-backend/FactGraph 代码证据：blueprint fork basis `7f84d4f601fe5f680a183ae7aefba79c35f52f99`；Q2 所引用的 shipped-source pin `32093c98d39f21a61418314a5f7a685acc256d4a`
   - read-only adjacent baselines：`meander@4ddb8e36f0b7a80e99a7447c719c21b4776d6ca7`、`meander-agent@e4b044911de5495ffa93edeba933985588b51cfa`、`factgraph-new@b92d6bf5405be8d15eedea5b97aa7408914e76b9`
   - 2026-08-11 user direction after initial draft：接受 3 working days / 24 person-hours / 20 deterministic cells / 6 model cells / 24+2 model turns 的 kill-first review baseline，授权 final Step 4.2 review，并指示未来执行工作交给届时具名的 user-designated agent；该指示不授权 preflight、`scoped`、execution、BYOK 或 egress
+  - completed standalone preflight：commit `8a6a0577ebfc9aa0167badece0735e74b17bff97`，preflight blob `3e28c8b76ac58851035aaee70804382eb33df432` / SHA-256 `01b0e6ca9f576f5f5c9af5b1df66257bb4834471f23853277d4bbd38e7e0dbdd`；15 PASS / 1 FAIL，3 Required / 8 Recommended / 6 Verified / 4 Scoped-detail / 0 Abandonment
+  - 2026-08-11 user direction after preflight：正式采纳较轻模型门方案并授权 Step 4.4/4.5 的 paired-doc amendment 与 self-check；不授权 SDK 安装、API/model 调用、网络外发、`scoped` 或实验执行
 - Outputs / Downstream:
-  - completed under current authorization: one formally reviewed revision of this paired blueprint/audit only
-  - after a separate Step 4.3 authorization: `workflow/audit/active/2026-08-11_meander-agent-query-validation-vertical-probe-preflight.md` on an independent preflight branch
+  - completed under current authorization: one formally reviewed and preflight-amended revision of this paired blueprint/audit only
+  - completed on its independent branch: `workflow/audit/active/2026-08-11_meander-agent-query-validation-vertical-probe-preflight.md` at `8a6a0577`
   - only after later `scoped` and execution authorization: one isolated disposable harness, one frozen fixture/oracle lineage, one immutable final result/disposition report, and this paired audit's lifecycle record
   - only after a terminal `PROCEED_TO_ADR_CANDIDATES` and new authorization: evidence-scoped D02–D07/D10–D11 decision proposals；本文本身不创建它们
 - Related:
@@ -35,7 +37,7 @@
 - Audit Log:
   - [`2026-08-11_meander-agent-query-validation-vertical-probe.audit.md`](./2026-08-11_meander-agent-query-validation-vertical-probe.audit.md)
 
-> Workflow Step 4.1 与 Step 4.2 已完成；三条 review lane 对 exact substantive baseline `c9786e34a45534e66323d5b254e244468864a5fd` 均返回 `CLEAR 0/0/0`。本文仍必须经过独立 preflight、self-check、`CAP-FINAL-01`、`draft -> scoped` 与 `scoped -> implementing`/execution 的分离授权后才可执行。BYOK 与 data egress 还需要各自独立授权。
+> Workflow Step 4.1–4.5 已完成：formal review 对 `c9786e34` 返回三路 `CLEAR 0/0/0`，standalone preflight 于 `8a6a0577` 完成，findings 已在本 paired docs 中消费并通过轻量 self-check。本文仍需 `CAP-FINAL-01`、`draft -> scoped` 与 `scoped -> implementing`/execution 的分离授权后才可执行；BYOK 与 data egress 还需要各自独立授权。
 
 ## 1. Problem
 
@@ -89,7 +91,7 @@ Agent 只填写固定 profile 的 typed slots
 - 不宣称 open fixtures 或两个模型可以统计泛化到所有 Agent。
 - 不用模型修复失败的 deterministic core；Step 3 不过则跳过模型。
 - 不创建第三个 discovery envelope；不把有利结果续成另一个架构 slice。
-- 本轮获授权的文档级 Step 4.2 review 已闭合；不在当前 `draft` 阶段运行测试、创建 fixtures/harness、选择/调用模型、使用 key、外发数据、执行 preflight 或推进状态。
+- 本轮获授权的文档级 Step 4.4/4.5 amendment 与 self-check 只消费已完成的 preflight；不运行测试、创建 fixtures/harness、调用模型、使用 key、外发数据或推进状态。
 
 ## 4. Current Context
 
@@ -100,7 +102,8 @@ Agent 只填写固定 profile 的 typed slots
 | Q2 decision | `adopted` at `7f84d4f6` | 允许用户另行授权起草一个 paired blueprint；不授权执行 |
 | Workflow Step 4.1 drafting | explicitly authorized by user on 2026-08-11 | 本次只可创建本 paired blueprint/audit |
 | Workflow Step 4.2 review | completed on 2026-08-11；exact baseline `c9786e34`；three lanes `CLEAR 0/0/0` | review 只修改 paired docs；不产生下一阶段授权 |
-| Independent preflight | not authorized / absent | 不得创建 preflight artifact 或从 draft 跳到 scoped |
+| Independent preflight | completed at `8a6a0577`；15 PASS / 1 FAIL；findings consumed by Step 4.4 | preflight artifact 保持独立；其完成不授权 scoped/execution |
+| Workflow Step 4.4/4.5 | completed under explicit 2026-08-11 user authorization | 只修订 paired docs 并 self-check；不创建实验资产 |
 | Numeric cap acceptance | user accepted the lean review baseline on 2026-08-11；not execution authorization | review 可以检验/收窄；任何增量必须重新获批 |
 | `scoped` / execution | not authorized | 不得创建 harness、fixtures、reports 或改源码 |
 | `BYOK-01` | not authorized | 不得读取、接受或使用模型凭据 |
@@ -124,7 +127,9 @@ Agent 只填写固定 profile 的 typed slots
 | `meander-agent` | `e4b044911de5495ffa93edeba933985588b51cfa` | read-only Plan/tool evidence |
 | `factgraph-new` | `b92d6bf5405be8d15eedea5b97aa7408914e76b9` | read-only adjacent baseline |
 
-Blueprint 分支创建时存在 112 项 unrelated dirty baseline，其 exact porcelain manifest SHA-256 为 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`。任何后续阶段都必须重新记录 baseline；只 stage 明确 allowlist 文件，不 restore、不格式化、不整目录 stage 用户修改。若 allowlist diff 无法和用户改动隔离，该阶段停止协调。
+Blueprint 分支创建时存在 112 项 unrelated dirty baseline，其 exact porcelain manifest SHA-256 为 `c058409c63252bf1c0c8289a58133b551ca49ec112296ad8b4d5d7500b1be326`。`DIRTY-BASELINE-01` 的唯一复现 recipe 是捕获 `git status --porcelain -uall` 的原始 stdout bytes（保留末尾 newline），再记录行数与 SHA-256；普通 `git status --porcelain` 不等价。任何后续阶段都必须重新记录 baseline；不 restore、不格式化用户修改。
+
+`CACHED-DIFF-ISOLATION-01`：stage 前先捕获 `git diff --cached --name-status` 基线；只允许 `git add -- <逐个显式 allowlist 文件>`，禁止 `git add -A`、`git add .` 或目录 stage。stage 后的 cached delta 必须恰等于本任务 intended files、是 §6.2 allowlist 子集，并与 unrelated dirty baseline 零交集；若无法证明则停止协调，不 reset/unstage 用户内容。
 
 ### 4.3 Shipped facts versus experimental obligations
 
@@ -139,15 +144,15 @@ Blueprint 分支创建时存在 112 项 unrelated dirty baseline，其 exact por
 | Explain | `row.explain()` 依赖 live result；manual Explain 可重新 evaluate，native graph builder 可读 current ledger | shipped 能力上限记为 R0；R1/R2 只通过 frozen experiment bundle 验证 |
 | Query head | SDK 生成 `__query__:<digest>`；authored/internal namespace 尚未分域 | AC-21 要求实验 managed catalog 前置拒绝碰撞，不对历史 ID 做迁移 |
 
-### 4.4 Draft-open items that review/preflight must close
+### 4.4 Review/preflight disposition
 
-1. 验证用户已接受的 §6.1 lean hard caps 在 pinned environment 中是否可执行；review/preflight 只可保持或收窄，不能擅自增加。
-2. 验证 20 个 executable cells 和 6 个 model-scored cells 是否仍覆盖 Q2 的最小反证面；batch validation 必须记录全部内部 assertions，不能用“一个 cell”隐藏额外 engine/model runs。
-3. 验证实验 package 可以只使用 private imports/facade 完成，不需修改 `src/`。
-4. 选择两个实质独立 provider/model coordinate；当前不在本文中预选供应商。
-5. 冻结独立人工 oracle review 与 blind grading 的实际角色；角色不足时允许诚实 `UNRESOLVED`，不引入 CB0 custody。
-6. 固定 preflight 可安全运行的 shipped compatibility tests；本文不凭猜测写入命令结果。
-7. 明确 outbound manifest、retention/training/cache/region 后，才可分别请求 `BYOK-01` 与 `EGRESS-01`。
+1. §6.1 的 lean hard caps 与 20/6 matrix 已由 formal review/preflight 复算闭合；review-derived `22+2/10/13/14` 仍等待 `CAP-FINAL-01`，不构成 execution authorization。
+2. 20 个 executable cells 和 6 个 model-scored cells 保持不变；batch validation 必须记录全部内部 assertions，不能用“一个 cell”隐藏额外 engine/model runs。
+3. preflight 的 production scan 未发现实验符号；未来 disposable package 仍只允许 private imports/facade，不得修改 `src/`。
+4. 轻量模型门冻结两项 profile identity：`openai-gpt-responses-v1`（OpenAI / GPT family / Responses tool-call dialect / experiment-owned raw HTTP adapter）与 `anthropic-claude-messages-v1`（Anthropic / Claude family / Messages `tool_use` dialect / experiment-owned raw HTTP adapter）。精确 model ID 与 adapter implementation version 延后至首次 scored call 前冻结；真实 API 接受度均为 `NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION`。
+5. 第二 blind adjudicator 当前未具名；handoff 必须填写 `blind_adjudicator_ref`，或显式设置 `accept_no_adjudicator_unresolved=true`，后者使相应 human dimension 合法保持 `UNRESOLVED`。
+6. shipped compatibility test 已由 preflight 钉为 `COMPAT-CMD-01`（§6.3）；其 `70 passed @3ad19859` 只作历史 baseline，执行期须先证明受保护 source/test surface 未漂移，再从 scoped repo root 复跑。
+7. outbound manifest、retention/training/cache/region 继续留在 `EGRESS-01`；`BYOK-01` 与逐 provider `EGRESS-01` 仍各自等待独立授权。
 
 ## 5. Proposed Shape
 
@@ -385,7 +390,7 @@ restricted、missing、ambiguous、branch-unbound fixtures 必须在 ledger acce
 
 ### 5.6 Frozen fixture plan: 20 named executable cells
 
-下表是用户已接受、等待 formal review/preflight 复核的 lean hard cap。一个 cell 就是一个 executable fixture；mutation/retry/variant 不得藏在同一个 ID 内规避 cap。静态 batch-validation cell 可以在一次显式 compiler/catalog invocation 中返回多条具名 diagnostics，但 manifest 必须列出每条 assertion，且不得暗中触发额外 engine/model runs。Step 2 必须在实现前写出每个 cell 的 ingress、resolution、lineage、result、expectation、Explain target 和 Agent interpretation oracle，并记录一次轻量独立 review。
+下表的 lean hard cap 已由 formal review/preflight 复算闭合，仍等待 `CAP-FINAL-01`。一个 cell 就是一个 executable fixture；mutation/retry/variant 不得藏在同一个 ID 内规避 cap。静态 batch-validation cell 可以在一次显式 compiler/catalog invocation 中返回多条具名 diagnostics，但 manifest 必须列出每条 assertion，且不得暗中触发额外 engine/model runs。Step 2 必须在实现前写出每个 cell 的 ingress、resolution、lineage、result、expectation、Explain target 和 Agent interpretation oracle，并记录一次轻量独立 review。
 
 | ID | Coverage / oracle | Model-scored |
 |---|---|---|
@@ -517,20 +522,34 @@ Step 4 只有在 canonical request、rows/expectations、zero/error distinctions
 
 ### 5.11 Probe Step 4: threshold-first dual-model protocol
 
+`PreScopedProviderProfileFreezeV0` 在 `scoped` 前固定两项 family-level profile；它们不是 exact model selection，也不证明远端 API 可用：
+
+| profile_id | provider organization / base family | wire dialect | adapter strategy | remote acceptance |
+|---|---|---|---|---|
+| `openai-gpt-responses-v1` | OpenAI / GPT | Responses tool-call JSON | experiment-owned raw HTTP projection | `NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION` |
+| `anthropic-claude-messages-v1` | Anthropic / Claude | Messages `tool_use/tool_result` JSON | experiment-owned raw HTTP projection | `NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION` |
+
+pre-scoped `ProviderProfileV0` 只记录 `profile_id/provider_organization/base_model_family/wire_dialect/adapter_strategy/offline_conformance_contract_version/model_id_state/remote_api_acceptance`。当前 `model_id_state=pending_until_first_scored_call_freeze`；本次不安装 SDK、不读取 key、不联网。
+
+两 profile 共用同一离线 conformance contract，只允许验证：request serialization、canonical schema embed→extract byte identity、canned tool/final/error response normalization。SDK 既非必要也不充分；离线通过不得升级为真实 API acceptance。transport implementation 尚不存在时，该合同在 Step 3 通过后且首次 scored call 前执行，不消费 provider call 或正式实验 attempt。
+
 #### 5.11.1 Freeze order
 
 首次 scored call 之前按顺序冻结并 hash：
 
 1. 6 个 model-scored fixture IDs 与 per-risk oracle；
-2. profile manifests 和 canonical Agent-visible JSON schema bytes；
+2. canonical Agent-visible JSON schema/response-contract bytes 与 digests；
 3. system/task prompts、typed tool-result payload、final response contract；
 4. normalizer、mechanical comparator、blind-human rubric；
-5. 两个实质独立 provider organizations/base model families 的 exact coordinate；
+5. 上表两个 family-level profile 的 exact model IDs、adapter implementation versions 与 transport flags；
 6. sampling settings、seed（若支持）、token/time/call caps；
 7. case order、threshold、denominator、retry/invalidation rules；
-8. `BYOK-01` 和逐 provider `EGRESS-01` authorization IDs。
+8. 以上字段组装并 hash 为 `ScoredArmManifestV0`；
+9. `BYOK-01` 和逐 provider `EGRESS-01` authorization IDs。
 
-每个 profile 的 canonical schema 在两模型间 byte-identical。供应商 transport wrapper 可以不同，但不得改变 tool name/description/fields/constraints/required set。供应商无法承载时，该 arm 为 `UNSUPPORTED/UNRESOLVED`；不得临时改 schema。
+`ScoredArmManifestV0` 承载 exact model ID、adapter implementation version、transport flags、canonical tool-schema/response-contract digests 与 sampling/cap metadata；这些字段不倒逼 pre-scoped adapter 实现。执行顺序固定为：冻结 exact arm manifest → 完成三项离线 conformance → 获得 `BYOK-01`/逐 provider `EGRESS-01` → 首次 scored call。
+
+每个 profile 的 canonical schema 在两模型间 byte-identical：每个 object 层递归设置 `additionalProperties=false`，全部 declared properties 都进入 `required`，可选语义以 nullable union 表达而不是省略字段。canonical digest 在 provider wrapping 前计算；adapter 必须从 serialized wrapper 重新提取 schema 并复核相同 digest。`strict`、`tool_choice`、parallel-tool 等 provider transport flags 独立冻结入 `ScoredArmManifestV0`；SDK/helper 若改写 tool name/description/fields/constraints/required set，该 profile 直接 `UNSUPPORTED/UNRESOLVED`，不得反向修改 canonical schema。
 
 Model A 的结果不得用于调整 Model B。每个 fixture 新会话、无 memory；最多一次 tool call，返回 typed result 后最多一次 final-answer turn。歧义可在 tool call 前 `abstain/needs_review`。第二个 semantic tool call 是失败。
 
@@ -619,7 +638,7 @@ blind_sample_id -> model_arm + run_id + provider_request_id
 
 ### 5.13 Separate BYOK and egress gates
 
-`BYOK-01` 只授权：credential owner、两个冻结 model coordinates、费用上限、runtime secret injection。key 禁止出现在 `.env`、CLI args、logs、fixtures、reports 或 git。
+`BYOK-01` 只授权：credential owner、两个冻结 model coordinates、费用上限、runtime secret injection。Secret value 禁止进入任何 tracked 或 durable artifact，包括 `.env`、CLI args/shell history、frozen prompts、transcripts、notebooks、raw/redacted logs、fixtures/goldens、manifests/reports、crash dumps、cache、untracked persistent files 或 git；工件只可记录 secret coordinate/owner/provider，不可记录值。
 
 `EGRESS-01` 必须逐 provider 冻结一个结构性 `EgressPolicyManifestV0`：允许的 message roles、JSON paths、data classification、per-field/total size limits、静态 system/task prompt、tool schema 和 result-template hashes，以及 retention/training/cache/log settings、region/residency、deletion/derived-output 处理和 inbound response 保存方式。运行前只能批准这些稳定结构与静态组件，不能假装预知包含 Agent tool arguments 的动态完整 payload digest。
 
@@ -661,7 +680,9 @@ RP-MUT-CONFIG
 RP-MUT-SOURCE
 ```
 
-13 个 logical operations 最多产生 14 次 local evaluate/explain/reopen attempts：三个 R0 Explain、一个 R1 reopen/Explain、R2 的一次 evaluate + 一次 Explain、四个 negative reopen/resolve attempts、四个 mutation evaluations。不得新增未列 operation，也不得产生额外 model call。
+13 个 logical operations 最多产生 14 次 local attempts，预算动词只允许 `EVALUATE | EXPLAIN | REOPEN`：三个 R0 `EXPLAIN`、一个 R1 `REOPEN`、R2 的一次 `EVALUATE` + 一次 `EXPLAIN`、四个 negative `REOPEN`、四个 mutation `EVALUATE`。`resolve` 只能是 outcome，不是额外 attempt。不得新增未列 operation，也不得产生额外 model call。
+
+R1/R2 共用一个 `ReplayBundlePinSetV0`：Policy/rules/lowering/compiler build、facts/snapshot、execution profile/config/budget、lineage、query/row/expectation anchor、provenance/support/eager-proof artifacts，以及 artifact digest/format version。R1 可不消费所有材料，但 capture 不得比 R2 更薄；缺任一 required pin 时只能显式 unavailable/`UNRESOLVED`，不能读取 current/latest 补全。
 
 | Level | Test action | Pass claim |
 |---|---|---|
@@ -675,7 +696,7 @@ RP-MUT-SOURCE
 
 canonical comparator 对 rows 使用稳定 tuple encoding/sort；排除允许变化的 run ID/time；用 authored semantic identity 比 Explain graph；generated nodes 通过 SC-02 lineage；completeness/failure class exact-match。expectation/query-summary 在本 probe 只验证 R0，不产生 R1/R2 通过主张。
 
-为 frozen `Q02` representative fixture 创建四个新的 child comparative runs：fact/ledger mutation、Policy mutation、config/profile mutation、source-availability mutation。每个 child 有新 run ID 和 parent ref，不覆盖原 Run。原 bundle 必须继续产原结果或因预注册缺件明确 unavailable。模型重新调用永远是新 comparative run，不是 replay。
+为 frozen `Q02` representative fixture 创建四个新的 child comparative runs：fact/ledger mutation、Policy mutation、config/profile mutation、source-availability mutation。每个 child 有新 run ID 和 parent ref，不覆盖原 Run。mutation isolation 只对 mutation 前后同一 base bundle 的 bytes/digest 与已计数 `RP-R2` result fingerprint 做零执行离线比较；不得为“原 bundle 仍可运行”再增加 evaluate/explain/reopen。若需要额外执行即触发 `K-BUDGET`，不能静默成为第 15 次 attempt。模型重新调用永远是新 comparative run，不是 replay。
 
 `PROCEED` 至少要求三-target R0、`Q02`-only R1/R2、`Q02` mutation isolation 和 explicit missing-artifact failure 全过。R3 固定 `UNRESOLVED`，D10 proposal 必须排除 detached/historical replay并保留 eager proof；query-summary/expectation durable replay 也保持排除。R4 固定 `NOT_TESTED`。
 
@@ -708,6 +729,8 @@ STOP-class kill
   > ordinary threshold REVISE
   > PROCEED_TO_ADR_CANDIDATES
 ```
+
+`DispositionPrecedenceValidatorV0` 从冻结的 evidence/kill/gate manifests 机械推导唯一终态：任一 STOP-class kill → `STOP`；否则任一 experiment invalidation、REVISE-class kill 或 required gate/threshold 未满足 → `REVISE`；只有全部 proceed prerequisites 成立才允许 `PROCEED_TO_ADR_CANDIDATES`。execution 前冻结 `kill_id→terminal_class`、required-gate 集合和 non-blocking allowlist；未知 ID/状态、重复冲突记录或缺失 mandatory input 一律 `EXPERIMENT_INVALID→REVISE`。R3=`UNRESOLVED`、R4=`NOT_TESTED` 与 product/P-GATE 的预注册非阻塞状态必须列入 allowlist，不能因字符串扫描而误判。validator 将推导值与终报声明值比较，不一致则拒绝生成/封存终报，并分别记录 `CONTRADICTED | EXPERIMENT_INVALID | THRESHOLD_UNMET` 原因；用 STOP、invalidation、threshold-unmet、proceed 四组离线 fixtures 自检。它是零 engine/model/replay-attempt 的离线后处理。
 
 终报同时区分 `architecture_hypothesis=CONTRADICTED` 与 `experiment_validity=UNRESOLVED`。写入终态后，report、cases、thresholds、models 和 disposition 不可改；blueprint 可因“协议已完成”进入 implemented/archive，即使结果为 STOP，但不能把 implemented 解释为架构成功。
 
@@ -773,16 +796,19 @@ all Meander, meander-agent, factgraph-new paths
 Q1/CB0 fixtures, reports, audits and working assets
 ```
 
+`docs/api/**` 与 `docs/official/**` 在当前基线可以不存在；这里仍作为防御性禁区保留，不要求创建或扫描出占位目录。
+
 ### 6.3 Compatibility and no-side-effect floor
 
 - experimental symbol 不得出现在 OpenAPI、SDK exports、MCP、production routes、migrations 或 public docs。
-- Meander Inbox、decision、learning、current-evaluation 和其他 persistent state 的 before/after digest 必须相等。
-- shipped Plan v3 focused behavior 和 eager-proof compatibility floor 不变；精确测试命令由 preflight 根据环境钉扎，不在 draft 中伪造。
+- `MEANDER-STATE-DIGEST-01`：相对 handoff 中 pinned Meander repo root，递归读取 `.meander/**` 与 `data/**` 的全部 regular files 原始 bytes（包括 `*.db`、`*.db-wal`、`*.db-shm`）。每项编码为 key 顺序固定的单行 JSON `{"path":"<relative POSIX>","length":<decimal>,"sha256":"<lowercase hex>"}`（UTF-8、无额外空白、每 record 单 LF），按 `path` 的 UTF-8 bytes 排序后对完整 JSONL bytes 计算 roll-up SHA-256。禁止通过 sqlite open/read/checkpoint 采集；新增、删除或内容变化均为 drift。preflight 观测值为 24 files / `1848674a22995cac4d77cfed6acbe1b059f645b4d8815a1ae8d3c69575f443f3`，只作历史证据，不是未来固定 invariant；execution-start 需在 quiescent 状态获得连续两次相同的新鲜 before baseline，再与 after manifest/roll-up 比较。
+- `COMPAT-CMD-01`（historical preflight baseline `3ad19859`）：cwd 固定为 handoff 中的 scoped hnsm repo root；命令为 `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src /Users/zhenzhili/miniforge3/envs/factpy/bin/python -m pytest -p no:cacheprovider -q tests/application/protocol/test_rule_expr.py tests/application/protocol/test_rule_expr_lowering.py tests/application/protocol/test_evaluate_result_digests.py`，历史结果 `70 passed, exit 0`。execution 前必须证明 `src/**` 与这三份 test 相对 `3ad19859` 无差异（`git diff --quiet 3ad19859 -- src tests/application/protocol/test_rule_expr.py tests/application/protocol/test_rule_expr_lowering.py tests/application/protocol/test_evaluate_result_digests.py` 或等价 blob manifest），再在 scoped cwd 复跑；只有该 protected surface 漂移才停止并重新 preflight，纯 docs/harness HEAD 变化不触发。
 - Agent/provider 无直接 executor 或 repository access。
 - native-only；unsupported engine/capability typed fail，不 silent fallback。
 - source repo pins 保持 read-only/clean；若外部 baseline 本身漂移，停止并重新 preflight，不跟随 latest。
 - experimental harness 可 private-import，但不能 re-export、monkey-patch installed product surface 或持久修改 current store。
-- 所有 Python/test 命令使用 `PYTHONDONTWRITEBYTECODE=1`；pytest cache 禁用或重定向；DB、temp、cache 和 bytecode（若无法禁用）只能进入 allowlisted working root。
+- FactGraph/replay/compat 的所有 Python/test 命令使用 `/Users/zhenzhili/miniforge3/envs/factpy/bin/python` 与 `PYTHONDONTWRITEBYTECODE=1`，禁止 bare `python`/`pytest`；model transport 可使用另行 pin 的隔离环境。pytest cache 禁用或重定向；DB、temp、cache 和 bytecode（若无法禁用）只能进入 allowlisted working root。
+- pre-existing `.pytest_cache` 只作为 path/mtime/content baseline 记录；after scan 只判新增或漂移，不删除用户 cache。是否清理由用户另行决定。
 - 四仓在每个 probe checkpoint 前后记录 pinned manifest/hash diff；邻接仓在环境支持时只读挂载，否则使用权限限制 + before/after hash 双证据。普通 `git status` 或“看起来 clean”不足以证明无污染。
 
 ### 6.4 Kill and invalidation table
@@ -813,7 +839,7 @@ Step 3 final gate 或首次 scored call 之后不允许 repair/rerun。终态也
 
 ### 6.6 Named independent-preflight checks
 
-Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone preflight 必须逐行报告 `PASS | FAIL | EXTERNAL_GATE_OPEN | NOT_APPLICABLE`、exact evidence coordinate 和 blocker effect；本 blueprint review 不提前关闭它们。
+Q2 要求每项 §4 lock 成为具名 preflight check。completed standalone preflight `8a6a0577` 已逐行报告 `PASS | FAIL | EXTERNAL_GATE_OPEN | NOT_APPLICABLE`、exact evidence coordinate 和 blocker effect；下表保留为历史 check contract。`PF-MODEL-01` 的历史 verdict 仍为 FAIL，本 Step 4.4 只消费其 remediation，不回写 preflight 为 PASS。
 
 | Check ID | Q2/blueprint lock | Required preflight evidence |
 |---|---|---|
@@ -825,35 +851,36 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 | `PF-SC01-01` | SC-01 paired meanings | both candidate goldens、observable `c` branch、current lowering labeled baseline only |
 | `PF-SC02-01` | total lineage exit | authored/lowered node schemas、totality checker、branch coverage and generated-role rules |
 | `PF-OBL01-01` | SC-12 + AC-21 | exact owner/stage/diagnostic codes；`engine_invocations=0`；no namespace capture/fallback |
-| `PF-MODEL-01` | two independent arms + 22+2 call cap | exact model coordinates pending/frozen state；offline adapter/schema-serialization compatibility for both providers；no credential/model call |
+| `PF-MODEL-01` | two independent arms + 22+2 call cap | 两个具名 family-level `ProviderProfileV0`、wire dialect/adapter strategy、冻结的三项离线 conformance contract；exact model ID/adapter version 首次 scored call 前冻结；remote acceptance 仍 `NOT_TESTED`；no credential/model call |
 | `PF-BLIND-01` | OBL-02 | 12-slot record、rubric、sealing/reveal process、absence/adjudication states and retained judgment schema |
 | `PF-SECRET-01` | BYOK/egress | secret injection design and per-provider pre-send manifest guard；both authorizations remain explicit external gates |
 | `PF-REPLAY-01` | R0–R4 + operation cap | 13 operation IDs、14-attempt maximum、bundle contents、negative errors、mutation parent/child isolation |
 | `PF-RUNTIME-01` | read-only/no pollution | `PYTHONDONTWRITEBYTECODE=1`；pytest cache disabled or redirected；all DB/temp/cache under allowed working root；four-repo before/after manifest/hash; adjacent repos read-only mounted where supported |
-| `PF-COMPAT-01` | Plan v3/eager-proof/no side effect | exact safe focused commands and Meander persistent-state before/after digest plan；no source writes |
+| `PF-COMPAT-01` | Plan v3/eager-proof/no side effect | §6.3 `COMPAT-CMD-01` 与 `MEANDER-STATE-DIGEST-01`；no source writes |
 | `PF-HANDOFF-01` | user-designated executor | handoff bundle schema、recipient-record field、pinned commit/blob requirements；handoff itself grants no execution/BYOK/egress |
-| `PF-DISPOSITION-01` | evidence map、kills、one terminal result | precedence checker、D02–D07/D10–D11 maximum-claim table、product/P-GATE unchanged、immutable report path |
+| `PF-DISPOSITION-01` | evidence map、kills、one terminal result | `DispositionPrecedenceValidatorV0`、D02–D07/D10–D11 maximum-claim table、product/P-GATE unchanged、immutable report path |
 
-`PF-MODEL-01` 必须在 `scoped` 前证明两套 provider adapters 能离线保留同一 canonical tool schema 和 response contract；否则 3 小时 Step 4 预算不能用于临时开发 transport，blueprint 保持 `draft/REVISE`。`PF-RUNTIME-01` 不允许普通 `git status` 代替 pinned manifest diff；private imports、tests 和 imports 也不得在 source/adjacent repos 留下 `__pycache__`、pytest cache、临时 DB 或其他文件。
+`PF-MODEL-01` 的较轻门在 `scoped` 前只要求 §5.11 的两个具名 family-level profiles、wire dialect、adapter strategy 与离线 conformance contract 已冻结；exact model IDs 与 adapter implementation versions 在首次 scored call 前冻结。离线 conformance 实现及真实 provider support 是后续 readiness gate，真实 API acceptance 保持 `NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION`；3 小时 Step 4 预算不得用于临时重写 transport。`PF-RUNTIME-01` 不允许普通 `git status` 代替 `DIRTY-BASELINE-01`；private imports、tests 和 imports 也不得在 source/adjacent repos 留下 `__pycache__`、pytest cache、临时 DB 或其他文件。
 
 ## 7. Acceptance
 
 ### 7.1 Workflow gates before `scoped`
 
-- [ ] Q2 adoption pin、branch fork basis、外部 repo pins 和 dirty baseline 经独立 preflight 重核。
+- [x] Q2 adoption pin、branch fork basis、外部 repo pins 和 dirty baseline 经 independent preflight `8a6a0577` 重核。
 - [x] Step 4.2 formal review 完成；exact substantive baseline `c9786e34` 的三条 review lane 均为 `CLEAR 0/0/0`，paired audit 只记录真实 review evidence。
-- [ ] 独立 preflight artifact 在独立 branch 完成并被 blueprint consume。
+- [x] 独立 preflight artifact 在独立 branch 完成；3 Required 与 8 Recommended 已由 Step 4.4 消费，历史 `PF-MODEL-01=FAIL` 未被改写为 PASS。
 - [x] 用户于 2026-08-11 明确接受 commit `4592e491` 中的原始 lean baseline（3 working days、24 person-hours、20/6 cells、2 models、24+2 turn ceiling 及其余当时列出的资源/零 repair caps）；本轮新增 operation accounting 与 22+2/10 收窄仍等待 `CAP-FINAL-01`，且均不构成 execution authorization。
-- [ ] `PF-BASELINE-01..PF-DISPOSITION-01` 全部逐项报告；external gates 不能伪装成 PASS。
+- [x] `PF-BASELINE-01..PF-DISPOSITION-01` 已全部逐项报告；external gates 保持 OPEN，未伪装成 PASS。
 - [ ] `CAP-FINAL-01` 对 pinned reviewed/preflight commit 获得用户确认；精确 cardinality 不得缩水后仍称 PROCEED。
 - [ ] 用户单独授权 `draft -> scoped`；这不授权 execution。
-- [ ] `OBL-Q2-BP-01` 映射到 `SC12-32/SC12-P/AC21` 及明确 oracle。
-- [ ] `OBL-Q2-BP-02` 映射到 §5.12 的 12-slot protocol；仅实际 candidate texts 进入 blind judgment。
-- [ ] `OBL-Q2-BP-03` entry gate 确认 CB0/Q2 状态并禁止第三封套。
+- [x] `OBL-Q2-BP-01` 映射到 `SC12-32/SC12-P/AC21` 及明确 oracle。
+- [x] `OBL-Q2-BP-02` 映射到 §5.12 的 12-slot protocol；仅实际 candidate texts 进入 blind judgment。
+- [x] `OBL-Q2-BP-03` entry gate 确认 CB0/Q2 状态并禁止第三封套。
 
 ### 7.2 Post-scoped handoff and execution gates
 
-- [ ] `PF-HANDOFF-01` 已在 preflight 验证 handoff schema；实际 `HandoffRecordV0` 将 exact scoped/preflight commits、fixture-plan contract、caps 和 open-gate 坐标交给届时具名的 user-designated executor agent，且不含 secrets。
+- [x] `PF-HANDOFF-01` 已在 preflight 验证 handoff schema。
+- [ ] post-scoped 实际 `HandoffRecordV0` 将 exact scoped/preflight commits、fixture-plan contract、caps、open-gate 坐标、pinned hnsm/Meander repo roots、factpy/model-transport environment IDs、`DIRTY-BASELINE-01`/`CACHED-DIFF-ISOLATION-01`/`COMPAT-CMD-01`/`MEANDER-STATE-DIGEST-01` 四个 runtime contract refs，以及 `blind_adjudicator_ref` 或 `accept_no_adjudicator_unresolved=true` 交给届时具名的 user-designated executor agent，且不含 secrets。
 - [ ] 用户在实际 handoff 后另行授权 `scoped -> implementing`/execution；这仍不替代 `BYOK-01`/`EGRESS-01`。
 
 ### 7.3 Probe Step 2 acceptance
@@ -896,7 +923,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 - [ ] 13 个 named replay operations / 最多 14 次 local attempts 全部入 ledger；四个 mutation 都产生 child comparative runs，不覆盖 original bundle。
 - [ ] compatibility/no-side-effect checks 通过，或按 kill table 终止。
 - [ ] D02–D07/D10–D11 每项基于实际证据分类；无自动 ADR。
-- [ ] final disposition 恰为三值之一并遵守 precedence。
+- [ ] `DispositionPrecedenceValidatorV0` 的四组离线 fixtures 通过；final disposition 恰为三值之一并遵守 precedence，未知/缺失输入 fail closed。
 - [ ] product/P-GATE/D01 明确 `NOT_TESTED/UNCHANGED`。
 - [ ] final report、manifest、paired audit 和 Outcome/Deviations 同步、不可变。
 - [ ] 即使 `PROCEED`，任何 ADR、源码、迁移、产品工作仍等待独立授权。
@@ -907,20 +934,20 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 
 1. **Step 4.1 — draft（completed）**：只创建本 paired blueprint/audit，状态保持 `draft`；运行文档结构、link 和 diff-scope 自检后提交 blueprint-only commit。
 2. **Step 4.2 — formal blueprint review（completed）**：governance、FactGraph contract、Agent/replay/privacy 三视角审阅并复验 exact substantive baseline `c9786e34`；三条 lane 均为 `CLEAR 0/0/0`，findings 已逐项进入 paired audit。该结果不授权下一阶段。
-3. **Step 4.3 — independent preflight（separate authorization）**：从 reviewed-draft commit fork `v0.3.0-meander-agent-query-validation-vertical-probe-preflight-2026-08-11`，只创建批准的 preflight artifact；核 repo pins、路径、环境、private imports、测试命令、预算可执行性、secret/egress gates 和 dirty seam。
-4. **Step 4.4/4.5 — amendment + self-check**：只消费 preflight findings 收紧 blueprint pair；不得创建实验资产。机械检查 fixture count、model subset、OBL mapping、kill precedence 和 path allowlist。
+3. **Step 4.3 — independent preflight（completed）**：独立分支产物最终 commit `8a6a0577`；15 PASS / 1 historical FAIL，3 Required / 8 Recommended / 6 Verified / 4 Scoped-detail / 0 Abandonment；未创建实验资产或授予后续权限。
+4. **Step 4.4/4.5 — amendment + self-check（completed）**：本 paired-doc amendment 消费 PF-R1..R3 与 PF-Rec1..8，并分流 PF-S1..S4；轻量自检覆盖 fixture/model/cap 计数、OBL mapping、kill precedence、path/dirty isolation、stale wording 与 diff scope。未运行测试或创建实验资产。
 5. **Step 4.6 — scope freeze（separate authorization）**：`CAP-FINAL-01` 与所有 non-external preflight checks 闭合后，用户单独授权 `draft -> scoped`；paired audit 记录 exact scoped commit。Execution/BYOK/egress 都不随 scoped 自动授权。
-6. **Step 4.6a — user-agent handoff and execution gate（separate authorization）**：生成/记录 `HandoffRecordV0`，至少含 scoped blueprint/audit commit、preflight commit/blob、四仓 pins/dirty manifest、exact path allowlist、§6.1 caps、frozen fixture-plan contract（20/6 IDs、oracle schema、rubric version、Step-2 artifact-freeze gate）、13 replay operation IDs、open gates、stop semantics 和 recipient=`user-designated executor agent`；不得包含尚未生成的 fixture/golden/oracle hashes 或 credential。用户审阅 handoff 后另行授权 `scoped -> implementing`/execution；handoff 本身不是授权。
+6. **Step 4.6a — user-agent handoff and execution gate（separate authorization）**：生成/记录 `HandoffRecordV0`，至少含 scoped blueprint/audit commit、preflight commit/blob、四仓 pins/dirty manifest、pinned hnsm/Meander repo roots、exact path allowlist、四个 runtime contract refs、§6.1 caps、frozen fixture-plan contract（20/6 IDs、oracle schema、rubric version、Step-2 artifact-freeze gate）、13 replay operation IDs、open gates、stop semantics 和 recipient=`user-designated executor agent`；不得包含尚未生成的 fixture/golden/oracle hashes 或 credential。用户审阅 handoff 后另行授权 `scoped -> implementing`/execution；handoff 本身不是授权。
 
 ### One implementation envelope
 
 7. **Probe Step 2 — fixtures/oracle**：由已具名 user-designated executor agent 在 implementation branch 创建 experiment package skeleton、20 cells、goldens、manifest、rubric；完成轻量独立 oracle review。不得调用模型。
 8. **Probe Step 3 — deterministic facade**：实现 private profile/query DTO、canonicalizer、compiler/lineage、native evaluator wrapper 和 typed results；依次跑 deterministic cells。若 gate 失败，停止构建并转 Step 5 synthesis。
 9. **Freeze without semantic adjustment**：Step 3 通过后直接冻结 scoring material；若必须改变 contract/oracle/cells，则以 `REVISE` 结束，不修复重跑。
-10. **Probe Step 4 readiness**：用户另外批准 exact providers/models 的 `BYOK-01` 与 `EGRESS-01`；没有批准则 Agent dimension `UNRESOLVED`、PROCEED 被禁止，但仍继续本地 Step 5 replay/compatibility。
+10. **Probe Step 4 readiness**：冻结两个已声明 family-level profile 的 exact model IDs、adapter implementation versions 与 transport flags；完成三项离线 conformance，并把双臂真实 remote support 标为待授权验证。用户另外批准 exact providers/models 的 `BYOK-01` 与逐 provider `EGRESS-01`；没有批准则 Agent dimension `UNRESOLVED`、PROCEED 被禁止，但仍继续本地 Step 5 replay/compatibility。
 11. **Probe Step 4 — Agent loop**：若双授权存在，按交错的 frozen order 运行 2×6 cases；保存 12-slot manifest；生成盲包、冻结盲分，再 reveal mapping。不得 repair/rerun。
 12. **Probe Step 5 — replay/compatibility**：执行 13 个 frozen operations：3 个 R0 分布于 `Q02/Q04/E03`，其余 10 个 R1/R2、negative availability 和 child-mutation operations 作用于 `Q02` representative selected-row bundle；R3 保持 `UNRESOLVED`，R4 固定 `NOT_TESTED`；重核 source/Plan v3/no-side-effect。
-13. **Immutable synthesis and `implementing -> implemented`**：生成 final disposition、evidence-to-D matrix 和 budget/egress ledger；补齐 §10，paired audit 记录终态后才可将 blueprint 标为 `implemented`。结果不符合假设也算协议完成，但不得改写为成功。
+13. **Immutable synthesis and `implementing -> implemented`**：由 `DispositionPrecedenceValidatorV0` 机械校验唯一终态后生成 final disposition、evidence-to-D matrix 和 budget/egress ledger；补齐 §10，paired audit 记录终态后才可将 blueprint 标为 `implemented`。结果不符合假设也算协议完成，但不得改写为成功。
 14. **Closure/archive（separate lifecycle authorization）**：同步 experiment README/benchmark index；按 workflow 将 blueprint pair 和 standalone preflight 一起归档并隔离 stage inventory row。不 push/merge sacred branch。
 
 任何步骤发现需要修改 `src/`、生产 Meander、公开 schema 或新增实验封套，先停止并报告，不得自行扩 scope。
@@ -932,7 +959,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 - `tools/benchmarks/meander_qv_vertical_probe/README.md` — 实验身份、运行边界、fixture manifest、证据解释和停止语义
 - `tools/benchmarks/README.md` — 一条 isolated experiment-only 索引；不得写成 shipped/public capability
 - 本 paired blueprint/audit — 状态、decision notes、final disposition、Outcome/Deviations
-- independent preflight — 只在其单独批准的 branch/path 创建，归档时随 consumer 移动
+- completed independent preflight `8a6a0577` — 归档时随 consumer 移动
 - `workflow/blueprints/archive/INVENTORY.md` — 只在归档时加入一行 isolated entry
 
 不更新 `src/factgraph/*/docs` 或 `docs/README.md`，因为本 probe 不改变 current implementation truth 或公共文档入口。若实现发现这些文档必须改变，说明 scope 已越界，任务停止并回到 decision/blueprint amendment。
