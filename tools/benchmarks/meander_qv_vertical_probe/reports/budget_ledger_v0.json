@@ -61,13 +61,27 @@
     "step4_model": {
       "cap_minutes": 180,
       "used_minutes": 0,
-      "entries": [],
+      "entries": [
+        {
+          "what": "LOCAL readiness only: adapters+conformance, zero network/credential/provider calls",
+          "minutes": 0
+        }
+      ],
       "state": "NOT_AUTHORIZED"
     },
     "step5_replay_compat": {
       "cap_minutes": 240,
-      "used_minutes": 0,
-      "entries": []
+      "used_minutes": 55,
+      "entries": [
+        {
+          "what": "replay.py 13 ops (bundle capture + 14 attempts) + compat recheck (COMPAT 70 passed; MEANDER digest identical; four-repo manifests)",
+          "minutes": 40
+        },
+        {
+          "what": "model_runner.py Step4 readiness offline conformance 6 profiles all OK; handoff RP-ID correction",
+          "minutes": 15
+        }
+      ]
     },
     "non_repair_reserve": {
       "cap_minutes": 120,
@@ -104,13 +118,20 @@
     "replay_local_attempts": {
       "cap": 14,
       "operation_ids_cap": 13,
-      "used": 0,
+      "used": 14,
       "verbs_allowed": [
         "EVALUATE",
         "EXPLAIN",
         "REOPEN"
       ],
-      "entries": []
+      "entries": [
+        {
+          "ops": "3xR0 EXPLAIN + R1 REOPEN + R2 EVALUATE+EXPLAIN + 4xNEG REOPEN + 4xMUT EVALUATE",
+          "total": 14,
+          "engine_calls_step5": 5,
+          "result": "R0/R1/R2 PASS; R3 UNRESOLVED; R4 NOT_TESTED; negatives 4/4 explicit; mutations 4/4; isolation zero-execution verified"
+        }
+      ]
     },
     "model_primary_turns": {
       "cap": 22,
@@ -204,6 +225,11 @@
       "utc": "2026-08-11T21:40:00Z",
       "event": "Step 3 exit gate: ALL items PASS on verification sweep evidence; scoring material frozen; original 15/20 primary manifest preserved untouched",
       "charged_to": "step3_deterministic"
+    },
+    {
+      "utc": "2026-08-11T22:20:00Z",
+      "event": "Phase 3 complete: Step 5 PASS (14/14 attempts), Step 4 readiness conformance all OK; BYOK/EGRESS/model execution still open",
+      "charged_to": "step5_replay_compat"
     }
   ]
 }

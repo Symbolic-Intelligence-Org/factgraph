@@ -1,0 +1,320 @@
+{
+  "record_type": "ReplayOperationManifestV0",
+  "interpretation_note": "Attempt-verb algebra admits no EVALUATE for Q04/E03 inside Step 5; RP-R0-SUMMARY and RP-R0-EXPECTATION therefore verify live-association evidence captured during the Step 3 live runs (A' item 4 complete artifacts); RP-R0-ROW is a genuinely live row.explain() on the RP-R2 re-executed handle.",
+  "operation_ids": [
+    "RP-R0-ROW",
+    "RP-R0-SUMMARY",
+    "RP-R0-EXPECTATION",
+    "RP-R1-REOPEN",
+    "RP-R2-REEXECUTE",
+    "RP-NEG-PARTIAL",
+    "RP-NEG-UNAVAILABLE",
+    "RP-NEG-EXPIRED",
+    "RP-NEG-INTEGRITY",
+    "RP-MUT-FACT",
+    "RP-MUT-POLICY",
+    "RP-MUT-CONFIG",
+    "RP-MUT-SOURCE"
+  ],
+  "attempts_used": 14,
+  "attempts_cap": 14,
+  "attempts": [
+    {
+      "op": "RP-R2-REEXECUTE",
+      "verb": "EVALUATE",
+      "detail": "re-execute Q02 from pinned facts/policy/profile"
+    },
+    {
+      "op": "RP-R2-REEXECUTE",
+      "verb": "EXPLAIN",
+      "detail": "explain re-executed selected row"
+    },
+    {
+      "op": "RP-R0-ROW",
+      "verb": "EXPLAIN",
+      "detail": "live row.explain() association on re-executed Q02 handle"
+    },
+    {
+      "op": "RP-R0-SUMMARY",
+      "verb": "EXPLAIN",
+      "detail": "verify Q04 live-run query-summary association (captured evidence)"
+    },
+    {
+      "op": "RP-R0-EXPECTATION",
+      "verb": "EXPLAIN",
+      "detail": "verify E03 live-run expectation association (captured evidence)"
+    },
+    {
+      "op": "RP-R1-REOPEN",
+      "verb": "REOPEN",
+      "detail": "reopen captured Q02 bundle; no store constructed"
+    },
+    {
+      "op": "RP-NEG-PARTIAL",
+      "verb": "REOPEN",
+      "detail": "required pin removed"
+    },
+    {
+      "op": "RP-NEG-UNAVAILABLE",
+      "verb": "REOPEN",
+      "detail": "bundle absent"
+    },
+    {
+      "op": "RP-NEG-EXPIRED",
+      "verb": "REOPEN",
+      "detail": "retention-expired bundle"
+    },
+    {
+      "op": "RP-NEG-INTEGRITY",
+      "verb": "REOPEN",
+      "detail": "digest-integrity failure on tampered copy"
+    },
+    {
+      "op": "RP-MUT-FACT",
+      "verb": "EVALUATE",
+      "detail": "fact mutation: add member eve/red"
+    },
+    {
+      "op": "RP-MUT-POLICY",
+      "verb": "EVALUATE",
+      "detail": "policy mutation: value-port compare m.team != 'red' (3 rows -> 0)"
+    },
+    {
+      "op": "RP-MUT-CONFIG",
+      "verb": "EVALUATE",
+      "detail": "config/profile mutation: budget marker"
+    },
+    {
+      "op": "RP-MUT-SOURCE",
+      "verb": "EVALUATE",
+      "detail": "source-availability mutation: dan's records unavailable"
+    }
+  ],
+  "operations": {
+    "RP-R2-REEXECUTE": {
+      "level": "R2",
+      "availability": "available",
+      "pass": true,
+      "comparator": {
+        "canonical_rowset_match": true,
+        "completeness_exact_match": true,
+        "explain_authored_identity_ok": true,
+        "excluded_from_compare": [
+          "run_id",
+          "row_id",
+          "evaluated_at"
+        ]
+      },
+      "claim": "selected-row pinned deterministic re-execution only"
+    },
+    "RP-R0-ROW": {
+      "level": "R0",
+      "availability": "available",
+      "pass": true,
+      "claim": "live association only (row target)",
+      "mode": "live"
+    },
+    "RP-R0-SUMMARY": {
+      "level": "R0",
+      "availability": "available",
+      "pass": true,
+      "claim": "live association only (summary target); verified from Step-3 live-run artifacts",
+      "mode": "verified_from_step3_live_run"
+    },
+    "RP-R0-EXPECTATION": {
+      "level": "R0",
+      "availability": "available",
+      "pass": true,
+      "claim": "live association only (expectation target); verified from Step-3 live-run artifacts",
+      "mode": "verified_from_step3_live_run"
+    },
+    "RP-R1-REOPEN": {
+      "level": "R1",
+      "availability": "available",
+      "pass": true,
+      "claim": "selected-row captured-artifact Explain only"
+    },
+    "RP-NEG-PARTIAL": {
+      "level": "NEG",
+      "availability": "partial",
+      "pass": true,
+      "observed": {
+        "status": "RUN_CONTEXT_UNAVAILABLE",
+        "availability": "partial",
+        "missing_pins": [
+          "provenance"
+        ]
+      }
+    },
+    "RP-NEG-UNAVAILABLE": {
+      "level": "NEG",
+      "availability": "unavailable",
+      "pass": true,
+      "observed": {
+        "status": "RUN_CONTEXT_UNAVAILABLE",
+        "availability": "unavailable"
+      }
+    },
+    "RP-NEG-EXPIRED": {
+      "level": "NEG",
+      "availability": "expired_or_erased",
+      "pass": true,
+      "observed": {
+        "status": "REPLAY_ARTIFACT_EXPIRED",
+        "availability": "expired_or_erased"
+      }
+    },
+    "RP-NEG-INTEGRITY": {
+      "level": "NEG",
+      "availability": "available",
+      "pass": true,
+      "observed": {
+        "status": "REPLAY_INTEGRITY_FAILURE",
+        "availability": "available",
+        "recomputed": "sha256:00f86bbbafa4272c8eb2235f96506193b60d307fe34aaa128df349b460230fbd"
+      }
+    },
+    "RP-MUT-FACT": {
+      "level": "MUT",
+      "availability": "available",
+      "child_run": {
+        "parent_bundle_digest": "sha256:e64860872b21785525fe880df287cd1e2b9efe271136a1cf8593f1cd160f7425",
+        "profile_digest": "sha256:43f582fe163fb6d3",
+        "world_digest": "sha256:959ae19341f2a920",
+        "rows": [
+          {
+            "person": "alice"
+          },
+          {
+            "person": "bob"
+          },
+          {
+            "person": "dan"
+          },
+          {
+            "person": "eve"
+          }
+        ],
+        "rowset_digest": "sha256:de0ca3c7da02e8fa",
+        "completeness": "complete"
+      },
+      "diff_vs_original": {
+        "rows_changed": true,
+        "profile_changed": false,
+        "world_changed": true
+      },
+      "pass": true,
+      "note": "fact mutation: add member eve/red"
+    },
+    "RP-MUT-POLICY": {
+      "level": "MUT",
+      "availability": "available",
+      "child_run": {
+        "parent_bundle_digest": "sha256:e64860872b21785525fe880df287cd1e2b9efe271136a1cf8593f1cd160f7425",
+        "profile_digest": "sha256:2d94ea2254430ae6",
+        "world_digest": "sha256:96ee63d8fe5645f3",
+        "rows": [],
+        "rowset_digest": "sha256:e3b0c44298fc1c14",
+        "completeness": "complete"
+      },
+      "diff_vs_original": {
+        "rows_changed": true,
+        "profile_changed": true,
+        "world_changed": false
+      },
+      "pass": true,
+      "note": "policy mutation: value-port compare m.team != 'red' (3 rows -> 0)"
+    },
+    "RP-MUT-CONFIG": {
+      "level": "MUT",
+      "availability": "available",
+      "child_run": {
+        "parent_bundle_digest": "sha256:e64860872b21785525fe880df287cd1e2b9efe271136a1cf8593f1cd160f7425",
+        "profile_digest": "sha256:fd8816e52cd8ec6b",
+        "world_digest": "sha256:96ee63d8fe5645f3",
+        "rows": [
+          {
+            "person": "alice"
+          },
+          {
+            "person": "bob"
+          },
+          {
+            "person": "dan"
+          }
+        ],
+        "rowset_digest": "sha256:8d6b13d71d85b001",
+        "completeness": "complete"
+      },
+      "diff_vs_original": {
+        "rows_changed": false,
+        "profile_changed": true,
+        "world_changed": false
+      },
+      "pass": true,
+      "note": "config/profile mutation: budget marker"
+    },
+    "RP-MUT-SOURCE": {
+      "level": "MUT",
+      "availability": "available",
+      "child_run": {
+        "parent_bundle_digest": "sha256:e64860872b21785525fe880df287cd1e2b9efe271136a1cf8593f1cd160f7425",
+        "profile_digest": "sha256:43f582fe163fb6d3",
+        "world_digest": "sha256:66f8dd6e74a1523c",
+        "rows": [
+          {
+            "person": "alice"
+          },
+          {
+            "person": "bob"
+          }
+        ],
+        "rowset_digest": "sha256:8c102ad48ac6c26c",
+        "completeness": "complete"
+      },
+      "diff_vs_original": {
+        "rows_changed": true,
+        "profile_changed": false,
+        "world_changed": true
+      },
+      "pass": true,
+      "note": "source-availability mutation: dan's records unavailable"
+    }
+  },
+  "levels": {
+    "R0": {
+      "status": "PASS",
+      "availability": "available",
+      "claim": "three-target live association only"
+    },
+    "R1": {
+      "status": "PASS",
+      "availability": "available",
+      "claim": "selected-row captured-artifact Explain only"
+    },
+    "R2": {
+      "status": "PASS",
+      "availability": "available",
+      "claim": "selected-row pinned deterministic re-execution only"
+    },
+    "R3": {
+      "status": "UNRESOLVED",
+      "availability": "unavailable",
+      "claim": "detached new-process reconstruction not executed in this lean envelope"
+    },
+    "R4": {
+      "status": "NOT_TESTED",
+      "availability": "unavailable",
+      "claim": "production CompletedRun/retention/migration/UI replay out of scope"
+    }
+  },
+  "negatives_all_explicit": true,
+  "mutation_isolation": {
+    "bundle_bytes_unchanged": true,
+    "r2_fingerprint_matches_bundle": true,
+    "method": "zero-execution offline bytes/digest comparison vs counted RP-R2 result"
+  },
+  "mutations_pass": true,
+  "engine_calls_this_phase": 5,
+  "query_summary_expectation_durable_replay": "NOT_TESTED (excluded per §5.14; D10/D11 at most narrowed PARTIAL)"
+}

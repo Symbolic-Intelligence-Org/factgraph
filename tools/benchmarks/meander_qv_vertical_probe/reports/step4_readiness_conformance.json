@@ -1,0 +1,128 @@
+{
+  "record_type": "Step4ReadinessConformanceV0",
+  "network_calls": 0,
+  "credentials_touched": 0,
+  "provider_calls": 0,
+  "provider_profiles": [
+    {
+      "record_type": "ProviderProfileV0",
+      "profile_id": "openai-gpt-responses-v1",
+      "provider_organization": "OpenAI",
+      "base_model_family": "GPT",
+      "wire_dialect": "Responses tool-call JSON",
+      "adapter_strategy": "experiment-owned raw HTTP projection",
+      "offline_conformance_contract_version": "v0 (serialization / embed-extract byte identity / canned normalization)",
+      "model_id_state": "pending_until_first_scored_call_freeze",
+      "candidate_exact_model_id": "CANDIDATE: latest generally-available GPT reasoning model at freeze time (user confirms exact ID in model-stage package)",
+      "remote_api_acceptance": "NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION"
+    },
+    {
+      "record_type": "ProviderProfileV0",
+      "profile_id": "anthropic-claude-messages-v1",
+      "provider_organization": "Anthropic",
+      "base_model_family": "Claude",
+      "wire_dialect": "Messages tool_use/tool_result JSON",
+      "adapter_strategy": "experiment-owned raw HTTP projection",
+      "offline_conformance_contract_version": "v0 (serialization / embed-extract byte identity / canned normalization)",
+      "model_id_state": "pending_until_first_scored_call_freeze",
+      "candidate_exact_model_id": "CANDIDATE: latest generally-available Claude model at freeze time (user confirms exact ID in model-stage package)",
+      "remote_api_acceptance": "NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION"
+    }
+  ],
+  "per_profile_conformance": [
+    {
+      "cell": "Q02",
+      "tool_name": "probe_qp_q02_v0",
+      "canonical_digest": "sha256:cfd7cbfbef15e2e6821988e71a8123897b469756b681cab31f83a826dbae10cb",
+      "serialization_ok": true,
+      "openai_embed_extract_byte_identical": true,
+      "anthropic_embed_extract_byte_identical": true
+    },
+    {
+      "cell": "Q04",
+      "tool_name": "probe_qp_q04_v0",
+      "canonical_digest": "sha256:8b72ece7a92336d0428a8c62d71cfe7ae2ec9cfa227f75ecf46c67a62e034d19",
+      "serialization_ok": true,
+      "openai_embed_extract_byte_identical": true,
+      "anthropic_embed_extract_byte_identical": true
+    },
+    {
+      "cell": "E03",
+      "tool_name": "probe_vp_e03_v0",
+      "canonical_digest": "sha256:2afaeb039064cd52c646c1c060e624e0ba3490f16b8133cea43c0127517e0e80",
+      "serialization_ok": true,
+      "openai_embed_extract_byte_identical": true,
+      "anthropic_embed_extract_byte_identical": true
+    },
+    {
+      "cell": "A01-AMB",
+      "tool_name": "probe_qp_a01_amb_v0",
+      "canonical_digest": "sha256:286df4688a797f84aba8fdef44fa53779ad707b94e1b33b28c2ebef820369847",
+      "serialization_ok": true,
+      "openai_embed_extract_byte_identical": true,
+      "anthropic_embed_extract_byte_identical": true
+    },
+    {
+      "cell": "A01-AUTH",
+      "tool_name": "probe_qp_a01_auth_v0",
+      "canonical_digest": "sha256:5cb85350fefa4d206971c46bdca50f962a31cc5e432919686af919f00440e4a8",
+      "serialization_ok": true,
+      "openai_embed_extract_byte_identical": true,
+      "anthropic_embed_extract_byte_identical": true
+    },
+    {
+      "cell": "X01",
+      "tool_name": "probe_qp_x01_v0",
+      "canonical_digest": "sha256:3e5886fa8961f69731c7104325deaa6a7faaa51357a0e752de78b4df50b458e8",
+      "serialization_ok": true,
+      "openai_embed_extract_byte_identical": true,
+      "anthropic_embed_extract_byte_identical": true
+    }
+  ],
+  "canned_normalization": {
+    "tool_call": {
+      "openai": {
+        "kind": "tool_call",
+        "tool": "probe_x",
+        "slots": {
+          "team_ref": "red"
+        }
+      },
+      "anthropic": {
+        "kind": "tool_call",
+        "tool": "probe_x",
+        "slots": {
+          "team_ref": "red"
+        }
+      }
+    },
+    "final": {
+      "openai": {
+        "kind": "final",
+        "text": "three members: alice, bob, dan"
+      },
+      "anthropic": {
+        "kind": "final",
+        "text": "three members: alice, bob, dan"
+      }
+    },
+    "provider_error": {
+      "openai": {
+        "kind": "provider_error",
+        "code": "rate_limited"
+      },
+      "anthropic": {
+        "kind": "provider_error",
+        "code": "rate_limited"
+      }
+    }
+  },
+  "canned_normalization_identity": {
+    "tool_call": true,
+    "final": true,
+    "provider_error": true
+  },
+  "conformance_all_ok": true,
+  "remote_api_acceptance": "NOT_TESTED_UNTIL_AUTHORIZED_EXECUTION (both arms)",
+  "note": "strict:true transport flag and exact model IDs freeze into ScoredArmManifestV0 before the first scored call; canonical schemas already satisfy additionalProperties=false + all-properties-required, so strict mode cannot mutate the required set (preflight PF-Rec3 honored)."
+}
