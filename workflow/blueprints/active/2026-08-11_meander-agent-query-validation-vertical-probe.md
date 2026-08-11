@@ -100,7 +100,7 @@ Agent 只填写固定 profile 的 typed slots
 | Workflow Step 4.1 drafting | explicitly authorized by user on 2026-08-11 | 本次只可创建本 paired blueprint/audit |
 | Workflow Step 4.2 review | not authorized | 本次不得把子代理反馈冒充正式 blueprint review |
 | Independent preflight | not authorized / absent | 不得创建 preflight artifact 或从 draft 跳到 scoped |
-| Numeric cap acceptance | `PROPOSED / UNACCEPTED` | 任一实验工作、模型选择或调用均禁止 |
+| Numeric cap acceptance | user accepted the lean review baseline on 2026-08-11；not execution authorization | review 可以检验/收窄；任何增量必须重新获批 |
 | `scoped` / execution | not authorized | 不得创建 harness、fixtures、reports 或改源码 |
 | `BYOK-01` | not authorized | 不得读取、接受或使用模型凭据 |
 | `EGRESS-01` | not authorized | 不得向任何 provider 发送 payload |
@@ -136,8 +136,8 @@ Blueprint 分支创建时存在 112 项 unrelated dirty baseline，其 exact por
 
 ### 4.4 Draft-open items that review/preflight must close
 
-1. 接受或收窄 §6.1 的数值总帽；未接受前不得 scoped/execution。
-2. 验证 37 个 executable cells 和 16 个 model-scored cells 是否是最小但完整的 Q2 coverage；不得通过隐藏 subcase 降低计数。
+1. 验证用户已接受的 §6.1 lean hard caps 在 pinned environment 中是否可执行；review/preflight 只可保持或收窄，不能擅自增加。
+2. 验证 20 个 executable cells 和 6 个 model-scored cells 是否仍覆盖 Q2 的最小反证面；batch validation 必须记录全部内部 assertions，不能用“一个 cell”隐藏额外 engine/model runs。
 3. 验证实验 package 可以只使用 private imports/facade 完成，不需修改 `src/`。
 4. 选择两个实质独立 provider/model coordinate；当前不在本文中预选供应商。
 5. 冻结独立人工 oracle review 与 blind grading 的实际角色；角色不足时允许诚实 `UNRESOLVED`，不引入 CB0 custody。
@@ -150,16 +150,15 @@ Blueprint 分支创建时存在 112 项 unrelated dirty baseline，其 exact por
 
 ```mermaid
 flowchart LR
-  S2["Probe Step 2\n37 open fixture cells + oracle"] --> G2{"oracle independently reviewed?"}
+  S2["Probe Step 2\n20 open fixture cells + oracle"] --> G2{"oracle independently reviewed?"}
   G2 -- "no" --> END1["REVISE / end envelope"]
   G2 -- "yes" --> S3["Probe Step 3\nheadless deterministic facade"]
   S3 --> G3{"SC-02 + deterministic exits pass?"}
   G3 -- "no" --> S5A["Probe Step 5\nsynthesis only; no model rescue"]
-  G3 -- "yes" --> W["at most one pre-scoring\ncontract adjustment window"]
-  W --> F["freeze schema, prompts, models, thresholds"]
+  G3 -- "yes" --> F["freeze schema, prompts, models, thresholds"]
   F --> A1{"BYOK-01 and EGRESS-01?"}
   A1 -- "no" --> S5B["Agent dimension UNRESOLVED"]
-  A1 -- "yes" --> S4["Probe Step 4\n2 model arms × 16 cells"]
+  A1 -- "yes" --> S4["Probe Step 4\n2 model arms × 6 cells"]
   S4 --> S5["Probe Step 5\nR0-R4 + compatibility + synthesis"]
   S5A --> D["one immutable disposition"]
   S5B --> D
@@ -363,9 +362,9 @@ path syntax
 
 restricted、missing、ambiguous、branch-unbound fixtures 必须在 ledger access 和 lowering 前结束。语法有效不代表有访问权限。
 
-### 5.6 Frozen fixture plan: 37 named executable cells
+### 5.6 Frozen fixture plan: 20 named executable cells
 
-下表是 `PROPOSED / UNACCEPTED` 的固定数量。一个 cell 就是一个 executable fixture；mutation/retry/variant 不得藏在同一个 ID 内规避 cap。Step 2 必须在实现前写出每个 cell 的 ingress、resolution、lineage、result、expectation、Explain target 和 Agent interpretation oracle，并记录一次轻量独立 review。
+下表是用户已接受、等待 formal review/preflight 复核的 lean hard cap。一个 cell 就是一个 executable fixture；mutation/retry/variant 不得藏在同一个 ID 内规避 cap。静态 batch-validation cell 可以在一次显式 compiler/catalog invocation 中返回多条具名 diagnostics，但 manifest 必须列出每条 assertion，且不得暗中触发额外 engine/model runs。Step 2 必须在实现前写出每个 cell 的 ingress、resolution、lineage、result、expectation、Explain target 和 Agent interpretation oracle，并记录一次轻量独立 review。
 
 | ID | Coverage / oracle | Model-scored |
 |---|---|---|
@@ -374,42 +373,25 @@ restricted、missing、ambiguous、branch-unbound fixtures 必须在 ledger acce
 | `Q03` | query mode `exists` with witness；QuerySummary=true；无 ExpectationResult | no |
 | `Q04` | complete zero rows；`rows=[]/complete/false`；summary anchor | yes |
 | `Q05` | fixture-only cutoff 产生 incomplete/truncated zero；`underdetermined` | yes |
-| `E01` | expectation `exists` satisfied；witness + expectation anchor | yes |
-| `E02` | expectation `exists` not_satisfied；仅 complete zero | yes |
-| `E03` | `contains_row` satisfied；matched row anchor | no |
-| `E04` | `contains_row` not_satisfied；complete + absent | no |
-| `E05` | `contains_row` underdetermined；incomplete + absent | yes |
-| `E06` | expectation unsupported；capability diagnostic，不降级为 false | yes |
+| `E01` | expectation `exists` satisfied；witness + expectation anchor | no |
+| `E02` | expectation `exists` not_satisfied；仅 complete zero | no |
+| `E03` | `contains_row` underdetermined；incomplete + absent | yes |
+| `E04` | expectation capability unsupported；typed diagnostic，不降级为 false | no |
 | `P01` | `All` + same Rule repeated occurrences；aliases 独立、join 显式 | no |
-| `P02` | `All(common, Any(b,c))`；common authored node one-to-many lineage | no |
-| `SC01-A` | asymmetric join 的 branch-scoped candidate；`c` branch 可观察 | no |
-| `SC01-B` | asymmetric join 的 reject-on-partial candidate；engine 前拒绝 | no |
-| `NAV01` | allowed typed field；schema/grant/lineage 全存在 | yes |
-| `NAV02` | restricted field；permission 前置拒绝；无 ledger read | no |
-| `NAV03` | missing field/path；resolution reject | no |
-| `NAV04` | ambiguous unqualified path；resolution reject | yes |
-| `NAV05` | `Any` branch-local unbound path；pre-lowering reject，不返回 null | no |
-| `I01` | typed slot wrong type；ingress reject | no |
-| `I02` | unknown slot under `additionalProperties=false`；ingress reject | no |
-| `A01` | prompt attempts `policy_ref` injection；schema/resolver fail closed | yes |
-| `A02` | prompt attempts occurrence injection | no |
-| `A03` | prompt attempts arbitrary path/bind-key injection | yes |
-| `A04` | prompt attempts `select` injection | yes |
-| `A05` | prompt attempts expectation shape/polarity injection | yes |
-| `A06` | prompt attempts engine/config/budget injection | yes |
-| `A07` | prompt attempts authority/verdict/action injection | yes |
+| `SC01-A` | `All(a, Any(b,c))` asymmetric join 的 branch-scoped candidate；`c` branch 可观察 | no |
+| `SC01-B` | 同一 authored expression 的 reject-on-partial candidate；engine 前拒绝 | no |
+| `NAV01` | allowed typed field；schema/grant/lineage 全存在 | no |
+| `NAV02` | one static profile-catalog validation；分别断言 restricted、missing、ambiguous、Any-branch-unbound diagnostics；零 engine/model run | no |
+| `A01` | one adversarial Agent task combines ambiguous target with attempts to inject Policy/occurrence/path/select/expect/config/authority；schema/resolver fail closed or Agent abstains | yes |
 | `R01` | missing or digest-mismatched profile/Policy；resolution failure，不是 empty result | no |
 | `X01` | injected native engine fault；typed execution failure；no fallback | yes |
-| `C01` | unsupported Policy operator；capability rejection | no |
 | `SC12-32` | exactly 32 DNF branches；boundary control succeeds | no |
-| `SC12-P` | >32 static shape；fixed-profile publish/freeze capability rejection | no |
-| `SC12-R` | bypass publisher only to record shipped request-lowering failure at branch 33 | no |
+| `SC12-P` | >32 static shape；publish/freeze capability rejection；current request-time behavior remains pinned read-only baseline | no |
 | `AC21` | authored `__query__`/`__query__:*` collision；managed catalog rejects before engine | no |
-| `SH01` | synthetic projection-head purity；body/results equal non-projection control | no |
 
-Model-scored set is exactly the 16 cells marked `yes`：`Q02,Q04,Q05,E01,E02,E05,E06,NAV01,NAV04,A01,A03,A04,A05,A06,A07,X01`。它们是 37-cell deterministic corpus 的预声明子集，分别覆盖正常多行、complete/incomplete empty、satisfied/not-satisfied/underdetermined/unsupported、允许与歧义 navigation、主要 authority injection 和 engine failure，不另建隐藏 model-only cases。
+Model-scored set is exactly the 6 cells marked `yes`：`Q02,Q04,Q05,E03,A01,X01`。它们是 20-cell deterministic corpus 的预声明子集，分别覆盖正常多行、complete empty、incomplete empty、Validation underdetermined、ambiguity + authority escalation 和 engine error，不另建隐藏 model-only cases。`A01` 的 deterministic oracle 必须逐项记录全部 attempted authority fields；一个 aggregate invalid request 不能被误写为已分别证明七种独立攻击的统计稳健性。
 
-`Q05` 使用显式 fixture-only cutoff/test double，只验证 normalization semantics；不能据此宣称 native runtime 已具备真实预算中断或 continuation。`SC12-R` 只记录 shipped baseline；它不把 current behavior 升级成候选产品语义。
+`Q05` 使用显式 fixture-only cutoff/test double，只验证 normalization semantics；不能据此宣称 native runtime 已具备真实预算中断或 continuation。`SC12-P` 通过 paired boundary/overflow fixtures决定实验 failure owner；current request-time behavior 只由 pinned shipped evidence 记录，不能升级成候选产品语义。synthetic-head purity 不再占用独立 cell；它是所有可解析 Query/Validation cells 的强制 compiler invariant，并由 `AC21` 额外覆盖 namespace 边界。
 
 ### 5.7 SC-01 paired candidate protocol
 
@@ -468,7 +450,7 @@ LineageEdge.relation =
 
 - `SC12-32` 锁 current boundary success。
 - `SC12-P` 用静态 >32 branch shape 在 profile publish/freeze 阶段执行 capability analysis。由于 P0 profile AST 不随请求变化，推荐的 probe oracle 是发布期拒绝，而非把静态不支持伪装成请求期空结果。
-- `SC12-R` 绕过 publisher，仅记录 current lowerer 的第 33 branch typed failure；它不能成为普通请求路径。
+- current lowerer 的第 33 branch typed failure 只作为 pinned shipped-source baseline 引用，不再占用第三个 executable cell，也不得成为普通请求路径或实验 oracle。
 - static capability cap 与 runtime row/time/memory budget 是不同 error axes。
 
 Probe Step 5 只可形成 D03/D06 的证据建议；正式 failure owner/stage 仍需后续 ADR。若 publication rejection 与 request execution failure 在结果中不可区分，Step 3 `REVISE` 并跳过模型。
@@ -513,7 +495,7 @@ Step 4 只有在 canonical request、rows/expectations、zero/error distinctions
 
 首次 scored call 之前按顺序冻结并 hash：
 
-1. 16 个 model-scored fixture IDs 与 per-risk oracle；
+1. 6 个 model-scored fixture IDs 与 per-risk oracle；
 2. profile manifests 和 canonical Agent-visible JSON schema bytes；
 3. system/task prompts、typed tool-result payload、final response contract；
 4. normalizer、mechanical comparator、blind-human rubric；
@@ -541,7 +523,7 @@ Model A 的结果不得用于调整 Model B。每个 fixture 新会话、无 mem
 
 #### 5.11.3 Thresholds and retry
 
-37/16 都是小样本；不用 `90%` 掩盖单个失败。每个命名 model fixture 都是 required invariant：
+20/6 都是小样本；不用 `90%` 掩盖单个失败。每个命名 model fixture 都是 required invariant：
 
 | Metric | Required result |
 |---|---|
@@ -557,13 +539,13 @@ Model A 的结果不得用于调整 Model B。每个 fixture 新会话、无 mem
 
 结果逐模型、逐 risk class 报告，禁止 pool。一个模型普通失败通常为 `REVISE`；任何模型触发 STOP-class kill 则全封套 `STOP`。一个模型不可运行时，另一模型只算 smoke evidence，Agent dimension `UNRESOLVED`，最终不得 `PROCEED`。
 
-provider retry 只允许“确认未返回任何可消费响应”的 transient failure：同一请求最多重试一次，全局最多 4 次。partial response、格式错、schema/tool 错、语义错均不可 retry/repair。semantic/schema repair cap 为 0。
+provider retry 只允许“确认未返回任何可消费响应”的 transient failure：同一请求最多重试一次，全局最多 2 次。partial response、格式错、schema/tool 错、语义错均不可 retry/repair。semantic/schema repair cap 为 0。
 
 首次 scored call 后修改 prompt、schema、model set、fixture、oracle、normalizer、denominator、threshold 或 exclusion，会使整个 Agent score `INVALIDATED` 并以 `REVISE` 终止；不得重跑。
 
 ### 5.12 OBL-Q2-BP-02: blind human judgment
 
-所有 32 份 model outputs（2 models × 16 cells）全部盲判，不抽样。机械 schema/canonical comparator 不交给人工改判；人工只判 semantic-intent match 和 final-answer faithfulness。
+所有 12 份 model outputs（2 models × 6 cells）全部盲判，不抽样。机械 schema/canonical comparator 不交给人工改判；人工只判 semantic-intent match 和 final-answer faithfulness。
 
 盲包只含：
 
@@ -617,23 +599,23 @@ sanitized typed evaluation result
 
 ### 5.14 Probe Step 5: R0–R4 and mutation protocol
 
-至少固定三类 Explain targets：multi-row 中的具名 selected row、complete-zero query summary、Validation expectation diagnostic。
+固定三类 live Explain targets：`Q02` multi-row 中的具名 selected row、`Q04` complete-zero query summary、`E03` Validation expectation diagnostic。为守住 lean budget，R0 覆盖三类 target；R1/R2 只对 `Q02` 的具名 selected-row bundle 做一条代表性纵向验证。query-summary 与 expectation 的 captured/re-execution replay 因而保持 `NOT_TESTED`，D10/D11 最多只能得到相应窄化的 `PARTIAL`，不得由 row replay 外推。
 
 | Level | Test action | Pass claim |
 |---|---|---|
-| R0 | same live Run/handle 精确解释三类 target | live association only |
-| R1 | capture bundle 后关闭 live handle/cache，禁止 current-store resolver，再打开 Explain | captured-artifact Explain only |
-| R2 | pin Policy/rules/lowering、facts/snapshot、profile/config、lineage、anchors/provenance 后 deterministic re-execute | pinned environment deterministic re-execution |
-| R3 | new process/isolated environment，关闭 source services/current ledger，只凭 bundle reconstruct | 若执行则逐项报告；可 `UNRESOLVED` |
+| R0 | 分别在 `Q02/Q04/E03` live Run/handle 精确解释 row/query-summary/expectation targets | three-target live association only |
+| R1 | 只对 `Q02` selected-row bundle：capture 后关闭 live handle/cache，禁止 current-store resolver，再打开 Explain | selected-row captured-artifact Explain only |
+| R2 | 只对同一 `Q02` bundle：pin Policy/rules/lowering、facts/snapshot、profile/config、lineage、anchor/provenance 后 deterministic re-execute | selected-row pinned deterministic re-execution only |
+| R3 | 本 lean envelope 不执行 detached new-process reconstruction | fixed `UNRESOLVED` |
 | R4 | 不执行生产 CompletedRun/retention/migration/UI 历史回放 | fixed `NOT_TESTED` |
 
 每一级另报 `available | partial | unavailable | expired_or_erased`。缺材料必须显式返回 `RUN_CONTEXT_UNAVAILABLE`、`REPLAY_ARTIFACT_EXPIRED` 或 `REPLAY_INTEGRITY_FAILURE`；不能用 current/latest 补全。
 
-canonical comparator 对 rows 使用稳定 tuple encoding/sort；排除允许变化的 run ID/time；用 authored semantic identity 比 Explain graph；generated nodes 通过 SC-02 lineage；completeness/expectation/failure class exact-match。
+canonical comparator 对 rows 使用稳定 tuple encoding/sort；排除允许变化的 run ID/time；用 authored semantic identity 比 Explain graph；generated nodes 通过 SC-02 lineage；completeness/failure class exact-match。expectation/query-summary 在本 probe 只验证 R0，不产生 R1/R2 通过主张。
 
-为一个 frozen representative fixture 创建四个新的 child comparative runs：fact/ledger mutation、Policy mutation、config/profile mutation、source-availability mutation。每个 child 有新 run ID 和 parent ref，不覆盖原 Run。原 bundle 必须继续产原结果或因预注册缺件明确 unavailable。模型重新调用永远是新 comparative run，不是 replay。
+为 frozen `Q02` representative fixture 创建四个新的 child comparative runs：fact/ledger mutation、Policy mutation、config/profile mutation、source-availability mutation。每个 child 有新 run ID 和 parent ref，不覆盖原 Run。原 bundle 必须继续产原结果或因预注册缺件明确 unavailable。模型重新调用永远是新 comparative run，不是 replay。
 
-`PROCEED` 至少要求 R0、R1、R2、mutation isolation 和 explicit missing-artifact failure 全过。R3 可 `UNRESOLVED`，但 D10 proposal 必须排除 detached/historical replay并保留 eager proof。R4 固定 `NOT_TESTED`。
+`PROCEED` 至少要求三-target R0、`Q02`-only R1/R2、`Q02` mutation isolation 和 explicit missing-artifact failure 全过。R3 固定 `UNRESOLVED`，D10 proposal 必须排除 detached/historical replay并保留 eager proof；query-summary/expectation durable replay 也保持排除。R4 固定 `NOT_TESTED`。
 
 ### 5.15 Immutable synthesis and evidence-to-decision map
 
@@ -645,16 +627,16 @@ canonical comparator 对 rows 使用稳定 tuple encoding/sort；排除允许变
 SUPPORTED_FOR_ADR | PARTIAL | UNRESOLVED | CONTRADICTED | NOT_TESTED
 ```
 
-| Candidate | Required probe evidence |
-|---|---|
-| D02 | typed semantic ports、digest inputs、occurrence/path fixtures |
-| D03 | All/Any、compare/unify、SC-01、SC-12/unsupported diagnostics |
-| D04 | typed navigation、grant、ambiguity/unbound、lineage |
-| D05 | stable filtered server-owned profiles/slots and P0/A0 ownership |
-| D06 | rows/completeness、zero cases、exists/contains_row、error/budget distinctions |
-| D07 | server-fixed assignment and all authority-escalation fixtures |
-| D10 | only individually passed R0–R3 levels and unavailability behavior |
-| D11 | row/expectation/query-summary anchors with declared scope |
+| Candidate | Required probe evidence | Maximum claim under lean envelope |
+|---|---|---|
+| D02 | typed semantic ports、digest inputs、occurrence/path fixtures | `SUPPORTED_FOR_ADR` only for tested native/P0 slice |
+| D03 | All/Any、compare/unify、SC-01、SC-12/unsupported diagnostics | `PARTIAL` unless one SC-01 candidate is clearly recommended |
+| D04 | typed navigation、grant、ambiguity/unbound、lineage | at most `PARTIAL`；one positive + one static negative batch is not broad runtime validation |
+| D05 | stable filtered server-owned profiles/slots and P0/A0 ownership | `SUPPORTED_FOR_ADR` only for fixed-profile experimental contract |
+| D06 | rows/completeness、zero cases、exists/contains_row、error distinctions | at most `PARTIAL`；real runtime truncation/budget remains untested |
+| D07 | server-fixed assignment and aggregate authority-escalation fixture | at most `PARTIAL`；`A01` does not establish seven independent attack rates |
+| D10 | R0 three targets；R1/R2 selected-row only；explicit unavailability | at most `PARTIAL`；R3/historical and durable summary/expectation replay excluded |
+| D11 | row/expectation/query-summary live anchors with declared scope | at most `PARTIAL`；only row anchor receives R1/R2 evidence |
 
 终态唯一且优先序固定：
 
@@ -669,32 +651,32 @@ STOP-class kill
 
 ## 6. Boundaries And Invariants
 
-### 6.1 Proposed cumulative budget — not yet accepted
+### 6.1 User-accepted lean review baseline — not execution authorization
 
 | Resource | Proposed hard cap | State |
 |---|---:|---|
-| elapsed execution window | 10 working days from execution authorization | `PROPOSED / UNACCEPTED` |
-| human work | 80 person-hours total | `PROPOSED / UNACCEPTED` |
-| Probe Step 2 | 16 hours | included |
-| Probe Step 3 | 32 hours | included |
-| Probe Step 4 | 12 hours | included |
-| Probe Step 5 | 16 hours | included |
-| non-repair reserve | 4 hours | included；不能用于修复/第二次实验 |
-| named deterministic fixture cells | exactly 37 | `PROPOSED / UNACCEPTED` |
-| model-scored cells | exactly 16, fixed subset of 37 | `PROPOSED / UNACCEPTED` |
-| local compute | 24 CPU-core-hours | `PROPOSED / UNACCEPTED` |
-| durable non-sensitive artifacts | 2 GiB | `PROPOSED / UNACCEPTED` |
-| non-model paid infrastructure | EUR 0 | `PROPOSED / UNACCEPTED` |
-| model configurations | exactly 2；no third/fallback | `PROPOSED / UNACCEPTED` |
-| primary model calls | at most 64 turns = 2 models × 16 cells × 2 turns | `PROPOSED / UNACCEPTED` |
-| transient retries | at most 4 additional turns；grand total 68 | `PROPOSED / UNACCEPTED` |
-| semantic/schema repair | 0 | `PROPOSED / UNACCEPTED` |
-| external tokens | ≤500k input + ≤100k output | `PROPOSED / UNACCEPTED` |
-| external model cost | ≤EUR 100 total | `PROPOSED / UNACCEPTED` |
-| outbound payload | ≤5 MiB total | `PROPOSED / UNACCEPTED` |
-| pre-score contract adjustment | at most 1, after Step 3 and before freeze | `PROPOSED / UNACCEPTED` |
+| elapsed execution window | 3 working days from execution authorization | `USER-ACCEPTED REVIEW BASELINE` |
+| human work | 24 person-hours total | `USER-ACCEPTED REVIEW BASELINE` |
+| Probe Step 2 | 5 hours | included |
+| Probe Step 3 | 10 hours | included |
+| Probe Step 4 | 3 hours | included |
+| Probe Step 5 | 4 hours | included |
+| non-repair reserve | 2 hours | included；不能用于 scope/contract/corpus 扩张 |
+| named deterministic fixture cells | exactly 20 | `USER-ACCEPTED REVIEW BASELINE` |
+| model-scored cells | exactly 6, fixed subset of 20 | `USER-ACCEPTED REVIEW BASELINE` |
+| local compute | 8 CPU-core-hours | `USER-ACCEPTED REVIEW BASELINE` |
+| durable non-sensitive artifacts | 512 MiB | `USER-ACCEPTED REVIEW BASELINE` |
+| non-model paid infrastructure | EUR 0 | `USER-ACCEPTED REVIEW BASELINE` |
+| model configurations | exactly 2；no third/fallback | `USER-ACCEPTED REVIEW BASELINE` |
+| primary model calls | at most 24 turns = 2 models × 6 cells × 2 turns | `USER-ACCEPTED REVIEW BASELINE` |
+| transient retries | at most 2 additional turns；grand total 26 | `USER-ACCEPTED REVIEW BASELINE` |
+| semantic/schema repair | 0 | `USER-ACCEPTED REVIEW BASELINE` |
+| external tokens | ≤150k input + ≤30k output | `USER-ACCEPTED REVIEW BASELINE` |
+| external model cost | ≤EUR 25 total | `USER-ACCEPTED REVIEW BASELINE` |
+| outbound payload | ≤1 MiB total | `USER-ACCEPTED REVIEW BASELINE` |
+| post-oracle semantic contract adjustment | 0 | `USER-ACCEPTED REVIEW BASELINE` |
 
-任何 cap 超出立即停止并以 `REVISE` 收束，相关维度 `UNRESOLVED`。预算不得通过省略失败 case、缩 denominator、换免费 provider、把人工时间记为“讨论”或把 retry 改名为新 run 绕过。
+任何 cap 超出立即停止并以 `REVISE` 收束，相关维度 `UNRESOLVED`。预算不得通过省略失败 case、缩 denominator、换免费 provider、把人工时间记为“讨论”或把 retry 改名为新 run 绕过。Formal review/preflight 只可保持或收窄本表；任何增加都必须回到用户重新授权。
 
 ### 6.2 Exact path allowlist after future execution authorization
 
@@ -752,17 +734,11 @@ Q1/CB0 fixtures, reports, audits and working assets
 | `K-DATA` | credential leak or unapproved egress | immediate `STOP` + incident handling |
 | `K-THIRD-ENVELOPE` | third discovery envelope proposed while CB0 and Q2 both non-terminal | reject proposal；do not change current experiment |
 
-### 6.5 One controlled adjustment window
+### 6.5 No semantic adjustment or repair run
 
-Step 3 证据与 Step 4 freeze 之间最多一次合同调整，必须：
+Step 2 oracle freeze 后，不允许修改 semantic contract、fixture meaning、oracle、cell set 或 denominator 来救 Step 3。Step 3 的普通代码缺陷可以在其 10 小时实现预算内修复，但前提是 frozen contract/oracle 字节不变；一旦发现必须改变它们，本封套直接 `REVISE`，不打开 adjustment window。
 
-- 在 paired audit 记录 exact diff 和原因；
-- 保留原 Step 2 fixture/oracle lineage；
-- 重跑全部 deterministic cells 但不增加 cell/call/hours cap；
-- 在任何 scored call 前完成；
-- 不能修复已触发 STOP 的问题。
-
-首次 scored call 后一切计分材料不可变。终态也不可通过 amendment 改写；后继工作需新 decision。
+Step 3 final gate 或首次 scored call 之后不允许 repair/rerun。终态也不可通过 amendment 改写；后继工作需新 decision。
 
 ## 7. Acceptance
 
@@ -771,15 +747,15 @@ Step 3 证据与 Step 4 freeze 之间最多一次合同调整，必须：
 - [ ] Q2 adoption pin、branch fork basis、外部 repo pins 和 dirty baseline 经独立 preflight 重核。
 - [ ] Step 4.2 formal review 完成，paired audit 只记录真实 review evidence。
 - [ ] 独立 preflight artifact 在独立 branch 完成并被 blueprint consume。
-- [ ] 用户明确接受 §6.1 所有数值，或通过 reviewed amendment 收窄；不能部分默许。
+- [x] 用户于 2026-08-11 明确接受 §6.1 lean hard caps 作为 review baseline；这不构成 execution authorization。
 - [ ] 用户分别授权 `scoped` 和 execution；状态转换不自动发生。
-- [ ] `OBL-Q2-BP-01` 映射到 `SC12-32/SC12-P/SC12-R/AC21` 及明确 oracle。
-- [ ] `OBL-Q2-BP-02` 映射到 §5.12 的 32-output blind protocol。
+- [ ] `OBL-Q2-BP-01` 映射到 `SC12-32/SC12-P/AC21` 及明确 oracle。
+- [ ] `OBL-Q2-BP-02` 映射到 §5.12 的 12-output blind protocol。
 - [ ] `OBL-Q2-BP-03` entry gate 确认 CB0/Q2 状态并禁止第三封套。
 
 ### 7.2 Probe Step 2 acceptance
 
-- [ ] manifest 恰好列出 37 个 executable cell IDs，且 model subset 恰好为冻结的 16 IDs。
+- [ ] manifest 恰好列出 20 个 executable cell IDs，且 model subset 恰好为冻结的 6 IDs。
 - [ ] 每个 cell 在 implementation 前具有 ingress/resolution/lineage/result/expectation/Explain/Agent interpretation oracle。
 - [ ] 轻量独立 oracle review 完成并记录 reviewer、date、finding disposition；不冒充 CB0 gold/custody。
 - [ ] SC-01 双候选、SC-02 totality、SC-12 failure owner、AC-21 namespace、zero/incomplete、navigation、injection 和 failure classes 均有具名 oracle。
@@ -787,7 +763,7 @@ Step 3 证据与 Step 4 freeze 之间最多一次合同调整，必须：
 
 ### 7.3 Probe Step 3 acceptance
 
-- [ ] 37 cells 在 native-only/no-fallback 下产生预期 canonical result 或显式 rejection。
+- [ ] 20 cells 在 native-only/no-fallback 下产生预期 canonical result 或显式 rejection。
 - [ ] `expect` 不进入 Policy body，不过滤 rows；synthetic head 不新增业务条件。
 - [ ] complete/incomplete zero rows、query exists、expectation exists 和 typed failures 保持分离。
 - [ ] restricted/missing/ambiguous/unbound navigation 在 ledger/lowering 前 fail closed。
@@ -805,14 +781,14 @@ Step 3 证据与 Step 4 freeze 之间最多一次合同调整，必须：
 - [ ] 两模型对每 profile 接收 byte-identical canonical tool schema。
 - [ ] prompt/schema/cases/oracle/normalizer/threshold/denominator/order/retry 在首次 call 前 hash 冻结。
 - [ ] `BYOK-01` 与逐 provider `EGRESS-01` 分别获得明确授权；secret/egress controls 通过。
-- [ ] 两个模型分别完成全部 16 cases 或该 arm 明确 `UNRESOLVED`；不得 pool/fallback。
+- [ ] 两个模型分别完成全部 6 cases 或该 arm 明确 `UNRESOLVED`；不得 pool/fallback。
 - [ ] authority/safety/zero/error/expectation hard invariants 全部逐模型判定。
-- [ ] 所有 32 outputs 按 §5.12 blind；human scores 在 reveal 前 hash 冻结。
+- [ ] 所有 12 outputs 按 §5.12 blind；human scores 在 reveal 前 hash 冻结。
 - [ ] call/token/cost/payload/retry caps 未超；semantic repair 为 0。
 
 ### 7.5 Probe Step 5 and closure acceptance
 
-- [ ] R0、R1、R2 分别通过；R3 独立报告，R4 固定 `NOT_TESTED`。
+- [ ] R0 对 `Q02/Q04/E03` 三类 target 通过；R1/R2 仅对 `Q02` selected-row bundle 通过；其余 durable target scope 不得外推；R3 `UNRESOLVED`，R4 `NOT_TESTED`。
 - [ ] 每个 replay level 另报 availability；缺材料显式失败且无 current/latest fallback。
 - [ ] 四个 mutation 都产生 child comparative runs，不覆盖 original bundle。
 - [ ] compatibility/no-side-effect checks 通过，或按 kill table 终止。
@@ -830,16 +806,16 @@ Step 3 证据与 Step 4 freeze 之间最多一次合同调整，必须：
 2. **Step 4.2 — formal blueprint review（separate authorization）**：至少做 governance、FactGraph contract、Agent/replay/privacy 三视角 review；findings 逐项进入 paired audit。不得把本次起草前咨询冒充 review。
 3. **Step 4.3 — independent preflight（separate authorization）**：从 reviewed-draft commit fork `v0.3.0-meander-agent-query-validation-vertical-probe-preflight-2026-08-11`，只创建批准的 preflight artifact；核 repo pins、路径、环境、private imports、测试命令、预算可执行性、secret/egress gates 和 dirty seam。
 4. **Step 4.4/4.5 — amendment + self-check**：只消费 preflight findings 收紧 blueprint pair；不得创建实验资产。机械检查 fixture count、model subset、OBL mapping、kill precedence 和 path allowlist。
-5. **Step 4.6 — scope freeze（separate authorization）**：用户逐项接受 numeric caps、角色和所有 open items 后才改 `Status: scoped`；paired audit 记录 exact scoped commit。BYOK/egress 仍不随 scoped 自动授权。
+5. **Step 4.6 — scope freeze（separate authorization）**：用户确认 reviewed/preflight 版本没有增加已接受的 caps，并关闭角色与其他 open items 后才改 `Status: scoped`；paired audit 记录 exact scoped commit。BYOK/egress 仍不随 scoped 自动授权。
 
 ### One implementation envelope
 
-6. **Probe Step 2 — fixtures/oracle**：在 implementation branch 创建 experiment package skeleton、37 cells、goldens、manifest、rubric；完成轻量独立 oracle review。不得调用模型。
+6. **Probe Step 2 — fixtures/oracle**：在 implementation branch 创建 experiment package skeleton、20 cells、goldens、manifest、rubric；完成轻量独立 oracle review。不得调用模型。
 7. **Probe Step 3 — deterministic facade**：实现 private profile/query DTO、canonicalizer、compiler/lineage、native evaluator wrapper 和 typed results；依次跑 deterministic cells。若 gate 失败，停止构建并转 Step 5 synthesis。
-8. **Single adjustment window（optional）**：只有 Step 3 暴露非 STOP contract issue 时，按 §6.5 使用至多一次；随后冻结全部 scoring material。
+8. **Freeze without semantic adjustment**：Step 3 通过后直接冻结 scoring material；若必须改变 contract/oracle/cells，则以 `REVISE` 结束，不修复重跑。
 9. **Probe Step 4 readiness**：用户另外批准 exact providers/models 的 `BYOK-01` 与 `EGRESS-01`；没有批准则跳过模型并记录 `UNRESOLVED`。
-10. **Probe Step 4 — Agent loop**：按交错的 frozen order 运行 2×16 cases；保存 sanitized manifest；生成盲包、冻结盲分，再 reveal mapping。不得 repair/rerun。
-11. **Probe Step 5 — replay/compatibility**：执行三类 target 的 R0/R1/R2，选择性 R3，固定 R4 NOT_TESTED；执行 availability 和四种 child mutation；重核 source/Plan v3/no-side-effect。
+10. **Probe Step 4 — Agent loop**：按交错的 frozen order 运行 2×6 cases；保存 sanitized manifest；生成盲包、冻结盲分，再 reveal mapping。不得 repair/rerun。
+11. **Probe Step 5 — replay/compatibility**：在 `Q02/Q04/E03` 上验证三-target R0；只对 `Q02` selected-row bundle 验证 R1/R2、availability 和四种 child mutation；R3 保持 `UNRESOLVED`，R4 固定 `NOT_TESTED`；重核 source/Plan v3/no-side-effect。
 12. **Immutable synthesis**：生成 final disposition、evidence-to-D matrix 和 budget/egress ledger；paired audit 记录终态。结果不符合假设也算协议完成，但不得改写为成功。
 13. **Closure/archive（separate lifecycle authorization）**：补齐 §10、同步 experiment README/benchmark index；按 workflow 将 blueprint pair 和 standalone preflight 一起归档并隔离 stage inventory row。不 push/merge sacred branch。
 

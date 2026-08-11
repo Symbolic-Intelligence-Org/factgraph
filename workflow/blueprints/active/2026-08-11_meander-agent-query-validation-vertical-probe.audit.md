@@ -20,6 +20,7 @@
 | Date | Stage | Event | Notes |
 | --- | --- | --- | --- |
 | 2026-08-11 | draft | Blueprint created | User authorized Workflow Step 4.1 drafting only. The pair maps adopted Q2 and `OBL-Q2-BP-01..03` into one proposed, numerically capped envelope. No formal review, preflight, scope freeze, fixtures/harness, model/BYOK/egress use, experiment execution, ADR, source implementation, push, or merge occurred. |
+| 2026-08-11 | draft | Envelope narrowed before formal review | User accepted the kill-first correction as the review baseline: 3 working days, 24 person-hours, 20 deterministic cells, 6 model-scored cells, at most 24 primary + 2 transient-retry model turns, and no post-oracle semantic adjustment/repair run. The user separately authorized final Step 4.2 review and stated later execution work should be handed to their agent. This event authorizes no preflight, scoped transition, BYOK/egress, fixture/harness creation, or execution. |
 
 ## Decision Notes
 
