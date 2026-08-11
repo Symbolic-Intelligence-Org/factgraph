@@ -621,7 +621,7 @@ blind_sample_id -> model_arm + run_id + provider_request_id
 
 `BYOK-01` 只授权：credential owner、两个冻结 model coordinates、费用上限、runtime secret injection。key 禁止出现在 `.env`、CLI args、logs、fixtures、reports 或 git。
 
-`EGRESS-01` 必须逐 provider 冻结：exact outbound manifest/digest、data classification/allowlist、retention/training/cache/log settings、region/residency、deletion/derived-output 处理和 inbound response 保存方式。
+`EGRESS-01` 必须逐 provider 冻结一个结构性 `EgressPolicyManifestV0`：允许的 message roles、JSON paths、data classification、per-field/total size limits、静态 system/task prompt、tool schema 和 result-template hashes，以及 retention/training/cache/log settings、region/residency、deletion/derived-output 处理和 inbound response 保存方式。运行前只能批准这些稳定结构与静态组件，不能假装预知包含 Agent tool arguments 的动态完整 payload digest。
 
 允许外发：
 
@@ -637,7 +637,7 @@ sanitized typed evaluation result
 
 用户提供 key 不自动等于 egress authorization。任一 gate 缺失则 Step 4 不运行，Agent dimension `UNRESOLVED`。
 
-每次 provider call 前，runner 必须从实际 serialized payload 重算 field allowlist 和 SHA-256，并与该 provider 已批准的 `EGRESS-01` manifest 精确比较；不一致时 local fail closed，`provider_calls` 不增加，且不得通过删除审计字段后重试。pre-send guard 的输入摘要、结果和 authorization ID 进入 budget/egress ledger，credential 本身不进入。
+每次 provider call 前，runner 必须对实际 serialized payload 检查 message role、JSON path、数据分类和大小是否落在 `EgressPolicyManifestV0` allowlist 内，并确认所有静态组件 hash 与批准值相同。任何动态字段越过批准 path/class/size 或静态 hash 漂移都 local fail closed，`provider_calls` 不增加，且不得通过删除审计字段后重试。检查通过后才为该次实际完整 payload 计算 SHA-256 并写入 budget/egress ledger；这个 per-call evidence digest 不与运行前未知的 full-payload digest 比较。pre-send guard 结果和 authorization ID 同样入 ledger，credential 本身不进入。
 
 ### 5.14 Probe Step 5: R0–R4 and mutation protocol
 
@@ -713,7 +713,7 @@ STOP-class kill
 
 ## 6. Boundaries And Invariants
 
-### 6.1 User-accepted lean review baseline — not execution authorization
+### 6.1 Lean cap table — user-accepted baseline plus review-derived accounting；not execution authorization
 
 | Resource | Proposed hard cap | State |
 |---|---:|---|
@@ -725,10 +725,10 @@ STOP-class kill
 | Probe Step 5 | 4 hours | included |
 | non-repair reserve | 2 hours | included；不能用于 scope/contract/corpus 扩张 |
 | named deterministic fixture cells | exactly 20 | `USER-ACCEPTED REVIEW BASELINE` |
-| primary Step 2/3 harness invocations | exactly 20；each cell at most one，engine call 为 oracle-pinned 0 or 1 | `USER-ACCEPTED REVIEW BASELINE` |
+| primary Step 2/3 harness invocations | exactly 20；each cell at most one，engine call 为 oracle-pinned 0 or 1 | `REVIEW-DERIVED / PENDING CAP-FINAL` |
 | model-scored cells | exactly 6, fixed subset of 20 | `USER-ACCEPTED REVIEW BASELINE` |
-| model-loop local tool executions | at most 10 = 2 models × 5 tool-using cells；`A01-AMB` required 0 per model | `REVIEW-NARROWED FROM USER-ACCEPTED BASELINE` |
-| non-primary replay operations | exactly 13 named IDs；at most 14 local evaluate/explain/reopen attempts | `USER-ACCEPTED REVIEW BASELINE` |
+| model-loop local tool executions | at most 10 = 2 models × 5 tool-using cells；`A01-AMB` required 0 per model | `REVIEW-DERIVED / PENDING CAP-FINAL` |
+| non-primary replay operations | exactly 13 named IDs；at most 14 local evaluate/explain/reopen attempts | `REVIEW-DERIVED / PENDING CAP-FINAL` |
 | local compute | 8 CPU-core-hours | `USER-ACCEPTED REVIEW BASELINE` |
 | durable non-sensitive artifacts | 512 MiB | `USER-ACCEPTED REVIEW BASELINE` |
 | non-model paid infrastructure | EUR 0 | `USER-ACCEPTED REVIEW BASELINE` |
@@ -843,17 +843,20 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 - [ ] Q2 adoption pin、branch fork basis、外部 repo pins 和 dirty baseline 经独立 preflight 重核。
 - [ ] Step 4.2 formal review 完成，paired audit 只记录真实 review evidence。
 - [ ] 独立 preflight artifact 在独立 branch 完成并被 blueprint consume。
-- [x] 用户于 2026-08-11 明确接受 §6.1 lean hard caps 作为 review baseline；这不构成 execution authorization。
+- [x] 用户于 2026-08-11 明确接受 commit `4592e491` 中的原始 lean baseline（3 working days、24 person-hours、20/6 cells、2 models、24+2 turn ceiling 及其余当时列出的资源/零 repair caps）；本轮新增 operation accounting 与 22+2/10 收窄仍等待 `CAP-FINAL-01`，且均不构成 execution authorization。
 - [ ] `PF-BASELINE-01..PF-DISPOSITION-01` 全部逐项报告；external gates 不能伪装成 PASS。
 - [ ] `CAP-FINAL-01` 对 pinned reviewed/preflight commit 获得用户确认；精确 cardinality 不得缩水后仍称 PROCEED。
 - [ ] 用户单独授权 `draft -> scoped`；这不授权 execution。
-- [ ] `PF-HANDOFF-01` bundle 将 exact scoped/preflight/fixture/cap/open-gate 坐标交给届时具名的 user-designated executor agent，且不含 secrets。
-- [ ] 用户在 handoff 后另行授权 `scoped -> implementing`/execution；这仍不替代 `BYOK-01`/`EGRESS-01`。
 - [ ] `OBL-Q2-BP-01` 映射到 `SC12-32/SC12-P/AC21` 及明确 oracle。
-- [ ] `OBL-Q2-BP-02` 映射到 §5.12 的 12-output blind protocol。
+- [ ] `OBL-Q2-BP-02` 映射到 §5.12 的 12-slot protocol；仅实际 candidate texts 进入 blind judgment。
 - [ ] `OBL-Q2-BP-03` entry gate 确认 CB0/Q2 状态并禁止第三封套。
 
-### 7.2 Probe Step 2 acceptance
+### 7.2 Post-scoped handoff and execution gates
+
+- [ ] `PF-HANDOFF-01` 已在 preflight 验证 handoff schema；实际 `HandoffRecordV0` 将 exact scoped/preflight commits、fixture-plan contract、caps 和 open-gate 坐标交给届时具名的 user-designated executor agent，且不含 secrets。
+- [ ] 用户在实际 handoff 后另行授权 `scoped -> implementing`/execution；这仍不替代 `BYOK-01`/`EGRESS-01`。
+
+### 7.3 Probe Step 2 acceptance
 
 - [ ] manifest 恰好列出 20 个 executable cell IDs，且 model subset 恰好为冻结的 6 IDs。
 - [ ] 每个 cell 在 implementation 前具有 ingress/resolution/lineage/result/expectation/Explain/Agent interpretation oracle。
@@ -861,7 +864,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 - [ ] SC-01 双候选、SC-02 totality、SC-12 failure owner、AC-21 namespace、zero/incomplete、navigation、injection 和 failure classes 均有具名 oracle。
 - [ ] fixture/golden canonical bytes、manifest 和 SHA-256 在 Step 3 前冻结。
 
-### 7.3 Probe Step 3 acceptance
+### 7.4 Probe Step 3 acceptance
 
 - [ ] 20 cells 在 native-only/no-fallback 下产生预期 canonical result 或显式 rejection。
 - [ ] `expect` 不进入 Policy body，不过滤 rows；synthetic head 不新增业务条件。
@@ -875,7 +878,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 - [ ] no production-state write、no source diff、Plan v3/eager-proof floor unchanged。
 - [ ] 所有 Step 3 exits 逐项报告；任一 required failure 时模型不运行。
 
-### 7.4 Probe Step 4 acceptance
+### 7.5 Probe Step 4 acceptance
 
 - [ ] 两个实质独立 provider/model exact coordinates 与 response model metadata 冻结。
 - [ ] 两模型对每 profile 接收 byte-identical canonical tool schema。
@@ -886,7 +889,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 - [ ] 12 个 expected slots 均记录 typed slot state；所有实际 candidate texts 按 §5.12 blind；human scores 在 reveal 前 hash 冻结。
 - [ ] call/token/cost/payload/retry caps 未超；semantic repair 为 0。
 
-### 7.5 Probe Step 5 and closure acceptance
+### 7.6 Probe Step 5 and closure acceptance
 
 - [ ] R0 对 `Q02/Q04/E03` 三类 target 通过；R1/R2 仅对 `Q02` selected-row bundle 通过；其余 durable target scope 不得外推；R3 `UNRESOLVED`，R4 `NOT_TESTED`。
 - [ ] 每个 replay level 另报 availability；缺材料显式失败且无 current/latest fallback。
@@ -907,7 +910,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 3. **Step 4.3 — independent preflight（separate authorization）**：从 reviewed-draft commit fork `v0.3.0-meander-agent-query-validation-vertical-probe-preflight-2026-08-11`，只创建批准的 preflight artifact；核 repo pins、路径、环境、private imports、测试命令、预算可执行性、secret/egress gates 和 dirty seam。
 4. **Step 4.4/4.5 — amendment + self-check**：只消费 preflight findings 收紧 blueprint pair；不得创建实验资产。机械检查 fixture count、model subset、OBL mapping、kill precedence 和 path allowlist。
 5. **Step 4.6 — scope freeze（separate authorization）**：`CAP-FINAL-01` 与所有 non-external preflight checks 闭合后，用户单独授权 `draft -> scoped`；paired audit 记录 exact scoped commit。Execution/BYOK/egress 都不随 scoped 自动授权。
-6. **Step 4.6a — user-agent handoff and execution gate（separate authorization）**：生成/记录 `HandoffRecordV0`，至少含 scoped blueprint/audit commit、preflight commit/blob、四仓 pins/dirty manifest、exact path allowlist、§6.1 caps、20/6 fixture/oracle hashes、13 replay operation IDs、open gates、stop semantics 和 recipient=`user-designated executor agent`；不得包含 credential。用户审阅 handoff 后另行授权 `scoped -> implementing`/execution；handoff 本身不是授权。
+6. **Step 4.6a — user-agent handoff and execution gate（separate authorization）**：生成/记录 `HandoffRecordV0`，至少含 scoped blueprint/audit commit、preflight commit/blob、四仓 pins/dirty manifest、exact path allowlist、§6.1 caps、frozen fixture-plan contract（20/6 IDs、oracle schema、rubric version、Step-2 artifact-freeze gate）、13 replay operation IDs、open gates、stop semantics 和 recipient=`user-designated executor agent`；不得包含尚未生成的 fixture/golden/oracle hashes 或 credential。用户审阅 handoff 后另行授权 `scoped -> implementing`/execution；handoff 本身不是授权。
 
 ### One implementation envelope
 
@@ -916,7 +919,7 @@ Q2 要求每项 §4 lock 成为具名 preflight check。未来 standalone prefli
 9. **Freeze without semantic adjustment**：Step 3 通过后直接冻结 scoring material；若必须改变 contract/oracle/cells，则以 `REVISE` 结束，不修复重跑。
 10. **Probe Step 4 readiness**：用户另外批准 exact providers/models 的 `BYOK-01` 与 `EGRESS-01`；没有批准则 Agent dimension `UNRESOLVED`、PROCEED 被禁止，但仍继续本地 Step 5 replay/compatibility。
 11. **Probe Step 4 — Agent loop**：若双授权存在，按交错的 frozen order 运行 2×6 cases；保存 12-slot manifest；生成盲包、冻结盲分，再 reveal mapping。不得 repair/rerun。
-12. **Probe Step 5 — replay/compatibility**：在 `Q02/Q04/E03` 上验证三-target R0；只对 `Q02` selected-row bundle执行 13 个 frozen replay operations（R1/R2、negative availability、四种 child mutation）；R3 保持 `UNRESOLVED`，R4 固定 `NOT_TESTED`；重核 source/Plan v3/no-side-effect。
+12. **Probe Step 5 — replay/compatibility**：执行 13 个 frozen operations：3 个 R0 分布于 `Q02/Q04/E03`，其余 10 个 R1/R2、negative availability 和 child-mutation operations 作用于 `Q02` representative selected-row bundle；R3 保持 `UNRESOLVED`，R4 固定 `NOT_TESTED`；重核 source/Plan v3/no-side-effect。
 13. **Immutable synthesis and `implementing -> implemented`**：生成 final disposition、evidence-to-D matrix 和 budget/egress ledger；补齐 §10，paired audit 记录终态后才可将 blueprint 标为 `implemented`。结果不符合假设也算协议完成，但不得改写为成功。
 14. **Closure/archive（separate lifecycle authorization）**：同步 experiment README/benchmark index；按 workflow 将 blueprint pair 和 standalone preflight 一起归档并隔离 stage inventory row。不 push/merge sacred branch。
 
