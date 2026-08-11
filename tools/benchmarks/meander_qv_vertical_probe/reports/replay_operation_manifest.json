@@ -283,19 +283,22 @@
   },
   "levels": {
     "R0": {
-      "status": "PASS",
+      "status": "UNMET_AGGREGATE",
       "availability": "available",
-      "claim": "three-target live association only"
+      "claim": "three-target live association only",
+      "superseded_from": "PASS (raw op outcome; downgraded at closure)"
     },
     "R1": {
-      "status": "PASS",
+      "status": "PARTIAL",
       "availability": "available",
-      "claim": "selected-row captured-artifact Explain only"
+      "claim": "selected-row captured-artifact Explain only",
+      "superseded_from": "PASS (raw op outcome; downgraded at closure)"
     },
     "R2": {
-      "status": "PASS",
+      "status": "PARTIAL",
       "availability": "available",
-      "claim": "selected-row pinned deterministic re-execution only"
+      "claim": "selected-row pinned deterministic re-execution only",
+      "superseded_from": "PASS (raw op outcome; downgraded at closure)"
     },
     "R3": {
       "status": "UNRESOLVED",
@@ -316,5 +319,6 @@
   },
   "mutations_pass": true,
   "engine_calls_this_phase": 5,
-  "query_summary_expectation_durable_replay": "NOT_TESTED (excluded per §5.14; D10/D11 at most narrowed PARTIAL)"
+  "query_summary_expectation_durable_replay": "NOT_TESTED (excluded per §5.14; D10/D11 at most narrowed PARTIAL)",
+  "closure_correction_note": "Per closure of 9b818490: level statuses here reflect the raw op outcomes, but the FINAL disposition downgrades them — R0 aggregate = UNMET (SUMMARY/EXPECTATION verified from Step-3 captured artifacts, not live), R1/R2 = PARTIAL (rowset+completeness only), EvidenceGraph authored-node identity = UNRESOLVED. See reports/final_disposition.md §2/§3. No re-execution performed."
 }

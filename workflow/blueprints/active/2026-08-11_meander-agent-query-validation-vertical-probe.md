@@ -973,13 +973,13 @@ Envelope closed 2026-08-11 at user direction after all local work; model stage d
 Full evidence: [`tools/benchmarks/meander_qv_vertical_probe/reports/final_disposition.md`](../../../tools/benchmarks/meander_qv_vertical_probe/reports/final_disposition.md).
 
 - 最终落地结果：**协议完成，未落地生产**。一次性 disposable harness + fixtures/goldens/manifests/reports 存于 experiment root;`src/**`、生产 Meander、公共 schema、邻接仓零改动。
-- 最终 disposition：**`REVISE`**(由 `DispositionPrecedenceValidatorV0` 机械推导,fail-closed,已自检)。
-- Experiment validity：**`EXPERIMENT_INVALID`** —— reason **`REQUIRED_GATES_UNMET`**(模型双臂门未授权;Step 3 exact-anchor exit 未满足;R0 aggregate 未满足)。
-- Architecture hypothesis：**`NOT_CONTRADICTED`** —— 无 kill criterion 触发;假设未被证伪,而是在模型层未测、在确定性层未达 exact-anchor exit。
-- Agent dimension：**`NOT_TESTED / UNRESOLVED`**(BYOK/EGRESS/provider call 均未授权)。
+- 最终 disposition：**`REVISE`** —— reason **`THRESHOLD_UNMET`**(由 `DispositionPrecedenceValidatorV0` 机械推导,fail-closed,10 组自检 PASS;`validate_declared(...,"REVISE","UNRESOLVED")` consistent)。
+- Experiment validity：**`UNRESOLVED`** —— 实验有效运行但 deterministic eligibility gates 未清:mandatory `dual_model_arms_pass` 未满足、Step 3 exact-anchor exit **未实现/未证明**、replay R0 aggregate 未满足。非 `EXPERIMENT_INVALID`(无证据损坏)。
+- Architecture hypothesis：**`NOT_CONTRADICTED`** —— 无 kill criterion 触发;假设未被证伪,而是在模型层未测、在确定性层 exact-anchor exit 未实现/未证明。
+- Agent dimension：**`NOT_TESTED / UNRESOLVED`**。BYOK-01/EGRESS-01 **未消费,因 deterministic eligibility gates 未清**,模型阶段从未 eligible(非"用户拒绝");0 provider call/token/cost/egress。
 - D02–D07/D10–D11 evidence map：全部 `PARTIAL`/`UNRESOLVED`,无一 `SUPPORTED_FOR_ADR`(详见终报 §3);probe 不采用任何 D-number。
 - Product/P-GATE/D01：固定 `NOT_TESTED / UNCHANGED / OPEN`。
-- 与 blueprint 不同的地方(deviations):①**A′ cap deviation**(用户 2026-08-11 裁定)——保留原始 20 primary invocations 与 15/20 manifest 不覆盖,仅修 3 项 harness root cause,恰一次单独记账的 20-cell verification sweep(20 inv/13 engine),再有失败即 REVISE;②Step 5 R0 的 SUMMARY/EXPECTATION 因 attempt-verb 代数从 Step-3 captured 工件校验而非 Step-5 live(manifest 内 interpretation note),据此 R0 aggregate 记 UNMET、R1/R2 记 PARTIAL/UNRESOLVED,不写 PASS。
-- 收束期事实修正(仅 report/audit,无 fixture/golden 改动、无重跑):validator fail-open 修复 + fail-closed 回归组;durable bytes 实测 ~357 KB(此前占位 0);phase_log 时间戳改为 logical milestones(去虚构精确壁钟;本机 UTC 收束约 2026-08-11T20:44Z);model_runner 明确为 offline projection prototype;`step4_model.state=NOT_AUTHORIZED_CLOSED_UNRESOLVED`。
+- 与 blueprint 不同的地方(deviations):①**A′ cap deviation**(用户 2026-08-11 裁定)——保留原始 20 primary invocations 与 15/20 manifest 不覆盖,仅修 3 项 harness root cause,恰一次单独记账的 20-cell verification sweep(20 inv/13 engine),再有失败即 REVISE;②Step 5 R0 的 SUMMARY/EXPECTATION 因 attempt-verb 代数从 Step-3 captured 工件校验而非 Step-5 live,据此 R0 aggregate 记 UNMET、R1 记 PARTIAL、R2 仅保留 rowset+completeness 一致(EvidenceGraph authored-node identity **UNRESOLVED**),不写 PASS。
+- 收束期事实修正(仅 report/audit,无 fixture/golden 改动、无重跑):**统一终态 tuple 为 `REVISE / THRESHOLD_UNMET`、`experiment_validity=UNRESOLVED`**;validator 现要求完整 mandatory kill/threshold/gate/invalidations inventory、缺 `dual_model_arms_pass` 必 fail-closed、补 type-error/空 threshold/缺 kill/STOP-precedence/full-tuple 自检(10 组 PASS);exact-anchor exit 改记 **未实现/未证明**;durable bytes 实测 **68 files / 369078 bytes**(此前 0/~357KB 作废);phase_log 时间戳为 logical milestones(本机 UTC 收束约 2026-08-11T20:44Z);model_runner 明确为 offline projection prototype;§5.15 逐项终态(protocol/SC-01/02/12/AC-21/Model A-B/blind scoring)补齐于终报 §3。
 - 预算/egress compliance:person-hours 远在 24h 内;semantic/schema repair = 0;**model provider calls / tokens / cost / egress 全部为 0**;dirty baseline 112 项/`c058409c…` 全程逐字节保持;master 未动;未 push/merge。
 - 归档说明:blueprint pair active→archive 与 standalone preflight active→archive 属独立 lifecycle 授权(§8.14),**本次未执行**;等用户单独授权归档。

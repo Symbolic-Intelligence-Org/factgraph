@@ -129,7 +129,7 @@
           "ops": "3xR0 EXPLAIN + R1 REOPEN + R2 EVALUATE+EXPLAIN + 4xNEG REOPEN + 4xMUT EVALUATE",
           "total": 14,
           "engine_calls_step5": 5,
-          "result": "R0/R1/R2 PASS; R3 UNRESOLVED; R4 NOT_TESTED; negatives 4/4 explicit; mutations 4/4; isolation zero-execution verified"
+          "result": "R0 aggregate UNMET; R1/R2 PARTIAL (rowset+completeness; EvidenceGraph identity UNRESOLVED); R3 UNRESOLVED; R4 NOT_TESTED; negatives 4/4 explicit; mutations 4/4; isolation zero-execution verified"
         }
       ]
     },
@@ -178,9 +178,10 @@
     },
     "durable_artifact_bytes": {
       "cap": 536870912,
-      "used_estimate": 357044,
+      "used_estimate": 369078,
       "measured": true,
-      "note": "measured via git ls-files | wc -c; earlier 0 was a stale placeholder (corrected at closure)"
+      "note": "measured as tracked-file content: `git ls-files <root> | xargs cat | wc -c` = 369078 bytes across 68 files; supersedes earlier 0 and ~357KB",
+      "file_count": 68
     },
     "non_model_paid_infrastructure_eur": {
       "cap": 0,
@@ -240,16 +241,22 @@
     },
     {
       "logical_milestone": "closure",
-      "event": "User declined BYOK/EGRESS/provider calls. Envelope closed REVISE / EXPERIMENT_INVALID / REQUIRED_GATES_UNMET; architecture_hypothesis=NOT_CONTRADICTED; agent_dimension=NOT_TESTED/UNRESOLVED. Report/audit facts corrected only: validator fail-open fixed + fail-closed regression test added; durable bytes measured (~357KB); phase_log timestamps de-fictionalized to logical milestones; model_runner clarified as offline projection prototype; R0 aggregate unmet and R1/R2 downgraded from PASS to PARTIAL/UNRESOLVED; Step 3 exact-anchor exit marked UNMET. No fixture/golden change, no deterministic/model re-execution.",
+      "event": "First closure of 9b818490 (SUPERSEDED by the closure-correction below): had recorded REVISE / EXPERIMENT_INVALID / REQUIRED_GATES_UNMET. The operative terminal tuple is now REVISE / THRESHOLD_UNMET / experiment_validity=UNRESOLVED (see the closure block and the closure-correction milestone). architecture_hypothesis=NOT_CONTRADICTED; agent_dimension=NOT_TESTED/UNRESOLVED throughout.",
+      "charged_to": "non_repair_reserve"
+    },
+    {
+      "logical_milestone": "closure-correction",
+      "event": "Pure closure-correction of 9b818490 (no engine/model, no fixture/golden change): unified terminal tuple to REVISE / THRESHOLD_UNMET / experiment_validity=UNRESOLVED / architecture_hypothesis=NOT_CONTRADICTED / agent_dimension=NOT_TESTED/UNRESOLVED; validator now requires complete mandatory inventory + fail-closed on missing dual_model_arms_pass + type/STOP-precedence/full-tuple self-tests (10 groups PASS); exact-anchor recorded NOT_IMPLEMENTED/NOT_PROVEN; R2 kept rowset/completeness only with EvidenceGraph identity UNRESOLVED; durable bytes = 68 files / 369078 bytes; residual replay PASS wording removed; BYOK reframed as deterministic-eligibility-gates-unmet; audit header fixed and truncated duplicate row removed; §5.15 per-item terminals recorded.",
       "charged_to": "non_repair_reserve"
     }
   ],
   "closure": {
     "disposition": "REVISE",
-    "experiment_validity": "EXPERIMENT_INVALID",
-    "reason": "REQUIRED_GATES_UNMET",
+    "reason": "THRESHOLD_UNMET",
+    "experiment_validity": "UNRESOLVED",
     "architecture_hypothesis": "NOT_CONTRADICTED",
     "agent_dimension": "NOT_TESTED/UNRESOLVED",
+    "byok_egress": "NOT_CONSUMED — deterministic eligibility gates unmet (dual_model_arms_pass, step3 exact-anchor exit not implemented/proven, replay R0 aggregate); BYOK/EGRESS never reached",
     "note": "timestamps recorded as logical milestones, not wall-clock; local UTC at closure ~2026-08-11T20:44Z"
   }
 }
