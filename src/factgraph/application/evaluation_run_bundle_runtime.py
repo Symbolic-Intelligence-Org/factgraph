@@ -483,6 +483,11 @@ def _assert_evaluation_run_bundle_current(
         for relation in bundle.relations
     }
     assertion_ids = {fact.asrt_id for facts in captured_relation.values() for fact in facts}
+    assertion_by_id = {
+        fact.asrt_id: (predicate_id, fact.fact_tuple)
+        for predicate_id, facts in captured_relation.items()
+        for fact in facts
+    }
     for row, anchor in zip(bundle.rows, bundle.run_anchor.row_anchors, strict=True):
         if len(row.values) > MAX_EVALUATION_RUN_BUNDLE_VALUES:
             raise ProtocolShapeError("captured projection value limit is exceeded")
@@ -529,9 +534,12 @@ def _assert_evaluation_run_bundle_current(
             raise ProtocolShapeError(
                 "ProofReceipt head bindings do not match the captured projection row"
             )
-        _receipt_case_index(receipt)
+        selected_case = _validate_receipt_static_consistency(
+            receipt,
+            where=where,
+            assertion_by_id=assertion_by_id,
+        )
         if rebuild_receipts:
-            selected_case = _receipt_case_index(receipt)
             try:
                 rebuilt_receipt = build_support_artifact_for_binding(
                     where=where,
@@ -577,6 +585,85 @@ def _receipt_case_index(receipt: ProofReceipt) -> int:
     if len(cases) != 1:
         raise ProtocolShapeError("ProofReceipt must describe exactly one native branch")
     return next(iter(cases))
+
+
+def _validate_receipt_static_consistency(
+    receipt: ProofReceipt,
+    *,
+    where: list[Any],
+    assertion_by_id: Mapping[str, tuple[str, tuple[Any, ...]]],
+) -> int:
+    """Check receipt-to-plan consistency without repeated relation scans.
+
+    This runs before any verifier early return.  It intentionally validates only
+    the receipt's selected branch and its referenced witnesses; rebuilding the
+    complete receipt remains separately bounded because it repeatedly traverses
+    captured relations.
+    """
+    selected_case = _receipt_case_index(receipt)
+    branches = _where_branches(where)
+    if selected_case >= len(branches):
+        raise ProtocolShapeError("ProofReceipt selected branch is absent from the native plan")
+    branch = branches[selected_case]
+    binding = binding_dict_from_items(receipt.binding_items)
+    expected_predicates: dict[str, tuple[str, tuple[Any, ...]]] = {}
+    expected_steps: dict[str, tuple[str, str]] = {}
+    for condition_index, atom in enumerate(branch):
+        kind = atom[0]
+        if kind == "pred":
+            if len(atom) != 3 or not isinstance(atom[1], str) or not isinstance(atom[2], list):
+                raise ProtocolShapeError("captured native predicate atom is malformed")
+            grounded = _ground_receipt_terms(atom[2], binding)
+            key = f"c{selected_case}.c{condition_index}:{atom[1]}"
+            expected_predicates[key] = (atom[1], grounded)
+        else:
+            key = f"c{selected_case}.c{condition_index}:{kind}"
+            expected_steps[key] = (str(kind), "no_match" if kind == "not" else "satisfied")
+
+    witnesses = {item.pred_condition_key: item for item in receipt.pred_witnesses}
+    if set(witnesses) != set(expected_predicates):
+        raise ProtocolShapeError("ProofReceipt predicate condition inventory does not match branch")
+    for key, witness in witnesses.items():
+        predicate_id, grounded = expected_predicates[key]
+        for assertion_id in witness.asrt_ids:
+            actual = assertion_by_id.get(assertion_id)
+            if actual != (predicate_id, grounded):
+                raise ProtocolShapeError(
+                    "ProofReceipt predicate witness does not match captured branch relation"
+                )
+
+    steps = {item.step_key: item for item in receipt.non_fact_steps}
+    if set(steps) != set(expected_steps):
+        raise ProtocolShapeError("ProofReceipt non-fact condition inventory does not match branch")
+    for key, step in steps.items():
+        if (step.kind, step.status) != expected_steps[key]:
+            raise ProtocolShapeError("ProofReceipt non-fact step does not match captured branch")
+    return selected_case
+
+
+def _where_branches(where: list[Any]) -> tuple[list[tuple[Any, ...]], ...]:
+    if all(isinstance(item, tuple) and item for item in where):
+        return (where,)
+    if all(
+        isinstance(branch, list)
+        and branch
+        and all(isinstance(atom, tuple) and atom for atom in branch)
+        for branch in where
+    ):
+        return tuple(where)
+    raise ProtocolShapeError("captured native plan branch shape is invalid")
+
+
+def _ground_receipt_terms(terms: list[Any], binding: Mapping[str, Any]) -> tuple[Any, ...]:
+    grounded: list[Any] = []
+    for term in terms:
+        if isinstance(term, str) and term.startswith("$"):
+            if term not in binding:
+                raise ProtocolShapeError("ProofReceipt does not bind captured predicate term")
+            grounded.append(binding[term])
+        else:
+            grounded.append(term)
+    return tuple(grounded)
 
 
 def _validate_native_where_bytes(raw: bytes) -> list[Any]:

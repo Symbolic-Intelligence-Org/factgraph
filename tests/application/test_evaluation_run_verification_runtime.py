@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+import json
 import unittest
 from unittest.mock import patch
 
@@ -37,6 +38,7 @@ from factgraph.application.protocol import (
 from factgraph.application.protocol.evaluation_run import _plain, _token as _anchor_token
 from factgraph.application.protocol.evaluation_run_bundle import _token as _bundle_token
 from factgraph.core.evidence.write_protocol import set_field
+from factgraph.core.store._support import support_artifact_bytes, support_artifact_from_dict
 from factgraph.core.rules.ruleref_substrate import NativeWhereEvaluation
 from factgraph.core.rules.where_ast import PredAtom, Var
 from factgraph.core.rules.where_eval import WhereValidationError
@@ -195,6 +197,60 @@ def _with_self_sealed_inconsistent_row(bundle):
     changed_row = replace(
         row,
         values=changed_values,
+        row_capture_digest=_bundle_token("evaluation_run_projection_row_v0", row_payload),
+    )
+    rows = (changed_row, *bundle.rows[1:])
+    rows_capture_digest = _bundle_token(
+        "evaluation_run_rows_capture_v0", tuple(item.row_capture_digest for item in rows)
+    )
+    bundle_values = (
+        bundle.run_anchor.anchor_digest,
+        bundle.query_capture_digest,
+        bundle.native_plan.plan_digest,
+        bundle.schema_capture_digest,
+        bundle.relations_capture_digest,
+        rows_capture_digest,
+        bundle.execution_contract,
+        bundle.integrity,
+        bundle.authenticity,
+        bundle.privacy,
+        bundle.custody,
+        bundle.playback,
+        bundle.replay_availability,
+    )
+    return replace(
+        bundle,
+        rows=rows,
+        rows_capture_digest=rows_capture_digest,
+        bundle_digest=_bundle_token("evaluation_run_bundle_v0", bundle_values),
+    )
+
+
+def _with_self_sealed_wrong_receipt_branch(bundle):
+    """Forge a canonical receipt whose condition keys select no plan branch."""
+    row = bundle.rows[0]
+    receipt = json.loads(row.proof_receipt_bytes.decode("utf-8"))
+    for witness in receipt["pred_witnesses"]:
+        witness["pred_condition_key"] = witness["pred_condition_key"].replace("c0.", "c999.")
+    for step in receipt["non_fact_steps"]:
+        step["step_key"] = step["step_key"].replace("c0.", "c999.")
+    next_receipt = support_artifact_from_dict(receipt)
+    receipt_bytes = support_artifact_bytes(next_receipt)
+    receipt_digest = "sha256:" + __import__("hashlib").sha256(receipt_bytes).hexdigest()
+    row_payload = (
+        row.ordinal,
+        row.row_id,
+        row.claim_digest,
+        row.head_scope_digest,
+        row.certainty,
+        row.certainty_digest,
+        row.values,
+        receipt_digest,
+    )
+    changed_row = replace(
+        row,
+        proof_receipt_bytes=receipt_bytes,
+        proof_receipt_digest=receipt_digest,
         row_capture_digest=_bundle_token("evaluation_run_projection_row_v0", row_payload),
     )
     rows = (changed_row, *bundle.rows[1:])
@@ -414,6 +470,30 @@ class EvaluationRunVerificationRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(ProtocolShapeError, "projection values"):
                 verify_evaluation_run_bundle(forged)
         evaluator.assert_not_called()
+
+    def test_receipt_branch_inconsistency_cannot_be_masked_by_early_exit(self) -> None:
+        _graph, _rule, bundle = _capture()
+        forged = _with_self_sealed_wrong_receipt_branch(bundle)
+
+        for patch_target, value in (
+            ("NATIVE_WHERE_SEMANTICS_VERSION", "native_where_future"),
+            ("_estimate_verification_work", MAX_EVALUATION_RUN_VERIFICATION_WORK + 1),
+        ):
+            with self.subTest(patch_target=patch_target):
+                with (
+                    patch(
+                        "factgraph.application.evaluation_run_verification_runtime."
+                        + patch_target,
+                        value,
+                    ),
+                    patch(
+                        "factgraph.application.evaluation_run_verification_runtime."
+                        "evaluate_native_where"
+                    ) as evaluator,
+                ):
+                    with self.assertRaisesRegex(ProtocolShapeError, "selected branch"):
+                        verify_evaluation_run_bundle(forged)
+                evaluator.assert_not_called()
 
     def test_semantic_support_and_execution_failures_are_distinct(self) -> None:
         _graph, _rule, bundle = _capture()
