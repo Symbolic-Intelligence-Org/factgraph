@@ -1,6 +1,6 @@
 # Task Blueprint: FactGraph managed occurrence address
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: task-scoped implementation contract for F2A only.
@@ -95,15 +95,15 @@ point.
 
 ## 7. Acceptance
 
-- [ ] Same Rule under two aliases has distinct addresses and unchanged contract identity.
-- [ ] Address resolution returns exact Rule-owned Var, endpoint and contract digest.
-- [ ] Duplicate alias, unknown alias and unknown port fail distinctly.
-- [ ] Mismatched Rule/contract and caller collection mutation fail or remain isolated.
-- [ ] Same-endpoint/different-Var ports remain separate and create no join.
-- [ ] Address-space identity is order-stable and alias-sensitive.
-- [ ] Stale Rule/contract is rejected at construction and resolution.
-- [ ] Legacy RuleExpr and one evaluate→row→Explain regression remain green.
-- [ ] Production line cap holds and application docs state all deferrals.
+- [x] Same Rule under two aliases has distinct addresses and unchanged contract identity.
+- [x] Address resolution returns exact Rule-owned Var, endpoint and contract digest.
+- [x] Duplicate alias, unknown alias and unknown port fail distinctly.
+- [x] Mismatched Rule/contract and caller collection mutation fail or remain isolated.
+- [x] Same-endpoint/different-Var ports remain separate and create no join.
+- [x] Address-space identity is order-stable and alias-sensitive.
+- [x] Stale Rule/contract is rejected at construction and resolution.
+- [x] Legacy RuleExpr and one evaluate→row→Explain regression remain green.
+- [x] Production line cap holds and application docs state all deferrals.
 
 ## 8. Implementation Plan
 
@@ -120,4 +120,20 @@ point.
 
 ## 10. Outcome / Deviations
 
-To be completed at closure.
+- Implementation `2377046f` adds a 30-line canonical address protocol, a
+  246-line managed occurrence/address runtime, 16 export lines, one 201-line
+  focused test file and current-truth application docs.
+- Production denominator is 292 added Python lines relative to `8e480daf`,
+  below the 350-line hard cap. No Rule, RuleExpr, lowering, Evaluate, Explain,
+  SDK, Schema, persistence, Policy or Query implementation changed.
+- Focused F2A + F1 + RuleExpr/lowering + existing evaluate→row→Explain chain:
+  100 passed plus 10 subtests. Ruff and targeted mypy passed.
+- Final full `tests/`: 2,906 passed, 32 skipped, 1 failure, 1,182 subtests.
+  The sole failure is the unchanged `service.static_ui` import of absent
+  `render_evidence_graph_html`, already reproduced in F1-lite before F2A.
+- Independent contract review and independent simplicity/workflow re-reviews
+  returned CLEAR with zero P0/P1 after the resolved carrier was made private.
+- No semantic deviation. One implementation-time trust-boundary clarification
+  removed the resolved reference from the public protocol rather than adding a
+  heavier construction-token mechanism.
+- Archive intent: move this blueprint and audit pair together after closure.

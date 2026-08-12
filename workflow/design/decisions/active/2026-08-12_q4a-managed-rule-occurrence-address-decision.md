@@ -189,17 +189,17 @@ Before F2B implements `Policy/All/Any/Unify/Compare`, a separate decision must:
 
 ## 8. Acceptance Criteria
 
-- [ ] Same Rule under two aliases yields distinct addresses and one shared
+- [x] Same Rule under two aliases yields distinct addresses and one shared
       semantic-contract identity without implicit equality.
-- [ ] Canonical resolution returns the Rule-owned Var, exact endpoint and
+- [x] Canonical resolution returns the Rule-owned Var, exact endpoint and
       semantic-contract digest.
-- [ ] Duplicate aliases and unknown alias/port fail with typed errors.
-- [ ] Occurrence/contract mismatch and caller-side collection mutation cannot
+- [x] Duplicate aliases and unknown alias/port fail with typed errors.
+- [x] Occurrence/contract mismatch and caller-side collection mutation cannot
       splice or alter resolved identity.
-- [ ] Address-space digest is input-order stable and alias-sensitive.
-- [ ] Legacy Rule/RuleExpr behavior is unchanged.
-- [ ] No Policy AST, lowering, Query, Evaluate, Explain or SDK surface is added.
-- [ ] Added production Python lines relative to `8e480daf` stay at or below 350.
+- [x] Address-space digest is input-order stable and alias-sensitive.
+- [x] Legacy Rule/RuleExpr behavior is unchanged.
+- [x] No Policy AST, lowering, Query, Evaluate, Explain or SDK surface is added.
+- [x] Added production Python lines relative to `8e480daf` stay at or below 350.
 
 ## 9. Decision Record
 
@@ -209,3 +209,4 @@ Before F2B implements `Policy/All/Any/Unify/Compare`, a separate decision must:
 | 2026-08-12 | adopted | User authorized the next bounded implementation | Scope narrowed to F2A occurrence/address substrate; F2B remains separately gated. |
 | 2026-08-12 | adopted | Independent contract amendments incorporated | Exact occurrence/contract consistency, internally derived refs, copy/freeze identity and unique typed resolution were added before scoping. |
 | 2026-08-12 | adopted | Implementation trust boundary clarified | Independent review found a public resolved DTO could be forged structurally; the verified carrier was made runtime-private rather than adding a heavier construction-token mechanism. |
+| 2026-08-12 | adopted | F2A contract implemented | `2377046f` landed in 292 production lines; final independent reviews returned CLEAR and all acceptance criteria passed. |

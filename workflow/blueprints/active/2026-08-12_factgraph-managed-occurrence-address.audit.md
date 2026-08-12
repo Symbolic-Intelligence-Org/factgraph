@@ -1,6 +1,6 @@
 # Task Blueprint Audit: FactGraph managed occurrence address
 
-- Status: implementing
+- Status: implemented
 - Created: 2026-08-12
 - Last Updated: 2026-08-12
 - Authority: paired blueprint audit log
@@ -19,6 +19,8 @@
 | 2026-08-12 | scoped | Lightweight preflight and self-check passed | Q4A and blueprint agree on direct-port-only structured addresses, exact bundle/occurrence consistency, typed failures, 350-line cap and explicit Policy/Query/lowering deferral. No unresolved item blocks this substrate slice. |
 | 2026-08-12 | implementing | F2A implementation started | Only protocol/runtime address values, focused tests, exports and current-truth application docs are in scope. |
 | 2026-08-12 | review | Independent implementation review requested one trust-boundary correction | Public construction could forge a shape-valid endpoint/digest pairing. The resolved reference was made a runtime-private carrier, leaving only address input public; the no-implicit-join test was also strengthened. |
+| 2026-08-12 | review | Independent re-reviews cleared the corrected implementation | Contract, simplicity and workflow reviews returned CLEAR with zero P0/P1; production denominator 292 lines. |
+| 2026-08-12 | implemented | Scoped implementation landed | `2377046f`; focused chain 100 passed + 10 subtests, Ruff/mypy passed, and full suite added no failure beyond the known service import baseline. |
 
 ## Decision Notes
 
