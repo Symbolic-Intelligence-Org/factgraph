@@ -17,6 +17,7 @@
 | 2026-08-12 | draft | F3B blueprint created | Initial question was whether execution should expose a CandidateSet bridge or an existing result envelope. |
 | 2026-08-12 | scoped | Runtime, result, Explain and compatibility audits converged | CandidateSet remains internal; exact native execution returns EvaluateResult with Query anchors and unchanged-live-view guards. |
 | 2026-08-12 | implementing | User authorized continuing F3B | Work is confined to the isolated F3B branch and the 320-line/no-F4 stops. |
+| 2026-08-12 | review | Implementation and internal independent review completed | Implementation `c94c5bf9`; three reviews returned CLEAR, the full application/SDK cohort passed 458 tests plus 96 subtests, and production growth is 317/320 lines. User-side read-only review remains pending. |
 
 ## Decision Notes
 
@@ -26,3 +27,8 @@
   immutable evaluation bundle and makes no historical replay claim.
 - Native-only execution is deliberate. Adapter parity and config ownership are
   deferred rather than inferred from shared lowering machinery.
+- Candidate IDs remain evaluator-internal identities. F4 must anchor immutable
+  bundles and replay to the transitive Query/result fingerprints instead.
+- The pinned `factpy` environment is the verified test environment; the base
+  interpreter's broad pytest startup still exits 139 and is not treated as a
+  passing environment.

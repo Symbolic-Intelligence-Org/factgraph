@@ -386,7 +386,7 @@ Identity Claim retracts raise `INV_7C_IDENTITY_PROTECTED`; legacy
 
 | Method | One-liner |
 |---|---|
-| `evaluate(inference_or_expr, *, head=None, engine=None, config=None)` | Evaluate an `Inference`, `Rule`, or `RuleExpr`; returns `EvaluateResult`. `engine=None` resolves to `"native"`; explicit values must be one of `"native"`, `"souffle"`, `"problog"`, `"pyreason"`. |
+| `evaluate(inference_or_expr_or_compiled_query, *, head=None, engine=None, config=None)` | Evaluate an `Inference`, `Rule`, `RuleExpr`, or application-compiled `CompiledEvaluationQueryV0`; returns `EvaluateResult`. Query v0 consumes its own projection head, is native-only, and rejects `config=`. Other inputs retain their documented engine/config behavior. |
 | `explain(expr, *, head, engine=None, config=None)` | Replay a closed-head explanation; `head=` is required (no default). `engine=` resolves the same way as `evaluate`. Returns `Explanation`. |
 | `preview_config(profile)` | Inspect public semantics wrappers or canonical `SemanticsProfile`. |
 

@@ -406,6 +406,33 @@ aggregate-containing branches before adapter invocation with `SDKStoreError`
 guidance that names the engine, unsupported feature, rejection source, and
 known alternative engines.
 
+### Compiled EvaluationQuery execution (v0)
+
+The initial Policy-query bridge accepts an application-compiled
+`CompiledEvaluationQueryV0` on the same result surface:
+
+```python
+result = fg.eval.evaluate(compiled_query, engine="native")
+for row in result:
+    print(row.bindings)       # ordered named selections
+    explanation = row.explain()
+```
+
+The SDK executes the exact compiler-issued plan and returns `EvaluateResult`;
+it does not expose the intermediate `CandidateSet`. No `head=` is needed because
+the artifact already contains its synthetic projection head. Bindings constrain
+engine truth and selections only project, so a non-matching bind returns an
+empty result rather than a failed/false claim.
+
+This v0 execution path is deliberately native-only and rejects `config=`,
+`evaluate_candidates(compiled_query)` and standalone
+`eval.explain(compiled_query, ...)`. `row.close()` and `row.explain()` are live
+helpers: they fail closed if the FactGraph view has changed since evaluation.
+Premise exclusions, allowances and predicate blocks are not yet captured with
+that live view, so a non-empty or later-changed premise policy also fails closed.
+That guard does not provide an immutable bundle, historical replay,
+completeness, truncation or expectation semantics; those remain later slices.
+
 ### Rule and RuleExpr snapshot matching
 
 `fg.entities.match(EntityCls, template, **port_constraints)` is the read-side

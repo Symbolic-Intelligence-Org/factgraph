@@ -34,8 +34,9 @@ boundary before F4 snapshot/replay semantics.
 - CandidateSet remains internal and cannot be accepted through the Query path.
 - Query rows are ordered typed projections in the existing result envelope.
 - Query/Policy/occurrence identity is committed in result fingerprints.
-- Evaluation is read-only and requires an unchanged live view across the call.
+- Evaluation performs no fact/ledger mutation and requires an unchanged live view across the call; normal support-artifact caching remains allowed.
 - Lazy close/explain is valid only while that same live view remains current.
+- Premise-filtered execution is rejected until F4 can capture its policy with the view.
 - Only native execution with no config is admitted.
 - F4 bundle/replay and F3 expectation/completeness work remain deferred.
 - Added production Python is capped at 320 lines relative to `5a6f4a55`.
@@ -51,16 +52,30 @@ boundary before F4 snapshot/replay semantics.
 
 ## 4. Acceptance
 
-- [ ] Exact native bind/select execution returns the expected ordered rows.
-- [ ] Non-matching binding returns an empty `EvaluateResult`, not a false claim.
-- [ ] Query execution never writes and does not expose candidates.
-- [ ] Artifact/schema/view changes fail closed at the documented boundary.
-- [ ] Projection kind, typed tags and Query/Policy fingerprints are correct.
-- [ ] Live row close/explain works before, and rejects after, view mutation.
-- [ ] Non-native/config/manual-explain/candidate surfaces reject.
-- [ ] Legacy cohorts and static checks pass within the production line cap.
-- [ ] Current-truth docs state the live-view and native-only limits.
+- [x] Exact native bind/select execution returns the expected ordered rows.
+- [x] Non-matching binding returns an empty `EvaluateResult`, not a false claim.
+- [x] Query execution never mutates facts/the ledger and does not expose candidates.
+- [x] Artifact/schema/view changes fail closed at the documented boundary.
+- [x] Projection kind, typed tags and Query/Policy fingerprints are correct.
+- [x] Live row close/explain works before, and rejects after, view mutation.
+- [x] Non-native/config/manual-explain/candidate surfaces reject.
+- [x] Premise-filtered execution and later premise-policy changes reject.
+- [x] Legacy cohorts and static checks pass within the production line cap.
+- [x] Current-truth docs state the live-view and native-only limits.
 
 ## 5. Outcome / Deviations
 
-To be completed after implementation and independent review.
+- Implementation `c94c5bf9` executes the exact F3A plan through the native
+  evaluator and returns the existing result model; CandidateSet remains private.
+- The full application/SDK cohort is 458 tests passing with 96 subtests. Ruff,
+  targeted mypy for the new runtime module and `git diff --check` pass.
+- Production Python is 317 gross additions relative to `5a6f4a55`, within the
+  320-line stop. The remaining margin is intentionally unused.
+- Three internal independent reviews returned CLEAR with zero blocking
+  findings. User-side read-only review remains pending, so lifecycle status
+  remains `implementing` and this pair is not archived.
+- Candidate identity is not a durable Query identity. F4 must bind any bundle
+  or replay anchor to the Query/result fingerprints rather than CandidateSet IDs.
+- The base interpreter still exits 139 during broad pytest startup; the pinned
+  `factpy` environment completes the stated cohorts. No engine parity beyond
+  native, immutable replay, expectations or completeness is claimed.

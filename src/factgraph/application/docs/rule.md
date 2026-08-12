@@ -369,11 +369,29 @@ strings inside `EntityRef` are safe because they are encoded to an idref first.
 
 `CompiledEvaluationQueryV0` contains the synthetic projection Rule, explicit
 per-branch source mappings, normalized bindings and an engine-neutral lowering
-plan. It does not execute, return rows, accept config, or promise snapshot-
-stable Explain. The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain
-unchanged. Compare/literals, field navigation, `expect`, completeness,
-What-if, Evaluate/Explain integration, persistence, Package, SDK, and
-Agent/Meander wire formats remain later slices.
+plan. The initial execution bridge accepts that exact artifact through the
+existing SDK result surface:
+
+```python
+result = fg.eval.evaluate(compiled_query, engine="native")
+row = result.first()
+```
+
+Execution revalidates the artifact and active schema, then executes the stored
+plan rather than substituting the validation-time reconstruction. It returns
+the existing `EvaluateResult`; raw `CandidateSet` values remain internal. Query rows have kind `projection`, keep
+selection order and carry the compiler-known value-domain tags. A non-matching
+binding yields a valid empty result and is not interpreted as a false claim.
+
+This first bridge is native-only and accepts no `config`. It captures the live
+view digest around evaluation and permits `row.close()` / `row.explain()` only
+while that view remains unchanged. Premise filters are rejected because v0
+does not yet capture their policy with the view. This is a fail-closed
+live-view guard, not an immutable snapshot or historical replay guarantee. The
+older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged. Non-native engines,
+standalone Query explain, candidate acceptance, Compare/literals, field
+navigation, `expect`, completeness, What-if, durable bundles, persistence,
+Package, and Agent/Meander wire formats remain later slices.
 
 Compiled Policy/Query values are compiler-issued, in-process artifacts. Their
 integrity checks detect inconsistent splicing; they are not authentication or

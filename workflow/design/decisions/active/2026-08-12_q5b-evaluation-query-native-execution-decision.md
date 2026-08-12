@@ -33,7 +33,7 @@ guarantees already exist.
 
 ## 2. Scope
 
-F3B adds one experimental, read-only path:
+F3B adds one experimental path that does not mutate facts or the ledger:
 
 ```python
 result = fg.eval.evaluate(compiled_query, engine="native")
@@ -72,9 +72,10 @@ It:
 
 ### 4.1 The exact compiled artifact is the execution authority
 
-Execution must not reconstruct a Query from its public fields or re-lower its
-Policy. It re-runs F3A's full structural/currentness check, verifies the active
-SDK schema digest, then materializes `compiled_query._lowering_plan` directly.
+Execution must not replace the compiler-issued plan with a newly reconstructed
+Query or Policy plan. It re-runs F3A's full structural/currentness check (which
+recomputes the expected seal for comparison), verifies the active SDK schema
+digest, then materializes `compiled_query._lowering_plan` itself.
 Any stale Rule, Policy, digest, branch mapping, binding, projection head or plan
 splice fails before the engine is invoked.
 
@@ -93,11 +94,13 @@ type inference.
 
 ### 4.3 Query identity must survive result construction
 
-The Query result `expr_digest` commits to the format marker plus
-`query_digest`, `policy_digest`, `address_space_digest` and `schema_digest`.
-The `rule_set_digest` commits to every occurrence-qualified Policy Rule pin and
-the synthetic projection head. Structurally identical plans compiled from
-different Policy/Query identities must therefore not collide.
+The Query result `expr_digest` is the protocol-form `sha256:` token of the
+compiler-issued `query_digest`; that transitive seal already commits the
+format, Policy, address space, schema, bindings and selections. The
+`rule_set_digest` commits the sealed `policy_digest` (which transitively covers
+occurrence-qualified Rule pins, expression, branches and lineage) plus the
+synthetic projection head. Structurally identical plans compiled from different
+Policy/Query identities must therefore not collide.
 
 ### 4.4 F3B is a stable-live-view contract, not replay
 
@@ -108,9 +111,11 @@ as the result anchor rather than recomputed a third time.
 `row.close()` and `row.explain()` are permitted only while the current live
 view digest still equals the result anchor. After a change, both fail closed.
 This prevents an old result fingerprint from being paired with newly read
-facts, but does not freeze metadata, premise policy or the ledger. F4 must
-replace this live guard with an immutable bundle before any durable replay or
-historical Explain claim.
+facts, but does not capture metadata, premise policy or the ledger. Because a
+later Explain could otherwise apply a different premise policy, v0 admits only
+an empty premise-filter configuration and fails closed if one appears during
+execution or before lazy close/explain. F4 must replace this live guard with an
+immutable bundle before any durable replay or historical Explain claim.
 
 ### 4.5 Native-only is an intentional stop, not inferred parity
 
@@ -135,11 +140,12 @@ Stop and split the slice if any of the following becomes necessary:
 
 - [ ] A compiled Query executes its exact native plan and returns ordered projection rows.
 - [ ] Bindings constrain engine truth; a non-matching bind returns a valid empty result.
-- [ ] Execution is read-only and invokes the native evaluator once.
+- [ ] Execution performs no fact/ledger mutation and invokes the native evaluator once; existing support-artifact caching may still occur.
 - [ ] Stale/spliced artifacts and a mismatched Store schema fail before engine invocation.
 - [ ] Rows use kind `projection` and compiler-known type tags.
 - [ ] Query/Policy identity changes alter the result expression/rule-set anchors.
 - [ ] A view change during execution aborts; a later view change blocks close/explain.
+- [ ] Non-empty or later-mutated premise filters fail closed in v0.
 - [ ] Non-native engines, config, query candidates and standalone Query explain reject explicitly.
 - [ ] Legacy evaluation, Explain, Match and old Query regression cohorts remain unchanged.
 - [ ] F4 bundle/replay/expect/completeness semantics are not claimed or implemented.
