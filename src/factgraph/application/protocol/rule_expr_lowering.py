@@ -125,6 +125,32 @@ class RuleExprHeadBinding:
             raise RuleExprError("inline head binding requires projection_occurrence_alias")
 
 
+@dataclass(frozen=True, order=True)
+class _RuleExprQueryHeadLink:
+    branch_id: str
+    head_port_name: str
+    occurrence_alias: str
+    port_name: str
+
+    def __post_init__(self) -> None:
+        for name in ("branch_id", "head_port_name", "occurrence_alias", "port_name"):
+            _require_non_empty_str(getattr(self, name), field_name=name)
+
+
+@dataclass(frozen=True)
+class _RuleExprQueryValueBinding:
+    branch_id: str
+    occurrence_alias: str
+    port_name: str
+    value: Const
+
+    def __post_init__(self) -> None:
+        for name in ("branch_id", "occurrence_alias", "port_name"):
+            _require_non_empty_str(getattr(self, name), field_name=name)
+        if not isinstance(self.value, Const):
+            raise RuleExprError("query value binding must contain Const")
+
+
 @dataclass(frozen=True)
 class RuleExprLoweringBranch:
     branch_id: str
@@ -151,6 +177,8 @@ class RuleExprLoweringPlan:
     branches: tuple[RuleExprLoweringBranch, ...]
     occurrence_map: tuple[RuleExprOccurrenceBinding, ...]
     canonical_key: tuple[object, ...]
+    query_head_links: tuple[_RuleExprQueryHeadLink, ...] = ()
+    query_value_bindings: tuple[_RuleExprQueryValueBinding, ...] = ()
 
     def __post_init__(self) -> None:
         if self.source_kind not in {"rule", "rule_expr"}:
@@ -165,6 +193,13 @@ class RuleExprLoweringPlan:
         _require_tuple(self.occurrence_map, field_name="occurrence_map", item_type=RuleExprOccurrenceBinding)
         if not isinstance(self.canonical_key, tuple) or not self.canonical_key:
             raise RuleExprError("RuleExprLoweringPlan.canonical_key must be non-empty tuple")
+        _require_tuple(self.query_head_links, field_name="query_head_links", item_type=_RuleExprQueryHeadLink)
+        _require_tuple(
+            self.query_value_bindings,
+            field_name="query_value_bindings",
+            item_type=_RuleExprQueryValueBinding,
+        )
+        _validate_query_extensions(self)
 
 
 @dataclass(frozen=True)
@@ -545,6 +580,12 @@ def probe_seed_vars_by_head_port(plan: RuleExprLoweringPlan) -> dict[str, tuple[
     for port_name, var_name in zip(plan.head.ports, _head_var_names(plan), strict=True):
         add(port_name, var_name)
 
+    if plan.query_head_links:
+        for link in plan.query_head_links:
+            query_source = _query_port_binding(plan, link.branch_id, link.occurrence_alias, link.port_name)
+            add(link.head_port_name, query_source.alias_local_execution_var.name)
+        return {port_name: tuple(var_names) for port_name, var_names in out.items()}
+
     for port_name in plan.head.ports:
         for branch in plan.branches:
             source = _branch_declared_port_source_for_name(branch, plan.occurrence_map, port_name)
@@ -648,6 +689,25 @@ def _declared_port_state_for_rule_expr_plan(
 ) -> tuple[tuple[RuleExprDeclaredPort, ...], frozenset[str]]:
     if not isinstance(plan, RuleExprLoweringPlan):
         raise RuleExprError("plan must be RuleExprLoweringPlan")
+    if plan.query_head_links:
+        query_declared: list[RuleExprDeclaredPort] = []
+        for port_name in sorted(plan.head.ports):
+            query_sources: list[RuleExprDeclaredPortBranchSource] = []
+            for branch in plan.branches:
+                link = next(
+                    item
+                    for item in plan.query_head_links
+                    if item.branch_id == branch.branch_id and item.head_port_name == port_name
+                )
+                binding = _query_port_binding(
+                    plan, branch.branch_id, link.occurrence_alias, link.port_name
+                )
+                query_sources.append(_branch_source(branch.branch_id, binding))
+            port_type = query_sources[0].port_type
+            if any(source.port_type != port_type for source in query_sources):
+                raise RuleExprError(f"query selection {port_name!r} has incompatible branch types")
+            query_declared.append(RuleExprDeclaredPort(port_name, port_type, tuple(query_sources)))
+        return tuple(query_declared), frozenset()
     by_branch: list[dict[str, RuleExprDeclaredPortBranchSource]] = []
     seen_names: set[str] = set()
     for branch in plan.branches:
@@ -934,6 +994,28 @@ def _attach_head(body: _RuleExprBodyPlan, *, head: Rule) -> RuleExprLoweringPlan
     )
 
 
+def _attach_evaluation_query_head(
+    body: _RuleExprBodyPlan,
+    *,
+    head: Rule,
+    query_digest: str,
+    head_links: tuple[_RuleExprQueryHeadLink, ...],
+    value_bindings: tuple[_RuleExprQueryValueBinding, ...],
+) -> RuleExprLoweringPlan:
+    """Attach exact query projection metadata without changing legacy plans."""
+
+    _require_non_empty_str(query_digest, field_name="query_digest")
+    base = _attach_head(body, head=head)
+    return replace(
+        base,
+        canonical_key=(*base.canonical_key, "evaluation_query_v0", query_digest),
+        query_head_links=tuple(sorted(head_links)),
+        query_value_bindings=tuple(
+            sorted(value_bindings, key=lambda item: (item.branch_id, item.occurrence_alias, item.port_name))
+        ),
+    )
+
+
 def _build_lowering_plan(
     expr: _RuleExpr,
     *,
@@ -1061,11 +1143,21 @@ def _assign_branch_ids(branches: tuple[RuleExprLoweringBranch, ...]) -> tuple[Ru
 def _materialize_branch(
     branch: RuleExprLoweringBranch,
     plan: RuleExprLoweringPlan,
-) -> tuple[list[object], tuple[RuleExprJoinMaterialization, ...], tuple[RuleExprHeadPortLinkMaterialization, ...]]:
+) -> tuple[
+    list[object],
+    tuple[RuleExprJoinMaterialization, ...],
+    tuple[RuleExprHeadPortLinkMaterialization, ...],
+]:
     materialized_atoms: list[Atom] = list(branch.body_atoms)
     if plan.head_binding.kind == "external":
         head_var_map = _head_alias_var_map(plan.head)
         materialized_atoms.extend(_rewrite_atom(atom, head_var_map) for atom in plan.head.when)
+
+    for query_binding in plan.query_value_bindings:
+        if query_binding.branch_id != branch.branch_id:
+            continue
+        query_source = _query_port_binding(plan, branch.branch_id, query_binding.occurrence_alias, query_binding.port_name)
+        materialized_atoms.append(CmpAtom(op="eq", lhs=query_source.alias_local_execution_var, rhs=query_binding.value))
 
     joins: list[RuleExprJoinMaterialization] = []
     unique_joins: dict[tuple[object, ...], RuleJoinConstraint] = {}
@@ -1100,12 +1192,8 @@ def _materialize_branch(
     head_links: list[RuleExprHeadPortLinkMaterialization] = []
     if plan.head_binding.kind in {"external", "projection"}:
         declared_ports, partial_ports = _declared_port_state_for_rule_expr_plan(plan)
-        _validate_head_declared_ports(
-            plan.head,
-            declared_ports,
-            partial_ports=partial_ports,
-            compare_port_types=plan.head_binding.kind != "projection",
-        )
+        _validate_head_declared_ports(plan.head, declared_ports, partial_ports=partial_ports,
+                                      compare_port_types=plan.head_binding.kind != "projection")
         declared_by_name = {port.name: port for port in declared_ports}
         head_var_map = _head_alias_var_map(plan.head) if plan.head_binding.kind == "external" else None
         for port_name in sorted(plan.head.ports):
@@ -1222,6 +1310,45 @@ def _port_binding(occurrence: RuleExprOccurrenceBinding, port_name: str) -> Rule
         if binding.port_name == port_name:
             return binding
     raise RuleExprError(f"head port {port_name!r} is missing from projection occurrence")
+
+
+def _query_port_binding(
+    plan: RuleExprLoweringPlan,
+    branch_id: str,
+    occurrence_alias: str,
+    port_name: str,
+) -> RuleExprPortBinding:
+    branch = next((item for item in plan.branches if item.branch_id == branch_id), None)
+    if branch is None or occurrence_alias not in branch.occurrence_aliases:
+        raise RuleExprError("query source is absent from its declared branch")
+    return _port_binding(_occurrence_binding(plan.occurrence_map, occurrence_alias), port_name)
+
+
+def _validate_query_extensions(plan: RuleExprLoweringPlan) -> None:
+    if not plan.query_head_links and not plan.query_value_bindings:
+        return
+    if plan.head_binding.kind != "projection" or not plan.query_head_links:
+        raise RuleExprError("query extensions require an explicit projection head")
+
+    expected = {
+        (branch.branch_id, port_name)
+        for branch in plan.branches
+        for port_name in plan.head.ports
+    }
+    actual = {(query_link.branch_id, query_link.head_port_name) for query_link in plan.query_head_links}
+    if len(actual) != len(plan.query_head_links) or actual != expected:
+        raise RuleExprError("query head links must exactly cover every head port in every branch")
+    for query_link in plan.query_head_links:
+        _query_port_binding(plan, query_link.branch_id, query_link.occurrence_alias, query_link.port_name)
+
+    binding_keys = {
+        (query_binding.branch_id, query_binding.occurrence_alias, query_binding.port_name)
+        for query_binding in plan.query_value_bindings
+    }
+    if len(binding_keys) != len(plan.query_value_bindings):
+        raise RuleExprError("query value bindings must be unique per branch port")
+    for query_binding in plan.query_value_bindings:
+        _query_port_binding(plan, query_binding.branch_id, query_binding.occurrence_alias, query_binding.port_name)
 
 
 def _canonical_children(children: tuple[_RuleExpr, ...]) -> tuple[_RuleExpr, ...]:

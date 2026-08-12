@@ -129,6 +129,10 @@ from .policy_runtime import (
     PolicyRulePin,
     compile_policy,
 )
+from .evaluation_query_runtime import (
+    CompiledEvaluationQueryV0,
+    compile_evaluation_query,
+)
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -141,6 +145,7 @@ __all__ = [
     "AuthoringRuntimeError",
     "CheckRuntimeError",
     "CompiledPolicyV0",
+    "CompiledEvaluationQueryV0",
     "CapabilityHelperError",
     "DerivationRuntimeError",
     "DiagnoseRuntimeError",
@@ -203,6 +208,7 @@ __all__ = [
     "check_rule_literal_replace_action",
     "check_why_not_universe",
     "compile_policy",
+    "compile_evaluation_query",
     "copy_ledger_to_workspace",
     "diagnose_derivation_binding",
     "encode_entity_ref",

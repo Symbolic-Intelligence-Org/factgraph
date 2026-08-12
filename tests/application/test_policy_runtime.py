@@ -257,6 +257,30 @@ class PolicyCompileTests(unittest.TestCase):
             compile_policy(Policy("p36", root), address_space=_space(bundle, *left, *right))
         self.assertEqual(ctx.exception.details["projected_count"], 36)
 
+    def test_cross_occurrence_execution_variable_collision_rejects(self) -> None:
+        index = _index()
+        left = build_resolved_rule(
+            id="left", when=(PredAtom("Person:exists", [Var("$b__x")]),),
+            ports={"person": SemanticRulePort(Var("$b__x"), entity_identity("Person"))},
+            schema_index=index,
+        )
+        right = build_resolved_rule(
+            id="right", when=(PredAtom("Person:exists", [Var("$x")]),),
+            ports={"person": SemanticRulePort(Var("$x"), entity_identity("Person"))},
+            schema_index=index,
+        )
+        space = SemanticAddressSpace((
+            manage_rule_occurrence(left, "a"), manage_rule_occurrence(right, "a__b"),
+        ))
+
+        with self.assertRaises(PolicyError) as ctx:
+            compile_policy(
+                Policy("collision", PolicyAll((_occ("a"), _occ("a__b")))),
+                address_space=space,
+            )
+        self.assertEqual(ctx.exception.code, "POLICY_EXECUTION_VAR_COLLISION")
+        self.assertEqual(ctx.exception.stage, "policy_lowering_adapter")
+
 
 class PolicyAdmissionTests(unittest.TestCase):
     def test_predicate_and_non_aggregate_comparison_are_admitted(self) -> None:
@@ -336,6 +360,24 @@ class PolicyLineageTests(unittest.TestCase):
         compiled = compile_policy(Policy("p", _occ("a")), address_space=_space(bundle, "a"))
         with self.assertRaises(ValueError):
             replace(compiled, branches=())
+
+    def test_compiled_policy_rejects_cross_artifact_splicing(self) -> None:
+        bundle = _person_bundle()
+        space = _space(bundle, "a", "b")
+        conjunctive = compile_policy(
+            Policy("all", PolicyAll((_occ("a"), _occ("b")))), address_space=space,
+        )
+        disjunctive = compile_policy(
+            Policy("any", PolicyAny((_occ("a"), _occ("b")))), address_space=space,
+        )
+
+        with self.assertRaises(PolicyError) as ctx:
+            replace(
+                conjunctive,
+                branches=disjunctive.branches,
+                _body_plan=disjunctive._body_plan,
+            )
+        self.assertEqual(ctx.exception.code, "COMPILED_POLICY_INTEGRITY_MISMATCH")
 
     def test_alias_rewrite_survives_generated_name_collision(self) -> None:
         bundle = _person_bundle()

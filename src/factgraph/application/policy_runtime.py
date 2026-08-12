@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import json
 from typing import Any, Literal
 
@@ -18,7 +18,9 @@ from .protocol.rule_expr import (
     RuleExpr, RuleExprError, RuleJoinConstraint, _AndGroup, _RuleExpr,
     _canonical_join_constraint,
 )
-from .protocol.rule_expr_lowering import _DNF_BRANCH_LIMIT, _RuleExprBodyPlan, _lower_rule_expr_body
+from .protocol.rule_expr_lowering import (
+    _DNF_BRANCH_LIMIT, _RuleExprBodyPlan, _lower_rule_expr_body, _vars_in_atom,
+)
 from .protocol.semantic_address import SemanticPortAddress
 from .semantic_address_runtime import ManagedRuleOccurrence, SemanticAddressResolutionError, SemanticAddressSpace
 from .semantic_port_runtime import SemanticPortResolutionError, assert_rule_contract_current
@@ -71,6 +73,7 @@ class CompiledPolicyV0:
             raise ValueError("branches must be a non-empty PolicyCompiledBranch tuple")
         if not isinstance(self.rule_expr, _RuleExpr) or not isinstance(self.lineage, PolicyLineage) or not isinstance(self._body_plan, _RuleExprBodyPlan):
             raise ValueError("compiled Policy structure has invalid runtime types")
+        _assert_compiled_policy_current(self)
 def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> CompiledPolicyV0:
     if not isinstance(policy, Policy):
         raise _error("policy must be Policy", "INVALID_POLICY", "policy_compile", ("policy",))
@@ -101,6 +104,7 @@ def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> Co
     try:
         rule_expr = _compile_expr(policy.when, managed, joins)
         body_plan = _lower_rule_expr_body(rule_expr)
+        _validate_execution_var_ownership(body_plan, managed)
     except RuleExprError as exc:
         raise _error(
             f"RuleExpr rejected compiled Policy: {exc}",
@@ -121,16 +125,13 @@ def compile_policy(policy: Policy, *, address_space: SemanticAddressSpace) -> Co
         )
         for alias, item in sorted(managed.items())
     )
+    policy_digest = _digest(
+        policy.id, policy.version, address_space.address_space_digest,
+        pins, rule_expr, branches, lineage,
+    )
     return CompiledPolicyV0(
-        policy.id,
-        policy.version,
-        _digest(policy, address_space.address_space_digest),
-        address_space.address_space_digest,
-        pins,
-        rule_expr,
-        branches,
-        lineage,
-        body_plan,
+        policy.id, policy.version, policy_digest, address_space.address_space_digest,
+        pins, rule_expr, branches, lineage, body_plan,
     )
 def _validate_structure(nodes: tuple[PolicyNode, ...], managed: dict[str, ManagedRuleOccurrence]) -> None:
     aliases = [node.alias for node in nodes if isinstance(node, PolicyOccurrence)]
@@ -163,6 +164,33 @@ def _validate_structure(nodes: tuple[PolicyNode, ...], managed: dict[str, Manage
             ("policy", "when"),
             {"node_ids": duplicate_nodes},
         )
+
+
+def _validate_execution_var_ownership(
+    plan: _RuleExprBodyPlan,
+    managed: dict[str, ManagedRuleOccurrence],
+) -> None:
+    occurrence_map = {binding.alias: binding for binding in plan.occurrence_map}
+    for branch in plan.branches:
+        offset, owners = 0, dict[str, str]()
+        for lowered_alias in branch.occurrence_aliases:
+            binding = occurrence_map[lowered_alias]
+            authored_alias = binding.authored_alias or lowered_alias
+            atom_count = len(managed[authored_alias].occurrence.rule.when)
+            for atom in branch.body_atoms[offset:offset + atom_count]:
+                for variable in _vars_in_atom(atom):
+                    owner = owners.setdefault(variable.name, lowered_alias)
+                    if owner != lowered_alias:
+                        raise _error(
+                            "distinct Policy occurrences lower to the same execution variable",
+                            "POLICY_EXECUTION_VAR_COLLISION",
+                            "policy_lowering_adapter",
+                            ("policy", "when", branch.branch_id),
+                            {"variable": variable.name, "occurrence_aliases": sorted((owner, lowered_alias))},
+                        )
+            offset += atom_count
+        if offset != len(branch.body_atoms):
+            raise _invariant("lowered atoms do not match occurrence Rule bodies", branch.branch_id)
 def _admit(managed: dict[str, ManagedRuleOccurrence]) -> None:
     schema_digests = {item.contract.schema_digest for item in managed.values()}
     if len(schema_digests) != 1:
@@ -394,16 +422,64 @@ def _unify_key(
 ) -> tuple[tuple[str, str], tuple[str, str]]:
     ends = sorted(((left.occurrence_alias, left.port_name), (right.occurrence_alias, right.port_name)))
     return ends[0], ends[1]
-def _digest(policy: Policy, address_space_digest: str) -> str:
+
+
+def _assert_compiled_policy_current(compiled: CompiledPolicyV0) -> None:
+    try:
+        current_body = _lower_rule_expr_body(compiled.rule_expr)
+    except Exception as exc:
+        raise _error(
+            "compiled Policy RuleExpr no longer lowers",
+            "COMPILED_POLICY_INTEGRITY_MISMATCH",
+            "policy_compiler_invariant",
+            details={"cause_type": type(exc).__name__},
+        ) from exc
+    bindings = {item.alias: item for item in current_body.occurrence_map}
+    expected_branches = tuple(
+        PolicyCompiledBranch(
+            branch.branch_id,
+            tuple((bindings[alias].authored_alias or alias) for alias in branch.occurrence_aliases),
+            branch.occurrence_aliases,
+        )
+        for branch in current_body.branches
+    )
+    expected_digest = _digest(
+        compiled.policy_id, compiled.policy_version, compiled.address_space_digest,
+        compiled.rule_pins, compiled.rule_expr,
+        compiled.branches, compiled.lineage,
+    )
+    if (
+        current_body != compiled._body_plan
+        or expected_branches != compiled.branches
+        or expected_digest != compiled.policy_digest
+    ):
+        raise _error(
+            "compiled Policy structure does not match its integrity seal",
+            "COMPILED_POLICY_INTEGRITY_MISMATCH",
+            "policy_compiler_invariant",
+        )
+
+
+def _digest(
+    policy_id: str,
+    policy_version: str | None,
+    address_space_digest: str,
+    rule_pins: tuple[PolicyRulePin, ...],
+    rule_expr: _RuleExpr,
+    branches: tuple[PolicyCompiledBranch, ...],
+    lineage: PolicyLineage,
+) -> str:
     payload = {
         "format": "compiled_policy_v0",
-        "policy": {"id": policy.id, "version": policy.version, "root_node_id": policy.when.node_id},
-        "address_space_digest": address_space_digest,
-        "dnf_branch_limit": _DNF_BRANCH_LIMIT,
-        "capability_profile": "managed_policy_v0_pred_cmp_unify",
+        "policy": [policy_id, policy_version, address_space_digest],
+        "rule_pins": [asdict(item) for item in rule_pins],
+        "rule_expr": repr(rule_expr._canonical()),
+        "branches": [asdict(item) for item in branches],
+        "lineage": asdict(lineage),
     }
-    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
-    return sha256_hex(raw)
+    return sha256_hex(json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+    ).encode())
 def _invariant(message: str, *path: str) -> PolicyError:
     return _error(message, "POLICY_LINEAGE_NOT_TOTAL", "policy_compiler_invariant", ("lineage", *path))
 def _runtime_text(value: object, name: str) -> None:

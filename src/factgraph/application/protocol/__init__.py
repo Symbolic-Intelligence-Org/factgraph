@@ -24,6 +24,13 @@ from .evaluate_result import (
     Explanation,
     ResultFingerprint,
 )
+from .evaluation_query import (
+    EvaluationQuery,
+    EvaluationQueryBinding,
+    EvaluationQueryError,
+    EvaluationQuerySelection,
+    EvaluationQueryValue,
+)
 from .explanation_render import walk_evidence
 from .derivation_fact_overlay import (
     FactOverlay,
@@ -204,6 +211,11 @@ __all__ = [
     "DetachedRowError",
     "EvaluateResult",
     "EvaluateRow",
+    "EvaluationQuery",
+    "EvaluationQueryBinding",
+    "EvaluationQueryError",
+    "EvaluationQuerySelection",
+    "EvaluationQueryValue",
     "Explanation",
     "ResultFingerprint",
     "FactOverlay",
