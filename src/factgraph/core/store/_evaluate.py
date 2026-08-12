@@ -287,13 +287,13 @@ def _evaluate_where_over_view_with_support(
         getattr(store, "premise_allowances", ()),
         getattr(store, "premise_blocks", ()),
     )
-    witness_facts = project_view_facts_with_witness(
+    witness_facts: Mapping[str, Sequence[ProjectedFact]] = project_view_facts_with_witness(
         ledger,
         store.schema_ir,
     )
     if native_effective_relation_observer is not None:
         dependency_predicates = _native_where_dependency_predicates(where)
-        witness_facts = {
+        reduced_relation = {
             pred_id: witness_facts[pred_id]
             for pred_id in dependency_predicates
             if pred_id in witness_facts
@@ -308,9 +308,10 @@ def _evaluate_where_over_view_with_support(
                 "native effective relation dependencies are absent from schema projection: "
                 + ", ".join(missing_dependencies)
             )
-        native_effective_relation_observer(
-            _immutable_effective_relation_copy(witness_facts)
-        )
+        # Freeze once: capture and evaluator consume the exact same relation
+        # object rather than independently copied/filterable representations.
+        witness_facts = _immutable_effective_relation_copy(reduced_relation)
+        native_effective_relation_observer(witness_facts)
     evaluation = _evaluate_where_over_view(
         store,
         where,

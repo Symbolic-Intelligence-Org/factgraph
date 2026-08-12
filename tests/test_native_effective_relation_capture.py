@@ -128,7 +128,9 @@ class NativeEffectiveRelationCoreTests(unittest.TestCase):
             },
         )
         for index, row in enumerate(projected["Person:exists"]):
-            self.assertIs(evaluator_view["Person:exists"][index], row.fact_tuple)
+            self.assertEqual(evaluator_view["Person:exists"][index], row.fact_tuple)
+        witness_relation = evaluator.call_args.kwargs["witness_facts"]
+        self.assertIs(witness_relation, snapshot)
 
         with self.assertRaises(TypeError):
             snapshot["new"] = ()  # type: ignore[index]
