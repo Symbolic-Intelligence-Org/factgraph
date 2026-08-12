@@ -472,8 +472,40 @@ Callers that need a current-runtime semantic check may independently pair it wit
 `verify_evaluation_run_bundle(...)`; the playback operation does not depend on or
 consume that verification record.
 
+F4C then projects that unchanged, detached engine evidence onto the authored
+Policy topology. It is deliberately a separate readonly view rather than a new
+`Explanation` field or a replacement for the engine's `EvidenceGraph`:
+
+```python
+from factgraph.application import project_policy_explanation_v0
+
+policy_view = project_policy_explanation_v0(
+    bundle.run_anchor,
+    evidence,
+    semantic_row_anchor_digest=(
+        bundle.run_anchor.row_anchors[0].semantic_anchor_digest
+    ),
+)
+```
+
+`PolicyExplanationViewV0` uses the compiler-issued `PolicyStructureV0` and
+`PolicyLineage` rather than generated alias parsing. It maps direct body atoms
+and structured joins to their exact authored occurrence/unify nodes, then folds
+the authored `All`/`Any` tree. Query-binding and synthetic projection-head atoms
+remain visible in the inner evidence but are listed as outside Policy lineage;
+they never change a Policy node state. The projection is total-or-error: it
+rejects incomplete, duplicate, stale, or internally contradictory evidence
+(including a body-rule status that disagrees with its atoms), rather than showing
+a partial Policy view. It carries assertion-source locators through from the
+inner graph, remains `authenticity="unverified"`, and has no authorization,
+Scenario, replay, or live-`row.explain()` integration. The projector is a pure
+value transformation: it does not create, bind, or change a live Explain
+lifecycle, although it may consume any `EvidenceGraph` that satisfies its
+anchor and lineage checks. Empty runs have no Policy view—an empty result is
+still not a false result.
+
 The older ad-hoc `QueryRuntimeRequest` and SDK `Query` remain unchanged.
-Non-native engines, standalone Query explain, candidate acceptance,
+Non-native engines, standalone Query explain integration, candidate acceptance,
 Compare/literals, field navigation, `expect`, completeness, What-if, bundle
 persistence, Package, and Agent/Meander wire formats remain later slices.
 

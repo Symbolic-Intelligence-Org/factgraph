@@ -31,7 +31,9 @@ compatibility.
     address space used by managed Rule consumers, the head-independent managed
     Policy v0 compiler and structural-lineage boundary, and the compile-only
     `EvaluationQuery` typed bind/select projection contract plus opt-in,
-    detached `EvaluationRunBundleV0` capture/codec semantics.
+    detached `EvaluationRunBundleV0` capture/codec, isolated verification,
+    single-row evidence playback, and readonly `PolicyExplanationViewV0`
+    projection semantics.
 - `src/factgraph/application/explain/docs/README.md`
   - Paths-model evidence tree types (`EvidenceGraph`, `EvidenceTree`,
     `EvidenceRule`, `EvidenceAtom`, `Certainty`, `AtomForm`, `Verdict`) and

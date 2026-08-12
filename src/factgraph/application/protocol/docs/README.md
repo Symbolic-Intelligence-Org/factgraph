@@ -127,6 +127,15 @@ but not authenticated, has caller-managed custody, and exposes neither replay
 nor detached Explain. Ordinary evaluation leaves `run_bundle=None`; capture
 cannot be added post hoc.
 
+The separate F4C `PolicyExplanationViewV0` is intentionally not an
+`Explanation` field and is not produced by `EvaluateRow.explain()`. Its normal
+composition projects detached F4B3 evidence through a matching
+`EvaluationRunAnchorV0`; as a pure value projector, it may also consume another
+`EvidenceGraph` that satisfies the same anchor and lineage checks. It does not
+create, attach, or change live-Explain lifecycle semantics. See
+`src/factgraph/application/docs/rule.md` for that readonly, total-or-error
+composition contract. This preserves the existing lazy live-Explain behavior.
+
 ---
 
 ### 2.4 `Explanation`

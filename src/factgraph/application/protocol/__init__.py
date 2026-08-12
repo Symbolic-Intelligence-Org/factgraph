@@ -45,6 +45,20 @@ from .evaluation_run_bundle import (
     EvaluationRunBundleV0,
 )
 from .evaluation_run_verification import EvaluationRunVerificationV0
+from .policy_explanation import (
+    PolicyBranchEvaluationV0,
+    PolicyBranchParticipation,
+    PolicyEvaluationProjectionV0,
+    PolicyEvidenceKind,
+    PolicyEvidenceLocatorV0,
+    PolicyExplanationProjectionError,
+    PolicyExplanationState,
+    PolicyExplanationViewV0,
+    PolicyNodeBranchStateV0,
+    PolicyNodeEvaluationV0,
+    PolicyNodeProvenanceV0,
+    PolicyProvenanceIndexV0,
+)
 from .explanation_render import walk_evidence
 from .derivation_fact_overlay import (
     FactOverlay,
@@ -286,6 +300,18 @@ __all__ = [
     "PolicyStructureNodeV0",
     "PolicyStructureV0",
     "PolicyUnify",
+    "PolicyBranchEvaluationV0",
+    "PolicyBranchParticipation",
+    "PolicyEvaluationProjectionV0",
+    "PolicyEvidenceKind",
+    "PolicyEvidenceLocatorV0",
+    "PolicyExplanationProjectionError",
+    "PolicyExplanationState",
+    "PolicyExplanationViewV0",
+    "PolicyNodeBranchStateV0",
+    "PolicyNodeEvaluationV0",
+    "PolicyNodeProvenanceV0",
+    "PolicyProvenanceIndexV0",
     "PortInspect",
     "ProofFrameConditionVerdict",
     "ProofFrameRecheckRequest",

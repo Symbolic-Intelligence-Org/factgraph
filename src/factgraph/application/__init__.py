@@ -139,6 +139,7 @@ from .evaluation_run_bundle_runtime import (
 )
 from .evaluation_run_verification_runtime import verify_evaluation_run_bundle
 from .evaluation_run_evidence_runtime import evaluation_run_bundle_evidence
+from .policy_explanation_runtime import project_policy_explanation_v0
 from .authoring_runtime import AuthoringRuntimeError
 from .why_not_runtime import (
     WhyNotRuntimeError,
@@ -218,6 +219,7 @@ __all__ = [
     "evaluation_run_bundle_bytes",
     "evaluation_run_bundle_from_bytes",
     "evaluation_run_bundle_evidence",
+    "project_policy_explanation_v0",
     "verify_evaluation_run_bundle",
     "copy_ledger_to_workspace",
     "diagnose_derivation_binding",

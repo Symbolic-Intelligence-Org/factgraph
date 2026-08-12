@@ -436,6 +436,12 @@ def _project_occurrence(
             "POLICY_LINEAGE_MAPPING_INCOMPLETE",
             f"Occurrence {node.node_id!r} body indexes are not total",
         )
+    declared_rule_state = _fold_all([_verdict_state(atom) for atom in body_rule.atoms])
+    if body_rule.status != declared_rule_state:
+        raise _projection_error(
+            "POLICY_EVIDENCE_CONTRADICTION",
+            f"Evidence body occurrence {lowered_alias!r} status disagrees with its atoms",
+        )
     locators: list[PolicyEvidenceLocatorV0] = []
     statuses: list[_TreeState] = []
     for ref in body_refs:
@@ -453,7 +459,13 @@ def _project_occurrence(
             )
         statuses.append(record.locator.status)
         locators.append(record.locator)
-    return _fold_all(statuses), tuple(locators)
+    atom_state = _fold_all(statuses)
+    if body_rule.status != atom_state:
+        raise _projection_error(
+            "POLICY_EVIDENCE_CONTRADICTION",
+            f"Evidence body occurrence {lowered_alias!r} has non-lineage atoms that change its state",
+        )
+    return atom_state, tuple(locators)
 def _project_unify(
     branch_id: str,
     lineage: PolicyNodeLineage,

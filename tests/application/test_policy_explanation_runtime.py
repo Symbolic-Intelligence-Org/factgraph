@@ -17,7 +17,7 @@ from factgraph.application.explain.evidence_tree import (
     PortRef,
     Source,
 )
-from factgraph.application.policy_explanation_runtime import project_policy_explanation_v0
+from factgraph.application import project_policy_explanation_v0
 from factgraph.application.policy_runtime import compile_policy
 from factgraph.application.protocol.evaluation_run import (
     EvaluationRunAnchorV0,
@@ -37,7 +37,7 @@ from factgraph.application.protocol.policy import (
     PolicyOccurrence,
     PolicyUnify,
 )
-from factgraph.application.protocol.policy_explanation import (
+from factgraph.application.protocol import (
     PolicyExplanationProjectionError,
     PolicyNodeBranchStateV0,
 )
@@ -568,6 +568,29 @@ class PolicyExplanationProjectionTests(unittest.TestCase):
         with self.assertRaises(PolicyExplanationProjectionError) as ctx:
             _view(anchor, graph)
         self.assertEqual(ctx.exception.code, "POLICY_RULE_IDENTITY_MISMATCH")
+
+    def test_body_rule_status_must_match_its_authored_atom_fold(self) -> None:
+        anchor = _anchor(_compiled(_occ("person"), ("person",)))
+        graph = _evidence(anchor)
+        tree = graph.paths[0]
+        assert isinstance(tree, EvidenceTree)
+        body = next(rule for rule in tree.rules if rule.role == "body")
+        contradictory = replace(
+            graph,
+            paths=(
+                replace(
+                    tree,
+                    rules=tuple(
+                        replace(rule, status="fails") if rule is body else rule
+                        for rule in tree.rules
+                    ),
+                ),
+            ),
+        )
+
+        with self.assertRaises(PolicyExplanationProjectionError) as ctx:
+            _view(anchor, contradictory)
+        self.assertEqual(ctx.exception.code, "POLICY_EVIDENCE_CONTRADICTION")
 
     def test_evidence_cannot_be_attached_to_another_semantic_row(self) -> None:
         anchor = _anchor(_compiled(_occ("person"), ("person",)))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ from factgraph.application import (
     compile_policy,
     evaluation_run_bundle_evidence,
     manage_rule_occurrence,
+    project_policy_explanation_v0,
 )
 from factgraph.application.explain import (
     EvidenceTree,
@@ -28,6 +30,7 @@ from factgraph.application.protocol import (
     PolicyAny,
     PolicyOccurrence,
     PolicyUnify,
+    PolicyExplanationProjectionError,
     ProtocolShapeError,
     SemanticPortAddress,
     SemanticRulePort,
@@ -265,6 +268,46 @@ class EvaluationRunEvidenceRuntimeTests(unittest.TestCase):
             evidence.metadata["join_condition_ids"],
             ((join.join_id, "c0.c6:eq"),),
         )
+
+    def test_detached_evidence_composes_to_policy_view_and_rejects_rule_contradiction(self) -> None:
+        graph, _rule, bundle = _capture(score=9)
+        row = bundle.rows[0]
+        graph.close()
+        evidence = evaluation_run_bundle_evidence(
+            bundle,
+            row_capture_digest=row.row_capture_digest,
+        )
+        semantic_row_anchor_digest = bundle.run_anchor.row_anchors[row.ordinal].semantic_anchor_digest
+        view = project_policy_explanation_v0(
+            bundle.run_anchor,
+            evidence,
+            semantic_row_anchor_digest=semantic_row_anchor_digest,
+        )
+
+        self.assertEqual(view.evaluation.root_state, "holds")
+        self.assertEqual(view.evaluation.branches[0].participation, "contributes")
+        tree = evidence.paths[0]
+        assert isinstance(tree, EvidenceTree)
+        body = next(rule for rule in tree.rules if rule.role == "body")
+        contradictory = replace(
+            evidence,
+            paths=(
+                replace(
+                    tree,
+                    rules=tuple(
+                        replace(rule, status="fails") if rule is body else rule
+                        for rule in tree.rules
+                    ),
+                ),
+            ),
+        )
+        with self.assertRaises(PolicyExplanationProjectionError) as ctx:
+            project_policy_explanation_v0(
+                bundle.run_anchor,
+                contradictory,
+                semantic_row_anchor_digest=semantic_row_anchor_digest,
+            )
+        self.assertEqual(ctx.exception.code, "POLICY_EVIDENCE_CONTRADICTION")
 
 
 if __name__ == "__main__":
